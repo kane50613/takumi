@@ -10,7 +10,8 @@
 //! one `dir/**` pattern, `WPT_WRITE=path` writes that list to `path` and still checks for
 //! regressions, `WPT_VERBOSE=1` prints each
 //! test that does not pass, `WPT_DUMP=dir` writes each failing test's rendering and its
-//! reference's there, and `WPT=fragment,...` runs only the tests whose paths contain one of the
+//! reference's there, `WPT_REPORT=path` writes each test's outcome, time, and error as
+//! tab-separated lines, and `WPT=fragment,...` runs only the tests whose paths contain one of the
 //! fragments.
 
 mod test_utils;
@@ -102,17 +103,17 @@ fn wpt_reftests() {
   let started = Instant::now();
   let finished = AtomicUsize::new(0);
   let watchdog = Watchdog::default();
-  let outcomes: BTreeMap<String, Outcome> = thread::scope(|scope| {
+  let runs: BTreeMap<String, TestRun> = thread::scope(|scope| {
     scope.spawn(|| watchdog.watch());
 
-    let outcomes = tests
+    let runs = tests
       .par_iter()
       .map(|path| {
         let name = runner.relative(path);
 
         watchdog.start(&name);
 
-        let outcome = runner.run(path);
+        let run = runner.run(path);
 
         watchdog.finish(&name);
 
@@ -126,13 +127,34 @@ fn wpt_reftests() {
           );
         }
 
-        (name, outcome)
+        (name, run)
       })
       .collect();
 
     watchdog.stop();
-    outcomes
+    runs
   });
+
+  if let Some(path) = env::var_os("WPT_REPORT") {
+    let report: String = runs
+      .iter()
+      .map(|(name, run)| {
+        format!(
+          "{name}\t{:?}\t{}\t{}\n",
+          run.outcome,
+          run.elapsed.as_millis(),
+          run.reason.as_deref().unwrap_or_default()
+        )
+      })
+      .collect();
+
+    fs::write(&path, report).unwrap();
+  }
+
+  let outcomes: BTreeMap<String, Outcome> = runs
+    .into_iter()
+    .map(|(name, run)| (name, run.outcome))
+    .collect();
   let mut counts = BTreeMap::new();
 
   for outcome in outcomes.values() {
@@ -601,6 +623,14 @@ impl Watchdog {
   }
 }
 
+/// How one test ran.
+struct TestRun {
+  outcome: Outcome,
+  /// Why the test or its reference could not render, for [`Outcome::Error`].
+  reason: Option<String>,
+  elapsed: Duration,
+}
+
 struct Runner {
   root: PathBuf,
   verbose: bool,
@@ -650,7 +680,7 @@ impl Runner {
     }
   }
 
-  fn run(&self, path: &Path) -> Outcome {
+  fn run(&self, path: &Path) -> TestRun {
     let started = Instant::now();
     let (outcome, reason) = match panic::catch_unwind(AssertUnwindSafe(|| self.compare(path))) {
       Ok(Ok(true)) => (Outcome::Pass, None),
@@ -670,12 +700,17 @@ impl Runner {
         "{}: {outcome:?}{}",
         self.relative(path),
         reason
+          .as_deref()
           .map(|reason| format!(", {reason}"))
           .unwrap_or_default(),
       );
     }
 
-    outcome
+    TestRun {
+      outcome,
+      reason,
+      elapsed,
+    }
   }
 
   /// Whether the test at `path` renders as its references say it should: like at least one
