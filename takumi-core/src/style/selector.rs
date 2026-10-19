@@ -15,6 +15,7 @@ use selectors::parser::{
 
 pub use crate::style::media_query::MediaQueryList;
 use crate::{
+  Xxh3HashSet,
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   keyframes::parse_keyframe_prelude,
   matching::RuleIndex,
@@ -1374,6 +1375,25 @@ impl StyleSheet {
     &self.rules
   }
 
+  /// Collects unique resource URLs referenced by the declarations of its rules and keyframes.
+  pub fn image_urls(&self) -> impl Iterator<Item = &str> {
+    let rules = self
+      .rules
+      .iter()
+      .flat_map(|rule| [&rule.normal_declarations, &rule.important_declarations]);
+    let keyframes = self
+      .keyframes
+      .iter()
+      .flat_map(|rule| &rule.keyframes)
+      .map(|keyframe| &keyframe.declarations);
+    let urls: Xxh3HashSet<&str> = rules
+      .chain(keyframes)
+      .flat_map(StyleDeclarationBlock::image_urls)
+      .collect();
+
+    urls.into_iter()
+  }
+
   /// The index over [`Self::rules`].
   pub(crate) fn rule_index(&self) -> &RuleIndex {
     &self.rule_index
@@ -1594,6 +1614,19 @@ mod tests {
         .width,
       Length::Px(100.0).into()
     );
+  }
+
+  #[test]
+  fn image_urls_cover_rules_and_keyframes() {
+    let sheet = parse_stylesheet_loosy(
+      "a { background: url(a.png) } b { background-image: url(b.png) !important } \
+       @keyframes k { to { background-image: url(c.png) } } d { background: url(a.png) }",
+    );
+    let mut urls: Vec<&str> = sheet.image_urls().collect();
+
+    urls.sort_unstable();
+
+    assert_eq!(urls, ["a.png", "b.png", "c.png"]);
   }
 
   #[test]

@@ -32,6 +32,7 @@ use std::{
 
 use image::RgbaImage;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use roxmltree::{Document, Node as XmlNode};
 use takumi::{
   prelude::{
     FontOverride, FontResource, Fonts, FromHtml, FromHtmlOptions, ImageCacheMode, ImageSource,
@@ -200,6 +201,43 @@ fn wpt_reftests() {
   );
 
   assert!(regressed.is_empty(), "{regressed:#?}");
+}
+
+/// What a browser's default style sheet sets that takumi's does not: CSS's initial `box-sizing`,
+/// which takumi changes to `border-box`, apart from tables.
+const UA_SHEET: &str = "* { box-sizing: content-box } ::before, ::after { box-sizing: content-box } table { box-sizing: border-box }";
+
+/// The `<style>` blocks of a document with their offsets. HTML reads a block as raw text; XHTML
+/// reads it as XML, which unwraps CDATA sections and decodes character references, so each block
+/// goes through an XML parser alone, apart from the entities of the document's DTD.
+fn style_blocks(source: &str, is_xhtml: bool) -> Vec<(usize, String)> {
+  source
+    .match_indices("<style")
+    .filter_map(|(start, _)| {
+      let (_, inner) = source[start..].split_once('>')?;
+      let (sheet, _) = inner.split_once("</style>")?;
+      let sheet = is_xhtml
+        .then(|| xml_text(&format!("<style>{sheet}</style>")))
+        .flatten()
+        .unwrap_or_else(|| sheet.to_owned());
+
+      Some((start, sheet))
+    })
+    .collect()
+}
+
+/// The text an XML parser reads in `element`; none when it is not well-formed.
+fn xml_text(element: &str) -> Option<String> {
+  let document = Document::parse(element).ok()?;
+
+  Some(
+    document
+      .root_element()
+      .descendants()
+      .filter(XmlNode::is_text)
+      .filter_map(|node| node.text())
+      .collect(),
+  )
 }
 
 /// The rules `tests/wpt-reftests.txt` lists: `path` expects one test to pass and `dir/` every test
@@ -814,45 +852,78 @@ impl Runner {
 
   /// The document at `path` rendered onto white, as RGBA.
   fn render(&self, path: &Path, source: &str) -> Result<Vec<u8>, String> {
-    let linked = positioned_tags(source, "link")
+    let linked: Vec<(usize, PathBuf, String)> = positioned_tags(source, "link")
       .into_iter()
       .filter_map(|(start, attributes)| {
         let is_stylesheet = attributes
           .get("rel")
           .is_some_and(|rel| rel.eq_ignore_ascii_case("stylesheet"));
-        let sheet = fs::read_to_string(self.resolve(path, attributes.get("href")?)).ok()?;
 
-        is_stylesheet.then_some((start, sheet))
-      });
-    // An XHTML document's parser takes a `<style>` block's CDATA section apart before CSS sees it.
-    let inline = source.match_indices("<style").filter_map(|(start, _)| {
-      let (_, inner) = source[start..].split_once('>')?;
-      let (sheet, _) = inner.split_once("</style>")?;
+        if !is_stylesheet {
+          return None;
+        }
 
-      Some((start, sheet.replace("<![CDATA[", "").replace("]]>", "")))
-    });
-    // Later sheets win ties, so they keep document order.
-    let mut sheets: Vec<(usize, String)> = linked.chain(inline).collect();
+        let sheet_path = self.resolve(path, attributes.get("href")?);
+        let sheet = fs::read_to_string(&sheet_path).ok()?;
 
-    sheets.sort_by_key(|(start, _)| *start);
-
-    let stylesheet = StyleSheet::parse_list_loosy(sheets.into_iter().map(|(_, sheet)| sheet));
-
-    let images: HashMap<Arc<str>, ImageSource> = tags(source, "img")
+        Some((start, sheet_path, sheet))
+      })
+      .collect();
+    let is_xhtml = path
+      .extension()
+      .is_some_and(|extension| extension == "xht" || extension == "xhtml");
+    let inline = style_blocks(source, is_xhtml);
+    let node = Node::from_html(source, FromHtmlOptions::default())
+      .map_err(|error| format!("parse: {error}"))?;
+    // Each sheet with the file its `url()`s resolve against, in document order, as later sheets
+    // win ties.
+    let mut sheets: Vec<(usize, PathBuf, String)> = linked
       .into_iter()
-      .filter_map(|attributes| {
-        let src = attributes.get("src")?;
-        let data = fs::read(self.resolve(path, src)).ok()?;
+      .chain(
+        inline
+          .into_iter()
+          .map(|(start, sheet)| (start, path.to_path_buf(), sheet)),
+      )
+      .collect();
+
+    sheets.sort_by_key(|(start, ..)| *start);
+
+    let parsed: Vec<(PathBuf, StyleSheet)> = sheets
+      .iter()
+      .map(|(_, base, sheet)| (base.clone(), StyleSheet::parse_loosy(sheet)))
+      .collect();
+    // Image URLs as takumi looks them up, with the file each resolves against: `<img>` sources as
+    // written, since `Node::image_urls` keeps only remote ones, then style attributes and sheets.
+    let img_sources: Vec<String> = tags(source, "img")
+      .into_iter()
+      .filter_map(|mut attributes| attributes.remove("src"))
+      .collect();
+    let sources = img_sources
+      .iter()
+      .map(String::as_str)
+      .chain(node.image_urls())
+      .map(|url| (url, path))
+      .chain(
+        parsed
+          .iter()
+          .flat_map(|(base, sheet)| sheet.image_urls().map(move |url| (url, base.as_path()))),
+      );
+    let images: HashMap<Arc<str>, ImageSource> = sources
+      .filter_map(|(url, base)| {
+        let data = fs::read(self.resolve(base, url)).ok()?;
         let image = self
           .images
           .get_or_decode(&data, ImageCacheMode::Auto)
           .ok()?;
 
-        Some((Arc::from(src.as_str()), image))
+        Some((Arc::from(url), image))
       })
       .collect();
-    let node = Node::from_html(source, FromHtmlOptions::default())
-      .map_err(|error| format!("parse: {error}"))?;
+    let stylesheet = StyleSheet::parse_list_loosy(
+      [UA_SHEET.to_owned()]
+        .into_iter()
+        .chain(sheets.into_iter().map(|(.., sheet)| sheet)),
+    );
     let bitmap = render(
       RenderOptions::builder()
         .viewport(Viewport::new(VIEWPORT))
@@ -944,4 +1015,19 @@ fn compress_lists_the_failures_of_a_mostly_passing_directory() {
     .into()
   );
   assert_eq!(expectations.names(&all), passing);
+}
+
+#[test]
+fn xhtml_style_blocks_read_as_xml() {
+  let source = "<style><![CDATA[a > b {}]]></style><p>&nbsp;</p><style>c &gt; d {}</style>";
+  let sheets: Vec<String> = style_blocks(source, true)
+    .into_iter()
+    .map(|(_, sheet)| sheet)
+    .collect();
+
+  assert_eq!(sheets, ["a > b {}", "c > d {}"]);
+  assert_eq!(
+    style_blocks("<style>e &gt; f {}</style>", false)[0].1,
+    "e &gt; f {}"
+  );
 }
