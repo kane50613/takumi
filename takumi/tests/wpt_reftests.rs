@@ -31,7 +31,7 @@ use std::{
 };
 
 use image::RgbaImage;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use roxmltree::{Document, Node as XmlNode};
 use takumi::{
   prelude::{
@@ -400,7 +400,7 @@ impl Directory {
 
 /// Every reftest under `dir`: an HTML or XHTML file that links a reference, and is not one.
 fn reftests(dir: &Path) -> Vec<PathBuf> {
-  let mut found = Vec::new();
+  let mut documents = Vec::new();
   let mut pending = vec![dir.to_path_buf()];
 
   while let Some(dir) = pending.pop() {
@@ -430,15 +430,19 @@ fn reftests(dir: &Path) -> Vec<PathBuf> {
       let is_reference =
         stem.ends_with("-ref") || stem.ends_with("-notref") || stem.contains("-ref-");
 
-      if is_document
-        && !is_reference
-        && fs::read_to_string(&path)
-          .is_ok_and(|source| !references(&source).is_empty() && !changes_itself(&source))
-      {
-        found.push(path);
+      if is_document && !is_reference {
+        documents.push(path);
       }
     }
   }
+
+  let mut found: Vec<PathBuf> = documents
+    .into_par_iter()
+    .filter(|path| {
+      fs::read_to_string(path)
+        .is_ok_and(|source| !references(&source).is_empty() && !changes_itself(&source))
+    })
+    .collect();
 
   found.sort();
 
