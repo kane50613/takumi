@@ -4,13 +4,13 @@ description: Load local or Google Fonts, choose fallbacks for multilingual text,
 icon: Type
 ---
 
-Takumi never reads system fonts. Load fonts covering your text. The built-in Geist covers Latin at weights 300–800 as a last resort. Registered fonts take priority, and generic families such as `sans-serif` resolve to them.
+Load a font for every script your text uses. Takumi never reads system fonts. The only built-in font is Geist, which covers Latin at weights 300 to 800 and comes last in every fallback chain. Generic families such as `sans-serif` resolve to the fonts you load.
 
 ## Loading fonts
 
 ### The `fonts` option
 
-Pass the fonts a render needs through `fonts`. An entry takes one of three forms:
+Pass the fonts a render needs through `fonts`. Each entry takes one of three forms:
 
 | Entry      | Resolves to                                                                          |
 | ---------- | ------------------------------------------------------------------------------------ |
@@ -18,7 +18,9 @@ Pass the fonts a render needs through `fonts`. An entry takes one of three forms
 | Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                     |
 | Descriptor | `{ name, data, weight, style, generic }`. The fields override what the file reports. |
 
-A reused renderer decodes each file once and keeps it until you [release it](#releasing-fonts). `fonts` also takes a promise of the list, so async helpers like `googleFonts` pass straight through without `await`.
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`.
+
+The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
@@ -30,7 +32,7 @@ export function GET() {
 }
 ```
 
-The descriptor overrides what the file reports, or supplies bytes through a loader. `data` is raw bytes or a function that returns them.
+A descriptor's `data` is raw bytes or a function that returns them:
 
 ```tsx twoslash title="Override font metadata"
 import { ImageResponse } from "takumi-js/response";
@@ -48,9 +50,7 @@ export function GET() {
 }
 ```
 
-The takumi-js functions `render`, `renderAnimation`, and `renderSvg` take the same `fonts` option.
-
-`generic` claims a CSS generic family keyword for the font, so stacks ending in `monospace`, `serif`, and friends reach it without naming the family, the way Tailwind's `font-mono` resolves:
+`generic` assigns the font to a CSS generic family keyword. A stack that ends in `monospace` or `serif` then reaches the font without naming it. This is how Tailwind's `font-mono` finds it:
 
 ```tsx twoslash title="Assign a generic font family"
 import { ImageResponse } from "takumi-js/response";
@@ -82,7 +82,7 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
 });
 ```
 
-`googleFonts` fetches one CSS response for the requested families. Font files load when the renderer needs their coverage subsets. Use the family name in `fontFamily`; [subsetting](#subsetting) selects the files needed for the text.
+`googleFonts` makes one CSS request for all the families. Font files download only when the text needs them; see [subsetting](#subsetting). Use the family name in `fontFamily`.
 
 Pass an object instead of a name to set a family's weight, style, or variable axes:
 
@@ -107,17 +107,15 @@ await googleFonts([
 ]);
 ```
 
-Each family accepts:
+| Field     | Accepts                                     | Effect                                                                           |
+| --------- | ------------------------------------------- | -------------------------------------------------------------------------------- |
+| `name`    | a family name                               | The family to load. Known families autocomplete their weights and axes.          |
+| `weight`  | a weight, an array, or a range `"100..900"` | Defaults to `400`. A range loads the variable font, and `font-weight` drives it. |
+| `style`   | `"normal"`, `"italic"`, or both             | Defaults to `"normal"`. Which styles to fetch.                                   |
+| `axes`    | `{ tag: value \| "min..max" }`              | Variable axes to load, such as `{ opsz: "9..144" }`. A range keeps them live.    |
+| `generic` | a CSS generic family keyword                | Every loaded subset claims it, so `font-mono` can resolve to the family.         |
 
-| Field     | Accepts                                     | Effect                                                                     |
-| --------- | ------------------------------------------- | -------------------------------------------------------------------------- |
-| `name`    | a family name                               | The family to load. Known families autocomplete their weights and axes.    |
-| `weight`  | a weight, an array, or a range `"100..900"` | A range loads the variable font; CSS `font-weight` drives it.              |
-| `style`   | `"normal"`, `"italic"`, or both             | Which styles to fetch.                                                     |
-| `axes`    | `{ tag: value \| "min..max" }`              | Variable axes to load, e.g. `{ opsz: "9..144" }`. A range keeps them live. |
-| `generic` | a CSS generic family keyword                | Every loaded subset claims it, so e.g. `font-mono` resolves to the family. |
-
-Pass an object for request-level options:
+Pass an object instead of an array for request options:
 
 ```ts twoslash title="Limit font requests"
 import { googleFonts } from "takumi-js/helpers";
@@ -131,15 +129,17 @@ const fonts = await googleFonts({
 | Option     | Accepts                | Effect                                                    |
 | ---------- | ---------------------- | --------------------------------------------------------- |
 | `families` | the list above         | The families to load, in fallback priority order.         |
-| `display`  | a `font-display` value | Maps to CSS `font-display`.                               |
-| `cache`    | a `Map`                | Overrides the bounded metadata CSS cache.                 |
+| `display`  | a `font-display` value | Sent as `display` in the CSS request.                     |
+| `cache`    | a `Map`                | Replaces the default cache of CSS responses.              |
 | `baseUrl`  | a css2 endpoint        | Point at a mirror such as `https://fonts.bunny.net/css2`. |
 
-The default CSS cache shares concurrent requests within each fetch implementation and evicts old entries automatically. Requests with `signal` or `allowUrl` bypass caching so cancellation and redirect checks stay local to the caller. `maxBytes` also applies to cache hits.
+`googleFonts` also takes the [fetch options](/docs/load-images#fetch-limits): `timeout`, `signal`, `maxBytes`, `allowUrl`, and `fetch`. The timeout covers each request on its own: the CSS request, then each font file. It does not cover the whole render.
 
-Temporary network failures are retried within the request's timeout. See [fetch limits](/docs/load-images#fetch-limits) for defaults, cancellation, and retry conditions. The timeout applies separately to the CSS request and each font file, not to the whole render.
+The default CSS cache is bounded and shares concurrent requests for the same URL. A request with `signal` or `allowUrl` skips the cache, so cancellation and URL checks stay with the caller. `maxBytes` applies to cache hits too.
 
 ### Fonts in CI and offline renders
+
+Bundle font files when a render must work without Google Fonts:
 
 ```tsx twoslash title="Fonts in CI and offline renders"
 import { readFile } from "node:fs/promises";
@@ -152,30 +152,30 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello</div>, {
 });
 ```
 
-Bundle font files when a render must work without Google Fonts. Retries can recover a brief outage, but not an unavailable host or a blocked CI network. Keep unit tests on local files or an injected `fetch`, and test the live service separately.
+Retries recover a brief outage. They do not help when the host is down or the CI network blocks it. Run unit tests against local files or an injected `fetch`, and test the live service separately.
 
-An outer test or route timeout can end the render before the helper's deadline. Set `timeout` below that outer limit, leaving time for layout and encoding.
+An outer test or route timeout can end the render before the font timeout does. Set `timeout` below that outer limit, and leave time for layout and encoding.
 
-CJK families can expose many coverage subsets. Takumi filters them by the text's codepoints before downloading, but matching subsets from multiple families or weights may still load together. Request only the families and weights your template needs. A timeout in `await googleFonts(...)` occurs during the CSS request, before these font downloads start.
+CJK families can have many coverage subsets. Takumi downloads only the subsets your text uses. Matching subsets from several families or weights still download together, so request only the families and weights you use. A timeout during `await googleFonts(...)` comes from the CSS request, before any font file downloads.
 
 ### Subsetting
 
-`render` registers only the subsets the content draws, so the same `fonts` work for any text and unused ranges never download. The pass runs automatically.
+`render` registers only the subsets the content draws. The same `fonts` list works for any text, and unused ranges never download. This runs on every render.
 
-| Font kind                           | Behavior                                    |
-| ----------------------------------- | ------------------------------------------- |
-| Ranged subsets (from `googleFonts`) | Trimmed to the codepoints the content uses. |
-| Whole files (URL string, raw bytes) | No `unicode-range`, so they load in full.   |
+| Font kind                           | Behavior                                  |
+| ----------------------------------- | ----------------------------------------- |
+| Ranged subsets (from `googleFonts`) | Kept only when the text uses their range. |
+| Whole files (URL string, raw bytes) | No `unicode-range`, so they always load.  |
 
-To trim before the render, call `subsetFonts({ fonts, source })`, where `source` is the string, node, or node array you render.
+To filter a list yourself, call `subsetFonts({ fonts, source })` from `takumi-js/helpers`. `source` is the string, node, or node array you render.
 
 ### Preloading with `registerFont`
 
-`registerFont` is the escape hatch for preloading. Register a font on a renderer up front, outside the request path, and reuse that renderer. It takes the same entries as `fonts` and returns the families it made.
+To load fonts before the first request, register them on a renderer. Then pass that renderer to each render. `registerFont` takes the same entries as `fonts` and returns the families it added.
 
 ```tsx twoslash title="Preload a local font"
 import { readFile } from "node:fs/promises";
-import { Renderer } from "@takumi-rs/core";
+import { Renderer } from "takumi-js/node";
 import { ImageResponse } from "takumi-js/response";
 
 const inter = await readFile(new URL("./fonts/Inter.woff2", import.meta.url));
@@ -194,28 +194,28 @@ export function GET() {
 
 ### Releasing fonts
 
-A long-running renderer keeps every font it registers. Release the ones you are done with:
+A renderer keeps every font it loads. Release the ones you no longer need:
 
 ```ts
 renderer.unregisterFont({ name: "Inter" }); // every face and subset of Inter
-renderer.clearFonts(); // back to the bundled fallback font
+renderer.clearFonts(); // back to the built-in Geist
 ```
 
-A later render that lists a released font registers it again.
+A later render that lists a released font loads it again.
 
-To release them automatically, cap the decoded font bytes that renders' `fonts` lists keep:
+To release fonts automatically, cap the decoded bytes that `fonts` lists may keep:
 
 ```ts
 const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 });
 ```
 
-Past the cap, the least recently used families go first. Fonts from `registerFont` stay, and so does the font loaded last, even past the cap alone. Set the cap above what one render needs.
+Past the cap, the least recently used families go first. Fonts from `registerFont` always stay. The font loaded last also stays, even if it alone exceeds the cap. Set the cap above what one render needs.
 
 ## Choosing a font
 
 ### Fallback chain
 
-`fontFamilies` is the ordered list of families to try when a glyph is missing. It defaults to all registered families in registration order, with the built-in Geist last. Set it to pin which family wins and what backs it up.
+`fontFamilies` is the ordered list of families to try when a glyph is missing. Set it to choose which family wins and what backs it up.
 
 ```tsx twoslash title="Choose font fallback order"
 import { render } from "takumi-js";
@@ -227,11 +227,13 @@ const image = await render(<div>Hello こんにちは</div>, {
 });
 ```
 
-A missing glyph walks the chain until a family covers it. `googleFonts` builds on this: each subset registers under its own internal name, while one logical family name in `font-family` expands across them.
+Without `fontFamilies`, the chain is the render's `fonts` in list order. A render without `fonts` uses every registered family in registration order. Geist always comes last.
+
+A missing glyph walks the chain until a family covers it. `googleFonts` registers every subset under its family name with its `unicode-range`. Each character then uses the subset that covers it, as in a browser.
 
 ### Variable axes & OpenType features
 
-Control font axes with `font-variation-settings`. Control OpenType features with `font-feature-settings`. For variable fonts, `font-weight` is shorthand for the `wght` axis, and `font-stretch` drives `wdth`. Kerning is on by default; `font-kerning: none` turns it off.
+Set font axes with `font-variation-settings` and OpenType features with `font-feature-settings`. In a variable font, `font-weight` drives the `wght` axis and `font-stretch` drives `wdth`. Kerning is on by default; `font-kerning: none` turns it off.
 
 ```tsx title="Set axes and OpenType features"
 <div
@@ -245,7 +247,7 @@ Control font axes with `font-variation-settings`. Control OpenType features with
 </div>
 ```
 
-Register a variable font once, with no `weight`, and its axes stay live:
+Register a variable font once, with no `weight`, to keep its axes live:
 
 ```tsx title="Register a variable font"
 // a `weight` here pins the file to that instance instead
@@ -255,35 +257,28 @@ await renderer.registerFont({ name: "Fraunces", data: variableWoff2 });
 `googleFonts` does this for you: a weight range or an `axes` entry fetches the variable file and leaves its axes free.
 
 <Callout>
-  Which axes a file exposes depends on the build. Google Fonts bakes the axes you didn't request to
-  their defaults, so `Fraunces` there exposes `opsz` and `wght` only. Other builds keep `SOFT` and
-  `WONK` live, and setting them changes the letterforms.
+  Which axes a file exposes depends on the build. Google Fonts fixes the axes you did not request at
+  their defaults, so `Fraunces` from there exposes only `opsz` and `wght`. Other builds keep `SOFT`
+  and `WONK` live, and setting them changes the letterforms.
 </Callout>
 
 ### Synthetic bold & italic
 
-When a family lacks the weight or style you asked for, Takumi fakes a bold or oblique. `font-synthesis` turns that off. Missing weights then stay regular.
+When a family lacks the weight or style you asked for, Takumi draws a synthetic bold or oblique. `font-synthesis` controls this.
 
 ```tsx title="Synthetic bold & italic"
 <div style={{ fontFamily: "Inter", fontSynthesis: "none" }}>No faux bold</div>
 ```
 
-Values are `weight`, `style`, or `none`. Pass `weight`, `style`, or both to allow each one; `none` disables them. Emoji never get a fake bold.
+List `weight`, `style`, `small-caps`, or any mix of them to allow each one. `none` turns them all off, so a missing bold weight draws at regular weight.
 
 ## Styling text
 
 ### Color, stroke, and fill
 
-`color` accepts modern CSS color spaces:
+`color` takes modern CSS color spaces, such as `oklch()`, `lab()`, and `color(display-p3 ...)`, as well as `rgb()` and `hsl()`.
 
-- `rgb`
-- `hsl`
-- `oklch`
-- `lab`
-- `display-p3`
-- and more
-
-Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`.
+Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`. The stroke uses `color` when you leave its color out.
 
 ```tsx title="Color, stroke, and fill"
 <div
@@ -296,8 +291,6 @@ Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-tex
   Outlined
 </div>
 ```
-
-The stroke color defaults to `color` when you omit it.
 
 ### Decoration & transform
 
@@ -316,7 +309,7 @@ The stroke color defaults to `color` when you omit it.
 
 ### Shadow
 
-`text-shadow` takes offset, blur, and color. Stack layers with commas.
+`text-shadow` takes offsets, a blur radius, and a color. Separate layers with commas.
 
 ```tsx title="Shadow"
 <div style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.5), 0 0 8px blue" }}>Glow</div>
@@ -324,7 +317,7 @@ The stroke color defaults to `color` when you omit it.
 
 ### Spacing & alignment
 
-`letter-spacing`, `word-spacing`, `line-height`, `text-indent`, and `text-align` (including `justify`) work as in the browser.
+`letter-spacing`, `word-spacing`, `line-height`, `text-indent`, and `text-align` work as in a browser, `justify` included.
 
 ```tsx title="Spacing & alignment"
 <div
@@ -343,19 +336,17 @@ The stroke color defaults to `color` when you omit it.
 
 ### Wrapping
 
-Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://github.com/vercel/satori/blob/2a0878a7f329bdba3a17ad68f71186a47add0dde/src/text/index.ts#L365). `balance` evens out line lengths. `pretty` stops the last line from stranding one word.
+`text-wrap: balance` evens out line lengths. `text-wrap: pretty` keeps the last line from holding a single word.
 
 ```tsx title="Wrapping"
 <div style={{ textWrap: "balance" }}>Super Long Text</div>
 ```
 
-`word-break` and `overflow-wrap` decide where a long token splits. `break-all`, `keep-all`, and `anywhere` cover CJK (Chinese/Japanese/Korean) and long URLs.
+`word-break` and `overflow-wrap` decide where a long word splits. Use `word-break: keep-all` to keep CJK (Chinese, Japanese, Korean) words whole, and `break-all` or `overflow-wrap: anywhere` to split long URLs.
 
 ### Truncation
 
-`line-clamp` cuts text after its line count and ends the last line with an ellipsis, as Chrome does. `line-clamp: 3 none` cuts without one. The legacy `-webkit-line-clamp` cuts only together with `display: -webkit-box` and `-webkit-box-orient: vertical`, as in browsers.
-
-`text-overflow: ellipsis` applies only to a box that clips its overflow, as in Chrome, so set `overflow: hidden` with it. It ends a line that overflows the box's width, such as `white-space: nowrap` text or a word too long to break. Text cut off by the box's height is clipped without an ellipsis; use `line-clamp` to end the text after a number of lines.
+`line-clamp` cuts text after a number of lines and ends the last line with an ellipsis, as Chrome does. `line-clamp: 3 none` cuts without one. The legacy `-webkit-line-clamp` works only with `display: -webkit-box` and `-webkit-box-orient: vertical`, as in browsers.
 
 ```tsx title="Truncation"
 <div
@@ -367,16 +358,18 @@ Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://g
 </div>
 ```
 
+`text-overflow: ellipsis` works only on a box that clips its overflow, as in Chrome, so set `overflow: hidden` with it. It ends a line that is wider than the box, such as `white-space: nowrap` text or a word too long to break. Text cut off by the box's height gets no ellipsis; use `line-clamp` for that.
+
 ### Fit to container
 
-`text-fit` scales text to fit its line box instead of wrapping or overflowing. The mode comes first: `grow`, `shrink`, or `none`. An optional target and percentage cap follow.
+`text-fit` scales text to fit its line box instead of wrapping or overflowing. The value starts with a mode: `grow`, `shrink`, or `none`. An optional target and a percentage cap follow.
 
 ```tsx title="Fit to container"
 <div style={{ textFit: "shrink" }}>Headline that always fits</div>
 <div style={{ textFit: "grow per-line 150%" }}>Per-line scaled, capped at 150%</div>
 ```
 
-The optional target controls which lines share a scale:
+The target decides which lines share a scale:
 
 | Target                 | Effect                            |
 | ---------------------- | --------------------------------- |
@@ -384,17 +377,25 @@ The optional target controls which lines share a scale:
 | `per-line`             | Scales each line except the last. |
 | `per-line-all`         | Scales every line.                |
 
-The percentage caps how far the scale can move.
+The percentage caps how far the scale can go.
 
-With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the percentage cap holds back. The `line-clamp` count still applies.
+With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the cap holds back. The `line-clamp` count still applies.
 
 ### RTL & bidirectional text
 
-Takumi handles Right-to-Left scripts like Arabic and Hebrew, including mixed runs. There's no manual override for text direction yet (see [issue #330](https://github.com/kane50613/takumi/issues/330)). The `direction` property controls layout, not the text run.
+Takumi runs the Unicode Bidirectional Algorithm, so Arabic and Hebrew text, mixed with left-to-right text, orders correctly. Set the base direction with the `dir` attribute or `direction: rtl`. `unicode-bidi` controls embedding, isolation, and overrides, as in a browser.
+
+```tsx title="Right-to-left paragraph"
+<p dir="rtl">مرحبا بالعالم, Hello</p>
+```
 
 ### Language-aware text
 
-The `lang` attribute sets the BCP-47 language for a node. Descendants inherit it, and a nested `lang` overrides. It drives locale-aware shaping: Han unification (one code point draws a different glyph for `zh-Hans`, `zh-Hant`, `ja`, or `ko`) and language-correct line breaking.
+The `lang` attribute sets a node's BCP-47 language. Descendants inherit it, and a nested `lang` overrides it. Takumi uses it in three places:
+
+- **Shaping**: one code point can draw a different glyph for `zh-Hans`, `zh-Hant`, `ja`, or `ko` (Han unification).
+- **Case mapping**: `text-transform` follows Turkish, Azerbaijani, and Greek rules for those languages.
+- **Selectors**: `:lang()` matches it.
 
 ```tsx title="Set each element’s language"
 <div>
@@ -403,12 +404,12 @@ The `lang` attribute sets the BCP-47 language for a node. Descendants inherit it
 </div>
 ```
 
-To set a default for the whole render, pass `lang`. Per-node `lang` still overrides it.
+Pass `lang` to set a default for the whole render. A node's own `lang` still overrides it.
 
 ```tsx title="Set the default language"
 const image = await render(node, { width: 1200, height: 630, fonts, lang: "ja" });
 ```
 
-The glyphs only change when the font carries per-language variants, such as a pan-CJK font. With a single-region font every language draws the same glyph.
+Glyphs change only when the font has per-language variants, such as a pan-CJK font. A font made for one region draws the same glyph for every language.
 
-Emoji rendering lives on its own page: [Images & emoji](/docs/load-images).
+Emoji have their own section: [Images & emoji](/docs/load-images#emoji).

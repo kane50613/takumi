@@ -1,12 +1,43 @@
 ---
 title: Introduction
-description: Generate Open Graph images, social cards, SVG, and animations from JSX, HTML, and CSS with Takumi.
+description: Takumi lays out JSX, HTML, and CSS with one engine and turns the result into images, PDFs, or paint trees, without a browser.
 icon: Axe
 ---
 
-Takumi generates Open Graph (OG) images, social cards, and banners from JSX, HTML, or node trees. Style them with CSS or Tailwind, then render PNG, JPEG, WebP, SVG, or animations without a headless browser.
+Takumi is one layout engine, with text and inline layout ported from Chromium. It turns JSX, HTML, and CSS into images, PDFs, and other outputs without a headless browser.
 
-Use `takumi-js` for image output. For invoices, reports, and other documents, start with [PDF generation](/docs/pdf). To hand boxes and text runs to another drawing API, such as a PPTX writer, start with [the paint tree](/docs/paint).
+## Pick a package
+
+Each package runs the same layout engine. Pick the one that produces your output.
+
+<Cards>
+  <Card
+    title="Images and animations"
+    href="#install"
+    description="takumi-js: PNG, JPEG, WebP, SVG, and animated WebP, APNG, or GIF. Open Graph images are one use."
+    icon={<Zap />}
+  />
+  <Card
+    title="PDF documents"
+    href="/docs/pdf"
+    description="takumi-pdf: paged documents such as invoices, reports, and tickets."
+    icon={<BookOpen />}
+  />
+  <Card
+    title="Paint tree"
+    href="/docs/paint"
+    description="takumi-paint: the shapes, text runs, and images to draw with Canvas, slides, or a native API."
+    icon={<Palette />}
+  />
+  <Card
+    title="Measure"
+    href="/docs/measure-api"
+    description="measure() in takumi-js: box sizes and text runs without painting."
+    icon={<Wrench />}
+  />
+</Cards>
+
+The rest of this page uses `takumi-js`.
 
 ## Install
 
@@ -14,11 +45,16 @@ Use `takumi-js` for image output. For invoices, reports, and other documents, st
 npm i takumi-js
 ```
 
-`takumi-js` bundles both bindings: the native renderer (`@takumi-rs/core`) and the WebAssembly one (`@takumi-rs/wasm`). It picks the right one at runtime: native on Node.js, WebAssembly on Cloudflare Workers, Vercel Edge, Deno, and the browser. No extra install.
+`takumi-js` ships two backends and picks one at runtime. You install nothing else.
+
+| Runtime                                           | Backend                         |
+| ------------------------------------------------- | ------------------------------- |
+| Node.js, Bun                                      | native (`@takumi-rs/core`)      |
+| Cloudflare Workers, edge runtimes, Deno, browsers | WebAssembly (`@takumi-rs/wasm`) |
 
 ## Render an image
 
-`render` takes JSX and returns image bytes. The built-in font covers the Latin text in this example. Save it as `image.tsx` and run `bun image.tsx`, or compile the JSX before running it in Node.js.
+`render` takes JSX and returns encoded image bytes. Save this as `image.tsx` and run `bun image.tsx`. In Node.js, compile the JSX first.
 
 ```tsx twoslash title="image.tsx"
 import { render } from "takumi-js";
@@ -40,12 +76,12 @@ const png = await render(
 await writeFile("hello.png", png);
 ```
 
-- `width` and `height` set the canvas.
-- `tw="w-full h-full"` makes the root fill that canvas.
+- `width` and `height` set the image size. Leave one out to size that side to the content.
+- `tw="w-full h-full"` makes the root fill the image.
 
 ## Serve it over HTTP
 
-[`ImageResponse`](/docs/image-response) extends the web `Response`, so any runtime with `Request` and `Response` can return it. The API matches `next/og`.
+[`ImageResponse`](/docs/image-response) extends the web `Response`. Return it from any route handler that uses `Request` and `Response`. Its API matches `next/og`.
 
 ```tsx twoslash title="app/og/route.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -59,14 +95,14 @@ export function GET() {
 ```
 
 <Callout type="warning">
-  Takumi never reads system fonts. One last-resort font ships built in (Geist, Latin only, weights
-  300 to 800). Load fonts for other scripts through `fonts` to avoid missing glyphs. See
+  Takumi never reads system fonts. The only built-in font is Geist, which covers Latin at weights
+  300 to 800. Load fonts for other scripts through `fonts`, or their glyphs go missing. See
   [Fonts](/docs/typography-and-fonts).
 </Callout>
 
 ## Load a font
 
-`googleFonts` fetches families in one request and returns `fonts` entries. A weight range or an `axes` entry loads the variable font, so `font-weight` and `font-variation-settings` drive its axes per element.
+`googleFonts` loads Google Fonts families in one request. A weight range or an `axes` entry loads the variable font. Then `font-weight` and `font-variation-settings` set its axes per element.
 
 ```tsx twoslash title="Load a variable font"
 import { render } from "takumi-js";
@@ -99,12 +135,11 @@ const png = await render(
 );
 ```
 
-- `fonts` also takes raw bytes, a descriptor, or a bare URL string.
-- Rendering many images? Register the fonts once on a [`Renderer`](/docs/typography-and-fonts#preloading-with-registerfont) and reuse it.
+`fonts` also takes a font URL, raw bytes, or a descriptor. To load fonts before the first request, [register them on a `Renderer`](/docs/typography-and-fonts#preloading-with-registerfont).
 
 ## Coming from satori
 
-Takumi defaults a bare `<div>` to block layout. Keep explicit Flexbox styles when migrating a Satori template, and compare the rendered output. `renderSvg()` returns SVG, while `render()` returns encoded image bytes. See the [Satori comparison and migration guide](/docs/comparison-to-satori).
+A bare `<div>` lays out as a block, as in a browser. Keep explicit Flexbox styles when you move a Satori template, and compare the output. `renderSvg()` returns SVG like `satori()` does. `render()` returns encoded image bytes. See the [Satori comparison and migration guide](/docs/comparison-to-satori).
 
 ## Next steps
 
@@ -118,14 +153,14 @@ Takumi defaults a bare `<div>` to block layout. Keep explicit Flexbox styles whe
   <Card
     title="Integration"
     href="/docs/integration"
-    description="Add image generation to your framework"
+    description="Add Takumi to your framework"
     icon={<ToyBrick />}
   />
   <Card
     title="Styling"
     href="/docs/styling"
     description="Inline styles, Tailwind, and full stylesheets"
-    icon={<Palette />}
+    icon={<FileCode2 />}
   />
   <Card
     title="Fonts & text"
