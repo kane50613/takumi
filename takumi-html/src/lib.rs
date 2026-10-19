@@ -265,9 +265,10 @@ impl Default for FromHtmlOptions {
 /// unrendered elements are dropped. A single root element is returned as-is; multiple
 /// roots are wrapped in a full-size container.
 ///
-/// A source that starts with an `<html>` element is parsed as a document, so
-/// the tree keeps that element as its root along with `<head>` and `<body>`.
-/// Anything else is parsed as a fragment and gains no wrappers of its own.
+/// A source that starts with a doctype or an `<html>` element is parsed as a
+/// document, so the tree has an `<html>` root along with `<head>` and `<body>`,
+/// as a browser builds them. Anything else is parsed as a fragment and gains no
+/// wrappers of its own.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
   let builder = NodeBuilder {
     presets: &options.presets,
@@ -277,7 +278,7 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
   };
   let mut nodes = Vec::new();
 
-  if starts_with_html_element(source) {
+  if is_document(source) {
     let dom = parse_document(DomSink::default(), ParseOpts::default()).one(source);
 
     builder.build_nodes(dom.document(), 0, &mut nodes)?;
@@ -304,26 +305,20 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
   Ok(collapse(nodes))
 }
 
-/// Whether the source opens with an `<html>` tag, ignoring leading whitespace,
-/// a doctype, and comments.
+/// Whether the source is a document: it opens with a doctype or an `<html>` tag, ignoring
+/// leading whitespace and comments.
 ///
 /// Document parsing invents `<html>`, `<head>` and `<body>` for a source that
 /// has none, which would wrap every fragment in boxes its author never wrote.
-fn starts_with_html_element(source: &str) -> bool {
+fn is_document(source: &str) -> bool {
   let mut rest = source.trim_start();
 
   loop {
-    let lowered = rest.get(..9).map(str::to_ascii_lowercase);
-
-    if lowered
-      .as_deref()
-      .is_some_and(|s| s.starts_with("<!doctype"))
+    if rest
+      .get(..9)
+      .is_some_and(|prefix| prefix.eq_ignore_ascii_case("<!doctype"))
     {
-      let Some((_, after)) = rest.split_once('>') else {
-        return false;
-      };
-      rest = after.trim_start();
-      continue;
+      return true;
     }
 
     if rest.starts_with("<!--") {
@@ -640,6 +635,16 @@ mod tests {
     assert_eq!(node.tag_name(), Some("html"));
     assert!(node.to_html().contains("font-size: 62.5%"));
 
+    assert!(node.to_html().contains("<body"));
+  }
+
+  /// A doctype makes a document even without an `<html>` tag, so the body and its margin are
+  /// there as in a browser.
+  #[test]
+  fn a_doctype_makes_a_document() {
+    let node = parse("<!DOCTYPE html><title>t</title><div>hi</div>");
+
+    assert_eq!(node.tag_name(), Some("html"));
     assert!(node.to_html().contains("<body"));
   }
 
