@@ -68,7 +68,7 @@ pub(crate) struct InlineBoxState<'a, 'c> {
 }
 
 impl<'a, 'c> InlineBoxState<'a, 'c> {
-  fn new(fragment_start: usize, style: &'c RenderContext, fonts: &StyleFonts) -> Self {
+  pub(crate) fn new(fragment_start: usize, style: &'c RenderContext, fonts: &StyleFonts) -> Self {
     Self {
       fragment_start,
       item: None,

@@ -29,6 +29,11 @@ impl FontHeight {
     self.ascent + self.descent
   }
 
+  /// Blink's `Contains`.
+  pub(crate) fn contains(&self, other: &Self) -> bool {
+    other.ascent <= self.ascent && other.descent <= self.descent
+  }
+
   /// Blink's `AddLeading`.
   pub(crate) fn add_leading(&mut self, start_and_end_leading: Self) {
     debug_assert!(!self.is_empty());

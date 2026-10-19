@@ -16,6 +16,7 @@ use super::{
   inline_node::InlineNode,
   inline_node_data::InlineNodeData,
   leading_floats::LeadingFloats,
+  line_break_candidate::{CandidateState, LineBreakCandidateContext},
   line_break_point::LineBreakPoint,
   line_info::LineInfo,
 };
@@ -48,6 +49,54 @@ use crate::{
     line_break_iterator::{BreakSpaceType, LineBreakIterator, LineBreakType},
   },
 };
+
+/// Blink's `ShapeResultWrapper` in `AppendCandidates`: positions in the candidates' coordinates.
+struct ShapeResultPositions<'s> {
+  shape_result: &'s ShapeResult,
+  start_index: u32,
+  base_position: f32,
+  is_ltr: bool,
+}
+
+impl<'s> ShapeResultPositions<'s> {
+  fn new(shape_result: &'s ShapeResult) -> Self {
+    shape_result.ensure_position_data();
+
+    Self {
+      shape_result,
+      start_index: shape_result.start_index(),
+      base_position: 0.0,
+      is_ltr: !shape_result.is_rtl(),
+    }
+  }
+
+  fn position_for_offset(&self, offset: usize) -> f32 {
+    let position = self
+      .shape_result
+      .cached_position_for_offset(offset as u32 - self.start_index)
+      .to_float();
+
+    if self.is_ltr {
+      self.base_position + position
+    } else {
+      self.base_position - position
+    }
+  }
+
+  /// Moves the shape result's coordinates so `offset` sits at `adjusted`.
+  fn set_base_position(&mut self, offset: usize, adjusted: f32) {
+    let position = self
+      .shape_result
+      .cached_position_for_offset(offset as u32 - self.start_index)
+      .to_float();
+
+    self.base_position = if self.is_ltr {
+      adjusted - position
+    } else {
+      adjusted + position
+    };
+  }
+}
 
 /// Blink's `LineBreakerMode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3339,6 +3388,275 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     if self.current.text_offset == item_result.item.end_offset() {
       self.current.item_index += 1;
     }
+  }
+
+  /// Blink's `AppendCandidates`: the break candidates in the text result `result_index` of
+  /// `line_info`, without hyphenation dictionaries.
+  pub(crate) fn append_candidates(
+    &mut self,
+    result_index: usize,
+    line_info: &LineInfo<'a, 'c>,
+    context: &mut LineBreakCandidateContext<'_, 'a, 'c>,
+  ) {
+    let item_result = &line_info.results[result_index];
+    let item = item_result.item;
+    let item_index = item_result.item_index;
+    let index = |text_offset| InlineItemTextIndex::new(item_index, text_offset);
+
+    debug_assert_eq!(item.item_type, InlineItemType::Text);
+
+    // Fully collapsed spaces have no break opportunities.
+    if item.length() == 0 {
+      let state = if item_result.can_break_after {
+        CandidateState::Break
+      } else {
+        context.state
+      };
+
+      context.append_trailing_spaces(state, index(item.end_offset()), context.position());
+      context.set_last(item, item.end_offset());
+
+      return;
+    }
+
+    let Some(shape_result) = item.shape_result.as_deref() else {
+      return;
+    };
+    let mut positions = ShapeResultPositions::new(shape_result);
+    let text = self.text();
+    // Up to the item's end or the line's, whichever is first, for the trailing spaces the line
+    // breaker removed.
+    let end = item_result
+      .end_offset()
+      .max(item.end_offset().min(line_info.end_text_offset()));
+    let mut start = item_result.start_offset();
+
+    // From where the last item ended, past spaces skipped or already handled.
+    if context.last_item.is_some() {
+      if context.last_end_offset >= end {
+        return;
+      }
+
+      start = context.last_end_offset;
+      positions.set_base_position(start, context.position());
+
+      if is_breakable_space(char_at(text, start)) {
+        while start < end && is_breakable_space(char_at(text, start)) {
+          start += char_at(text, start).len_utf8();
+        }
+
+        let end_position = positions.position_for_offset(start);
+
+        if start == end {
+          let state = if item_result.can_break_after {
+            CandidateState::Break
+          } else {
+            CandidateState::MidWord
+          };
+
+          context.append_trailing_spaces(state, index(start), end_position);
+          context.set_last(item, end);
+
+          return;
+        }
+
+        let state = if self.auto_wrap {
+          CandidateState::Break
+        } else {
+          CandidateState::MidWord
+        };
+
+        context.append_trailing_spaces(state, index(start), end_position);
+      }
+    } else {
+      positions.set_base_position(start, context.position());
+    }
+
+    context.set_last(item, end);
+
+    if let Some(object) = item.layout_object {
+      self.set_current_style(object.context());
+    }
+
+    let mut hyphen_advance_cache = None;
+
+    loop {
+      let mut next_offset = if self.auto_wrap {
+        let len = (end + 1).min(text.len());
+
+        self.break_iterator.next_break_opportunity(start + 1, len)
+      } else {
+        end + 1
+      };
+
+      // A break allowed after the item wins over the next opportunity.
+      if next_offset > end && item_result.can_break_after {
+        next_offset = end;
+      }
+
+      let mut next_state = CandidateState::Break;
+      let mut penalty = 0.0;
+      let mut is_hyphenated = false;
+      let end_offset;
+      let next_position;
+      let mut end_position;
+
+      if next_offset > end {
+        // The next opportunity is past this item: stop mid-word at its end.
+        next_offset = end;
+        end_offset = end;
+        next_position = positions.position_for_offset(end);
+        end_position = next_position;
+        next_state = CandidateState::MidWord;
+      } else {
+        // Higher level protocols forbid the break, as in `<span>1 </span>2`.
+        if next_offset == end && !item_result.can_break_after {
+          next_state = CandidateState::MidWord;
+        }
+
+        next_position = positions.position_for_offset(next_offset);
+
+        // The word's end, without its trailing spaces.
+        let mut word_end = next_offset;
+        let mut last_ch = char_before(text, word_end);
+
+        while is_breakable_space(last_ch) {
+          word_end -= last_ch.len_utf8();
+
+          if word_end == start {
+            last_ch = '\0';
+
+            break;
+          }
+
+          last_ch = char_before(text, word_end);
+        }
+
+        end_offset = word_end;
+
+        let end_safe_offset = match next_state {
+          CandidateState::Break => {
+            (shape_result.cached_previous_safe_to_break_offset(end_offset as u32) as usize)
+              .max(start)
+          }
+          CandidateState::MidWord => end_offset,
+        };
+
+        end_position = if end_safe_offset == end_offset {
+          if end_offset == next_offset {
+            next_position
+          } else {
+            positions.position_for_offset(end_offset)
+          }
+        } else {
+          positions.position_for_offset(end_safe_offset)
+            + Self::shape_text(
+              self.items_data,
+              &self.shaper,
+              text,
+              item,
+              end_safe_offset,
+              end_offset,
+            )
+            .width()
+        };
+
+        is_hyphenated = if end_offset == item_result.end_offset() {
+          item_result.is_hyphenated
+        } else {
+          last_ch == SOFT_HYPHEN && next_state == CandidateState::Break
+        };
+
+        if is_hyphenated {
+          end_position += self
+            .hyphen_advance(
+              positions.is_ltr,
+              item_result.hyphen.as_ref(),
+              &mut hyphen_advance_cache,
+            )
+            .to_float();
+          penalty = context.hyphen_penalty;
+        }
+      }
+
+      context.append(
+        next_state,
+        index(next_offset),
+        index(end_offset),
+        next_position,
+        end_position,
+        penalty,
+        is_hyphenated,
+      );
+
+      if next_offset >= end {
+        break;
+      }
+
+      start = next_offset;
+    }
+  }
+
+  /// Blink's `HyphenAdvance`: the hyphen's advance, negative in RTL.
+  fn hyphen_advance(
+    &self,
+    is_ltr: bool,
+    hyphen: Option<&HyphenResult>,
+    cache: &mut Option<LayoutUnit>,
+  ) -> LayoutUnit {
+    if let Some(advance) = *cache {
+      return advance;
+    }
+
+    let size = match (hyphen, self.current_style) {
+      (Some(hyphen), _) => hyphen.inline_size(),
+      (None, Some(style)) => HyphenResult::new(style, &self.items_data.fonts).inline_size(),
+      (None, None) => LayoutUnit::ZERO,
+    };
+    let advance = if is_ltr { size } else { -size };
+
+    *cache = Some(advance);
+    advance
+  }
+
+  /// Blink's `CanBreakInside`: whether the line has a break opportunity before its end.
+  pub(crate) fn can_break_inside(&mut self, line_info: &LineInfo<'a, 'c>) -> bool {
+    let item_results = &line_info.results;
+
+    if let Some(break_index) = item_results[..item_results.len().saturating_sub(1)]
+      .iter()
+      .position(|result| result.can_break_after)
+      && item_results[break_index + 1..]
+        .iter()
+        .any(|result| !result.item.is_floating_or_out_of_flow_positioned())
+    {
+      return true;
+    }
+
+    item_results.iter().any(|item_result| {
+      item_result.item.item_type == InlineItemType::Text
+        && item_result.may_break_inside
+        && self.can_break_inside_result(item_result)
+    })
+  }
+
+  /// Blink's `CanBreakInside` of a text result.
+  fn can_break_inside_result(&mut self, item_result: &InlineItemResult<'a, 'c>) -> bool {
+    debug_assert!(item_result.may_break_inside);
+
+    if let Some(object) = item_result.item.layout_object {
+      self.set_current_style(object.context());
+    }
+
+    if !self.auto_wrap {
+      return false;
+    }
+
+    let next_offset = self
+      .break_iterator
+      .next_break_opportunity(item_result.start_offset() + 1, self.text().len());
+
+    next_offset < item_result.end_offset()
   }
 
   /// Blink's `CreateBreakToken`: where the next line starts, none at the end.
