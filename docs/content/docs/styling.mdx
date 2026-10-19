@@ -4,7 +4,7 @@ description: Style Takumi templates with inline CSS, stylesheets, Tailwind utili
 icon: Palette
 ---
 
-Choose how to supply styles based on your project:
+Pick the approach that matches what you have:
 
 | You have                                   | Use                                             |
 | ------------------------------------------ | ----------------------------------------------- |
@@ -14,11 +14,11 @@ Choose how to supply styles based on your project:
 | Design tokens to theme with                | [a `:root` rule](#design-tokens)                |
 | One-off styles on one node                 | [the `style` prop](#inline-styles)              |
 
-These approaches can be combined. The sections below explain which declarations take precedence.
+You can mix them. The sections below say which declaration wins.
 
 ## Inline styles
 
-The `style` prop puts `CSSProperties` on one node. It overrides the tag default and every matching stylesheet rule at the same importance.
+The `style` prop sets `CSSProperties` on one node. It beats the tag default and every matching stylesheet rule of the same importance.
 
 ```tsx twoslash title="Style one element"
 <div style={{ display: "flex", padding: 48, background: "#0f172a" }}>Hello</div>
@@ -26,7 +26,7 @@ The `style` prop puts `CSSProperties` on one node. It overrides the tag default 
 
 ## CSS
 
-Pass a CSS string or a list of stylesheets through `css`. The engine matches it by `className` or `id`.
+Pass stylesheet text, or a list of stylesheets, through `css`.
 
 ```tsx twoslash title="Apply a stylesheet"
 import { render } from "takumi-js";
@@ -39,18 +39,7 @@ const image = await render(<div className="card">Hello</div>, {
 });
 ```
 
-The engine handles:
-
-| Selectors             | At-rules                                      | Properties                                                                                                                      |
-| --------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| class, id, descendant | `@keyframes`, `@media`, `@supports`, `@layer` | custom properties with `var()`, shorthands, gradients, `box-shadow`, `filter`, `backdrop-filter`, `mix-blend-mode`, `transform` |
-
-<Callout type="info">
-  A render is one static frame, so interactive pseudo-classes like `:hover` and `:focus` parse but
-  never match.
-</Callout>
-
-A `<style>` tag feeds the same engine. Takumi extracts it from the JSX for you.
+A `<style>` tag in the JSX or HTML feeds the same stylesheet. Takumi pulls it out of the tree for you.
 
 ```tsx twoslash title="Embed a style tag"
 <div className="card">
@@ -60,9 +49,20 @@ A `<style>` tag feeds the same engine. Takumi extracts it from the JSX for you.
 </div>
 ```
 
+The stylesheet supports:
+
+- **Selectors**: type, class, id, attribute, and combinators. Structural pseudo-classes such as `:first-child` and `:nth-child()`, plus `:is()`, `:where()`, `:not()`, `:root`, and `:lang()`. The `::before` and `::after` pseudo-elements.
+- **At-rules**: `@media`, `@supports`, `@layer`, and `@keyframes`.
+- **Values**: custom properties with `var()`, `calc()`, and shorthands.
+
+<Callout type="info">
+  A render is one static frame. Interactive pseudo-classes such as `:hover` and `:focus` parse but
+  never match.
+</Callout>
+
 ### Media queries
 
-A render has a viewport and an output format, so `@media` reads those:
+`@media` reads the render's viewport and output:
 
 | Feature                  | Reads                                                               |
 | ------------------------ | ------------------------------------------------------------------- |
@@ -72,18 +72,13 @@ A render has a viewport and an output format, so `@media` reads those:
 | `resolution`             | the device pixel ratio, in `dppx`, `x`, `dpi`, or `dpcm`            |
 | `screen`, `print`, `all` | the media type: image renders are `screen`, PDF renders are `print` |
 
-`width`, `height`, `aspect-ratio` and `resolution` take the `min-`/`max-`
-prefixes and the range syntax, so `(min-width: 768px)` and
-`(400px < width <= 700px)` both work. Combine queries with `and`, `or`, `not`,
-and parentheses.
+`width`, `height`, `aspect-ratio`, and `resolution` take `min-` and `max-` prefixes and the range syntax. Both `(min-width: 768px)` and `(400px < width <= 700px)` work. Combine queries with `and`, `or`, `not`, and parentheses.
 
-Any other feature, `prefers-color-scheme` included, matches nothing. The rest
-of the stylesheet still applies.
+Any other feature, `prefers-color-scheme` included, matches nothing. The rest of the stylesheet still applies.
 
 ### Rule objects
 
-A `css` entry can be an object. Object entries keep application data out of
-CSS strings.
+A `css` entry can be an object instead of text. Use objects to keep application data out of CSS strings.
 
 | Entry                        | Writes                                                    |
 | ---------------------------- | --------------------------------------------------------- |
@@ -104,12 +99,11 @@ const image = await render(<div className="card">Hello Takumi</div>, {
 });
 ```
 
-Takumi parses each prelude with the grammar its rule takes. A prelude
-carrying a block is rejected, so it cannot close the rule and open another.
+Takumi parses each prelude with its rule's grammar. A prelude that contains a block is rejected, so data cannot close the rule and open another.
 
 ## Tailwind with your bundler
 
-Compile Tailwind with your bundler, then pass the generated CSS through `css`. Tailwind does the compiling, so every directive and class name works. What renders is still bounded by [the engine's CSS support](#css). With Vite, import the stylesheet using `?inline`.
+Compile Tailwind with your bundler, then pass the generated CSS through `css`. Tailwind does the compiling, so every directive and class name works. The output is still limited to [what the stylesheet supports](#css). With Vite, import the stylesheet with `?inline`.
 
 ```tsx title="og.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -143,7 +137,7 @@ export default defineConfig({
 
 ## Tailwind without a build step
 
-The `tw` prop runs a built-in parser with no build step. It uses the same prop name as [Satori](https://github.com/vercel/satori#tailwind-css). Check class support when migrating `next/og` templates.
+The `tw` prop runs a built-in Tailwind parser. It needs no build step. [Satori](https://github.com/vercel/satori#tailwind-css) uses the same prop name.
 
 ```tsx twoslash title="Use Tailwind utilities"
 import { render } from "takumi-js";
@@ -157,9 +151,9 @@ const image = await render(
 );
 ```
 
-Arbitrary values work. The parser does not cover every Tailwind feature. The [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) lists every supported class.
+Arbitrary values work. The parser does not cover every Tailwind feature. The [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) lists every supported class. Check it when you migrate `next/og` templates.
 
-`tw` is a plain prop, so build it dynamically:
+`tw` is a plain string prop, so you can build it at runtime:
 
 ```tsx twoslash title="Build classes dynamically"
 import clsx from "clsx";
@@ -173,13 +167,11 @@ const isError = true;
 
 ### Preflight
 
-The native parser applies no Tailwind Preflight by default, so elements keep their UA margins. A `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
-
-The same import line a Tailwind stylesheet starts with turns Preflight on. It drops the UA margins, list markers and heading font tweaks.
+The built-in parser applies no Tailwind Preflight by default. Elements keep their default margins: an `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
 
 Without Preflight, a border style utility draws on every side. `border-dashed` sets `border-style` on all four sides, and an unset border width is `medium`. So `border-l-2 border-dashed` draws a 2px left border and 3px borders on the other sides. Preflight's `border: 0 solid` reset removes them.
 
-Tailwind's other entry points work the same way. `tailwindcss/index.css` and `tailwindcss/preflight.css` turn Preflight on. `tailwindcss/theme.css` and `tailwindcss/utilities.css` leave it off, as in Tailwind's [setup without Preflight](https://tailwindcss.com/docs/preflight#disabling-preflight). Modifiers such as `layer(base)` and `source(none)` are ignored.
+Add the import line a Tailwind stylesheet starts with to turn Preflight on. It removes default margins, list markers, and heading font sizes and weights.
 
 ```tsx twoslash title="Enable Preflight"
 import { render } from "takumi-js";
@@ -192,9 +184,18 @@ const image = await render(<h1 tw="text-4xl">Hello Takumi</h1>, {
 });
 ```
 
+Tailwind's other entry points work the same way:
+
+| Import                                                              | Preflight |
+| ------------------------------------------------------------------- | --------- |
+| `tailwindcss`, `tailwindcss/index.css`, `tailwindcss/preflight.css` | on        |
+| `tailwindcss/theme.css`, `tailwindcss/utilities.css`                | off       |
+
+This matches Tailwind's [setup without Preflight](https://tailwindcss.com/docs/preflight#disabling-preflight). Modifiers such as `layer(base)` and `source(none)` are ignored.
+
 ### Utilities in the cascade
 
-Utilities sit in the last declared layer, Tailwind's own order:
+Utilities sit in the last declared layer, as Tailwind orders them:
 
 | Against a utility            | Winner           |
 | ---------------------------- | ---------------- |
@@ -206,13 +207,13 @@ Prefix a utility with `!` to flip the result. Important declarations reverse the
 
 ### Tailwind at-rules
 
-A Tailwind source stylesheet drops into `css` unchanged. The engine reads these directives and skips the rest:
+A Tailwind source stylesheet drops into `css` unchanged. Takumi reads these directives and skips the rest:
 
-| At-rule                 | Reads as                                                                                               | Rejected                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `@theme`                | its `:root` rule. Nested `@keyframes` register. Modifiers like `reference` and `inline` change nothing | `prefix()`              |
-| `@import "tailwindcss"` | [Preflight](#preflight) when the entry point brings it, at the top level only                          | any other import target |
-| `@apply`                | the utilities' declarations, expanded in place, `!` suffix included                                    | variants like `md:`     |
+| At-rule                 | Reads as                                                                                                  | Rejected                |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `@theme`                | its `:root` rule. Nested `@keyframes` register. Modifiers such as `reference` and `inline` change nothing | `prefix()`              |
+| `@import "tailwindcss"` | [Preflight](#preflight) when the entry point brings it, at the top level only                             | any other import target |
+| `@apply`                | the utilities' declarations, expanded in place, `!` suffix included                                       | variants such as `md:`  |
 
 ```css title="Define Tailwind utilities"
 .card {
@@ -220,15 +221,15 @@ A Tailwind source stylesheet drops into `css` unchanged. The engine reads these 
 }
 ```
 
-Other Tailwind directives do not parse: `@utility`, `@custom-variant`, `@source`, `@plugin` and `@config`. Compile those with Tailwind and use [the bundler path](#tailwind-with-your-bundler).
+`@utility`, `@custom-variant`, `@source`, `@plugin`, and `@config` do not parse. Compile those with Tailwind and use [the bundler path](#tailwind-with-your-bundler).
 
 ## Design tokens
 
-A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, and `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback, so tokens stay optional until you want your own palette.
+A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, and `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale is the fallback, so you only declare tokens you want to change.
 
 ### Declaring tokens
 
-Three equivalent places. All of them feed every `var()`, in stylesheets, in `<style>` tags, and in utilities.
+Declare tokens in a stylesheet or in a rule object. Both feed every `var()`: in stylesheets, in `<style>` tags, and in utilities.
 
 A `:root` rule, or a [Tailwind `@theme` block](#tailwind-at-rules) pasted as-is:
 
@@ -240,9 +241,7 @@ A `:root` rule, or a [Tailwind `@theme` block](#tailwind-at-rules) pasted as-is:
 }
 ```
 
-Or a rule object in `css`, so a token that comes from application data never
-needs string concatenation. Takumi rejects a value that is not a value for its
-property, so it cannot escape the rule it was written for.
+A rule object in `css`, so a token from application data needs no string concatenation. Takumi rejects a value that is not valid for its property, so the value cannot escape its rule.
 
 ```tsx twoslash title="Apply design tokens"
 import { render } from "takumi-js";
@@ -260,29 +259,29 @@ const image = await render(<div tw="bg-brand-500 p-gutter">Hello</div>, {
 
 ### Which utilities read a token
 
-The namespace picks which utilities a token reaches:
+The token's namespace decides which utilities read it:
 
-| Namespace                                           | Utilities                                                                                                                                      |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--color-*`                                         | color utilities: `bg-*`, `text-*`, `border-*`, `outline-*`, `decoration-*`                                                                     |
-| `--spacing`, `--spacing-*`                          | length utilities: `p-*`, `m-*`, `w-*`, `gap-*`, `inset-*`. `p-4` reads `calc(var(--spacing) * 4)`, `p-gutter` reads `var(--spacing-gutter)`    |
-| `--container-*`                                     | `max-w-*`                                                                                                                                      |
-| `--text-*`                                          | `--text-xl` sets `text-xl`, `--text-xl--line-height` sets its leading                                                                          |
-| `--font-*`                                          | font families, `font-sans`                                                                                                                     |
-| `--font-weight-*`                                   | font weights, `font-bold`                                                                                                                      |
-| `--tracking-*`                                      | `tracking-*`                                                                                                                                   |
-| `--leading-*`                                       | `leading-*`                                                                                                                                    |
-| `--radius-*`                                        | `rounded-*`, including corners and sides                                                                                                       |
-| `--aspect-*`                                        | `aspect-*`                                                                                                                                     |
-| `--blur-*`                                          | `blur-*` and `backdrop-blur-*` presets                                                                                                         |
-| `--drop-shadow-*`                                   | `drop-shadow-*` presets                                                                                                                        |
-| `--shadow-*`, `--inset-shadow-*`, `--text-shadow-*` | shadow preset shapes. A custom shape carries its own colours, so shadow colour utilities only reach the built-in fallback                      |
-| `--animate-*`                                       | `animate-*`. An unknown token like `animate-wiggle` reads `var(--animate-wiggle)`. Pair it with its `@keyframes`                               |
-| `--breakpoint-*`                                    | the `sm:`–`2xl:` variants, and new ones like `3xl:`. Variants gate before the cascade, so only an unconditional `:root` declaration moves them |
+| Namespace                                           | Utilities                                                                                                                                             |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--color-*`                                         | color utilities: `bg-*`, `text-*`, `border-*`, `outline-*`, `decoration-*`                                                                            |
+| `--spacing`, `--spacing-*`                          | length utilities: `p-*`, `m-*`, `w-*`, `gap-*`, `inset-*`. `p-4` reads `calc(var(--spacing) * 4)`, `p-gutter` reads `var(--spacing-gutter)`           |
+| `--container-*`                                     | `max-w-*`                                                                                                                                             |
+| `--text-*`                                          | `--text-xl` sets `text-xl`, `--text-xl--line-height` sets its leading                                                                                 |
+| `--font-*`                                          | font families, such as `font-sans`                                                                                                                    |
+| `--font-weight-*`                                   | font weights, such as `font-bold`                                                                                                                     |
+| `--tracking-*`                                      | `tracking-*`                                                                                                                                          |
+| `--leading-*`                                       | `leading-*`                                                                                                                                           |
+| `--radius-*`                                        | `rounded-*`, including corners and sides                                                                                                              |
+| `--aspect-*`                                        | `aspect-*`                                                                                                                                            |
+| `--blur-*`                                          | `blur-*` and `backdrop-blur-*` presets                                                                                                                |
+| `--drop-shadow-*`                                   | `drop-shadow-*` presets                                                                                                                               |
+| `--shadow-*`, `--inset-shadow-*`, `--text-shadow-*` | shadow preset shapes. A custom shape carries its own colors, so shadow color utilities only reach the built-in fallback                               |
+| `--animate-*`                                       | `animate-*`. An unknown token such as `animate-wiggle` reads `var(--animate-wiggle)`. Pair it with its `@keyframes`                                   |
+| `--breakpoint-*`                                    | the `sm:` to `2xl:` variants, and new ones such as `3xl:`. Variants apply before the cascade, so only an unconditional `:root` declaration moves them |
 
 ### Overriding tokens
 
-Tokens declared in a stylesheet follow the CSS cascade. A media query or a selector can override them:
+Tokens in a stylesheet follow the cascade. A media query or a selector can override them:
 
 ```css title="Override tokens by viewport"
 @media (width >= 1000px) {
@@ -292,8 +291,7 @@ Tokens declared in a stylesheet follow the CSS cascade. A media query or a selec
 }
 ```
 
-A rule object sits where its entry sits in `css`, so the array's order is the
-cascade order:
+A rule object sits where its entry sits in `css`, so array order is cascade order:
 
 | Competing declaration                  | Result                   |
 | -------------------------------------- | ------------------------ |
@@ -303,9 +301,9 @@ cascade order:
 
 ## Where this differs from Tailwind
 
-- Colours reach gradients and shadows. `from-brand-500` and `shadow-brand-500` read `--color-brand-500` like `bg-brand-500` does.
-- Same as Tailwind, but easy to miss: a gradient needs `bg-linear-*`, `bg-radial` or `bg-conic`. Stops alone paint nothing.
-- `--color-red-500: initial` falls back to the built-in red instead of removing `bg-red-500`.
-- A bare `rounded` keeps its built-in value. `rounded-sm` and the rest read the variable.
-- `--spacing` needs a unit. A bare number makes `p-4` compute pixels here, where a browser rejects the declaration.
-- An aliased token stays live. `--color-brand: var(--background)` follows a subtree `--background` override. In a browser, `@theme inline` exists to arrange that.
+- Colors reach gradients and shadows. `from-brand-500` and `shadow-brand-500` read `--color-brand-500`, as `bg-brand-500` does.
+- As in Tailwind, a gradient needs `bg-linear-*`, `bg-radial`, or `bg-conic`. Color stops alone paint nothing.
+- `--color-red-500: initial` falls back to the built-in red. It does not remove `bg-red-500`.
+- A bare `rounded` keeps its built-in value. `rounded-sm` and the others read the variable.
+- `--spacing` needs a unit. With a bare number, `p-4` computes pixels here. A browser rejects that declaration.
+- An aliased token stays live. `--color-brand: var(--background)` follows a `--background` override in a subtree. In a browser, you need `@theme inline` for that.
