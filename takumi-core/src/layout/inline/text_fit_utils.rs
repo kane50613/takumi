@@ -180,7 +180,7 @@ fn scaled_font(font: &Font, scale_factor: f32, context: &RenderContext) -> Rc<Fo
 
   scaled_description.computed_size *= scale_factor;
 
-  Rc::new(Font::new(context.fonts(), scaled_description))
+  Rc::new(context.font(scaled_description))
 }
 
 /// The text fragments of a line box, forced breaks and hidden ones among them, as Blink's cursor

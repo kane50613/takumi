@@ -12,6 +12,7 @@ pub(crate) mod font_face;
 pub(crate) mod font_face_cache;
 pub(crate) mod font_fallback_iterator;
 pub(crate) mod font_fallback_list;
+pub(crate) mod font_fallback_map;
 pub(crate) mod font_fallback_priority;
 pub(crate) mod font_height;
 pub(crate) mod font_selection_algorithm;
