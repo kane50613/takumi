@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>font_language_override</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      p {
+        display: block;
+        margin: 0;
+        font-family: "CJK Locl Test";
+        font-size: 40px;
+      }
+      span {
+        font-family: Geist;
+        font-size: 24px;
+      }
+    </style>
+  </head>
+  <body style="width: 640px; height: 330px">
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <p lang="ja"><span>ja </span>直 骨 今 海 真 令 説 器</p>
+      <p style="font-language-override: &quot;JAN&quot;"
+        ><span>JAN </span>直 骨 今 海 真 令 説 器</p
+      >
+      <p lang="ko"><span>ko </span>直 骨 今 海 真 令 説 器</p>
+      <p lang="ja" style="font-language-override: &quot;KOR&quot;">
+        <span>ja KOR </span>直 骨 今 海 真 令 説 器
+      </p>
+    </div>
+  </body>
+</html>

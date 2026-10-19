@@ -10,7 +10,7 @@ use super::font_selection_types::FontSelectionRequest;
 use crate::{
   font_style::{ExpandedFontFamily, SizedFontStyle},
   sort_key::sort_by_key,
-  style::{FontOpticalSizing, FontSynthesic, FontVariantCaps},
+  style::{FontLanguageOverride, FontOpticalSizing, FontSynthesic, FontVariantCaps},
 };
 
 /// The style a font is matched and shaped with.
@@ -28,6 +28,8 @@ pub(crate) struct FontDescription {
   pub(crate) features: Vec<Feature>,
   /// Blink's `LocaleOrDefault` as a HarfBuzz language.
   pub(crate) locale: Option<Language>,
+  /// `font-language-override`, which Blink lacks.
+  pub(crate) language_override: FontLanguageOverride,
   /// Blink's `VariantCaps`, whose features the shaper adds.
   pub(crate) variant_caps: FontVariantCaps,
   /// Blink's `GetFontSynthesisSmallCaps`.
@@ -43,6 +45,21 @@ pub(crate) struct FontDescription {
 }
 
 impl FontDescription {
+  /// The language HarfBuzz shapes in: the locale, with `font-language-override`'s language
+  /// system as a private-use `x-hbot` subtag, which HarfBuzz reads in place of the locale's.
+  pub(crate) fn shaping_language(&self) -> Option<Language> {
+    let FontLanguageOverride::Tag(tag) = self.language_override else {
+      return self.locale.clone();
+    };
+    let ot_language = format!("x-hbot-{:08x}", u32::from_be_bytes(tag));
+    let language = match &self.locale {
+      Some(locale) => format!("{}-{ot_language}", locale.as_str()),
+      None => ot_language,
+    };
+
+    Language::from_str(&language).ok()
+  }
+
   /// The description of `style`'s font, as Blink's `FontBuilder` resolves it.
   pub(crate) fn new(style: &SizedFontStyle<'_>) -> Self {
     let computed = style.parent;
@@ -61,6 +78,7 @@ impl FontDescription {
         .lang
         .as_ref()
         .and_then(|lang| Language::from_str(lang.as_str()).ok()),
+      language_override: computed.inherited_data.font_language_override,
       variant_caps: style.caps,
       font_synthesis_small_caps: computed.inherited_data.font_synthesis_small_caps,
       letter_spacing: style.letter_spacing,

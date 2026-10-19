@@ -398,6 +398,7 @@ impl HarfBuzzShaper {
   ) {
     let font = range_data.font;
     let language = font.description.locale.as_ref();
+    let shaping_language = font.description.shaping_language();
     let needs_caps_handling = font.description.variant_caps != FontVariantCaps::Normal;
     let mut fallback_iterator =
       FontFallbackIterator::new(&font.fallback_list, segment.font_fallback_priority);
@@ -526,7 +527,7 @@ impl HarfBuzzShaper {
         &adjusted_font,
         segment.script,
         range_data.harfbuzz_direction(),
-        language,
+        shaping_language.as_ref(),
       ) else {
         continue;
       };
