@@ -519,6 +519,26 @@ mod tests {
     );
   }
 
+  /// The lines past the clamp point are hidden as a whole, so they take no baseline.
+  #[test]
+  fn lines_past_the_clamp_point_are_hidden() {
+    let block = render_tree(
+      [Node::text("aaa bbb ccc ddd eee")],
+      ".container { line-clamp: 2 }",
+    );
+    let node = InlineNode::new(&block);
+    let data = node.prepare_layout();
+    let lines = node.layout_lines(&data, LayoutUnit::from_float(42.0), &mut TestAtomicInline);
+
+    assert_eq!(
+      lines
+        .iter()
+        .map(|line| line.is_hidden_due_to_layout)
+        .collect::<Vec<_>>(),
+      [false, false, true]
+    );
+  }
+
   /// A clamp line with no line after it keeps its text.
   #[test]
   fn line_clamp_leaves_a_last_line_whole() {

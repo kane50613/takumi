@@ -61,6 +61,8 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   pub(crate) base_direction: TextDirection,
   pub(crate) break_token: Option<InlineBreakToken<'c>>,
   pub(crate) is_empty_line_box: bool,
+  /// Blink's `IsHiddenDueToLayout`: the line is past the `line-clamp` point.
+  pub(crate) is_hidden_due_to_layout: bool,
   /// The space a `<br clear>` adds after the line.
   pub(crate) clearance_after_line: LayoutUnit,
   /// The floats after the line.
@@ -85,6 +87,7 @@ impl LineBoxFragment<'_, '_> {
       base_direction: TextDirection::Ltr,
       break_token: None,
       is_empty_line_box: false,
+      is_hidden_due_to_layout: false,
       clearance_after_line: LayoutUnit::ZERO,
       exclusion_space,
       lines_until_clamp: None,
@@ -536,6 +539,8 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     }
 
     if line_clamp_state == LineClampState::Hide {
+      self.container_builder.is_hidden_due_to_layout = true;
+
       for child in &mut line_box.children {
         child.is_hidden_due_to_layout = true;
       }

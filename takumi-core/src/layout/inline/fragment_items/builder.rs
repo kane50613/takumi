@@ -78,6 +78,7 @@ impl FragmentItems {
     let mut items = Self {
       content_box: ContentBox::of(layout),
       text: items_data.text_content.clone(),
+      generated_text_start: items_data.text_content.len(),
       ellipsized: false,
       line_boxes: Vec::new(),
       baselines: None,
@@ -97,6 +98,12 @@ impl FragmentItems {
     let root_font = BoxFont::of(context);
 
     for line in lines {
+      // Blink's `PropagateBaselineFromLineBox` skips a line past the clamp point, and its items
+      // are hidden.
+      if line.is_hidden_due_to_layout {
+        continue;
+      }
+
       let Some(line_top) = line.line_box_bfc_block_offset else {
         continue;
       };
@@ -364,6 +371,12 @@ impl FragmentItems {
 
         symbol = ShapeResultView::create_from_result(&Rc::new(shaped));
         (&symbol, child.text_offset.start as u32, x_shift)
+      } else if let Some(generated) = &child.text_content {
+        // An ellipsis or hyphen counts its offsets from its own start, and takes the text's end.
+        let start = self.text.len() as u32;
+
+        self.text.push_str(generated);
+        (shape_result.as_ref(), start, 0.0)
       } else {
         (shape_result.as_ref(), 0, 0.0)
       };
@@ -379,7 +392,11 @@ impl FragmentItems {
           font_data: font_data.cloned(),
         });
       });
-    let text_end = child.text_offset.end;
+    let text_end = if child.text_content.is_some() {
+      self.text.len()
+    } else {
+      child.text_offset.end
+    };
     let mut starts: Vec<u32> = glyphs.iter().map(|glyph| glyph.character_index).collect();
 
     starts.sort_unstable();

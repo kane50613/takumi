@@ -35,14 +35,16 @@ use crate::{
 pub struct FragmentItems {
   /// The content box it laid out in.
   pub(crate) content_box: ContentBox,
-  /// The text layout shaped.
+  /// The text layout shaped, then the ellipses and hyphens it generated.
   pub(crate) text: String,
+  /// Where the generated text starts in `text`.
+  generated_text_start: usize,
   /// Whether `text-overflow: ellipsis` cut the spans short, which collecting them again does not.
   pub(crate) ellipsized: bool,
   /// Each line box's top and bottom, below the content box's top.
   line_boxes: Vec<(f32, f32)>,
-  /// The first and last line's baselines, below the content box's top; `None` when it has no
-  /// lines or `line-clamp` cut lines off.
+  /// The first and last shown line's baselines, below the content box's top; `None` when it has
+  /// no lines.
   baselines: Option<(f32, f32)>,
   /// What its ink covers.
   pub(crate) ink: Ink,
@@ -469,7 +471,9 @@ impl FragmentItems {
         .source_span_id
         .and_then(|id| spans.get(id as usize));
       let text_range = match span {
-        Some(ProcessedInlineSpan::Text { byte_range, .. }) => {
+        Some(ProcessedInlineSpan::Text { byte_range, .. })
+          if item.text_range.start < self.generated_text_start =>
+        {
           item.text_range.start.max(byte_range.start)..item.text_range.end.min(byte_range.end)
         }
         _ => item.text_range.clone(),

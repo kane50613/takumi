@@ -2792,3 +2792,18 @@ fn a_table_nested_in_a_cell_keeps_its_max_content_width() {
 
   assert_eq!(run_texts(&result), ["XXXXX XXXXXX"]);
 }
+
+/// An ellipsis measures as its own text, not the paragraph's text at its offsets.
+#[test]
+fn an_ellipsis_measures_as_its_own_text() {
+  let root = Node::container([Node::text("Hello wonderful world")]).with_class_name("clamp");
+  let result = measure_with_css(
+    root,
+    r#"
+      .clamp { display: block; width: 80px; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    "#,
+  );
+  let texts = run_texts(&result);
+
+  assert_eq!(texts.last(), Some(&"\u{2026}"), "{texts:?}");
+}
