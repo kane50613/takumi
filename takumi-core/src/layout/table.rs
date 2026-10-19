@@ -1912,8 +1912,8 @@ mod tests {
   }
 
   #[test]
-  fn a_hidden_child_of_a_table_stays_hidden() {
-    fn hidden_display(tree: &RenderNode) -> Option<Display> {
+  fn a_hidden_child_of_a_table_gets_no_box() {
+    fn contains_hidden(tree: &RenderNode) -> bool {
       let mut pending = vec![tree];
 
       while let Some(node) = pending.pop() {
@@ -1923,13 +1923,13 @@ mod tests {
           .and_then(|node| node.metadata.id.as_deref())
           == Some("hidden")
         {
-          return Some(node.context.style.base_data.display);
+          return true;
         }
 
         pending.extend(node.children.as_deref().unwrap_or_default());
       }
 
-      None
+      false
     }
 
     let hidden = || {
@@ -1941,8 +1941,8 @@ mod tests {
       lower(Node::container([named_row("row", [cell("a")]), hidden()]).with_class_name("table"));
     let after_loose_row = lower(Node::container([named_row("row", [cell("a")]), hidden()]));
 
-    assert_eq!(hidden_display(&in_table), Some(Display::None));
-    assert_eq!(hidden_display(&after_loose_row), Some(Display::None));
+    assert!(!contains_hidden(&in_table));
+    assert!(!contains_hidden(&after_loose_row));
   }
 
   #[test]

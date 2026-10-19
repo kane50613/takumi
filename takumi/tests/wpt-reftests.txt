@@ -893,8 +893,6 @@ css/CSS2/tables/table-visual-layout-026d.xht
 !css/CSS2/text/white-space-applies-to-014.xht
 !css/CSS2/text/white-space-applies-to-015.xht
 !css/CSS2/text/white-space-bidirectionality-001.xht
-!css/CSS2/text/white-space-collapsing-004.xht
-!css/CSS2/text/white-space-collapsing-005.xht
 !css/CSS2/text/white-space-collapsing-bidi-001.xht
 !css/CSS2/text/white-space-collapsing-bidi-002.xht
 !css/CSS2/text/white-space-generated-content-before-001.xht
