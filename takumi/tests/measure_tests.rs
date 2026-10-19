@@ -2859,3 +2859,21 @@ fn line_break_anywhere_fills_a_line_mid_word() {
   assert!(anywhere[0].starts_with("aaaa b"), "{anywhere:?}");
   assert_eq!(anywhere.concat().replace(' ', ""), "aaaabbbbbbbbbbbb");
 }
+
+/// An `<img>` without a source takes the box its `width` and `height` size, as in Chrome, and the
+/// document still renders.
+#[test]
+fn an_img_without_a_source_takes_its_attribute_size() {
+  let node = Node::from_html(
+    r#"<div><img width="40" height="20"><span>after</span></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let result = measure(node, create_test_viewport());
+
+  assert!(
+    has_descendant(&result, |node| node.width == 40.0 && node.height == 20.0),
+    "{result:?}"
+  );
+  assert_eq!(run_texts(&result), ["after"]);
+}

@@ -29,7 +29,10 @@ use html5ever::{
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
-  style::{Direction, FromCssStr, Lang, Style, StyleDeclarationBlock, TailwindValues},
+  style::{
+    Direction, Display, FromCssStr, Lang, Length, Style, StyleDeclaration, StyleDeclarationBlock,
+    TailwindValues,
+  },
 };
 use typed_builder::TypedBuilder;
 
@@ -188,9 +191,6 @@ static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum HtmlError {
-  /// An `<img>` element lacked the required `src` attribute.
-  #[error("image element must have a `src` attribute")]
-  MissingImageSrc,
   /// Element nesting exceeded [`FromHtmlOptions::max_depth`].
   #[error("element nesting exceeded the maximum depth of {0}")]
   MaxDepthExceeded(usize),
@@ -428,17 +428,16 @@ impl NodeBuilder<'_> {
 
     let node = match tag {
       "br" => Node::text("\n"),
-      "img" => {
-        let src = attribute(handle, "src")
-          .filter(|src| !src.trim().is_empty())
-          .ok_or(HtmlError::MissingImageSrc)?;
-
-        Node::image(ImageData {
+      "img" => match attribute(handle, "src").filter(|src| !src.trim().is_empty()) {
+        Some(src) => Node::image(ImageData {
           src: ImageSourceInput::Url(src.into()),
           width: dimension(handle, "width"),
           height: dimension(handle, "height"),
-        })
-      }
+        }),
+        // Chrome draws an `<img>` without a source as an empty inline box its `width` and
+        // `height` size.
+        None => Node::container([]).with_preset(empty_image_style(handle)),
+      },
       _ if UNRENDERED_TAGS.contains(&tag) => return Ok(None),
       "svg" => Node::image(ImageData {
         src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
@@ -561,6 +560,21 @@ fn attribute(handle: &Handle, name: &str) -> Option<String> {
 
 fn dimension(handle: &Handle, name: &str) -> Option<f32> {
   attribute(handle, name).and_then(|value| value.parse().ok())
+}
+
+/// The style of an `<img>` without a source: an inline-block, sized by its `width` and `height`.
+fn empty_image_style(handle: &Handle) -> Style {
+  let mut style = Style::default().with(StyleDeclaration::display(Display::InlineBlock));
+
+  if let Some(width) = dimension(handle, "width") {
+    style = style.with(StyleDeclaration::width(Length::Px(width)));
+  }
+
+  if let Some(height) = dimension(handle, "height") {
+    style = style.with(StyleDeclaration::height(Length::Px(height)));
+  }
+
+  style
 }
 
 /// Serialize an element including its own tag (outer HTML), used to round-trip
@@ -696,11 +710,10 @@ mod tests {
   }
 
   #[test]
-  fn empty_img_src_rejected() {
-    assert!(matches!(
-      from_html(r#"<img src="">"#, FromHtmlOptions::default()),
-      Err(HtmlError::MissingImageSrc),
-    ));
+  fn an_img_without_a_source_is_an_empty_box() {
+    let node = parse(r#"<img src="" width="10" height="20">"#);
+
+    assert!(matches!(node.kind, NodeKind::Container { .. }));
   }
 
   #[test]
