@@ -4,7 +4,7 @@ description: Render HTML tables with Takumi, set column widths, and understand d
 icon: Table
 ---
 
-Takumi lays out `display: table` as a grid, so every row shares one set of column tracks. Column widths follow Blink's table width algorithm, approximately.
+Takumi lays out tables with a port of [Chromium's table layout](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/table/). Column widths, row heights, and collapsed borders follow Chromium.
 
 ```tsx twoslash title="Set a table column width"
 <table style={{ width: "100%" }}>
@@ -24,29 +24,52 @@ Takumi lays out `display: table` as a grid, so every row shares one set of colum
 </table>
 ```
 
-## What works
+## Elements
 
-- `<table>`, `<thead>`, `<tbody>`, `<tfoot>`, `<tr>`, `<td>`, `<th>`, and `<caption>` have element presets in HTML and JSX.
-- Header groups render first and footer groups last, whatever the source order.
-- `colspan` and `rowspan` span tracks. The HTML attributes and the JSX `colSpan` and `rowSpan` props both work.
-- `caption` renders above the table, or below it with `caption-side: bottom`.
-- A row's background is copied to cells without their own, so zebra stripes and header bands work. The `border-spacing` gaps stay unpainted.
-- A block-level table with `width: auto` shrinks to fit its content. In a flex or grid container, it stretches.
-- Columns share the table's width by their content. Percentage and fixed cell widths constrain their columns.
-- `border-collapse: collapse` merges adjacent borders.
-- `border-spacing` defaults to `2px`.
-- `vertical-align` places cell content as Chrome does. `baseline` cells line up their first lines across a row.
-- Paged PDF output splits rows across pages. Columns keep the same positions on every page.
+- `<table>`, `<caption>`, `<colgroup>`, `<col>`, `<thead>`, `<tbody>`, `<tfoot>`, `<tr>`, `<td>`, and `<th>` have presets in HTML and JSX.
+- Header groups render first. Footer groups render last.
+- `caption` renders above the table. `caption-side: bottom` moves it below.
+- `display: inline-table` sits on a line. Its first row's baseline aligns with the text.
 
-Cells keep their box. Padding, borders, and backgrounds cover the cell's full grid area, including rows spanned by `rowspan`.
+## Columns and spans
+
+- `colspan` and `rowspan` work on `<td>` and `<th>`. The JSX props are `colSpan` and `rowSpan`.
+- A `rowspan` stops at the end of its row group.
+- `<col>` and `<colgroup>` widths size their columns. `span` covers several columns.
+- Columns share the table's width by their content.
+- `table-layout: fixed` reads column widths from the first row. It needs a table `width`.
+- `visibility: collapse` removes a row or a column, and its space.
+- `direction: rtl` starts the first column on the right.
+
+## Sizing
+
+- An `auto`-width table shrinks to fit its content.
+- In a flex or grid container, an `auto`-width table stretches.
+- A table is never narrower than its content's minimum width.
+
+## Borders and backgrounds
+
+- `border-spacing` puts gaps between cells. The gaps stay unpainted.
+- `border-collapse: collapse` merges shared borders as Chromium does. The wider border wins.
+- Row, row group, column, and column group backgrounds paint inside their cells.
+- With separate borders, `empty-cells: hide` hides empty cells.
+
+## Alignment
+
+- `vertical-align` places cell content as Chromium does.
+- `baseline` cells line up their first lines across a row.
+
+## PDF pages
+
+- Rows split across pages.
+- Header and footer groups with `break-inside: avoid` repeat on every page. The presets set it.
+- Columns keep the same positions on every page.
 
 ## Where it drifts
 
-| Behavior              | In a browser                    | In Takumi                                 |
-| :-------------------- | :------------------------------ | :---------------------------------------- |
-| `<col>`, `<colgroup>` | Their widths size columns       | Ignored. Set the width on a cell instead. |
-| Caption width         | A wide caption widens the table | The caption wraps to the table's width    |
-
-## Upstream table layout
-
-Takumi lays out flex and grid with [Taffy](https://github.com/DioxusLabs/taffy), which has no table algorithm yet. [DioxusLabs/taffy#1094](https://github.com/DioxusLabs/taffy/pull/1094) proposes one. Takumi uses the grid-based approach above.
+| Case                                                      | Chromium                        | Takumi                                             |
+| :-------------------------------------------------------- | :------------------------------ | :------------------------------------------------- |
+| Row baseline, with percentage-height content in a cell    | Measured after the row grows    | Measured before the row grows                      |
+| `content-box` background on a vertically aligned cell     | Stays at the cell's padding     | Moves with the content                             |
+| Background image on a row or column under a spanning cell | Positioned on the row or column | Positioned on the row or column, grown to the cell |
+| Page breaks                                               | Fragments the table in layout   | Cuts the finished table into pages                 |
