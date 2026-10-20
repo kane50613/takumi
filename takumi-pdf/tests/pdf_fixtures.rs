@@ -810,6 +810,31 @@ fn content_beside_a_table_does_not_replay_with_its_header() {
   );
 }
 
+/// A cell's tagged `RowSpan` stops where its row group ends, as its layout
+/// does, so `rowspan="0"` in a one-row header spans no further.
+#[test]
+fn a_tagged_rowspan_stays_in_its_row_group() {
+  let fonts = fonts();
+  let html = r#"<table>
+    <thead><tr><th rowspan="0">Name</th><th>Qty</th></tr></thead>
+    <tbody><tr><td>Item</td><td>3</td></tr><tr><td rowspan="5">Last</td><td>4</td></tr></tbody>
+  </table>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse table"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::On)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render table");
+
+  assert!(
+    !inflated_text(&pdf).contains("/RowSpan"),
+    "a row span reached past its row group"
+  );
+}
+
 /// A header cell's rowspan ends with its row group, as HTML's table model
 /// clips it, so the header still repeats.
 #[test]

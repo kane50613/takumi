@@ -332,11 +332,12 @@ fn span(span: usize) -> Option<NonZeroU32> {
 /// `TH` or `TD` for a cell. The source tag decides when there is one; a
 /// tagless cell in a header row group is still a header. A `TH` takes its
 /// `Scope` from the `scope` attribute, defaulting to `Column` in a header row
-/// group and `Row` elsewhere, per ISO 32000-2 §14.8.4.8.3's algorithm.
-fn cell_kind(cell: &RenderNode, in_header: bool) -> Tag {
+/// group and `Row` elsewhere, per ISO 32000-2 §14.8.4.8.3's algorithm. Its
+/// row span stops at the `rows_left` rows to the end of its row group.
+fn cell_kind(cell: &RenderNode, in_header: bool, rows_left: usize) -> Tag {
   let source = cell.node.as_ref();
   let tag_name = source.and_then(|node| node.tag_name());
-  let row_span = span(cell.table_cell_rowspan());
+  let row_span = span(cell.table_cell_rowspan().min(rows_left));
   let col_span = span(cell.table_cell_colspan());
   let is_header = match tag_name {
     Some("th") => true,
@@ -434,6 +435,7 @@ fn build_table(
     let section = &children[index];
     let display = section.context.style.base_data.display;
     let in_header = display == Display::TableHeaderGroup;
+    let row_count = section.children.as_deref().map_or(0, <[RenderNode]>::len);
     let mut rows = Vec::new();
 
     path.push(index);
@@ -449,7 +451,7 @@ fn build_table(
           cell,
           path,
           walk,
-          cell_kind(cell, in_header),
+          cell_kind(cell, in_header, row_count - row_index),
           nesting,
           true,
         ));
