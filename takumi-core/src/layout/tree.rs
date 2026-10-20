@@ -2363,10 +2363,13 @@ impl RenderNode {
 
       let render_node = finished.finish();
 
-      if let Some(parent) = stack.last_mut() {
-        parent.rendered_children.push(render_node);
-      } else {
+      let Some(parent) = stack.last_mut() else {
         return render_node;
+      };
+
+      // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box.
+      if render_node.context.style.base_data.display != Display::None {
+        parent.rendered_children.push(render_node);
       }
     }
   }

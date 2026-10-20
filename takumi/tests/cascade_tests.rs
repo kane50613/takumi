@@ -251,7 +251,7 @@ fn preflight_hides_the_hidden_attribute() {
     .with_tw(tw("block w-64!"));
   let result = measure_with_css(Node::container([hidden]), r#"@import "tailwindcss";"#);
 
-  assert_eq!(result.children[0].width, 0.0);
+  assert!(result.children.is_empty());
 }
 
 /// `until-found` is the one `hidden` value Preflight leaves visible.
