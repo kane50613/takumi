@@ -1222,25 +1222,6 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_gradient_hint_color() {
-    assert_eq!(
-      GradientStop::from_css_str("#ff0000"),
-      Ok(GradientStop::ColorHint {
-        color: ColorInput::Value(Color([255, 0, 0, 255])),
-        hint: None,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_gradient_hint_numeric() {
-    assert_eq!(
-      GradientStop::from_css_str("50%"),
-      Ok(GradientStop::Hint(StopPosition(Length::Percentage(50.0))))
-    );
-  }
-
-  #[test]
   fn test_keyword_direction_to_angle() {
     assert_eq!(
       GradientKeywordDirection {

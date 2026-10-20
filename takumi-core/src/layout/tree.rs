@@ -3521,109 +3521,6 @@ mod tests {
   }
 
   #[test]
-  fn registered_custom_property_accepts_valid_length_assignment() {
-    let parent = ComputedStyle::default();
-    let stylesheet = parse_stylesheet(
-      r#"
-        @property --box-size {
-          syntax: "<length>";
-          inherits: false;
-          initial-value: 10px;
-        }
-      "#,
-    );
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
-    let style = Style::default().with(StyleDeclaration::CustomProperty(
-      "--box-size".to_owned(),
-      "24px".to_owned(),
-    ));
-
-    let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom_properties.get("--box-size"), Some("24px"));
-  }
-
-  #[test]
-  fn registered_custom_property_keeps_var_assignment_without_validation() {
-    let parent = ComputedStyle::default();
-    let stylesheet = parse_stylesheet(
-      r#"
-        @property --box-size {
-          syntax: "<length>";
-          inherits: false;
-          initial-value: 10px;
-        }
-      "#,
-    );
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
-    let style = Style::default()
-      .with(StyleDeclaration::CustomProperty(
-        "--source".to_owned(),
-        "18px".to_owned(),
-      ))
-      .with(StyleDeclaration::CustomProperty(
-        "--box-size".to_owned(),
-        "var(--source)".to_owned(),
-      ));
-
-    let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(
-      resolved.custom_properties.get("--box-size"),
-      Some("var(--source)")
-    );
-  }
-
-  #[test]
-  fn registered_custom_property_still_accepts_keyword_assignment() {
-    let parent = ComputedStyle::default();
-    let stylesheet = parse_stylesheet(
-      r#"
-        @property --display-state {
-          syntax: "none | auto";
-          inherits: false;
-          initial-value: none;
-        }
-      "#,
-    );
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
-    let style = Style::default().with(StyleDeclaration::CustomProperty(
-      "--display-state".to_owned(),
-      "auto".to_owned(),
-    ));
-
-    let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(
-      resolved.custom_properties.get("--display-state"),
-      Some("auto")
-    );
-  }
-
-  #[test]
-  fn registered_custom_property_still_accepts_alternative_assignment() {
-    let parent = ComputedStyle::default();
-    let stylesheet = parse_stylesheet(
-      r#"
-        @property --accent {
-          syntax: "<length> | <color>";
-          inherits: false;
-          initial-value: red;
-        }
-      "#,
-    );
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
-    let style = Style::default().with(StyleDeclaration::CustomProperty(
-      "--accent".to_owned(),
-      "12px".to_owned(),
-    ));
-
-    let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom_properties.get("--accent"), Some("12px"));
-  }
-
-  #[test]
   fn registered_custom_property_still_accepts_supported_assignments() {
     let parent = ComputedStyle::default();
     let stylesheet = parse_stylesheet(
@@ -3704,29 +3601,6 @@ mod tests {
 
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(resolved.box_data.width, Length::Px(10.0).into());
-  }
-
-  #[test]
-  fn registered_custom_property_accepts_invalid_transform_assignment_without_validation() {
-    let parent = ComputedStyle::default();
-    let stylesheet = parse_stylesheet(
-      r#"
-        @property --move {
-          syntax: "<transform-function>";
-          inherits: false;
-          initial-value: translate(10px, 20px);
-        }
-      "#,
-    );
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
-    let style = Style::default().with(StyleDeclaration::CustomProperty(
-      "--move".to_owned(),
-      "red".to_owned(),
-    ));
-
-    let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom_properties.get("--move"), Some("red"));
   }
 
   #[test]

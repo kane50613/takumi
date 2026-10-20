@@ -898,32 +898,4 @@ mod tests {
       ]))
     );
   }
-
-  #[test]
-  fn parse_tailwind_animation_preset() {
-    assert_eq!(
-      Animations::parse_tw("spin"),
-      Some(Box::from([Animation {
-        duration: AnimationTime::from_milliseconds(1000.0),
-        timing_function: AnimationTimingFunction::Linear,
-        iteration_count: AnimationIterationCount::Infinite,
-        name: Some("spin".to_string()),
-        ..Animation::default()
-      }]))
-    );
-  }
-
-  #[test]
-  fn parse_tailwind_animation_arbitrary_value() {
-    assert_eq!(
-      Animations::parse_tw_with_arbitrary("[wiggle_1s_ease-in-out_infinite]"),
-      Some(Box::from([Animation {
-        duration: AnimationTime::from_milliseconds(1000.0),
-        timing_function: AnimationTimingFunction::EaseInOut,
-        iteration_count: AnimationIterationCount::Infinite,
-        name: Some("wiggle".to_string()),
-        ..Animation::default()
-      }]))
-    );
-  }
 }

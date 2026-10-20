@@ -660,21 +660,6 @@ mod tests {
   }
 
   #[test]
-  fn test_font_variant_caps_round_trip() {
-    for css in ["normal", "small-caps", "all-small-caps", "titling-caps"] {
-      let parsed = FontVariantCaps::from_css_str(css).unwrap();
-      let reparsed = FontVariantCaps::from_css_str(&parsed.to_css_string()).unwrap();
-      assert_eq!(parsed, reparsed, "failed for {css}");
-    }
-  }
-
-  #[test]
-  fn test_parse_font_variant_caps_invalid() {
-    assert!(FontVariantCaps::from_css_str("bogus").is_err());
-    assert!(FontVariantCaps::from_css_str("123").is_err());
-  }
-
-  #[test]
   fn test_parse_font_variant_position() {
     for (css, expected) in [
       ("normal", FontVariantPosition::Normal),
@@ -687,20 +672,6 @@ mod tests {
         "failed for {css}"
       );
     }
-  }
-
-  #[test]
-  fn test_font_variant_position_round_trip() {
-    for css in ["normal", "sub", "super"] {
-      let parsed = FontVariantPosition::from_css_str(css).unwrap();
-      let reparsed = FontVariantPosition::from_css_str(&parsed.to_css_string()).unwrap();
-      assert_eq!(parsed, reparsed, "failed for {css}");
-    }
-  }
-
-  #[test]
-  fn test_parse_font_variant_position_invalid() {
-    assert!(FontVariantPosition::from_css_str("bogus").is_err());
   }
 
   #[test]

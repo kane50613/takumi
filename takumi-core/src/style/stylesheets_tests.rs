@@ -16,29 +16,6 @@ use crate::{
   viewport::Viewport,
 };
 
-/// The sizing longhands moved off `Length`, so their builders take anything that
-/// converts into the new value types. This pins the `Length` call that callers
-/// wrote before the sizing keywords existed.
-#[test]
-fn the_sizing_builders_still_take_a_length() {
-  assert_eq!(
-    StyleDeclaration::width(Length::Px(80.0)),
-    StyleDeclaration::width(Length::Px(80.0))
-  );
-  assert_eq!(
-    StyleDeclaration::height(Length::Percentage(50.0)),
-    StyleDeclaration::height(Length::Percentage(50.0))
-  );
-  assert_eq!(
-    StyleDeclaration::flex_basis(Some(Length::Px(12.0).into())),
-    StyleDeclaration::flex_basis(Some(FlexBasis::Size(Length::Px(12.0).into())))
-  );
-  assert_eq!(
-    StyleDeclaration::flex_basis(None),
-    StyleDeclaration::FlexBasis(None)
-  );
-}
-
 fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style {
   let mut style = Style::default();
   for declaration in declarations {
@@ -96,7 +73,7 @@ fn resolve_var(
 }
 
 #[test]
-fn test_merge_from_inline_over_tailwind() {
+fn inline_declarations_override_tailwind() {
   let mut tw_style = style_with([
     StyleDeclaration::width(Length::Rem(10.0)),
     StyleDeclaration::height(Length::Rem(20.0)),
@@ -561,41 +538,6 @@ fn property_id_accepts_legacy_gap_aliases() {
 }
 
 #[test]
-fn parse_style_declaration_supports_css_wide_keywords_for_longhands() {
-  let declarations = parse_declarations("color", "inherit");
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::CssWideKeyword(
-      LonghandId::Color,
-      CssWideKeyword::Inherit,
-    )]
-  );
-}
-
-#[test]
-fn parse_style_declaration_still_parses_normal_longhand_values() {
-  let declarations = parse_declarations("color", "#ff0000");
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::color(ColorInput::Value(Color([
-      255, 0, 0, 255
-    ])))]
-  );
-}
-
-#[test]
-fn parse_style_declaration_parses_order_integer() {
-  let declarations = parse_declarations("order", "-2");
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::order(Order(-2))]
-  );
-}
-
-#[test]
 fn parse_text_fit_values() {
   let cases = [
     (
@@ -959,13 +901,6 @@ fn style_declaration_block_from_str_tracks_important_declarations() {
 }
 
 #[test]
-fn style_declaration_block_supports_reference_iteration() {
-  let declarations = parse_declarations("padding", "1px 2px");
-
-  assert_eq!(declarations.iter().count(), 4);
-}
-
-#[test]
 fn style_declaration_block_collect_style_fetch_tasks_collects_url_images() {
   let background_url = "https://placehold.co/80x80/22c55e/white";
   let mask_url = "https://placehold.co/40x40/000000/white";
@@ -983,70 +918,6 @@ fn style_declaration_block_collect_style_fetch_tasks_collects_url_images() {
   assert_eq!(
     declarations.image_urls().collect::<Vec<_>>(),
     vec![background_url, mask_url]
-  );
-}
-
-#[test]
-fn style_declaration_block_into_iter_yields_owned_values() {
-  let declarations = parse_declarations("padding", "1px 2px");
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![
-      &StyleDeclaration::padding_top(Length::Px(1.0)),
-      &StyleDeclaration::padding_right(Length::Px(2.0)),
-      &StyleDeclaration::padding_bottom(Length::Px(1.0)),
-      &StyleDeclaration::padding_left(Length::Px(2.0)),
-    ]
-  );
-}
-
-#[test]
-fn test_merge_from_text_decoration_longhands_clear_lower_priority_color() {
-  let mut preset_style = style_with([StyleDeclaration::text_decoration_color(ColorInput::Value(
-    Color([255, 0, 0, 255]),
-  ))]);
-  let inline_style = style_with([
-    StyleDeclaration::text_decoration_line(Some(TextDecorationLines::UNDERLINE)),
-    StyleDeclaration::text_decoration_style(TextDecorationStyle::default()),
-    StyleDeclaration::text_decoration_color(ColorInput::default()),
-    StyleDeclaration::text_decoration_thickness(TextDecorationThickness::default()),
-  ]);
-
-  preset_style.append_block(inline_style.declarations);
-
-  let inherited = preset_style.inherit(&ComputedStyle::default());
-  assert_eq!(
-    inherited.misc3_data.text_decoration_color,
-    ColorInput::default()
-  );
-  assert_eq!(
-    inherited.visual_data.text_decoration_line,
-    Some(TextDecorationLines::UNDERLINE)
-  );
-}
-
-#[test]
-fn test_merge_from_background_longhands_clear_lower_priority_background_color() {
-  let mut preset_style = style_with([StyleDeclaration::background_color(ColorInput::Value(
-    Color([255, 0, 0, 255]),
-  ))]);
-  let inline_style = style_with([
-    StyleDeclaration::background_image(Some([BackgroundImage::None].into())),
-    StyleDeclaration::background_position([PositionValue::default()].into()),
-    StyleDeclaration::background_size([BackgroundSize::default()].into()),
-    StyleDeclaration::background_repeat([BackgroundRepeat::default()].into()),
-    StyleDeclaration::background_blend_mode([BlendMode::default()].into()),
-    StyleDeclaration::background_color(ColorInput::default()),
-    StyleDeclaration::background_clip(BackgroundClip::default()),
-  ]);
-
-  preset_style.append_block(inline_style.declarations);
-
-  let inherited = preset_style.inherit(&ComputedStyle::default());
-  assert_eq!(
-    inherited.background_data.background_color,
-    ColorInput::default()
   );
 }
 

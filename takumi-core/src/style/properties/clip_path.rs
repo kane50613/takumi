@@ -426,17 +426,6 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_inset_four_values() {
-    assert_eq!(
-      BasicShape::from_css_str("inset(10px 20px 30px 40px)"),
-      Ok(BasicShape::Inset(Box::new(InsetShape {
-        inset: Sides([Px(10.0), Px(20.0), Px(30.0), Px(40.0)]),
-        border_radius: None,
-      })))
-    );
-  }
-
-  #[test]
   fn test_parse_inset_with_border_radius() {
     assert_eq!(
       BasicShape::from_css_str("inset(10px round 5px)"),

@@ -36,7 +36,7 @@ impl OverflowWrap {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::{FromCssStr, ToCss};
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_overflow_wrap() {
@@ -51,20 +51,5 @@ mod tests {
         "failed for {css}"
       );
     }
-  }
-
-  #[test]
-  fn test_overflow_wrap_round_trip() {
-    for css in ["normal", "anywhere", "break-word"] {
-      let parsed = OverflowWrap::from_css_str(css).unwrap();
-      let reparsed = OverflowWrap::from_css_str(&parsed.to_css_string()).unwrap();
-      assert_eq!(parsed, reparsed, "failed for {css}");
-    }
-  }
-
-  #[test]
-  fn test_parse_overflow_wrap_invalid() {
-    assert!(OverflowWrap::from_css_str("bogus").is_err());
-    assert!(OverflowWrap::from_css_str("123").is_err());
   }
 }

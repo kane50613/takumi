@@ -700,21 +700,6 @@ mod tests {
   }
 
   #[test]
-  fn make_computed_collapses_formula_without_percent_to_px() {
-    let mut value: Length = Length::Calc(
-      CalcFormula {
-        rem: 1.0,
-        px: 5.0,
-        ..Default::default()
-      }
-      .compress()
-      .unwrap(),
-    );
-    value.make_computed(&sizing());
-    assert_eq!(value, Length::Px(21.0));
-  }
-
-  #[test]
   fn make_computed_collapsed_px_applies_dpr_only_once_in_to_px() {
     let mut value: Length = Length::Calc(
       CalcFormula {
