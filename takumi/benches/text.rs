@@ -50,6 +50,20 @@ fn document_paragraph() -> Node {
   .with_tw("flex w-[320px] bg-white".parse().unwrap())
 }
 
+/// Words and emoji interleaved, so every emoji run asks font fallback for a face.
+fn emoji_paragraph() -> Node {
+  let text = LONG_TEXT
+    .split(' ')
+    .zip(["🎨", "📐", "✨", "🖋️", "📚"].iter().cycle())
+    .map(|(word, emoji)| format!("{word} {emoji}"))
+    .collect::<Vec<_>>()
+    .join(" ")
+    .repeat(4);
+
+  Node::container([Node::text(text).with_tw("text-[20px] text-gray-900".parse().unwrap())])
+    .with_tw("flex w-full h-full p-12 bg-white".parse().unwrap())
+}
+
 fn bench_text(c: &mut Criterion) {
   let fonts = common::fonts();
   let mut group = c.benchmark_group("text");
@@ -63,6 +77,9 @@ fn bench_text(c: &mut Criterion) {
 
   group.bench_function("document_paragraph", |b| {
     b.iter(|| render_node(&fonts, black_box(document_paragraph())))
+  });
+  group.bench_function("emoji_paragraph", |b| {
+    b.iter(|| render_node(&fonts, black_box(emoji_paragraph())))
   });
 
   group.finish();
