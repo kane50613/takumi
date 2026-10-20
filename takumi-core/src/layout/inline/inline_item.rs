@@ -13,7 +13,7 @@ use crate::{
     font_fallback_priority::FontFallbackPriority,
     shaping::{run_segmenter::RunSegmenterRange, shape_result::ShapeResult},
   },
-  layout::tree::RenderNode,
+  layout::{node::Node, tree::RenderNode},
   style::{ComputedStyle, Direction as TextDirection},
   text::bidi_paragraph::direction_from_level,
 };
@@ -48,7 +48,7 @@ impl<'c> LayoutObject<'c> {
 
   /// Blink's `IsBR`.
   pub(crate) fn is_br(self) -> bool {
-    matches!(self, Self::Text(node) if node.node.as_ref().and_then(|node| node.tag_name()).is_some_and(|tag| tag.eq_ignore_ascii_case("br")))
+    matches!(self, Self::Text(node) if node.node.as_ref().is_some_and(Node::is_br))
   }
 }
 

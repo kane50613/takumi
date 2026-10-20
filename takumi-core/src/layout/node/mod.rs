@@ -348,10 +348,22 @@ impl Node {
     Some(text)
   }
 
+  /// Blink's `IsBR`: a `<br>`, which takumi carries as a text node holding its line feed.
+  pub(crate) fn is_br(&self) -> bool {
+    matches!(self.kind, NodeKind::Text(_))
+      && self
+        .tag_name()
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
+  }
+
   pub(crate) fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;
     };
+
+    if self.is_br() {
+      return false;
+    }
     data
       .text
       .chars()
