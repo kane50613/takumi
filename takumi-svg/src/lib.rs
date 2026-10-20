@@ -1029,7 +1029,10 @@ impl SvgDocument {
       self.close("defs")?;
     }
     self.close("svg")?;
-    Ok(String::from_utf8_lossy(&self.writer.into_inner()).into_owned())
+    Ok(
+      String::from_utf8(self.writer.into_inner())
+        .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned()),
+    )
   }
 }
 
