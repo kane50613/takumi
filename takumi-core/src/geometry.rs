@@ -2,6 +2,7 @@
 
 use std::ops::{Add, Sub};
 
+use tiny_skia::{Path, PathBuilder as TinyPathBuilder};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::style::Affine;
@@ -411,6 +412,25 @@ pub enum PathCommand {
 }
 
 impl PathCommand {
+  /// `paths` as a tiny-skia path; none for one with no segments.
+  pub fn build_path(paths: &[Self]) -> Option<Path> {
+    let mut builder = TinyPathBuilder::new();
+
+    for command in paths {
+      match command {
+        Self::MoveTo(point) => builder.move_to(point.x, point.y),
+        Self::LineTo(point) => builder.line_to(point.x, point.y),
+        Self::QuadTo(p1, p2) => builder.quad_to(p1.x, p1.y, p2.x, p2.y),
+        Self::CubicTo(p1, p2, p3) => {
+          builder.cubic_to(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+        }
+        Self::Close => builder.close(),
+      }
+    }
+
+    builder.finish()
+  }
+
   /// A digest of `paths`, which the same commands always give.
   pub fn digest(paths: &[Self]) -> u64 {
     let mut h = Xxh3::new();

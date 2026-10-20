@@ -11,7 +11,7 @@ use skrifa::{
   GlyphId,
   bitmap::{BitmapData, BitmapGlyph, BitmapStrikes, Origin},
   color::{
-    Brush, ColorGlyphCollection, ColorGlyphFormat, ColorPainter, CompositeMode,
+    Brush, ColorGlyphCollection, ColorGlyphFormat, ColorPainter, ColorPalette, CompositeMode,
     PaintCachedColorGlyph, Transform,
   },
   instance::{LocationRef, Size},
@@ -29,7 +29,7 @@ use crate::{
     glyph_cache::ENTRY_OVERHEAD,
     image_buffer::{ImageBuffer, rgba_len},
   },
-  style::Affine,
+  style::{Affine, Color},
 };
 
 /// A run's resolved glyphs by glyph id.
@@ -149,6 +149,39 @@ pub struct ResolvedColorLayer {
   pub palette_index: u16,
   /// Layer opacity, 0..=1.
   pub alpha: f32,
+}
+
+impl ResolvedColorLayer {
+  /// Whether the layer draws in the text's color, the COLR palette index `0xFFFF`.
+  pub fn is_foreground(&self) -> bool {
+    self.palette_index == u16::MAX
+  }
+
+  /// The layer's color: its palette entry, or `foreground` for a foreground layer, faded by the
+  /// layer's and the foreground's opacity. None for an entry `palette` lacks.
+  pub fn color(&self, palette: Option<&ColorPalette<'_>>, foreground: Color) -> Option<Color> {
+    let foreground_opacity = foreground.0[3] as f32 / 255.0;
+
+    if self.is_foreground() {
+      let alpha = (foreground_opacity * self.alpha * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+
+      return Some(Color([
+        foreground.0[0],
+        foreground.0[1],
+        foreground.0[2],
+        alpha,
+      ]));
+    }
+
+    let record = palette?.colors().get(usize::from(self.palette_index))?;
+    let alpha = ((record.alpha() as f32 / 255.0) * self.alpha * foreground_opacity * 255.0)
+      .round()
+      .clamp(0.0, 255.0) as u8;
+
+    Some(Color([record.red(), record.green(), record.blue(), alpha]))
+  }
 }
 
 impl ResolvedOutlineGlyph {

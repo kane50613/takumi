@@ -282,7 +282,7 @@ impl Deref for FontsSnapshot {
 }
 
 /// Synthetic styling still needed after variable axes are applied.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct RunSynthesis {
   /// Stroke width in px for synthetic bold.
   pub embolden: Option<f32>,

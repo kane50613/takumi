@@ -13,8 +13,8 @@ use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  BoxMask, Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area,
-  create_mask, mul_div_255, placement_overlap, style::Affine,
+  BoxMask, Command, Fill, Placement, RenderContext, Result, Style, checked_area, create_mask,
+  mul_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -622,7 +622,7 @@ fn rasterize_mask(
   style: Style,
   cull: Option<CanvasViewport>,
 ) -> Option<(Vec<u8>, Placement)> {
-  let mut path = build_path(paths)?;
+  let mut path = Command::build_path(paths)?;
 
   if let Some(stroke) = style.stroke() {
     if let Some(dash) = &stroke.dash

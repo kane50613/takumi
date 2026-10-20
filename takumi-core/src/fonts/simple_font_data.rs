@@ -15,11 +15,18 @@ use skrifa::{
 
 use crate::{
   fonts::font_description::FontDescription,
-  resources::font::{MatchedFace, PrimaryFontMetrics},
+  resources::{
+    font::{MatchedFace, PrimaryFontMetrics, RunSynthesis},
+    glyph::synthesis_embolden_strength,
+  },
 };
 
 /// Blink's `kSmallCapsFontSizeMultiplier`.
 const SMALL_CAPS_FONT_SIZE_MULTIPLIER: f32 = 0.7;
+
+/// The angle in degrees of the `-1/4` horizontal skew Skia gives a synthetic italic, which
+/// Blink's `FontPlatformData::SetupSkFont` asks for.
+const SYNTHETIC_ITALIC_SKEW: f32 = 14.036_243;
 
 /// Blink's `SimpleFontData`.
 pub(crate) struct SimpleFontData {
@@ -113,6 +120,18 @@ impl SimpleFontData {
 
   pub(crate) fn size(&self) -> f32 {
     self.size
+  }
+
+  /// The synthetic bold and italic Blink's `FontPlatformData::SetupSkFont` asks Skia for; a color
+  /// face takes neither.
+  pub(crate) fn synthesis(&self) -> RunSynthesis {
+    let synthesizes = !self.face.typeface.is_color;
+
+    RunSynthesis {
+      embolden: (synthesizes && self.face.synthetic_bold)
+        .then(|| synthesis_embolden_strength(self.size)),
+      skew: (synthesizes && self.face.synthetic_italic).then_some(-SYNTHETIC_ITALIC_SKEW),
+    }
   }
 
   pub(crate) fn specified_size(&self) -> f32 {

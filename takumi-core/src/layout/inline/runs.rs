@@ -8,7 +8,7 @@ use crate::{
       ExactFontMetrics, FontBlob, FontUnderline, PrimaryFontMetrics, RunFace, RunSynthesis,
       em_box_descent, zero_inline_size,
     },
-    glyph::{ResolvedColorLayer, ResolvedGlyphs, ResolvedOutlineGlyph},
+    glyph::{ResolvedGlyphs, ResolvedOutlineGlyph},
   },
   style::{Affine, Color},
 };
@@ -250,27 +250,14 @@ impl PositionedInlineRun {
     let font = FontRef::from_index(self.glyph_run.font_data(), self.glyph_run.font_index).ok();
     let palettes = font.as_ref().map(MetadataProvider::color_palettes);
     let palette = palettes.as_ref().and_then(|palettes| palettes.get(0));
-    let foreground_opacity = foreground.0[3] as f32 / 255.0;
 
     layers
       .iter()
-      .filter_map(|layer: &ResolvedColorLayer| {
-        let color = if layer.palette_index == u16::MAX {
-          let alpha = (foreground_opacity * layer.alpha * 255.0)
-            .round()
-            .clamp(0.0, 255.0) as u8;
-          Color([foreground.0[0], foreground.0[1], foreground.0[2], alpha])
-        } else {
-          let record = palette
-            .as_ref()?
-            .colors()
-            .get(usize::from(layer.palette_index))?;
-          let alpha = ((record.alpha() as f32 / 255.0) * layer.alpha * foreground_opacity * 255.0)
-            .round()
-            .clamp(0.0, 255.0) as u8;
-          Color([record.red(), record.green(), record.blue(), alpha])
-        };
-        Some((color, layer.paths.as_slice()))
+      .filter_map(|layer| {
+        Some((
+          layer.color(palette.as_ref(), foreground)?,
+          layer.paths.as_slice(),
+        ))
       })
       .collect()
   }
