@@ -434,16 +434,6 @@ impl PositionedInlineRun {
     }
   }
 
-  /// Source order of the element the run's text belongs to.
-  pub(crate) fn element(&self, spans: &[ProcessedInlineSpan<'_>]) -> Option<usize> {
-    let span_id = self.glyph_run.brush.source_span_id?;
-
-    match spans.get(span_id as usize)? {
-      ProcessedInlineSpan::Text { element, .. } => *element,
-      _ => None,
-    }
-  }
-
   /// The spans around the run, innermost first.
   fn span_chain<'s, 'c>(
     &self,
