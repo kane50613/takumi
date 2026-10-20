@@ -14,6 +14,7 @@ use png::{
   ColorType, Filter,
   chunk::{IDAT, acTL, fcTL, fdAT},
 };
+use takumi_core::resources::image_buffer::rgba_len;
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
@@ -133,7 +134,7 @@ impl Bitmap {
   /// Builds a bitmap from raw RGBA bytes, row-major, 4 bytes per pixel. Returns
   /// `None` when `data.len()` is not `width * height * 4`.
   pub fn from_raw(width: u32, height: u32, data: Vec<u8>) -> Option<Self> {
-    (data.len() == pixel_count(width, height)? * 4).then_some(Self {
+    (data.len() == rgba_len(width, height)?).then_some(Self {
       width,
       height,
       data,
@@ -149,12 +150,12 @@ impl Bitmap {
   /// A bitmap filled with `pixel`.
   #[cfg(test)]
   pub(crate) fn from_pixel(width: u32, height: u32, pixel: [u8; 4]) -> Self {
-    let count = pixel_count(width, height).expect("the bitmap fits in memory");
+    let len = rgba_len(width, height).expect("the bitmap fits in memory");
 
     Self {
       width,
       height,
-      data: pixel.repeat(count),
+      data: pixel.repeat(len / 4),
     }
   }
 
@@ -261,11 +262,6 @@ impl Bitmap {
 
     y as usize * self.width as usize + x as usize
   }
-}
-
-/// `width * height`, unless it overflows `usize`.
-fn pixel_count(width: u32, height: u32) -> Option<usize> {
-  (width as usize).checked_mul(height as usize)
 }
 
 /// Represents a single frame of an animated image.
@@ -1289,6 +1285,12 @@ mod tests {
     let result = write_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
 
     assert_matches!(result, Err(Error::MixedAnimationFrameDimensions));
+  }
+
+  /// A byte length past `usize` is rejected rather than wrapped.
+  #[test]
+  fn from_raw_rejects_an_overflowing_size() {
+    assert!(Bitmap::from_raw(u32::MAX, u32::MAX, Vec::new()).is_none());
   }
 
   /// A crop keeps the region's rows, each starting at its left column.
