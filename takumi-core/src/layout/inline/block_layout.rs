@@ -71,6 +71,24 @@ impl<'c> InlineNode<'c> {
     )
   }
 
+  /// The min-content, max-content, or fit-content width the available width asks for, as Blink's
+  /// `ComputeMinMaxSizes` finds it without laying out any line.
+  pub(crate) fn content_inline_size(
+    self,
+    items_data: &InlineNodeData<'c>,
+    available_space: Size<AvailableSpace>,
+  ) -> f32 {
+    let mut atomic_inline = BoxAtomicInline { available_space };
+    let sizes = self.compute_min_max_sizes(items_data, &mut atomic_inline);
+    let (min_size, max_size) = (sizes.min_size.to_float(), sizes.max_size.to_float());
+
+    match available_space.width {
+      AvailableSpace::MinContent => min_size,
+      AvailableSpace::MaxContent => max_size,
+      AvailableSpace::Definite(available) => max_size.min(available.max(0.0)).max(min_size),
+    }
+  }
+
   /// The size and baselines of the lines in taffy's constraint: the known width, or the
   /// min-content, max-content, or fit-content width the available width asks for, and the lines'
   /// height down to a `line-clamp`.
@@ -86,17 +104,8 @@ impl<'c> InlineNode<'c> {
     let known_width = known_dimensions
       .width
       .map(|width| (width - padding.left - padding.right - border.left - border.right).max(0.0));
-    let width = known_width.unwrap_or_else(|| {
-      let mut atomic_inline = BoxAtomicInline { available_space };
-      let sizes = self.compute_min_max_sizes(items_data, &mut atomic_inline);
-      let (min_size, max_size) = (sizes.min_size.to_float(), sizes.max_size.to_float());
-
-      match available_space.width {
-        AvailableSpace::MinContent => min_size,
-        AvailableSpace::MaxContent => max_size,
-        AvailableSpace::Definite(available) => max_size.min(available.max(0.0)).max(min_size),
-      }
-    });
+    let width =
+      known_width.unwrap_or_else(|| self.content_inline_size(items_data, available_space));
     // taffy lays a leaf out with no known width, at the definite width it offers.
     let line_width = known_width.unwrap_or(match available_space.width {
       AvailableSpace::Definite(available) => available.max(width),
