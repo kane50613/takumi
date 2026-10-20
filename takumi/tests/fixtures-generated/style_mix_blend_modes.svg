@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="790" height="220" viewBox="0 0 790 220">
+  <rect x="0" y="0" width="790" height="220" fill="#f4a460"/>
+  <rect x="10" y="10" width="120" height="60" fill="#76808a"/>
+  <rect x="10" y="10" width="40" height="60" fill="#ad6b60"/>
+  <rect x="50" y="10" width="40" height="60" fill="#669c74"/>
+  <rect x="90" y="10" width="40" height="60" fill="#627ab0"/>
+  <rect x="140" y="10" width="120" height="60" fill="#76808a"/>
+  <rect x="270" y="10" width="120" height="60" fill="#76808a"/>
+  <rect x="400" y="10" width="120" height="60" fill="#76808a"/>
+  <rect x="530" y="10" width="120" height="60" fill="#76808a"/>
+  <rect x="660" y="10" width="120" height="60" fill="#76808a"/>
+  <rect x="10" y="80" width="120" height="60" fill="#76808a"/>
+  <rect x="140" y="80" width="120" height="60" fill="#76808a"/>
+  <rect x="270" y="80" width="120" height="60" fill="#76808a"/>
+  <rect x="400" y="80" width="120" height="60" fill="#76808a"/>
+  <rect x="530" y="80" width="120" height="60" fill="#76808a"/>
+  <rect x="660" y="80" width="120" height="60" fill="#76808a"/>
+  <rect x="10" y="150" width="120" height="60" fill="#76808a"/>
+  <rect x="140" y="150" width="120" height="60" fill="#76808a"/>
+  <rect x="270" y="150" width="120" height="60" fill="#76808a"/>
+  <rect x="400" y="150" width="120" height="60" fill="#76808a"/>
+  <rect x="530" y="150" width="120" height="60" fill="#76808a"/>
+  <rect x="660" y="150" width="120" height="60" fill="#76808a"/>
+  <g style="mix-blend-mode:multiply">
+    <rect x="140" y="10" width="40" height="60" fill="#ad6b60"/>
+    <rect x="180" y="10" width="40" height="60" fill="#669c74"/>
+    <rect x="220" y="10" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:screen">
+    <rect x="270" y="10" width="40" height="60" fill="#ad6b60"/>
+    <rect x="310" y="10" width="40" height="60" fill="#669c74"/>
+    <rect x="350" y="10" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:overlay">
+    <rect x="400" y="10" width="40" height="60" fill="#ad6b60"/>
+    <rect x="440" y="10" width="40" height="60" fill="#669c74"/>
+    <rect x="480" y="10" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:darken">
+    <rect x="530" y="10" width="40" height="60" fill="#ad6b60"/>
+    <rect x="570" y="10" width="40" height="60" fill="#669c74"/>
+    <rect x="610" y="10" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:lighten">
+    <rect x="660" y="10" width="40" height="60" fill="#ad6b60"/>
+    <rect x="700" y="10" width="40" height="60" fill="#669c74"/>
+    <rect x="740" y="10" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:color-dodge">
+    <rect x="10" y="80" width="40" height="60" fill="#ad6b60"/>
+    <rect x="50" y="80" width="40" height="60" fill="#669c74"/>
+    <rect x="90" y="80" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:color-burn">
+    <rect x="140" y="80" width="40" height="60" fill="#ad6b60"/>
+    <rect x="180" y="80" width="40" height="60" fill="#669c74"/>
+    <rect x="220" y="80" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:hard-light">
+    <rect x="270" y="80" width="40" height="60" fill="#ad6b60"/>
+    <rect x="310" y="80" width="40" height="60" fill="#669c74"/>
+    <rect x="350" y="80" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:soft-light">
+    <rect x="400" y="80" width="40" height="60" fill="#ad6b60"/>
+    <rect x="440" y="80" width="40" height="60" fill="#669c74"/>
+    <rect x="480" y="80" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:difference">
+    <rect x="530" y="80" width="40" height="60" fill="#ad6b60"/>
+    <rect x="570" y="80" width="40" height="60" fill="#669c74"/>
+    <rect x="610" y="80" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:exclusion">
+    <rect x="660" y="80" width="40" height="60" fill="#ad6b60"/>
+    <rect x="700" y="80" width="40" height="60" fill="#669c74"/>
+    <rect x="740" y="80" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:hue">
+    <rect x="10" y="150" width="40" height="60" fill="#ad6b60"/>
+    <rect x="50" y="150" width="40" height="60" fill="#669c74"/>
+    <rect x="90" y="150" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:saturation">
+    <rect x="140" y="150" width="40" height="60" fill="#ad6b60"/>
+    <rect x="180" y="150" width="40" height="60" fill="#669c74"/>
+    <rect x="220" y="150" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:color">
+    <rect x="270" y="150" width="40" height="60" fill="#ad6b60"/>
+    <rect x="310" y="150" width="40" height="60" fill="#669c74"/>
+    <rect x="350" y="150" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:luminosity">
+    <rect x="400" y="150" width="40" height="60" fill="#ad6b60"/>
+    <rect x="440" y="150" width="40" height="60" fill="#669c74"/>
+    <rect x="480" y="150" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:plus-darker">
+    <rect x="530" y="150" width="40" height="60" fill="#ad6b60"/>
+    <rect x="570" y="150" width="40" height="60" fill="#669c74"/>
+    <rect x="610" y="150" width="40" height="60" fill="#627ab0"/>
+  </g>
+  <g style="mix-blend-mode:plus-lighter">
+    <rect x="660" y="150" width="40" height="60" fill="#ad6b60"/>
+    <rect x="700" y="150" width="40" height="60" fill="#669c74"/>
+    <rect x="740" y="150" width="40" height="60" fill="#627ab0"/>
+  </g>
+</svg>
