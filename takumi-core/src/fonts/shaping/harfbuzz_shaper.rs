@@ -910,7 +910,7 @@ mod tests {
   use super::*;
   use crate::fonts::shaping::{
     glyph_data::HarfBuzzRunGlyphData,
-    testing::{GEIST, NOTO_SANS_TC, TWEMOJI, font, geist, register},
+    testing::{GEIST, NOTO_SANS_DEVANAGARI, NOTO_SANS_TC, TWEMOJI, font, geist, register},
   };
   use crate::{
     resources::font::Fonts,
@@ -1201,6 +1201,95 @@ mod tests {
     assert_eq!(
       runs(&rtl),
       [(1, length - 1, length - 1, latin), (0, 1, 1, latin)]
+    );
+  }
+
+  /// `X` and U+0300 COMBINING GRAVE ACCENT, `length` characters long, with a cluster at each end.
+  fn latin_clusters(length: usize) -> String {
+    format!("X\u{300}{}Z\u{300}", "X".repeat(length - 4))
+  }
+
+  /// Blink's `MaxGlyphsClusterLatin`, in UTF-8 bytes: U+0300 takes two, so the string runs three
+  /// bytes past `MAX_CHARACTERS` and the cluster at the end that passes it takes a run of its own.
+  #[test]
+  fn max_glyphs_cluster_latin() {
+    let (_fonts, font) = geist();
+    let max = HarfBuzzRunGlyphData::MAX_CHARACTERS;
+    let shaper = HarfBuzzShaper::new(latin_clusters(max as usize + 1));
+    let latin = icu_script_to_hb_script(Script::Latin);
+
+    let ltr = shaper.shape_all(&font, TextDirection::Ltr);
+
+    assert_eq!((ltr.num_characters(), ltr.num_glyphs()), (max + 3, max + 1));
+    assert_eq!(runs(&ltr), [(0, max, max - 1, latin), (max, 3, 2, latin)]);
+
+    let rtl = shaper.shape_all(&font, TextDirection::Rtl);
+
+    assert_eq!(runs(&rtl), [(3, max, max - 1, latin), (0, 3, 2, latin)]);
+  }
+
+  /// Blink's `MaxGlyphsClusterLatin2`, in UTF-8 bytes. The right-to-left run keeps its end, so it
+  /// spans one byte past `MAX_CHARACTERS` while its last cluster still starts within
+  /// `MAX_CHARACTER_INDEX`.
+  #[test]
+  fn max_glyphs_cluster_latin2() {
+    let (_fonts, font) = geist();
+    let max = HarfBuzzRunGlyphData::MAX_CHARACTERS;
+    let shaper = HarfBuzzShaper::new(latin_clusters(max as usize + 2));
+    let latin = icu_script_to_hb_script(Script::Latin);
+
+    let ltr = shaper.shape_all(&font, TextDirection::Ltr);
+
+    assert_eq!((ltr.num_characters(), ltr.num_glyphs()), (max + 4, max + 2));
+    assert_eq!(runs(&ltr), [(0, max, max - 1, latin), (max, 4, 3, latin)]);
+
+    let rtl = shaper.shape_all(&font, TextDirection::Rtl);
+
+    assert_eq!(runs(&rtl), [(3, max + 1, max, latin), (0, 3, 2, latin)]);
+  }
+
+  /// Blink's `MaxGlyphsClusterDevanagari`, in UTF-8 bytes: U+0930 takes three, so a run holds the
+  /// 10,923 clusters that start within `MAX_CHARACTER_INDEX` bytes of it.
+  #[test]
+  fn max_glyphs_cluster_devanagari() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, NOTO_SANS_DEVANAGARI, "Noto Sans Devanagari");
+
+    let font = font(&fonts, "Noto Sans Devanagari");
+    let length = HarfBuzzRunGlyphData::MAX_CHARACTERS + 1;
+    let cluster = "\u{930}\u{93F}\u{902}";
+    let string = format!(
+      "{cluster}{}{cluster}",
+      "\u{930}".repeat(length as usize - 6)
+    );
+    let shaper = HarfBuzzShaper::new(string);
+    let devanagari = icu_script_to_hb_script(Script::Devanagari);
+
+    let ltr = shaper.shape_all(&font, TextDirection::Ltr);
+
+    assert_eq!(
+      (ltr.num_characters(), ltr.num_glyphs()),
+      (3 * length, length)
+    );
+    assert_eq!(
+      runs(&ltr),
+      [
+        (0, 32769, 10923, devanagari),
+        (32769, 32769, 10923, devanagari),
+        (65538, 32769, 10923, devanagari)
+      ]
+    );
+
+    let rtl = shaper.shape_all(&font, TextDirection::Rtl);
+
+    assert_eq!(
+      runs(&rtl),
+      [
+        (65532, 32775, 10925, devanagari),
+        (32763, 32769, 10923, devanagari),
+        (0, 32763, 10921, devanagari)
+      ]
     );
   }
 
