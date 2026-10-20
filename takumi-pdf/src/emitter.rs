@@ -335,7 +335,6 @@ impl Emitter<'_> {
           let mut column_node = source.clone();
 
           column_node.context = column.context;
-          column_node.context.paint_offset = node.context.paint_offset;
           for background in column.cells {
             self.emit_cell_background(&column_node, frame, background, surface);
           }

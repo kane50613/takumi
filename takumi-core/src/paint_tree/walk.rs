@@ -856,11 +856,8 @@ fn decorations(
         &mut recorder,
       )?;
       for column in columns {
-        let mut column_context = column.context.clone();
-
-        column_context.paint_offset = context.paint_offset;
         for cell in &column.cells {
-          cell_background(&column_context, layout, cell, &mut recorder)?;
+          cell_background(&column.context, layout, cell, &mut recorder)?;
         }
       }
     }

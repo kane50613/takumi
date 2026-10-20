@@ -73,7 +73,7 @@ impl CellBackground {
 pub struct ColumnBackground {
   /// The column's child-index path from the table.
   pub path: Vec<usize>,
-  /// The column's context, whose background paints.
+  /// The column's context, whose background paints, at the table's paint offset.
   pub context: RenderContext,
   /// The cells under it, relative to the table.
   pub cells: Vec<CellBackground>,
@@ -360,13 +360,16 @@ fn column_backgrounds(
       }
     }
 
+    let mut context = column.context.clone();
+
+    context.paint_offset = table.context.paint_offset;
     backgrounds.push(ColumnBackground {
       path: geometry
         .path
         .into_iter()
         .filter(|index| *index != usize::MAX)
         .collect(),
-      context: column.context.clone(),
+      context,
       cells: cells.into_iter().map(|cell| cell.under(area)).collect(),
     });
   }

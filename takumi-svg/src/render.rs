@@ -268,11 +268,8 @@ impl<'n> PlacedBox<'n> {
         )
         .emit_box(text_clip, paints_border, doc)?;
         for column in columns {
-          let mut context = column.context;
-
-          context.paint_offset = self.node.context.paint_offset;
           for background in column.cells {
-            emit_cell_background(&context, self.frame, background, doc)?;
+            emit_cell_background(&column.context, self.frame, background, doc)?;
           }
         }
         Ok(())

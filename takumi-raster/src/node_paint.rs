@@ -97,12 +97,9 @@ pub(crate) fn draw_table_box_shell(
       draw_box_shell(&grid_context, canvas, grid, text_clip, paints_border)?;
 
       for column in columns {
-        let mut column_context = column.context;
-
-        column_context.paint_offset = context.paint_offset;
         for background in column.cells {
           draw_cell_background(
-            &column_context,
+            &column.context,
             canvas,
             context.transform,
             layout,
