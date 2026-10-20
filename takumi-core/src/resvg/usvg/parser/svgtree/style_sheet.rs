@@ -1,7 +1,7 @@
 //! An SVG document's `<style>` sheets and `style` attributes, matched by takumi's selector engine
 //! in place of upstream usvg's `simplecss`.
 
-use std::{num::NonZeroUsize, ptr::NonNull};
+use std::{cell::RefCell, num::NonZeroUsize, ptr::NonNull};
 
 use cssparser::{
   AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserState, QualifiedRuleParser,
@@ -54,6 +54,8 @@ struct Rule {
 pub(crate) struct StyleSheet<'a> {
   rules: Vec<Rule>,
   blocks: Vec<Vec<Declaration<'a>>>,
+  /// Shared by every node of the one document the sheet styles.
+  caches: RefCell<SelectorCaches>,
 }
 
 impl<'a> StyleSheet<'a> {
@@ -80,7 +82,7 @@ impl<'a> StyleSheet<'a> {
 
   /// Calls `apply` with each declaration whose rule matches `node`, lowest specificity first.
   pub(crate) fn cascade(&self, node: roxmltree::Node, mut apply: impl FnMut(&Declaration<'a>)) {
-    let mut caches = SelectorCaches::default();
+    let mut caches = self.caches.borrow_mut();
     let mut context = MatchingContext::new(
       MatchingMode::Normal,
       None,
@@ -286,7 +288,7 @@ impl Element for XmlElement<'_, '_> {
     !self
       .0
       .children()
-      .any(|child| child.is_element() || child.text().is_some_and(|text| !text.is_empty()))
+      .any(|child| child.is_element() || child.is_text() && child.text() != Some(""))
   }
 
   fn is_root(&self) -> bool {
@@ -427,5 +429,16 @@ mod tests {
     assert_eq!(matched(css, svg, "a"), ["first"]);
     assert_eq!(matched(css, svg, "b"), ["second"]);
     assert_eq!(matched(css, svg, "c"), ["not-rect", "french"]);
+  }
+
+  #[test]
+  fn a_comment_leaves_an_element_empty() {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><g id="comment"><!-- note --></g><g id="text">x</g></svg>"#;
+
+    assert_eq!(
+      matched("g:empty { fill: empty }", svg, "comment"),
+      ["empty"]
+    );
+    assert!(matched("g:empty { fill: empty }", svg, "text").is_empty());
   }
 }
