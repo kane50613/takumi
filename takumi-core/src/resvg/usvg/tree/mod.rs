@@ -15,7 +15,7 @@ pub use tiny_skia_path;
 pub use self::geom::*;
 pub use self::text::*;
 
-use crate::resources::image_buffer::ImageBuffer;
+use crate::resources::glyph::ResolvedGlyph;
 use crate::resvg::usvg::OptionLog;
 
 /// An alias to `NormalizedF32`.
@@ -1470,8 +1470,8 @@ pub enum ImageKind {
   WEBP(Arc<Vec<u8>>),
   /// A preprocessed SVG tree. Can be rendered as is.
   SVG(Tree),
-  /// Decoded pixels, such as a bitmap glyph's.
-  Bitmap(Arc<ImageBuffer>),
+  /// A bitmap glyph, sharing the glyph cache's decoded pixels.
+  Glyph(Arc<ResolvedGlyph>),
 }
 
 impl ImageKind {
@@ -1491,7 +1491,12 @@ impl ImageKind {
         .and_then(|(width, height)| Size::from_wh(width as f32, height as f32))
         .log_none(|| log::warn!("Image has an invalid size. Skipped.")),
       ImageKind::SVG(svg) => Some(svg.size),
-      ImageKind::Bitmap(image) => Size::from_wh(image.width() as f32, image.height() as f32),
+      ImageKind::Glyph(glyph) => match glyph.as_ref() {
+        ResolvedGlyph::Bitmap(bitmap) => {
+          Size::from_wh(bitmap.image.width() as f32, bitmap.image.height() as f32)
+        }
+        ResolvedGlyph::Outline(_) => None,
+      },
     }
   }
 }
@@ -1504,7 +1509,7 @@ impl std::fmt::Debug for ImageKind {
       ImageKind::GIF(_) => f.write_str("ImageKind::GIF(..)"),
       ImageKind::WEBP(_) => f.write_str("ImageKind::WEBP(..)"),
       ImageKind::SVG(_) => f.write_str("ImageKind::SVG(..)"),
-      ImageKind::Bitmap(_) => f.write_str("ImageKind::Bitmap(..)"),
+      ImageKind::Glyph(_) => f.write_str("ImageKind::Glyph(..)"),
     }
   }
 }
