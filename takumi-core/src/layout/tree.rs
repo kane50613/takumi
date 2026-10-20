@@ -2438,23 +2438,13 @@ impl RenderNode {
       return children;
     }
 
-    let mut final_children = Vec::new();
-    let mut inline_group = Vec::new();
-
     // An out-of-flow box stays in the run of inline content around it, as a placeholder
     // marking its static position, rather than breaking the run into two lines.
-    for item in children {
-      if item.participates_in_inline_formatting_context() {
-        inline_group.push(item);
-        continue;
-      }
-
-      flush_inline_group(&mut inline_group, &mut final_children, context);
-      final_children.push(item);
-    }
-
-    flush_inline_group(&mut inline_group, &mut final_children, context);
-    final_children.into_boxed_slice()
+    wrap_runs(
+      children,
+      RenderNode::participates_in_inline_formatting_context,
+      |run| RenderNode::anonymous_block_container(context, run),
+    )
   }
 
   /// Padding in pixels, with a percentage resolving to zero.
@@ -2774,19 +2764,34 @@ impl RenderNode {
   }
 }
 
-fn flush_inline_group(
-  inline_group: &mut Vec<RenderNode>,
-  final_children: &mut Vec<RenderNode>,
-  parent_render_context: &RenderContext,
-) {
-  if inline_group.is_empty() {
-    return;
+/// `children` with each run of the ones `in_run` picks wrapped in the box `wrap` makes of it.
+fn wrap_runs(
+  children: Box<[RenderNode]>,
+  in_run: impl Fn(&RenderNode) -> bool,
+  wrap: impl Fn(Vec<RenderNode>) -> RenderNode,
+) -> Box<[RenderNode]> {
+  let mut wrapped = Vec::new();
+  let mut run = Vec::new();
+
+  for child in children {
+    if in_run(&child) {
+      run.push(child);
+
+      continue;
+    }
+
+    if !run.is_empty() {
+      wrapped.push(wrap(take(&mut run)));
+    }
+
+    wrapped.push(child);
   }
 
-  final_children.push(RenderNode::anonymous_block_container(
-    parent_render_context,
-    take(inline_group),
-  ));
+  if !run.is_empty() {
+    wrapped.push(wrap(run));
+  }
+
+  wrapped.into_boxed_slice()
 }
 
 // Mirrors Blink's Text::TextLayoutObjectIsNeeded, minus the ends-with-space
