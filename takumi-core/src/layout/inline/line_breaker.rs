@@ -69,7 +69,7 @@ impl<'s> ShapeResultPositions<'s> {
 
     Self {
       shape_result,
-      start_index: shape_result.start_index(),
+      start_index: shape_result.start_index,
       base_position: 0.0,
       is_ltr: !shape_result.is_rtl(),
     }
@@ -1321,10 +1321,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     let item = &self.items()[item_index];
 
     debug_assert!(self.hyphen_index.is_none());
-    debug_assert_eq!(
-      item_shape_result.start_index() as usize,
-      item.start_offset()
-    );
+    debug_assert_eq!(item_shape_result.start_index as usize, item.start_offset());
     debug_assert_eq!(item_shape_result.end_index() as usize, item.end_offset());
 
     let items_data = self.items_data;

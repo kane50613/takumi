@@ -98,10 +98,7 @@ impl<'a> FontFallbackIterator<'a> {
     let Some(font_data) = candidate.font_data() else {
       return self.next(hint_list);
     };
-    let candidate_id = (
-      font_data.face().typeface.id,
-      font_data.face().typeface.index,
-    );
+    let candidate_id = (font_data.face.typeface.id, font_data.face.typeface.index);
 
     if self
       .unique_font_data_for_range_sets_returned
@@ -147,7 +144,7 @@ impl<'a> FontFallbackIterator<'a> {
 
         let last_resort = self
           .font_fallback_list
-          .font_cache()
+          .font_cache
           .last_resort_fallback_font()
           .map(FontDataForRangeSet::new)
           .unwrap_or_default();
@@ -209,7 +206,7 @@ impl<'a> FontFallbackIterator<'a> {
   fn fallback_priority_font(&self, hint: char) -> Option<Rc<SimpleFontData>> {
     self
       .font_fallback_list
-      .font_cache()
+      .font_cache
       .fallback_font_for_character(hint, self.font_fallback_priority)
   }
 
@@ -240,7 +237,7 @@ impl<'a> FontFallbackIterator<'a> {
 
     self
       .font_fallback_list
-      .font_cache()
+      .font_cache
       .fallback_font_for_character(hint, FontFallbackPriority::Text)
   }
 }

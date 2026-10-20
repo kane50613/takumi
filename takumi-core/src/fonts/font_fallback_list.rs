@@ -50,7 +50,7 @@ impl FontData {
 #[derive(Debug)]
 pub(crate) struct FontFallbackList {
   font_list: Vec<FontData>,
-  font_cache: FontCache,
+  pub(crate) font_cache: FontCache,
   /// Blink's `cached_primary_simple_font_data_with_space_`.
   primary_with_space: OnceCell<Option<Rc<SimpleFontData>>>,
   /// Blink's `cached_primary_simple_font_data_with_digit_zero_`.
@@ -111,10 +111,6 @@ impl FontFallbackList {
   /// Blink's `FontDataAt`.
   pub(crate) fn font_data_at(&self, realized_font_index: usize) -> Option<&FontData> {
     self.font_list.get(realized_font_index)
-  }
-
-  pub(crate) fn font_cache(&self) -> &FontCache {
-    &self.font_cache
   }
 
   /// Blink's `PrimarySimpleFontDataWithSpace`: the font metrics come from.

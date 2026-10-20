@@ -16,10 +16,11 @@ pub(crate) struct ShapeResultSpacing<'a> {
   word_spacing: TextRunLayoutUnit,
   expansion: InlineLayoutUnit,
   expansion_per_opportunity: TextRunLayoutUnit,
-  expansion_opportunity_count: usize,
+  /// Blink's `ExpansionOppotunityCount`.
+  pub(crate) expansion_opportunity_count: usize,
   justification_context: JustificationContext,
   has_spacing: bool,
-  is_letter_spacing_applied: bool,
+  pub(crate) is_letter_spacing_applied: bool,
   is_word_spacing_applied: bool,
   allow_tabs: bool,
   allow_word_spacing_anywhere: bool,
@@ -43,19 +44,8 @@ impl<'a> ShapeResultSpacing<'a> {
     }
   }
 
-  #[cfg(test)]
-  pub(crate) fn is_letter_spacing_applied(&self) -> bool {
-    self.is_letter_spacing_applied
-  }
-
   pub(crate) fn has_expansion(&self) -> bool {
     self.expansion_opportunity_count != 0
-  }
-
-  #[cfg(test)]
-  /// Blink's `ExpansionOppotunityCount`.
-  pub(crate) fn expansion_opportunity_count(&self) -> usize {
-    self.expansion_opportunity_count
   }
 
   /// Blink's `SetSpacing` from `letter-spacing` and `word-spacing` in pixels.
@@ -286,7 +276,7 @@ mod tests {
       .expansion_setup(InlineLayoutUnit::from_float(expansion), false, false)
       .count_opportunities(method, text, TextDirection::Ltr);
 
-    spacing.expansion_opportunity_count()
+    spacing.expansion_opportunity_count
   }
 
   #[test]
@@ -320,7 +310,7 @@ mod tests {
     result.apply_spacing(&mut spacing, 0);
 
     assert_eq!(result.width(), width + 6.0);
-    assert!(spacing.is_letter_spacing_applied());
+    assert!(spacing.is_letter_spacing_applied);
   }
 
   #[test]
@@ -350,7 +340,7 @@ mod tests {
       .count_opportunities(TextJustify::Auto, text, TextDirection::Ltr);
 
     // The trailing space is no opportunity without trailing expansion.
-    assert_eq!(spacing.expansion_opportunity_count(), 2);
+    assert_eq!(spacing.expansion_opportunity_count, 2);
 
     result.apply_expansion(TextJustify::Auto, &mut spacing, 0);
 

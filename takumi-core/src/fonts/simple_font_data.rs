@@ -30,14 +30,15 @@ const SYNTHETIC_ITALIC_SKEW: f32 = 14.036_243;
 
 /// Blink's `SimpleFontData`.
 pub(crate) struct SimpleFontData {
-  face: MatchedFace,
+  pub(crate) face: MatchedFace,
   /// Blink's `FontPlatformData::size`.
-  size: f32,
+  pub(crate) size: f32,
   /// The size `trak` reads, which Blink passes to `hb_font_set_ptem`.
-  specified_size: f32,
+  pub(crate) specified_size: f32,
   variations: Vec<Variation>,
-  units_per_em: u16,
-  space_glyph: u16,
+  pub(crate) units_per_em: u16,
+  /// Blink's `SpaceGlyph`.
+  pub(crate) space_glyph: u16,
   font_metrics: OnceCell<Option<PrimaryFontMetrics>>,
   shaping_font: OnceCell<Option<ShapingFont>>,
   small_caps: OnceCell<Rc<SimpleFontData>>,
@@ -114,14 +115,6 @@ impl SimpleFontData {
     }
   }
 
-  pub(crate) fn face(&self) -> &MatchedFace {
-    &self.face
-  }
-
-  pub(crate) fn size(&self) -> f32 {
-    self.size
-  }
-
   /// The synthetic bold and italic Blink's `FontPlatformData::SetupSkFont` asks Skia for; a color
   /// face takes neither.
   pub(crate) fn synthesis(&self) -> RunSynthesis {
@@ -132,14 +125,6 @@ impl SimpleFontData {
         .then(|| synthesis_embolden_strength(self.size)),
       skew: (synthesizes && self.face.synthetic_italic).then_some(-SYNTHETIC_ITALIC_SKEW),
     }
-  }
-
-  pub(crate) fn specified_size(&self) -> f32 {
-    self.specified_size
-  }
-
-  pub(crate) fn units_per_em(&self) -> u16 {
-    self.units_per_em
   }
 
   /// The variation coordinates the face is instanced at, as user-space `(tag, value)` pairs.
@@ -167,11 +152,6 @@ impl SimpleFontData {
       )
       .coords()
       .to_vec()
-  }
-
-  /// Blink's `SpaceGlyph`.
-  pub(crate) fn space_glyph(&self) -> u16 {
-    self.space_glyph
   }
 
   /// Blink's `SpaceWidth`: the space glyph's advance.

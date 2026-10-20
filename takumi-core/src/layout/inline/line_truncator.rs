@@ -435,7 +435,7 @@ fn truncate_text<'a, 'c>(
   direction: TextDirection,
 ) -> LogicalLineItem<'a, 'c> {
   let start = item.text_offset.start;
-  let new_text_offset = if direction == shape_result.direction() {
+  let new_text_offset = if direction == shape_result.direction {
     start..start + offset_to_fit
   } else {
     start + offset_to_fit..item.text_offset.end

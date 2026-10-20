@@ -186,10 +186,10 @@ impl PartSource {
           .map(|run_index| RunInfoPart::whole_run(result, run_index))
           .collect(),
         start_index_offset_for_run: 0,
-        start_index: result.start_index(),
+        start_index: result.start_index,
         end_index: result.end_index(),
-        direction: result.direction(),
-        has_vertical_offsets: result.has_vertical_offsets(),
+        direction: result.direction,
+        has_vertical_offsets: result.has_vertical_offsets,
       },
       SegmentSource::View(view) => Self {
         parts: view.parts.clone(),
@@ -208,8 +208,8 @@ impl PartSource {
 pub(crate) struct ShapeResultView {
   parts: Vec<RunInfoPart>,
   start_index: u32,
-  width: f32,
-  num_characters: u32,
+  pub(crate) width: f32,
+  pub(crate) num_characters: u32,
   direction: TextDirection,
   has_vertical_offsets: bool,
   /// The start offset of the first segment, as `ShapeResult::sub_range` keeps it.
@@ -386,15 +386,6 @@ impl ShapeResultView {
 
   pub(crate) fn end_index(&self) -> u32 {
     self.start_index() + self.num_characters
-  }
-
-  pub(crate) fn num_characters(&self) -> u32 {
-    self.num_characters
-  }
-
-  #[cfg(test)]
-  pub(crate) fn width(&self) -> f32 {
-    self.width
   }
 
   /// Blink's `SnappedWidth`.
@@ -588,7 +579,7 @@ mod tests {
       let view_glyphs = glyphs(&view);
 
       assert_eq!(view.start_index(), start);
-      assert_eq!(view.num_characters(), end - start);
+      assert_eq!(view.num_characters, end - start);
       assert_eq!(view.num_glyphs(), (end - start) as usize);
       assert_glyphs_match(&view_glyphs, &all, start as usize);
     }
@@ -610,7 +601,7 @@ mod tests {
     let view_glyphs = glyphs(&composite_view);
 
     assert_eq!(composite_view.start_index(), 0);
-    assert_eq!(composite_view.num_characters(), 16);
+    assert_eq!(composite_view.num_characters, 16);
     assert_eq!(composite_view.num_glyphs(), 16);
 
     let mut composite_copy = ShapeResult::new(0, 0, TextDirection::Ltr);
@@ -623,7 +614,7 @@ mod tests {
     let copy_glyphs = glyphs(&ShapeResultView::create_from_result(&composite_copy));
 
     assert_glyphs_match(&view_glyphs, &copy_glyphs, 0);
-    assert_eq!(composite_view.width(), composite_copy.width());
+    assert_eq!(composite_view.width, composite_copy.width());
   }
 
   #[test]
@@ -642,8 +633,8 @@ mod tests {
     }
 
     assert_eq!(
-      composite_copy.num_characters(),
-      reference_result.num_characters()
+      composite_copy.num_characters,
+      reference_result.num_characters
     );
     assert_eq!(composite_copy.num_glyphs(), reference_result.num_glyphs());
 
@@ -652,10 +643,10 @@ mod tests {
       ShapeResultView::create(&ranges.map(|(start, end)| segment(&result, start, end)));
     let composite_glyphs = glyphs(&composite_view);
 
-    assert_eq!(composite_view.start_index(), composite_copy.start_index());
+    assert_eq!(composite_view.start_index(), composite_copy.start_index);
     assert_eq!(
-      composite_view.num_characters(),
-      reference_result.num_characters()
+      composite_view.num_characters,
+      reference_result.num_characters
     );
     assert_eq!(
       composite_view.num_glyphs() as u32,
@@ -667,7 +658,7 @@ mod tests {
       &glyphs(&ShapeResultView::create_from_result(&composite_copy)),
       0,
     );
-    assert_eq!(composite_view.width(), composite_copy.width());
+    assert_eq!(composite_view.width, composite_copy.width());
   }
 
   #[test]
@@ -689,8 +680,8 @@ mod tests {
     result_b.copy_range(0, string_b.len() as u32, &mut composite_copy);
 
     assert_eq!(
-      composite_copy.num_characters(),
-      reference_result.num_characters()
+      composite_copy.num_characters,
+      reference_result.num_characters
     );
     assert_eq!(composite_copy.num_glyphs(), reference_result.num_glyphs());
 
@@ -702,8 +693,8 @@ mod tests {
 
     assert_eq!(composite_view.start_index(), 0);
     assert_eq!(
-      composite_view.num_characters(),
-      reference_result.num_characters()
+      composite_view.num_characters,
+      reference_result.num_characters
     );
     assert_eq!(
       composite_view.num_glyphs() as u32,
@@ -714,7 +705,7 @@ mod tests {
       &glyphs(&ShapeResultView::create_from_result(&composite_copy)),
       0,
     );
-    assert_eq!(composite_view.width(), composite_copy.width());
+    assert_eq!(composite_view.width, composite_copy.width());
   }
 
   #[test]
@@ -723,11 +714,11 @@ mod tests {
     let result = shape(&font, "12345678901234567890");
     let view1 = ShapeResultView::create_from_result_range(&result, 5, 20);
 
-    assert_eq!((view1.num_characters(), view1.num_glyphs()), (15, 15));
+    assert_eq!((view1.num_characters, view1.num_glyphs()), (15, 15));
 
     let view2 = ShapeResultView::create_from_view_range(&view1, 5, 19);
 
-    assert_eq!((view2.num_characters(), view2.num_glyphs()), (14, 14));
+    assert_eq!((view2.num_characters, view2.num_glyphs()), (14, 14));
   }
 
   #[test]
@@ -763,7 +754,7 @@ mod tests {
     )));
 
     assert_eq!(
-      (first_word.start_index(), first_word.num_characters()),
+      (first_word.start_index(), first_word.num_characters),
       (0, 8)
     );
     assert_eq!((first_word.num_glyphs(), first_glyphs.len()), (4, 4));
@@ -772,10 +763,7 @@ mod tests {
 
     let last_word = ShapeResultView::create(&[segment(&result, 8, 13)]);
 
-    assert_eq!(
-      (last_word.start_index(), last_word.num_characters()),
-      (8, 5)
-    );
+    assert_eq!((last_word.start_index(), last_word.num_characters), (8, 5));
     assert_eq!((last_word.num_glyphs(), glyphs(&last_word).len()), (3, 3));
   }
 
@@ -813,9 +801,9 @@ mod tests {
     let view = ShapeResultView::create_from_result_range(&result, 5, 22);
     let copy = Rc::new(view.create_shape_result());
 
-    assert_eq!(copy.start_index(), view.start_index());
-    assert_eq!(copy.num_characters(), view.num_characters());
-    assert_eq!(copy.width(), view.width());
+    assert_eq!(copy.start_index, view.start_index());
+    assert_eq!(copy.num_characters, view.num_characters);
+    assert_eq!(copy.width(), view.width);
     assert_eq!(
       glyphs(&ShapeResultView::create_from_result(&copy)),
       glyphs(&view)

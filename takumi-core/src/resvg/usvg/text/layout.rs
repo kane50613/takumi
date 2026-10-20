@@ -1232,9 +1232,9 @@ impl ResolvedFont {
   /// `font_data`'s face and metrics; none for a face without metrics.
   fn new(font_data: &SimpleFontData) -> Option<Self> {
     Some(Self {
-      typeface: Arc::clone(&font_data.face().typeface),
+      typeface: Arc::clone(&font_data.face.typeface),
       normalized_coords: font_data.normalized_coords(),
-      size: font_data.size(),
+      size: font_data.size,
       synthesis: font_data.synthesis(),
       metrics: font_data.font_metrics()?,
     })

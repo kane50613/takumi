@@ -22,7 +22,7 @@ impl FontDataForRangeSet {
   pub(crate) fn contains(&self, ch: char) -> bool {
     self.font_data.as_ref().is_some_and(|font_data| {
       font_data
-        .face()
+        .face
         .unicode_range
         .as_ref()
         .is_none_or(|range| range.contains(u32::from(ch)))
@@ -33,7 +33,7 @@ impl FontDataForRangeSet {
   pub(crate) fn is_entire_range(&self) -> bool {
     self.font_data.as_ref().is_none_or(|font_data| {
       font_data
-        .face()
+        .face
         .unicode_range
         .as_ref()
         .is_none_or(UnicodeRangeSet::is_entire_range)

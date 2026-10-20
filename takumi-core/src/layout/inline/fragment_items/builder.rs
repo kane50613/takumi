@@ -453,7 +453,7 @@ impl FragmentItems {
       let Some(font_data) = font_data else {
         continue;
       };
-      let face = font_data.face();
+      let face = &font_data.face;
       let is_color = face.typeface.is_color;
       let cluster_ranges: Vec<Range<usize>> = group
         .iter()
@@ -497,7 +497,7 @@ impl FragmentItems {
             .and_then(|metrics| metrics.underline)
             .map_or(0.0, |underline| underline.thickness),
         },
-        font_size: font_data.size(),
+        font_size: font_data.size,
         font_index: face.typeface.index,
         text_range,
         cluster_ranges,
