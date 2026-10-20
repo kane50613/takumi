@@ -1,6 +1,7 @@
 name: Setup Bun
-description: Setup Bun and cache its global install cache
+description: Setup Bun
 
+# No install cache: restoring it took 60-90s on ubuntu-slim, while a cold `bun install` takes seconds.
 runs:
   using: composite
   steps:
@@ -8,10 +9,3 @@ runs:
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
         bun-version: "1.4"
-
-    - name: Bun install cache
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ~/.bun/install/cache
-        key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-        restore-keys: bun-${{ runner.os }}-
