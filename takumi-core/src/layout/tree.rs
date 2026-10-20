@@ -32,14 +32,19 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     inline::{
-      ContentBox, FragmentItems, InlineContentKind, InlineOutOfFlow, PaddingBox, StaticPosition,
-      inline_node::InlineNode, inline_node_data::InlineNodeData,
+      ContentBox, FragmentItems, InlineContentKind, InlineMeasurement, InlineOutOfFlow, PaddingBox,
+      StaticPosition,
+      inline_item::InlineItemType,
+      inline_item_result::{CollapsedMargins, LayoutResult},
+      inline_node::InlineNode,
+      inline_node_data::InlineNodeData,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
     table::MAX_GRID_ROWS,
     table_columns::TableColumns,
   },
+  layout_unit::LayoutUnit,
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   painter::OwnContent,
   resources::font::PrimaryFontMetrics,
@@ -217,12 +222,14 @@ impl LayoutResults {
 }
 
 /// A measurement's constraint as bits: each axis's available space as a kind and a size, then
-/// each known size, the height ones left out unless `with_height`.
+/// each known size, the height ones left out unless `with_height`, then the edges its margins
+/// adjoin.
 fn inline_measure_bits(
   available_space: Size<AvailableSpace>,
   known_dimensions: Size<Option<f32>>,
+  margins_adjoin: Line<bool>,
   with_height: bool,
-) -> [u32; 6] {
+) -> [u32; 7] {
   let available = |space: AvailableSpace| match space {
     AvailableSpace::Definite(value) => (0, value.to_bits()),
     AvailableSpace::MinContent => (1, 0),
@@ -245,6 +252,7 @@ fn inline_measure_bits(
     height,
     known(known_dimensions.width),
     known_height,
+    u32::from(margins_adjoin.start) | (u32::from(margins_adjoin.end) << 1),
   ]
 }
 
@@ -257,7 +265,7 @@ pub struct LayoutTree<'r> {
   /// Each inline formatting context's measured size per constraint. taffy keys its own cache on
   /// both axes, while only inline boxes see the available height, so a context without them is
   /// keyed on its width constraint alone.
-  inline_measures: RefCell<HashMap<InlineMeasureKey, Size<f32>>>,
+  inline_measures: RefCell<HashMap<InlineMeasureKey, InlineMeasurement>>,
   /// Each inline formatting context's prepared items, which every pass of one layout shares, as
   /// Blink keeps them until `NeedsCollectInlines`.
   inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
@@ -267,7 +275,7 @@ pub struct LayoutTree<'r> {
 }
 
 /// A node and the constraint it is measured under, as bits.
-type InlineMeasureKey = (usize, [u32; 6]);
+type InlineMeasureKey = (usize, [u32; 7]);
 
 struct LayoutNodeState {
   style: Style,
@@ -484,6 +492,20 @@ fn block_style() -> Rc<Style> {
 pub(crate) struct AtomicInlineMetrics {
   pub(crate) size: Size<f32>,
   pub(crate) baseline_offset: Option<f32>,
+  /// A block-in-inline's margins, none for an atomic inline.
+  pub(crate) collapsed_margins: Option<CollapsedMargins>,
+}
+
+impl AtomicInlineMetrics {
+  /// The metrics as the line takes them, in layout units.
+  pub(crate) fn into_layout_result(self) -> LayoutResult {
+    LayoutResult {
+      inline_size: LayoutUnit::from_float(self.size.width),
+      block_size: LayoutUnit::from_float(self.size.height),
+      baseline: self.baseline_offset.map(LayoutUnit::from_float),
+      collapsed_margins: self.collapsed_margins,
+    }
+  }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1000,6 +1022,85 @@ impl<'r> LayoutTree<'r> {
     for node in &mut self.nodes {
       node.final_layout = node.unrounded_layout;
     }
+  }
+
+  /// The measurement of the inline formatting context the node at `idx` establishes, cached by
+  /// its constraint and the margins adjoining its edges.
+  fn inline_measurement(
+    &self,
+    idx: usize,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
+  ) -> InlineMeasurement {
+    let render_node = self.render_nodes[idx];
+    let margins_adjoin = render_node.context.margins_adjoin();
+    let key = |with_height| {
+      (
+        idx,
+        inline_measure_bits(
+          available_space,
+          known_dimensions,
+          margins_adjoin,
+          with_height,
+        ),
+      )
+    };
+    let (across_heights, exact) = (key(false), key(true));
+    let measured = {
+      let measures = self.inline_measures.borrow();
+
+      measures
+        .get(&across_heights)
+        .or_else(|| measures.get(&exact))
+        .copied()
+    };
+
+    if let Some(measurement) = measured {
+      return measurement;
+    }
+
+    let (measurement, sizes_boxes) = render_node.measure_inline_content(
+      &self.inline_node_data(idx),
+      available_space,
+      known_dimensions,
+    );
+
+    self.inline_measures.borrow_mut().insert(
+      if sizes_boxes { exact } else { across_heights },
+      measurement,
+    );
+    measurement
+  }
+
+  /// The root laid out as an in-flow block of a block formatting context, an auto width filling a
+  /// definite `available_space`'s: its size leaves out the margins collapsing through its edges,
+  /// which the output carries.
+  pub(crate) fn lay_out_root_in_flow(
+    &mut self,
+    available_space: Size<AvailableSpace>,
+  ) -> LayoutOutput {
+    let available_space: TaffySize<TaffyAvailableSpace> =
+      available_space.map(AvailableSpace::into_taffy).into_taffy();
+
+    self.compute_child_layout(
+      NodeId::ROOT.into_taffy(),
+      LayoutInput {
+        run_mode: RunMode::PerformLayout,
+        sizing_mode: SizingMode::InherentSize,
+        axis: RequestedAxis::Both,
+        known_dimensions: TaffySize {
+          width: available_space.width.into_option(),
+          height: None,
+        },
+        known_dimensions_are_definite: TaffySize {
+          width: true,
+          height: true,
+        },
+        parent_size: available_space.into_options(),
+        available_space,
+        vertical_margins_are_collapsible: Line::TRUE,
+      },
+    )
   }
 
   /// The root's border-box min-content and max-content widths, sized without laying out its
@@ -1561,6 +1662,19 @@ impl<'r> LayoutTree<'r> {
               .map(|height| (height - insets.height).max(0.0)),
           );
 
+          // taffy's `children_margins_adjoin_own_edges`, the end one for an auto height only.
+          if node_data.is_inline_children {
+            let collapsible = inputs.vertical_margins_are_collapsible;
+
+            render_node.context.set_margins_adjoin(Line {
+              start: collapsible.start && padding.top == 0.0 && border.top == 0.0,
+              end: collapsible.end
+                && padding.bottom == 0.0
+                && border.bottom == 0.0
+                && fixed_size.height.is_none(),
+            });
+          }
+
           let mut output = compute_leaf_layout(
             inputs,
             &node_data.style,
@@ -1596,40 +1710,35 @@ impl<'r> LayoutTree<'r> {
                   .into_taffy();
               }
 
-              let across_heights = (
-                idx,
-                inline_measure_bits(available_space, known_dimensions, false),
-              );
-              let exact = (
-                idx,
-                inline_measure_bits(available_space, known_dimensions, true),
-              );
-              let measured = {
-                let measures = tree.inline_measures.borrow();
-
-                measures
-                  .get(&across_heights)
-                  .or_else(|| measures.get(&exact))
-                  .copied()
-              };
-
-              if let Some(size) = measured {
-                return size.into_taffy();
-              }
-
-              let (size, sizes_boxes) = render_node.measure_inline_content(
-                &tree.inline_node_data(idx),
-                available_space,
-                known_dimensions,
-              );
-
               tree
-                .inline_measures
-                .borrow_mut()
-                .insert(if sizes_boxes { exact } else { across_heights }, size);
-              size.into_taffy()
+                .inline_measurement(idx, available_space, known_dimensions)
+                .size
+                .into_taffy()
             },
           );
+
+          // Margins of a block-in-inline at the content's edges collapse out through them.
+          if node_data.is_inline_children
+            && tree
+              .inline_node_data(idx)
+              .items
+              .iter()
+              .any(|item| item.item_type == InlineItemType::BlockInInline)
+          {
+            let margins = tree
+              .inline_measurement(
+                idx,
+                Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
+                Size {
+                  width: Some(output.size.width),
+                  height: None,
+                },
+              )
+              .margins;
+
+            output.top_margin = margins.start;
+            output.bottom_margin = margins.end;
+          }
 
           let lays_out_text = node_data.is_inline_children
             || matches!(
@@ -2699,6 +2808,7 @@ impl RenderNode {
         )
       }),
       baseline_offset: None,
+      collapsed_margins: None,
     }
   }
 
@@ -2728,11 +2838,14 @@ impl RenderNode {
     AtomicInlineMetrics {
       size,
       baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
+      collapsed_margins: None,
     }
   }
 
-  /// Blink's `BlockNode::Layout` of a block-in-inline: an auto width fills `available_space`'s.
-  /// Approximate: its first baseline stands in for its last, which taffy does not give.
+  /// Blink's `BlockNode::Layout` of a block-in-inline: an auto width fills `available_space`'s,
+  /// and the margins of its first and last blocks collapse through it. Approximate: its first
+  /// baseline stands in for its last, which taffy does not give, and it collapses through when it
+  /// has no height, without Blink's check of its content.
   pub(crate) fn layout_block_in_inline(
     &self,
     available_space: Size<AvailableSpace>,
@@ -2740,11 +2853,16 @@ impl RenderNode {
     self
       .atomic_inline_layouts
       .get_or_insert_with(available_space, || {
-        let results = LayoutResults::compute(self, available_space);
+        let output = LayoutTree::from_render_node(self).lay_out_root_in_flow(available_space);
 
         AtomicInlineMetrics {
-          size: results.root_size(),
-          baseline_offset: self.layout_first_baseline_offset(&results),
+          size: Size::from_taffy(output.size),
+          baseline_offset: output.baselines.first,
+          collapsed_margins: Some(CollapsedMargins {
+            start: output.top_margin,
+            end: output.bottom_margin,
+            is_self_collapsing: output.size.height == 0.0,
+          }),
         }
       })
   }
@@ -2776,21 +2894,20 @@ impl RenderNode {
     AtomicInlineMetrics {
       size,
       baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
+      collapsed_margins: None,
     }
   }
 
-  /// The size of this inline formatting context, and whether it sized inline boxes, the only
-  /// part of it the available height reaches.
+  /// The measurement of this inline formatting context, and whether it sized inline boxes, the
+  /// only part of it the available height reaches.
   pub(crate) fn measure_inline_content<'c>(
     &'c self,
     items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
-  ) -> (Size<f32>, bool) {
+  ) -> (InlineMeasurement, bool) {
     (
-      InlineNode::new(self)
-        .measure(items_data, available_space, known_dimensions)
-        .size,
+      InlineNode::new(self).measure(items_data, available_space, known_dimensions),
       true,
     )
   }

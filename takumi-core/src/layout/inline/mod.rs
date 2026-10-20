@@ -1,5 +1,7 @@
 //! Inline layout, ported from Blink's `core/layout/inline`.
 
+use taffy::{CollapsibleMarginSet, Line};
+
 use crate::{
   geometry::{Point, Size},
   style::{AppliedTextDecorations, Color, TextDecorationSkipInk},
@@ -87,6 +89,8 @@ pub struct InlineMeasurement {
   pub(crate) last_baseline: Option<f32>,
   /// Whether a height or line limit may have dropped lines.
   pub(crate) clamped: bool,
+  /// The margins collapsing out through the content's block-start and block-end edges.
+  pub(crate) margins: Line<CollapsibleMarginSet>,
 }
 
 #[derive(Clone, PartialEq, Debug)]

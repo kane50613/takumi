@@ -4,6 +4,8 @@
 
 use std::{ops::Range, rc::Rc};
 
+use taffy::CollapsibleMarginSet;
+
 use super::{
   inline_item::{InlineItem, InlineItemType},
   inline_item_text_index::InlineItemTextIndex,
@@ -63,8 +65,20 @@ impl LineBoxStrut {
   }
 }
 
-/// What laying out an atomic inline gives its line: Blink's `LayoutResult` for one, in
-/// line-relative directions.
+/// The margins collapsing through a block-in-inline's anonymous block, which its border box leaves
+/// out: what Blink's `LayoutResult` keeps of its margin struts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct CollapsedMargins {
+  /// The margins adjoining its block start.
+  pub(crate) start: CollapsibleMarginSet,
+  /// Blink's `EndMarginStrut`.
+  pub(crate) end: CollapsibleMarginSet,
+  /// Blink's `IsSelfCollapsing`.
+  pub(crate) is_self_collapsing: bool,
+}
+
+/// What laying out an atomic inline or a block-in-inline gives its line: Blink's `LayoutResult`
+/// for one, in line-relative directions.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub(crate) struct LayoutResult {
   /// The border box's inline size.
@@ -73,9 +87,32 @@ pub(crate) struct LayoutResult {
   pub(crate) block_size: LayoutUnit,
   /// The baseline below the border box's block start, if it has one.
   pub(crate) baseline: Option<LayoutUnit>,
+  /// A block-in-inline's margins, none for an atomic inline.
+  pub(crate) collapsed_margins: Option<CollapsedMargins>,
 }
 
 impl LayoutResult {
+  /// How far above its border box the box paints, and the block size it paints: a block-in-inline's
+  /// anonymous block lays the margins collapsing through it out inside it again.
+  pub(crate) fn paint_block_extent(&self) -> (LayoutUnit, LayoutUnit) {
+    let Some(margins) = self.collapsed_margins else {
+      return (LayoutUnit::ZERO, self.block_size);
+    };
+    let start = LayoutUnit::from_float(margins.start.resolve());
+
+    if margins.is_self_collapsing {
+      return (
+        start,
+        LayoutUnit::from_float(margins.start.collapse_with_set(margins.end).resolve()),
+      );
+    }
+
+    (
+      start,
+      start + self.block_size + LayoutUnit::from_float(margins.end.resolve()),
+    )
+  }
+
   /// Blink's `LogicalBoxFragment::BaselineMetrics` for the alphabetic baseline: the margin box
   /// around the baseline, synthesized at the margin box's bottom without one.
   pub(crate) fn baseline_metrics(&self, margins: &LineBoxStrut) -> FontHeight {

@@ -2486,8 +2486,9 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       let item_result = &mut line_info.results[result_index];
 
       item_result.inline_size = layout_result.inline_size;
-      // Approximate: Blink's `IsSelfCollapsing`, for a block whose margins taffy keeps inside it.
-      item_result.should_create_line_box = layout_result.block_size != LayoutUnit::ZERO;
+      item_result.should_create_line_box = !layout_result
+        .collapsed_margins
+        .is_some_and(|margins| margins.is_self_collapsing);
       item_result.layout_result = Some(layout_result);
     } else {
       // Blink's `ComputeMinMaxContentSizeForBlockChild`.

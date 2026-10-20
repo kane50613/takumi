@@ -37,22 +37,17 @@ impl<'c> AtomicInlineLayout<'c> for TestAtomicInline {
       inline_size: LayoutUnit::from_float(size.width),
       block_size: LayoutUnit::from_float(size.height),
       baseline: None,
+      collapsed_margins: None,
     }
   }
 
   fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult {
-    let size = node
+    node
       .layout_block_in_inline(Size {
         width: AvailableSpace::MaxContent,
         height: AvailableSpace::MaxContent,
       })
-      .size;
-
-    LayoutResult {
-      inline_size: LayoutUnit::from_float(size.width),
-      block_size: LayoutUnit::from_float(size.height),
-      baseline: None,
-    }
+      .into_layout_result()
   }
 
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {

@@ -5,6 +5,7 @@
 use std::ptr;
 
 use rustc_hash::FxHashMap;
+use taffy::{CollapsibleMarginSet, Line};
 
 use super::{
   FragmentItems, InlineMeasurement, StaticPosition,
@@ -102,7 +103,9 @@ impl<'c> InlineNode<'c> {
       _ => width,
     });
     let lines = self.layout_lines_at(items_data, line_width, available_space.height);
-    let (height, clamped) = content_block_size(&lines);
+    let margins_adjoin = self.block.context.margins_adjoin();
+    let margins = margin_struts(&lines, margins_adjoin);
+    let (height, clamped) = content_block_size(&lines, margins_adjoin.end);
     let baseline = |line: &LineBoxFragment<'_, '_>| line.bfc_baseline().map(LayoutUnit::to_float);
 
     let shown = lines
@@ -115,15 +118,66 @@ impl<'c> InlineNode<'c> {
       first_baseline: lines[..shown].iter().find_map(baseline),
       last_baseline: lines[..shown].iter().rev().find_map(baseline),
       clamped,
+      margins,
     }
   }
 }
 
-/// The block size the lines take, down to the clamp line of a `line-clamp`, floats included,
-/// and whether a clamp hid lines.
-fn content_block_size(lines: &[LineBoxFragment<'_, '_>]) -> (f32, bool) {
+/// Blink's `BlockLayoutAlgorithm` passing out the margins that adjoin the content's block-start
+/// and block-end edges where `margins_adjoin` says: the ones before the first line box, and the
+/// `EndMarginStrut` of the last line.
+fn margin_struts(
+  lines: &[LineBoxFragment<'_, '_>],
+  margins_adjoin: Line<bool>,
+) -> Line<CollapsibleMarginSet> {
+  let end = lines
+    .last()
+    .map_or(CollapsibleMarginSet::ZERO, |line| line.end_margin_strut);
+  let start = lines
+    .iter()
+    .enumerate()
+    .find_map(|(index, line)| {
+      line.line_box_bfc_block_offset?;
+
+      let before = index
+        .checked_sub(1)
+        .map_or(CollapsibleMarginSet::ZERO, |previous| {
+          lines[previous].end_margin_strut
+        });
+
+      Some(
+        match line
+          .block_in_inline_layout_result()
+          .and_then(|result| result.collapsed_margins)
+        {
+          Some(margins) => before.collapse_with_set(margins.start),
+          None => before,
+        },
+      )
+    })
+    .unwrap_or(end);
+
+  Line {
+    start: if margins_adjoin.start {
+      start
+    } else {
+      CollapsibleMarginSet::ZERO
+    },
+    end: if margins_adjoin.end {
+      end
+    } else {
+      CollapsibleMarginSet::ZERO
+    },
+  }
+}
+
+/// The block size the lines take, down to the clamp line of a `line-clamp`, floats included, and
+/// the margins after the last line unless they collapse out through the block-end edge it
+/// `margins_adjoin`, and whether a clamp hid lines.
+fn content_block_size(lines: &[LineBoxFragment<'_, '_>], margins_adjoin: bool) -> (f32, bool) {
   let mut bottom = LayoutUnit::ZERO;
   let mut clamped = false;
+  let mut end = LayoutUnit::ZERO;
 
   for line in lines {
     if let Some(top) = line.line_box_bfc_block_offset {
@@ -131,6 +185,7 @@ fn content_block_size(lines: &[LineBoxFragment<'_, '_>]) -> (f32, bool) {
         continue;
       }
 
+      end = top + line.block_size + line.clearance_after_line;
       bottom = bottom.max(top + line.block_size);
       clamped = line.lines_until_clamp == Some(0);
     }
@@ -146,6 +201,13 @@ fn content_block_size(lines: &[LineBoxFragment<'_, '_>]) -> (f32, bool) {
         );
       }
     }
+  }
+
+  if !clamped
+    && !margins_adjoin
+    && let Some(last) = lines.last()
+  {
+    bottom = bottom.max(end + LayoutUnit::from_float(last.end_margin_strut.resolve()));
   }
 
   let hides_lines = clamped
@@ -197,16 +259,11 @@ impl RenderNode {
     let items_data = node.prepare_layout();
     let lines = node.layout_lines_in_content_box(&items_data, layout);
     let mut placed: FxHashMap<*const RenderNode, StaticPosition> = FxHashMap::default();
-    let mut next_line_top = LayoutUnit::ZERO;
 
     for line in &lines {
-      // An empty line holds its out-of-flow boxes where the next line would start.
-      let line_top = line.line_box_bfc_block_offset.unwrap_or(next_line_top);
-
-      if line.line_box_bfc_block_offset.is_some() {
-        next_line_top = line_top + line.block_size + line.clearance_after_line;
-      }
-
+      let line_top = line
+        .line_box_bfc_block_offset
+        .unwrap_or(line.static_bfc_block_offset);
       let line_left = line.bfc_line_offset;
       let mut place = |node: &RenderNode, offset: LogicalOffset, direction: Direction| {
         placed.insert(

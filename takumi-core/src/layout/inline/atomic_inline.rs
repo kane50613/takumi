@@ -53,20 +53,16 @@ impl<'c> AtomicInlineLayout<'c> for BoxAtomicInline {
       inline_size: LayoutUnit::from_float(size.width),
       block_size: LayoutUnit::from_float(size.height),
       baseline: baseline_offset.map(|baseline| LayoutUnit::from_float(baseline - margin_top)),
+      collapsed_margins: None,
     }
   }
 
-  /// Approximate: taffy lays the block out as a root, so its margins stay inside it rather than
-  /// collapsing with the lines and blocks around it, and floats beside the line do not shorten its
-  /// lines.
+  /// Approximate: taffy lays the block out without the floats beside the line, so they do not
+  /// shorten its lines.
   fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult {
-    let metrics = node.layout_block_in_inline(self.available_space);
-
-    LayoutResult {
-      inline_size: LayoutUnit::from_float(metrics.size.width),
-      block_size: LayoutUnit::from_float(metrics.size.height),
-      baseline: metrics.baseline_offset.map(LayoutUnit::from_float),
-    }
+    node
+      .layout_block_in_inline(self.available_space)
+      .into_layout_result()
   }
 
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {
