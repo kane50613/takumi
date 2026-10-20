@@ -8,7 +8,7 @@ import { container, image, text } from "../helpers";
 import type { ConvertedNodes } from "../root";
 import type { Declarations, Node } from "../types";
 import { NodeMetadataReader } from "../jsx/metadata";
-import { isUnrenderedElement } from "../jsx/utils";
+import { isAsciiWhitespace, isUnrenderedElement } from "../jsx/utils";
 import { decodeHtmlEntities } from "./entities";
 
 /**
@@ -124,8 +124,10 @@ class NodeBuilder {
       textContent += child.value ?? "";
     }
 
-    if (onlyTextChildren && textContent) {
-      nodes.push(text({ text: decodeHtmlEntities(textContent), ...metadata }));
+    const decodedText = onlyTextChildren ? decodeHtmlEntities(textContent) : "";
+
+    if (!isAsciiWhitespace(decodedText)) {
+      nodes.push(text({ text: decodedText, ...metadata }));
       return;
     }
 
