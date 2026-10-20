@@ -16,7 +16,6 @@ pub use self::geom::*;
 pub use self::text::*;
 
 use crate::resvg::usvg::OptionLog;
-use crate::resvg::usvg::text::fontdb;
 
 /// An alias to `NormalizedF32`.
 pub type Opacity = NormalizedF32;
@@ -1597,7 +1596,6 @@ pub struct Tree {
   pub(crate) clip_paths: Vec<Arc<ClipPath>>,
   pub(crate) masks: Vec<Arc<Mask>>,
   pub(crate) filters: Vec<Arc<filter::Filter>>,
-  pub(crate) fontdb: Arc<fontdb::Database>,
 }
 
 impl Tree {

@@ -4,7 +4,7 @@
 use std::mem;
 use std::sync::Arc;
 
-use super::fontdb::{Database, ID};
+use super::layout::ResolvedFont;
 use crate::resvg::usvg::GlyphId;
 use skrifa::MetadataProvider;
 use skrifa::Tag;
@@ -20,26 +20,6 @@ fn resolve_rendering_mode(text: &Text) -> ShapeRendering {
     TextRendering::OptimizeLegibility => ShapeRendering::GeometricPrecision,
     TextRendering::GeometricPrecision => ShapeRendering::GeometricPrecision,
   }
-}
-
-/// Returns the effective variation settings for a glyph: the span's explicit
-/// variations plus an automatically computed `opsz` value when
-/// `font-optical-sizing: auto` is in effect and the font has an `opsz` axis
-/// that wasn't set explicitly. This matches browser behavior
-/// (CSS font-optical-sizing: auto).
-fn effective_variations(
-  cache: &mut Cache,
-  span: &layout::Span,
-  glyph: &layout::PositionedGlyph,
-) -> Vec<FontVariation> {
-  let mut variations = span.variations.clone();
-  if span.font_optical_sizing == crate::resvg::usvg::FontOpticalSizing::Auto
-    && !variations.iter().any(|v| &v.tag == b"opsz")
-    && cache.has_opsz_axis(glyph.font)
-  {
-    variations.push(FontVariation::new(*b"opsz", glyph.font_size()));
-  }
-  variations
 }
 
 fn push_outline_paths(
@@ -95,11 +75,9 @@ pub(crate) fn flatten(text: &mut Text, cache: &mut Cache) -> Option<(Group, NonZ
     let mut span_builder = tiny_skia_path::PathBuilder::new();
 
     for glyph in &span.positioned_glyphs {
-      let variations = effective_variations(cache, span, glyph);
-
       // Color glyph formats (COLR/SVG/bitmap) are stripped from this vendor;
       // every glyph renders from its outline table.
-      let outline = cache.fontdb_outline(glyph.font, glyph.id, &variations);
+      let outline = cache.outline(&glyph.font, glyph.id);
 
       if let Some(outline) = outline.and_then(|p| p.transform(glyph.outline_transform())) {
         span_builder.push_path(&outline);
@@ -162,53 +140,26 @@ impl OutlinePen for PathBuilder {
   }
 }
 
-pub(crate) trait DatabaseExt {
-  fn outline(
-    &self,
-    id: ID,
-    glyph_id: GlyphId,
-    variations: &[crate::resvg::usvg::FontVariation],
-  ) -> Option<tiny_skia_path::Path>;
-  fn has_opsz_axis(&self, id: ID) -> bool;
-}
+impl ResolvedFont {
+  /// The glyph's outline in font units, at the face's variation coordinates.
+  pub(crate) fn outline(&self, glyph_id: GlyphId) -> Option<tiny_skia_path::Path> {
+    let font = self.typeface.font_ref()?;
+    let outline = font.outline_glyphs().get(glyph_id.into())?;
+    let mut builder = PathBuilder::default();
+    let location = font.axes().location(
+      self
+        .variations
+        .iter()
+        .map(|variation| (Tag::from_be_bytes(variation.tag), variation.value)),
+    );
 
-impl DatabaseExt for Database {
-  #[inline(never)]
-  fn outline(
-    &self,
-    id: ID,
-    glyph_id: GlyphId,
-    variations: &[crate::resvg::usvg::FontVariation],
-  ) -> Option<tiny_skia_path::Path> {
-    self.with_face_data(id, |data, face_index| -> Option<tiny_skia_path::Path> {
-      let font = skrifa::FontRef::from_index(data, face_index).ok()?;
-      let outline = font.outline_glyphs().get(glyph_id.into())?;
+    draw_outline(
+      &outline,
+      DrawSettings::unhinted(skrifa::prelude::Size::unscaled(), &location),
+      &mut builder,
+    )
+    .ok()?;
 
-      let mut builder = PathBuilder::default();
-
-      let size = skrifa::prelude::Size::unscaled();
-      // An empty variation list resolves to the default value of every
-      // variation axis, which is what we want for non-variable fonts and
-      // for variable fonts used without variations.
-      let location = font.axes().location(
-        variations
-          .iter()
-          .map(|v| (Tag::from_be_bytes(v.tag), v.value)),
-      );
-      draw_outline(
-        &outline,
-        DrawSettings::unhinted(size, &location),
-        &mut builder,
-      )
-      .ok()?;
-
-      builder.builder.finish()
-    })?
-  }
-
-  fn has_opsz_axis(&self, id: ID) -> bool {
-    // Diverges from upstream: the registry already knows this at registration
-    // time, so no need to re-parse the face with skrifa.
-    self.face(id).is_some_and(|face| face.has_opsz)
+    builder.builder.finish()
   }
 }

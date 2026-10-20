@@ -1,15 +1,10 @@
 // Copyright 2018 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::sync::Arc;
-
-use crate::resvg::usvg::text::fontdb;
-use crate::resvg::usvg::{
-  FontResolver, ImageHrefResolver, ImageRendering, ShapeRendering, Size, TextRendering,
-};
+use crate::resources::font::Fonts;
+use crate::resvg::usvg::{ImageHrefResolver, ImageRendering, ShapeRendering, Size, TextRendering};
 
 /// Processing options.
-#[derive(Debug)]
 pub struct Options<'a> {
   /// Directory that will be used during relative paths resolving.
   ///
@@ -25,13 +20,6 @@ pub struct Options<'a> {
   ///
   /// Default: 96.0
   pub dpi: f32,
-
-  /// A default font family.
-  ///
-  /// Will be used when no `font-family` attribute is set in the SVG.
-  ///
-  /// Default: Times New Roman
-  pub font_family: String,
 
   /// A default font size.
   ///
@@ -81,18 +69,8 @@ pub struct Options<'a> {
   /// Default: see type's documentation for details
   pub image_href_resolver: ImageHrefResolver<'a>,
 
-  /// Specifies how fonts should be resolved and loaded.
-  pub font_resolver: FontResolver<'a>,
-
-  /// A database of fonts usable by text.
-  ///
-  /// This is a base database. If a custom `font_resolver` is specified,
-  /// additional fonts can be loaded during parsing. Those will be added to a
-  /// copy of this database. The full database containing all fonts referenced
-  /// in a `Tree` becomes available as [`Tree::fontdb`](crate::resvg::usvg::Tree::fontdb)
-  /// after parsing. If no fonts were loaded dynamically, that database will
-  /// be the same as this one.
-  pub fontdb: Arc<fontdb::Database>,
+  /// The fonts `<text>` matches and shapes with.
+  pub fonts: Fonts,
 
   /// A CSS stylesheet that should be injected into the SVG. Can be used to overwrite
   /// certain attributes.
@@ -116,8 +94,6 @@ impl Default for Options<'_> {
     Options {
       resources_dir: None,
       dpi: 96.0,
-      // Default font is user-agent dependent so we can use whichever we like.
-      font_family: "Times New Roman".to_owned(),
       font_size: 12.0,
       languages: vec!["en".to_string()],
       shape_rendering: ShapeRendering::default(),
@@ -125,8 +101,7 @@ impl Default for Options<'_> {
       image_rendering: ImageRendering::default(),
       default_size: Size::from_wh(100.0, 100.0).unwrap(),
       image_href_resolver: ImageHrefResolver::default(),
-      font_resolver: FontResolver::default(),
-      fontdb: Arc::new(fontdb::Database::default()),
+      fonts: Fonts::default(),
       style_sheet: None,
       current_color: None,
       current_color_used: std::sync::atomic::AtomicBool::new(false),

@@ -24,11 +24,6 @@ use skrifa::{
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
-#[cfg(feature = "svg")]
-use std::sync::OnceLock;
-
-#[cfg(feature = "svg")]
-use crate::resvg::usvg::fontdb::Database;
 use crate::{
   fonts::{
     css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
@@ -259,9 +254,6 @@ pub struct Fonts {
 #[derive(Clone, Default)]
 struct FontRegistry {
   selector: CssFontSelector,
-  /// Face store for SVG `<text>`, built on first use.
-  #[cfg(feature = "svg")]
-  svg_db: OnceLock<Arc<Database>>,
   /// Stamped from a process-wide counter on every registration or removal, so
   /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
   /// tell any two registry states apart, including across `Fonts` instances.
@@ -272,11 +264,6 @@ impl FontRegistry {
   /// Marks the registry changed, so font-dependent caches can tell its states apart.
   fn revise(&mut self) {
     static REVISION: AtomicU64 = AtomicU64::new(1);
-
-    #[cfg(feature = "svg")]
-    {
-      self.svg_db = OnceLock::new();
-    }
 
     self.revision = REVISION.fetch_add(1, Ordering::Relaxed);
   }
@@ -364,83 +351,10 @@ impl Fonts {
       .collect()
   }
 
-  /// Face store for SVG `<text>` conversion, sharing this registry's font bytes, built once per
-  /// registry state.
-  #[cfg(feature = "svg")]
-  pub(crate) fn svg_fontdb(&self) -> Arc<Database> {
-    Arc::clone(
-      self
-        .registry
-        .svg_db
-        .get_or_init(|| Arc::new(self.build_svg_fontdb())),
-    )
-  }
-
   /// Registration revision of the font registry.
   #[cfg(feature = "svg")]
   pub(crate) fn revision(&self) -> u64 {
     self.registry.revision
-  }
-
-  #[cfg(feature = "svg")]
-  fn build_svg_fontdb(&self) -> Database {
-    use crate::resvg::usvg::fontdb::{Family, Stretch, Style as SvgStyle, Weight};
-
-    fn stretch_bucket(width: f32) -> Stretch {
-      match width {
-        r if r <= 0.5625 => Stretch::UltraCondensed,
-        r if r <= 0.6875 => Stretch::ExtraCondensed,
-        r if r <= 0.8125 => Stretch::Condensed,
-        r if r < 1.0 => Stretch::SemiCondensed,
-        r if r < 1.125 => Stretch::Normal,
-        r if r < 1.25 => Stretch::SemiExpanded,
-        r if r < 1.5 => Stretch::Expanded,
-        r if r < 2.0 => Stretch::ExtraExpanded,
-        _ => Stretch::UltraExpanded,
-      }
-    }
-
-    let mut database = Database::default();
-
-    for font_face in self.registry.selector.font_faces() {
-      let typeface = &font_face.custom_platform_data;
-      let attributes = typeface.attributes;
-      let style = match attributes.style {
-        Style::Normal => SvgStyle::Normal,
-        Style::Italic => SvgStyle::Italic,
-        Style::Oblique(_) => SvgStyle::Oblique,
-      };
-
-      database.push_face(
-        Arc::clone(&font_face.family),
-        style,
-        Weight(attributes.weight.value() as u16),
-        stretch_bucket(attributes.stretch.ratio()),
-        typeface
-          .axes
-          .iter()
-          .any(|axis| axis.tag == harfrust::Tag::new(b"opsz")),
-        Arc::clone(typeface),
-      );
-    }
-
-    for (generic, keyword) in [
-      (Family::Serif, GenericFamilyType::Serif),
-      (Family::SansSerif, GenericFamilyType::SansSerif),
-      (Family::Cursive, GenericFamilyType::Cursive),
-      (Family::Fantasy, GenericFamilyType::Fantasy),
-      (Family::Monospace, GenericFamilyType::Monospace),
-    ] {
-      for family in self
-        .registry
-        .selector
-        .family_names_from_settings(keyword.keyword())
-      {
-        database.register_generic(generic, family);
-      }
-    }
-
-    database
   }
 
   /// Render-local snapshot with no extra fallbacks.
