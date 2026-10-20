@@ -1,17 +1,13 @@
-use std::hint::black_box;
+use std::{collections::HashMap, hint::black_box, sync::Arc};
 
-use base64::{Engine, engine::general_purpose::STANDARD};
 use criterion::{Criterion, criterion_group, criterion_main};
-use takumi_core::Fonts;
+use takumi_core::{Fonts, resources::image::ImageSource};
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{PageOptions, PdfOptions, render};
 
 /// The same photo drawn 120 times across pages, as a logo or avatar repeats through a report.
 fn repeated_photo(style: &str) -> String {
-  let photo = STANDARD.encode(include_bytes!("../../assets/images/fuma.jpg"));
-  let image = format!(
-    r#"<img src="data:image/jpeg;base64,{photo}" style="width: 120px; height: 120px; {style}">"#
-  );
+  let image = format!(r#"<img src="photo" style="width: 120px; height: 120px; {style}">"#);
 
   format!(
     r#"<div style="display: flex; flex-wrap: wrap; gap: 8px">{}</div>"#,
@@ -19,7 +15,7 @@ fn repeated_photo(style: &str) -> String {
   )
 }
 
-fn render_html(fonts: &Fonts, html: &str) {
+fn render_html(fonts: &Fonts, images: &HashMap<Arc<str>, ImageSource>, html: &str) {
   let node = from_html(html, FromHtmlOptions::default()).expect("parse bench document");
 
   black_box(
@@ -28,6 +24,7 @@ fn render_html(fonts: &Fonts, html: &str) {
         .node(node)
         .page(PageOptions::A4)
         .fonts(fonts)
+        .images(images.clone())
         .build(),
     )
     .expect("render pdf"),
@@ -36,14 +33,19 @@ fn render_html(fonts: &Fonts, html: &str) {
 
 fn bench_images(c: &mut Criterion) {
   let fonts = Fonts::default();
+  let photo =
+    ImageSource::from_bytes(include_bytes!("../../assets/images/fuma.jpg")).expect("decode photo");
+  let images = HashMap::from([("photo".into(), photo)]);
   let plain = repeated_photo("");
   let filtered = repeated_photo("filter: grayscale(1)");
   let mut group = c.benchmark_group("pdf_images");
 
   group.sample_size(20);
-  group.bench_function("repeated_photo", |b| b.iter(|| render_html(&fonts, &plain)));
+  group.bench_function("repeated_photo", |b| {
+    b.iter(|| render_html(&fonts, &images, &plain))
+  });
   group.bench_function("repeated_filtered_photo", |b| {
-    b.iter(|| render_html(&fonts, &filtered))
+    b.iter(|| render_html(&fonts, &images, &filtered))
   });
   group.finish();
 }
