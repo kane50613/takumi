@@ -276,6 +276,8 @@ impl Default for FromHtmlOptions {
 /// as a browser builds them. Anything else is parsed as a fragment and gains no
 /// wrappers of its own.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
+  // Decoding drops a leading byte order mark: https://encoding.spec.whatwg.org/#decode
+  let source = source.strip_prefix('\u{feff}').unwrap_or(source);
   let builder = NodeBuilder {
     presets: &options.presets,
     tw_property: options.tailwind_property.as_deref().unwrap_or("tw"),
@@ -655,6 +657,15 @@ mod tests {
 
     assert_eq!(node.tag_name(), Some("html"));
     assert!(node.to_html().contains("<body"));
+  }
+
+  #[test]
+  fn a_leading_byte_order_mark_is_dropped() {
+    assert_eq!(
+      parse("\u{feff}<!doctype html><div>hi</div>").tag_name(),
+      Some("html")
+    );
+    assert_eq!(parse("\u{feff}<div>hi</div>").tag_name(), Some("div"));
   }
 
   #[test]
