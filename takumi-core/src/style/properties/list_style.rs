@@ -193,8 +193,6 @@ impl ListStyleType {
       ListStyleType::String(value) => return Some(value.as_ref().to_owned()),
       ListStyleType::Disc => ("\u{2022}".to_owned(), " "),
       ListStyleType::Circle => ("\u{25e6}".to_owned(), " "),
-      // Blink paints `square` at `(ascent*2/3 + 1)/2` px
-      // (`RelativeSymbolMarkerRect`); `▪` tracks that size, `■` does not.
       ListStyleType::Square => ("\u{25aa}".to_owned(), " "),
       // Ref: https://drafts.csswg.org/css-counter-styles-3/#simple-symbolic
       ListStyleType::DisclosureClosed if direction == Direction::Rtl => {

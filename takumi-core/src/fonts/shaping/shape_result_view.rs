@@ -392,6 +392,7 @@ impl ShapeResultView {
     self.num_characters
   }
 
+  #[cfg(test)]
   pub(crate) fn width(&self) -> f32 {
     self.width
   }
@@ -399,10 +400,6 @@ impl ShapeResultView {
   /// Blink's `SnappedWidth`.
   pub(crate) fn snapped_width(&self) -> LayoutUnit {
     LayoutUnit::from_float_ceil(self.width)
-  }
-
-  pub(crate) fn direction(&self) -> TextDirection {
-    self.direction
   }
 
   pub(crate) fn is_ltr(&self) -> bool {

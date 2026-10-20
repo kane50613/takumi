@@ -18,7 +18,7 @@ pub mod inline_box;
 /// Where a glyph outline crosses a horizontal band.
 pub mod intercept;
 /// Generated marker boxes for `display: list-item`.
-mod list_marker;
+pub(crate) mod list_marker;
 pub(crate) mod logical_rect;
 pub mod measure;
 /// Node Tree

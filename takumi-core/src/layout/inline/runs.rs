@@ -2,7 +2,7 @@
 
 use crate::{
   geometry::{ComputedLayout, PathCommand, Point},
-  layout::intercept::skips_ink,
+  layout::{intercept::skips_ink, list_marker::SymbolMarker},
   resources::{
     font::{
       ExactFontMetrics, FontBlob, FontUnderline, PrimaryFontMetrics, RunFace, RunSynthesis,
@@ -100,6 +100,8 @@ pub struct ShapedRun {
   pub synthetic_skew: Option<f32>,
   /// Normalized variation coordinates the run was shaped at.
   pub(crate) normalized_coords: Vec<F2Dot14>,
+  /// The shape a symbol marker's run paints instead of its glyphs, which are spaces.
+  pub(crate) symbol_marker: Option<SymbolMarker>,
   // Accessor, not a `pub` field: the backing font bytes stay out of the public API.
   pub(super) font_data: FontBlob,
 }
@@ -119,7 +121,7 @@ impl ShapedRun {
     }
   }
 
-  /// Whether `other` draws in the same face, metrics and brush, wherever and whatever it draws.
+  /// Whether `other` draws in the same face, metrics, brush and symbol, wherever it draws.
   pub(super) fn same_face(&self, other: &Self) -> bool {
     self.brush == other.brush
       && self.metrics == other.metrics
@@ -130,6 +132,7 @@ impl ShapedRun {
       && self.synthetic_bold == other.synthetic_bold
       && self.synthetic_skew == other.synthetic_skew
       && self.normalized_coords == other.normalized_coords
+      && self.symbol_marker == other.symbol_marker
   }
 
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
