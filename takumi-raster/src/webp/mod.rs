@@ -50,11 +50,7 @@ impl FrameRegion {
   /// or `None` when every difference is invisible. RGB under alpha 0 never
   /// counts: the encoder is free to rewrite it anyway (`config.exact` is 0).
   pub(super) fn diff(previous: &Bitmap, current: &Bitmap) -> Option<Self> {
-    let row_bytes = previous.width() as usize * 4;
-    let rows = previous
-      .as_raw()
-      .chunks_exact(row_bytes)
-      .zip(current.as_raw().chunks_exact(row_bytes));
+    let rows = previous.rows().zip(current.rows());
 
     let mut top = None;
     let mut bottom = 0;
@@ -66,11 +62,11 @@ impl FrameRegion {
         continue;
       }
 
-      let previous_pixels = bytemuck::cast_slice::<u8, [u8; 4]>(previous_row);
-      let current_pixels = bytemuck::cast_slice::<u8, [u8; 4]>(current_row);
-      let mut differing = previous_pixels
+      let mut differing = previous_row
+        .as_chunks::<4>()
+        .0
         .iter()
-        .zip(current_pixels)
+        .zip(current_row.as_chunks::<4>().0)
         .enumerate()
         .filter(|(_, (previous_pixel, current_pixel))| {
           !pixels_visibly_equal(previous_pixel, current_pixel)

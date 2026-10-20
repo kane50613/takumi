@@ -457,7 +457,7 @@ mod tests {
     let with_zero = render_json(&tree(&format!("{bar}, {zero_bar}")))?;
     let without_zero = render_json(&tree(bar))?;
 
-    assert_eq!(with_zero, without_zero);
+    assert_eq!(with_zero.as_raw(), without_zero.as_raw());
     Ok(())
   }
 

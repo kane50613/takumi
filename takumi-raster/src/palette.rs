@@ -21,13 +21,11 @@ impl Palette {
   pub(crate) fn of(rgba: &Bitmap) -> Option<Self> {
     let mut table = ColorTable::default();
     let mut colors = Vec::with_capacity(MAX_COLORS);
-    let row_bytes = rgba.width() as usize * 4;
-
-    if row_bytes == 0 {
+    if rgba.width() == 0 {
       return None;
     }
 
-    for row in rgba.as_raw().chunks_exact(row_bytes).step_by(SAMPLE_STRIDE) {
+    for row in rgba.rows().step_by(SAMPLE_STRIDE) {
       for pixel in row.as_chunks::<4>().0 {
         table.index(*pixel, &mut colors)?;
       }
@@ -36,7 +34,7 @@ impl Palette {
     let mut indices = Vec::with_capacity(rgba.as_raw().len() / 4);
     let mut previous = None;
 
-    for &pixel in rgba.as_raw().as_chunks::<4>().0 {
+    for &pixel in rgba.pixels() {
       let index = match previous {
         Some((color, index)) if color == pixel => index,
         _ => table.index(pixel, &mut colors)?,

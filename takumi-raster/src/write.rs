@@ -4,6 +4,7 @@ use std::{
   borrow::{Borrow, Cow},
   io::{self, Write},
   iter::once,
+  slice::ChunksExact,
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
@@ -101,7 +102,7 @@ impl OutputFormat {
 ///
 /// Encode it with [`write_image`], or reach the raw bytes via [`as_raw`](Bitmap::as_raw) /
 /// [`into_raw`](Bitmap::into_raw).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Bitmap {
   width: u32,
   height: u32,
@@ -176,8 +177,23 @@ impl Bitmap {
     (self.width, self.height)
   }
 
+  /// Bytes in one row.
+  pub(crate) fn stride(&self) -> usize {
+    self.width as usize * 4
+  }
+
+  /// The rows of RGBA bytes, top to bottom.
+  pub(crate) fn rows(&self) -> ChunksExact<'_, u8> {
+    // A zero-width bitmap holds no bytes, so any nonzero chunk size yields no rows.
+    self.data.chunks_exact(self.stride().max(4))
+  }
+
+  /// Row `y`'s RGBA bytes.
+  pub(crate) fn row(&self, y: usize) -> &[u8] {
+    &self.data[y * self.stride()..(y + 1) * self.stride()]
+  }
+
   /// The pixels, row-major.
-  #[cfg(test)]
   pub(crate) fn pixels(&self) -> impl Iterator<Item = &[u8; 4]> {
     self.data.as_chunks().0.iter()
   }
@@ -1066,10 +1082,7 @@ mod tests {
   }
 
   fn mk_frame(image: Bitmap, duration_ms: u32) -> AnimationFrame {
-    AnimationFrame {
-      image: image,
-      duration_ms,
-    }
+    AnimationFrame { image, duration_ms }
   }
 
   #[test]

@@ -102,8 +102,7 @@ impl<'a> Pixels<'a> {
   fn extend_row(self, row: usize, out: &mut Vec<u8>) {
     match self {
       Self::Rgba { image, keep_alpha } => {
-        let row_bytes = image.width() as usize * 4;
-        let pixels = &image.as_raw()[row * row_bytes..(row + 1) * row_bytes];
+        let pixels = image.row(row);
 
         if keep_alpha {
           out.extend_from_slice(pixels);

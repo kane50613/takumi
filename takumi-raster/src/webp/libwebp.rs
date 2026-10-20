@@ -76,7 +76,7 @@ fn import_rgba_picture(
   // https://github.com/webmproject/libwebp/blob/main/src/enc/picture_csp_enc.c
   picture.use_argb = config.lossless;
 
-  let stride = image.width() as usize * 4;
+  let stride = image.stride();
   let region_start = region.y as usize * stride + region.x as usize * 4;
   let import_ok = unsafe {
     WebPPictureImportRGBA(
