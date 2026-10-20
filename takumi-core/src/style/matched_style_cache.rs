@@ -1,6 +1,8 @@
-//! Blink's `MatchedPropertiesCache`: the style a box resolves to from its parent's style and the
-//! declarations it matched, which every box matching the same declarations under the same parent
-//! shares, as the cells of one table column do.
+//! An approximation of Blink's `MatchedPropertiesCache`, which shares the style a box resolves to
+//! among boxes matching the same declaration blocks, as the cells of one table column do. Blink
+//! reuses an entry under any parent with equal inherited values, and reapplies inherited properties
+//! when only the non-inherited ones match. This shares only under the same parent style `Rc` and
+//! keeps whole results.
 
 use std::{cell::RefCell, ptr, rc::Rc};
 
