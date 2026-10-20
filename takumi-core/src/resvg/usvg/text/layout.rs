@@ -17,7 +17,6 @@ use skrifa::raw::types::F2Dot14;
 use strict_num::NonZeroPositiveF32;
 use svgtypes::FontFamily;
 use tiny_skia_path::{NonZeroRect, Transform};
-use unicode_bidi::{BidiInfo, Level};
 
 use crate::font_style::ExpandedFontFamily;
 use crate::fonts::font::Font as ShapingFont;
@@ -41,7 +40,7 @@ use crate::style::{
   Direction as TextDirection, FontFamilyToken, FontLanguageOverride,
   FontOpticalSizing as CssFontOpticalSizing, FontSynthesic, FontVariantCaps, GenericFamilyType,
 };
-use crate::text::bidi_data::IcuBidiData;
+use crate::text::bidi_paragraph::{BidiParagraph, direction_from_level};
 
 /// A glyph that has already been positioned correctly.
 ///
@@ -779,69 +778,60 @@ fn process_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<GlyphCl
 /// as Blink's `InlineNode::ShapeText` shapes each item, so a bidi run is shaped piece by piece
 /// at span boundaries.
 fn shape_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<Glyph> {
-  let bidi_info = BidiInfo::new_with_data_source(&IcuBidiData, &chunk.text, Some(Level::ltr()));
+  let bidi = BidiParagraph::new(&chunk.text, Some(TextDirection::Ltr));
   let shaper = HarfBuzzShaper::new(chunk.text.clone());
   let mut glyphs = Vec::new();
 
-  for paragraph in &bidi_info.paragraphs {
-    let (levels, runs) = bidi_info.visual_runs(paragraph, paragraph.range.clone());
+  for run in bidi.get_visual_runs() {
+    let direction = direction_from_level(run.level);
+    let mut pieces: Vec<(&TextSpan, usize, usize)> = chunk
+      .spans
+      .iter()
+      .filter_map(|span| {
+        let start = span.start.max(run.start);
+        let end = span.end.min(run.end);
 
-    for run in runs {
-      let direction = if levels[run.start].is_rtl() {
-        TextDirection::Rtl
-      } else {
-        TextDirection::Ltr
+        (start < end).then_some((span, start, end))
+      })
+      .collect();
+
+    if direction == TextDirection::Rtl {
+      pieces.reverse();
+    }
+
+    for (span, start, end) in pieces {
+      let Some(font) = fonts_cache.shaping_font(span) else {
+        continue;
       };
-      let mut pieces: Vec<(&TextSpan, usize, usize)> = chunk
-        .spans
-        .iter()
-        .filter_map(|span| {
-          let start = span.start.max(run.start);
-          let end = span.end.min(run.end);
+      let result = shaper.shape(&font, direction, start, end);
+      let mut shaped = Vec::new();
+      let total_advance = ShapeResultView::create_from_result(&Rc::new(result)).for_each_glyph(
+        0.0,
+        |character_index, glyph, offset, advance, font_data| {
+          shaped.push((character_index, glyph, offset, advance, font_data.cloned()));
+        },
+      );
 
-          (start < end).then_some((span, start, end))
-        })
-        .collect();
-
-      if direction == TextDirection::Rtl {
-        pieces.reverse();
-      }
-
-      for (span, start, end) in pieces {
-        let Some(font) = fonts_cache.shaping_font(span) else {
+      for (index, (character_index, glyph, offset, advance, font_data)) in shaped.iter().enumerate()
+      {
+        let next_advance = shaped
+          .get(index + 1)
+          .map_or(total_advance, |&(_, _, _, next_advance, _)| next_advance);
+        let Some(font) = font_data
+          .as_ref()
+          .and_then(|font_data| fonts_cache.resolved(font_data))
+        else {
           continue;
         };
-        let result = shaper.shape(&font, direction, start, end);
-        let mut shaped = Vec::new();
-        let total_advance = ShapeResultView::create_from_result(&Rc::new(result)).for_each_glyph(
-          0.0,
-          |character_index, glyph, offset, advance, font_data| {
-            shaped.push((character_index, glyph, offset, advance, font_data.cloned()));
-          },
-        );
 
-        for (index, (character_index, glyph, offset, advance, font_data)) in
-          shaped.iter().enumerate()
-        {
-          let next_advance = shaped
-            .get(index + 1)
-            .map_or(total_advance, |&(_, _, _, next_advance, _)| next_advance);
-          let Some(font) = font_data
-            .as_ref()
-            .and_then(|font_data| fonts_cache.resolved(font_data))
-          else {
-            continue;
-          };
-
-          glyphs.push(Glyph {
-            id: GlyphId(u32::from(*glyph)),
-            byte_idx: ByteIndex::new(*character_index as usize),
-            dx: offset.x,
-            dy: offset.y,
-            width: next_advance - advance,
-            font,
-          });
-        }
+        glyphs.push(Glyph {
+          id: GlyphId(u32::from(*glyph)),
+          byte_idx: ByteIndex::new(*character_index as usize),
+          dx: offset.x,
+          dy: offset.y,
+          width: next_advance - advance,
+          font,
+        });
       }
     }
   }
