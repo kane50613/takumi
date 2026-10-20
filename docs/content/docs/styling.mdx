@@ -168,6 +168,23 @@ const isError = true;
 </div>;
 ```
 
+### Variants
+
+Breakpoints such as `md:` apply when the viewport is at least that wide. Structural variants apply by the element's place among its siblings, so one class list can style every row of a list:
+
+```tsx twoslash title="Stripe and round a list"
+const rows = ["Plan", "Seats", "Total"];
+
+<div tw="flex flex-col">
+  {rows.map((row) => (
+    // [!code highlight]
+    <div tw="p-3 bg-white odd:bg-slate-100 first:rounded-t-lg last:rounded-b-lg">{row}</div>
+  ))}
+</div>;
+```
+
+The structural variants are `first:`, `last:`, `only:`, `odd:`, `even:`, `first-of-type:`, `last-of-type:`, `only-of-type:`, `empty:`, `nth-3:` and its `nth-last-`, `nth-of-type-`, and `nth-last-of-type-` forms, `nth-[2n+1]:`, `not-first:` for any of them, and an arbitrary variant on the element itself such as `[&:nth-child(3)]:`. Variants combine, as in `md:first:mt-0`. Interactive ones such as `hover:` never apply to a static frame.
+
 ### Preflight
 
 The built-in parser applies no Tailwind Preflight by default. Elements keep their default margins: an `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
