@@ -1734,7 +1734,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "simplecss",
  "siphasher",
  "skrifa",
  "smallvec",

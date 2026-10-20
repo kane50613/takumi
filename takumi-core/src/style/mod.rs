@@ -6,6 +6,7 @@ mod custom_properties;
 pub mod math;
 mod media_query;
 pub(crate) mod properties;
+mod raw_declaration;
 pub(crate) mod selector;
 mod sizing;
 mod stylesheets;
@@ -24,6 +25,7 @@ pub use custom_properties::CustomProperties;
 pub(crate) use math::lerp;
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
+pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
 // Selector matching internals (CssRule, SelectorImpl, Ident, …) stay crate-private
 // under `selector::` for the renderer's `layout::matching`; only the stylesheet
 // entry point and `@property` rule type are part of the public surface.

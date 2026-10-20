@@ -20,9 +20,9 @@ use crate::{
   keyframes::parse_keyframe_prelude,
   matching::RuleIndex,
   style::{
-    BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
-    StyleDeclarationBlock, expand_apply, is_reserved_custom_ident,
-    supports::parse_supports_condition,
+    BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, RawDeclaration,
+    RawDeclarationParser, StyleDeclaration, StyleDeclarationBlock, expand_apply,
+    is_reserved_custom_ident, supports::parse_supports_condition,
   },
 };
 
@@ -393,26 +393,6 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
 
 impl_parser_traits!(StyleDeclarationParser, StyleDeclarationBlock);
 
-struct PropertyRuleDeclarationParser;
-
-impl<'i> DeclarationParser<'i> for PropertyRuleDeclarationParser {
-  type Declaration = (String, String);
-  type Error = StyleSheetParseError;
-
-  fn parse_value(
-    &mut self,
-    name: CowRcStr<'i>,
-    input: &mut Parser<'i>,
-    _state: &ParserState,
-  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let start = input.position();
-    while input.next_including_whitespace_and_comments().is_ok() {}
-    Ok((name.to_string(), input.slice_from(start).trim().to_owned()))
-  }
-}
-
-impl_parser_traits!(PropertyRuleDeclarationParser, (String, String));
-
 struct NestedStyleRuleParser<'a> {
   parent_selectors: SelectorList<SelectorImpl>,
   context: NestingContext<'a>,
@@ -690,23 +670,32 @@ fn parse_property_rule<'i>(
   property_name: String,
   input: &mut Parser<'i>,
 ) -> Result<PropertyRule, ParseError<StyleSheetParseError>> {
-  let mut parser = PropertyRuleDeclarationParser;
+  let mut parser = RawDeclarationParser;
   let mut syntax = None;
   let mut inherits = None;
   let mut initial_value = None;
   let mut invalid_inherits = false;
 
   for descriptor in RuleBodyParser::new(input, &mut parser) {
-    let (name, value) = descriptor.map_err(|(error, ..)| error)?;
+    let RawDeclaration {
+      name,
+      value,
+      important,
+    } = descriptor.map_err(|(error, ..)| error)?;
+
+    // Blink parses descriptors without the `!important` annotation, so one that has it is invalid.
+    if important {
+      continue;
+    }
 
     match_ignore_ascii_case! { &name,
-      "syntax" => syntax = Some(value),
+      "syntax" => syntax = Some(value.to_owned()),
       "inherits" => match_ignore_ascii_case! { &value,
         "true" => inherits = Some(true),
         "false" => inherits = Some(false),
         _ => invalid_inherits = true,
       },
-      "initial-value" => initial_value = Some(value),
+      "initial-value" => initial_value = Some(value.to_owned()),
       _ => {},
     }
   }
@@ -2402,6 +2391,37 @@ mod tests {
       sheet.property_rules[0].initial_value,
       Some("10px".to_owned())
     );
+  }
+
+  #[test]
+  fn test_parse_property_rule_drops_important_descriptors() {
+    let sheet = parse_stylesheet(
+      r#"
+        @property --box-size {
+          syntax: "<length>";
+          inherits: false;
+          initial-value: 10px;
+          initial-value: 20px !important;
+        }
+      "#,
+    );
+
+    assert_eq!(
+      sheet.property_rules[0].initial_value,
+      Some("10px".to_owned())
+    );
+
+    let sheet = parse_stylesheet_loosy(
+      r#"
+        @property --box-size {
+          syntax: "<length>";
+          inherits: false !important;
+          initial-value: 10px;
+        }
+      "#,
+    );
+
+    assert!(sheet.property_rules.is_empty());
   }
 
   #[test]
