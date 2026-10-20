@@ -3,7 +3,6 @@
 //! registry. The [`Fonts`](super::font::Fonts) registry drives this through
 //! [`GlyphResolveContext`], memoizing the results per worker thread.
 
-use image::{Rgba, RgbaImage};
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
@@ -583,21 +582,15 @@ fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(ImageBuffer, Origin)
     #[cfg(not(feature = "png"))]
     BitmapData::Png(_) => return None,
     BitmapData::Bgra(bytes) => {
-      if bytes.len() < rgba_len(bitmap.width, bitmap.height)? {
-        return None;
-      }
+      let bgra = bytes.get(..rgba_len(bitmap.width, bitmap.height)?)?;
+      let rgba = bgra
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|&[blue, green, red, alpha]| [red, green, blue, alpha])
+        .collect();
 
-      let image = RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
-        let index = ((y * bitmap.width + x) * 4) as usize;
-        Rgba([
-          bytes[index + 2],
-          bytes[index + 1],
-          bytes[index],
-          bytes[index + 3],
-        ])
-      });
-      let (width, height) = (image.width(), image.height());
-      ImageBuffer::from_rgba_bytes(image.into_raw(), width, height)?
+      ImageBuffer::from_rgba_bytes(rgba, bitmap.width, bitmap.height)?
     }
     BitmapData::Mask(_) => return None,
   };

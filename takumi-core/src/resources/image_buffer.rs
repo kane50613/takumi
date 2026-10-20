@@ -1,7 +1,7 @@
 //! Backend-agnostic decoded-image storage.
 
 #[cfg(feature = "png")]
-use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
+use png::{BitDepth, ColorType, Compression, Encoder, Filter};
 
 use crate::style::math::mul_div_255;
 
@@ -85,10 +85,20 @@ impl ImageBuffer {
     let mut straight = self.data.clone();
 
     demultiply_truncating_in_place(&mut straight);
+
     let mut out = Vec::new();
-    PngEncoder::new(&mut out)
-      .write_image(&straight, self.width, self.height, ExtendedColorType::Rgba8)
+    let mut encoder = Encoder::new(&mut out, self.width, self.height);
+
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    encoder.set_compression(Compression::Fast);
+    encoder.set_filter(Filter::Adaptive);
+    encoder
+      .write_header()
+      .ok()?
+      .write_image_data(&straight)
       .ok()?;
+
     Some(out)
   }
 
