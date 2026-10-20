@@ -243,7 +243,7 @@ describe("shared fetchCache policy enforcement", () => {
   });
 });
 
-describe("default fetch timeout", () => {
+describe("fetch timeout", () => {
   test("fontFromUrl rejects a hanging host within the timeout", async () => {
     const fetchMock = mock(
       (_url: string, init?: RequestInit) =>

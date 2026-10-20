@@ -488,8 +488,8 @@ describe("fromJsx", () => {
     } satisfies TextNode);
   });
 
-  test("handles img without src satisfies container", () => {
-    expect(fromJsx(<img alt="No src" />)).rejects.toThrowError(
+  test("handles img without src satisfies container", async () => {
+    await expect(fromJsx(<img alt="No src" />)).rejects.toThrowError(
       "Image element must have a 'src' prop.",
     );
   });

@@ -832,10 +832,8 @@ mod tests {
 
   #[test]
   fn cubic_bezier_preserves_overshoot() {
-    let Ok(function) = AnimationTimingFunction::from_css_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)")
-    else {
-      return;
-    };
+    let function =
+      AnimationTimingFunction::from_css_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)").unwrap();
 
     let early = function.apply(0.2, false);
     let late = function.apply(0.8, false);
