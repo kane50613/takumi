@@ -27,6 +27,7 @@ mod gradient;
 mod image;
 mod render;
 mod scene_emit;
+mod svg_image;
 mod text;
 
 use std::{borrow::Cow, collections::HashMap, fmt::Write as _, io, mem};
@@ -413,18 +414,23 @@ impl SvgDocument {
     self.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
   }
 
-  /// Opens an alpha `<mask>` in user space and returns the open token plus its
-  /// `url(#id)`; CSS `mask-image` defaults to alpha masking.
-  pub(crate) fn begin_mask(&mut self) -> io::Result<(GroupToken, String)> {
+  /// Opens a `<mask>` over the viewport in user space, by luminance or else alpha, and returns the
+  /// open token plus its `url(#id)`; CSS `mask-image` defaults to alpha masking.
+  pub(crate) fn begin_mask(&mut self, luminance: bool) -> io::Result<(GroupToken, String)> {
     let (id, reference) = self.alloc_id("mk");
-    self.open(
-      "mask",
-      &[
-        ("id", id.into()),
-        ("maskUnits", "userSpaceOnUse".into()),
-        ("style", "mask-type:alpha".into()),
-      ],
-    )?;
+    let mask_type = if luminance {
+      "mask-type:luminance"
+    } else {
+      "mask-type:alpha"
+    };
+    let mut attrs = vec![
+      ("id", id.into()),
+      ("maskUnits", "userSpaceOnUse".into()),
+      ("style", mask_type.into()),
+    ];
+
+    attrs.extend(self.blur_region(0.0).attrs());
+    self.open("mask", &attrs)?;
     Ok((GroupToken::default(), reference))
   }
 

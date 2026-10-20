@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420">
   <rect x="0" y="0" width="640" height="420" fill="#fff"/>
-  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="420">
     <g fill="#000">
       <use href="#g0" x="540.13" y="53"/>
       <use href="#g1" x="558.81" y="53"/>

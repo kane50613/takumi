@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
-  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
     <g fill="#000">
       <use href="#g0" x="80" y="201"/>
       <use href="#g1" x="158" y="201"/>
@@ -100,7 +100,7 @@
     <use href="#g7" x="661.88" y="201"/>
     <use href="#g8" x="728.48" y="201"/>
   </g>
-  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
     <g fill="#000">
       <use href="#g9" x="140" y="477"/>
       <use href="#g7" x="227" y="477"/>

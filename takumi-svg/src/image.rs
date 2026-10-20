@@ -1,8 +1,9 @@
 //! Image node → SVG `<image>` emission.
 //!
 //! Raster sources are embedded as `data:` URLs (original encoded bytes when
-//! available, otherwise re-encoded PNG); SVG sources embed their original markup
-//! as `data:image/svg+xml`, drawn where takumi-core's replaced-content placement puts them.
+//! available, otherwise re-encoded PNG). SVG sources are written as their vector ops, or embed
+//! their original markup as `data:image/svg+xml` where an op needs a raster. Both are drawn where
+//! takumi-core's replaced-content placement puts them.
 
 use std::io;
 
@@ -11,11 +12,11 @@ use takumi_core::{
   geometry::Size,
   layout::node::{ImageData, ImageSourceInput, resolve_image},
   painter::{BoxFrame, BoxPainter, PaintDevice},
-  resources::image::{ImageSource, sniff_mime, to_data_url},
-  style::ImageScalingAlgorithm,
+  resources::image::{ImageSource, SvgOp, SvgSource, sniff_mime, to_data_url},
+  style::{Affine, FillRule, ImageScalingAlgorithm},
 };
 
-use crate::{Frame, SvgDocument, render::DocumentDevice};
+use crate::{Frame, SvgDocument, render::DocumentDevice, svg_image::is_vector};
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
@@ -41,10 +42,17 @@ pub(crate) fn emit_image(
   if content.w <= 0.0 || content.h <= 0.0 {
     return Ok(());
   }
-  let Some(href) = data_url(&image.src, context) else {
+  let source = image.src.resolve(context).ok();
+  let intrinsic = source
+    .as_ref()
+    .and_then(|source| intrinsic_size(source, context));
+  let vector = match (&source, intrinsic) {
+    (Some(ImageSource::Svg(svg)), Some(_)) => vector_ops(svg, context),
+    _ => None,
+  };
+  let Some(drawing) = vector.or_else(|| data_url(&image.src, context).map(Drawing::Href)) else {
     return Ok(());
   };
-  let intrinsic = intrinsic_size(&image.src, context);
   let replaced = painter.replaced_content(intrinsic.map_or(
     Size {
       width: content.w,
@@ -70,16 +78,60 @@ pub(crate) fn emit_image(
     if let Some(clip) = replaced.clip {
       device.push_clip(&clip.into(), frame.translation());
     }
-    device.write(|doc| doc.image(rect, &href, Some(aspect)));
+    device.write(|doc| match &drawing {
+      Drawing::Ops { ops, canvas } => doc.svg_image(ops, *canvas, rect),
+      Drawing::Href(href) => doc.image(rect, href, Some(aspect)),
+    });
     if replaced.clip.is_some() {
       device.pop_clip();
     }
   })
 }
 
-fn intrinsic_size(src: &ImageSourceInput, context: &RenderContext) -> Option<(f32, f32)> {
-  let (width, height) = src.resolve(context).ok()?.size(&context.sizing);
+fn intrinsic_size(source: &ImageSource, context: &RenderContext) -> Option<(f32, f32)> {
+  let (width, height) = source.size(&context.sizing);
   (width > 0.0 && height > 0.0).then_some((width, height))
+}
+
+/// What an image node draws.
+enum Drawing {
+  /// An SVG image's vector ops, drawn on `canvas`.
+  Ops { ops: Vec<SvgOp>, canvas: Frame },
+  /// A `data:` URL for an `<image>`.
+  Href(String),
+}
+
+/// `svg`'s ops, when SVG elements can express every op.
+fn vector_ops(svg: &SvgSource, context: &RenderContext) -> Option<Drawing> {
+  let (width, height) = svg.dimensions();
+  // Ops that need a raster discard it for the original markup, so its scale does not matter.
+  let ops = svg.vector_ops(1.0, context.current_color, Some(context.fonts()));
+
+  (width > 0.0 && height > 0.0 && is_vector(&ops)).then(|| Drawing::Ops {
+    ops,
+    canvas: Frame::new(0.0, 0.0, width, height),
+  })
+}
+
+impl SvgDocument {
+  /// Writes an SVG image's `ops`, drawn on `canvas`, stretched over `rect`.
+  fn svg_image(&mut self, ops: &[SvgOp], canvas: Frame, rect: Frame) -> io::Result<()> {
+    let clip = self.clip_path(&canvas.path_data(), FillRule::NonZero, None)?;
+    let transform = Affine {
+      a: rect.w / canvas.w,
+      b: 0.0,
+      c: 0.0,
+      d: rect.h / canvas.h,
+      x: rect.x,
+      y: rect.y,
+    };
+    let group = self.begin_group(transform, 1.0, Some(&clip), None)?;
+    let isolated = self.begin_isolate_group()?;
+
+    self.svg_ops(ops)?;
+    self.end_group(isolated)?;
+    self.end_group(group)
+  }
 }
 
 fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
