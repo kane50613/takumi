@@ -1781,7 +1781,7 @@ name = "takumi"
 version = "2.17.1"
 dependencies = [
  "criterion",
- "image",
+ "gif",
  "image-webp",
  "png",
  "rayon",
@@ -1793,6 +1793,8 @@ dependencies = [
  "takumi-html",
  "takumi-raster",
  "takumi-svg",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -1948,7 +1950,6 @@ dependencies = [
  "color",
  "flate2",
  "gif",
- "image",
  "image-webp",
  "jpeg-encoder",
  "libwebp-sys",

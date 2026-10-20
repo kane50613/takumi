@@ -46,9 +46,6 @@ features = ["rc"]
 [dependencies.libz-rs-sys]
 workspace = true
 
-[dependencies.image]
-workspace = true
-features = ["png", "webp", "gif", "ico"]
 
 [dependencies.rayon]
 workspace = true

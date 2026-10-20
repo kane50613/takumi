@@ -7,6 +7,7 @@ use std::{
   borrow::Cow,
   collections::HashMap,
   fs::{self, File},
+  io::Cursor,
   path::{Path, PathBuf},
   process::Command,
   result::Result,
@@ -20,6 +21,8 @@ use takumi::{
 };
 use takumi_core::resources::image::ResourceCache;
 use takumi_svg::{SvgOptions, render as svg_render};
+use zune_core::{bytestream::ZCursor, colorspace::ColorSpace, options::DecoderOptions};
+use zune_jpeg::JpegDecoder;
 
 const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
   (
@@ -425,4 +428,59 @@ fn create_test_context() -> Fonts {
   }
 
   context
+}
+
+/// Decodes PNG, JPEG, or WebP `bytes` to straight-alpha RGBA through the format's own crate, an
+/// independent check on takumi's encoders. Returns the width, height, and pixels.
+pub fn decode_rgba(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+  if bytes.starts_with(b"\x89PNG") {
+    let mut decoder = png::Decoder::new(Cursor::new(bytes));
+
+    decoder.set_transformations(
+      png::Transformations::EXPAND | png::Transformations::STRIP_16 | png::Transformations::ALPHA,
+    );
+
+    let mut reader = decoder.read_info().unwrap();
+    let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+    let info = reader.next_frame(&mut pixels).unwrap();
+    let rgba = match info.color_type {
+      png::ColorType::GrayscaleAlpha => pixels
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .flat_map(|&[gray, alpha]| [gray, gray, gray, alpha])
+        .collect(),
+      _ => pixels,
+    };
+
+    return (info.width, info.height, rgba);
+  }
+
+  if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+    let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGBA);
+    let mut decoder = JpegDecoder::new_with_options(ZCursor::new(bytes), options);
+    let rgba = decoder.decode().unwrap();
+    let (width, height) = decoder.dimensions().unwrap();
+
+    return (width as u32, height as u32, rgba);
+  }
+
+  let mut decoder = image_webp::WebPDecoder::new(Cursor::new(bytes)).unwrap();
+  let (width, height) = decoder.dimensions();
+  let mut pixels = vec![0; decoder.output_buffer_size().unwrap()];
+
+  decoder.read_image(&mut pixels).unwrap();
+
+  let rgba = if decoder.has_alpha() {
+    pixels
+  } else {
+    pixels
+      .as_chunks::<3>()
+      .0
+      .iter()
+      .flat_map(|&[red, green, blue]| [red, green, blue, 255])
+      .collect()
+  };
+
+  (width, height, rgba)
 }

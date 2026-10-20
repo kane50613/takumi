@@ -8,7 +8,6 @@ use std::{
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
-use image::{ExtendedColorType, ImageEncoder, codecs::ico::IcoEncoder};
 use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
 use png::{
   ColorType, Filter,
@@ -518,8 +517,6 @@ pub fn write_image<T: Write>(
   destination: &mut T,
   format: OutputFormat,
 ) -> Result<()> {
-  let rgba = image;
-
   match format {
     OutputFormat::Jpeg { quality } => {
       let mut encoder = JpegEncoder::new(destination, quality.get());
@@ -541,7 +538,7 @@ pub fn write_image<T: Write>(
     }
     OutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
-      let palette = Palette::of(rgba);
+      let palette = Palette::of(image);
       let (encoding, pixels) = match &palette {
         Some(palette) => {
           encoder.set_color(ColorType::Indexed);
@@ -558,7 +555,7 @@ pub fn write_image<T: Write>(
           )
         }
         None => {
-          let keep_alpha = has_any_alpha_pixel(rgba);
+          let keep_alpha = has_any_alpha_pixel(image);
 
           encoder.set_color(if keep_alpha {
             ColorType::Rgba
@@ -567,10 +564,7 @@ pub fn write_image<T: Write>(
           });
           (
             PngEncoding::pick(image.as_raw(), image.width()),
-            Pixels::Rgba {
-              image: rgba,
-              keep_alpha,
-            },
+            Pixels::Rgba { image, keep_alpha },
           )
         }
       };
@@ -585,23 +579,45 @@ pub fn write_image<T: Write>(
     }
     #[cfg(not(target_arch = "wasm32"))]
     OutputFormat::WebP { quality } => {
-      write_webp_lossy(Cow::Borrowed(rgba), destination, quality)?;
+      write_webp_lossy(Cow::Borrowed(image), destination, quality)?;
     }
     OutputFormat::WebPLossless => {
-      write_webp_lossless(Cow::Borrowed(rgba), destination)?;
+      write_webp_lossless(Cow::Borrowed(image), destination)?;
     }
-    OutputFormat::Ico => {
-      let encoder = IcoEncoder::new(destination);
-      encoder
-        .write_image(
-          image.as_raw(),
-          image.width(),
-          image.height(),
-          ExtendedColorType::Rgba8,
-        )
-        .map_err(Error::encode)?;
-    }
+    OutputFormat::Ico => write_ico(image, destination)?,
   }
+
+  Ok(())
+}
+
+/// Writes `image` as an ICO holding one PNG-compressed icon, as the ICO format allows from
+/// Windows Vista on. <https://learn.microsoft.com/en-us/previous-versions/ms997538(v=msdn.10)>
+fn write_ico(image: &Bitmap, destination: &mut impl Write) -> Result<()> {
+  let side = |length: u32| match length {
+    1..=255 => Ok(length as u8),
+    256 => Ok(0),
+    _ => Err(Error::encode(io::Error::new(
+      io::ErrorKind::InvalidInput,
+      format!("ICO images are 1 to 256 pixels on a side, not {length}"),
+    ))),
+  };
+  let (width, height) = (side(image.width())?, side(image.height())?);
+  let mut png = Vec::new();
+
+  write_image(image, &mut png, OutputFormat::Png)?;
+
+  let size = u32::try_from(png.len()).map_err(Error::encode)?;
+  // ICONDIR (reserved, type 1 for icons, one image), then its ICONDIRENTRY: size, no palette,
+  // 32 bits per pixel, and the PNG's length and offset past these 22 bytes.
+  let header = [
+    &[0, 0, 1, 0, 1, 0, width, height, 0, 0, 0, 0, 32, 0][..],
+    &size.to_le_bytes(),
+    &22_u32.to_le_bytes(),
+  ]
+  .concat();
+
+  destination.write_all(&header)?;
+  destination.write_all(&png)?;
 
   Ok(())
 }
@@ -1312,15 +1328,35 @@ mod tests {
     );
   }
 
+  /// One icon directory entry pointing at a PNG of the image right after the header.
   #[test]
-  fn write_image_ico_produces_ico_header() {
+  fn write_image_ico_wraps_one_png() {
     let image = Bitmap::from_pixel(16, 16, [255, 0, 0, 255]);
     let mut encoded = Vec::new();
-    let result = write_image(&image, &mut encoded, OutputFormat::Ico);
-    assert!(result.is_ok(), "failed to encode ico image");
+
+    write_image(&image, &mut encoded, OutputFormat::Ico).unwrap();
+
+    let (header, png) = encoded.split_at(22);
+    let size = u32::from_le_bytes(header[14..18].try_into().unwrap());
+
+    assert_eq!(header[..6], [0, 0, 1, 0, 1, 0]);
+    assert_eq!(header[6..14], [16, 16, 0, 0, 0, 0, 32, 0]);
+    assert_eq!(size as usize, png.len());
+    assert_eq!(header[18..22], 22_u32.to_le_bytes());
+
+    let mut decoder = png::Decoder::new(Cursor::new(png));
+
+    decoder.set_transformations(png::Transformations::EXPAND);
+
+    let mut reader = decoder.read_info().unwrap();
+    let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+    let info = reader.next_frame(&mut pixels).unwrap();
+
+    assert_eq!((info.width, info.height), (16, 16));
     assert!(
-      encoded.starts_with(&[0, 0, 1, 0]),
-      "encoded bytes should begin with ICO header"
+      pixels
+        .chunks_exact(info.color_type.samples())
+        .all(|pixel| pixel[..3] == [255, 0, 0])
     );
   }
 
@@ -1338,7 +1374,7 @@ mod tests {
     assert!(
       err
         .to_string()
-        .contains("the image width must be `1..=256`, instead width 257 was provided")
+        .contains("ICO images are 1 to 256 pixels on a side, not 257")
     );
   }
 
