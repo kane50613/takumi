@@ -57,8 +57,8 @@ fn emoji_paragraph() -> Node {
     .zip(["🎨", "📐", "✨", "🖋️", "📚"].iter().cycle())
     .map(|(word, emoji)| format!("{word} {emoji}"))
     .collect::<Vec<_>>()
-    .join(" ")
-    .repeat(4);
+    .join(" ");
+  let text = [text.as_str(); 4].join(" ");
 
   Node::container([Node::text(text).with_tw("text-[20px] text-gray-900".parse().unwrap())])
     .with_tw("flex w-full h-full p-12 bg-white".parse().unwrap())
