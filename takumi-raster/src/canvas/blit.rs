@@ -388,8 +388,18 @@ fn source_over_at_opacity(dest: [u8; 4], source: [u8; 4], opacity: f32) -> [u8; 
   array::from_fn(|channel| {
     let blended = f32::from(dest[channel]) * UNIT * behind + source[channel];
 
-    (blended.clamp(0.0, 1.0) * 255.0).round_ties_even() as u8
+    round_ties_even_byte(blended.clamp(0.0, 1.0) * 255.0)
   })
+}
+
+/// `value.round_ties_even() as u8` for `value` in `[0, 255]`. Adding and subtracting 2^23 leaves
+/// the default round-half-to-even mode to drop the fraction, which vectorizes where SSE2 has no
+/// rounding instruction and `round_ties_even` becomes a call.
+#[inline(always)]
+fn round_ties_even_byte(value: f32) -> u8 {
+  const SHIFT: f32 = 8_388_608.0;
+
+  ((value + SHIFT) - SHIFT) as u8
 }
 
 fn blit_solid_translation(
@@ -781,6 +791,19 @@ mod tests {
     .unwrap();
 
     assert_eq!((bounds.x_min, bounds.x_max), (16_777_217, 16_777_218));
+  }
+
+  #[test]
+  fn byte_rounding_breaks_ties_to_even() {
+    for step in 0..=255 * 1024 {
+      let value = step as f32 / 1024.0;
+
+      assert_eq!(
+        round_ties_even_byte(value),
+        value.round_ties_even() as u8,
+        "{value}"
+      );
+    }
   }
 
   #[test]
