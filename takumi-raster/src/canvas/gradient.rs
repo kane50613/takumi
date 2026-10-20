@@ -415,7 +415,7 @@ pub(crate) fn overlay_radial_gradient_tile(
 
 #[cfg(test)]
 mod tests {
-  use image::{Rgba, RgbaImage};
+  use crate::Bitmap;
   use takumi_core::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
   use tiny_skia::PixmapMut;
 
@@ -432,10 +432,10 @@ mod tests {
   };
 
   fn overlay_area_reference(
-    bottom: &mut RgbaImage,
+    bottom: &mut Bitmap,
     offset: Point<f32>,
     top_size: Size<u32>,
-    f: impl Fn(u32, u32) -> Rgba<u8>,
+    f: impl Fn(u32, u32) -> [u8; 4],
   ) {
     let offset_x = offset.x as i32;
     let offset_y = offset.y as i32;
@@ -449,7 +449,7 @@ mod tests {
       for dest_x in dest_x_min..dest_x_max {
         let src_x = (dest_x - offset_x) as u32;
         let pixel = f(src_x, src_y);
-        if pixel.0[3] == 0 {
+        if pixel[3] == 0 {
           continue;
         }
         let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
@@ -468,8 +468,7 @@ mod tests {
     T: GradientOverlayTile,
   {
     let mut canvas = Canvas::new(canvas_size);
-    let mut reference =
-      RgbaImage::from_pixel(canvas_size.width, canvas_size.height, Rgba([0, 0, 0, 0]));
+    let mut reference = Bitmap::from_pixel(canvas_size.width, canvas_size.height, [0, 0, 0, 0]);
 
     {
       let mut pixmap = canvas.image.as_mut();
@@ -489,7 +488,7 @@ mod tests {
         let color = tile.sample_pixel_dithered(x, y);
         let mut pixel = [color.red(), color.green(), color.blue(), color.alpha()];
         demultiply_rgba_in_place(&mut pixel);
-        Rgba(pixel)
+        pixel
       },
     );
 

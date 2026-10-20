@@ -3,16 +3,13 @@
 
 use std::{mem::swap, ops::Range};
 
-use image::RgbaImage;
+use crate::Bitmap;
 
 /// The pixels an image's PNG data holds.
 #[derive(Clone, Copy)]
 pub(crate) enum Pixels<'a> {
   /// RGBA pixels, written with alpha only when `keep_alpha`.
-  Rgba {
-    image: &'a RgbaImage,
-    keep_alpha: bool,
-  },
+  Rgba { image: &'a Bitmap, keep_alpha: bool },
   /// One palette index per pixel, `width` to a row.
   Indexed { indices: &'a [u8], width: usize },
 }
@@ -105,8 +102,7 @@ impl<'a> Pixels<'a> {
   fn extend_row(self, row: usize, out: &mut Vec<u8>) {
     match self {
       Self::Rgba { image, keep_alpha } => {
-        let row_bytes = image.width() as usize * 4;
-        let pixels = &image.as_raw()[row * row_bytes..(row + 1) * row_bytes];
+        let pixels = image.row(row);
 
         if keep_alpha {
           out.extend_from_slice(pixels);
@@ -252,29 +248,29 @@ fn magnitude(row: &[u8]) -> u64 {
 mod tests {
   use std::io::Read;
 
+  use crate::Bitmap;
   use flate2::read::ZlibDecoder;
-  use image::RgbaImage;
   use png::{ColorType, Filter};
 
   use super::{Pixels, Scanlines};
 
-  fn photo(width: u32, height: u32, alpha: bool) -> RgbaImage {
-    RgbaImage::from_fn(width, height, |x, y| {
+  fn photo(width: u32, height: u32, alpha: bool) -> Bitmap {
+    Bitmap::from_fn(width, height, |x, y| {
       let noise = (x.wrapping_mul(2654435761) ^ y.wrapping_mul(40503)) as u8;
 
-      image::Rgba([
+      [
         (x as u8).wrapping_add(noise / 8),
         (y as u8).wrapping_add(noise / 4),
         noise,
         if alpha { 255 - noise / 2 } else { 255 },
-      ])
+      ]
     })
   }
 
   /// What the png crate's adaptive filter writes for `rgba`, read back out of its IDAT.
-  fn png_crate_scanlines(rgba: &RgbaImage, keep_alpha: bool) -> Vec<u8> {
+  fn png_crate_scanlines(rgba: &Bitmap, keep_alpha: bool) -> Vec<u8> {
     let data: Vec<u8> = if keep_alpha {
-      rgba.as_raw().clone()
+      rgba.as_raw().to_vec()
     } else {
       rgba
         .as_raw()

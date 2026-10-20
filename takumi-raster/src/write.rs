@@ -4,15 +4,17 @@ use std::{
   borrow::{Borrow, Cow},
   io::{self, Write},
   iter::once,
+  slice::ChunksExact,
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
-use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::ico::IcoEncoder};
+use image::{ExtendedColorType, ImageEncoder, codecs::ico::IcoEncoder};
 use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
 use png::{
   ColorType, Filter,
   chunk::{IDAT, acTL, fcTL, fdAT},
 };
+use takumi_core::resources::image_buffer::rgba_len;
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
@@ -99,50 +101,166 @@ impl OutputFormat {
 
 /// A rendered RGBA raster image: the output of [`render`](crate::render).
 ///
-/// Wraps the pixel buffer so the public API does not commit to a specific
-/// `image` crate version. Encode it with [`write_image`], or reach the raw bytes
-/// via [`as_raw`](Bitmap::as_raw) / [`into_raw`](Bitmap::into_raw).
+/// Encode it with [`write_image`], or reach the raw bytes via [`as_raw`](Bitmap::as_raw) /
+/// [`into_raw`](Bitmap::into_raw).
 #[derive(Debug, Clone)]
-pub struct Bitmap(RgbaImage);
+pub struct Bitmap {
+  width: u32,
+  height: u32,
+  data: Vec<u8>,
+}
 
 impl Bitmap {
   /// Width in pixels.
   pub fn width(&self) -> u32 {
-    self.0.width()
+    self.width
   }
 
   /// Height in pixels.
   pub fn height(&self) -> u32 {
-    self.0.height()
+    self.height
   }
 
   /// Borrows the raw RGBA bytes, row-major, 4 bytes per pixel.
   pub fn as_raw(&self) -> &[u8] {
-    self.0.as_raw()
+    &self.data
   }
 
   /// Consumes the bitmap into its raw RGBA byte buffer.
   pub fn into_raw(self) -> Vec<u8> {
-    self.0.into_raw()
+    self.data
   }
 
   /// Builds a bitmap from raw RGBA bytes, row-major, 4 bytes per pixel. Returns
   /// `None` when `data.len()` is not `width * height * 4`.
   pub fn from_raw(width: u32, height: u32, data: Vec<u8>) -> Option<Self> {
-    RgbaImage::from_raw(width, height, data).map(Self)
+    (data.len() == rgba_len(width, height)?).then_some(Self {
+      width,
+      height,
+      data,
+    })
   }
 
-  pub(crate) fn from_rgba(image: RgbaImage) -> Self {
-    Self(image)
+  /// A transparent black bitmap.
+  #[cfg(test)]
+  pub(crate) fn new(width: u32, height: u32) -> Self {
+    Self::from_pixel(width, height, [0; 4])
   }
 
-  pub(crate) fn as_rgba(&self) -> &RgbaImage {
-    &self.0
+  /// A bitmap filled with `pixel`.
+  #[cfg(test)]
+  pub(crate) fn from_pixel(width: u32, height: u32, pixel: [u8; 4]) -> Self {
+    let len = rgba_len(width, height).expect("the bitmap fits in memory");
+
+    Self {
+      width,
+      height,
+      data: pixel.repeat(len / 4),
+    }
+  }
+
+  /// A bitmap whose pixel at `(x, y)` is `pixel(x, y)`.
+  #[cfg(test)]
+  pub(crate) fn from_fn(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Self {
+    let data = (0..height)
+      .flat_map(|y| (0..width).map(move |x| (x, y)))
+      .flat_map(|(x, y)| pixel(x, y))
+      .collect();
+
+    Self {
+      width,
+      height,
+      data,
+    }
+  }
+
+  pub(crate) fn dimensions(&self) -> (u32, u32) {
+    (self.width, self.height)
+  }
+
+  /// Bytes in one row.
+  pub(crate) fn stride(&self) -> usize {
+    self.width as usize * 4
+  }
+
+  /// The rows of RGBA bytes, top to bottom.
+  pub(crate) fn rows(&self) -> ChunksExact<'_, u8> {
+    // A zero-width bitmap holds no bytes, so any nonzero chunk size yields no rows.
+    self.data.chunks_exact(self.stride().max(4))
+  }
+
+  /// Row `y`'s RGBA bytes.
+  pub(crate) fn row(&self, y: usize) -> &[u8] {
+    &self.data[y * self.stride()..(y + 1) * self.stride()]
+  }
+
+  /// The pixels, row-major.
+  pub(crate) fn pixels(&self) -> impl Iterator<Item = &[u8; 4]> {
+    self.data.as_chunks().0.iter()
+  }
+
+  /// The pixels with their coordinates, row-major.
+  #[cfg(test)]
+  pub(crate) fn enumerate_pixels(&self) -> impl Iterator<Item = (u32, u32, &[u8; 4])> {
+    let width = self.width.max(1);
+
+    self
+      .pixels()
+      .enumerate()
+      .map(move |(index, pixel)| (index as u32 % width, index as u32 / width, pixel))
   }
 
   #[cfg(test)]
-  pub(crate) fn into_rgba(self) -> RgbaImage {
-    self.0
+  pub(crate) fn as_raw_mut(&mut self) -> &mut [u8] {
+    &mut self.data
+  }
+
+  #[cfg(test)]
+  pub(crate) fn get_pixel(&self, x: u32, y: u32) -> &[u8; 4] {
+    let index = self.index(x, y);
+
+    &self.data.as_chunks().0[index]
+  }
+
+  #[cfg(test)]
+  pub(crate) fn get_pixel_mut(&mut self, x: u32, y: u32) -> &mut [u8; 4] {
+    let index = self.index(x, y);
+
+    &mut self.data.as_chunks_mut().0[index]
+  }
+
+  #[cfg(test)]
+  pub(crate) fn put_pixel(&mut self, x: u32, y: u32, pixel: [u8; 4]) {
+    let index = self.index(x, y);
+
+    self.data.as_chunks_mut().0[index] = pixel;
+  }
+
+  /// The `width` by `height` region whose top-left pixel is `(x, y)`.
+  #[cfg(any(test, target_arch = "wasm32"))]
+  pub(crate) fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Self {
+    let row_bytes = width as usize * 4;
+    let data = (y..y + height)
+      .flat_map(|row| {
+        let start = self.index(x, row) * 4;
+
+        &self.data[start..start + row_bytes]
+      })
+      .copied()
+      .collect();
+
+    Self {
+      width,
+      height,
+      data,
+    }
+  }
+
+  #[cfg(any(test, target_arch = "wasm32"))]
+  fn index(&self, x: u32, y: u32) -> usize {
+    debug_assert!(x < self.width && y < self.height);
+
+    y as usize * self.width as usize + x as usize
   }
 }
 
@@ -314,7 +432,7 @@ const OPTIMIZED_JPEG_MAX_PIXELS: u64 = 1 << 22;
 
 /// Every 32nd row of an image, stacked into a band for an encoding to be tried on.
 enum RowSample {
-  Rgba(RgbaImage),
+  Rgba(Bitmap),
   Indexed { indices: Vec<u8>, width: usize },
 }
 
@@ -324,7 +442,7 @@ impl RowSample {
     let band = sample_rows(rgba, width as usize * 4)?;
     let height = band.len() / (width as usize * 4);
 
-    RgbaImage::from_raw(width, height as u32, band).map(Self::Rgba)
+    Bitmap::from_raw(width, height as u32, band).map(Self::Rgba)
   }
 
   /// The sample of palette `indices` rows `width` pixels wide, or `None` when it has under two
@@ -400,7 +518,7 @@ pub fn write_image<T: Write>(
   destination: &mut T,
   format: OutputFormat,
 ) -> Result<()> {
-  let rgba = image.as_rgba();
+  let rgba = image;
 
   match format {
     OutputFormat::Jpeg { quality } => {
@@ -672,7 +790,7 @@ where
 
     let stream = encoding.deflate(
       Pixels::Rgba {
-        image: &frame.image.0,
+        image: &frame.image,
         keep_alpha: true,
       },
       height as usize,
@@ -879,7 +997,6 @@ mod tests {
   use std::{assert_matches, borrow::Cow, io::Cursor, mem::MaybeUninit, slice::from_raw_parts};
 
   use gif::{ColorOutput, DecodeOptions};
-  use image::RgbaImage;
   use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
   use libwebp_sys::{WEBP_CSP_MODE::MODE_RGBA, *};
   use takumi_core::Error;
@@ -960,24 +1077,15 @@ mod tests {
     ));
   }
 
-  fn mk_frame(image: RgbaImage, duration_ms: u32) -> AnimationFrame {
-    AnimationFrame {
-      image: Bitmap::from_rgba(image),
-      duration_ms,
-    }
+  fn mk_frame(image: Bitmap, duration_ms: u32) -> AnimationFrame {
+    AnimationFrame { image, duration_ms }
   }
 
   #[test]
   fn write_animated_png_writes_per_frame_delays() {
     let frames = vec![
-      mk_frame(
-        RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
-        120,
-      ),
-      mk_frame(
-        RgbaImage::from_pixel(2, 2, image::Rgba([0, 255, 0, 255])),
-        30,
-      ),
+      mk_frame(Bitmap::from_pixel(2, 2, [255, 0, 0, 255]), 120),
+      mk_frame(Bitmap::from_pixel(2, 2, [0, 255, 0, 255]), 30),
     ];
 
     let mut bytes = Vec::new();
@@ -1008,21 +1116,21 @@ mod tests {
   #[test]
   fn write_animated_gif_writes_valid_animation_and_delays() {
     let frame_a = mk_frame(
-      RgbaImage::from_fn(2, 2, |x, y| {
+      Bitmap::from_fn(2, 2, |x, y| {
         if x == 0 && y == 0 {
-          image::Rgba([255, 0, 0, 255])
+          [255, 0, 0, 255]
         } else {
-          image::Rgba([0, 0, 0, 0])
+          [0, 0, 0, 0]
         }
       }),
       45,
     );
     let frame_b = mk_frame(
-      RgbaImage::from_fn(2, 2, |x, y| {
+      Bitmap::from_fn(2, 2, |x, y| {
         if x == 1 && y == 1 {
-          image::Rgba([0, 255, 0, 255])
+          [0, 255, 0, 255]
         } else {
-          image::Rgba([0, 0, 0, 0])
+          [0, 0, 0, 0]
         }
       }),
       10,
@@ -1094,14 +1202,8 @@ mod tests {
 
   #[test]
   fn write_animated_gif_rejects_mismatched_frame_dimensions() {
-    let frame_a = mk_frame(
-      RgbaImage::from_fn(2, 2, |_, _| image::Rgba([255, 0, 0, 255])),
-      10,
-    );
-    let frame_b = mk_frame(
-      RgbaImage::from_fn(3, 2, |_, _| image::Rgba([0, 255, 0, 255])),
-      10,
-    );
+    let frame_a = mk_frame(Bitmap::from_fn(2, 2, |_, _| [255, 0, 0, 255]), 10);
+    let frame_b = mk_frame(Bitmap::from_fn(3, 2, |_, _| [0, 255, 0, 255]), 10);
 
     let mut bytes = Vec::new();
     let encode_result = write_animated_gif(
@@ -1175,14 +1277,8 @@ mod tests {
   #[test]
   fn write_animated_png_rejects_mismatched_frame_dimensions() {
     let frames = vec![
-      mk_frame(
-        RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
-        100,
-      ),
-      mk_frame(
-        RgbaImage::from_pixel(3, 2, image::Rgba([0, 255, 0, 255])),
-        100,
-      ),
+      mk_frame(Bitmap::from_pixel(2, 2, [255, 0, 0, 255]), 100),
+      mk_frame(Bitmap::from_pixel(3, 2, [0, 255, 0, 255]), 100),
     ];
 
     let mut bytes = Vec::new();
@@ -1191,11 +1287,36 @@ mod tests {
     assert_matches!(result, Err(Error::MixedAnimationFrameDimensions));
   }
 
+  /// A byte length past `usize` is rejected rather than wrapped.
+  #[test]
+  fn from_raw_rejects_an_overflowing_size() {
+    assert!(Bitmap::from_raw(u32::MAX, u32::MAX, Vec::new()).is_none());
+  }
+
+  /// A crop keeps the region's rows, each starting at its left column.
+  #[test]
+  fn crop_keeps_the_region() {
+    let image = Bitmap::from_fn(4, 3, |x, y| [x as u8, y as u8, 0, 255]);
+    let cropped = image.crop(1, 1, 2, 2);
+
+    assert_eq!(cropped.dimensions(), (2, 2));
+    assert_eq!(
+      cropped.as_raw(),
+      [
+        [1, 1, 0, 255],
+        [2, 1, 0, 255],
+        [1, 2, 0, 255],
+        [2, 2, 0, 255]
+      ]
+      .concat()
+    );
+  }
+
   #[test]
   fn write_image_ico_produces_ico_header() {
-    let image = RgbaImage::from_pixel(16, 16, image::Rgba([255, 0, 0, 255]));
+    let image = Bitmap::from_pixel(16, 16, [255, 0, 0, 255]);
     let mut encoded = Vec::new();
-    let result = write_image(&Bitmap::from_rgba(image), &mut encoded, OutputFormat::Ico);
+    let result = write_image(&image, &mut encoded, OutputFormat::Ico);
     assert!(result.is_ok(), "failed to encode ico image");
     assert!(
       encoded.starts_with(&[0, 0, 1, 0]),
@@ -1205,9 +1326,9 @@ mod tests {
 
   #[test]
   fn write_image_ico_rejects_dimensions_over_256() {
-    let image = RgbaImage::from_pixel(257, 16, image::Rgba([255, 0, 0, 255]));
+    let image = Bitmap::from_pixel(257, 16, [255, 0, 0, 255]);
     let mut encoded = Vec::new();
-    let result = write_image(&Bitmap::from_rgba(image), &mut encoded, OutputFormat::Ico);
+    let result = write_image(&image, &mut encoded, OutputFormat::Ico);
 
     let err = result.err();
     assert!(err.is_some(), "expected oversized ico image to fail");
@@ -1224,21 +1345,21 @@ mod tests {
   #[test]
   fn write_animated_webp_respects_blend_dispose_and_loop_count() {
     let frame_a = mk_frame(
-      RgbaImage::from_fn(2, 2, |x, y| {
+      Bitmap::from_fn(2, 2, |x, y| {
         if x == 0 && y == 0 {
-          image::Rgba([255, 0, 0, 255])
+          [255, 0, 0, 255]
         } else {
-          image::Rgba([0, 0, 0, 0])
+          [0, 0, 0, 0]
         }
       }),
       120,
     );
     let frame_b = mk_frame(
-      RgbaImage::from_fn(2, 2, |x, y| {
+      Bitmap::from_fn(2, 2, |x, y| {
         if x == 1 && y == 1 {
-          image::Rgba([0, 255, 0, 255])
+          [0, 255, 0, 255]
         } else {
-          image::Rgba([0, 0, 0, 0])
+          [0, 0, 0, 0]
         }
       }),
       240,
@@ -1293,10 +1414,7 @@ mod tests {
     // With allow_mixed=1 libwebp may choose VP8L even at quality<100 when it
     // produces a smaller file (trivial 2×2 solid-colour images always compress
     // better losslessly). We verify the output is a parseable animated WebP.
-    let frame = mk_frame(
-      RgbaImage::from_fn(2, 2, |_, _| image::Rgba([20, 80, 220, 255])),
-      100,
-    );
+    let frame = mk_frame(Bitmap::from_fn(2, 2, |_, _| [20, 80, 220, 255]), 100);
 
     let mut bytes = Vec::new();
     let encode_result = write_animated_webp(
@@ -1334,8 +1452,8 @@ mod tests {
 
   #[test]
   fn write_animated_webp_merges_consecutive_identical_frames() {
-    let image_a = RgbaImage::from_fn(2, 2, |_, _| image::Rgba([120, 30, 10, 255]));
-    let image_b = RgbaImage::from_fn(2, 2, |_, _| image::Rgba([5, 200, 20, 255]));
+    let image_a = Bitmap::from_fn(2, 2, |_, _| [120, 30, 10, 255]);
+    let image_b = Bitmap::from_fn(2, 2, |_, _| [5, 200, 20, 255]);
     let frame_a = mk_frame(image_a.clone(), 50);
     let frame_b = mk_frame(image_a, 70);
     let frame_c = mk_frame(image_b, 30);
@@ -1383,7 +1501,7 @@ mod tests {
 
   #[test]
   fn write_animated_webp_rejects_zero_sized_frames() {
-    let invalid = mk_frame(RgbaImage::new(0, 1), 10);
+    let invalid = mk_frame(Bitmap::new(0, 1), 10);
 
     let mut bytes = Vec::new();
     let result = write_animated_webp(
@@ -1407,22 +1525,10 @@ mod tests {
   #[test]
   fn write_animated_webp_preserves_parallel_frame_order() {
     let frames = vec![
-      mk_frame(
-        RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
-        10,
-      ),
-      mk_frame(
-        RgbaImage::from_pixel(2, 2, image::Rgba([0, 255, 0, 255])),
-        20,
-      ),
-      mk_frame(
-        RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 255, 255])),
-        30,
-      ),
-      mk_frame(
-        RgbaImage::from_pixel(2, 2, image::Rgba([255, 255, 0, 255])),
-        40,
-      ),
+      mk_frame(Bitmap::from_pixel(2, 2, [255, 0, 0, 255]), 10),
+      mk_frame(Bitmap::from_pixel(2, 2, [0, 255, 0, 255]), 20),
+      mk_frame(Bitmap::from_pixel(2, 2, [0, 0, 255, 255]), 30),
+      mk_frame(Bitmap::from_pixel(2, 2, [255, 255, 0, 255]), 40),
     ];
 
     let mut bytes = Vec::new();

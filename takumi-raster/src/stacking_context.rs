@@ -408,11 +408,11 @@ fn draw_node_content(
 mod tests {
   use std::error::Error;
 
-  use crate::{Fonts, RenderOptions, layout::node::Node, render, viewport::Viewport};
+  use crate::{Bitmap, Fonts, RenderOptions, layout::node::Node, render, viewport::Viewport};
 
   type TestResult = Result<(), Box<dyn Error>>;
 
-  fn render_json(json: &str) -> Result<image::RgbaImage, Box<dyn Error>> {
+  fn render_json(json: &str) -> Result<Bitmap, Box<dyn Error>> {
     let fonts = Fonts::default();
     let node: Node = serde_json::from_str(json)?;
     let options = RenderOptions::builder()
@@ -420,7 +420,7 @@ mod tests {
       .node(node)
       .fonts(&fonts)
       .build();
-    Ok(render(options)?.into_rgba())
+    Ok(render(options)?)
   }
 
   #[test]
@@ -457,7 +457,7 @@ mod tests {
     let with_zero = render_json(&tree(&format!("{bar}, {zero_bar}")))?;
     let without_zero = render_json(&tree(bar))?;
 
-    assert_eq!(with_zero, without_zero);
+    assert_eq!(with_zero.as_raw(), without_zero.as_raw());
     Ok(())
   }
 
@@ -475,7 +475,7 @@ mod tests {
 
     let pixel = image.get_pixel(10, 10);
     assert!(
-      pixel.0[0] > 0 && pixel.0[3] > 0,
+      pixel[0] > 0 && pixel[3] > 0,
       "overflowing child of zero-sized opacity parent must still paint, got {pixel:?}"
     );
     Ok(())

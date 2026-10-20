@@ -118,7 +118,7 @@ impl ImageBuffer {
 }
 
 /// Byte length of a `width` x `height` RGBA buffer, or `None` when it overflows `usize`.
-pub(crate) fn rgba_len(width: u32, height: u32) -> Option<usize> {
+pub fn rgba_len(width: u32, height: u32) -> Option<usize> {
   (width as usize)
     .checked_mul(height as usize)?
     .checked_mul(4)

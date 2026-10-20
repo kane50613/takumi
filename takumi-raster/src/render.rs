@@ -166,7 +166,7 @@ fn render_with_context(
 
   let image = canvas.into_inner()?;
 
-  Ok(Bitmap::from_rgba(image))
+  Ok(image)
 }
 
 /// A scene with its per-frame-invariant render state precomputed: the font
@@ -331,7 +331,6 @@ fn resolve_scene_at_time<'a, 'g>(
 
 #[cfg(test)]
 mod tests {
-  use image::Rgba;
 
   use super::{RenderOptions, SequentialScene, render, render_animation, resolve_scene_at_time};
   use crate::{
@@ -756,12 +755,12 @@ mod tests {
     assert_eq!(measured.children[0].width, 128.0);
     assert_eq!(measured.children[0].height, 128.0);
 
-    let rendered = render(options).unwrap().into_rgba();
+    let rendered = render(options).unwrap();
 
     let top_left = rendered.get_pixel(10, 10);
     let bottom_right = rendered.get_pixel(220, 220);
 
-    assert_eq!(top_left, &Rgba([255, 0, 0, 255]));
-    assert_eq!(bottom_right, &Rgba([11, 16, 32, 255]));
+    assert_eq!(top_left, &[255, 0, 0, 255]);
+    assert_eq!(bottom_right, &[11, 16, 32, 255]);
   }
 }
