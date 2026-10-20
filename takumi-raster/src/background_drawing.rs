@@ -574,6 +574,10 @@ pub(crate) fn render_tile(
         return Ok(None);
       };
 
+      if !source.is_drawable_at(tile_w, tile_h) {
+        return Ok(None);
+      }
+
       match &source {
         ImageSource::Bitmap(bitmap) => Some(BackgroundTile::SampledBitmap {
           source: bitmap.clone(),

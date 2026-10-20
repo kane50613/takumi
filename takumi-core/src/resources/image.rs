@@ -566,6 +566,19 @@ impl ImageSource {
     }))
   }
 
+  /// Whether [`render_for_layout`](Self::render_for_layout) can render it at `width` by `height`.
+  pub fn is_drawable_at(&self, width: u32, height: u32) -> bool {
+    if width == 0 || height == 0 {
+      return false;
+    }
+
+    match self {
+      #[cfg(feature = "svg")]
+      ImageSource::Svg(_) => within_raster_pixel_budget(width, height),
+      _ => true,
+    }
+  }
+
   /// Prepare image data for layout rendering.
   ///
   /// Bitmap images share their buffer so the renderer can sample them
@@ -2165,6 +2178,20 @@ mod tests {
     );
 
     assert_matches!(result, Err(ImageError::InvalidPixmapSize));
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_is_drawable_only_at_a_nonzero_size_within_budget() {
+    let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
+      .parse::<SvgSource>()
+      .unwrap()
+      .into();
+
+    assert!(source.is_drawable_at(8192, 8192));
+    assert!(!source.is_drawable_at(8193, 8192));
+    assert!(!source.is_drawable_at(0, 8));
+    assert!(!source.is_drawable_at(8, 0));
   }
 
   #[cfg(feature = "gif")]
