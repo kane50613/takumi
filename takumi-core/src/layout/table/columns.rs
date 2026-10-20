@@ -485,13 +485,13 @@ impl ColumnConstraints {
         .columns
         .resize(cells.len(), Column::empty(is_fixed_layout));
     } else if self.columns.len() > cells.len() {
-      // Trims mergeable columns off the end.
-      let mut last = self.columns.len() - 1;
+      // Trims mergeable columns off the end, as far as none when no cell holds any.
+      let mut len = self.columns.len();
 
-      while last + 1 > cells.len() && self.columns[last].is_mergeable {
-        last -= 1;
+      while len > cells.len() && self.columns[len - 1].is_mergeable {
+        len -= 1;
       }
-      self.columns.truncate(last + 1);
+      self.columns.truncate(len);
     }
 
     for colspan in &colspan_cells {

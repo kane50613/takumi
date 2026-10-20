@@ -537,3 +537,11 @@ fn a_table_height_grows_its_rows() {
   assert_close(boxes["a"].layout.size.height, 100.0);
   assert_close(boxes["b"].origin.y, 100.0);
 }
+
+#[test]
+fn a_table_of_columns_alone_lays_out() {
+  let tree = render(table([part("col", [])]), "");
+  let boxes = boxes(&tree, 400.0);
+
+  assert_close(boxes["table"].layout.size.width, 0.0);
+}
