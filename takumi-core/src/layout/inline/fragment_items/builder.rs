@@ -17,15 +17,15 @@ use crate::{
       atomic_inline::BoxAtomicInline,
       background::{SpanFragment, resolve_span_fragments},
       decorations::{BoxFont, DecorationPlacement},
-      inline_item::{InlineItem, InlineItemType},
+      inline_item::InlineItem,
       inline_layout_algorithm::LineBoxFragment,
       inline_node_data::InlineNodeData,
       items::{DecorationLink, InlineSpans, ProcessedInlineSpan},
-      line_breaker::AtomicInlineLayout,
       logical_line_item::{LineFragment, LogicalLineItem},
       metrics::VisualInlineBox,
       runs::{PositionedGlyph, RunMetrics, ShapedRun, glyph_skips_ink},
       text_fit::LineScaleState,
+      unpositioned_list_marker::UnpositionedListMarker,
     },
     list_marker::SymbolMarker,
   },
@@ -243,7 +243,13 @@ impl FragmentItems {
       }
     }
 
-    items.place_outside_list_markers(items_data, lines, spans, &mut ink.content);
+    items.place_outside_list_marker(
+      items_data,
+      lines,
+      spans,
+      (layout, context.style.inherited_data.direction),
+      &mut ink.content,
+    );
     let span_fragments = line_span_fragments(lines, spans, content);
 
     let (backgrounds, outline_rects) = resolve_span_fragments(&span_fragments);
@@ -613,70 +619,50 @@ impl FragmentItems {
     }
   }
 
-  /// Blink's `BlockLayoutAlgorithm::PositionOrPropagateListMarker`: each outside list marker
-  /// beside the first line, at its content's start edge, on the line's baseline.
-  fn place_outside_list_markers<'c>(
+  /// Blink's `BlockLayoutAlgorithm::PositionOrPropagateListMarker`: the outside list marker beside
+  /// the line it aligns with, in the content box of `layout` laid out in `direction`.
+  fn place_outside_list_marker<'c>(
     &mut self,
     items_data: &InlineNodeData<'c>,
     lines: &[LineBoxFragment<'_, 'c>],
     spans: &mut InlineSpans<'c>,
+    (layout, direction): (ComputedLayout, Direction),
     ink: &mut Option<InkBox>,
   ) {
-    let Some(line) = lines
-      .iter()
-      .find(|line| line.line_box_bfc_block_offset.is_some())
-    else {
+    let Some(marker) = UnpositionedListMarker::of(items_data) else {
       return;
     };
-    let line_top = line
-      .line_box_bfc_block_offset
-      .map_or(0.0, LayoutUnit::to_float);
-    let baseline = line_top + line.metrics.ascent.to_float();
+    let Some((_, line)) = UnpositionedListMarker::content_alignment_line(lines) else {
+      return;
+    };
+    let Some(span) = spans.span_of(marker.node) else {
+      return;
+    };
+    let Some(ProcessedInlineSpan::Box(item)) = spans.spans.get_mut(span) else {
+      return;
+    };
+    let mut atomic_inline = BoxAtomicInline {
+      available_space: Size {
+        width: AvailableSpace::Definite(self.content_box.size.width),
+        height: AvailableSpace::MaxContent,
+      },
+    };
+    let result = marker.layout(&mut atomic_inline);
+    let size = item.paint_border_box(result.inline_size, result.block_size);
+    let offset = marker.offset(&result, line, layout, direction);
 
-    for item in &items_data.items {
-      if item.item_type != InlineItemType::ListMarker {
-        continue;
-      }
-
-      let Some(object) = item.layout_object else {
-        continue;
-      };
-      let node = object.node();
-      let Some(span) = spans.span_of(node) else {
-        continue;
-      };
-      let Some(ProcessedInlineSpan::Box(marker)) = spans.spans.get_mut(span) else {
-        continue;
-      };
-      let mut atomic_inline = BoxAtomicInline {
-        available_space: Size {
-          width: AvailableSpace::Definite(self.content_box.size.width),
-          height: AvailableSpace::MaxContent,
-        },
-      };
-      let result = atomic_inline.layout(node);
-      let size = marker.paint_border_box(result.inline_size, result.block_size);
-      let marker_baseline = result.baseline.map_or(size.height, |baseline| {
-        baseline.to_float() + marker.margin.top
-      });
-      let x = match node.context.style.inherited_data.direction {
-        Direction::Rtl => self.content_box.size.width - size.width,
-        Direction::Ltr => 0.0,
-      };
-
-      self.push_inline_box(
-        ink,
-        VisualInlineBox {
-          id: span as u64,
-          x,
-          y: baseline - marker_baseline,
-          width: size.width,
-          height: size.height,
-          line_baseline: Some(baseline),
-          kind: node.inline_box_kind(),
-        },
-      );
-    }
+    self.push_inline_box(
+      ink,
+      VisualInlineBox {
+        id: span as u64,
+        x: offset.x,
+        y: offset.y,
+        width: size.width,
+        height: size.height,
+        line_baseline: line.baseline().map(LayoutUnit::to_float),
+        kind: marker.node.inline_box_kind(),
+      },
+    );
   }
 
   /// Places `inline_box`, growing `ink` to take it.

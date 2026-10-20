@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use taffy::{LengthPercentageAuto, Size as TaffySize};
+use taffy::Size as TaffySize;
 
 use crate::{
   context::RenderContext,
@@ -12,8 +12,8 @@ use crate::{
   layout_unit::LayoutUnit,
   matching::MatchedDeclarationsView,
   style::{
-    BackgroundImage, Direction, Display, JustifyContent, Length, ListStylePosition, ListStyleType,
-    MakeComputed, Size, TextWrapMode, WhiteSpaceCollapse,
+    BackgroundImage, Direction, Display, Length, ListStylePosition, ListStyleType, MakeComputed,
+    TextWrapMode, WhiteSpaceCollapse,
   },
 };
 
@@ -43,22 +43,13 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
 
   match position {
     ListStylePosition::Outside => {
-      // Blink's `AdjustStyleForMarker`: an outside marker does not break and keeps its trailing
-      // spaces.
+      // Blink's `AdjustStyleForMarker`: an outside marker is a block container that does not
+      // break and keeps its trailing spaces.
       let inherited = style.inherited_data_mut();
 
       inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
       inherited.text_wrap_mode = TextWrapMode::NoWrap;
-      style.base_data_mut().display = Display::InlineFlex;
-
-      let box_data = style.box_data_mut();
-
-      // Taffy resolves `Start`/`End` against `direction`, so flow-relative `End`
-      // hangs the overflowing content outside the item's content edge either way.
-      box_data.justify_content = JustifyContent::End;
-      // An outside marker hangs at the item's content edge without taking width:
-      // a zero-width flex box ends its overflowing content there.
-      box_data.width = Size::zero();
+      style.base_data_mut().display = Display::InlineBlock;
     }
     ListStylePosition::Inside => {
       let (margin_start, margin_end) = inline_margins_for_inside(has_image, style_type);
@@ -80,7 +71,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
       .clone_from(&item_context.text_decorations);
   }
 
-  let mut content = match image {
+  let content = match image {
     Some(image) => marker_image(&context, image),
     None => {
       let text = style_type.marker_text(ordinal, direction)?;
@@ -92,27 +83,17 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
       }
     }
   };
-
-  if position == ListStylePosition::Outside {
-    // Blink's `LayoutOutsideListMarker` is the block holding the marker's content, so the block
-    // laying that content out here is the marker's too, where `FindSymbolMarkerLayoutText` looks.
-    content.origin = NodeOrigin::Marker;
-
-    if let Some(gap) = margin_end_for_outside(&context, has_image, style_type) {
-      apply_marker_gap(&mut content, gap, direction);
-    }
-  }
-
-  if let Some(layout_style) = &mut content.layout_style_override {
-    Rc::make_mut(layout_style).flex_shrink = 0.0;
-  }
-
-  Some(RenderNode::new(
+  let mut marker = RenderNode::new(
     context,
     NodeOrigin::Marker,
     Some(Node::container([])),
     Some(Box::new([content])),
-  ))
+  );
+
+  // Blink's `LayoutOutsideListMarker` lays its content out in lines, an image marker's too.
+  marker.force_inline_layout = position == ListStylePosition::Outside;
+
+  Some(marker)
 }
 
 /// Blink's `InlineMarginsForInside`: the marker box's inline-start and inline-end margins.
@@ -130,30 +111,35 @@ fn inline_margins_for_inside(has_image: bool, style_type: &ListStyleType) -> (Le
   }
 }
 
-/// Blink's `InlineMarginsForOutside` inline-end margin of an outside marker's content, if any.
-fn margin_end_for_outside(
+/// Blink's `ListMarker::InlineMarginsForOutside`: the inline-start and inline-end margins that
+/// hang an outside marker `marker_inline_size` wide outside its list item.
+pub(crate) fn inline_margins_for_outside(
   context: &RenderContext,
-  has_image: bool,
-  style_type: &ListStyleType,
-) -> Option<f32> {
-  if has_image {
-    return Some(MARKER_GAP_PX);
+  marker_inline_size: LayoutUnit,
+) -> (LayoutUnit, LayoutUnit) {
+  let style_type = &context.style.misc_inherited1_data.list_style_type;
+
+  if available_marker_image(context).is_some() {
+    let gap = LayoutUnit::from_float(MARKER_GAP_PX);
+
+    return (-marker_inline_size - gap, gap);
   }
   if !style_type.is_symbolic() {
-    return None;
+    return (-marker_inline_size, LayoutUnit::ZERO);
   }
 
-  let ascent = primary_font_ascent(context)?;
+  let Some(ascent) = primary_font_ascent(context) else {
+    return (LayoutUnit::ZERO, LayoutUnit::ZERO);
+  };
   let offset = match style_type {
     ListStyleType::DisclosureOpen | ListStyleType::DisclosureClosed => {
       disclosure_symbol_size(context)
     }
     _ => LayoutUnit::from_int(ascent * 2 / 3),
   };
-  let margin_end = offset + LayoutUnit::from_float(MARKER_GAP_PX) + LayoutUnit::from_int(1)
-    - width_of_symbol(context);
+  let gap = offset + LayoutUnit::from_float(MARKER_GAP_PX) + LayoutUnit::from_int(1);
 
-  Some(margin_end.to_float())
+  (-gap, gap - marker_inline_size)
 }
 
 /// Blink's `FontMetrics::Ascent` of the primary font, in whole px.
@@ -290,17 +276,6 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage) -> RenderNo
   }
 
   item
-}
-
-/// A margin on the content's inline-end side keeps the marker box itself zero-width.
-fn apply_marker_gap(item: &mut RenderNode, gap: f32, direction: Direction) {
-  let Some(layout_style) = &mut item.layout_style_override else {
-    return;
-  };
-  let margin = &mut Rc::make_mut(layout_style).margin;
-  let (_, end) = direction.inline_sides(&mut margin.left, &mut margin.right);
-
-  *end = LengthPercentageAuto::length(gap);
 }
 
 /// The running count a list hands to its items, honoring `start` and `value`.

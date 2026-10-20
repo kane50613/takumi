@@ -16,6 +16,7 @@ use super::{
   inline_node_data::InlineNodeData,
   items::{InlineSpans, ProcessedInlineSpan},
   logical_line_item::LineFragment,
+  unpositioned_list_marker::UnpositionedListMarker,
 };
 use crate::{
   geometry::{AvailableSpace, ComputedLayout, Point, Size},
@@ -26,7 +27,8 @@ use crate::{
 };
 
 impl<'c> InlineNode<'c> {
-  /// The lines laid out at `inline_size`, atomic inlines in a containing block `inline_size` wide.
+  /// The lines laid out at `inline_size`, atomic inlines in a containing block `inline_size` wide,
+  /// below an outside list marker taller than the first line's ascent.
   fn layout_lines_at<'a>(
     self,
     items_data: &'a InlineNodeData<'c>,
@@ -40,11 +42,17 @@ impl<'c> InlineNode<'c> {
       },
     };
 
-    self.layout_lines(
+    let mut lines = self.layout_lines(
       items_data,
       LayoutUnit::from_float(inline_size),
       &mut atomic_inline,
-    )
+    );
+
+    if let Some(marker) = UnpositionedListMarker::of(items_data) {
+      marker.push_content_down(&mut lines, &mut atomic_inline);
+    }
+
+    lines
   }
 
   /// The lines laid out in the content box of `layout`.
@@ -95,11 +103,7 @@ impl<'c> InlineNode<'c> {
     });
     let lines = self.layout_lines_at(items_data, line_width, available_space.height);
     let (height, clamped) = content_block_size(&lines);
-    let baseline = |line: &LineBoxFragment<'_, '_>| {
-      line
-        .line_box_bfc_block_offset
-        .map(|top| (top + line.metrics.ascent).to_float())
-    };
+    let baseline = |line: &LineBoxFragment<'_, '_>| line.baseline().map(LayoutUnit::to_float);
 
     let shown = lines
       .iter()
