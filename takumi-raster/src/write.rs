@@ -236,7 +236,7 @@ impl Bitmap {
   }
 
   /// The `width` by `height` region whose top-left pixel is `(x, y)`.
-  #[cfg(target_arch = "wasm32")]
+  #[cfg(any(test, target_arch = "wasm32"))]
   pub(crate) fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Self {
     let row_bytes = width as usize * 4;
     let data = (y..y + height)
@@ -1289,6 +1289,25 @@ mod tests {
     let result = write_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
 
     assert_matches!(result, Err(Error::MixedAnimationFrameDimensions));
+  }
+
+  /// A crop keeps the region's rows, each starting at its left column.
+  #[test]
+  fn crop_keeps_the_region() {
+    let image = Bitmap::from_fn(4, 3, |x, y| [x as u8, y as u8, 0, 255]);
+    let cropped = image.crop(1, 1, 2, 2);
+
+    assert_eq!(cropped.dimensions(), (2, 2));
+    assert_eq!(
+      cropped.as_raw(),
+      [
+        [1, 1, 0, 255],
+        [2, 1, 0, 255],
+        [1, 2, 0, 255],
+        [2, 2, 0, 255]
+      ]
+      .concat()
+    );
   }
 
   #[test]

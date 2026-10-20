@@ -1,6 +1,5 @@
 use std::{borrow::Cow, io::Write};
 
-use crate::Bitmap;
 use image_webp::{ColorType, EncoderParams, WebPEncoder};
 
 use crate::{
@@ -122,10 +121,10 @@ where
   let encode_frame = |frame: UniqueFrame<Bitmap>| -> Result<EncodedFrame<Vec<u8>>> {
     let region = frame.placement.region;
     let cropped;
-    let source = if region.covers(frame.image) {
-      frame.image
+    let source = if region.covers(&frame.image) {
+      &frame.image
     } else {
-      cropped = region.crop(frame.image);
+      cropped = region.crop(&frame.image);
       &cropped
     };
 
