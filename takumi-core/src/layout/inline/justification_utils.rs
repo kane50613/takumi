@@ -115,7 +115,7 @@ fn justify_results(
 
     if let Some(shape_result) = &item_result.shape_result {
       let mut shape_result = shape_result.create_shape_result();
-      let text_start_offset = item_result.start_offset() as i32 - shape_result.start_index() as i32;
+      let text_start_offset = item_result.start_offset() as i32 - shape_result.start_index as i32;
 
       last_glyph_spacing = shape_result.apply_expansion(method, spacing, text_start_offset);
       item_result.inline_size = shape_result.snapped_width();

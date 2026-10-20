@@ -1238,7 +1238,7 @@ mod tests {
       .map(|item| {
         let shape_result = item.shape_result.as_ref().expect("a shaped text item");
 
-        assert_eq!(shape_result.start_index() as usize, item.start_offset());
+        assert_eq!(shape_result.start_index as usize, item.start_offset());
         assert_eq!(shape_result.end_index() as usize, item.end_offset());
 
         shape_result.width()

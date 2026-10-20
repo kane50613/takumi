@@ -223,13 +223,13 @@ fn shape_range(
     &mut buffer,
     ShapeOptions::new()
       .features(font_features)
-      .point_size(Some(current_font.specified_size())),
+      .point_size(Some(current_font.specified_size)),
   )
   .ok()?;
 
   let glyphs = buffer;
   // Approximate: Blink's HarfBuzz scales Skia's advances; see #2001.
-  let scale = f64::from(current_font.size()) * 65536.0 / f64::from(current_font.units_per_em());
+  let scale = f64::from(current_font.size) * 65536.0 / f64::from(current_font.units_per_em);
   let to_harfbuzz_position = |units: i32| (f64::from(units) * scale).round() as i32;
   let positions = glyphs
     .glyph_positions()
@@ -350,7 +350,7 @@ fn is_unmatched_variation_sequence(font: &SimpleFontData, text: &str) -> bool {
 
   // Only the base character's glyph: it is unmatched unless its color fits the presentation
   // asked for, as Blink judges by `TypefaceHasAnySupportedColorTable`.
-  let is_color = font.face().typeface.is_color;
+  let is_color = font.face.typeface.is_color;
 
   match selector {
     VARIATION_SELECTOR_15 => is_color,
@@ -689,7 +689,7 @@ impl HarfBuzzShaper {
       return;
     }
 
-    let space_glyph = u32::from(current_font.space_glyph());
+    let space_glyph = u32::from(current_font.space_glyph);
     let shape_end = range_data.shape_end(current_queue_item);
     let commit = |range_data: &RangeContext<'_>, shape_result: &mut ShapeResult, slice| {
       self.commit_glyphs(
@@ -948,7 +948,7 @@ mod tests {
           run
             .font_data
             .as_ref()
-            .map_or(0.0, |font_data| font_data.size()),
+            .map_or(0.0, |font_data| font_data.size),
           run
             .glyph_data
             .glyphs()
@@ -979,7 +979,7 @@ mod tests {
         run
           .font_data
           .as_ref()
-          .is_some_and(|font_data| font_data.face().typeface.is_color)
+          .is_some_and(|font_data| font_data.face.typeface.is_color)
       })
       .collect()
   }
@@ -1122,7 +1122,7 @@ mod tests {
     result
       .runs
       .iter()
-      .map(|run| run.font_data.as_ref().unwrap().face().typeface.id)
+      .map(|run| run.font_data.as_ref().unwrap().face.typeface.id)
       .collect()
   }
 
@@ -1171,7 +1171,7 @@ mod tests {
     for string in ["\u{FFF0}", "\u{FFF0}Hello", "\u{AD}"] {
       let result = HarfBuzzShaper::new(string.into()).shape_all(&font, TextDirection::Ltr);
 
-      assert_eq!(result.start_index(), 0);
+      assert_eq!(result.start_index, 0);
       assert_eq!(result.end_index() as usize, string.len());
     }
   }
@@ -1186,7 +1186,7 @@ mod tests {
 
     let ltr = shaper.shape_all(&font, TextDirection::Ltr);
 
-    assert_eq!((ltr.num_characters(), ltr.num_glyphs()), (length, length));
+    assert_eq!((ltr.num_characters, ltr.num_glyphs()), (length, length));
     assert_eq!(
       runs(&ltr),
       [
@@ -1197,7 +1197,7 @@ mod tests {
 
     let rtl = shaper.shape_all(&font, TextDirection::Rtl);
 
-    assert_eq!((rtl.num_characters(), rtl.num_glyphs()), (length, length));
+    assert_eq!((rtl.num_characters, rtl.num_glyphs()), (length, length));
     assert_eq!(
       runs(&rtl),
       [(1, length - 1, length - 1, latin), (0, 1, 1, latin)]
@@ -1220,7 +1220,7 @@ mod tests {
 
     let ltr = shaper.shape_all(&font, TextDirection::Ltr);
 
-    assert_eq!((ltr.num_characters(), ltr.num_glyphs()), (max + 3, max + 1));
+    assert_eq!((ltr.num_characters, ltr.num_glyphs()), (max + 3, max + 1));
     assert_eq!(runs(&ltr), [(0, max, max - 1, latin), (max, 3, 2, latin)]);
 
     let rtl = shaper.shape_all(&font, TextDirection::Rtl);
@@ -1240,7 +1240,7 @@ mod tests {
 
     let ltr = shaper.shape_all(&font, TextDirection::Ltr);
 
-    assert_eq!((ltr.num_characters(), ltr.num_glyphs()), (max + 4, max + 2));
+    assert_eq!((ltr.num_characters, ltr.num_glyphs()), (max + 4, max + 2));
     assert_eq!(runs(&ltr), [(0, max, max - 1, latin), (max, 4, 3, latin)]);
 
     let rtl = shaper.shape_all(&font, TextDirection::Rtl);
@@ -1268,10 +1268,7 @@ mod tests {
 
     let ltr = shaper.shape_all(&font, TextDirection::Ltr);
 
-    assert_eq!(
-      (ltr.num_characters(), ltr.num_glyphs()),
-      (3 * length, length)
-    );
+    assert_eq!((ltr.num_characters, ltr.num_glyphs()), (3 * length, length));
     assert_eq!(
       runs(&ltr),
       [
@@ -1301,7 +1298,7 @@ mod tests {
     for direction in [TextDirection::Ltr, TextDirection::Rtl] {
       let result = HarfBuzzShaper::new(string.into()).shape_all(&font, direction);
 
-      assert_eq!(result.start_index(), 0);
+      assert_eq!(result.start_index, 0);
       assert_eq!(result.end_index() as usize, string.len());
     }
   }
@@ -1342,6 +1339,6 @@ mod tests {
     assert_eq!(fonts[0], geist);
     assert_ne!(fonts[1], geist);
     assert_eq!(fonts[2], geist);
-    assert_eq!(result.num_characters() as usize, "ab\u{203B}cd".len());
+    assert_eq!(result.num_characters as usize, "ab\u{203B}cd".len());
   }
 }

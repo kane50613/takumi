@@ -58,10 +58,10 @@ pub(crate) struct ShapeResult {
   /// Runs in visual order.
   pub(crate) runs: Vec<ShapeResultRun>,
   width: Cell<f32>,
-  start_index: u32,
-  num_characters: u32,
-  direction: TextDirection,
-  has_vertical_offsets: bool,
+  pub(crate) start_index: u32,
+  pub(crate) num_characters: u32,
+  pub(crate) direction: TextDirection,
+  pub(crate) has_vertical_offsets: bool,
   is_applied_spacing: bool,
 }
 
@@ -111,7 +111,7 @@ impl ShapeResult {
     let font_data = font.primary_font_for_tab_size();
     let space_glyph = font_data
       .as_ref()
-      .map_or(0, |font_data| font_data.space_glyph());
+      .map_or(0, |font_data| font_data.space_glyph);
     let hb_direction = match direction {
       TextDirection::Ltr => HbDirection::LeftToRight,
       TextDirection::Rtl => HbDirection::RightToLeft,
@@ -180,7 +180,7 @@ impl ShapeResult {
     let font_data = font.primary_font();
     let space_glyph = font_data
       .as_ref()
-      .map_or(0, |font_data| font_data.space_glyph());
+      .map_or(0, |font_data| font_data.space_glyph);
     let offsets: Vec<u32> = text
       .char_indices()
       .map(|(offset, _)| offset as u32)
@@ -218,7 +218,7 @@ impl ShapeResult {
 
   /// Blink's `CreateEmpty`.
   pub(crate) fn create_empty(other: &Self) -> Self {
-    Self::new(0, 0, other.direction())
+    Self::new(0, 0, other.direction)
   }
 
   pub(crate) fn width(&self) -> f32 {
@@ -228,10 +228,6 @@ impl ShapeResult {
   /// Blink's `SnappedWidth`.
   pub(crate) fn snapped_width(&self) -> LayoutUnit {
     LayoutUnit::from_float_ceil(self.width.get())
-  }
-
-  pub(crate) fn num_characters(&self) -> u32 {
-    self.num_characters
   }
 
   /// Blink's `HasLigatures`.
@@ -255,16 +251,8 @@ impl ShapeResult {
     })
   }
 
-  pub(crate) fn start_index(&self) -> u32 {
-    self.start_index
-  }
-
   pub(crate) fn end_index(&self) -> u32 {
     self.start_index + self.num_characters
-  }
-
-  pub(crate) fn direction(&self) -> TextDirection {
-    self.direction
   }
 
   pub(crate) fn is_ltr(&self) -> bool {
@@ -275,14 +263,10 @@ impl ShapeResult {
     self.direction == TextDirection::Rtl
   }
 
-  pub(crate) fn has_vertical_offsets(&self) -> bool {
-    self.has_vertical_offsets
-  }
-
   #[cfg(test)]
   /// Blink's `CharacterData`.
   pub(crate) fn character_data(&self, offset: u32) -> ShapeResultCharacterData {
-    debug_assert!(offset >= self.start_index());
+    debug_assert!(offset >= self.start_index);
     debug_assert!(offset < self.end_index());
 
     let character_position = self.character_position.borrow();
@@ -310,7 +294,7 @@ impl ShapeResult {
 
     glyph.is_some_and(|glyph| {
       glyph.is_safe_to_break_before()
-        && self.start_index() == run.start_index + u32::from(glyph.character_index)
+        && self.start_index == run.start_index + u32::from(glyph.character_index)
     })
   }
 
@@ -367,7 +351,7 @@ impl ShapeResult {
       }
     }
 
-    self.start_index()
+    self.start_index
   }
 
   #[cfg(test)]
@@ -389,7 +373,7 @@ impl ShapeResult {
     };
 
     debug_assert!(self.character_position.borrow().is_empty());
-    debug_assert!(offset >= self.start_index());
+    debug_assert!(offset >= self.start_index);
 
     for run in &mut self.runs {
       let mut run_offset = offset.wrapping_sub(run.start_index);
@@ -427,15 +411,15 @@ impl ShapeResult {
 
     if target_x <= 0.0 {
       if self.is_rtl() {
-        result.left_character_index = self.num_characters();
-        result.right_character_index = self.num_characters();
+        result.left_character_index = self.num_characters;
+        result.right_character_index = self.num_characters;
       }
 
       return result;
     }
 
     let mut characters_so_far = if self.is_rtl() {
-      self.num_characters()
+      self.num_characters
     } else {
       0
     };
@@ -515,8 +499,8 @@ impl ShapeResult {
     let mut x = 0.0;
     let mut offset = absolute_offset;
 
-    if self.is_rtl() && offset < self.num_characters() {
-      offset = self.num_characters() - offset - 1;
+    if self.is_rtl() && offset < self.num_characters {
+      offset = self.num_characters - offset - 1;
     }
 
     for run in &self.runs {
@@ -530,7 +514,7 @@ impl ShapeResult {
       x += run.width;
     }
 
-    if absolute_offset == self.num_characters() {
+    if absolute_offset == self.num_characters {
       return if self.is_rtl() { 0.0 } else { self.width() };
     }
 
@@ -540,13 +524,13 @@ impl ShapeResult {
   #[cfg(test)]
   /// Blink's `EnsureGraphemes`, counting graphemes with ICU4X instead of Blink's LGPL code.
   pub(crate) fn ensure_graphemes(&mut self, text: &str) {
-    assert_eq!(self.num_characters() as usize, text.len());
+    assert_eq!(self.num_characters as usize, text.len());
 
     if self.runs.is_empty() || self.runs[0].glyph_data.has_graphemes() {
       return;
     }
 
-    let result_start_index = self.start_index();
+    let result_start_index = self.start_index;
     let segmenter = GraphemeClusterSegmenter::new();
 
     for run in &mut self.runs {
@@ -734,7 +718,7 @@ impl ShapeResult {
     debug_assert!(!character_position.is_empty());
 
     let rtl = self.is_rtl();
-    let length = self.num_characters();
+    let length = self.num_characters;
 
     if x <= LayoutUnit::ZERO {
       return if rtl { length } else { 0 };
@@ -783,7 +767,7 @@ impl ShapeResult {
     debug_assert!(offset <= self.num_characters);
     debug_assert!(!character_position.is_empty());
 
-    let length = self.num_characters();
+    let length = self.num_characters;
 
     if !self.is_rtl() {
       if offset < length {
@@ -832,7 +816,7 @@ impl ShapeResult {
     debug_assert!(self.start_index <= offset);
 
     let adjusted_offset = offset - self.start_index;
-    let length = self.num_characters();
+    let length = self.num_characters;
 
     debug_assert!(adjusted_offset < length);
 
@@ -853,7 +837,7 @@ impl ShapeResult {
     debug_assert!(self.start_index <= offset);
 
     let adjusted_offset = offset - self.start_index;
-    let length = self.num_characters();
+    let length = self.num_characters;
 
     debug_assert!(adjusted_offset <= length);
 
@@ -918,11 +902,10 @@ impl ShapeResult {
       target.start_index = start_offset;
       0
     } else {
-      i64::from(target.end_index()) - i64::from(start_offset.max(self.start_index()))
+      i64::from(target.end_index()) - i64::from(start_offset.max(self.start_index))
     };
 
-    target.num_characters +=
-      end_offset.min(self.end_index()) - start_offset.max(self.start_index());
+    target.num_characters += end_offset.min(self.end_index()) - start_offset.max(self.start_index);
 
     let target_run_size_before = target.runs.len();
     let mut should_merge = !target.runs.is_empty();
@@ -981,7 +964,7 @@ impl ShapeResult {
   #[cfg(test)]
   /// Blink's `SubRange`.
   pub(crate) fn sub_range(&self, start_offset: u32, end_offset: u32) -> Self {
-    let mut sub_range = Self::new(0, 0, self.direction());
+    let mut sub_range = Self::new(0, 0, self.direction);
 
     self.copy_range(start_offset, end_offset, &mut sub_range);
 
@@ -1191,7 +1174,7 @@ mod tests {
     num_characters: u32,
     advance: TextRunLayoutUnit,
   ) {
-    let direction = result.direction();
+    let direction = result.direction;
     let run = result.insert_run_for_testing(start_index, num_characters, direction, &[]);
 
     for glyph in run.glyph_data.glyphs_mut() {
@@ -1350,12 +1333,12 @@ mod tests {
     let rtl = two_runs(TextDirection::Rtl).sub_range(2, 6);
 
     assert_eq!(
-      (ltr.start_index(), ltr.num_characters(), ltr.width()),
+      (ltr.start_index, ltr.num_characters, ltr.width()),
       (2, 4, 40.0)
     );
     assert_eq!(run_ranges(&ltr), [(2, 2), (4, 2)]);
     assert_eq!(
-      (rtl.start_index(), rtl.num_characters(), rtl.width()),
+      (rtl.start_index, rtl.num_characters, rtl.width()),
       (2, 4, 40.0)
     );
     assert_eq!(run_ranges(&rtl), [(4, 2), (2, 2)]);

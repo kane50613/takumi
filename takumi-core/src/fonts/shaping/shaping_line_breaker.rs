@@ -210,7 +210,7 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
 
     let result = self.result;
     let is_ltr = result.is_ltr();
-    let range_start = result.start_index() as usize;
+    let range_start = result.start_index as usize;
     let range_end = result.end_index() as usize;
 
     debug_assert!(start >= range_start);
@@ -549,7 +549,7 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
 
     let line_result = ShapeResultView::create(&segments);
 
-    debug_assert_eq!((end - start) as u32, line_result.num_characters());
+    debug_assert_eq!((end - start) as u32, line_result.num_characters);
 
     line_result
   }
@@ -842,7 +842,7 @@ mod tests {
     let mut breaker = fixture.breaker(&result, &break_iterator);
     let (offset, line) = shape_line(&mut breaker, 0, LayoutUnit::MAX);
 
-    assert_eq!((offset, line.width()), (2, result.width()));
+    assert_eq!((offset, line.width), (2, result.width()));
   }
 
   #[test]

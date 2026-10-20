@@ -332,7 +332,7 @@ impl<'a, 'c> LineInfo<'a, 'c> {
 
             let shape_result = shape_result_view.create_shape_result();
             let end_position = shape_result.position_for_offset(
-              (end_offset - shape_result.start_index() as usize) as u32,
+              (end_offset - shape_result.start_index as usize) as u32,
               AdjustMidCluster::ToEnd,
             );
 
