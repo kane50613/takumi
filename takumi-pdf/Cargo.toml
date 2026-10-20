@@ -83,4 +83,9 @@ workspace = true
 path = "../takumi-html"
 
 [dev-dependencies]
+criterion.workspace = true
 pretty_assertions.workspace = true
+
+[[bench]]
+name = "images"
+harness = false
