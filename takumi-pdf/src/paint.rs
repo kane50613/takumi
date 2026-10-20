@@ -1,7 +1,7 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
 #[cfg(feature = "images")]
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, sync::Arc};
 
 #[cfg(feature = "images")]
 use rustc_hash::FxHashMap;
@@ -160,76 +160,58 @@ pub(crate) fn rasterized_image(
   )))
 }
 
-/// What a rasterized image depends on: the source, the filter, and for an SVG the size and
-/// `currentColor` it renders at.
+/// What a rasterized image depends on: the `src` it resolved from, the filter, and for an SVG the
+/// size and `currentColor` it renders at.
 #[cfg(feature = "images")]
 #[derive(Hash, PartialEq, Eq)]
 struct RasterKey {
-  source: usize,
-  filter: usize,
+  src: Arc<str>,
+  filter: Vec<u32>,
   svg: Option<([u32; 2], [u8; 4])>,
 }
 
-/// Images [`rasterized_image`] made for one document, so a repeated image is decoded, filtered,
-/// and hashed once. Each entry keeps its source and filter alive, so no address is reused.
+/// Images [`rasterized_image`] made for one document, so an image drawn again from the same `src`
+/// is decoded, filtered, and hashed once.
 #[cfg(feature = "images")]
 #[derive(Default)]
 pub(crate) struct RasterizedImages {
-  images: RefCell<FxHashMap<RasterKey, RasterizedImage>>,
-}
-
-#[cfg(feature = "images")]
-struct RasterizedImage {
-  _source: ImageSource,
-  _filter: Option<Rc<ColorFilter>>,
-  image: Option<KrillaImage>,
+  images: RefCell<FxHashMap<RasterKey, Option<KrillaImage>>>,
 }
 
 #[cfg(feature = "images")]
 impl RasterizedImages {
-  /// [`rasterized_image`], reused when the same source was drawn the same way before.
+  /// [`rasterized_image`] of `source`, which `src` resolved to, reused when it was drawn the same
+  /// way before.
   pub(crate) fn get(
     &self,
+    src: &Arc<str>,
     source: &ImageSource,
     context: &RenderContext,
     target: Size<f32>,
-    filter: Option<&Rc<ColorFilter>>,
+    filter: Option<&ColorFilter>,
   ) -> Result<Option<KrillaImage>, String> {
-    let source_address = match source {
-      ImageSource::Bitmap(bitmap) => Arc::as_ptr(bitmap) as usize,
-      ImageSource::Encoded(encoded) => Arc::as_ptr(encoded) as usize,
-      #[cfg(feature = "svg")]
-      ImageSource::Svg(svg) => Arc::as_ptr(svg) as usize,
-      _ => return rasterized_image(source, context, target, filter.map(Rc::as_ref)),
-    };
+    #[cfg(feature = "svg")]
+    let svg = matches!(source, ImageSource::Svg(_)).then(|| {
+      (
+        [target.width.to_bits(), target.height.to_bits()],
+        context.current_color.0,
+      )
+    });
+    #[cfg(not(feature = "svg"))]
+    let svg = None;
     let key = RasterKey {
-      source: source_address,
-      filter: filter.map_or(0, |filter| Rc::as_ptr(filter) as usize),
-      #[cfg(feature = "svg")]
-      svg: matches!(source, ImageSource::Svg(_)).then(|| {
-        (
-          [target.width.to_bits(), target.height.to_bits()],
-          context.current_color.0,
-        )
-      }),
-      #[cfg(not(feature = "svg"))]
-      svg: None,
+      src: Arc::clone(src),
+      filter: filter.map(ColorFilter::key).unwrap_or_default(),
+      svg,
     };
 
-    if let Some(rasterized) = self.images.borrow().get(&key) {
-      return Ok(rasterized.image.clone());
+    if let Some(image) = self.images.borrow().get(&key) {
+      return Ok(image.clone());
     }
 
-    let image = rasterized_image(source, context, target, filter.map(Rc::as_ref))?;
+    let image = rasterized_image(source, context, target, filter)?;
 
-    self.images.borrow_mut().insert(
-      key,
-      RasterizedImage {
-        _source: source.clone(),
-        _filter: filter.cloned(),
-        image: image.clone(),
-      },
-    );
+    self.images.borrow_mut().insert(key, image.clone());
     Ok(image)
   }
 }

@@ -40,7 +40,7 @@ use takumi_core::{
 #[cfg(feature = "images")]
 use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
-use crate::paint::RasterizedImages;
+use crate::paint::{RasterizedImages, rasterized_image};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
@@ -601,10 +601,13 @@ impl Emitter<'_> {
       };
       let Some(krilla_image) = self.drawable(
         url,
-        self
-          .document
-          .images
-          .get(&source, &node.context, size, self.color_filter.as_ref()),
+        self.document.images.get(
+          url,
+          &source,
+          &node.context,
+          size,
+          self.color_filter.as_deref(),
+        ),
       ) else {
         return;
       };
@@ -964,10 +967,21 @@ impl Emitter<'_> {
     let krilla_image = if vector.is_none() {
       let Some(image) = self.drawable(
         image_label(&image.src),
-        self
-          .document
-          .images
-          .get(&source, context, placement.size, self.color_filter.as_ref()),
+        match &image.src {
+          ImageSourceInput::Url(src) => self.document.images.get(
+            src,
+            &source,
+            context,
+            placement.size,
+            self.color_filter.as_deref(),
+          ),
+          _ => rasterized_image(
+            &source,
+            context,
+            placement.size,
+            self.color_filter.as_deref(),
+          ),
+        },
       ) else {
         return;
       };

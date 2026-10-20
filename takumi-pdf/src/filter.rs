@@ -34,6 +34,12 @@ pub(crate) fn filtered(filter: Option<&ColorFilter>, color: Color) -> [u8; 4] {
 }
 
 impl ColorFilter {
+  /// The filter's coefficients, which identify what it does to a pixel.
+  #[cfg(feature = "images")]
+  pub(crate) fn key(&self) -> Vec<u32> {
+    self.functions.coefficient_bits().collect()
+  }
+
   /// Prepends a filter list to whatever the ancestors already apply: CSS
   /// filters the element first and the ancestor's group afterwards, and the
   /// matrices do not commute. Returns `None` when nothing changes color.
