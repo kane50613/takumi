@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="520" height="200" viewBox="0 0 520 200">
   <rect x="0" y="0" width="520" height="200" fill="#fff"/>
-  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="520" height="200">
     <path d="M40 46h120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
     <path d="M40 154h120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
     <path d="M154 40v120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
@@ -78,7 +78,7 @@
     </pattern>
     <rect x="40" y="40" width="120" height="120" fill="url(#pat1)"/>
   </g>
-  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="520" height="200">
     <clipPath id="cp4">
       <path d="M216 40h72c13.25 0 24 10.75 24 24v72c0 13.25-10.75 24-24 24h-72c-13.25 0-24-10.75-24-24v-72c0-13.25 10.75-24 24-24Z"/>
     </clipPath>
@@ -117,7 +117,7 @@
   <g mask="url(#mk3)">
     <rect x="192" y="40" width="120" height="120" fill="#16a34a"/>
   </g>
-  <mask id="mk10" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk10" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="520" height="200">
     <path d="M344 40h120v120h-120v-120Zm4 4h112v112h-112v-112Z" fill="#000" fill-rule="evenodd"/>
     <path d="M352 48h104v104h-104v-104Zm4 4h96v96h-96v-96Z" fill="#000" fill-rule="evenodd"/>
   </mask>

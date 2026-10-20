@@ -126,8 +126,10 @@ impl SvgDocument {
       y: rect.y,
     };
     let group = self.begin_group(transform, 1.0, Some(&clip), None)?;
+    let isolated = self.begin_isolate_group()?;
 
     self.svg_ops(ops)?;
+    self.end_group(isolated)?;
     self.end_group(group)
   }
 }

@@ -371,7 +371,7 @@
     <use href="#g12" x="99.93" y="162"/>
     <use href="#g8" x="113.58" y="162"/>
   </g>
-  <mask id="mk8" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk8" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="420" height="320">
     <g fill="#000">
       <use href="#g20" x="168.97" y="222"/>
       <use href="#g21" x="191.37" y="222"/>

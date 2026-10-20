@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300">
   <rect x="0" y="0" width="640" height="300" fill="#fff"/>
-  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="300">
     <rect x="20" y="73" width="234.96" height="4" fill="#000"/>
     <g fill="#000">
       <use href="#g0" x="20" y="71"/>
@@ -101,7 +101,7 @@
     <use href="#g3" x="200.88" y="71"/>
     <use href="#g2" x="227.06" y="71"/>
   </g>
-  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="300">
     <clipPath id="cp4">
       <path d="M20 121.83h254.28v11h-254.28Z"/>
     </clipPath>
@@ -207,7 +207,7 @@
     <use href="#g13" x="222.36" y="143"/>
     <use href="#g3" x="247.66" y="143"/>
   </g>
-  <mask id="mk7" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk7" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="300">
     <g fill="#000" stroke="#000" stroke-width="4">
       <use href="#g14" x="20" y="215"/>
       <use href="#g12" x="49" y="215"/>

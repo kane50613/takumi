@@ -12,7 +12,7 @@
       <rect x="180" y="115" width="400" height="520" fill="#2563eb"/>
     </g>
   </g>
-  <mask id="mk2" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk2" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
     <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="640" y1="315" x2="1000" y2="315">
       <stop offset="0" stop-color="#000"/>
       <stop offset=".016" stop-color="#000" stop-opacity=".984"/>

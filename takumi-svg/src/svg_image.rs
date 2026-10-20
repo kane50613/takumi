@@ -33,10 +33,12 @@ pub(crate) fn is_vector(ops: &[SvgOp]) -> bool {
 impl SvgDocument {
   /// Writes `ops`, each `Push*` as a `<g>` its `Pop` closes. `is_vector` keeps rasters out.
   pub(crate) fn svg_ops(&mut self, ops: &[SvgOp]) -> io::Result<()> {
+    let mut groups = Vec::new();
+
     for op in ops {
       match op {
         SvgOp::PushTransform(transform) => {
-          self.open("g", &[("transform", matrix(*transform).into())])?;
+          groups.push(self.begin_group(affine(*transform), 1.0, None, None)?);
         }
         SvgOp::PushClip { path, evenodd } => {
           let clip = self.clip_path(
@@ -45,26 +47,24 @@ impl SvgDocument {
             None,
           )?;
 
-          self.open("g", &[("clip-path", clip.into())])?;
+          groups.push(self.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)?);
         }
-        SvgOp::PushBlend(blend) => {
-          self.open(
-            "g",
-            &[(
-              "style",
-              format!("mix-blend-mode:{}", blend.to_css_string()).into(),
-            )],
-          )?;
+        SvgOp::PushBlend(blend) => groups.push(self.begin_blend_group(&blend.to_css_string())?),
+        SvgOp::PushOpacity(opacity) => {
+          groups.push(self.begin_group(Affine::IDENTITY, *opacity, None, None)?);
         }
-        SvgOp::PushOpacity(opacity) => self.open("g", &[("opacity", num(*opacity).into())])?,
         SvgOp::PushMask { ops, luminance } => {
           let (token, reference) = self.begin_mask(*luminance)?;
 
           self.svg_ops(ops)?;
           self.end_mask(token)?;
-          self.open("g", &[("mask", reference.into())])?;
+          groups.push(self.begin_masked_group(&reference)?);
         }
-        SvgOp::Pop => self.close("g")?,
+        SvgOp::Pop => {
+          if let Some(group) = groups.pop() {
+            self.end_group(group)?;
+          }
+        }
         SvgOp::Draw { path, fill, stroke } => {
           let mut attrs: Vec<(&str, Cow<'_, str>)> =
             vec![("d", path_data(path, Affine::IDENTITY).into())];

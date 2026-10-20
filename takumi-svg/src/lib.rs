@@ -414,8 +414,8 @@ impl SvgDocument {
     self.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
   }
 
-  /// Opens a `<mask>` in user space, by luminance or else alpha, and returns the open token plus
-  /// its `url(#id)`; CSS `mask-image` defaults to alpha masking.
+  /// Opens a `<mask>` over the viewport in user space, by luminance or else alpha, and returns the
+  /// open token plus its `url(#id)`; CSS `mask-image` defaults to alpha masking.
   pub(crate) fn begin_mask(&mut self, luminance: bool) -> io::Result<(GroupToken, String)> {
     let (id, reference) = self.alloc_id("mk");
     let mask_type = if luminance {
@@ -423,15 +423,14 @@ impl SvgDocument {
     } else {
       "mask-type:alpha"
     };
+    let mut attrs = vec![
+      ("id", id.into()),
+      ("maskUnits", "userSpaceOnUse".into()),
+      ("style", mask_type.into()),
+    ];
 
-    self.open(
-      "mask",
-      &[
-        ("id", id.into()),
-        ("maskUnits", "userSpaceOnUse".into()),
-        ("style", mask_type.into()),
-      ],
-    )?;
+    attrs.extend(self.blur_region(0.0).attrs());
+    self.open("mask", &attrs)?;
     Ok((GroupToken::default(), reference))
   }
 

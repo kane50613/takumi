@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#ff3b30"/>
+  <clipPath id="cp0">
+    <path d="M0 0H200V200H0Z"/>
+  </clipPath>
+  <g transform="matrix(1 0 0 1 380 215)" clip-path="url(#cp0)">
+    <g style="isolation:isolate">
+      <g style="mix-blend-mode:multiply">
+        <path d="M180 100c0 44.18-35.82 80-80 80s-80-35.82-80-80 35.82-80 80-80 80 35.82 80 80Z" fill="#5ac8fa"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp1">
+    <path d="M0 0H2000V2000H0Z"/>
+  </clipPath>
+  <g transform="matrix(.1 0 0 .1 620 215)" clip-path="url(#cp1)">
+    <g style="isolation:isolate">
+      <path d="M0 0h2000v2000h-2000Z" fill="#102040"/>
+      <mask id="mk2" maskUnits="userSpaceOnUse" style="mask-type:luminance" x="-6200" y="-2150" width="11999.999" height="6300">
+        <clipPath id="cp3">
+          <path d="M0 0h2000v2000h-2000Z"/>
+        </clipPath>
+        <g clip-path="url(#cp3)">
+          <path d="M0 0h2000v2000h-2000Z" fill="#fff"/>
+        </g>
+      </mask>
+      <g mask="url(#mk2)">
+        <path d="M200 1400h1600v500h-1600Z" fill="#ffb454"/>
+      </g>
+    </g>
+  </g>
+</svg>

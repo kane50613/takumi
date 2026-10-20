@@ -4,8 +4,10 @@
     <path d="M0 0H96V96H0Z"/>
   </clipPath>
   <g transform="matrix(1 0 0 1 552 267)" clip-path="url(#cp0)">
-    <g transform="matrix(4 0 0 4 0 0)">
-      <path d="M12 17v-14m-6 8 6 6 6-6m1 10h-14" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <g style="isolation:isolate">
+      <g transform="matrix(4 0 0 4 0 0)">
+        <path d="M12 17v-14m-6 8 6 6 6-6m1 10h-14" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
     </g>
   </g>
 </svg>
