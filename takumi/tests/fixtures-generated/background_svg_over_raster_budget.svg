@@ -5,7 +5,6 @@
     <path d="M40 40H120V120H40Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <image x="40" y="40" width="8000000" height="80" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMDAwMDAgMSc+PHJlY3QgeD0nOTk5OTknIHdpZHRoPScxJyBoZWlnaHQ9JzEnIGZpbGw9J3JlZCcvPjwvc3ZnPg==" preserveAspectRatio="none"/>
   </g>
   <g fill="#000">
     <use href="#g0" x="140" y="94"/>
