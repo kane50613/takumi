@@ -5,6 +5,7 @@
 use std::ptr;
 
 use rustc_hash::FxHashMap;
+use taffy::{CollapsibleMarginSet, Line};
 
 use super::{
   FragmentItems, InlineMeasurement, StaticPosition,
@@ -102,8 +103,10 @@ impl<'c> InlineNode<'c> {
       _ => width,
     });
     let lines = self.layout_lines_at(items_data, line_width, available_space.height);
-    let (height, clamped) = content_block_size(&lines);
-    let baseline = |line: &LineBoxFragment<'_, '_>| line.baseline().map(LayoutUnit::to_float);
+    let margins_adjoin = self.block.context.margins_adjoin();
+    let margins = margin_struts(&lines, margins_adjoin);
+    let (height, clamped) = content_block_size(&lines, margins_adjoin);
+    let baseline = |line: &LineBoxFragment<'_, '_>| line.bfc_baseline().map(LayoutUnit::to_float);
 
     let shown = lines
       .iter()
@@ -115,22 +118,80 @@ impl<'c> InlineNode<'c> {
       first_baseline: lines[..shown].iter().find_map(baseline),
       last_baseline: lines[..shown].iter().rev().find_map(baseline),
       clamped,
+      margins,
     }
   }
 }
 
-/// The block size the lines take, down to the clamp line of a `line-clamp`, floats included,
-/// and whether a clamp hid lines.
-fn content_block_size(lines: &[LineBoxFragment<'_, '_>]) -> (f32, bool) {
+/// Blink's `BlockLayoutAlgorithm` passing out the margins that adjoin the content's block-start
+/// and block-end edges where `margins_adjoin` says: the ones before the first line box, and the
+/// `EndMarginStrut` of the last line.
+fn margin_struts(
+  lines: &[LineBoxFragment<'_, '_>],
+  margins_adjoin: Line<bool>,
+) -> Line<CollapsibleMarginSet> {
+  let end = lines
+    .last()
+    .map_or(CollapsibleMarginSet::ZERO, |line| line.end_margin_strut);
+  let start = lines
+    .iter()
+    .enumerate()
+    .find_map(|(index, line)| {
+      line.line_box_bfc_block_offset?;
+
+      let before = index
+        .checked_sub(1)
+        .map_or(CollapsibleMarginSet::ZERO, |previous| {
+          lines[previous].end_margin_strut
+        });
+
+      Some(
+        match line
+          .block_in_inline_layout_result()
+          .and_then(|result| result.collapsed_margins)
+        {
+          Some(margins) => before.collapse_with_set(margins.start),
+          None => before,
+        },
+      )
+    })
+    .unwrap_or(end);
+
+  Line {
+    start: if margins_adjoin.start {
+      start
+    } else {
+      CollapsibleMarginSet::ZERO
+    },
+    end: if margins_adjoin.end {
+      end
+    } else {
+      CollapsibleMarginSet::ZERO
+    },
+  }
+}
+
+/// The block size the lines take, down to the clamp line of a `line-clamp`, floats included, and
+/// the margins after the last line unless they collapse out through an edge `margins_adjoin`, and
+/// whether a clamp hid lines.
+fn content_block_size(
+  lines: &[LineBoxFragment<'_, '_>],
+  margins_adjoin: Line<bool>,
+) -> (f32, bool) {
   let mut bottom = LayoutUnit::ZERO;
   let mut clamped = false;
+  let mut end = LayoutUnit::ZERO;
+  let mut resolved = false;
 
   for line in lines {
     if let Some(top) = line.line_box_bfc_block_offset {
+      resolved = true;
+
       if clamped {
         continue;
       }
 
+      end = top + line.block_size + line.clearance_after_line;
       bottom = bottom.max(top + line.block_size);
       clamped = line.lines_until_clamp == Some(0);
     }
@@ -146,6 +207,16 @@ fn content_block_size(lines: &[LineBoxFragment<'_, '_>]) -> (f32, bool) {
         );
       }
     }
+  }
+
+  // Blink's `BlockLayoutAlgorithm` passes an unresolved BFC block offset's margin strut out
+  // through the block-start edge, so the block size leaves it out.
+  if !clamped
+    && !margins_adjoin.end
+    && (resolved || !margins_adjoin.start)
+    && let Some(last) = lines.last()
+  {
+    bottom = bottom.max(end + LayoutUnit::from_float(last.end_margin_strut.resolve()));
   }
 
   let hides_lines = clamped
@@ -197,16 +268,11 @@ impl RenderNode {
     let items_data = node.prepare_layout();
     let lines = node.layout_lines_in_content_box(&items_data, layout);
     let mut placed: FxHashMap<*const RenderNode, StaticPosition> = FxHashMap::default();
-    let mut next_line_top = LayoutUnit::ZERO;
 
     for line in &lines {
-      // An empty line holds its out-of-flow boxes where the next line would start.
-      let line_top = line.line_box_bfc_block_offset.unwrap_or(next_line_top);
-
-      if line.line_box_bfc_block_offset.is_some() {
-        next_line_top = line_top + line.block_size + line.clearance_after_line;
-      }
-
+      let line_top = line
+        .line_box_bfc_block_offset
+        .unwrap_or(line.static_bfc_block_offset);
       let line_left = line.bfc_line_offset;
       let mut place = |node: &RenderNode, offset: LogicalOffset, direction: Direction| {
         placed.insert(
@@ -298,5 +364,55 @@ impl RenderNode {
     } else {
       measurement.first_baseline
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use taffy::Line;
+
+  use super::content_block_size;
+  use crate::geometry::{AvailableSpace, Size};
+  use crate::layout::{
+    inline::{atomic_inline::BoxAtomicInline, inline_node::InlineNode, testing::render_tree},
+    node::Node,
+  };
+  use crate::layout_unit::LayoutUnit;
+
+  /// The block size of lines holding only a self-collapsing block in a span, its 20px top margin
+  /// collapsing out where `margins_adjoin`.
+  fn self_collapsing_block_size(margins_adjoin: Line<bool>) -> f32 {
+    let block = render_tree(
+      [Node::container([Node::container([]).with_class_name("inner")]).with_class_name("span")],
+      ".inner { display: block; margin-top: 20px }",
+    );
+    let mut atomic_inline = BoxAtomicInline {
+      available_space: Size {
+        width: AvailableSpace::Definite(60.0),
+        height: AvailableSpace::MaxContent,
+      },
+    };
+
+    block.context.set_margins_adjoin(margins_adjoin);
+
+    let node = InlineNode::new(&block);
+    let data = node.prepare_layout();
+    let lines = node.layout_lines(&data, LayoutUnit::from_float(60.0), &mut atomic_inline);
+
+    content_block_size(&lines, margins_adjoin).0
+  }
+
+  /// Blink's `BlockLayoutAlgorithm` passes the margins of content that resolves no BFC block offset
+  /// out through the block start, so they do not also grow a block whose end they cannot pass.
+  #[test]
+  fn margins_passed_out_through_the_start_leave_the_block_size() {
+    assert_eq!(
+      self_collapsing_block_size(Line {
+        start: true,
+        end: false,
+      }),
+      0.0
+    );
+    assert_eq!(self_collapsing_block_size(Line::FALSE), 20.0);
   }
 }

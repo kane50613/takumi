@@ -7,7 +7,7 @@ use std::{mem, rc::Rc};
 use super::{
   inline_box_state::{InlineBoxState, InlineLayoutStateStack, LineHeightMode},
   inline_item::{InlineItem, InlineItemType, LayoutObject},
-  inline_item_result::{HyphenResult, InlineItemResult, find_text_scale},
+  inline_item_result::{HyphenResult, InlineItemResult, LineBoxStrut, find_text_scale},
   inline_node_data::StyleFonts,
   line_breaker::LineBreaker,
   line_info::LineInfo,
@@ -196,6 +196,11 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
           self.place_atomic_inline(item, item_result, line_box, fonts);
           self.has_relative_positioned_items |= is_relative_positioned(item);
         }
+        InlineItemType::BlockInInline => {
+          debug_assert!(line_info.is_block_in_inline);
+
+          self.place_block_in_inline(item, item_result, line_box);
+        }
         // A list marker's metrics count only in quirks mode.
         InlineItemType::ListMarker => {}
         InlineItemType::OutOfFlowPositioned => {
@@ -322,6 +327,40 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
     self
       .box_states
       .on_close_tag(self.constraint_space, line_box);
+  }
+
+  /// Blink's `InlineLayoutAlgorithm::PlaceBlockInInline` but the line box's size, which
+  /// `InlineLayoutAlgorithm::create_line` sets: the block at the line's start, its baseline the
+  /// line's unless it collapses through.
+  fn place_block_in_inline(
+    &mut self,
+    item: &'a InlineItem<'c>,
+    item_result: &InlineItemResult<'a, 'c>,
+    line_box: &mut LogicalLineItems<'a, 'c>,
+  ) {
+    let (Some(object), Some(layout_result)) = (item.layout_object, item_result.layout_result)
+    else {
+      return;
+    };
+
+    // The anonymous block around the block-in-inline has no margins.
+    if item_result.should_create_line_box {
+      self.box_states.on_block_in_inline(
+        layout_result.baseline_metrics(&LineBoxStrut::default()),
+        line_box,
+      );
+    }
+
+    line_box.add_child(LogicalLineItem::with_layout_result(
+      LineFragment::BlockInInline {
+        node: object.node(),
+        layout_result,
+      },
+      LogicalOffset::default(),
+      item_result.inline_size,
+      0,
+      item.bidi_level(),
+    ));
   }
 }
 
@@ -488,7 +527,7 @@ mod tests {
     let metrics = box_states.line_box_state().metrics;
 
     box_states.apply_relative_positioning(&space, &mut line_box);
-    box_states.create_box_fragments(&mut line_box);
+    box_states.create_box_fragments(&mut line_box, false);
 
     let items = line_box
       .children
@@ -505,6 +544,7 @@ mod tests {
             },
           ),
           Some(LineFragment::AtomicInline { .. }) => "atomic".to_owned(),
+          Some(LineFragment::BlockInInline { .. }) => "block".to_owned(),
           Some(LineFragment::Float { .. }) => "float".to_owned(),
           None if item.inline_item.is_some() => {
             format!("{:?}", &data.text_content[item.text_offset.clone()])

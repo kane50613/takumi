@@ -111,11 +111,14 @@ pub(crate) enum LineBreakerMode {
   MaxContent,
 }
 
-/// Lays out an atomic inline for a line: Blink's `LayoutAtomicInline` and
-/// `ComputeMinAndMaxContentContribution`.
+/// Lays out an atomic inline or a block-in-inline for a line: Blink's `LayoutAtomicInline`,
+/// `BlockNode::Layout`, and `ComputeMinAndMaxContentContribution`.
 pub(crate) trait AtomicInlineLayout<'c> {
   /// The box laid out in the line's available space.
   fn layout(&mut self, node: &'c RenderNode) -> LayoutResult;
+
+  /// The block-in-inline laid out in the containing block's available space.
+  fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult;
 
   /// The box's min-content and max-content contributions, without margins.
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit);
@@ -952,6 +955,11 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
         }
         InlineItemType::BidiControl => {
           self.handle_bidi_control_item(item_index, line_info);
+
+          continue;
+        }
+        InlineItemType::BlockInInline => {
+          self.handle_block_in_inline(item_index, line_info);
 
           continue;
         }
@@ -2192,45 +2200,52 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     }
   }
 
-  /// Blink's `HandleForcedLineBreak`.
-  fn handle_forced_line_break(&mut self, item_index: usize, line_info: &mut LineInfo<'a, 'c>) {
+  /// Blink's `HandleForcedLineBreak`, at the forced break item `item_index`, or before a
+  /// block-in-inline without one.
+  fn handle_forced_line_break(
+    &mut self,
+    item_index: Option<usize>,
+    line_info: &mut LineInfo<'a, 'c>,
+  ) {
     // The last item may have overflowed.
     if self.handle_overflow_if_needed(line_info) {
       return;
     }
 
-    let item = &self.items()[item_index];
+    if let Some(item_index) = item_index {
+      let item = &self.items()[item_index];
 
-    debug_assert_eq!(item.text_type, TextItemType::ForcedLineBreak);
-    debug_assert_eq!(char_at(self.text(), item.start_offset()), LINE_FEED);
+      debug_assert_eq!(item.text_type, TextItemType::ForcedLineBreak);
+      debug_assert_eq!(char_at(self.text(), item.start_offset()), LINE_FEED);
 
-    let result_index = self.add_item(item_index, line_info);
-    let item_result = &mut line_info.results[result_index];
+      let result_index = self.add_item(item_index, line_info);
+      let item_result = &mut line_info.results[result_index];
 
-    item_result.should_create_line_box = true;
-    item_result.has_only_pre_wrap_trailing_spaces = true;
-    item_result.has_only_bidi_trailing_spaces = true;
-    item_result.can_break_after = true;
-    self.move_to_next_of_item(item_index);
+      item_result.should_create_line_box = true;
+      item_result.has_only_pre_wrap_trailing_spaces = true;
+      item_result.has_only_bidi_trailing_spaces = true;
+      item_result.can_break_after = true;
+      self.move_to_next_of_item(item_index);
 
-    // Close tags after the break join this line, which their edges show.
-    while !self.is_at_end() {
-      let next_index = self.current.item_index;
-      let next_item = &self.items()[next_index];
+      // Close tags after the break join this line, which their edges show.
+      while !self.is_at_end() {
+        let next_index = self.current.item_index;
+        let next_item = &self.items()[next_index];
 
-      if next_item.item_type == InlineItemType::CloseTag {
-        self.handle_close_tag(next_index, line_info);
+        if next_item.item_type == InlineItemType::CloseTag {
+          self.handle_close_tag(next_index, line_info);
 
-        continue;
+          continue;
+        }
+
+        if next_item.item_type == InlineItemType::Text && next_item.length() == 0 {
+          self.handle_empty_text(next_index, line_info);
+
+          continue;
+        }
+
+        break;
       }
-
-      if next_item.item_type == InlineItemType::Text && next_item.length() == 0 {
-        self.handle_empty_text(next_index, line_info);
-
-        continue;
-      }
-
-      break;
     }
 
     if self.hyphen_index.is_some() {
@@ -2252,7 +2267,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     debug_assert!(item.length() >= 1);
 
     if item.text_type == TextItemType::ForcedLineBreak {
-      self.handle_forced_line_break(item_index, line_info);
+      self.handle_forced_line_break(Some(item_index), line_info);
 
       return;
     }
@@ -2449,6 +2464,50 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     self.position += item_result.inline_size;
     self.trailing_whitespace = WhitespaceState::None;
     self.move_to_next_of_item(item_index);
+  }
+
+  /// Blink's `HandleBlockInInline`: the block takes a line of its own, a forced break before and
+  /// after it.
+  fn handle_block_in_inline(&mut self, item_index: usize, line_info: &mut LineInfo<'a, 'c>) {
+    if !line_info.results.is_empty() {
+      self.force_non_empty_if_last_line = false;
+      self.handle_forced_line_break(None, line_info);
+
+      return;
+    }
+
+    let Some(object) = self.items()[item_index].layout_object else {
+      return;
+    };
+    let result_index = self.add_item(item_index, line_info);
+
+    if self.mode == LineBreakerMode::Content {
+      let layout_result = self.atomic_inline.layout_block_in_inline(object.node());
+      let item_result = &mut line_info.results[result_index];
+
+      item_result.inline_size = layout_result.inline_size;
+      item_result.should_create_line_box = !layout_result
+        .collapsed_margins
+        .is_some_and(|margins| margins.is_self_collapsing);
+      item_result.layout_result = Some(layout_result);
+    } else {
+      // Blink's `ComputeMinMaxContentSizeForBlockChild`.
+      let (min_size, max_size) = self.atomic_inline.min_max_sizes(object.node());
+
+      line_info.results[result_index].inline_size = if self.mode == LineBreakerMode::MinContent {
+        min_size
+      } else {
+        max_size
+      };
+    }
+
+    self.position += line_info.results[result_index].inline_size;
+    line_info.is_block_in_inline = true;
+    line_info.has_forced_break = true;
+    self.is_forced_break = true;
+    self.trailing_whitespace = WhitespaceState::None;
+    self.move_to_next_of_item(item_index);
+    self.state = LineBreakState::Done;
   }
 
   /// Blink's `ShouldPushFloatAfterLine`: whether the float goes below this line.
@@ -3748,6 +3807,8 @@ mod tests {
     trailing_whitespaces: Vec<WhitespaceState>,
     first_hang_width: LayoutUnit,
     widths: Vec<LayoutUnit>,
+    /// Each line's `is_block_in_inline` and `is_empty_line`.
+    flags: Vec<(bool, bool)>,
   }
 
   /// Blink's `BreakLines`.
@@ -3764,6 +3825,7 @@ mod tests {
       trailing_whitespaces: Vec::new(),
       first_hang_width: LayoutUnit::ZERO,
       widths: Vec::new(),
+      flags: Vec::new(),
     };
 
     loop {
@@ -3798,6 +3860,9 @@ mod tests {
 
       break_token = line_info.break_token;
       broken.widths.push(line_info.width());
+      broken
+        .flags
+        .push((line_info.is_block_in_inline, line_info.is_empty_line));
       broken.lines.push((
         line_info
           .results
@@ -3824,6 +3889,66 @@ mod tests {
 
   fn texts(lines: Vec<(String, usize)>) -> Vec<String> {
     lines.into_iter().map(|(text, _)| text).collect()
+  }
+
+  /// A span holding `children`.
+  fn inline_box(children: impl Into<Vec<Node>>) -> Node {
+    Node::container(children).with_class_name("span")
+  }
+
+  /// Blink's `InlineLayoutAlgorithmTest.TypesForBlockInInline`: the block takes a line of its own
+  /// between the lines before and after it, empty when only tags are on them.
+  #[test]
+  fn a_block_in_inline_takes_a_line_of_its_own() {
+    let tree = render_tree(
+      [inline_box([
+        Node::container([Node::text("abc")]).with_class_name("block")
+      ])],
+      ".block { display: block }",
+    );
+    let broken = break_lines_with_state(&tree, 100.0);
+
+    assert_eq!(texts(broken.lines), ["", "\u{FFFC}", ""]);
+    assert_eq!(broken.flags, [(false, true), (true, false), (false, true)]);
+  }
+
+  /// Blink's `ScoreLineBreakerTest.BeforeAfter`: the text before and after a block-in-inline breaks
+  /// into lines of its own.
+  #[test]
+  fn text_around_a_block_in_inline_breaks_apart() {
+    let tree = render_tree(
+      [inline_box([
+        Node::text("123 456 "),
+        Node::container([]).with_class_name("block"),
+        Node::text(" 789"),
+      ])],
+      ".block { display: block; height: 10px }",
+    );
+    let broken = break_lines_with_state(&tree, 100.0);
+
+    assert_eq!(texts(broken.lines), ["123 456", "\u{FFFC}", "789"]);
+    assert_eq!(
+      broken.flags,
+      [(false, false), (true, false), (false, false)]
+    );
+  }
+
+  /// A block-in-inline with no height collapses through, so its line is empty.
+  #[test]
+  fn an_empty_block_in_inline_leaves_an_empty_line() {
+    let tree = render_tree(
+      [inline_box([
+        Node::text("a"),
+        Node::container([]).with_class_name("block"),
+        Node::text("b"),
+      ])],
+      ".block { display: block }",
+    );
+
+    assert_eq!(
+      break_lines_with_state(&tree, 100.0).flags,
+      [(false, false), (true, true), (false, false)]
+    );
   }
 
   #[test]

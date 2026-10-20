@@ -1,5 +1,5 @@
 //! Blink's [`BlockNode::LayoutAtomicInline`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_node.cc)
-//! for takumi's boxes, which taffy lays out.
+//! and its `Layout` of a block-in-inline for takumi's boxes, which taffy lays out.
 
 use super::{inline_item_result::LayoutResult, line_breaker::AtomicInlineLayout};
 use crate::{
@@ -53,10 +53,28 @@ impl<'c> AtomicInlineLayout<'c> for BoxAtomicInline {
       inline_size: LayoutUnit::from_float(size.width),
       block_size: LayoutUnit::from_float(size.height),
       baseline: baseline_offset.map(|baseline| LayoutUnit::from_float(baseline - margin_top)),
+      collapsed_margins: None,
     }
   }
 
+  /// Approximate: taffy lays the block out without the floats beside the line, so they do not
+  /// shorten its lines.
+  fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult {
+    node
+      .layout_block_in_inline(self.available_space)
+      .into_layout_result()
+  }
+
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {
+    if node.is_block_in_inline {
+      let (min_size, max_size) = node.min_max_widths();
+
+      return (
+        LayoutUnit::from_float(min_size),
+        LayoutUnit::from_float(max_size),
+      );
+    }
+
     let at_width = |width| Size {
       width,
       height: self.available_space.height,

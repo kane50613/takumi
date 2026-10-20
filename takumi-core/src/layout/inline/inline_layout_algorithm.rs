@@ -2,12 +2,13 @@
 //! and the line boxes it builds, without ruby, initial letters, SVG text, `text-combine-upright`,
 //! `text-box-trim`, block fragmentation, shapes, or margin collapsing.
 
-use taffy::Clear;
+use taffy::{Clear, CollapsibleMarginSet};
 
 use super::{
   inline_break_token::InlineBreakToken,
   inline_child_layout_context::InlineChildLayoutContext,
   inline_item::InlineItemType,
+  inline_item_result::LayoutResult,
   inline_node::InlineNode,
   inline_node_data::InlineNodeData,
   justification_utils::apply_justification,
@@ -61,6 +62,11 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   pub(crate) base_direction: TextDirection,
   pub(crate) break_token: Option<InlineBreakToken<'c>>,
   pub(crate) is_empty_line_box: bool,
+  /// Blink's `EndMarginStrut`: the margins after the line, which collapse with the next ones.
+  pub(crate) end_margin_strut: CollapsibleMarginSet,
+  /// Where the line starts, below the margins before it: an empty line's out-of-flow boxes sit
+  /// there, and a block-in-inline that collapses through sits there as if it had a bottom border.
+  pub(crate) static_bfc_block_offset: LayoutUnit,
   /// Blink's `IsHiddenDueToLayout`: the line is past the `line-clamp` point.
   pub(crate) is_hidden_due_to_layout: bool,
   /// The space a `<br clear>` adds after the line.
@@ -87,12 +93,35 @@ impl LineBoxFragment<'_, '_> {
       base_direction: TextDirection::Ltr,
       break_token: None,
       is_empty_line_box: false,
+      end_margin_strut: CollapsibleMarginSet::ZERO,
+      static_bfc_block_offset: LayoutUnit::ZERO,
       is_hidden_due_to_layout: false,
       clearance_after_line: LayoutUnit::ZERO,
       exclusion_space,
       lines_until_clamp: None,
       text_fit_scale: 1.0,
     }
+  }
+
+  /// The baseline below the line's top, as Blink's `PropagateBaselineFromLineBox` takes it: a
+  /// block-in-inline's own, which it may not have.
+  pub(crate) fn baseline(&self) -> Option<LayoutUnit> {
+    match self.block_in_inline_layout_result() {
+      Some(layout_result) => layout_result.baseline,
+      None => Some(self.metrics.ascent),
+    }
+  }
+
+  /// Blink's `LogicalLineItems::BlockInInlineLayoutResult`.
+  pub(crate) fn block_in_inline_layout_result(&self) -> Option<&LayoutResult> {
+    self
+      .items
+      .children
+      .iter()
+      .find_map(|child| match &child.layout_result {
+        Some(LineFragment::BlockInInline { layout_result, .. }) => Some(layout_result),
+        _ => None,
+      })
   }
 
   /// Blink's `LineHeight`.
@@ -104,11 +133,12 @@ impl LineBoxFragment<'_, '_> {
     self.metrics.line_height().clamp_negative_to_zero()
   }
 
-  /// The baseline's BFC block offset, none for an empty line.
-  pub(crate) fn baseline(&self) -> Option<LayoutUnit> {
+  /// The baseline's BFC block offset, none for an empty line or a block-in-inline without one.
+  pub(crate) fn bfc_baseline(&self) -> Option<LayoutUnit> {
     self
       .line_box_bfc_block_offset
-      .map(|line_top| line_top + self.metrics.ascent)
+      .zip(self.baseline())
+      .map(|(line_top, baseline)| line_top + baseline)
   }
 
   /// Moves the line box, with the floats placed on it, `delta` toward the block end.
@@ -530,7 +560,8 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let hang_width = line_info.hang_width();
     let position = line_info.adjust_line_offset_for_hanging();
     let box_states = self.context.box_states();
-    let mut inline_size = box_states.compute_inline_positions(line_box, position, false);
+    let mut inline_size =
+      box_states.compute_inline_positions(line_box, position, line_info.is_block_in_inline);
 
     if hang_width != LayoutUnit::ZERO {
       // A line moved by its hanging width already has the right size.
@@ -578,14 +609,18 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     // Negative margins can move the position before zero, but not shrink the size below it.
     inline_size = inline_size.clamp_negative_to_zero();
 
-    // Other `text-align` values than `justify` move the line box as a whole.
-    let mut bfc_line_offset = line_info.bfc_offset.line_offset + line_offset_for_text_align;
+    if line_info.is_block_in_inline {
+      self.container_builder.bfc_line_offset = space.bfc_offset.line_offset;
+    } else {
+      // Other `text-align` values than `justify` move the line box as a whole.
+      let mut bfc_line_offset = line_info.bfc_offset.line_offset + line_offset_for_text_align;
 
-    if line_info.base_direction == TextDirection::Ltr {
-      bfc_line_offset += line_info.text_indent;
+      if line_info.base_direction == TextDirection::Ltr {
+        bfc_line_offset += line_info.text_indent;
+      }
+
+      self.container_builder.bfc_line_offset = bfc_line_offset;
     }
-
-    self.container_builder.bfc_line_offset = bfc_line_offset;
 
     if has_out_of_flow_positioned_items {
       self.place_out_of_flow_objects(line_info, &line_box_metrics, line_box);
@@ -604,7 +639,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let box_states = self.context.box_states();
 
     box_states.apply_relative_positioning(space, line_box);
-    box_states.create_box_fragments(line_box);
+    box_states.create_box_fragments(line_box, line_info.is_block_in_inline);
     self.context.set_item_index(line_info.end_item_index);
 
     // Empty items may still leave no line.
@@ -614,6 +649,15 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
     if !line_box_metrics.is_empty() {
       self.container_builder.metrics = line_box_metrics;
+    }
+
+    // Blink's `PlaceBlockInInline` sizes the line to the block, which sits at its top.
+    if line_info.is_block_in_inline {
+      self.container_builder.inline_size = line_info
+        .block_in_inline_layout_result()
+        .map_or(LayoutUnit::ZERO, |result| result.inline_size);
+
+      return;
     }
 
     // The items sat on a baseline at zero; the line box's top is zero from here.
@@ -631,7 +675,8 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       return LineClampState::Hide;
     }
 
-    if self.constraint_space.is_at_clamp_point()
+    if !line_info.is_block_in_inline
+      && self.constraint_space.is_at_clamp_point()
       && style.misc_inherited1_data.block_ellipsis != BlockEllipsis::None
     {
       return LineClampState::LineClampEllipsis;
@@ -642,7 +687,8 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let should_truncate_overflowing_text = style.misc4_data.text_overflow != TextOverflow::Clip;
 
     // Approximate: Blink truncates a line that overflowed before `text-fit` fitted it.
-    let has_overflow = line_info.has_overflow
+    let has_overflow = !line_info.is_block_in_inline
+      && line_info.has_overflow
       && (line_info.text_fit_scale == 1.0 || line_info.width() > line_info.available_width());
 
     if has_overflow && should_truncate_overflowing_text {
@@ -1017,8 +1063,25 @@ impl<'c> InlineNode<'c> {
       context.score_line_break_context = Some(ScoreLineBreakContext::default());
     }
 
+    // Blink's `PreviousInflowPosition`: where the last line ended, the margins after it, and
+    // whether a line resolved the BFC block offset, before which margins collapse through the
+    // block start when they adjoin it.
+    let margins_adjoin = self.block.context.margins_adjoin();
+    let mut position = LayoutUnit::ZERO;
+    let mut margin_strut = CollapsibleMarginSet::ZERO;
+    let mut is_bfc_block_offset_resolved = !margins_adjoin.start;
+
     loop {
-      let line = InlineLayoutAlgorithm::new(
+      // A float or an out-of-flow box on an empty line sits below the margins before it.
+      let margin_offset = if is_bfc_block_offset_resolved {
+        LayoutUnit::from_float(margin_strut.resolve())
+      } else {
+        LayoutUnit::ZERO
+      };
+
+      space.bfc_offset.block_offset = position + margin_offset;
+
+      let mut line = InlineLayoutAlgorithm::new(
         self,
         items_data,
         &space,
@@ -1029,16 +1092,49 @@ impl<'c> InlineNode<'c> {
       )
       .layout();
 
+      line.static_bfc_block_offset = space.bfc_offset.block_offset;
       exclusion_space = line.exclusion_space.clone();
       break_token = line.break_token;
       space.lines_until_clamp = line.lines_until_clamp;
 
-      // An empty line takes no space.
-      if let Some(line_box_bfc_block_offset) = line.line_box_bfc_block_offset {
-        space.bfc_offset.block_offset =
-          line_box_bfc_block_offset + line.block_size + line.clearance_after_line;
+      match line
+        .block_in_inline_layout_result()
+        .and_then(|result| result.collapsed_margins)
+      {
+        Some(margins) if margins.is_self_collapsing => {
+          let start = margin_strut.collapse_with_set(margins.start);
+
+          if is_bfc_block_offset_resolved {
+            line.static_bfc_block_offset = position + LayoutUnit::from_float(start.resolve());
+          }
+
+          margin_strut = start.collapse_with_set(margins.end);
+        }
+        // Blink's `PlaceBlockInInline` keeps the block's `EndMarginStrut`, its start margins
+        // collapsing with the ones before it.
+        Some(margins) => {
+          if is_bfc_block_offset_resolved {
+            let start = margin_strut.collapse_with_set(margins.start).resolve();
+
+            line.move_in_block_direction(LayoutUnit::from_float(start) - margin_offset);
+          }
+
+          is_bfc_block_offset_resolved = true;
+          margin_strut = margins.end;
+        }
+        // A line box resolves the margins before it; an empty line leaves them.
+        None if line.line_box_bfc_block_offset.is_some() => {
+          is_bfc_block_offset_resolved = true;
+          margin_strut = CollapsibleMarginSet::ZERO;
+        }
+        None => {}
       }
 
+      if let Some(line_box_bfc_block_offset) = line.line_box_bfc_block_offset {
+        position = line_box_bfc_block_offset + line.block_size + line.clearance_after_line;
+      }
+
+      line.end_margin_strut = margin_strut;
       lines.push(line);
 
       if break_token.is_none() {
@@ -1050,9 +1146,14 @@ impl<'c> InlineNode<'c> {
 
 #[cfg(test)]
 mod tests {
+  use taffy::Line;
+
+  use crate::geometry::{AvailableSpace, Size};
   use crate::layout::{
     inline::{
+      atomic_inline::BoxAtomicInline,
       inline_node::InlineNode,
+      line_breaker::AtomicInlineLayout,
       testing::{TestAtomicInline, render_tree, span},
     },
     node::Node,
@@ -1062,15 +1163,23 @@ mod tests {
 
   /// Each line's line-left offset, top, and inline size, then the text of its items.
   fn layout_lines(block: &RenderNode, available_width: f32) -> Vec<String> {
+    layout_lines_with(block, available_width, &mut TestAtomicInline)
+  }
+
+  /// [`layout_lines`] with the boxes on the lines laid out by `atomic_inline`.
+  fn layout_lines_with<'c>(
+    block: &'c RenderNode,
+    available_width: f32,
+    atomic_inline: &mut dyn AtomicInlineLayout<'c>,
+  ) -> Vec<String> {
     let node = InlineNode::new(block);
     let data = node.prepare_layout();
-    let mut atomic_inline = TestAtomicInline;
 
     node
       .layout_lines(
         &data,
         LayoutUnit::from_float(available_width),
-        &mut atomic_inline,
+        atomic_inline,
       )
       .iter()
       .map(|line| {
@@ -1093,6 +1202,94 @@ mod tests {
         )
       })
       .collect()
+  }
+
+  /// A span holding an empty block of class `class`.
+  fn span_with_block(class: &str) -> Node {
+    Node::container([Node::container([]).with_class_name(class)]).with_class_name("span")
+  }
+
+  /// The tops of `block`'s lines, the margins at its edges collapsing out where `margins_adjoin`.
+  fn line_tops(block: &RenderNode, margins_adjoin: Line<bool>) -> Vec<f32> {
+    let mut atomic_inline = BoxAtomicInline {
+      available_space: Size {
+        width: AvailableSpace::Definite(60.0),
+        height: AvailableSpace::MaxContent,
+      },
+    };
+
+    block.context.set_margins_adjoin(margins_adjoin);
+
+    let node = InlineNode::new(block);
+    let data = node.prepare_layout();
+
+    node
+      .layout_lines(&data, LayoutUnit::from_float(60.0), &mut atomic_inline)
+      .iter()
+      .filter_map(|line| line.line_box_bfc_block_offset)
+      .map(LayoutUnit::to_float)
+      .collect()
+  }
+
+  /// WPT's `block-in-inline-after-block-in-inline-with-margin-collapse`: the margins of blocks in
+  /// two spans collapse through the empty lines between them.
+  #[test]
+  fn margins_of_blocks_in_inline_collapse_across_empty_lines() {
+    let block = render_tree(
+      [span_with_block("first"), span_with_block("second")],
+      ".first, .second { display: block; height: 10px } .first { margin-bottom: 50px } \
+       .second { margin-top: 20px }",
+    );
+
+    assert_eq!(line_tops(&block, Line::FALSE), [0.0, 60.0]);
+  }
+
+  /// The margins before the first line box collapse out through the block start they adjoin, and
+  /// stay inside when it has a border or padding.
+  #[test]
+  fn start_margins_collapse_out_where_they_adjoin() {
+    let block = render_tree(
+      [span_with_block("first"), Node::text("a")],
+      ".first { display: block; height: 10px; margin-top: 20px }",
+    );
+
+    assert_eq!(line_tops(&block, Line::FALSE), [20.0, 30.0]);
+    assert_eq!(
+      line_tops(
+        &block,
+        Line {
+          start: true,
+          end: false,
+        },
+      ),
+      [0.0, 10.0]
+    );
+  }
+
+  /// Blink's `PlaceBlockInInline`: the block fills its line from the container's line-left edge,
+  /// whatever `text-align` says, and the line takes its height.
+  #[test]
+  fn a_block_in_inline_fills_its_line() {
+    let block = render_tree(
+      [Node::container([
+        span("ab"),
+        Node::container([]).with_class_name("block"),
+        span("cd"),
+      ])
+      .with_class_name("span")],
+      ".container { text-align: center } .block { display: block; height: 20px }",
+    );
+    let mut atomic_inline = BoxAtomicInline {
+      available_space: Size {
+        width: AvailableSpace::Definite(60.0),
+        height: AvailableSpace::MaxContent,
+      },
+    };
+
+    assert_eq!(
+      layout_lines_with(&block, 60.0, &mut atomic_inline),
+      ["\"ab\" 24@0+12", "\"\" 0@10+60", "\"cd\" 24@30+12"]
+    );
   }
 
   #[test]

@@ -1,5 +1,6 @@
 use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
 
+use taffy::Line;
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -92,6 +93,7 @@ impl From<RenderContextInit> for RenderContext {
       text_decorations: AppliedTextDecorations::default(),
       collapsed_borders: init.collapsed_borders,
       definite_height: Cell::new(None),
+      margins_adjoin: Cell::new(Line::FALSE),
     }
   }
 }
@@ -119,6 +121,9 @@ pub struct RenderContext {
   /// The content height the box's last layout fixed before its content, Blink's definite block
   /// size.
   definite_height: Cell<Option<f32>>,
+  /// Whether its children's margins adjoin its block-start and block-end edges in its last layout,
+  /// so they collapse through it.
+  margins_adjoin: Cell<Line<bool>>,
 }
 
 /// A [`RenderContextBuilder`] with nothing set yet.
@@ -210,6 +215,7 @@ impl RenderContext {
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
       definite_height: Cell::new(None),
+      margins_adjoin: Cell::new(Line::FALSE),
     }
   }
 
@@ -234,6 +240,7 @@ impl RenderContext {
       style: Rc::new(style),
       collapsed_borders: false,
       definite_height: Cell::new(None),
+      margins_adjoin: Cell::new(Line::FALSE),
     }
   }
 
@@ -244,6 +251,15 @@ impl RenderContext {
 
   pub(crate) fn set_definite_height(&self, height: Option<f32>) {
     self.definite_height.set(height);
+  }
+
+  /// Whether its children's margins adjoin its block-start and block-end edges in its last layout.
+  pub(crate) fn margins_adjoin(&self) -> Line<bool> {
+    self.margins_adjoin.get()
+  }
+
+  pub(crate) fn set_margins_adjoin(&self, margins_adjoin: Line<bool>) {
+    self.margins_adjoin.set(margins_adjoin);
   }
 
   /// The style to change in place, copied first when another box shares it.

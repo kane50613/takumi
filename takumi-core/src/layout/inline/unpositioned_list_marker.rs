@@ -95,7 +95,7 @@ impl<'c> UnpositionedListMarker<'c> {
     layout: ComputedLayout,
     direction: Direction,
   ) -> Point<f32> {
-    let baseline = line.baseline().unwrap_or(LayoutUnit::ZERO);
+    let baseline = line.bfc_baseline().unwrap_or(LayoutUnit::ZERO);
     let marker_ascent = result.baseline_metrics(&LineBoxStrut::default()).ascent;
     let inline_offset = self.inline_offset(result.inline_size).to_float();
     let border_box_x = match direction {

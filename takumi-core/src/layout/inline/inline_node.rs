@@ -174,6 +174,9 @@ impl<'c> InlineNode<'c> {
           } else if node.context.style.base_data.display == Display::Inline && !node.is_dom_text() {
             builder.enter_inline(node);
             stack.push(Frame::new(node, Some(parent), true));
+          } else if node.is_block_in_inline {
+            builder.append_block_in_inline(LayoutObject::Box(node));
+            previous_character.pass_box(node);
           } else {
             previous_character.enter_box(node);
             stack.push(Frame::new(node, Some(parent), false));
@@ -603,7 +606,7 @@ mod tests {
       node::Node,
       tree::RenderNode,
     },
-    style::{Direction as TextDirection, Lang},
+    style::{Direction as TextDirection, Display, Lang},
   };
 
   use InlineItemType::*;
@@ -750,6 +753,71 @@ mod tests {
 
     assert_eq!(text, "a\nb");
     assert!(items.contains(&(Control, "\n".to_owned())));
+  }
+
+  /// Blink's `InlineItemsBuilderTest.BlockInInline`: the spaces around a block-in-inline collapse
+  /// away, as around a forced break.
+  #[test]
+  fn spaces_around_a_block_in_inline_collapse() {
+    let inline_box = Node::container([
+      Node::text("Hello "),
+      block([Node::text("block")]),
+      Node::text(" World"),
+    ])
+    .with_class_name("span");
+    let tree = render_tree(block([inline_box]), "");
+
+    assert_eq!(
+      collect(&tree),
+      (
+        "Hello\u{FFFC}World".to_owned(),
+        vec![
+          (OpenTag, String::new()),
+          (Text, "Hello".to_owned()),
+          (BlockInInline, "\u{FFFC}".to_owned()),
+          (Text, "World".to_owned()),
+          (CloseTag, String::new()),
+        ]
+      )
+    );
+  }
+
+  /// Blink's `LayoutInline::AddChildAsBlockInInline`: consecutive blocks in an inline box share an
+  /// anonymous block, and the box stays inline.
+  #[test]
+  fn consecutive_blocks_in_an_inline_box_share_a_block_in_inline() {
+    let inline_box =
+      Node::container([span("a"), block([]), block([]), span("b")]).with_class_name("span");
+    let tree = render_tree(block([inline_box]), "");
+    let inline_box = &tree.children.as_deref().expect("children")[0];
+    let children = inline_box.children.as_deref().expect("children");
+
+    assert_eq!(inline_box.context.style.base_data.display, Display::Inline);
+    assert_eq!(
+      children
+        .iter()
+        .map(|child| child.is_block_in_inline)
+        .collect::<Vec<_>>(),
+      [false, true, false]
+    );
+    assert_eq!(children[1].children.as_deref().map(<[_]>::len), Some(2));
+  }
+
+  /// A flex item blockifies, so the blocks in it are its own and its inline content goes in an
+  /// anonymous block.
+  #[test]
+  fn a_flex_item_holds_its_blocks_as_a_block() {
+    let item = Node::container([span("a"), block([])]).with_class_name("span");
+    let tree = render_tree(
+      Node::container([item]).with_class_name("flex"),
+      ".flex { display: flex }",
+    );
+    let item = &tree.children.as_deref().expect("children")[0];
+    let children = item.children.as_deref().expect("children");
+
+    assert_eq!(item.context.style.base_data.display, Display::Block);
+    assert!(children.iter().all(|child| !child.is_block_in_inline));
+    assert_eq!(children.len(), 2);
   }
 
   /// A `<br>` opens no inline box, so its own font does not grow the line.

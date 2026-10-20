@@ -103,7 +103,11 @@ impl FragmentItems {
         continue;
       }
 
-      let Some(line_top) = line.line_box_bfc_block_offset else {
+      let Some(line_top) = line.line_box_bfc_block_offset.or_else(|| {
+        line
+          .block_in_inline_layout_result()
+          .map(|_| line.static_bfc_block_offset)
+      }) else {
         continue;
       };
       let line_top = line_top.to_float();
@@ -112,11 +116,16 @@ impl FragmentItems {
       // Where each span on the line has its baseline, for the decorations it paints.
       let mut span_baselines: FxHashMap<usize, f32> = FxHashMap::default();
 
-      items
-        .line_boxes
-        .push((line_top, line_top + line.block_size.to_float()));
-      first_baseline.get_or_insert(baseline);
-      last_baseline = Some(baseline);
+      if line.line_box_bfc_block_offset.is_some() {
+        items
+          .line_boxes
+          .push((line_top, line_top + line.block_size.to_float()));
+      }
+
+      if let Some(line_baseline) = line.bfc_baseline().map(LayoutUnit::to_float) {
+        first_baseline.get_or_insert(line_baseline);
+        last_baseline = Some(line_baseline);
+      }
 
       for child in &line.items.children {
         // Blink's `PhysicalFragment::IsHiddenDueToLayout` also reads the `IsTruncated` that
@@ -147,28 +156,35 @@ impl FragmentItems {
         }
 
         match &child.layout_result {
-          Some(LineFragment::AtomicInline {
-            node,
-            layout_result,
-          }) => {
+          Some(
+            LineFragment::AtomicInline {
+              node,
+              layout_result,
+            }
+            | LineFragment::BlockInInline {
+              node,
+              layout_result,
+            },
+          ) => {
             let Some(span) = spans.span_of(node) else {
               continue;
             };
             let Some(ProcessedInlineSpan::Box(item)) = spans.spans.get_mut(span) else {
               continue;
             };
-            let size = item.paint_border_box(layout_result.inline_size, layout_result.block_size);
+            let (paint_offset, paint_block_size) = layout_result.paint_block_extent();
+            let size = item.paint_border_box(layout_result.inline_size, paint_block_size);
             let margin = item.margin;
 
             item.baseline_offset = layout_result
               .baseline
-              .map(|baseline| baseline.to_float() + margin.top);
+              .map(|baseline| (baseline + paint_offset).to_float() + margin.top);
             items.push_inline_box(
               &mut ink.content,
               VisualInlineBox {
                 id: span as u64,
                 x: origin.x - margin.left,
-                y: origin.y - margin.top,
+                y: origin.y - margin.top - paint_offset.to_float(),
                 width: size.width,
                 height: size.height,
                 line_baseline: Some(baseline),
@@ -659,7 +675,7 @@ impl FragmentItems {
         y: offset.y,
         width: size.width,
         height: size.height,
-        line_baseline: line.baseline().map(LayoutUnit::to_float),
+        line_baseline: line.bfc_baseline().map(LayoutUnit::to_float),
         kind: marker.node.inline_box_kind(),
       },
     );
@@ -697,6 +713,11 @@ pub(in crate::layout::inline) fn line_span_fragments<'c>(
       let Some(LineFragment::InlineBox(fragment)) = &child.layout_result else {
         continue;
       };
+
+      if fragment.is_opaque {
+        continue;
+      }
+
       let Some(decoration) = spans.decoration_of(fragment.node) else {
         continue;
       };

@@ -1,5 +1,5 @@
 //! Blink's [`InlineBoxState`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_box_state.cc),
-//! without ruby, SVG text, block-in-inline, `text-box-trim`, `text-emphasis`, or quirks mode.
+//! without ruby, SVG text, `text-box-trim`, `text-emphasis`, or quirks mode.
 
 use std::{mem, ptr, rc::Rc};
 
@@ -317,8 +317,12 @@ impl<'a, 'c> BoxData<'a, 'c> {
   }
 
   /// Blink's `CreateBoxFragment`: the box's fragment, its children staying in the line's flat
-  /// list but for the out-of-flow boxes it takes.
-  fn create_box_fragment(&self, line_box: &mut LogicalLineItems<'a, 'c>) -> LineFragment<'c> {
+  /// list but for the out-of-flow boxes it takes. An opaque one paints no side.
+  fn create_box_fragment(
+    &self,
+    line_box: &mut LogicalLineItems<'a, 'c>,
+    is_opaque: bool,
+  ) -> LineFragment<'c> {
     let mut out_of_flow_children = Vec::new();
     let mut i = self.fragment_start;
 
@@ -350,6 +354,7 @@ impl<'a, 'c> BoxData<'a, 'c> {
       padding: self.padding,
       has_line_left_edge: self.has_line_left_edge,
       has_line_right_edge: self.has_line_right_edge,
+      is_opaque,
       out_of_flow_children,
     })
   }
@@ -362,6 +367,7 @@ pub(crate) struct InlineLayoutStateStack<'a, 'c> {
   stack: Vec<InlineBoxState<'a, 'c>>,
   box_data_list: Vec<BoxData<'a, 'c>>,
   is_empty_line: bool,
+  has_block_in_inline: bool,
 }
 
 impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
@@ -397,6 +403,8 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     let line_style = line_info.line_style;
     let fonts = &line_info.items_data.fonts;
     let is_first_line = self.stack.is_empty();
+
+    self.has_block_in_inline = false;
 
     if is_first_line {
       self.stack.push(InlineBoxState::new(0, line_style, fonts));
@@ -575,6 +583,31 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     }
   }
 
+  /// Blink's `OnBlockInInline`: every open box, and the line, takes the block's `metrics`, and
+  /// the placeholders on the line its height.
+  pub(crate) fn on_block_in_inline(
+    &mut self,
+    metrics: FontHeight,
+    line_box: &mut LogicalLineItems<'a, 'c>,
+  ) {
+    debug_assert!(!self.has_block_in_inline);
+
+    self.has_block_in_inline = true;
+
+    for box_state in &mut self.stack {
+      box_state.metrics = metrics;
+    }
+
+    let line_height = metrics.line_height();
+
+    for item in &mut line_box.children {
+      debug_assert!(item.is_placeholder());
+
+      item.rect.offset.block_offset = LayoutUnit::ZERO;
+      item.rect.size.block_size = line_height;
+    }
+  }
+
   /// Blink's `AddBoxFragmentPlaceholder`: a flat placeholder for the box, which
   /// `create_box_fragments` turns into the box's fragment.
   fn add_box_fragment_placeholder(
@@ -719,7 +752,7 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     box_data.rect.size.inline_size =
       advance - box_data.margin_line_left - box_data.margin_line_right;
 
-    let fragment = box_data.create_box_fragment(line_box);
+    let fragment = box_data.create_box_fragment(line_box, false);
     let placeholder = &mut line_box[fragment_start];
 
     placeholder.layout_result = Some(fragment);
@@ -1032,8 +1065,13 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     }
   }
 
-  /// Blink's `CreateBoxFragments`: the boxes' fragments, in place of their placeholders.
-  pub(crate) fn create_box_fragments(&mut self, line_box: &mut LogicalLineItems<'a, 'c>) {
+  /// Blink's `CreateBoxFragments`: the boxes' fragments, in place of their placeholders, opaque
+  /// on a block-in-inline's line.
+  pub(crate) fn create_box_fragments(
+    &mut self,
+    line_box: &mut LogicalLineItems<'a, 'c>,
+    is_opaque: bool,
+  ) {
     if !self.has_box_fragments() {
       return;
     }
@@ -1048,7 +1086,7 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
       debug_assert!(end > start);
       debug_assert!(box_data.item.should_create_box_fragment);
 
-      let fragment = box_data.create_box_fragment(line_box);
+      let fragment = box_data.create_box_fragment(line_box, is_opaque);
 
       if line_box[start].is_placeholder() {
         let child = &mut line_box[start];
@@ -1084,6 +1122,13 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     index: usize,
     line_box: &mut LogicalLineItems<'a, 'c>,
   ) -> PositionPending {
+    // `vertical-align` does not apply to the line around a block-in-inline.
+    if self.has_block_in_inline {
+      debug_assert!(self.stack[index].pending_descendants.is_empty());
+
+      return PositionPending::NotPending;
+    }
+
     // Descendants waiting for this box's size align now.
     if !self.stack[index].pending_descendants.is_empty() {
       let mut pending_descendants = mem::take(&mut self.stack[index].pending_descendants);

@@ -32,14 +32,19 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     inline::{
-      ContentBox, FragmentItems, InlineContentKind, InlineOutOfFlow, PaddingBox, StaticPosition,
-      inline_node::InlineNode, inline_node_data::InlineNodeData,
+      ContentBox, FragmentItems, InlineContentKind, InlineMeasurement, InlineOutOfFlow, PaddingBox,
+      StaticPosition,
+      inline_item::InlineItemType,
+      inline_item_result::{CollapsedMargins, LayoutResult},
+      inline_node::InlineNode,
+      inline_node_data::InlineNodeData,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
     table::MAX_GRID_ROWS,
     table_columns::TableColumns,
   },
+  layout_unit::LayoutUnit,
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   painter::OwnContent,
   resources::font::PrimaryFontMetrics,
@@ -217,12 +222,14 @@ impl LayoutResults {
 }
 
 /// A measurement's constraint as bits: each axis's available space as a kind and a size, then
-/// each known size, the height ones left out unless `with_height`.
+/// each known size, the height ones left out unless `with_height`, then the edges its margins
+/// adjoin.
 fn inline_measure_bits(
   available_space: Size<AvailableSpace>,
   known_dimensions: Size<Option<f32>>,
+  margins_adjoin: Line<bool>,
   with_height: bool,
-) -> [u32; 6] {
+) -> [u32; 7] {
   let available = |space: AvailableSpace| match space {
     AvailableSpace::Definite(value) => (0, value.to_bits()),
     AvailableSpace::MinContent => (1, 0),
@@ -245,6 +252,7 @@ fn inline_measure_bits(
     height,
     known(known_dimensions.width),
     known_height,
+    u32::from(margins_adjoin.start) | (u32::from(margins_adjoin.end) << 1),
   ]
 }
 
@@ -257,7 +265,7 @@ pub struct LayoutTree<'r> {
   /// Each inline formatting context's measured size per constraint. taffy keys its own cache on
   /// both axes, while only inline boxes see the available height, so a context without them is
   /// keyed on its width constraint alone.
-  inline_measures: RefCell<HashMap<InlineMeasureKey, Size<f32>>>,
+  inline_measures: RefCell<HashMap<InlineMeasureKey, InlineMeasurement>>,
   /// Each inline formatting context's prepared items, which every pass of one layout shares, as
   /// Blink keeps them until `NeedsCollectInlines`.
   inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
@@ -267,7 +275,7 @@ pub struct LayoutTree<'r> {
 }
 
 /// A node and the constraint it is measured under, as bits.
-type InlineMeasureKey = (usize, [u32; 6]);
+type InlineMeasureKey = (usize, [u32; 7]);
 
 struct LayoutNodeState {
   style: Style,
@@ -376,6 +384,8 @@ pub struct RenderNode {
   /// Generated marker box, emitted before this box's own inline content.
   pub(crate) marker: Option<Box<RenderNode>>,
   pub(crate) force_inline_layout: bool,
+  /// Blink's `IsBlockInInline`: the anonymous block holding block-level children of an inline box.
+  pub(crate) is_block_in_inline: bool,
   /// Grid lines a lowered table's header rows cover, as `[start, end)`, for
   /// paged output to repeat per css-tables-3 §repeated-headers.
   pub table_header_lines: Option<(i16, i16)>,
@@ -388,7 +398,7 @@ pub struct RenderNode {
   pub(crate) table_columns: Option<Box<TableColumns>>,
   /// The fragment items its inline content last laid out to.
   pub(crate) fragment_items: FragmentItemsCache,
-  /// The layouts it took as an atomic inline, by available space.
+  /// The layouts it took as an atomic inline or a block-in-inline, by available space.
   atomic_inline_layouts: AtomicInlineCache,
 }
 
@@ -482,6 +492,20 @@ fn block_style() -> Rc<Style> {
 pub(crate) struct AtomicInlineMetrics {
   pub(crate) size: Size<f32>,
   pub(crate) baseline_offset: Option<f32>,
+  /// A block-in-inline's margins, none for an atomic inline.
+  pub(crate) collapsed_margins: Option<CollapsedMargins>,
+}
+
+impl AtomicInlineMetrics {
+  /// The metrics as the line takes them, in layout units.
+  pub(crate) fn into_layout_result(self) -> LayoutResult {
+    LayoutResult {
+      inline_size: LayoutUnit::from_float(self.size.width),
+      block_size: LayoutUnit::from_float(self.size.height),
+      baseline: self.baseline_offset.map(LayoutUnit::from_float),
+      collapsed_margins: self.collapsed_margins,
+    }
+  }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -998,6 +1022,85 @@ impl<'r> LayoutTree<'r> {
     for node in &mut self.nodes {
       node.final_layout = node.unrounded_layout;
     }
+  }
+
+  /// The measurement of the inline formatting context the node at `idx` establishes, cached by
+  /// its constraint and the margins adjoining its edges.
+  fn inline_measurement(
+    &self,
+    idx: usize,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
+  ) -> InlineMeasurement {
+    let render_node = self.render_nodes[idx];
+    let margins_adjoin = render_node.context.margins_adjoin();
+    let key = |with_height| {
+      (
+        idx,
+        inline_measure_bits(
+          available_space,
+          known_dimensions,
+          margins_adjoin,
+          with_height,
+        ),
+      )
+    };
+    let (across_heights, exact) = (key(false), key(true));
+    let measured = {
+      let measures = self.inline_measures.borrow();
+
+      measures
+        .get(&across_heights)
+        .or_else(|| measures.get(&exact))
+        .copied()
+    };
+
+    if let Some(measurement) = measured {
+      return measurement;
+    }
+
+    let (measurement, sizes_boxes) = render_node.measure_inline_content(
+      &self.inline_node_data(idx),
+      available_space,
+      known_dimensions,
+    );
+
+    self.inline_measures.borrow_mut().insert(
+      if sizes_boxes { exact } else { across_heights },
+      measurement,
+    );
+    measurement
+  }
+
+  /// The root laid out as an in-flow block of a block formatting context, an auto width filling a
+  /// definite `available_space`'s: its size leaves out the margins collapsing through its edges,
+  /// which the output carries.
+  pub(crate) fn lay_out_root_in_flow(
+    &mut self,
+    available_space: Size<AvailableSpace>,
+  ) -> LayoutOutput {
+    let available_space: TaffySize<TaffyAvailableSpace> =
+      available_space.map(AvailableSpace::into_taffy).into_taffy();
+
+    self.compute_child_layout(
+      NodeId::ROOT.into_taffy(),
+      LayoutInput {
+        run_mode: RunMode::PerformLayout,
+        sizing_mode: SizingMode::InherentSize,
+        axis: RequestedAxis::Both,
+        known_dimensions: TaffySize {
+          width: available_space.width.into_option(),
+          height: None,
+        },
+        known_dimensions_are_definite: TaffySize {
+          width: true,
+          height: true,
+        },
+        parent_size: available_space.into_options(),
+        available_space,
+        vertical_margins_are_collapsible: Line::TRUE,
+      },
+    )
   }
 
   /// The root's border-box min-content and max-content widths, sized without laying out its
@@ -1559,6 +1662,19 @@ impl<'r> LayoutTree<'r> {
               .map(|height| (height - insets.height).max(0.0)),
           );
 
+          // taffy's `children_margins_adjoin_own_edges`, the end one for an auto height only.
+          if node_data.is_inline_children {
+            let collapsible = inputs.vertical_margins_are_collapsible;
+
+            render_node.context.set_margins_adjoin(Line {
+              start: collapsible.start && padding.top == 0.0 && border.top == 0.0,
+              end: collapsible.end
+                && padding.bottom == 0.0
+                && border.bottom == 0.0
+                && fixed_size.height.is_none(),
+            });
+          }
+
           let mut output = compute_leaf_layout(
             inputs,
             &node_data.style,
@@ -1594,40 +1710,35 @@ impl<'r> LayoutTree<'r> {
                   .into_taffy();
               }
 
-              let across_heights = (
-                idx,
-                inline_measure_bits(available_space, known_dimensions, false),
-              );
-              let exact = (
-                idx,
-                inline_measure_bits(available_space, known_dimensions, true),
-              );
-              let measured = {
-                let measures = tree.inline_measures.borrow();
-
-                measures
-                  .get(&across_heights)
-                  .or_else(|| measures.get(&exact))
-                  .copied()
-              };
-
-              if let Some(size) = measured {
-                return size.into_taffy();
-              }
-
-              let (size, sizes_boxes) = render_node.measure_inline_content(
-                &tree.inline_node_data(idx),
-                available_space,
-                known_dimensions,
-              );
-
               tree
-                .inline_measures
-                .borrow_mut()
-                .insert(if sizes_boxes { exact } else { across_heights }, size);
-              size.into_taffy()
+                .inline_measurement(idx, available_space, known_dimensions)
+                .size
+                .into_taffy()
             },
           );
+
+          // Margins of a block-in-inline at the content's edges collapse out through them.
+          if node_data.is_inline_children
+            && tree
+              .inline_node_data(idx)
+              .items
+              .iter()
+              .any(|item| item.item_type == InlineItemType::BlockInInline)
+          {
+            let margins = tree
+              .inline_measurement(
+                idx,
+                Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
+                Size {
+                  width: Some(output.size.width),
+                  height: None,
+                },
+              )
+              .margins;
+
+            output.top_margin = margins.start;
+            output.bottom_margin = margins.end;
+          }
 
           let lays_out_text = node_data.is_inline_children
             || matches!(
@@ -1907,6 +2018,7 @@ impl RenderNode {
       anonymous_text_content: None,
       marker: None,
       force_inline_layout: false,
+      is_block_in_inline: false,
       table_header_lines: None,
       table_footer_lines: None,
       table_part: None,
@@ -1999,6 +2111,26 @@ impl RenderNode {
       Some(children.into_boxed_slice()),
       block_style(),
     )
+  }
+
+  /// Blink's `LayoutInline::CreateAnonymousContainerForBlockChildren`, which takes the inline box's
+  /// direction for the blocks it holds.
+  fn block_in_inline(parent_context: &RenderContext, children: Vec<RenderNode>) -> Self {
+    let context = RenderContext::for_anonymous(parent_context);
+    let layout_style = Rc::new(Style {
+      display: TaffyDisplay::Block,
+      direction: context.style.inherited_data.direction.into_taffy(),
+      ..Style::default()
+    });
+    let mut block = Self::anonymous(
+      context,
+      None,
+      Some(children.into_boxed_slice()),
+      layout_style,
+    );
+
+    block.is_block_in_inline = true;
+    block
   }
 
   pub(super) fn anonymous_image_item(
@@ -2331,6 +2463,7 @@ impl RenderNode {
       &mut source_cursor,
       &mut root_counter,
       false,
+      true,
     )];
 
     loop {
@@ -2346,6 +2479,12 @@ impl RenderNode {
           &mut source_cursor,
           &mut current.list_counter,
           current.inside_list,
+          current
+            .context
+            .style
+            .base_data
+            .display
+            .should_blockify_children(),
         );
         stack.push(child_pending);
         continue;
@@ -2384,10 +2523,12 @@ impl RenderNode {
   }
 
   /// Blockifies, trims, and wraps `children` the way their parent's display
-  /// requires, blockifying the parent itself when it holds a block.
+  /// requires. An inline parent holding a block wraps it as a block-in-inline, unless its own
+  /// parent `blockifies` it, which it then does here.
   fn normalize_children(
     context: &mut RenderContext,
     children: Box<[RenderNode]>,
+    blockifies: bool,
   ) -> Box<[RenderNode]> {
     if context.style.base_data.display.should_blockify_children() {
       // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
@@ -2427,6 +2568,14 @@ impl RenderNode {
     let parent_is_inline = context.style.base_data.display.is_inline();
 
     if parent_is_inline && has_block {
+      if !blockifies {
+        return wrap_runs(
+          children,
+          |child| !child.participates_in_inline_formatting_context(),
+          |run| RenderNode::block_in_inline(context, run),
+        );
+      }
+
       context.blockify();
     }
 
@@ -2438,23 +2587,13 @@ impl RenderNode {
       return children;
     }
 
-    let mut final_children = Vec::new();
-    let mut inline_group = Vec::new();
-
     // An out-of-flow box stays in the run of inline content around it, as a placeholder
     // marking its static position, rather than breaking the run into two lines.
-    for item in children {
-      if item.participates_in_inline_formatting_context() {
-        inline_group.push(item);
-        continue;
-      }
-
-      flush_inline_group(&mut inline_group, &mut final_children, context);
-      final_children.push(item);
-    }
-
-    flush_inline_group(&mut inline_group, &mut final_children, context);
-    final_children.into_boxed_slice()
+    wrap_runs(
+      children,
+      RenderNode::participates_in_inline_formatting_context,
+      |run| RenderNode::anonymous_block_container(context, run),
+    )
   }
 
   /// Padding in pixels, with a percentage resolving to zero.
@@ -2669,6 +2808,7 @@ impl RenderNode {
         )
       }),
       baseline_offset: None,
+      collapsed_margins: None,
     }
   }
 
@@ -2698,7 +2838,38 @@ impl RenderNode {
     AtomicInlineMetrics {
       size,
       baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
+      collapsed_margins: None,
     }
+  }
+
+  /// Blink's `BlockNode::Layout` of a block-in-inline: an auto width fills `available_space`'s,
+  /// and the margins of its first and last blocks collapse through it. Approximate: its first
+  /// baseline stands in for its last, which taffy does not give, and it collapses through when it
+  /// has no height, without Blink's check of its content.
+  pub(crate) fn layout_block_in_inline(
+    &self,
+    available_space: Size<AvailableSpace>,
+  ) -> AtomicInlineMetrics {
+    self
+      .atomic_inline_layouts
+      .get_or_insert_with(available_space, || {
+        let output = LayoutTree::from_render_node(self).lay_out_root_in_flow(available_space);
+
+        AtomicInlineMetrics {
+          size: Size::from_taffy(output.size),
+          baseline_offset: output.baselines.first,
+          collapsed_margins: Some(CollapsedMargins {
+            start: output.top_margin,
+            end: output.bottom_margin,
+            is_self_collapsing: output.size.height == 0.0,
+          }),
+        }
+      })
+  }
+
+  /// The border box's min-content and max-content widths, laid out as a tree's root.
+  pub(crate) fn min_max_widths(&self) -> (f32, f32) {
+    LayoutTree::from_render_node(self).root_min_max_widths()
   }
 
   /// An atomic inline box's shrink-to-fit size and baseline.
@@ -2711,7 +2882,7 @@ impl RenderNode {
     // CSS shrink-to-fit for inline-level atomic boxes:
     // width = min(max-content, max(min-content, available)).
     // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
-    let (min_content, max_content) = LayoutTree::from_render_node(self).root_min_max_widths();
+    let (min_content, max_content) = self.min_max_widths();
     let used_width = match available_space.width {
       AvailableSpace::Definite(available) => max_content.min(min_content.max(available)),
       AvailableSpace::MinContent => min_content,
@@ -2723,21 +2894,20 @@ impl RenderNode {
     AtomicInlineMetrics {
       size,
       baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
+      collapsed_margins: None,
     }
   }
 
-  /// The size of this inline formatting context, and whether it sized inline boxes, the only
-  /// part of it the available height reaches.
+  /// The measurement of this inline formatting context, and whether it sized inline boxes, the
+  /// only part of it the available height reaches.
   pub(crate) fn measure_inline_content<'c>(
     &'c self,
     items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
-  ) -> (Size<f32>, bool) {
+  ) -> (InlineMeasurement, bool) {
     (
-      InlineNode::new(self)
-        .measure(items_data, available_space, known_dimensions)
-        .size,
+      InlineNode::new(self).measure(items_data, available_space, known_dimensions),
       true,
     )
   }
@@ -2774,19 +2944,34 @@ impl RenderNode {
   }
 }
 
-fn flush_inline_group(
-  inline_group: &mut Vec<RenderNode>,
-  final_children: &mut Vec<RenderNode>,
-  parent_render_context: &RenderContext,
-) {
-  if inline_group.is_empty() {
-    return;
+/// `children` with each run of the ones `in_run` picks wrapped in the box `wrap` makes of it.
+fn wrap_runs(
+  children: Box<[RenderNode]>,
+  in_run: impl Fn(&RenderNode) -> bool,
+  wrap: impl Fn(Vec<RenderNode>) -> RenderNode,
+) -> Box<[RenderNode]> {
+  let mut wrapped = Vec::new();
+  let mut run = Vec::new();
+
+  for child in children {
+    if in_run(&child) {
+      run.push(child);
+
+      continue;
+    }
+
+    if !run.is_empty() {
+      wrapped.push(wrap(take(&mut run)));
+    }
+
+    wrapped.push(child);
   }
 
-  final_children.push(RenderNode::anonymous_block_container(
-    parent_render_context,
-    take(inline_group),
-  ));
+  if !run.is_empty() {
+    wrapped.push(wrap(run));
+  }
+
+  wrapped.into_boxed_slice()
 }
 
 // Mirrors Blink's Text::TextLayoutObjectIsNeeded, minus the ends-with-space
@@ -2826,6 +3011,8 @@ struct PendingRenderNode {
   marker_ordinal: Option<i32>,
   inside_list: bool,
   owns_list_counter: bool,
+  /// Whether its parent blockifies it, as a flex or grid item or the tree's root.
+  blockifies: bool,
 }
 
 impl PendingRenderNode {
@@ -2836,6 +3023,7 @@ impl PendingRenderNode {
     source_cursor: &mut usize,
     counter: &mut ListCounter,
     inside_list: bool,
+    blockifies: bool,
   ) -> Self {
     let source_order = *source_cursor;
     *source_cursor += 1;
@@ -2881,6 +3069,7 @@ impl PendingRenderNode {
       },
       inside_list: inside_list || is_list_element(&node),
       owns_list_counter,
+      blockifies,
       context,
       node,
       rendered_children,
@@ -2901,6 +3090,7 @@ impl PendingRenderNode {
       Some(RenderNode::normalize_children(
         &mut context,
         self.rendered_children.into_boxed_slice(),
+        self.blockifies,
       ))
     } else {
       Self::anonymous_text_child(&context, &self.node).map(|child| Box::from([child]))

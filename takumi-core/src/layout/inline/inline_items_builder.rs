@@ -655,6 +655,33 @@ impl<'c> InlineItemsBuilder<'c> {
     }
   }
 
+  /// Blink's `AppendBlockInInline`: like a forced break, it removes the collapsible space before
+  /// it and collapses the spaces after it.
+  pub(crate) fn append_block_in_inline(&mut self, layout_object: LayoutObject<'c>) {
+    self.remove_trailing_collapsible_space_if_exists();
+
+    let index = self.append(
+      InlineItemType::BlockInInline,
+      OBJECT_REPLACEMENT_CHARACTER,
+      layout_object,
+    );
+    let item = &mut self.items[index];
+
+    item.end_collapse_type = CollapseType::Collapsible;
+    item.is_end_collapsible_newline = false;
+
+    // Blink stops culling the inline box around it.
+    if let Some(current_box) = self.boxes.last_mut()
+      && !current_box.should_create_box_fragment
+    {
+      current_box.should_create_box_fragment = true;
+      self.items[current_box.item_index].should_create_box_fragment = true;
+    }
+
+    // The content before it, it, and the content after it bisect as three paragraphs.
+    self.is_bisect_line_break_disabled = true;
+  }
+
   /// Blink's `AppendFloating`: out of flow, so opaque to text processing.
   /// <https://drafts.csswg.org/css-text-3/#text-encoding>
   pub(crate) fn append_floating(&mut self, layout_object: LayoutObject<'c>) {
@@ -712,9 +739,12 @@ impl<'c> InlineItemsBuilder<'c> {
     debug_assert_eq!(item.end_collapse_type, CollapseType::Collapsible);
     debug_assert!(item.length() > 0);
 
-    // A forced break poses as a collapsible space, and stays.
+    // A forced break and a block-in-inline pose as a collapsible space, and stay.
     if item.item_type != InlineItemType::Text {
-      debug_assert_eq!(item.item_type, InlineItemType::Control);
+      debug_assert!(matches!(
+        item.item_type,
+        InlineItemType::Control | InlineItemType::BlockInInline
+      ));
 
       return;
     }

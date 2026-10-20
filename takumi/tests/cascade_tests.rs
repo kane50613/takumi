@@ -41,9 +41,9 @@ fn empty_rule_blocks_do_not_disturb_the_cascade() {
 
 #[test]
 fn descendant_selector_matches_after_sibling_subtrees() {
-  let plain = Node::container([block("probe")]);
-  let outer = Node::container([block("probe")]).with_class_name("outer");
-  let trailing = Node::container([block("probe")]);
+  let plain = block_of([block("probe")]);
+  let outer = block_of([block("probe")]).with_class_name("outer");
+  let trailing = block_of([block("probe")]);
   let root = Node::container([plain, outer, trailing]);
   let result = measure_with_css(root, r#".outer .probe { width: 150px; }"#);
 
@@ -51,6 +51,12 @@ fn descendant_selector_matches_after_sibling_subtrees() {
   assert_ne!(default_width, 150.0);
   assert_eq!(result.children[1].children[0].width, 150.0);
   assert_eq!(result.children[2].children[0].width, default_width);
+}
+
+/// A block container of `children`.
+fn block_of(children: impl Into<Vec<Node>>) -> Node {
+  Node::container(children)
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
 }
 
 fn tw_block(class: &str, values: &str) -> Node {

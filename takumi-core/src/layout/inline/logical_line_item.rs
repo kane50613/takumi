@@ -1,5 +1,5 @@
 //! Blink's [`LogicalLineItem`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/logical_line_item.cc),
-//! without ruby, initial letters, block-in-inline, or `text-fit`.
+//! without ruby, initial letters, or `text-fit`.
 
 use std::{
   ops::{Index, IndexMut, Range},
@@ -37,6 +37,8 @@ pub(crate) struct InlineBoxFragment<'c> {
   pub(crate) padding: LineBoxStrut,
   pub(crate) has_line_left_edge: bool,
   pub(crate) has_line_right_edge: bool,
+  /// Blink's `IsOpaque`: on a block-in-inline's line, it paints nothing.
+  pub(crate) is_opaque: bool,
   /// The out-of-flow boxes inside.
   pub(crate) out_of_flow_children: Vec<OutOfFlowInlineChild<'c>>,
 }
@@ -60,6 +62,11 @@ pub(crate) enum LineFragment<'c> {
     node: &'c RenderNode,
     layout_result: LayoutResult,
   },
+  /// A block-in-inline, laid out.
+  BlockInInline {
+    node: &'c RenderNode,
+    layout_result: LayoutResult,
+  },
   /// A float placed with the line.
   Float {
     node: &'c RenderNode,
@@ -71,7 +78,9 @@ pub(crate) enum LineFragment<'c> {
 impl<'c> LineFragment<'c> {
   pub(crate) fn node(&self) -> &'c RenderNode {
     match self {
-      Self::AtomicInline { node, .. } | Self::Float { node, .. } => node,
+      Self::AtomicInline { node, .. }
+      | Self::BlockInInline { node, .. }
+      | Self::Float { node, .. } => node,
       Self::InlineBox(fragment) => fragment.node,
     }
   }
