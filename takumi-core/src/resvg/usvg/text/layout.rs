@@ -6,8 +6,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use harfrust::{Feature, Tag as HbTag, font::Variation};
-use icu_properties::CodePointMapData;
-use icu_properties::props::Script;
 use kurbo::{ParamCurve, ParamCurveArclen, ParamCurveDeriv};
 use skrifa::raw::types::F2Dot14;
 use strict_num::NonZeroPositiveF32;
@@ -23,11 +21,12 @@ use crate::fonts::font_selection_types::{
   FontSelectionRequest, FontSelectionValue, ITALIC_SLOPE_VALUE, NORMAL_SLOPE_VALUE,
 };
 use crate::fonts::shaping::harfbuzz_shaper::HarfBuzzShaper;
+use crate::fonts::shaping::shape_result_spacing::ShapeResultSpacing;
 use crate::fonts::shaping::shape_result_view::ShapeResultView;
 use crate::fonts::simple_font_data::SimpleFontData;
 use crate::layout::inline::decorations::{DecoratingBox, DecorationFont};
 use crate::resources::font::{PrimaryFontMetrics, RunFace, RunSynthesis};
-use crate::resvg::usvg::tree::{BBox, IsValidLength};
+use crate::resvg::usvg::tree::BBox;
 use crate::resvg::usvg::{
   AlignmentBaseline, ApproxZeroUlps, BaselineShift, Cache, DominantBaseline, Fill, FillRule, Font,
   FontOpticalSizing, FontStyle, GlyphId, LengthAdjust, PaintOrder, Path, ShapeRendering, Stroke,
@@ -35,9 +34,9 @@ use crate::resvg::usvg::{
 };
 use crate::sort_key::sort_by_key;
 use crate::style::{
-  Direction as TextDirection, FontFamilyToken, FontLanguageOverride,
-  FontOpticalSizing as CssFontOpticalSizing, FontSynthesic, FontVariantCaps, GenericFamilyType,
-  SizedTextDecorationThickness, TextDecorationLines, TextUnderlinePosition,
+  Direction as TextDirection, FontFamilyToken, FontFeature, FontLanguageOverride,
+  FontOpticalSizing as CssFontOpticalSizing, FontSynthesic, FontVariantCaps, FontVariantLigatures,
+  GenericFamilyType, SizedTextDecorationThickness, TextDecorationLines, TextUnderlinePosition,
 };
 use crate::text::bidi_paragraph::{BidiParagraph, direction_from_level};
 
@@ -144,8 +143,6 @@ pub(crate) fn layout_text(text_node: &Text, cache: &Cache) -> Option<(Vec<Span>,
     }
 
     apply_writing_mode(text_node.writing_mode, &mut clusters);
-    apply_letter_spacing(chunk, &mut clusters);
-    apply_word_spacing(chunk, &mut clusters);
 
     apply_length_adjust(chunk, &mut clusters);
     let mut curr_pos = resolve_clusters_positions(
@@ -758,12 +755,13 @@ fn process_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<GlyphCl
   clusters
 }
 
-/// Shapes `chunk` through `HarfBuzzShaper`, in visual order. Each span shapes with its own font,
-/// as Blink's `InlineNode::ShapeText` shapes each item, so a bidi run is shaped piece by piece
-/// at span boundaries.
+/// Shapes `chunk` through `HarfBuzzShaper` and spaces it through `ShapeResultSpacing`, in visual
+/// order. Each span shapes with its own font and spacing, as Blink's `InlineNode::ShapeText`
+/// shapes each item, so a bidi run is shaped piece by piece at span boundaries.
 fn shape_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<Glyph> {
   let bidi = BidiParagraph::new(&chunk.text, Some(TextDirection::Ltr));
   let shaper = HarfBuzzShaper::new(chunk.text.clone());
+  let mut spacing = ShapeResultSpacing::new(&chunk.text, true);
   let mut glyphs = Vec::new();
 
   for run in bidi.get_visual_runs() {
@@ -787,7 +785,15 @@ fn shape_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<Glyph> {
       let Some(font) = fonts_cache.shaping_font(span) else {
         continue;
       };
-      let result = shaper.shape(&font, direction, start, end);
+      let mut result = shaper.shape(&font, direction, start, end);
+
+      if spacing.set_spacing_from(
+        font.description.letter_spacing,
+        font.description.word_spacing,
+      ) {
+        result.apply_spacing(&mut spacing, 0);
+      }
+
       let mut shaped = Vec::new();
       let total_advance = ShapeResultView::create_from_result(&Rc::new(result)).for_each_glyph(
         0.0,
@@ -845,7 +851,6 @@ fn apply_length_adjust(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
 
     for i in &cluster_indexes {
       // Use the original cluster `width` and not `advance`.
-      // This method essentially discards any `word-spacing` and `letter-spacing`.
       width += clusters[*i].width;
     }
 
@@ -889,73 +894,6 @@ fn apply_writing_mode(writing_mode: WritingMode, _clusters: &mut [GlyphCluster])
   // Vertical writing modes are unsupported (the parser never emits
   // `TopToBottom`), so upstream's Vertical_Orientation rotation is stripped.
   debug_assert!(writing_mode != WritingMode::TopToBottom);
-}
-
-/// Applies the `letter-spacing` property to a text chunk clusters.
-///
-/// [In the CSS spec](https://www.w3.org/TR/css-text-3/#letter-spacing-property).
-fn apply_letter_spacing(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
-  // At least one span should have a non-zero spacing.
-  if !chunk
-    .spans
-    .iter()
-    .any(|span| !span.letter_spacing.approx_zero_ulps(4))
-  {
-    return;
-  }
-
-  let num_clusters = clusters.len();
-  for (i, cluster) in clusters.iter_mut().enumerate() {
-    // Spacing must be applied only to characters that belongs to the script
-    // that supports spacing.
-    // We are checking only the first code point, since it should be enough.
-    // https://www.w3.org/TR/css-text-3/#cursive-tracking
-    let script = CodePointMapData::<Script>::new().get(cluster.codepoint);
-    if script_supports_letter_spacing(script) {
-      if let Some(span) = chunk_span_at(chunk, cluster.byte_idx) {
-        // A space after the last cluster should be ignored,
-        // since it affects the bbox and text alignment.
-        if i != num_clusters - 1 {
-          cluster.advance += span.letter_spacing;
-        }
-
-        // If the cluster advance became negative - clear it.
-        // This is an UB so we can do whatever we want, and we mimic Chrome's behavior.
-        if !cluster.advance.is_valid_length() {
-          cluster.width = 0.0;
-          cluster.advance = 0.0;
-          cluster.glyphs = vec![];
-        }
-      }
-    }
-  }
-}
-
-/// Applies the `word-spacing` property to a text chunk clusters.
-///
-/// [In the CSS spec](https://www.w3.org/TR/css-text-3/#propdef-word-spacing).
-fn apply_word_spacing(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
-  // At least one span should have a non-zero spacing.
-  if !chunk
-    .spans
-    .iter()
-    .any(|span| !span.word_spacing.approx_zero_ulps(4))
-  {
-    return;
-  }
-
-  for cluster in clusters {
-    if is_word_separator_characters(cluster.codepoint) {
-      if let Some(span) = chunk_span_at(chunk, cluster.byte_idx) {
-        // Technically, word spacing 'should be applied half on each
-        // side of the character', but it doesn't affect us in any way,
-        // so we are ignoring this.
-        cluster.advance += span.word_spacing;
-
-        // After word spacing, `advance` can be negative.
-      }
-    }
-  }
 }
 
 fn form_glyph_clusters(glyphs: &[Glyph], text: &str) -> GlyphCluster {
@@ -1041,33 +979,6 @@ impl Iterator for GlyphClusters<'_> {
   }
 }
 
-/// Checks that selected script supports letter spacing.
-///
-/// [In the CSS spec](https://www.w3.org/TR/css-text-3/#cursive-tracking).
-///
-/// The list itself is from: https://github.com/harfbuzz/harfbuzz/issues/64
-pub(crate) fn script_supports_letter_spacing(script: Script) -> bool {
-  !matches!(
-    script,
-    Script::Arabic
-      | Script::Syriac
-      | Script::Nko
-      | Script::Manichaean
-      | Script::PsalterPahlavi
-      | Script::Mandaic
-      | Script::Mongolian
-      | Script::PhagsPa
-      | Script::Devanagari
-      | Script::Bengali
-      | Script::Gurmukhi
-      | Script::Modi
-      | Script::Sharada
-      | Script::SylotiNagri
-      | Script::Tirhuta
-      | Script::Ogham
-  )
-}
-
 /// A glyph.
 ///
 /// Basically, a glyph ID and it's metrics.
@@ -1115,6 +1026,8 @@ struct SpanFontKey {
   small_caps: bool,
   apply_kerning: bool,
   font_optical_sizing: FontOpticalSizing,
+  letter_spacing: u32,
+  word_spacing: u32,
 }
 
 impl SpanFontKey {
@@ -1125,6 +1038,8 @@ impl SpanFontKey {
       small_caps: span.small_caps,
       apply_kerning: span.apply_kerning,
       font_optical_sizing: span.font_optical_sizing,
+      letter_spacing: span.letter_spacing.to_bits(),
+      word_spacing: span.word_spacing.to_bits(),
     }
   }
 
@@ -1150,11 +1065,19 @@ impl SpanFontKey {
       FontStyle::Normal => NORMAL_SLOPE_VALUE,
       FontStyle::Italic | FontStyle::Oblique => ITALIC_SLOPE_VALUE,
     };
-    let features = if self.apply_kerning {
-      Vec::new()
-    } else {
-      vec![Feature::new(HbTag::new(b"kern"), 0, ..)]
-    };
+    let letter_spacing = f32::from_bits(self.letter_spacing);
+    let mut font_features = Vec::new();
+
+    FontVariantLigatures::default().append_features(letter_spacing != 0.0, &mut font_features);
+
+    let mut features: Vec<Feature> = font_features
+      .into_iter()
+      .map(FontFeature::into_harfrust)
+      .collect();
+
+    if !self.apply_kerning {
+      features.push(Feature::new(HbTag::new(b"kern"), 0, ..));
+    }
 
     FontDescription {
       fallback: FontFallbackKey {
@@ -1198,8 +1121,8 @@ impl SpanFontKey {
         FontVariantCaps::Normal
       },
       font_synthesis_small_caps: FontSynthesic::Auto,
-      letter_spacing: 0.0,
-      word_spacing: 0.0,
+      letter_spacing,
+      word_spacing: f32::from_bits(self.word_spacing),
       is_letter_spacing_fixed: true,
       is_word_spacing_fixed: true,
     }
@@ -1305,13 +1228,6 @@ pub(crate) fn span_contains(span: &TextSpan, byte_offset: ByteIndex) -> bool {
 /// Checks that the selected character is a word separator.
 ///
 /// According to: https://www.w3.org/TR/css-text-3/#word-separator
-pub(crate) fn is_word_separator_characters(c: char) -> bool {
-  matches!(
-    c as u32,
-    0x0020 | 0x00A0 | 0x1361 | 0x010100 | 0x010101 | 0x01039F | 0x01091F
-  )
-}
-
 impl ResolvedFont {
   /// `font_data`'s face and metrics; none for a face without metrics.
   fn new(font_data: &SimpleFontData) -> Option<Self> {
