@@ -1478,7 +1478,7 @@ impl Emitter<'_> {
   }
 
   /// A krilla font for a run's backing blob, instanced at the run's variation
-  /// coordinates. Copies the blob into the cache once per distinct instance.
+  /// coordinates, sharing the blob's bytes.
   fn cached_font(&self, shaped: &ShapedRun) -> Option<Font> {
     let key = (
       shaped.font_id(),
@@ -1499,7 +1499,7 @@ impl Emitter<'_> {
       .map(|(axis, value)| (Tag::new(axis), *value))
       .collect();
     let font = Font::new_variable(
-      Data::from(shaped.font_data().to_vec()),
+      Data::from(shaped.font_blob().shared_data()),
       shaped.font_index,
       &variations,
     )?;
