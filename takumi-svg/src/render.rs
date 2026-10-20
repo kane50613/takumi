@@ -261,7 +261,7 @@ impl<'n> PlacedBox<'n> {
       return Ok(None);
     }
 
-    let (token, reference) = doc.begin_mask()?;
+    let (token, reference) = doc.begin_mask(false)?;
     let border_box = Frame::border_box(self.frame);
 
     let layers = FillLayers::mask(style).resolve(
@@ -721,7 +721,7 @@ impl DocumentDevice<'_> {
     if self.error.is_some() {
       return;
     }
-    let (token, reference) = match self.doc.begin_mask() {
+    let (token, reference) = match self.doc.begin_mask(false) {
       Ok(mask) => mask,
       Err(error) => {
         self.error = Some(error);
