@@ -1,7 +1,7 @@
 use takumi_core::{geometry::PathCommand, painter::StrokeStyle};
 use tiny_skia::{
-  FillRule as TinyFillRule, LineCap as TinyLineCap, LineJoin as TinyLineJoin, Path as TinyPath,
-  PathBuilder as TinyPathBuilder, Stroke as TinyStroke, StrokeDash as TinyStrokeDash,
+  FillRule as TinyFillRule, LineCap as TinyLineCap, LineJoin as TinyLineJoin, Stroke as TinyStroke,
+  StrokeDash as TinyStrokeDash,
 };
 
 use crate::style::{FillRule, LineJoin};
@@ -171,24 +171,6 @@ impl Style {
 }
 
 pub(crate) type Command = PathCommand;
-
-pub(crate) fn build_path(commands: &[Command]) -> Option<TinyPath> {
-  let mut builder = TinyPathBuilder::new();
-
-  for command in commands {
-    match command {
-      Command::MoveTo(point) => builder.move_to(point.x, point.y),
-      Command::LineTo(point) => builder.line_to(point.x, point.y),
-      Command::QuadTo(p1, p2) => builder.quad_to(p1.x, p1.y, p2.x, p2.y),
-      Command::CubicTo(p1, p2, p3) => {
-        builder.cubic_to(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-      }
-      Command::Close => builder.close(),
-    }
-  }
-
-  builder.finish()
-}
 
 #[cfg(test)]
 mod tests {
