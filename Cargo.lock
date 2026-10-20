@@ -468,28 +468,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fontconfig-parser"
-version = "0.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbc773e24e02d4ddd8395fd30dc147524273a83e54e0f312d986ea30de5f5646"
-dependencies = [
- "roxmltree 0.20.0",
-]
-
-[[package]]
-name = "fontdb"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2660c5e9157bf76d2db1294e4a9feba604ef610819a3b591088d0d8392a3290f"
-dependencies = [
- "fontconfig-parser",
- "log",
- "memmap2",
- "slotmap",
- "tinyvec",
-]
-
-[[package]]
 name = "futures"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -617,24 +595,12 @@ dependencies = [
 
 [[package]]
 name = "harfrust"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
-dependencies = [
- "bitflags",
- "bytemuck",
- "read-fonts 0.41.0",
- "smallvec",
-]
-
-[[package]]
-name = "harfrust"
 version = "0.14.0"
 source = "git+https://github.com/kane50613/harfrust?rev=de393280a638ef3de24fad5eae26bb9454b44681#de393280a638ef3de24fad5eae26bb9454b44681"
 dependencies = [
  "bitflags",
  "bytemuck",
- "read-fonts 0.45.0",
+ "read-fonts",
  "smallvec",
 ]
 
@@ -959,15 +925,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "memmap2"
-version = "0.9.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "miniz_oxide"
@@ -1342,17 +1299,6 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.41.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "046a7d674daf459825b32f5062056d6882db0d2f5a479fbd76ccfc870ac18709"
-dependencies = [
- "bytemuck",
- "font-types",
- "once_cell",
-]
-
-[[package]]
-name = "read-fonts"
 version = "0.45.0"
 source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
 dependencies = [
@@ -1426,12 +1372,6 @@ checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 dependencies = [
  "bytemuck",
 ]
-
-[[package]]
-name = "roxmltree"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "roxmltree"
@@ -1609,21 +1549,11 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
 name = "skrifa"
-version = "0.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "819ab7d62b1d3e72d9d9dea5650bac30424f9111364bb94928dbf5ecad1baa68"
-dependencies = [
- "bytemuck",
- "read-fonts 0.41.0",
-]
-
-[[package]]
-name = "skrifa"
 version = "0.48.0"
 source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
 dependencies = [
  "bytemuck",
- "read-fonts 0.45.0",
+ "read-fonts",
 ]
 
 [[package]]
@@ -1752,7 +1682,7 @@ dependencies = [
  "png",
  "rayon",
  "resvg",
- "roxmltree 0.21.1",
+ "roxmltree",
  "serde_json",
  "takumi",
  "takumi-core",
@@ -1782,7 +1712,7 @@ dependencies = [
  "cssparser",
  "data-url",
  "gif",
- "harfrust 0.14.0",
+ "harfrust",
  "icu_casemap",
  "icu_locale_core",
  "icu_properties",
@@ -1798,7 +1728,7 @@ dependencies = [
  "precomputed-hash",
  "quick_cache",
  "rayon",
- "roxmltree 0.21.1",
+ "roxmltree",
  "rustc-hash",
  "selectors",
  "serde",
@@ -1806,7 +1736,7 @@ dependencies = [
  "serde_json",
  "simplecss",
  "siphasher",
- "skrifa 0.48.0",
+ "skrifa",
  "smallvec",
  "strict-num",
  "svgtypes",
@@ -1882,7 +1812,7 @@ dependencies = [
  "pretty_assertions",
  "rustc-hash",
  "siphasher",
- "skrifa 0.48.0",
+ "skrifa",
  "smallvec",
  "takumi-core",
  "takumi-html",
@@ -1923,7 +1853,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "skrifa 0.48.0",
+ "skrifa",
  "smallvec",
  "takumi-core",
  "tiny-skia",
@@ -2040,12 +1970,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tinyvec"
-version = "1.13.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
-
-[[package]]
 name = "typed-builder"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2078,22 +2002,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
-name = "unicode-script"
-version = "0.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "383ad40bb927465ec0ce7720e033cb4ca06912855fc35db31b5755d0de75b1ee"
-
-[[package]]
 name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
-
-[[package]]
-name = "unicode-vo"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1d386ff53b415b7fe27b50bb44679e2cc4660272694b7b6f3326d8480823a94"
 
 [[package]]
 name = "usvg"
@@ -2101,26 +2013,17 @@ version = "0.48.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "977d0a4abdef933f424a99fe09f95576e089b90aebc6f016a3bc813762493e91"
 dependencies = [
- "base64",
  "data-url",
- "flate2",
- "fontdb",
- "harfrust 0.12.0",
  "imagesize",
  "kurbo",
  "log",
  "pico-args",
- "roxmltree 0.21.1",
+ "roxmltree",
  "simplecss",
  "siphasher",
- "skrifa 0.44.0",
  "strict-num",
  "svgtypes",
  "tiny-skia-path",
- "unicode-bidi",
- "unicode-script",
- "unicode-vo",
- "xmlwriter",
 ]
 
 [[package]]
@@ -2273,7 +2176,7 @@ dependencies = [
  "indexmap",
  "kurbo",
  "log",
- "read-fonts 0.45.0",
+ "read-fonts",
 ]
 
 [[package]]
@@ -2292,12 +2195,6 @@ dependencies = [
  "bytes",
  "flate2",
 ]
-
-[[package]]
-name = "xmlwriter"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xmp-writer"

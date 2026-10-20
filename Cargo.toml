@@ -48,7 +48,7 @@ precomputed-hash = "0.1"
 pretty_assertions = "1"
 quick-xml = "0.42"
 rayon = "1.12"
-resvg = "0.48"
+resvg = { version = "0.48", default-features = false, features = ["raster-images"] }
 roxmltree = "0.21.1"
 rustc-hash = "2.1"
 selectors = "0.41"
