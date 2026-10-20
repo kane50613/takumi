@@ -668,19 +668,19 @@ mod tests {
     text::line_break_iterator::LineBreakType,
   };
 
-  struct Fixture {
-    shaper: HarfBuzzShaper,
+  struct Fixture<'t> {
+    shaper: HarfBuzzShaper<'t>,
     font: Font,
     result: Rc<ShapeResult>,
   }
 
-  impl Fixture {
-    fn new(text: &str) -> (Fonts, Self) {
+  impl<'t> Fixture<'t> {
+    fn new(text: &'t str) -> (Fonts, Self) {
       Self::with_font(text, geist())
     }
 
-    fn with_font(text: &str, (fonts, font): (Fonts, Font)) -> (Fonts, Self) {
-      let shaper = HarfBuzzShaper::new(text.into());
+    fn with_font(text: &'t str, (fonts, font): (Fonts, Font)) -> (Fonts, Self) {
+      let shaper = HarfBuzzShaper::new(text);
       let result = Rc::new(shaper.shape_all(&font, TextDirection::Ltr));
 
       (

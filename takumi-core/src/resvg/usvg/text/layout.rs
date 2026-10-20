@@ -760,7 +760,7 @@ fn process_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<GlyphCl
 /// shapes each item, so a bidi run is shaped piece by piece at span boundaries.
 fn shape_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<Glyph> {
   let bidi = BidiParagraph::new(&chunk.text, Some(TextDirection::Ltr));
-  let shaper = HarfBuzzShaper::new(chunk.text.clone());
+  let shaper = HarfBuzzShaper::new(&chunk.text);
   let mut spacing = ShapeResultSpacing::new(&chunk.text, true);
   let mut glyphs = Vec::new();
 

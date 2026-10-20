@@ -86,7 +86,7 @@ fn scale_line(scale_factor: f32, line_info: &mut LineInfo<'_, '_>) -> bool {
 /// The shaper and spacing `text-fit` reshapes a paragraph's text with.
 struct FitShaper<'a, 'c> {
   items_data: &'a InlineNodeData<'c>,
-  shaper: HarfBuzzShaper,
+  shaper: HarfBuzzShaper<'a>,
   spacing: ShapeResultSpacing<'a>,
 }
 
@@ -94,7 +94,7 @@ impl<'a, 'c> FitShaper<'a, 'c> {
   fn new(items_data: &'a InlineNodeData<'c>) -> Self {
     Self {
       items_data,
-      shaper: HarfBuzzShaper::new(items_data.text_content.clone()),
+      shaper: HarfBuzzShaper::new(&items_data.text_content),
       spacing: ShapeResultSpacing::new(&items_data.text_content, false),
     }
   }

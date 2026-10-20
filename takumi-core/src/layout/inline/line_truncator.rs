@@ -178,7 +178,7 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
   }
 
   fn shape(&self, text: String, direction: TextDirection) -> Rc<ShapeResultView> {
-    let shape_result = HarfBuzzShaper::new(text).shape_all(&self.font, direction);
+    let shape_result = HarfBuzzShaper::new(&text).shape_all(&self.font, direction);
 
     Rc::new(ShapeResultView::create_from_result(&Rc::new(shape_result)))
   }

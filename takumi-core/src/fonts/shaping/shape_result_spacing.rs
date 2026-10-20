@@ -301,7 +301,7 @@ mod tests {
   fn letter_spacing_follows_each_cluster() {
     let (_fonts, font) = geist();
     let text = "abc";
-    let mut result = HarfBuzzShaper::new(text.into()).shape_all(&font, TextDirection::Ltr);
+    let mut result = HarfBuzzShaper::new(text).shape_all(&font, TextDirection::Ltr);
     let width = result.width();
     let mut spacing = ShapeResultSpacing::new(text, false);
 
@@ -317,7 +317,7 @@ mod tests {
   fn word_spacing_skips_a_leading_space() {
     let (_fonts, font) = geist();
     let text = " a b";
-    let mut result = HarfBuzzShaper::new(text.into()).shape_all(&font, TextDirection::Ltr);
+    let mut result = HarfBuzzShaper::new(text).shape_all(&font, TextDirection::Ltr);
     let width = result.width();
     let mut spacing = ShapeResultSpacing::new(text, false);
 
@@ -331,7 +331,7 @@ mod tests {
   fn expansion_fills_the_spaces_but_the_last() {
     let (_fonts, font) = geist();
     let text = "a b c ";
-    let mut result = HarfBuzzShaper::new(text.into()).shape_all(&font, TextDirection::Ltr);
+    let mut result = HarfBuzzShaper::new(text).shape_all(&font, TextDirection::Ltr);
     let width = result.width();
     let mut spacing = ShapeResultSpacing::new(text, false);
 

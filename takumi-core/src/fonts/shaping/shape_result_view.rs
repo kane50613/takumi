@@ -530,7 +530,7 @@ mod tests {
   type GlyphInfo = (u32, u16, f32);
 
   fn shape(font: &Font, text: &str) -> Rc<ShapeResult> {
-    Rc::new(HarfBuzzShaper::new(text.into()).shape_all(font, TextDirection::Ltr))
+    Rc::new(HarfBuzzShaper::new(text).shape_all(font, TextDirection::Ltr))
   }
 
   /// Blink's `AddGlyphInfo` over every glyph.
@@ -744,7 +744,7 @@ mod tests {
 
     let font = font(&fonts, "Scheherazade");
     let shape_rtl =
-      |text: &str| Rc::new(HarfBuzzShaper::new(text.into()).shape_all(&font, TextDirection::Rtl));
+      |text: &str| Rc::new(HarfBuzzShaper::new(text).shape_all(&font, TextDirection::Rtl));
     let result = shape_rtl("\u{639}\u{631}\u{628}\u{649} \u{646}\u{635}");
     let all = glyphs(&ShapeResultView::create_from_result(&result));
     let first_word = ShapeResultView::create(&[segment(&result, 0, 8)]);
@@ -778,7 +778,7 @@ mod tests {
         .nth(character)
         .map_or(HEBREW.len(), |(byte, _)| byte)
     };
-    let shaper = HarfBuzzShaper::new(HEBREW.into());
+    let shaper = HarfBuzzShaper::new(HEBREW);
     let shape_result = Rc::new(shaper.shape(&font, TextDirection::Rtl, byte_of(51), byte_of(131)));
     let (start_offset, end_offset) = (byte_of(59) as u32, byte_of(118) as u32);
     let view = ShapeResultView::create_from_result_range(&shape_result, start_offset, end_offset);
