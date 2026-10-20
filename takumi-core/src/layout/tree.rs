@@ -3406,35 +3406,34 @@ impl RenderContext {
     source_order: usize,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
   ) -> (Rc<ComputedStyle>, SizingContext, Color) {
-    let metadata = &node.metadata;
-    // A box styled beyond its preset and matched rules, or one that styles itself by its own
-    // tag, resolves alone.
-    let shares_style = metadata.style.is_none()
-      && metadata.tw.is_none()
-      && metadata.dir.is_none()
-      && metadata.lang.is_none()
-      && !matches!(node.kind, NodeKind::Image(_))
-      && !node
-        .tag_name()
-        .is_some_and(|tag| tag.eq_ignore_ascii_case("html") || tag.eq_ignore_ascii_case("br"));
     let default_matched = MatchedDeclarationsView::default();
     let matched = matched_declarations
       .get(source_order)
       .map(NodeMatchedDeclarations::element)
       .unwrap_or(&default_matched);
-    let key = shares_style.then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
+    // A tree built in code is content, not a document: `rem` resolves against
+    // the viewport, so a `font-size` on the outermost node styles text without
+    // rescaling every `rem` length below it. A parsed document is the
+    // exception, since its outermost node is the `<html>` element that CSS
+    // does make the `rem` basis.
+    let is_document_root = source_order == 0
+      && node
+        .tag_name()
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
+    let layers = node.take_style_layers();
+    let key = (layers.is_preset_only() && !is_document_root)
+      .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
     let cache = self.matched_styles();
 
     if let Some(key) = &key
-      && let Some(resolved) = cache.get(key, &self.style, &self.sizing, metadata.preset.as_ref())
+      && let Some(resolved) = cache.get(key, &self.style, &self.sizing, layers.preset.as_ref())
     {
-      node.take_style_layers();
       return resolved;
     }
 
-    let preset = key.as_ref().and(metadata.preset.clone());
+    let preset = key.as_ref().and(layers.preset.clone());
     let (style, sizing, current_color) =
-      self.resolve_uncached_child_style(node, source_order, matched_declarations);
+      self.resolve_uncached_child_style(layers, matched, is_document_root);
     let style = Rc::new(style);
 
     // A style an animation or a query container decided holds for this box alone.
@@ -3460,35 +3459,19 @@ impl RenderContext {
     (style, sizing, current_color)
   }
 
-  /// Resolves a child's style and sizing from its matched declarations.
+  /// Resolves a child's style and sizing from its style layers and matched declarations.
   fn resolve_uncached_child_style(
     &self,
-    node: &mut Node,
-    source_order: usize,
-    matched_declarations: &[NodeMatchedDeclarations<'_>],
+    layers: NodeStyleLayers,
+    matched: &MatchedDeclarationsView<'_>,
+    is_document_root: bool,
   ) -> (ComputedStyle, SizingContext, Color) {
-    let default_matched = MatchedDeclarationsView::default();
-    let matched = matched_declarations
-      .get(source_order)
-      .map(NodeMatchedDeclarations::element)
-      .unwrap_or(&default_matched);
-    let layers = node.take_style_layers();
     let lang = layers.lang;
 
     let (style_layers, element_important) = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
 
     let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
-
-    // A tree built in code is content, not a document: `rem` resolves against
-    // the viewport, so a `font-size` on the outermost node styles text without
-    // rescaling every `rem` length below it. A parsed document is the
-    // exception, since its outermost node is the `<html>` element that CSS
-    // does make the `rem` basis.
-    let is_document_root = source_order == 0
-      && node
-        .tag_name()
-        .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
     if !style.misc1_data.animation_name.is_empty() {

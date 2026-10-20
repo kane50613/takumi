@@ -664,6 +664,13 @@ pub(crate) struct NodeStyleLayers {
   pub(crate) lang: Option<Lang>,
 }
 
+impl NodeStyleLayers {
+  /// Whether nothing but the preset styles the element beyond its matched rules.
+  pub(crate) fn is_preset_only(&self) -> bool {
+    self.author_tw.is_none() && self.inline.is_none() && self.dir.is_none() && self.lang.is_none()
+  }
+}
+
 /// Selector-matching queries read by [`crate::matching`].
 impl Node {
   /// The element's tag name.
