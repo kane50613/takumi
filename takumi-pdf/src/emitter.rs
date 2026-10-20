@@ -1338,8 +1338,9 @@ impl Emitter<'_> {
     })
   }
 
-  /// Shears the text about its baseline, the faux oblique the raster renderer applies to glyph
-  /// outlines.
+  /// Shears the text about the run's baseline, the faux oblique the raster renderer applies to
+  /// glyph outlines. Raster shears each glyph about its own origin, so a glyph shaping raises off
+  /// the baseline lands a quarter of the raise further along here.
   fn push_oblique(&self, shaped: &ShapedRun, origin: Point, surface: &mut Surface) -> bool {
     let Some(degrees) = shaped.synthetic_skew else {
       return false;
@@ -1351,7 +1352,7 @@ impl Emitter<'_> {
       0.0,
       -tangent,
       1.0,
-      tangent * origin.y,
+      tangent * (origin.y + shaped.baseline),
       0.0,
     ));
     true
