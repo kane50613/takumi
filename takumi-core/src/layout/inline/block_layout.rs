@@ -105,7 +105,7 @@ impl<'c> InlineNode<'c> {
     let lines = self.layout_lines_at(items_data, line_width, available_space.height);
     let margins_adjoin = self.block.context.margins_adjoin();
     let margins = margin_struts(&lines, margins_adjoin);
-    let (height, clamped) = content_block_size(&lines, margins_adjoin.end);
+    let (height, clamped) = content_block_size(&lines, margins_adjoin);
     let baseline = |line: &LineBoxFragment<'_, '_>| line.bfc_baseline().map(LayoutUnit::to_float);
 
     let shown = lines
@@ -172,15 +172,21 @@ fn margin_struts(
 }
 
 /// The block size the lines take, down to the clamp line of a `line-clamp`, floats included, and
-/// the margins after the last line unless they collapse out through the block-end edge it
-/// `margins_adjoin`, and whether a clamp hid lines.
-fn content_block_size(lines: &[LineBoxFragment<'_, '_>], margins_adjoin: bool) -> (f32, bool) {
+/// the margins after the last line unless they collapse out through an edge `margins_adjoin`, and
+/// whether a clamp hid lines.
+fn content_block_size(
+  lines: &[LineBoxFragment<'_, '_>],
+  margins_adjoin: Line<bool>,
+) -> (f32, bool) {
   let mut bottom = LayoutUnit::ZERO;
   let mut clamped = false;
   let mut end = LayoutUnit::ZERO;
+  let mut resolved = false;
 
   for line in lines {
     if let Some(top) = line.line_box_bfc_block_offset {
+      resolved = true;
+
       if clamped {
         continue;
       }
@@ -203,8 +209,11 @@ fn content_block_size(lines: &[LineBoxFragment<'_, '_>], margins_adjoin: bool) -
     }
   }
 
+  // Blink's `BlockLayoutAlgorithm` passes an unresolved BFC block offset's margin strut out
+  // through the block-start edge, so the block size leaves it out.
   if !clamped
-    && !margins_adjoin
+    && !margins_adjoin.end
+    && (resolved || !margins_adjoin.start)
     && let Some(last) = lines.last()
   {
     bottom = bottom.max(end + LayoutUnit::from_float(last.end_margin_strut.resolve()));
@@ -355,5 +364,55 @@ impl RenderNode {
     } else {
       measurement.first_baseline
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use taffy::Line;
+
+  use super::content_block_size;
+  use crate::geometry::{AvailableSpace, Size};
+  use crate::layout::{
+    inline::{atomic_inline::BoxAtomicInline, inline_node::InlineNode, testing::render_tree},
+    node::Node,
+  };
+  use crate::layout_unit::LayoutUnit;
+
+  /// The block size of lines holding only a self-collapsing block in a span, its 20px top margin
+  /// collapsing out where `margins_adjoin`.
+  fn self_collapsing_block_size(margins_adjoin: Line<bool>) -> f32 {
+    let block = render_tree(
+      [Node::container([Node::container([]).with_class_name("inner")]).with_class_name("span")],
+      ".inner { display: block; margin-top: 20px }",
+    );
+    let mut atomic_inline = BoxAtomicInline {
+      available_space: Size {
+        width: AvailableSpace::Definite(60.0),
+        height: AvailableSpace::MaxContent,
+      },
+    };
+
+    block.context.set_margins_adjoin(margins_adjoin);
+
+    let node = InlineNode::new(&block);
+    let data = node.prepare_layout();
+    let lines = node.layout_lines(&data, LayoutUnit::from_float(60.0), &mut atomic_inline);
+
+    content_block_size(&lines, margins_adjoin).0
+  }
+
+  /// Blink's `BlockLayoutAlgorithm` passes the margins of content that resolves no BFC block offset
+  /// out through the block start, so they do not also grow a block whose end they cannot pass.
+  #[test]
+  fn margins_passed_out_through_the_start_leave_the_block_size() {
+    assert_eq!(
+      self_collapsing_block_size(Line {
+        start: true,
+        end: false,
+      }),
+      0.0
+    );
+    assert_eq!(self_collapsing_block_size(Line::FALSE), 20.0);
   }
 }
