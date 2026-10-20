@@ -10,7 +10,7 @@ use strict_num::NonZeroPositiveF32;
 use tiny_skia_path::{NonZeroRect, Transform};
 
 use crate::geometry::PathCommand;
-use crate::resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph};
+use crate::resources::glyph::{ResolvedBitmapGlyph, ResolvedGlyph, ResolvedOutlineGlyph};
 use crate::resvg::usvg::*;
 use crate::style::Color as RgbaColor;
 
@@ -69,6 +69,38 @@ impl TextPaths {
     }
   }
 
+  /// Pushes `bitmap`, placed by `transform`, in the span's fill opacity: Skia draws a color glyph
+  /// in its own colors and the paint's alpha, and nothing without a fill.
+  fn push_bitmap(
+    &mut self,
+    span: &layout::Span,
+    bitmap: &ResolvedBitmapGlyph,
+    transform: Transform,
+  ) -> Option<()> {
+    let fill = span.fill.as_ref()?;
+    let size = Size::from_wh(bitmap.image.width() as f32, bitmap.image.height() as f32)?;
+    let image_transform = transform.pre_concat(bitmap.image_transform().into());
+    let abs_transform = self.abs_transform.pre_concat(image_transform);
+    let mut group = Group::empty();
+
+    group.children.push(Node::Image(Box::new(Image {
+      id: String::new(),
+      visible: span.visible,
+      size,
+      rendering_mode: ImageRendering::default(),
+      kind: ImageKind::Bitmap(Arc::new(bitmap.image.clone())),
+      abs_transform,
+      abs_bounding_box: size.to_non_zero_rect(0.0, 0.0).transform(abs_transform)?,
+    })));
+    group.transform = image_transform;
+    group.abs_transform = abs_transform;
+    group.opacity = fill.opacity;
+    group.calculate_bounding_boxes();
+    self.children.push(Node::Group(Box::new(group)));
+
+    Some(())
+  }
+
   /// Pushes `glyph`, collecting a plain outline into `builder` so consecutive ones share a path.
   fn push_glyph(
     &mut self,
@@ -81,11 +113,15 @@ impl TextPaths {
     let glyphs = cache
       .fonts
       .resolve_glyphs(glyph.font.face(), font, once(glyph.id.0));
-    // Bitmap glyphs are not drawn.
-    let ResolvedGlyph::Outline(outline) = glyphs.get(&glyph.id.0)?.as_ref() else {
-      return None;
-    };
     let transform = glyph.transform();
+    let outline = match glyphs.get(&glyph.id.0)?.as_ref() {
+      ResolvedGlyph::Outline(outline) => outline,
+      ResolvedGlyph::Bitmap(bitmap) => {
+        self.flush(span, builder);
+
+        return self.push_bitmap(span, bitmap, transform);
+      }
+    };
     let path = PathCommand::build_path(outline.paths())?.transform(transform)?;
     let layers = span.color_layer_fills(outline, glyph);
     // Synthetic bold strokes the glyph in its own fill, as the raster backend does.

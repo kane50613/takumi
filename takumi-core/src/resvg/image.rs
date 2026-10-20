@@ -78,6 +78,7 @@ mod raster_images {
 
     match image {
       ImageKind::SVG(_) => None,
+      ImageKind::Bitmap(image) => buffer_to_pixmap(ImageBuffer::clone(image)),
       ImageKind::JPEG(data) | ImageKind::PNG(data) | ImageKind::WEBP(data) => decode_image(data)
         .ok()
         .and_then(buffer_to_pixmap)
