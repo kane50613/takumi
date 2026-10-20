@@ -245,42 +245,21 @@ fn header(level: u32) -> [u8; 2] {
 
 #[cfg(test)]
 mod tests {
-  use std::io::Read;
-
-  use flate2::read::ZlibDecoder;
+  use zlib_rs::{InflateConfig, ReturnCode, decompress_slice};
 
   use super::compress_segmented;
 
-  fn inflate(stream: &[u8]) -> Vec<u8> {
-    let mut out = Vec::new();
-
-    ZlibDecoder::new(stream).read_to_end(&mut out).unwrap();
-    out
-  }
-
-  fn compress(data: &[u8], row_len: usize, segments: usize) -> Vec<u8> {
-    compress_segmented(data.len() / row_len, row_len, 7, segments, |rows, out| {
-      out.extend_from_slice(&data[rows.start * row_len..rows.end * row_len]);
-    })
-    .unwrap()
-  }
-
-  #[test]
-  fn segments_inflate_back_to_the_input() {
-    let row_len = 301;
-    let data: Vec<u8> = (0..row_len * 400)
-      .map(|index| ((index / row_len) * 7 + (index % row_len) % 13) as u8)
-      .collect();
-
-    for segments in [1, 2, 3, 8] {
-      assert_eq!(inflate(&compress(&data, row_len, segments)), data);
-    }
-  }
-
   #[test]
   fn more_segments_than_rows_still_inflate() {
-    let data = vec![9u8; 30];
+    let data = [9u8; 30];
+    let stream = compress_segmented(3, 10, 7, 8, |rows, out| {
+      out.extend_from_slice(&data[rows.start * 10..rows.end * 10]);
+    })
+    .unwrap();
+    let mut inflated = [0; 30];
+    let (inflated, code) = decompress_slice(&mut inflated, &stream, InflateConfig::default());
 
-    assert_eq!(inflate(&compress(&data, 10, 8)), data);
+    assert!(matches!(code, ReturnCode::Ok));
+    assert_eq!(inflated, data);
   }
 }

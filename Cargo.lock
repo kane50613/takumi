@@ -1914,7 +1914,6 @@ version = "0.5.9"
 dependencies = [
  "bytemuck",
  "color",
- "flate2",
  "gif",
  "image-webp",
  "jpeg-encoder",

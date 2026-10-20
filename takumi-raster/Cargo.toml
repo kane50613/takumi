@@ -60,7 +60,6 @@ webp = ["takumi-core/webp"]
 rayon = ["dep:rayon", "takumi-core/rayon"]
 
 [dev-dependencies]
-flate2 = { workspace = true, features = ["zlib-rs"] }
 serde_json.workspace = true
 
 [lints]

@@ -246,11 +246,9 @@ fn magnitude(row: &[u8]) -> u64 {
 
 #[cfg(test)]
 mod tests {
-  use std::io::Read;
-
   use crate::Bitmap;
-  use flate2::read::ZlibDecoder;
   use png::{ColorType, Filter};
+  use zlib_rs::{InflateConfig, ReturnCode, decompress_slice};
 
   use super::{Pixels, Scanlines};
 
@@ -307,12 +305,12 @@ mod tests {
       at += 12 + len;
     }
 
-    let mut scanlines = Vec::new();
+    let channels = if keep_alpha { 4 } else { 3 };
+    let mut scanlines = vec![0; (rgba.width() as usize * channels + 1) * rgba.height() as usize];
+    let (inflated, code) = decompress_slice(&mut scanlines, &stream, InflateConfig::default());
 
-    ZlibDecoder::new(&stream[..])
-      .read_to_end(&mut scanlines)
-      .unwrap();
-    scanlines
+    assert!(matches!(code, ReturnCode::Ok));
+    inflated.to_vec()
   }
 
   #[test]
