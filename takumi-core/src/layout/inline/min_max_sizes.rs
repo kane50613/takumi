@@ -88,22 +88,31 @@ impl FloatsMaxSize {
 
 impl<'c> InlineNode<'c> {
   /// Blink's `ComputeMinMaxSizes`: the min-content size, the widest line when every opportunity
-  /// breaks, and the max-content size, the widest line when only forced breaks do.
+  /// breaks, and the max-content size, the widest line when only forced breaks do. Kept for text
+  /// alone, as Blink keeps a box's intrinsic sizes until its content changes.
   pub(crate) fn compute_min_max_sizes(
     self,
     items_data: &InlineNodeData<'c>,
     atomic_inline: &mut dyn AtomicInlineLayout<'c>,
   ) -> MinMaxSizes {
+    if let Some(sizes) = items_data.min_max_sizes.get() {
+      return sizes;
+    }
+
     let min_size =
       self.compute_content_size(items_data, LineBreakerMode::MinContent, atomic_inline);
     let max_size =
       self.compute_content_size(items_data, LineBreakerMode::MaxContent, atomic_inline);
-
     // A negative `text-indent` can make the min-content size the larger.
-    MinMaxSizes {
+    let sizes = MinMaxSizes {
       min_size,
       max_size: max_size.max(min_size),
+    };
+
+    if items_data.holds_only_text() {
+      items_data.min_max_sizes.set(Some(sizes));
     }
+    sizes
   }
 
   /// Blink's `ComputeContentSize`: the widest line, with its floats, when the lines break as

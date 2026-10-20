@@ -2,7 +2,7 @@
 //! with `InlineItemsData` folded in.
 
 use std::{
-  cell::{OnceCell, RefCell},
+  cell::{Cell, OnceCell, RefCell},
   collections::HashMap,
   fmt::{self, Debug, Formatter},
   ops::Range,
@@ -15,6 +15,7 @@ use rustc_hash::FxHashMap;
 use super::{
   inline_item::{InlineItem, InlineItemType, InlineItems, LayoutObject},
   inline_item_segment::InlineItemSegments,
+  min_max_sizes::MinMaxSizes,
 };
 use crate::{
   context::RenderContext,
@@ -50,6 +51,9 @@ pub(crate) struct InlineNodeData<'c> {
   /// Where each paragraph after a line feed starts, and the direction its first strong character
   /// gives it, for `unicode-bidi: plaintext`.
   pub(crate) plaintext_paragraphs: OnceCell<Vec<(usize, TextDirection)>>,
+  /// The min-content and max-content sizes, kept once no box inside can make them depend on the
+  /// available space.
+  pub(crate) min_max_sizes: Cell<Option<MinMaxSizes>>,
 }
 
 impl<'c> InlineNodeData<'c> {
@@ -95,6 +99,21 @@ impl<'c> InlineNodeData<'c> {
     );
 
     LineBreakIterator::with_opportunities(&self.text_content, breakable, options)
+  }
+
+  /// Whether only text and inline boxes lay out inside, with no atomic inline, block, float,
+  /// positioned box, or marker sized against the available space.
+  pub(crate) fn holds_only_text(&self) -> bool {
+    self.items.iter().all(|item| {
+      matches!(
+        item.item_type,
+        InlineItemType::Text
+          | InlineItemType::Control
+          | InlineItemType::OpenTag
+          | InlineItemType::CloseTag
+          | InlineItemType::BidiControl
+      )
+    })
   }
 
   /// Blink's `HasFloatingOrOutOfFlowPositioned`.
