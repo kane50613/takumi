@@ -6064,9 +6064,10 @@ fn persian_zero_width_non_joiners_keep_their_own_glyph() {
   );
 }
 
-/// A synthesized italic shears about its own baseline, so it stays where its advance puts it.
+/// A synthesized italic leans right by a quarter, as raster output does, about its own baseline,
+/// so it stays where its advance puts it.
 #[test]
-fn synthesized_italic_shears_about_the_baseline() {
+fn synthesized_italic_leans_right_about_the_baseline() {
   let fonts = latin_font();
   let doc = r#"<p style="margin:0">one <i>two</i> three</p><p style="margin:40px 0 0">one <i>two</i> three</p>"#;
   let pdf = render_pinned(
@@ -6117,6 +6118,12 @@ fn synthesized_italic_shears_about_the_baseline() {
       .expect("a text matrix after the shear");
 
     sheared += 1;
+    // Device y points down, so a glyph's top lands right of its foot when `c` is negative.
+    assert!(
+      (c / a + 0.25).abs() < 1e-4,
+      "slant {} where a right lean is -0.25",
+      c / a
+    );
     assert!(
       (c * baseline + e - upright_x).abs() < 0.01,
       "baseline moved by {} pt under a {a} {c} shear",

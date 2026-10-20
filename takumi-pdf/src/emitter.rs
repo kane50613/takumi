@@ -1350,9 +1350,9 @@ impl Emitter<'_> {
     surface.push_transform(&Transform::from_row(
       1.0,
       0.0,
-      -tangent,
+      tangent,
       1.0,
-      tangent * (origin.y + shaped.baseline),
+      -tangent * (origin.y + shaped.baseline),
       0.0,
     ));
     true
