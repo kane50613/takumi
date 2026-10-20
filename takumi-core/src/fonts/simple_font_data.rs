@@ -1,12 +1,15 @@
 //! Blink's `SimpleFontData`, with `FontPlatformData` and `HarfBuzzFace` folded in.
 
 use std::{
-  cell::OnceCell,
+  cell::{OnceCell, RefCell},
   fmt::{self, Debug, Formatter},
   rc::Rc,
 };
 
-use harfrust::font::{Font as ShapingFont, Variation};
+use harfrust::{
+  Direction, Feature, Language, Script, ShapePlan, ShapePlanKey,
+  font::{Font as ShapingFont, Variation},
+};
 use skrifa::{
   FontRef, GlyphId, MetadataProvider,
   instance::Size,
@@ -41,6 +44,7 @@ pub(crate) struct SimpleFontData {
   pub(crate) space_glyph: u16,
   font_metrics: OnceCell<Option<PrimaryFontMetrics>>,
   shaping_font: OnceCell<Option<ShapingFont>>,
+  shape_plans: RefCell<Vec<Rc<ShapePlan>>>,
   small_caps: OnceCell<Rc<SimpleFontData>>,
 }
 
@@ -89,6 +93,7 @@ impl SimpleFontData {
       space_glyph,
       font_metrics: OnceCell::new(),
       shaping_font: OnceCell::new(),
+      shape_plans: RefCell::default(),
       small_caps: OnceCell::new(),
     })
   }
@@ -111,6 +116,7 @@ impl SimpleFontData {
       space_glyph: self.space_glyph,
       font_metrics: OnceCell::new(),
       shaping_font: OnceCell::new(),
+      shape_plans: RefCell::default(),
       small_caps: OnceCell::new(),
     }
   }
@@ -217,6 +223,37 @@ impl SimpleFontData {
         })
       })
       .as_ref()
+  }
+
+  /// The harfrust plan for a segment's direction, script, language, and features, compiled once
+  /// per font, as HarfBuzz's `hb_shape_plan_create_cached` keeps plans on the face for Blink.
+  pub(crate) fn shape_plan(
+    &self,
+    direction: Direction,
+    script: Script,
+    language: Option<&Language>,
+    features: &[Feature],
+  ) -> Option<Rc<ShapePlan>> {
+    let font = self.shaping_font()?;
+    let key = ShapePlanKey::new(font, Some(script), direction)
+      .language(language)
+      .features(features);
+    let mut plans = self.shape_plans.borrow_mut();
+
+    if let Some(plan) = plans.iter().find(|plan| key.matches(plan)) {
+      return Some(Rc::clone(plan));
+    }
+
+    let plan = Rc::new(ShapePlan::new(
+      font,
+      direction,
+      Some(script),
+      language,
+      features,
+    ));
+
+    plans.push(Rc::clone(&plan));
+    Some(plan)
   }
 }
 
