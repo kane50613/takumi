@@ -243,7 +243,13 @@ impl FragmentItems {
       }
     }
 
-    items.place_outside_list_marker(items_data, lines, spans, layout, &mut ink.content);
+    items.place_outside_list_marker(
+      items_data,
+      lines,
+      spans,
+      (layout, context.style.inherited_data.direction),
+      &mut ink.content,
+    );
     let span_fragments = line_span_fragments(lines, spans, content);
 
     let (backgrounds, outline_rects) = resolve_span_fragments(&span_fragments);
@@ -614,13 +620,13 @@ impl FragmentItems {
   }
 
   /// Blink's `BlockLayoutAlgorithm::PositionOrPropagateListMarker`: the outside list marker beside
-  /// the line it aligns with, in the content box of `layout`.
+  /// the line it aligns with, in the content box of `layout` laid out in `direction`.
   fn place_outside_list_marker<'c>(
     &mut self,
     items_data: &InlineNodeData<'c>,
     lines: &[LineBoxFragment<'_, 'c>],
     spans: &mut InlineSpans<'c>,
-    layout: ComputedLayout,
+    (layout, direction): (ComputedLayout, Direction),
     ink: &mut Option<InkBox>,
   ) {
     let Some(marker) = UnpositionedListMarker::of(items_data) else {
@@ -643,7 +649,7 @@ impl FragmentItems {
     };
     let result = marker.layout(&mut atomic_inline);
     let size = item.paint_border_box(result.inline_size, result.block_size);
-    let offset = marker.offset(&result, line, layout);
+    let offset = marker.offset(&result, line, layout, direction);
 
     self.push_inline_box(
       ink,

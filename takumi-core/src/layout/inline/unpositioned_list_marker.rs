@@ -87,17 +87,18 @@ impl<'c> UnpositionedListMarker<'c> {
   }
 
   /// Blink's `AddToBox`: the marker's border box, laid out as `result`, beside `line` in the
-  /// content box of `layout`.
+  /// content box of `layout`, whose block lays out in `direction`.
   pub(crate) fn offset(
     self,
     result: &LayoutResult,
     line: &LineBoxFragment<'_, 'c>,
     layout: ComputedLayout,
+    direction: Direction,
   ) -> Point<f32> {
     let baseline = line.baseline().unwrap_or(LayoutUnit::ZERO);
     let marker_ascent = result.baseline_metrics(&LineBoxStrut::default()).ascent;
     let inline_offset = self.inline_offset(result.inline_size).to_float();
-    let border_box_x = match self.node.context.style.inherited_data.direction {
+    let border_box_x = match direction {
       Direction::Ltr => inline_offset,
       Direction::Rtl => layout.size.width - inline_offset - result.inline_size.to_float(),
     };
@@ -119,6 +120,7 @@ mod tests {
       node::Node,
     },
     layout_unit::LayoutUnit,
+    style::Direction,
   };
 
   /// A 24px square PNG, taller than a 10px line's ascent.
@@ -159,8 +161,9 @@ mod tests {
     )
   }
 
-  /// The marker's offset in the item's content box, and its inline size.
-  fn marker_offset(css: &str) -> (Point<f32>, f32) {
+  /// The marker's offset in the item's content box, laid out in `host` or else the item's
+  /// direction, and its inline size.
+  fn marker_offset(css: &str, host: Option<Direction>) -> (Point<f32>, f32) {
     let tree = render_tree(
       [Node::container([Node::text("item")]).with_class_name("item")],
       css,
@@ -175,7 +178,12 @@ mod tests {
     let result = marker.layout(&mut atomic_inline);
 
     (
-      marker.offset(&result, line, item_layout()),
+      marker.offset(
+        &result,
+        line,
+        item_layout(),
+        host.unwrap_or(item.context.style.inherited_data.direction),
+      ),
       result.inline_size.to_float(),
     )
   }
@@ -184,7 +192,7 @@ mod tests {
   /// and border.
   #[test]
   fn a_marker_hangs_outside_the_item_border_box() {
-    let (offset, width) = marker_offset(ITEM_CSS);
+    let (offset, width) = marker_offset(ITEM_CSS, None);
 
     assert_eq!(offset.x, -8.0 - width);
   }
@@ -192,7 +200,16 @@ mod tests {
   /// Right to left, the marker hangs past the item's right border edge.
   #[test]
   fn a_right_to_left_marker_hangs_past_the_right_edge() {
-    let (offset, _) = marker_offset(&format!("{ITEM_CSS} .item {{ direction: rtl }}"));
+    let (offset, _) = marker_offset(&format!("{ITEM_CSS} .item {{ direction: rtl }}"), None);
+
+    assert_eq!(offset.x, 100.0);
+  }
+
+  /// Blink's `AddToBox` offsets the marker in the direction of the block that holds the line,
+  /// which can differ from the list item's.
+  #[test]
+  fn a_marker_follows_the_direction_of_the_block_holding_the_line() {
+    let (offset, _) = marker_offset(ITEM_CSS, Some(Direction::Rtl));
 
     assert_eq!(offset.x, 100.0);
   }
