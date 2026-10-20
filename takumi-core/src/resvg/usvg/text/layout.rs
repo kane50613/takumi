@@ -11,8 +11,9 @@ use icu_properties::CodePointMapData;
 use icu_properties::props::Script;
 use kurbo::{ParamCurve, ParamCurveArclen, ParamCurveDeriv};
 use skrifa::MetadataProvider;
-use skrifa::Tag;
+use skrifa::instance::LocationRef;
 use skrifa::raw::TableProvider;
+use skrifa::raw::types::F2Dot14;
 use strict_num::NonZeroPositiveF32;
 use svgtypes::FontFamily;
 use tiny_skia_path::{NonZeroRect, Transform};
@@ -28,12 +29,12 @@ use crate::fonts::font_selection_types::{
 use crate::fonts::shaping::harfbuzz_shaper::HarfBuzzShaper;
 use crate::fonts::shaping::shape_result_view::ShapeResultView;
 use crate::fonts::simple_font_data::SimpleFontData;
+use crate::resources::font::{RunFace, RunSynthesis};
 use crate::resvg::usvg::tree::{BBox, IsValidLength};
 use crate::resvg::usvg::{
   AlignmentBaseline, ApproxZeroUlps, BaselineShift, Cache, DominantBaseline, Fill, FillRule, Font,
-  FontOpticalSizing, FontStyle, FontVariation, GlyphId, LengthAdjust, PaintOrder, Path,
-  ShapeRendering, Stroke, Text, TextAnchor, TextChunk, TextDecorationStyle, TextFlow, TextPath,
-  TextSpan, WritingMode,
+  FontOpticalSizing, FontStyle, GlyphId, LengthAdjust, PaintOrder, Path, ShapeRendering, Stroke,
+  Text, TextAnchor, TextChunk, TextDecorationStyle, TextFlow, TextPath, TextSpan, WritingMode,
 };
 use crate::sort_key::sort_by_key;
 use crate::style::{
@@ -63,24 +64,12 @@ pub struct PositionedGlyph {
 }
 
 impl PositionedGlyph {
-  /// Returns the transform of glyph.
+  /// Returns the transform of the glyph's outline, which is in pixels at the font size.
   pub fn transform(&self) -> Transform {
-    let sx = self.font.scale();
-
     self
       .span_ts
       .pre_concat(self.cluster_ts)
       .pre_concat(self.glyph_ts)
-      .pre_scale(sx, sx)
-  }
-
-  /// Returns the transform of glyph, assuming that an outline
-  /// glyph is being used (i.e. from the `glyf` or `CFF/CFF2` table).
-  pub fn outline_transform(&self) -> Transform {
-    // Outlines are mirrored by default.
-    self
-      .transform()
-      .pre_concat(Transform::from_scale(1.0, -1.0))
   }
 }
 
@@ -1137,9 +1126,10 @@ pub(crate) struct Glyph {
 #[derive(Debug)]
 pub(crate) struct ResolvedFont {
   pub(crate) typeface: Arc<FontCustomPlatformData>,
-  /// The variation coordinates the face was shaped at.
-  pub(crate) variations: Vec<FontVariation>,
+  /// The normalized variation coordinates the face was shaped at.
+  normalized_coords: Vec<F2Dot14>,
   size: f32,
+  synthesis: RunSynthesis,
 
   units_per_em: NonZeroU16,
 
@@ -1369,22 +1359,10 @@ impl ResolvedFont {
   /// `font_data`'s face and metrics; none for a face whose `unitsPerEm` is out of range.
   fn new(font_data: &SimpleFontData) -> Option<Self> {
     let font = font_data.font_ref()?;
-    let variations: Vec<FontVariation> = font_data
-      .variation_settings()
-      .into_iter()
-      .map(|(tag, value)| FontVariation::new(tag, value))
-      .collect();
-
-    // For variable fonts, metrics depend on the position in the design space,
-    // so resolve the variations to a normalized location first.
+    let normalized_coords = font_data.normalized_coords();
+    let coords = normalized_coords.as_slice();
     // Metrics are always in font units, so the size stays unscaled.
-    let location = font.axes().location(
-      variations
-        .iter()
-        .map(|variation| (Tag::from_be_bytes(variation.tag), variation.value)),
-    );
-    let coords = location.coords();
-    let metrics = font.metrics(skrifa::prelude::Size::unscaled(), &location);
+    let metrics = font.metrics(skrifa::prelude::Size::unscaled(), LocationRef::new(coords));
 
     // Reject fonts with an out-of-range unitsPerEm, like `ttf-parser` did.
     if !(16..=16384).contains(&metrics.units_per_em) {
@@ -1450,8 +1428,9 @@ impl ResolvedFont {
 
     Some(Self {
       typeface: Arc::clone(&font_data.face().typeface),
-      variations,
+      normalized_coords,
       size: font_data.size(),
+      synthesis: font_data.synthesis(),
       units_per_em,
       ascent: ascent.round() as i16,
       descent: descent.round() as i16,
@@ -1464,8 +1443,19 @@ impl ResolvedFont {
     })
   }
 
+  /// The face its glyphs resolve against.
+  pub(crate) fn face(&self) -> RunFace<'_> {
+    RunFace {
+      font_id: self.typeface.id,
+      font_index: self.typeface.index,
+      font_size: self.size,
+      normalized_coords: &self.normalized_coords,
+      synthesis: self.synthesis,
+    }
+  }
+
   #[inline]
-  pub(crate) fn scale(&self) -> f32 {
+  fn scale(&self) -> f32 {
     self.size / self.units_per_em.get() as f32
   }
 

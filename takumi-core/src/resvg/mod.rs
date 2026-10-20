@@ -9,8 +9,9 @@ Vendored from resvg 0.48.1 (Apache-2.0 OR MIT), stripped of the `svgz`,
 
 Text support diverges from upstream: `<text>` matches fonts through the renderer's
 `FontFallbackList` and shapes through its `HarfBuzzShaper` in place of `fontdb` and
-`rustybuzz`, `unicode-script`/`unicode-vo` are replaced by `icu_properties`, and color glyph
-formats (COLR, SVG-in-font, bitmap) are stripped — glyphs render from outlines only.
+`rustybuzz`, `unicode-script`/`unicode-vo` are replaced by `icu_properties`, and glyphs resolve
+through the renderer's glyph cache, which draws COLRv0 layers but not bitmap or SVG-in-font
+glyphs.
 */
 
 #![forbid(unsafe_code)]

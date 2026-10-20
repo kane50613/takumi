@@ -15,9 +15,7 @@ use super::{Error, Options, marker};
 use crate::fonts::font_fallback_map::FontFallbackMap;
 use crate::resources::font::Fonts;
 use crate::resvg::usvg::parser::paint_server::process_paint;
-use crate::resvg::usvg::text::layout::ResolvedFont;
 use crate::resvg::usvg::*;
-use crate::resvg::usvg::{FontVariation, GlyphId};
 
 #[derive(Clone)]
 pub struct State<'a> {
@@ -41,8 +39,6 @@ pub struct Cache {
   /// The fallback lists of every `<text>` in the tree, shared across them.
   pub(crate) font_fallback_map: FontFallbackMap,
 
-  cache_outline: HashMap<(u64, u32, GlyphId, Vec<FontVariation>), Option<tiny_skia_path::Path>>,
-
   pub clip_paths: HashMap<String, Arc<ClipPath>>,
   pub masks: HashMap<String, Arc<Mask>>,
   pub filters: HashMap<String, Arc<filter::Filter>>,
@@ -64,8 +60,6 @@ impl Cache {
     Self {
       fonts,
       font_fallback_map: FontFallbackMap::default(),
-
-      cache_outline: HashMap::new(),
 
       clip_paths: HashMap::new(),
       masks: HashMap::new(),
@@ -159,25 +153,6 @@ impl Cache {
         return NonEmptyString::new(new_id).unwrap();
       }
     }
-  }
-
-  pub(crate) fn outline(
-    &mut self,
-    font: &ResolvedFont,
-    glyph: GlyphId,
-  ) -> Option<tiny_skia_path::Path> {
-    let key = (
-      font.typeface.id,
-      font.typeface.index,
-      glyph,
-      font.variations.clone(),
-    );
-
-    self
-      .cache_outline
-      .entry(key)
-      .or_insert_with(|| font.outline(glyph))
-      .clone()
   }
 }
 
