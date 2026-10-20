@@ -125,17 +125,8 @@ pub(crate) fn emit_run_glyphs(
               }
             }
             None => {
-              let data = path_data(
-                outline.paths(),
-                Affine {
-                  x: 0.0,
-                  y: 0.0,
-                  ..placed
-                },
-              );
-
-              if !data.is_empty() {
-                uses.push((doc.glyph_ref(data), placed.x, placed.y));
+              if let Some(id) = doc.outline_ref(outline, placed) {
+                uses.push((id, placed.x, placed.y));
               }
             }
           }
