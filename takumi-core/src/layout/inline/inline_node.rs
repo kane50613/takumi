@@ -950,8 +950,7 @@ mod tests {
     let tree = render_tree(list, "");
     let item = &tree.children.as_deref().expect("children")[0];
     let marker = item.marker.as_deref().expect("marker");
-    let content = &marker.children.as_deref().expect("marker content")[0];
-    let data = InlineNode::new(content).collect_inlines();
+    let data = InlineNode::new(marker).collect_inlines();
 
     assert_eq!(data.text_content, "\u{2022}");
     assert!(data.items[0].is_symbol_marker());

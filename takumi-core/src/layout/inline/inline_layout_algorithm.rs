@@ -103,6 +103,35 @@ impl LineBoxFragment<'_, '_> {
 
     self.metrics.line_height().clamp_negative_to_zero()
   }
+
+  /// The baseline's BFC block offset, none for an empty line.
+  pub(crate) fn baseline(&self) -> Option<LayoutUnit> {
+    self
+      .line_box_bfc_block_offset
+      .map(|line_top| line_top + self.metrics.ascent)
+  }
+
+  /// Moves the line box, with the floats placed on it, `delta` toward the block end.
+  pub(crate) fn move_in_block_direction(&mut self, delta: LayoutUnit) {
+    for offset in [
+      &mut self.bfc_block_offset,
+      &mut self.line_box_bfc_block_offset,
+    ]
+    .into_iter()
+    .flatten()
+    {
+      *offset += delta;
+    }
+
+    for child in &mut self.items.children {
+      if let Some(LineFragment::Float {
+        positioned_float, ..
+      }) = &mut child.layout_result
+      {
+        positioned_float.bfc_offset.block_offset += delta;
+      }
+    }
+  }
 }
 
 impl TextAlign {

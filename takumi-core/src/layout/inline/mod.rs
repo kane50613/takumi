@@ -45,6 +45,7 @@ pub(crate) mod testing;
 mod text_fit;
 pub(crate) mod text_fit_scale;
 pub(crate) mod text_fit_utils;
+mod unpositioned_list_marker;
 
 pub(crate) use self::items::InlineContentKind;
 pub(crate) use self::{
