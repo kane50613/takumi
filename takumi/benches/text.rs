@@ -42,6 +42,14 @@ fn clipped_text_paragraph() -> Node {
   .with_tw("flex w-full h-full p-12 items-center justify-center bg-white".parse().unwrap())
 }
 
+/// About 40 KB of text in a narrow column, so it breaks into hundreds of lines.
+fn document_paragraph() -> Node {
+  Node::container([
+    Node::text(LONG_TEXT.repeat(64)).with_tw("text-[14px] text-gray-900".parse().unwrap())
+  ])
+  .with_tw("flex w-[320px] bg-white".parse().unwrap())
+}
+
 fn bench_text(c: &mut Criterion) {
   let fonts = common::fonts();
   let mut group = c.benchmark_group("text");
@@ -51,6 +59,10 @@ fn bench_text(c: &mut Criterion) {
   });
   group.bench_function("clipped_text_paragraph", |b| {
     b.iter(|| render_node(&fonts, black_box(clipped_text_paragraph())))
+  });
+
+  group.bench_function("document_paragraph", |b| {
+    b.iter(|| render_node(&fonts, black_box(document_paragraph())))
   });
 
   group.finish();
