@@ -10,7 +10,7 @@ use strict_num::NonZeroPositiveF32;
 use tiny_skia_path::{NonZeroRect, Transform};
 
 use crate::geometry::PathCommand;
-use crate::resources::glyph::{ResolvedBitmapGlyph, ResolvedGlyph, ResolvedOutlineGlyph};
+use crate::resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph};
 use crate::resvg::usvg::*;
 use crate::style::Color as RgbaColor;
 
@@ -69,14 +69,17 @@ impl TextPaths {
     }
   }
 
-  /// Pushes `bitmap`, placed by `transform`, in the span's fill opacity: Skia draws a color glyph
-  /// in its own colors and the paint's alpha, and nothing without a fill.
+  /// Pushes the bitmap `glyph`, placed by `transform`, in the span's fill opacity: Skia draws a
+  /// color glyph in its own colors and the paint's alpha, and nothing without a fill.
   fn push_bitmap(
     &mut self,
     span: &layout::Span,
-    bitmap: &ResolvedBitmapGlyph,
+    glyph: &Arc<ResolvedGlyph>,
     transform: Transform,
   ) -> Option<()> {
+    let ResolvedGlyph::Bitmap(bitmap) = glyph.as_ref() else {
+      return None;
+    };
     let fill = span.fill.as_ref()?;
     let size = Size::from_wh(bitmap.image.width() as f32, bitmap.image.height() as f32)?;
     let image_transform = transform.pre_concat(bitmap.image_transform().into());
@@ -88,7 +91,7 @@ impl TextPaths {
       visible: span.visible,
       size,
       rendering_mode: ImageRendering::default(),
-      kind: ImageKind::Bitmap(Arc::new(bitmap.image.clone())),
+      kind: ImageKind::Glyph(Arc::clone(glyph)),
       abs_transform,
       abs_bounding_box: size.to_non_zero_rect(0.0, 0.0).transform(abs_transform)?,
     })));
@@ -114,13 +117,11 @@ impl TextPaths {
       .fonts
       .resolve_glyphs(glyph.font.face(), font, once(glyph.id.0));
     let transform = glyph.transform();
-    let outline = match glyphs.get(&glyph.id.0)?.as_ref() {
-      ResolvedGlyph::Outline(outline) => outline,
-      ResolvedGlyph::Bitmap(bitmap) => {
-        self.flush(span, builder);
+    let resolved = glyphs.get(&glyph.id.0)?;
+    let ResolvedGlyph::Outline(outline) = resolved.as_ref() else {
+      self.flush(span, builder);
 
-        return self.push_bitmap(span, bitmap, transform);
-      }
+      return self.push_bitmap(span, resolved, transform);
     };
     let path = PathCommand::build_path(outline.paths())?.transform(transform)?;
     let layers = span.color_layer_fills(outline, glyph);
