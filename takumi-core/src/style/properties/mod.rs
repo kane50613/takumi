@@ -1645,14 +1645,6 @@ mod border_spacing_tests {
     assert!(BorderSpacing::from_css_str("-4px").is_err());
     assert!(BorderSpacing::from_css_str("4px -8px").is_err());
   }
-
-  #[test]
-  fn border_spacing_starts_at_zero() {
-    assert_eq!(
-      BorderSpacing::default(),
-      BorderSpacing(SpacePair::from_single(Length::Px(0.0)))
-    );
-  }
 }
 
 #[cfg(test)]

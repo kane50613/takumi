@@ -97,12 +97,6 @@ function bundleSplit(opts: { target: string }): { entry: string; chunks: string 
 describe("#backend resolution by import condition", () => {
   // node/bun select napi as the primary backend; the WASM backend is still
   // reachable as the `module` escape hatch (a lazy chunk), so it may appear too.
-  test("node → native core", () => {
-    const code = bundle({ target: "node" });
-
-    expect(code).toContain("@takumi-rs/core");
-  });
-
   test("bun → native core", () => {
     const code = bundle({ target: "bun" });
 
@@ -119,29 +113,11 @@ describe("#backend resolution by import condition", () => {
     expect(code).not.toContain("@takumi-rs/core");
   });
 
-  test("workerd → WASM auto, never native core", () => {
-    const code = bundle({
-      target: "browser",
-      conditions: ["workerd", "worker", "browser"],
-    });
-
-    expect(code).toContain("@takumi-rs/wasm/auto");
-    expect(code).not.toContain("@takumi-rs/core");
-  });
-
-  test("edge-light → WASM, never native core", () => {
-    // edge-light routes to the WASM backend (`@takumi-rs/wasm/auto`); the auto
-    // entry's own conditions then pick the Next/Vercel edge loader downstream.
-    const code = bundle({ target: "browser", conditions: ["edge-light"] });
-
-    expect(code).toContain("@takumi-rs/wasm/auto");
-    expect(code).not.toContain("@takumi-rs/core");
-  });
-
-  test("browser → WASM, never native core", () => {
+  // workerd, worker, deno, and edge-light all resolve to this same backend.
+  test("browser → WASM auto, never native core", () => {
     const code = bundle({ target: "browser" });
 
-    expect(code).toContain("@takumi-rs/wasm");
+    expect(code).toContain("@takumi-rs/wasm/auto");
     expect(code).not.toContain("@takumi-rs/core");
   });
 

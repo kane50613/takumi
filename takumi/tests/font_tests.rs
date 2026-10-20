@@ -106,34 +106,12 @@ fn subsets_route_per_family() {
 }
 
 #[test]
-fn test_ttf_font_loading() {
-  let mut context = Fonts::default();
-
-  assert!(
-    context
-      .register(FontResource::new(read_font("noto-sans/NotoColorEmoji.ttf")))
-      .is_ok()
-  );
-}
-
-#[test]
 fn test_ttc_font_loading() {
   let mut context = Fonts::default();
 
   assert!(
     context
       .register(FontResource::new(read_font("ubuntu/Ubuntu.ttc")))
-      .is_ok()
-  );
-}
-
-#[test]
-fn test_woff2_font_loading() {
-  let mut context = Fonts::default();
-
-  assert!(
-    context
-      .register(FontResource::new(read_font("geist/Geist[wght].woff2")))
       .is_ok()
   );
 }

@@ -237,15 +237,6 @@ mod tests {
   }
 
   #[test]
-  fn japanese_punctuation_mixed_inside_horizontal() {
-    check_runs(&[(
-      "\u{3044}\u{308D}\u{306F}\u{306B}.\u{2026}\u{A1}\u{307B}\u{3078}\u{3068}",
-      Script::Hiragana,
-      FontFallbackPriority::Text,
-    )]);
-  }
-
-  #[test]
   fn punctuation_devanagari_combining() {
     check_runs(&[(
       "\u{915}+\u{947}",

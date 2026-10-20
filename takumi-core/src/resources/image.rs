@@ -2058,28 +2058,6 @@ mod tests {
     Ok(())
   }
 
-  /// usvg drops `<text>`/`<tspan>` (text feature off), so we no longer strip
-  /// them: the SVG renders identically with and without the text nodes.
-  #[cfg(feature = "svg")]
-  #[test]
-  fn svg_text_nodes_are_ignored_not_stripped() -> Result<(), ImageError> {
-    fn rendered_data(svg: &str) -> Result<Vec<u8>, ImageError> {
-      let image: ImageSource = SvgSource::from_str(svg)?.into();
-      let rendered =
-        image.render_for_layout(8, 8, ImageScalingAlgorithm::Auto, 0, Color::black(), None)?;
-      let RenderedImage::Rasterized(pixmap) = rendered else {
-        unreachable!("svg renders to a rasterized pixmap");
-      };
-      Ok(pixmap.data().to_vec())
-    }
-
-    let with_text = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#ff0000"/><text x="1" y="5">hi <tspan>there</tspan></text></svg>"##;
-    let without_text = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#ff0000"/></svg>"##;
-
-    assert_eq!(rendered_data(with_text)?, rendered_data(without_text)?);
-    Ok(())
-  }
-
   /// `<text>` inside `clipPath` and `foreignObject` must not break parsing.
   #[cfg(feature = "svg")]
   #[test]

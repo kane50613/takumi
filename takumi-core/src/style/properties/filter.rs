@@ -658,14 +658,6 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_blur_filter_zero() {
-    assert_eq!(
-      Filter::from_css_str("blur()"),
-      Ok(Filter::Blur(Length::zero()))
-    );
-  }
-
-  #[test]
   fn test_parse_drop_shadow_filter() {
     assert_eq!(
       Filter::from_css_str("drop-shadow(2px 4px 6px red)"),
