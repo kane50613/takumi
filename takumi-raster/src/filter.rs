@@ -666,9 +666,7 @@ mod tests {
       .build();
     let width = image.width();
     let height = image.height();
-    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
-      return Ok(());
-    };
+    let mut pixmap = PixmapMut::from_bytes(image.as_mut(), width, height).unwrap();
     apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
@@ -710,9 +708,7 @@ mod tests {
     let mut image = RgbaImage::new(16, 16);
     let width = image.width();
     let height = image.height();
-    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
-      return Ok(());
-    };
+    let mut pixmap = PixmapMut::from_bytes(image.as_mut(), width, height).unwrap();
 
     let shadow = SizedShadow {
       offset_x: 1.0,

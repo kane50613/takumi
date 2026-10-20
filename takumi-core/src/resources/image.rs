@@ -1936,25 +1936,6 @@ mod tests {
     assert_matches!(ImageSource::from_bytes(&bytes), Ok(ImageSource::Bitmap(_)));
   }
 
-  #[cfg(feature = "gif")]
-  fn expected_frame_index(durations: &[u32], time_ms: u64) -> usize {
-    let total: u64 = durations.iter().map(|d| *d as u64).sum();
-    if total == 0 {
-      return 0;
-    }
-
-    let target_time = time_ms % total;
-    let mut elapsed_ms = 0_u64;
-    for (index, duration_ms) in durations.iter().enumerate() {
-      elapsed_ms += *duration_ms as u64;
-      if target_time < elapsed_ms {
-        return index;
-      }
-    }
-
-    0
-  }
-
   #[test]
   fn sniffs_common_formats() {
     assert_eq!(
@@ -2203,14 +2184,21 @@ mod tests {
 
   #[cfg(feature = "gif")]
   #[test]
-  fn gif_source_frame_selection_matches_expected_indices() {
-    let durations = [10, 20, 30];
+  fn gif_source_frame_selection_follows_frame_durations() {
     let gif = gif_source(&[(0, 10), (1, 20), (2, 30)]);
-    let samples = [0_u64, 9, 10, 29, 30, 59, 60, 75];
+    let samples = [
+      (0, 0),
+      (9, 0),
+      (10, 1),
+      (29, 1),
+      (30, 2),
+      (59, 2),
+      (60, 0),
+      (75, 1),
+    ];
 
-    for time_ms in samples {
-      let expected_color = FRAME_COLORS[expected_frame_index(&durations, time_ms)];
-      assert_eq!(gif.frame_at_time(time_ms).pixel(2, 2), expected_color);
+    for (time_ms, frame) in samples {
+      assert_eq!(gif.frame_at_time(time_ms).pixel(2, 2), FRAME_COLORS[frame]);
     }
   }
 
