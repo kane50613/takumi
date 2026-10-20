@@ -107,7 +107,11 @@ impl RenderNode {
     if role == TableRole::Table
       && context.style.inherited_data.border_collapse == BorderCollapse::Collapse
     {
-      for section in &mut fixed {
+      let sections = fixed
+        .iter_mut()
+        .filter(|child| child.context.style.base_data.display.is_table_section());
+
+      for section in sections {
         for row in section.children.as_deref_mut().into_iter().flatten() {
           for cell in row.children.as_deref_mut().into_iter().flatten() {
             cell.context.collapsed_borders = true;
