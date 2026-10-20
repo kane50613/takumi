@@ -1360,9 +1360,6 @@ css/css-flexbox/
 !css/css-flexbox/flex-abspos-inset-nested-001.html
 !css/css-flexbox/flex-abspos-inset-nested-002.html
 !css/css-flexbox/flex-aspect-ratio-cross-size-002.html
-!css/css-flexbox/flex-aspect-ratio-img-column-001.html
-!css/css-flexbox/flex-aspect-ratio-img-column-002.html
-!css/css-flexbox/flex-aspect-ratio-img-column-003.html
 !css/css-flexbox/flex-aspect-ratio-img-column-005.html
 !css/css-flexbox/flex-aspect-ratio-img-column-006.html
 !css/css-flexbox/flex-aspect-ratio-img-column-007.html
@@ -1370,9 +1367,6 @@ css/css-flexbox/
 !css/css-flexbox/flex-aspect-ratio-img-column-012.html
 !css/css-flexbox/flex-aspect-ratio-img-column-014.html
 !css/css-flexbox/flex-aspect-ratio-img-column-015.html
-!css/css-flexbox/flex-aspect-ratio-img-row-001.html
-!css/css-flexbox/flex-aspect-ratio-img-row-002.html
-!css/css-flexbox/flex-aspect-ratio-img-row-003.html
 !css/css-flexbox/flex-aspect-ratio-img-row-006.html
 !css/css-flexbox/flex-aspect-ratio-img-row-007.html
 !css/css-flexbox/flex-aspect-ratio-img-row-010.html
@@ -1393,7 +1387,6 @@ css/css-flexbox/
 !css/css-flexbox/flex-item-transferred-sizes-padding-border-sizing.html
 !css/css-flexbox/flex-item-transferred-sizes-padding-content-sizing.html
 !css/css-flexbox/flex-lines/multi-line-wrap-with-column-reverse.html
-!css/css-flexbox/flex-margin-no-collapse.html
 !css/css-flexbox/flex-minimum-height-flex-items-021.html
 !css/css-flexbox/flex-minimum-height-flex-items-023.html
 !css/css-flexbox/flex-minimum-height-flex-items-029.html
@@ -1452,11 +1445,7 @@ css/css-flexbox/
 !css/css-flexbox/flexbox-definite-sizes-004.html
 !css/css-flexbox/flexbox-flex-basis-content-004a.html
 !css/css-flexbox/flexbox-flex-basis-content-004b.html
-!css/css-flexbox/flexbox-flex-wrap-default.htm
 !css/css-flexbox/flexbox-flex-wrap-flexing-003.html
-!css/css-flexbox/flexbox-flex-wrap-horiz-001.html
-!css/css-flexbox/flexbox-flex-wrap-nowrap.htm
-!css/css-flexbox/flexbox-flex-wrap-vert-001.html
 !css/css-flexbox/flexbox-items-as-stacking-contexts-001.xhtml
 !css/css-flexbox/flexbox-items-as-stacking-contexts-002.html
 !css/css-flexbox/flexbox-items-as-stacking-contexts-003.html
@@ -1533,9 +1522,7 @@ css/css-flexbox/
 !css/css-flexbox/flexbox_flex-0-0-N-unitless-basis.html
 !css/css-flexbox/flexbox_flex-0-1-1-unitless-basis.html
 !css/css-flexbox/flexbox_flex-0-1-N-unitless-basis.html
-!css/css-flexbox/flexbox_flex-formatting-interop.html
 !css/css-flexbox/flexbox_flex-natural.html
-!css/css-flexbox/flexbox_flex-none-wrappable-content.html
 !css/css-flexbox/flexbox_inline.html
 !css/css-flexbox/flexbox_justifycontent-left-001.html
 !css/css-flexbox/flexbox_justifycontent-left-002.html
