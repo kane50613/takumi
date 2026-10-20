@@ -1773,6 +1773,21 @@ impl<'r> LayoutTree<'r> {
               let available_space =
                 Size::from_taffy(available_space).map(AvailableSpace::from_taffy);
               let known_dimensions = Size::from_taffy(known_dimensions);
+
+              // A width alone needs no line laid out, as Blink's `ComputeMinMaxSizes` lays out
+              // none.
+              if inputs.run_mode == RunMode::ComputeSize
+                && inputs.axis == RequestedAxis::Horizontal
+                && known_dimensions.width.is_none()
+                && (node_data.is_inline_children || render_node.measures_as_inline_content())
+              {
+                return TaffySize {
+                  width: InlineNode::new(render_node)
+                    .content_inline_size(&tree.inline_node_data(idx), available_space),
+                  height: 0.0,
+                };
+              }
+
               if !node_data.is_inline_children {
                 if render_node.measures_as_inline_content() {
                   return InlineNode::new(render_node)
