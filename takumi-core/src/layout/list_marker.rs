@@ -4,6 +4,7 @@ use taffy::{LengthPercentageAuto, Size as TaffySize};
 
 use crate::{
   context::RenderContext,
+  geometry::Point,
   layout::{
     node::{Node, resolve_image},
     tree::{NodeOrigin, RenderNode},
@@ -16,8 +17,7 @@ use crate::{
   },
 };
 
-/// Blink's `kCMarkerPaddingPx`: the gap between a marker image or an outside
-/// symbol and the item's content.
+/// Blink's `kCMarkerPaddingPx`: the gap between a marker image and the item's content.
 const MARKER_GAP_PX: f32 = 7.0;
 
 /// Blink's `kCUAMarkerMarginEm`: the gap an inside symbol keeps from the
@@ -85,19 +85,22 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
     None => {
       let text = style_type.marker_text(ordinal, direction)?;
 
-      match position {
-        ListStylePosition::Inside if style_type.is_symbolic() => {
-          RenderNode::anonymous_text_item(&context, text.trim_end().to_owned())
-        }
-        _ => RenderNode::anonymous_text_item(&context, text),
+      if style_type.is_symbolic() {
+        RenderNode::anonymous_text_item(&context, text.trim_end().to_owned())
+      } else {
+        RenderNode::anonymous_text_item(&context, text)
       }
     }
   };
 
-  // Blink spaces an outside symbol or image from the content with a margin, not a suffix
-  // (`InlineMarginsForOutside`).
-  if position == ListStylePosition::Outside && (has_image || style_type.is_symbolic()) {
-    apply_marker_gap(&mut content, &context, Length::Px(MARKER_GAP_PX), direction);
+  if position == ListStylePosition::Outside {
+    // Blink's `LayoutOutsideListMarker` is the block holding the marker's content, so the block
+    // laying that content out here is the marker's too, where `FindSymbolMarkerLayoutText` looks.
+    content.origin = NodeOrigin::Marker;
+
+    if let Some(gap) = margin_end_for_outside(&context, has_image, style_type) {
+      apply_marker_gap(&mut content, gap, direction);
+    }
   }
 
   if let Some(layout_style) = &mut content.layout_style_override {
@@ -127,18 +130,134 @@ fn inline_margins_for_inside(has_image: bool, style_type: &ListStyleType) -> (Le
   }
 }
 
+/// Blink's `InlineMarginsForOutside` inline-end margin of an outside marker's content, if any.
+fn margin_end_for_outside(
+  context: &RenderContext,
+  has_image: bool,
+  style_type: &ListStyleType,
+) -> Option<f32> {
+  if has_image {
+    return Some(MARKER_GAP_PX);
+  }
+  if !style_type.is_symbolic() {
+    return None;
+  }
+
+  let ascent = primary_font_ascent(context)?;
+  let offset = match style_type {
+    ListStyleType::DisclosureOpen | ListStyleType::DisclosureClosed => {
+      disclosure_symbol_size(context)
+    }
+    _ => LayoutUnit::from_int(ascent * 2 / 3),
+  };
+  let margin_end = offset + LayoutUnit::from_float(MARKER_GAP_PX) + LayoutUnit::from_int(1)
+    - width_of_symbol(context);
+
+  Some(margin_end.to_float())
+}
+
+/// Blink's `FontMetrics::Ascent` of the primary font, in whole px.
+fn primary_font_ascent(context: &RenderContext) -> Option<i32> {
+  context
+    .primary_font_metrics(&context.style, context.sizing.font_size)
+    .map(|metrics| metrics.ascent as i32)
+}
+
+/// Blink's `DisclosureSymbolSize`.
+fn disclosure_symbol_size(context: &RenderContext) -> LayoutUnit {
+  LayoutUnit::from_float(context.sizing.font_size * DISCLOSURE_SYMBOL_SIZE_EM)
+}
+
 /// Blink's `ListMarker::WidthOfSymbol`: the width a symbol marker, painted as a shape, takes.
 pub(crate) fn width_of_symbol(context: &RenderContext) -> LayoutUnit {
-  let style = &context.style;
-  let Some(metrics) = context.primary_font_metrics(style, context.sizing.font_size) else {
+  let Some(ascent) = primary_font_ascent(context) else {
     return LayoutUnit::ZERO;
   };
 
-  match style.misc_inherited1_data.list_style_type {
+  match context.style.misc_inherited1_data.list_style_type {
     ListStyleType::DisclosureOpen | ListStyleType::DisclosureClosed => {
-      LayoutUnit::from_float(context.sizing.font_size * DISCLOSURE_SYMBOL_SIZE_EM)
+      disclosure_symbol_size(context)
     }
-    _ => LayoutUnit::from_int((metrics.ascent as i32 * 2 / 3 + 1) / 2 + 2),
+    _ => LayoutUnit::from_int((ascent * 2 / 3 + 1) / 2 + 2),
+  }
+}
+
+/// The shape Blink's `TextFragmentPainter::PaintSymbol` paints a symbol marker as.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum SymbolShape {
+  /// `disc`: a filled ellipse.
+  Disc,
+  /// `circle`: an ellipse stroked 1px wide.
+  Circle,
+  /// `square`: a filled rectangle.
+  Square,
+  /// `disclosure-open` and `disclosure-closed`: a filled triangle.
+  Disclosure(DisclosureOrientation),
+}
+
+/// Blink's `GetDisclosureOrientation` in `horizontal-tb`, the only writing mode takumi lays out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DisclosureOrientation {
+  /// Toward the inline end of right-to-left text.
+  Left,
+  /// Toward the inline end of left-to-right text.
+  Right,
+  /// Toward the block end.
+  Down,
+}
+
+/// A symbol marker's shape and where it paints.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SymbolMarker {
+  pub(crate) shape: SymbolShape,
+  /// Blink's `RelativeSymbolMarkerRect` top-left, from the marker text's start on its baseline.
+  pub(crate) offset: Point<f32>,
+  /// The side of that rect, which is square.
+  pub(crate) side: f32,
+}
+
+impl SymbolMarker {
+  /// Blink's `ListMarker::RelativeSymbolMarkerRect` for marker text in `context`.
+  pub(crate) fn of(context: &RenderContext) -> Option<Self> {
+    let style = &context.style;
+    let shape = match style.misc_inherited1_data.list_style_type {
+      ListStyleType::Disc => SymbolShape::Disc,
+      ListStyleType::Circle => SymbolShape::Circle,
+      ListStyleType::Square => SymbolShape::Square,
+      ListStyleType::DisclosureOpen => SymbolShape::Disclosure(DisclosureOrientation::Down),
+      ListStyleType::DisclosureClosed => {
+        SymbolShape::Disclosure(match style.inherited_data.direction {
+          Direction::Ltr => DisclosureOrientation::Right,
+          Direction::Rtl => DisclosureOrientation::Left,
+        })
+      }
+      _ => return None,
+    };
+    let ascent = primary_font_ascent(context)?;
+    let (offset, side) = match shape {
+      SymbolShape::Disclosure(_) => {
+        let side = disclosure_symbol_size(context).to_float();
+
+        (Point { x: 0.0, y: -side }, side)
+      }
+      _ => {
+        let top = 3 * (ascent - ascent * 2 / 3) / 2;
+
+        (
+          Point {
+            x: 1.0,
+            y: (top - ascent) as f32,
+          },
+          ((ascent * 2 / 3 + 1) / 2) as f32,
+        )
+      }
+    };
+
+    Some(Self {
+      shape,
+      offset,
+      side,
+    })
   }
 }
 
@@ -174,19 +293,14 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage) -> RenderNo
 }
 
 /// A margin on the content's inline-end side keeps the marker box itself zero-width.
-fn apply_marker_gap(
-  item: &mut RenderNode,
-  context: &RenderContext,
-  gap: Length,
-  direction: Direction,
-) {
+fn apply_marker_gap(item: &mut RenderNode, gap: f32, direction: Direction) {
   let Some(layout_style) = &mut item.layout_style_override else {
     return;
   };
   let margin = &mut Rc::make_mut(layout_style).margin;
   let (_, end) = direction.inline_sides(&mut margin.left, &mut margin.right);
 
-  *end = LengthPercentageAuto::length(gap.to_px(&context.sizing, 0.0));
+  *end = LengthPercentageAuto::length(gap);
 }
 
 /// The running count a list hands to its items, honoring `start` and `value`.

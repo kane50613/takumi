@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>list_symbol_markers</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 8px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+        color: rgb(17, 24, 39);
+      }
+      .list {
+        display: block;
+        width: 200px;
+        padding: 6px 8px 6px 40px;
+        background: white;
+        font-size: 16px;
+      }
+      .item {
+        display: list-item;
+      }
+      .large {
+        font-size: 30px;
+      }
+      .inside {
+        list-style-position: inside;
+      }
+      .colored {
+        color: rgb(220, 38, 38);
+      }
+      .filled {
+        -webkit-text-fill-color: rgb(37, 99, 235);
+      }
+      .rtl {
+        direction: rtl;
+        padding: 6px 40px 6px 8px;
+      }
+      .disc {
+        list-style-type: disc;
+      }
+      .circle {
+        list-style-type: circle;
+      }
+      .square {
+        list-style-type: square;
+      }
+      .open {
+        list-style-type: disclosure-open;
+      }
+      .closed {
+        list-style-type: disclosure-closed;
+      }
+    </style>
+  </head>
+  <body style="width: 640px; height: 348px">
+    <div class="root"
+      ><div class="list"
+        ><div class="item disc">disc</div><div class="item circle">circle</div
+        ><div class="item square">square</div><div class="item open">disclosure-open</div
+        ><div class="item closed">disclosure-closed</div></div
+      ><div class="list inside"
+        ><div class="item disc">disc</div><div class="item circle">circle</div
+        ><div class="item square">square</div><div class="item open">disclosure-open</div
+        ><div class="item closed">disclosure-closed</div></div
+      ><div class="list rtl"
+        ><div class="item disc">disc</div><div class="item closed">disclosure-closed</div
+        ><div class="item inside closed">inside</div></div
+      ><div class="list large colored"
+        ><div class="item disc">disc</div><div class="item circle">circle</div
+        ><div class="item square">square</div><div class="item open">open</div
+        ><div class="item closed">closed</div></div
+      ><div class="list large inside filled"
+        ><div class="item disc">disc</div><div class="item circle">circle</div
+        ><div class="item square">square</div><div class="item open">open</div
+        ><div class="item closed">closed</div></div
+      ></div
+    >
+  </body>
+</html>

@@ -10,25 +10,24 @@ use super::{BackgroundItem, ContentBox, FragmentItems, GlyphStore, Ink, InkBox, 
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  fonts::{
-    font::Font,
-    shaping::{harfbuzz_shaper::HarfBuzzShaper, shape_result_view::ShapeResultView},
-    simple_font_data::SimpleFontData,
-  },
+  fonts::{font::Font, simple_font_data::SimpleFontData},
   geometry::{AvailableSpace, ComputedLayout, Point, Size},
-  layout::inline::{
-    atomic_inline::BoxAtomicInline,
-    background::{SpanFragment, resolve_span_fragments},
-    decorations::{BoxFont, DecorationPlacement},
-    inline_item::{InlineItem, InlineItemType},
-    inline_layout_algorithm::LineBoxFragment,
-    inline_node_data::InlineNodeData,
-    items::{DecorationLink, InlineSpans, ProcessedInlineSpan},
-    line_breaker::AtomicInlineLayout,
-    logical_line_item::{LineFragment, LogicalLineItem},
-    metrics::VisualInlineBox,
-    runs::{PositionedGlyph, RunMetrics, ShapedRun, glyph_skips_ink},
-    text_fit::LineScaleState,
+  layout::{
+    inline::{
+      atomic_inline::BoxAtomicInline,
+      background::{SpanFragment, resolve_span_fragments},
+      decorations::{BoxFont, DecorationPlacement},
+      inline_item::{InlineItem, InlineItemType},
+      inline_layout_algorithm::LineBoxFragment,
+      inline_node_data::InlineNodeData,
+      items::{DecorationLink, InlineSpans, ProcessedInlineSpan},
+      line_breaker::AtomicInlineLayout,
+      logical_line_item::{LineFragment, LogicalLineItem},
+      metrics::VisualInlineBox,
+      runs::{PositionedGlyph, RunMetrics, ShapedRun, glyph_skips_ink},
+      text_fit::LineScaleState,
+    },
+    list_marker::SymbolMarker,
   },
   layout_unit::LayoutUnit,
   scene::text_ink_reach,
@@ -368,36 +367,30 @@ impl FragmentItems {
 
     brush.source_span_id = Some(span as u64);
 
-    let symbol;
-    // Approximate: Blink paints a symbol marker as a shape in the spaces `WidthOfSymbol` wide it
-    // shapes as; takumi draws the symbol's glyph centered in them.
-    let (shape_result, index_offset, x_shift) =
-      if child.inline_item.is_some_and(InlineItem::is_symbol_marker) {
-        let text = &items_data.text_content[child.text_offset.clone()];
-        let shaped =
-          HarfBuzzShaper::new(text.to_owned()).shape_all(&font, shape_result.direction());
-        let x_shift = (shape_result.width() - shaped.width()) / 2.0;
-
-        symbol = ShapeResultView::create_from_result(&Rc::new(shaped));
-        (&symbol, child.text_offset.start as u32, x_shift)
-      } else if let Some(generated) = &child.text_content {
-        // An ellipsis or hyphen counts its offsets from its own start, and takes the text's end.
+    let symbol_marker = if child.inline_item.is_some_and(InlineItem::is_symbol_marker) {
+      SymbolMarker::of(object.context())
+    } else {
+      None
+    };
+    let index_offset = match &child.text_content {
+      // An ellipsis or hyphen counts its offsets from its own start, and takes the text's end.
+      Some(generated) => {
         let start = self.text.len() as u32;
 
         self.text.push_str(generated);
-        (shape_result.as_ref(), start, 0.0)
-      } else {
-        (shape_result.as_ref(), 0, 0.0)
-      };
+        start
+      }
+      None => 0,
+    };
     let mut glyphs: Vec<ItemGlyph> = Vec::with_capacity(shape_result.num_glyphs());
     let total_advance =
       shape_result.for_each_glyph(0.0, |character_index, glyph, offset, advance, font_data| {
         glyphs.push(ItemGlyph {
           character_index: character_index + index_offset,
           glyph,
-          x: advance + offset.x + x_shift,
+          x: advance + offset.x,
           y: offset.y,
-          advance: advance + x_shift,
+          advance,
           font_data: font_data.cloned(),
         });
       });
@@ -490,6 +483,7 @@ impl FragmentItems {
         synthetic_bold: synthesis.embolden,
         synthetic_skew: synthesis.skew,
         normalized_coords: font_data.normalized_coords(),
+        symbol_marker,
         font_data: face.typeface.blob(),
         brush: brush.clone(),
       };

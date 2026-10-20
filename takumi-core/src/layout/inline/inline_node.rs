@@ -96,12 +96,9 @@ impl<'c> Frame<'c> {
     }
   }
 
-  /// Blink's `FindSymbolMarkerLayoutText`: whether this box's text is a symbol marker's, which
-  /// paints as a shape.
+  /// Blink's `FindSymbolMarkerLayoutText`: whether this box's text is a symbol marker's.
   fn is_symbol_marker_text(&self) -> bool {
-    self
-      .parent
-      .is_some_and(|parent| parent.origin == NodeOrigin::Marker)
+    self.parent.unwrap_or(self.node).origin == NodeOrigin::Marker
       && self
         .node
         .context
@@ -602,6 +599,7 @@ mod tests {
         inline_node_data::InlineNodeData,
         testing::render_root,
       },
+      list_marker::{DisclosureOrientation, SymbolMarker, SymbolShape},
       node::Node,
       tree::RenderNode,
     },
@@ -945,6 +943,20 @@ mod tests {
     assert!(!items[3].is_symbol_marker());
   }
 
+  /// Blink's `LayoutOutsideListMarker` lays its text out itself, and a symbol's paints as a shape.
+  #[test]
+  fn an_outside_marker_text_is_a_symbol_marker() {
+    let list = Node::container([Node::text("a").with_class_name("item")]).with_class_name("list");
+    let tree = render_tree(list, "");
+    let item = &tree.children.as_deref().expect("children")[0];
+    let marker = item.marker.as_deref().expect("marker");
+    let content = &marker.children.as_deref().expect("marker content")[0];
+    let data = InlineNode::new(content).collect_inlines();
+
+    assert_eq!(data.text_content, "\u{2022}");
+    assert!(data.items[0].is_symbol_marker());
+  }
+
   /// Blink's `InlineNodeForTest`: items appended as they are, without collapsing.
   struct TestNode<'c> {
     block: &'c RenderNode,
@@ -1219,8 +1231,38 @@ mod tests {
       .expect("a symbol marker");
     let width = marker.shape_result.as_ref().expect("shaped").width();
 
-    // Blink's `(ascent * 2 / 3 + 1) / 2 + 2`, with Geist's 16px ascent rounding to 15.
+    // Blink's `(ascent * 2 / 3 + 1) / 2 + 2`, with Geist's 16px ascent rounding to 16.
     assert_eq!(width, 7.0);
+  }
+
+  /// Blink's `RelativeSymbolMarkerRect` of the marker's text, from its start on its baseline.
+  #[test]
+  fn symbol_markers_sit_on_the_baseline() {
+    let symbol_marker = |list_style_type: &str| {
+      let list = Node::container([Node::text("a").with_class_name("item")]).with_class_name("list");
+      let tree = render_tree(
+        list,
+        &format!(".list {{ list-style: inside {list_style_type}; font: 16px Geist }}"),
+      );
+      let item = &tree.children.as_deref().expect("children")[0];
+      let marker = item.marker.as_deref().expect("marker");
+      let content = &marker.children.as_deref().expect("marker content")[0];
+
+      SymbolMarker::of(&content.context).expect("a symbol marker")
+    };
+    let disc = symbol_marker("disc");
+    let disclosure = symbol_marker("disclosure-closed");
+
+    // Geist's 16px ascent rounds to 16: `(16 * 2 / 3 + 1) / 2` wide, `3 * (16 - 10) / 2` down.
+    assert_eq!(disc.shape, SymbolShape::Disc);
+    assert_eq!((disc.offset.x, disc.offset.y, disc.side), (1.0, -7.0, 5.0));
+    // `DisclosureSymbolSize` is 0.66em, its bottom on the baseline.
+    assert_eq!(
+      disclosure.shape,
+      SymbolShape::Disclosure(DisclosureOrientation::Right)
+    );
+    assert_eq!(disclosure.offset.y, -disclosure.side);
+    assert!((disclosure.side - 10.56).abs() < 0.02);
   }
 
   /// Items of one bidi level shape in that direction.
