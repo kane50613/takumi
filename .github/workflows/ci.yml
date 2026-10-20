@@ -263,6 +263,7 @@ jobs:
           targets: ${{ matrix.settings.target }}
           components: rust-src
           stage: build
+          build-std: true
 
       - name: Install cargo-zigbuild
         if: ${{ contains(matrix.settings.target, 'musl') }}
@@ -643,6 +644,7 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
+          build-std: true
 
       - name: Install wasm-pack
         uses: ./.github/actions/setup-wasm-pack
@@ -723,6 +725,7 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
+          build-std: true
 
       - name: Install wasm-pack
         uses: ./.github/actions/setup-wasm-pack
@@ -806,6 +809,7 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
+          build-std: true
 
       - name: Install wasm-pack
         uses: ./.github/actions/setup-wasm-pack
