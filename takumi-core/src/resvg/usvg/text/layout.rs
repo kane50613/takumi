@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::collections::HashMap;
-use std::num::NonZeroU16;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -10,9 +9,6 @@ use harfrust::{Feature, Tag as HbTag, font::Variation};
 use icu_properties::CodePointMapData;
 use icu_properties::props::Script;
 use kurbo::{ParamCurve, ParamCurveArclen, ParamCurveDeriv};
-use skrifa::MetadataProvider;
-use skrifa::instance::LocationRef;
-use skrifa::raw::TableProvider;
 use skrifa::raw::types::F2Dot14;
 use strict_num::NonZeroPositiveF32;
 use svgtypes::FontFamily;
@@ -20,6 +16,7 @@ use tiny_skia_path::{NonZeroRect, Transform};
 
 use crate::font_style::ExpandedFontFamily;
 use crate::fonts::font::Font as ShapingFont;
+use crate::fonts::font_baseline::FontBaseline;
 use crate::fonts::font_custom_platform_data::FontCustomPlatformData;
 use crate::fonts::font_description::{FontDescription, FontFallbackKey, FontSelectionDescription};
 use crate::fonts::font_selection_types::{
@@ -28,7 +25,8 @@ use crate::fonts::font_selection_types::{
 use crate::fonts::shaping::harfbuzz_shaper::HarfBuzzShaper;
 use crate::fonts::shaping::shape_result_view::ShapeResultView;
 use crate::fonts::simple_font_data::SimpleFontData;
-use crate::resources::font::{RunFace, RunSynthesis};
+use crate::layout::inline::decorations::{DecoratingBox, DecorationFont};
+use crate::resources::font::{PrimaryFontMetrics, RunFace, RunSynthesis};
 use crate::resvg::usvg::tree::{BBox, IsValidLength};
 use crate::resvg::usvg::{
   AlignmentBaseline, ApproxZeroUlps, BaselineShift, Cache, DominantBaseline, Fill, FillRule, Font,
@@ -39,6 +37,7 @@ use crate::sort_key::sort_by_key;
 use crate::style::{
   Direction as TextDirection, FontFamilyToken, FontLanguageOverride,
   FontOpticalSizing as CssFontOpticalSizing, FontSynthesic, FontVariantCaps, GenericFamilyType,
+  SizedTextDecorationThickness, TextDecorationLines, TextUnderlinePosition,
 };
 use crate::text::bidi_paragraph::{BidiParagraph, direction_from_level};
 
@@ -184,55 +183,43 @@ pub(crate) fn layout_text(text_node: &Text, cache: &Cache) -> Option<(Vec<Span>,
         span_ts = span_ts.pre_translate(0.0, shift);
       }
 
-      let mut underline = None;
-      let mut overline = None;
-      let mut line_through = None;
-
-      if let Some(decoration) = span.decoration.underline.clone() {
-        // TODO: No idea what offset should be used for top-to-bottom layout.
-        // There is
-        // https://www.w3.org/TR/css-text-decor-3/#text-underline-position-property
-        // but it doesn't go into details.
+      let mut decorate = |line, decoration: &Option<TextDecorationStyle>, vertical_offset| {
+        let decoration = decoration.clone()?;
+        let (center, thickness) = font.decoration_line(line);
         let offset = match text_node.writing_mode {
-          WritingMode::LeftToRight => -font.underline_position(),
-          WritingMode::TopToBottom => font.height() / 2.0,
+          WritingMode::LeftToRight => center,
+          WritingMode::TopToBottom => vertical_offset,
         };
+        let path = convert_decoration(
+          (offset, thickness),
+          span,
+          decoration,
+          &decoration_spans,
+          span_ts,
+        )?;
 
-        if let Some(path) =
-          convert_decoration(offset, span, font, decoration, &decoration_spans, span_ts)
-        {
-          bbox = bbox.expand(path.data.bounds());
-          underline = Some(path);
-        }
-      }
-
-      if let Some(decoration) = span.decoration.overline.clone() {
-        let offset = match text_node.writing_mode {
-          WritingMode::LeftToRight => -font.ascent(),
-          WritingMode::TopToBottom => -font.height() / 2.0,
-        };
-
-        if let Some(path) =
-          convert_decoration(offset, span, font, decoration, &decoration_spans, span_ts)
-        {
-          bbox = bbox.expand(path.data.bounds());
-          overline = Some(path);
-        }
-      }
-
-      if let Some(decoration) = span.decoration.line_through.clone() {
-        let offset = match text_node.writing_mode {
-          WritingMode::LeftToRight => -font.line_through_position(),
-          WritingMode::TopToBottom => 0.0,
-        };
-
-        if let Some(path) =
-          convert_decoration(offset, span, font, decoration, &decoration_spans, span_ts)
-        {
-          bbox = bbox.expand(path.data.bounds());
-          line_through = Some(path);
-        }
-      }
+        bbox = bbox.expand(path.data.bounds());
+        Some(path)
+      };
+      // TODO: No idea what offset should be used for top-to-bottom layout.
+      // There is
+      // https://www.w3.org/TR/css-text-decor-3/#text-underline-position-property
+      // but it doesn't go into details.
+      let underline = decorate(
+        TextDecorationLines::UNDERLINE,
+        &span.decoration.underline,
+        font.height() / 2.0,
+      );
+      let overline = decorate(
+        TextDecorationLines::OVERLINE,
+        &span.decoration.overline,
+        -font.height() / 2.0,
+      );
+      let line_through = decorate(
+        TextDecorationLines::LINE_THROUGH,
+        &span.decoration.line_through,
+        0.0,
+      );
 
       let mut fill = span.fill.clone();
       if let Some(ref mut fill) = fill {
@@ -361,17 +348,15 @@ fn collect_decoration_spans(span: &TextSpan, clusters: &[GlyphCluster]) -> Vec<D
   spans
 }
 
+/// The decoration `thickness` thick, centered `dy` below the baseline, under `decoration_spans`.
 pub(crate) fn convert_decoration(
-  dy: f32,
+  (dy, thickness): (f32, f32),
   span: &TextSpan,
-  font: &ResolvedFont,
   mut decoration: TextDecorationStyle,
   decoration_spans: &[DecorationSpan],
   transform: Transform,
 ) -> Option<Path> {
   debug_assert!(!decoration_spans.is_empty());
-
-  let thickness = font.underline_thickness();
 
   let mut builder = tiny_skia_path::PathBuilder::new();
   for dec_span in decoration_spans {
@@ -507,13 +492,12 @@ pub(crate) fn resolve_baseline(
 
   // TODO: support vertical layout as well
   if writing_mode == WritingMode::LeftToRight {
-    if span.alignment_baseline == AlignmentBaseline::Auto
-      || span.alignment_baseline == AlignmentBaseline::Baseline
-    {
-      shift += font.dominant_baseline_shift(span.dominant_baseline);
-    } else {
-      shift += font.alignment_baseline_shift(span.alignment_baseline);
-    }
+    let baseline = span
+      .alignment_baseline
+      .font_baseline()
+      .unwrap_or_else(|| span.dominant_baseline.font_baseline());
+
+    shift += font.baseline_shift(baseline);
   }
 
   shift
@@ -524,8 +508,8 @@ fn resolve_baseline_shift(baselines: &[BaselineShift], font: &ResolvedFont) -> f
   for baseline in baselines.iter().rev() {
     match baseline {
       BaselineShift::Baseline => {}
-      BaselineShift::Subscript => shift -= font.subscript_offset(),
-      BaselineShift::Superscript => shift += font.superscript_offset(),
+      BaselineShift::Subscript => shift -= font.height() / 2.0,
+      BaselineShift::Superscript => shift += font.height() / 2.0,
       BaselineShift::Number(n) => shift += n,
     }
   }
@@ -1120,24 +1104,7 @@ pub(crate) struct ResolvedFont {
   normalized_coords: Vec<F2Dot14>,
   size: f32,
   synthesis: RunSynthesis,
-
-  units_per_em: NonZeroU16,
-
-  // All values below are in font units.
-  ascent: i16,
-  descent: i16,
-  x_height: NonZeroU16,
-
-  underline_position: i16,
-  underline_thickness: NonZeroU16,
-
-  // line-through thickness should be the the same as underline thickness
-  // according to the TrueType spec:
-  // https://docs.microsoft.com/en-us/typography/opentype/spec/os2#ystrikeoutsize
-  line_through_position: i16,
-
-  subscript_offset: i16,
-  superscript_offset: i16,
+  metrics: PrimaryFontMetrics,
 }
 
 /// What of a span selects and shapes its font.
@@ -1346,90 +1313,14 @@ pub(crate) fn is_word_separator_characters(c: char) -> bool {
 }
 
 impl ResolvedFont {
-  /// `font_data`'s face and metrics; none for a face whose `unitsPerEm` is out of range.
+  /// `font_data`'s face and metrics; none for a face without metrics.
   fn new(font_data: &SimpleFontData) -> Option<Self> {
-    let font = font_data.font_ref()?;
-    let normalized_coords = font_data.normalized_coords();
-    let coords = normalized_coords.as_slice();
-    // Metrics are always in font units, so the size stays unscaled.
-    let metrics = font.metrics(skrifa::prelude::Size::unscaled(), LocationRef::new(coords));
-
-    // Reject fonts with an out-of-range unitsPerEm, like `ttf-parser` did.
-    if !(16..=16384).contains(&metrics.units_per_em) {
-      return None;
-    }
-    let units_per_em = NonZeroU16::new(metrics.units_per_em)?;
-
-    let ascent = metrics.ascent;
-    let descent = metrics.descent;
-
-    let x_height = metrics
-      .x_height
-      .filter(|x| *x > 0.0)
-      .and_then(|x| u16::try_from(x.round() as i32).ok())
-      .and_then(NonZeroU16::new);
-    let x_height = match x_height {
-      Some(height) => height,
-      None => {
-        // If not set - fallback to height * 45%.
-        // 45% is what Firefox uses.
-        u16::try_from(((ascent - descent) * 0.45).round() as i32)
-          .ok()
-          .and_then(NonZeroU16::new)?
-      }
-    };
-
-    let line_through_position = match metrics.strikeout {
-      Some(metrics) => metrics.offset.round() as i16,
-      None => x_height.get() as i16 / 2,
-    };
-
-    let (underline_position, underline_thickness) = match metrics.underline {
-      Some(metrics) => {
-        let thickness = u16::try_from(metrics.thickness.round() as i32)
-          .ok()
-          .and_then(NonZeroU16::new)
-          // `skrifa` guarantees that units_per_em is > 0
-          .unwrap_or_else(|| NonZeroU16::new(units_per_em.get() / 12).unwrap());
-
-        (metrics.offset.round() as i16, thickness)
-      }
-      None => (
-        -(units_per_em.get() as i16) / 9,
-        NonZeroU16::new(units_per_em.get() / 12).unwrap(),
-      ),
-    };
-
-    // 0.2 and 0.4 are generic offsets used by some applications (Inkscape/librsvg).
-    let mut subscript_offset = (units_per_em.get() as f32 / 0.2).round() as i16;
-    let mut superscript_offset = (units_per_em.get() as f32 / 0.4).round() as i16;
-
-    if let Ok(os2) = font.os2() {
-      subscript_offset = os2.y_subscript_y_offset();
-      superscript_offset = os2.y_superscript_y_offset();
-    }
-    if let (Ok(mvar), true) = (font.mvar(), !coords.is_empty()) {
-      use skrifa::raw::tables::mvar::tags::*;
-      let metric_delta = |tag| mvar.metric_delta(tag, coords).unwrap_or_default().to_f32();
-
-      subscript_offset += metric_delta(SBYO).round() as i16;
-      superscript_offset += metric_delta(SPYO).round() as i16;
-    }
-
     Some(Self {
       typeface: Arc::clone(&font_data.face().typeface),
-      normalized_coords,
+      normalized_coords: font_data.normalized_coords(),
       size: font_data.size(),
       synthesis: font_data.synthesis(),
-      units_per_em,
-      ascent: ascent.round() as i16,
-      descent: descent.round() as i16,
-      x_height,
-      underline_position,
-      underline_thickness,
-      line_through_position,
-      subscript_offset,
-      superscript_offset,
+      metrics: font_data.font_metrics()?,
     })
   }
 
@@ -1444,116 +1335,72 @@ impl ResolvedFont {
     }
   }
 
-  #[inline]
-  fn scale(&self) -> f32 {
-    self.size / self.units_per_em.get() as f32
-  }
-
-  #[inline]
   pub(crate) fn ascent(&self) -> f32 {
-    self.ascent as f32 * self.scale()
+    self.metrics.ascent
   }
 
-  #[inline]
+  /// Negative, below the baseline.
   pub(crate) fn descent(&self) -> f32 {
-    self.descent as f32 * self.scale()
+    -self.metrics.descent
   }
 
-  #[inline]
   pub(crate) fn height(&self) -> f32 {
-    self.ascent() - self.descent()
+    self.metrics.float_height()
   }
 
-  #[inline]
-  pub(crate) fn x_height(&self) -> f32 {
-    self.x_height.get() as f32 * self.scale()
+  /// How far the text moves down to put `baseline` where its alphabetic baseline was, as Blink
+  /// aligns SVG text.
+  fn baseline_shift(&self, baseline: FontBaseline) -> f32 {
+    self.metrics.ascent - self.metrics.float_ascent(baseline)
   }
 
-  #[inline]
-  pub(crate) fn underline_position(&self) -> f32 {
-    self.underline_position as f32 * self.scale()
+  /// The center of a `line` decoration below the baseline, and its thickness, as Blink's
+  /// `TextDecorationInfo` places it.
+  fn decoration_line(&self, line: TextDecorationLines) -> (f32, f32) {
+    let font = DecorationFont::new(self.metrics, self.size);
+    let thickness = font.thickness(SizedTextDecorationThickness::Auto);
+    let top = DecoratingBox::new(font, 0.0).line_top(
+      line,
+      (TextUnderlinePosition::Auto, None),
+      -self.ascent(),
+      thickness,
+    );
+
+    (top + thickness / 2.0, thickness)
   }
+}
 
-  #[inline]
-  fn underline_thickness(&self) -> f32 {
-    self.underline_thickness.get() as f32 * self.scale()
+impl DominantBaseline {
+  /// Blink's `ComputedStyle::GetFontBaseline`.
+  fn font_baseline(self) -> FontBaseline {
+    match self {
+      Self::Auto | Self::UseScript | Self::NoChange | Self::ResetSize | Self::Alphabetic => {
+        FontBaseline::Alphabetic
+      }
+      Self::Ideographic => FontBaseline::IdeographicUnder,
+      Self::Hanging => FontBaseline::Hanging,
+      Self::Mathematical => FontBaseline::Math,
+      Self::Central => FontBaseline::Central,
+      Self::Middle => FontBaseline::XMiddle,
+      Self::TextAfterEdge => FontBaseline::TextUnder,
+      Self::TextBeforeEdge => FontBaseline::TextOver,
+    }
   }
+}
 
-  #[inline]
-  pub(crate) fn line_through_position(&self) -> f32 {
-    self.line_through_position as f32 * self.scale()
-  }
-
-  #[inline]
-  fn subscript_offset(&self) -> f32 {
-    self.subscript_offset as f32 * self.scale()
-  }
-
-  #[inline]
-  fn superscript_offset(&self) -> f32 {
-    self.superscript_offset as f32 * self.scale()
-  }
-
-  fn dominant_baseline_shift(&self, baseline: DominantBaseline) -> f32 {
-    let alignment = match baseline {
-      DominantBaseline::Auto => AlignmentBaseline::Auto,
-      DominantBaseline::UseScript => AlignmentBaseline::Auto, // unsupported
-      DominantBaseline::NoChange => AlignmentBaseline::Auto,  // already resolved
-      DominantBaseline::ResetSize => AlignmentBaseline::Auto, // unsupported
-      DominantBaseline::Ideographic => AlignmentBaseline::Ideographic,
-      DominantBaseline::Alphabetic => AlignmentBaseline::Alphabetic,
-      DominantBaseline::Hanging => AlignmentBaseline::Hanging,
-      DominantBaseline::Mathematical => AlignmentBaseline::Mathematical,
-      DominantBaseline::Central => AlignmentBaseline::Central,
-      DominantBaseline::Middle => AlignmentBaseline::Middle,
-      DominantBaseline::TextAfterEdge => AlignmentBaseline::TextAfterEdge,
-      DominantBaseline::TextBeforeEdge => AlignmentBaseline::TextBeforeEdge,
-    };
-
-    self.alignment_baseline_shift(alignment)
-  }
-
-  // The `alignment-baseline` property is a mess.
-  //
-  // The SVG 1.1 spec (https://www.w3.org/TR/SVG11/text.html#BaselineAlignmentProperties)
-  // goes on and on about what this property suppose to do, but doesn't actually explain
-  // how it should be implemented. It's just a very verbose overview.
-  //
-  // As of Nov 2022, only Chrome and Safari support `alignment-baseline`. Firefox isn't.
-  // Same goes for basically every SVG library in existence.
-  // Meaning we have no idea how exactly it should be implemented.
-  //
-  // And even Chrome and Safari cannot agree on how to handle `baseline`, `after-edge`,
-  // `text-after-edge` and `ideographic` variants. Producing vastly different output.
-  //
-  // As per spec, a proper implementation should get baseline values from the font itself,
-  // using `BASE` and `bsln` TrueType tables. If those tables are not present,
-  // we have to synthesize them (https://drafts.csswg.org/css-inline/#baseline-synthesis-fonts).
-  // And in the worst case scenario simply fallback to hardcoded values.
-  //
-  // Also, most fonts do not provide `BASE` and `bsln` tables to begin with.
-  //
-  // Again, as of Nov 2022, Chrome does only the latter:
-  // https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/platform/fonts/font_metrics.cc#L153
-  //
-  // Since baseline TrueType tables parsing and baseline synthesis are pretty hard,
-  // we do what Chrome does - use hardcoded values. And it seems like Safari does the same.
-  //
-  //
-  // But that's not all! SVG 2 and CSS Inline Layout 3 did a baseline handling overhaul,
-  // and it's far more complex now. Not sure if anyone actually supports it.
-  fn alignment_baseline_shift(&self, alignment: AlignmentBaseline) -> f32 {
-    match alignment {
-      AlignmentBaseline::Auto => 0.0,
-      AlignmentBaseline::Baseline => 0.0,
-      AlignmentBaseline::BeforeEdge | AlignmentBaseline::TextBeforeEdge => self.ascent(),
-      AlignmentBaseline::Middle => self.x_height() * 0.5,
-      AlignmentBaseline::Central => self.ascent() - self.height() * 0.5,
-      AlignmentBaseline::AfterEdge | AlignmentBaseline::TextAfterEdge => self.descent(),
-      AlignmentBaseline::Ideographic => self.descent(),
-      AlignmentBaseline::Alphabetic => 0.0,
-      AlignmentBaseline::Hanging => self.ascent() * 0.8,
-      AlignmentBaseline::Mathematical => self.ascent() * 0.5,
+impl AlignmentBaseline {
+  /// Blink's `InlineBoxState::ResetStyle` for SVG text; none where it takes the dominant baseline.
+  fn font_baseline(self) -> Option<FontBaseline> {
+    match self {
+      Self::Auto | Self::Baseline => None,
+      Self::BeforeEdge | Self::TextBeforeEdge => Some(FontBaseline::TextOver),
+      Self::Middle => Some(FontBaseline::XMiddle),
+      Self::Central => Some(FontBaseline::Central),
+      Self::AfterEdge | Self::TextAfterEdge => Some(FontBaseline::TextUnder),
+      Self::Ideographic => Some(FontBaseline::IdeographicUnder),
+      Self::Alphabetic => Some(FontBaseline::Alphabetic),
+      Self::Hanging => Some(FontBaseline::Hanging),
+      Self::Mathematical => Some(FontBaseline::Math),
     }
   }
 }
