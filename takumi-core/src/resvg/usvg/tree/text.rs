@@ -6,7 +6,6 @@ use std::sync::Arc;
 use strict_num::NonZeroPositiveF32;
 pub use svgtypes::FontFamily;
 
-use crate::resvg::usvg::text::fontdb;
 use crate::resvg::usvg::text::layout::Span;
 use crate::resvg::usvg::{
   Fill, Group, NonEmptyString, PaintOrder, Rect, Stroke, TextRendering, Transform,
@@ -34,34 +33,19 @@ impl Default for FontStretch {
   }
 }
 
-impl From<fontdb::Stretch> for FontStretch {
-  fn from(stretch: fontdb::Stretch) -> Self {
-    match stretch {
-      fontdb::Stretch::UltraCondensed => FontStretch::UltraCondensed,
-      fontdb::Stretch::ExtraCondensed => FontStretch::ExtraCondensed,
-      fontdb::Stretch::Condensed => FontStretch::Condensed,
-      fontdb::Stretch::SemiCondensed => FontStretch::SemiCondensed,
-      fontdb::Stretch::Normal => FontStretch::Normal,
-      fontdb::Stretch::SemiExpanded => FontStretch::SemiExpanded,
-      fontdb::Stretch::Expanded => FontStretch::Expanded,
-      fontdb::Stretch::ExtraExpanded => FontStretch::ExtraExpanded,
-      fontdb::Stretch::UltraExpanded => FontStretch::UltraExpanded,
-    }
-  }
-}
-
-impl From<FontStretch> for fontdb::Stretch {
-  fn from(stretch: FontStretch) -> Self {
-    match stretch {
-      FontStretch::UltraCondensed => fontdb::Stretch::UltraCondensed,
-      FontStretch::ExtraCondensed => fontdb::Stretch::ExtraCondensed,
-      FontStretch::Condensed => fontdb::Stretch::Condensed,
-      FontStretch::SemiCondensed => fontdb::Stretch::SemiCondensed,
-      FontStretch::Normal => fontdb::Stretch::Normal,
-      FontStretch::SemiExpanded => fontdb::Stretch::SemiExpanded,
-      FontStretch::Expanded => fontdb::Stretch::Expanded,
-      FontStretch::ExtraExpanded => fontdb::Stretch::ExtraExpanded,
-      FontStretch::UltraExpanded => fontdb::Stretch::UltraExpanded,
+impl FontStretch {
+  /// The width the keyword names, as a percentage of normal.
+  pub(crate) fn percentage(self) -> f32 {
+    match self {
+      Self::UltraCondensed => 50.0,
+      Self::ExtraCondensed => 62.5,
+      Self::Condensed => 75.0,
+      Self::SemiCondensed => 87.5,
+      Self::Normal => 100.0,
+      Self::SemiExpanded => 112.5,
+      Self::Expanded => 125.0,
+      Self::ExtraExpanded => 150.0,
+      Self::UltraExpanded => 200.0,
     }
   }
 }
@@ -117,26 +101,6 @@ impl Default for FontStyle {
   }
 }
 
-impl From<fontdb::Style> for FontStyle {
-  fn from(style: fontdb::Style) -> Self {
-    match style {
-      fontdb::Style::Normal => FontStyle::Normal,
-      fontdb::Style::Italic => FontStyle::Italic,
-      fontdb::Style::Oblique => FontStyle::Oblique,
-    }
-  }
-}
-
-impl From<FontStyle> for fontdb::Style {
-  fn from(style: FontStyle) -> Self {
-    match style {
-      FontStyle::Normal => fontdb::Style::Normal,
-      FontStyle::Italic => fontdb::Style::Italic,
-      FontStyle::Oblique => fontdb::Style::Oblique,
-    }
-  }
-}
-
 /// Text font properties.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Font {
@@ -148,9 +112,7 @@ pub struct Font {
 }
 
 impl Font {
-  /// A list of family names.
-  ///
-  /// Never empty. Uses `usvg::Options::font_family` as fallback.
+  /// A list of family names, empty for the standard font.
   pub fn families(&self) -> &[FontFamily] {
     &self.families
   }
@@ -259,7 +221,7 @@ impl Default for LengthAdjust {
 ///
 /// Controls automatic adjustment of the `opsz` axis in variable fonts
 /// based on font size. Matches CSS `font-optical-sizing`.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum FontOpticalSizing {
   /// Automatically set `opsz` to match font size (browser default).
   Auto,

@@ -44,7 +44,7 @@ impl Default for ExpandedFontFamily {
 }
 
 impl ExpandedFontFamily {
-  fn new(tokens: Vec<FontFamilyToken>) -> Self {
+  pub(crate) fn new(tokens: Vec<FontFamilyToken>) -> Self {
     let mut hasher = Xxh3::new();
 
     for token in &tokens {

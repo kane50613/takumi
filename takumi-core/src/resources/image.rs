@@ -25,6 +25,8 @@ use thiserror::Error;
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(feature = "svg")]
+use crate::resources::font::Fonts;
 #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "svg-sizing")]
@@ -214,7 +216,7 @@ impl SvgSource {
     let mut options = svg_parse_options();
 
     if let Some(fonts) = fonts.filter(|_| self.has_text) {
-      options.fontdb = fonts.svg_fontdb();
+      options.fonts = Fonts::clone(fonts);
     }
 
     configure(&mut options);

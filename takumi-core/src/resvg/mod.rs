@@ -7,10 +7,10 @@
 Vendored from resvg 0.48.1 (Apache-2.0 OR MIT), stripped of the `svgz`,
 `system-fonts`, `memmap-fonts` and `writer` features and the CLI.
 
-Text support diverges from upstream: the `fontdb` crate is replaced by a
-face store backed by the renderer's font registry (`usvg::text::fontdb`), `unicode-script`/
-`unicode-vo` by `icu_properties`, and color glyph formats (COLR, SVG-in-font,
-bitmap) are stripped — glyphs render from outlines only.
+Text support diverges from upstream: `<text>` matches fonts through the renderer's
+`FontFallbackList` and shapes through its `HarfBuzzShaper` in place of `fontdb` and
+`rustybuzz`, `unicode-script`/`unicode-vo` are replaced by `icu_properties`, and color glyph
+formats (COLR, SVG-in-font, bitmap) are stripped — glyphs render from outlines only.
 */
 
 #![forbid(unsafe_code)]

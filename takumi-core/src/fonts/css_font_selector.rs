@@ -184,6 +184,7 @@ impl CssFontSelector {
   }
 
   /// Every registered face, in registration order.
+  #[cfg(any(test, feature = "paint-tree"))]
   pub(crate) fn font_faces(&self) -> impl Iterator<Item = &Arc<FontFace>> + '_ {
     self
       .font_faces
