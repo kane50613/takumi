@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "2.17.0"
+version = "2.17.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Render images, animations, and SVG from HTML, CSS, or node trees. No headless browser."
@@ -15,24 +15,24 @@ autotests = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.31.0"
+version = "0.32.0"
 default-features = false
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
-version = "0.5.8"
+version = "0.5.9"
 default-features = false
 optional = true
 
 [dependencies.takumi-svg]
 path = "../takumi-svg"
-version = "0.3.30"
+version = "0.3.31"
 default-features = false
 optional = true
 
 [dependencies.takumi-html]
 path = "../takumi-html"
-version = "0.5.0"
+version = "0.6.0"
 default-features = false
 optional = true
 

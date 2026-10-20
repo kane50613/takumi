@@ -1,3 +1,17 @@
+## takumi-html@0.6.0
+
+### Parse a document that starts with a byte order mark as a document
+
+`from_html` now drops a leading byte order mark, as a browser does when it decodes a page. A document saved with one used to parse as a fragment, so it lost its `<body>` and the body's margin.
+
+### Keep the box of an element that holds only white space
+
+An element whose only content is white space, such as `<div style="height: 20px; background: green"> </div>`, now takes up space and paints its background and border in `fromHtml`, `fromJsx`, and `takumi-html`. It used to vanish along with its text.
+
+### Parse a source with a doctype as a document
+
+`from_html` parses a source that opens with a doctype as a document even without an `<html>` tag, so it gains the `<html>`, `<head>`, and `<body>` a browser builds, along with the body's default margin.
+
 ## takumi-html@0.5.0
 
 ### Render an `<img>` without a source

@@ -1,3 +1,81 @@
+## takumi-core@0.32.0
+
+### Match fonts once per style in a render
+
+Each run of inline text matched its fonts and fallback faces again, even when an earlier run had the same font style. Runs with the same font style now share one fallback list for the whole render.
+
+### Shape SVG text with the registry's faces
+
+SVG `<text>` shapes with the faces the font registry holds, sharing their shaping tables instead of building new ones for each text chunk.
+
+### List the images a stylesheet references
+
+`StyleSheet::image_urls` lists the `url()`s its rules and keyframes reference, as `Node::image_urls` does for a node tree, so a caller can load them before rendering.
+
+### Read `ch` and normal line height from the font that draws
+
+`ch`, `line-height: normal`, and an inline box's ascent now come from the same primary font the text draws with, at its variation instance. With `font-optical-sizing: auto`, `ch` used the parent's font size to pick the optical size, so a `10ch` box in a 64px Inter came out 11px wider than in Chrome.
+
+### Honor emoji and text variation selectors in font fallback
+
+Since 2.17.0, the first font with a glyph drew a character whatever variation selector followed it, so `‼️` came out monochrome after a text font and `‼︎` in color after an emoji font. A font that lacks a variation sequence now hands it to a later font that draws it the way it asks, as Chrome does, and only when none does does the base character's glyph stand in.
+
+### Lay out nested inline blocks in linear time
+
+Each level of nested `inline-block` boxes laid out the level below it several times over, so a few levels deep took minutes. An inline block now keeps the layout it took in each available space.
+
+### Share the font registry between renders
+
+A render's font snapshot shares the registry instead of copying it, and SVG `<text>` builds its face store once per set of registered fonts instead of once per render.
+
+### Skip an SVG too large to rasterize instead of failing the render
+
+An SVG image or background that would rasterize past the pixel budget, such as `background-size: cover` on an SVG with an extreme `viewBox`, is now left undrawn. The whole render used to fail with `InvalidPixmapSize`.
+
+### Generate `::before` and `::after` whose `content` is empty
+
+A pseudo-element with `content: ""` now gets a box, so a clearfix, a decorative bar, or an absolutely positioned overlay drawn by one shows up. It used to be dropped because it held no text.
+
+### Speed up `feMorphology`
+
+`feMorphology` read every pixel of its radius rectangle for each output pixel. It now sweeps rows, then columns, with the same result. A large radius runs several times faster.
+
+### Keep a background whose shorthand names an attachment
+
+`background: red url(a.png) no-repeat fixed` used to drop the whole declaration over `fixed`. The shorthand now accepts `scroll`, `fixed`, and `local`; a still image paints them alike.
+
+### Keep a line whole around a `display: none` element
+
+A `display: none` element inside a line of text, such as `Only <span style="display: none">sold out</span>$20`, no longer breaks the line in two. Such an element now gets no box at all, so `measure()` leaves it out of the children it returns.
+
+### Reject negative padding and sizes
+
+A negative `padding`, `width`, `height`, `min-*`, or `max-*`, including their logical forms, is now invalid, as in browsers: a stylesheet drops it and keeps the earlier declaration, and a style object reports it as an invalid value instead of using it.
+
+### Parse `flex: none` as `0 0 auto`
+
+`flex: none` now keeps a flex item from growing or shrinking, as CSS defines it. It used to reset the item to `0 1 auto`, so the item still shrank to fit its container.
+
+### Support `white-space: break-spaces`
+
+`white-space: break-spaces` and `white-space-collapse: break-spaces` keep every space and let a line wrap after any of them, so spaces that reach the end of a line wrap onto the next instead of hanging past it.
+
+### Keep scene bounds past the canvas's top and left edges
+
+`SceneBounds` fields are now `i32`, and a node that reaches past the canvas's top or left edge gets negative bounds instead of bounds clamped to zero.
+
+### Hide images an ellipsis cuts off
+
+Since 2.17.0, an inline image at or past a `text-overflow: ellipsis` cut was still painted, over the ellipsis or in its place. It is now left out, and an ellipsis that lands right after an image paints as well.
+
+### Shape every size of a face with one font
+
+A face builds its shaping tables once while it stays registered, instead of once for each size, variation, and render that uses it.
+
+### Support the `ch` unit
+
+`ch` lengths, alone or in `calc()`, resolve to the advance of the `0` glyph in the first font that covers it, or half the font size when that font has no `0`.
+
 ## takumi-core@0.31.0
 
 ### Wrap loose table parts in anonymous tables
