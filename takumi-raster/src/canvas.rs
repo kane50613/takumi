@@ -7,15 +7,11 @@ mod mask;
 mod paint_source;
 mod skia;
 
-use std::{borrow::Cow, mem::replace, sync::Arc};
+use std::{borrow::Cow, io, mem::replace, sync::Arc};
 
 use blit::{blit_paint_source_translation, blit_translucent_translation};
 pub(crate) use blit::{overlay_image, overlay_sampled_paint_source, placement_overlap};
 pub(crate) use gradient::try_overlay_gradient_tile;
-use image::{
-  ImageError,
-  error::{ParameterError, ParameterErrorKind},
-};
 use mask::MaskStackEntry;
 pub(crate) use mask::{
   CanvasViewport, MaskView, NodeMasks, PlacedMask, alpha_mask, attenuate_alpha_by_mask,
@@ -671,9 +667,10 @@ fn scale_by_alphas(pixels: &mut [[u8; 4]], alphas: &[u8]) {
 }
 
 fn dimension_mismatch() -> Error {
-  Error::encode(ImageError::Parameter(ParameterError::from_kind(
-    ParameterErrorKind::DimensionMismatch,
-  )))
+  Error::encode(io::Error::new(
+    io::ErrorKind::InvalidData,
+    "the canvas pixels do not match its dimensions",
+  ))
 }
 
 #[cfg(test)]

@@ -30,15 +30,14 @@ use std::{
   time::{Duration, Instant},
 };
 
-use image::RgbaImage;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use roxmltree::{Document, Node as XmlNode};
 use takumi::{
   prelude::{
-    FontOverride, FontResource, Fonts, FromHtml, FromHtmlOptions, ImageCacheMode, ImageSource,
-    Node, RenderOptions, StyleSheet, Viewport,
+    Bitmap, FontOverride, FontResource, Fonts, FromHtml, FromHtmlOptions, ImageCacheMode,
+    ImageSource, Node, OutputFormat, RenderOptions, StyleSheet, Viewport,
   },
-  render,
+  render, write_image,
 };
 use takumi_core::resources::image::ResourceCache;
 use test_utils::{CONTEXT, matches_fragments};
@@ -838,9 +837,11 @@ impl Runner {
           let (width, height) = VIEWPORT;
 
           for (suffix, pixels) in [("test", test.clone()), ("ref", reference)] {
-            RgbaImage::from_raw(width, height, pixels)
-              .ok_or("render size")?
-              .save(dump.join(format!("{name}-{suffix}.png")))
+            let bitmap = Bitmap::from_raw(width, height, pixels).ok_or("render size")?;
+            let mut file = fs::File::create(dump.join(format!("{name}-{suffix}.png")))
+              .map_err(|error| error.to_string())?;
+
+            write_image(&bitmap, &mut file, OutputFormat::Png)
               .map_err(|error| error.to_string())?;
           }
         }

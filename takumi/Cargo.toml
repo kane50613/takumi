@@ -56,16 +56,15 @@ from-html = ["dep:takumi-html"]
 
 [dev-dependencies]
 criterion.workspace = true
+gif.workspace = true
 image-webp.workspace = true
 png.workspace = true
 rayon.workspace = true
 roxmltree.workspace = true
 resvg.workspace = true
 serde_json.workspace = true
-
-[dev-dependencies.image]
-workspace = true
-features = ["jpeg", "png", "webp"]
+zune-core.workspace = true
+zune-jpeg.workspace = true
 
 [dev-dependencies.takumi]
 path = "."
