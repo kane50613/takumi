@@ -30,7 +30,7 @@ describe("ImageResponse", () => {
     const controller = new AbortController();
     controller.abort();
 
-    expect(render(node, { renderer, signal: controller.signal })).rejects.toThrow();
+    await expect(render(node, { renderer, signal: controller.signal })).rejects.toThrow();
     expect(renderer.render).not.toHaveBeenCalled();
   });
 
@@ -96,7 +96,7 @@ describe("ImageResponse", () => {
       },
     );
 
-    expect(response.arrayBuffer()).resolves.toBeDefined();
+    await expect(response.arrayBuffer()).resolves.toBeDefined();
   });
 
   test("should expose rendering errors through ready promise and call onError", async () => {
@@ -284,6 +284,6 @@ describe("ImageResponse", () => {
       },
     );
 
-    expect(response.arrayBuffer()).resolves.toBeDefined();
+    await expect(response.arrayBuffer()).resolves.toBeDefined();
   });
 });

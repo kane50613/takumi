@@ -40,6 +40,8 @@ test("concurrent static renders resolve to distinct valid PNGs", async () => {
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     );
   }
+
+  expect(new Set(results.map((result) => result.toString("base64"))).size).toBe(results.length);
 });
 
 test("interleaved concurrent render and measure calls all resolve", async () => {

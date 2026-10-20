@@ -33,8 +33,8 @@ test("css accepts a list", async () => {
   expect(fromCss).toEqual(fromList);
 });
 
-test("css next to stylesheets throws", () => {
-  expect(render(node, { width: 10, height: 10, css: sheet, stylesheets: [sheet] })).rejects.toThrow(
-    "pass either `css` or `stylesheets`, not both",
-  );
+test("css next to stylesheets throws", async () => {
+  await expect(
+    render(node, { width: 10, height: 10, css: sheet, stylesheets: [sheet] }),
+  ).rejects.toThrow("pass either `css` or `stylesheets`, not both");
 });
