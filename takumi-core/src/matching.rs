@@ -19,7 +19,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    LonghandId, MediaQueryList, StyleDeclarationBlock,
+    LonghandId, MediaQueryList, StyleDeclarationBlock, TwMatches,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -427,6 +427,7 @@ pub(crate) struct NodeMatchedDeclarations<'a> {
   element: MatchedDeclarationsView<'a>,
   before: Option<MatchedDeclarationsView<'a>>,
   after: Option<MatchedDeclarationsView<'a>>,
+  tw: TwMatches,
 }
 
 impl<'a> NodeMatchedDeclarations<'a> {
@@ -443,6 +444,11 @@ impl<'a> NodeMatchedDeclarations<'a> {
   /// Declarations matching the element's `::after`, if any rule targeted it.
   pub fn after(&self) -> Option<&MatchedDeclarationsView<'a>> {
     self.after.as_ref()
+  }
+
+  /// The element's `tw` utilities whose variants its position satisfies.
+  pub(crate) fn tw(&self) -> &TwMatches {
+    &self.tw
   }
 }
 
@@ -611,6 +617,8 @@ pub(crate) fn match_stylesheets_view<'a>(
   let arena = StyleArena::new(root);
   let node_count = arena.nodes.len();
   let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
+
+  match_tw_variants(&arena, &mut per_node);
 
   // Every distinct media query list gates some rule, so none matching means no
   // rule applies. Skip the per-node match buckets and the matching walk.
@@ -817,6 +825,32 @@ fn take_pseudo_bucket<'a>(
   let mut view = MatchedDeclarationsView::default();
   finalize_bucket(rules, layer_count, &mut view);
   Some(view)
+}
+
+/// Records which `tw` utilities each element's variants admit, independent of any stylesheet.
+fn match_tw_variants(arena: &StyleArena<'_>, per_node: &mut [NodeMatchedDeclarations<'_>]) {
+  let mut caches = SelectorCaches::default();
+  let mut context = MatchingContext::new(
+    MatchingMode::Normal,
+    None,
+    &mut caches,
+    QuirksMode::NoQuirks,
+    NeedsSelectorFlags::No,
+    MatchingForInvalidation::No,
+  );
+
+  for (index, matched) in per_node.iter_mut().enumerate() {
+    let Some(tw) = &arena.nodes[index].node.metadata.tw else {
+      continue;
+    };
+    let element = ArenaElement { tree: arena, index };
+
+    for (condition_index, condition) in tw.conditions().enumerate() {
+      if matches_selector(condition, 0, None, &element, &mut context) {
+        matched.tw.insert(condition_index);
+      }
+    }
+  }
 }
 
 /// RFC 4647 basic filtering, as `:lang()` uses: `range` matches `lang` if they're equal

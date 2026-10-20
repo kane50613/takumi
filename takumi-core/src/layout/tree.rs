@@ -54,7 +54,7 @@ use crate::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
     Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
-    StyleSheet, TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
+    StyleSheet, TwBlocks, TwMatches, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -3267,11 +3267,13 @@ impl RenderContext {
       .font_metrics()
   }
 
-  /// A child's cascaded style and its element-owned important declarations.
+  /// A child's cascaded style and its element-owned important declarations, its `tw` utilities
+  /// filtered to those whose variants `tw_matches` admits.
   fn cascade(
     &self,
     node_layers: NodeStyleLayers,
     matched_declarations: &MatchedDeclarationsView<'_>,
+    tw_matches: &TwMatches,
   ) -> (NodeStyle, ElementImportant) {
     let mut style = NodeStyle::default();
 
@@ -3282,6 +3284,7 @@ impl RenderContext {
       author_tw.declaration_blocks(
         self.sizing.viewport,
         &self.stylesheet().breakpoints,
+        tw_matches,
         self.tw_cache(),
       )
     });
@@ -3376,7 +3379,11 @@ impl RenderContext {
     &self,
     pseudo_matched: &MatchedDeclarationsView<'_>,
   ) -> (ComputedStyle, SizingContext, Color) {
-    let (style_layers, _) = self.cascade(NodeStyleLayers::default(), pseudo_matched);
+    let (style_layers, _) = self.cascade(
+      NodeStyleLayers::default(),
+      pseudo_matched,
+      &TwMatches::default(),
+    );
     let mut style = style_layers.inherit(&self.inherited_style());
     let sizing = self.child_sizing(&style, &self.sizing, false);
     let current_color = style.inherited_data.color.resolve(self.current_color);
@@ -3393,11 +3400,11 @@ impl RenderContext {
     source_order: usize,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
   ) -> (Rc<ComputedStyle>, SizingContext, Color) {
-    let default_matched = MatchedDeclarationsView::default();
-    let matched = matched_declarations
+    let default_matched = NodeMatchedDeclarations::default();
+    let node_matched = matched_declarations
       .get(source_order)
-      .map(NodeMatchedDeclarations::element)
       .unwrap_or(&default_matched);
+    let matched = node_matched.element();
     // A tree built in code is content, not a document: `rem` resolves against
     // the viewport, so a `font-size` on the outermost node styles text without
     // rescaling every `rem` length below it. A parsed document is the
@@ -3420,7 +3427,7 @@ impl RenderContext {
 
     let preset = key.as_ref().and(layers.preset.clone());
     let (style, sizing, current_color) =
-      self.resolve_uncached_child_style(layers, matched, is_document_root);
+      self.resolve_uncached_child_style(layers, matched, node_matched.tw(), is_document_root);
     let style = Rc::new(style);
 
     // A style an animation or a query container decided holds for this box alone.
@@ -3451,11 +3458,12 @@ impl RenderContext {
     &self,
     layers: NodeStyleLayers,
     matched: &MatchedDeclarationsView<'_>,
+    tw_matches: &TwMatches,
     is_document_root: bool,
   ) -> (ComputedStyle, SizingContext, Color) {
     let lang = layers.lang;
 
-    let (style_layers, element_important) = self.cascade(layers, matched);
+    let (style_layers, element_important) = self.cascade(layers, matched, tw_matches);
     let inherited_parent = self.inherited_style();
 
     let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);

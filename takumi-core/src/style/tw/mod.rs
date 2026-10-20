@@ -5,6 +5,7 @@ mod map;
 mod namespace;
 /// Parsers for Tailwind utility-class suffixes.
 mod parser;
+mod variant;
 
 use std::{
   borrow::Cow,
@@ -20,11 +21,13 @@ use builder::TailwindDeclarationBuilder;
 use cssparser::match_ignore_ascii_case;
 pub(crate) use namespace::Namespace;
 use quick_cache::{Weighter, sync::Cache};
+use selectors::parser::Selector;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
 
 use crate::{
   style::{
+    selector::SelectorImpl,
     tw::{
       map::{FIXED_PROPERTIES, PREFIX_PARSERS, VAR_TARGETS},
       parser::*,
@@ -63,7 +66,7 @@ pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
   for token in source.split_whitespace() {
     let value = TailwindValue::parse(token)?;
 
-    if value.breakpoint.is_some() {
+    if value.breakpoint.is_some() || value.condition.is_some() {
       return None;
     }
 
@@ -166,7 +169,7 @@ pub(crate) struct TwBlocks {
   pub(crate) important: StyleDeclarationBlock,
 }
 
-type TwCacheKey = (*const Vec<TailwindValue>, Option<u32>, u32, u32);
+type TwCacheKey = (*const Vec<TailwindValue>, Option<u32>, u32, u32, TwMatches);
 
 const EXPANSION_CACHE_MAX_ENTRIES: usize = 2048;
 
@@ -230,11 +233,14 @@ impl TailwindValues {
   }
 
   fn parse(source: &str) -> Self {
-    // Plain utilities first, then breakpoint ones, then the `!important` pair in the same
-    // order; within a group the source order stays, so a later utility wins.
-    let mut groups: [Vec<TailwindValue>; 4] = Default::default();
+    // Plain utilities first, then structural variants, then breakpoints, then both, as Tailwind
+    // sorts variants; then the `!important` set in the same order. Within a group the source
+    // order stays, so a later utility wins.
+    let mut groups: [Vec<TailwindValue>; 8] = Default::default();
     for value in source.split_whitespace().filter_map(TailwindValue::parse) {
-      let group = usize::from(value.important) * 2 + usize::from(value.breakpoint.is_some());
+      let group = usize::from(value.important) * 4
+        + usize::from(value.breakpoint.is_some()) * 2
+        + usize::from(value.condition.is_some());
       groups[group].push(value);
     }
     let collected = groups.into_iter().flatten().collect::<Vec<_>>();
@@ -258,11 +264,21 @@ impl TailwindValues {
       .into_iter()
   }
 
-  /// The blocks this class list expands to, resolved once per render.
+  /// The selectors of the utilities a structural variant conditions, in order.
+  pub(crate) fn conditions(&self) -> impl Iterator<Item = &Selector<SelectorImpl>> {
+    self
+      .inner
+      .iter()
+      .filter_map(|value| value.condition.as_ref())
+  }
+
+  /// The blocks this class list expands to on an element whose position satisfies `matches`,
+  /// resolved once per render.
   pub(crate) fn declaration_blocks(
     &self,
     viewport: Viewport,
     breakpoints: &BreakpointOverrides,
+    matches: &TwMatches,
     cache: &TwCache,
   ) -> Rc<TwBlocks> {
     let key = (
@@ -270,6 +286,7 @@ impl TailwindValues {
       viewport.size.width,
       viewport.font_size.to_bits(),
       viewport.effective_dpr().to_bits(),
+      matches.clone(),
     );
 
     if let Some((_, blocks)) = cache.blocks.borrow().get(&key) {
@@ -278,7 +295,7 @@ impl TailwindValues {
 
     let (normal, important) = self
       .clone()
-      .into_declaration_block(viewport, breakpoints)
+      .into_declaration_block(viewport, breakpoints, matches)
       .split_importance();
     let blocks = Rc::new(TwBlocks { normal, important });
 
@@ -291,20 +308,54 @@ impl TailwindValues {
     blocks
   }
 
-  /// Resolves all utilities for the viewport into a declaration block.
+  /// Resolves the utilities that apply at the viewport, on an element whose position satisfies
+  /// `matches`, into a declaration block.
   #[inline(never)]
   pub(crate) fn into_declaration_block(
     self,
     viewport: Viewport,
     breakpoints: &BreakpointOverrides,
+    matches: &TwMatches,
   ) -> StyleDeclarationBlock {
     let mut builder = TailwindDeclarationBuilder::with_capacity(self.inner.len());
+    let mut condition_index = 0;
 
     for value in self.inner.iter().cloned() {
+      if value.condition.is_some() {
+        condition_index += 1;
+
+        if !matches.contains(condition_index - 1) {
+          continue;
+        }
+      }
+
       value.apply(&mut builder, viewport, breakpoints);
     }
 
     builder.finish()
+  }
+}
+
+/// Which of an element's variant-conditioned utilities, in [`TailwindValues::conditions`] order,
+/// its position in the tree satisfies.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub(crate) struct TwMatches(SmallVec<[u64; 1]>);
+
+impl TwMatches {
+  pub(crate) fn insert(&mut self, index: usize) {
+    let word = index / u64::BITS as usize;
+
+    if self.0.len() <= word {
+      self.0.resize(word + 1, 0);
+    }
+    self.0[word] |= 1 << (index % u64::BITS as usize);
+  }
+
+  fn contains(&self, index: usize) -> bool {
+    self
+      .0
+      .get(index / u64::BITS as usize)
+      .is_some_and(|word| word & (1 << (index % u64::BITS as usize)) != 0)
   }
 }
 
@@ -326,6 +377,8 @@ pub(crate) struct TailwindValue {
   pub property: TailwindProperty,
   /// The breakpoint.
   pub breakpoint: Option<Breakpoint>,
+  /// The selector structural variants put on the element, such as `:first-child` for `first:`.
+  pub condition: Option<Selector<SelectorImpl>>,
   /// Whether the value is important.
   pub important: bool,
 }
@@ -397,12 +450,22 @@ impl TailwindValue {
   pub fn parse(mut token: &str) -> Option<Self> {
     let mut important = false;
     let mut breakpoint = None;
+    let mut pseudo_classes = String::new();
 
-    // Breakpoint. sm:mt-0
-    if let Some((breakpoint_token, rest)) = split_variant(token) {
-      breakpoint = Some(Breakpoint::parse(breakpoint_token)?);
+    // Variants, at most one of them a breakpoint. sm:first:mt-0
+    while let Some((variant, rest)) = split_variant(token) {
+      match variant::pseudo_class(variant) {
+        Some(pseudo_class) => pseudo_classes.push_str(&pseudo_class),
+        None if breakpoint.is_none() => breakpoint = Some(Breakpoint::parse(variant)?),
+        None => return None,
+      }
       token = rest;
     }
+
+    let condition = match pseudo_classes.as_str() {
+      "" => None,
+      pseudo_classes => Some(variant::condition(pseudo_classes)?),
+    };
 
     // Check for important flag. !mt-0
     if let Some(stripped) = token.strip_prefix('!') {
@@ -419,6 +482,7 @@ impl TailwindValue {
     Some(TailwindValue {
       property: TailwindProperty::parse(token)?,
       breakpoint,
+      condition,
       important,
     })
   }
