@@ -3399,7 +3399,7 @@ impl RenderContext {
   }
 
   /// Resolves a child's style and sizing from its matched declarations, sharing the style a box
-  /// with the same preset resolved to from the same declarations under the same parent.
+  /// with the same preset resolved to from the same declarations under an equal parent.
   fn resolve_child_style(
     &self,
     node: &mut Node,
@@ -3417,30 +3417,30 @@ impl RenderContext {
       && !node
         .tag_name()
         .is_some_and(|tag| tag.eq_ignore_ascii_case("html") || tag.eq_ignore_ascii_case("br"));
-    let key = shares_style.then(|| {
-      let default_matched = MatchedDeclarationsView::default();
-      let matched = matched_declarations
-        .get(source_order)
-        .map(NodeMatchedDeclarations::element)
-        .unwrap_or(&default_matched);
-
-      MatchedStyleKey::new(&self.style, matched)
-    });
+    let default_matched = MatchedDeclarationsView::default();
+    let matched = matched_declarations
+      .get(source_order)
+      .map(NodeMatchedDeclarations::element)
+      .unwrap_or(&default_matched);
+    let key = shares_style.then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
     let cache = self.matched_styles();
 
     if let Some(key) = &key
-      && let Some(resolved) = cache.get(
-        key,
-        node.metadata.preset.as_ref(),
-        &self.sizing,
-        self.current_color,
-      )
+      && let Some(resolved) = cache.get(key, &self.style, &self.sizing, metadata.preset.as_ref())
     {
       node.take_style_layers();
       return resolved;
     }
 
-    let preset = key.as_ref().and(node.metadata.preset.clone());
+    let preset = key.as_ref().and(metadata.preset.clone());
+    let inherits_explicitly = key.is_some()
+      && (matched.inherits_explicitly()
+        || preset.as_ref().is_some_and(|preset| {
+          preset
+            .declarations
+            .iter()
+            .any(StyleDeclaration::inherits_explicitly)
+        }));
     let (style, sizing, current_color) =
       self.resolve_uncached_child_style(node, source_order, matched_declarations);
     let style = Rc::new(style);
@@ -3453,9 +3453,9 @@ impl RenderContext {
       cache.insert(
         key,
         Rc::clone(&self.style),
-        preset,
         self.sizing.clone(),
-        self.current_color,
+        preset,
+        inherits_explicitly,
         (Rc::clone(&style), sizing.clone(), current_color),
       );
     }
@@ -4094,5 +4094,50 @@ mod tests {
       .with_id("root")
       .with_tag_name("html");
     assert_eq!(child_width(document), 32.0);
+  }
+
+  #[test]
+  fn boxes_under_parents_with_equal_inherited_values_share_a_style() {
+    use std::{rc::Rc, sync::Arc};
+
+    use crate::layout::node::Node;
+
+    let stylesheet = StyleSheet::parse(
+      ".a { width: 10px } .b { width: 20px } .cell { height: 5px } .inherits { width: inherit }",
+    )
+    .expect("stylesheet parses");
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let row = |class: &str| {
+      Node::container([
+        Node::container([]).with_class_name("cell"),
+        Node::container([]).with_class_name("inherits"),
+      ])
+      .with_class_name(class)
+    };
+    let tree = RenderNode::from_node(&context, Node::container([row("a"), row("b")]));
+    let rows = tree.children.as_deref().expect("rows");
+    let first = rows[0].children.as_deref().expect("cells");
+    let second = rows[1].children.as_deref().expect("cells");
+
+    assert!(Rc::ptr_eq(
+      &first[0].context.style,
+      &second[0].context.style
+    ));
+    assert_eq!(
+      first[1].context.style.box_data.width,
+      Length::Px(10.0).into()
+    );
+    assert_eq!(
+      second[1].context.style.box_data.width,
+      Length::Px(20.0).into()
+    );
   }
 }

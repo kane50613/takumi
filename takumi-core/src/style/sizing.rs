@@ -56,6 +56,7 @@ impl SizingContext {
   }
 
   /// Whether lengths resolve the same against both, whatever either read of a query container.
+  /// Both must come from one render, whose contexts all share its calc arena.
   pub(crate) fn resolves_like(&self, other: &Self) -> bool {
     self.viewport == other.viewport
       && self.container_size == other.container_size
@@ -64,7 +65,6 @@ impl SizingContext {
       && self.line_height == other.line_height
       && self.root_line_height == other.root_line_height
       && self.ch == other.ch
-      && Rc::ptr_eq(&self.calc_arena, &other.calc_arena)
   }
 
   /// Returns a copy with the font and line-height metrics overridden, inheriting

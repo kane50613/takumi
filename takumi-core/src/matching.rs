@@ -19,7 +19,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    MediaQueryList, StyleDeclarationBlock,
+    MediaQueryList, StyleDeclaration, StyleDeclarationBlock,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -373,6 +373,9 @@ pub(crate) struct MatchedDeclarationsView<'a> {
   /// order. The `tw` layer slots in here: above unlayered rules, below every
   /// named `@layer`.
   layered_important_start: usize,
+  /// The stylesheet position of the rule each block came from and whether it is the `!important`
+  /// block, in cascade order.
+  rules: SmallVec<[(usize, bool); 8]>,
 }
 
 impl<'a> MatchedDeclarationsView<'a> {
@@ -400,6 +403,21 @@ impl<'a> MatchedDeclarationsView<'a> {
   /// Matched blocks marked `!important` from named layers, in cascade order.
   pub(crate) fn layered_important(&self) -> &[&'a StyleDeclarationBlock] {
     &self.important[self.layered_important_start..]
+  }
+
+  /// The rules the blocks came from, which name the same blocks on every element of the render.
+  pub(crate) fn rules(&self) -> &[(usize, bool)] {
+    &self.rules
+  }
+
+  /// Whether a matched declaration may copy a non-inherited value from the parent.
+  pub(crate) fn inherits_explicitly(&self) -> bool {
+    self
+      .normal
+      .iter()
+      .chain(&self.important)
+      .flat_map(|block| block.iter())
+      .any(StyleDeclaration::inherits_explicitly)
   }
 }
 
@@ -764,6 +782,8 @@ fn finalize_bucket<'a>(
     )
   });
   for rule in rules.drain(..) {
+    matched.rules.push((rule.source_order, rule.important));
+
     if rule.important {
       if rule.layer_order == 0 {
         matched.layered_important_start += 1;
