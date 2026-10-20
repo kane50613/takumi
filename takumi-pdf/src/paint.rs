@@ -95,6 +95,10 @@ fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
 pub(crate) fn rasterized_image(
   source: &ImageSource,
   context: &RenderContext,
+  #[cfg_attr(
+    not(feature = "svg"),
+    expect(unused_variables, reason = "only an SVG rasterizes at the target size")
+  )]
   target: Size<f32>,
   filter: Option<&ColorFilter>,
 ) -> Result<Option<KrillaImage>, String> {

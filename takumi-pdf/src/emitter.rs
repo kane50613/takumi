@@ -2,11 +2,12 @@
 
 use std::{cell::RefCell, collections::HashMap, ptr, rc::Rc};
 
+#[cfg(all(feature = "images", feature = "svg"))]
+use takumi_core::resources::image::ImageSource;
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
   layout::node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
-  resources::image::ImageSource,
 };
 use takumi_core::{
   font_style::SizedFontStyle,
