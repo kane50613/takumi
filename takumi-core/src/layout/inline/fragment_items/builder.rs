@@ -115,8 +115,11 @@ impl FragmentItems {
       items
         .line_boxes
         .push((line_top, line_top + line.block_size.to_float()));
-      first_baseline.get_or_insert(baseline);
-      last_baseline = Some(baseline);
+
+      if let Some(line_baseline) = line.bfc_baseline().map(LayoutUnit::to_float) {
+        first_baseline.get_or_insert(line_baseline);
+        last_baseline = Some(line_baseline);
+      }
 
       for child in &line.items.children {
         // Blink's `PhysicalFragment::IsHiddenDueToLayout` also reads the `IsTruncated` that
@@ -147,10 +150,16 @@ impl FragmentItems {
         }
 
         match &child.layout_result {
-          Some(LineFragment::AtomicInline {
-            node,
-            layout_result,
-          }) => {
+          Some(
+            LineFragment::AtomicInline {
+              node,
+              layout_result,
+            }
+            | LineFragment::BlockInInline {
+              node,
+              layout_result,
+            },
+          ) => {
             let Some(span) = spans.span_of(node) else {
               continue;
             };
@@ -659,7 +668,7 @@ impl FragmentItems {
         y: offset.y,
         width: size.width,
         height: size.height,
-        line_baseline: line.baseline().map(LayoutUnit::to_float),
+        line_baseline: line.bfc_baseline().map(LayoutUnit::to_float),
         kind: marker.node.inline_box_kind(),
       },
     );
@@ -697,6 +706,11 @@ pub(in crate::layout::inline) fn line_span_fragments<'c>(
       let Some(LineFragment::InlineBox(fragment)) = &child.layout_result else {
         continue;
       };
+
+      if fragment.is_opaque {
+        continue;
+      }
+
       let Some(decoration) = spans.decoration_of(fragment.node) else {
         continue;
       };

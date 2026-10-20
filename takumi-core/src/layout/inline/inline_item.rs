@@ -25,7 +25,8 @@ pub(crate) enum LayoutObject<'c> {
   Text(&'c RenderNode),
   /// An inline box: Blink's `LayoutInline`.
   Inline(&'c RenderNode),
-  /// An atomic inline, a float, an out-of-flow box, or a list marker: Blink's `LayoutBox`.
+  /// An atomic inline, a block-in-inline, a float, an out-of-flow box, or a list marker: Blink's
+  /// `LayoutBox`.
   Box(&'c RenderNode),
 }
 
@@ -72,6 +73,7 @@ pub(crate) enum InlineItemType {
   AtomicInline,
   OpenTag,
   CloseTag,
+  BlockInInline,
   Floating,
   OutOfFlowPositioned,
   ListMarker,
@@ -156,7 +158,11 @@ impl<'c> InlineItem<'c> {
     debug_assert!(!self.is_empty_item);
 
     match self.item_type {
-      InlineItemType::Text | InlineItemType::AtomicInline | InlineItemType::Control => {}
+      // A block-in-inline's emptiness is known only once it is laid out.
+      InlineItemType::Text
+      | InlineItemType::AtomicInline
+      | InlineItemType::Control
+      | InlineItemType::BlockInInline => {}
       InlineItemType::OpenTag => {
         self.is_empty_item = self
           .layout_object

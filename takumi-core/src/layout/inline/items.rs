@@ -81,7 +81,7 @@ impl RenderNode {
       if child.participates_as_inline_box() {
         child.inline_box_kind() == InlineBoxKind::Float
       } else {
-        child.has_inline_floats()
+        !child.is_block_in_inline && child.has_inline_floats()
       }
     })
   }
@@ -354,8 +354,8 @@ impl From<&InlineBoxItem<'_>> for ComputedLayout {
 }
 
 /// The spans painting reads for an inline formatting context the inline layout port laid out:
-/// a text span per text, and a box span per atomic inline, float, and out-of-flow box, each with
-/// the spans and the link around it.
+/// a text span per text, and a box span per atomic inline, block-in-inline, float, and out-of-flow
+/// box, each with the spans and the link around it.
 pub(crate) struct InlineSpans<'c> {
   pub(crate) spans: Vec<ProcessedInlineSpan<'c>>,
   /// The span of each item, by item index.
@@ -453,6 +453,7 @@ impl<'c> InlineSpans<'c> {
           Some(span_index)
         }
         InlineItemType::AtomicInline
+        | InlineItemType::BlockInInline
         | InlineItemType::Floating
         | InlineItemType::OutOfFlowPositioned
         | InlineItemType::ListMarker => {

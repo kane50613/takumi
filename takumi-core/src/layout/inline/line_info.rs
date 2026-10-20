@@ -1,10 +1,10 @@
 //! Blink's [`LineInfo`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/line_info.cc),
-//! without ruby, block-in-inline, initial letters, or block fragmentation.
+//! without ruby, initial letters, or block fragmentation.
 
 use super::{
   inline_break_token::InlineBreakToken,
   inline_item::{CollapseType, InlineItemType},
-  inline_item_result::InlineItemResults,
+  inline_item_result::{InlineItemResults, LayoutResult},
   inline_item_text_index::InlineItemTextIndex,
   inline_node_data::InlineNodeData,
 };
@@ -60,6 +60,8 @@ pub(crate) struct LineInfo<'a, 'c> {
   pub(crate) is_start_of_paragraph: bool,
   pub(crate) is_last_line: bool,
   pub(crate) has_forced_break: bool,
+  /// Blink's `IsBlockInInline`: the line holds a block-in-inline alone.
+  pub(crate) is_block_in_inline: bool,
   pub(crate) is_empty_line: bool,
   pub(crate) has_line_even_if_empty: bool,
   pub(crate) has_overflow: bool,
@@ -90,6 +92,7 @@ impl<'a, 'c> LineInfo<'a, 'c> {
       is_start_of_paragraph: false,
       is_last_line: false,
       has_forced_break: false,
+      is_block_in_inline: false,
       is_empty_line: false,
       has_line_even_if_empty: false,
       has_overflow: false,
@@ -108,6 +111,15 @@ impl<'a, 'c> LineInfo<'a, 'c> {
   pub(crate) fn set_line_style(&mut self, block: &'c RenderContext) {
     self.line_style = block;
     self.needs_accurate_end_position = self.compute_needs_accurate_end_position();
+  }
+
+  /// Blink's `BlockInInlineLayoutResult`.
+  pub(crate) fn block_in_inline_layout_result(&self) -> Option<LayoutResult> {
+    self
+      .results
+      .iter()
+      .find(|result| result.item.item_type == InlineItemType::BlockInInline)
+      .and_then(|result| result.layout_result)
   }
 
   /// Blink's `IsEndParagraph`.

@@ -103,7 +103,7 @@ impl<'c> InlineNode<'c> {
     });
     let lines = self.layout_lines_at(items_data, line_width, available_space.height);
     let (height, clamped) = content_block_size(&lines);
-    let baseline = |line: &LineBoxFragment<'_, '_>| line.baseline().map(LayoutUnit::to_float);
+    let baseline = |line: &LineBoxFragment<'_, '_>| line.bfc_baseline().map(LayoutUnit::to_float);
 
     let shown = lines
       .iter()

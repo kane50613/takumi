@@ -40,6 +40,21 @@ impl<'c> AtomicInlineLayout<'c> for TestAtomicInline {
     }
   }
 
+  fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult {
+    let size = node
+      .layout_block_in_inline(Size {
+        width: AvailableSpace::MaxContent,
+        height: AvailableSpace::MaxContent,
+      })
+      .size;
+
+    LayoutResult {
+      inline_size: LayoutUnit::from_float(size.width),
+      block_size: LayoutUnit::from_float(size.height),
+      baseline: None,
+    }
+  }
+
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {
     let width = self.layout(node).inline_size;
 

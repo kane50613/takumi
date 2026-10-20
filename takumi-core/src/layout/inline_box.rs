@@ -27,7 +27,11 @@ pub enum InlineBoxPaint<'n> {
     layout: ComputedLayout,
   },
   /// An inline-level container: `inline-block`, `inline-flex`, `inline-grid`,
-  /// or a float. It carries a scene of its own.
+  /// or a float, or a block-in-inline. It carries a scene of its own.
+  ///
+  /// Approximate for a block-in-inline: Blink paints it as a block child, its backgrounds before
+  /// the line content and its positioned descendants in their stacking contexts, where takumi
+  /// paints it whole after the text, as an `inline-block`.
   Container(Box<InlineSubtree>),
 }
 
@@ -77,7 +81,7 @@ impl<'n> InlineBoxPaint<'n> {
 
     // The line advances by the margin box, but the box itself is its border box inside it, as
     // Blink's `LogicalLineBuilder::PlaceAtomicInline` places the fragment past its start margin.
-    if !node.participates_as_inline_box() {
+    if !node.participates_as_inline_box() && !node.is_block_in_inline {
       let border_box = origin + margin_offset;
 
       return (

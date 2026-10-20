@@ -376,6 +376,8 @@ pub struct RenderNode {
   /// Generated marker box, emitted before this box's own inline content.
   pub(crate) marker: Option<Box<RenderNode>>,
   pub(crate) force_inline_layout: bool,
+  /// Blink's `IsBlockInInline`: the anonymous block holding block-level children of an inline box.
+  pub(crate) is_block_in_inline: bool,
   /// Grid lines a lowered table's header rows cover, as `[start, end)`, for
   /// paged output to repeat per css-tables-3 §repeated-headers.
   pub table_header_lines: Option<(i16, i16)>,
@@ -388,7 +390,7 @@ pub struct RenderNode {
   pub(crate) table_columns: Option<Box<TableColumns>>,
   /// The fragment items its inline content last laid out to.
   pub(crate) fragment_items: FragmentItemsCache,
-  /// The layouts it took as an atomic inline, by available space.
+  /// The layouts it took as an atomic inline or a block-in-inline, by available space.
   atomic_inline_layouts: AtomicInlineCache,
 }
 
@@ -1907,6 +1909,7 @@ impl RenderNode {
       anonymous_text_content: None,
       marker: None,
       force_inline_layout: false,
+      is_block_in_inline: false,
       table_header_lines: None,
       table_footer_lines: None,
       table_part: None,
@@ -1999,6 +2002,26 @@ impl RenderNode {
       Some(children.into_boxed_slice()),
       block_style(),
     )
+  }
+
+  /// Blink's `LayoutInline::CreateAnonymousContainerForBlockChildren`, which takes the inline box's
+  /// direction for the blocks it holds.
+  fn block_in_inline(parent_context: &RenderContext, children: Vec<RenderNode>) -> Self {
+    let context = RenderContext::for_anonymous(parent_context);
+    let layout_style = Rc::new(Style {
+      display: TaffyDisplay::Block,
+      direction: context.style.inherited_data.direction.into_taffy(),
+      ..Style::default()
+    });
+    let mut block = Self::anonymous(
+      context,
+      None,
+      Some(children.into_boxed_slice()),
+      layout_style,
+    );
+
+    block.is_block_in_inline = true;
+    block
   }
 
   pub(super) fn anonymous_image_item(
@@ -2331,6 +2354,7 @@ impl RenderNode {
       &mut source_cursor,
       &mut root_counter,
       false,
+      true,
     )];
 
     loop {
@@ -2346,6 +2370,12 @@ impl RenderNode {
           &mut source_cursor,
           &mut current.list_counter,
           current.inside_list,
+          current
+            .context
+            .style
+            .base_data
+            .display
+            .should_blockify_children(),
         );
         stack.push(child_pending);
         continue;
@@ -2384,10 +2414,12 @@ impl RenderNode {
   }
 
   /// Blockifies, trims, and wraps `children` the way their parent's display
-  /// requires, blockifying the parent itself when it holds a block.
+  /// requires. An inline parent holding a block wraps it as a block-in-inline, unless its own
+  /// parent `blockifies` it, which it then does here.
   fn normalize_children(
     context: &mut RenderContext,
     children: Box<[RenderNode]>,
+    blockifies: bool,
   ) -> Box<[RenderNode]> {
     if context.style.base_data.display.should_blockify_children() {
       // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
@@ -2427,6 +2459,14 @@ impl RenderNode {
     let parent_is_inline = context.style.base_data.display.is_inline();
 
     if parent_is_inline && has_block {
+      if !blockifies {
+        return wrap_runs(
+          children,
+          |child| !child.participates_in_inline_formatting_context(),
+          |run| RenderNode::block_in_inline(context, run),
+        );
+      }
+
       context.blockify();
     }
 
@@ -2691,6 +2731,29 @@ impl RenderNode {
     }
   }
 
+  /// Blink's `BlockNode::Layout` of a block-in-inline: an auto width fills `available_space`'s.
+  /// Approximate: its first baseline stands in for its last, which taffy does not give.
+  pub(crate) fn layout_block_in_inline(
+    &self,
+    available_space: Size<AvailableSpace>,
+  ) -> AtomicInlineMetrics {
+    self
+      .atomic_inline_layouts
+      .get_or_insert_with(available_space, || {
+        let results = LayoutResults::compute(self, available_space);
+
+        AtomicInlineMetrics {
+          size: results.root_size(),
+          baseline_offset: self.layout_first_baseline_offset(&results),
+        }
+      })
+  }
+
+  /// The border box's min-content and max-content widths, laid out as a tree's root.
+  pub(crate) fn min_max_widths(&self) -> (f32, f32) {
+    LayoutTree::from_render_node(self).root_min_max_widths()
+  }
+
   /// An atomic inline box's shrink-to-fit size and baseline.
   fn measure_atomic_subtree(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
     let at_width = |width| Size {
@@ -2701,7 +2764,7 @@ impl RenderNode {
     // CSS shrink-to-fit for inline-level atomic boxes:
     // width = min(max-content, max(min-content, available)).
     // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
-    let (min_content, max_content) = LayoutTree::from_render_node(self).root_min_max_widths();
+    let (min_content, max_content) = self.min_max_widths();
     let used_width = match available_space.width {
       AvailableSpace::Definite(available) => max_content.min(min_content.max(available)),
       AvailableSpace::MinContent => min_content,
@@ -2831,6 +2894,8 @@ struct PendingRenderNode {
   marker_ordinal: Option<i32>,
   inside_list: bool,
   owns_list_counter: bool,
+  /// Whether its parent blockifies it, as a flex or grid item or the tree's root.
+  blockifies: bool,
 }
 
 impl PendingRenderNode {
@@ -2841,6 +2906,7 @@ impl PendingRenderNode {
     source_cursor: &mut usize,
     counter: &mut ListCounter,
     inside_list: bool,
+    blockifies: bool,
   ) -> Self {
     let source_order = *source_cursor;
     *source_cursor += 1;
@@ -2886,6 +2952,7 @@ impl PendingRenderNode {
       },
       inside_list: inside_list || is_list_element(&node),
       owns_list_counter,
+      blockifies,
       context,
       node,
       rendered_children,
@@ -2906,6 +2973,7 @@ impl PendingRenderNode {
       Some(RenderNode::normalize_children(
         &mut context,
         self.rendered_children.into_boxed_slice(),
+        self.blockifies,
       ))
     } else {
       Self::anonymous_text_child(&context, &self.node).map(|child| Box::from([child]))
