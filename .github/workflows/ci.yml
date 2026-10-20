@@ -83,6 +83,10 @@ jobs:
       - name: Run Clippy for the paint build
         run: cargo clippy --locked --target wasm32-unknown-unknown -p takumi-paint-wasm -- -D warnings
 
+      # Feature gates the all-features pass cannot see: an item or import only some features use.
+      - name: Run Clippy without default features
+        run: cargo clippy --locked -p takumi-core --all-targets --no-default-features -- -D warnings
+
       - name: Test README.md is up to date
         run: |
           fail=0

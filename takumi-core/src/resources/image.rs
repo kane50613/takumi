@@ -1326,6 +1326,7 @@ mod resource_cache_tests {
 mod tests {
   use std::assert_matches;
 
+  #[cfg(feature = "svg")]
   use crate::geometry::Size;
   #[cfg(feature = "png")]
   use crate::resources::animated::AnimatedFormat;

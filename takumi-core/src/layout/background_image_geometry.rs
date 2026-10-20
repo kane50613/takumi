@@ -5,6 +5,8 @@
 
 use smallvec::SmallVec;
 
+#[cfg(feature = "svg-sizing")]
+use crate::resources::image::ImageSource;
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, Point, Rect, Size},
@@ -12,7 +14,6 @@ use crate::{
   layout_unit::{
     BoxStrut, LayoutUnit, UnitOffset, UnitRect, UnitSize, snap_size_to_pixel_allowing_zero,
   },
-  resources::image::ImageSource,
   style::{
     BackgroundClip, BackgroundImage, BackgroundOrigin, BackgroundRepeat, BackgroundRepeatStyle,
     BackgroundSize, BlendMode, BorderCollapse, BorderStyle, ComputedStyle, IntrinsicSizing, Length,
