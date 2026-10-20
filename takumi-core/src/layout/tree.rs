@@ -236,36 +236,28 @@ impl LayoutResults {
   }
 }
 
-/// A measurement's constraint as bits: each axis's available space as a kind and a size, then
-/// each known size, the height ones left out unless `with_height`, then the edges its margins
-/// adjoin.
-fn inline_measure_bits(
-  available_space: Size<AvailableSpace>,
-  known_dimensions: Size<Option<f32>>,
+/// The lines a measurement lays out, as bits: the width they lay out at, then the available
+/// height as a kind and a size and the known height, left out unless `with_height`, then the edges
+/// its margins adjoin.
+fn inline_lines_bits(
+  line_width: f32,
+  available_height: AvailableSpace,
+  known_height: Option<f32>,
   margins_adjoin: Line<bool>,
   with_height: bool,
-) -> [u32; 7] {
-  let available = |space: AvailableSpace| match space {
-    AvailableSpace::Definite(value) => (0, value.to_bits()),
-    AvailableSpace::MinContent => (1, 0),
-    AvailableSpace::MaxContent => (2, 0),
-  };
-  let known = |value: Option<f32>| value.unwrap_or(f32::NAN).to_bits();
-  let (width_kind, width) = available(available_space.width);
-  let (height_kind, height, known_height) = if with_height {
-    let (kind, height) = available(available_space.height);
-
-    (kind, height, known(known_dimensions.height))
-  } else {
-    (u32::MAX, 0, 0)
+) -> [u32; 5] {
+  let known_height = known_height.unwrap_or(f32::NAN).to_bits();
+  let (height_kind, height, known_height) = match available_height {
+    _ if !with_height => (u32::MAX, 0, 0),
+    AvailableSpace::Definite(value) => (0, value.to_bits(), known_height),
+    AvailableSpace::MinContent => (1, 0, known_height),
+    AvailableSpace::MaxContent => (2, 0, known_height),
   };
 
   [
-    width_kind,
-    width,
+    line_width.to_bits(),
     height_kind,
     height,
-    known(known_dimensions.width),
     known_height,
     u32::from(margins_adjoin.start) | (u32::from(margins_adjoin.end) << 1),
   ]
@@ -277,9 +269,9 @@ pub struct LayoutTree<'r> {
   render_nodes: Vec<&'r RenderNode>,
   /// The nodes standing in for inline containing blocks.
   inline_containing_blocks: Vec<TaffyNodeId>,
-  /// Each inline formatting context's measured size per constraint. taffy keys its own cache on
-  /// both axes, while only inline boxes see the available height, so a context without them is
-  /// keyed on its width constraint alone.
+  /// Each inline formatting context's lines measured per width they lay out at, which a measure
+  /// with a known width and one offered the same available width share. Only boxes inside see the
+  /// available height, so text alone is keyed on the width.
   inline_measures: RefCell<HashMap<InlineMeasureKey, InlineMeasurement>>,
   /// Each inline formatting context's prepared items, which every pass of one layout shares, as
   /// Blink keeps them until `NeedsCollectInlines`.
@@ -379,8 +371,8 @@ impl TableBoxStyle {
   }
 }
 
-/// A node and the constraint it is measured under, as bits.
-type InlineMeasureKey = (usize, [u32; 7]);
+/// A node and the lines it measures, as bits.
+type InlineMeasureKey = (usize, [u32; 5]);
 
 struct LayoutNodeState {
   style: Style,
@@ -1098,52 +1090,48 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// The measurement of the inline formatting context the node at `idx` establishes, cached by
-  /// its constraint and the margins adjoining its edges.
+  /// The measurement of the inline formatting context the node at `idx` establishes or measures
+  /// as, its known border-box width less its laid-out padding and border `insets_width`, its lines
+  /// cached by the width they lay out at.
   fn inline_measurement(
     &self,
     idx: usize,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
+    insets_width: f32,
   ) -> InlineMeasurement {
     let render_node = self.render_nodes[idx];
-    let margins_adjoin = render_node.context.margins_adjoin();
-    let key = |with_height| {
-      (
-        idx,
-        inline_measure_bits(
-          available_space,
-          known_dimensions,
-          margins_adjoin,
-          with_height,
-        ),
-      )
-    };
-    let (across_heights, exact) = (key(false), key(true));
-    let measured = {
-      let measures = self.inline_measures.borrow();
+    let items_data = self.inline_node_data(idx);
+    let node = InlineNode::new(render_node);
+    let known_width = known_dimensions
+      .width
+      .map(|width| node.content_width_of(width, Some(insets_width)));
+    let (width, line_width) = node.widths(&items_data, available_space, known_width);
+    let key = (
+      idx,
+      inline_lines_bits(
+        line_width,
+        available_space.height,
+        known_dimensions.height,
+        render_node.context.margins_adjoin(),
+        !items_data.holds_only_text(),
+      ),
+    );
+    let measured = self.inline_measures.borrow().get(&key).copied();
+    let measurement = measured.unwrap_or_else(|| {
+      let measurement = node.measure_lines(&items_data, width, line_width, available_space.height);
 
-      measures
-        .get(&across_heights)
-        .or_else(|| measures.get(&exact))
-        .copied()
-    };
+      self.inline_measures.borrow_mut().insert(key, measurement);
+      measurement
+    });
 
-    if let Some(measurement) = measured {
-      return measurement;
+    InlineMeasurement {
+      size: Size {
+        width,
+        height: measurement.size.height,
+      },
+      ..measurement
     }
-
-    let (measurement, sizes_boxes) = render_node.measure_inline_content(
-      &self.inline_node_data(idx),
-      available_space,
-      known_dimensions,
-    );
-
-    self.inline_measures.borrow_mut().insert(
-      if sizes_boxes { exact } else { across_heights },
-      measurement,
-    );
-    measurement
   }
 
   /// The root laid out as an in-flow block of a block formatting context, an auto width filling a
@@ -1788,25 +1776,14 @@ impl<'r> LayoutTree<'r> {
                 };
               }
 
-              if !node_data.is_inline_children {
-                if render_node.measures_as_inline_content() {
-                  return InlineNode::new(render_node)
-                    .measure(
-                      &tree.inline_node_data(idx),
-                      available_space,
-                      known_dimensions,
-                    )
-                    .size
-                    .into_taffy();
-                }
-
+              if !node_data.is_inline_children && !render_node.measures_as_inline_content() {
                 return render_node
                   .measure(available_space, known_dimensions, &node_data.style)
                   .into_taffy();
               }
 
               tree
-                .inline_measurement(idx, available_space, known_dimensions)
+                .inline_measurement(idx, available_space, known_dimensions, insets.width)
                 .size
                 .into_taffy()
             },
@@ -1828,6 +1805,7 @@ impl<'r> LayoutTree<'r> {
                   width: Some(output.size.width),
                   height: None,
                 },
+                insets.width,
               )
               .margins;
 
@@ -1853,7 +1831,6 @@ impl<'r> LayoutTree<'r> {
           // `compute_leaf_layout` reports no baseline, which leaves flexbox
           // baseline alignment on its bottom margin edge fallback.
           if lays_out_text && inputs.run_mode == RunMode::PerformLayout {
-            let table_box = node_data.table_box;
             let kept = tree.keeps_fragment_items.then(border_box);
 
             let items_data = tree.inline_node_data(idx);
@@ -1861,9 +1838,9 @@ impl<'r> LayoutTree<'r> {
             if let Some(layout) = kept {
               render_node.keep_fragment_items(&items_data, layout);
             }
-            // A cell's content starts below the border its table gives it and the padding it lays
-            // out with, which its style alone does not say.
-            let content_top = table_box.sized_by_table.then_some(border.top + padding.top);
+            // The padding and border it lays out with, which its style alone does not say for a
+            // cell its table borders or a percentage its containing block resolves.
+            let laid_out_insets = Rect::from_taffy(padding + border);
 
             output.baselines.first = render_node.inline_content_border_box_baseline(
               &items_data,
@@ -1871,7 +1848,7 @@ impl<'r> LayoutTree<'r> {
               Size::from_taffy(output.size),
               false,
               kept,
-              content_top,
+              Some(laid_out_insets),
             );
           }
 
@@ -2804,7 +2781,7 @@ impl RenderNode {
     size: Size<f32>,
     use_last_line: bool,
     kept: Option<ComputedLayout>,
-    content_top: Option<f32>,
+    laid_out_insets: Option<Rect<f32>>,
   ) -> Option<f32> {
     if matches!(
       self.node.as_ref().and_then(Node::inline_content),
@@ -2813,7 +2790,7 @@ impl RenderNode {
       return None;
     }
 
-    let content_top = content_top.unwrap_or_else(|| self.content_top());
+    let content_top = laid_out_insets.map_or_else(|| self.content_top(), |insets| insets.top);
 
     if let Some(baseline) = kept
       .and_then(|layout| self.fragment_items_in(layout))
@@ -2822,8 +2799,13 @@ impl RenderNode {
       return Some(content_top + baseline);
     }
 
-    let baseline =
-      self.inline_content_baseline(items_data, available_space, size.width, use_last_line)?;
+    let baseline = self.inline_content_baseline(
+      items_data,
+      available_space,
+      size.width,
+      laid_out_insets.map(|insets| insets.left + insets.right),
+      use_last_line,
+    )?;
 
     Some(content_top + baseline)
   }
@@ -3011,20 +2993,6 @@ impl RenderNode {
       baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
       collapsed_margins: None,
     }
-  }
-
-  /// The measurement of this inline formatting context, and whether it sized inline boxes, the
-  /// only part of it the available height reaches.
-  pub(crate) fn measure_inline_content<'c>(
-    &'c self,
-    items_data: &InlineNodeData<'c>,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
-  ) -> (InlineMeasurement, bool) {
-    (
-      InlineNode::new(self).measure(items_data, available_space, known_dimensions),
-      true,
-    )
   }
 
   /// Whether it measures as the inline content it holds: a text node, or an inline box that tree
