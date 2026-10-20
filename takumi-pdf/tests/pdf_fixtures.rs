@@ -6063,3 +6063,73 @@ fn persian_zero_width_non_joiners_keep_their_own_glyph() {
     "U+200C joined to another character: {mappings:?}"
   );
 }
+
+/// A synthesized italic leans right by a quarter, as raster output does, about its own baseline,
+/// so it stays where its advance puts it.
+#[test]
+fn synthesized_italic_leans_right_about_the_baseline() {
+  let fonts = latin_font();
+  let doc = r#"<p style="margin:0">one <i>two</i> three</p><p style="margin:40px 0 0">one <i>two</i> three</p>"#;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse italic doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  );
+  let lines: Vec<String> = content_lines(&pdf)
+    .map(|line| String::from_utf8_lossy(&line).into_owned())
+    .collect();
+  // The six operands before `operator`, as `cm` and `Tm` take.
+  let numbers = |line: &str, operator: &str| -> Vec<f32> {
+    let tokens: Vec<&str> = line[..line.find(operator).expect("operator in line")]
+      .split_whitespace()
+      .collect();
+
+    tokens[tokens.len() - 6..]
+      .iter()
+      .map(|token| token.parse().expect("numeric operand"))
+      .collect()
+  };
+  let upright_x = lines
+    .iter()
+    .find(|line| line.contains(" cm") && numbers(line, " cm")[2] == 0.0)
+    .map(|line| numbers(line, " cm")[4])
+    .expect("an upright run");
+  let mut sheared = 0;
+
+  for (index, line) in lines.iter().enumerate() {
+    if !line.contains(" cm") {
+      continue;
+    }
+
+    let [a, _, c, _, e, _] = numbers(line, " cm")[..] else {
+      panic!("cm takes six operands: {line}");
+    };
+
+    if c == 0.0 {
+      continue;
+    }
+
+    let baseline = lines[index..]
+      .iter()
+      .find(|line| line.contains(" Tm"))
+      .map(|line| numbers(line, " Tm")[5])
+      .expect("a text matrix after the shear");
+
+    sheared += 1;
+    // Device y points down, so a glyph's top lands right of its foot when `c` is negative.
+    assert!(
+      (c / a + 0.25).abs() < 1e-4,
+      "slant {} where a right lean is -0.25",
+      c / a
+    );
+    assert!(
+      (c * baseline + e - upright_x).abs() < 0.01,
+      "baseline moved by {} pt under a {a} {c} shear",
+      c * baseline + e - upright_x
+    );
+  }
+
+  assert_eq!(sheared, 2, "expected one sheared run per paragraph");
+}
