@@ -214,14 +214,17 @@ fn shape_range(
   language: Option<&Language>,
 ) -> Option<HarfBuzzBuffer> {
   let shaper_font = ShaperFont::new(current_font.shaping_font()?);
+  let script = icu_script_to_hb_script(current_run_script);
+  let plan = current_font.shape_plan(direction, script, language, font_features)?;
 
   buffer.set_language(language.cloned());
-  buffer.set_script(Some(icu_script_to_hb_script(current_run_script)));
+  buffer.set_script(Some(script));
   buffer.set_direction(direction);
   shape(
     &shaper_font,
     &mut buffer,
     ShapeOptions::new()
+      .plan(Some(&plan))
       .features(font_features)
       .point_size(Some(current_font.specified_size)),
   )
