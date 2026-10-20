@@ -2446,6 +2446,14 @@ impl RenderNode {
       .is_some_and(|children| children.iter().any(RenderNode::is_anonymous_text_item))
   }
 
+  /// Whether it is a text node without a tag, whose text belongs to its parent element.
+  pub(crate) fn is_untagged_text(&self) -> bool {
+    self
+      .node
+      .as_ref()
+      .is_some_and(|node| matches!(node.kind, NodeKind::Text(_)) && node.tag_name().is_none())
+  }
+
   /// The authored node's document-order position, absent for generated boxes.
   pub fn source_order(&self) -> Option<usize> {
     match self.origin {

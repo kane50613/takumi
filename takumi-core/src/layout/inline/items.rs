@@ -175,6 +175,9 @@ pub enum ProcessedInlineSpan<'c> {
     link: Option<Arc<str>>,
     /// Innermost enclosing inline span, if any.
     decorations: Option<Rc<DecorationLink<'c>>>,
+    /// Source order of the element the text belongs to, absent for text of the formatting
+    /// context itself or of generated content.
+    element: Option<usize>,
   },
   /// An inline box.
   Box(InlineBoxItem<'c>),
@@ -375,6 +378,7 @@ impl<'c> InlineSpans<'c> {
     // The spans and links open at each item, the formatting context's own first.
     let mut chains: Vec<Option<Rc<DecorationLink<'c>>>> = vec![None];
     let mut links: Vec<Option<Arc<str>>> = vec![link_of(block)];
+    let mut elements: Vec<Option<usize>> = vec![None];
     let mut next_span = 0;
     let mut last_text: Option<(*const RenderNode, usize)> = None;
     let mut node_spans = FxHashMap::default();
@@ -407,12 +411,14 @@ impl<'c> InlineSpans<'c> {
 
           chains.push(decoration.or(chain));
           links.push(link_of(node).or(link));
+          elements.push(node.source_order());
           None
         }
         InlineItemType::CloseTag => {
           if chains.len() > 1 {
             chains.pop();
             links.pop();
+            elements.pop();
           }
 
           None
@@ -441,6 +447,10 @@ impl<'c> InlineSpans<'c> {
                 )),
                 link: link_of(node).or(link),
                 decorations: chain,
+                element: node
+                  .source_order()
+                  .filter(|_| !node.is_untagged_text())
+                  .or_else(|| elements.last().copied().flatten()),
               });
               node_spans
                 .entry(ptr::from_ref(node))
