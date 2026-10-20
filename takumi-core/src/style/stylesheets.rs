@@ -2365,6 +2365,14 @@ impl StyleDeclarationBlock {
     self.declarations.iter()
   }
 
+  /// Whether a declaration may copy a non-inherited value from the parent.
+  pub(crate) fn inherits_explicitly(&self) -> bool {
+    self
+      .declarations
+      .iter()
+      .any(StyleDeclaration::inherits_explicitly)
+  }
+
   /// The number of declarations in this block.
   pub fn len(&self) -> usize {
     self.declarations.len()

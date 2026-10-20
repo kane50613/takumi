@@ -19,7 +19,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    MediaQueryList, StyleDeclaration, StyleDeclarationBlock,
+    MediaQueryList, StyleDeclarationBlock,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -416,8 +416,7 @@ impl<'a> MatchedDeclarationsView<'a> {
       .normal
       .iter()
       .chain(&self.important)
-      .flat_map(|block| block.iter())
-      .any(StyleDeclaration::inherits_explicitly)
+      .any(|block| block.inherits_explicitly())
   }
 }
 

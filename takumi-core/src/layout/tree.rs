@@ -3433,14 +3433,6 @@ impl RenderContext {
     }
 
     let preset = key.as_ref().and(metadata.preset.clone());
-    let inherits_explicitly = key.is_some()
-      && (matched.inherits_explicitly()
-        || preset.as_ref().is_some_and(|preset| {
-          preset
-            .declarations
-            .iter()
-            .any(StyleDeclaration::inherits_explicitly)
-        }));
     let (style, sizing, current_color) =
       self.resolve_uncached_child_style(node, source_order, matched_declarations);
     let style = Rc::new(style);
@@ -3450,6 +3442,11 @@ impl RenderContext {
       && style.misc1_data.animation_name.is_empty()
       && !sizing.container_read.get()
     {
+      let inherits_explicitly = matched.inherits_explicitly()
+        || preset
+          .as_ref()
+          .is_some_and(|preset| preset.declarations.inherits_explicitly());
+
       cache.insert(
         key,
         Rc::clone(&self.style),
