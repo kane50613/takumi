@@ -1105,7 +1105,7 @@ impl<'r> LayoutTree<'r> {
     let node = InlineNode::new(render_node);
     let known_width = known_dimensions
       .width
-      .map(|width| (width - insets_width).max(0.0));
+      .map(|width| node.content_width_of(width, Some(insets_width)));
     let (width, line_width) = node.widths(&items_data, available_space, known_width);
     let key = (
       idx,
@@ -1831,7 +1831,6 @@ impl<'r> LayoutTree<'r> {
           // `compute_leaf_layout` reports no baseline, which leaves flexbox
           // baseline alignment on its bottom margin edge fallback.
           if lays_out_text && inputs.run_mode == RunMode::PerformLayout {
-            let table_box = node_data.table_box;
             let kept = tree.keeps_fragment_items.then(border_box);
 
             let items_data = tree.inline_node_data(idx);
@@ -1839,9 +1838,9 @@ impl<'r> LayoutTree<'r> {
             if let Some(layout) = kept {
               render_node.keep_fragment_items(&items_data, layout);
             }
-            // A cell's content starts below the border its table gives it and the padding it lays
-            // out with, which its style alone does not say.
-            let content_top = table_box.sized_by_table.then_some(border.top + padding.top);
+            // The padding and border it lays out with, which its style alone does not say for a
+            // cell its table borders or a percentage its containing block resolves.
+            let laid_out_insets = Rect::from_taffy(padding + border);
 
             output.baselines.first = render_node.inline_content_border_box_baseline(
               &items_data,
@@ -1849,7 +1848,7 @@ impl<'r> LayoutTree<'r> {
               Size::from_taffy(output.size),
               false,
               kept,
-              content_top,
+              Some(laid_out_insets),
             );
           }
 
@@ -2782,7 +2781,7 @@ impl RenderNode {
     size: Size<f32>,
     use_last_line: bool,
     kept: Option<ComputedLayout>,
-    content_top: Option<f32>,
+    laid_out_insets: Option<Rect<f32>>,
   ) -> Option<f32> {
     if matches!(
       self.node.as_ref().and_then(Node::inline_content),
@@ -2791,7 +2790,7 @@ impl RenderNode {
       return None;
     }
 
-    let content_top = content_top.unwrap_or_else(|| self.content_top());
+    let content_top = laid_out_insets.map_or_else(|| self.content_top(), |insets| insets.top);
 
     if let Some(baseline) = kept
       .and_then(|layout| self.fragment_items_in(layout))
@@ -2800,8 +2799,13 @@ impl RenderNode {
       return Some(content_top + baseline);
     }
 
-    let baseline =
-      self.inline_content_baseline(items_data, available_space, size.width, use_last_line)?;
+    let baseline = self.inline_content_baseline(
+      items_data,
+      available_space,
+      size.width,
+      laid_out_insets.map(|insets| insets.left + insets.right),
+      use_last_line,
+    )?;
 
     Some(content_top + baseline)
   }

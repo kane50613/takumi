@@ -89,6 +89,19 @@ impl<'c> InlineNode<'c> {
     }
   }
 
+  /// The content width of a `border_box_width` box, less `insets_width` when its layout resolved
+  /// its padding and border, else the padding and border its style gives.
+  pub(crate) fn content_width_of(self, border_box_width: f32, insets_width: Option<f32>) -> f32 {
+    let insets_width = insets_width.unwrap_or_else(|| {
+      let padding = self.block.padding_px();
+      let border = self.block.border_px();
+
+      padding.left + padding.right + border.left + border.right
+    });
+
+    (border_box_width - insets_width).max(0.0)
+  }
+
   /// The width taffy's constraint gives the content, the known content width or the min-content,
   /// max-content, or fit-content width the available width asks for, and the width its lines lay
   /// out at.
@@ -117,12 +130,9 @@ impl<'c> InlineNode<'c> {
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
   ) -> InlineMeasurement {
-    // taffy knows a border-box width whatever `box-sizing` says, and offers a content-box one.
-    let padding = self.block.padding_px();
-    let border = self.block.border_px();
     let known_width = known_dimensions
       .width
-      .map(|width| (width - padding.left - padding.right - border.left - border.right).max(0.0));
+      .map(|width| self.content_width_of(width, None));
     let (width, line_width) = self.widths(items_data, available_space, known_width);
 
     self.measure_lines(items_data, width, line_width, available_space.height)
@@ -377,22 +387,20 @@ impl RenderNode {
   }
 
   /// The first or last line's baseline below the content box's top, laid out at the border box
-  /// width `width` in `available_space`.
+  /// width `width` in `available_space`, less `insets_width` when its layout resolved its padding
+  /// and border.
   pub(crate) fn inline_content_baseline<'c>(
     &'c self,
     items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
     width: f32,
+    insets_width: Option<f32>,
     use_last_line: bool,
   ) -> Option<f32> {
-    let measurement = InlineNode::new(self).measure(
-      items_data,
-      available_space,
-      Size {
-        width: Some(width),
-        height: None,
-      },
-    );
+    let node = InlineNode::new(self);
+    let known_width = node.content_width_of(width, insets_width);
+    let (width, line_width) = node.widths(items_data, available_space, Some(known_width));
+    let measurement = node.measure_lines(items_data, width, line_width, available_space.height);
 
     if use_last_line {
       measurement.last_baseline
