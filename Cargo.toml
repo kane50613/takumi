@@ -99,9 +99,6 @@ features = ["zlib-rs"]
 version = "4.6"
 features = ["derive"]
 
-[workspace.dependencies.image]
-version = "0.25"
-default-features = false
 
 [workspace.dependencies.imagesize]
 version = "0.15"
@@ -274,8 +271,6 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.wuff]
 opt-level = 3
-[profile.release.package.image]
-opt-level = "z"
 [profile.release.package.gif]
 opt-level = "z"
 
