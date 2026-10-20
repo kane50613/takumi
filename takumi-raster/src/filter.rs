@@ -570,7 +570,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
 
 #[cfg(test)]
 mod tests {
-  use image::{Rgba, RgbaImage};
+  use crate::Bitmap;
   use tiny_skia::PixmapMut;
 
   use super::*;
@@ -652,8 +652,8 @@ mod tests {
 
   #[test]
   fn test_apply_filters_lut_batching() -> Result<()> {
-    let mut image = RgbaImage::new(1, 1);
-    image.put_pixel(0, 0, Rgba([100, 150, 200, 255]));
+    let mut image = Bitmap::new(1, 1);
+    image.put_pixel(0, 0, [100, 150, 200, 255]);
 
     let filters = [
       Filter::Brightness(PercentageNumber(1.2)),
@@ -666,11 +666,11 @@ mod tests {
       .build();
     let width = image.width();
     let height = image.height();
-    let mut pixmap = PixmapMut::from_bytes(image.as_mut(), width, height).unwrap();
+    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), width, height).unwrap();
     apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
-    assert_eq!(pixel.0, [67, 37, 7, 127]);
+    assert_eq!(*pixel, [67, 37, 7, 127]);
 
     Ok(())
   }
@@ -705,10 +705,10 @@ mod tests {
 
   #[test]
   fn drop_shadow_on_transparent_content_does_not_panic() -> Result<()> {
-    let mut image = RgbaImage::new(16, 16);
+    let mut image = Bitmap::new(16, 16);
     let width = image.width();
     let height = image.height();
-    let mut pixmap = PixmapMut::from_bytes(image.as_mut(), width, height).unwrap();
+    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), width, height).unwrap();
 
     let shadow = SizedShadow {
       offset_x: 1.0,

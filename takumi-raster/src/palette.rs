@@ -1,6 +1,6 @@
 //! Images of at most 256 colors, which PNG stores as one palette index per pixel.
 
-use image::RgbaImage;
+use crate::Bitmap;
 
 /// Most colors a PNG palette holds.
 const MAX_COLORS: usize = 256;
@@ -18,7 +18,7 @@ pub(crate) struct Palette {
 
 impl Palette {
   /// The palette of `rgba`, or `None` when it holds more than 256 colors.
-  pub(crate) fn of(rgba: &RgbaImage) -> Option<Self> {
+  pub(crate) fn of(rgba: &Bitmap) -> Option<Self> {
     let mut table = ColorTable::default();
     let mut colors = Vec::with_capacity(MAX_COLORS);
     let row_bytes = rgba.width() as usize * 4;
@@ -112,19 +112,19 @@ impl ColorTable {
 
 #[cfg(test)]
 mod tests {
-  use image::{Rgba, RgbaImage};
+  use crate::Bitmap;
 
   use super::Palette;
 
   #[test]
   fn indices_map_back_to_every_pixel() {
-    let rgba = RgbaImage::from_fn(50, 40, |x, y| {
-      Rgba([
+    let rgba = Bitmap::from_fn(50, 40, |x, y| {
+      [
         (x % 8 * 30) as u8,
         (y % 8 * 30) as u8,
         7,
         if x % 8 == 3 { 128 } else { 255 },
-      ])
+      ]
     });
     let palette = Palette::of(&rgba).unwrap();
     let rgb = palette.rgb();
@@ -134,7 +134,7 @@ mod tests {
       let index = usize::from(index);
 
       assert_eq!(
-        pixel.0,
+        *pixel,
         [
           rgb[index * 3],
           rgb[index * 3 + 1],
@@ -147,21 +147,16 @@ mod tests {
 
   #[test]
   fn opaque_images_carry_no_alphas() {
-    let rgba = RgbaImage::from_pixel(8, 8, Rgba([1, 2, 3, 255]));
+    let rgba = Bitmap::from_pixel(8, 8, [1, 2, 3, 255]);
 
     assert!(Palette::of(&rgba).unwrap().alphas().is_none());
   }
 
   #[test]
   fn a_257th_color_rejects_the_image() {
-    let rgba = RgbaImage::from_fn(257, 1, |x, _| Rgba([x as u8, (x >> 8) as u8, 0, 255]));
+    let rgba = Bitmap::from_fn(257, 1, |x, _| [x as u8, (x >> 8) as u8, 0, 255]);
 
     assert!(Palette::of(&rgba).is_none());
-    assert!(
-      Palette::of(&RgbaImage::from_fn(256, 1, |x, _| Rgba([
-        x as u8, 0, 0, 255
-      ])))
-      .is_some()
-    );
+    assert!(Palette::of(&Bitmap::from_fn(256, 1, |x, _| [x as u8, 0, 0, 255])).is_some());
   }
 }

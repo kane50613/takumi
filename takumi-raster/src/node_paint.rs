@@ -1078,7 +1078,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    assert!((8..40).all(|x| image.get_pixel(x, 2).0[3] > 0));
+    assert!((8..40).all(|x| image.get_pixel(x, 2)[3] > 0));
   }
 
   #[test]
@@ -1101,7 +1101,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    assert!(image.pixels().all(|pixel| pixel.0[3] == 0));
+    assert!(image.pixels().all(|pixel| pixel[3] == 0));
   }
 
   #[test]
@@ -1125,7 +1125,7 @@ mod tests {
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
-    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2)[3]).collect();
     let has_opaque = row.iter().any(|&a| a > 0);
     let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);
 
@@ -1157,7 +1157,7 @@ mod tests {
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
-    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2)[3]).collect();
     let has_opaque = row.iter().any(|&a| a > 0);
     let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);
 
@@ -1205,7 +1205,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    let top_row: Vec<u8> = (8..40).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let top_row: Vec<u8> = (8..40).map(|x| image.get_pixel(x, 2)[3]).collect();
 
     assert!(
       top_row.iter().any(|&alpha| alpha > 0),
@@ -1216,17 +1216,17 @@ mod tests {
       "Top dashed side should contain transparent gaps"
     );
     assert_eq!(
-      image.get_pixel(24, 45).0[3],
+      image.get_pixel(24, 45)[3],
       0,
       "Bottom side should stay transparent for top-only dashed border"
     );
     assert_eq!(
-      image.get_pixel(2, 24).0[3],
+      image.get_pixel(2, 24)[3],
       0,
       "Left side should stay transparent for top-only dashed border"
     );
     assert_eq!(
-      image.get_pixel(45, 24).0[3],
+      image.get_pixel(45, 24)[3],
       0,
       "Right side should stay transparent for top-only dashed border"
     );
@@ -1254,7 +1254,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    let left_column: Vec<u8> = (8..40).map(|y| image.get_pixel(2, y).0[3]).collect();
+    let left_column: Vec<u8> = (8..40).map(|y| image.get_pixel(2, y)[3]).collect();
 
     assert!(
       left_column.iter().any(|&alpha| alpha > 0),
@@ -1265,17 +1265,17 @@ mod tests {
       "Left dotted side should contain transparent gaps"
     );
     assert_eq!(
-      image.get_pixel(24, 2).0[3],
+      image.get_pixel(24, 2)[3],
       0,
       "Top side should stay transparent for left-only dotted border"
     );
     assert_eq!(
-      image.get_pixel(45, 24).0[3],
+      image.get_pixel(45, 24)[3],
       0,
       "Right side should stay transparent for left-only dotted border"
     );
     assert_eq!(
-      image.get_pixel(24, 45).0[3],
+      image.get_pixel(24, 45)[3],
       0,
       "Bottom side should stay transparent for left-only dotted border"
     );
@@ -1305,11 +1305,11 @@ mod tests {
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
     assert_eq!(
-      image.get_pixel(24, 2).0[3],
+      image.get_pixel(24, 2)[3],
       0,
       "Hidden top side should stay transparent"
     );
-    let right_band_has_ink = (44..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    let right_band_has_ink = (44..48).any(|x| image.get_pixel(x, 24)[3] > 0);
     assert!(
       right_band_has_ink,
       "Visible right side should still be painted"
@@ -1340,11 +1340,11 @@ mod tests {
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
     assert_eq!(
-      image.get_pixel(24, 2).0[3],
+      image.get_pixel(24, 2)[3],
       0,
       "Hidden top side should stay transparent"
     );
-    let right_band_has_ink = (42..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    let right_band_has_ink = (42..48).any(|x| image.get_pixel(x, 24)[3] > 0);
     assert!(
       right_band_has_ink,
       "Visible right side should still be painted"
@@ -1379,11 +1379,11 @@ mod tests {
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
     assert!(
-      image.get_pixel(4, 3).0[3] > 0,
+      image.get_pixel(4, 3)[3] > 0,
       "Visible top side should not be clipped by hidden left width"
     );
     assert_eq!(
-      image.get_pixel(3, 32).0[3],
+      image.get_pixel(3, 32)[3],
       0,
       "Hidden left side should stay transparent"
     );
@@ -1412,7 +1412,7 @@ mod tests {
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
     assert!(
-      image.get_pixel(10, 10).0[3] > 0,
+      image.get_pixel(10, 10)[3] > 0,
       "Oversized border should still render a valid filled mask"
     );
   }

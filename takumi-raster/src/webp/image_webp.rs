@@ -1,6 +1,6 @@
 use std::{borrow::Cow, io::Write};
 
-use image::RgbaImage;
+use crate::Bitmap;
 use image_webp::{ColorType, EncoderParams, WebPEncoder};
 
 use crate::{
@@ -19,7 +19,7 @@ fn predictor_encoder<W: Write>(destination: W) -> WebPEncoder<W> {
 }
 
 pub(crate) fn write_webp_lossless(
-  image: Cow<'_, RgbaImage>,
+  image: Cow<'_, Bitmap>,
   destination: &mut impl Write,
 ) -> Result<()> {
   let encoder = predictor_encoder(destination);
@@ -122,10 +122,10 @@ where
   let encode_frame = |frame: UniqueFrame<Bitmap>| -> Result<EncodedFrame<Vec<u8>>> {
     let region = frame.placement.region;
     let cropped;
-    let source = if region.covers(frame.image.as_rgba()) {
-      frame.image.as_rgba()
+    let source = if region.covers(frame.image) {
+      frame.image
     } else {
-      cropped = region.crop(frame.image.as_rgba());
+      cropped = region.crop(frame.image);
       &cropped
     };
 
@@ -171,7 +171,7 @@ where
   Ok(())
 }
 
-fn strip_alpha_channel(image: Cow<'_, RgbaImage>) -> Vec<u8> {
+fn strip_alpha_channel(image: Cow<'_, Bitmap>) -> Vec<u8> {
   match image {
     Cow::Owned(image) => {
       let mut rgba = image.into_raw();

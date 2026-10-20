@@ -1,9 +1,5 @@
 use std::{borrow::Borrow, io::Write, mem, ops::Range};
 
-use image::RgbaImage;
-#[cfg(target_arch = "wasm32")]
-use image::imageops::crop_imm;
-
 use crate::{
   Result,
   error::{Error, WebPError},
@@ -53,7 +49,7 @@ impl FrameRegion {
   /// Bounding box of visibly differing pixels between two equally sized images,
   /// or `None` when every difference is invisible. RGB under alpha 0 never
   /// counts: the encoder is free to rewrite it anyway (`config.exact` is 0).
-  pub(super) fn diff(previous: &RgbaImage, current: &RgbaImage) -> Option<Self> {
+  pub(super) fn diff(previous: &Bitmap, current: &Bitmap) -> Option<Self> {
     let row_bytes = previous.width() as usize * 4;
     let rows = previous
       .as_raw()
@@ -108,13 +104,13 @@ impl FrameRegion {
   }
 
   #[cfg(target_arch = "wasm32")]
-  pub(super) fn covers(&self, image: &RgbaImage) -> bool {
+  pub(super) fn covers(&self, image: &Bitmap) -> bool {
     self.x == 0 && self.y == 0 && self.width == image.width() && self.height == image.height()
   }
 
   #[cfg(target_arch = "wasm32")]
-  pub(super) fn crop(&self, image: &RgbaImage) -> RgbaImage {
-    crop_imm(image, self.x, self.y, self.width, self.height).to_image()
+  pub(super) fn crop(&self, image: &Bitmap) -> Bitmap {
+    image.crop(self.x, self.y, self.width, self.height)
   }
 }
 
@@ -126,7 +122,7 @@ pub(super) struct FramePlacement {
 }
 
 impl FramePlacement {
-  pub(super) fn first(image: &RgbaImage, options: &AnimatedWebpOptions) -> Self {
+  pub(super) fn first(image: &Bitmap, options: &AnimatedWebpOptions) -> Self {
     Self {
       region: FrameRegion::full(image.width(), image.height()),
       blend: options.blend,
@@ -136,8 +132,8 @@ impl FramePlacement {
   /// Placement for `current` relative to `previous`, or `None` when the frames
   /// are identical and should merge into one longer frame.
   pub(super) fn next(
-    previous: &RgbaImage,
-    current: &RgbaImage,
+    previous: &Bitmap,
+    current: &Bitmap,
     canvas_width: u32,
     canvas_height: u32,
     options: &AnimatedWebpOptions,
@@ -180,7 +176,7 @@ pub(super) struct UniqueFrame<T> {
 impl<T: Borrow<Bitmap>> UniqueFrame<T> {
   pub(super) fn first(image: T, duration_ms: u32, options: &AnimatedWebpOptions) -> Self {
     Self {
-      placement: FramePlacement::first(image.borrow().as_rgba(), options),
+      placement: FramePlacement::first(image.borrow(), options),
       duration_ms: duration_ms.clamp(0, U24_MAX),
       image,
     }
@@ -198,8 +194,8 @@ impl<T: Borrow<Bitmap>> UniqueFrame<T> {
   ) -> Option<Self> {
     let duration_ms = duration_ms.clamp(0, U24_MAX);
     let Some(placement) = FramePlacement::next(
-      self.image.borrow().as_rgba(),
-      image.borrow().as_rgba(),
+      self.image.borrow(),
+      image.borrow(),
       canvas_width,
       canvas_height,
       options,
@@ -367,7 +363,7 @@ pub(super) fn write_riff_container<W: Write, B: AsRef<[u8]>>(
   Ok(())
 }
 
-pub(super) fn has_any_alpha_pixel(image: &RgbaImage) -> bool {
+pub(super) fn has_any_alpha_pixel(image: &Bitmap) -> bool {
   // An AND over sixteen pixels at a time vectorizes where a per-pixel `any` cannot.
   let opaque = |pixels: &[u8]| {
     let all = pixels
@@ -385,20 +381,19 @@ pub(super) fn has_any_alpha_pixel(image: &RgbaImage) -> bool {
 
 #[cfg(test)]
 mod tests {
-  use image::Rgba;
 
   use super::*;
 
   #[test]
   fn any_translucent_pixel_counts_wherever_it_sits() {
-    let opaque = RgbaImage::from_pixel(9, 5, Rgba([10, 20, 30, 255]));
+    let opaque = Bitmap::from_pixel(9, 5, [10, 20, 30, 255]);
 
     assert!(!has_any_alpha_pixel(&opaque));
-    assert!(!has_any_alpha_pixel(&RgbaImage::new(0, 0)));
+    assert!(!has_any_alpha_pixel(&Bitmap::new(0, 0)));
     for index in [0, 15, 16, 31, 40, 44] {
       let mut translucent = opaque.clone();
 
-      translucent.put_pixel(index % 9, index / 9, Rgba([10, 20, 30, 254]));
+      translucent.put_pixel(index % 9, index / 9, [10, 20, 30, 254]);
       assert!(has_any_alpha_pixel(&translucent), "pixel {index}");
     }
   }
@@ -415,10 +410,10 @@ mod tests {
 
   #[test]
   fn diff_rounds_origin_down_to_even_and_grows_size() {
-    let base = RgbaImage::from_pixel(10, 10, Rgba([0, 0, 0, 255]));
+    let base = Bitmap::from_pixel(10, 10, [0, 0, 0, 255]);
     let mut changed = base.clone();
-    changed.put_pixel(5, 3, Rgba([255, 0, 0, 255]));
-    changed.put_pixel(7, 7, Rgba([0, 255, 0, 255]));
+    changed.put_pixel(5, 3, [255, 0, 0, 255]);
+    changed.put_pixel(7, 7, [0, 255, 0, 255]);
 
     let region = FrameRegion::diff(&base, &changed).unwrap();
     assert_eq!(
@@ -434,18 +429,18 @@ mod tests {
 
   #[test]
   fn diff_of_identical_images_is_none() {
-    let base = RgbaImage::from_pixel(8, 8, Rgba([1, 2, 3, 255]));
+    let base = Bitmap::from_pixel(8, 8, [1, 2, 3, 255]);
 
     assert_eq!(FrameRegion::diff(&base, &base.clone()), None);
   }
 
   #[test]
   fn diff_ignores_rgb_under_alpha_zero() {
-    let mut previous = RgbaImage::from_pixel(8, 8, Rgba([1, 2, 3, 255]));
+    let mut previous = Bitmap::from_pixel(8, 8, [1, 2, 3, 255]);
     let mut current = previous.clone();
-    previous.put_pixel(0, 0, Rgba([50, 60, 70, 0]));
-    current.put_pixel(0, 0, Rgba([7, 8, 9, 0]));
-    current.put_pixel(6, 6, Rgba([9, 9, 9, 255]));
+    previous.put_pixel(0, 0, [50, 60, 70, 0]);
+    current.put_pixel(0, 0, [7, 8, 9, 0]);
+    current.put_pixel(6, 6, [9, 9, 9, 255]);
 
     let region = FrameRegion::diff(&previous, &current).unwrap();
     assert_eq!(

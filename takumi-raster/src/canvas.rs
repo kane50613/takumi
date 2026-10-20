@@ -13,7 +13,7 @@ use blit::{blit_paint_source_translation, blit_translucent_translation};
 pub(crate) use blit::{overlay_image, overlay_sampled_paint_source, placement_overlap};
 pub(crate) use gradient::try_overlay_gradient_tile;
 use image::{
-  ImageError, Rgba, RgbaImage,
+  ImageError,
   error::{ParameterError, ParameterErrorKind},
 };
 use mask::MaskStackEntry;
@@ -36,7 +36,7 @@ use tiny_skia::{
 
 use self::skia::to_tiny_blend_mode;
 use crate::{
-  BackgroundTile, BorderProperties, Placement, Result,
+  BackgroundTile, Bitmap, BorderProperties, Placement, Result,
   blend::*,
   error::Error,
   simd::Simd,
@@ -378,12 +378,12 @@ impl Canvas {
     self.constraint_mask_stack.pop();
   }
 
-  pub(crate) fn into_inner(self) -> Result<RgbaImage> {
+  pub(crate) fn into_inner(self) -> Result<Bitmap> {
     let (width, height) = (self.image.width(), self.image.height());
     let mut data = self.image.take();
     demultiply_rgba_in_place(&mut data);
 
-    RgbaImage::from_raw(width, height, data).ok_or_else(dimension_mismatch)
+    Bitmap::from_raw(width, height, data).ok_or_else(dimension_mismatch)
   }
 
   pub(crate) fn with_pixmap<R>(&mut self, f: impl FnOnce(&mut Pixmap) -> R) -> R {
@@ -430,7 +430,7 @@ impl Canvas {
         target.pixmap,
         mask,
         placement,
-        Rgba(color.0),
+        color.0,
         mode,
         target.combined_mask,
       );

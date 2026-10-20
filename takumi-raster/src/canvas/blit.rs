@@ -2,8 +2,6 @@
 //! [`DrawTarget`].
 
 use std::array;
-
-use image::Rgba;
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{PixmapMut, PixmapRef, PremultipliedColorU8};
 
@@ -453,7 +451,7 @@ pub(crate) fn draw_mask(
   pixmap: &mut PixmapMut<'_>,
   mask: &[u8],
   placement: Placement,
-  color: Rgba<u8>,
+  color: [u8; 4],
   mode: BlendMode,
   combined_mask: Option<MaskView<'_>>,
 ) {
@@ -470,7 +468,7 @@ pub(crate) fn draw_mask(
     pixmap,
     mask,
     placement,
-    premultiply_pixel(color.0),
+    premultiply_pixel(color),
     mode,
     combined_mask,
   );
@@ -660,7 +658,7 @@ pub(crate) fn overlay_sampled_paint_source(
 
 #[cfg(test)]
 mod tests {
-  use image::{Rgba, RgbaImage};
+  use crate::Bitmap;
   use takumi_core::geometry::Size;
   use tiny_skia::{
     BlendMode as TinyBlendMode, FilterQuality, Mask as TinyMask, Pixmap, PixmapPaint, PixmapRef,
@@ -866,11 +864,11 @@ mod tests {
 
   #[test]
   fn test_subcanvas_overlay_sampled_image_matches_direct_render() -> Result<()> {
-    let source = RgbaImage::from_fn(2, 1, |x, _| {
+    let source = Bitmap::from_fn(2, 1, |x, _| {
       if x == 0 {
-        Rgba([255, 0, 0, 255])
+        [255, 0, 0, 255]
       } else {
-        Rgba([0, 0, 255, 255])
+        [0, 0, 255, 255]
       }
     });
     let source_pixmap =
@@ -965,7 +963,7 @@ mod tests {
 
     let output = canvas.into_inner().unwrap();
     let pixel = output.get_pixel(2, 2);
-    assert_eq!(pixel.0[1], 255);
-    assert_eq!(pixel.0[3], 255);
+    assert_eq!(pixel[1], 255);
+    assert_eq!(pixel[3], 255);
   }
 }
