@@ -45,7 +45,8 @@ Takumi lays out tables with a port of [Chromium's table layout](https://source.c
 
 - An `auto`-width table shrinks to fit its content.
 - In a flex or grid container, an `auto`-width table stretches.
-- A table is never narrower than its content's minimum width.
+- In automatic layout, a table is never narrower than its content's minimum width.
+- With `table-layout: fixed` and a `width`, content can overflow its cell instead.
 
 ## Borders and backgrounds
 
