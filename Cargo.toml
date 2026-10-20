@@ -69,6 +69,7 @@ wasm-bindgen = "0.2"
 write-fonts = "0.54"
 xmp-writer = "0.3"
 yoke = "0.8"
+zune-core = "0.5"
 zune-jpeg = "0.5"
 
 [workspace.dependencies.tiny-skia]

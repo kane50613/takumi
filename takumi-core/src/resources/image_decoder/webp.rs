@@ -1,7 +1,7 @@
 //! WebP stills and animations: libwebp on native targets, `image-webp` on
 //! wasm, and header-only sizing when the decoder is compiled out.
 
-use super::DecodeTarget;
+use super::{DecodeError, DecodeResult, DecodeTarget};
 #[cfg(all(target_arch = "wasm32", feature = "webp"))]
 use std::io::Cursor;
 #[cfg(feature = "webp")]
@@ -14,9 +14,6 @@ use std::{
   slice,
 };
 
-use image::ImageResult;
-#[cfg(feature = "webp")]
-use image::{ImageFormat, RgbaImage};
 #[cfg(all(target_arch = "wasm32", feature = "webp"))]
 use image_webp::{DecodingError as WebPDecodingError, WebPDecoder};
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
@@ -28,26 +25,26 @@ use libwebp_sys::{
 };
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
-use super::{DetectedImageFormat, detect_image_format};
+use super::detect_image_format;
+#[cfg(not(feature = "webp"))]
+use super::header_dimensions;
 #[cfg(feature = "webp")]
 use super::{
-  Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS, check_pixel_budget,
-  covers_canvas, fit_to_target, invalid_buffer_error, rgba_to_buffer, webp_decode_error,
+  DetectedImageFormat, Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS,
+  check_pixel_budget, covers_canvas, fit_to_target, rgba_buffer,
 };
-#[cfg(not(feature = "webp"))]
-use super::{header_dimensions, unsupported_format_error};
 use crate::resources::image_buffer::ImageBuffer;
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 use crate::{error::WebPError, resources::image_buffer::rgba_len};
 
 #[cfg(all(target_arch = "wasm32", feature = "webp"))]
-pub(crate) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  let decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
+pub(crate) fn webp_dimensions(bytes: &[u8]) -> DecodeResult<(u32, u32)> {
+  let decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_error)?;
   Ok(decoder.dimensions())
 }
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
-pub(crate) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+pub(crate) fn webp_dimensions(bytes: &[u8]) -> DecodeResult<(u32, u32)> {
   let mut width = 0;
   let mut height = 0;
   let header_ok = unsafe {
@@ -56,37 +53,31 @@ pub(crate) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   };
 
   if header_ok == 0 || width <= 0 || height <= 0 {
-    return Err(webp_decode_error(WebPError::InvalidEncodedData));
+    return Err(webp_error(WebPError::InvalidEncodedData));
   }
 
   Ok((width as u32, height as u32))
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "webp"))]
-pub(super) fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
-  let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
+pub(super) fn decode_webp(bytes: &[u8]) -> DecodeResult<ImageBuffer> {
+  let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_error)?;
   let (width, height) = decoder.dimensions();
   check_pixel_budget(width, height)?;
   let has_alpha = decoder.has_alpha();
   let channel_count = if has_alpha { 4 } else { 3 };
   let mut image_data = vec![0; width as usize * height as usize * channel_count];
-  decoder
-    .read_image(&mut image_data)
-    .map_err(webp_decode_error)?;
+  decoder.read_image(&mut image_data).map_err(webp_error)?;
 
   if has_alpha {
-    return RgbaImage::from_raw(width, height, image_data)
-      .ok_or_else(invalid_buffer_error)
-      .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP));
+    return rgba_buffer(image_data, (width, height));
   }
 
-  RgbaImage::from_raw(width, height, rgb_to_rgba(&image_data))
-    .ok_or_else(invalid_buffer_error)
-    .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
+  rgba_buffer(rgb_to_rgba(&image_data), (width, height))
 }
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
-pub(super) fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
+pub(super) fn decode_webp(bytes: &[u8]) -> DecodeResult<ImageBuffer> {
   if is_animated_webp(bytes) {
     return decode_animated_webp_first_frame(bytes);
   }
@@ -106,7 +97,7 @@ pub(super) fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 pub(super) fn decode_webp_scaled(
   bytes: &[u8],
   target: DecodeTarget,
-) -> Option<ImageResult<ImageBuffer>> {
+) -> Option<DecodeResult<ImageBuffer>> {
   if !matches!(detect_image_format(bytes), Some(DetectedImageFormat::WebP))
     || is_animated_webp(bytes)
   {
@@ -140,16 +131,16 @@ fn decode_webp_into(
   width: u32,
   height: u32,
   scale: bool,
-) -> ImageResult<ImageBuffer> {
-  let buffer_len = rgba_len(width, height).ok_or_else(invalid_buffer_error)?;
+) -> DecodeResult<ImageBuffer> {
+  let buffer_len = rgba_len(width, height).ok_or(DecodeError::InvalidBuffer)?;
   let stride = i32::try_from(width)
     .ok()
     .and_then(|w| w.checked_mul(4))
-    .ok_or_else(invalid_buffer_error)?;
+    .ok_or(DecodeError::InvalidBuffer)?;
   let mut image_data = vec![0u8; buffer_len];
 
   let mut config =
-    WebPDecoderConfig::new().map_err(|()| webp_decode_error(WebPError::InvalidEncodedData))?;
+    WebPDecoderConfig::new().map_err(|()| webp_error(WebPError::InvalidEncodedData))?;
   if scale {
     config.options.use_scaling = 1;
     config.options.scaled_width = width as i32;
@@ -172,12 +163,10 @@ fn decode_webp_into(
   };
 
   if status != VP8StatusCode::VP8_STATUS_OK {
-    return Err(webp_decode_error(WebPError::InvalidEncodedData));
+    return Err(webp_error(WebPError::InvalidEncodedData));
   }
 
-  RgbaImage::from_raw(width, height, image_data)
-    .ok_or_else(invalid_buffer_error)
-    .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
+  rgba_buffer(image_data, (width, height))
 }
 
 /// Whether the `VP8X` header sets the animation flag.
@@ -208,7 +197,7 @@ fn webp_chunks(bytes: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
 /// Per-frame delays in milliseconds, in stream order, read from the `ANMF` headers without decoding
 /// any pixels.
 #[cfg(feature = "webp")]
-pub(crate) fn webp_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
+pub(crate) fn webp_frame_infos(bytes: &[u8]) -> DecodeResult<Box<[FrameInfo]>> {
   let (width, height) = webp_dimensions(bytes)?;
   let frame_pixels = width as u64 * height as u64;
   let mut total_pixels = 0_u64;
@@ -255,7 +244,7 @@ pub(crate) fn decode_webp_frames(
   limit: Option<usize>,
   target: Option<DecodeTarget>,
   mut push: impl FnMut(Arc<ImageBuffer>),
-) -> ImageResult<bool> {
+) -> DecodeResult<bool> {
   let (width, height) = webp_dimensions(bytes)?;
 
   // The decoder allocates two canvases when it is created.
@@ -264,7 +253,7 @@ pub(crate) fn decode_webp_frames(
   let mut decoder = AnimDecoder::new(bytes)?;
 
   if decoder.canvas != (width, height) {
-    return Err(webp_decode_error(WebPError::InvalidEncodedData));
+    return Err(webp_error(WebPError::InvalidEncodedData));
   }
 
   let target = target.filter(|target| target.shrinks(width, height));
@@ -280,7 +269,7 @@ pub(crate) fn decode_webp_frames(
       Some(Some(canvas)) => canvas,
       None => return Ok(true),
       Some(None) if index == 0 => {
-        return Err(webp_decode_error(WebPError::InvalidEncodedData));
+        return Err(webp_error(WebPError::InvalidEncodedData));
       }
       Some(None) => return Ok(true),
     };
@@ -314,11 +303,11 @@ struct AnimDecoder<'a> {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 impl<'a> AnimDecoder<'a> {
-  fn new(bytes: &'a [u8]) -> ImageResult<Self> {
+  fn new(bytes: &'a [u8]) -> DecodeResult<Self> {
     let mut options = MaybeUninit::<WebPAnimDecoderOptions>::zeroed();
     // SAFETY: `options` is valid for writes, and initializing it reads nothing.
     if unsafe { WebPAnimDecoderOptionsInit(options.as_mut_ptr()) } == 0 {
-      return Err(webp_decode_error(WebPError::InvalidEncodedData));
+      return Err(webp_error(WebPError::InvalidEncodedData));
     }
     // SAFETY: `WebPAnimDecoderOptionsInit` filled every field.
     let mut options = unsafe { options.assume_init() };
@@ -332,7 +321,7 @@ impl<'a> AnimDecoder<'a> {
     };
     // SAFETY: `data` points at `bytes`, which the returned decoder borrows for `'a`.
     let decoder = NonNull::new(unsafe { WebPAnimDecoderNew(&data, &options) })
-      .ok_or_else(|| webp_decode_error(WebPError::InvalidEncodedData))?;
+      .ok_or_else(|| webp_error(WebPError::InvalidEncodedData))?;
     let mut info = MaybeUninit::<WebPAnimInfo>::zeroed();
     // SAFETY: `decoder` is live and `info` is valid for writes.
     let info_ok = unsafe { WebPAnimDecoderGetInfo(decoder.as_ptr(), info.as_mut_ptr()) } != 0;
@@ -345,7 +334,7 @@ impl<'a> AnimDecoder<'a> {
     };
 
     if !info_ok {
-      return Err(webp_decode_error(WebPError::InvalidEncodedData));
+      return Err(webp_error(WebPError::InvalidEncodedData));
     }
     Ok(decoder)
   }
@@ -394,8 +383,8 @@ pub(crate) fn decode_webp_frames(
   limit: Option<usize>,
   target: Option<DecodeTarget>,
   mut push: impl FnMut(Arc<ImageBuffer>),
-) -> ImageResult<bool> {
-  let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
+) -> DecodeResult<bool> {
+  let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_error)?;
   let (width, height) = decoder.dimensions();
   check_pixel_budget(width, height)?;
   let target = target.filter(|target| target.shrinks(width, height));
@@ -405,7 +394,7 @@ pub(crate) fn decode_webp_frames(
     0_u8;
     decoder
       .output_buffer_size()
-      .ok_or_else(invalid_buffer_error)?
+      .ok_or(DecodeError::InvalidBuffer)?
   ];
   let mut total_pixels = 0_u64;
   let mut pushed = 0_usize;
@@ -418,7 +407,7 @@ pub(crate) fn decode_webp_frames(
     match decoder.read_frame(&mut canvas) {
       Ok(_) => {}
       Err(WebPDecodingError::NoMoreFrames) => return Ok(true),
-      Err(error) if index == 0 => return Err(webp_decode_error(error)),
+      Err(error) if index == 0 => return Err(webp_error(error)),
       Err(_) => return Ok(true),
     }
 
@@ -442,13 +431,13 @@ pub(crate) fn decode_webp_frames(
 
 /// The first frame, for the still-image decode paths.
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
-fn decode_animated_webp_first_frame(bytes: &[u8]) -> ImageResult<ImageBuffer> {
+fn decode_animated_webp_first_frame(bytes: &[u8]) -> DecodeResult<ImageBuffer> {
   let mut first = None;
   decode_webp_frames(bytes, 0, Some(1), None, |frame| first = Some(frame))?;
 
   first
     .map(Arc::unwrap_or_clone)
-    .ok_or_else(invalid_buffer_error)
+    .ok_or(DecodeError::InvalidBuffer)
 }
 
 /// Decodes frame `index` on its own, skipping the frames before it, when the
@@ -596,6 +585,11 @@ fn webp_frame_as_still(bitstream: &[u8], width: u32, height: u32) -> Option<Vec<
   Some(still)
 }
 
+#[cfg(feature = "webp")]
+fn webp_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> DecodeError {
+  DecodeError::format(DetectedImageFormat::WebP, error)
+}
+
 /// One composited canvas as a premultiplied buffer, resampled to `target`.
 #[cfg(feature = "webp")]
 fn webp_canvas_to_buffer(
@@ -604,7 +598,7 @@ fn webp_canvas_to_buffer(
   height: u32,
   has_alpha: bool,
   target: Option<DecodeTarget>,
-) -> ImageResult<ImageBuffer> {
+) -> DecodeResult<ImageBuffer> {
   let rgba = if has_alpha {
     canvas.to_vec()
   } else {
@@ -612,26 +606,26 @@ fn webp_canvas_to_buffer(
   };
 
   let buffer =
-    ImageBuffer::from_rgba_bytes(rgba, width, height).ok_or_else(invalid_buffer_error)?;
+    ImageBuffer::from_rgba_bytes(rgba, width, height).ok_or(DecodeError::InvalidBuffer)?;
 
   fit_to_target(buffer, target)
 }
 
 #[cfg(not(feature = "webp"))]
-pub(crate) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+pub(crate) fn webp_dimensions(bytes: &[u8]) -> DecodeResult<(u32, u32)> {
   header_dimensions(bytes)
 }
 
 #[cfg(not(feature = "webp"))]
-pub(super) fn decode_webp(_bytes: &[u8]) -> ImageResult<ImageBuffer> {
-  Err(unsupported_format_error())
+pub(super) fn decode_webp(_bytes: &[u8]) -> DecodeResult<ImageBuffer> {
+  Err(DecodeError::Unsupported)
 }
 
 #[cfg(not(all(not(target_arch = "wasm32"), feature = "webp")))]
 pub(super) fn decode_webp_scaled(
   _bytes: &[u8],
   _target: DecodeTarget,
-) -> Option<ImageResult<ImageBuffer>> {
+) -> Option<DecodeResult<ImageBuffer>> {
   None
 }
 

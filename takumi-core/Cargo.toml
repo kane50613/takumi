@@ -59,14 +59,19 @@ features = ["aarch64_simd", "avx512_simd", "derive"]
 workspace = true
 features = ["rc"]
 
-[dependencies.image]
-workspace = true
-
 [dependencies.imagesize]
 workspace = true
 features = ["png", "jpeg", "webp", "gif"]
 
 [dependencies.png]
+workspace = true
+optional = true
+
+[dependencies.zune-jpeg]
+workspace = true
+optional = true
+
+[dependencies.zune-core]
 workspace = true
 optional = true
 
@@ -124,10 +129,10 @@ optional = true
 [features]
 default = ["woff2", "woff", "svg", "image-decoding"]
 image-decoding = ["png", "jpeg", "webp", "gif"]
-png = ["dep:png", "image/png"]
-jpeg = ["image/jpeg"]
-webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
-gif = ["dep:gif", "image/gif"]
+png = ["dep:png"]
+jpeg = ["dep:zune-jpeg", "dep:zune-core"]
+webp = ["dep:image-webp", "dep:libwebp-sys"]
+gif = ["dep:gif"]
 svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
 svg = ["svg-sizing", "dep:simplecss", "dep:siphasher", "dep:strict-num", "dep:tiny-skia-path"]
 woff2 = ["dep:wuff", "wuff/brotli"]

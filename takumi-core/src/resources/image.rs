@@ -1326,8 +1326,6 @@ mod resource_cache_tests {
 mod tests {
   use std::assert_matches;
 
-  use image::{Rgba, RgbaImage};
-
   use crate::geometry::Size;
   #[cfg(feature = "png")]
   use crate::resources::animated::AnimatedFormat;
@@ -1487,21 +1485,19 @@ mod tests {
   /// must be multiples of 10 (GIF stores centiseconds).
   #[cfg(feature = "gif")]
   fn encoded_gif(frames: &[(usize, u32)]) -> Vec<u8> {
-    use image::{Delay, Frame, codecs::gif::GifEncoder};
+    use gif::{DisposalMethod, Encoder, Frame};
 
     let mut bytes = Vec::new();
-    let mut encoder = GifEncoder::new(&mut bytes);
+    let mut encoder = Encoder::new(&mut bytes, 4, 4, &[]).unwrap();
 
-    encoder
-      .encode_frames(frames.iter().map(|&(color, delay_ms)| {
-        Frame::from_parts(
-          RgbaImage::from_pixel(4, 4, Rgba(FRAME_COLORS[color])),
-          0,
-          0,
-          Delay::from_numer_denom_ms(delay_ms, 1),
-        )
-      }))
-      .unwrap();
+    for &(color, delay_ms) in frames {
+      let mut pixels = FRAME_COLORS[color].repeat(16);
+      let mut frame = Frame::from_rgba_speed(4, 4, &mut pixels, 10);
+
+      frame.delay = (delay_ms / 10) as u16;
+      frame.dispose = DisposalMethod::Background;
+      encoder.write_frame(&frame).unwrap();
+    }
     drop(encoder);
 
     bytes
@@ -1786,22 +1782,7 @@ mod tests {
   #[cfg(feature = "gif")]
   #[test]
   fn a_frame_after_a_background_dispose_stands_alone() {
-    use image::{Delay, Frame, RgbaImage, codecs::gif::GifEncoder, codecs::gif::Repeat};
-
-    let mut bytes = Vec::new();
-    let mut encoder = GifEncoder::new(&mut bytes);
-    encoder.set_repeat(Repeat::Infinite).unwrap();
-    encoder
-      .encode_frames((0..3).map(|index| {
-        Frame::from_parts(
-          RgbaImage::from_pixel(4, 4, Rgba(FRAME_COLORS[index])),
-          0,
-          0,
-          Delay::from_numer_denom_ms(100, 1),
-        )
-      }))
-      .unwrap();
-    drop(encoder);
+    let bytes = encoded_gif(&[(0, 100), (1, 100), (2, 100)]);
 
     let Ok(ImageSource::Animated(gif)) = ImageSource::from_bytes(&bytes) else {
       unreachable!("valid gif");
@@ -2074,10 +2055,8 @@ mod tests {
 
   #[test]
   fn bitmap_renders_sampled() -> Result<(), ImageError> {
-    let mut bitmap = RgbaImage::new(2, 2);
-    bitmap.put_pixel(0, 0, Rgba([12, 34, 56, 200]));
-    bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
-    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
+    let bitmap = [[12, 34, 56, 200], [78, 90, 12, 255], [0; 4], [0; 4]].concat();
+    let buffer = ImageBuffer::from_rgba_bytes(bitmap, 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
     let rendered =
@@ -2089,12 +2068,14 @@ mod tests {
 
   #[test]
   fn bitmap_render_for_layout_keeps_sampling_parameters() -> Result<(), ImageError> {
-    let mut bitmap = RgbaImage::new(2, 2);
-    bitmap.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
-    bitmap.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
-    bitmap.put_pixel(0, 1, Rgba([0, 0, 255, 255]));
-    bitmap.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
-    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
+    let bitmap = [
+      [255, 0, 0, 255],
+      [0, 255, 0, 255],
+      [0, 0, 255, 255],
+      [255, 255, 255, 255],
+    ]
+    .concat();
+    let buffer = ImageBuffer::from_rgba_bytes(bitmap, 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
     let rendered = image.render_for_layout(

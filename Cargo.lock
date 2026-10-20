@@ -1819,7 +1819,6 @@ dependencies = [
  "icu_locale_core",
  "icu_properties",
  "icu_segmenter",
- "image",
  "image-webp",
  "imagesize",
  "kurbo",
@@ -1852,6 +1851,8 @@ dependencies = [
  "unicode-bidi",
  "wuff",
  "xxhash-rust",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

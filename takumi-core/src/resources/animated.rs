@@ -18,7 +18,9 @@ use super::image_decoder::{
 use super::{
   image::ImageError,
   image_buffer::ImageBuffer,
-  image_decoder::{DecodeTarget, FrameInfo, MAX_ANIMATION_FRAMES, needs_previous_frame},
+  image_decoder::{
+    DecodeError, DecodeTarget, FrameInfo, MAX_ANIMATION_FRAMES, needs_previous_frame,
+  },
 };
 use crate::style::ImageScalingAlgorithm;
 
@@ -62,7 +64,7 @@ impl AnimatedFormat {
     None
   }
 
-  fn dimensions(self, bytes: &[u8]) -> Result<(u32, u32), image::ImageError> {
+  fn dimensions(self, bytes: &[u8]) -> Result<(u32, u32), DecodeError> {
     match self {
       #[cfg(feature = "gif")]
       Self::Gif => gif_dimensions(bytes),
@@ -80,7 +82,7 @@ impl AnimatedFormat {
     limit: Option<usize>,
     target: Option<DecodeTarget>,
     push: impl FnMut(Arc<ImageBuffer>),
-  ) -> Result<bool, image::ImageError> {
+  ) -> Result<bool, DecodeError> {
     match self {
       #[cfg(feature = "gif")]
       Self::Gif => decode_gif_frames(bytes, skip, limit, target, push),
@@ -110,7 +112,7 @@ impl AnimatedFormat {
   }
 
   /// Per-frame metadata in stream order, read without decoding pixels.
-  fn frame_infos(self, bytes: &[u8]) -> Result<Box<[FrameInfo]>, image::ImageError> {
+  fn frame_infos(self, bytes: &[u8]) -> Result<Box<[FrameInfo]>, DecodeError> {
     match self {
       #[cfg(feature = "gif")]
       Self::Gif => gif_frame_infos(bytes),
