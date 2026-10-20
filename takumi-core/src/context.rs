@@ -18,7 +18,8 @@ use crate::{
     image::{ImageSource, ResourceCache},
   },
   style::{
-    Affine, AppliedTextDecorations, Color, ComputedStyle, SizingContext, StyleSheet, TwCache,
+    Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, SizingContext,
+    StyleSheet, TwCache,
   },
 };
 
@@ -32,6 +33,7 @@ struct RenderShared {
   font_fallback_map: FontFallbackMap,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
+  matched_styles: MatchedStyleCache,
   time_ms: u64,
   draw_debug_border: bool,
   dither_gradients: bool,
@@ -81,6 +83,7 @@ impl From<RenderContextInit> for RenderContext {
         font_fallback_map: FontFallbackMap::default(),
         inline_cache: InlineLayoutCache::default(),
         tw_cache: TwCache::default(),
+        matched_styles: MatchedStyleCache::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
         dither_gradients: init.dither_gradients,
@@ -189,6 +192,11 @@ impl RenderContext {
     &self.shared.tw_cache
   }
 
+  /// Per-render cache of the styles boxes resolved from the declarations they matched.
+  pub(crate) fn matched_styles(&self) -> &MatchedStyleCache {
+    &self.shared.matched_styles
+  }
+
   /// The font `description` names, its fallback list shared across the render.
   pub(crate) fn font(&self, description: FontDescription) -> Font {
     Font {
@@ -221,10 +229,12 @@ impl RenderContext {
 
   pub(crate) fn from_parent(
     parent: &Self,
-    style: ComputedStyle,
+    style: impl Into<Rc<ComputedStyle>>,
     sizing: SizingContext,
     current_color: Color,
   ) -> Self {
+    let style = style.into();
+
     Self {
       shared: parent.shared.clone(),
       text_decorations: parent.text_decorations.for_child(
@@ -237,7 +247,7 @@ impl RenderContext {
       transform: parent.transform,
       paint_offset: parent.paint_offset,
       current_color,
-      style: Rc::new(style),
+      style,
       collapsed_borders: false,
       definite_height: Cell::new(None),
       margins_adjoin: Cell::new(Line::FALSE),

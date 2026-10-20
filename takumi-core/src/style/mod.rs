@@ -3,6 +3,7 @@ mod calc;
 mod css_input;
 mod css_source;
 mod custom_properties;
+mod matched_style_cache;
 pub mod math;
 mod media_query;
 pub(crate) mod properties;
@@ -22,6 +23,7 @@ pub use css_source::{
   SupportsRule,
 };
 pub use custom_properties::CustomProperties;
+pub(crate) use matched_style_cache::{MatchedStyleCache, MatchedStyleKey};
 pub(crate) use math::lerp;
 pub(crate) use properties::unexpected_token;
 pub use properties::*;

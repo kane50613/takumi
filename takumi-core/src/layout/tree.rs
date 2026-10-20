@@ -51,9 +51,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
-    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TwBlocks,
-    WhiteSpaceCollapse, apply_stylesheet_animations,
+    Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
+    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+    TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -3390,8 +3390,73 @@ impl RenderContext {
     (style, sizing, current_color)
   }
 
-  /// Resolves a child's style and sizing from its matched declarations.
+  /// Resolves a child's style and sizing from its matched declarations, sharing the style a box
+  /// with the same preset resolved to from the same declarations under the same parent.
   fn resolve_child_style(
+    &self,
+    node: &mut Node,
+    source_order: usize,
+    matched_declarations: &[NodeMatchedDeclarations<'_>],
+  ) -> (Rc<ComputedStyle>, SizingContext, Color) {
+    let metadata = &node.metadata;
+    // A box styled beyond its preset and matched rules, or one that styles itself by its own
+    // tag, resolves alone.
+    let shares_style = metadata.style.is_none()
+      && metadata.tw.is_none()
+      && metadata.dir.is_none()
+      && metadata.lang.is_none()
+      && !matches!(node.kind, NodeKind::Image(_))
+      && !node
+        .tag_name()
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("html") || tag.eq_ignore_ascii_case("br"));
+    let key = shares_style.then(|| {
+      let default_matched = MatchedDeclarationsView::default();
+      let matched = matched_declarations
+        .get(source_order)
+        .map(NodeMatchedDeclarations::element)
+        .unwrap_or(&default_matched);
+
+      MatchedStyleKey::new(&self.style, matched)
+    });
+    let cache = self.matched_styles();
+
+    if let Some(key) = &key
+      && let Some(resolved) = cache.get(
+        key,
+        node.metadata.preset.as_ref(),
+        &self.sizing,
+        self.current_color,
+      )
+    {
+      node.take_style_layers();
+      return resolved;
+    }
+
+    let preset = key.as_ref().and(node.metadata.preset.clone());
+    let (style, sizing, current_color) =
+      self.resolve_uncached_child_style(node, source_order, matched_declarations);
+    let style = Rc::new(style);
+
+    // A style an animation or a query container decided holds for this box alone.
+    if let Some(key) = key
+      && style.misc1_data.animation_name.is_empty()
+      && !sizing.container_read.get()
+    {
+      cache.insert(
+        key,
+        Rc::clone(&self.style),
+        preset,
+        self.sizing.clone(),
+        self.current_color,
+        (Rc::clone(&style), sizing.clone(), current_color),
+      );
+    }
+
+    (style, sizing, current_color)
+  }
+
+  /// Resolves a child's style and sizing from its matched declarations.
+  fn resolve_uncached_child_style(
     &self,
     node: &mut Node,
     source_order: usize,
