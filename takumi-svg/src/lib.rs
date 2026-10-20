@@ -43,7 +43,7 @@ use takumi_core::{
   geometry::{Rect, Size},
   painter::{BoxFrame, FillShape, StrokeStyle},
   path_data::{APPROX_CHARS_PER_NUMBER, Num, edges_path_data, path_data, quantize_path},
-  resources::image_buffer::demultiply_pixel,
+  resources::{glyph::ResolvedOutlineGlyph, image_buffer::demultiply_pixel},
   shadow::SizedShadow,
   style::{Affine, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
@@ -168,6 +168,9 @@ pub(crate) struct SvgDocument {
   /// Interned glyph outlines in glyph space, emitted as `<defs>` by [`Self::finish`].
   glyph_defs: Vec<String>,
   glyph_ids: HashMap<String, u32>,
+  /// Interned ids by outline and the linear part of its placement, so a repeated glyph skips
+  /// formatting its path. `None` for an outline that draws nothing.
+  glyph_keys: HashMap<(u64, [u32; 4]), Option<u32>>,
   /// Each open transformed group's transform onto the root, innermost last.
   transforms: Vec<Affine>,
   /// The root viewport in root user space.
@@ -193,6 +196,7 @@ impl SvgDocument {
       next_id: 0,
       glyph_defs: Vec::new(),
       glyph_ids: HashMap::new(),
+      glyph_keys: HashMap::new(),
       transforms: Vec::new(),
       viewport,
     })
@@ -553,7 +557,36 @@ impl SvgDocument {
 
   /// Interns a glyph outline (path data in glyph space, translation excluded)
   /// and returns the id shared by every `<use>` of the same outline.
-  pub(crate) fn glyph_ref(&mut self, data: String) -> u32 {
+  /// The interned id of `outline` placed by `placed`'s linear part, or `None` when it draws nothing.
+  pub(crate) fn outline_ref(
+    &mut self,
+    outline: &ResolvedOutlineGlyph,
+    placed: Affine,
+  ) -> Option<u32> {
+    let key = (
+      outline.cache_signature(),
+      [placed.a, placed.b, placed.c, placed.d].map(f32::to_bits),
+    );
+
+    if let Some(&id) = self.glyph_keys.get(&key) {
+      return id;
+    }
+
+    let data = path_data(
+      outline.paths(),
+      Affine {
+        x: 0.0,
+        y: 0.0,
+        ..placed
+      },
+    );
+    let id = (!data.is_empty()).then(|| self.glyph_ref(data));
+
+    self.glyph_keys.insert(key, id);
+    id
+  }
+
+  fn glyph_ref(&mut self, data: String) -> u32 {
     if let Some(&id) = self.glyph_ids.get(&data) {
       return id;
     }
