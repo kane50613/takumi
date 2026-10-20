@@ -259,24 +259,8 @@ fn draw_color_outline_image(
   }
 
   for layer in color_layers {
-    let color = if layer.palette_index == u16::MAX {
-      let alpha = (foreground_opacity * layer.alpha * 255.0)
-        .round()
-        .clamp(0.0, 255.0) as u8;
-      Color([
-        foreground_color.0[0],
-        foreground_color.0[1],
-        foreground_color.0[2],
-        alpha,
-      ])
-    } else {
-      let Some(record) = palette.colors().get(usize::from(layer.palette_index)) else {
-        continue;
-      };
-      let alpha = ((record.alpha() as f32 / 255.0) * layer.alpha * foreground_opacity * 255.0)
-        .round()
-        .clamp(0.0, 255.0) as u8;
-      Color([record.red(), record.green(), record.blue(), alpha])
+    let Some(color) = layer.color(Some(palette), foreground_color) else {
+      continue;
     };
 
     let (mask, placement) =
