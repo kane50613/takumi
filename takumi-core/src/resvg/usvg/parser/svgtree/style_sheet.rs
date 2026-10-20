@@ -4,8 +4,8 @@
 use std::{cell::RefCell, num::NonZeroUsize, ptr::NonNull};
 
 use cssparser::{
-  AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserState, QualifiedRuleParser,
-  RuleBodyItemParser, RuleBodyParser, StyleSheetParser, Token, parse_important,
+  AtRuleParser, ParseError, Parser, ParserState, QualifiedRuleParser, RuleBodyParser,
+  StyleSheetParser,
 };
 use selectors::{
   Element, OpaqueElement,
@@ -22,26 +22,11 @@ use super::parse::XML_NAMESPACE_NS;
 use crate::{
   error::StyleSheetParseError,
   matching::lang_matches,
-  style::selector::{Ident, PseudoClass, PseudoElement, SelectorImpl, TakumiSelectorParser},
+  style::{
+    RawDeclaration, RawDeclarationParser,
+    selector::{Ident, PseudoClass, PseudoElement, SelectorImpl, TakumiSelectorParser},
+  },
 };
-
-/// A `name: value` pair from a rule or a `style` attribute.
-pub(crate) struct Declaration<'a> {
-  pub(crate) name: CowRcStr<'a>,
-  pub(crate) value: &'a str,
-  pub(crate) important: bool,
-}
-
-impl<'a> Declaration<'a> {
-  /// The declarations of a `style` attribute, in source order.
-  pub(crate) fn parse_list(text: &'a str) -> Vec<Self> {
-    let mut parser = Parser::new(text);
-
-    RuleBodyParser::new(&mut parser, &mut DeclarationListParser)
-      .filter_map(Result::ok)
-      .collect()
-  }
-}
 
 /// One selector of a rule, pointing at the rule's declarations.
 struct Rule {
@@ -53,7 +38,7 @@ struct Rule {
 #[derive(Default)]
 pub(crate) struct StyleSheet<'a> {
   rules: Vec<Rule>,
-  blocks: Vec<Vec<Declaration<'a>>>,
+  blocks: Vec<Vec<RawDeclaration<'a>>>,
   /// Shared by every node of the one document the sheet styles.
   caches: RefCell<SelectorCaches>,
 }
@@ -81,7 +66,7 @@ impl<'a> StyleSheet<'a> {
   }
 
   /// Calls `apply` with each declaration whose rule matches `node`, lowest specificity first.
-  pub(crate) fn cascade(&self, node: roxmltree::Node, mut apply: impl FnMut(&Declaration<'a>)) {
+  pub(crate) fn cascade(&self, node: roxmltree::Node, mut apply: impl FnMut(&RawDeclaration<'a>)) {
     let mut caches = self.caches.borrow_mut();
     let mut context = MatchingContext::new(
       MatchingMode::Normal,
@@ -105,7 +90,7 @@ struct RuleListParser;
 
 impl<'i> QualifiedRuleParser<'i> for RuleListParser {
   type Prelude = SelectorList<SelectorImpl>;
-  type QualifiedRule = (SelectorList<SelectorImpl>, Vec<Declaration<'i>>);
+  type QualifiedRule = (SelectorList<SelectorImpl>, Vec<RawDeclaration<'i>>);
   type Error = StyleSheetParseError;
 
   fn parse_prelude(
@@ -121,7 +106,7 @@ impl<'i> QualifiedRuleParser<'i> for RuleListParser {
     _start: &ParserState,
     input: &mut Parser<'i>,
   ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
-    let declarations = RuleBodyParser::new(input, &mut DeclarationListParser)
+    let declarations = RuleBodyParser::new(input, &mut RawDeclarationParser)
       .filter_map(Result::ok)
       .collect();
 
@@ -131,81 +116,8 @@ impl<'i> QualifiedRuleParser<'i> for RuleListParser {
 
 impl<'i> AtRuleParser<'i> for RuleListParser {
   type Prelude = ();
-  type AtRule = (SelectorList<SelectorImpl>, Vec<Declaration<'i>>);
+  type AtRule = (SelectorList<SelectorImpl>, Vec<RawDeclaration<'i>>);
   type Error = StyleSheetParseError;
-}
-
-struct DeclarationListParser;
-
-impl<'i> DeclarationParser<'i> for DeclarationListParser {
-  type Declaration = Declaration<'i>;
-  type Error = ();
-
-  fn parse_value(
-    &mut self,
-    name: CowRcStr<'i>,
-    input: &mut Parser<'i>,
-    _start: &ParserState,
-  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let start = input.position();
-    let mut end = start;
-    let mut important = false;
-
-    while !input.is_exhausted() {
-      if input
-        .try_parse(|input| {
-          parse_important(input)?;
-          input.expect_exhausted()
-        })
-        .is_ok()
-      {
-        important = true;
-        break;
-      }
-
-      if matches!(
-        input.next()?,
-        Token::Function(_)
-          | Token::ParenthesisBlock
-          | Token::SquareBracketBlock
-          | Token::CurlyBracketBlock
-      ) {
-        input.parse_nested_block(|block| {
-          while block.next().is_ok() {}
-          Ok::<_, ParseError<()>>(())
-        })?;
-      }
-      end = input.position();
-    }
-
-    Ok(Declaration {
-      name,
-      value: input.slice(start..end).trim(),
-      important,
-    })
-  }
-}
-
-impl<'i> AtRuleParser<'i> for DeclarationListParser {
-  type Prelude = ();
-  type AtRule = Declaration<'i>;
-  type Error = ();
-}
-
-impl<'i> QualifiedRuleParser<'i> for DeclarationListParser {
-  type Prelude = ();
-  type QualifiedRule = Declaration<'i>;
-  type Error = ();
-}
-
-impl<'i> RuleBodyItemParser<'i, Declaration<'i>, ()> for DeclarationListParser {
-  fn parse_declarations(&self) -> bool {
-    true
-  }
-
-  fn parse_qualified(&self) -> bool {
-    false
-  }
 }
 
 /// An XML element, as the `selectors` crate matches it.
@@ -362,34 +274,7 @@ impl Element for XmlElement<'_, '_> {
 
 #[cfg(test)]
 mod tests {
-  use super::{Declaration, StyleSheet};
-
-  fn pairs(declarations: &[Declaration]) -> Vec<(String, String, bool)> {
-    declarations
-      .iter()
-      .map(|declaration| {
-        (
-          declaration.name.to_string(),
-          declaration.value.to_owned(),
-          declaration.important,
-        )
-      })
-      .collect()
-  }
-
-  #[test]
-  fn a_style_attribute_keeps_whole_function_values() {
-    assert_eq!(
-      pairs(&Declaration::parse_list(
-        "fill:rgb(255,255,0); stroke: url(#a) red !important;opacity:.5"
-      )),
-      [
-        ("fill".into(), "rgb(255,255,0)".into(), false),
-        ("stroke".into(), "url(#a) red".into(), true),
-        ("opacity".into(), ".5".into(), false),
-      ]
-    );
-  }
+  use super::StyleSheet;
 
   fn matched(css: &str, svg: &str, id: &str) -> Vec<String> {
     let xml = roxmltree::Document::parse(svg).unwrap();

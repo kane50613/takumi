@@ -20,9 +20,9 @@ use crate::{
   keyframes::parse_keyframe_prelude,
   matching::RuleIndex,
   style::{
-    BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
-    StyleDeclarationBlock, expand_apply, is_reserved_custom_ident,
-    supports::parse_supports_condition,
+    BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, RawDeclaration,
+    RawDeclarationParser, StyleDeclaration, StyleDeclarationBlock, expand_apply,
+    is_reserved_custom_ident, supports::parse_supports_condition,
   },
 };
 
@@ -393,59 +393,6 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
 
 impl_parser_traits!(StyleDeclarationParser, StyleDeclarationBlock);
 
-struct PropertyRuleDeclarationParser;
-
-impl<'i> DeclarationParser<'i> for PropertyRuleDeclarationParser {
-  type Declaration = (String, String, bool);
-  type Error = StyleSheetParseError;
-
-  fn parse_value(
-    &mut self,
-    name: CowRcStr<'i>,
-    input: &mut Parser<'i>,
-    _state: &ParserState,
-  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let start = input.position();
-    let mut end = start;
-    let mut important = false;
-
-    while !input.is_exhausted() {
-      if input
-        .try_parse(|input| {
-          parse_important(input)?;
-          input.expect_exhausted()
-        })
-        .is_ok()
-      {
-        important = true;
-        break;
-      }
-
-      if matches!(
-        input.next()?,
-        Token::Function(_)
-          | Token::ParenthesisBlock
-          | Token::SquareBracketBlock
-          | Token::CurlyBracketBlock
-      ) {
-        input.parse_nested_block(|block| {
-          while block.next().is_ok() {}
-          Ok::<_, ParseError<Self::Error>>(())
-        })?;
-      }
-      end = input.position();
-    }
-
-    Ok((
-      name.to_string(),
-      input.slice(start..end).trim().to_owned(),
-      important,
-    ))
-  }
-}
-
-impl_parser_traits!(PropertyRuleDeclarationParser, (String, String, bool));
-
 struct NestedStyleRuleParser<'a> {
   parent_selectors: SelectorList<SelectorImpl>,
   context: NestingContext<'a>,
@@ -723,14 +670,18 @@ fn parse_property_rule<'i>(
   property_name: String,
   input: &mut Parser<'i>,
 ) -> Result<PropertyRule, ParseError<StyleSheetParseError>> {
-  let mut parser = PropertyRuleDeclarationParser;
+  let mut parser = RawDeclarationParser;
   let mut syntax = None;
   let mut inherits = None;
   let mut initial_value = None;
   let mut invalid_inherits = false;
 
   for descriptor in RuleBodyParser::new(input, &mut parser) {
-    let (name, value, important) = descriptor.map_err(|(error, ..)| error)?;
+    let RawDeclaration {
+      name,
+      value,
+      important,
+    } = descriptor.map_err(|(error, ..)| error)?;
 
     // Blink parses descriptors without the `!important` annotation, so one that has it is invalid.
     if important {
@@ -738,13 +689,13 @@ fn parse_property_rule<'i>(
     }
 
     match_ignore_ascii_case! { &name,
-      "syntax" => syntax = Some(value),
+      "syntax" => syntax = Some(value.to_owned()),
       "inherits" => match_ignore_ascii_case! { &value,
         "true" => inherits = Some(true),
         "false" => inherits = Some(false),
         _ => invalid_inherits = true,
       },
-      "initial-value" => initial_value = Some(value),
+      "initial-value" => initial_value = Some(value.to_owned()),
       _ => {},
     }
   }

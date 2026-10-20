@@ -7,9 +7,9 @@ use roxmltree::Error;
 use svgtypes::FontShorthand;
 
 use super::{
-  AId, Attribute, Document, EId, NodeData, NodeId, NodeKind, ShortRange,
-  style_sheet::{Declaration, StyleSheet},
+  AId, Attribute, Document, EId, NodeData, NodeId, NodeKind, ShortRange, style_sheet::StyleSheet,
 };
+use crate::style::RawDeclaration;
 
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
 const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
@@ -344,7 +344,7 @@ pub(crate) fn parse_svg_element<'input>(
     }
   };
 
-  let mut write_declaration = |declaration: &Declaration| {
+  let mut write_declaration = |declaration: &RawDeclaration| {
     // TODO: perform XML attribute normalization
     let imp = declaration.important;
     let val = declaration.value;
@@ -405,7 +405,7 @@ pub(crate) fn parse_svg_element<'input>(
 
   // Split a `style` attribute.
   if let Some(value) = xml_node.attribute("style") {
-    for declaration in Declaration::parse_list(value) {
+    for declaration in RawDeclaration::parse_list(value) {
       write_declaration(&declaration);
     }
   }
