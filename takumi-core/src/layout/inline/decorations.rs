@@ -83,6 +83,7 @@ pub(crate) struct DecorationFont {
 
 impl DecorationFont {
   /// The primary font with `metrics` at `size`, unscaled.
+  #[cfg(feature = "svg")]
   pub(crate) fn new(metrics: PrimaryFontMetrics, size: f32) -> Self {
     Self {
       metrics,
@@ -165,6 +166,7 @@ pub(crate) struct DecoratingBox {
 
 impl DecoratingBox {
   /// The box `font` measures, with its baseline at `baseline`.
+  #[cfg(feature = "svg")]
   pub(crate) fn new(font: DecorationFont, baseline: f32) -> Self {
     Self { font, baseline }
   }

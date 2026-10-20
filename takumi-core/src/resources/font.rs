@@ -24,12 +24,13 @@ use skrifa::{
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(feature = "svg")]
+use crate::fonts::font_baseline::FontBaseline;
 use crate::{
   fonts::{
     css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
-    font_baseline::FontBaseline, font_custom_platform_data::FontCustomPlatformData,
-    font_description::FontSelectionDescription, font_face::FontFaceDescriptors,
-    font_height::FontHeight,
+    font_custom_platform_data::FontCustomPlatformData, font_description::FontSelectionDescription,
+    font_face::FontFaceDescriptors, font_height::FontHeight,
   },
   layout_unit::LayoutUnit,
   resources::{
@@ -655,12 +656,14 @@ impl PrimaryFontMetrics {
   }
 
   /// Blink's `FontMetrics::FloatHeight`.
+  #[cfg(feature = "svg")]
   pub(crate) fn float_height(self) -> f32 {
     self.ascent + self.descent
   }
 
   /// Blink's `FontMetrics::XHeight`: the font's x-height, or 56% of the ascent, as Blink's
   /// `SimpleFontData::PlatformInit` guesses for a font without one.
+  #[cfg(feature = "svg")]
   pub(crate) fn float_x_height(self) -> f32 {
     self
       .x_height
@@ -669,6 +672,7 @@ impl PrimaryFontMetrics {
   }
 
   /// Blink's `FontMetrics::FloatAscent`: how far `baseline` sits below the top of the text.
+  #[cfg(feature = "svg")]
   pub(crate) fn float_ascent(self, baseline: FontBaseline) -> f32 {
     match baseline {
       FontBaseline::Alphabetic => self.ascent,
