@@ -172,4 +172,14 @@ impl<'c> BoxBackground<'c> {
       ),
     }
   }
+
+  /// The snapped border box, relative to the border box.
+  pub fn border_box(&self) -> Rect<f32> {
+    Rect {
+      left: self.offset.x,
+      top: self.offset.y,
+      right: self.offset.x + self.size.width,
+      bottom: self.offset.y + self.size.height,
+    }
+  }
 }
