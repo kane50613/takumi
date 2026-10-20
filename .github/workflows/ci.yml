@@ -24,7 +24,8 @@ env:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A cancelled master run saves no Rust cache, the one cache pull requests restore, and can stop publish halfway.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 # Jobs are grouped by package
 jobs:
