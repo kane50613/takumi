@@ -1,9 +1,9 @@
-//! Image node → SVG `<image>` emission.
+//! Image node and `background-image: url(...)` → SVG emission.
 //!
 //! Raster sources are embedded as `data:` URLs (original encoded bytes when
 //! available, otherwise re-encoded PNG). SVG sources are written as their vector ops, or embed
-//! their original markup as `data:image/svg+xml` where an op needs a raster. Both are drawn where
-//! takumi-core's replaced-content placement puts them.
+//! their original markup as `data:image/svg+xml` where an op needs a raster. An image node draws
+//! where takumi-core's replaced-content placement puts it.
 
 use std::io;
 
@@ -19,14 +19,6 @@ use takumi_core::{
 use crate::{Frame, SvgDocument, render::DocumentDevice, svg_image::is_vector};
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
-
-/// Resolves a `background-image: url(...)` reference to a `data:` URL, or `None`
-/// if it cannot be resolved (usually no resource map was supplied).
-pub(crate) fn data_url_for_url(url: &str, context: &RenderContext) -> Option<String> {
-  resolve_image(url, context)
-    .ok()
-    .and_then(|s| loaded_data_url(&s, context))
-}
 
 /// Emits an image node's content into the content box of the box `painter` paints at `frame`,
 /// clipped to the content box's curve or edge where it has to be.
@@ -78,10 +70,7 @@ pub(crate) fn emit_image(
     if let Some(clip) = replaced.clip {
       device.push_clip(&clip.into(), frame.translation());
     }
-    device.write(|doc| match &drawing {
-      Drawing::Ops { ops, canvas } => doc.svg_image(ops, *canvas, rect),
-      Drawing::Href(href) => doc.image(rect, href, Some(aspect)),
-    });
+    device.write(|doc| doc.draw(&drawing, rect, aspect));
     if replaced.clip.is_some() {
       device.pop_clip();
     }
@@ -93,12 +82,31 @@ fn intrinsic_size(source: &ImageSource, context: &RenderContext) -> Option<(f32,
   (width > 0.0 && height > 0.0).then_some((width, height))
 }
 
-/// What an image node draws.
-enum Drawing {
+/// What an image draws as in SVG output.
+pub(crate) enum Drawing {
   /// An SVG image's vector ops, drawn on `canvas`.
   Ops { ops: Vec<SvgOp>, canvas: Frame },
   /// A `data:` URL for an `<image>`.
   Href(String),
+}
+
+impl Drawing {
+  /// What a `background-image: url(...)` draws in a `tile`, or `None` if it cannot be resolved
+  /// (usually no resource map was supplied) or, as in raster output, drawn at that size.
+  pub(crate) fn of_url(url: &str, tile: Frame, context: &RenderContext) -> Option<Self> {
+    let source = resolve_image(url, context).ok()?;
+
+    if !source.is_drawable_at(tile.w.round() as u32, tile.h.round() as u32) {
+      return None;
+    }
+
+    let vector = match &source {
+      ImageSource::Svg(svg) => vector_ops(svg, context),
+      _ => None,
+    };
+
+    vector.or_else(|| loaded_data_url(&source, context).map(Self::Href))
+  }
 }
 
 /// `svg`'s ops, when SVG elements can express every op.
@@ -114,6 +122,14 @@ fn vector_ops(svg: &SvgSource, context: &RenderContext) -> Option<Drawing> {
 }
 
 impl SvgDocument {
+  /// Draws `drawing` stretched over `rect`, an `<image>` keeping `aspect`.
+  pub(crate) fn draw(&mut self, drawing: &Drawing, rect: Frame, aspect: &str) -> io::Result<()> {
+    match drawing {
+      Drawing::Ops { ops, canvas } => self.svg_image(ops, *canvas, rect),
+      Drawing::Href(href) => self.image(rect, href, Some(aspect)),
+    }
+  }
+
   /// Writes an SVG image's `ops`, drawn on `canvas`, stretched over `rect`.
   fn svg_image(&mut self, ops: &[SvgOp], canvas: Frame, rect: Frame) -> io::Result<()> {
     let clip = self.clip_path(&canvas.path_data(), FillRule::NonZero, None)?;
