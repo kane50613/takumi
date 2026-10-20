@@ -2,7 +2,10 @@
   <rect x="0" y="0" width="480" height="196" fill="#fff"/>
   <rect x="12" y="12" width="456" height="31" fill="#e2e8f0"/>
   <rect x="12" y="51" width="456" height="43" fill="#e2e8f0"/>
+  <path d="M12 51h73v43h-73v-43Zm2 2h69v39h-69v-39Z" fill="#2563eb" fill-rule="evenodd"/>
+  <path d="M85 51h73v43h-73v-43Zm2 2h69v39h-69v-39Z" fill="#2563eb" fill-rule="evenodd"/>
   <rect x="12" y="102" width="456" height="74" fill="#e2e8f0"/>
+  <path d="M12 102h71v43h-71v-43Zm2 2h67v39h-67v-39Z" fill="#2563eb" fill-rule="evenodd"/>
   <rect x="0" y="196" width="480" height="31" fill="#e2e8f0"/>
   <g fill="#000">
     <use href="#g0" x="12" y="36"/>
@@ -28,19 +31,16 @@
     <use href="#g11" x="236.04" y="36"/>
     <use href="#g12" x="249.19" y="36"/>
   </g>
-  <path d="M12 51h73v43h-73v-43Zm2 2h69v39h-69v-39Z" fill="#2563eb" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g13" x="26" y="81"/>
     <use href="#g5" x="43.74" y="81"/>
     <use href="#g1" x="57.39" y="81"/>
   </g>
-  <path d="M85 51h73v43h-73v-43Zm2 2h69v39h-69v-39Z" fill="#2563eb" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g0" x="98.86" y="81"/>
     <use href="#g12" x="110.91" y="81"/>
     <use href="#g11" x="129.94" y="81"/>
   </g>
-  <path d="M12 102h71v43h-71v-43Zm2 2h67v39h-67v-39Z" fill="#2563eb" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g14" x="26" y="132"/>
     <use href="#g1" x="42.68" y="132"/>

@@ -20,6 +20,8 @@ pub enum ChunkPart {
   Outline,
   /// The floats inside its inline content.
   Floats,
+  /// A table's collapsed borders.
+  CollapsedBorders,
 }
 
 /// Part of one box, painted under one property state.
@@ -60,7 +62,9 @@ impl<'s> PaintChunk<'s> {
   /// The clip and effect the chunk paints under.
   pub fn state(&self) -> PropertyState {
     match self.part {
-      ChunkPart::Content | ChunkPart::Floats => self.node.properties.contents,
+      ChunkPart::Content | ChunkPart::Floats | ChunkPart::CollapsedBorders => {
+        self.node.properties.contents
+      }
       ChunkPart::Decorations | ChunkPart::Outline => self.node.properties.border_box,
     }
   }
@@ -103,6 +107,9 @@ fn push_context_chunks<'s>(
             }
             PaintItemKind::Context(child) => push_context_chunks(contexts, *child, chunks),
             PaintItemKind::Floats(node) => chunks.push(chunk(node, ChunkPart::Floats)),
+            PaintItemKind::CollapsedBorders(node) => {
+              chunks.push(chunk(node, ChunkPart::CollapsedBorders));
+            }
           }
         }
       }

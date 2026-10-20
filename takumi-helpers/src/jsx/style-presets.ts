@@ -323,4 +323,10 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     display: "table-caption",
     textAlign: "center",
   },
+  colgroup: {
+    display: "table-column-group",
+  },
+  col: {
+    display: "table-column",
+  },
 };

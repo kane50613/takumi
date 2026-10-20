@@ -1555,6 +1555,7 @@ define_style! {
       visibility: Visibility where inherit = true,
       caption_side: CaptionSide where inherit = true,
       border_collapse: BorderCollapse where inherit = true,
+      empty_cells: EmptyCells where inherit = true,
       border_spacing: BorderSpacing where inherit = true,
       list_style_position: ListStylePosition where inherit = true,
     }

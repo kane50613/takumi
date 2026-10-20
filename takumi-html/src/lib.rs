@@ -182,6 +182,8 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
     "display:table-cell;padding:1px;vertical-align:inherit;font-weight:bold;text-align:center",
   ),
   ("caption", "display:table-caption;text-align:center"),
+  ("colgroup", "display:table-column-group"),
+  ("col", "display:table-column"),
 ];
 
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {

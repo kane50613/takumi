@@ -3,15 +3,15 @@ use takumi_core::{
   layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
-  painter::TextClip,
+  painter::{TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene, SceneBounds},
 };
 use tiny_skia::PixmapMut;
 
 use crate::{
-  BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error, NodeMasks,
-  PlacedMask, RenderContext, Result, apply_backdrop_filter, apply_filters_to_pixmap,
-  draw_box_shell, draw_debug_border,
+  BorderProperties, Canvas, CanvasDevice, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error,
+  NodeMasks, PlacedMask, RenderContext, Result, apply_backdrop_filter, apply_filters_to_pixmap,
+  draw_debug_border, draw_table_box_shell,
   inline_drawing::draw_own_content,
   layout::tree::{LayoutResults, RenderNode},
   style::{Affine, BlendMode, Filter, SizingContext, expand_filter_bounds},
@@ -101,10 +101,26 @@ impl ScenePainter<'_, '_> {
     match chunk.part {
       ChunkPart::Decorations if node.paints_own_box() => {
         let text_clip = TextClip::of(root, self.results, chunk.node)?;
+        let table = TableDecorations::of(root, self.results, &chunk.node.path, chunk.node.node_id)?;
 
-        draw_box_shell(&node.context, canvas, layout, text_clip.as_ref())
+        draw_table_box_shell(&node.context, canvas, layout, text_clip.as_ref(), table)
       }
-      ChunkPart::Decorations => Ok(()),
+      ChunkPart::CollapsedBorders if node.paints_collapsed_borders() => {
+        let mut result = Ok(());
+
+        CanvasDevice::paint(canvas, &node.context, |device| {
+          result = paint_collapsed_borders(
+            self.results,
+            chunk.node.node_id,
+            chunk.node.paint_offset,
+            Affine::IDENTITY,
+            None,
+            device,
+          );
+        })?;
+        result
+      }
+      ChunkPart::Decorations | ChunkPart::CollapsedBorders => Ok(()),
       ChunkPart::Content => draw_node_content(node, canvas, layout, chunk.node.transform),
       ChunkPart::Floats => {
         draw_own_content(node, &node.context, canvas, layout, InlinePass::Floats)

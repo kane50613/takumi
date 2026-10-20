@@ -663,9 +663,9 @@ fn legacy_page_break_properties_split_the_page() {
 }
 
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
-/// wider one takes the intersection, and `hidden` clears the line. The last
-/// table pins the naive edge: a spanning cell resolves one winner for its
-/// whole side, so the 4px border under one column reaches both segments.
+/// wider one takes the intersection, and `hidden` clears the line. Each
+/// segment of a line resolves on its own, so the 4px border under one column
+/// stops where the column ends, above the cell spanning both.
 #[test]
 fn a_collapsing_table_paints_one_border_per_line() {
   run_pdf_fixture("collapsed-table", |fonts| {
@@ -810,18 +810,18 @@ fn content_beside_a_table_does_not_replay_with_its_header() {
   );
 }
 
-/// A header cell whose rowspan reaches into the body would replay body area
-/// with the band, so such a table does not repeat at all.
+/// A header cell's rowspan ends with its row group, as HTML's table model
+/// clips it, so the header still repeats.
 #[test]
-fn a_header_rowspan_into_the_body_suppresses_repetition() {
+fn a_header_rowspan_stays_in_its_row_group() {
   let fonts = fonts();
-  let table = |thead_style: &str| {
+  let table = |rowspan: &str| {
     let rows: String = (1..=30)
       .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
       .collect();
     let html = format!(
       r#"<table style="width: 100%; font-size: 12px; color: #141414">
-        <thead{thead_style}><tr><th rowspan="2">Name</th><th>Qty</th></tr></thead>
+        <thead><tr><th{rowspan}>Name</th><th>Qty</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>"#
     );
@@ -842,9 +842,9 @@ fn a_header_rowspan_into_the_body_suppresses_repetition() {
   };
 
   assert_eq!(
+    text_show_operators(&table(r#" rowspan="2""#)),
     text_show_operators(&table("")),
-    text_show_operators(&table(r#" style="display: table-row-group""#)),
-    "a cross-group rowspan header still repeated"
+    "a header rowspan reached into the body"
   );
 }
 

@@ -13,9 +13,11 @@ use takumi_core::{
     decoration::ClipBox,
     inline::{PositionedGlyph, PositionedInlineRun},
   },
+  paint_property::ClipNode,
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, PaintDevice, PendingOutline, ShadowShape, StripBackground, StrokeStyle, TextClip,
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, CellArea, CellBackground,
+    FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice, PendingOutline, ShadowShape,
+    StripBackground, StrokeStyle, TableDecorations, TextClip,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
   scene::SceneBounds,
@@ -30,21 +32,22 @@ use super::{
   collect_background_layers, draw_image, rasterize_layers,
 };
 use crate::{
-  BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, Placement, Result, Stroke, Style,
-  alpha_mask, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage, checked_area,
-  draw_glyph, intersect_alpha_masks,
+  BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, PlacedMask, Placement, Result,
+  Stroke, Style, alpha_mask, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage,
+  checked_area, draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
 };
 
 /// Paints a box's own decorations, bottom to top: outset shadows, background, through
-/// `text_clip` when it has one, inset shadows, and border.
+/// `text_clip` when it has one, inset shadows, and border when `paints_border`.
 pub(crate) fn draw_box_shell(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
   text_clip: Option<&TextClip>,
+  paints_border: bool,
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
 
@@ -55,7 +58,123 @@ pub(crate) fn draw_box_shell(
   CanvasDevice::paint(canvas, context, |device| {
     painter.paint_inset_box_shadows(Point::ZERO, device);
   })?;
-  draw_border(context, canvas, layout)
+  if paints_border {
+    draw_border(context, canvas, layout)?;
+  }
+  Ok(())
+}
+
+/// Paints a box's own decorations as its part in a table paints them.
+pub(crate) fn draw_table_box_shell(
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  layout: Layout,
+  text_clip: Option<&TextClip>,
+  table: TableDecorations,
+) -> Result<()> {
+  match table {
+    TableDecorations::None => draw_box_shell(context, canvas, layout, text_clip, true),
+    TableDecorations::Cell {
+      paints_border,
+      clip: None,
+    } => draw_box_shell(context, canvas, layout, text_clip, paints_border),
+    TableDecorations::Cell {
+      paints_border,
+      clip: Some(clip),
+    } => within_cell(canvas, context.transform, clip, |canvas| {
+      draw_box_shell(context, canvas, layout, text_clip, paints_border)
+    }),
+    TableDecorations::Table {
+      grid,
+      grid_offset,
+      paints_border,
+      columns,
+    } => {
+      let mut grid_context = context.clone();
+
+      grid_context.transform =
+        context.transform * Affine::translation(grid_offset.x, grid_offset.y);
+      draw_box_shell(&grid_context, canvas, grid, text_clip, paints_border)?;
+
+      for column in columns {
+        let mut column_context = column.context;
+
+        column_context.paint_offset = context.paint_offset;
+        for background in column.cells {
+          draw_cell_background(
+            &column_context,
+            canvas,
+            context.transform,
+            layout,
+            background,
+          )?;
+        }
+      }
+      Ok(())
+    }
+    TableDecorations::Part { cells } => {
+      let painter = BoxPainter::new(context, layout);
+
+      CanvasDevice::paint(canvas, context, |device| {
+        painter.paint_normal_box_shadows(Point::ZERO, device);
+      })?;
+      for background in cells {
+        draw_cell_background(context, canvas, context.transform, layout, background)?;
+      }
+      CanvasDevice::paint(canvas, context, |device| {
+        painter.paint_inset_box_shadows(Point::ZERO, device);
+      })
+    }
+  }
+}
+
+/// Draws the background of `context`, a table part, over `background.area` inside its cell, both
+/// placed under `transform` relative to `layout`, the box painting it.
+fn draw_cell_background(
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  transform: Affine,
+  layout: Layout,
+  background: CellBackground,
+) -> Result<()> {
+  let at = background.area.offset;
+  let mut part_context = context.clone();
+
+  part_context.transform = transform * Affine::translation(at.x, at.y);
+  let part_layout = Layout {
+    location: layout.location + at,
+    size: background.area.size,
+    border: Rect::default(),
+    padding: Rect::default(),
+  };
+
+  within_cell(canvas, transform, background.cell, |canvas| {
+    draw_background(&part_context, canvas, part_layout, None)
+  })
+}
+
+/// Runs `paint` with the canvas masked to `cell`, placed under `transform`.
+fn within_cell(
+  canvas: &mut Canvas,
+  transform: Affine,
+  cell: CellArea,
+  paint: impl FnOnce(&mut Canvas) -> Result<()>,
+) -> Result<()> {
+  let clip = ClipNode {
+    parent: None,
+    transform: transform * Affine::translation(cell.offset.x, cell.offset.y),
+    shape: FillShape::Rect(cell.size),
+    owner: Vec::new(),
+  };
+  let Some(mask) = PlacedMask::of_clip(&clip, canvas.viewport()) else {
+    return Ok(());
+  };
+
+  canvas.push_mask(mask);
+  let result = paint(canvas);
+
+  canvas.pop_mask();
+  result
 }
 
 /// The canvas as a [`PaintDevice`]. An unclipped rounded rectangle composites

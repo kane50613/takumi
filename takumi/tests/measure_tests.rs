@@ -2301,6 +2301,15 @@ fn test_flow_root_wraps_inline_text_like_block() {
   );
 }
 
+/// The cells of each row in `table`'s first row group.
+fn table_rows(table: &MeasuredNode) -> Vec<&[MeasuredNode]> {
+  table.children[0]
+    .children
+    .iter()
+    .map(|row| row.children.as_slice())
+    .collect()
+}
+
 /// Blink shares a table's free width among its auto columns in proportion to
 /// their max-content widths, whether or not another column declares a width.
 #[test]
@@ -2314,7 +2323,8 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
   )
   .expect("parse");
   let out = measure(node, create_test_viewport());
-  let cells = &out.children[0].children;
+  let rows = table_rows(&out.children[0]);
+  let cells = rows[1];
   fn first_run(node: &MeasuredNode) -> Option<&MeasuredTextRun> {
     node
       .runs
@@ -2322,13 +2332,13 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
       .or_else(|| node.children.iter().find_map(first_run))
   }
   let max_content = |cell: &MeasuredNode| first_run(cell).expect("a run").width + 2.0;
-  let (name, description) = (max_content(&cells[3]), max_content(&cells[4]));
+  let (name, description) = (max_content(&cells[0]), max_content(&cells[1]));
   // 352px less the 48px column and four 2px spacings.
   let free = 296.0;
 
-  assert_within(cells[3].width, free * name / (name + description), 1.0);
+  assert_within(cells[0].width, free * name / (name + description), 1.0);
   assert_within(
-    cells[4].width,
+    cells[1].width,
     free * description / (name + description),
     1.0,
   );
@@ -2350,7 +2360,7 @@ fn test_table_keyword_cell_width_leaves_column_auto() {
     )
     .expect("parse");
 
-    measure(node, create_test_viewport()).children[0].children[3..]
+    table_rows(&measure(node, create_test_viewport()).children[0])[1]
       .iter()
       .map(|cell| cell.width)
       .collect::<Vec<_>>()
@@ -2380,7 +2390,7 @@ fn test_table_fixed_layout_keeps_tracks_with_keyword_cell_width() {
 
     (
       table.width,
-      table.children[2..]
+      table_rows(table)[1]
         .iter()
         .map(|cell| cell.width)
         .collect::<Vec<_>>(),
@@ -2584,19 +2594,19 @@ fn test_measure_table_cells_default_to_the_middle() {
   }
 
   let node = Node::from_html(
-    r#"<table style="border-spacing:0"><tr><td style="padding:0"><div style="height:60px; width:20px"></div></td><td style="padding:0; font-size:20px; line-height:20px">x</td></tr></table>"#,
+    r#"<table style="border-spacing:0"><tr><td style="padding:0"><div style="height:60px; width:20px"></div></td><td style="padding:0"><div style="font-size:20px; line-height:20px">x</div></td></tr></table>"#,
     FromHtmlOptions::default(),
   )
   .expect("parse");
   let out = measure(node, create_test_viewport());
-  let cell = cell_with(&out, "x").expect("the text cell");
-  let run = cell
+  let content = cell_with(&out, "x").expect("the text cell's content");
+  let run = content
     .runs
     .iter()
     .find(|run| run.text == "x")
     .expect("the run");
 
-  assert_within(cell.transform[5] + run.y + run.height / 2.0, 30.0, 1.0);
+  assert_within(content.transform[5] + run.y + run.height / 2.0, 30.0, 1.0);
 }
 
 /// The top of each text run under `node`, by its text, in the node's space.

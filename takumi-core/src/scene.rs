@@ -99,6 +99,9 @@ pub enum PaintItemKind {
   /// The floats inside a node's inline content, which paint in the floats phase apart from the
   /// rest of that content.
   Floats(NodePaint),
+  /// A table's collapsed borders, which paint once its cells' backgrounds have, as Blink paints
+  /// them in the descendant block backgrounds phase.
+  CollapsedBorders(NodePaint),
 }
 
 /// A paint entry plus its z-index and source order, which together order it uniquely.
@@ -121,6 +124,8 @@ impl PaintItem {
   pub(crate) fn part_in(&self, part: BoxPart) -> Option<BoxPart> {
     match (&self.kind, part) {
       (PaintItemKind::Node(_) | PaintItemKind::Floats(_), part) => Some(part),
+      (PaintItemKind::CollapsedBorders(_), BoxPart::Content) => None,
+      (PaintItemKind::CollapsedBorders(_), part) => Some(part),
       (PaintItemKind::Context(_), BoxPart::Whole) => Some(BoxPart::Whole),
       (PaintItemKind::Context(_), BoxPart::Decorations) => (!self.atomic).then_some(BoxPart::Whole),
       (PaintItemKind::Context(_), BoxPart::Content) => self.atomic.then_some(BoxPart::Whole),
@@ -363,6 +368,9 @@ impl SceneRequest<'_> {
     let mut containing_blocks = ContainingBlocks::default();
     let mut properties = PropertyTrees::default();
     let mut contents: HashMap<NodeId, ContainerContents> = HashMap::new();
+    // Each table with collapsed borders being visited: the context its boxes paint in, the
+    // visits left once its subtree is done, and its paint.
+    let mut collapsed_borders: Vec<(usize, usize, NodePaint)> = Vec::new();
     let mut visits = vec![StackingContextBuildVisit {
       path: Vec::new(),
       node_id: NodeId::ROOT,
@@ -378,12 +386,34 @@ impl SceneRequest<'_> {
       is_root: true,
     }];
 
-    while let Some(visit) = visits.pop() {
+    loop {
+      // A table's collapsed borders follow every box inside it, once the last has been visited.
+      while collapsed_borders
+        .last()
+        .is_some_and(|(_, remaining, _)| visits.len() <= *remaining)
+      {
+        let Some((context_id, _, borders)) = collapsed_borders.pop() else {
+          break;
+        };
+
+        contexts[context_id].push_item(
+          PaintBucket::InFlow,
+          PaintItemKind::CollapsedBorders(borders),
+          0,
+          source_order,
+          false,
+        );
+        source_order += 1;
+      }
+
+      let Some(visit) = visits.pop() else {
+        break;
+      };
       let Some(current) = root.node_at_path(&visit.path) else {
         return Err(Error::InvalidLayoutNode(visit.node_id.into()));
       };
       let layout = layout_results.layout(visit.node_id)?;
-      if current.context.style.is_invisible() {
+      if current.context.style.is_invisible() || layout_results.is_hidden_for_paint(visit.node_id) {
         continue;
       }
 
@@ -437,6 +467,10 @@ impl SceneRequest<'_> {
         properties: node_properties,
       };
       let inline_floats = (current.should_create_inline_layout() && current.has_inline_floats())
+        .then(|| node_paint.clone());
+      let table_borders = layout_results
+        .table_fragment(visit.node_id)
+        .is_some_and(|fragment| fragment.borders.is_some())
         .then(|| node_paint.clone());
 
       let is_flex_or_grid_item = visit
@@ -511,6 +545,10 @@ impl SceneRequest<'_> {
         );
       }
 
+      if let Some(borders) = table_borders {
+        collapsed_borders.push((context_id, visits.len(), borders));
+      }
+
       let layout_children = layout_results.box_children(visit.node_id)?;
       let child_container_size = Size {
         width: Some(layout.content_box_width()),
@@ -575,9 +613,9 @@ impl SceneRequest<'_> {
       for bucket in contexts[context_id].buckets.in_paint_order() {
         for item in bucket {
           let item_bounds = match &item.kind {
-            PaintItemKind::Node(node_paint) | PaintItemKind::Floats(node_paint) => {
-              node_paint.paint_bounds
-            }
+            PaintItemKind::Node(node_paint)
+            | PaintItemKind::Floats(node_paint)
+            | PaintItemKind::CollapsedBorders(node_paint) => node_paint.paint_bounds,
             PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
           };
           match item_bounds {
@@ -662,7 +700,9 @@ impl Scene {
     for context in &contexts {
       let items = context.buckets.in_paint_order().into_iter().flatten();
       let paints = items.filter_map(|item| match &item.kind {
-        PaintItemKind::Node(paint) | PaintItemKind::Floats(paint) => Some(paint),
+        PaintItemKind::Node(paint)
+        | PaintItemKind::Floats(paint)
+        | PaintItemKind::CollapsedBorders(paint) => Some(paint),
         PaintItemKind::Context(_) => None,
       });
 
