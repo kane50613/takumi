@@ -11,8 +11,6 @@
 //! tab-size) is written as `&#9;`/`&#10;`/`&#32;` entities, which the
 //! formatter cannot re-wrap.
 
-mod test_utils;
-
 use std::{
   env, fs,
   path::{Path, PathBuf},
@@ -22,7 +20,8 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use takumi::prelude::{
   FromHtml, FromHtmlOptions, Node, RenderOptions, StylePresets, StyleSheet, Viewport,
 };
-use test_utils::{CONTEXT, TEST_IMAGES, matches_fragments, write_goldens};
+
+use crate::test_utils::{CONTEXT, TEST_IMAGES, matches_fragments, write_goldens};
 
 #[test]
 fn html_fixtures() {

@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::{assert_matches, fs, sync::Arc};
 
 use resvg::{
@@ -7,7 +5,8 @@ use resvg::{
   usvg::{Options, Tree},
 };
 use takumi::{prelude::*, render, render_svg};
-use test_utils::repo_base_path;
+
+use crate::test_utils::repo_base_path;
 
 fn read_font(path: &str) -> Vec<u8> {
   fs::read(repo_base_path("assets/fonts").join(path)).unwrap()

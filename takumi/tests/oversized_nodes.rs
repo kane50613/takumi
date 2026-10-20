@@ -1,7 +1,6 @@
-mod test_utils;
-
 use takumi::{prelude::*, render};
-use test_utils::CONTEXT;
+
+use crate::test_utils::CONTEXT;
 
 /// Renders into a 200x200 viewport, so the declared style is the only thing
 /// pushing buffer sizes past `u32`.

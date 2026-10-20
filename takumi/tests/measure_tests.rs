@@ -1,9 +1,8 @@
-mod test_utils;
-
 use std::fs;
 
 use takumi::prelude::{Length::*, *};
-use test_utils::{
+
+use crate::test_utils::{
   CONTEXT, TEST_IMAGES, create_test_viewport, measure_with_css, repo_base_path, run_texts,
 };
 

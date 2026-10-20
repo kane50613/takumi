@@ -2,8 +2,6 @@
 //! assert on the rendered pixels or measured layout. Everything else lives in
 //! `tests/fixtures-html/` and runs through the `html_fixtures` test.
 
-mod test_utils;
-
 #[path = "fixtures/animated_image_sources.rs"]
 pub mod animated_image_sources;
 #[path = "fixtures/animation.rs"]

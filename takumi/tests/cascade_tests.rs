@@ -1,9 +1,8 @@
-mod test_utils;
-
 use std::str::FromStr;
 
 use takumi::prelude::*;
-use test_utils::{block, measure_with_css};
+
+use crate::test_utils::{block, measure_with_css};
 
 /// A block carrying the `style` object a JS caller would send, so the value
 /// takes the deserializing path rather than the typed builder.
