@@ -152,7 +152,7 @@ impl HyphenResult {
       }
     };
     let shape_result =
-      HarfBuzzShaper::new(text.clone()).shape_all(&font, context.style.inherited_data.direction);
+      HarfBuzzShaper::new(&text).shape_all(&font, context.style.inherited_data.direction);
 
     Self {
       text,

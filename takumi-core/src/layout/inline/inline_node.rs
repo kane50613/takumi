@@ -329,7 +329,7 @@ impl<'c> InlineNode<'c> {
   fn shape_text(self, data: &mut InlineNodeData<'c>) {
     let text = &data.text_content;
     let items = &mut data.items;
-    let shaper = HarfBuzzShaper::new(text.clone());
+    let shaper = HarfBuzzShaper::new(text);
     let mut spacing = ShapeResultSpacing::new(
       text,
       self

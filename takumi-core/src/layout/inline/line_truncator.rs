@@ -143,7 +143,7 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
       .filter(|bidi| !bidi.is_unidirectional() || bidi.base_direction() == TextDirection::Rtl);
 
     let Some(bidi) = bidi else {
-      let shape_result = self.shape(ellipsis_text.clone(), self.line_direction);
+      let shape_result = self.shape(&ellipsis_text, self.line_direction);
 
       self.ellipsis_width = self.scaled(shape_result.snapped_width());
       self.ellipsis_shape_results.push(EllipsisShapeResult {
@@ -157,7 +157,7 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
 
     for run in bidi.get_visual_runs() {
       let run_text = ellipsis_text[run.start..run.end].to_owned();
-      let shape_result = self.shape(run_text.clone(), direction_from_level(run.level));
+      let shape_result = self.shape(&run_text, direction_from_level(run.level));
 
       self.ellipsis_width += self.scaled(shape_result.snapped_width());
       self.ellipsis_shape_results.push(EllipsisShapeResult {
@@ -177,7 +177,7 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
     LayoutUnit::from_float(width.to_float() * self.text_fit_scale)
   }
 
-  fn shape(&self, text: String, direction: TextDirection) -> Rc<ShapeResultView> {
+  fn shape(&self, text: &str, direction: TextDirection) -> Rc<ShapeResultView> {
     let shape_result = HarfBuzzShaper::new(text).shape_all(&self.font, direction);
 
     Rc::new(ShapeResultView::create_from_result(&Rc::new(shape_result)))

@@ -370,13 +370,13 @@ enum ClusterResult {
   Unknown,
 }
 
-/// Blink's `HarfBuzzShaper`.
-pub(crate) struct HarfBuzzShaper {
-  text: String,
+/// Blink's `HarfBuzzShaper`, over text its caller owns.
+pub(crate) struct HarfBuzzShaper<'t> {
+  text: &'t str,
 }
 
-impl HarfBuzzShaper {
-  pub(crate) fn new(text: String) -> Self {
+impl<'t> HarfBuzzShaper<'t> {
+  pub(crate) fn new(text: &'t str) -> Self {
     Self { text }
   }
 
@@ -395,7 +395,7 @@ impl HarfBuzzShaper {
     let mut range_data = RangeContext::new(font, direction, start, end);
 
     // Blink keeps text that fits Latin-1 in 8 bits, and shapes it as one Latin segment.
-    if is_8bit(&self.text) {
+    if is_8bit(self.text) {
       let segment_range = RunSegmenterRange {
         start,
         end,
@@ -405,7 +405,7 @@ impl HarfBuzzShaper {
 
       self.shape_segment(&mut range_data, &segment_range, &mut result);
     } else {
-      let mut run_segmenter = RunSegmenter::new(&self.text);
+      let mut run_segmenter = RunSegmenter::new(self.text);
 
       while let Some(segment_range) = run_segmenter.consume() {
         if start < segment_range.end && end > segment_range.start {
@@ -591,7 +591,7 @@ impl HarfBuzzShaper {
       case_map_intend.fill_buffer(
         &mut buffer,
         language.map(Language::as_str),
-        &self.text,
+        self.text,
         shape_start,
         shape_end,
       );
@@ -940,7 +940,7 @@ mod tests {
 
   /// Each run's characters, font size, and glyphs.
   fn caps_runs(font: &Font, text: &str) -> Vec<(u32, u32, f32, Vec<u16>)> {
-    HarfBuzzShaper::new(text.into())
+    HarfBuzzShaper::new(text)
       .shape_all(font, TextDirection::Ltr)
       .runs
       .iter()
@@ -972,7 +972,7 @@ mod tests {
 
   /// Whether each run shaping `text[..end]` takes a color font.
   fn prefix_run_colors(font: &Font, text: &str, end: usize) -> Vec<bool> {
-    HarfBuzzShaper::new(text.into())
+    HarfBuzzShaper::new(text)
       .shape(font, TextDirection::Ltr, 0, end)
       .runs
       .iter()
@@ -1134,7 +1134,7 @@ mod tests {
     let (_fonts, font) = geist();
     let string = "Hello World!";
     let direction = TextDirection::Ltr;
-    let shaper = HarfBuzzShaper::new(string.into());
+    let shaper = HarfBuzzShaper::new(string);
     let combined = shaper.shape_all(&font, direction);
     let first = shaper.shape(&font, direction, 0, 6);
     let second = shaper.shape(&font, direction, 6, 11);
@@ -1144,9 +1144,9 @@ mod tests {
     assert_eq!((runs(&second)[0].0, runs(&second)[0].1), (6, 5));
     assert_eq!((runs(&third)[0].0, runs(&third)[0].1), (11, 1));
 
-    let first_reference = HarfBuzzShaper::new(string[0..6].into()).shape_all(&font, direction);
-    let second_reference = HarfBuzzShaper::new(string[6..11].into()).shape_all(&font, direction);
-    let third_reference = HarfBuzzShaper::new(string[11..12].into()).shape_all(&font, direction);
+    let first_reference = HarfBuzzShaper::new(&string[0..6]).shape_all(&font, direction);
+    let second_reference = HarfBuzzShaper::new(&string[6..11]).shape_all(&font, direction);
+    let third_reference = HarfBuzzShaper::new(&string[11..12]).shape_all(&font, direction);
 
     assert!((first_reference.width() - first.width()).abs() <= 1.0);
     assert!((second_reference.width() - second.width()).abs() <= 1.0);
@@ -1162,7 +1162,7 @@ mod tests {
   fn no_font() {
     let fonts = Fonts::default();
     let font = font(&fonts, "Geist");
-    let result = HarfBuzzShaper::new("a".into()).shape_all(&font, TextDirection::Ltr);
+    let result = HarfBuzzShaper::new("a").shape_all(&font, TextDirection::Ltr);
 
     assert!(result.runs.is_empty());
   }
@@ -1172,7 +1172,7 @@ mod tests {
     let (_fonts, font) = geist();
 
     for string in ["\u{FFF0}", "\u{FFF0}Hello", "\u{AD}"] {
-      let result = HarfBuzzShaper::new(string.into()).shape_all(&font, TextDirection::Ltr);
+      let result = HarfBuzzShaper::new(string).shape_all(&font, TextDirection::Ltr);
 
       assert_eq!(result.start_index, 0);
       assert_eq!(result.end_index() as usize, string.len());
@@ -1184,7 +1184,7 @@ mod tests {
     let (_fonts, font) = geist();
     let length = HarfBuzzRunGlyphData::MAX_CHARACTERS + 1;
     let string = "X".repeat(length as usize);
-    let shaper = HarfBuzzShaper::new(string);
+    let shaper = HarfBuzzShaper::new(&string);
     let latin = icu_script_to_hb_script(Script::Latin);
 
     let ltr = shaper.shape_all(&font, TextDirection::Ltr);
@@ -1218,7 +1218,8 @@ mod tests {
   fn max_glyphs_cluster_latin() {
     let (_fonts, font) = geist();
     let max = HarfBuzzRunGlyphData::MAX_CHARACTERS;
-    let shaper = HarfBuzzShaper::new(latin_clusters(max as usize + 1));
+    let text = latin_clusters(max as usize + 1);
+    let shaper = HarfBuzzShaper::new(&text);
     let latin = icu_script_to_hb_script(Script::Latin);
 
     let ltr = shaper.shape_all(&font, TextDirection::Ltr);
@@ -1238,7 +1239,8 @@ mod tests {
   fn max_glyphs_cluster_latin2() {
     let (_fonts, font) = geist();
     let max = HarfBuzzRunGlyphData::MAX_CHARACTERS;
-    let shaper = HarfBuzzShaper::new(latin_clusters(max as usize + 2));
+    let text = latin_clusters(max as usize + 2);
+    let shaper = HarfBuzzShaper::new(&text);
     let latin = icu_script_to_hb_script(Script::Latin);
 
     let ltr = shaper.shape_all(&font, TextDirection::Ltr);
@@ -1266,7 +1268,7 @@ mod tests {
       "{cluster}{}{cluster}",
       "\u{930}".repeat(length as usize - 6)
     );
-    let shaper = HarfBuzzShaper::new(string);
+    let shaper = HarfBuzzShaper::new(&string);
     let devanagari = icu_script_to_hb_script(Script::Devanagari);
 
     let ltr = shaper.shape_all(&font, TextDirection::Ltr);
@@ -1299,7 +1301,7 @@ mod tests {
     let string = "\u{200B}\u{200B}\u{627}\u{631}\u{62F}\u{648}\u{200B}\u{200B}";
 
     for direction in [TextDirection::Ltr, TextDirection::Rtl] {
-      let result = HarfBuzzShaper::new(string.into()).shape_all(&font, direction);
+      let result = HarfBuzzShaper::new(string).shape_all(&font, direction);
 
       assert_eq!(result.start_index, 0);
       assert_eq!(result.end_index() as usize, string.len());
@@ -1313,8 +1315,7 @@ mod tests {
     register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
 
     let font = font(&fonts, "Noto Sans TC");
-    let result =
-      HarfBuzzShaper::new("\u{3001}\u{3000}".into()).shape_all(&font, TextDirection::Ltr);
+    let result = HarfBuzzShaper::new("\u{3001}\u{3000}").shape_all(&font, TextDirection::Ltr);
     let mut fonts = run_fonts(&result);
 
     fonts.dedup();
@@ -1330,8 +1331,8 @@ mod tests {
     register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
 
     let font = font(&fonts, "Geist, 'Noto Sans TC'");
-    let geist = run_fonts(&HarfBuzzShaper::new("a".into()).shape_all(&font, TextDirection::Ltr))[0];
-    let result = HarfBuzzShaper::new("ab\u{203B}cd".into()).shape_all(&font, TextDirection::Ltr);
+    let geist = run_fonts(&HarfBuzzShaper::new("a").shape_all(&font, TextDirection::Ltr))[0];
+    let result = HarfBuzzShaper::new("ab\u{203B}cd").shape_all(&font, TextDirection::Ltr);
     let ranges: Vec<(u32, u32)> = runs(&result)
       .into_iter()
       .map(|(start, characters, ..)| (start, characters))
