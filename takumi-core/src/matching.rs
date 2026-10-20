@@ -19,7 +19,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    MediaQueryList, StyleDeclarationBlock,
+    LonghandId, MediaQueryList, StyleDeclarationBlock,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -782,7 +782,17 @@ fn take_pseudo_bucket<'a>(
   rules: &mut Vec<MatchedRule<'a>>,
   layer_count: usize,
 ) -> Option<MatchedDeclarationsView<'a>> {
-  if rules.is_empty() {
+  // `content` does not inherit and computes to `normal` when undeclared, which generates no box.
+  let sets_content = rules.iter().any(|rule| {
+    rule.declarations.iter().any(|declaration| {
+      declaration
+        .affected_longhands()
+        .contains(&LonghandId::Content)
+    })
+  });
+
+  if !sets_content {
+    rules.clear();
     return None;
   }
   let mut view = MatchedDeclarationsView::default();

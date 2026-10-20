@@ -46,6 +46,24 @@ fn before_and_after_around_existing_text() {
 }
 
 #[test]
+fn content_from_a_variable_or_a_split_rule_creates_a_pseudo_box() {
+  let root = Node::container([Node::text("body".to_string())])
+    .with_class_name("greet")
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+  let from_variable = measure_with_css(
+    root.clone(),
+    r#".greet { --label: "hello"; } .greet::before { content: var(--label); }"#,
+  );
+  let from_split_rule = measure_with_css(
+    root,
+    r#"*, ::before { color: red; } .greet::before { content: "hello"; }"#,
+  );
+
+  assert!(run_texts(&from_variable).concat().starts_with("hello"));
+  assert!(run_texts(&from_split_rule).concat().starts_with("hello"));
+}
+
+#[test]
 fn content_normal_or_none_creates_no_pseudo_box() {
   let root = block("greet");
   let result_none = measure_with_css(root.clone(), r#".greet::before { content: none; }"#);
