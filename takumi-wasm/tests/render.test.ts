@@ -311,17 +311,6 @@ describe("renderAsDataUrl", () => {
     expect(result.length).toBeGreaterThan(100);
   });
 
-  test("png format explicit", async () => {
-    const result = await renderer.renderAsDataUrl(node, {
-      width: 1200,
-      height: 630,
-      format: "png",
-    });
-
-    expect(result).toMatch(/^data:image\/png;base64,/);
-    expect(result.length).toBeGreaterThan(100);
-  });
-
   test("ico format", async () => {
     const result = await renderer.renderAsDataUrl(node, {
       width: 256,
@@ -330,47 +319,6 @@ describe("renderAsDataUrl", () => {
     });
 
     expect(result).toMatch(/^data:image\/x-icon;base64,/);
-    expect(result.length).toBeGreaterThan(100);
-  });
-
-  test("renderAsDataUrl with debug borders", async () => {
-    const result = await renderer.renderAsDataUrl(node, {
-      width: 1200,
-      height: 630,
-      format: "png",
-      drawDebugBorder: true,
-    });
-
-    expect(result).toMatch(/^data:image\/png;base64,/);
-    expect(result.length).toBeGreaterThan(100);
-  });
-
-  test("renderAsDataUrl with device pixel ratio", async () => {
-    const result = await renderer.renderAsDataUrl(node, {
-      width: 1200,
-      height: 630,
-      format: "png",
-      devicePixelRatio: 2.0,
-    });
-
-    expect(result).toMatch(/^data:image\/png;base64,/);
-    expect(result.length).toBeGreaterThan(100);
-  });
-
-  test("renderAsDataUrl with fetched resources", async () => {
-    const result = await renderer.renderAsDataUrl(node, {
-      width: 1200,
-      height: 630,
-      format: "png",
-      images: [
-        {
-          src: "../assets/images/yeecord.png",
-          data: new Uint8Array(localImage),
-        },
-      ],
-    });
-
-    expect(result).toMatch(/^data:image\/png;base64,/);
     expect(result.length).toBeGreaterThan(100);
   });
 

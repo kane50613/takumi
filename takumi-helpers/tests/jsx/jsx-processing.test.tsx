@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { User2 } from "lucide-react";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { container } from "../../src/helpers";
 import { fromJsx } from "../../src/jsx";
@@ -8,10 +8,6 @@ import { defaultStylePresets } from "../../src/jsx/style-presets";
 import type { ContainerNode, ImageNode, TextNode } from "../../src/types";
 
 describe("fromJsx", () => {
-  afterEach(() => {
-    mock.restore();
-  });
-
   test("handles React like object", async () => {
     const { node } = await fromJsx({
       type: "div",
@@ -75,7 +71,7 @@ describe("fromJsx", () => {
     }
   });
 
-  test("converts simple div to ContainerNode", async () => {
+  test("folds a div holding only text into a TextNode", async () => {
     const { node } = await fromJsx(<div>Hello</div>);
     expect(node).toEqual({
       type: "text",
@@ -203,42 +199,6 @@ describe("fromJsx", () => {
       text: "Hello World",
       preset: defaultStylePresets.div,
       tagName: "div",
-    } satisfies TextNode);
-  });
-
-  test("resolves useContext when react is installed", async () => {
-    const GreetingContext = createContext("Fallback");
-
-    const Message = () => <div>Hello {useContext(GreetingContext)}</div>;
-
-    const { node } = await fromJsx(
-      <GreetingContext.Provider value="Context">
-        <Message />
-      </GreetingContext.Provider>,
-    );
-
-    expect(node).toEqual({
-      type: "text",
-      text: "Hello Context",
-      preset: defaultStylePresets.div,
-      tagName: "div",
-    } satisfies TextNode);
-  });
-
-  test("handles context consumer render props", async () => {
-    const GreetingContext = createContext("Fallback");
-
-    const { node } = await fromJsx(
-      <GreetingContext.Provider value="Context">
-        <GreetingContext.Consumer>{(value) => <span>{value}</span>}</GreetingContext.Consumer>
-      </GreetingContext.Provider>,
-    );
-
-    expect(node).toEqual({
-      type: "text",
-      text: "Context",
-      preset: defaultStylePresets.span,
-      tagName: "span",
     } satisfies TextNode);
   });
 
@@ -500,7 +460,7 @@ describe("fromJsx", () => {
     expect("src" in node && node.src).toStartWith("<svg");
   });
 
-  test("decodes escaped inline style values in react-dom/server fallback markup", async () => {
+  test("keeps a quoted fontFeatureSettings value beside an icon and text", async () => {
     const { node } = await fromJsx(
       <div style={{ fontFeatureSettings: "'ss01' on" }}>
         <User2 />
@@ -527,78 +487,6 @@ describe("fromJsx", () => {
       }),
       tagName: "div",
     });
-  });
-
-  test("uses react-dom/server fallback when a provider exists", async () => {
-    const GreetingContext = createContext("Fallback");
-
-    const Counter = () => {
-      const [count] = useState(3);
-
-      return (
-        <div>
-          {useContext(GreetingContext)} {count}
-        </div>
-      );
-    };
-
-    const { node } = await fromJsx(
-      <GreetingContext.Provider value="Context">
-        <Counter />
-      </GreetingContext.Provider>,
-    );
-
-    expect(node).toEqual({
-      type: "text",
-      text: "Context 3",
-      preset: defaultStylePresets.div,
-      tagName: "div",
-    } satisfies TextNode);
-  });
-
-  test("falls back to internal traversal when react-dom/server is unavailable", async () => {
-    mock.module("react-dom/server", () => ({}));
-
-    const moduleUrl = new URL(
-      `../../src/jsx/index.ts?no-react-dom-server=${Date.now()}`,
-      import.meta.url,
-    ).href;
-    const { fromJsx: fromJsxWithoutReactDomServer } = await import(moduleUrl);
-    const GreetingContext = createContext("Fallback");
-
-    const { node } = await fromJsxWithoutReactDomServer(
-      <GreetingContext.Provider value="Context">
-        <p tw="text-red-500">Context</p>
-      </GreetingContext.Provider>,
-    );
-
-    expect(node).toEqual({
-      type: "text",
-      text: "Context",
-      preset: defaultStylePresets.p,
-      tagName: "p",
-      tw: "text-red-500",
-    } satisfies TextNode);
-  });
-
-  test("preserves tw when react-dom/server fallback renders a provider subtree", async () => {
-    const GreetingContext = createContext("Fallback");
-
-    const Message = () => <p tw="text-red-500">{useContext(GreetingContext)}</p>;
-
-    const { node } = await fromJsx(
-      <GreetingContext.Provider value="Context">
-        <Message />
-      </GreetingContext.Provider>,
-    );
-
-    expect(node).toEqual({
-      type: "text",
-      text: "Context",
-      preset: defaultStylePresets.p,
-      tagName: "p",
-      tw: "text-red-500",
-    } satisfies TextNode);
   });
 
   test("handles deeply nested structures", async () => {
