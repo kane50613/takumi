@@ -519,6 +519,22 @@ mod tests {
     resources::font::Fonts,
   };
 
+  const SCHEHERAZADE: &str = "../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2";
+
+  /// Blink's `PreviousSafeToBreak` text: Hebrew with points, between Latin punctuation.
+  const HEBREW: &str = concat!(
+    "(\u{5D1}) \u{5D4}\u{5D1}\u{5DC} \u{5D0}\u{5DE}\u{5E8} \u{5E2}\u{5DC} \u{5D3}",
+    "\u{5D1}\u{5E8}\u{5D9} \u{5D4}\u{5D1}\u{5DC}\u{5D9} \u{5D4}\u{5E2}\u{5D5}",
+    "\u{5DC}\u{5DD}, \u{5D5}\u{5E1}\u{5DE}\u{5DA} \u{5D4}\u{5B2}\u{5D1}\u{5B5}",
+    "\u{5DC} \u{5D0}\u{5DC} \u{5D4}\u{5D1}\u{5DC}\u{5D9}\u{5DD} \u{5D5}\u{5D0}",
+    "\u{5DD} \u{5DC}\u{5D0} \u{5D9}\u{5DE}\u{5E6}\u{5D0} \u{5DE}\u{5D4}\u{5E9}",
+    "\u{5DE}\u{5D5}\u{5EA} \u{5E9}\u{5D4}\u{5DD} \u{5E2}\u{5DC} \u{5DE}\u{5E9}",
+    "\u{5E7}\u{5DC} \u{5D0}\u{5E8}\u{5E5} \u{5E9}\u{5D9}\u{5E9}\u{5EA}\u{5E0}",
+    "\u{5D4} \u{5D7}\u{5D5}\u{5E5} \u{5DE}\u{5B5}\u{5D7}\u{5B2}\u{5D3}\u{5B7}",
+    "\u{5E8} \u{5DE}\u{5B4}\u{5E9}\u{5B0}\u{5C1}\u{5DB}\u{5B8}\u{5D1}\u{5B0}\u{5DA}",
+    "\u{5B8} (\u{5E9}\u{5DE}\u{5D5}\u{5EA} \u{5D6}\u{5F3}:\u{5DB}\u{5F4}\u{5D7})"
+  );
+
   /// Blink's `ShapeResultTestGlyphInfo`.
   type GlyphInfo = (u32, u16, f32);
 
@@ -726,6 +742,68 @@ mod tests {
     let view2 = ShapeResultView::create_from_result_range(&result, 9, 25);
 
     assert_eq!(view2.previous_safe_to_break_offset(24), 24);
+  }
+
+  /// Blink's `ArabicSingleView`, in UTF-8 bytes: each Arabic letter takes two.
+  #[test]
+  fn arabic_single_view() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, SCHEHERAZADE, "Scheherazade");
+
+    let font = font(&fonts, "Scheherazade");
+    let shape_rtl =
+      |text: &str| Rc::new(HarfBuzzShaper::new(text.into()).shape_all(&font, TextDirection::Rtl));
+    let result = shape_rtl("\u{639}\u{631}\u{628}\u{649} \u{646}\u{635}");
+    let all = glyphs(&ShapeResultView::create_from_result(&result));
+    let first_word = ShapeResultView::create(&[segment(&result, 0, 8)]);
+    let first_glyphs = glyphs(&first_word);
+    let reference = glyphs(&ShapeResultView::create_from_result(&shape_rtl(
+      "\u{639}\u{631}\u{628}\u{649}",
+    )));
+
+    assert_eq!(
+      (first_word.start_index(), first_word.num_characters()),
+      (0, 8)
+    );
+    assert_eq!((first_word.num_glyphs(), first_glyphs.len()), (4, 4));
+    assert_glyphs_match(&first_glyphs, &reference, 0);
+    assert_glyphs_match(&first_glyphs, &all, 3);
+
+    let last_word = ShapeResultView::create(&[segment(&result, 8, 13)]);
+
+    assert_eq!(
+      (last_word.start_index(), last_word.num_characters()),
+      (8, 5)
+    );
+    assert_eq!((last_word.num_glyphs(), glyphs(&last_word).len()), (3, 3));
+  }
+
+  /// Blink's `PreviousSafeToBreak`: a view of Hebrew with points finds the safe offsets the
+  /// result it creates caches. Blink's offsets are characters; these are their UTF-8 bytes.
+  #[test]
+  fn previous_safe_to_break() {
+    let (_fonts, font) = geist();
+    let byte_of = |character: usize| {
+      HEBREW
+        .char_indices()
+        .nth(character)
+        .map_or(HEBREW.len(), |(byte, _)| byte)
+    };
+    let shaper = HarfBuzzShaper::new(HEBREW.into());
+    let shape_result = Rc::new(shaper.shape(&font, TextDirection::Rtl, byte_of(51), byte_of(131)));
+    let (start_offset, end_offset) = (byte_of(59) as u32, byte_of(118) as u32);
+    let view = ShapeResultView::create_from_result_range(&shape_result, start_offset, end_offset);
+    let result = view.create_shape_result();
+    let offsets =
+      (start_offset + 1..=end_offset).filter(|&offset| HEBREW.is_char_boundary(offset as usize));
+
+    for offset in offsets {
+      assert_eq!(
+        view.previous_safe_to_break_offset(offset),
+        result.previous_safe_to_break_offset(offset)
+      );
+    }
   }
 
   #[test]

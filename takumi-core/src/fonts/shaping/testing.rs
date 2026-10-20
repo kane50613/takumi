@@ -17,6 +17,8 @@ use crate::{
 
 pub(crate) const GEIST: &str = "../assets/fonts/geist/Geist[wght].woff2";
 pub(crate) const GEIST_MONO: &str = "../assets/fonts/geist/GeistMono[wght].woff2";
+pub(crate) const NOTO_SANS_DEVANAGARI: &str =
+  "../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2";
 pub(crate) const NOTO_SANS_TC: &str =
   "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2";
 pub(crate) const TWEMOJI: &str = "../assets/fonts/twemoji/TwemojiMozilla-colr.woff2";
