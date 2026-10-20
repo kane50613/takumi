@@ -3531,14 +3531,6 @@ impl RenderContext {
       }
     }
 
-    // Blink's `LayoutBR` breaks the line whatever `white-space` says.
-    if node
-      .tag_name()
-      .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
-    {
-      style.inherited_data_mut().white_space_collapse = WhiteSpaceCollapse::PreserveBreaks;
-    }
-
     let sizing = self.child_sizing(
       &style,
       child_sizing_for_final.as_ref().unwrap_or(&self.sizing),
