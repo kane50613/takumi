@@ -15,6 +15,10 @@ inputs:
   components:
     description: Components to install
     required: false
+  build-std:
+    description: The job builds std from source with `-Zbuild-std`
+    required: false
+    default: "false"
   stage:
     description: Stage of the action
     required: true
@@ -35,11 +39,50 @@ runs:
         targets: ${{ inputs.targets }}
 
     - name: Rust Cache
+      if: ${{ inputs.build-std != 'true' }}
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         prefix-key: rust-${{ inputs.stage }}
         # PRs restore master's cache. Saving per PR filled the 10 GB quota and evicted master's.
         save-if: ${{ github.ref == 'refs/heads/master' }}
+
+    # rust-cache prunes what `cargo metadata` does not list, std included, and a rebuilt std
+    # rebuilds every crate above it. These keep the whole target directory instead.
+    - name: Restore build-std target
+      if: ${{ inputs.build-std == 'true' && github.ref != 'refs/heads/master' }}
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          target
+        key: rust-build-std-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.targets }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: rust-build-std-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.targets }}-
+
+    - name: Cache build-std target
+      if: ${{ inputs.build-std == 'true' && github.ref == 'refs/heads/master' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          target
+        key: rust-build-std-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.targets }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: rust-build-std-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.targets }}-
+
+    # rustup stamps every file with its install time, so the restored std looks stale and
+    # rebuilds along with every crate above it. A fixed mtime keeps the cached one fresh.
+    - name: Pin the std sources' mtime
+      if: ${{ inputs.build-std == 'true' }}
+      shell: bash
+      run: |
+        sysroot=$(rustc --print sysroot)
+        if [ "$RUNNER_OS" = Windows ]; then
+          sysroot=$(cygpath -u "$sysroot")
+        fi
+        find "$sysroot/lib/rustlib/src" -exec touch -h -t 202601010000 {} +
 
     - name: Install cargo-binstall
       if: ${{ inputs.binstall }}
