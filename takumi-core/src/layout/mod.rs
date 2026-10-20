@@ -26,10 +26,7 @@ pub mod node;
 pub(crate) mod relative_utils;
 /// Where replaced content sits inside its content box.
 pub mod replaced;
-/// Lowering `display: table` onto the grid layout algorithm.
-mod table;
-
-mod table_borders;
-mod table_columns;
+/// CSS tables, laid out by Blink's table algorithm.
+pub mod table;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;

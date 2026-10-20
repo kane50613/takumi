@@ -523,12 +523,15 @@ pub enum Visibility {
   Visible,
   /// The element is invisible (not rendered) but still takes up space.
   Hidden,
+  /// A table row, row group, column, or column group takes no space; anything else is `hidden`.
+  Collapse,
 }
 
 impl_css_enum!(
   Visibility,
   "visible" => Visibility::Visible,
-  "hidden" => Visibility::Hidden
+  "hidden" => Visibility::Hidden,
+  "collapse" => Visibility::Collapse
 );
 
 /// Defines which side of the table a caption renders on.
@@ -563,6 +566,23 @@ impl_css_enum!(
   BorderCollapse,
   "separate" => BorderCollapse::Separate,
   "collapse" => BorderCollapse::Collapse
+);
+
+/// Defines whether a table cell with no content paints its borders and background.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum EmptyCells {
+  /// Empty cells paint as any other.
+  #[default]
+  Show,
+  /// Empty cells paint nothing, unless the table collapses its borders.
+  Hide,
+}
+
+impl_css_enum!(
+  EmptyCells,
+  "show" => EmptyCells::Show,
+  "hide" => EmptyCells::Hide
 );
 
 /// Defines how a table distributes its column widths.
@@ -995,6 +1015,8 @@ pub enum Display {
   ListItem,
   /// The element generates a table wrapper box
   Table,
+  /// The element generates an inline-level table wrapper box
+  InlineTable,
   /// The element groups rows rendered before every other row group
   TableHeaderGroup,
   /// The element groups rows in source order
@@ -1007,6 +1029,10 @@ pub enum Display {
   TableCell,
   /// The element generates a table caption
   TableCaption,
+  /// The element groups table columns
+  TableColumnGroup,
+  /// The element describes a table column
+  TableColumn,
   /// The legacy `-webkit-box`: a flex container whose axis `-webkit-box-orient` sets
   WebkitBox,
   /// The legacy `-webkit-inline-box`: an inline-level `-webkit-box`
@@ -1028,12 +1054,15 @@ impl_css_enum!(
   "flow-root" => Display::FlowRoot,
   "list-item" => Display::ListItem,
   "table" => Display::Table,
+  "inline-table" => Display::InlineTable,
   "table-header-group" => Display::TableHeaderGroup,
   "table-row-group" => Display::TableRowGroup,
   "table-footer-group" => Display::TableFooterGroup,
   "table-row" => Display::TableRow,
   "table-cell" => Display::TableCell,
-  "table-caption" => Display::TableCaption
+  "table-caption" => Display::TableCaption,
+  "table-column-group" => Display::TableColumnGroup,
+  "table-column" => Display::TableColumn
 );
 
 impl Display {
@@ -1050,8 +1079,27 @@ impl Display {
         | Display::InlineBlock
         | Display::InlineFlex
         | Display::InlineGrid
+        | Display::InlineTable
         | Display::WebkitInlineBox
     )
+  }
+
+  /// Whether the box is a table wrapper box, block-level or inline-level.
+  pub fn is_table(self) -> bool {
+    matches!(self, Display::Table | Display::InlineTable)
+  }
+
+  /// Blink's `IsTableSection`: a header, footer, or body row group.
+  pub(crate) fn is_table_section(self) -> bool {
+    matches!(
+      self,
+      Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup
+    )
+  }
+
+  /// Blink's `IsLayoutTableCol`: a column or column group.
+  pub(crate) fn is_table_column(self) -> bool {
+    matches!(self, Display::TableColumn | Display::TableColumnGroup)
   }
 
   /// Whether the box is a flex container, the legacy `-webkit-box` included.
@@ -1067,8 +1115,7 @@ impl Display {
     matches!(self, Display::WebkitBox | Display::WebkitInlineBox)
   }
 
-  /// Returns true if the display makes the children blockified (e.g., flex or grid).
-  /// Whether a box with this display belongs inside a table: a row, row group, cell, or caption.
+  /// Blink's `IsTablePart`: a row group, row, cell, caption, column, or column group.
   pub(crate) fn is_table_part(self) -> bool {
     matches!(
       self,
@@ -1078,21 +1125,12 @@ impl Display {
         | Display::TableFooterGroup
         | Display::TableCell
         | Display::TableCaption
+        | Display::TableColumn
+        | Display::TableColumnGroup
     )
   }
 
-  /// Whether a box with this display lays its table parts out itself: a table, row group, or row.
-  pub(crate) fn holds_table_parts(self) -> bool {
-    matches!(
-      self,
-      Display::Table
-        | Display::TableRowGroup
-        | Display::TableHeaderGroup
-        | Display::TableFooterGroup
-        | Display::TableRow
-    )
-  }
-
+  /// Returns true if the display makes the children blockified (e.g., flex or grid).
   pub(crate) fn should_blockify_children(&self) -> bool {
     self.is_flex() || matches!(self, Display::Grid | Display::InlineGrid)
   }
@@ -1108,8 +1146,11 @@ impl Display {
       | Display::TableHeaderGroup
       | Display::TableFooterGroup
       | Display::TableRow
+      | Display::TableColumnGroup
+      | Display::TableColumn
       | Display::TableCell
       | Display::TableCaption => Display::Block,
+      Display::InlineTable => Display::Table,
       Display::InlineFlex => Display::Flex,
       Display::WebkitInlineBox => Display::WebkitBox,
       Display::InlineGrid => Display::Grid,
@@ -1132,14 +1173,16 @@ impl Display {
         taffy::Display::Block
       }
       Display::FlowRoot => taffy::Display::FlowRoot,
-      // Lowering replaces every table box that sits in a table, so what is left
-      // here is a table part outside one. Blink wraps those in anonymous table
-      // boxes; block is the approximation.
+      // The table algorithm lays out a table and its parts; taffy only sees a table as a block
+      // child it does not stretch.
       Display::Table
+      | Display::InlineTable
       | Display::TableHeaderGroup
       | Display::TableRowGroup
       | Display::TableFooterGroup
       | Display::TableRow
+      | Display::TableColumnGroup
+      | Display::TableColumn
       | Display::TableCell
       | Display::TableCaption => taffy::Display::Block,
       Display::None => taffy::Display::None,

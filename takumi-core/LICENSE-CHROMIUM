@@ -99,8 +99,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    src/layout/inline/outline.rs, the decoration lines in
    src/painter/decoration.rs, the property rules in src/paint_property.rs,
    `ConversionContext` in src/paint_chunk.rs, the corners and side clips
-   in src/layout/contoured_rect.rs, the column widths in
-   src/layout/table_columns.rs, the background layer geometry in
+   in src/layout/contoured_rect.rs, the table layout in src/layout/table/,
+   the table painting in src/painter/table.rs, the background layer geometry in
    src/layout/background_image_geometry.rs, and the line box alignment in
    src/layout/inline/line_box.rs, from
    third_party/blink/renderer/core/paint/box_border_painter.cc,
@@ -113,8 +113,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/platform/geometry/contoured_rect.cc,
    third_party/blink/renderer/core/paint/background_image_geometry.cc,
    third_party/blink/renderer/core/paint/box_painter_base.cc,
+   third_party/blink/renderer/core/paint/table_painters.cc,
+   third_party/blink/renderer/core/layout/table/table_layout_algorithm.cc,
+   third_party/blink/renderer/core/layout/table/table_section_layout_algorithm.cc,
+   third_party/blink/renderer/core/layout/table/table_row_layout_algorithm.cc,
    third_party/blink/renderer/core/layout/table/table_layout_utils.cc,
    third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.cc,
+   third_party/blink/renderer/core/layout/table/table_borders.cc,
+   third_party/blink/renderer/core/layout/table/table_node.cc,
+   third_party/blink/renderer/core/layout/table/layout_table_column_visitor.h,
+   third_party/blink/renderer/core/layout/table/table_fragment_data.h,
    third_party/blink/renderer/core/layout/inline/inline_box_state.cc,
    third_party/blink/renderer/platform/geometry/path_builder.cc,
    third_party/blink/renderer/platform/graphics/compositing/paint_chunks_to_cc_layer.cc;

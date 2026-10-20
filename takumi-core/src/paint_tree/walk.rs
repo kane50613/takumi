@@ -27,8 +27,8 @@ use crate::{
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
-    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, OverflowClip, OwnContent, PaintDevice,
-    PaintedInline, TextClip,
+    BackgroundClipArea, BoxFrame, BoxPainter, CellBackground, FillShape, OverflowClip, OwnContent,
+    PaintDevice, PaintedInline, TableDecorations, TextClip, paint_collapsed_borders,
   },
   resources::image::{sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
@@ -113,12 +113,13 @@ impl Walker {
     transform: Affine,
     path: Vec<usize>,
     text_clip: Option<&TextClip>,
+    table: &TableDecorations,
   ) -> Result<usize> {
     let context = &node.context;
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
     let drawables = if node.paints_own_box() {
-      decorations(&painter, transform, text_clip)?
+      decorations(&painter, layout, transform, text_clip, table)?
     } else {
       Vec::new()
     };
@@ -327,7 +328,14 @@ impl Walker {
             &node.context.sizing,
           );
           let placed = transform * Affine::translation(offset.x, offset.y) * local;
-          let id = self.record_box(node, layout, placed, box_path.clone(), None)?;
+          let id = self.record_box(
+            node,
+            layout,
+            placed,
+            box_path.clone(),
+            None,
+            &TableDecorations::None,
+          )?;
           let (group, clip, outline) = match &self.nodes[id].kind {
             NodeKind::Box {
               effects,
@@ -490,6 +498,41 @@ impl Walker {
     self.paths.push(path);
   }
 
+  /// Records a table's collapsed borders as a node of their own inside the table `node`, and
+  /// draws it.
+  fn record_collapsed_borders(&mut self, table: usize, drawables: Vec<Drawable>, path: Vec<usize>) {
+    let id = self.nodes.len();
+    let PaintNode {
+      transform,
+      width,
+      height,
+      bounds,
+      ..
+    } = self.nodes[table].clone();
+
+    self.add(
+      PaintNode {
+        id,
+        parent: None,
+        element: None,
+        transform,
+        width,
+        height,
+        bounds,
+        drawables,
+        children: Vec::new(),
+        kind: NodeKind::Box {
+          content_box: PaintRect::sized(Point::ZERO, Size::ZERO),
+          outline: Vec::new(),
+          effects: None,
+          overflow_clip: None,
+        },
+      },
+      Some(path),
+    );
+    self.draw(id);
+  }
+
   fn draw(&mut self, node: usize) {
     self.steps.push(PaintStep::Draw {
       node,
@@ -590,6 +633,7 @@ impl StepWriter<'_, '_> {
           return Ok(None);
         };
         let text_clip = TextClip::of(&scene.root, &scene.results, paint)?;
+        let table = TableDecorations::of(&scene.root, &scene.results, &paint.path, paint.node_id)?;
 
         self
           .walker
@@ -599,6 +643,7 @@ impl StepWriter<'_, '_> {
             paint.transform,
             [self.prefix, &paint.path].concat(),
             text_clip.as_ref(),
+            &table,
           )
           .map(Some)
       })
@@ -653,6 +698,39 @@ impl StepWriter<'_, '_> {
 
         if let Err(error) = result {
           self.error.get_or_insert(error);
+        }
+      }
+      ChunkPart::CollapsedBorders => {
+        if !self
+          .scene
+          .root
+          .node_at_path(&chunk.node.path)
+          .is_some_and(RenderNode::paints_collapsed_borders)
+        {
+          return;
+        }
+        let mut recorder = Recorder::new(chunk.node.transform);
+        let result = paint_collapsed_borders(
+          &self.scene.results,
+          chunk.node.node_id,
+          chunk.node.paint_offset,
+          Affine::IDENTITY,
+          None,
+          &mut recorder,
+        );
+
+        if let Err(error) = result {
+          self.error.get_or_insert(error);
+          return;
+        }
+        let drawables = recorder.finish();
+
+        if !drawables.is_empty() {
+          walker.record_collapsed_borders(
+            node,
+            drawables,
+            [self.prefix, &chunk.node.path].concat(),
+          );
         }
       }
       ChunkPart::Outline => {
@@ -725,16 +803,132 @@ pub(super) fn recorded<'s>(
   )
 }
 
-/// The shadows, background, and border the box `painter` paints, bottom first.
+/// The shadows, background, and border the box `painter` paints at `layout`, bottom first, as
+/// its part in a table, if any, paints them.
 fn decorations(
   painter: &BoxPainter<'_>,
+  layout: ComputedLayout,
   transform: Affine,
   text_clip: Option<&TextClip>,
+  table: &TableDecorations,
 ) -> Result<Vec<Drawable>> {
   let mut recorder = Recorder::new(transform);
+  let context = painter.context();
 
-  painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
+  match table {
+    TableDecorations::None => {
+      box_decorations(painter, Point::ZERO, text_clip, true, &mut recorder)?
+    }
+    TableDecorations::Cell {
+      paints_border,
+      clip,
+    } => {
+      if let Some(clip) = clip {
+        recorder.push_clip(
+          &FillShape::Rect(clip.size),
+          Affine::translation(clip.offset.x, clip.offset.y),
+        );
+      }
+      box_decorations(
+        painter,
+        Point::ZERO,
+        text_clip,
+        *paints_border,
+        &mut recorder,
+      )?;
+      if clip.is_some() {
+        recorder.pop_clip();
+      }
+    }
+    TableDecorations::Table {
+      grid,
+      grid_offset,
+      paints_border,
+      columns,
+    } => {
+      let grid_painter = BoxPainter::new(context, *grid);
 
+      box_decorations(
+        &grid_painter,
+        *grid_offset,
+        text_clip,
+        *paints_border,
+        &mut recorder,
+      )?;
+      for column in columns {
+        for cell in &column.cells {
+          cell_background(&column.context, layout, cell, &mut recorder)?;
+        }
+      }
+    }
+    TableDecorations::Part { cells } => {
+      painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
+      for cell in cells {
+        cell_background(context, layout, cell, &mut recorder)?;
+      }
+      painter.paint_inset_box_shadows(Point::ZERO, &mut recorder);
+    }
+  }
+
+  Ok(recorder.finish())
+}
+
+/// The background of `context`, a table part, over `background.area` inside its cell, both
+/// relative to `layout`, the box painting it.
+fn cell_background(
+  context: &RenderContext,
+  layout: ComputedLayout,
+  background: &CellBackground,
+  recorder: &mut Recorder,
+) -> Result<()> {
+  let cell = background.cell;
+  let at = background.area.offset;
+  let painter = BoxPainter::new(
+    context,
+    ComputedLayout {
+      location: layout.location + at,
+      size: background.area.size,
+      border: Default::default(),
+      padding: Default::default(),
+    },
+  );
+
+  recorder.push_clip(
+    &FillShape::Rect(cell.size),
+    Affine::translation(cell.offset.x, cell.offset.y),
+  );
+  let painted = self::background(&painter, at, None, recorder);
+
+  recorder.pop_clip();
+  painted
+}
+
+/// The shadows, background, and border the box `painter` paints with its border box at `origin`,
+/// its border only when `paints_border`.
+fn box_decorations(
+  painter: &BoxPainter<'_>,
+  origin: Point<f32>,
+  text_clip: Option<&TextClip>,
+  paints_border: bool,
+  recorder: &mut Recorder,
+) -> Result<()> {
+  painter.paint_normal_box_shadows(origin, recorder);
+  background(painter, origin, text_clip, recorder)?;
+  painter.paint_inset_box_shadows(origin, recorder);
+  if paints_border {
+    painter.paint_border(origin, recorder);
+  }
+  Ok(())
+}
+
+/// The background the box `painter` paints with its border box at `origin`, shown through
+/// `text_clip` when it has one.
+fn background(
+  painter: &BoxPainter<'_>,
+  origin: Point<f32>,
+  text_clip: Option<&TextClip>,
+  recorder: &mut Recorder,
+) -> Result<()> {
   let background = painter.background();
   let layers = Paint::layers(&background.layers, painter.context());
   // Blink's `BoxPainterBase::PaintFillLayers` paints a background that blends in a layer of its
@@ -744,40 +938,40 @@ fn decorations(
   if isolated {
     recorder.begin_layer(1.0, None);
   }
-  painter.background_color(Point::ZERO, &mut recorder);
+  painter.background_color(origin, recorder);
   if let Some(clip) = background.clip.shape(background.size) {
     let mask = background.clip.border_mask();
+    let offset = origin + background.offset;
     let shape = Shape::of(
       &mask.map_or(clip, |_| FillShape::Rect(background.size)),
-      Affine::translation(background.offset.x, background.offset.y),
+      Affine::translation(offset.x, offset.y),
     );
     let fill = |recorder: &mut Recorder| {
       for (paint, blend_mode) in layers {
+        let clips = recorder.clips();
+
         recorder.push(Drawable::Fill {
           role: Role::Background,
           shape: shape.clone(),
           paint,
           blend_mode,
-          clips: Vec::new(),
+          clips,
         });
       }
     };
 
     match mask {
-      Some(mask) => recorder.with_border_mask(&mask, background.size, background.offset, fill),
-      None => fill(&mut recorder),
+      Some(mask) => recorder.with_border_mask(&mask, background.size, offset, fill),
+      None => fill(recorder),
     }
   }
   if let Some(text_clip) = text_clip {
-    text_clip.paint_background(Point::ZERO, &mut recorder)?;
+    text_clip.paint_background(origin, recorder)?;
   }
   if isolated {
     recorder.end_layer();
   }
-
-  painter.paint_inset_box_shadows(Point::ZERO, &mut recorder);
-  painter.paint_border(Point::ZERO, &mut recorder);
-  Ok(recorder.finish())
+  Ok(())
 }
 
 /// How the box `painter` paints composites, as a group.

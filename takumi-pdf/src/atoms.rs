@@ -131,8 +131,9 @@ impl AtomCollector<'_> {
           PaintItemKind::Context(child) => {
             self.context_atoms(*child, child_frame, atoms)?;
           }
-          // The node's own item already records its inline content, floats included.
-          PaintItemKind::Floats(_) => {}
+          // The node's own item already records its inline content, floats included, and the
+          // table's its collapsed borders.
+          PaintItemKind::Floats(_) | PaintItemKind::CollapsedBorders(_) => {}
         }
       }
     }

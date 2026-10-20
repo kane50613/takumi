@@ -5,8 +5,8 @@
 //! with a semantic HTML tag become structure elements owning those
 //! identifiers. Containers without a role lift their content to the nearest
 //! tagged ancestor, and bare text under an untagged ancestor wraps in `P` so
-//! no content stays outside the tree. Lowered tables rebuild their rows and
-//! row groups from the [`TablePart`] stamps lowering leaves behind.
+//! no content stays outside the tree. A table maps its row groups, rows, and
+//! cells onto `THead`/`TBody`/`TFoot`, `TR`, and `TH`/`TD`.
 
 use std::{
   collections::{HashMap, HashSet},
@@ -15,11 +15,8 @@ use std::{
 };
 
 use takumi_core::{
-  layout::{
-    node::NodeKind,
-    tree::{RenderNode, TablePart},
-  },
-  style::{Display, FlexDirection, GridPlacement, GridPlacementSpan, ListStyleType},
+  layout::{node::NodeKind, tree::RenderNode},
+  style::{CaptionSide, Display, FlexDirection, ListStyleType},
 };
 
 use crate::krilla::tagging::{
@@ -186,7 +183,7 @@ fn build_node(
   pending: &mut Vec<Identifier>,
   nesting: Nesting,
 ) {
-  if node.table_part == Some(TablePart::Table) {
+  if node.context.style.base_data.display.is_table() {
     flush_paragraph(pending, parent);
     build_table(node, path, walk, parent, nesting);
     return;
@@ -327,124 +324,25 @@ fn build_element(
   (has_content || is_target || keep_empty).then_some(group)
 }
 
-/// Rebuilds `Table → THead/TBody/TFoot → TR → TH/TD` from a lowered table,
-/// whose render tree only has captions, cells, and the grids a tall table's
-/// body rows move into left. Rows come back from each cell's grid line, groups from the [`TablePart`] lowering stamped on
-/// it. A page-spanning table stays one `Table`, as ISO 14289-2:2024 §8.2.2
-/// requires: replayed header bands are artifacts, so only the first
-/// occurrence carries content.
-struct TableBuilder {
-  /// Finished direct children of `Table`: captions, row groups, stray rows.
-  groups: Vec<TagGroup>,
-  /// The open row group and the rows collected for it so far.
-  section: Option<(TablePart, Vec<TagGroup>)>,
-  /// The open row: its grid line and the `TR` collecting its cells.
-  row: Option<(GridRow, TagGroup)>,
+/// The span a cell carries along one axis, when it spans more than one.
+fn span(span: usize) -> Option<NonZeroU32> {
+  NonZeroU32::new(u32::try_from(span).ok()?).filter(|span| span.get() > 1)
 }
 
-/// A lowered cell's row: the index of the [`TablePart::BodyRows`] grid holding
-/// it among the table's children, if one does, and its line in its grid.
-type GridRow = (Option<usize>, i16);
-
-impl TableBuilder {
-  fn close_row(&mut self) {
-    if let Some((_, row)) = self.row.take()
-      && let Some((_, rows)) = self.section.as_mut()
-    {
-      rows.push(row);
-    }
-  }
-
-  fn close_section(&mut self) {
-    self.close_row();
-    if let Some((part, rows)) = self.section.take() {
-      let tag = match part {
-        TablePart::HeaderCell => Tag::T_HEAD,
-        TablePart::FooterCell => Tag::T_FOOT,
-        _ => Tag::T_BODY,
-      };
-
-      self.groups.push(tag_group(tag, rows));
-    }
-  }
-
-  /// The `TR` for `line` in a `part` row group, opening either as needed.
-  fn row(&mut self, part: TablePart, line: GridRow) -> &mut TagGroup {
-    if self.section.as_ref().is_none_or(|(open, _)| *open != part) {
-      self.close_section();
-      self.section = Some((part, Vec::new()));
-    }
-    if self.row.as_ref().is_some_and(|(open, _)| *open != line) {
-      self.close_row();
-    }
-    &mut self
-      .row
-      .get_or_insert_with(|| (line, TagGroup::new(Tag::TR)))
-      .1
-  }
-
-  /// Content that was never a cell still needs a place inside the table's
-  /// content model, so it rides in a row of its own.
-  fn push_stray(&mut self, children: Vec<TagGroup>) {
-    self.close_section();
-    self.groups.push(tag_group(
-      Tag::TR,
-      [tag_group(Tag::table_data(None, None), children)],
-    ));
-  }
-
-  /// Adds a lowered `cell` to its row, the grid line it starts on inside the
-  /// `BodyRows` grid at table child index `grid`, if any.
-  fn push_cell(
-    &mut self,
-    cell: &RenderNode,
-    part: TablePart,
-    grid: Option<usize>,
-    path: &mut Vec<usize>,
-    walk: &mut Walk,
-    nesting: Nesting,
-  ) {
-    let GridPlacement::Line(line) = cell.context.style.misc2_data.grid_row_start else {
-      return;
-    };
-    let kind = cell_kind(cell, part);
-
-    // An empty cell still holds its place in the row, so the row keeps
-    // the cell count the spec's regularity asks for.
-    if let Some(element) = build_element(cell, path, walk, kind, nesting, true) {
-      self.row(part, (grid, line)).push(element);
-    }
-  }
-
-  fn push_caption(&mut self, caption: TagGroup) {
-    self.close_section();
-    self.groups.push(caption);
-  }
-}
-
-/// The span a lowered cell carries on a grid axis.
-fn placement_span(placement: &GridPlacement) -> Option<NonZeroU32> {
-  match placement {
-    GridPlacement::Span(GridPlacementSpan::Span(span)) if *span > 1 => {
-      NonZeroU32::new((*span).into())
-    }
-    _ => None,
-  }
-}
-
-/// `TH` or `TD` for a lowered cell. The source tag decides when there is one;
-/// a tagless cell in a header row group is still a header. A `TH` takes its
+/// `TH` or `TD` for a cell. The source tag decides when there is one; a
+/// tagless cell in a header row group is still a header. A `TH` takes its
 /// `Scope` from the `scope` attribute, defaulting to `Column` in a header row
-/// group and `Row` elsewhere, per ISO 32000-2 §14.8.4.8.3's algorithm.
-fn cell_kind(cell: &RenderNode, part: TablePart) -> Tag {
+/// group and `Row` elsewhere, per ISO 32000-2 §14.8.4.8.3's algorithm. Its
+/// row span stops at the `rows_left` rows to the end of its row group.
+fn cell_kind(cell: &RenderNode, in_header: bool, rows_left: usize) -> Tag {
   let source = cell.node.as_ref();
   let tag_name = source.and_then(|node| node.tag_name());
-  let row_span = placement_span(&cell.context.style.misc2_data.grid_row_end);
-  let col_span = placement_span(&cell.context.style.misc2_data.grid_column_end);
+  let row_span = span(cell.table_cell_rowspan().min(rows_left));
+  let col_span = span(cell.table_cell_colspan());
   let is_header = match tag_name {
     Some("th") => true,
     Some("td") => false,
-    _ => part == TablePart::HeaderCell,
+    _ => in_header,
   };
 
   if !is_header {
@@ -461,7 +359,7 @@ fn cell_kind(cell: &RenderNode, part: TablePart) -> Tag {
       }
       _ => None,
     })
-    .unwrap_or(if part == TablePart::HeaderCell {
+    .unwrap_or(if in_header {
       TableHeaderScope::Column
     } else {
       TableHeaderScope::Row
@@ -470,6 +368,10 @@ fn cell_kind(cell: &RenderNode, part: TablePart) -> Tag {
   Tag::table_header(scope, row_span, col_span)
 }
 
+/// Builds `Table → Caption, THead/TBody/TFoot → TR → TH/TD` from a table, its
+/// row groups in layout order. A page-spanning table stays one `Table`, as
+/// ISO 14289-2:2024 §8.2.2 requires: replayed header bands are artifacts, so
+/// only the first occurrence carries content.
 fn build_table(
   node: &RenderNode,
   path: &mut Vec<usize>,
@@ -484,11 +386,7 @@ fn build_table(
   } = walk.collector.take(path);
   let mut kind = Tag::TABLE;
   let is_target = walk.name_target(path, &mut kind);
-  let mut builder = TableBuilder {
-    groups: Vec::new(),
-    section: None,
-    row: None,
-  };
+  let mut groups = Vec::new();
   // A list or flex row outside the table does not reach into its cells; an
   // enclosing `Figure` does.
   let nesting = Nesting {
@@ -496,64 +394,91 @@ fn build_table(
     in_list: false,
     in_figure: nesting.in_figure,
   };
+  let children = node.children.as_deref().unwrap_or_default();
+  let captions =
+    |side: CaptionSide, path: &mut Vec<usize>, walk: &mut Walk, groups: &mut Vec<TagGroup>| {
+      for (index, child) in children.iter().enumerate() {
+        if child.context.style.base_data.display != Display::TableCaption
+          || child.context.style.inherited_data.caption_side != side
+        {
+          continue;
+        }
+        path.push(index);
+        groups.extend(build_element(
+          child,
+          path,
+          walk,
+          Tag::CAPTION,
+          nesting,
+          false,
+        ));
+        path.pop();
+      }
+    };
+
+  captions(CaptionSide::Top, path, walk, &mut groups);
 
   // The table box itself has no content slot in the model, so anything
-  // recorded against it rides in a stray row like non-cell children do. It
-  // waits for the first non-caption child, keeping a top caption first.
-  let mut own_content = identifiers;
+  // recorded against it rides in a row of its own.
+  if !identifiers.is_empty() {
+    let mut wrap = Vec::new();
+    let mut own_content = identifiers;
 
-  for (index, child) in node.children.iter().flatten().enumerate() {
+    flush_paragraph(&mut own_content, &mut wrap);
+    groups.push(tag_group(
+      Tag::TR,
+      [tag_group(Tag::table_data(None, None), wrap)],
+    ));
+  }
+
+  for (index, _) in node.table_sections() {
+    let section = &children[index];
+    let display = section.context.style.base_data.display;
+    let in_header = display == Display::TableHeaderGroup;
+    let row_count = section.children.as_deref().map_or(0, <[RenderNode]>::len);
+    let mut rows = Vec::new();
+
     path.push(index);
-    if child.table_part != Some(TablePart::Caption) && !own_content.is_empty() {
-      let mut wrap = Vec::new();
+    for (row_index, row) in section.children.iter().flatten().enumerate() {
+      let mut cells = Vec::new();
 
-      flush_paragraph(&mut own_content, &mut wrap);
-      builder.push_stray(wrap);
-    }
-    match child.table_part {
-      Some(TablePart::Caption) => {
-        if let Some(caption) = build_element(child, path, walk, Tag::CAPTION, nesting, false) {
-          builder.push_caption(caption);
-        }
+      path.push(row_index);
+      for (cell_index, cell) in row.children.iter().flatten().enumerate() {
+        path.push(cell_index);
+        // An empty cell still holds its place in the row, so the row keeps
+        // the cell count the spec's regularity asks for.
+        cells.extend(build_element(
+          cell,
+          path,
+          walk,
+          cell_kind(cell, in_header, row_count - row_index),
+          nesting,
+          true,
+        ));
+        path.pop();
       }
-      Some(part @ (TablePart::HeaderCell | TablePart::BodyCell | TablePart::FooterCell)) => {
-        builder.push_cell(child, part, None, path, walk, nesting);
-      }
-      Some(TablePart::BodyRows) => {
-        for (cell_index, cell) in child.children.iter().flatten().enumerate() {
-          path.push(cell_index);
-          if let Some(
-            part @ (TablePart::HeaderCell | TablePart::BodyCell | TablePart::FooterCell),
-          ) = cell.table_part
-          {
-            builder.push_cell(cell, part, Some(index), path, walk, nesting);
-          }
-          path.pop();
-        }
-      }
-      _ => {
-        let mut wrap = Vec::new();
-        let mut pending = Vec::new();
-
-        build_node(child, path, walk, &mut wrap, &mut pending, nesting);
-        flush_paragraph(&mut pending, &mut wrap);
-        if !wrap.is_empty() {
-          builder.push_stray(wrap);
-        }
+      path.pop();
+      if !cells.is_empty() {
+        rows.push(tag_group(Tag::TR, cells));
       }
     }
     path.pop();
-  }
-  if !own_content.is_empty() {
-    let mut wrap = Vec::new();
 
-    flush_paragraph(&mut own_content, &mut wrap);
-    builder.push_stray(wrap);
-  }
-  builder.close_section();
+    if !rows.is_empty() {
+      let tag = match display {
+        Display::TableHeaderGroup => Tag::T_HEAD,
+        Display::TableFooterGroup => Tag::T_FOOT,
+        _ => Tag::T_BODY,
+      };
 
-  if !builder.groups.is_empty() || is_target {
-    parent.push(tag_group(kind, builder.groups));
+      groups.push(tag_group(tag, rows));
+    }
+  }
+
+  captions(CaptionSide::Bottom, path, walk, &mut groups);
+
+  if !groups.is_empty() || is_target {
+    parent.push(tag_group(kind, groups));
   }
   push_link_wrappers(annotations, parent);
 }

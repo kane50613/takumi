@@ -9,6 +9,7 @@ mod outline;
 mod replaced;
 mod shadow;
 mod snapped_box;
+mod table;
 mod text;
 mod text_clip;
 
@@ -20,6 +21,7 @@ pub use self::{
   replaced::ReplacedContent,
   shadow::ShadowShape,
   snapped_box::SnappedBox,
+  table::{CellArea, CellBackground, ColumnBackground, TableDecorations, paint_collapsed_borders},
   text::{GlyphDevice, GlyphFill, InlineLines, LineItem, StripBackground},
   text_clip::TextClip,
 };

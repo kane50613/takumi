@@ -101,7 +101,14 @@ impl<'n> InlineBoxPaint<'n> {
       height: (positioned.height - item.margin.vertical()).max(0.0),
     };
     let root = node.clone();
-    let results = LayoutResults::compute(&root, size.map(AvailableSpace::Definite));
+    // Taffy lays a root out in the space beside its margins, which the margin box holds.
+    let results = LayoutResults::compute(
+      &root,
+      Size {
+        width: AvailableSpace::Definite(positioned.width.max(0.0)),
+        height: AvailableSpace::Definite(positioned.height.max(0.0)),
+      },
+    );
 
     (
       origin,

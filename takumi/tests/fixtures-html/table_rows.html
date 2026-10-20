@@ -1,0 +1,191 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_rows</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 282px;
+        height: 290px;
+      }
+      .label {
+        font-size: 15px;
+        color: rgb(71, 85, 105);
+      }
+      table {
+        display: table;
+        border-spacing: 4px;
+        border-collapse: separate;
+        background: rgb(255, 255, 255);
+        font-size: 16px;
+        color: rgb(17, 24, 39);
+      }
+      caption {
+        display: table-caption;
+        text-align: center;
+      }
+      colgroup {
+        display: table-column-group;
+      }
+      col {
+        display: table-column;
+      }
+      thead {
+        display: table-header-group;
+        vertical-align: middle;
+      }
+      tbody {
+        display: table-row-group;
+        vertical-align: middle;
+      }
+      tfoot {
+        display: table-footer-group;
+        vertical-align: middle;
+      }
+      tr {
+        display: table-row;
+        vertical-align: inherit;
+      }
+      td,
+      th {
+        display: table-cell;
+        vertical-align: inherit;
+        padding: 3px 6px;
+        border: 1px solid rgb(148, 163, 184);
+        text-align: left;
+      }
+      th {
+        font-weight: bold;
+      }
+      .striped tbody {
+        background: rgb(219, 234, 254);
+      }
+      .striped tr.marked {
+        background: rgb(254, 226, 226);
+      }
+      .collapsed {
+        visibility: collapse;
+      }
+      .hide {
+        empty-cells: hide;
+      }
+      .tall {
+        height: 160px;
+      }
+      .bottom {
+        caption-side: bottom;
+      }
+      caption.spaced {
+        margin: 6px 0;
+        color: rgb(71, 85, 105);
+      }
+      .aligned td {
+        height: 48px;
+      }
+      .aligned .top {
+        vertical-align: top;
+      }
+      .aligned .middle {
+        vertical-align: middle;
+      }
+      .aligned .bottom-cell {
+        vertical-align: bottom;
+      }
+      .aligned .baseline {
+        vertical-align: baseline;
+      }
+      .aligned .big {
+        font-size: 24px;
+      }
+      .line {
+        font-size: 16px;
+      }
+      .inline {
+        display: inline-table;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="root">
+      <div class="cell">
+        <span class="label">row and row group backgrounds</span>
+        <table class="striped">
+          <tbody>
+            <tr><td>a1</td><td>b1</td></tr>
+            <tr class="marked"><td>a2</td><td>b2</td></tr>
+            <tr><td>a3</td><td>b3</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">a collapsed row takes no height</span>
+        <table>
+          <tr><td>a1</td><td>b1</td></tr>
+          <tr class="collapsed"><td>a2</td><td>b2</td></tr>
+          <tr><td>a3</td><td>b3</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">empty cells hide</span>
+        <table class="hide">
+          <tr><td>a1</td><td></td></tr>
+          <tr><td></td><td>b2</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">table height grows the rows</span>
+        <table class="tall">
+          <tr><td rowspan="2">spans two</td><td>b1</td></tr>
+          <tr><td>b2</td></tr>
+          <tr><td>a3</td><td>b3</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">captions above and below</span>
+        <table>
+          <caption class="spaced">above</caption>
+          <caption class="spaced bottom">below</caption>
+          <tr><td>a1</td><td>b1</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">vertical-align in a row</span>
+        <table class="aligned">
+          <tr>
+            <td class="top">top</td>
+            <td class="middle">mid</td>
+            <td class="bottom-cell">bot</td>
+            <td class="baseline">x</td>
+            <td class="baseline big">X</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">an inline table on a line</span>
+        <div class="line"
+          >before
+          <table class="inline"
+            ><tr><td>a</td><td>b</td></tr></table
+          >
+          after</div
+        >
+      </div>
+    </div>
+  </body>
+</html>

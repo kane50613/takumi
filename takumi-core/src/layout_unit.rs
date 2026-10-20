@@ -514,6 +514,13 @@ pub(crate) struct BoxStrut {
 }
 
 impl BoxStrut {
+  pub(crate) const ZERO: Self = Self {
+    top: LayoutUnit::ZERO,
+    right: LayoutUnit::ZERO,
+    bottom: LayoutUnit::ZERO,
+    left: LayoutUnit::ZERO,
+  };
+
   /// Whether every side is zero.
   pub fn is_zero(self) -> bool {
     self == Self::default()

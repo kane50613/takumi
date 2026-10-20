@@ -24,9 +24,10 @@ use takumi_core::{
   paint_chunk::{ChunkPart, ConversionContext, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
-    BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, LineItem, OwnContent, PaintDevice, PaintedInline, PendingOutline, ShadowShape,
-    StripBackground, StrokeStyle, TextClip, UNBOUNDED,
+    BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, CellArea, CellBackground, FillShape,
+    GlyphDevice, GlyphFill, LayerBounds, LineItem, OwnContent, PaintDevice, PaintedInline,
+    PendingOutline, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip,
+    UNBOUNDED, paint_collapsed_borders,
   },
   scene::{NodePaint, Scene},
   shadow::SizedShadow,
@@ -295,17 +296,76 @@ impl Emitter<'_> {
     node: &RenderNode,
     frame: BoxFrame,
     text_clip: Option<&TextClip>,
+    table: TableDecorations,
     surface: &mut Surface,
   ) {
     if !node.paints_own_box() {
       return;
     }
 
+    match table {
+      TableDecorations::None => self.emit_box(node, frame, text_clip, true, surface),
+      TableDecorations::Cell {
+        paints_border,
+        clip: None,
+      } => {
+        self.emit_box(node, frame, text_clip, paints_border, surface);
+      }
+      TableDecorations::Cell {
+        paints_border,
+        clip: Some(clip),
+      } => {
+        self.within_cell(frame.origin, clip, surface, |surface| {
+          self.emit_box(node, frame, text_clip, paints_border, surface);
+        });
+      }
+      TableDecorations::Table {
+        grid,
+        grid_offset,
+        paints_border,
+        columns,
+      } => {
+        let grid_frame = BoxFrame::new(grid, frame.origin + grid_offset);
+
+        self.emit_box(node, grid_frame, text_clip, paints_border, surface);
+        for column in columns {
+          let Some(source) = node.node_at_path(&column.path) else {
+            continue;
+          };
+          let mut column_node = source.clone();
+
+          column_node.context = column.context;
+          for background in column.cells {
+            self.emit_cell_background(&column_node, frame, background, surface);
+          }
+        }
+      }
+      TableDecorations::Part { cells } => {
+        let painter = BoxPainter::new(&node.context, frame.layout);
+
+        painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
+        for background in cells {
+          self.emit_cell_background(node, frame, background, surface);
+        }
+        painter.paint_inset_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
+      }
+    }
+  }
+
+  /// Emits the box's shadows, background, through `text_clip` when it has one, and its border
+  /// when `paints_border`.
+  fn emit_box(
+    &self,
+    node: &RenderNode,
+    frame: BoxFrame,
+    text_clip: Option<&TextClip>,
+    paints_border: bool,
+    surface: &mut Surface,
+  ) {
     let painter = BoxPainter::new(&node.context, frame.layout);
 
     painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
-    painter.background_color(frame.origin, &mut self.device(surface, self.tagged));
-    self.emit_background_layers(node, &painter.background(), frame, surface);
+    self.emit_background(node, frame, surface);
     if let Some(text_clip) = text_clip {
       let painted = text_clip.paint_background(
         frame.origin,
@@ -323,7 +383,66 @@ impl Emitter<'_> {
       }
     }
     painter.paint_inset_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
-    painter.paint_border(frame.origin, &mut self.device(surface, self.tagged));
+    if paints_border {
+      painter.paint_border(frame.origin, &mut self.device(surface, self.tagged));
+    }
+  }
+
+  /// Emits the box's background colour and image layers.
+  fn emit_background(&self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) {
+    let painter = BoxPainter::new(&node.context, frame.layout);
+
+    painter.background_color(frame.origin, &mut self.device(surface, self.tagged));
+    self.emit_background_layers(node, &painter.background(), frame, surface);
+  }
+
+  /// Emits the background of `node`, a table part, over `background.area` inside its cell, both
+  /// relative to `frame`, the box painting it.
+  fn emit_cell_background(
+    &self,
+    node: &RenderNode,
+    frame: BoxFrame,
+    background: CellBackground,
+    surface: &mut Surface,
+  ) {
+    let cell_top = frame.origin.y + background.cell.offset.y;
+
+    if self
+      .window
+      .excludes(cell_top, cell_top + background.cell.size.height)
+    {
+      return;
+    }
+    let at = background.area.offset;
+    let layout = Layout {
+      location: frame.layout.location + at,
+      size: background.area.size,
+      border: Default::default(),
+      padding: Default::default(),
+    };
+
+    self.within_cell(frame.origin, background.cell, surface, |surface| {
+      self.emit_background(node, BoxFrame::new(layout, frame.origin + at), surface);
+    });
+  }
+
+  /// Runs `emit` clipped to `cell`, relative to `origin`.
+  fn within_cell(
+    &self,
+    origin: CorePoint<f32>,
+    cell: CellArea,
+    surface: &mut Surface,
+    emit: impl FnOnce(&mut Surface),
+  ) {
+    let clip = shape_path(&FillShape::Rect(cell.size), origin + cell.offset);
+
+    let Some(clip) = clip else {
+      return;
+    };
+
+    surface.push_clip_path(&clip, &FillRule::NonZero);
+    emit(surface);
+    surface.pop();
   }
 
   /// Emits the box's own content inside its structure tag when tagging is on.
@@ -1081,7 +1200,7 @@ impl Emitter<'_> {
     tagged: bool,
     surface: &mut Surface,
   ) {
-    self.emit_decorations(node, frame, None, surface);
+    self.emit_decorations(node, frame, None, TableDecorations::None, surface);
     if tagged {
       self.start_tagged_node(node, surface);
     }
@@ -1459,11 +1578,37 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
         let scene = emitter.scene;
 
         TextClip::of(&scene.root, &scene.results, chunk.node)
-          .map(|text_clip| {
-            emitter.emit_decorations(node, decoration_frame, text_clip.as_ref(), surface);
+          .and_then(|text_clip| {
+            let table = TableDecorations::of(
+              &scene.root,
+              &scene.results,
+              &chunk.node.path,
+              chunk.node.node_id,
+            )?;
+
+            emitter.emit_decorations(node, decoration_frame, text_clip.as_ref(), table, surface);
+            Ok(())
           })
           .map_err(PdfError::from)
       }
+      ChunkPart::CollapsedBorders if node.paints_collapsed_borders() => {
+        // The window maps onto the table only while no transform was pushed for it.
+        let visible = (pushed == 0)
+          .then_some(emitter.window.y)
+          .flatten()
+          .map(|(top, bottom)| (top - frame.origin.y, bottom - frame.origin.y));
+
+        paint_collapsed_borders(
+          &emitter.scene.results,
+          chunk.node.node_id,
+          chunk.node.paint_offset,
+          frame.translation(),
+          visible,
+          &mut emitter.device(surface, emitter.tagged),
+        )
+        .map_err(PdfError::from)
+      }
+      ChunkPart::CollapsedBorders => Ok(()),
       ChunkPart::Content => emitter.emit_tagged_content(
         node,
         &resolved.content,
