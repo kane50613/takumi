@@ -89,9 +89,28 @@ impl<'c> InlineNode<'c> {
     }
   }
 
-  /// The size and baselines of the lines in taffy's constraint: the known width, or the
-  /// min-content, max-content, or fit-content width the available width asks for, and the lines'
-  /// height down to a `line-clamp`.
+  /// The width taffy's constraint gives the content, the known content width or the min-content,
+  /// max-content, or fit-content width the available width asks for, and the width its lines lay
+  /// out at.
+  pub(crate) fn widths(
+    self,
+    items_data: &InlineNodeData<'c>,
+    available_space: Size<AvailableSpace>,
+    known_width: Option<f32>,
+  ) -> (f32, f32) {
+    let width =
+      known_width.unwrap_or_else(|| self.content_inline_size(items_data, available_space));
+    // taffy lays a leaf out with no known width, at the definite width it offers.
+    let line_width = known_width.unwrap_or(match available_space.width {
+      AvailableSpace::Definite(available) => available.max(width),
+      _ => width,
+    });
+
+    (width, line_width)
+  }
+
+  /// The size and baselines of the lines in taffy's constraint, as [`Self::widths`] and
+  /// [`Self::measure_lines`] find them.
   pub(crate) fn measure(
     self,
     items_data: &InlineNodeData<'c>,
@@ -104,14 +123,21 @@ impl<'c> InlineNode<'c> {
     let known_width = known_dimensions
       .width
       .map(|width| (width - padding.left - padding.right - border.left - border.right).max(0.0));
-    let width =
-      known_width.unwrap_or_else(|| self.content_inline_size(items_data, available_space));
-    // taffy lays a leaf out with no known width, at the definite width it offers.
-    let line_width = known_width.unwrap_or(match available_space.width {
-      AvailableSpace::Definite(available) => available.max(width),
-      _ => width,
-    });
-    let lines = self.layout_lines_at(items_data, line_width, available_space.height);
+    let (width, line_width) = self.widths(items_data, available_space, known_width);
+
+    self.measure_lines(items_data, width, line_width, available_space.height)
+  }
+
+  /// The size and baselines of the lines laid out `line_width` wide in `available_height`: `width`
+  /// wide, and as tall as the lines down to a `line-clamp`.
+  pub(crate) fn measure_lines(
+    self,
+    items_data: &InlineNodeData<'c>,
+    width: f32,
+    line_width: f32,
+    available_height: AvailableSpace,
+  ) -> InlineMeasurement {
+    let lines = self.layout_lines_at(items_data, line_width, available_height);
     let margins_adjoin = self.block.context.margins_adjoin();
     let margins = margin_struts(&lines, margins_adjoin);
     let (height, clamped) = content_block_size(&lines, margins_adjoin);
