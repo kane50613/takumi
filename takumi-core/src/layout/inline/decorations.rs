@@ -82,6 +82,15 @@ pub(crate) struct DecorationFont {
 }
 
 impl DecorationFont {
+  /// The primary font with `metrics` at `size`, unscaled.
+  pub(crate) fn new(metrics: PrimaryFontMetrics, size: f32) -> Self {
+    Self {
+      metrics,
+      size,
+      scale: 1.0,
+    }
+  }
+
   /// The font of a box styled with `font`, scaled by `scale`, or of `run` when the box has no
   /// primary font.
   fn of(font: BoxFont, scale: f32, run: &ShapedRun) -> Self {
@@ -98,7 +107,7 @@ impl DecorationFont {
   }
 
   /// Blink's `TextDecorationThickness::Resolve`, at least a pixel.
-  fn thickness(self, thickness: SizedTextDecorationThickness) -> f32 {
+  pub(crate) fn thickness(self, thickness: SizedTextDecorationThickness) -> f32 {
     let auto = self.size * self.scale / 10.0;
 
     match thickness {
@@ -155,6 +164,11 @@ pub(crate) struct DecoratingBox {
 }
 
 impl DecoratingBox {
+  /// The box `font` measures, with its baseline at `baseline`.
+  pub(crate) fn new(font: DecorationFont, baseline: f32) -> Self {
+    Self { font, baseline }
+  }
+
   /// Blink's `DecoratingBox::ContentOffsetInContainer`, the top of its content area.
   fn top(self) -> f32 {
     self.baseline - self.font.ascent()
@@ -162,7 +176,7 @@ impl DecoratingBox {
 
   /// The top of its `line`, `thickness` thick, over text whose top is `text_top`, as Blink's
   /// `TextDecorationInfo` places it.
-  fn line_top(
+  pub(crate) fn line_top(
     self,
     line: TextDecorationLines,
     (underline_position, underline_offset): (TextUnderlinePosition, Option<f32>),

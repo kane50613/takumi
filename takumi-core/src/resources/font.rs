@@ -27,8 +27,9 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 use crate::{
   fonts::{
     css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
-    font_custom_platform_data::FontCustomPlatformData, font_description::FontSelectionDescription,
-    font_face::FontFaceDescriptors, font_height::FontHeight,
+    font_baseline::FontBaseline, font_custom_platform_data::FontCustomPlatformData,
+    font_description::FontSelectionDescription, font_face::FontFaceDescriptors,
+    font_height::FontHeight,
   },
   layout_unit::LayoutUnit,
   resources::{
@@ -651,6 +652,33 @@ impl PrimaryFontMetrics {
   /// The `line-height: normal` these metrics give, as Blink's `FontMetrics::SetLineSpacing`.
   pub(crate) fn line_spacing(self) -> f32 {
     self.ascent + self.descent + self.line_gap
+  }
+
+  /// Blink's `FontMetrics::FloatHeight`.
+  pub(crate) fn float_height(self) -> f32 {
+    self.ascent + self.descent
+  }
+
+  /// Blink's `FontMetrics::XHeight`: the font's x-height, or 56% of the ascent, as Blink's
+  /// `SimpleFontData::PlatformInit` guesses for a font without one.
+  pub(crate) fn float_x_height(self) -> f32 {
+    self
+      .x_height
+      .filter(|x_height| *x_height > 0.0)
+      .unwrap_or(self.ascent * 0.56)
+  }
+
+  /// Blink's `FontMetrics::FloatAscent`: how far `baseline` sits below the top of the text.
+  pub(crate) fn float_ascent(self, baseline: FontBaseline) -> f32 {
+    match baseline {
+      FontBaseline::Alphabetic => self.ascent,
+      FontBaseline::Central => self.float_height() / 2.0,
+      FontBaseline::TextUnder | FontBaseline::IdeographicUnder => self.float_height(),
+      FontBaseline::XMiddle => self.ascent - self.float_x_height() / 2.0,
+      FontBaseline::Math => self.ascent * 0.5,
+      FontBaseline::Hanging => self.ascent * 0.2,
+      FontBaseline::TextOver => 0.0,
+    }
   }
 }
 

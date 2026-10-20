@@ -4,6 +4,7 @@ pub(crate) mod css_font_selector;
 pub(crate) mod css_segmented_font_face;
 pub(crate) mod emoji_presentation_scanner;
 pub(crate) mod font;
+pub(crate) mod font_baseline;
 pub(crate) mod font_cache;
 pub(crate) mod font_custom_platform_data;
 pub(crate) mod font_data_for_range_set;

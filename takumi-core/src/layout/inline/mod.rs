@@ -9,7 +9,7 @@ pub(crate) mod atomic_inline;
 mod background;
 mod block_layout;
 mod cache;
-mod decorations;
+pub(crate) mod decorations;
 mod fragment_items;
 pub(crate) mod inline_box_state;
 pub(crate) mod inline_break_token;
