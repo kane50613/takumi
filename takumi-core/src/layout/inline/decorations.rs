@@ -159,6 +159,27 @@ impl DecoratingBox {
   fn top(self) -> f32 {
     self.baseline - self.font.ascent()
   }
+
+  /// The top of its `line`, `thickness` thick, over text whose top is `text_top`, as Blink's
+  /// `TextDecorationInfo` places it.
+  fn line_top(
+    self,
+    line: TextDecorationLines,
+    (underline_position, underline_offset): (TextUnderlinePosition, Option<f32>),
+    text_top: f32,
+    thickness: f32,
+  ) -> f32 {
+    match line {
+      TextDecorationLines::UNDERLINE => {
+        self.top()
+          + self
+            .font
+            .underline_offset(underline_position, underline_offset, thickness)
+      }
+      TextDecorationLines::OVERLINE => text_top - thickness.floor(),
+      _ => text_top + 2.0 * self.font.ascent() / 3.0 - thickness / 2.0,
+    }
+  }
 }
 
 /// Where a run's decorations go, after Blink's `TextDecorationInfo`: in the border box, which
@@ -327,18 +348,12 @@ impl ShapedRun {
         .into_iter()
         .filter(|(line, _)| decoration.line.contains(*line))
         .map(move |(line, over)| {
-          let top = match line {
-            TextDecorationLines::UNDERLINE => {
-              decorating.top()
-                + decorating.font.underline_offset(
-                  decoration.underline_position,
-                  decoration.underline_offset,
-                  thickness,
-                )
-            }
-            TextDecorationLines::OVERLINE => placement.text_top - thickness.floor(),
-            _ => placement.text_top + 2.0 * decorating.font.ascent() / 3.0 - thickness / 2.0,
-          };
+          let top = decorating.line_top(
+            line,
+            (decoration.underline_position, decoration.underline_offset),
+            placement.text_top,
+            thickness,
+          );
 
           DecorationLine {
             origin: Point {
