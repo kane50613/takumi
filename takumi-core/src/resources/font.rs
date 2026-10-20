@@ -192,6 +192,11 @@ impl FontBlob {
     (*self.data).as_ref()
   }
 
+  /// The sfnt bytes, shared with the blob instead of copied.
+  pub fn shared_data(&self) -> Arc<dyn AsRef<[u8]> + Send + Sync> {
+    self.data.clone()
+  }
+
   /// The id glyph caches key the bytes by.
   pub fn id(&self) -> u64 {
     self.id

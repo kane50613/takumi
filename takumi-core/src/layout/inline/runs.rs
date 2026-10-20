@@ -141,8 +141,7 @@ impl ShapedRun {
   }
 
   /// The font file the run was shaped with.
-  #[cfg(feature = "paint-tree")]
-  pub(crate) fn font_blob(&self) -> FontBlob {
+  pub fn font_blob(&self) -> FontBlob {
     self.font_data.clone()
   }
 
