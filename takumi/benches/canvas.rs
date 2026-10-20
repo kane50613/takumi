@@ -178,6 +178,22 @@ fn html_fixture(html: &str) -> Node {
   Node::from_html(body, options).unwrap()
 }
 
+/// Full-canvas layers at partial opacity, each composited over the ones below.
+fn translucent_layers_fixture() -> Node {
+  let layers = ["#ff5f6d", "#3a1c71", "#30a46c", "#ffb454"]
+    .iter()
+    .map(|color| {
+      format!(
+        r#"<div style="position: absolute; inset: 0; opacity: 0.6; background-image: linear-gradient(135deg, {color}, transparent)"></div>"#
+      )
+    })
+    .collect::<String>();
+
+  html_fixture(&format!(
+    r#"<body><div style="position: relative; width: 100%; height: 100%; background-color: white">{layers}</div></body>"#
+  ))
+}
+
 fn bench_canvas(c: &mut Criterion) {
   let fonts = Fonts::default();
   let mut group = c.benchmark_group("canvas");
@@ -193,6 +209,9 @@ fn bench_canvas(c: &mut Criterion) {
   });
   group.bench_function("gradient_clip_mask", |b| {
     b.iter(|| render_node(&fonts, black_box(gradient_clip_mask_fixture())))
+  });
+  group.bench_function("translucent_layers", |b| {
+    b.iter(|| render_node(&fonts, black_box(translucent_layers_fixture())))
   });
   group.bench_function("square_border_sides", |b| {
     b.iter(|| {
