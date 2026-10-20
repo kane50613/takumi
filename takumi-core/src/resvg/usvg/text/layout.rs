@@ -183,70 +183,43 @@ pub(crate) fn layout_text(text_node: &Text, cache: &Cache) -> Option<(Vec<Span>,
         span_ts = span_ts.pre_translate(0.0, shift);
       }
 
-      let mut underline = None;
-      let mut overline = None;
-      let mut line_through = None;
-
-      if let Some(decoration) = span.decoration.underline.clone() {
-        // TODO: No idea what offset should be used for top-to-bottom layout.
-        // There is
-        // https://www.w3.org/TR/css-text-decor-3/#text-underline-position-property
-        // but it doesn't go into details.
-        let (center, thickness) = font.decoration_line(TextDecorationLines::UNDERLINE);
+      let mut decorate = |line, decoration: &Option<TextDecorationStyle>, vertical_offset| {
+        let decoration = decoration.clone()?;
+        let (center, thickness) = font.decoration_line(line);
         let offset = match text_node.writing_mode {
           WritingMode::LeftToRight => center,
-          WritingMode::TopToBottom => font.height() / 2.0,
+          WritingMode::TopToBottom => vertical_offset,
         };
-
-        if let Some(path) = convert_decoration(
+        let path = convert_decoration(
           (offset, thickness),
           span,
           decoration,
           &decoration_spans,
           span_ts,
-        ) {
-          bbox = bbox.expand(path.data.bounds());
-          underline = Some(path);
-        }
-      }
+        )?;
 
-      if let Some(decoration) = span.decoration.overline.clone() {
-        let (center, thickness) = font.decoration_line(TextDecorationLines::OVERLINE);
-        let offset = match text_node.writing_mode {
-          WritingMode::LeftToRight => center,
-          WritingMode::TopToBottom => -font.height() / 2.0,
-        };
-
-        if let Some(path) = convert_decoration(
-          (offset, thickness),
-          span,
-          decoration,
-          &decoration_spans,
-          span_ts,
-        ) {
-          bbox = bbox.expand(path.data.bounds());
-          overline = Some(path);
-        }
-      }
-
-      if let Some(decoration) = span.decoration.line_through.clone() {
-        let (center, thickness) = font.decoration_line(TextDecorationLines::LINE_THROUGH);
-        let offset = match text_node.writing_mode {
-          WritingMode::LeftToRight => center,
-          WritingMode::TopToBottom => 0.0,
-        };
-
-        if let Some(path) = convert_decoration(
-          (offset, thickness),
-          span,
-          decoration,
-          &decoration_spans,
-          span_ts,
-        ) {
-          bbox = bbox.expand(path.data.bounds());
-          line_through = Some(path);
-        }
-      }
+        bbox = bbox.expand(path.data.bounds());
+        Some(path)
+      };
+      // TODO: No idea what offset should be used for top-to-bottom layout.
+      // There is
+      // https://www.w3.org/TR/css-text-decor-3/#text-underline-position-property
+      // but it doesn't go into details.
+      let underline = decorate(
+        TextDecorationLines::UNDERLINE,
+        &span.decoration.underline,
+        font.height() / 2.0,
+      );
+      let overline = decorate(
+        TextDecorationLines::OVERLINE,
+        &span.decoration.overline,
+        -font.height() / 2.0,
+      );
+      let line_through = decorate(
+        TextDecorationLines::LINE_THROUGH,
+        &span.decoration.line_through,
+        0.0,
+      );
 
       let mut fill = span.fill.clone();
       if let Some(ref mut fill) = fill {
