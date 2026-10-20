@@ -782,7 +782,7 @@ fn take_pseudo_bucket<'a>(
   rules: &mut Vec<MatchedRule<'a>>,
   layer_count: usize,
 ) -> Option<MatchedDeclarationsView<'a>> {
-  // `content` does not inherit and computes to `normal` when undeclared, which generates no box.
+  // `content` does not inherit, and its initial `normal` computes to `none` on these pseudo-elements.
   let sets_content = rules.iter().any(|rule| {
     rule.declarations.iter().any(|declaration| {
       declaration
