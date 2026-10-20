@@ -793,7 +793,7 @@ fn take_pseudo_bucket<'a>(
 /// RFC 4647 basic filtering, as `:lang()` uses: `range` matches `lang` if they're equal
 /// (case-insensitive) or `lang` extends `range` with a `-` boundary (`zh` matches `zh-Hant`).
 /// `*` matches any non-empty `lang`.
-fn lang_matches(lang: &str, range: &str) -> bool {
+pub(crate) fn lang_matches(lang: &str, range: &str) -> bool {
   if range == "*" {
     return true;
   }

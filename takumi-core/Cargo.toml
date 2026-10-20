@@ -87,10 +87,6 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.simplecss]
-workspace = true
-optional = true
-
 [dependencies.siphasher]
 workspace = true
 optional = true
@@ -134,7 +130,7 @@ jpeg = ["dep:zune-jpeg", "dep:zune-core"]
 webp = ["dep:image-webp", "dep:libwebp-sys"]
 gif = ["dep:gif"]
 svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
-svg = ["svg-sizing", "dep:simplecss", "dep:siphasher", "dep:strict-num", "dep:tiny-skia-path"]
+svg = ["svg-sizing", "dep:siphasher", "dep:strict-num", "dep:tiny-skia-path"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
 rayon = ["dep:rayon"]

@@ -1804,7 +1804,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "simplecss",
  "siphasher",
  "skrifa 0.48.0",
  "smallvec",
