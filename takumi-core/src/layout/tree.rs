@@ -3312,7 +3312,7 @@ impl RenderContext {
     // importance.
     let (inline_normal, inline_important) = node_layers
       .inline
-      .map(|inline| StyleDeclarationBlock::from(inline).split_importance())
+      .map(|inline| StyleDeclarationBlock::from(*inline).split_importance())
       .unzip();
 
     if let Some(inline_normal) = inline_normal {
@@ -3413,7 +3413,7 @@ impl RenderContext {
     let cache = self.matched_styles();
 
     if let Some(key) = &key
-      && let Some(resolved) = cache.get(key, &self.style, &self.sizing, layers.preset.as_ref())
+      && let Some(resolved) = cache.get(key, &self.style, &self.sizing, layers.preset.as_deref())
     {
       return resolved;
     }

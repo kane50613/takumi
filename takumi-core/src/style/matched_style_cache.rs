@@ -47,7 +47,7 @@ impl MatchedStyleKey {
 struct MatchedStyle {
   parent: Rc<ComputedStyle>,
   parent_sizing: SizingContext,
-  preset: Option<Style>,
+  preset: Option<Box<Style>>,
   inherits_explicitly: bool,
   resolved: (Rc<ComputedStyle>, SizingContext, Color),
 }
@@ -61,7 +61,7 @@ impl MatchedStyle {
     parent_sizing: &SizingContext,
     preset: Option<&Style>,
   ) -> bool {
-    self.preset.as_ref() == preset
+    self.preset.as_deref() == preset
       && self.parent_sizing.resolves_like(parent_sizing)
       && self.parent.inherited_equal(parent)
       && (!self.inherits_explicitly || self.parent.non_inherited_equal(parent))
@@ -101,7 +101,7 @@ impl MatchedStyleCache {
     key: MatchedStyleKey,
     parent: Rc<ComputedStyle>,
     parent_sizing: SizingContext,
-    preset: Option<Style>,
+    preset: Option<Box<Style>>,
     inherits_explicitly: bool,
     resolved: (Rc<ComputedStyle>, SizingContext, Color),
   ) {
