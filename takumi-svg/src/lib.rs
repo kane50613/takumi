@@ -30,7 +30,7 @@ mod scene_emit;
 mod svg_image;
 mod text;
 
-use std::{borrow::Cow, collections::HashMap, fmt::Write as _, io, mem};
+use std::{borrow::Cow, collections::HashMap, fmt::Write as _, io, mem, rc::Rc, sync::Arc};
 
 use quick_xml::{
   Writer,
@@ -171,6 +171,11 @@ pub(crate) struct SvgDocument {
   /// Interned ids by outline and the linear part of its placement, so a repeated glyph skips
   /// formatting its path. `None` for an outline that draws nothing.
   glyph_keys: HashMap<(u64, [u32; 4]), Option<u32>>,
+  /// `data:` URLs by what they encode, `None` for an image that would not encode.
+  image_hrefs: HashMap<ImageKey, Option<Rc<str>>>,
+  /// Images drawn at their own pixel size, emitted as `<defs>` by [`Self::finish`].
+  image_defs: Vec<ImageDef>,
+  image_ids: HashMap<ImageKey, u32>,
   /// Each open transformed group's transform onto the root, innermost last.
   transforms: Vec<Affine>,
   /// The root viewport in root user space.
@@ -197,6 +202,9 @@ impl SvgDocument {
       glyph_defs: Vec::new(),
       glyph_ids: HashMap::new(),
       glyph_keys: HashMap::new(),
+      image_hrefs: HashMap::new(),
+      image_defs: Vec::new(),
+      image_ids: HashMap::new(),
       transforms: Vec::new(),
       viewport,
     })
@@ -479,6 +487,61 @@ impl SvgDocument {
       attrs.push(("preserveAspectRatio", par.into()));
     }
     self.empty("image", &attrs)
+  }
+
+  /// The `data:` URL of the image `key` names, which `encode` makes the first time it is asked.
+  pub(crate) fn image_href(
+    &mut self,
+    key: &ImageKey,
+    encode: impl FnOnce() -> Option<String>,
+  ) -> Option<Rc<str>> {
+    if let Some(href) = self.image_hrefs.get(key) {
+      return href.clone();
+    }
+
+    let href = encode().map(Rc::from);
+
+    self.image_hrefs.insert(key.clone(), href.clone());
+    href
+  }
+
+  /// Draws the image `key` names, `href` at `natural` pixels, stretched over `rect` by a `<use>` of
+  /// its one definition.
+  pub(crate) fn image_use(
+    &mut self,
+    key: &ImageKey,
+    href: &Rc<str>,
+    natural: (f32, f32),
+    rect: Frame,
+  ) -> io::Result<()> {
+    let id = match self.image_ids.get(key) {
+      Some(&id) => id,
+      None => {
+        let id = self.image_defs.len() as u32;
+
+        self.image_defs.push(ImageDef {
+          href: Rc::clone(href),
+          width: natural.0,
+          height: natural.1,
+        });
+        self.image_ids.insert(key.clone(), id);
+        id
+      }
+    };
+    let transform = Affine {
+      a: rect.w / natural.0,
+      b: 0.0,
+      c: 0.0,
+      d: rect.h / natural.1,
+      x: rect.x,
+      y: rect.y,
+    };
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("href", format!("#i{id}").into())];
+
+    if !transform.is_identity() {
+      attrs.push(("transform", matrix_attr(transform).into()));
+    }
+    self.empty("use", &attrs)
   }
 
   /// Opens a `<g>` with a transform and optional opacity, clip, and filter.
@@ -1018,12 +1081,24 @@ impl SvgDocument {
   /// glyph outlines are flushed as a trailing `<defs>`; `<use>` references
   /// resolve document-wide, so forward references are fine.
   pub(crate) fn finish(mut self) -> io::Result<String> {
-    if !self.glyph_defs.is_empty() {
+    if !self.glyph_defs.is_empty() || !self.image_defs.is_empty() {
       self.open("defs", &[])?;
       for (id, data) in mem::take(&mut self.glyph_defs).iter().enumerate() {
         self.empty(
           "path",
           &[("id", format!("g{id}").into()), ("d", data.as_str().into())],
+        )?;
+      }
+      for (id, image) in mem::take(&mut self.image_defs).iter().enumerate() {
+        self.empty(
+          "image",
+          &[
+            ("id", format!("i{id}").into()),
+            ("width", num(image.width).into()),
+            ("height", num(image.height).into()),
+            ("preserveAspectRatio", "none".into()),
+            ("href", image.href.as_ref().into()),
+          ],
         )?;
       }
       self.close("defs")?;
@@ -1034,6 +1109,25 @@ impl SvgDocument {
         .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned()),
     )
   }
+}
+
+/// What an embedded image was made from, so a repeat reuses its encoding and its definition.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) enum ImageKey {
+  /// The image `src` resolves to, with the `currentColor` an SVG source reads.
+  Src {
+    src: Arc<str>,
+    current_color: [u8; 4],
+  },
+  /// A bitmap glyph of the font `font` at a size.
+  BitmapGlyph { font: u64, glyph: u32, size: u32 },
+}
+
+/// An image written once into `<defs>` at its own pixel size.
+struct ImageDef {
+  href: Rc<str>,
+  width: f32,
+  height: f32,
 }
 
 /// Opaque proof that an element a `begin_*` method opened is still open;
