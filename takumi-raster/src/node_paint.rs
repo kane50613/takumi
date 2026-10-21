@@ -501,8 +501,9 @@ impl<'c> CanvasDevice<'c> {
       y: offset.y + glyph.y,
     };
 
-    // The run's glyphs cast one shadow: their coverage drawn together, then blurred once, as
-    // Blink blurs a text shadow's whole layer.
+    // Approximate: the run's glyphs cast one shadow, their coverage drawn together and blurred
+    // once. Blink's `DropShadowPaintFilter` covers a whole text fragment, which can span several
+    // of these runs where font fallback or bidi splits it, so halos still stack across those.
     if let Some(shadow) = self.shadow {
       // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`).
       let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
