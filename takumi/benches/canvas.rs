@@ -228,6 +228,13 @@ fn rounded_image_fixture(size: &str) -> Node {
   )
 }
 
+/// A full-canvas radial gradient under a `clip-path`, which paints through the clip mask.
+fn clipped_radial_gradient_fixture() -> Node {
+  html_fixture(
+    r#"<body><div style="width: 100%; height: 100%; clip-path: circle(45%); background-image: radial-gradient(circle at 30% 40%, #ff5f6d, #3a1c71 60%, #30a46c)"></div></body>"#,
+  )
+}
+
 fn bench_canvas(c: &mut Criterion) {
   let fonts = Fonts::default();
   let mut group = c.benchmark_group("canvas");
@@ -255,6 +262,9 @@ fn bench_canvas(c: &mut Criterion) {
   });
   group.bench_function("rounded_scaled_image", |b| {
     b.iter(|| render_node(&fonts, black_box(rounded_image_fixture("700px"))))
+  });
+  group.bench_function("clipped_radial_gradient", |b| {
+    b.iter(|| render_node(&fonts, black_box(clipped_radial_gradient_fixture())))
   });
   group.bench_function("square_border_sides", |b| {
     b.iter(|| {

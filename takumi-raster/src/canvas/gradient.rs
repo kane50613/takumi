@@ -74,11 +74,7 @@ pub(crate) fn overlay_gradient_tile<T>(
     bounds,
     mode,
     combined_mask,
-    |y, row| {
-      for (i, pixel) in row.iter_mut().enumerate() {
-        *pixel = premultiplied_from_pixel(gradient.sample_pixel_dithered(x_start + i as u32, y));
-      }
-    },
+    |y, span, row| gradient.fill_row(x_start + span.start as u32, y, &mut row[span]),
   );
 }
 

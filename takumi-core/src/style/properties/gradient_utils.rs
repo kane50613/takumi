@@ -327,6 +327,30 @@ pub trait GradientOverlayTile {
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState;
   /// Returns an index in `0..lut_len` where `lut_len` is the value passed to `begin_row`.
   fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize;
+  /// Writes the premultiplied pixels of row `y` from `x_start` on into `out`, stepping the LUT
+  /// index along the row.
+  fn fill_row(&self, x_start: u32, y: u32, out: &mut [[u8; 4]]) {
+    let lut_len = self.lut_len();
+
+    if lut_len == 0 {
+      out.fill([0; 4]);
+      return;
+    }
+
+    let mut row_state = self.begin_row(x_start, y, lut_len);
+    let bytes =
+      |color: PremultipliedColorU8| [color.red(), color.green(), color.blue(), color.alpha()];
+
+    if self.dither_active() {
+      for (x, pixel) in (x_start..).zip(out) {
+        *pixel = bytes(self.sample_dithered_at(self.next_lut_index(&mut row_state), x, y));
+      }
+    } else {
+      for pixel in out {
+        *pixel = bytes(self.sample_at(self.next_lut_index(&mut row_state)));
+      }
+    }
+  }
   /// Returns true when every LUT entry has alpha = 255; allows the overlay loop to skip blending.
   fn fully_opaque(&self) -> bool {
     false
