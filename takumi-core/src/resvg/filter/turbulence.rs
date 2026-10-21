@@ -3,7 +3,10 @@
 
 #![allow(clippy::needless_range_loop)]
 
-use super::{ImageRefMut, f32_bound};
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+
+use super::{ImageRefMut, RGBA8, f32_bound};
 use crate::resvg::usvg::ApproxZeroUlps;
 
 const RAND_M: i32 = 2147483647; // 2**31 - 1
@@ -23,6 +26,9 @@ struct StitchInfo {
   wrap_x: i32, // Minimum value to wrap.
   wrap_y: i32,
 }
+
+/// Each channel's gradients, indexed by lattice point.
+type Gradients = [[[f64; 2]; B_LEN]; 4];
 
 /// Applies a turbulence filter.
 ///
@@ -44,17 +50,12 @@ pub fn apply(
   dest: ImageRefMut,
 ) {
   let (lattice_selector, gradient) = init(seed);
-  let width = dest.width;
-  let height = dest.height;
-  let mut x = 0;
-  let mut y = 0;
-  for pixel in dest.data.iter_mut() {
-    let turb = |channel| {
-      let (tx, ty) = ((x as f64 + offset_x) / sx, (y as f64 + offset_y) / sy);
-      let n = turbulence(
-        channel,
-        tx,
-        ty,
+  let (width, height) = (dest.width, dest.height);
+  let fill_row = |(y, row): (usize, &mut [RGBA8])| {
+    for (x, pixel) in row.iter_mut().enumerate() {
+      let noise = turbulence(
+        (x as f64 + offset_x) / sx,
+        (y as f64 + offset_y) / sy,
         x as f64,
         y as f64,
         width as f64,
@@ -67,32 +68,37 @@ pub fn apply(
         &lattice_selector,
         &gradient,
       );
+      let [r, g, b, a] = noise.map(|n| {
+        let n = if fractal_noise {
+          (n * 255.0 + 255.0) / 2.0
+        } else {
+          n * 255.0
+        };
 
-      let n = if fractal_noise {
-        (n * 255.0 + 255.0) / 2.0
-      } else {
-        n * 255.0
-      };
+        (f32_bound(0.0, n as f32, 255.0) + 0.5) as u8
+      });
 
-      (f32_bound(0.0, n as f32, 255.0) + 0.5) as u8
-    };
-
-    pixel.r = turb(0);
-    pixel.g = turb(1);
-    pixel.b = turb(2);
-    pixel.a = turb(3);
-
-    x += 1;
-    if x == dest.width {
-      x = 0;
-      y += 1;
+      *pixel = RGBA8 { r, g, b, a };
     }
-  }
+  };
+
+  #[cfg(feature = "rayon")]
+  dest
+    .data
+    .par_chunks_mut(width as usize)
+    .enumerate()
+    .for_each(fill_row);
+  #[cfg(not(feature = "rayon"))]
+  dest
+    .data
+    .chunks_mut(width as usize)
+    .enumerate()
+    .for_each(fill_row);
 }
 
-fn init(mut seed: i32) -> (Vec<usize>, Vec<Vec<Vec<f64>>>) {
-  let mut lattice_selector = vec![0; B_LEN];
-  let mut gradient = vec![vec![vec![0.0; 2]; B_LEN]; 4];
+fn init(mut seed: i32) -> ([usize; B_LEN], Box<Gradients>) {
+  let mut lattice_selector = [0; B_LEN];
+  let mut gradient = Box::new([[[0.0; 2]; B_LEN]; 4]);
 
   if seed <= 0 {
     seed = -(seed % (RAND_M - 1)) + 1;
@@ -129,18 +135,16 @@ fn init(mut seed: i32) -> (Vec<usize>, Vec<Vec<Vec<f64>>>) {
 
   for i in 0..B_SIZE + 2 {
     lattice_selector[B_SIZE + i] = lattice_selector[i];
-    for g in gradient.iter_mut().take(4) {
-      for j in 0..2 {
-        g[B_SIZE + i][j] = g[i][j];
-      }
+    for g in gradient.iter_mut() {
+      g[B_SIZE + i] = g[i];
     }
   }
 
   (lattice_selector, gradient)
 }
 
+/// The turbulence of all four channels at a point, which share every lattice lookup.
 fn turbulence(
-  color_channel: usize,
   mut x: f64,
   mut y: f64,
   tile_x: f64,
@@ -152,9 +156,9 @@ fn turbulence(
   num_octaves: u32,
   fractal_sum: bool,
   do_stitching: bool,
-  lattice_selector: &[usize],
-  gradient: &[Vec<Vec<f64>>],
-) -> f64 {
+  lattice_selector: &[usize; B_LEN],
+  gradient: &Gradients,
+) -> [f64; 4] {
   // Adjust the base frequencies if necessary for stitching.
   let mut stitch = if do_stitching {
     // When stitching tiled turbulence, the frequencies must be adjusted
@@ -194,15 +198,19 @@ fn turbulence(
     None
   };
 
-  let mut sum = 0.0;
+  let mut sum = [0.0; 4];
   x *= base_freq_x;
   y *= base_freq_y;
   let mut ratio = 1.0;
   for _ in 0..num_octaves {
-    if fractal_sum {
-      sum += noise2(color_channel, x, y, lattice_selector, gradient, stitch) / ratio;
-    } else {
-      sum += noise2(color_channel, x, y, lattice_selector, gradient, stitch).abs() / ratio;
+    let noise = noise2(x, y, lattice_selector, gradient, stitch);
+
+    for (sum, noise) in sum.iter_mut().zip(noise) {
+      if fractal_sum {
+        *sum += noise / ratio;
+      } else {
+        *sum += noise.abs() / ratio;
+      }
     }
     x *= 2.0;
     y *= 2.0;
@@ -221,14 +229,14 @@ fn turbulence(
   sum
 }
 
+/// Perlin noise of all four channels at a point, finding its lattice cell once.
 fn noise2(
-  color_channel: usize,
   x: f64,
   y: f64,
-  lattice_selector: &[usize],
-  gradient: &[Vec<Vec<f64>>],
+  lattice_selector: &[usize; B_LEN],
+  gradient: &Gradients,
   stitch_info: Option<StitchInfo>,
-) -> f64 {
+) -> [f64; 4] {
   let t = x + PERLIN_N as f64;
   let mut bx0 = t as i32;
   let mut bx1 = bx0 + 1;
@@ -271,17 +279,20 @@ fn noise2(
   let b11 = lattice_selector[j + by1 as usize];
   let sx = s_curve(rx0);
   let sy = s_curve(ry0);
-  let q = &gradient[color_channel][b00];
-  let u = rx0 * q[0] + ry0 * q[1];
-  let q = &gradient[color_channel][b10];
-  let v = rx1 * q[0] + ry0 * q[1];
-  let a = lerp(sx, u, v);
-  let q = &gradient[color_channel][b01];
-  let u = rx0 * q[0] + ry1 * q[1];
-  let q = &gradient[color_channel][b11];
-  let v = rx1 * q[0] + ry1 * q[1];
-  let b = lerp(sx, u, v);
-  lerp(sy, a, b)
+
+  gradient.each_ref().map(|channel| {
+    let q = &channel[b00];
+    let u = rx0 * q[0] + ry0 * q[1];
+    let q = &channel[b10];
+    let v = rx1 * q[0] + ry0 * q[1];
+    let a = lerp(sx, u, v);
+    let q = &channel[b01];
+    let u = rx0 * q[0] + ry1 * q[1];
+    let q = &channel[b11];
+    let v = rx1 * q[0] + ry1 * q[1];
+    let b = lerp(sx, u, v);
+    lerp(sy, a, b)
+  })
 }
 
 fn random(seed: i32) -> i32 {
