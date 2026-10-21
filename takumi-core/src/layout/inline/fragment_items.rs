@@ -55,7 +55,7 @@ pub struct FragmentItems {
   /// each a run holding no glyphs at no place.
   faces: Vec<Rc<ShapedRun>>,
   /// The outlines of the glyphs each of [`Self::faces`] draws, resolved once for ink and paint.
-  face_glyphs: Vec<Rc<ResolvedGlyphs>>,
+  face_glyphs: Vec<ResolvedGlyphs>,
   glyphs: GlyphStore,
   /// In-flow and out-of-flow inline boxes, sorted by id.
   inline_boxes: Vec<VisualInlineBox>,
@@ -408,10 +408,10 @@ impl FragmentItems {
       .iter()
       .rposition(|existing| existing.same_face(&run));
     let face = existing.unwrap_or_else(|| {
-      self.face_glyphs.push(Rc::default());
+      self.face_glyphs.push(ResolvedGlyphs::default());
       self.face_glyphs.len() - 1
     });
-    let resolved = Rc::make_mut(&mut self.face_glyphs[face]);
+    let resolved = &mut self.face_glyphs[face];
 
     if let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) {
       context.fonts().resolve_glyphs_into(
@@ -560,7 +560,7 @@ impl FragmentItems {
 
       runs.push(PositionedInlineRun {
         glyph_run,
-        resolved_glyphs: Rc::clone(&self.face_glyphs[item.face as usize]),
+        resolved_glyphs: self.face_glyphs[item.face as usize].clone(),
         line_scale: item.placement.line_scale,
         decoration_placement: item.placement.decoration_placement.clone(),
         paint_offset,
