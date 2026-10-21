@@ -689,8 +689,8 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
         LonghandId::MarginLeft,
       ],
     )]),
-  "mx" => Utility::functional(&[value!(-Length: margin_left, margin_right)])
-    .theme(&[(Namespace::Spacing, &[LonghandId::MarginLeft, LonghandId::MarginRight])]),
+  "mx" => Utility::functional(&[value!(-Length: margin_inline_start, margin_inline_end)])
+    .theme(&[(Namespace::Spacing, &[LonghandId::MarginInlineStart, LonghandId::MarginInlineEnd])]),
   "my" => Utility::functional(&[value!(-Length: margin_top, margin_bottom)])
     .theme(&[(Namespace::Spacing, &[LonghandId::MarginTop, LonghandId::MarginBottom])]),
   "mt" => Utility::functional(&[value!(-Length: margin_top)])
@@ -715,8 +715,8 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
         LonghandId::PaddingLeft,
       ],
     )]),
-  "px" => Utility::functional(&[value!(Length: padding_left, padding_right)])
-    .theme(&[(Namespace::Spacing, &[LonghandId::PaddingLeft, LonghandId::PaddingRight])]),
+  "px" => Utility::functional(&[value!(Length: padding_inline_start, padding_inline_end)])
+    .theme(&[(Namespace::Spacing, &[LonghandId::PaddingInlineStart, LonghandId::PaddingInlineEnd])]),
   "py" => Utility::functional(&[value!(Length: padding_top, padding_bottom)])
     .theme(&[(Namespace::Spacing, &[LonghandId::PaddingTop, LonghandId::PaddingBottom])]),
   "pt" => Utility::functional(&[value!(Length: padding_top)])
@@ -741,8 +741,8 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
         LonghandId::Left,
       ],
     )]),
-  "inset-x" => Utility::functional(&[value!(-Length: left, right)])
-    .theme(&[(Namespace::Spacing, &[LonghandId::Left, LonghandId::Right])]),
+  "inset-x" => Utility::functional(&[value!(-Length: inset_inline_start, inset_inline_end)])
+    .theme(&[(Namespace::Spacing, &[LonghandId::InsetInlineStart, LonghandId::InsetInlineEnd])]),
   "inset-y" => Utility::functional(&[value!(-Length: top, bottom)])
     .theme(&[(Namespace::Spacing, &[LonghandId::Top, LonghandId::Bottom])]),
   "top" => Utility::functional(&[value!(-Length: top)])

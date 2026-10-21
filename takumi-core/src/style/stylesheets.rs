@@ -389,13 +389,13 @@ macro_rules! define_style {
       }
 
       impl LonghandId {
-        const COUNT: usize = [$($(Self::[<$longhand:camel>],)*)* $(Self::[<$transient:camel>],)*].len();
+        pub(crate) const COUNT: usize = [$($(Self::[<$longhand:camel>],)*)* $(Self::[<$transient:camel>],)*].len();
         const ALL: [Self; Self::COUNT] = [
           $($(Self::[<$longhand:camel>],)*)*
           $(Self::[<$transient:camel>],)*
         ];
 
-        const fn index(self) -> usize {
+        pub(crate) const fn index(self) -> usize {
           self as usize
         }
 
@@ -543,7 +543,7 @@ macro_rules! define_style {
           }
         }
 
-        fn from_kebab_case(name: &str) -> Self {
+        pub(crate) fn from_kebab_case(name: &str) -> Self {
           PropertyId::from_name(name, normalize_kebab_property_name)
         }
 
@@ -674,7 +674,7 @@ macro_rules! define_style {
         }
 
         /// Longhands this property expands into (shorthand-expansion targets; unrelated to `!important`).
-        fn target_longhands(self) -> PropertyMask {
+        pub(crate) fn target_longhands(self) -> PropertyMask {
           match self {
             Self::Ignored | Self::Custom => PropertyMask::default(),
             Self::Longhand(property) => [property].into_iter().collect(),
