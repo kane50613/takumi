@@ -5,7 +5,7 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MASK_RUN, MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
-  blit::{OverlayBounds, apply_mask_row, composite_run_over},
+  blit::{OverlayBounds, apply_mask_row, blend_row_masked, composite_run_over},
   mask::MaskRow,
   paint_source::{ResolvedSource, ScaledRows, sample_paint_source},
   whole_pixel_translation,
@@ -286,7 +286,6 @@ fn try_translation_blit(
   let skip = (x_min - bounds.x_min) as usize;
   let len = (x_max - x_min) as usize;
   let mut alphas = vec![0u8; len];
-  let mut sources = vec![[0u8; 4]; len];
 
   for dest_y in bounds.y_min..bounds.y_max {
     let src_y = dest_y + sample_dy;
@@ -312,16 +311,11 @@ fn try_translation_blit(
 
     let src_start = src_y as usize * source_width as usize + (x_min + sample_dx) as usize;
 
-    for ((source, &pixel), &alpha) in sources
-      .iter_mut()
-      .zip(&source_pixels[src_start..src_start + len])
-      .zip(&alphas)
-    {
-      *source = scale_premultiplied_pixel(pixel, alpha);
-    }
-    composite_premultiplied_over_row(
+    blend_row_masked(
       &mut pixels[region.dst_row(dest_y)][skip..skip + len],
-      &sources,
+      &source_pixels[src_start..src_start + len],
+      &alphas,
+      BlendMode::Normal,
     );
   }
 
