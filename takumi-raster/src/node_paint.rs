@@ -4,7 +4,7 @@
 //! [`takumi_core::layout::decoration`]; these functions composite it with
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
@@ -34,7 +34,7 @@ use super::{
 use crate::{
   BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, PlacedMask, Placement, Result,
   Stroke, Style, alpha_mask, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage,
-  checked_area, draw_glyph, intersect_alpha_masks,
+  cached_glyph_mask, checked_area, draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
@@ -523,27 +523,35 @@ impl<'c> CanvasDevice<'c> {
 
         match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
           Some(ResolvedGlyph::Outline(outline)) => {
-            coverages.push(render_mask(
+            let signature = outline.cache_signature();
+
+            coverages.push(cached_glyph_mask(
+              signature,
               outline.paths(),
-              Some(transform),
-              Some(Fill::NonZero.into()),
-              Some(viewport),
+              transform,
+              None,
             ));
             if let Some(text_stroke) = text_stroke {
-              coverages.push(render_mask(
+              coverages.push(cached_glyph_mask(
+                signature,
                 outline.paths(),
-                Some(transform),
-                Some(text_stroke.into()),
-                Some(viewport),
+                transform,
+                Some(text_stroke),
               ));
             }
           }
           Some(ResolvedGlyph::Bitmap(bitmap)) => {
-            coverages.extend(bitmap_coverage(bitmap, transform, viewport));
+            coverages.extend(
+              bitmap_coverage(bitmap, transform, viewport)
+                .map(|(mask, placement)| (Arc::new(mask), placement)),
+            );
           }
           None => {}
         }
       }
+
+      // The cached masks are uncropped, so one wholly outside would only widen the union.
+      coverages.retain(|(_, placement)| viewport.overlaps(*placement));
 
       if let Some(coverage) = union_alpha_masks(coverages) {
         self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
