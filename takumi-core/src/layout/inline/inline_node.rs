@@ -325,13 +325,10 @@ impl<'c> InlineNode<'c> {
   }
 
   /// Blink's `ShapeText`: shapes adjacent text items together, then splits the result among them.
-  /// Without reusing earlier results, the shape cache, `text-autospace`, or `HanKerning`.
+  /// Without reusing earlier results, `text-autospace`, or `HanKerning`.
   fn shape_text(self, data: &mut InlineNodeData<'c>) {
-    let text = &data.text_content;
-    let items = &mut data.items;
-    let shaper = HarfBuzzShaper::new(text);
     let mut spacing = ShapeResultSpacing::new(
-      text,
+      &data.text_content,
       self
         .block
         .context
@@ -340,6 +337,10 @@ impl<'c> InlineNode<'c> {
         .white_space_collapse
         .should_preserve_white_spaces(),
     );
+    let allow_shape_cache = is_shape_cache_allowed(data, &mut spacing);
+    let text = &data.text_content;
+    let items = &mut data.items;
+    let shaper = HarfBuzzShaper::new(text);
     let mut index = 0;
 
     debug_assert!(
@@ -411,7 +412,7 @@ impl<'c> InlineNode<'c> {
         end_index += 1;
       }
 
-      let mut shape_result = match &data.segments {
+      let shape = || match &data.segments {
         Some(segments) => segments.shape_text(
           &shaper,
           &font,
@@ -427,16 +428,29 @@ impl<'c> InlineNode<'c> {
           shaper.shape_pre_segmented(&font, direction, start_offset, end_offset, &range)
         }
       };
+      let mut shape_result = if allow_shape_cache {
+        font.fallback_list.shape_cache.get_or_create(
+          text,
+          start_offset,
+          end_offset,
+          direction,
+          &font.description,
+          shape,
+        )
+      } else {
+        Rc::new(shape())
+      };
 
+      // The cache allows no spacing, so this result is not one it shares.
       if spacing.set_spacing_from(
         font.description.letter_spacing,
         font.description.word_spacing,
       ) {
-        shape_result.apply_spacing(&mut spacing, 0);
+        Rc::make_mut(&mut shape_result).apply_spacing(&mut spacing, 0);
       }
 
       if end_offset == start_item.end_offset() {
-        items[index].shape_result = Some(Rc::new(shape_result));
+        items[index].shape_result = Some(shape_result);
         index += 1;
 
         continue;
@@ -454,7 +468,7 @@ impl<'c> InlineNode<'c> {
       let has_ligatures = shape_result.has_ligatures();
 
       if has_ligatures {
-        shape_result.ensure_position_data();
+        Rc::make_mut(&mut shape_result).ensure_position_data();
       }
 
       for &i in &text_items {
@@ -489,6 +503,54 @@ impl<'c> InlineNode<'c> {
       index = end_index;
     }
   }
+}
+
+/// Blink's `IsNGShapeCacheAllowed`: whether `data` is only text, or text in one span, in one font
+/// with no spacing. Every font's features apply to the whole text, so they are always simple.
+fn is_shape_cache_allowed(data: &InlineNodeData<'_>, spacing: &mut ShapeResultSpacing) -> bool {
+  if data.text_content.is_empty() {
+    return false;
+  }
+
+  let mut font = None;
+  let mut previous_text_end_offset = 0;
+
+  for (index, item) in data.items.iter().enumerate() {
+    match item.item_type {
+      InlineItemType::Control | InlineItemType::Text => {
+        if font.is_none()
+          && item.item_type == InlineItemType::Text
+          && let Some(layout_object) = item.layout_object
+        {
+          font = Some(data.fonts.get(&layout_object.node().context));
+        }
+        if previous_text_end_offset != item.start_offset() {
+          return false;
+        }
+        previous_text_end_offset = item.end_offset();
+      }
+      InlineItemType::Floating | InlineItemType::OutOfFlowPositioned => {}
+      InlineItemType::OpenTag if index == 0 => {}
+      InlineItemType::CloseTag if index == data.items.len() - 1 => {}
+      InlineItemType::OpenTag
+      | InlineItemType::CloseTag
+      | InlineItemType::AtomicInline
+      | InlineItemType::BlockInInline
+      | InlineItemType::ListMarker
+      | InlineItemType::BidiControl => return false,
+    }
+  }
+
+  if previous_text_end_offset != data.text_content.len() {
+    return false;
+  }
+
+  font.is_some_and(|font| {
+    !spacing.set_spacing_from(
+      font.description.letter_spacing,
+      font.description.word_spacing,
+    )
+  })
 }
 
 /// Blink's `ShouldBreakShapingBeforeText`: shaping runs on across items of one font, direction,

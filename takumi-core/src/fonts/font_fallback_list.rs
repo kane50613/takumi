@@ -4,7 +4,8 @@ use std::{cell::OnceCell, rc::Rc};
 
 use super::{
   font_cache::FontCache, font_data_for_range_set::FontDataForRangeSet,
-  font_description::FontFallbackKey, simple_font_data::SimpleFontData,
+  font_description::FontFallbackKey, shaping::shape_cache::ShapeCache,
+  simple_font_data::SimpleFontData,
 };
 use crate::{
   resources::font::{Fonts, MatchedFace},
@@ -51,6 +52,8 @@ impl FontData {
 pub(crate) struct FontFallbackList {
   font_list: Vec<FontData>,
   pub(crate) font_cache: FontCache,
+  /// Blink's `PrimaryFont()->GetShapeCache()`.
+  pub(crate) shape_cache: ShapeCache,
   /// Blink's `cached_primary_simple_font_data_with_space_`.
   primary_with_space: OnceCell<Option<Rc<SimpleFontData>>>,
   /// Blink's `cached_primary_simple_font_data_with_digit_zero_`.
@@ -103,6 +106,7 @@ impl FontFallbackList {
     Self {
       font_list,
       font_cache,
+      shape_cache: ShapeCache::default(),
       primary_with_space: OnceCell::new(),
       primary_with_digit_zero: OnceCell::new(),
     }

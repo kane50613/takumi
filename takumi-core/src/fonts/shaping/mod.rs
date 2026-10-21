@@ -5,6 +5,7 @@ pub(crate) mod glyph_data;
 pub(crate) mod glyph_data_range;
 pub(crate) mod harfbuzz_shaper;
 pub(crate) mod run_segmenter;
+pub(crate) mod shape_cache;
 pub(crate) mod shape_result;
 pub(crate) mod shape_result_run;
 pub(crate) mod shape_result_spacing;
