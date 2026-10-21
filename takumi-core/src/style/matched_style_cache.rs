@@ -10,7 +10,7 @@ use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use crate::{
-  matching::MatchedDeclarationsView,
+  matching::{MatchedDeclarationsView, RuleId},
   style::{Color, ComputedStyle, SizingContext, Style},
 };
 
@@ -22,7 +22,7 @@ const MAX_ENTRIES: usize = 4096;
 /// also hashes to keep a key's entries few.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MatchedStyleKey {
-  rules: SmallVec<[(usize, bool); 8]>,
+  rules: SmallVec<[(RuleId, bool); 8]>,
   parent_color: [u8; 4],
   parent_font_size: u32,
 }

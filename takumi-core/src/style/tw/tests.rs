@@ -1785,93 +1785,28 @@ fn test_class_list_parsing_shares_storage() {
 }
 
 #[test]
-fn test_expansion_cache_keeps_class_lists_distinct() {
-  let first = TailwindValues::parse("w-1");
-  let second = TailwindValues::parse("w-2");
-  let viewport = Viewport::new((100, 100));
-  let breakpoints = BreakpointOverrides::default();
-  let cache = TwCache::default();
-  let first_blocks = first.declaration_blocks(viewport, &breakpoints, &cache);
-  let second_blocks = second.declaration_blocks(viewport, &breakpoints, &cache);
-
-  assert!(!Rc::ptr_eq(&first_blocks, &second_blocks));
-  assert_ne!(first_blocks.normal, second_blocks.normal);
-  assert!(Rc::ptr_eq(
-    &second_blocks,
-    &second.declaration_blocks(viewport, &breakpoints, &cache),
-  ));
-  assert_eq!(
-    first_blocks.normal,
-    first
-      .declaration_blocks(viewport, &breakpoints, &cache)
-      .normal,
-  );
-}
-
-#[test]
-fn test_expansion_cache_retains_its_key() {
-  let values = TailwindValues::parse("w-3");
-  let weak = Arc::downgrade(&values.inner);
-  let cache = TwCache::default();
-  values.declaration_blocks(Viewport::new((100, 100)), &Default::default(), &cache);
-  drop(values);
-  assert!(weak.upgrade().is_some());
-  drop(cache);
-  assert!(weak.upgrade().is_none());
-}
-
-#[test]
-fn test_expansion_cache_stops_retaining_unique_lists_when_full() {
-  let cache = TwCache::default();
-  let viewport = Viewport::new((100, 100));
-  let breakpoints = BreakpointOverrides::default();
-  let first = TailwindValues::parse("w-1");
-  let blocks = first.declaration_blocks(viewport, &breakpoints, &cache);
-  for _ in 1..EXPANSION_CACHE_MAX_ENTRIES {
-    TailwindValues::parse("w-1").declaration_blocks(viewport, &breakpoints, &cache);
-  }
-
-  let overflow = TailwindValues::parse("w-2");
-  let weak = Arc::downgrade(&overflow.inner);
-  let expanded = overflow.declaration_blocks(viewport, &breakpoints, &cache);
-  assert_eq!(cache.blocks.borrow().len(), EXPANSION_CACHE_MAX_ENTRIES);
-  assert_eq!(
-    expanded.normal,
-    overflow
-      .clone()
-      .into_declaration_block(viewport, &breakpoints)
-      .split_importance()
-      .0,
-  );
-  drop(overflow);
-  assert!(weak.upgrade().is_none());
-  assert!(Rc::ptr_eq(
-    &blocks,
-    &first.declaration_blocks(viewport, &breakpoints, &cache),
-  ));
-}
-
-#[test]
-fn test_expansion_cache_tracks_breakpoint_inputs() {
+fn test_breakpoints_follow_the_viewport_and_theme() {
   let values: TailwindValues = "w-1 sm:w-2".parse().unwrap();
   let viewport = Viewport::new((800, 100));
-  let cache = TwCache::default();
   let breakpoints = BreakpointOverrides::default();
-  let active = values.declaration_blocks(viewport, &breakpoints, &cache);
+  let active = values
+    .clone()
+    .into_declaration_block(viewport, &breakpoints);
 
   for inactive_viewport in [
     Viewport::new((400, 100)),
     viewport.with_font_size(32.0),
     viewport.with_device_pixel_ratio(2.0),
   ] {
-    let inactive = values.declaration_blocks(inactive_viewport, &breakpoints, &cache);
-    assert_ne!(active.normal, inactive.normal);
+    let inactive = values
+      .clone()
+      .into_declaration_block(inactive_viewport, &breakpoints);
+    assert_ne!(active, inactive);
   }
 
-  let themed = values.declaration_blocks(
+  let themed = values.into_declaration_block(
     viewport,
     &HashMap::from([("sm".to_owned(), Length::Px(900.0))]),
-    &TwCache::default(),
   );
-  assert_ne!(active.normal, themed.normal);
+  assert_ne!(active, themed);
 }

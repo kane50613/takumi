@@ -19,7 +19,7 @@ use crate::{
   },
   style::{
     Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, SizingContext,
-    StyleSheet, TwCache,
+    StyleSheet,
   },
 };
 
@@ -32,7 +32,6 @@ struct RenderShared {
   font_families: ExpandedFamilies,
   font_fallback_map: FontFallbackMap,
   inline_cache: InlineLayoutCache,
-  tw_cache: TwCache,
   matched_styles: MatchedStyleCache,
   time_ms: u64,
   draw_debug_border: bool,
@@ -82,7 +81,6 @@ impl From<RenderContextInit> for RenderContext {
         font_families: ExpandedFamilies::default(),
         font_fallback_map: FontFallbackMap::default(),
         inline_cache: InlineLayoutCache::default(),
-        tw_cache: TwCache::default(),
         matched_styles: MatchedStyleCache::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
@@ -185,11 +183,6 @@ impl RenderContext {
 
   pub(crate) fn font_families(&self) -> &ExpandedFamilies {
     &self.shared.font_families
-  }
-
-  /// Per-render cache of expanded Tailwind class lists.
-  pub(crate) fn tw_cache(&self) -> &TwCache {
-    &self.shared.tw_cache
   }
 
   /// Per-render cache of the styles boxes resolved from the declarations they matched.
