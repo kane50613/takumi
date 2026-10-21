@@ -6,7 +6,7 @@ use std::{
   sync::Arc,
 };
 
-use crate::style::selector::PropertyRule;
+use crate::style::{CssWideKeyword, FromCssStr, selector::PropertyRule};
 
 /// The `@property` rules in force, by name, shared by every element they reach.
 pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
@@ -35,6 +35,32 @@ impl CustomProperties {
 
   pub(crate) fn set(&mut self, name: String, value: String) {
     Arc::make_mut(&mut self.values).insert(name, value);
+  }
+
+  /// Sets `name` as a declaration specifies it. A CSS-wide keyword resolves here, as the cascade
+  /// resolves it for a custom property: `inherit` takes `parent`'s value, `initial` the registered
+  /// initial value or none, and `unset` either one as the property inherits.
+  /// <https://drafts.csswg.org/css-variables-1/#defining-variables>
+  pub(crate) fn declare(&mut self, name: String, value: String, parent: Option<&Self>) {
+    let Ok(keyword) = CssWideKeyword::from_css_str(&value) else {
+      return self.set(name, value);
+    };
+    let registration = self.registration(&name);
+    let inherits = registration.is_none_or(|rule| rule.inherits);
+    let inherited = match keyword {
+      CssWideKeyword::Inherit => true,
+      CssWideKeyword::Unset => inherits,
+      CssWideKeyword::Initial => false,
+    };
+    let resolved = match parent {
+      Some(parent) if inherited => parent.get(&name).map(str::to_owned),
+      _ => registration.and_then(|rule| rule.initial_value.clone()),
+    };
+
+    match resolved {
+      Some(value) => self.set(name, value),
+      None => self.remove(&name),
+    }
   }
 
   pub(crate) fn remove(&mut self, name: &str) {
