@@ -166,7 +166,7 @@ fn render_with_context(
 
   let image = canvas.into_inner()?;
 
-  Ok(Bitmap::from_rgba(image))
+  Ok(image)
 }
 
 /// A scene with its per-frame-invariant render state precomputed: the font
@@ -331,7 +331,6 @@ fn resolve_scene_at_time<'a, 'g>(
 
 #[cfg(test)]
 mod tests {
-  use image::Rgba;
 
   use super::{RenderOptions, SequentialScene, render, render_animation, resolve_scene_at_time};
   use crate::{
@@ -667,12 +666,7 @@ mod tests {
       .time_ms(500)
       .build();
 
-    let layout_result = measure(options);
-    assert!(layout_result.is_ok());
-    let layout = match layout_result {
-      Ok(layout) => layout,
-      Err(_) => return,
-    };
+    let layout = measure(options).unwrap();
 
     assert_eq!(layout.width, 150.0);
   }
@@ -715,10 +709,7 @@ mod tests {
       .node(root)
       .build();
 
-    let layout = match measure(options) {
-      Ok(layout) => layout,
-      Err(_) => return,
-    };
+    let layout = measure(options).unwrap();
     let mid_node = &layout.children[0];
     let abs_node = &mid_node.children[0];
 
@@ -759,23 +750,17 @@ mod tests {
       .viewport(Viewport::new((256, 256)))
       .node(node.clone())
       .build();
-    let measured = match measure(options.clone()) {
-      Ok(measured) => measured,
-      Err(_) => return,
-    };
+    let measured = measure(options.clone()).unwrap();
     assert_eq!(measured.children.len(), 1);
     assert_eq!(measured.children[0].width, 128.0);
     assert_eq!(measured.children[0].height, 128.0);
 
-    let rendered = match render(options) {
-      Ok(rendered) => rendered.into_rgba(),
-      Err(_) => return,
-    };
+    let rendered = render(options).unwrap();
 
     let top_left = rendered.get_pixel(10, 10);
     let bottom_right = rendered.get_pixel(220, 220);
 
-    assert_eq!(top_left, &Rgba([255, 0, 0, 255]));
-    assert_eq!(bottom_right, &Rgba([11, 16, 32, 255]));
+    assert_eq!(top_left, &[255, 0, 0, 255]);
+    assert_eq!(bottom_right, &[11, 16, 32, 255]);
   }
 }

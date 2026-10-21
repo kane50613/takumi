@@ -3,7 +3,7 @@ use std::{
   ops::{Deref, DerefMut, Mul, MulAssign},
 };
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 use tiny_skia::Transform as TinyTransform;
 
 use crate::style::{
@@ -270,6 +270,17 @@ impl Affine {
     )
   }
 
+  /// Skia's `SkMatrix::mapVector`: `(x, y)` under the linear part alone, translation left out.
+  pub fn transform_vector(self, x: f32, y: f32) -> (f32, f32) {
+    (self.a * x + self.c * y, self.b * x + self.d * y)
+  }
+
+  /// cc's `MathUtil::ComputeTransform2dScaleComponents`: how far the transform stretches its x
+  /// and y axes.
+  pub fn scale_components(self) -> (f32, f32) {
+    (self.a.hypot(self.b), self.c.hypot(self.d))
+  }
+
   /// Creates a new skew transform
   pub(crate) fn skew(x: Angle, y: Angle) -> Self {
     let tanx = x.to_radians().tan();
@@ -347,7 +358,7 @@ impl Affine {
 }
 
 impl<'i> FromCss<'i> for Affine {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let a = input.expect_number()?;
     input.expect_comma()?;
     let b = input.expect_number()?;
@@ -371,7 +382,7 @@ impl<'i> FromCss<'i> for Affine {
 pub struct Transforms(pub Box<[Transform]>);
 
 impl<'i> FromCss<'i> for Transforms {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut transforms = Vec::new();
 
     while !input.is_exhausted() {
@@ -485,19 +496,14 @@ impl ToCss for Transforms {
 }
 
 impl<'i> FromCss<'i> for Transform {
-  fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = parser.current_source_location();
+  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 
     let Token::Function(function) = token else {
-      return Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      );
+      return Err(CssParseError::unexpected_token());
     };
 
-    let parse: fn(&mut Parser<'i, '_>) -> ParseResult<'i, Self> = match_ignore_ascii_case! {function,
+    let parse: fn(&mut Parser<'i>) -> ParseResult<'i, Self> = match_ignore_ascii_case! {function,
       "translate" => |input| {
         let x = Length::from_css(input)?;
         input.expect_comma()?;
@@ -547,7 +553,7 @@ impl<'i> FromCss<'i> for Transform {
       )),
       "rotate" => |input| Ok(Self::Rotate(Angle::from_css(input)?)),
       "matrix" => |input| Ok(Self::Matrix(Affine::from_css(input)?)),
-      _ => return Err(unexpected_token!(location, token)),
+      _ => return Err(unexpected_token!(token)),
     };
 
     parser.parse_nested_block(parse)

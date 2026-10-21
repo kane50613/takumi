@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420">
   <rect x="0" y="0" width="640" height="420" fill="#fff"/>
-  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="420">
     <g fill="#000">
       <use href="#g0" x="20" y="62"/>
       <use href="#g1" x="49.6" y="62"/>
@@ -14,12 +14,12 @@
       <use href="#g8" x="232.28" y="62"/>
       <use href="#g9" x="255.8" y="62"/>
     </g>
-    <rect x="273.401" y="120" width="71.8" height="4" fill="#000"/>
+    <rect x="273.406" y="120" width="71.8" height="4" fill="#000"/>
     <g fill="#000">
-      <use href="#g6" x="273.4" y="118"/>
-      <use href="#g10" x="285.6" y="118"/>
-      <use href="#g11" x="297.08" y="118"/>
-      <use href="#g1" x="321" y="118"/>
+      <use href="#g6" x="273.41" y="118"/>
+      <use href="#g10" x="285.61" y="118"/>
+      <use href="#g11" x="297.09" y="118"/>
+      <use href="#g1" x="321.01" y="118"/>
     </g>
     <g fill="#000">
       <use href="#g12" x="28" y="118"/>
@@ -176,17 +176,17 @@
   </g>
   <g>
     <g fill="#0f172a" fill-opacity=".349">
-      <use href="#g6" x="276.4" y="121"/>
-      <use href="#g10" x="288.6" y="121"/>
-      <use href="#g11" x="300.08" y="121"/>
-      <use href="#g1" x="324" y="121"/>
+      <use href="#g6" x="276.41" y="121"/>
+      <use href="#g10" x="288.61" y="121"/>
+      <use href="#g11" x="300.09" y="121"/>
+      <use href="#g1" x="324.01" y="121"/>
     </g>
   </g>
   <g fill="#000" fill-opacity="0">
-    <use href="#g6" x="273.4" y="118"/>
-    <use href="#g10" x="285.6" y="118"/>
-    <use href="#g11" x="297.08" y="118"/>
-    <use href="#g1" x="321" y="118"/>
+    <use href="#g6" x="273.41" y="118"/>
+    <use href="#g10" x="285.61" y="118"/>
+    <use href="#g11" x="297.09" y="118"/>
+    <use href="#g1" x="321.01" y="118"/>
   </g>
   <g>
     <g fill="#0f172a" fill-opacity=".349">

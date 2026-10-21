@@ -2,41 +2,76 @@
 
 use std::{io::Cursor, sync::Arc};
 
-use image::{
-  ImageDecoder, ImageError, ImageFormat, ImageResult, codecs::png::PngDecoder, error::DecodingError,
-};
 use png::{
   BitDepth, BlendOp, ColorType, Decoder as PngRowDecoder, DisposeOp, FrameControl,
   Reader as PngReader, Transformations,
 };
 
 use super::{
-  DecodeTarget, Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS,
-  MAX_IMAGE_DIMENSION, PNG_SIGNATURE, covers_canvas, decode_with_image_crate, fit_to_target,
-  invalid_buffer_error, pixel_budget_error,
+  DecodeError, DecodeResult, DecodeTarget, DetectedImageFormat, Dispose, FrameInfo,
+  MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS, MAX_IMAGE_DIMENSION, PNG_SIGNATURE,
+  check_dimensions, covers_canvas, fit_to_target, rgba_buffer,
 };
 use crate::resources::{
   image_buffer::{ImageBuffer, premultiply_rgba_in_place},
   image_resampler::StreamResampler,
 };
 
-pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
-  decode_with_image_crate(PngDecoder::new(Cursor::new(bytes))?, ImageFormat::Png)
+/// Decodes a PNG still as 8-bit RGBA, whatever its color type and depth.
+pub(crate) fn decode_png(bytes: &[u8]) -> DecodeResult<ImageBuffer> {
+  let mut reader = row_decoder(bytes).read_info().map_err(png_decode_error)?;
+  let (width, height) = (reader.info().width, reader.info().height);
+
+  check_dimensions(width, height)?;
+
+  let channels = output_channels(&reader).ok_or(DecodeError::InvalidBuffer)?;
+  let mut pixels = vec![
+    0;
+    reader
+      .output_buffer_size()
+      .ok_or(DecodeError::InvalidBuffer)?
+  ];
+
+  reader.next_frame(&mut pixels).map_err(png_decode_error)?;
+
+  if channels == 2 {
+    let mut rgba = vec![0; pixels.len() * 2];
+
+    expand_gray_alpha(&pixels, &mut rgba);
+    pixels = rgba;
+  }
+
+  rgba_buffer(pixels, (width, height))
 }
 
-pub(super) fn png_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  PngDecoder::new(Cursor::new(bytes)).map(|d| d.dimensions())
+pub(super) fn png_dimensions(bytes: &[u8]) -> DecodeResult<(u32, u32)> {
+  let mut decoder = row_decoder(bytes);
+  let info = decoder.read_header_info().map_err(png_decode_error)?;
+
+  Ok((info.width, info.height))
 }
 
-fn png_decode_error(error: png::DecodingError) -> ImageError {
-  ImageError::Decoding(DecodingError::new(ImageFormat::Png.into(), error))
+fn png_decode_error(error: png::DecodingError) -> DecodeError {
+  DecodeError::format(DetectedImageFormat::Png, error)
+}
+
+/// Writes gray-alpha pixels into `rgba` as RGBA, gray repeated in each color channel.
+fn expand_gray_alpha(gray_alpha: &[u8], rgba: &mut [u8]) {
+  for (rgba, &[gray, alpha]) in rgba
+    .as_chunks_mut::<4>()
+    .0
+    .iter_mut()
+    .zip(gray_alpha.as_chunks::<2>().0)
+  {
+    *rgba = [gray, gray, gray, alpha];
+  }
 }
 
 /// Streams an eligible non-interlaced PNG through [`StreamResampler`].
 pub(super) fn decode_png_scaled(
   bytes: &[u8],
   target: DecodeTarget,
-) -> Option<ImageResult<ImageBuffer>> {
+) -> Option<DecodeResult<ImageBuffer>> {
   if !bytes.starts_with(&PNG_SIGNATURE) {
     return None;
   }
@@ -72,26 +107,14 @@ pub(super) fn decode_png_scaled(
 
     match channels {
       4 => rgba_row.copy_from_slice(row.data()),
-      _ => {
-        for (rgba, pixel) in rgba_row
-          .as_chunks_mut::<4>()
-          .0
-          .iter_mut()
-          .zip(row.data().as_chunks::<2>().0)
-        {
-          rgba[0] = pixel[0];
-          rgba[1] = pixel[0];
-          rgba[2] = pixel[0];
-          rgba[3] = pixel[1];
-        }
-      }
+      _ => expand_gray_alpha(row.data(), &mut rgba_row),
     }
 
     premultiply_rgba_in_place(&mut rgba_row);
     resampler.push_row(&rgba_row);
   }
 
-  Some(resampler.finish().ok_or_else(invalid_buffer_error))
+  Some(resampler.finish().ok_or(DecodeError::InvalidBuffer))
 }
 
 /// Whether the PNG carries an `acTL` animation control chunk.
@@ -112,7 +135,7 @@ fn png_chunks(bytes: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
   })
 }
 
-pub(crate) fn apng_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+pub(crate) fn apng_dimensions(bytes: &[u8]) -> DecodeResult<(u32, u32)> {
   let reader = apng_reader(bytes)?;
   let info = reader.info();
   Ok((info.width, info.height))
@@ -120,7 +143,7 @@ pub(crate) fn apng_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 
 /// Per-frame delays in milliseconds, in stream order, read from the `fcTL` chunks without decoding
 /// any pixels.
-pub(crate) fn apng_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
+pub(crate) fn apng_frame_infos(bytes: &[u8]) -> DecodeResult<Box<[FrameInfo]>> {
   let (width, height) = apng_dimensions(bytes)?;
   let frame_pixels = width as u64 * height as u64;
   let mut total_pixels = 0_u64;
@@ -196,12 +219,10 @@ fn output_channels(reader: &PngReader<Cursor<&[u8]>>) -> Option<usize> {
   }
 }
 
-fn apng_reader(bytes: &[u8]) -> ImageResult<PngReader<Cursor<&[u8]>>> {
+fn apng_reader(bytes: &[u8]) -> DecodeResult<PngReader<Cursor<&[u8]>>> {
   let reader = row_decoder(bytes).read_info().map_err(png_decode_error)?;
   let info = reader.info();
-  if info.width > MAX_IMAGE_DIMENSION || info.height > MAX_IMAGE_DIMENSION {
-    return Err(pixel_budget_error(info.width, info.height));
-  }
+  check_dimensions(info.width, info.height)?;
 
   Ok(reader)
 }
@@ -262,11 +283,11 @@ pub(crate) fn decode_apng_frames(
   limit: Option<usize>,
   target: Option<DecodeTarget>,
   mut push: impl FnMut(Arc<ImageBuffer>),
-) -> ImageResult<bool> {
+) -> DecodeResult<bool> {
   let mut reader = apng_reader(bytes)?;
   let (width, height) = (reader.info().width, reader.info().height);
   let target = target.filter(|target| target.shrinks(width, height));
-  let channels = output_channels(&reader).ok_or_else(invalid_buffer_error)?;
+  let channels = output_channels(&reader).ok_or(DecodeError::InvalidBuffer)?;
 
   let mut canvas = ApngCanvas::new(width, height);
   let mut subframe = Vec::new();
@@ -411,7 +432,7 @@ impl ApngCanvas {
     }
   }
 
-  fn to_buffer(&self, target: Option<DecodeTarget>) -> ImageResult<ImageBuffer> {
+  fn to_buffer(&self, target: Option<DecodeTarget>) -> DecodeResult<ImageBuffer> {
     let mut premultiplied = self.pixels.clone();
     premultiply_rgba_in_place(&mut premultiplied);
 
@@ -419,7 +440,7 @@ impl ApngCanvas {
       Some(target) => target.resample(&premultiplied, (self.width, self.height)),
       None => ImageBuffer::from_premultiplied_rgba(premultiplied, self.width, self.height),
     }
-    .ok_or_else(invalid_buffer_error)
+    .ok_or(DecodeError::InvalidBuffer)
   }
 }
 
@@ -448,12 +469,34 @@ fn blend_over(target: &mut [u8], source: [u8; 4]) {
 mod tests {
   use super::*;
   use crate::resources::image_resampler::resample_premultiplied;
-  use image::RgbaImage;
 
   use crate::{
     resources::image_decoder::{decode_bitmap_scaled, decode_image},
     style::ImageScalingAlgorithm,
   };
+
+  /// A `width` by `height` PNG of `color` whose samples are `sample(x, y)`.
+  fn encode(
+    (width, height): (u32, u32),
+    color: ColorType,
+    sample: impl Fn(u32, u32) -> Vec<u8>,
+  ) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, width, height);
+
+    encoder.set_color(color);
+    encoder.set_depth(BitDepth::Eight);
+
+    let sample = &sample;
+    let data: Vec<u8> = (0..height)
+      .flat_map(|y| (0..width).flat_map(move |x| sample(x, y)))
+      .collect();
+    let mut writer = encoder.write_header().unwrap();
+
+    writer.write_image_data(&data).unwrap();
+    drop(writer);
+    bytes
+  }
 
   fn assert_streamed_matches_full(bytes: &[u8], width: u32, height: u32) {
     for algorithm in [
@@ -481,28 +524,18 @@ mod tests {
 
   #[test]
   fn png_streaming_matches_full_decode_for_rgba() {
-    let mut image = RgbaImage::new(40, 30);
-    for (x, y, pixel) in image.enumerate_pixels_mut() {
-      *pixel = image::Rgba([(x * 6) as u8, (y * 8) as u8, ((x + y) * 3) as u8, 200]);
-    }
-    let mut bytes = Vec::new();
-    image
-      .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
-      .unwrap();
+    let bytes = encode((40, 30), ColorType::Rgba, |x, y| {
+      vec![(x * 6) as u8, (y * 8) as u8, ((x + y) * 3) as u8, 200]
+    });
 
     assert_streamed_matches_full(&bytes, 13, 9);
   }
 
   #[test]
   fn png_streaming_matches_full_decode_for_grayscale_alpha() {
-    let mut image = image::GrayAlphaImage::new(32, 24);
-    for (x, y, pixel) in image.enumerate_pixels_mut() {
-      *pixel = image::LumaA([(x * 8) as u8, (255 - y * 4) as u8]);
-    }
-    let mut bytes = Vec::new();
-    image
-      .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
-      .unwrap();
+    let bytes = encode((32, 24), ColorType::GrayscaleAlpha, |x, y| {
+      vec![(x * 8) as u8, (255 - y * 4) as u8]
+    });
 
     assert_streamed_matches_full(&bytes, 11, 7);
   }

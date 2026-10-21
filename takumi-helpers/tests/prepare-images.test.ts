@@ -45,7 +45,7 @@ describe("prepareImages", () => {
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
     const node = imageTree("https://example.com/y.png");
 
-    expect(prepareImages({ node, fetchCache, fetch: fetchMock })).rejects.toThrow("boom");
+    await expect(prepareImages({ node, fetchCache, fetch: fetchMock })).rejects.toThrow("boom");
     expect(fetchCache.size).toBe(0);
 
     const images = await prepareImages({ node, fetchCache, fetch: fetchMock });

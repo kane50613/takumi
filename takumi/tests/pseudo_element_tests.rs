@@ -1,9 +1,8 @@
-mod test_utils;
-
 use std::collections::BTreeMap;
 
 use takumi::prelude::{Length::*, *};
-use test_utils::{block, measure_with_css, run_texts};
+
+use crate::test_utils::{block, measure_with_css, run_texts};
 
 #[test]
 fn before_string_content_inserts_text_at_start() {
@@ -44,6 +43,24 @@ fn before_and_after_around_existing_text() {
   assert!(text.contains("[ "), "expected '[ ' prefix in {text:?}");
   assert!(text.contains("middle"), "expected 'middle' in {text:?}");
   assert!(text.contains(" ]"), "expected ' ]' suffix in {text:?}");
+}
+
+#[test]
+fn content_from_a_variable_or_a_split_rule_creates_a_pseudo_box() {
+  let root = Node::container([Node::text("body".to_string())])
+    .with_class_name("greet")
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+  let from_variable = measure_with_css(
+    root.clone(),
+    r#".greet { --label: "hello"; } .greet::before { content: var(--label); }"#,
+  );
+  let from_split_rule = measure_with_css(
+    root,
+    r#"*, ::before { color: red; } .greet::before { content: "hello"; }"#,
+  );
+
+  assert!(run_texts(&from_variable).concat().starts_with("hello"));
+  assert!(run_texts(&from_split_rule).concat().starts_with("hello"));
 }
 
 #[test]
@@ -133,7 +150,7 @@ fn display_none_on_pseudo_creates_no_box() {
 }
 
 #[test]
-fn display_flex_pseudo_downgrades_to_block() {
+fn display_flex_pseudo_lays_out_its_content_as_an_item() {
   let root = Node::container([Node::text("body".to_string())])
     .with_class_name("card")
     .with_style(
@@ -143,16 +160,18 @@ fn display_flex_pseudo_downgrades_to_block() {
     );
   let block = measure_with_css(
     root.clone(),
-    r#".card::before { content: "header"; display: block; }"#,
+    r#".card::before { content: "head" "er"; display: block; }"#,
   );
   let flex = measure_with_css(
     root,
-    r#".card::before { content: "header"; display: flex; }"#,
+    r#".card::before { content: "head" "er"; display: flex; justify-content: flex-end; }"#,
   );
-  assert_eq!(
-    flex.height, block.height,
-    "flex pseudo should match block; got flex={flex:?} block={block:?}"
-  );
+  let header = &flex.children[0];
+
+  assert_eq!(flex.height, block.height);
+  assert_eq!(header.children.len(), 1, "{header:?}");
+  assert_eq!(run_texts(&header.children[0]), ["header"]);
+  assert!(header.children[0].transform[4] > 100.0, "{header:?}");
 }
 
 #[test]

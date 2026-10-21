@@ -58,7 +58,7 @@ pub struct RayShape {
   pub position: Option<ShapePosition>,
 }
 
-fn parse_ray<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, RayShape> {
+fn parse_ray<'i>(input: &mut Parser<'i>) -> ParseResult<'i, RayShape> {
   input.expect_function_matching("ray")?;
   input.parse_nested_block(|input| {
     let mut angle = None;
@@ -163,7 +163,7 @@ impl MakeComputed for OffsetPath {
 }
 
 impl<'i> FromCss<'i> for OffsetPath {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(ray) = input.try_parse(parse_ray) {
       return Ok(OffsetPath::Ray(ray));
     }
@@ -233,7 +233,7 @@ impl OffsetAnchor {
 }
 
 impl<'i> FromCss<'i> for OffsetAnchor {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()
@@ -285,7 +285,7 @@ impl OffsetPosition {
 }
 
 impl<'i> FromCss<'i> for OffsetPosition {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
@@ -382,7 +382,7 @@ impl Animatable for OffsetRotate {
 }
 
 impl<'i> FromCss<'i> for OffsetRotate {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()
@@ -460,7 +460,7 @@ pub struct OffsetShorthand {
 }
 
 impl<'i> FromCss<'i> for OffsetShorthand {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let position = input
       .try_parse(OffsetPosition::from_css)
       .unwrap_or_default();

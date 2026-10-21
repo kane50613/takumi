@@ -3,20 +3,21 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 //! Vector SVG output for takumi.
 //!
-//! [`render`] turns a node tree into real SVG (`<rect>`, `<path>`,
-//! `<linearGradient>`/`<radialGradient>`, `<filter>`, `<clipPath>`, glyph-outline
-//! `<path>`s, embedded `<image>`) instead of wrapping a rasterized bitmap in a
-//! `data:` URL. [`quick_xml`] builds the document, so every attribute and value
-//! is escaped.
+//! [`render`] turns a node tree into SVG elements such as `<rect>`, `<path>`, `<linearGradient>`,
+//! `<radialGradient>`, `<filter>`, `<clipPath>`, `<mask>`, glyph outline `<path>`s, and
+//! embedded `<image>`s. It does not wrap a rasterized bitmap in a `data:` URL. [`quick_xml`]
+//! builds the document, so every attribute and value is escaped.
+//!
+//! In the `takumi` crate, enable the `svg-backend` feature and call `takumi::render_svg`.
 //!
 //! Coverage:
 //!
 //! - Backgrounds, borders, border-radius (backgrounds and clip).
 //! - Linear and radial gradients; conic via a wedge-path approximation.
 //! - Box-shadow.
-//! - Text: glyph outlines, decorations, text-shadow, `-webkit-text-stroke`.
+//! - Text covers glyph outlines, decorations, text-shadow, and `-webkit-text-stroke`.
 //! - Bitmap and emoji glyphs, images.
-//! - Clip-path, overflow, opacity.
+//! - Clip-path, `mask-image`, overflow, opacity, and blend modes.
 //! - Filter and backdrop-filter (`<filter>` chains; the backdrop is the scene
 //!   replayed up to the element).
 //! - Affine transforms.
@@ -26,9 +27,10 @@ mod gradient;
 mod image;
 mod render;
 mod scene_emit;
+mod svg_image;
 mod text;
 
-use std::{borrow::Cow, collections::HashMap, fmt::Write as _, io, mem};
+use std::{borrow::Cow, collections::HashMap, fmt::Write as _, io, mem, rc::Rc, sync::Arc};
 
 use quick_xml::{
   Writer,
@@ -41,7 +43,7 @@ use takumi_core::{
   geometry::{Rect, Size},
   painter::{BoxFrame, FillShape, StrokeStyle},
   path_data::{APPROX_CHARS_PER_NUMBER, Num, edges_path_data, path_data, quantize_path},
-  resources::image_buffer::demultiply_pixel,
+  resources::{glyph::ResolvedOutlineGlyph, image_buffer::demultiply_pixel},
   shadow::SizedShadow,
   style::{Affine, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
@@ -166,6 +168,14 @@ pub(crate) struct SvgDocument {
   /// Interned glyph outlines in glyph space, emitted as `<defs>` by [`Self::finish`].
   glyph_defs: Vec<String>,
   glyph_ids: HashMap<String, u32>,
+  /// Interned ids by outline and the linear part of its placement, so a repeated glyph skips
+  /// formatting its path. `None` for an outline that draws nothing.
+  glyph_keys: HashMap<(u64, [u32; 4]), Option<u32>>,
+  /// `data:` URLs by what they encode, `None` for an image that would not encode.
+  image_hrefs: HashMap<ImageKey, Option<Rc<str>>>,
+  /// Images drawn at their own pixel size, emitted as `<defs>` by [`Self::finish`].
+  image_defs: Vec<ImageDef>,
+  image_ids: HashMap<ImageKey, u32>,
   /// Each open transformed group's transform onto the root, innermost last.
   transforms: Vec<Affine>,
   /// The root viewport in root user space.
@@ -191,6 +201,10 @@ impl SvgDocument {
       next_id: 0,
       glyph_defs: Vec::new(),
       glyph_ids: HashMap::new(),
+      glyph_keys: HashMap::new(),
+      image_hrefs: HashMap::new(),
+      image_defs: Vec::new(),
+      image_ids: HashMap::new(),
       transforms: Vec::new(),
       viewport,
     })
@@ -412,18 +426,23 @@ impl SvgDocument {
     self.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
   }
 
-  /// Opens an alpha `<mask>` in user space and returns the open token plus its
-  /// `url(#id)`; CSS `mask-image` defaults to alpha masking.
-  pub(crate) fn begin_mask(&mut self) -> io::Result<(GroupToken, String)> {
+  /// Opens a `<mask>` over the viewport in user space, by luminance or else alpha, and returns the
+  /// open token plus its `url(#id)`; CSS `mask-image` defaults to alpha masking.
+  pub(crate) fn begin_mask(&mut self, luminance: bool) -> io::Result<(GroupToken, String)> {
     let (id, reference) = self.alloc_id("mk");
-    self.open(
-      "mask",
-      &[
-        ("id", id.into()),
-        ("maskUnits", "userSpaceOnUse".into()),
-        ("style", "mask-type:alpha".into()),
-      ],
-    )?;
+    let mask_type = if luminance {
+      "mask-type:luminance"
+    } else {
+      "mask-type:alpha"
+    };
+    let mut attrs = vec![
+      ("id", id.into()),
+      ("maskUnits", "userSpaceOnUse".into()),
+      ("style", mask_type.into()),
+    ];
+
+    attrs.extend(self.blur_region(0.0).attrs());
+    self.open("mask", &attrs)?;
     Ok((GroupToken::default(), reference))
   }
 
@@ -468,6 +487,62 @@ impl SvgDocument {
       attrs.push(("preserveAspectRatio", par.into()));
     }
     self.empty("image", &attrs)
+  }
+
+  /// The `data:` URL of the image `key` names, which `encode` makes the first time it is asked.
+  pub(crate) fn image_href(
+    &mut self,
+    key: &ImageKey,
+    encode: impl FnOnce() -> Option<String>,
+  ) -> Option<Rc<str>> {
+    if let Some(href) = self.image_hrefs.get(key) {
+      return href.clone();
+    }
+
+    let href = encode().map(Rc::from);
+
+    self.image_hrefs.insert(key.clone(), href.clone());
+    href
+  }
+
+  /// Draws the image `key` names, `href` at `natural` pixels, stretched over `rect` by a `<use>` of
+  /// its one definition.
+  pub(crate) fn image_use(
+    &mut self,
+    key: &ImageKey,
+    href: &Rc<str>,
+    natural: (f32, f32),
+    rect: Frame,
+  ) -> io::Result<()> {
+    let id = match self.image_ids.get(key) {
+      Some(&id) => id,
+      None => {
+        let id = self.image_defs.len() as u32;
+
+        self.image_defs.push(ImageDef {
+          href: Rc::clone(href),
+          width: natural.0,
+          height: natural.1,
+        });
+        self.image_ids.insert(key.clone(), id);
+        id
+      }
+    };
+    let definition = &self.image_defs[id as usize];
+    let transform = Affine {
+      a: rect.w / definition.width,
+      b: 0.0,
+      c: 0.0,
+      d: rect.h / definition.height,
+      x: rect.x,
+      y: rect.y,
+    };
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("href", format!("#i{id}").into())];
+
+    if !transform.is_identity() {
+      attrs.push(("transform", matrix_attr(transform).into()));
+    }
+    self.empty("use", &attrs)
   }
 
   /// Opens a `<g>` with a transform and optional opacity, clip, and filter.
@@ -546,7 +621,36 @@ impl SvgDocument {
 
   /// Interns a glyph outline (path data in glyph space, translation excluded)
   /// and returns the id shared by every `<use>` of the same outline.
-  pub(crate) fn glyph_ref(&mut self, data: String) -> u32 {
+  /// The interned id of `outline` placed by `placed`'s linear part, or `None` when it draws nothing.
+  pub(crate) fn outline_ref(
+    &mut self,
+    outline: &ResolvedOutlineGlyph,
+    placed: Affine,
+  ) -> Option<u32> {
+    let key = (
+      outline.cache_signature(),
+      [placed.a, placed.b, placed.c, placed.d].map(f32::to_bits),
+    );
+
+    if let Some(&id) = self.glyph_keys.get(&key) {
+      return id;
+    }
+
+    let data = path_data(
+      outline.paths(),
+      Affine {
+        x: 0.0,
+        y: 0.0,
+        ..placed
+      },
+    );
+    let id = (!data.is_empty()).then(|| self.glyph_ref(data));
+
+    self.glyph_keys.insert(key, id);
+    id
+  }
+
+  fn glyph_ref(&mut self, data: String) -> u32 {
     if let Some(&id) = self.glyph_ids.get(&data) {
       return id;
     }
@@ -978,7 +1082,7 @@ impl SvgDocument {
   /// glyph outlines are flushed as a trailing `<defs>`; `<use>` references
   /// resolve document-wide, so forward references are fine.
   pub(crate) fn finish(mut self) -> io::Result<String> {
-    if !self.glyph_defs.is_empty() {
+    if !self.glyph_defs.is_empty() || !self.image_defs.is_empty() {
       self.open("defs", &[])?;
       for (id, data) in mem::take(&mut self.glyph_defs).iter().enumerate() {
         self.empty(
@@ -986,11 +1090,50 @@ impl SvgDocument {
           &[("id", format!("g{id}").into()), ("d", data.as_str().into())],
         )?;
       }
+      for (id, image) in mem::take(&mut self.image_defs).iter().enumerate() {
+        self.empty(
+          "image",
+          &[
+            ("id", format!("i{id}").into()),
+            ("width", num(image.width).into()),
+            ("height", num(image.height).into()),
+            ("preserveAspectRatio", "none".into()),
+            ("href", image.href.as_ref().into()),
+          ],
+        )?;
+      }
       self.close("defs")?;
     }
     self.close("svg")?;
-    Ok(String::from_utf8_lossy(&self.writer.into_inner()).into_owned())
+    Ok(
+      String::from_utf8(self.writer.into_inner())
+        .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned()),
+    )
   }
+}
+
+/// What an embedded image was made from, so a repeat reuses its encoding and its definition.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) enum ImageKey {
+  /// The image `src` resolves to, with the `currentColor` an SVG source reads.
+  Src {
+    src: Arc<str>,
+    current_color: [u8; 4],
+  },
+  /// A bitmap glyph of face `index` in the font `font` at a size.
+  BitmapGlyph {
+    font: u64,
+    index: u32,
+    glyph: u32,
+    size: u32,
+  },
+}
+
+/// An image written once into `<defs>` at its own pixel size.
+struct ImageDef {
+  href: Rc<str>,
+  width: f32,
+  height: f32,
 }
 
 /// Opaque proof that an element a `begin_*` method opened is still open;

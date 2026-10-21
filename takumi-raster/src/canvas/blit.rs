@@ -1,9 +1,7 @@
 //! Free blitters and the image/mask overlay dispatchers that paint onto a
 //! [`DrawTarget`].
 
-use std::array;
-
-use image::Rgba;
+use std::{array, ops::Range};
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{PixmapMut, PixmapRef, PremultipliedColorU8};
 
@@ -170,7 +168,7 @@ fn blit_sampled_paint_source_translation(
       bounds,
       mode,
       combined_mask,
-      |src_y, row| {
+      |src_y, _, row| {
         rows.fill(src_y as f32 + 0.5, row);
       },
     );
@@ -206,7 +204,7 @@ pub(super) fn blit_rows(
   bounds: OverlayBounds,
   mode: BlendMode,
   combined_mask: Option<MaskView<'_>>,
-  mut fill: impl FnMut(u32, &mut [[u8; 4]]),
+  mut fill: impl FnMut(u32, Range<usize>, &mut [[u8; 4]]),
 ) {
   let mut row = vec![[0u8; 4]; (bounds.x_max - bounds.x_min).max(0) as usize];
 
@@ -216,7 +214,23 @@ pub(super) fn blit_rows(
       continue;
     }
 
-    fill((dest_y - bounds.offset_y) as u32, &mut row);
+    // Only pixels under a nonzero mask alpha read the row, so runs of zero at either end need no
+    // fill.
+    let span = mask_row.map_or(0..row.len(), |mask_row| {
+      let (first, alphas) = mask_row.covered(row.len());
+      let (runs, tail) = alphas.as_chunks::<MASK_RUN>();
+      let is_clear = |run: &&[u8; MASK_RUN]| u64::from_ne_bytes(**run) == 0;
+      let leading = runs.iter().take_while(is_clear).count();
+      let end = if tail.iter().any(|&alpha| alpha != 0) {
+        alphas.len()
+      } else {
+        (runs.len() - runs[leading..].iter().rev().take_while(is_clear).count()) * MASK_RUN
+      };
+
+      first + leading * MASK_RUN..first + end
+    });
+
+    fill((dest_y - bounds.offset_y) as u32, span, &mut row);
 
     let dst_start = dest_y as usize * canvas_width as usize + bounds.x_min as usize;
     let dst = &mut pixels[dst_start..dst_start + row.len()];
@@ -226,21 +240,36 @@ pub(super) fn blit_rows(
       continue;
     };
     let (first, alphas) = mask_row.covered(row.len());
-    let dst = &mut dst[first..first + alphas.len()];
-    let row = &row[first..first + alphas.len()];
-    let (dst_runs, dst_tail) = dst.as_chunks_mut::<MASK_RUN>();
-    let (row_runs, row_tail) = row.as_chunks::<MASK_RUN>();
-    let (alpha_runs, alpha_tail) = alphas.as_chunks::<MASK_RUN>();
 
-    for ((dst, row), alphas) in dst_runs.iter_mut().zip(row_runs).zip(alpha_runs) {
-      match u64::from_ne_bytes(*alphas) {
-        0 => {}
-        u64::MAX => blend_row(dst, row, mode),
-        _ => blend_masked(dst, row, alphas, mode),
-      }
-    }
-    blend_masked(dst_tail, row_tail, alpha_tail, mode);
+    blend_row_masked(
+      &mut dst[first..first + alphas.len()],
+      &row[first..first + alphas.len()],
+      alphas,
+      mode,
+    );
   }
+}
+
+/// `row` blended over `dst` in `mode` under `alphas`, a [`MASK_RUN`] at a time: a clear run
+/// skips, an opaque run blends unscaled, and only the rest scale by their alphas.
+pub(super) fn blend_row_masked(
+  dst: &mut [[u8; 4]],
+  row: &[[u8; 4]],
+  alphas: &[u8],
+  mode: BlendMode,
+) {
+  let (dst_runs, dst_tail) = dst.as_chunks_mut::<MASK_RUN>();
+  let (row_runs, row_tail) = row.as_chunks::<MASK_RUN>();
+  let (alpha_runs, alpha_tail) = alphas.as_chunks::<MASK_RUN>();
+
+  for ((dst, row), alphas) in dst_runs.iter_mut().zip(row_runs).zip(alpha_runs) {
+    match u64::from_ne_bytes(*alphas) {
+      0 => {}
+      u64::MAX => blend_row(dst, row, mode),
+      _ => blend_masked(dst, row, alphas, mode),
+    }
+  }
+  blend_masked(dst_tail, row_tail, alpha_tail, mode);
 }
 
 fn blend_masked(dst: &mut [[u8; 4]], row: &[[u8; 4]], alphas: &[u8], mode: BlendMode) {
@@ -338,7 +367,7 @@ pub(super) fn blit_paint_source_translation(
       bounds,
       mode,
       combined_mask,
-      |src_y, row| rows.fill(src_y, row),
+      |src_y, _, row| rows.fill(src_y, row),
     ),
   }
 }
@@ -390,8 +419,18 @@ fn source_over_at_opacity(dest: [u8; 4], source: [u8; 4], opacity: f32) -> [u8; 
   array::from_fn(|channel| {
     let blended = f32::from(dest[channel]) * UNIT * behind + source[channel];
 
-    (blended.clamp(0.0, 1.0) * 255.0).round_ties_even() as u8
+    round_ties_even_byte(blended.clamp(0.0, 1.0) * 255.0)
   })
+}
+
+/// `value.round_ties_even() as u8` for `value` in `[0, 255]`. Adding and subtracting 2^23 leaves
+/// the default round-half-to-even mode to drop the fraction, which vectorizes where SSE2 has no
+/// rounding instruction and `round_ties_even` becomes a call.
+#[inline(always)]
+fn round_ties_even_byte(value: f32) -> u8 {
+  const SHIFT: f32 = 8_388_608.0;
+
+  ((value + SHIFT) - SHIFT) as u8
 }
 
 fn blit_solid_translation(
@@ -445,7 +484,7 @@ fn blit_solid_translation(
     bounds,
     mode,
     combined_mask,
-    |_, row| row.fill(color),
+    |_, span, row| row[span].fill(color),
   );
 }
 
@@ -453,7 +492,7 @@ pub(crate) fn draw_mask(
   pixmap: &mut PixmapMut<'_>,
   mask: &[u8],
   placement: Placement,
-  color: Rgba<u8>,
+  color: [u8; 4],
   mode: BlendMode,
   combined_mask: Option<MaskView<'_>>,
 ) {
@@ -470,7 +509,7 @@ pub(crate) fn draw_mask(
     pixmap,
     mask,
     placement,
-    premultiply_pixel(color.0),
+    premultiply_pixel(color),
     mode,
     combined_mask,
   );
@@ -660,7 +699,7 @@ pub(crate) fn overlay_sampled_paint_source(
 
 #[cfg(test)]
 mod tests {
-  use image::{Rgba, RgbaImage};
+  use crate::Bitmap;
   use takumi_core::geometry::Size;
   use tiny_skia::{
     BlendMode as TinyBlendMode, FilterQuality, Mask as TinyMask, Pixmap, PixmapPaint, PixmapRef,
@@ -710,7 +749,7 @@ mod tests {
     };
     let bounds = OverlayBounds::new(canvas, Point { x: -2.0, y: 1.0 }, Size::new(27, 14)).unwrap();
     let start: Vec<[u8; 4]> = (0..29 * 13).map(|index| pixel(index, 3)).collect();
-    let fill = |y: u32, row: &mut [[u8; 4]]| {
+    let fill = |y: u32, _: Range<usize>, row: &mut [[u8; 4]]| {
       for (x, src) in row.iter_mut().enumerate() {
         *src = pixel(y as usize * 31 + x, 4);
       }
@@ -731,7 +770,9 @@ mod tests {
       for dest_y in bounds.y_min..bounds.y_max {
         let mut row = vec![[0; 4]; (bounds.x_max - bounds.x_min) as usize];
 
-        fill((dest_y - bounds.offset_y) as u32, &mut row);
+        let len = row.len();
+
+        fill((dest_y - bounds.offset_y) as u32, 0..len, &mut row);
         for (offset, &src) in row.iter().enumerate() {
           let dst = &mut expected[dest_y as usize * 29 + bounds.x_min as usize + offset];
           let alpha = clip.map_or(u8::MAX, |view| {
@@ -783,6 +824,19 @@ mod tests {
     .unwrap();
 
     assert_eq!((bounds.x_min, bounds.x_max), (16_777_217, 16_777_218));
+  }
+
+  #[test]
+  fn byte_rounding_breaks_ties_to_even() {
+    for step in 0..=255 * 1024 {
+      let value = step as f32 / 1024.0;
+
+      assert_eq!(
+        round_ties_even_byte(value),
+        value.round_ties_even() as u8,
+        "{value}"
+      );
+    }
   }
 
   #[test]
@@ -866,11 +920,11 @@ mod tests {
 
   #[test]
   fn test_subcanvas_overlay_sampled_image_matches_direct_render() -> Result<()> {
-    let source = RgbaImage::from_fn(2, 1, |x, _| {
+    let source = Bitmap::from_fn(2, 1, |x, _| {
       if x == 0 {
-        Rgba([255, 0, 0, 255])
+        [255, 0, 0, 255]
       } else {
-        Rgba([0, 0, 255, 255])
+        [0, 0, 255, 255]
       }
     });
     let source_pixmap =
@@ -965,7 +1019,7 @@ mod tests {
 
     let output = canvas.into_inner().unwrap();
     let pixel = output.get_pixel(2, 2);
-    assert_eq!(pixel.0[1], 255);
-    assert_eq!(pixel.0[3], 255);
+    assert_eq!(pixel[1], 255);
+    assert_eq!(pixel[3], 255);
   }
 }

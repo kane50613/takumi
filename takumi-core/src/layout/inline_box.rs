@@ -27,7 +27,11 @@ pub enum InlineBoxPaint<'n> {
     layout: ComputedLayout,
   },
   /// An inline-level container: `inline-block`, `inline-flex`, `inline-grid`,
-  /// or a float. It carries a scene of its own.
+  /// or a float, or a block-in-inline. It carries a scene of its own.
+  ///
+  /// Approximate for a block-in-inline: Blink paints it as a block child, its backgrounds before
+  /// the line content and its positioned descendants in their stacking contexts, where takumi
+  /// paints it whole after the text, as an `inline-block`.
   Container(Box<InlineSubtree>),
 }
 
@@ -56,7 +60,9 @@ pub fn resolve_inline_box<'n>(
 }
 
 impl<'n> InlineBoxPaint<'n> {
-  /// What `positioned` holds, and its origin relative to the container's border-box origin.
+  /// What `positioned` holds, and where it paints from relative to the container's border-box
+  /// origin: a replaced box's border box, or a container's margin box, which
+  /// [`InlineSubtree::border_box_origin`] moves to its border box.
   pub fn of(
     positioned: &VisualInlineBox,
     item: &InlineBoxItem<'n>,
@@ -68,14 +74,22 @@ impl<'n> InlineBoxPaint<'n> {
       x: content.x + positioned.x,
       y: content.y + positioned.y,
     };
+    let margin_offset = Point {
+      x: item.margin.left,
+      y: item.margin.top,
+    };
 
-    if !node.participates_as_inline_box() {
+    // The line advances by the margin box, but the box itself is its border box inside it, as
+    // Blink's `LogicalLineBuilder::PlaceAtomicInline` places the fragment past its start margin.
+    if !node.participates_as_inline_box() && !node.is_block_in_inline {
+      let border_box = origin + margin_offset;
+
       return (
-        origin,
+        border_box,
         Self::Replaced {
           node,
           layout: ComputedLayout {
-            location: origin,
+            location: border_box,
             ..ComputedLayout::from(item)
           },
         },
@@ -87,7 +101,14 @@ impl<'n> InlineBoxPaint<'n> {
       height: (positioned.height - item.margin.vertical()).max(0.0),
     };
     let root = node.clone();
-    let results = LayoutResults::compute(&root, size.map(AvailableSpace::Definite));
+    // Taffy lays a root out in the space beside its margins, which the margin box holds.
+    let results = LayoutResults::compute(
+      &root,
+      Size {
+        width: AvailableSpace::Definite(positioned.width.max(0.0)),
+        height: AvailableSpace::Definite(positioned.height.max(0.0)),
+      },
+    );
 
     (
       origin,
@@ -95,16 +116,8 @@ impl<'n> InlineBoxPaint<'n> {
         root,
         results,
         size,
-        margin_offset: Point {
-          x: item.margin.left,
-          y: item.margin.top,
-        },
-        paint_offset: node.context.paint_offset
-          + origin
-          + Point {
-            x: item.margin.left,
-            y: item.margin.top,
-          },
+        margin_offset,
+        paint_offset: node.context.paint_offset + origin + margin_offset,
       })),
     )
   }

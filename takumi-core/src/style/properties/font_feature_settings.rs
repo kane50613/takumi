@@ -29,8 +29,8 @@ impl Tag {
     Some(Self([bytes[0], bytes[1], bytes[2], bytes[3]]))
   }
 
-  pub(crate) fn into_parlance(self) -> parley::setting::Tag {
-    parley::setting::Tag::from_bytes(self.0)
+  pub(crate) fn into_harfrust(self) -> harfrust::Tag {
+    harfrust::Tag::new(&self.0)
   }
 }
 
@@ -42,13 +42,11 @@ impl fmt::Display for Tag {
 }
 
 pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
-  input: &mut Parser<'i, '_>,
+  input: &mut Parser<'i>,
 ) -> ParseResult<'i, Tag> {
-  let location = input.current_source_location();
   let tag_name = input.expect_string()?;
 
-  Tag::parse(tag_name)
-    .ok_or_else(|| unexpected_token!(T, location, &Token::QuotedString(tag_name.clone())))
+  Tag::parse(tag_name).ok_or_else(|| unexpected_token!(T, &Token::QuotedString(tag_name.clone())))
 }
 
 /// An OpenType font feature setting (tag + value) from CSS `font-feature-settings`.
@@ -61,16 +59,14 @@ pub struct FontFeature {
 }
 
 impl FontFeature {
+  /// The feature as harfrust shapes with it, over the whole text.
+  pub(crate) fn into_harfrust(self) -> harfrust::Feature {
+    harfrust::Feature::new(self.tag.into_harfrust(), u32::from(self.value), ..)
+  }
+
   /// Creates a new feature setting.
   pub const fn new(tag: Tag, value: u16) -> Self {
     Self { tag, value }
-  }
-
-  pub(crate) fn into_parlance(self) -> parley::FontFeature {
-    parley::FontFeature {
-      tag: self.tag.into_parlance(),
-      value: self.value,
-    }
   }
 }
 
@@ -83,7 +79,7 @@ pub(crate) type FontFeatureSettings = Arc<[FontFeature]>;
 impl MakeComputed for FontFeatureSettings {}
 
 impl<'i> FromCss<'i> for FontFeatureSettings {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
@@ -96,7 +92,6 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
       let value = if input.is_exhausted() {
         1
       } else {
-        let location = input.current_source_location();
         match input.next()? {
           Token::Ident(st) if st.as_ref() == "on" => 1,
           Token::Ident(st) if st.as_ref() == "off" => 0,
@@ -104,7 +99,7 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
             value, int_value, ..
           } => int_value.map(|v| v as u16).unwrap_or(*value as u16),
           token => {
-            return Err(unexpected_token!(location, token));
+            return Err(unexpected_token!(token));
           }
         }
       };

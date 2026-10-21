@@ -42,8 +42,9 @@ mod tests {
     assert_eq!(parsed.to_css_string(), "normal");
   }
 
+  /// Only a keyword error names its token; `cssparser` reports any other token without it.
   #[test]
-  fn keyword_errors_preserve_ident_and_non_ident_forms() {
+  fn keyword_errors_name_only_an_ident_token() {
     let keyword = FontKerning::from_css_str("kern").unwrap_err();
     let number = FontKerning::from_css_str("1").unwrap_err();
     let string = FontKerning::from_css_str("\"normal\"").unwrap_err();
@@ -53,17 +54,8 @@ mod tests {
       keyword.to_string(),
       "Unexpected token: kern, expected a value of 'auto', 'normal' or 'none'"
     );
-    assert_eq!(
-      number.to_string(),
-      "Basic(UnexpectedToken(Number { has_sign: false, value: 1.0, int_value: Some(1) }))"
-    );
-    assert_eq!(
-      string.to_string(),
-      "Basic(UnexpectedToken(QuotedString(\"normal\")))"
-    );
-    assert_eq!(
-      function.to_string(),
-      "Basic(UnexpectedToken(Function(\"kern\")))"
-    );
+    assert_eq!(number.to_string(), "Basic(UnexpectedToken)");
+    assert_eq!(string.to_string(), "Basic(UnexpectedToken)");
+    assert_eq!(function.to_string(), "Basic(UnexpectedToken)");
   }
 }

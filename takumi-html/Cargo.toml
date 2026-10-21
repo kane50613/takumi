@@ -1,6 +1,6 @@
 [package]
 name = "takumi-html"
-version = "0.4.4"
+version = "0.6.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Parse HTML + Tailwind markup into a takumi node tree, mirroring the JS `fromHtml` helper."
@@ -10,13 +10,12 @@ rust-version = "1.91"
 
 [dependencies]
 html5ever.workspace = true
-markup5ever_rcdom.workspace = true
 thiserror.workspace = true
 typed-builder.workspace = true
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.29.1"
+version = "0.32.0"
 default-features = false
 
 [lints]

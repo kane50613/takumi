@@ -10,3 +10,52 @@ reviews:
   path_filters:
     - "!takumi/tests/fixtures-generated/**"
     - "!takumi-pdf/tests/fixtures-generated/**"
+  path_instructions:
+    - path: "**/*.rs"
+      instructions: |
+        takumi renders HTML and CSS the way Chromium does. Review every change against that.
+
+        Chromium parity:
+        - For layout, text, font, paint, SVG, and CSS parsing changes, compare the behavior with Blink at https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/ and with the CSS, SVG, or HTML spec. Flag a divergence the code does not document.
+        - A type or function ported from Blink keeps Blink's name and says so in its doc, such as "Blink's `ShapeResultSpacing`". Flag a port that renames, merges, or reorders Blink's logic without saying where it drifts.
+        - An approximate implementation must say it is approximate and name where it differs from the reference. Flag a doc that sells accuracy instead of naming the drift.
+        - Flag a change that fixes output by special-casing a fixture instead of following Blink.
+
+        Structure:
+        - Before accepting new code, look for an existing type or function that already does the job. Flag a parallel version of an existing concept, and a pattern that now appears twice instead of having one owner.
+        - An operation whose first argument is a type the project owns belongs on that type. Values that travel together belong in a type. New modules are named after domain nouns.
+        - Siblings doing the same job share parameter order, units, naming, and error handling.
+        - Items used only by an optional feature, such as `svg`, are compiled behind that feature, so `cargo clippy --target wasm32-unknown-unknown -p takumi-paint-wasm` sees no dead code.
+
+        Style:
+        - `use` statements sit at the top of the file. Flag a fully qualified path in a new expression.
+        - Every `if`, `else`, `for`, and `while` body has braces.
+        - A blank line separates declarations from the statements that use them.
+        - Comments only link an external reference, mark a TODO, explain unidiomatic code, or state an invariant the code cannot show. Flag comments that narrate the change, restate the code, or explain why the diff was made.
+        - An item doc is one line and a module doc is one short paragraph, unless it cites a spec or reference implementation. Flag a doc that contradicts the code it describes, including module docs of partly edited files.
+    - path: "**/*.{ts,tsx}"
+      instructions: |
+        - Flag non-null assertions, type assertions, `as any`, `@ts-ignore`, and `@ts-expect-error`. Type errors are fixed at their source.
+        - Every exported function, method, and value of a published package has an explicit type, since the packages build with `isolatedDeclarations`.
+        - Relative imports are extensionless.
+        - Every `if`, `else`, `for`, and `while` body has braces.
+    - path: "takumi/tests/fixtures-html/**"
+      instructions: |
+        Each fixture pins one behavior that no other fixture pins. For a fixture that matches browser behavior, check what Chromium renders for the same HTML, and flag a fixture whose expected output Chromium would not produce.
+    - path: ".tegami/*.md"
+      instructions: |
+        A changeset entry is earned only when a published package's output, public API, or errors change. Refactors, performance work, tests, CI, and docs take no entry. The entry has one `#` heading written as the outcome a user gets, then at most one short paragraph.
+  pre_merge_checks:
+    custom_checks:
+      - name: "Chromium parity"
+        mode: "warning"
+        instructions: |
+          Pass when the pull request does not change rendered or measured output. Otherwise pass only when the changed code or the pull request description names the Blink source or the spec section the new behavior follows, or documents the change as an approximation and says where it differs from Chromium.
+      - name: "Golden fixture"
+        mode: "warning"
+        instructions: |
+          Pass when the pull request does not change rendered or serialized output. Otherwise pass only when it adds or updates a golden file under `takumi/tests/fixtures-generated/` or `takumi-pdf/tests/fixtures-generated/` that shows the change.
+      - name: "Refactor stays separate"
+        mode: "warning"
+        instructions: |
+          Fail when a single commit both restructures code and changes output. A commit described as a refactor, rename, or move must leave every golden file unchanged.

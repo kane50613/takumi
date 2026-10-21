@@ -1,19 +1,20 @@
-# TanStack Start Example
+# Generate images in TanStack Start
 
-Return an Open Graph image from a TanStack Start server route using `takumi-js` and the Cloudflare Vite plugin.
+A TanStack Start server route that returns a 1200 × 630 WebP card with `ImageResponse` from `takumi-js`. The dev server runs the route in the Cloudflare Workers runtime through the Cloudflare Vite plugin.
 
-Install [Rust](https://www.rust-lang.org/tools/install) and the workspace dependencies, then build from the repository root:
+## Run
 
-```bash
-bun install
-bun --filter '*' run build
-```
-
-Start the example with [portless](https://github.com/vercel-labs/portless):
+Build the [image example packages](../README.md#image-examples) first. Then start the dev server with [portless](https://github.com/vercel-labs/portless):
 
 ```bash
 cd example/tanstack-start
-portless run --name takumi-tanstack vite dev
+bunx portless run --name takumi-tanstack bunx vite dev
 ```
 
-Open https://takumi-tanstack.localhost/ to see the generated image.
+Open `https://takumi-tanstack.localhost/` to see the card. Its title shows the request's host.
+
+## Notes
+
+- The route is [`src/routes/index.tsx`](./src/routes/index.tsx).
+- The route loads Geist from `takumi.kane.tw`, so rendering needs network access.
+- `bun run test` builds the app and checks that the server bundle includes the WebAssembly binary and leaves out the native `@takumi-rs/core` binding.

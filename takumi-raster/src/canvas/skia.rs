@@ -8,7 +8,7 @@ use tiny_skia::{
 
 use super::{DrawTarget, PaintSource};
 use crate::{
-  BorderProperties, ColorTile, build_path,
+  BorderProperties, ColorTile, Command,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
@@ -164,7 +164,7 @@ pub(crate) fn try_fill_image_path_with_tiny_skia(
 fn build_border_path(border: BorderProperties, size: Size<u32>) -> Option<TinyPath> {
   let mut commands = Vec::new();
   border.append_mask_commands(&mut commands, size.map(|v| v as f32), Point::ZERO);
-  build_path(&commands)
+  Command::build_path(&commands)
 }
 
 #[cfg(test)]

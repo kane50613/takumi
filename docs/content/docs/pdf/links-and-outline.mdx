@@ -8,7 +8,7 @@ Add links with `<a href>`, bookmarks with `outline`, and document properties wit
 
 ## Hyperlinks
 
-Anchors with an `href` become clickable link annotations. They appear on every page that their box touches:
+An `<a>` with an `href` becomes a clickable link on every page its box touches:
 
 ```tsx twoslash title="Link to a website"
 import { render } from "takumi-pdf";
@@ -21,9 +21,9 @@ const pdf = await render(
 );
 ```
 
-Inline anchors annotate each text run. A link that wraps across lines stays clickable on both lines. Block-level anchors annotate their entire box.
+An inline link is clickable on each line it wraps across. A block-level link covers its whole box.
 
-`http`, `https`, `mailto` and `tel` links open outside the document. An `href` starting with `#` points inside it instead, to the element carrying that `id`:
+`http`, `https`, `mailto`, and `tel` links open outside the document. An `href` that starts with `#` jumps to the element with that `id`:
 
 ```tsx twoslash title="Link within the document"
 import { render } from "takumi-pdf";
@@ -37,11 +37,11 @@ const pdf = await render(
 );
 ```
 
-Internal links jump to the target element. Unresolved fragments and unsupported URL schemes are omitted.
+A link to a missing `id` or with another URL scheme gets no annotation.
 
 ## Table of contents
 
-`<TargetPageNumber />` prints the page number of an internal link target. Put it inside an `<a href="#id">`, or pass `href` to the primitive to create its own link. HTML input can use the `targetPageNumber` class on an element inside the link.
+`<TargetPageNumber />` prints the page number of an internal link's target. Put it inside an `<a href="#id">`, or pass `href` so it renders its own link. In HTML input, put an element with the `targetPageNumber` class inside the link.
 
 ```tsx twoslash title="Build a table of contents"
 import { render } from "takumi-pdf";
@@ -62,21 +62,24 @@ const pdf = await render(
 );
 ```
 
-The stretched span draws the dot leader. Counter styles work here too, so `format="upper-roman"` prints `IV`. See [Counter styles](/docs/pdf/headers-and-footers#counter-styles) for the full list.
+The stretched span draws the dot leader. `format` takes any [counter style](/docs/pdf/headers-and-footers#counter-styles), so `format="upper-roman"` prints `IV` for page 4.
 
-A fragment naming no element prints nothing. This follows the rule links already use.
+A fragment that names no element prints nothing, the same rule links follow.
 
 ### Reserve space for page numbers
 
-A page number exists only after pagination. Takumi paginates, fills the numbers in, and lays the document out again. A number that widens its line can move a page break, and the moved break can renumber the entry. The render repeats this up to three times, then keeps what it has.
+A page number exists only after pagination. Takumi paginates, fills the numbers in, and lays the document out again. A number that widens its line can move a page break, and the moved break can renumber the entry. The render repeats this up to three times, then keeps the last result.
 
-The example reserves width with `w-8 shrink-0 text-right`. Increase it if your document needs more digits. This prevents page numbers from changing the entry width during layout.
+The example reserves width with `w-8 shrink-0 text-right`, so a number cannot change the entry's width. Widen it if your document needs more digits.
 
-Headers and footers are laid out per page, outside this loop. A `<TargetPageNumber />` in a band renders nothing.
+<Callout type="warn">
+  Headers and footers are laid out per page, outside this loop. A `<TargetPageNumber />` in a band
+  renders nothing.
+</Callout>
 
 ## Outline
 
-Set `outline: true` to build PDF bookmarks from `h1`–`h6`. Deeper headings nest under the previous shallower heading:
+Set `outline: true` to build PDF bookmarks from `h1`–`h6`. A deeper heading nests under the shallower heading before it. `tagged: "ua1"` and `"ua2"` turn the outline on, since PDF/UA requires one:
 
 ```tsx twoslash title="Generate PDF bookmarks"
 import type { ReactNode } from "react";
@@ -92,7 +95,7 @@ Clicking a bookmark jumps to the page and position of its heading.
 
 ## Document metadata
 
-`metadata` fills the PDF document properties. `lang` also sets the metadata language:
+`metadata` fills the PDF document properties. `lang` also sets the document language:
 
 ```tsx twoslash title="Set document metadata"
 import type { ReactNode } from "react";
@@ -113,4 +116,14 @@ const pdf = await render(report, {
 });
 ```
 
-Metadata fields are optional for ordinary PDF output. [PDF/A and PDF/UA](/docs/pdf/pdf-a) require some fields. Use a fixed `creationDate` when you need reproducible output.
+| Field          | Written as                                               |
+| -------------- | -------------------------------------------------------- |
+| `title`        | Document title                                           |
+| `description`  | Subject                                                  |
+| `authors`      | Author                                                   |
+| `keywords`     | Keywords                                                 |
+| `creator`      | Creator: the tool that made the source                   |
+| `creationDate` | Creation date, UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS` |
+| `xmp`          | Custom XMP schemas, such as Factur-X's `fx:` block       |
+
+Every field is optional for plain PDF output. [PDF/A and PDF/UA](/docs/pdf/pdf-a#required-inputs) require some of them. Set a fixed `creationDate` for reproducible output.

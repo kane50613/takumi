@@ -1,4 +1,5 @@
 import type {
+  MeasuredNode,
   Node,
   RegisteredFamily,
   RenderAnimationOptions as RenderAnimationOptionsInternal,
@@ -11,13 +12,14 @@ import { Renderer as RendererInternal } from "../index";
 
 export { setGlyphCacheMaxBytes } from "../index";
 
-import { FontRegistry, prepareRenderInput } from "@takumi-rs/helpers/renderer";
+import { FontRegistry, withRenderInput } from "@takumi-rs/helpers/renderer";
 import { toNativeSource } from "./node-source";
 import type {
   BackendAnimationOptions,
   BackendRenderOptions,
   BackendSvgOptions,
   FontLoader,
+  RegisteredFamilyLike,
 } from "@takumi-rs/helpers/renderer";
 
 export type {
@@ -38,31 +40,50 @@ export class Renderer {
 
   constructor(options?: RendererOptions) {
     this.inner = new RendererInternal(options);
-    this.fonts = new FontRegistry<RegisteredFamily>((font) => this.inner.registerFont(font));
+    this.fonts = new FontRegistry(this.inner);
   }
 
-  async render(node: Node, options?: RenderOptions) {
-    const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.render(toNativeSource(node), opts, signal);
+  render(node: Node, options?: RenderOptions): Promise<Buffer<ArrayBuffer>> {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts, signal) =>
+      this.inner.render(toNativeSource(node), opts, signal),
+    );
   }
 
-  async renderSvg(node: Node, options?: SvgRenderOptions) {
-    const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.renderSvg(toNativeSource(node), opts, signal);
+  renderSvg(node: Node, options?: SvgRenderOptions): Promise<string> {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts, signal) =>
+      this.inner.renderSvg(toNativeSource(node), opts, signal),
+    );
   }
 
-  async measure(node: Node, options?: RenderOptions) {
-    const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.measure(toNativeSource(node), opts, signal);
+  measure(node: Node, options?: RenderOptions): Promise<MeasuredNode> {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts, signal) =>
+      this.inner.measure(toNativeSource(node), opts, signal),
+    );
   }
 
-  async renderAnimation(options: RenderAnimationOptions) {
+  renderAnimation(options: RenderAnimationOptions): Promise<Buffer<ArrayBuffer>> {
     const nodes = options.scenes.map((scene) => scene.node);
-    const { options: opts, signal } = await prepareRenderInput(this.fonts, options, nodes);
-    return this.inner.renderAnimation(opts, signal);
+
+    return withRenderInput(this.fonts, options, nodes, (opts, signal) =>
+      this.inner.renderAnimation(opts, signal),
+    );
   }
 
-  registerFont(font: FontLoader) {
+  registerFont(font: FontLoader): Promise<RegisteredFamily[]> {
     return this.fonts.register(font);
+  }
+
+  /**
+   * Removes every face registered under the family `name`, from any `registerFont` call and each
+   * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
+   * as well. A later render that lists one of its fonts registers it again.
+   */
+  unregisterFont(family: RegisteredFamilyLike): boolean {
+    return this.inner.unregisterFont(family.name);
+  }
+
+  /** Removes every registered font, leaving the bundled fallback font. */
+  clearFonts(): void {
+    this.inner.clearFonts();
   }
 }

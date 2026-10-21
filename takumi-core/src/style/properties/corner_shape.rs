@@ -102,8 +102,7 @@ impl Animatable for Superellipse {
 }
 
 impl<'i> FromCss<'i> for Superellipse {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
@@ -114,15 +113,14 @@ impl<'i> FromCss<'i> for Superellipse {
         "round" => Ok(Self::ROUND),
         "squircle" => Ok(Self::SQUIRCLE),
         "square" => Ok(Self::SQUARE),
-        _ => Err(unexpected_token!(location, token)),
+        _ => Err(unexpected_token!(token)),
       },
       Token::Function(function) => {
         if !function.eq_ignore_ascii_case("superellipse") {
-          return Err(unexpected_token!(location, token));
+          return Err(unexpected_token!(token));
         }
 
         input.parse_nested_block(|input| {
-          let location = input.current_source_location();
           let token = input.next()?;
 
           match token {
@@ -130,13 +128,13 @@ impl<'i> FromCss<'i> for Superellipse {
             Token::Ident(ident) => match_ignore_ascii_case! { ident,
               "infinity" => Ok(Self::SQUARE),
               "-infinity" => Ok(Self::NOTCH),
-              _ => Err(unexpected_token!(Self, location, token)),
+              _ => Err(unexpected_token!(Self, token)),
             },
-            _ => Err(unexpected_token!(Self, location, token)),
+            _ => Err(unexpected_token!(Self, token)),
           }
         })
       }
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 
@@ -190,6 +188,7 @@ mod tests {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 16.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     }
   }

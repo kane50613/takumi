@@ -1,12 +1,23 @@
 use std::{borrow::Cow, marker::PhantomData};
 
-use parley::fontique::Attributes;
 use taffy::{LengthPercentage, Line, Rect, Size};
 
 use super::ComputedStyle;
 use crate::{
+  fonts::{
+    font_description::FontSelectionDescription,
+    font_selection_types::{FontSelectionRequest, FontSelectionValue},
+  },
   geometry::{Point, Size as CoreSize},
   style::{Lang, SizingContext, properties::*},
+  text::{
+    capitalize::capitalize,
+    case_map::CaseMap,
+    character::{
+      IDEOGRAPHIC_SPACE, is_modern_georgian_uppercase, lowercase_modern_georgian_uppercase,
+    },
+    character_variants::{full_size_kana_variant, full_width_variant},
+  },
 };
 
 impl ComputedStyle {
@@ -21,6 +32,16 @@ impl ComputedStyle {
       style.inherited_data_mut().font_family = font_family;
     }
     style
+  }
+
+  /// Blink's `ResolvedIsColumnFlexDirection`, as a direction: a `-webkit-box` takes its axis from
+  /// `-webkit-box-orient`.
+  pub(crate) fn resolved_flex_direction(&self) -> FlexDirection {
+    if self.base_data.display.is_deprecated_webkit_box() {
+      self.misc_data.box_orient.into()
+    } else {
+      self.misc_data.flex_direction
+    }
   }
 
   /// Normalize inheritable text-related values to computed values for this node.
@@ -93,6 +114,19 @@ impl ComputedStyle {
     // (LayoutBlockFlow::ShouldTruncateOverflowingText).
     if !self.clips_overflow() && self.misc4_data.text_overflow != TextOverflow::Clip {
       self.misc4_data_mut().text_overflow = TextOverflow::Clip;
+    }
+
+    // `-webkit-legacy` collapses only in a vertical `-webkit-box`, Blink's
+    // `IsDeprecatedWebkitBoxWithVerticalLineClamp`.
+    if self.misc_data.r#continue == Continue::WebkitLegacy {
+      let collapses = self.base_data.display.is_deprecated_webkit_box()
+        && self.misc_data.box_orient == BoxOrient::Vertical;
+
+      self.misc_data_mut().r#continue = if collapses {
+        Continue::Collapse
+      } else {
+        Continue::Normal
+      };
     }
 
     self.original_display = self.base_data.display;
@@ -345,54 +379,60 @@ impl ComputedStyle {
     self.resolve_overflows().should_clip_content()
   }
 
-  /// The string used to mark truncated text.
-  pub(crate) fn ellipsis_char(&self) -> &str {
-    const ELLIPSIS_CHAR: &str = "…";
+  /// Blink's `ApplyTextTransform`: the case, then full-width forms, then full-size kana.
+  /// `previous_character` ends the text before, which decides whether `capitalize` starts a word.
+  pub(crate) fn apply_text_transform<'t>(
+    &self,
+    text: &'t str,
+    previous_character: char,
+  ) -> Cow<'t, str> {
+    let transform = self.inherited_data.text_transform;
+    let case_map = || CaseMap::new(self.lang.as_ref().map(Lang::as_str));
+    let mut text = match transform.case {
+      TextTransformCase::None => Cow::Borrowed(text),
+      TextTransformCase::Capitalize => Cow::Owned(capitalize(text, previous_character)),
+      // Fonts lack the Mtavruli letters, so Georgian stays in Mkhedruli. <https://crbug.com/865427>
+      TextTransformCase::Uppercase => match case_map().to_upper(text) {
+        Cow::Owned(upper) if upper.contains(is_modern_georgian_uppercase) => Cow::Owned(
+          upper
+            .chars()
+            .map(|c| {
+              if is_modern_georgian_uppercase(c) {
+                lowercase_modern_georgian_uppercase(c)
+              } else {
+                c
+              }
+            })
+            .collect(),
+        ),
+        upper => upper,
+      },
+      TextTransformCase::Lowercase => case_map().to_lower(text),
+    };
 
-    match &self.misc4_data.text_overflow {
-      TextOverflow::Ellipsis => return ELLIPSIS_CHAR,
-      TextOverflow::Custom(custom) => return custom.as_str(),
-      _ => {}
+    if transform.full_width {
+      // A space white space processing may collapse stays one, as in Blink.
+      let preserves_spaces = self
+        .inherited_data
+        .white_space_collapse
+        .should_preserve_white_spaces();
+
+      text = Cow::Owned(
+        text
+          .chars()
+          .map(|c| match c {
+            ' ' if preserves_spaces => IDEOGRAPHIC_SPACE,
+            c => full_width_variant(c),
+          })
+          .collect(),
+      );
     }
 
-    match &self.misc_inherited1_data.block_ellipsis {
-      BlockEllipsis::String(custom) => custom.as_str(),
-      BlockEllipsis::None => "",
-      BlockEllipsis::Auto => ELLIPSIS_CHAR,
-    }
-  }
-
-  /// `nowrap` + `ellipsis`: parley lays out all the text even when it overflows,
-  /// so this case is rendered by switching to wrapping with a one-line clamp.
-  fn forces_single_line_ellipsis(&self) -> bool {
-    self.inherited_data.text_wrap_mode == TextWrapMode::NoWrap
-      && self.misc4_data.text_overflow == TextOverflow::Ellipsis
-  }
-
-  /// The wrap mode used for layout, forcing wrap for single-line ellipsis.
-  pub(crate) fn resolved_text_wrap_mode(&self) -> TextWrapMode {
-    if self.forces_single_line_ellipsis() {
-      TextWrapMode::Wrap
-    } else {
-      self.inherited_data.text_wrap_mode
-    }
-  }
-
-  /// The number of lines to clamp to for layout, or `None` when not clamped.
-  ///
-  /// `nowrap` + `ellipsis` clamps to a single line; otherwise `max-lines` applies
-  /// only inside a fragmentation context (`continue: collapse`), per CSS Overflow 4.
-  /// The ellipsis itself comes from [`Self::ellipsis_char`].
-  pub(crate) fn clamp_lines(&self) -> Option<u32> {
-    if self.forces_single_line_ellipsis() {
-      return Some(1);
+    if transform.full_size_kana {
+      text = Cow::Owned(text.chars().map(full_size_kana_variant).collect());
     }
 
-    if self.misc_data.r#continue != Continue::Collapse {
-      return None;
-    }
-
-    self.misc3_data.max_lines.filter(|&count| count >= 1)
+    text
   }
 
   #[inline]
@@ -421,12 +461,43 @@ impl ComputedStyle {
     }
   }
 
-  /// The face attributes a font query matches.
-  pub(crate) fn font_attributes(&self) -> Attributes {
-    Attributes {
-      width: self.inherited_data.font_stretch.into_parlance(),
-      style: self.inherited_data.font_style.into_parlance(),
-      weight: self.inherited_data.font_weight.into_parlance(),
+  /// The lines `line-clamp` keeps, which collapse the lines past them.
+  pub(crate) fn line_clamp(&self) -> Option<u32> {
+    self
+      .misc3_data
+      .max_lines
+      .filter(|&lines| self.misc_data.r#continue == Continue::Collapse && lines >= 1)
+  }
+
+  /// What font matching reads of this style at `sizing`'s font size, apart from the families.
+  pub(crate) fn font_selection_description(
+    &self,
+    sizing: &SizingContext,
+  ) -> FontSelectionDescription {
+    let inherited = &self.inherited_data;
+
+    FontSelectionDescription {
+      font_selection_request: FontSelectionRequest::new(
+        FontSelectionValue::new(inherited.font_weight.value()),
+        FontSelectionValue::new(inherited.font_stretch.percentage() * 100.0),
+        FontSelectionValue::new(inherited.font_style.slope()),
+      ),
+      is_italic_keyword: inherited.font_style.is_italic(),
+      synthetic_bold_allowed: inherited.font_synthesis_weight.is_allowed(),
+      synthetic_italic_allowed: inherited.font_synthesis_style.is_allowed(),
+      is_synthetic_bold: false,
+      is_synthetic_italic: false,
+      effective_font_size: sizing.font_size,
+      adjusted_specified_size: sizing.to_css(sizing.font_size),
+      font_optical_sizing: inherited.font_optical_sizing,
+      variation_settings: inherited
+        .font_variation_settings
+        .iter()
+        .map(|variation| harfrust::font::Variation {
+          tag: variation.tag.into_harfrust(),
+          value: variation.value,
+        })
+        .collect(),
     }
   }
 
@@ -518,7 +589,7 @@ impl ComputedStyle {
       }
       .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
       display: self.base_data.display.into_taffy(),
-      flex_direction: self.misc_data.flex_direction.into_taffy(),
+      flex_direction: self.resolved_flex_direction().into_taffy(),
       position: self.base_data.position.into_taffy(),
       justify_content: self.box_data.justify_content.into_taffy(),
       align_content: self.misc_data.align_content.into_taffy(),

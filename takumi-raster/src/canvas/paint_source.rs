@@ -1,4 +1,4 @@
-use std::array;
+use std::{array, cell::RefCell};
 
 use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
@@ -300,49 +300,77 @@ pub(crate) struct BilinearRow<'p> {
   bottom: &'p [PremultipliedColorU8],
 }
 
-impl BilinearRow<'_> {
-  /// [`BilinearAxis::mix`] of each of `columns` into `out`, gathering eight columns' taps into
-  /// one array per tap before mixing them so the arithmetic vectorizes.
-  pub(crate) fn fill(self, columns: &[BilinearAxis], out: &mut [[u8; 4]]) {
-    const RUN: usize = 8;
-    const LANES: usize = RUN * 4;
+/// Bilinear magnification across a fixed set of destination columns, one destination row at a
+/// time. Each source row is lerped across the columns once and kept while the next destination
+/// rows still read it, so a row costs one vertical lerp; the result matches
+/// [`BilinearAxis::mix`] byte for byte.
+pub(crate) struct BilinearColumns {
+  columns: Vec<BilinearAxis>,
+  lerped: RefCell<LerpedRows>,
+}
 
-    let row = self.axis.ratio;
+/// The last two source rows lerped across the columns, each by its row index.
+#[derive(Default)]
+struct LerpedRows([(Option<usize>, Vec<[u16; 4]>); 2]);
 
-    for (out, columns) in out.chunks_mut(RUN).zip(columns.chunks(RUN)) {
-      let mut taps = [[0; LANES]; 4];
-      let mut ratios = [0; LANES];
-
-      for (index, column) in columns.iter().enumerate() {
-        let lanes = index * 4..index * 4 + 4;
-
-        for (tap, pixel) in taps.iter_mut().zip([
-          self.top[column.floor],
-          self.top[column.ceil],
-          self.bottom[column.floor],
-          self.bottom[column.ceil],
-        ]) {
-          tap[lanes.clone()].copy_from_slice(&premultiplied_from_pixel(pixel));
-        }
-        ratios[lanes].fill(column.ratio as u16);
-      }
-
-      let [top_left, top_right, bottom_left, bottom_right] = taps;
-      // A row's lerp peaks at 255 * 256, inside 16 bits; the column lerp needs 32.
-      let lerp = |left: u8, right: u8, column: u16| {
-        u32::from(u16::from(left) * (256 - column) + u16::from(right) * column)
-      };
-      let mixed: [u8; LANES] = array::from_fn(|lane| {
-        let top = lerp(top_left[lane], top_right[lane], ratios[lane]);
-        let bottom = lerp(bottom_left[lane], bottom_right[lane], ratios[lane]);
-
-        ((top * (256 - row) + bottom * row) >> 16) as u8
-      });
-
-      let out = out.as_flattened_mut();
-
-      out.copy_from_slice(&mixed[..out.len()]);
+impl BilinearColumns {
+  pub(crate) fn new(columns: Vec<BilinearAxis>) -> Self {
+    Self {
+      columns,
+      lerped: RefCell::default(),
     }
+  }
+
+  /// [`BilinearAxis::mix`] of each column at source rows `row` into `out`.
+  pub(crate) fn fill(&self, source: PixmapRef<'_>, row: BilinearAxis, out: &mut [[u8; 4]]) {
+    let mut lerped = self.lerped.borrow_mut();
+    let top = lerped.slot(source, &self.columns, row.floor, row.ceil);
+    let bottom = lerped.slot(source, &self.columns, row.ceil, row.floor);
+    let [top, bottom] = [top, bottom].map(|slot| &lerped.0[slot].1);
+    let weight = row.ratio;
+
+    // A row's lerp peaks at 255 * 256, inside 16 bits; the column lerp needs 32.
+    for ((out, top), bottom) in out.iter_mut().zip(top).zip(bottom) {
+      *out = array::from_fn(|channel| {
+        ((u32::from(top[channel]) * (256 - weight) + u32::from(bottom[channel]) * weight) >> 16)
+          as u8
+      });
+    }
+  }
+}
+
+impl LerpedRows {
+  /// The slot holding source row `index` lerped across `columns`, lerping it into the slot that
+  /// does not hold row `keep` when neither has it.
+  fn slot(
+    &mut self,
+    source: PixmapRef<'_>,
+    columns: &[BilinearAxis],
+    index: usize,
+    keep: usize,
+  ) -> usize {
+    if let Some(slot) = self.0.iter().position(|(row, _)| *row == Some(index)) {
+      return slot;
+    }
+
+    let slot = usize::from(self.0[0].0 == Some(keep) && index != keep);
+    let stride = source.width() as usize;
+    let pixels = &source.pixels()[index * stride..][..stride];
+    let (row, lerped) = &mut self.0[slot];
+
+    *row = Some(index);
+    lerped.clear();
+    lerped.extend(columns.iter().map(|column| {
+      let left = premultiplied_from_pixel(pixels[column.floor]);
+      let right = premultiplied_from_pixel(pixels[column.ceil]);
+      let ratio = column.ratio as u16;
+
+      array::from_fn(|channel| {
+        u16::from(left[channel]) * (256 - ratio) + u16::from(right[channel]) * ratio
+      })
+    }));
+
+    slot
   }
 }
 
@@ -436,7 +464,7 @@ enum ScaledColumns {
   Shift {
     start: usize,
   },
-  Bilinear(Vec<BilinearAxis>),
+  Bilinear(BilinearColumns),
   Box {
     columns: Vec<BoxAxis>,
     span_y: f32,
@@ -496,11 +524,11 @@ impl<'a> ScaledRows<'a> {
         span_y: footprint.box_span_y(),
       }
     } else {
-      ScaledColumns::Bilinear(
+      ScaledColumns::Bilinear(BilinearColumns::new(
         (0..width)
           .map(|_| BilinearAxis::new(advance(), source.width()))
           .collect(),
-      )
+      ))
     };
 
     Some(Self {
@@ -532,9 +560,11 @@ impl<'a> ScaledRows<'a> {
         }
       }
       ScaledColumns::Bilinear(columns) => {
-        BilinearAxis::new(sample_y, self.source.height())
-          .rows(self.source)
-          .fill(columns, out);
+        columns.fill(
+          self.source,
+          BilinearAxis::new(sample_y, self.source.height()),
+          out,
+        );
       }
       ScaledColumns::Box { columns, span_y } => {
         BoxAxis::new(sample_y, *span_y, self.source.height()).fill_row(self.source, columns, out);
@@ -729,26 +759,39 @@ mod tests {
   use tiny_skia::{Pixmap, PremultipliedColorU8};
 
   use super::{
-    BilinearAxis, SamplingFootprint, ScaledColumns, ScaledRows, interpolate_bilinear,
-    interpolate_with_footprint, sample_paint_source,
+    BilinearAxis, BilinearColumns, SamplingFootprint, ScaledColumns, ScaledRows,
+    interpolate_bilinear, interpolate_with_footprint, sample_paint_source,
   };
   use crate::style::{Affine, ImageScalingAlgorithm};
 
   #[test]
   fn a_filled_row_mixes_each_column_alone() {
     let pixmap = noisy_pixmap();
+    // Rows that repeat, step within one source row, skip rows, go back, and reach the last row,
+    // where both taps read the same source row.
+    let sample_ys = [
+      0.0, 0.2, 0.7, 0.9, 1.6, 5.3, 5.4, 2.1, 30.5, 60.2, 61.0, 60.9, 13.37,
+    ];
 
     for (case, width) in [1, 7, 8, 9, 23, 97].into_iter().enumerate() {
       let step = 97.0 / width as f32 * 0.83;
       let columns: Vec<BilinearAxis> = (0..width)
         .map(|index| BilinearAxis::new(index as f32 * step + 0.1 * case as f32, 97))
         .collect();
-      let row = BilinearAxis::new(13.37 + case as f32 * 7.9, 61).rows(pixmap.as_ref());
-      let mut filled = vec![[0; 4]; width];
+      let filler = BilinearColumns::new(columns.clone());
 
-      row.fill(&columns, &mut filled);
-      for (column, filled) in columns.iter().zip(&filled) {
-        assert_eq!(*filled, column.mix(row), "width {width}");
+      for sample_y in sample_ys {
+        let row = BilinearAxis::new(sample_y + case as f32 * 0.3, 61);
+        let mut filled = vec![[0; 4]; width];
+
+        filler.fill(pixmap.as_ref(), row, &mut filled);
+        for (column, filled) in columns.iter().zip(&filled) {
+          assert_eq!(
+            *filled,
+            column.mix(row.rows(pixmap.as_ref())),
+            "width {width} at y {sample_y}"
+          );
+        }
       }
     }
   }

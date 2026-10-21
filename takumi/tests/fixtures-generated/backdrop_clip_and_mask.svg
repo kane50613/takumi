@@ -74,7 +74,7 @@
       <ellipse cx="300" cy="160" rx="137.674" ry="137.674"/>
     </clipPath>
     <g clip-path="url(#cp2)">
-      <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+      <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="600" height="320">
         <linearGradient id="lg4" gradientUnits="userSpaceOnUse" x1="120" y1="160" x2="480" y2="160">
           <stop offset="0" stop-color="#000"/>
           <stop offset=".016" stop-color="#000" stop-opacity=".984"/>
@@ -231,7 +231,7 @@
       </g>
     </g>
   </g>
-  <mask id="mk8" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk8" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="600" height="320">
     <linearGradient id="lg9" gradientUnits="userSpaceOnUse" x1="120" y1="160" x2="480" y2="160">
       <stop offset="0" stop-color="#000"/>
       <stop offset=".016" stop-color="#000" stop-opacity=".984"/>

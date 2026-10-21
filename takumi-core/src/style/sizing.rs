@@ -32,6 +32,10 @@ pub struct SizingContext {
   /// Pixel basis for the `rlh` unit, set alongside [`Self::root_font_size`].
   #[builder(default)]
   pub root_line_height: Option<f32>,
+  /// Pixel basis for the `ch` unit: the advance of the `0` glyph, as Blink's
+  /// `FontSizes::Ch` reads it from `PrimaryFontWithDigitZero`.
+  #[builder(default = viewport.to_device(viewport.font_size) / 2.0)]
+  pub(crate) ch: f32,
   /// The calc arena shared by the current layout tree.
   #[builder(default, setter(skip))]
   pub(crate) calc_arena: Rc<CalcArena>,
@@ -51,6 +55,18 @@ impl SizingContext {
     self.viewport.to_css(device_px)
   }
 
+  /// Whether lengths resolve the same against both, whatever either read of a query container.
+  /// Both must come from one render, whose contexts all share its calc arena.
+  pub(crate) fn resolves_like(&self, other: &Self) -> bool {
+    self.viewport == other.viewport
+      && self.container_size == other.container_size
+      && self.font_size == other.font_size
+      && self.root_font_size == other.root_font_size
+      && self.line_height == other.line_height
+      && self.root_line_height == other.root_line_height
+      && self.ch == other.ch
+  }
+
   /// Returns a copy with the font and line-height metrics overridden, inheriting
   /// the viewport, container size, and shared calc arena.
   pub(crate) fn with_font_metrics(
@@ -59,12 +75,14 @@ impl SizingContext {
     root_font_size: Option<f32>,
     line_height: f32,
     root_line_height: Option<f32>,
+    ch: f32,
   ) -> Self {
     Self {
       font_size,
       root_font_size,
       line_height,
       root_line_height,
+      ch,
       ..self.clone()
     }
   }

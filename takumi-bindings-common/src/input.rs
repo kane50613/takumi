@@ -110,12 +110,26 @@ pub struct ImageSource {
   cache: Option<ImageCacheMode>,
 }
 
-/// Registers a font input, returning the families it produced.
-pub fn register_font(fonts: &mut Fonts, font: Font) -> Result<Vec<RegisteredFamily>, FontError> {
+/// Registers a font input, returning the families it produced and the bytes of font data it holds.
+pub fn register_font(
+  fonts: &mut Fonts,
+  font: Font,
+) -> Result<(Vec<RegisteredFamily>, u64), FontError> {
   match font {
-    Font::Buffer(buffer) => fonts.register(FontResource::new(buffer.into_vec())),
-    Font::Object(details) => fonts.register(details.options.resource(&details.data)?),
+    Font::Buffer(buffer) => register_resource(fonts, FontResource::new(buffer.into_vec())),
+    Font::Object(details) => register_resource(fonts, details.options.resource(&details.data)?),
   }
+}
+
+/// Registers `resource` decoded, returning the families it produced and its decoded bytes.
+pub fn register_resource(
+  fonts: &mut Fonts,
+  resource: FontResource<'_>,
+) -> Result<(Vec<RegisteredFamily>, u64), FontError> {
+  let resource = resource.into_resolved()?;
+  let bytes = resource.byte_len() as u64;
+
+  Ok((fonts.register(resource)?, bytes))
 }
 
 /// Decodes the per-render image inputs into a `src`-keyed map through `cache`.

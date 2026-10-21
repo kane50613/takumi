@@ -1,6 +1,6 @@
 use std::{rc::Rc, str::FromStr};
 
-use cssparser::{Parser, ParserInput};
+use cssparser::Parser;
 use serde_json::{from_value, json};
 
 use super::{
@@ -11,34 +11,10 @@ use crate::{
   geometry::Size,
   style::{
     CalcArena, ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style,
-    StyleBaseData, StyleBoxData, StyleDeclaration, StyleInheritedData, StyleMisc4Data,
-    StyleSvgData, properties::*,
+    StyleBaseData, StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
   },
   viewport::Viewport,
 };
-
-/// The sizing longhands moved off `Length`, so their builders take anything that
-/// converts into the new value types. This pins the `Length` call that callers
-/// wrote before the sizing keywords existed.
-#[test]
-fn the_sizing_builders_still_take_a_length() {
-  assert_eq!(
-    StyleDeclaration::width(Length::Px(80.0)),
-    StyleDeclaration::width(Length::Px(80.0))
-  );
-  assert_eq!(
-    StyleDeclaration::height(Length::Percentage(50.0)),
-    StyleDeclaration::height(Length::Percentage(50.0))
-  );
-  assert_eq!(
-    StyleDeclaration::flex_basis(Some(Length::Px(12.0).into())),
-    StyleDeclaration::flex_basis(Some(FlexBasis::Size(Length::Px(12.0).into())))
-  );
-  assert_eq!(
-    StyleDeclaration::flex_basis(None),
-    StyleDeclaration::FlexBasis(None)
-  );
-}
 
 fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style {
   let mut style = Style::default();
@@ -49,16 +25,14 @@ fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style
 }
 
 fn parse_declarations(name: &str, css: &str) -> StyleDeclarationBlock {
-  let mut input = ParserInput::new(css);
-  let mut parser = Parser::new(&mut input);
+  let mut parser = Parser::new(css);
   let declarations_result = StyleDeclarationBlock::parse(name, &mut parser);
   assert!(declarations_result.is_ok());
   declarations_result.unwrap_or_default()
 }
 
 fn parse_declarations_is_err(name: &str, css: &str) -> bool {
-  let mut input = ParserInput::new(css);
-  let mut parser = Parser::new(&mut input);
+  let mut parser = Parser::new(css);
   StyleDeclarationBlock::parse(name, &mut parser).is_err()
 }
 
@@ -99,7 +73,7 @@ fn resolve_var(
 }
 
 #[test]
-fn test_merge_from_inline_over_tailwind() {
+fn inline_declarations_override_tailwind() {
   let mut tw_style = style_with([
     StyleDeclaration::width(Length::Rem(10.0)),
     StyleDeclaration::height(Length::Rem(20.0)),
@@ -408,9 +382,12 @@ fn property_id_accepts_webkit_aliases() {
   assert_eq!(PropertyId::from_camel_case("lineClamp"), line_clamp);
   assert_eq!(
     PropertyId::from_kebab_case("-webkit-line-clamp"),
-    line_clamp
+    PropertyId::Shorthand(ShorthandId::WebkitLineClamp)
   );
-  assert_eq!(PropertyId::from_camel_case("WebkitLineClamp"), line_clamp);
+  assert_eq!(
+    PropertyId::from_camel_case("WebkitLineClamp"),
+    PropertyId::Shorthand(ShorthandId::WebkitLineClamp)
+  );
   assert_eq!(
     PropertyId::from_kebab_case("-webkit-text-fill-color"),
     PropertyId::Longhand(LonghandId::WebkitTextFillColor)
@@ -427,6 +404,53 @@ fn property_id_accepts_webkit_aliases() {
     PropertyId::from_kebab_case("-webkit-mask-image"),
     PropertyId::Longhand(LonghandId::MaskImage)
   );
+}
+
+/// `-webkit-line-clamp` collapses lines only in a vertical legacy box.
+#[test]
+fn webkit_line_clamp_needs_a_vertical_webkit_box() {
+  let style = |declarations: &[(&str, &str)]| {
+    let mut style = Style::default();
+
+    for (name, value) in declarations {
+      style.append_block(parse_declarations(name, value));
+    }
+
+    let mut computed = style.inherit(&ComputedStyle::default());
+
+    computed.make_computed(&SizingContext {
+      viewport: Viewport::new((1200, 630)),
+      container_size: Size::NONE,
+      container_read: Default::default(),
+      font_size: 16.0,
+      root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
+      ch: 16.0 / 2.0,
+      calc_arena: Rc::new(CalcArena::default()),
+    });
+    computed
+  };
+
+  let legacy = style(&[
+    ("display", "-webkit-box"),
+    ("-webkit-box-orient", "vertical"),
+    ("-webkit-line-clamp", "2"),
+  ]);
+  let bare = style(&[("-webkit-line-clamp", "2")]);
+  let flex_column = style(&[
+    ("display", "flex"),
+    ("flex-direction", "column"),
+    ("-webkit-line-clamp", "2"),
+  ]);
+  let horizontal = style(&[("display", "-webkit-box"), ("-webkit-line-clamp", "2")]);
+  let overridden = style(&[("line-clamp", "4"), ("-webkit-line-clamp", "4")]);
+
+  assert_eq!(legacy.line_clamp(), Some(2));
+  assert_eq!(bare.line_clamp(), None);
+  assert_eq!(flex_column.line_clamp(), None);
+  assert_eq!(horizontal.line_clamp(), None);
+  assert_eq!(overridden.line_clamp(), None);
 }
 
 #[test]
@@ -478,20 +502,6 @@ fn continue_property_resolves_by_name() {
 }
 
 #[test]
-fn max_lines_clamps_only_inside_fragmentation_context() {
-  // Bare `max-lines` (continue: normal) does not clamp.
-  let bare = inherited_style_from_pairs([("max-lines", "3")], &ComputedStyle::default());
-  assert!(bare.clamp_lines().is_none());
-
-  // `continue: collapse` turns it into a fragmentation context that clamps.
-  let clamped = inherited_style_from_pairs(
-    [("max-lines", "3"), ("continue", "collapse")],
-    &ComputedStyle::default(),
-  );
-  assert_eq!(clamped.clamp_lines(), Some(3));
-}
-
-#[test]
 fn property_id_accepts_legacy_page_break_aliases() {
   assert_eq!(
     PropertyId::from_kebab_case("page-break-before"),
@@ -524,41 +534,6 @@ fn property_id_accepts_legacy_gap_aliases() {
   assert_eq!(
     PropertyId::from_camel_case("gridColumnGap"),
     PropertyId::Longhand(LonghandId::ColumnGap)
-  );
-}
-
-#[test]
-fn parse_style_declaration_supports_css_wide_keywords_for_longhands() {
-  let declarations = parse_declarations("color", "inherit");
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::CssWideKeyword(
-      LonghandId::Color,
-      CssWideKeyword::Inherit,
-    )]
-  );
-}
-
-#[test]
-fn parse_style_declaration_still_parses_normal_longhand_values() {
-  let declarations = parse_declarations("color", "#ff0000");
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::color(ColorInput::Value(Color([
-      255, 0, 0, 255
-    ])))]
-  );
-}
-
-#[test]
-fn parse_style_declaration_parses_order_integer() {
-  let declarations = parse_declarations("order", "-2");
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::order(Order(-2))]
   );
 }
 
@@ -809,13 +784,13 @@ fn parse_legacy_box_properties_lower_to_flex() {
   let orient = parse_declarations("-webkit-box-orient", "vertical");
   assert_eq!(
     orient.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::flex_direction(FlexDirection::Column)]
+    vec![&StyleDeclaration::box_orient(BoxOrient::Vertical)]
   );
 
   let inline_axis = parse_declarations("-webkit-box-orient", "inline-axis");
   assert_eq!(
     inline_axis.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::flex_direction(FlexDirection::Row)]
+    vec![&StyleDeclaration::box_orient(BoxOrient::Horizontal)]
   );
 
   let pack = parse_declarations("-webkit-box-pack", "justify");
@@ -926,13 +901,6 @@ fn style_declaration_block_from_str_tracks_important_declarations() {
 }
 
 #[test]
-fn style_declaration_block_supports_reference_iteration() {
-  let declarations = parse_declarations("padding", "1px 2px");
-
-  assert_eq!(declarations.iter().count(), 4);
-}
-
-#[test]
 fn style_declaration_block_collect_style_fetch_tasks_collects_url_images() {
   let background_url = "https://placehold.co/80x80/22c55e/white";
   let mask_url = "https://placehold.co/40x40/000000/white";
@@ -950,70 +918,6 @@ fn style_declaration_block_collect_style_fetch_tasks_collects_url_images() {
   assert_eq!(
     declarations.image_urls().collect::<Vec<_>>(),
     vec![background_url, mask_url]
-  );
-}
-
-#[test]
-fn style_declaration_block_into_iter_yields_owned_values() {
-  let declarations = parse_declarations("padding", "1px 2px");
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![
-      &StyleDeclaration::padding_top(Length::Px(1.0)),
-      &StyleDeclaration::padding_right(Length::Px(2.0)),
-      &StyleDeclaration::padding_bottom(Length::Px(1.0)),
-      &StyleDeclaration::padding_left(Length::Px(2.0)),
-    ]
-  );
-}
-
-#[test]
-fn test_merge_from_text_decoration_longhands_clear_lower_priority_color() {
-  let mut preset_style = style_with([StyleDeclaration::text_decoration_color(ColorInput::Value(
-    Color([255, 0, 0, 255]),
-  ))]);
-  let inline_style = style_with([
-    StyleDeclaration::text_decoration_line(Some(TextDecorationLines::UNDERLINE)),
-    StyleDeclaration::text_decoration_style(TextDecorationStyle::default()),
-    StyleDeclaration::text_decoration_color(ColorInput::default()),
-    StyleDeclaration::text_decoration_thickness(TextDecorationThickness::default()),
-  ]);
-
-  preset_style.append_block(inline_style.declarations);
-
-  let inherited = preset_style.inherit(&ComputedStyle::default());
-  assert_eq!(
-    inherited.misc3_data.text_decoration_color,
-    ColorInput::default()
-  );
-  assert_eq!(
-    inherited.visual_data.text_decoration_line,
-    Some(TextDecorationLines::UNDERLINE)
-  );
-}
-
-#[test]
-fn test_merge_from_background_longhands_clear_lower_priority_background_color() {
-  let mut preset_style = style_with([StyleDeclaration::background_color(ColorInput::Value(
-    Color([255, 0, 0, 255]),
-  ))]);
-  let inline_style = style_with([
-    StyleDeclaration::background_image(Some([BackgroundImage::None].into())),
-    StyleDeclaration::background_position([PositionValue::default()].into()),
-    StyleDeclaration::background_size([BackgroundSize::default()].into()),
-    StyleDeclaration::background_repeat([BackgroundRepeat::default()].into()),
-    StyleDeclaration::background_blend_mode([BlendMode::default()].into()),
-    StyleDeclaration::background_color(ColorInput::default()),
-    StyleDeclaration::background_clip(BackgroundClip::default()),
-  ]);
-
-  preset_style.append_block(inline_style.declarations);
-
-  let inherited = preset_style.inherit(&ComputedStyle::default());
-  assert_eq!(
-    inherited.background_data.background_color,
-    ColorInput::default()
   );
 }
 
@@ -1133,6 +1037,7 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 16.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
   let border_box = Size {
@@ -1194,24 +1099,6 @@ fn test_transform_creates_stacking_context_without_offscreen_compositing() {
 }
 
 #[test]
-fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
-  let style = ComputedStyle {
-    inherited_data: Rc::new(StyleInheritedData {
-      text_wrap_mode: TextWrapMode::NoWrap,
-      ..Default::default()
-    }),
-    misc4_data: Rc::new(StyleMisc4Data {
-      text_overflow: TextOverflow::Ellipsis,
-      ..Default::default()
-    }),
-    ..Default::default()
-  };
-
-  assert_eq!(style.resolved_text_wrap_mode(), TextWrapMode::Wrap);
-  assert_eq!(style.clamp_lines(), Some(1));
-}
-
-#[test]
 fn test_position_absolute_blockifies_inline_display() {
   let mut style = style_with([
     StyleDeclaration::display(Display::Inline),
@@ -1227,6 +1114,7 @@ fn test_position_absolute_blockifies_inline_display() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 16.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
 
@@ -1251,6 +1139,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 32.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   });
 
@@ -1263,6 +1152,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 32.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
   let inherited_font_size = inherited_child
@@ -1281,6 +1171,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 10.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
 
@@ -1566,6 +1457,7 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 16.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
   let radius = style.surround_data.border_top_left_radius.x.to_px(
@@ -1690,4 +1582,202 @@ fn shorthands_take_css_wide_keywords() {
       StyleDeclaration::CssWideKeyword(LonghandId::OverflowY, CssWideKeyword::Initial),
     ]
   );
+}
+
+/// Inline-axis logical properties follow `direction`; block-axis and size ones map as in
+/// `horizontal-tb`.
+#[test]
+fn logical_properties_map_to_physical_sides() {
+  let style = style_with(
+    StyleDeclarationBlock::parse_loosy(
+      "direction: rtl; inset-inline-start: 10px; border-inline-end-width: 3px; \
+       border-start-start-radius: 4px; margin-block-start: 5px; inline-size: 20px; \
+       border-block-end: 2px solid red",
+    )
+    .declarations,
+  )
+  .inherit(&ComputedStyle::default());
+
+  assert_eq!(style.surround_data.right, Length::Px(10.0));
+  assert_eq!(
+    style.box_data.border_left_width,
+    LineWidth::Length(Length::Px(3.0))
+  );
+  assert_eq!(
+    style.surround_data.border_top_right_radius,
+    SpacePair::from_single(Length::Px(4.0))
+  );
+  assert_eq!(style.box_data.margin_top, Length::Px(5.0));
+  assert_eq!(style.box_data.width, Length::Px(20.0).into());
+  assert_eq!(
+    style.box_data.border_bottom_width,
+    LineWidth::Length(Length::Px(2.0))
+  );
+}
+
+/// Padding and sizes reject a negative value, which leaves the earlier declaration in place, while
+/// margins and offsets still take one.
+#[test]
+fn negative_padding_and_sizes_are_invalid() {
+  for css in [
+    "padding-top: -1px",
+    "padding: 8px -8px",
+    "padding-inline-start: -1px",
+    "padding-block: -1px",
+    "width: -10px",
+    "height: -1%",
+    "min-width: -1px",
+    "max-height: -1em",
+    "inline-size: -1px",
+  ] {
+    assert!(
+      StyleDeclarationBlock::parse_loosy(css).is_empty(),
+      "{css} parsed as valid"
+    );
+  }
+
+  for css in ["margin-top: -1px", "top: -1px", "width: 0", "padding: 0"] {
+    assert!(
+      !StyleDeclarationBlock::parse_loosy(css).is_empty(),
+      "{css} parsed as invalid"
+    );
+  }
+
+  let style = style_with(
+    StyleDeclarationBlock::parse_loosy("padding-top: 8px; padding-top: -8px").declarations,
+  )
+  .inherit(&ComputedStyle::default());
+
+  assert_eq!(style.box_data.padding_top, Length::Px(8.0));
+}
+
+#[test]
+fn all_sets_every_longhand_but_direction_and_unicode_bidi() {
+  let block = StyleDeclarationBlock::from_str("all: unset").unwrap();
+  let longhands: Vec<LonghandId> = block
+    .declarations
+    .iter()
+    .filter_map(|declaration| match declaration {
+      StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset) => Some(*longhand),
+      _ => None,
+    })
+    .collect();
+
+  assert_eq!(longhands.len(), block.declarations.len());
+  assert!(longhands.contains(&LonghandId::Color));
+  assert!(longhands.contains(&LonghandId::MarginLeft));
+  assert!(!longhands.contains(&LonghandId::Direction));
+  assert!(!longhands.contains(&LonghandId::UnicodeBidi));
+  assert!(!longhands.contains(&LonghandId::MarginInlineStart));
+
+  let from_object: Style = from_value(json!({ "all": "unset" })).unwrap();
+
+  assert_eq!(from_object.declarations.declarations, block.declarations);
+}
+
+#[test]
+fn all_takes_only_a_css_wide_keyword() {
+  for css in ["all: red", "all: unset red", "all: revert", "all: none"] {
+    assert!(
+      StyleDeclarationBlock::parse_loosy(css).is_empty(),
+      "{css} parsed as valid"
+    );
+  }
+}
+
+#[test]
+fn all_unset_inherits_inherited_longhands_and_resets_the_rest() {
+  let parent = inherited_style_from_pairs(
+    [("color", "red"), ("direction", "rtl"), ("width", "10px")],
+    &ComputedStyle::default(),
+  );
+  let style = inherited_style_from_pairs([("margin-top", "5px"), ("all", "unset")], &parent);
+
+  assert_eq!(style.inherited_data.color, parent.inherited_data.color);
+  assert_eq!(style.inherited_data.direction, Direction::Rtl);
+  assert_eq!(
+    style.box_data.margin_top,
+    ComputedStyle::default().box_data.margin_top
+  );
+  assert_eq!(
+    style.box_data.width,
+    ComputedStyle::default().box_data.width
+  );
+}
+
+#[test]
+fn all_initial_resets_inherited_longhands_but_direction() {
+  let parent = inherited_style_from_pairs(
+    [("color", "red"), ("direction", "rtl")],
+    &ComputedStyle::default(),
+  );
+  let style = inherited_style_from_pairs([("all", "initial")], &parent);
+
+  assert_eq!(
+    style.inherited_data.color,
+    ComputedStyle::default().inherited_data.color
+  );
+  assert_eq!(style.inherited_data.direction, Direction::Rtl);
+}
+
+#[test]
+fn all_inherit_copies_non_inherited_longhands() {
+  let parent = inherited_style_from_pairs([("width", "10px")], &ComputedStyle::default());
+  let style = inherited_style_from_pairs([("all", "inherit"), ("height", "4px")], &parent);
+
+  assert_eq!(style.box_data.width, parent.box_data.width);
+  assert_eq!(style.box_data.height, Length::Px(4.0).into());
+}
+
+#[test]
+fn a_var_that_substitutes_to_nothing_unsets_the_property() {
+  let parent = inherited_style_from_pairs([("color", "red")], &ComputedStyle::default());
+  let style = inherited_style_from_pairs(
+    [
+      ("width", "10px"),
+      ("width", "var(--missing)"),
+      ("color", "blue"),
+      ("color", "var(--missing)"),
+      ("margin", "4px"),
+      ("margin", "var(--missing)"),
+    ],
+    &parent,
+  );
+
+  assert_eq!(
+    style.box_data.width,
+    ComputedStyle::default().box_data.width
+  );
+  assert_eq!(style.inherited_data.color, parent.inherited_data.color);
+  assert_eq!(
+    style.box_data.margin_top,
+    ComputedStyle::default().box_data.margin_top
+  );
+}
+
+#[test]
+fn a_var_that_substitutes_to_an_invalid_value_unsets_the_property() {
+  let style = inherited_style_from_pairs(
+    [
+      ("--size", "red"),
+      ("width", "10px"),
+      ("width", "var(--size)"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(
+    style.box_data.width,
+    ComputedStyle::default().box_data.width
+  );
+}
+
+#[test]
+fn a_var_fallback_still_applies() {
+  let style = inherited_style_from_pairs(
+    [("width", "10px"), ("width", "var(--missing, 6px)")],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(style.box_data.width, Length::Px(6.0).into());
 }

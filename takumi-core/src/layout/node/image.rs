@@ -38,12 +38,12 @@ impl ImageData {
   }
 
   /// Pushes the element's `width` and `height` attributes into its preset style.
-  pub(super) fn push_size_preset(&self, preset: &mut Option<Style>) {
+  pub(super) fn push_size_preset(&self, preset: &mut Option<Box<Style>>) {
     if self.width.is_none() && self.height.is_none() {
       return;
     }
 
-    let preset = preset.get_or_insert_with(Style::default);
+    let preset = preset.get_or_insert_default();
 
     if let Some(width) = self.width {
       preset.push(StyleDeclaration::width(Length::Px(width)), false);
@@ -300,7 +300,6 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 mod tests {
   use std::assert_matches;
 
-  use image::RgbaImage;
   use serde_json::from_value;
   use taffy::{Dimension, Size as TaffySize, Style};
 
@@ -333,14 +332,11 @@ mod tests {
   fn a_data_uri_decodes_once_per_cache() {
     use std::sync::Arc;
 
-    use image::{ImageEncoder, codecs::png::PngEncoder};
-
     use crate::resources::image::{ResourceCache, to_data_url};
 
-    let mut png = Vec::new();
-
-    PngEncoder::new(&mut png)
-      .write_image(&[255; 4 * 4 * 4], 4, 4, image::ExtendedColorType::Rgba8)
+    let png = ImageBuffer::from_rgba_bytes(vec![255; 4 * 4 * 4], 4, 4)
+      .unwrap()
+      .encode_png()
       .unwrap();
 
     let uri = to_data_url("image/png", &png);
@@ -474,8 +470,7 @@ mod tests {
 
   #[test]
   fn from_pixmap_creates_loaded_image_source_input() {
-    let bitmap = RgbaImage::new(2, 2);
-    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
+    let buffer = ImageBuffer::from_rgba_bytes(vec![0; 2 * 2 * 4], 2, 2).unwrap();
     let image = ImageData::from(buffer);
 
     assert_matches!(image.src, ImageSourceInput::Loaded(ImageSource::Bitmap(_)));
@@ -492,7 +487,7 @@ mod tests {
           .build(),
       )
       .build();
-    let buffer = ImageBuffer::from_rgba_bytes(RgbaImage::new(10, 10).into_raw(), 10, 10).unwrap();
+    let buffer = ImageBuffer::from_rgba_bytes(vec![0; 10 * 10 * 4], 10, 10).unwrap();
     let image = ImageData::from(ImageSource::from(buffer));
     let style = Style {
       size: TaffySize {

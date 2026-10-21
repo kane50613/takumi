@@ -17,7 +17,7 @@ pub enum MediaTarget {
 }
 
 /// The viewport for the image renderer.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Viewport {
   /// Size of the viewport
   pub size: ViewportSize,
@@ -135,7 +135,7 @@ impl Viewport {
 }
 
 /// Represents Viewport size
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ViewportSize {
   /// The width of the viewport in pixels.
   pub width: Option<u32>,

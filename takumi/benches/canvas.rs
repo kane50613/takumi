@@ -4,11 +4,11 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
   prelude::{
     AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
-    Color, ColorInput, Display, FlexWrap, Fonts, FromCssStr, FromHtml, FromHtmlOptions,
-    JustifyContent,
+    Color, ColorInput, Display, FlexWrap, Fonts, FromCssStr, FromHtml, FromHtmlOptions, ImageData,
+    ImageSourceInput, JustifyContent,
     Length::{Percentage, Px},
-    Node, ObjectFit, Overflow, PositionValues, RenderOptions, SpacePair, Style, StyleDeclaration,
-    StylePresets, Viewport,
+    Node, ObjectFit, Overflow, PositionValues, RenderOptions, RgbaImage, SpacePair, Style,
+    StyleDeclaration, StylePresets, Viewport,
   },
   render,
 };
@@ -178,6 +178,63 @@ fn html_fixture(html: &str) -> Node {
   Node::from_html(body, options).unwrap()
 }
 
+/// Full-canvas layers at partial opacity, each composited over the ones below.
+fn translucent_layers_fixture() -> Node {
+  let layers = ["#ff5f6d", "#3a1c71", "#30a46c", "#ffb454"]
+    .iter()
+    .map(|color| {
+      format!(
+        r#"<div style="position: absolute; inset: 0; opacity: 0.6; background-image: linear-gradient(135deg, {color}, transparent)"></div>"#
+      )
+    })
+    .collect::<String>();
+
+  html_fixture(&format!(
+    r#"<body><div style="position: relative; width: 100%; height: 100%; background-color: white">{layers}</div></body>"#
+  ))
+}
+
+/// A card with rounded corners over a gradient, the most common OG image layout.
+fn rounded_gradient_card_fixture() -> Node {
+  html_fixture(
+    r#"<body><div style="width: 100%; height: 100%; padding: 40px; background-color: white"><div style="width: 100%; height: 100%; border-radius: 48px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71)"></div></div></body>"#,
+  )
+}
+
+/// A 640px photo-like image with rounded corners, drawn at its own size or scaled to `size`.
+fn rounded_image_fixture(size: &str) -> Node {
+  let pixels = (0..640 * 640)
+    .flat_map(|index: u32| {
+      let noise = index.wrapping_mul(2_654_435_761) >> 24;
+
+      [(index % 640) as u8, (index / 640) as u8, noise as u8, 255]
+    })
+    .collect();
+  let image = ImageData {
+    src: ImageSourceInput::Rgba(RgbaImage::new(pixels, 640, 640, true).unwrap()),
+    width: None,
+    height: None,
+  };
+
+  Node::container([Node::image(image).with_tw(
+    format!("w-[{size}] h-[{size}] rounded-[64px]")
+      .parse()
+      .unwrap(),
+  )])
+  .with_tw(
+    "flex w-full h-full items-center justify-center"
+      .parse()
+      .unwrap(),
+  )
+}
+
+/// A full-canvas radial gradient under a `clip-path`, which paints through the clip mask.
+fn clipped_radial_gradient_fixture() -> Node {
+  html_fixture(
+    r#"<body><div style="width: 100%; height: 100%; clip-path: circle(45%); background-image: radial-gradient(circle at 30% 40%, #ff5f6d, #3a1c71 60%, #30a46c)"></div></body>"#,
+  )
+}
+
 fn bench_canvas(c: &mut Criterion) {
   let fonts = Fonts::default();
   let mut group = c.benchmark_group("canvas");
@@ -193,6 +250,21 @@ fn bench_canvas(c: &mut Criterion) {
   });
   group.bench_function("gradient_clip_mask", |b| {
     b.iter(|| render_node(&fonts, black_box(gradient_clip_mask_fixture())))
+  });
+  group.bench_function("translucent_layers", |b| {
+    b.iter(|| render_node(&fonts, black_box(translucent_layers_fixture())))
+  });
+  group.bench_function("rounded_gradient_card", |b| {
+    b.iter(|| render_node(&fonts, black_box(rounded_gradient_card_fixture())))
+  });
+  group.bench_function("rounded_image", |b| {
+    b.iter(|| render_node(&fonts, black_box(rounded_image_fixture("640px"))))
+  });
+  group.bench_function("rounded_scaled_image", |b| {
+    b.iter(|| render_node(&fonts, black_box(rounded_image_fixture("700px"))))
+  });
+  group.bench_function("clipped_radial_gradient", |b| {
+    b.iter(|| render_node(&fonts, black_box(clipped_radial_gradient_fixture())))
   });
   group.bench_function("square_border_sides", |b| {
     b.iter(|| {

@@ -1,4 +1,4 @@
-use std::iter::successors;
+use std::{array, iter::successors};
 
 use smallvec::SmallVec;
 #[cfg(feature = "svg")]
@@ -225,17 +225,30 @@ impl MirroredRegion {
         offset
       }) as usize
     };
-    let mut padded = Vec::with_capacity(capacity);
+    let source_rows = raw.as_chunks::<4>().0;
+    let columns: Vec<usize> = (0..width).map(|x| mirror(x, region.width)).collect();
+    // The columns a row copies straight across, without mirroring.
+    let straight = padding.min(width) as usize..(padding + region.width).min(width) as usize;
+    let mut padded = vec![[0; 4]; capacity / 4];
 
-    for y in 0..height {
-      let row = mirror(y, region.height) * region.width as usize;
+    for (y, row) in padded.chunks_exact_mut(width as usize).enumerate() {
+      let source = &source_rows[mirror(y as u32, region.height) * region.width as usize..]
+        [..region.width as usize];
 
-      for x in 0..width {
-        let start = (row + mirror(x, region.width)) * 4;
+      let (left, rest) = row.split_at_mut(straight.start);
+      let (middle, right) = rest.split_at_mut(straight.len());
 
-        padded.extend_from_slice(&raw[start..start + 4]);
+      middle.copy_from_slice(&source[columns[straight.start]..][..straight.len()]);
+      for (pixel, &column) in left
+        .iter_mut()
+        .zip(&columns)
+        .chain(right.iter_mut().zip(&columns[straight.end..]))
+      {
+        *pixel = source[column];
       }
     }
+
+    let padded = padded.into_flattened();
 
     Some(Self {
       raw: padded,
@@ -245,17 +258,11 @@ impl MirroredRegion {
     })
   }
 
-  /// The pixels of the original region.
-  fn inner(&self) -> Vec<u8> {
-    let row_bytes = (self.width - self.padding * 2) as usize * 4;
+  /// The bytes of the original region's row `y`.
+  fn inner_row(&self, y: u32) -> &[u8] {
+    let start = ((y + self.padding) * self.width + self.padding) as usize * 4;
 
-    (self.padding..self.height - self.padding)
-      .flat_map(|y| {
-        let start = (y * self.width + self.padding) as usize * 4;
-
-        self.raw[start..start + row_bytes].iter().copied()
-      })
-      .collect()
+    &self.raw[start..start + (self.width - self.padding * 2) as usize * 4]
   }
 }
 
@@ -267,23 +274,26 @@ fn composite_backdrop_with_mask(
   region_width: usize,
 ) {
   let mask_end_x = (mask_start_x + region_width).min(mask_row.len());
-  for (x, &alpha) in mask_row[mask_start_x..mask_end_x].iter().enumerate() {
-    if alpha == 0 {
-      continue;
-    }
+  let pixels = canvas_row
+    .as_chunks_mut::<4>()
+    .0
+    .iter_mut()
+    .zip(backdrop_row.as_chunks::<4>().0)
+    .zip(&mask_row[mask_start_x..mask_end_x]);
 
-    let px_idx = x * 4;
-    let src = &backdrop_row[px_idx..px_idx + 4];
-    let dst = &mut canvas_row[px_idx..px_idx + 4];
+  // Branch-free so the row vectorizes: a zero alpha weighs the canvas by 255, which divides back
+  // to itself.
+  for ((dst, src), &alpha) in pixels {
     // The filtered backdrop composites over what it came from, masked by the element's shape.
     let inverse = u8::MAX - mul_div_255(src[3], alpha);
 
-    for (dst, &src) in dst.iter_mut().zip(src) {
-      let sum = u32::from(src) * u32::from(alpha) + u32::from(*dst) * u32::from(inverse);
+    *dst = array::from_fn(|channel| {
+      let sum =
+        u32::from(src[channel]) * u32::from(alpha) + u32::from(dst[channel]) * u32::from(inverse);
 
       // The weights can sum past 255, but every sum from 255 * 255 up divides to 255.
-      *dst = div_255(sum.min(255 * 255) as u16);
-    }
+      div_255(sum.min(255 * 255) as u16)
+    });
   }
 }
 
@@ -432,8 +442,6 @@ pub(crate) fn apply_backdrop_filter(
     filters.iter().filter(|filter| !filter.is_drop_shadow()),
   )?;
 
-  let backdrop_raw = padded.inner();
-
   let mask_offset_x = region.left - placement.left;
   let mask_offset_y = region.top - placement.top;
   let x_start = (-mask_offset_x).max(0) as usize;
@@ -459,8 +467,7 @@ pub(crate) fn apply_backdrop_filter(
       let canvas_start = (canvas_y * canvas_width + region.left as usize) * 4;
       let canvas_row = &mut canvas_raw[canvas_start..canvas_start + region_row_bytes];
 
-      let backdrop_start = (y * region.width) as usize * 4;
-      let backdrop_row = &backdrop_raw[backdrop_start..backdrop_start + region_row_bytes];
+      let backdrop_row = padded.inner_row(y);
       let mask_row_start = mask_y as usize * placement.width as usize;
       let mask_row = &mask_data[mask_row_start..mask_row_start + placement.width as usize];
       composite_backdrop_with_mask(
@@ -570,7 +577,14 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
 
 #[cfg(test)]
 mod tests {
-  use image::{Rgba, RgbaImage};
+  #[test]
+  fn a_byte_weighed_by_255_divides_back_to_itself() {
+    for byte in 0..=u8::MAX {
+      assert_eq!(super::div_255(u16::from(byte) * 255), byte);
+    }
+  }
+
+  use crate::Bitmap;
   use tiny_skia::PixmapMut;
 
   use super::*;
@@ -652,8 +666,8 @@ mod tests {
 
   #[test]
   fn test_apply_filters_lut_batching() -> Result<()> {
-    let mut image = RgbaImage::new(1, 1);
-    image.put_pixel(0, 0, Rgba([100, 150, 200, 255]));
+    let mut image = Bitmap::new(1, 1);
+    image.put_pixel(0, 0, [100, 150, 200, 255]);
 
     let filters = [
       Filter::Brightness(PercentageNumber(1.2)),
@@ -666,13 +680,11 @@ mod tests {
       .build();
     let width = image.width();
     let height = image.height();
-    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
-      return Ok(());
-    };
+    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), width, height).unwrap();
     apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
-    assert_eq!(pixel.0, [67, 37, 7, 127]);
+    assert_eq!(*pixel, [67, 37, 7, 127]);
 
     Ok(())
   }
@@ -707,12 +719,10 @@ mod tests {
 
   #[test]
   fn drop_shadow_on_transparent_content_does_not_panic() -> Result<()> {
-    let mut image = RgbaImage::new(16, 16);
+    let mut image = Bitmap::new(16, 16);
     let width = image.width();
     let height = image.height();
-    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
-      return Ok(());
-    };
+    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), width, height).unwrap();
 
     let shadow = SizedShadow {
       offset_x: 1.0,

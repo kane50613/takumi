@@ -1,6 +1,6 @@
 {
   "name": "takumi-pdf",
-  "version": "0.17.3",
+  "version": "0.18.1",
   "description": "Render paged PDFs from JSX, HTML, and CSS. No headless browser.",
   "keywords": [
     "chromium-free",
@@ -140,7 +140,8 @@
   "scripts": {
     "build": "wasm-pack build . --no-pack --release --out-dir pkg --target web -- --locked --config 'profile.release.package.takumi-core.opt-level=\"z\"' && bun build:js",
     "build:js": "tsdown",
-    "publish-lint": "attw --pack . && publint --strict ."
+    "publish-lint": "attw --pack . && publint --strict .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*"

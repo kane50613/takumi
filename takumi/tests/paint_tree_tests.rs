@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::fs::{create_dir_all, write};
 
 use takumi::prelude::*;
@@ -7,7 +5,8 @@ use takumi_core::paint_tree::{
   Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTree,
   PaintTreeOptions, Role, Shape, Spread, TextRun, paint_tree,
 };
-use test_utils::{CONTEXT, TEST_IMAGES, format_generated};
+
+use crate::test_utils::{CONTEXT, TEST_IMAGES, format_generated};
 
 const CSS: &str = r#"
   .card {
@@ -432,9 +431,23 @@ fn a_hairline_repeating_gradient_keeps_one_period_repeating() {
 }
 
 #[test]
-fn run_outline_writes_the_runs_glyphs() {
+fn glyph_clusters_index_the_runs_text_in_utf16_units() {
+  let document = build(Node::container([Node::text("café ok")]).with_id("cafe"));
+  let run = runs(&document, find(&document, "cafe"))[0];
+  let clusters: Vec<_> = run.glyphs.iter().map(|glyph| glyph.cluster).collect();
+
+  assert_eq!(run.text, "café ok");
+  assert_eq!(
+    clusters,
+    [0, 1, 2, 3, 4, 5, 6].map(Some),
+    "é is two bytes but one UTF-16 unit, so o and k start at 5 and 6"
+  );
+}
+
+#[test]
+fn run_outlines_write_each_glyph() {
   let tree = paint(card());
-  let (node, run) = tree
+  let (node, run, count) = tree
     .document
     .nodes
     .iter()
@@ -442,15 +455,17 @@ fn run_outline_writes_the_runs_glyphs() {
       NodeKind::Text { runs, .. } => runs
         .iter()
         .position(|run| run.text == "world")
-        .map(|run| (node.id, run)),
+        .map(|run| (node.id, run, runs[run].glyphs.len())),
       _ => None,
     })
     .expect("a run reading world");
+  let outlines = tree.run_outlines(node, run).expect("the run's outlines");
 
-  assert!(
-    tree
-      .run_outline(node, run)
+  assert_eq!(outlines.len(), count);
+  assert!(outlines.iter().all(|outline| {
+    outline
+      .as_deref()
       .is_some_and(|outline| outline.starts_with('M'))
-  );
-  assert_eq!(tree.run_outline(node, usize::MAX), None);
+  }));
+  assert_eq!(tree.run_outlines(node, usize::MAX), None);
 }

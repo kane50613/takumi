@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use parley::fontique::Blob;
+use crate::resources::font::FontBlob;
 use skrifa::{FontRef, MetadataProvider, attribute::Style};
 
 use super::document::{PaintFont, PaintVariation};
@@ -38,7 +38,7 @@ impl FontKey {
 pub(super) struct FontTable {
   indices: HashMap<FontKey, usize>,
   fonts: Vec<PaintFont>,
-  data: Vec<Blob<u8>>,
+  data: Vec<FontBlob>,
 }
 
 impl FontTable {
@@ -56,7 +56,7 @@ impl FontTable {
   }
 
   /// The instances, and each one's font file, in table order.
-  pub(super) fn finish(self) -> (Vec<PaintFont>, Vec<Blob<u8>>) {
+  pub(super) fn finish(self) -> (Vec<PaintFont>, Vec<FontBlob>) {
     (self.fonts, self.data)
   }
 }
@@ -86,7 +86,9 @@ fn describe(fonts: &FontsSnapshot, run: &ShapedRun) -> PaintFont {
     .unwrap_or(100.0);
 
   PaintFont {
-    family: fonts.face_family(run.font_id(), run.font_index),
+    family: fonts
+      .face_family(run.font_id(), run.font_index)
+      .map(str::to_owned),
     face_index: run.font_index,
     weight,
     style,

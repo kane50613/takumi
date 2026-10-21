@@ -20,14 +20,15 @@
     "tegami": "bun scripts/tegami.mts",
     "knip": "knip-bun --no-config-hints",
     "postinstall": "lefthook install",
-    "publish-lint": "bun --filter '*' publish-lint"
+    "publish-lint": "bun --filter '*' publish-lint",
+    "typecheck": "bun --filter '@takumi-rs/*' --filter 'takumi-*' typecheck"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@types/bun": "^1.4.1",
     "knip": "^6.34.0",
     "lefthook": "^2.1.12",
-    "oxfmt": "^0.66.0",
+    "oxfmt": "^0.73.0",
     "oxlint": "^1.81.0",
     "publint": "^0.3.24",
     "tegami": "^1.5.0",
@@ -35,10 +36,10 @@
   },
   "overrides": {
     "@takumi-rs/image-response": "workspace:*",
-    "rolldown-plugin-dts": "0.27.6",
+    "rolldown-plugin-dts": "0.27.14",
     "takumi-js": "workspace:*",
-    "vite": "8.2.2",
-    "waku": "1.0.0-rc.0"
+    "vite": "8.3.4",
+    "waku": "1.0.0-rc.3"
   },
   "catalog": {
     "@types/bun": "^1.4.1",

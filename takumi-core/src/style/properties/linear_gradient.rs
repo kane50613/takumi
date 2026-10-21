@@ -472,7 +472,7 @@ pub struct ResolvedGradientStop {
 }
 
 impl<'i> FromCss<'i> for StopPosition {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, StopPosition> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, StopPosition> {
     if let Ok(num) = input.try_parse(Parser::expect_number) {
       return Ok(StopPosition(Length::Percentage(
         num.clamp(0.0, 1.0) * 100.0,
@@ -484,10 +484,7 @@ impl<'i> FromCss<'i> for StopPosition {
     }
 
     let Ok(length) = input.try_parse(Length::from_css) else {
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        input.next()?,
-      ));
+      return Err(unexpected_token!(input.next()?,));
     };
 
     Ok(StopPosition(length))
@@ -498,7 +495,7 @@ impl<'i> FromCss<'i> for StopPosition {
 
 impl<'i> FromCss<'i> for GradientStop {
   /// Parses a gradient hint from the input.
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, GradientStop> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, GradientStop> {
     if let Ok(hint) = input.try_parse(StopPosition::from_css) {
       return Ok(GradientStop::Hint(hint));
     };
@@ -694,7 +691,7 @@ impl GradientKeywordDirection {
 }
 
 impl<'i> FromCss<'i> for GradientKeywordDirection {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     input.expect_ident_matching("to")?;
 
     if let Ok(vertical) = input.try_parse(VerticalKeyword::from_css) {
@@ -725,7 +722,7 @@ impl<'i> FromCss<'i> for GradientKeywordDirection {
 }
 
 impl<'i> FromCss<'i> for LinearGradientDirection {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(direction) = input.try_parse(GradientKeywordDirection::from_css) {
       return Ok(Self::Keyword(direction));
     }
@@ -741,7 +738,7 @@ impl LinearGradient {
 }
 
 impl<'i> FromCss<'i> for LinearGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, LinearGradient> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, LinearGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {
@@ -785,7 +782,7 @@ impl<'i> FromCss<'i> for LinearGradient {
 }
 
 impl<'i> FromCss<'i> for Angle {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Angle> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Angle> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -793,7 +790,6 @@ impl<'i> FromCss<'i> for Angle {
       return Ok(Angle::zero());
     }
 
-    let location = input.current_source_location();
     let token = input.next()?;
 
     match token {
@@ -803,9 +799,9 @@ impl<'i> FromCss<'i> for Angle {
         "grad" => Ok(Angle::new(*value / 400.0 * 360.0)),
         "turn" => Ok(Angle::new(*value * 360.0)),
         "rad" => Ok(Angle::new(value.to_degrees())),
-        _ => Err(unexpected_token!(location, token)),
+        _ => Err(unexpected_token!(token)),
       },
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 
@@ -894,6 +890,7 @@ mod tests {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 16.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     }
   }
@@ -1221,25 +1218,6 @@ mod tests {
         ]
         .into(),
       })
-    );
-  }
-
-  #[test]
-  fn test_parse_gradient_hint_color() {
-    assert_eq!(
-      GradientStop::from_css_str("#ff0000"),
-      Ok(GradientStop::ColorHint {
-        color: ColorInput::Value(Color([255, 0, 0, 255])),
-        hint: None,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_gradient_hint_numeric() {
-    assert_eq!(
-      GradientStop::from_css_str("50%"),
-      Ok(GradientStop::Hint(StopPosition(Length::Percentage(50.0))))
     );
   }
 

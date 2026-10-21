@@ -1,7 +1,7 @@
 {
   "name": "takumi-js",
-  "version": "2.16.2",
-  "description": "Render OG images from JSX, HTML, and CSS. No headless browser.",
+  "version": "2.17.1",
+  "description": "Render images, animations, and SVG from JSX, HTML, and CSS. No headless browser.",
   "keywords": [
     "animated-webp",
     "css",
@@ -235,7 +235,8 @@
     "build": "tsdown",
     "test": "bun test",
     "test:bundlers": "bun test tests/bundlers.test.ts",
-    "publish-lint": "attw --pack . && publint --strict ."
+    "publish-lint": "attw --pack . && publint --strict .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",

@@ -1,6 +1,6 @@
 [package]
 name = "takumi-core"
-version = "0.29.1"
+version = "0.32.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Backend-agnostic layout, style, and resource core for takumi."
@@ -24,7 +24,6 @@ skrifa.workspace = true
 xxhash-rust.workspace = true
 quick_cache.workspace = true
 smallvec.workspace = true
-parley.workspace = true
 taffy.workspace = true
 bitflags.workspace = true
 cssparser.workspace = true
@@ -60,14 +59,19 @@ features = ["aarch64_simd", "avx512_simd", "derive"]
 workspace = true
 features = ["rc"]
 
-[dependencies.image]
-workspace = true
-
 [dependencies.imagesize]
 workspace = true
 features = ["png", "jpeg", "webp", "gif"]
 
 [dependencies.png]
+workspace = true
+optional = true
+
+[dependencies.zune-jpeg]
+workspace = true
+optional = true
+
+[dependencies.zune-core]
 workspace = true
 optional = true
 
@@ -80,10 +84,6 @@ workspace = true
 optional = true
 
 [dependencies.svgtypes]
-workspace = true
-optional = true
-
-[dependencies.simplecss]
 workspace = true
 optional = true
 
@@ -102,14 +102,21 @@ optional = true
 
 [dependencies.harfrust]
 workspace = true
-optional = true
+
+[dependencies.icu_casemap]
+workspace = true
+
+[dependencies.icu_locale_core]
+workspace = true
+
+[dependencies.icu_segmenter]
+workspace = true
 
 [dependencies.icu_properties]
 workspace = true
 
 [dependencies.unicode-bidi]
 workspace = true
-optional = true
 
 [dependencies.wuff]
 workspace = true
@@ -118,20 +125,12 @@ optional = true
 [features]
 default = ["woff2", "woff", "svg", "image-decoding"]
 image-decoding = ["png", "jpeg", "webp", "gif"]
-png = ["dep:png", "image/png"]
-jpeg = ["image/jpeg"]
-webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
-gif = ["dep:gif", "image/gif"]
+png = ["dep:png"]
+jpeg = ["dep:zune-jpeg", "dep:zune-core"]
+webp = ["dep:image-webp", "dep:libwebp-sys"]
+gif = ["dep:gif"]
 svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
-svg = [
-  "svg-sizing",
-  "dep:simplecss",
-  "dep:siphasher",
-  "dep:strict-num",
-  "dep:tiny-skia-path",
-  "dep:harfrust",
-  "dep:unicode-bidi",
-]
+svg = ["svg-sizing", "dep:siphasher", "dep:strict-num", "dep:tiny-skia-path"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
 rayon = ["dep:rayon"]

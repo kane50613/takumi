@@ -13,20 +13,20 @@ fn frame_color(index: usize) -> [u8; 4] {
 }
 
 fn encoded_gif(frames: usize) -> Vec<u8> {
-  use image::{Delay, Frame, Rgba, RgbaImage, codecs::gif::GifEncoder};
+  use gif::{DisposalMethod, Encoder, Frame};
 
+  let side = SIZE as u16;
   let mut bytes = Vec::new();
-  let mut encoder = GifEncoder::new(&mut bytes);
-  encoder
-    .encode_frames((0..frames).map(|index| {
-      Frame::from_parts(
-        RgbaImage::from_pixel(SIZE, SIZE, Rgba(frame_color(index))),
-        0,
-        0,
-        Delay::from_numer_denom_ms(100, 1),
-      )
-    }))
-    .unwrap();
+  let mut encoder = Encoder::new(&mut bytes, side, side, &[]).unwrap();
+
+  for index in 0..frames {
+    let mut pixels = frame_color(index).repeat(SIZE as usize * SIZE as usize);
+    let mut frame = Frame::from_rgba_speed(side, side, &mut pixels, 10);
+
+    frame.delay = 10;
+    frame.dispose = DisposalMethod::Background;
+    encoder.write_frame(&frame).unwrap();
+  }
   drop(encoder);
 
   bytes

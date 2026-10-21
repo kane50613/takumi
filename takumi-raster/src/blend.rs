@@ -1,6 +1,4 @@
 use std::array;
-
-use image::Rgba;
 use tiny_skia::PremultipliedColorU8;
 
 use crate::{div_255, mul_div_255, resources::image_buffer::premultiply_pixel, style::BlendMode};
@@ -11,28 +9,28 @@ fn composited_alpha(bottom_alpha: u8, top_alpha: u8) -> u32 {
 }
 
 #[inline(always)]
-fn blend_plus_lighter(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
-  let result_alpha = top.0[3].saturating_add(bottom.0[3]);
+fn blend_plus_lighter(bottom: &mut [u8; 4], top: [u8; 4]) {
+  let result_alpha = top[3].saturating_add(bottom[3]);
   if result_alpha == 0 {
     return;
   }
 
   for i in 0..3 {
-    let top_premul = mul_div_255(top.0[i], top.0[3]);
-    let bottom_premul = mul_div_255(bottom.0[i], bottom.0[3]);
-    bottom.0[i] = top_premul.saturating_add(bottom_premul);
+    let top_premul = mul_div_255(top[i], top[3]);
+    let bottom_premul = mul_div_255(bottom[i], bottom[3]);
+    bottom[i] = top_premul.saturating_add(bottom_premul);
   }
 
-  bottom.0[3] = result_alpha;
+  bottom[3] = result_alpha;
 }
 
-pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
-  if top.0[3] == 0 {
+pub(crate) fn blend_pixel(bottom: &mut [u8; 4], top: [u8; 4], mode: BlendMode) {
+  if top[3] == 0 {
     return;
   }
 
-  let top_alpha = top.0[3];
-  let bottom_alpha = bottom.0[3];
+  let top_alpha = top[3];
+  let bottom_alpha = bottom[3];
 
   if bottom_alpha == 0 {
     *bottom = top;
@@ -50,7 +48,7 @@ pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode)
         let inverse_alpha = 255 - top_alpha;
 
         for i in 0..3 {
-          bottom.0[i] = div_255(
+          bottom[i] = div_255(
             u16::from(top[i]) * u16::from(top_alpha)
               + u16::from(bottom[i]) * u16::from(inverse_alpha),
           );
@@ -82,11 +80,11 @@ pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode)
 }
 
 #[inline(always)]
-fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
-  let top_alpha = top.0[3] as u32;
-  let bottom_alpha = bottom.0[3] as u32;
+fn blend_normal_partial_transparency(bottom: &mut [u8; 4], top: [u8; 4]) {
+  let top_alpha = top[3] as u32;
+  let bottom_alpha = bottom[3] as u32;
 
-  let result_alpha = composited_alpha(bottom.0[3], top.0[3]);
+  let result_alpha = composited_alpha(bottom[3], top[3]);
 
   if result_alpha == 0 {
     return;
@@ -95,21 +93,21 @@ fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
   let inverse_top_alpha = 255 - top_alpha;
 
   for i in 0..3 {
-    let top_premul = top.0[i] as u32 * top_alpha;
-    let bottom_premul = bottom.0[i] as u32 * bottom_alpha;
+    let top_premul = top[i] as u32 * top_alpha;
+    let bottom_premul = bottom[i] as u32 * bottom_alpha;
     let result_premul = top_premul + ((bottom_premul * inverse_top_alpha + 127) / 255);
 
-    bottom.0[i] = ((result_premul + result_alpha / 2) / result_alpha).min(255) as u8;
+    bottom[i] = ((result_premul + result_alpha / 2) / result_alpha).min(255) as u8;
   }
 
-  bottom.0[3] = result_alpha.min(255) as u8;
+  bottom[3] = result_alpha.min(255) as u8;
 }
 
 #[inline(always)]
-fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
-  let bottom_alpha = bottom.0[3] as u32;
-  let top_alpha = top.0[3] as u32;
-  let result_alpha = composited_alpha(bottom.0[3], top.0[3]);
+fn blend_with_integer(bottom: &mut [u8; 4], top: [u8; 4], mode: BlendMode) {
+  let bottom_alpha = bottom[3] as u32;
+  let top_alpha = top[3] as u32;
+  let result_alpha = composited_alpha(bottom[3], top[3]);
 
   if result_alpha == 0 {
     return;
@@ -119,18 +117,18 @@ fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
   const MAX_ALPHA: u32 = u8::MAX as u32;
 
   for i in 0..3 {
-    let b = bottom.0[i];
-    let t = top.0[i];
+    let b = bottom[i];
+    let t = top[i];
     let blended = blend_channel_integer(mode, b, t) as u32;
     let composited = ((MAX_ALPHA - top_alpha) * bottom_alpha * b as u32
       + (MAX_ALPHA - bottom_alpha) * top_alpha * t as u32
       + top_alpha * bottom_alpha * blended
       + ROUNDING_OFFSET)
       / ALPHA_DIVISOR;
-    bottom.0[i] = ((composited * 255 + result_alpha / 2) / result_alpha).min(255) as u8;
+    bottom[i] = ((composited * 255 + result_alpha / 2) / result_alpha).min(255) as u8;
   }
 
-  bottom.0[3] = result_alpha.min(255) as u8;
+  bottom[3] = result_alpha.min(255) as u8;
 }
 
 #[inline(always)]
@@ -195,27 +193,27 @@ fn color_burn_integer(bottom: u8, top: u8) -> u8 {
 }
 
 #[inline(always)]
-fn blend_with_float(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
+fn blend_with_float(bottom: &mut [u8; 4], top: [u8; 4], mode: BlendMode) {
   let top_normalized = normalize_rgba(top);
   let bottom_normalized = normalize_rgba(*bottom);
 
   let result_alpha = top_normalized.alpha + bottom_normalized.alpha * (1.0 - top_normalized.alpha);
 
   if result_alpha <= 0.0 {
-    bottom.0 = [0; 4];
+    *bottom = [0; 4];
     return;
   }
 
   let blended = compute_blend_float(mode, &bottom_normalized, &top_normalized);
   let composited = composite_float(&bottom_normalized, &top_normalized, &blended);
 
-  for (pixel, composited_pixel) in bottom.0.iter_mut().zip(composited.iter()) {
+  for (pixel, composited_pixel) in bottom.iter_mut().zip(composited.iter()) {
     *pixel = (composited_pixel / result_alpha * 255.0)
       .round()
       .clamp(0.0, 255.0) as u8;
   }
 
-  bottom.0[3] = (result_alpha * 255.0).round() as u8;
+  bottom[3] = (result_alpha * 255.0).round() as u8;
 }
 
 #[derive(Copy, Clone)]
@@ -242,9 +240,9 @@ impl NormalizedColor {
 }
 
 #[inline(always)]
-fn normalize_rgba(color: Rgba<u8>) -> NormalizedColor {
+fn normalize_rgba(color: [u8; 4]) -> NormalizedColor {
   const INV_255: f32 = 1.0 / 255.0;
-  let [r, g, b, a] = color.0;
+  let [r, g, b, a] = color;
   NormalizedColor {
     channels: [r as f32 * INV_255, g as f32 * INV_255, b as f32 * INV_255],
     alpha: a as f32 * INV_255,
@@ -497,30 +495,30 @@ pub(crate) fn blend_premultiplied_pixel(dst: &mut [u8; 4], src: [u8; 4], mode: B
 #[inline(never)]
 fn blend_premultiplied_pixel_slow(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMode) {
   if src[3] == u8::MAX && dst[3] == u8::MAX {
-    let mut current = Rgba(*dst);
-    let color = Rgba(src);
+    let mut current = *dst;
+    let color = src;
     blend_pixel(&mut current, color, mode);
-    *dst = current.0;
+    *dst = current;
     return;
   }
 
   let mut current = demultiplied(*dst);
 
   blend_pixel(&mut current, demultiplied(src), mode);
-  *dst = premultiply_pixel(current.0);
+  *dst = premultiply_pixel(current);
 }
 
 /// Straight alpha from a premultiplied pixel, through the `DEMUL` reciprocal table.
 #[inline(always)]
-fn demultiplied([red, green, blue, alpha]: [u8; 4]) -> Rgba<u8> {
+fn demultiplied([red, green, blue, alpha]: [u8; 4]) -> [u8; 4] {
   match alpha {
-    0 => Rgba([0, 0, 0, 0]),
-    u8::MAX => Rgba([red, green, blue, alpha]),
+    0 => [0, 0, 0, 0],
+    u8::MAX => [red, green, blue, alpha],
     _ => {
       let inverse = DEMUL[alpha as usize];
       let scale = |channel: u8| (channel as f32 * inverse + 0.5) as u8;
 
-      Rgba([scale(red), scale(green), scale(blue), alpha])
+      [scale(red), scale(green), scale(blue), alpha]
     }
   }
 }
@@ -595,7 +593,6 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 
 #[cfg(test)]
 mod tests {
-  use image::Rgba;
 
   use crate::{
     blend::{blend_pixel, composite_premultiplied_over, composite_premultiplied_over_row},
@@ -631,44 +628,44 @@ mod tests {
   // https://github.com/kane50613/takumi/issues/447
   #[test]
   fn plus_lighter_issue_447() {
-    let mut bottom = Rgba([0xF5, 0xB1, 0x2D, 0xFF]);
-    let top = Rgba([0xFF, 0xFF, 0xFF, 0x7F]);
+    let mut bottom = [0xF5, 0xB1, 0x2D, 0xFF];
+    let top = [0xFF, 0xFF, 0xFF, 0x7F];
 
     blend_pixel(&mut bottom, top, BlendMode::PlusLighter);
 
-    assert_eq!(bottom, Rgba([0xFF, 0xFF, 0xAC, 0xFF]));
+    assert_eq!(bottom, [0xFF, 0xFF, 0xAC, 0xFF]);
   }
 
   // https://github.com/kane50613/takumi/issues/501
   #[test]
   fn plus_darker_issue_501() {
-    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
-    let top = Rgba([0xFF, 0xFF, 0xFF, 0xFF]);
+    let mut bottom = [0x96, 0x77, 0x00, 0xFF];
+    let top = [0xFF, 0xFF, 0xFF, 0xFF];
 
     blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
 
-    assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
+    assert_eq!(bottom, [0x96, 0x77, 0x00, 0xFF]);
   }
 
   // https://github.com/kane50613/takumi/issues/643
   #[test]
   fn plus_darker_preserves_opaque_backdrop_under_partial_white() {
-    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
-    let top = Rgba([0xFF, 0xFF, 0xFF, 0x7F]);
+    let mut bottom = [0x96, 0x77, 0x00, 0xFF];
+    let top = [0xFF, 0xFF, 0xFF, 0x7F];
 
     blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
 
-    assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
+    assert_eq!(bottom, [0x96, 0x77, 0x00, 0xFF]);
   }
 
   // https://github.com/kane50613/takumi/issues/643
   #[test]
   fn plus_darker_with_low_opacity_black_stays_faint() {
-    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
-    let top = Rgba([0x00, 0x00, 0x00, 0x1A]);
+    let mut bottom = [0x96, 0x77, 0x00, 0xFF];
+    let top = [0x00, 0x00, 0x00, 0x1A];
 
     blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
 
-    assert_eq!(bottom, Rgba([0x87, 0x6B, 0x00, 0xFF]));
+    assert_eq!(bottom, [0x87, 0x6B, 0x00, 0xFF]);
   }
 }

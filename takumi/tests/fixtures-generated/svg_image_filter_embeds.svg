@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
+  <use href="#i0" transform="matrix(1 0 0 1 200 115)"/>
+  <defs>
+    <image id="i0" width="800" height="400" preserveAspectRatio="none" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDIwMCI+PGRlZnM+PGZpbHRlciBpZD0iYmx1ciI+PGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iNCIvPjwvZmlsdGVyPjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzEwMjA0MCIvPjxjaXJjbGUgY3g9IjIwMCIgY3k9IjEwMCIgcj0iNjAiIGZpbGw9IiNmZmI0NTQiIGZpbHRlcj0idXJsKCNibHVyKSIvPjwvc3ZnPg=="/>
+  </defs>
+</svg>

@@ -6,7 +6,7 @@
     <use href="#g2" x="29.56" y="29"/>
     <use href="#g3" x="36.77" y="29"/>
     <use href="#g4" x="41.66" y="29"/>
-    <use href="#g5" x="49.22" y="29"/>
+    <use href="#g5" x="49.21" y="29"/>
     <use href="#g6" x="56.33" y="29"/>
     <use href="#g1" x="67.65" y="29"/>
     <use href="#g7" x="70.9" y="29"/>
@@ -20,7 +20,7 @@
     <use href="#g3" x="124.3" y="29"/>
   </g>
   <rect x="16" y="43" width="420" height="81" fill="#e2e8f0"/>
-  <rect x="16" y="43" width="74" height="81" fill="#bfdbfe"/>
+  <rect x="16" y="43" width="73" height="81" fill="#bfdbfe"/>
   <g fill="#000">
     <use href="#g12" x="22" y="67"/>
     <use href="#g13" x="31.74" y="67"/>
@@ -47,7 +47,7 @@
     <use href="#g2" x="29.56" y="147"/>
     <use href="#g3" x="36.77" y="147"/>
     <use href="#g4" x="41.66" y="147"/>
-    <use href="#g5" x="49.22" y="147"/>
+    <use href="#g5" x="49.21" y="147"/>
     <use href="#g6" x="56.33" y="147"/>
     <use href="#g21" x="67.6" y="147"/>
     <use href="#g22" x="74.42" y="147"/>
@@ -84,7 +84,7 @@
     <use href="#g2" x="29.56" y="219"/>
     <use href="#g3" x="36.77" y="219"/>
     <use href="#g4" x="41.66" y="219"/>
-    <use href="#g5" x="49.22" y="219"/>
+    <use href="#g5" x="49.21" y="219"/>
     <use href="#g23" x="56.33" y="219"/>
     <use href="#g3" x="63.59" y="219"/>
     <use href="#g8" x="68.3" y="219"/>
@@ -98,7 +98,7 @@
     <use href="#g24" x="119.25" y="219"/>
     <use href="#g25" x="122.81" y="219"/>
     <use href="#g26" x="127.54" y="219"/>
-    <use href="#g27" x="135.41" y="219"/>
+    <use href="#g27" x="135.4" y="219"/>
     <use href="#g28" x="144.02" y="219"/>
     <use href="#g22" x="151.11" y="219"/>
     <use href="#g29" x="158.71" y="219"/>
@@ -127,13 +127,13 @@
     <use href="#g2" x="29.56" y="291"/>
     <use href="#g3" x="36.77" y="291"/>
     <use href="#g4" x="41.66" y="291"/>
-    <use href="#g5" x="49.22" y="291"/>
+    <use href="#g5" x="49.21" y="291"/>
     <use href="#g30" x="56.33" y="291"/>
     <use href="#g3" x="62.7" y="291"/>
     <use href="#g31" x="67.86" y="291"/>
     <use href="#g11" x="72.26" y="291"/>
     <use href="#g3" x="79.17" y="291"/>
-    <use href="#g9" x="84.06" y="291"/>
+    <use href="#g9" x="84.05" y="291"/>
     <use href="#g4" x="91.02" y="291"/>
   </g>
   <rect x="16" y="305" width="420" height="35" fill="#e2e8f0"/>

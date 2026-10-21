@@ -12,14 +12,14 @@ use takumi_core::{
   layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
-  painter::{BoxFrame, TextClip},
+  painter::{BoxFrame, TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene},
   style::{Affine, Filter},
 };
 
 use crate::{
   GroupToken, SvgDocument,
-  render::{EffectGroups, PlacedBox},
+  render::{DocumentDevice, EffectGroups, PlacedBox},
 };
 
 /// A scene, emitted in paint order.
@@ -139,8 +139,33 @@ impl ChunkWriter<'_, '_, '_> {
           let text_clip =
             TextClip::of(&scene.root, &scene.results, chunk.node).map_err(io::Error::other)?;
 
-          placed.emit_decorations(text_clip.as_ref(), doc)?;
+          let table = TableDecorations::of(
+            &scene.root,
+            &scene.results,
+            &chunk.node.path,
+            chunk.node.node_id,
+          )
+          .map_err(io::Error::other)?;
+
+          placed.emit_decorations(text_clip.as_ref(), table, doc)?;
         }
+        ChunkPart::CollapsedBorders if placed.node.paints_collapsed_borders() => {
+          let scene = self.emitter.scene;
+          let mut result = Ok(());
+
+          DocumentDevice::paint(doc, |device| {
+            result = paint_collapsed_borders(
+              &scene.results,
+              chunk.node.node_id,
+              chunk.node.paint_offset,
+              placed.frame.translation(),
+              None,
+              device,
+            );
+          })?;
+          result.map_err(io::Error::other)?;
+        }
+        ChunkPart::CollapsedBorders => {}
         ChunkPart::Content => placed.emit_own_content(InlinePass::Content, doc)?,
         ChunkPart::Floats => placed.emit_own_content(InlinePass::Floats, doc)?,
         ChunkPart::Outline => placed.emit_outline(doc)?,

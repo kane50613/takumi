@@ -24,7 +24,8 @@ env:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A cancelled master run saves no Rust cache, the one cache pull requests restore, and can stop publish halfway.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 # Jobs are grouped by package
 jobs:
@@ -82,6 +83,13 @@ jobs:
       - name: Run Clippy for the paint build
         run: cargo clippy --locked --target wasm32-unknown-unknown -p takumi-paint-wasm -- -D warnings
 
+      # Feature gates the all-features pass cannot see: an item or import only some features use.
+      - name: Run Clippy without default features
+        run: cargo clippy --locked -p takumi-core --all-targets --no-default-features -- -D warnings
+
+      - name: Run Clippy for PDF images without SVG
+        run: cargo clippy --locked -p takumi-pdf --all-targets --no-default-features --features images -- -D warnings
+
       - name: Test README.md is up to date
         run: |
           fail=0
@@ -91,14 +99,16 @@ jobs:
             | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")')
           exit $fail
 
+      # The WPT job runs the reftests. The cached target directory may still hold an old checkout.
       - name: Run tests
-        run: cargo test --locked
+        run: cargo test --locked -- --skip wpt_reftests
 
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
       # the reference validator can tell whether the claim holds.
       # Pinned to one release, so a new veraPDF changes what CI validates only
       # when someone bumps it. The checksum guards the file behind the URL.
       - name: Install veraPDF
+        working-directory: ${{ runner.temp }}
         env:
           VERAPDF_VERSION: 1.30.3
           VERAPDF_SHA256: b512bf24945503a33fc10738ecffc1f2dccaaf8593a448e94ee9ac86a9559a59
@@ -142,7 +152,7 @@ jobs:
               fi
             done
             if [ ${#files[@]} -gt 0 ]; then
-              ./verapdf/verapdf --flavour "$flavour" --format text "${files[@]}" || fail=1
+              "$RUNNER_TEMP/verapdf/verapdf" --flavour "$flavour" --format text "${files[@]}" || fail=1
               checked=$((checked + ${#files[@]}))
             fi
           done
@@ -164,17 +174,19 @@ jobs:
       - name: Check for git changes and prepare artifact
         id: check_changes
         run: |
+          # A new fixture's goldens are untracked, which `git diff` skips without this.
+          git add --all --intent-to-add
           if git diff --quiet HEAD; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
-            git diff --name-only HEAD > changed_files.txt
+            git diff --name-only HEAD | tee changed_files.txt
             tar czf changed_files.tar.gz $(cat changed_files.txt)
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Upload changed files artifact
         if: steps.check_changes.outputs.changed == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: changed-files
           path: changed_files.tar.gz
@@ -216,41 +228,34 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
           if-no-files-found: error
 
+      # The build generates the catalog from Google Fonts; type-checking the source needs it.
+      - name: Upload Google Fonts catalog
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: helpers-catalog
+          path: takumi-helpers/src/google-fonts-catalog.ts
+          if-no-files-found: error
+
   build-and-test-napi:
     needs: build-helpers
     strategy:
-      fail-fast: false
-      # A pull request builds only the target the rest of the pipeline consumes.
-      # The other seven take longer than every other job put together, and
-      # nothing downstream reads them until master publishes.
-      # `--use-napi-cross` pins libc at 2.31 on the gnu targets (cross-rs docs).
       matrix:
-        settings: >-
-          ${{ github.event_name == 'pull_request'
-          && fromJSON('[
-          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu", "build": "bun run build --target x86_64-unknown-linux-gnu --use-napi-cross"}
-          ]')
-          || fromJSON('[
-          {"host": "windows-2025", "target": "x86_64-pc-windows-msvc", "build": "bun run build --target x86_64-pc-windows-msvc"},
-          {"host": "windows-11-arm", "target": "aarch64-pc-windows-msvc", "build": "bun run build --target aarch64-pc-windows-msvc"},
-          {"host": "macos-15", "target": "aarch64-apple-darwin", "build": "bun run build --target aarch64-apple-darwin"},
-          {"host": "macos-15-intel", "target": "x86_64-apple-darwin", "build": "bun run build --target x86_64-apple-darwin"},
-          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu", "build": "bun run build --target aarch64-unknown-linux-gnu --use-napi-cross"},
-          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-musl", "build": "bun run build --target aarch64-unknown-linux-musl -x"},
-          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu", "build": "bun run build --target x86_64-unknown-linux-gnu --use-napi-cross"},
-          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-musl", "build": "bun run build --target x86_64-unknown-linux-musl -x"}
-          ]') }}
+        settings:
+          # `--use-napi-cross` pins libc at 2.31 on the gnu targets (cross-rs docs).
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: bun run build --target x86_64-unknown-linux-gnu --use-napi-cross
 
     name: Build @takumi-rs/core for ${{ matrix.settings.target }}
     runs-on: ${{ matrix.settings.host }}
 
-    steps:
+    steps: &napi-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Bun
@@ -265,13 +270,14 @@ jobs:
           targets: ${{ matrix.settings.target }}
           components: rust-src
           stage: build
+          build-std: true
 
       - name: Install cargo-zigbuild
         if: ${{ contains(matrix.settings.target, 'musl') }}
         run: pip install cargo-zigbuild
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
@@ -291,7 +297,7 @@ jobs:
         run: ${{ matrix.settings.build }} -- --locked && bun build:js
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bindings-${{ matrix.settings.target }}
           path: |
@@ -312,10 +318,44 @@ jobs:
           docker run --rm -v $PWD:/workspace -w /workspace/takumi-napi \
             oven/bun:alpine bun test
 
+  # The targets nothing else in the pipeline reads; they take longer than every other job
+  # put together, so only master builds them, right before it publishes.
+  build-napi-platforms:
+    if: github.event_name != 'pull_request'
+    needs: build-helpers
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: windows-2025
+            target: x86_64-pc-windows-msvc
+            build: bun run build --target x86_64-pc-windows-msvc
+          - host: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            build: bun run build --target aarch64-pc-windows-msvc
+          - host: macos-15
+            target: aarch64-apple-darwin
+            build: bun run build --target aarch64-apple-darwin
+          - host: macos-15-intel
+            target: x86_64-apple-darwin
+            build: bun run build --target x86_64-apple-darwin
+          - host: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            build: bun run build --target aarch64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            build: bun run build --target aarch64-unknown-linux-musl -x
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            build: bun run build --target x86_64-unknown-linux-musl -x
+
+    name: Build @takumi-rs/core for ${{ matrix.settings.target }}
+    runs-on: ${{ matrix.settings.host }}
+    steps: *napi-steps
   build-js:
     name: Build takumi-js
     runs-on: ubuntu-slim
-    needs: [build-helpers, build-and-test-napi, build-wasm]
+    needs: build-helpers
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -323,22 +363,10 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
-
-      - name: Download N-API bindings artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi
-
-      - name: Download WASM artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: wasm-package
-          path: takumi-wasm
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./takumi-js
@@ -348,11 +376,78 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: js-dist
           path: takumi-js/dist
           if-no-files-found: error
+
+  # Outside Pass Test: the suite takes over 20 minutes, so it reports without blocking a merge.
+  test-wpt:
+    name: WPT reftests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          stage: wpt
+
+      # The checkout is pinned to one revision and directory list, both in the script. It stays
+      # out of target/, which the Rust cache saves too.
+      - name: Cache the web-platform-tests
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/wpt
+          key: wpt-${{ hashFiles('scripts/wpt-checkout.sh') }}
+
+      - name: Check out the web-platform-tests
+        env:
+          WPT_ROOT: ${{ runner.temp }}/wpt
+        run: sh scripts/wpt-checkout.sh
+
+      - name: Run the reftests
+        env:
+          WPT_ROOT: ${{ runner.temp }}/wpt
+          WPT_WRITE: ${{ runner.temp }}/wpt-reftests.txt
+        run: cargo test --locked --release -p takumi --test wpt_reftests -- --nocapture
+
+      # The tests that pass now, for a PR to adopt without running the suite locally:
+      # `gh run download <run> -n wpt-reftests -D takumi/tests`.
+      - name: Report WPT passes
+        if: ${{ !cancelled() }}
+        run: |
+          set -eu
+          current="$RUNNER_TEMP/wpt-reftests.txt"
+          [ -f "$current" ] || exit 0
+          rules() { grep -v '^#' "$1" | sort; }
+          added=$(comm -13 <(rules takumi/tests/wpt-reftests.txt) <(rules "$current"))
+          removed=$(comm -23 <(rules takumi/tests/wpt-reftests.txt) <(rules "$current"))
+          {
+            echo "### WPT reftests"
+            echo
+            if [ -z "$added$removed" ]; then
+              echo "\`takumi/tests/wpt-reftests.txt\` matches the tests that pass."
+            else
+              echo "\`takumi/tests/wpt-reftests.txt\` differs from the tests that pass; download the \`wpt-reftests\` artifact to update it."
+              echo
+              echo '```diff'
+              printf '%s\n' "$added" | sed '/^$/d; s/^/+ /'
+              printf '%s\n' "$removed" | sed '/^$/d; s/^/- /'
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload WPT passes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wpt-reftests
+          path: ${{ runner.temp }}/wpt-reftests.txt
+          if-no-files-found: ignore
 
   test-js:
     name: Test takumi-js, templates & examples
@@ -365,25 +460,25 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-dist
           path: takumi-js/dist
@@ -425,7 +520,7 @@ jobs:
   build-image-response:
     name: Build @takumi-rs/image-response
     runs-on: ubuntu-slim
-    needs: [build-helpers, build-js, build-and-test-napi, build-wasm]
+    needs: [build-helpers, build-js]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -433,25 +528,13 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
-      - name: Download N-API bindings artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi
-
-      - name: Download WASM artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: wasm-package
-          path: takumi-wasm
-
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-dist
           path: takumi-js/dist
@@ -464,15 +547,15 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-response-dist
           path: takumi-image-response/dist
           if-no-files-found: error
 
   check-packaging:
-    name: Check packaging (attw + publint)
-    runs-on: ubuntu-slim
+    name: Check packaging (attw + publint + types)
+    runs-on: ubuntu-latest
     needs:
       [
         build-helpers,
@@ -490,46 +573,52 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-dist
           path: takumi-js/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download PDF artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: pdf-package
           path: takumi-pdf-js
 
       - name: Download paint artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: paint-package
           path: takumi-paint
+
+      - name: Download Google Fonts catalog
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: helpers-catalog
+          path: takumi-helpers/src
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -537,9 +626,17 @@ jobs:
       - name: Check exports with attw and publint
         run: bun publish-lint
 
+      # Bun runs TypeScript without checking it, and declaration builds fall back to `any`.
+      - name: Type-check the packages
+        run: bun run typecheck
+
   build-wasm:
     name: Build @takumi-rs/wasm
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # To read the base branch's wasm artifact.
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -554,6 +651,7 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
+          build-std: true
 
       - name: Install wasm-pack
         uses: ./.github/actions/setup-wasm-pack
@@ -571,8 +669,41 @@ jobs:
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128
         run: bun run build
 
+      # A PR compares against the wasm its base branch's latest successful run built.
+      - name: Report wasm size
+        working-directory: takumi-wasm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          wasm=pkg/takumi_wasm_bg.wasm
+          raw=$(wc -c < "$wasm")
+          gz=$(gzip -9 -c "$wasm" | wc -c)
+          base_raw=""
+          base_gz=""
+          if [ -n "$BASE_REF" ]; then
+            run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch "$BASE_REF" --status success -L 1 --json databaseId -q '.[0].databaseId' || true)
+            if [ -n "$run" ] && gh run download "$run" -R "$GITHUB_REPOSITORY" -n wasm-package -D "$RUNNER_TEMP/base" > /dev/null 2>&1; then
+              base_raw=$(wc -c < "$RUNNER_TEMP/base/pkg/takumi_wasm_bg.wasm")
+              base_gz=$(gzip -9 -c "$RUNNER_TEMP/base/pkg/takumi_wasm_bg.wasm" | wc -c)
+            fi
+          fi
+          {
+            echo "| takumi wasm | bytes | MiB | change from \`${BASE_REF:-base}\` |"
+            echo "| --- | ---: | ---: | ---: |"
+            awk -v raw="$raw" -v gz="$gz" -v base_raw="$base_raw" -v base_gz="$base_gz" 'BEGIN {
+              printf "| raw | %d | %.2f | %s |\n", raw, raw / 1048576, delta(raw, base_raw)
+              printf "| gzip | %d | %.2f | %s |\n", gz, gz / 1048576, delta(gz, base_gz)
+            }
+            function delta(now, before) {
+              if (before == "") return "n/a"
+              return sprintf("%+d (%+.2f%%)", now - before, 100 * (now - before) / before)
+            }'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wasm-package
           path: |
@@ -601,12 +732,13 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
+          build-std: true
 
       - name: Install wasm-pack
         uses: ./.github/actions/setup-wasm-pack
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
@@ -654,7 +786,7 @@ jobs:
         run: bun test
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pdf-package
           path: |
@@ -684,12 +816,13 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
+          build-std: true
 
       - name: Install wasm-pack
         uses: ./.github/actions/setup-wasm-pack
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
@@ -712,7 +845,7 @@ jobs:
         run: bun test
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: paint-package
           path: |
@@ -755,13 +888,13 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wasm-package
           path: takumi-wasm
@@ -785,49 +918,49 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download all N-API artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: bindings-*
           path: takumi-napi/artifacts
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-dist
           path: takumi-js/dist
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download PDF artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: pdf-package
           path: takumi-pdf-js
 
       - name: Download paint artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: paint-package
           path: takumi-paint
@@ -900,7 +1033,7 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-slim
-    needs: pass-test
+    needs: [pass-test, build-napi-platforms]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: write
@@ -920,49 +1053,49 @@ jobs:
           stage: release
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download all napi artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: bindings-*
           path: takumi-napi/artifacts
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-dist
           path: takumi-js/dist
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download PDF artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: pdf-package
           path: takumi-pdf-js
 
       - name: Download paint artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: paint-package
           path: takumi-paint
@@ -1024,43 +1157,43 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download js-dist artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-dist
           path: takumi-js/dist
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download takumi-pdf artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: pdf-package
           path: takumi-pdf-js
 
       - name: Download takumi-paint artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: paint-package
           path: takumi-paint

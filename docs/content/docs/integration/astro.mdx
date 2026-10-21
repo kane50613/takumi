@@ -3,13 +3,13 @@ title: Astro
 description: Generate Open Graph images for static Astro pages at build time with astro-takumi.
 ---
 
-[astro-takumi](https://github.com/vikas5914/astro-takumi) renders an Open Graph image for every page of an Astro site. During the build it reads each emitted page, renders a React component (or a [built-in preset](https://github.com/vikas5914/astro-takumi#presets)) through Takumi, and writes the image next to the HTML.
+[astro-takumi](https://github.com/vikas5914/astro-takumi) renders an Open Graph image for every page of an Astro site. During the build, it reads each emitted page and renders a React component or a [built-in preset](https://github.com/vikas5914/astro-takumi#presets) with Takumi. It writes each image next to its HTML file.
 
 <Steps>
   <Step>
     ### Add the integration
 
-    `astro add` wires the integration into your config. You also install React and a font: React describes the layout and never ships to the client, and you declare every font yourself since system fonts are unavailable.
+    `astro add` adds the integration to your config. Also install React and a font. React describes the layout and never ships to the client. System fonts are unavailable, so declare every font yourself.
 
     ```npm
     npx astro add astro-takumi
@@ -23,7 +23,7 @@ description: Generate Open Graph images for static Astro pages at build time wit
   <Step>
     ### Configure the integration
 
-    Give it the fonts to render with and a `render` function. The presets cover common layouts; set `site` so Takumi can build absolute image URLs.
+    Pass the fonts and a `render` function. The presets cover common layouts. Set `site` so the integration can build absolute image URLs.
 
     <Callout>astro-takumi runs in `astro:build:done`, so it only covers statically rendered pages.</Callout>
 
@@ -50,7 +50,9 @@ description: Generate Open Graph images for static Astro pages at build time wit
   <Step>
     ### Reference the image from your layout
 
-    `getImagePath` returns the URL of the image Takumi generates for the current page. The build fails if the `og:image` value does not match that path.
+    `getImagePath` returns the URL of the current page's image.
+
+    <Callout type="warn">The build fails if `og:title`, `og:type`, or `og:image` is missing, or if `og:image` does not match that URL.</Callout>
 
     ```astro title="src/layouts/Layout.astro"
     ---

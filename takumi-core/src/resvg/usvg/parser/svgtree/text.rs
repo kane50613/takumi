@@ -5,14 +5,14 @@
 
 use roxmltree::Error;
 
-use super::{AId, Document, EId, NodeId, NodeKind, SvgNode};
+use super::{AId, Document, EId, NodeId, NodeKind, SvgNode, style_sheet::StyleSheet};
 
 const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
 
 pub(crate) fn parse_svg_text_element<'input>(
   parent: roxmltree::Node<'_, 'input>,
   parent_id: NodeId,
-  style_sheet: &simplecss::StyleSheet,
+  style_sheet: &StyleSheet,
   doc: &mut Document<'input>,
 ) -> Result<(), Error> {
   debug_assert_eq!(parent.tag_name().name(), "text");
@@ -40,7 +40,7 @@ pub(crate) fn parse_svg_text_element<'input>(
 fn parse_svg_text_element_impl<'input>(
   parent: roxmltree::Node<'_, 'input>,
   parent_id: NodeId,
-  style_sheet: &simplecss::StyleSheet,
+  style_sheet: &StyleSheet,
   space: XmlSpace,
   doc: &mut Document<'input>,
 ) -> Result<(), Error> {

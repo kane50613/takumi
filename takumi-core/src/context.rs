@@ -1,23 +1,25 @@
-use std::{
-  cell::{Cell, OnceCell, RefCell},
-  collections::HashMap,
-  rc::Rc,
-  sync::Arc,
-};
+use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
 
-use rustc_hash::FxHashMap;
+use taffy::Line;
 use typed_builder::TypedBuilder;
 
 use crate::{
   font_style::ExpandedFamilies,
+  fonts::{
+    font::Font,
+    font_description::{FontDescription, FontFallbackKey},
+    font_fallback_list::FontFallbackList,
+    font_fallback_map::FontFallbackMap,
+  },
   geometry::{ComputedLayout, Point},
-  layout::inline::{InlineLayoutCache, MeasureCache, ShapeCache},
+  layout::inline::InlineLayoutCache,
   resources::{
-    font::{FontsSnapshot, PrimaryFontMetrics},
+    font::FontsSnapshot,
     image::{ImageSource, ResourceCache},
   },
   style::{
-    Affine, AppliedTextDecorations, Color, ComputedStyle, SizingContext, StyleSheet, TwCache,
+    Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, SizingContext,
+    StyleSheet, TwCache,
   },
 };
 
@@ -28,23 +30,13 @@ struct RenderShared {
   resource_cache: Option<ResourceCache>,
   stylesheet: Arc<StyleSheet>,
   font_families: ExpandedFamilies,
+  font_fallback_map: FontFallbackMap,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
-  primary_font_metrics: RefCell<FxHashMap<u64, Option<PrimaryFontMetrics>>>,
-  /// The id the next context of the render takes.
-  next_context_id: Cell<usize>,
+  matched_styles: MatchedStyleCache,
   time_ms: u64,
   draw_debug_border: bool,
   dither_gradients: bool,
-}
-
-impl RenderShared {
-  fn take_context_id(&self) -> usize {
-    let id = self.next_context_id.get();
-
-    self.next_context_id.set(id + 1);
-    id
-  }
 }
 
 /// The values a render starts from, collected by [`RenderContext::builder`].
@@ -77,10 +69,6 @@ pub struct RenderContextInit {
   resource_cache: Option<ResourceCache>,
   #[builder(default)]
   stylesheet: Arc<StyleSheet>,
-  #[builder(default)]
-  shape_cache: ShapeCache,
-  #[builder(default)]
-  measure_cache: MeasureCache,
 }
 
 impl From<RenderContextInit> for RenderContext {
@@ -92,10 +80,10 @@ impl From<RenderContextInit> for RenderContext {
         resource_cache: init.resource_cache,
         stylesheet: init.stylesheet,
         font_families: ExpandedFamilies::default(),
-        inline_cache: InlineLayoutCache::new(init.shape_cache, init.measure_cache),
+        font_fallback_map: FontFallbackMap::default(),
+        inline_cache: InlineLayoutCache::default(),
         tw_cache: TwCache::default(),
-        primary_font_metrics: RefCell::default(),
-        next_context_id: Cell::new(1),
+        matched_styles: MatchedStyleCache::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
         dither_gradients: init.dither_gradients,
@@ -107,9 +95,8 @@ impl From<RenderContextInit> for RenderContext {
       style: init.style,
       text_decorations: AppliedTextDecorations::default(),
       collapsed_borders: init.collapsed_borders,
-      text_measure_digest: OnceCell::new(),
       definite_height: Cell::new(None),
-      id: 0,
+      margins_adjoin: Cell::new(Line::FALSE),
     }
   }
 }
@@ -134,18 +121,17 @@ pub struct RenderContext {
   pub(crate) text_decorations: AppliedTextDecorations,
   /// Whether this box is a cell of a table that collapses its borders.
   pub(crate) collapsed_borders: bool,
-  /// Digest of the style inputs to text measurement, taken on first use.
-  text_measure_digest: OnceCell<u64>,
   /// The content height the box's last layout fixed before its content, Blink's definite block
   /// size.
   definite_height: Cell<Option<f32>>,
-  /// Names the box it styles within the render; its clones style the same box.
-  id: usize,
+  /// Whether its children's margins adjoin its block-start and block-end edges in its last layout,
+  /// so they collapse through it.
+  margins_adjoin: Cell<Line<bool>>,
 }
 
 /// A [`RenderContextBuilder`] with nothing set yet.
 type UnsetRenderContextBuilder =
-  RenderContextBuilder<((), (), (), (), (), (), (), (), (), (), (), (), (), ())>;
+  RenderContextBuilder<((), (), (), (), (), (), (), (), (), (), (), ())>;
 
 impl RenderContext {
   /// Starts a root context; `fonts` and `sizing` are required.
@@ -197,19 +183,8 @@ impl RenderContext {
     &self.shared.inline_cache
   }
 
-  /// Names the box this context styles within its render.
-  pub(crate) fn id(&self) -> usize {
-    self.id
-  }
-
   pub(crate) fn font_families(&self) -> &ExpandedFamilies {
     &self.shared.font_families
-  }
-
-  /// Drops the shaped text this render keeps to lay the same text out again, once every box
-  /// that needs it holds its fragment items.
-  pub fn release_shaped_text(&self) {
-    self.shared.inline_cache.clear_shapes();
   }
 
   /// Per-render cache of expanded Tailwind class lists.
@@ -217,29 +192,28 @@ impl RenderContext {
     &self.shared.tw_cache
   }
 
-  /// The primary font metrics for `key`, resolved once per render.
-  pub(crate) fn cached_primary_font_metrics(
-    &self,
-    key: u64,
-    resolve: impl FnOnce() -> Option<PrimaryFontMetrics>,
-  ) -> Option<PrimaryFontMetrics> {
-    if let Some(metrics) = self.shared.primary_font_metrics.borrow().get(&key) {
-      return *metrics;
+  /// Per-render cache of the styles boxes resolved from the declarations they matched.
+  pub(crate) fn matched_styles(&self) -> &MatchedStyleCache {
+    &self.shared.matched_styles
+  }
+
+  /// The font `description` names, its fallback list shared across the render.
+  pub(crate) fn font(&self, description: FontDescription) -> Font {
+    Font {
+      fallback_list: self.font_fallback_list(&description.fallback),
+      description,
     }
-    let metrics = resolve();
-    self
-      .shared
-      .primary_font_metrics
-      .borrow_mut()
-      .insert(key, metrics);
-    metrics
+  }
+
+  /// Blink's `FontFallbackMap::Get`: the fallback list `key` names, shared across the render.
+  pub(crate) fn font_fallback_list(&self, key: &FontFallbackKey) -> Rc<FontFallbackList> {
+    self.shared.font_fallback_map.get(&self.shared.fonts, key)
   }
 
   /// Blink's `CreateAnonymousStyleWithDisplay`, keeping the parent's applied text decorations.
   /// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/resolver/style_resolver.cc
   pub(crate) fn for_anonymous(parent: &Self) -> Self {
     Self {
-      id: parent.shared.take_context_id(),
       shared: parent.shared.clone(),
       sizing: parent.sizing.clone(),
       transform: parent.transform,
@@ -248,19 +222,20 @@ impl RenderContext {
       style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
-      text_measure_digest: OnceCell::new(),
       definite_height: Cell::new(None),
+      margins_adjoin: Cell::new(Line::FALSE),
     }
   }
 
   pub(crate) fn from_parent(
     parent: &Self,
-    style: ComputedStyle,
+    style: impl Into<Rc<ComputedStyle>>,
     sizing: SizingContext,
     current_color: Color,
   ) -> Self {
+    let style = style.into();
+
     Self {
-      id: parent.shared.take_context_id(),
       shared: parent.shared.clone(),
       text_decorations: parent.text_decorations.for_child(
         &parent.style,
@@ -272,10 +247,10 @@ impl RenderContext {
       transform: parent.transform,
       paint_offset: parent.paint_offset,
       current_color,
-      style: Rc::new(style),
+      style,
       collapsed_borders: false,
-      text_measure_digest: OnceCell::new(),
       definite_height: Cell::new(None),
+      margins_adjoin: Cell::new(Line::FALSE),
     }
   }
 
@@ -286,6 +261,15 @@ impl RenderContext {
 
   pub(crate) fn set_definite_height(&self, height: Option<f32>) {
     self.definite_height.set(height);
+  }
+
+  /// Whether its children's margins adjoin its block-start and block-end edges in its last layout.
+  pub(crate) fn margins_adjoin(&self) -> Line<bool> {
+    self.margins_adjoin.get()
+  }
+
+  pub(crate) fn set_margins_adjoin(&self, margins_adjoin: Line<bool>) {
+    self.margins_adjoin.set(margins_adjoin);
   }
 
   /// The style to change in place, copied first when another box shares it.
@@ -300,10 +284,5 @@ impl RenderContext {
     if display != self.style.base_data.display {
       self.style_mut().base_data_mut().display = display;
     }
-  }
-
-  /// The part of a text measurement key that only depends on this context.
-  pub(crate) fn text_measure_digest(&self, digest: impl FnOnce() -> u64) -> u64 {
-    *self.text_measure_digest.get_or_init(digest)
   }
 }

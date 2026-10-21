@@ -1,10 +1,10 @@
 ---
 title: ImageResponse
-description: Generate Open Graph images in HTTP route handlers with the next/og-compatible ImageResponse API.
+description: Return rendered images from HTTP route handlers with the next/og-compatible ImageResponse API.
 icon: Send
 ---
 
-`ImageResponse` extends the web `Response`, so any runtime with `Request` and `Response` returns it from a route handler. The API matches `next/og`.
+Return an `ImageResponse` from a route handler to serve a rendered image. It extends the web `Response`, so it works in any runtime with `Request` and `Response`. Its API matches `next/og`.
 
 ```tsx twoslash title="app/og/route.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -14,17 +14,26 @@ export function GET() {
 }
 ```
 
+The first argument takes what `render()` takes: JSX, an HTML string, or a node tree.
+
 ## Options
 
-`ImageResponseOptions` is `RenderOptions` plus the standard `ResponseInit` fields and an error hook.
+`ImageResponseOptions` is the `render()` options plus the `ResponseInit` fields and an error hook.
 
 <TypeTable
   type={{
-    width: { type: "number", required: true, description: "Canvas width in pixels." },
-    height: { type: "number", required: true, description: "Canvas height in pixels." },
+    width: {
+      type: "number",
+      description: "Image width in pixels. Omit it to size the width to the content.",
+    },
+    height: {
+      type: "number",
+      description: "Image height in pixels. Omit it to size the height to the content.",
+    },
     format: {
       type: '"png" | "jpeg" | "webp" | "ico" | "raw"',
-      description: "Output encoder. Sets the default content-type.",
+      default: '"png"',
+      description: "Output encoder. Also sets the default content-type.",
       typeDescriptionLink: "/docs/output-formats",
     },
     quality: {
@@ -32,32 +41,49 @@ export function GET() {
       description: "Encoder quality, 0–100. Applies to JPEG and lossy WebP.",
     },
     fonts: {
-      type: "Font[]",
-      description: "Per-response fonts; identical fonts are decoded once.",
+      type: "FontLoader[] | Promise<FontLoader[]>",
+      description: "Fonts for this response. Each file decodes once per renderer.",
       typeDescriptionLink: "/docs/typography-and-fonts",
     },
+    css: {
+      type: "CssInput | CssInput[]",
+      description: "Stylesheet text or rule objects.",
+      typeDescriptionLink: "/docs/styling#css",
+    },
     images: {
-      type: "ImageLoader[]",
-      description: "Pre-fetched images keyed by src.",
+      type: "ImageLoader[] | { sources, fetchCache, cache, ...fetchOptions }",
+      description: "Pre-fetched images keyed by src, and limits for the images Takumi fetches.",
       typeDescriptionLink: "/docs/load-images",
+    },
+    emoji: {
+      type: '"twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat" | "from-font"',
+      default: '"twemoji"',
+      description: "Where emoji glyphs come from.",
+      typeDescriptionLink: "/docs/load-images#emoji",
     },
     renderer: {
       type: "Renderer",
-      description: "Bring your own renderer instance to reuse caches.",
+      description: "A renderer you configured yourself.",
       typeDescriptionLink: "#bring-your-own-renderer",
     },
     jsx: {
       type: "FromJsxOptions",
-      description: "JSX conversion options, e.g. { defaultStyles: false }.",
+      description: "JSX conversion options, such as { defaultStyles: false }.",
+    },
+    signal: {
+      type: "AbortSignal",
+      description: "Cancels the render while it loads fonts and images.",
+      typeDescriptionLink: "/docs/output-formats#cancellation",
     },
     headers: {
       type: "HeadersInit",
-      description: "Response headers. content-type defaults to format.",
+      description: "Response headers. content-type defaults to match format.",
     },
     status: { type: "number", description: "Response status code." },
+    statusText: { type: "string", description: "Response status text." },
     onError: {
       type: "(error: unknown) => void | Promise<void>",
-      description: "Runs after a render failure, for side effects like logging.",
+      description: "Runs after a render fails. Defaults to logging the error with console.error.",
       typeDescriptionLink: "#error-handling",
     },
   }}
@@ -65,7 +91,7 @@ export function GET() {
 
 ## Custom headers
 
-`content-type` defaults to the chosen `format`. This handler lets browsers and shared caches reuse the image for one hour. Adjust `Cache-Control` to match how often the content changes.
+`content-type` follows `format` unless you set it. Takumi sets no other headers. This handler lets browsers and shared caches reuse the image for one hour:
 
 ```tsx twoslash title="Cache an image response"
 import { ImageResponse } from "takumi-js/response";
@@ -83,9 +109,16 @@ export function GET() {
 }
 ```
 
+Match `max-age` to how often the content changes.
+
 ## Error handling
 
-`ImageResponse` exposes a `ready` promise: it resolves when the render succeeds and rejects when it fails. Await it to serve a fallback.
+<Callout type="warn">
+  The response streams its body while the render runs, so the status is already set when a render
+  fails.
+</Callout>
+
+To send a fallback instead, await `ready`. It resolves when the render succeeds and rejects when it fails.
 
 ```tsx twoslash title="Return a fallback response"
 import { ImageResponse } from "takumi-js/response";
@@ -102,7 +135,7 @@ export async function GET() {
 }
 ```
 
-`onError` is a notification hook for side effects like logging. Its return value is ignored and the response stream still errors, so it cannot substitute a fallback image; use `ready` for that.
+`onError` is for side effects such as logging. Takumi ignores its return value, and the response stream still errors. Use `ready` to send a fallback.
 
 ```tsx twoslash title="Log a render failure"
 import { ImageResponse } from "takumi-js/response";
@@ -118,13 +151,13 @@ export function GET() {
 
 ## Bring your own renderer
 
-Pass a `renderer` to reuse a configured instance across responses. A reused renderer decodes each font and image once.
+Without `renderer`, every response in the process shares one default renderer and its caches. Pass your own `Renderer` to configure it: set cache budgets, or [register fonts up front](/docs/typography-and-fonts#preloading-with-registerfont).
 
 ```tsx twoslash title="Reuse a native renderer"
-import { Renderer } from "@takumi-rs/core";
+import { Renderer } from "takumi-js/node";
 import { ImageResponse } from "takumi-js/response";
 
-const renderer = new Renderer(); // [!code highlight]
+const renderer = new Renderer({ cacheMaxBytes: 128 * 1024 * 1024 }); // [!code highlight]
 
 export function GET() {
   return new ImageResponse(<div>Hello Takumi</div>, {
@@ -134,3 +167,5 @@ export function GET() {
   });
 }
 ```
+
+`takumi-js/node` exports the native renderer. On WebAssembly runtimes, use the `Renderer` from `takumi-js/wasm` and call its `init` first, as in [the `measure()` example](/docs/measure-api).

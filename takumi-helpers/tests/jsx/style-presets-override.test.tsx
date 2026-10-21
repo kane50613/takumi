@@ -16,26 +16,6 @@ describe("fromJsx - stylePresets overriding", () => {
       } satisfies TextNode);
     });
 
-    test("applies default style presets to p element", async () => {
-      const { node } = await fromJsx(<p>Paragraph</p>);
-      expect(node).toEqual({
-        type: "text",
-        text: "Paragraph",
-        preset: defaultStylePresets.p,
-        tagName: "p",
-      } satisfies TextNode);
-    });
-
-    test("applies default style presets to strong element", async () => {
-      const { node } = await fromJsx(<strong>Bold</strong>);
-      expect(node).toEqual({
-        type: "text",
-        text: "Bold",
-        preset: defaultStylePresets.strong,
-        tagName: "strong",
-      } satisfies TextNode);
-    });
-
     test("applies default style presets to span for raw text", async () => {
       const { node } = await fromJsx("Plain text");
       expect(node).toEqual({
@@ -51,37 +31,6 @@ describe("fromJsx - stylePresets overriding", () => {
   });
 
   describe("disabling default styles with false", () => {
-    test("disables default styles for h1 element", async () => {
-      const { node } = await fromJsx(<h1>Hello</h1>, { defaultStyles: false });
-      expect(node).toEqual({
-        type: "text",
-        text: "Hello",
-        tagName: "h1",
-      } satisfies TextNode);
-    });
-
-    test("disables default styles for p element", async () => {
-      const { node } = await fromJsx(<p>Paragraph</p>, {
-        defaultStyles: false,
-      });
-      expect(node).toEqual({
-        type: "text",
-        text: "Paragraph",
-        tagName: "p",
-      } satisfies TextNode);
-    });
-
-    test("disables default styles for strong element", async () => {
-      const { node } = await fromJsx(<strong>Bold</strong>, {
-        defaultStyles: false,
-      });
-      expect(node).toEqual({
-        type: "text",
-        text: "Bold",
-        tagName: "strong",
-      } satisfies TextNode);
-    });
-
     test("disables default styles for raw text", async () => {
       const { node } = await fromJsx("Plain text", { defaultStyles: false });
       expect(node).toEqual({

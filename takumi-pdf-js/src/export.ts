@@ -12,13 +12,16 @@ import {
 import type { ReactNode } from "react";
 import {
   counterCharacters,
+  type FontCacheOptions,
   type PageOverride,
   type PageRules,
   type PdfSection,
   PdfRenderer as PdfRendererInternal,
+  type RegisteredFamily,
 } from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
+export type { FontCacheOptions } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";
@@ -220,8 +223,9 @@ export type PdfMetadata = {
   /** The tool that created the source document. */
   creator?: string;
   /**
-   * UTC creation date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. Tagged archival
-   * standards require one; supplying it keeps output deterministic.
+   * UTC creation date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. PDF/A output
+   * requires one when `metadata` is set, or `lang` on tagged output. Supplying
+   * it keeps output deterministic.
    */
   creationDate?: string;
   /**
@@ -484,10 +488,13 @@ async function resolveSection(input: SectionInput) {
 
 /** A PDF renderer holding registered fonts. Reuse one instance across renders. */
 export class PdfRenderer {
-  private inner = new PdfRendererInternal();
-  private fonts = new FontRegistry<RegisteredFamilyLike>(
-    (font) => this.inner.registerFont(font) as RegisteredFamilyLike[],
-  );
+  private inner: PdfRendererInternal;
+  private fonts: FontRegistry<RegisteredFamily>;
+
+  constructor(options?: FontCacheOptions) {
+    this.inner = new PdfRendererInternal(options);
+    this.fonts = new FontRegistry(this.inner);
+  }
 
   /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
@@ -518,7 +525,16 @@ export class PdfRenderer {
       ...bands,
       ...(sectionResults?.flatMap((result) => result.nodes) ?? []),
     ];
-    const resources = await this.fonts.resolveResources(
+    const sheets = [
+      ...ownCss(css, stylesheets),
+      ...main.css,
+      ...(headerResult?.css ?? []),
+      ...(footerResult?.css ?? []),
+      ...(pagesResult?.css ?? []),
+      ...(sectionResults?.flatMap((result) => result.css) ?? []),
+    ];
+
+    return this.fonts.resolveResources(
       fonts &&
         subsetFonts({
           fonts,
@@ -532,26 +548,17 @@ export class PdfRenderer {
         }),
       images,
       fontFamilies,
+      (resources) =>
+        this.inner.render(main.node, {
+          ...rest,
+          header: headerResult?.node,
+          footer: footerResult?.node,
+          pages: pagesResult?.pages,
+          sections: sectionResults?.map((result) => result.section),
+          css: sheets.length > 0 ? sheets : undefined,
+          ...resources,
+        }),
     );
-    const sheets = [
-      ...ownCss(css, stylesheets),
-      ...main.css,
-      ...(headerResult?.css ?? []),
-      ...(footerResult?.css ?? []),
-      ...(pagesResult?.css ?? []),
-      ...(sectionResults?.flatMap((result) => result.css) ?? []),
-    ];
-
-    return this.inner.render(main.node, {
-      ...rest,
-      header: headerResult?.node,
-      footer: footerResult?.node,
-      pages: pagesResult?.pages,
-      sections: sectionResults?.map((result) => result.section),
-      css: sheets.length > 0 ? sheets : undefined,
-      images: resources.images,
-      fontFamilies: resources.fontFamilies,
-    });
   }
 
   /**
@@ -568,8 +575,10 @@ export class PdfRenderer {
   async measure(node: NodeInput, options: MeasureOptions = {}): Promise<MeasuredSize> {
     const { fonts, images, css, stylesheets, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
+    const sheets = [...ownCss(css, stylesheets), ...main.css];
+
     // The tree measured may itself be a band, so its counters are always in play.
-    const resources = await this.fonts.resolveResources(
+    return this.fonts.resolveResources(
       fonts &&
         subsetFonts({
           fonts,
@@ -577,24 +586,36 @@ export class PdfRenderer {
         }),
       images,
       fontFamilies,
+      (resources) =>
+        this.inner.measure(main.node, {
+          ...rest,
+          css: sheets.length > 0 ? sheets : undefined,
+          ...resources,
+        }),
     );
-    const sheets = [...ownCss(css, stylesheets), ...main.css];
-
-    return this.inner.measure(main.node, {
-      ...rest,
-      css: sheets.length > 0 ? sheets : undefined,
-      images: resources.images,
-      fontFamilies: resources.fontFamilies,
-    });
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
-  registerFont(font: FontLoader) {
+  registerFont(font: FontLoader): Promise<RegisteredFamily[]> {
     return this.fonts.register(font);
   }
 
+  /**
+   * Removes every face registered under the family `name`, from any `registerFont` call and each
+   * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
+   * as well. A later render that lists one of its fonts registers it again.
+   */
+  unregisterFont(family: RegisteredFamilyLike): boolean {
+    return this.inner.unregisterFont(family.name);
+  }
+
+  /** Removes every registered font, leaving the bundled fallback font. */
+  clearFonts(): void {
+    this.inner.clearFonts();
+  }
+
   /** Releases the underlying wasm renderer's memory. */
-  free() {
+  free(): void {
     this.inner.free();
   }
 }

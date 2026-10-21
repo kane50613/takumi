@@ -13,7 +13,7 @@ const node = container({
 });
 ```
 
-`takumi-js/helpers` re-exports `@takumi-rs/helpers`. Use these functions to build nodes or prepare resources yourself. With JSX or HTML, `render` and `ImageResponse` handle conversion and resource loading.
+`takumi-js/helpers` re-exports `@takumi-rs/helpers`. Use it to build node trees or prepare fonts and images yourself. For JSX or HTML input, `render` and `ImageResponse` already convert the input and load its resources.
 
 ## Fonts
 
@@ -21,7 +21,7 @@ const node = container({
 | :------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
 | `googleFonts(options)`           | Load Google Fonts families in one request; `render` keeps the subsets used. See [Fonts & text](/docs/typography-and-fonts#from-google-fonts). |
 | `fontFromUrl(url, options?)`     | Turn a font URL into a lazy `fonts` entry. `options` takes the [fetch limits](/docs/load-images#fetch-limits).                                |
-| `subsetFonts({ fonts, source })` | Trim font subsets to the codepoints `source` renders (what `render` does internally).                                                         |
+| `subsetFonts({ fonts, source })` | Keep the font subsets that cover the codepoints in `source`. `render` does this for you.                                                      |
 
 `googleFonts`, `fontFromUrl`, and `prepareImages` share [fetch limits and retry behavior](/docs/load-images#fetch-limits).
 
@@ -38,9 +38,12 @@ The `props` argument holds the node's own fields. [Node types](/docs/reference#n
 
 Styles, presets, and stylesheet rules share the `Declarations` type. Custom properties such as `"--accent": "red"` accept strings or numbers, including in React's `style` prop.
 
-Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/height, `em`/`rem` are font-relative sizes, `fr` is a grid fraction. See the [MDN CSS values reference](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Values_and_Units).
+Length and color shorthands return CSS strings. `vw` and `vh` are viewport units, `em` and `rem` are font-relative, and `fr` is a grid fraction. See the [MDN CSS values reference](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Values_and_Units).
 
-`rem` resolves against the viewport, not the outermost node. [Units](/docs/reference#units) covers what each font-relative unit follows.
+<Callout type="info">
+  `rem` resolves against the viewport's font size, not the outermost node.
+  [Units](/docs/reference#units) covers what each font-relative unit follows.
+</Callout>
 
 | Helper                 | Output             |
 | :--------------------- | :----------------- |
@@ -57,7 +60,7 @@ Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/hei
 | `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | Convert JSX or a React element to `{ node, css }`. |
 | `fromHtml(html)`             | `takumi-js/helpers/html` | Convert an HTML string to `{ node, css }`.         |
 
-`fromJsx` resolves React hooks and context without loading `react-dom`. Components using `useState`, `useContext`, or `use()` render with server semantics: initial state, no effects. Preact trees work only when their components do not call Preact hooks.
+`fromJsx` resolves React hooks and context without `react-dom`. Components that call `useState`, `useContext`, or `use()` render with server semantics: initial state, no effects. Preact trees work only when their components call no Preact hooks.
 
 ## Images & emoji
 

@@ -1,6 +1,6 @@
 //! CSS gradient / background-image → SVG paint emission.
 
-use std::{f32::consts::TAU, io};
+use std::{f32::consts::TAU, io, sync::Arc};
 
 use takumi_core::{
   context::RenderContext,
@@ -14,7 +14,7 @@ use takumi_core::{
 
 use crate::{
   Frame, GradientStop, Rgba, SvgDocument,
-  image::{PRESERVE_ASPECT_NONE, data_url_for_url},
+  image::{Drawing, PRESERVE_ASPECT_NONE},
 };
 
 const CONIC_WEDGES: usize = 180;
@@ -113,11 +113,12 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     }
   }
 
-  fn url(&mut self, url: &str, rect: Frame) -> io::Result<()> {
-    let Some(href) = data_url_for_url(url, self.context) else {
+  fn url(&mut self, url: &Arc<str>, rect: Frame) -> io::Result<()> {
+    let Some(drawing) = Drawing::of_url(url, rect, self.context, self.doc) else {
       return Ok(());
     };
-    self.doc.image(rect, &href, Some(PRESERVE_ASPECT_NONE))
+
+    self.doc.draw(&drawing, rect, PRESERVE_ASPECT_NONE)
   }
 
   fn linear(&mut self, gradient: &LinearGradient, rect: Frame) -> io::Result<()> {

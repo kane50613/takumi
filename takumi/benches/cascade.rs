@@ -60,6 +60,58 @@ fn bench_cascade(c: &mut Criterion) {
     );
   }
 
+  // The reset most stylesheets open with, which matches every element's `::before` and `::after`.
+  let reset = StyleSheet::parse(
+    "*, ::before, ::after { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid; }",
+  )
+  .expect("valid stylesheet");
+  let node = document(400);
+
+  group.bench_function(BenchmarkId::from_parameter("400x_reset"), |b| {
+    b.iter(|| {
+      black_box(
+        render(
+          RenderOptions::builder()
+            .viewport(Viewport::new((64, 64)))
+            .node(node.clone())
+            .fonts(&fonts)
+            .stylesheet(reset.clone().into())
+            .build(),
+        )
+        .expect("renders"),
+      )
+    })
+  });
+
+  // Tailwind v4's output registers its `--tw-*` names with `@property` and resets them on every
+  // element.
+  let registrations: String = (0..30)
+    .map(|index| {
+      format!("@property --tw-p{index} {{ syntax: \"*\"; inherits: false; initial-value: 0; }}\n")
+    })
+    .collect();
+  let resets: String = (0..10)
+    .map(|index| format!("--tw-p{index}: {index};"))
+    .collect();
+  let properties = format!("{registrations}* {{ {resets} }}");
+  let property_rules = StyleSheet::parse(&properties).expect("valid stylesheet");
+
+  group.bench_function(BenchmarkId::from_parameter("400x_property_rules"), |b| {
+    b.iter(|| {
+      black_box(
+        render(
+          RenderOptions::builder()
+            .viewport(Viewport::new((64, 64)))
+            .node(node.clone())
+            .fonts(&fonts)
+            .stylesheet(property_rules.clone().into())
+            .build(),
+        )
+        .expect("renders"),
+      )
+    })
+  });
+
   group.finish();
 }
 

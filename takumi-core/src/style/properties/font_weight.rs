@@ -1,7 +1,6 @@
 use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use parley::style::FontWeight as ParleyFontWeight;
 
 use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp, tw::Namespace,
@@ -66,20 +65,19 @@ impl Animatable for FontWeight {
 }
 
 impl<'i> FromCss<'i> for FontWeight {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
-      Token::Number { value, .. } => Ok((*value).into()),
+      Token::Number { value, .. } if (1.0..=1000.0).contains(value) => Ok((*value).into()),
       Token::Ident(ident) => match_ignore_ascii_case! { ident,
         "normal" => Ok(400.0.into()),
         "bold" => Ok(700.0.into()),
         "bolder" => Ok(FontWeight::Bolder),
         "lighter" => Ok(FontWeight::Lighter),
-        _ => Err(unexpected_token!(location, token)),
+        _ => Err(unexpected_token!(token)),
       },
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 
@@ -129,10 +127,6 @@ impl FontWeight {
       absolute => absolute,
     }
   }
-
-  pub(crate) fn into_parlance(self) -> ParleyFontWeight {
-    ParleyFontWeight::new(self.value())
-  }
 }
 
 impl From<f32> for FontWeight {
@@ -159,6 +153,14 @@ mod tests {
   #[test]
   fn parses_numeric_font_weight() {
     assert_eq!(FontWeight::from_css_str("700"), Ok(700.0.into()));
+  }
+
+  #[test]
+  fn rejects_numeric_font_weight_outside_1_to_1000() {
+    assert!(FontWeight::from_css_str("0").is_err());
+    assert!(FontWeight::from_css_str("1001").is_err());
+    assert_eq!(FontWeight::from_css_str("1"), Ok(1.0.into()));
+    assert_eq!(FontWeight::from_css_str("1000"), Ok(1000.0.into()));
   }
 
   #[test]

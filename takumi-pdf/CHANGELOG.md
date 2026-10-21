@@ -1,3 +1,17 @@
+## takumi-pdf@0.18.0
+
+### Shape with HarfBuzz 14.5.1
+
+Shaping moves to harfrust 0.14, which matches HarfBuzz 14.5.1: Bengali ra-phala such as গ্র joins again, marks attach correctly after a ligated multiple substitution, and Hangul runs apply `calt` to the characters around them. A PDF now draws a glyph from a font's SVG table only when that glyph has SVG data.
+
+### Bound render fonts with `fontCacheMaxBytes`
+
+Past this cap in decoded font bytes, a renderer releases the least recently used fonts that renders' `fonts` lists loaded, and a later render loads them again. Fonts from `registerFont` stay, and a running render keeps the fonts it started with. The wasm `Renderer` now passes its options, such as `cacheMaxBytes`, to the native renderer.
+
+### Release fonts a renderer no longer needs
+
+`unregisterFont({ name })` removes a family with all its `unicodeRange` subsets, and `clearFonts()` goes back to the bundled fallback font. A later render that lists a released font registers it again. In Rust, use `Fonts::unregister_family`.
+
 ## takumi-pdf@0.17.3
 
 ### Copy text correctly from PDF in viewers that ignore `/ActualText`

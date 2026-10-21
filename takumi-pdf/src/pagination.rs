@@ -5,8 +5,9 @@ use std::collections::HashMap;
 use takumi_core::{
   geometry::{Point, transformed_rect_extents},
   layout::node::Node,
+  layout::table::TableSectionKind,
   scene::NodePaint,
-  style::{GridPlacement, GridPlacementSpan},
+  style::BreakInside,
 };
 
 use crate::{
@@ -174,9 +175,13 @@ impl RepeatedSection {
     let Some(node) = tree.scene.root.node_at_path(&paint.path) else {
       return;
     };
-    // Cell extents are measured in the table's own space, so anything beyond a
-    // translation would disagree with the transformed section; such a table is
-    // a monolithic atom anyway.
+    let table_sections = node.table_sections();
+
+    if table_sections.is_empty() {
+      return;
+    }
+    // Section extents are measured in the table's own space, so anything beyond a translation
+    // would disagree with the transformed table; such a table is a monolithic atom anyway.
     let transform = paint.transform;
 
     if (transform.a - 1.0).abs() > 1e-3
@@ -186,7 +191,8 @@ impl RepeatedSection {
     {
       return;
     }
-    let Ok(layout) = tree.scene.results.layout(paint.node_id) else {
+    let results = &tree.scene.results;
+    let Ok(layout) = results.layout(paint.node_id) else {
       return;
     };
     let Some((left, table_top, right, table_bottom)) =
@@ -194,100 +200,66 @@ impl RepeatedSection {
     else {
       return;
     };
-    let Some(rows) = node.children.as_deref() else {
+    let Ok(children) = results.box_children(paint.node_id) else {
       return;
     };
-    let Ok(children) = tree.scene.results.box_children(paint.node_id) else {
-      return;
+    let extent = |index: usize| {
+      let child = children.iter().find(|child| child.render_index == index)?;
+      let section = results.layout(child.node_id).ok()?;
+      let top = table_top + section.location.y;
+
+      Some((top, top + section.size.height))
     };
-    let content_top = table_top + layout.border.top + layout.padding.top;
-    let cells: Vec<_> = children
-      .iter()
-      .filter_map(|ordered| {
-        let child = rows.get(ordered.render_index)?;
-        let GridPlacement::Line(line) = child.context.style.misc2_data.grid_row_start else {
-          return None;
-        };
-        let GridPlacement::Span(GridPlacementSpan::Span(rowspan)) =
-          child.context.style.misc2_data.grid_row_end
-        else {
-          return None;
-        };
-        let cell = tree.scene.results.layout(ordered.node_id).ok()?;
-        let top = content_top + cell.location.y;
+    let rendered = node.children.as_deref().unwrap_or_default();
 
-        Some((
-          line,
-          line.saturating_add(rowspan as i16),
-          top,
-          top + cell.size.height,
-        ))
-      })
-      .collect();
-    let section = |kind, (start, end): (i16, i16)| {
-      let mut rows_top = f32::MAX;
-      let mut rows_bottom = f32::MIN;
-      // The body edge facing the section, so the `border-spacing` strip
-      // between them repeats with it, as Blink reserves it.
-      let mut body_edge: Option<f32> = None;
+    for (position, &(index, role)) in table_sections.iter().enumerate() {
+      let kind = match role {
+        TableSectionKind::Header => SectionKind::Header,
+        TableSectionKind::Footer => SectionKind::Footer,
+        TableSectionKind::Body => continue,
+      };
 
-      for &(line, span_end, top, bottom) in &cells {
-        if line >= start && line < end {
-          // A section cell whose rowspan reaches past the section would replay
-          // body area with it; such a table does not repeat.
-          if span_end > end {
-            return None;
-          }
-          rows_top = rows_top.min(top);
-          rows_bottom = rows_bottom.max(bottom);
-        } else if kind == SectionKind::Header && line >= end {
-          body_edge = Some(body_edge.map_or(top, |edge| edge.min(top)));
-        } else if kind == SectionKind::Footer && line < start {
-          if span_end > start {
-            return None;
-          }
-          body_edge = Some(body_edge.map_or(bottom, |edge| edge.max(bottom)));
-        }
+      // Blink repeats a header or footer only when it avoids breaking inside (`IsAvoidBreakValue`).
+      if rendered
+        .get(index)
+        .is_none_or(|section| section.context.style.misc_data.break_inside != BreakInside::Avoid)
+      {
+        continue;
       }
-      if rows_top == f32::MAX {
-        return None;
-      }
-
-      // A header starts at its cells, not the table edge, so a top caption
-      // between the two does not repeat; a footer ends at its cells for the
-      // bottom caption.
+      let Some((top, bottom)) = extent(index) else {
+        continue;
+      };
+      // The body edge facing the section goes with it, so the `border-spacing` strip between them
+      // repeats too, as Blink reserves it.
       let (top, bottom) = match kind {
         SectionKind::Header => (
-          rows_top,
-          body_edge.map_or(rows_bottom, |edge| edge.max(rows_bottom)),
+          top,
+          table_sections
+            .get(position + 1)
+            .and_then(|&(next, _)| extent(next))
+            .map_or(bottom, |(next_top, _)| next_top.max(bottom)),
         ),
         SectionKind::Footer => (
-          body_edge.map_or(rows_top, |edge| edge.min(rows_top)),
-          rows_bottom,
+          position
+            .checked_sub(1)
+            .and_then(|previous| extent(table_sections[previous].0))
+            .map_or(top, |(_, previous_bottom)| previous_bottom.min(top)),
+          bottom,
         ),
       };
 
-      (bottom > top).then_some(Self {
-        kind,
-        top,
-        bottom,
-        table_top,
-        table_bottom,
-        left,
-        right,
-      })
-    };
-
-    sections.extend(
-      node
-        .table_header_lines
-        .and_then(|lines| section(SectionKind::Header, lines)),
-    );
-    sections.extend(
-      node
-        .table_footer_lines
-        .and_then(|lines| section(SectionKind::Footer, lines)),
-    );
+      if bottom > top {
+        sections.push(Self {
+          kind,
+          top,
+          bottom,
+          table_top,
+          table_bottom,
+          left,
+          right,
+        });
+      }
+    }
   }
 
   /// The headers a page starting at `y` replays, each with the window offset
@@ -467,9 +439,6 @@ impl Paginated {
       .extend(sections.iter().map(|section| (section.top, section.bottom)));
     let starts = atoms.page_starts(&sections, content.scene.size.height, frame.window_height);
     let interactive = Interactive::collect(&content);
-
-    // Collecting the atoms left every text box holding the fragment items pages paint from.
-    content.scene.root.context.release_shaped_text();
 
     Ok(Self {
       content,

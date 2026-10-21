@@ -6,8 +6,7 @@ use std::{
   sync::{Arc, OnceLock},
 };
 
-use cssparser::{Parser, ParserInput, RuleBodyParser, Token, match_ignore_ascii_case};
-use parley::Language;
+use cssparser::{Parser, RuleBodyParser, Token, match_ignore_ascii_case};
 use pastey::paste;
 use serde::{
   Deserialize,
@@ -99,6 +98,22 @@ pub(crate) struct DeferredDeclaration {
   pub(crate) specified_value: String,
 }
 
+impl DeferredDeclaration {
+  /// Applies the value its `var()` references substitute to, or `unset` to every longhand it
+  /// targets when that value is invalid at computed-value time.
+  /// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
+  fn apply_with_parent(&self, style: &mut ComputedStyle, parent: &ComputedStyle) {
+    if apply_deferred_declaration(style, Some(parent), self) {
+      return;
+    }
+
+    for longhand in self.property.target_longhands().iter() {
+      StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset)
+        .apply_with_parent(style, parent);
+    }
+  }
+}
+
 /// A utility value read from a custom property, with the built-in scale as its
 /// fallback. Tailwind compiles `bg-red-500` to `var(--color-red-500)`.
 #[derive(Debug, Clone, PartialEq)]
@@ -113,6 +128,7 @@ impl ToCss for DeferredDeclaration {
     let name = match self.property {
       PropertyId::Longhand(id) => id.css_name(),
       PropertyId::Shorthand(id) => id.css_name(),
+      PropertyId::All => "all",
       _ => return Ok(()),
     };
 
@@ -151,7 +167,11 @@ impl TwVarRef {
 /// prefix), inherited from the `lang` attribute. Drives locale-aware shaping
 /// (Han unification, line-breaking).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Lang(parley::Language);
+pub struct Lang {
+  /// The canonical form, ASCII.
+  bytes: [u8; Lang::MAX_LEN],
+  len: u8,
+}
 
 impl<'de> Deserialize<'de> for Lang {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -169,20 +189,55 @@ impl<'de> Deserialize<'de> for Lang {
 }
 
 impl Lang {
-  /// Parses a BCP-47 tag string, canonicalizing language/script/region casing.
+  /// The longest canonical form: an eight-letter language, a script, and a region.
+  const MAX_LEN: usize = 17;
+
+  /// Parses a BCP-47 tag string, canonicalizing language/script/region casing and dropping the
+  /// subtags after them.
   pub fn parse(tag: &str) -> crate::Result<Self> {
-    Language::parse(tag)
-      .map(Self)
-      .map_err(|_| Error::InvalidLanguageTag(tag.to_string()))
+    let invalid = || Error::InvalidLanguageTag(tag.to_string());
+    let mut subtags = tag.split(['-', '_']).peekable();
+    let language = subtags
+      .next()
+      .filter(|language| {
+        matches!(language.len(), 2..=3 | 5..=8)
+          && language.bytes().all(|byte| byte.is_ascii_alphabetic())
+      })
+      .ok_or_else(invalid)?;
+    let mut canonical = language.to_ascii_lowercase();
+
+    if let Some(script) = subtags
+      .next_if(|script| script.len() == 4 && script.bytes().all(|byte| byte.is_ascii_alphabetic()))
+    {
+      canonical.push('-');
+      canonical.push_str(&script[..1].to_ascii_uppercase());
+      canonical.push_str(&script[1..].to_ascii_lowercase());
+    }
+
+    if let Some(region) = subtags.next_if(|region| {
+      (region.len() == 2 && region.bytes().all(|byte| byte.is_ascii_alphabetic()))
+        || (region.len() == 3 && region.bytes().all(|byte| byte.is_ascii_digit()))
+    }) {
+      canonical.push('-');
+      canonical.push_str(&region.to_ascii_uppercase());
+    }
+
+    let mut bytes = [0; Self::MAX_LEN];
+
+    bytes
+      .get_mut(..canonical.len())
+      .ok_or_else(invalid)?
+      .copy_from_slice(canonical.as_bytes());
+
+    Ok(Self {
+      bytes,
+      len: canonical.len() as u8,
+    })
   }
 
   /// The canonical string form (`language[-Script][-REGION]`).
   pub fn as_str(&self) -> &str {
-    self.0.as_str()
-  }
-
-  pub(crate) fn into_parlance(self) -> Language {
-    self.0
+    str::from_utf8(&self.bytes[..usize::from(self.len)]).unwrap_or_default()
   }
 }
 
@@ -247,12 +302,33 @@ macro_rules! push_four_side_declarations {
   }};
 }
 
+/// `declarations`, or the error Blink's `kNonNegative` raises when one of them is negative on a
+/// property that must not be.
+fn reject_negative<'i>(declarations: ParsedDeclarations) -> ParseResult<'i, ParsedDeclarations> {
+  if declarations
+    .iter()
+    .any(StyleDeclaration::is_negative_where_non_negative)
+  {
+    return Err(cssparser::ParseError::custom(ValueError::from(
+      Cow::Borrowed("a negative value is invalid here"),
+    )));
+  }
+
+  Ok(declarations)
+}
+
 macro_rules! define_style {
   // Field default for `ComputedStyle`: explicit `= expr` when given, else the type's `Default`.
   (@default $default:expr) => { $default };
   (@default) => { ::core::default::Default::default() };
   // `where builder = manual` keeps the generated constructor out of the way of a
   // hand-written one.
+  // `where non_negative = true` makes a negative value invalid, as Blink's `kNonNegative`.
+  (@non_negative $value:ident, true) => { $value.is_negative() };
+  (@non_negative $value:ident) => {{
+    let _ = $value;
+    false
+  }};
   (@builder $name:ident, $ty:ty, manual) => {};
   (@builder $name:ident, $ty:ty) => {
     paste! {
@@ -272,6 +348,7 @@ macro_rules! define_style {
               $(where inherit = $longhand_inherit:literal)?
               $(where anonymous = $longhand_anonymous:literal)?
               $(where builder = $longhand_builder:ident)?
+              $(where non_negative = $longhand_non_negative:literal)?
               $(= $longhand_default:expr)?,
           )*
         }
@@ -281,6 +358,7 @@ macro_rules! define_style {
     transient_longhands {
       $(
         $transient:ident: $transient_ty:ty
+          $(where non_negative = $transient_non_negative:literal)?
           $(= $transient_default:expr)?
           => ($ltr_group:ident . $transient_ltr:ident, $rtl_group:ident . $transient_rtl:ident),
       )*
@@ -332,6 +410,16 @@ macro_rules! define_style {
           $({ let _ = stringify!($transient); false },)*
         ];
 
+        /// The longhands `all` resets: every one but `direction`, `unicode-bidi`, and the logical-axis
+        /// ones, which resolve onto the others.
+        /// <https://drafts.csswg.org/css-cascade-4/#all-shorthand>
+        fn affected_by_all() -> PropertyMask {
+          [$($(Self::[<$longhand:camel>],)*)*]
+            .into_iter()
+            .filter(|property| !matches!(property, Self::Direction | Self::UnicodeBidi))
+            .collect()
+        }
+
         /// The property's CSS name, e.g. `-webkit-text-fill-color`.
         pub(crate) fn css_name(self) -> &'static str {
           static NAMES: OnceLock<Box<[Box<str>]>> = OnceLock::new();
@@ -356,7 +444,7 @@ macro_rules! define_style {
       impl LonghandId {
         fn parse_declarations<'i>(
           self,
-          input: &mut cssparser::Parser<'i, '_>,
+          input: &mut cssparser::Parser<'i>,
         ) -> ParseResult<'i, ParsedDeclarations> {
           let state = input.state();
           let keyword = input.try_parse(CssWideKeyword::from_css).ok();
@@ -379,7 +467,7 @@ macro_rules! define_style {
             )*
           };
 
-          Ok(smallvec![declaration])
+          reject_negative(smallvec![declaration])
         }
 
         const EXPECT_INFO: [(CssExpectedMessage, &'static [&'static str]); Self::COUNT] = [
@@ -395,11 +483,11 @@ macro_rules! define_style {
       impl ShorthandId {
         fn parse_declarations<'i>(
           self,
-          input: &mut cssparser::Parser<'i, '_>,
+          input: &mut cssparser::Parser<'i>,
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             $(
-              Self::[<$shorthand:camel>] => Ok(StyleDeclaration::[<expand_ $shorthand>](
+              Self::[<$shorthand:camel>] => reject_negative(StyleDeclaration::[<expand_ $shorthand>](
                 <$shorthand_ty as FromCss>::from_css(input)?,
               )),
             )*
@@ -440,6 +528,8 @@ macro_rules! define_style {
         Longhand(LonghandId),
         /// A shorthand property.
         Shorthand(ShorthandId),
+        /// The `all` shorthand, which takes only a CSS-wide keyword.
+        All,
       }
 
       impl PropertyId {
@@ -448,6 +538,7 @@ macro_rules! define_style {
             $($(stringify!($longhand) => Self::Longhand(LonghandId::[<$longhand:camel>]),)*)*
             $(stringify!($transient) => Self::Longhand(LonghandId::[<$transient:camel>]),)*
             $(stringify!($shorthand) => Self::Shorthand(ShorthandId::[<$shorthand:camel>]),)*
+            "all" => Self::All,
             _ => Self::Ignored,
           }
         }
@@ -464,7 +555,7 @@ macro_rules! define_style {
         fn parse_declarations<'i>(
           self,
           name: &str,
-          input: &mut cssparser::Parser<'i, '_>,
+          input: &mut cssparser::Parser<'i>,
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             Self::Ignored => {
@@ -493,18 +584,13 @@ macro_rules! define_style {
               let state = input.state();
 
               if let Ok(keyword) = input.try_parse(CssWideKeyword::from_css) {
-                return Ok(
-                  self
-                    .target_longhands()
-                    .iter()
-                    .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, keyword))
-                    .collect(),
-                );
+                return Ok(self.expand_keyword(keyword));
               }
 
               input.reset(&state);
               property.parse_declarations(input)
             }
+            Self::All => Ok(self.expand_keyword(CssWideKeyword::from_css(input)?)),
             Self::Longhand(property) => property.parse_declarations(input),
           }
         }
@@ -535,13 +621,7 @@ macro_rules! define_style {
           }
 
           if let Some(keyword) = CssWideKeyword::from_css_input(&css_input) {
-            return Ok(
-              self
-                .target_longhands()
-                .iter()
-                .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, keyword))
-                .collect(),
-            );
+            return Ok(self.expand_keyword(keyword));
           }
 
           if let CssInput::Unexpected(unexpected) = css_input {
@@ -558,21 +638,21 @@ macro_rules! define_style {
           };
 
           let result = {
-            let mut parser_input = ParserInput::new(&source);
-            let mut parser = Parser::new(&mut parser_input);
+            let mut parser = Parser::new(&source);
 
             // `parse_entirely`, because a declaration list drops a value with
             // anything left over and a lone value has no `;` to stop at.
             parser.parse_entirely(|parser| match self {
               Self::Shorthand(property) => property.parse_declarations(parser),
               Self::Longhand(property) => property.parse_declarations(parser),
+              Self::All => Ok(self.expand_keyword(CssWideKeyword::from_css(parser)?)),
               Self::Ignored | Self::Custom => unreachable!(),
             })
           }
           .map_err(|error| {
             (
               self.expected_message(&source),
-              CssInputParseFailure::new(&source, error.location),
+              CssInputParseFailure::new(&error),
             )
           });
 
@@ -586,6 +666,7 @@ macro_rules! define_style {
           let (message, valid_tokens) = match self {
             Self::Longhand(property) => property.expect_info(),
             Self::Shorthand(property) => property.expect_info(),
+            Self::All => (CssExpectedMessage::OneValue, CssWideKeyword::VALID_TOKENS),
             Self::Ignored | Self::Custom => return String::new(),
           };
 
@@ -602,7 +683,17 @@ macro_rules! define_style {
                 [$(LonghandId::$target),+].into_iter().collect()
               })*
             },
+            Self::All => LonghandId::affected_by_all(),
           }
+        }
+
+        /// `keyword` set on every longhand this property expands into.
+        fn expand_keyword(self, keyword: CssWideKeyword) -> ParsedDeclarations {
+          self
+            .target_longhands()
+            .iter()
+            .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, keyword))
+            .collect()
         }
       }
 
@@ -785,7 +876,7 @@ macro_rules! define_style {
               StyleDeclaration::Deferred(deferred)
                 if matches!(deferred.property, PropertyId::Longhand(LonghandId::Direction)) =>
               {
-                apply_deferred_declaration(&mut style, Some(parent), deferred);
+                deferred.apply_with_parent(&mut style, parent);
               }
               _ => {}
             }
@@ -977,6 +1068,20 @@ macro_rules! define_style {
           })
         }
 
+        /// Whether a child that inherits nothing explicitly resolves the same against both, as
+        /// Blink's `InheritedEqualIncludingInheritedVariables`.
+        pub(crate) fn inherited_equal(&self, other: &Self) -> bool {
+          self.custom_properties == other.custom_properties
+            && self.lang == other.lang
+            $(&& (!$group_ty::INHERITED || self.$group == other.$group))*
+        }
+
+        /// Whether the values only explicit inheritance reads match, as Blink's `NonInheritedEqual`.
+        pub(crate) fn non_inherited_equal(&self, other: &Self) -> bool {
+          self.original_display == other.original_display
+            $(&& ($group_ty::INHERITED || self.$group == other.$group))*
+        }
+
         /// Builds the style of an anonymous block box generated inside `parent`,
         /// resolved down to its used values like any other box's.
         pub(crate) fn for_anonymous(parent: &Self, sizing: &SizingContext) -> Self {
@@ -1093,6 +1198,36 @@ macro_rules! define_style {
       }
 
       impl StyleDeclaration {
+        /// Whether it sets a property CSS keeps non-negative to a negative value, which makes the
+        /// declaration invalid.
+        pub(crate) fn is_negative_where_non_negative(&self) -> bool {
+          match self {
+            $($(
+              Self::[<$longhand:camel>](value) => {
+                define_style!(@non_negative value $(, $longhand_non_negative)?)
+              }
+            )*)*
+            $(
+              Self::[<$transient:camel>](value) => {
+                define_style!(@non_negative value $(, $transient_non_negative)?)
+              }
+            )*
+            _ => false,
+          }
+        }
+
+        /// Whether applying it may copy a non-inherited value from the parent, which Blink's
+        /// `HasExplicitInheritance` tracks.
+        pub(crate) fn inherits_explicitly(&self) -> bool {
+          match self {
+            Self::CssWideKeyword(property, CssWideKeyword::Inherit) => {
+              !LonghandId::INHERITED[property.index()]
+            }
+            Self::Deferred(..) | Self::VarRef(..) => true,
+            _ => false,
+          }
+        }
+
         $($(
           define_style!(@builder $longhand, $longhand_ty $(, $longhand_builder)?);
         )*)*
@@ -1179,9 +1314,7 @@ macro_rules! define_style {
             Self::CustomProperty(name, value) => {
               style.custom_properties.set(name, value);
             }
-            Self::Deferred(deferred) => {
-              apply_deferred_declaration(style, Some(parent), &deferred);
-            }
+            Self::Deferred(deferred) => deferred.apply_with_parent(style, parent),
             Self::VarRef(var_ref) => var_ref.apply(style, Some(parent)),
             $($(Self::[<$longhand:camel>](value) => style.[<$group _mut>]().$longhand = value,)*)*
             $(
@@ -1292,16 +1425,16 @@ define_style! {
     /// Blink's `box` field group: sizes, margins, padding, and border widths and styles.
     box_data: StyleBoxData {
       box_sizing: BoxSizing,
-      width: Size where builder = manual,
-      height: Size where builder = manual,
-      max_width: MaxSize,
-      max_height: MaxSize,
-      min_width: Length,
-      min_height: Length,
-      padding_top: Length = Length::zero(),
-      padding_right: Length = Length::zero(),
-      padding_bottom: Length = Length::zero(),
-      padding_left: Length = Length::zero(),
+      width: Size where builder = manual where non_negative = true,
+      height: Size where builder = manual where non_negative = true,
+      max_width: MaxSize where non_negative = true,
+      max_height: MaxSize where non_negative = true,
+      min_width: Length where non_negative = true,
+      min_height: Length where non_negative = true,
+      padding_top: Length where non_negative = true = Length::zero(),
+      padding_right: Length where non_negative = true = Length::zero(),
+      padding_bottom: Length where non_negative = true = Length::zero(),
+      padding_left: Length where non_negative = true = Length::zero(),
       margin_top: Length = Length::zero(),
       margin_right: Length = Length::zero(),
       margin_bottom: Length = Length::zero(),
@@ -1363,6 +1496,7 @@ define_style! {
     /// Blink's `misc` field group: its rarely set non-inherited fields under eight bits.
     misc_data: StyleMiscData {
       flex_direction: FlexDirection,
+      box_orient: BoxOrient,
       justify_self: AlignItems,
       align_content: JustifyContent,
       justify_items: AlignItems,
@@ -1371,6 +1505,7 @@ define_style! {
       outline_style: BorderStyle,
       object_fit: ObjectFit where anonymous = true,
       r#continue: Continue where anonymous = true,
+      unicode_bidi: UnicodeBidi,
       text_decoration_style: TextDecorationStyle,
       break_before: BreakBetween,
       break_after: BreakBetween,
@@ -1460,10 +1595,12 @@ define_style! {
       font_variant_position: FontVariantPosition where inherit = true,
       font_kerning: FontKerning where inherit = true,
       font_optical_sizing: FontOpticalSizing where inherit = true,
+      font_language_override: FontLanguageOverride where inherit = true,
       font_synthesis_weight: FontSynthesic where inherit = true,
       font_synthesis_style: FontSynthesic where inherit = true,
       font_synthesis_small_caps: FontSynthesic where inherit = true,
       text_align: TextAlign where inherit = true,
+      text_align_last: TextAlignLast where inherit = true,
       letter_spacing: Length where inherit = true,
       word_spacing: Length where inherit = true,
       white_space_collapse: WhiteSpaceCollapse where inherit = true,
@@ -1473,6 +1610,7 @@ define_style! {
       visibility: Visibility where inherit = true,
       caption_side: CaptionSide where inherit = true,
       border_collapse: BorderCollapse where inherit = true,
+      empty_cells: EmptyCells where inherit = true,
       border_spacing: BorderSpacing where inherit = true,
       list_style_position: ListStylePosition where inherit = true,
     }
@@ -1484,11 +1622,15 @@ define_style! {
       image_rendering: ImageScalingAlgorithm where inherit = true,
       overflow_wrap: OverflowWrap where inherit = true,
       word_break: WordBreak where inherit = true,
+      line_break: LineBreak where inherit = true,
+      hyphens: Hyphens where inherit = true,
+      text_justify: TextJustify where inherit = true,
       clip_rule: FillRule where inherit = true,
     }
     /// Blink's `misc-inherited->misc-inherited1` field group, which Blink nests in `misc-inherited`.
     misc_inherited1_data: StyleMiscInherited1Data {
       block_ellipsis: BlockEllipsis where inherit = true,
+      hyphenate_character: HyphenateCharacter where inherit = true,
       list_style_image: ListStyleImage where inherit = true,
       list_style_type: ListStyleType where inherit = true,
       orphans: MinLines where inherit = true,
@@ -1506,8 +1648,20 @@ define_style! {
   transient_longhands {
     margin_inline_start: Length = Length::zero() => (box_data.margin_left, box_data.margin_right),
     margin_inline_end: Length = Length::zero() => (box_data.margin_right, box_data.margin_left),
-    padding_inline_start: Length = Length::zero() => (box_data.padding_left, box_data.padding_right),
-    padding_inline_end: Length = Length::zero() => (box_data.padding_right, box_data.padding_left),
+    padding_inline_start: Length where non_negative = true = Length::zero() => (box_data.padding_left, box_data.padding_right),
+    padding_inline_end: Length where non_negative = true = Length::zero() => (box_data.padding_right, box_data.padding_left),
+    inset_inline_start: Length => (surround_data.left, surround_data.right),
+    inset_inline_end: Length => (surround_data.right, surround_data.left),
+    border_inline_start_width: LineWidth => (box_data.border_left_width, box_data.border_right_width),
+    border_inline_end_width: LineWidth => (box_data.border_right_width, box_data.border_left_width),
+    border_inline_start_style: BorderStyle => (box_data.border_left_style, box_data.border_right_style),
+    border_inline_end_style: BorderStyle => (box_data.border_right_style, box_data.border_left_style),
+    border_inline_start_color: ColorInput => (surround_data.border_left_color, surround_data.border_right_color),
+    border_inline_end_color: ColorInput => (surround_data.border_right_color, surround_data.border_left_color),
+    border_start_start_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()) => (surround_data.border_top_left_radius, surround_data.border_top_right_radius),
+    border_start_end_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()) => (surround_data.border_top_right_radius, surround_data.border_top_left_radius),
+    border_end_start_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()) => (surround_data.border_bottom_left_radius, surround_data.border_bottom_right_radius),
+    border_end_end_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()) => (surround_data.border_bottom_right_radius, surround_data.border_bottom_left_radius),
   }
   shorthands {
     list_style: ListStyleShorthand => [ListStyleType, ListStylePosition, ListStyleImage] |value, target| {
@@ -1564,6 +1718,14 @@ define_style! {
     padding_block: SpacePair<Length> => [PaddingTop, PaddingBottom] |value, target| {
       push_axis_declarations!(target, value, padding_top, padding_bottom);
     },
+    // The block-axis and size logical properties map as in `writing-mode: horizontal-tb`, the
+    // only writing mode takumi lays out.
+    padding_block_start: Length => [PaddingTop] |value, target| {
+      target.push(StyleDeclaration::padding_top(value));
+    },
+    padding_block_end: Length => [PaddingBottom] |value, target| {
+      target.push(StyleDeclaration::padding_bottom(value));
+    },
     margin: Sides<Length> => [MarginTop, MarginRight, MarginBottom, MarginLeft] |value, target| {
       push_four_side_declarations!(
         target,
@@ -1580,14 +1742,44 @@ define_style! {
     margin_block: SpacePair<Length> => [MarginTop, MarginBottom] |value, target| {
       push_axis_declarations!(target, value, margin_top, margin_bottom);
     },
+    margin_block_start: Length => [MarginTop] |value, target| {
+      target.push(StyleDeclaration::margin_top(value));
+    },
+    margin_block_end: Length => [MarginBottom] |value, target| {
+      target.push(StyleDeclaration::margin_bottom(value));
+    },
     inset: Sides<Length> => [Top, Right, Bottom, Left] |value, target| {
       push_four_side_declarations!(target, value.0, top, right, bottom, left);
     },
-    inset_inline: SpacePair<Length> => [Left, Right] |value, target| {
-      push_axis_declarations!(target, value, left, right);
+    inset_inline: SpacePair<Length> => [InsetInlineStart, InsetInlineEnd] |value, target| {
+      push_axis_declarations!(target, value, inset_inline_start, inset_inline_end);
     },
     inset_block: SpacePair<Length> => [Top, Bottom] |value, target| {
       push_axis_declarations!(target, value, top, bottom);
+    },
+    inset_block_start: Length => [Top] |value, target| {
+      target.push(StyleDeclaration::top(value));
+    },
+    inset_block_end: Length => [Bottom] |value, target| {
+      target.push(StyleDeclaration::bottom(value));
+    },
+    inline_size: Size => [Width] |value, target| {
+      target.push(StyleDeclaration::width(value));
+    },
+    block_size: Size => [Height] |value, target| {
+      target.push(StyleDeclaration::height(value));
+    },
+    min_inline_size: Length => [MinWidth] |value, target| {
+      target.push(StyleDeclaration::min_width(value));
+    },
+    min_block_size: Length => [MinHeight] |value, target| {
+      target.push(StyleDeclaration::min_height(value));
+    },
+    max_inline_size: MaxSize => [MaxWidth] |value, target| {
+      target.push(StyleDeclaration::max_width(value));
+    },
+    max_block_size: MaxSize => [MaxHeight] |value, target| {
+      target.push(StyleDeclaration::max_height(value));
     },
     mask: Backgrounds => [MaskImage, MaskPosition, MaskSize, MaskRepeat] |value, target| {
       target.push(StyleDeclaration::mask_position(
@@ -1613,23 +1805,16 @@ define_style! {
       target.push(StyleDeclaration::flex_direction(value.direction));
       target.push(StyleDeclaration::flex_wrap(value.wrap));
     },
-    box_orient: BoxOrient => [FlexDirection] |value, target| {
-      target.push(StyleDeclaration::flex_direction(value.into()));
-    },
     box_pack: BoxPack => [JustifyContent] |value, target| {
       target.push(StyleDeclaration::justify_content(value.into()));
     },
     box_align: BoxAlign => [AlignItems] |value, target| {
       target.push(StyleDeclaration::align_items(value.into()));
     },
-    flex: Option<Flex> => [FlexGrow, FlexShrink, FlexBasis] |value, target| {
-      target.push(StyleDeclaration::flex_grow(
-        value.map(|value| FlexGrow(value.grow)),
-      ));
-      target.push(StyleDeclaration::flex_shrink(
-        value.map(|value| FlexGrow(value.shrink)),
-      ));
-      target.push(StyleDeclaration::flex_basis(value.map(|value| value.basis)));
+    flex: Flex => [FlexGrow, FlexShrink, FlexBasis] |value, target| {
+      target.push(StyleDeclaration::flex_grow(Some(FlexGrow(value.grow))));
+      target.push(StyleDeclaration::flex_shrink(Some(FlexGrow(value.shrink))));
+      target.push(StyleDeclaration::flex_basis(Some(value.basis)));
     },
     place_items: PlaceItems => [AlignItems, JustifyItems] |value, target| {
       target.push(StyleDeclaration::align_items(value.align));
@@ -1687,13 +1872,53 @@ define_style! {
         border_left_width
       );
     },
-    border_inline_width: SpacePair<LineWidth> => [BorderLeftWidth, BorderRightWidth] |value, target| {
+    border_inline_width: SpacePair<LineWidth> => [BorderInlineStartWidth, BorderInlineEndWidth] |value, target| {
       push_axis_declarations!(
         target,
         value,
-        border_left_width,
-        border_right_width
+        border_inline_start_width,
+        border_inline_end_width
       );
+    },
+    border_inline_style: SpacePair<BorderStyle> => [BorderInlineStartStyle, BorderInlineEndStyle] |value, target| {
+      push_axis_declarations!(
+        target,
+        value,
+        border_inline_start_style,
+        border_inline_end_style
+      );
+    },
+    border_inline_color: SpacePair<ColorInput> => [BorderInlineStartColor, BorderInlineEndColor] |value, target| {
+      push_axis_declarations!(
+        target,
+        value,
+        border_inline_start_color,
+        border_inline_end_color
+      );
+    },
+    border_block_style: SpacePair<BorderStyle> => [BorderTopStyle, BorderBottomStyle] |value, target| {
+      push_axis_declarations!(target, value, border_top_style, border_bottom_style);
+    },
+    border_block_color: SpacePair<ColorInput> => [BorderTopColor, BorderBottomColor] |value, target| {
+      push_axis_declarations!(target, value, border_top_color, border_bottom_color);
+    },
+    border_block_start_width: LineWidth => [BorderTopWidth] |value, target| {
+      target.push(StyleDeclaration::border_top_width(value));
+    },
+    border_block_end_width: LineWidth => [BorderBottomWidth] |value, target| {
+      target.push(StyleDeclaration::border_bottom_width(value));
+    },
+    border_block_start_style: BorderStyle => [BorderTopStyle] |value, target| {
+      target.push(StyleDeclaration::border_top_style(value));
+    },
+    border_block_end_style: BorderStyle => [BorderBottomStyle] |value, target| {
+      target.push(StyleDeclaration::border_bottom_style(value));
+    },
+    border_block_start_color: ColorInput => [BorderTopColor] |value, target| {
+      target.push(StyleDeclaration::border_top_color(value));
+    },
+    border_block_end_color: ColorInput => [BorderBottomColor] |value, target| {
+      target.push(StyleDeclaration::border_bottom_color(value));
     },
     border_block_width: SpacePair<LineWidth> => [BorderTopWidth, BorderBottomWidth] |value, target| {
       push_axis_declarations!(
@@ -1736,6 +1961,42 @@ define_style! {
       target.push(StyleDeclaration::border_left_width(value.width));
       target.push(StyleDeclaration::border_left_style(value.style));
       target.push(StyleDeclaration::border_left_color(value.color));
+    },
+    border_inline: Border => [BorderInlineStartWidth, BorderInlineEndWidth, BorderInlineStartStyle, BorderInlineEndStyle, BorderInlineStartColor, BorderInlineEndColor] |value, target| {
+      target.push(StyleDeclaration::border_inline_start_width(value.width));
+      target.push(StyleDeclaration::border_inline_end_width(value.width));
+      target.push(StyleDeclaration::border_inline_start_style(value.style));
+      target.push(StyleDeclaration::border_inline_end_style(value.style));
+      target.push(StyleDeclaration::border_inline_start_color(value.color));
+      target.push(StyleDeclaration::border_inline_end_color(value.color));
+    },
+    border_inline_start: Border => [BorderInlineStartWidth, BorderInlineStartStyle, BorderInlineStartColor] |value, target| {
+      target.push(StyleDeclaration::border_inline_start_width(value.width));
+      target.push(StyleDeclaration::border_inline_start_style(value.style));
+      target.push(StyleDeclaration::border_inline_start_color(value.color));
+    },
+    border_inline_end: Border => [BorderInlineEndWidth, BorderInlineEndStyle, BorderInlineEndColor] |value, target| {
+      target.push(StyleDeclaration::border_inline_end_width(value.width));
+      target.push(StyleDeclaration::border_inline_end_style(value.style));
+      target.push(StyleDeclaration::border_inline_end_color(value.color));
+    },
+    border_block: Border => [BorderTopWidth, BorderBottomWidth, BorderTopStyle, BorderBottomStyle, BorderTopColor, BorderBottomColor] |value, target| {
+      target.push(StyleDeclaration::border_top_width(value.width));
+      target.push(StyleDeclaration::border_bottom_width(value.width));
+      target.push(StyleDeclaration::border_top_style(value.style));
+      target.push(StyleDeclaration::border_bottom_style(value.style));
+      target.push(StyleDeclaration::border_top_color(value.color));
+      target.push(StyleDeclaration::border_bottom_color(value.color));
+    },
+    border_block_start: Border => [BorderTopWidth, BorderTopStyle, BorderTopColor] |value, target| {
+      target.push(StyleDeclaration::border_top_width(value.width));
+      target.push(StyleDeclaration::border_top_style(value.style));
+      target.push(StyleDeclaration::border_top_color(value.color));
+    },
+    border_block_end: Border => [BorderBottomWidth, BorderBottomStyle, BorderBottomColor] |value, target| {
+      target.push(StyleDeclaration::border_bottom_width(value.width));
+      target.push(StyleDeclaration::border_bottom_style(value.style));
+      target.push(StyleDeclaration::border_bottom_color(value.color));
     },
     border_style: Sides<BorderStyle> => [BorderTopStyle, BorderRightStyle, BorderBottomStyle, BorderLeftStyle] |value, target| {
       push_four_side_declarations!(
@@ -1806,6 +2067,24 @@ define_style! {
       target.push(StyleDeclaration::font_synthesis_style(value.style));
       target.push(StyleDeclaration::font_synthesis_small_caps(value.small_caps));
     },
+    font: FontShorthand => [FontStyle, FontVariantLigatures, FontVariantCaps, FontVariantNumeric, FontVariantEastAsian, FontVariantPosition, FontWeight, FontStretch, FontSize, LineHeight, FontFamily, FontOpticalSizing, FontKerning, FontFeatureSettings, FontVariationSettings, FontLanguageOverride] |value, target| {
+      target.push(StyleDeclaration::font_style(value.style));
+      target.push(StyleDeclaration::font_variant_ligatures(FontVariantLigatures::default()));
+      target.push(StyleDeclaration::font_variant_caps(value.caps));
+      target.push(StyleDeclaration::font_variant_numeric(FontVariantNumeric::default()));
+      target.push(StyleDeclaration::font_variant_east_asian(FontVariantEastAsian::default()));
+      target.push(StyleDeclaration::font_variant_position(FontVariantPosition::default()));
+      target.push(StyleDeclaration::font_weight(value.weight));
+      target.push(StyleDeclaration::font_stretch(value.stretch));
+      target.push(StyleDeclaration::font_size(value.size));
+      target.push(StyleDeclaration::line_height(value.line_height));
+      target.push(StyleDeclaration::font_family(value.family));
+      target.push(StyleDeclaration::font_optical_sizing(FontOpticalSizing::default()));
+      target.push(StyleDeclaration::font_kerning(FontKerning::default()));
+      target.push(StyleDeclaration::font_feature_settings(FontFeatureSettings::default()));
+      target.push(StyleDeclaration::font_variation_settings(FontVariationSettings::default()));
+      target.push(StyleDeclaration::font_language_override(FontLanguageOverride::default()));
+    },
     font_variant: FontVariant => [FontVariantLigatures, FontVariantNumeric, FontVariantEastAsian, FontVariantCaps, FontVariantPosition] |value, target| {
       target.push(StyleDeclaration::font_variant_ligatures(value.ligatures));
       target.push(StyleDeclaration::font_variant_numeric(value.numeric));
@@ -1841,6 +2120,11 @@ define_style! {
       target.push(StyleDeclaration::max_lines(value.max_lines));
       target.push(StyleDeclaration::block_ellipsis(value.block_ellipsis));
       target.push(StyleDeclaration::r#continue(value.line_continue));
+    },
+    webkit_line_clamp: WebkitLineClamp => [MaxLines, BlockEllipsis, Continue] |value, target| {
+      target.push(StyleDeclaration::max_lines(value.0.max_lines));
+      target.push(StyleDeclaration::block_ellipsis(value.0.block_ellipsis));
+      target.push(StyleDeclaration::r#continue(value.0.line_continue));
     },
   }
 }
@@ -1881,15 +2165,14 @@ pub(crate) enum CssWideKeyword {
 }
 
 impl<'i> FromCss<'i> for CssWideKeyword {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let ident = input.expect_ident_cloned()?;
 
     match_ignore_ascii_case! { ident.as_ref(),
       "initial" => Ok(Self::Initial),
       "inherit" => Ok(Self::Inherit),
       "unset" => Ok(Self::Unset),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident))),
+      _ => Err(unexpected_token!(&Token::Ident(ident))),
     }
   }
 
@@ -2111,6 +2394,14 @@ impl StyleDeclarationBlock {
     self.declarations.iter()
   }
 
+  /// Whether a declaration may copy a non-inherited value from the parent.
+  pub(crate) fn inherits_explicitly(&self) -> bool {
+    self
+      .declarations
+      .iter()
+      .any(StyleDeclaration::inherits_explicitly)
+  }
+
   /// The number of declarations in this block.
   pub fn len(&self) -> usize {
     self.declarations.len()
@@ -2154,7 +2445,7 @@ impl StyleDeclarationBlock {
   }
 
   /// Parses one declaration block for the given property name.
-  pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let property = PropertyId::from_kebab_case(name);
     let start = input.position();
 
@@ -2187,8 +2478,7 @@ impl StyleDeclarationBlock {
   /// its own declaration and nothing else. [`FromStr`] stays strict for callers that want to
   /// know the input was not fully understood.
   pub fn parse_loosy(input: &str) -> Self {
-    let mut parser_input = ParserInput::new(input);
-    let mut parser = Parser::new(&mut parser_input);
+    let mut parser = Parser::new(input);
     let mut declaration_parser = StyleDeclarationParser;
     let mut block = Self::default();
 
@@ -2203,15 +2493,14 @@ impl FromStr for StyleDeclarationBlock {
   type Err = StyleDeclarationBlockParseError;
 
   fn from_str(input: &str) -> Result<Self, Self::Err> {
-    let mut parser_input = ParserInput::new(input);
-    let mut parser = Parser::new(&mut parser_input);
+    let mut parser = Parser::new(input);
     let mut declaration_parser = StyleDeclarationParser;
     let mut block = Self::default();
 
     for result in RuleBodyParser::new(&mut parser, &mut declaration_parser) {
       match result {
         Ok(declarations) => block.append(declarations),
-        Err((error, context)) => {
+        Err((error, context, _)) => {
           return Err(StyleDeclarationBlockParseError::InvalidDeclarationBlock {
             input: input.to_owned(),
             context: context.to_owned(),

@@ -1,21 +1,21 @@
 //! Inline items flattened from a render subtree: text, spacers and boxes.
 
-use crate::{
-  context::RenderContext,
-  font_style::{BoxLineHeight, SizedFontStyle},
-  geometry::{ComputedLayout, Point, Rect, Size},
-  layout::{border::BorderProperties, node::Node, tree::RenderNode},
-  style::{
-    Color, Direction, Display, Float, Length, Position, ResolvedVerticalAlign, Sides,
-    SizingContext, SpacePair, WhiteSpaceCollapse,
-  },
-  text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
-};
-use parley::{InlineBox, InlineBoxKind};
+use std::{borrow::Cow, iter::successors, ops::Range, ptr, rc::Rc, sync::Arc};
+
+use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
-use super::{line_box::BoxFont, metrics::Strut, outline::InlineOutline};
-use std::{borrow::Cow, iter::successors, ops::Range, rc::Rc, sync::Arc};
+use super::{
+  decorations::BoxFont, inline_item::InlineItemType, inline_node_data::InlineNodeData,
+  metrics::InlineBoxKind, outline::InlineOutline,
+};
+use crate::{
+  font_style::SizedFontStyle,
+  geometry::{ComputedLayout, Point, Rect, Size},
+  layout::{border::BorderProperties, node::Node, tree::RenderNode},
+  layout_unit::LayoutUnit,
+  style::{Color, Direction, Display, Float, Length, Position, Sides, SizingContext, SpacePair},
+};
 
 /// An out-of-flow box inside inline content.
 #[derive(Clone)]
@@ -64,7 +64,6 @@ pub struct InlineBoxItem<'c> {
   pub render_node: &'c RenderNode,
   /// Innermost enclosing inline span, if any.
   pub(crate) decorations: Option<Rc<DecorationLink<'c>>>,
-  pub(crate) inline_box: InlineBox,
   pub(crate) paint_width: f32,
   pub(crate) paint_height: f32,
   /// Margin around the box.
@@ -72,79 +71,23 @@ pub struct InlineBoxItem<'c> {
   pub(crate) padding: Rect<f32>,
   pub(crate) border: Rect<f32>,
   pub(crate) baseline_offset: Option<f32>,
-  pub(crate) vertical_align: ResolvedVerticalAlign,
-}
-
-/// The space lines lay out in, which `position: relative` insets resolve against, after Blink's
-/// `ConstraintSpace`.
-#[derive(Clone, Copy)]
-pub(crate) struct LineSpace {
-  direction: Direction,
-  /// The lines' available width, `None` when indefinite.
-  inline_size: Option<f32>,
-  /// The height they lay out in, `None` when it depends on them.
-  block_size: Option<f32>,
-}
-
-impl LineSpace {
-  /// The space lines break at `max_width` in for the formatting context `context` styles.
-  pub(crate) fn of(context: &RenderContext, max_width: f32) -> Self {
-    Self {
-      direction: context.style.inherited_data.direction,
-      inline_size: max_width.is_finite().then_some(max_width),
-      block_size: context.definite_height(),
-    }
-  }
-
-  /// Blink's `ComputeRelativeOffsetForInline`: how far `position: relative` moves the
-  /// inline-level `node` on these lines, its start inset winning when both horizontal ones are
-  /// set. A percentage inset against an indefinite size counts as `auto`.
-  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/relative_utils.cc>
-  pub(crate) fn relative_offset(self, node: &RenderNode) -> Point<f32> {
-    let style = &node.context.style;
-
-    if style.base_data.position != Position::Relative {
-      return Point::ZERO;
-    }
-
-    let inset = |length: Length, basis: Option<f32>| match (length, basis) {
-      (Length::Auto, _) => None,
-      (length, None) if length.has_percentage() => None,
-      (length, basis) => Some(length.to_px(&node.context.sizing, basis.unwrap_or(0.0))),
-    };
-    let surround = &style.surround_data;
-    let (left, right) = (
-      inset(surround.left, self.inline_size),
-      inset(surround.right, self.inline_size),
-    );
-    let x = match (left, right, self.direction) {
-      (Some(left), _, Direction::Ltr) | (Some(left), None, Direction::Rtl) => left,
-      (_, Some(right), _) => -right,
-      (None, None, _) => 0.0,
-    };
-    let y = inset(surround.top, self.block_size)
-      .or_else(|| inset(surround.bottom, self.block_size).map(|bottom| -bottom))
-      .unwrap_or(0.0);
-
-    Point { x, y }
-  }
 }
 
 impl RenderNode {
   /// Whether a float sits among the inline content this node lays out, found the way
-  /// [`collect_inline_items`] walks it.
+  /// [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines) walks it.
   pub(crate) fn has_inline_floats(&self) -> bool {
     self.children.iter().flatten().any(|child| {
       if child.participates_as_inline_box() {
-        child.inline_box_kind() == InlineBoxKind::CustomOutOfFlow
+        child.inline_box_kind() == InlineBoxKind::Float
       } else {
-        child.has_inline_floats()
+        !child.is_block_in_inline && child.has_inline_floats()
       }
     })
   }
 
   /// Whether an out-of-flow box sits among the inline content this node lays out, found the way
-  /// [`collect_inline_items`] walks it.
+  /// [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines) walks it.
   pub(crate) fn holds_inline_out_of_flow(&self) -> bool {
     self.children.iter().flatten().any(|child| {
       child.is_out_of_flow() || (child.is_inline_span() && child.holds_inline_out_of_flow())
@@ -152,7 +95,7 @@ impl RenderNode {
   }
 
   /// The out-of-flow boxes among the inline content this node lays out, found the way
-  /// [`collect_inline_items`] walks it.
+  /// [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines) walks it.
   pub(crate) fn inline_out_of_flow(&self) -> Vec<InlineOutOfFlow<'_>> {
     fn visit<'n>(
       node: &'n RenderNode,
@@ -188,7 +131,7 @@ impl RenderNode {
 
   /// Whether the node is an inline box whose content joins its parent's lines rather than an
   /// atomic box of its own.
-  fn is_inline_span(&self) -> bool {
+  pub(crate) fn is_inline_span(&self) -> bool {
     self.context.style.base_data.display.is_inline() && !self.participates_as_inline_box()
   }
 
@@ -206,12 +149,12 @@ impl RenderNode {
     self.context.style.base_data.position.is_positioned() || self.contains_fixed_as_inline()
   }
 
-  /// How parley places the box standing in for this node.
+  /// How the box standing in for this node sits in its line.
   pub(super) fn inline_box_kind(&self) -> InlineBoxKind {
     if self.context.style.base_data.position.is_out_of_flow() {
       InlineBoxKind::OutOfFlow
     } else if self.context.style.base_data.float != Float::None {
-      InlineBoxKind::CustomOutOfFlow
+      InlineBoxKind::Float
     } else {
       InlineBoxKind::InFlow
     }
@@ -220,13 +163,6 @@ impl RenderNode {
 
 /// An inline item after text processing, ready for layout.
 pub enum ProcessedInlineSpan<'c> {
-  /// The synthetic direction mark leading the paragraph.
-  DirectionMark {
-    /// Base direction the mark forces.
-    direction: Direction,
-    /// Resolved font style, borrowed from the first text span.
-    style: Box<SizedFontStyle<'c>>,
-  },
   /// A styled text span.
   Text {
     /// Byte range within the laid-out text.
@@ -239,17 +175,12 @@ pub enum ProcessedInlineSpan<'c> {
     link: Option<Arc<str>>,
     /// Innermost enclosing inline span, if any.
     decorations: Option<Rc<DecorationLink<'c>>>,
+    /// Source order of the element the text belongs to, absent for text of the formatting
+    /// context itself or of generated content.
+    element: Option<usize>,
   },
   /// An inline box.
   Box(InlineBoxItem<'c>),
-  /// A zero-height box reserving an inline span's horizontal padding. Naive next to Blink: parley
-  /// may break a line after any inline box, where Blink never breaks at a span's edge.
-  Spacer {
-    /// The box the spacer occupies in the layout.
-    inline_box: InlineBox,
-    /// Innermost enclosing inline span, if any.
-    decorations: Option<Rc<DecorationLink<'c>>>,
-  },
 }
 
 impl<'c> ProcessedInlineSpan<'c> {
@@ -264,21 +195,8 @@ impl<'c> ProcessedInlineSpan<'c> {
   /// The spans around this one, innermost first.
   pub(crate) fn chain(&self) -> Option<&Rc<DecorationLink<'c>>> {
     match self {
-      Self::Text { decorations, .. } | Self::Spacer { decorations, .. } => decorations.as_ref(),
+      Self::Text { decorations, .. } => decorations.as_ref(),
       Self::Box(item) => item.decorations.as_ref(),
-      Self::DirectionMark { .. } => None,
-    }
-  }
-
-  /// How far `position: relative` on it and the spans around it moves it on lines of `space`.
-  pub(crate) fn relative_offset(&self, space: LineSpace) -> Point<f32> {
-    let spans = self
-      .chain()
-      .map_or(Point::ZERO, |link| link.relative_offset(space));
-
-    match self {
-      Self::Box(item) => spans + space.relative_offset(item.render_node),
-      _ => spans,
     }
   }
 }
@@ -291,17 +209,10 @@ pub(crate) struct InlineDecoration<'c> {
   pub(crate) owner: &'c RenderNode,
   /// Unique among the spans one collection opens.
   pub(crate) id: usize,
-  /// How the span aligns against its parent.
-  pub(crate) vertical_align: ResolvedVerticalAlign,
   /// The font the span's fragments and its children align by.
   pub(crate) font: BoxFont,
   /// Whether the fragments paint, which a span kept only as a containing block does not.
   pub(crate) paints: bool,
-  /// Whether the span's line fragments are tracked, to paint or to bound the out-of-flow boxes
-  /// it contains.
-  pub(crate) has_fragments: bool,
-  /// How far the span grows every line it is open on.
-  pub(crate) strut: Option<Strut>,
   pub(crate) color: Color,
   pub(crate) padding: Rect<f32>,
   /// The border's widths, colours and styles; each fragment resolves its radii from `radius`.
@@ -350,180 +261,6 @@ impl<'c> DecorationLink<'c> {
   pub(crate) fn ancestors(&self) -> impl Iterator<Item = &DecorationLink<'c>> {
     successors(Some(self), |link| link.parent.as_deref())
   }
-
-  /// How far `position: relative` on this span and the spans around it moves its content on
-  /// lines of `space`.
-  pub(crate) fn relative_offset(&self, space: LineSpace) -> Point<f32> {
-    self.ancestors().fold(Point::ZERO, |offset, link| {
-      offset + space.relative_offset(link.decoration.owner)
-    })
-  }
-}
-
-/// A piece of inline content collected from the tree.
-pub enum InlineItem<'c> {
-  /// An inline-level render node.
-  RenderNode {
-    /// The node.
-    render_node: &'c RenderNode,
-    /// Innermost enclosing inline span, if any.
-    decorations: Option<Rc<DecorationLink<'c>>>,
-  },
-  /// A run of text.
-  Text {
-    /// The text content.
-    text: Cow<'c, str>,
-    /// Render context for the text.
-    context: &'c RenderContext,
-    /// URI of the nearest enclosing anchor's `href`, if any.
-    link: Option<Arc<str>>,
-    /// Innermost enclosing inline span, if any.
-    decorations: Option<Rc<DecorationLink<'c>>>,
-  },
-  /// Advance an inline span's horizontal padding reserves at its edge.
-  Spacer {
-    /// The padding width in px.
-    width: f32,
-    /// Innermost enclosing inline span (the padded span itself), if any.
-    decorations: Option<Rc<DecorationLink<'c>>>,
-  },
-}
-
-/// Flatten a render node subtree into its inline items.
-pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
-  let mut items = Vec::new();
-  collect_inline_items_impl(root, 0, None, None, &mut 0, &mut items);
-  items
-}
-
-/// A marker holds the start of the line, so the whitespace that a line start
-/// would have collapsed is collapsed against the marker instead.
-fn trim_leading_whitespace(item: &mut InlineItem<'_>) {
-  let InlineItem::Text { text, context, .. } = item else {
-    return;
-  };
-
-  // `preserve-breaks` keeps its newlines but still collapses spaces and tabs.
-  let collapsible: &[char] = match context.style.inherited_data.white_space_collapse {
-    WhiteSpaceCollapse::Collapse => &COLLAPSIBLE_WHITESPACE,
-    WhiteSpaceCollapse::PreserveBreaks => &HORIZONTAL_WHITESPACE,
-    WhiteSpaceCollapse::Preserve | WhiteSpaceCollapse::PreserveSpaces => return,
-  };
-
-  let trimmed = text.trim_start_matches(collapsible);
-  if trimmed.len() != text.len() {
-    *text = Cow::Owned(trimmed.to_owned());
-  }
-}
-
-fn collect_inline_items_impl<'n>(
-  node: &'n RenderNode,
-  depth: usize,
-  link: Option<&Arc<str>>,
-  decorations: Option<&Rc<DecorationLink<'n>>>,
-  next_span: &mut usize,
-  items: &mut Vec<InlineItem<'n>>,
-) {
-  if depth > 0 && (node.participates_as_inline_box() || node.is_out_of_flow()) {
-    items.push(InlineItem::RenderNode {
-      render_node: node,
-      decorations: decorations.cloned(),
-    });
-    return;
-  }
-  let anchor = node
-    .node
-    .as_ref()
-    .and_then(Node::href)
-    .map(Arc::<str>::from);
-  let link = anchor.as_ref().or(link);
-  let own_decoration = inline_span_decoration(node, depth, *next_span).map(|decoration| {
-    *next_span += 1;
-
-    Rc::new(DecorationLink {
-      decoration,
-      parent: decorations.cloned(),
-    })
-  });
-  // The margins sit outside the span's own background, on its parent's.
-  let outer_decorations = decorations;
-  let decorations = own_decoration.as_ref().or(decorations);
-
-  if let Some(marker) = node.marker.as_deref() {
-    items.push(InlineItem::RenderNode {
-      render_node: marker,
-      decorations: None,
-    });
-  }
-
-  let content_start = items.len();
-  let (margin, border_padding) = inline_span_spacing(node, depth);
-  let direction = node.context.style.inherited_data.direction;
-  let (margin_start, margin_end) = direction.inline_sides(margin.left, margin.right);
-  let (border_padding_start, border_padding_end) =
-    direction.inline_sides(border_padding.left, border_padding.right);
-
-  if margin_start != 0.0 {
-    items.push(InlineItem::Spacer {
-      width: margin_start,
-      decorations: outer_decorations.cloned(),
-    });
-  }
-  if border_padding_start > 0.0 {
-    items.push(InlineItem::Spacer {
-      width: border_padding_start,
-      decorations: decorations.cloned(),
-    });
-  }
-
-  if let Some(text) = node.anonymous_text_content.as_deref() {
-    items.push(InlineItem::Text {
-      text: Cow::Borrowed(text),
-      context: &node.context,
-      link: link.cloned(),
-      decorations: decorations.cloned(),
-    });
-  }
-
-  if let Some(inline_content) = node.node.as_ref().and_then(Node::inline_content) {
-    match inline_content {
-      InlineContentKind::Box => items.push(InlineItem::RenderNode {
-        render_node: node,
-        decorations: decorations.cloned(),
-      }),
-      InlineContentKind::Text(text) => items.push(InlineItem::Text {
-        text,
-        context: &node.context,
-        link: link.cloned(),
-        decorations: decorations.cloned(),
-      }),
-    }
-  }
-
-  if let Some(children) = &node.children {
-    for child in children {
-      collect_inline_items_impl(child, depth + 1, link, decorations, next_span, items);
-    }
-  }
-
-  if border_padding_end > 0.0 {
-    items.push(InlineItem::Spacer {
-      width: border_padding_end,
-      decorations: decorations.cloned(),
-    });
-  }
-  if margin_end != 0.0 {
-    items.push(InlineItem::Spacer {
-      width: margin_end,
-      decorations: outer_decorations.cloned(),
-    });
-  }
-
-  if node.marker.is_some()
-    && let Some(first) = items.get_mut(content_start)
-  {
-    trim_leading_whitespace(first);
-  }
 }
 
 /// Whether this node is a non-replaced `display: inline` span (the inline formatting context's root
@@ -535,27 +272,6 @@ fn is_inline_span(node: &RenderNode, depth: usize) -> bool {
       node.node.as_ref().and_then(Node::inline_content),
       Some(InlineContentKind::Box)
     )
-}
-
-/// The margins, and the borders with the padding, an inline span reserves on the line, each
-/// side's only where it starts or ends. A negative margin pulls the neighbouring content in.
-fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>) {
-  if !is_inline_span(node, depth) {
-    return Default::default();
-  }
-
-  let border = node.border_px();
-  let padding = node.padding_px();
-
-  (
-    node.margin_px(),
-    Rect {
-      top: border.top + padding.top,
-      right: border.right + padding.right,
-      bottom: border.bottom + padding.bottom,
-      left: border.left + padding.left,
-    },
-  )
 }
 
 /// The inline box an inline span opens with `id`, or `None` for a node that is not one.
@@ -585,14 +301,8 @@ fn inline_span_decoration(
   Some(InlineDecoration {
     owner: node,
     id,
-    vertical_align: style
-      .base_data
-      .vertical_align
-      .resolve(&node.context.sizing, node.context.sizing.line_height),
     font: BoxFont::of(&node.context),
     paints,
-    has_fragments: paints || node.contains_absolute_as_inline(),
-    strut: Strut::of(&node.context, BoxLineHeight::of(style, &node.context)),
     color,
     padding: node.padding_px(),
     border,
@@ -614,13 +324,194 @@ pub(crate) enum InlineContentKind<'c> {
   Box,
 }
 
+impl InlineBoxItem<'_> {
+  /// Paints the box around a border box `inline_size` by `block_size`; its margin box's size.
+  pub(crate) fn paint_border_box(
+    &mut self,
+    inline_size: LayoutUnit,
+    block_size: LayoutUnit,
+  ) -> Size<f32> {
+    self.paint_width = inline_size.to_float() + self.margin.left + self.margin.right;
+    self.paint_height = block_size.to_float() + self.margin.top + self.margin.bottom;
+
+    Size {
+      width: self.paint_width,
+      height: self.paint_height,
+    }
+  }
+}
+
+/// The box's border box: its line footprint less its margins.
 impl From<&InlineBoxItem<'_>> for ComputedLayout {
   fn from(value: &InlineBoxItem<'_>) -> Self {
     ComputedLayout::new(
       Point::ZERO,
-      Size::new(value.paint_width, value.paint_height),
+      Size::new(
+        (value.paint_width - value.margin.horizontal()).max(0.0),
+        (value.paint_height - value.margin.vertical()).max(0.0),
+      ),
       value.border,
       value.padding,
     )
   }
+}
+
+/// The spans painting reads for an inline formatting context the inline layout port laid out:
+/// a text span per text, and a box span per atomic inline, block-in-inline, float, and out-of-flow
+/// box, each with the spans and the link around it.
+pub(crate) struct InlineSpans<'c> {
+  pub(crate) spans: Vec<ProcessedInlineSpan<'c>>,
+  /// The span of each item, by item index.
+  pub(crate) item_spans: Vec<Option<usize>>,
+  /// The first span of each node, for a fragment an item no longer holds, such as an ellipsis or
+  /// a laid out atomic inline.
+  node_spans: FxHashMap<*const RenderNode, usize>,
+  /// The decoration each inline box opens, by its node.
+  node_decorations: FxHashMap<*const RenderNode, Rc<DecorationLink<'c>>>,
+}
+
+impl<'c> InlineSpans<'c> {
+  /// The spans of the items `block` lays out.
+  pub(crate) fn of(block: &'c RenderNode, items_data: &InlineNodeData<'c>) -> Self {
+    let mut spans: Vec<ProcessedInlineSpan<'c>> = Vec::new();
+    let mut item_spans = Vec::with_capacity(items_data.items.len());
+    // The spans and links open at each item, the formatting context's own first.
+    let mut chains: Vec<Option<Rc<DecorationLink<'c>>>> = vec![None];
+    let mut links: Vec<Option<Arc<str>>> = vec![link_of(block)];
+    let mut elements: Vec<Option<usize>> = vec![None];
+    let mut next_span = 0;
+    let mut last_text: Option<(*const RenderNode, usize)> = None;
+    let mut node_spans = FxHashMap::default();
+    let mut node_decorations = FxHashMap::default();
+
+    for item in &items_data.items {
+      let chain = chains.last().cloned().flatten();
+      let link = links.last().cloned().flatten();
+      let Some(object) = item.layout_object else {
+        item_spans.push(None);
+
+        continue;
+      };
+      let node = object.node();
+      let span = match item.item_type {
+        InlineItemType::OpenTag => {
+          let decoration =
+            inline_span_decoration(node, chains.len(), next_span).map(|decoration| {
+              next_span += 1;
+
+              Rc::new(DecorationLink {
+                decoration,
+                parent: chain.clone(),
+              })
+            });
+
+          if let Some(decoration) = &decoration {
+            node_decorations.insert(ptr::from_ref(node), Rc::clone(decoration));
+          }
+
+          chains.push(decoration.or(chain));
+          links.push(link_of(node).or(link));
+          elements.push(node.source_order());
+          None
+        }
+        InlineItemType::CloseTag => {
+          if chains.len() > 1 {
+            chains.pop();
+            links.pop();
+            elements.pop();
+          }
+
+          None
+        }
+        InlineItemType::Text | InlineItemType::Control => {
+          let range = item.start_offset()..item.end_offset();
+          let span_index = match last_text {
+            Some((last_node, index)) if ptr::eq(last_node, node) => {
+              if let Some(ProcessedInlineSpan::Text {
+                byte_range, text, ..
+              }) = spans.get_mut(index)
+              {
+                byte_range.end = range.end;
+                text.push_str(&items_data.text_content[range]);
+              }
+
+              index
+            }
+            _ => {
+              spans.push(ProcessedInlineSpan::Text {
+                text: items_data.text_content[range.clone()].to_owned(),
+                byte_range: range,
+                style: Box::new(SizedFontStyle::from_style(
+                  &node.context.style,
+                  &node.context,
+                )),
+                link: link_of(node).or(link),
+                decorations: chain,
+                element: node
+                  .source_order()
+                  .filter(|_| !node.is_untagged_text())
+                  .or_else(|| elements.last().copied().flatten()),
+              });
+              node_spans
+                .entry(ptr::from_ref(node))
+                .or_insert(spans.len() - 1);
+              spans.len() - 1
+            }
+          };
+
+          last_text = Some((ptr::from_ref(node), span_index));
+          Some(span_index)
+        }
+        InlineItemType::AtomicInline
+        | InlineItemType::BlockInInline
+        | InlineItemType::Floating
+        | InlineItemType::OutOfFlowPositioned
+        | InlineItemType::ListMarker => {
+          spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
+            render_node: node,
+            decorations: chain,
+            paint_width: 0.0,
+            paint_height: 0.0,
+            margin: node.margin_px(),
+            padding: node.padding_px(),
+            border: node.border_px(),
+            baseline_offset: None,
+          }));
+          node_spans
+            .entry(ptr::from_ref(node))
+            .or_insert(spans.len() - 1);
+          Some(spans.len() - 1)
+        }
+        InlineItemType::BidiControl => None,
+      };
+
+      item_spans.push(span);
+    }
+
+    Self {
+      spans,
+      item_spans,
+      node_spans,
+      node_decorations,
+    }
+  }
+
+  /// The decoration the inline box `node` opens.
+  pub(crate) fn decoration_of(&self, node: &RenderNode) -> Option<&Rc<DecorationLink<'c>>> {
+    self.node_decorations.get(&ptr::from_ref(node))
+  }
+
+  /// The first span of `node`.
+  pub(crate) fn span_of(&self, node: &RenderNode) -> Option<usize> {
+    self.node_spans.get(&ptr::from_ref(node)).copied()
+  }
+}
+
+/// The `href` of `node`, if it is an anchor.
+fn link_of(node: &RenderNode) -> Option<Arc<str>> {
+  node
+    .node
+    .as_ref()
+    .and_then(Node::href)
+    .map(Arc::<str>::from)
 }

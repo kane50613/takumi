@@ -81,7 +81,7 @@ impl Default for ResolvedVerticalAlign {
 }
 
 impl<'i> FromCss<'i> for VerticalAlign {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(VerticalAlignKeyword::from_css) {
       return Ok(Self::Keyword(keyword));
     }
@@ -151,6 +151,7 @@ mod tests {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 16.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     }
   }

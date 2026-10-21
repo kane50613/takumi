@@ -1,6 +1,6 @@
 use std::fmt;
 
-use cssparser::{Parser, Token};
+use cssparser::{ParseError as CssParseError, Parser, Token};
 
 use crate::style::{FromCss, ParseResult, ToCss, unexpected_token};
 
@@ -39,8 +39,7 @@ impl GridRepetitionCount {
 }
 
 impl<'i> FromCss<'i> for GridRepetitionCount {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
       if ident.eq_ignore_ascii_case("auto-fill") {
         return Ok(GridRepetitionCount::Keyword(
@@ -50,7 +49,7 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
       if ident.eq_ignore_ascii_case("auto-fit") {
         return Ok(GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFit));
       }
-      return Err(unexpected_token!(location, &Token::Ident(ident)));
+      return Err(unexpected_token!(&Token::Ident(ident)));
     }
 
     let token = input.next()?;
@@ -61,15 +60,11 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
         let count = int_value.map_or(value as i64, i64::from);
 
         if count < 0 {
-          return Err(
-            location
-              .new_basic_unexpected_token_error(token.clone())
-              .into(),
-          );
+          return Err(CssParseError::unexpected_token());
         }
         Ok(GridRepetitionCount::Count(count as u16))
       }
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 

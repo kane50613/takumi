@@ -14,8 +14,8 @@
     <use href="#g2" x="77.71" y="52"/>
   </g>
   <g fill="#000">
-    <use href="#g0" x="107.54" y="52"/>
-    <use href="#g1" x="120.41" y="52"/>
+    <use href="#g0" x="107.55" y="52"/>
+    <use href="#g1" x="120.42" y="52"/>
     <use href="#g2" x="132.8" y="52"/>
     <use href="#g3" x="140.26" y="52"/>
     <use href="#g4" x="153.13" y="52"/>
@@ -40,17 +40,17 @@
     <use href="#g11" x="88.71" y="100"/>
   </g>
   <g fill="#000">
-    <use href="#g7" x="123.27" y="100"/>
-    <use href="#g8" x="136.45" y="100"/>
-    <use href="#g3" x="148.44" y="100"/>
-    <use href="#g3" x="161.31" y="100"/>
-    <use href="#g9" x="173.96" y="100"/>
-    <use href="#g10" x="179.46" y="100"/>
-    <use href="#g11" x="191.98" y="100"/>
-    <use href="#g5" x="205.05" y="100"/>
+    <use href="#g7" x="123.28" y="100"/>
+    <use href="#g8" x="136.46" y="100"/>
+    <use href="#g3" x="148.45" y="100"/>
+    <use href="#g3" x="161.32" y="100"/>
+    <use href="#g9" x="173.97" y="100"/>
+    <use href="#g10" x="179.47" y="100"/>
+    <use href="#g11" x="191.99" y="100"/>
+    <use href="#g5" x="205.06" y="100"/>
     <use href="#g0" x="214.27" y="100"/>
     <use href="#g1" x="227.14" y="100"/>
-    <use href="#g6" x="238.64" y="100"/>
+    <use href="#g6" x="238.65" y="100"/>
   </g>
   <path d="M119 126h239v28h-239v-28Z" fill="#facc15"/>
   <path d="M103 118h271" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.955"/>

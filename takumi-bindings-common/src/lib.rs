@@ -6,17 +6,19 @@
 //! binding keeps only its platform-specific glue (JS type coercion, error
 //! mapping, threading).
 
+pub mod font_cache;
 pub mod input;
 
-use std::{
-  fmt,
-  sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
-};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
+
+use font_cache::FontCache;
+use input::{Font, register_font};
+use serde::Deserialize;
 
 use takumi_core::{
   Error as CoreError, Fonts,
   resources::{
-    font::{FontError, FontOverride, FontResource},
+    font::{FontError, FontOverride, FontResource, RegisteredFamily},
     image::ResourceCache,
   },
   style::{CssSource, CssSourceError, KeyframesRule, Lang, StyleSheet},
@@ -35,7 +37,18 @@ const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
 pub fn default_fonts() -> Result<Fonts, FontError> {
   let mut fonts = Fonts::default();
 
+  register_embedded(&mut fonts, |_| true)?;
+
+  Ok(fonts)
+}
+
+/// Registers the embedded last-resort fonts whose family `wanted` accepts.
+fn register_embedded(fonts: &mut Fonts, wanted: impl Fn(&str) -> bool) -> Result<(), FontError> {
   for (bytes, name) in EMBEDDED_FONTS {
+    if !wanted(name) {
+      continue;
+    }
+
     let resource = FontResource::new(*bytes)
       .override_info(FontOverride {
         family_name: Some((*name).into()),
@@ -46,42 +59,91 @@ pub fn default_fonts() -> Result<Fonts, FontError> {
     drop(fonts.register(resource)?);
   }
 
-  Ok(fonts)
+  Ok(())
 }
 
-/// Registered fonts behind a lock that fails instead of blocking, for the
-/// single-threaded wasm bindings.
-pub struct FontStore(RwLock<Fonts>);
+/// Registered fonts for the single-threaded wasm bindings, copy-on-write like the napi
+/// bindings' `ArcSwap`: a call takes the current registry and lets go of the store at once, and
+/// a change publishes a new registry. Nothing is held across a call, so one that traps (release
+/// builds abort on panic) leaves the store usable.
+pub struct FontStore {
+  fonts: RefCell<Rc<Fonts>>,
+  cache: RefCell<FontCache>,
+}
 
 impl FontStore {
-  /// A store holding the embedded last-resort fonts.
-  pub fn new() -> Result<Self, FontError> {
-    default_fonts().map(|fonts| Self(RwLock::new(fonts)))
+  /// A store holding the embedded last-resort fonts, keeping at most `cache_max_bytes` of fonts
+  /// that are not pinned.
+  pub fn new(cache_max_bytes: Option<u64>) -> Result<Self, FontError> {
+    Ok(Self {
+      fonts: RefCell::new(Rc::new(default_fonts()?)),
+      cache: RefCell::new(FontCache::new(cache_max_bytes)),
+    })
   }
 
-  pub fn read(&self) -> Result<RwLockReadGuard<'_, Fonts>, FontStoreLocked> {
-    self.0.try_read().map_err(FontStoreLocked::from)
+  /// The registry for a render that names `families`, which are marked used.
+  pub fn for_render(&self, families: Option<&[String]>) -> Rc<Fonts> {
+    self.cache.borrow_mut().touch(families.unwrap_or_default());
+    self.current()
   }
 
-  pub fn write(&self) -> Result<RwLockWriteGuard<'_, Fonts>, FontStoreLocked> {
-    self.0.try_write().map_err(FontStoreLocked::from)
+  fn current(&self) -> Rc<Fonts> {
+    self.fonts.borrow().clone()
+  }
+
+  /// The families a registration under `key` added, marked used; see [`FontCache::lookup`].
+  pub fn cached(&self, key: &str, pin: bool) -> Option<Vec<RegisteredFamily>> {
+    self.cache.borrow_mut().lookup(key, pin)
+  }
+
+  /// Registers `font` under `key`; one that is not `pinned` can be released for space.
+  pub fn register(
+    &self,
+    font: Font,
+    key: Option<&str>,
+    pinned: bool,
+  ) -> Result<Vec<RegisteredFamily>, FontError> {
+    let mut fonts = Fonts::clone(&self.current());
+    let (registered, bytes) = register_font(&mut fonts, font)?;
+
+    self
+      .cache
+      .borrow_mut()
+      .admit(&mut fonts, key, &registered, bytes, pinned)?;
+    *self.fonts.borrow_mut() = Rc::new(fonts);
+
+    Ok(registered)
+  }
+
+  /// Removes every face registered under `family`; see [`Fonts::unregister_family`].
+  pub fn unregister_family(&self, family: &str) -> bool {
+    let mut fonts = Fonts::clone(&self.current());
+    let removed = fonts.unregister_family(family);
+
+    self.cache.borrow_mut().forget(family);
+
+    if removed {
+      *self.fonts.borrow_mut() = Rc::new(fonts);
+    }
+
+    removed
+  }
+
+  /// Goes back to the embedded last-resort fonts alone.
+  pub fn reset(&self) -> Result<(), FontError> {
+    *self.fonts.borrow_mut() = Rc::new(default_fonts()?);
+    self.cache.borrow_mut().clear();
+
+    Ok(())
   }
 }
 
-/// A [`FontStore`] lock already held by another call.
-#[derive(Debug)]
-pub struct FontStoreLocked(String);
-
-impl<T> From<TryLockError<T>> for FontStoreLocked {
-  fn from(error: TryLockError<T>) -> Self {
-    Self(error.to_string())
-  }
-}
-
-impl fmt::Display for FontStoreLocked {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "Renderer state is locked: {}", self.0)
-  }
+/// Options for a renderer whose only option is its font cache budget.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FontCacheOptions {
+  /// Bytes of fonts from renders' `fonts` lists to keep registered.
+  pub font_cache_max_bytes: Option<u64>,
 }
 
 /// A render's default language, parsed from its BCP-47 tag.

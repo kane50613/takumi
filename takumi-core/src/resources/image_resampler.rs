@@ -1,16 +1,13 @@
 //! Streaming separable resampler fed one source row at a time, so a decoder
 //! never materializes the full-size image.
 //!
-//! Replicates `image::imageops::resize` exactly (vertical pass into f32, then
-//! horizontal, same windows, weights, and rounding), so streamed output is
-//! byte-identical to decode-then-resize.
+//! Follows `image::imageops::resize`: a vertical pass into f32, then a horizontal one, with its
+//! windows, weights, and rounding.
 
 use std::collections::VecDeque;
 
 use crate::{resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm};
 
-// std `sin`, not `math::sin`: streamed output must stay bit-exact with
-// `image::imageops::resize`, whose Lanczos kernel uses the platform libm.
 fn sinc(t: f32) -> f32 {
   let a = t * std::f32::consts::PI;
   if t == 0.0 { 1.0 } else { a.sin() / a }
@@ -262,8 +259,6 @@ pub(crate) fn resample_premultiplied(
 
 #[cfg(test)]
 mod tests {
-  use image::{RgbaImage, imageops};
-
   use super::*;
 
   fn gradient(width: u32, height: u32) -> Vec<u8> {
@@ -281,49 +276,54 @@ mod tests {
     data
   }
 
-  fn reference(
-    data: &[u8],
-    (width, height): (u32, u32),
-    (target_width, target_height): (u32, u32),
-    algorithm: ImageScalingAlgorithm,
-  ) -> Vec<u8> {
-    let image = RgbaImage::from_raw(width, height, data.to_vec()).unwrap();
-    let filter = match algorithm {
-      ImageScalingAlgorithm::Smooth => imageops::FilterType::Lanczos3,
-      ImageScalingAlgorithm::Pixelated => imageops::FilterType::Nearest,
-      _ => imageops::FilterType::CatmullRom,
-    };
-    imageops::resize(&image, target_width, target_height, filter).into_raw()
+  /// FNV-1a over `bytes`.
+  fn fingerprint(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| {
+      (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    })
   }
 
+  /// Pins the streamed output, first checked byte for byte against `image::imageops::resize`.
   #[test]
-  fn streamed_output_matches_imageops_resize() {
+  fn streamed_output_stays_pinned() {
     let (width, height) = (64, 48);
     let data = gradient(width, height);
+    let mut fingerprints = Vec::new();
 
     for algorithm in [
       ImageScalingAlgorithm::Auto,
       ImageScalingAlgorithm::Smooth,
       ImageScalingAlgorithm::Pixelated,
     ] {
-      for (target_width, target_height) in [(17, 13), (32, 24), (63, 47), (1, 1)] {
-        let mut resampler =
-          StreamResampler::new((width, height), (target_width, target_height), algorithm);
+      for target in [(17, 13), (32, 24), (63, 47), (1, 1)] {
+        let mut resampler = StreamResampler::new((width, height), target, algorithm);
+
         for row in data.chunks_exact(width as usize * 4) {
           resampler.push_row(row);
         }
-        let streamed = resampler.finish().unwrap();
 
-        let expected = reference(
-          &data,
-          (width, height),
-          (target_width, target_height),
-          algorithm,
-        );
-        assert_eq!(streamed.data(), expected.as_slice(), "{algorithm:?}");
+        fingerprints.push(fingerprint(resampler.finish().unwrap().data()));
       }
     }
+
+    assert_eq!(fingerprints, PINNED);
   }
+
+  /// Each algorithm's fingerprints, at each target size, in test order.
+  const PINNED: [u64; 12] = [
+    0x46cf8d0dd5f2ccec,
+    0xcb96458ae29411d4,
+    0x2e800b8c48a1a2ff,
+    0xb80df1ef85123f69,
+    0xd6099883e7e9aeae,
+    0x3e994d31a05db8f6,
+    0xfcddbd7534efe99f,
+    0xb85bf1ef855460ba,
+    0xd9b3505cd1fdfc20,
+    0xbe022d5adf637da5,
+    0x5099c597a29001dc,
+    0x28184b5566eb268,
+  ];
 
   #[test]
   fn truncated_stream_returns_none() {

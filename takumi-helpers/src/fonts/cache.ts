@@ -23,7 +23,7 @@ export class FontStylesheetCache {
     return cache;
   }
 
-  get(url: string) {
+  get(url: string): Promise<string> | undefined {
     const entry = this.entries.get(url);
     if (entry) {
       this.entries.delete(url);
@@ -32,7 +32,7 @@ export class FontStylesheetCache {
     return entry?.pending;
   }
 
-  set(url: string, pending: Promise<string>) {
+  set(url: string, pending: Promise<string>): void {
     this.delete(url);
     const entry = { pending, bytes: url.length * 2 };
     this.entries.set(url, entry);
@@ -58,7 +58,7 @@ export class FontStylesheetCache {
     );
   }
 
-  delete(url: string) {
+  delete(url: string): void {
     const entry = this.entries.get(url);
     if (entry) {
       this.bytes -= entry.bytes;
@@ -88,7 +88,7 @@ export class FontStylesheetCache {
     options: FetchOptions & {
       cache?: Pick<Map<string, Promise<string>>, "get" | "set" | "delete">;
     },
-  ) {
+  ): Promise<string> {
     options.signal?.throwIfAborted();
     if (options.signal || options.allowUrl) {
       return this.read(url, options);

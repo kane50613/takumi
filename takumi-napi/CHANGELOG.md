@@ -1,3 +1,31 @@
+## @takumi-rs/core@2.17.1
+
+### Skip an SVG too large to rasterize instead of failing the render
+
+An SVG image or background that would rasterize past the pixel budget, such as `background-size: cover` on an SVG with an extreme `viewBox`, is now left undrawn. The whole render used to fail with `InvalidPixmapSize`.
+
+### Clip a repeated background to its box
+
+A repeated `background-image` whose tiles do not divide the box evenly, such as 15px tiles in a 96px box, now stops at the box's edge. Its last row and column of tiles used to paint past it.
+
+### Scale images up faster
+
+A magnified image lerped every source row across the destination width again for each destination row that read it. Each source row is now lerped once and reused, so drawing a small image across a large box takes about 40% less time. The output is unchanged.
+
+### Blur what lies past the canvas edge
+
+Since 2.15.0, an element with a pixel-moving filter such as `blur()` that reached past the canvas's top or left edge lost that part before filtering, so its blur faded toward the edge. The filter layer now takes in what the filter reads past the canvas, as Chrome's compositor does.
+
+## @takumi-rs/core@2.17.0
+
+### Bound render fonts with `fontCacheMaxBytes`
+
+Past this cap in decoded font bytes, a renderer releases the least recently used fonts that renders' `fonts` lists loaded, and a later render loads them again. Fonts from `registerFont` stay, and a running render keeps the fonts it started with. The wasm `Renderer` now passes its options, such as `cacheMaxBytes`, to the native renderer.
+
+### Release fonts a renderer no longer needs
+
+`unregisterFont({ name })` removes a family with all its `unicodeRange` subsets, and `clearFonts()` goes back to the bundled fallback font. A later render that lists a released font registers it again. In Rust, use `Fonts::unregister_family`.
+
 ## @takumi-rs/core@2.16.0
 
 ### Register font subsets with `unicodeRange`

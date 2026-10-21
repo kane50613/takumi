@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_align</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .column {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+        height: 100%;
+        padding: 8px;
+      }
+      .column > span {
+        display: block;
+        background-color: rgb(240, 240, 240);
+        font-size: 24px;
+      }
+    </style>
+  </head>
+  <body style="width: 600px; height: 256px">
+    <div class="column">
+      <span style="text-align: start">start</span>
+      <span style="text-align: left">left</span>
+      <span style="text-align: center">center</span>
+      <span style="text-align: right">right</span>
+      <span style="text-align: end">end</span>
+      <span style="direction: rtl; text-align: start">rtl start</span>
+    </div>
+  </body>
+</html>

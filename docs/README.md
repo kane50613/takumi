@@ -43,7 +43,7 @@ Run these commands from `docs`:
 
 ```bash
 bun run typecheck
-bun run test --silent
+bun test app/playground tests --silent
 bun run build
 ```
 

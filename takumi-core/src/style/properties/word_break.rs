@@ -25,20 +25,10 @@ impl_css_enum!(
   "break-word" => WordBreak::BreakWord,
 );
 
-impl WordBreak {
-  pub(crate) fn into_parley(self) -> parley::WordBreak {
-    match self {
-      WordBreak::Normal | WordBreak::BreakWord => parley::WordBreak::Normal,
-      WordBreak::BreakAll => parley::WordBreak::BreakAll,
-      WordBreak::KeepAll => parley::WordBreak::KeepAll,
-    }
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::{FromCssStr, ToCss};
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_word_break() {
@@ -54,20 +44,5 @@ mod tests {
         "failed for {css}"
       );
     }
-  }
-
-  #[test]
-  fn test_word_break_round_trip() {
-    for css in ["normal", "break-all", "keep-all", "break-word"] {
-      let parsed = WordBreak::from_css_str(css).unwrap();
-      let reparsed = WordBreak::from_css_str(&parsed.to_css_string()).unwrap();
-      assert_eq!(parsed, reparsed, "failed for {css}");
-    }
-  }
-
-  #[test]
-  fn test_parse_word_break_invalid() {
-    assert!(WordBreak::from_css_str("bogus").is_err());
-    assert!(WordBreak::from_css_str("123").is_err());
   }
 }

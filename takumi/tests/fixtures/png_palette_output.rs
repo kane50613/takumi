@@ -1,9 +1,8 @@
 use std::fs;
 
-use image::ImageFormat;
 use takumi::{prelude::*, render, write_image};
 
-use crate::test_utils::{CONTEXT, create_test_viewport, generated_path};
+use crate::test_utils::{CONTEXT, create_test_viewport, decode_rgba, generated_path};
 
 /// A docs card of a few hundred colors at most, stored as a palette and read back pixel for pixel.
 #[test]
@@ -35,9 +34,9 @@ fn png_palette_output() {
   // IHDR's color type, 3 for indexed color.
   assert_eq!(encoded[25], 3);
 
-  let decoded = image::load_from_memory_with_format(&encoded, ImageFormat::Png)
-    .unwrap()
-    .to_rgba8();
+  let (width, height, decoded) = decode_rgba(&encoded);
 
-  assert!(decoded.as_raw() == image.as_raw());
+  assert_eq!((width, height), (image.width(), image.height()));
+
+  assert!(decoded == image.as_raw());
 }

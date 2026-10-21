@@ -52,6 +52,7 @@ mod raster_images {
   #[cfg(feature = "gif")]
   use std::sync::Arc;
 
+  use crate::resources::glyph::ResolvedGlyph;
   use crate::resources::image_buffer::ImageBuffer;
   #[cfg(feature = "gif")]
   use crate::resources::image_decoder::decode_gif_frames;
@@ -78,6 +79,10 @@ mod raster_images {
 
     match image {
       ImageKind::SVG(_) => None,
+      ImageKind::Glyph(glyph) => match glyph.as_ref() {
+        ResolvedGlyph::Bitmap(bitmap) => buffer_to_pixmap(bitmap.image.clone()),
+        ResolvedGlyph::Outline(_) => None,
+      },
       ImageKind::JPEG(data) | ImageKind::PNG(data) | ImageKind::WEBP(data) => decode_image(data)
         .ok()
         .and_then(buffer_to_pixmap)

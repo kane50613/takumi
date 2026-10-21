@@ -3,6 +3,12 @@
 #![deny(missing_docs)]
 //! Parse HTML markup into a takumi [`Node`] tree.
 //!
+//! The `style`, `tw` (Tailwind classes), `class`, `id`, `dir`, and `lang` attributes carry
+//! over. Elements get Chromium's default styles unless [`FromHtmlOptions`] sets other presets.
+//! `<style>` and `<script>` elements are dropped, so pass CSS to the renderer as a stylesheet.
+//!
+//! In the `takumi` crate, enable the `from-html` feature and call `takumi::from_html`.
+//!
 //! ```rust
 //! use takumi_core::layout::node::Node;
 //! use takumi_html::{FromHtml, FromHtmlOptions};
@@ -12,6 +18,8 @@
 //! # Ok(())
 //! # }
 //! ```
+
+mod dom;
 
 use std::{
   borrow::Cow,
@@ -26,12 +34,16 @@ use html5ever::{
   serialize::{SerializeOpts, TraversalScope, serialize},
   tendril::TendrilSink,
 };
-use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
-  style::{Direction, FromCssStr, Lang, Style, StyleDeclarationBlock, TailwindValues},
+  style::{
+    Direction, Display, FromCssStr, Lang, Length, Style, StyleDeclaration, StyleDeclarationBlock,
+    TailwindValues,
+  },
 };
 use typed_builder::TypedBuilder;
+
+use crate::dom::{DomSink, NodeData, NodeRef};
 
 /// Tags whose entire subtree is dropped, matching the JS markup walker.
 /// Deliberately distinct from the `display:none` presets (`title`,
@@ -170,6 +182,8 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
     "display:table-cell;padding:1px;vertical-align:inherit;font-weight:bold;text-align:center",
   ),
   ("caption", "display:table-caption;text-align:center"),
+  ("colgroup", "display:table-column-group"),
+  ("col", "display:table-column"),
 ];
 
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {
@@ -188,9 +202,6 @@ static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum HtmlError {
-  /// An `<img>` element lacked the required `src` attribute.
-  #[error("image element must have a `src` attribute")]
-  MissingImageSrc,
   /// Element nesting exceeded [`FromHtmlOptions::max_depth`].
   #[error("element nesting exceeded the maximum depth of {0}")]
   MaxDepthExceeded(usize),
@@ -262,10 +273,13 @@ impl Default for FromHtmlOptions {
 /// unrendered elements are dropped. A single root element is returned as-is; multiple
 /// roots are wrapped in a full-size container.
 ///
-/// A source that starts with an `<html>` element is parsed as a document, so
-/// the tree keeps that element as its root along with `<head>` and `<body>`.
-/// Anything else is parsed as a fragment and gains no wrappers of its own.
+/// A source that starts with a doctype or an `<html>` element is parsed as a
+/// document, so the tree has an `<html>` root along with `<head>` and `<body>`,
+/// as a browser builds them. Anything else is parsed as a fragment and gains no
+/// wrappers of its own.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
+  // Decoding drops a leading byte order mark: https://encoding.spec.whatwg.org/#decode
+  let source = source.strip_prefix('\u{feff}').unwrap_or(source);
   let builder = NodeBuilder {
     presets: &options.presets,
     tw_property: options.tailwind_property.as_deref().unwrap_or("tw"),
@@ -274,14 +288,14 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
   };
   let mut nodes = Vec::new();
 
-  if starts_with_html_element(source) {
-    let dom = parse_document(RcDom::default(), ParseOpts::default()).one(source);
+  if is_document(source) {
+    let dom = parse_document(DomSink::default(), ParseOpts::default()).one(source);
 
-    builder.build_nodes(&dom.document, 0, &mut nodes)?;
+    builder.build_nodes(dom.document(), 0, &mut nodes)?;
   } else {
     let context = QualName::new(None, ns!(html), local_name!("body"));
     let dom = parse_fragment(
-      RcDom::default(),
+      DomSink::default(),
       ParseOpts::default(),
       context,
       vec![],
@@ -291,8 +305,8 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
 
     // `parse_fragment` wraps the roots in a synthetic context element, the
     // document's only child.
-    if let Some(context) = dom.document.children.borrow().first() {
-      for child in context.children.borrow().iter() {
+    if let Some(context) = dom.document().children().next() {
+      for child in context.children() {
         builder.build_nodes(child, 0, &mut nodes)?;
       }
     }
@@ -301,26 +315,20 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
   Ok(collapse(nodes))
 }
 
-/// Whether the source opens with an `<html>` tag, ignoring leading whitespace,
-/// a doctype, and comments.
+/// Whether the source is a document: it opens with a doctype or an `<html>` tag, ignoring
+/// leading whitespace and comments.
 ///
 /// Document parsing invents `<html>`, `<head>` and `<body>` for a source that
 /// has none, which would wrap every fragment in boxes its author never wrote.
-fn starts_with_html_element(source: &str) -> bool {
+fn is_document(source: &str) -> bool {
   let mut rest = source.trim_start();
 
   loop {
-    let lowered = rest.get(..9).map(str::to_ascii_lowercase);
-
-    if lowered
-      .as_deref()
-      .is_some_and(|s| s.starts_with("<!doctype"))
+    if rest
+      .get(..9)
+      .is_some_and(|prefix| prefix.eq_ignore_ascii_case("<!doctype"))
     {
-      let Some((_, after)) = rest.split_once('>') else {
-        return false;
-      };
-      rest = after.trim_start();
-      continue;
+      return true;
     }
 
     if rest.starts_with("<!--") {
@@ -387,27 +395,24 @@ struct NodeBuilder<'a> {
 impl NodeBuilder<'_> {
   fn build_nodes(
     &self,
-    handle: &Handle,
+    handle: NodeRef<'_>,
     depth: usize,
     out: &mut Vec<Node>,
   ) -> Result<(), HtmlError> {
-    match &handle.data {
-      NodeData::Comment { .. }
-      | NodeData::Doctype { .. }
-      | NodeData::ProcessingInstruction { .. } => {}
+    match handle.data() {
+      NodeData::Comment(_) | NodeData::Doctype { .. } | NodeData::ProcessingInstruction { .. } => {}
       NodeData::Document => {
-        for child in handle.children.borrow().iter() {
+        for child in handle.children() {
           self.build_nodes(child, depth, out)?;
         }
       }
-      NodeData::Text { contents } => {
-        let value = contents.borrow();
-        if !value.is_empty() {
-          out.push(Node::text(value.to_string()));
+      NodeData::Text(contents) => {
+        if !contents.is_empty() {
+          out.push(Node::text(contents.to_string()));
         }
       }
       NodeData::Element { name, .. } => {
-        if let Some(node) = self.build_element(handle, name.local.as_ref(), depth)? {
+        if let Some(node) = self.build_element(handle, &name.local, depth)? {
           out.push(node);
         }
       }
@@ -418,7 +423,7 @@ impl NodeBuilder<'_> {
 
   fn build_element(
     &self,
-    handle: &Handle,
+    handle: NodeRef<'_>,
     tag: &str,
     depth: usize,
   ) -> Result<Option<Node>, HtmlError> {
@@ -428,17 +433,16 @@ impl NodeBuilder<'_> {
 
     let node = match tag {
       "br" => Node::text("\n"),
-      "img" => {
-        let src = attribute(handle, "src")
-          .filter(|src| !src.trim().is_empty())
-          .ok_or(HtmlError::MissingImageSrc)?;
-
-        Node::image(ImageData {
+      "img" => match handle.attribute("src").filter(|src| !src.trim().is_empty()) {
+        Some(src) => Node::image(ImageData {
           src: ImageSourceInput::Url(src.into()),
           width: dimension(handle, "width"),
           height: dimension(handle, "height"),
-        })
-      }
+        }),
+        // Chrome draws an `<img>` without a source as an empty inline box its `width` and
+        // `height` size.
+        None => Node::container([]).with_preset(empty_image_style(handle)),
+      },
       _ if UNRENDERED_TAGS.contains(&tag) => return Ok(None),
       "svg" => Node::image(ImageData {
         src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
@@ -449,7 +453,7 @@ impl NodeBuilder<'_> {
         Some(text) => Node::text(text),
         None => {
           let mut children = Vec::new();
-          for child in handle.children.borrow().iter() {
+          for child in handle.children() {
             self.build_nodes(child, depth + 1, &mut children)?;
           }
 
@@ -461,20 +465,20 @@ impl NodeBuilder<'_> {
     Ok(Some(self.apply_metadata(node, handle, tag)))
   }
 
-  fn apply_metadata(&self, mut node: Node, handle: &Handle, tag: &str) -> Node {
+  fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
     node = node.with_tag_name(tag);
 
     if let Some(preset) = self.presets.get(tag) {
       node = node.with_preset(preset.clone());
     }
 
-    let NodeData::Element { attrs, .. } = &handle.data else {
+    let NodeData::Element { attrs, .. } = handle.data() else {
       return node;
     };
 
     let mut attributes = BTreeMap::new();
-    for attr in attrs.borrow().iter() {
-      let name = attr.name.local.as_ref();
+    for attr in attrs {
+      let name = &*attr.name.local;
       let value = attr.value.as_ref();
 
       // Read Tailwind independently of reserved names so it can alias `class`
@@ -531,49 +535,54 @@ impl NodeBuilder<'_> {
   }
 }
 
-/// Concatenated text if every child is a text node, else `None`. Comments are
-/// ignored, mirroring the JS markup walker.
-fn text_only_contents(handle: &Handle) -> Option<String> {
+/// Concatenated text if every child is a text node and not all of it is white space, else `None`.
+/// Comments are ignored, mirroring the JS markup walker.
+fn text_only_contents(handle: NodeRef<'_>) -> Option<String> {
   let mut text = String::new();
 
-  for child in handle.children.borrow().iter() {
-    match &child.data {
-      NodeData::Comment { .. } => continue,
-      NodeData::Text { contents } => text.push_str(&contents.borrow()),
+  for child in handle.children() {
+    match child.data() {
+      NodeData::Comment(_) => continue,
+      NodeData::Text(contents) => text.push_str(contents),
       _ => return None,
     }
   }
 
-  (!text.is_empty()).then_some(text)
+  text
+    .chars()
+    .any(|ch| !ch.is_ascii_whitespace())
+    .then_some(text)
 }
 
-fn attribute(handle: &Handle, name: &str) -> Option<String> {
-  let NodeData::Element { attrs, .. } = &handle.data else {
-    return None;
-  };
-
-  attrs
-    .borrow()
-    .iter()
-    .find(|attr| attr.name.local.as_ref() == name)
-    .map(|attr| attr.value.to_string())
+fn dimension(handle: NodeRef<'_>, name: &str) -> Option<f32> {
+  handle.attribute(name).and_then(|value| value.parse().ok())
 }
 
-fn dimension(handle: &Handle, name: &str) -> Option<f32> {
-  attribute(handle, name).and_then(|value| value.parse().ok())
+/// The style of an `<img>` without a source: an inline-block, sized by its `width` and `height`.
+fn empty_image_style(handle: NodeRef<'_>) -> Style {
+  let mut style = Style::default().with(StyleDeclaration::display(Display::InlineBlock));
+
+  if let Some(width) = dimension(handle, "width") {
+    style = style.with(StyleDeclaration::width(Length::Px(width)));
+  }
+
+  if let Some(height) = dimension(handle, "height") {
+    style = style.with(StyleDeclaration::height(Length::Px(height)));
+  }
+
+  style
 }
 
 /// Serialize an element including its own tag (outer HTML), used to round-trip
 /// `<svg>` subtrees into an image source.
-fn serialize_outer_html(handle: &Handle) -> Vec<u8> {
+fn serialize_outer_html(handle: NodeRef<'_>) -> Vec<u8> {
   let mut buffer = Vec::new();
-  let serializable: SerializableHandle = handle.clone().into();
   let opts = SerializeOpts {
     traversal_scope: TraversalScope::IncludeNode,
     ..SerializeOpts::default()
   };
 
-  if serialize(&mut buffer, &serializable, opts).is_err() {
+  if serialize(&mut buffer, &handle, opts).is_err() {
     return Vec::new();
   }
 
@@ -642,6 +651,25 @@ mod tests {
     assert!(node.to_html().contains("<body"));
   }
 
+  /// A doctype makes a document even without an `<html>` tag, so the body and its margin are
+  /// there as in a browser.
+  #[test]
+  fn a_doctype_makes_a_document() {
+    let node = parse("<!DOCTYPE html><title>t</title><div>hi</div>");
+
+    assert_eq!(node.tag_name(), Some("html"));
+    assert!(node.to_html().contains("<body"));
+  }
+
+  #[test]
+  fn a_leading_byte_order_mark_is_dropped() {
+    assert_eq!(
+      parse("\u{feff}<!doctype html><div>hi</div>").tag_name(),
+      Some("html")
+    );
+    assert_eq!(parse("\u{feff}<div>hi</div>").tag_name(), Some("div"));
+  }
+
   #[test]
   fn a_fragment_gains_no_wrappers() {
     assert_eq!(parse("<div>hi</div>").tag_name(), Some("div"));
@@ -696,11 +724,10 @@ mod tests {
   }
 
   #[test]
-  fn empty_img_src_rejected() {
-    assert!(matches!(
-      from_html(r#"<img src="">"#, FromHtmlOptions::default()),
-      Err(HtmlError::MissingImageSrc),
-    ));
+  fn an_img_without_a_source_is_an_empty_box() {
+    let node = parse(r#"<img src="" width="10" height="20">"#);
+
+    assert!(matches!(node.kind, NodeKind::Container { .. }));
   }
 
   #[test]

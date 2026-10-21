@@ -1,9 +1,8 @@
-mod test_utils;
-
 use std::str::FromStr;
 
 use takumi::prelude::*;
-use test_utils::{block, measure_with_css};
+
+use crate::test_utils::{block, measure_with_css};
 
 /// A block carrying the `style` object a JS caller would send, so the value
 /// takes the deserializing path rather than the typed builder.
@@ -42,9 +41,9 @@ fn empty_rule_blocks_do_not_disturb_the_cascade() {
 
 #[test]
 fn descendant_selector_matches_after_sibling_subtrees() {
-  let plain = Node::container([block("probe")]);
-  let outer = Node::container([block("probe")]).with_class_name("outer");
-  let trailing = Node::container([block("probe")]);
+  let plain = block_of([block("probe")]);
+  let outer = block_of([block("probe")]).with_class_name("outer");
+  let trailing = block_of([block("probe")]);
   let root = Node::container([plain, outer, trailing]);
   let result = measure_with_css(root, r#".outer .probe { width: 150px; }"#);
 
@@ -52,6 +51,12 @@ fn descendant_selector_matches_after_sibling_subtrees() {
   assert_ne!(default_width, 150.0);
   assert_eq!(result.children[1].children[0].width, 150.0);
   assert_eq!(result.children[2].children[0].width, default_width);
+}
+
+/// A block container of `children`.
+fn block_of(children: impl Into<Vec<Node>>) -> Node {
+  Node::container(children)
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
 }
 
 fn tw_block(class: &str, values: &str) -> Node {
@@ -252,7 +257,7 @@ fn preflight_hides_the_hidden_attribute() {
     .with_tw(tw("block w-64!"));
   let result = measure_with_css(Node::container([hidden]), r#"@import "tailwindcss";"#);
 
-  assert_eq!(result.children[0].width, 0.0);
+  assert!(result.children.is_empty());
 }
 
 /// `until-found` is the one `hidden` value Preflight leaves visible.
@@ -515,4 +520,45 @@ fn structural_pseudo_classes_skip_text_nodes() {
 
   assert!(widths.contains(&100.0), "{widths:?}");
   assert!(widths.contains(&200.0), "{widths:?}");
+}
+
+#[test]
+fn all_resets_what_earlier_rules_set() {
+  let root = Node::container([block("box reset")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .box { width: 100px; }
+      .reset { all: initial; }
+    "#,
+  );
+
+  assert_eq!(result.children[0].width, result.width);
+}
+
+#[test]
+fn all_unset_in_a_where_rule_yields_to_every_other_rule() {
+  let root = Node::container([block("box")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .box { width: 100px; }
+      :where(*) { all: unset; }
+    "#,
+  );
+
+  assert_eq!(result.children[0].width, 100.0);
+}
+
+#[test]
+fn a_var_that_substitutes_to_nothing_drops_the_earlier_value() {
+  let root = Node::container([block("box")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .box { width: 100px; width: var(--missing); }
+    "#,
+  );
+
+  assert_eq!(result.children[0].width, result.width);
 }

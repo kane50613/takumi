@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { JSX, ReactNode } from "react";
 
 export default function DocsTemplate({
   title,
@@ -14,7 +14,7 @@ export default function DocsTemplate({
   primaryColor: string;
   primaryTextColor: string;
   site: ReactNode;
-}) {
+}): JSX.Element {
   return (
     <div
       style={{

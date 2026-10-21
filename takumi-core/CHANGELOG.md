@@ -1,3 +1,181 @@
+## takumi-core@0.32.0
+
+### Match fonts once per style in a render
+
+Each run of inline text matched its fonts and fallback faces again, even when an earlier run had the same font style. Runs with the same font style now share one fallback list for the whole render.
+
+### Shape SVG text with the registry's faces
+
+SVG `<text>` shapes with the faces the font registry holds, sharing their shaping tables instead of building new ones for each text chunk.
+
+### List the images a stylesheet references
+
+`StyleSheet::image_urls` lists the `url()`s its rules and keyframes reference, as `Node::image_urls` does for a node tree, so a caller can load them before rendering.
+
+### Read `ch` and normal line height from the font that draws
+
+`ch`, `line-height: normal`, and an inline box's ascent now come from the same primary font the text draws with, at its variation instance. With `font-optical-sizing: auto`, `ch` used the parent's font size to pick the optical size, so a `10ch` box in a 64px Inter came out 11px wider than in Chrome.
+
+### Honor emoji and text variation selectors in font fallback
+
+Since 2.17.0, the first font with a glyph drew a character whatever variation selector followed it, so `‼️` came out monochrome after a text font and `‼︎` in color after an emoji font. A font that lacks a variation sequence now hands it to a later font that draws it the way it asks, as Chrome does, and only when none does does the base character's glyph stand in.
+
+### Lay out nested inline blocks in linear time
+
+Each level of nested `inline-block` boxes laid out the level below it several times over, so a few levels deep took minutes. An inline block now keeps the layout it took in each available space.
+
+### Share the font registry between renders
+
+A render's font snapshot shares the registry instead of copying it, and SVG `<text>` builds its face store once per set of registered fonts instead of once per render.
+
+### Skip an SVG too large to rasterize instead of failing the render
+
+An SVG image or background that would rasterize past the pixel budget, such as `background-size: cover` on an SVG with an extreme `viewBox`, is now left undrawn. The whole render used to fail with `InvalidPixmapSize`.
+
+### Generate `::before` and `::after` whose `content` is empty
+
+A pseudo-element with `content: ""` now gets a box, so a clearfix, a decorative bar, or an absolutely positioned overlay drawn by one shows up. It used to be dropped because it held no text.
+
+### Speed up `feMorphology`
+
+`feMorphology` read every pixel of its radius rectangle for each output pixel. It now sweeps rows, then columns, with the same result. A large radius runs several times faster.
+
+### Keep a background whose shorthand names an attachment
+
+`background: red url(a.png) no-repeat fixed` used to drop the whole declaration over `fixed`. The shorthand now accepts `scroll`, `fixed`, and `local`; a still image paints them alike.
+
+### Keep a line whole around a `display: none` element
+
+A `display: none` element inside a line of text, such as `Only <span style="display: none">sold out</span>$20`, no longer breaks the line in two. Such an element now gets no box at all, so `measure()` leaves it out of the children it returns.
+
+### Reject negative padding and sizes
+
+A negative `padding`, `width`, `height`, `min-*`, or `max-*`, including their logical forms, is now invalid, as in browsers: a stylesheet drops it and keeps the earlier declaration, and a style object reports it as an invalid value instead of using it.
+
+### Parse `flex: none` as `0 0 auto`
+
+`flex: none` now keeps a flex item from growing or shrinking, as CSS defines it. It used to reset the item to `0 1 auto`, so the item still shrank to fit its container.
+
+### Support `white-space: break-spaces`
+
+`white-space: break-spaces` and `white-space-collapse: break-spaces` keep every space and let a line wrap after any of them, so spaces that reach the end of a line wrap onto the next instead of hanging past it.
+
+### Keep scene bounds past the canvas's top and left edges
+
+`SceneBounds` fields are now `i32`, and a node that reaches past the canvas's top or left edge gets negative bounds instead of bounds clamped to zero.
+
+### Hide images an ellipsis cuts off
+
+Since 2.17.0, an inline image at or past a `text-overflow: ellipsis` cut was still painted, over the ellipsis or in its place. It is now left out, and an ellipsis that lands right after an image paints as well.
+
+### Shape every size of a face with one font
+
+A face builds its shaping tables once while it stays registered, instead of once for each size, variation, and render that uses it.
+
+### Support the `ch` unit
+
+`ch` lengths, alone or in `calc()`, resolve to the advance of the `0` glyph in the first font that covers it, or half the font size when that font has no `0`.
+
+## takumi-core@0.31.0
+
+### Wrap loose table parts in anonymous tables
+
+A `display: table-row` or `table-cell` outside a table, with text or inline elements in it, made rendering panic. Loose table parts now sit in an anonymous table, cells outside a row and a row group's other children in an anonymous row, and anything else in a row in an anonymous cell, as Chrome builds them. A table part inside a flex or grid container lays out as a block.
+
+### Support `line-break`
+
+`lineBreak` sets how strictly lines break around CJK punctuation and small kana: `strict` keeps a small kana with the character before it, while `normal` and `loose` break before it. `anywhere` breaks between any two characters, mid-word included.
+
+### Support the remaining logical properties
+
+The block-axis longhands (`margin-block-start`, `inset-block-end`, …), the logical sizes (`inline-size`, `max-block-size`, …), and the logical borders and corner radii (`border-inline-start`, `border-block-color`, `border-start-end-radius`, …) now parse. Inline start and end follow `direction`, and `inset-inline` and `border-inline-width` now do too.
+
+### Support `text-justify`
+
+`textJustify` takes `auto`, `none`, `inter-word`, and `inter-character`. With `text-align: justify`, `inter-word` widens only the spaces, `inter-character` spaces out the letters too, and `none` leaves the line unjustified.
+
+### Support `hyphens` and `hyphenate-character`
+
+`hyphens: none` stops lines from breaking at soft hyphens (U+00AD). `hyphenateCharacter` sets the string a line ends with where it breaks at one. `hyphens: auto` breaks only at soft hyphens, as `manual` does, because takumi has no hyphenation dictionaries.
+
+### Match fonts as Chrome does
+
+Within a family, a renderer now picks the face closest to `font-weight`, `font-stretch`, and `font-style` with the CSS font matching algorithm, as Chrome does. A variable face takes its `wght`, `wdth`, and `slnt` from the style, and a family split by `unicodeRange` keeps every subset for fallback.
+
+### Draw an inline image inside its margins
+
+An `<img>` or other replaced element in a line of text was drawn across its margins, stretched and with its border and background reaching into them. It now draws in its border box, and its margins stay empty space on the line.
+
+### Transform text case as browsers do
+
+`text-transform: capitalize` no longer lowercases the rest of each word, and a word split across inline elements is capitalized once. `uppercase` and `lowercase` follow the `lang` of Turkish, Azerbaijani, Greek, Lithuanian, and Dutch text, and uppercased Georgian keeps its usual letters.
+
+### Drop line and column from CSS value errors
+
+`cssparser` 0.38 no longer tracks where a parse error happened, so an invalid style value reports the token it stopped at but no longer its line and column.
+
+### Shape with HarfBuzz 14.5.1
+
+Shaping moves to harfrust 0.14, which matches HarfBuzz 14.5.1: Bengali ra-phala such as গ্র joins again, marks attach correctly after a ligated multiple substitution, and Hangul runs apply `calt` to the characters around them. A PDF now draws a glyph from a font's SVG table only when that glyph has SVG data.
+
+### Support `unicode-bidi`
+
+`unicodeBidi` with `direction` sets how a box's text joins the bidi algorithm: `embed` and `isolate` give an inline box its own direction, `bidi-override` and `isolate-override` lay its characters out in that direction whatever they are, and `plaintext` lets each paragraph's first strong character pick its direction.
+
+### Space inside list markers as Chromium does
+
+A `list-style-position: inside` marker now lays out as an inline box, as Chromium's does. A `disc`, `circle`, or `square` marker starts 1px earlier. A `disclosure-open` or `disclosure-closed` marker keeps a 0.4em gap from the text instead of 1em.
+
+### Parse an image list that starts with `none`
+
+`background-image: none, url(a.png)` and `mask-image: none, none` were dropped as invalid. A list may now start with `none`.
+
+### Support `full-width` and `full-size-kana` in `text-transform`
+
+`textTransform` takes `full-width`, which puts characters in their full-width forms, and `full-size-kana`, which puts small kana in their full-size forms, alone or with a case: `uppercase full-width`. A space becomes U+3000 only where white space is preserved, as in Chrome.
+
+In Rust, `TextTransform` is now a struct of a `TextTransformCase` and the two flags; `TextTransformCase` converts into it.
+
+### Support `font-language-override`
+
+`fontLanguageOverride` takes an OpenType language system tag, such as `"TRK"`, which picks glyphs and localized forms in place of the system the content language maps to: `lang="ja"` with `font-language-override: "KOR"` draws Korean forms.
+
+### Lay out inline text as Chrome does
+
+Text and inline boxes now lay out with a port of Chromium's inline layout. `text-overflow: ellipsis` and `line-clamp` cut at a character instead of a whole word, a tab advances to the next tab stop, a float that no longer fits beside a line moves below it, and `text-wrap: balance` leaves a paragraph with floats unbalanced, as Chrome does.
+
+### Support `text-align-last`
+
+`textAlignLast` aligns the last line of a block, and a line before a forced break, apart from the others. `text-align: justify; text-align-last: justify` justifies every line, and `auto` keeps aligning a justified block's last line to the start.
+
+### Support the `font` shorthand
+
+`font: italic bold 16px/1.5 Geist, sans-serif` sets the style, weight, size, line height, and family in one declaration, and resets the other font properties it covers. System font keywords such as `caption` are not supported.
+
+`font-weight` now rejects numbers outside 1 to 1000, and `font-family` rejects unquoted CSS-wide keywords and `default`, as browsers do.
+
+### Release fonts a renderer no longer needs
+
+`unregisterFont({ name })` removes a family with all its `unicodeRange` subsets, and `clearFonts()` goes back to the bundled fallback font. A later render that lists a released font registers it again. In Rust, use `Fonts::unregister_family`.
+
+### Keep a keyframe when one of its declarations is invalid
+
+`StyleSheet::parse_loosy` dropped a whole keyframe when one declaration in it failed to parse. Now it drops only that declaration, as it already did in style rules.
+
+### Clamp with `-webkit-line-clamp` only in a vertical `-webkit-box`
+
+As in browsers, `-webkit-line-clamp` now cuts lines only together with `display: -webkit-box` and `-webkit-box-orient: vertical`. Use `line-clamp` to cut lines on any block. `-webkit-box-orient` now sets the axis of a `-webkit-box` only, which ignores `flex-direction`, as in browsers.
+
+## takumi-core@0.30.0
+
+### Read a run's outlines one glyph at a time
+
+`TextRun.outline()` is now `outlines()`, which returns each glyph's outline as SVG path data in the order of `glyphs`, with `null` for a glyph the run's color does not fill. A renderer can draw, animate, or hit-test each letter on its own. Replace `run.outline()` with `run.outlines().join("")`. In Rust, `PaintTree::run_outline` is now `run_outlines`.
+
+### Map each glyph of a paint tree back to its text
+
+A `Glyph` now has `cluster`: where its cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one cluster share it, so a renderer can split a run into words or animate it a letter at a time without guessing from glyph positions.
+
 ## takumi-core@0.29.1
 
 ### Keep every line `line-clamp` allows

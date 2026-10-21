@@ -92,8 +92,8 @@ impl SnappedBox {
   /// `offset` in paint-offset space, relative to the border box.
   fn relative(&self, offset: UnitOffset) -> Point<f32> {
     Point {
-      x: offset.left.to_f32() - self.paint_offset.x,
-      y: offset.top.to_f32() - self.paint_offset.y,
+      x: offset.left.to_float() - self.paint_offset.x,
+      y: offset.top.to_float() - self.paint_offset.y,
     }
   }
 }
@@ -101,9 +101,9 @@ impl SnappedBox {
 /// `insets` in the nearest layout units.
 fn strut(insets: Rect<f32>) -> BoxStrut {
   BoxStrut {
-    top: LayoutUnit::from_f32_round(insets.top),
-    right: LayoutUnit::from_f32_round(insets.right),
-    bottom: LayoutUnit::from_f32_round(insets.bottom),
-    left: LayoutUnit::from_f32_round(insets.left),
+    top: LayoutUnit::from_float_round(insets.top),
+    right: LayoutUnit::from_float_round(insets.right),
+    bottom: LayoutUnit::from_float_round(insets.bottom),
+    left: LayoutUnit::from_float_round(insets.left),
   }
 }

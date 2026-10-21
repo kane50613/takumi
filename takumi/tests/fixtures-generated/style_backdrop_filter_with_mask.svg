@@ -166,7 +166,7 @@
     <use href="#g6" x="869.2" y="332"/>
     <use href="#g15" x="897.76" y="332"/>
   </g>
-  <mask id="mk4" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk4" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
     <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="600" y1="0" x2="600" y2="630">
       <stop offset="0" stop-color="#000" stop-opacity="0"/>
       <stop offset=".016" stop-color="#000" stop-opacity="0"/>
@@ -242,7 +242,7 @@
     <path d="M0 0h1200v630h-1200v-630Z"/>
   </clipPath>
   <g clip-path="url(#cp6)">
-    <mask id="mk7" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+    <mask id="mk7" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
       <radialGradient id="rg8" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="848.528" gradientTransform="matrix(1 0 0 .525 0 149.625)">
         <stop offset="0" stop-color="#000" stop-opacity="0"/>
         <stop offset=".016" stop-color="#000" stop-opacity="0"/>
@@ -490,7 +490,7 @@
             <use href="#g6" x="869.2" y="332"/>
             <use href="#g15" x="897.76" y="332"/>
           </g>
-          <mask id="mk15" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+          <mask id="mk15" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
             <linearGradient id="lg16" gradientUnits="userSpaceOnUse" x1="600" y1="0" x2="600" y2="630">
               <stop offset="0" stop-color="#000" stop-opacity="0"/>
               <stop offset=".016" stop-color="#000" stop-opacity="0"/>
@@ -566,7 +566,7 @@
       </g>
     </g>
   </g>
-  <mask id="mk17" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk17" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
     <radialGradient id="rg18" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="848.528" gradientTransform="matrix(1 0 0 .525 0 149.625)">
       <stop offset="0" stop-color="#000" stop-opacity="0"/>
       <stop offset=".016" stop-color="#000" stop-opacity="0"/>

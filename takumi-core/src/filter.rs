@@ -34,6 +34,18 @@ impl ColorMatrixChain {
     }
   }
 
+  /// The chain's coefficients as bits, in order, so equal chains compare equal as a cache key.
+  pub fn coefficient_bits(&self) -> impl Iterator<Item = u32> + '_ {
+    self.0.iter().flat_map(|matrix| {
+      matrix
+        .rows
+        .iter()
+        .flatten()
+        .chain([&matrix.alpha])
+        .map(|coefficient| coefficient.to_bits())
+    })
+  }
+
   /// Runs every matrix over an 8-bit straight colour.
   #[inline]
   pub fn apply_rgba8(&self, rgba: [u8; 4]) -> [u8; 4] {

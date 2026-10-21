@@ -3,7 +3,6 @@
 //! registry. The [`Fonts`](super::font::Fonts) registry drives this through
 //! [`GlyphResolveContext`], memoizing the results per worker thread.
 
-use image::{Rgba, RgbaImage};
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
@@ -11,7 +10,7 @@ use skrifa::{
   GlyphId,
   bitmap::{BitmapData, BitmapGlyph, BitmapStrikes, Origin},
   color::{
-    Brush, ColorGlyphCollection, ColorGlyphFormat, ColorPainter, CompositeMode,
+    Brush, ColorGlyphCollection, ColorGlyphFormat, ColorPainter, ColorPalette, CompositeMode,
     PaintCachedColorGlyph, Transform,
   },
   instance::{LocationRef, Size},
@@ -29,7 +28,7 @@ use crate::{
     glyph_cache::ENTRY_OVERHEAD,
     image_buffer::{ImageBuffer, rgba_len},
   },
-  style::Affine,
+  style::{Affine, Color},
 };
 
 /// A run's resolved glyphs by glyph id.
@@ -149,6 +148,39 @@ pub struct ResolvedColorLayer {
   pub palette_index: u16,
   /// Layer opacity, 0..=1.
   pub alpha: f32,
+}
+
+impl ResolvedColorLayer {
+  /// Whether the layer draws in the text's color, the COLR palette index `0xFFFF`.
+  pub fn is_foreground(&self) -> bool {
+    self.palette_index == u16::MAX
+  }
+
+  /// The layer's color: its palette entry, or `foreground` for a foreground layer, faded by the
+  /// layer's and the foreground's opacity. None for an entry `palette` lacks.
+  pub fn color(&self, palette: Option<&ColorPalette<'_>>, foreground: Color) -> Option<Color> {
+    let foreground_opacity = foreground.0[3] as f32 / 255.0;
+
+    if self.is_foreground() {
+      let alpha = (foreground_opacity * self.alpha * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+
+      return Some(Color([
+        foreground.0[0],
+        foreground.0[1],
+        foreground.0[2],
+        alpha,
+      ]));
+    }
+
+    let record = palette?.colors().get(usize::from(self.palette_index))?;
+    let alpha = ((record.alpha() as f32 / 255.0) * self.alpha * foreground_opacity * 255.0)
+      .round()
+      .clamp(0.0, 255.0) as u8;
+
+    Some(Color([record.red(), record.green(), record.blue(), alpha]))
+  }
 }
 
 impl ResolvedOutlineGlyph {
@@ -280,10 +312,6 @@ pub fn outline_ink(paths: &[Command], embolden: Option<f32>) -> InkExtents {
     max.y + outset,
   ))
 }
-
-/// CSS `kBoldThreshold` — weights at or above this synthesize bold when no bolder face
-/// exists; lighter weights do not. https://drafts.csswg.org/css-fonts-4/#font-weight-prop
-pub(crate) const BOLD_THRESHOLD: f32 = 600.0;
 
 /// Skia's fake-bold stroke width as a fraction of text size: `1/24` at 9px and below,
 /// easing to `1/32` at 36px and above, linearly interpolated in between. A constant factor
@@ -554,21 +582,15 @@ fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(ImageBuffer, Origin)
     #[cfg(not(feature = "png"))]
     BitmapData::Png(_) => return None,
     BitmapData::Bgra(bytes) => {
-      if bytes.len() < rgba_len(bitmap.width, bitmap.height)? {
-        return None;
-      }
+      let bgra = bytes.get(..rgba_len(bitmap.width, bitmap.height)?)?;
+      let rgba = bgra
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|&[blue, green, red, alpha]| [red, green, blue, alpha])
+        .collect();
 
-      let image = RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
-        let index = ((y * bitmap.width + x) * 4) as usize;
-        Rgba([
-          bytes[index + 2],
-          bytes[index + 1],
-          bytes[index],
-          bytes[index + 3],
-        ])
-      });
-      let (width, height) = (image.width(), image.height());
-      ImageBuffer::from_rgba_bytes(image.into_raw(), width, height)?
+      ImageBuffer::from_rgba_bytes(rgba, bitmap.width, bitmap.height)?
     }
     BitmapData::Mask(_) => return None,
   };

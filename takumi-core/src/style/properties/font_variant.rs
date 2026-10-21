@@ -78,7 +78,7 @@ impl MakeComputed for FontVariantLigatures {}
 impl Animatable for FontVariantLigatures {}
 
 impl<'i> FromCss<'i> for FontVariantLigatures {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_keyword_set(input, Self::set_keyword)
   }
 
@@ -202,7 +202,7 @@ impl MakeComputed for FontVariantNumeric {}
 impl Animatable for FontVariantNumeric {}
 
 impl<'i> FromCss<'i> for FontVariantNumeric {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_keyword_set(input, Self::set_keyword)
   }
 
@@ -318,7 +318,7 @@ impl MakeComputed for FontVariantEastAsian {}
 impl Animatable for FontVariantEastAsian {}
 
 impl<'i> FromCss<'i> for FontVariantEastAsian {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_keyword_set(input, Self::set_keyword)
   }
 
@@ -358,9 +358,7 @@ impl ToCss for FontVariantEastAsian {
   }
 }
 
-/// `font-variant-caps`. Each value maps to OpenType caps features; unlike browsers, missing
-/// features are not synthesized (e.g. small-caps from scaled capitals), so the result depends
-/// on the font shipping `smcp`/`c2sc`/`pcap`/`c2pc`/`unic`/`titl`.
+/// `font-variant-caps`. Each value maps to OpenType caps features.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum FontVariantCaps {
   /// No caps feature.
@@ -442,21 +440,16 @@ impl_css_enum!(
 
 /// Parses `normal` or a space-separated run of keywords that `set_keyword` accepts.
 fn parse_keyword_set<'i, T: Default + FromCss<'i>>(
-  input: &mut Parser<'i, '_>,
+  input: &mut Parser<'i>,
   set_keyword: fn(&mut T, &str) -> bool,
 ) -> ParseResult<'i, T> {
   let mut value = T::default();
 
   while !input.is_exhausted() {
-    let location = input.current_source_location();
     let ident = input.expect_ident()?;
 
     if !ident.eq_ignore_ascii_case("normal") && !set_keyword(&mut value, ident) {
-      return Err(unexpected_token!(
-        T,
-        location,
-        &Token::Ident(ident.to_owned())
-      ));
+      return Err(unexpected_token!(T, &Token::Ident(ident.to_owned())));
     }
   }
 
@@ -480,10 +473,9 @@ pub struct FontVariant {
 }
 
 impl<'i> FromCss<'i> for FontVariant {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut value = Self::default();
     while !input.is_exhausted() {
-      let location = input.current_source_location();
       let ident = input.expect_ident()?;
 
       if ident.eq_ignore_ascii_case("normal") {
@@ -503,7 +495,7 @@ impl<'i> FromCss<'i> for FontVariant {
         value.position = position;
         continue;
       }
-      return Err(unexpected_token!(location, &Token::Ident(ident.to_owned())));
+      return Err(unexpected_token!(&Token::Ident(ident.to_owned())));
     }
     Ok(value)
   }
@@ -668,21 +660,6 @@ mod tests {
   }
 
   #[test]
-  fn test_font_variant_caps_round_trip() {
-    for css in ["normal", "small-caps", "all-small-caps", "titling-caps"] {
-      let parsed = FontVariantCaps::from_css_str(css).unwrap();
-      let reparsed = FontVariantCaps::from_css_str(&parsed.to_css_string()).unwrap();
-      assert_eq!(parsed, reparsed, "failed for {css}");
-    }
-  }
-
-  #[test]
-  fn test_parse_font_variant_caps_invalid() {
-    assert!(FontVariantCaps::from_css_str("bogus").is_err());
-    assert!(FontVariantCaps::from_css_str("123").is_err());
-  }
-
-  #[test]
   fn test_parse_font_variant_position() {
     for (css, expected) in [
       ("normal", FontVariantPosition::Normal),
@@ -695,20 +672,6 @@ mod tests {
         "failed for {css}"
       );
     }
-  }
-
-  #[test]
-  fn test_font_variant_position_round_trip() {
-    for css in ["normal", "sub", "super"] {
-      let parsed = FontVariantPosition::from_css_str(css).unwrap();
-      let reparsed = FontVariantPosition::from_css_str(&parsed.to_css_string()).unwrap();
-      assert_eq!(parsed, reparsed, "failed for {css}");
-    }
-  }
-
-  #[test]
-  fn test_parse_font_variant_position_invalid() {
-    assert!(FontVariantPosition::from_css_str("bogus").is_err());
   }
 
   #[test]

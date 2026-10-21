@@ -1,9 +1,8 @@
 use std::fs;
 
-use image::ImageFormat;
 use takumi::{prelude::*, render, write_image};
 
-use crate::test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, generated_path};
+use crate::test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, decode_rgba, generated_path};
 
 const PHOTO: &str = "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg";
 
@@ -65,10 +64,8 @@ fn webp_lossy_output() {
   .unwrap();
   fs::write(generated_path("webp_lossy_output.webp"), &encoded).unwrap();
 
-  let decoded = image::load_from_memory_with_format(&encoded, ImageFormat::WebP)
-    .unwrap()
-    .to_rgba8();
+  let (width, height, decoded) = decode_rgba(&encoded);
 
-  assert_eq!(decoded.dimensions(), (image.width(), image.height()));
-  assert!(psnr(image.as_raw(), decoded.as_raw()) > 35.0);
+  assert_eq!((width, height), (image.width(), image.height()));
+  assert!(psnr(image.as_raw(), &decoded) > 35.0);
 }

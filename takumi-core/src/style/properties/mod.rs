@@ -26,9 +26,11 @@ pub(crate) mod filter;
 pub(crate) mod filter_reference;
 mod flex;
 mod flex_grow;
+mod font;
 mod font_family;
 mod font_feature_settings;
 mod font_kerning;
+mod font_language_override;
 mod font_optical_sizing;
 mod font_size;
 mod font_stretch;
@@ -40,8 +42,10 @@ mod font_weight;
 mod gap;
 pub(crate) mod gradient_utils;
 mod grid;
+mod hyphens;
 mod intrinsic_sizing;
 mod length;
+mod line_break;
 mod line_clamp;
 mod line_height;
 pub(crate) mod linear_gradient;
@@ -57,15 +61,18 @@ mod sides;
 mod size;
 mod space_pair;
 mod tab_size;
+mod text_align_last;
 mod text_decoration;
 mod text_fit;
 mod text_indent;
+mod text_justify;
 mod text_overflow;
 mod text_shadow;
 mod text_stroke;
 mod text_wrap;
 mod traits;
 mod transform;
+mod unicode_bidi;
 mod vertical_align;
 mod white_space;
 mod word_break;
@@ -91,22 +98,21 @@ pub use conic_gradient::ConicGradient;
 pub use contain::*;
 pub use content::*;
 pub use corner_shape::*;
-use cssparser::{
-  ParseError as CssParseError, ParseErrorKind, Parser, SourceLocation, Token,
-  match_ignore_ascii_case,
-};
+use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 pub use filter::{
-  BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
-  TransferTable,
+  BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, MapDirection, SEPIA_WEIGHTS,
+  TransferChannel, TransferTable, expand_filter_bounds,
 };
 #[cfg(feature = "svg")]
 pub use filter_reference::FilterReference;
 pub use flex::*;
 pub use flex_grow::*;
+pub use font::*;
 pub use font_family::*;
 pub(crate) use font_feature_settings::FontFeatureSettings;
 pub use font_feature_settings::{FontFeature, Tag};
 pub use font_kerning::*;
+pub use font_language_override::*;
 pub use font_optical_sizing::*;
 pub use font_size::*;
 pub use font_stretch::*;
@@ -114,12 +120,14 @@ pub use font_style::*;
 pub use font_synthesis::*;
 pub use font_variant::*;
 pub use font_variation_settings::FontVariation;
-pub(crate) use font_variation_settings::{FontVariationSettings, ResolvedFontVariations};
+pub(crate) use font_variation_settings::FontVariationSettings;
 pub use font_weight::*;
 pub use gap::*;
 pub use grid::*;
+pub use hyphens::*;
 pub use intrinsic_sizing::*;
 pub use length::*;
+pub use line_break::*;
 pub use line_clamp::*;
 pub use line_height::*;
 pub use linear_gradient::{
@@ -132,7 +140,6 @@ pub use offset_path::*;
 pub use order::*;
 pub use overflow::*;
 pub use overflow_wrap::*;
-use parley::Alignment;
 pub use percentage_number::*;
 pub use radial_gradient::{RadialGradient, RadialShape, RadialSize};
 use serde::Deserialize;
@@ -140,9 +147,11 @@ pub use sides::*;
 pub use size::*;
 pub use space_pair::*;
 pub use tab_size::*;
+pub use text_align_last::*;
 pub use text_decoration::*;
 pub use text_fit::*;
 pub use text_indent::*;
+pub use text_justify::*;
 pub use text_overflow::*;
 pub use text_shadow::*;
 pub use text_stroke::*;
@@ -152,6 +161,7 @@ pub(crate) use traits::{
   declare_box_alignment_enum_impl, impl_comma_list_from_css, impl_css_enum, impl_from_taffy_enum,
 };
 pub use transform::*;
+pub use unicode_bidi::*;
 pub use vertical_align::*;
 pub use white_space::*;
 pub use word_break::*;
@@ -159,7 +169,22 @@ pub use z_index::*;
 
 use crate::style::{SizingContext, tw::TailwindPropertyParser};
 
-pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
+/// Whether `ident` is a CSS-wide keyword or `default`, which a `<custom-ident>` excludes.
+/// <https://drafts.csswg.org/css-values-4/#custom-idents>
+pub(crate) fn is_reserved_custom_ident(ident: &str) -> bool {
+  [
+    "initial",
+    "inherit",
+    "unset",
+    "revert",
+    "revert-layer",
+    "default",
+  ]
+  .iter()
+  .any(|keyword| ident.eq_ignore_ascii_case(keyword))
+}
+
+pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i>) -> bool {
   let state = input.state();
   let is_comma = input.expect_comma().is_ok();
   input.reset(&state);
@@ -168,8 +193,8 @@ pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
 
 /// Parses a comma-separated list of `parse_item`, requiring at least one.
 pub(crate) fn parse_comma_list<'i, T>(
-  input: &mut Parser<'i, '_>,
-  mut parse_item: impl FnMut(&mut Parser<'i, '_>) -> ParseResult<'i, T>,
+  input: &mut Parser<'i>,
+  mut parse_item: impl FnMut(&mut Parser<'i>) -> ParseResult<'i, T>,
 ) -> ParseResult<'i, Box<[T]>> {
   let mut items = Vec::new();
   items.push(parse_item(input)?);
@@ -190,16 +215,15 @@ impl TailwindPropertyParser for AlignItems {}
 impl TailwindPropertyParser for BorderStyle {}
 
 macro_rules! unexpected_token {
-  ($type:ty, $location:expr, $token:expr $(,)?) => {
+  ($token:expr $(,)?) => {
+    $crate::style::unexpected_token!(Self, $token)
+  };
+  ($type:ty, $token:expr $(,)?) => {
     $crate::style::build_unexpected_token(
-      $location,
       $token,
       <$type as $crate::style::FromCss>::EXPECT_MESSAGE,
       <$type as $crate::style::FromCss>::VALID_TOKENS,
     )
-  };
-  ($location:expr, $token:expr $(,)?) => {
-    $crate::style::unexpected_token!(Self, $location, $token)
   };
 }
 
@@ -209,19 +233,15 @@ pub(crate) use unexpected_token;
 #[cold]
 #[inline(never)]
 pub(crate) fn build_unexpected_token<'i>(
-  location: SourceLocation,
   token: &Token<'i>,
   expect: CssExpectedMessage,
   valid_tokens: &'static [&'static str],
-) -> CssParseError<'i, ValueError<'i>> {
-  CssParseError {
-    location,
-    kind: ParseErrorKind::Custom(ValueError::UnexpectedToken {
-      token: token.clone(),
-      expect,
-      valid_tokens,
-    }),
-  }
+) -> CssParseError<ValueError<'i>> {
+  CssParseError::custom(ValueError::UnexpectedToken {
+    token: token.clone(),
+    expect,
+    valid_tokens,
+  })
 }
 
 /// `tokens` as an error message lists them: keywords quoted, `<syntax>` as is, the last joined
@@ -389,7 +409,7 @@ impl Animatable for BorderRadius {
 }
 
 impl<'i> FromCss<'i> for BorderRadius {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let widths: Sides<Length> = Sides::from_css(input)?;
 
     let heights = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
@@ -463,13 +483,8 @@ impl_css_enum!(
   "end" => TextAlign::End
 );
 
-impl_from_taffy_enum!(
-  TextAlign, into_parley -> Alignment, Left, Right, Center, Justify, Start, End
-);
-
 impl TextAlign {
   /// The physical side `start` and `end` name under `direction`.
-  #[cfg(feature = "paint-tree")]
   pub(crate) fn resolve(self, direction: Direction) -> Self {
     match (self, direction) {
       (Self::Start, Direction::Ltr) | (Self::End, Direction::Rtl) => Self::Left,
@@ -508,12 +523,15 @@ pub enum Visibility {
   Visible,
   /// The element is invisible (not rendered) but still takes up space.
   Hidden,
+  /// A table row, row group, column, or column group takes no space; anything else is `hidden`.
+  Collapse,
 }
 
 impl_css_enum!(
   Visibility,
   "visible" => Visibility::Visible,
-  "hidden" => Visibility::Hidden
+  "hidden" => Visibility::Hidden,
+  "collapse" => Visibility::Collapse
 );
 
 /// Defines which side of the table a caption renders on.
@@ -548,6 +566,23 @@ impl_css_enum!(
   BorderCollapse,
   "separate" => BorderCollapse::Separate,
   "collapse" => BorderCollapse::Collapse
+);
+
+/// Defines whether a table cell with no content paints its borders and background.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum EmptyCells {
+  /// Empty cells paint as any other.
+  #[default]
+  Show,
+  /// Empty cells paint nothing, unless the table collapses its borders.
+  Hide,
+}
+
+impl_css_enum!(
+  EmptyCells,
+  "show" => EmptyCells::Show,
+  "hide" => EmptyCells::Hide
 );
 
 /// Defines how a table distributes its column widths.
@@ -604,15 +639,14 @@ impl<'i> FromCss<'i> for BorderSpacing {
   const VALID_TOKENS: &'static [&'static str] = SpacePair::<Length>::VALID_TOKENS;
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let pair = SpacePair::<Length>::from_css(input)?;
 
     if [pair.x, pair.y]
       .into_iter()
       .any(|length| matches!(length, Length::Auto | Length::Percentage(_)) || length.is_negative())
     {
-      return Err(location.new_unexpected_token_error(Token::Delim('%')));
+      return Err(CssParseError::unexpected_token());
     }
 
     Ok(Self(pair))
@@ -682,6 +716,11 @@ impl Position {
     }
   }
 
+  /// `position: relative`, which moves a box from where it lays out.
+  pub(crate) const fn is_relative(self) -> bool {
+    matches!(self, Self::Relative)
+  }
+
   /// A positioned element (anything but `static`): establishes a containing
   /// block for absolutely-positioned descendants and honors `z-index`.
   pub(crate) const fn is_positioned(self) -> bool {
@@ -714,12 +753,11 @@ impl Direction {
     }
   }
 
-  /// The bidi control character forcing this base direction: U+200E LEFT-TO-RIGHT
-  /// MARK or U+200F RIGHT-TO-LEFT MARK.
-  pub(crate) const fn bidi_mark(self) -> &'static str {
+  /// The paragraph embedding level of this base direction, as UAX #9 numbers it.
+  pub(crate) fn bidi_level(self) -> u8 {
     match self {
-      Self::Ltr => "\u{200E}",
-      Self::Rtl => "\u{200F}",
+      Self::Ltr => 0,
+      Self::Rtl => 1,
     }
   }
 }
@@ -977,6 +1015,8 @@ pub enum Display {
   ListItem,
   /// The element generates a table wrapper box
   Table,
+  /// The element generates an inline-level table wrapper box
+  InlineTable,
   /// The element groups rows rendered before every other row group
   TableHeaderGroup,
   /// The element groups rows in source order
@@ -989,13 +1029,23 @@ pub enum Display {
   TableCell,
   /// The element generates a table caption
   TableCaption,
+  /// The element groups table columns
+  TableColumnGroup,
+  /// The element describes a table column
+  TableColumn,
+  /// The legacy `-webkit-box`: a flex container whose axis `-webkit-box-orient` sets
+  WebkitBox,
+  /// The legacy `-webkit-inline-box`: an inline-level `-webkit-box`
+  WebkitInlineBox,
 }
 
 impl_css_enum!(
   Display,
   "none" => Display::None,
-  "flex" | "-webkit-box" | "-webkit-flex" => Display::Flex,
-  "inline-flex" | "-webkit-inline-box" | "-webkit-inline-flex" => Display::InlineFlex,
+  "flex" | "-webkit-flex" => Display::Flex,
+  "inline-flex" | "-webkit-inline-flex" => Display::InlineFlex,
+  "-webkit-box" => Display::WebkitBox,
+  "-webkit-inline-box" => Display::WebkitInlineBox,
   "grid" => Display::Grid,
   "inline-grid" => Display::InlineGrid,
   "inline" => Display::Inline,
@@ -1004,12 +1054,15 @@ impl_css_enum!(
   "flow-root" => Display::FlowRoot,
   "list-item" => Display::ListItem,
   "table" => Display::Table,
+  "inline-table" => Display::InlineTable,
   "table-header-group" => Display::TableHeaderGroup,
   "table-row-group" => Display::TableRowGroup,
   "table-footer-group" => Display::TableFooterGroup,
   "table-row" => Display::TableRow,
   "table-cell" => Display::TableCell,
-  "table-caption" => Display::TableCaption
+  "table-caption" => Display::TableCaption,
+  "table-column-group" => Display::TableColumnGroup,
+  "table-column" => Display::TableColumn
 );
 
 impl Display {
@@ -1022,24 +1075,84 @@ impl Display {
   pub(crate) fn is_inline_level(&self) -> bool {
     matches!(
       self,
-      Display::Inline | Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
+      Display::Inline
+        | Display::InlineBlock
+        | Display::InlineFlex
+        | Display::InlineGrid
+        | Display::InlineTable
+        | Display::WebkitInlineBox
+    )
+  }
+
+  /// Whether the box is a table wrapper box, block-level or inline-level.
+  pub fn is_table(self) -> bool {
+    matches!(self, Display::Table | Display::InlineTable)
+  }
+
+  /// Blink's `IsTableSection`: a header, footer, or body row group.
+  pub(crate) fn is_table_section(self) -> bool {
+    matches!(
+      self,
+      Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup
+    )
+  }
+
+  /// Blink's `IsLayoutTableCol`: a column or column group.
+  pub(crate) fn is_table_column(self) -> bool {
+    matches!(self, Display::TableColumn | Display::TableColumnGroup)
+  }
+
+  /// Whether the box is a flex container, the legacy `-webkit-box` included.
+  pub(crate) fn is_flex(self) -> bool {
+    matches!(
+      self,
+      Display::Flex | Display::InlineFlex | Display::WebkitBox | Display::WebkitInlineBox
+    )
+  }
+
+  /// Blink's `IsDeprecatedWebkitBox`.
+  pub(crate) fn is_deprecated_webkit_box(self) -> bool {
+    matches!(self, Display::WebkitBox | Display::WebkitInlineBox)
+  }
+
+  /// Blink's `IsTablePart`: a row group, row, cell, caption, column, or column group.
+  pub(crate) fn is_table_part(self) -> bool {
+    matches!(
+      self,
+      Display::TableRow
+        | Display::TableRowGroup
+        | Display::TableHeaderGroup
+        | Display::TableFooterGroup
+        | Display::TableCell
+        | Display::TableCaption
+        | Display::TableColumn
+        | Display::TableColumnGroup
     )
   }
 
   /// Returns true if the display makes the children blockified (e.g., flex or grid).
   pub(crate) fn should_blockify_children(&self) -> bool {
-    matches!(
-      self,
-      Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
-    )
+    self.is_flex() || matches!(self, Display::Grid | Display::InlineGrid)
   }
 
   /// Cast the display to block level.
+  /// Blink's `EquivalentBlockDisplay`, which turns the parts of a table into blocks as well.
+  /// <https://drafts.csswg.org/css-display/#blockify>
   pub(crate) fn as_blockified(self) -> Self {
     match self {
-      Display::Inline => Display::Block,
-      Display::InlineBlock => Display::Block,
+      Display::Inline
+      | Display::InlineBlock
+      | Display::TableRowGroup
+      | Display::TableHeaderGroup
+      | Display::TableFooterGroup
+      | Display::TableRow
+      | Display::TableColumnGroup
+      | Display::TableColumn
+      | Display::TableCell
+      | Display::TableCaption => Display::Block,
+      Display::InlineTable => Display::Table,
       Display::InlineFlex => Display::Flex,
+      Display::WebkitInlineBox => Display::WebkitBox,
       Display::InlineGrid => Display::Grid,
       _ => self,
     }
@@ -1052,20 +1165,24 @@ impl Display {
 
   pub(crate) fn into_taffy(self) -> taffy::Display {
     match self {
-      Display::Flex | Display::InlineFlex => taffy::Display::Flex,
+      Display::Flex | Display::InlineFlex | Display::WebkitBox | Display::WebkitInlineBox => {
+        taffy::Display::Flex
+      }
       Display::Grid | Display::InlineGrid => taffy::Display::Grid,
       Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
         taffy::Display::Block
       }
       Display::FlowRoot => taffy::Display::FlowRoot,
-      // Lowering replaces every table box that sits in a table, so what is left
-      // here is a table part outside one. Blink wraps those in anonymous table
-      // boxes; block is the approximation.
+      // The table algorithm lays out a table and its parts; taffy only sees a table as a block
+      // child it does not stretch.
       Display::Table
+      | Display::InlineTable
       | Display::TableHeaderGroup
       | Display::TableRowGroup
       | Display::TableFooterGroup
       | Display::TableRow
+      | Display::TableColumnGroup
+      | Display::TableColumn
       | Display::TableCell
       | Display::TableCaption => taffy::Display::Block,
       Display::None => taffy::Display::None,
@@ -1073,11 +1190,12 @@ impl Display {
   }
 }
 
-/// Legacy `-webkit-box-orient` axis, lowered to `flex-direction`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Legacy `-webkit-box-orient`: the axis of a `display: -webkit-box`, which ignores `flex-direction`.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum BoxOrient {
   /// `horizontal` or `inline-axis`: children flow as a row.
+  #[default]
   Horizontal,
   /// `vertical` or `block-axis`: children flow as a column.
   Vertical,
@@ -1259,11 +1377,11 @@ impl AlignItems {
   }
 }
 
-/// Controls text case transformation when rendering.
+/// The case `text-transform` maps text to.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
-pub enum TextTransform {
-  /// Do not transform text
+pub enum TextTransformCase {
+  /// Leave the case.
   #[default]
   None,
   /// Transform all characters to uppercase
@@ -1274,13 +1392,102 @@ pub enum TextTransform {
   Capitalize,
 }
 
-impl_css_enum!(
-  TextTransform,
-  "none" => TextTransform::None,
-  "uppercase" => TextTransform::Uppercase,
-  "lowercase" => TextTransform::Lowercase,
-  "capitalize" => TextTransform::Capitalize
-);
+/// `text-transform`: `none | [capitalize | uppercase | lowercase] || full-width || full-size-kana`.
+/// <https://drafts.csswg.org/css-text-3/#text-transform-property>
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub struct TextTransform {
+  /// The case it maps text to.
+  pub case: TextTransformCase,
+  /// Whether it puts characters in their full-width forms.
+  pub full_width: bool,
+  /// Whether it puts small kana in their full-size forms.
+  pub full_size_kana: bool,
+}
+
+impl From<TextTransformCase> for TextTransform {
+  fn from(case: TextTransformCase) -> Self {
+    Self {
+      case,
+      ..Self::default()
+    }
+  }
+}
+
+impl MakeComputed for TextTransform {}
+
+impl Animatable for TextTransform {}
+
+impl<'i> FromCss<'i> for TextTransform {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("none"))
+      .is_ok()
+    {
+      return Ok(Self::default());
+    }
+
+    let mut transform = Self::default();
+    let mut has_case = false;
+    let mut parsed_any = false;
+
+    // Each of the three may come once, in any order.
+    while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
+      match_ignore_ascii_case! { &ident,
+        "uppercase" | "lowercase" | "capitalize" if !has_case => {
+          has_case = true;
+          transform.case = match_ignore_ascii_case! { &ident,
+            "uppercase" => TextTransformCase::Uppercase,
+            "lowercase" => TextTransformCase::Lowercase,
+            _ => TextTransformCase::Capitalize,
+          };
+        },
+        "full-width" if !transform.full_width => transform.full_width = true,
+        "full-size-kana" if !transform.full_size_kana => transform.full_size_kana = true,
+        _ => return Err(CssParseError::unexpected_token()),
+      }
+
+      parsed_any = true;
+    }
+
+    if !parsed_any {
+      return Err(input.new_error_for_next_token());
+    }
+
+    Ok(transform)
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "none",
+    "uppercase",
+    "lowercase",
+    "capitalize",
+    "full-width",
+    "full-size-kana",
+  ];
+}
+
+impl ToCss for TextTransform {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let case = match self.case {
+      TextTransformCase::None => None,
+      TextTransformCase::Uppercase => Some("uppercase"),
+      TextTransformCase::Lowercase => Some("lowercase"),
+      TextTransformCase::Capitalize => Some("capitalize"),
+    };
+    let parts: Vec<&str> = case
+      .into_iter()
+      .chain(self.full_width.then_some("full-width"))
+      .chain(self.full_size_kana.then_some("full-size-kana"))
+      .collect();
+
+    if parts.is_empty() {
+      dest.write_str("none")
+    } else {
+      dest.write_str(&parts.join(" "))
+    }
+  }
+}
 
 /// Controls whether text decoration should skip descenders.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -1312,6 +1519,8 @@ pub enum WhiteSpaceCollapse {
   PreserveSpaces,
   /// Preserve breaks and collapse spaces.
   PreserveBreaks,
+  /// Preserve whitespace, with a soft wrap opportunity after every preserved space.
+  BreakSpaces,
 }
 
 impl_css_enum!(
@@ -1320,7 +1529,36 @@ impl_css_enum!(
   "collapse" => WhiteSpaceCollapse::Collapse,
   "preserve-spaces" => WhiteSpaceCollapse::PreserveSpaces,
   "preserve-breaks" => WhiteSpaceCollapse::PreserveBreaks,
+  "break-spaces" => WhiteSpaceCollapse::BreakSpaces,
 );
+
+impl WhiteSpaceCollapse {
+  /// Blink's `ShouldPreserveWhiteSpaces`.
+  pub(crate) fn should_preserve_white_spaces(self) -> bool {
+    matches!(
+      self,
+      Self::Preserve | Self::PreserveSpaces | Self::BreakSpaces
+    )
+  }
+
+  /// Blink's `ShouldCollapseWhiteSpaces`.
+  pub(crate) fn should_collapse_white_spaces(self) -> bool {
+    !self.should_preserve_white_spaces()
+  }
+
+  /// Blink's `ShouldPreserveBreaks`.
+  pub(crate) fn should_preserve_breaks(self) -> bool {
+    matches!(
+      self,
+      Self::Preserve | Self::PreserveBreaks | Self::BreakSpaces
+    )
+  }
+
+  /// Blink's `ShouldBreakSpaces`.
+  pub(crate) fn should_break_spaces(self) -> bool {
+    self == Self::BreakSpaces
+  }
+}
 
 /// Defines how images should be scaled when rendered.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -1398,12 +1636,14 @@ mod display_tests {
 
   #[test]
   fn legacy_webkit_values_map_to_flex_layout() {
-    assert_eq!(Display::from_css_str("-webkit-box"), Ok(Display::Flex));
+    let webkit_box = Display::from_css_str("-webkit-box").unwrap();
+    let webkit_inline_box = Display::from_css_str("-webkit-inline-box").unwrap();
+
+    assert_eq!(webkit_box, Display::WebkitBox);
+    assert_eq!(webkit_inline_box.as_blockified(), Display::WebkitBox);
+    assert_eq!(webkit_box.into_taffy(), taffy::Display::Flex);
+    assert!(webkit_inline_box.is_inline_level() && webkit_inline_box.is_flex());
     assert_eq!(Display::from_css_str("-webkit-flex"), Ok(Display::Flex));
-    assert_eq!(
-      Display::from_css_str("-webkit-inline-box"),
-      Ok(Display::InlineFlex)
-    );
     assert_eq!(
       Display::from_css_str("-webkit-inline-flex"),
       Ok(Display::InlineFlex)
@@ -1448,12 +1688,43 @@ mod border_spacing_tests {
     assert!(BorderSpacing::from_css_str("-4px").is_err());
     assert!(BorderSpacing::from_css_str("4px -8px").is_err());
   }
+}
+
+#[cfg(test)]
+mod text_transform_tests {
+  use crate::style::{FromCssStr, TextTransform, TextTransformCase, ToCss};
 
   #[test]
-  fn border_spacing_starts_at_zero() {
+  fn parses_a_case_full_width_and_full_size_kana_in_any_order() {
+    let transform = TextTransform::from_css_str("full-size-kana uppercase full-width").unwrap();
+
     assert_eq!(
-      BorderSpacing::default(),
-      BorderSpacing(SpacePair::from_single(Length::Px(0.0)))
+      transform,
+      TextTransform {
+        case: TextTransformCase::Uppercase,
+        full_width: true,
+        full_size_kana: true,
+      }
     );
+    assert_eq!(
+      transform.to_css_string(),
+      "uppercase full-width full-size-kana"
+    );
+    assert_eq!(
+      TextTransform::from_css_str("none").unwrap().to_css_string(),
+      "none"
+    );
+  }
+
+  #[test]
+  fn rejects_a_repeated_part() {
+    for value in [
+      "uppercase lowercase",
+      "full-width full-width",
+      "full-size-kana capitalize full-size-kana",
+      "",
+    ] {
+      assert!(TextTransform::from_css_str(value).is_err(), "{value:?}");
+    }
   }
 }

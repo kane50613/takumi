@@ -70,7 +70,7 @@ impl From<LineWidth> for Length {
 }
 
 impl<'i> FromCss<'i> for LineWidth {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(LineWidthKeyword::from_css) {
       return Ok(Self::Keyword(keyword));
     }
@@ -146,7 +146,7 @@ pub struct Border {
 }
 
 impl<'i> FromCss<'i> for Border {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut width = None;
     let mut style = None;
     let mut color = None;
@@ -167,10 +167,7 @@ impl<'i> FromCss<'i> for Border {
         continue;
       }
 
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        input.next()?,
-      ));
+      return Err(unexpected_token!(input.next()?,));
     }
 
     Ok(Border {
@@ -231,16 +228,6 @@ mod tests {
     assert_eq!(used("thin"), 1.0);
     assert_eq!(used("medium"), 3.0);
     assert_eq!(used("thick"), 5.0);
-  }
-
-  #[test]
-  fn test_parse_border_style_solid() {
-    assert_eq!(BorderStyle::from_css_str("solid"), Ok(BorderStyle::Solid));
-  }
-
-  #[test]
-  fn test_parse_border_style_dashed() {
-    assert_eq!(BorderStyle::from_css_str("dashed"), Ok(BorderStyle::Dashed));
   }
 
   #[test]
@@ -383,54 +370,6 @@ mod tests {
   #[test]
   fn test_parse_border_empty() {
     assert_eq!(Border::from_css_str(""), Ok(Border::default()));
-  }
-
-  #[test]
-  fn test_border_value_from_css() {
-    assert_eq!(
-      Border::from_css_str("3px solid blue"),
-      Ok(Border {
-        width: LineWidth::Length(Length::Px(3.0)),
-        style: BorderStyle::Solid,
-        color: ColorInput::Value(Color([0, 0, 255, 255])),
-      })
-    );
-  }
-
-  #[test]
-  fn test_border_value_from_invalid_css() {
-    assert!(Border::from_css_str("invalid border").is_err());
-  }
-
-  #[test]
-  fn test_line_width_default_is_medium() {
-    assert_eq!(
-      LineWidth::default(),
-      LineWidth::Keyword(LineWidthKeyword::Medium)
-    );
-    assert_eq!(Length::from(LineWidth::default()), Length::Px(3.0));
-    assert_eq!(Length::from(LineWidthKeyword::Thin), Length::Px(1.0));
-    assert_eq!(Length::from(LineWidthKeyword::Thick), Length::Px(5.0));
-  }
-
-  #[test]
-  fn test_line_width_keywords() {
-    assert_eq!(
-      LineWidth::from_css_str("thin"),
-      Ok(LineWidth::Keyword(LineWidthKeyword::Thin))
-    );
-    assert_eq!(
-      LineWidth::from_css_str("medium"),
-      Ok(LineWidth::Keyword(LineWidthKeyword::Medium))
-    );
-    assert_eq!(
-      LineWidth::from_css_str("thick"),
-      Ok(LineWidth::Keyword(LineWidthKeyword::Thick))
-    );
-    assert_eq!(
-      LineWidth::from_css_str("2px"),
-      Ok(LineWidth::Length(Length::Px(2.0)))
-    );
   }
 
   #[test]

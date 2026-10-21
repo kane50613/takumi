@@ -4,15 +4,13 @@ description: Add Open Graph image templates to your project with the shadcn CLI 
 icon: LayoutTemplate
 ---
 
-Start with an Open Graph image template and edit its content and styles.
-The [shadcn CLI](https://ui.shadcn.com/docs/cli) copies a template into your
-project and installs `takumi-js` alongside it.
+Copy an Open Graph card into your project, then edit its content and styles. The [shadcn CLI](https://ui.shadcn.com/docs/cli) adds the card and installs `takumi-js`.
 
 ```npm
 npx shadcn@latest add https://takumi.kane.tw/r/image/blog-post.json
 ```
 
-Register the namespace in `components.json` to reach the same items by name:
+To add items by name, register the namespace in `components.json`:
 
 ```json title="components.json"
 {
@@ -26,12 +24,11 @@ Register the namespace in `components.json` to reach the same items by name:
 npx shadcn@latest add @takumi/image/blog-post
 ```
 
-Items are grouped by what they render. Everything here is under `image`, and a
-card lands in `components/takumi/image/`.
+Every item lives under `image/`. Cards land in `components/takumi/image/`.
 
 ## A route that answers with an image
 
-`image/og-route` is a Next.js route handler plus the card it renders. It creates an `/og` endpoint that reads the title from the query string.
+`image/og-route` adds a Next.js route handler and the blog post card it renders. The route serves `/og` and reads the card's text from the query string.
 
 ```npm
 npx shadcn@latest add @takumi/image/og-route
@@ -57,23 +54,37 @@ export function GET(request: Request) {
 }
 ```
 
-Point a page's metadata at it and every article gets its own card:
+Point a page's Open Graph image at the route:
 
 ```tsx title="app/blog/[slug]/page.tsx"
-export const metadata = {
-  openGraph: { images: [`/og?title=${encodeURIComponent(title)}`] },
-};
+import type { Metadata } from "next";
+
+type Props = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+
+  return {
+    openGraph: { images: [`/og?title=${encodeURIComponent(slug)}`] },
+  };
+}
 ```
 
-The import above assumes the `@/` alias. The CLI rewrites it to whatever
-`components.json` names, so a project on `~/` gets `~/components/takumi/image/blog-post`.
+<Callout type="warn">
+  A relative image URL needs `metadataBase` in the root layout's metadata, or `next build` fails.
+</Callout>
 
-The route lands only in a project the CLI recognizes as Next.js. Elsewhere it
-installs the card and leaves the route to you.
+```tsx title="app/layout.tsx"
+export const metadata = { metadataBase: new URL("https://example.com") };
+```
+
+The CLI rewrites the `@/` import to the alias in your `components.json`. A project on `~/` gets `~/components/takumi/image/blog-post`.
+
+The route is for the Next.js App Router. The shadcn CLI skips it when it cannot detect the framework, and moves it to another folder in Pages Router, React Router, and Laravel projects, where it does not work as a route.
 
 ## Blog Post Template
 
-A blog post card with a large title and a subtitle.
+An article card with a category pill, an oversized title, and an author byline.
 
 ![Blog Post Template](/templates/previews/blog-post.svg)
 
@@ -83,7 +94,7 @@ npx shadcn@latest add @takumi/image/blog-post
 
 ## Docs Template
 
-A documentation card for guides and API pages.
+A documentation page card, tinted by a color you pass and headed by the site's icon.
 
 ![Docs Template](/templates/previews/docs.svg)
 
@@ -93,7 +104,7 @@ npx shadcn@latest add @takumi/image/docs
 
 ## Product Card Template
 
-A product card with an image, name, and price.
+A product card with its image, name, price, and a line of copy.
 
 ![Product Card Template](/templates/previews/product-card.svg)
 
@@ -103,7 +114,7 @@ npx shadcn@latest add @takumi/image/product-card
 
 ## Event Template
 
-An editorial card for talks, webinars, and conferences, with an oversized title and a clear when/where/host footer.
+A card for a talk or a conference, with the title above a when, where, and host footer.
 
 ![Event Template](/templates/previews/event.svg)
 
@@ -113,7 +124,7 @@ npx shadcn@latest add @takumi/image/event
 
 ## Quote Template
 
-A high-contrast quote and testimonial card with author and company attribution.
+A high-contrast quote card, attributed to a person and a company.
 
 ![Quote Template](/templates/previews/quote.svg)
 
@@ -123,7 +134,7 @@ npx shadcn@latest add @takumi/image/quote
 
 ## Repository Template
 
-A developer-native card for open-source repositories, featuring the repo slug, description, and star, fork, and language stats.
+A repository card with its slug, description, and star, fork, and language counts.
 
 ![Repository Template](/templates/previews/repository.svg)
 

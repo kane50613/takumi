@@ -1,9 +1,8 @@
-mod test_utils;
-
 use std::fs;
 
 use takumi::prelude::{Length::*, *};
-use test_utils::{
+
+use crate::test_utils::{
   CONTEXT, TEST_IMAGES, create_test_viewport, measure_with_css, repo_base_path, run_texts,
 };
 
@@ -141,7 +140,7 @@ fn test_measure_text_node() {
           text: "Hello World".to_string(),
           x: 0.0,
           y: -0.10000038,
-          width: 105.46001,
+          width: 105.45999,
           height: 26.0,
         }],
       }],
@@ -269,7 +268,7 @@ fn test_measure_inline_layout() {
   assert_within(first.height, 26.0, 0.1);
 
   let second = &result.runs[1];
-  assert_eq!(second.text, "This is Takumi ");
+  assert_eq!(second.text, "This is Takumi");
   assert_within(second.x, 233.47, 0.1);
   assert_within(second.y, 108.0, 1.5);
   assert_within(second.height, 26.0, 0.1);
@@ -322,7 +321,7 @@ fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
 }
 
 /// taffy subtracts the content-box inset without a floor, so the available
-/// width reaching the text can be negative. parley asserts on that.
+/// width reaching the text can be negative.
 #[test]
 fn test_measure_padding_wider_than_the_box_does_not_panic() {
   let node = Node::from_html(
@@ -1123,7 +1122,7 @@ fn test_measure_clear_left_moves_following_float_below_previous_left_float() {
 }
 
 #[test]
-fn test_measure_line_box_reflows_below_float_that_intersects_tall_line() {
+fn test_measure_float_too_wide_for_the_line_goes_below_it() {
   let node = Node::container([
     Node::container([])
       .with_style(
@@ -1173,12 +1172,11 @@ fn test_measure_line_box_reflows_below_float_that_intersects_tall_line() {
     .first()
     .expect("expected text after the floats to be measured");
 
+  // Blink's `ShouldPushFloatAfterLine` places a float too wide for the rest of the line below it.
   assert_close(second_float.transform[4], 0.0);
-  assert_close(second_float.transform[5], 40.0);
-  assert!(
-    first_run.y >= 80.0,
-    "expected text to reflow below the intersecting float instead of overlapping it"
-  );
+  assert_close(second_float.transform[5], 60.0);
+  assert_close(first_run.x, 120.0);
+  assert!(first_run.y >= 60.0, "text after the float starts beside it");
 }
 
 #[test]
@@ -2303,6 +2301,15 @@ fn test_flow_root_wraps_inline_text_like_block() {
   );
 }
 
+/// The cells of each row in `table`'s first row group.
+fn table_rows(table: &MeasuredNode) -> Vec<&[MeasuredNode]> {
+  table.children[0]
+    .children
+    .iter()
+    .map(|row| row.children.as_slice())
+    .collect()
+}
+
 /// Blink shares a table's free width among its auto columns in proportion to
 /// their max-content widths, whether or not another column declares a width.
 #[test]
@@ -2316,7 +2323,8 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
   )
   .expect("parse");
   let out = measure(node, create_test_viewport());
-  let cells = &out.children[0].children;
+  let rows = table_rows(&out.children[0]);
+  let cells = rows[1];
   fn first_run(node: &MeasuredNode) -> Option<&MeasuredTextRun> {
     node
       .runs
@@ -2324,13 +2332,13 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
       .or_else(|| node.children.iter().find_map(first_run))
   }
   let max_content = |cell: &MeasuredNode| first_run(cell).expect("a run").width + 2.0;
-  let (name, description) = (max_content(&cells[3]), max_content(&cells[4]));
+  let (name, description) = (max_content(&cells[0]), max_content(&cells[1]));
   // 352px less the 48px column and four 2px spacings.
   let free = 296.0;
 
-  assert_within(cells[3].width, free * name / (name + description), 1.0);
+  assert_within(cells[0].width, free * name / (name + description), 1.0);
   assert_within(
-    cells[4].width,
+    cells[1].width,
     free * description / (name + description),
     1.0,
   );
@@ -2352,7 +2360,7 @@ fn test_table_keyword_cell_width_leaves_column_auto() {
     )
     .expect("parse");
 
-    measure(node, create_test_viewport()).children[0].children[3..]
+    table_rows(&measure(node, create_test_viewport()).children[0])[1]
       .iter()
       .map(|cell| cell.width)
       .collect::<Vec<_>>()
@@ -2382,7 +2390,7 @@ fn test_table_fixed_layout_keeps_tracks_with_keyword_cell_width() {
 
     (
       table.width,
-      table.children[2..]
+      table_rows(table)[1]
         .iter()
         .map(|cell| cell.width)
         .collect::<Vec<_>>(),
@@ -2586,19 +2594,19 @@ fn test_measure_table_cells_default_to_the_middle() {
   }
 
   let node = Node::from_html(
-    r#"<table style="border-spacing:0"><tr><td style="padding:0"><div style="height:60px; width:20px"></div></td><td style="padding:0; font-size:20px; line-height:20px">x</td></tr></table>"#,
+    r#"<table style="border-spacing:0"><tr><td style="padding:0"><div style="height:60px; width:20px"></div></td><td style="padding:0"><div style="font-size:20px; line-height:20px">x</div></td></tr></table>"#,
     FromHtmlOptions::default(),
   )
   .expect("parse");
   let out = measure(node, create_test_viewport());
-  let cell = cell_with(&out, "x").expect("the text cell");
-  let run = cell
+  let content = cell_with(&out, "x").expect("the text cell's content");
+  let run = content
     .runs
     .iter()
     .find(|run| run.text == "x")
     .expect("the run");
 
-  assert_within(cell.transform[5] + run.y + run.height / 2.0, 30.0, 1.0);
+  assert_within(content.transform[5] + run.y + run.height / 2.0, 30.0, 1.0);
 }
 
 /// The top of each text run under `node`, by its text, in the node's space.
@@ -2768,4 +2776,135 @@ fn an_inline_flex_resolves_a_percentage_height_before_sizing_its_width() {
     .collect();
 
   assert_eq!(sizes.last(), Some(&(100.0, 100.0)), "{sizes:?}");
+}
+
+/// A table in a block in a table cell sizes the cell by its max-content width, so its text stays on
+/// one line.
+#[test]
+fn a_table_nested_in_a_cell_keeps_its_max_content_width() {
+  let root = Node::container([Node::container([Node::container([Node::container([
+    Node::text("XXXXX XXXXXX"),
+  ])
+  .with_class_name("cell")])
+  .with_class_name("block")])
+  .with_class_name("row")])
+  .with_class_name("root");
+  let result = measure_with_css(
+    root,
+    r#"
+      .root { display: block; width: 800px; }
+      .row { display: table-row; font-size: 16px; }
+      .block { display: block; }
+      .cell { display: table-cell; }
+    "#,
+  );
+
+  assert_eq!(run_texts(&result), ["XXXXX XXXXXX"]);
+}
+
+/// An ellipsis measures as its own text, not the paragraph's text at its offsets.
+#[test]
+fn an_ellipsis_measures_as_its_own_text() {
+  let root = Node::container([Node::text("Hello wonderful world")]).with_class_name("clamp");
+  let result = measure_with_css(
+    root,
+    r#"
+      .clamp { display: block; width: 80px; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    "#,
+  );
+  let texts = run_texts(&result);
+
+  assert_eq!(texts.last(), Some(&"\u{2026}"), "{texts:?}");
+}
+
+/// A block-level absolute box in an inline box of the other direction takes its static position
+/// in its container's direction, as Blink's `AddOutOfFlowInlineChildCandidate` passes it.
+#[test]
+fn an_absolute_block_in_a_reversed_inline_box_keeps_its_containers_direction() {
+  let root = Node::container([
+    Node::text("aa "),
+    Node::container([
+      Node::text("bb"),
+      Node::container([]).with_class_name("absolute"),
+    ])
+    .with_class_name("span"),
+  ])
+  .with_class_name("root");
+  let result = measure_with_css(
+    root,
+    r#"
+      .root { display: block; position: relative; width: 400px; font-size: 20px; }
+      .span { display: inline; direction: rtl; padding: 0 4px; }
+      .absolute { display: block; position: absolute; width: 10px; height: 10px; }
+    "#,
+  );
+  let absolute = &result.children[0].children[0];
+
+  assert_eq!(absolute.transform[4], 0.0, "{result:?}");
+}
+
+/// `line-break: anywhere` breaks between any two characters, so a line fills up mid-word.
+#[test]
+fn line_break_anywhere_fills_a_line_mid_word() {
+  let measure_lines = |line_break: &str| {
+    let root = Node::container([Node::text("aaaa bbbbbbbbbbbb")]).with_class_name("root");
+    let result = measure_with_css(
+      root,
+      &format!(
+        ".root {{ display: block; width: 120px; font-size: 20px; line-break: {line_break}; }}"
+      ),
+    );
+
+    run_texts(&result)
+      .into_iter()
+      .map(str::to_owned)
+      .collect::<Vec<_>>()
+  };
+
+  assert_eq!(measure_lines("auto"), ["aaaa", "bbbbbbbbbbbb"]);
+
+  let anywhere = measure_lines("anywhere");
+
+  assert!(anywhere[0].starts_with("aaaa b"), "{anywhere:?}");
+  assert_eq!(anywhere.concat().replace(' ', ""), "aaaabbbbbbbbbbbb");
+}
+
+/// An `<img>` without a source takes the box its `width` and `height` size, as in Chrome, and the
+/// document still renders.
+#[test]
+fn an_img_without_a_source_takes_its_attribute_size() {
+  let node = Node::from_html(
+    r#"<div><img width="40" height="20"><span>after</span></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let result = measure(node, create_test_viewport());
+
+  assert!(
+    has_descendant(&result, |node| node.width == 40.0 && node.height == 20.0),
+    "{result:?}"
+  );
+  assert_eq!(run_texts(&result), ["after"]);
+}
+
+/// `ch` is the advance of the font's `0` glyph, so ten of them fill a `10ch` box once kerning and
+/// contextual alternates, which `ch` never sees, stay off.
+#[test]
+fn ch_matches_the_advance_of_zero() {
+  let root = Node::container([
+    Node::container([]).with_class_name("box"),
+    Node::text("0000000000"),
+  ])
+  .with_class_name("root");
+  let result = measure_with_css(
+    root,
+    ".root { display: block; font: 20px Geist; font-feature-settings: \"calt\" 0, \"kern\" 0; } .box { display: block; width: 10ch; height: 1px; }",
+  );
+  let box_width = result.children[0].width;
+  let zeros_width = result.children[1].runs[0].width;
+
+  assert!(
+    (box_width - zeros_width).abs() < 0.5,
+    "10ch is {box_width}px, ten zeros {zeros_width}px"
+  );
 }

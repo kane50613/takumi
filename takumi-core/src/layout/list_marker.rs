@@ -1,94 +1,250 @@
 use std::rc::Rc;
 
-use taffy::{LengthPercentageAuto, Size as TaffySize};
+use taffy::Size as TaffySize;
 
 use crate::{
   context::RenderContext,
+  geometry::Point,
   layout::{
     node::{Node, resolve_image},
     tree::{NodeOrigin, RenderNode},
   },
+  layout_unit::LayoutUnit,
   matching::MatchedDeclarationsView,
   style::{
-    BackgroundImage, Direction, Display, JustifyContent, Length, ListStylePosition, MakeComputed,
-    Size, TextWrapMode, WhiteSpaceCollapse,
+    BackgroundImage, Direction, Display, Length, ListStylePosition, ListStyleType, MakeComputed,
+    TextWrapMode, WhiteSpaceCollapse,
   },
 };
 
-/// Blink's `kCMarkerPaddingPx`: the gap between a marker image or an outside
-/// symbol and the item's content.
+/// Blink's `kCMarkerPaddingPx`: the gap between a marker image and the item's content.
 const MARKER_GAP_PX: f32 = 7.0;
 
 /// Blink's `kCUAMarkerMarginEm`: the gap an inside symbol keeps from the
 /// content that follows it on the line.
 const INSIDE_SYMBOL_GAP_EM: f32 = 1.0;
 
-/// The marker box of a `display: list-item` box, per css-lists-3 §3.
+/// Blink's `kClosureMarkerMarginEm`: the gap an inside disclosure triangle keeps.
+const INSIDE_DISCLOSURE_GAP_EM: f32 = 0.4;
+
+/// Blink's `DisclosureSymbolSize`, in ems.
+const DISCLOSURE_SYMBOL_SIZE_EM: f32 = 0.66;
+
+/// The marker box of a `display: list-item` box, per css-lists-3 §3: Blink's
+/// `LayoutOutsideListMarker`, an atomic inline, or `LayoutInsideListMarker`, an inline box.
 pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<RenderNode> {
   let direction = item_context.style.inherited_data.direction;
+  let position = item_context.style.inherited_data.list_style_position;
+  let style_type = &item_context.style.misc_inherited1_data.list_style_type;
+  let image = available_marker_image(item_context);
+  let has_image = image.is_some();
   let (mut style, sizing, current_color) =
     item_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
 
-  let inherited = style.inherited_data_mut();
+  match position {
+    ListStylePosition::Outside => {
+      // Blink's `AdjustStyleForMarker`: an outside marker is a block container that does not
+      // break and keeps its trailing spaces.
+      let inherited = style.inherited_data_mut();
 
-  inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
-  inherited.text_wrap_mode = TextWrapMode::NoWrap;
-  style.base_data_mut().display = Display::InlineFlex;
-  // Taffy resolves `Start`/`End` against `direction`, so flow-relative `End`
-  // hangs the overflowing content outside the item's content edge either way.
-  style.box_data_mut().justify_content = JustifyContent::End;
+      inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
+      inherited.text_wrap_mode = TextWrapMode::NoWrap;
+      style.base_data_mut().display = Display::InlineBlock;
+    }
+    ListStylePosition::Inside => {
+      let (margin_start, margin_end) = inline_margins_for_inside(has_image, style_type);
+      let box_data = style.box_data_mut();
+      let (start, end) =
+        direction.inline_sides(&mut box_data.margin_left, &mut box_data.margin_right);
 
-  // An outside marker hangs at the item's content edge without taking width:
-  // a zero-width flex box ends its overflowing content there.
-  if item_context.style.inherited_data.list_style_position == ListStylePosition::Outside {
-    style.box_data_mut().width = Size::zero();
+      *start = margin_start;
+      *end = margin_end;
+      style.base_data_mut().display = Display::Inline;
+    }
   }
 
   let mut context = RenderContext::from_parent(item_context, style, sizing, current_color);
 
-  // Blink's inside marker is an inline box, which the item's decorations reach. Naive: the
-  // marker lays out as an inline flex box here, so the space after its text hangs undecorated.
-  if item_context.style.inherited_data.list_style_position == ListStylePosition::Inside {
+  if position == ListStylePosition::Inside {
     context
       .text_decorations
       .clone_from(&item_context.text_decorations);
   }
 
-  let mut content = match available_marker_image(item_context) {
-    Some(image) => marker_image(&context, image, direction),
+  let content = match image {
+    Some(image) => marker_image(&context, image),
     None => {
-      let style_type = &item_context.style.misc_inherited1_data.list_style_type;
       let text = style_type.marker_text(ordinal, direction)?;
 
-      // Blink spaces a symbol marker with margins, not its suffix
-      // (`InlineMarginsForInside`/`Outside`).
       if style_type.is_symbolic() {
-        let (text, gap) = match item_context.style.inherited_data.list_style_position {
-          ListStylePosition::Inside => {
-            (text.trim_end().to_owned(), Length::Em(INSIDE_SYMBOL_GAP_EM))
-          }
-          ListStylePosition::Outside => (text, Length::Px(MARKER_GAP_PX)),
-        };
-        let mut item = RenderNode::anonymous_text_item(&context, text);
-
-        apply_marker_gap(&mut item, &context, gap, direction);
-        item
+        RenderNode::anonymous_text_item(&context, text.trim_end().to_owned())
       } else {
         RenderNode::anonymous_text_item(&context, text)
       }
     }
   };
-
-  if let Some(layout_style) = &mut content.layout_style_override {
-    Rc::make_mut(layout_style).flex_shrink = 0.0;
-  }
-
-  Some(RenderNode::new(
+  let mut marker = RenderNode::new(
     context,
     NodeOrigin::Marker,
     Some(Node::container([])),
     Some(Box::new([content])),
-  ))
+  );
+
+  // Blink's `LayoutOutsideListMarker` lays its content out in lines, an image marker's too.
+  marker.force_inline_layout = position == ListStylePosition::Outside;
+
+  Some(marker)
+}
+
+/// Blink's `InlineMarginsForInside`: the marker box's inline-start and inline-end margins.
+fn inline_margins_for_inside(has_image: bool, style_type: &ListStyleType) -> (Length, Length) {
+  if has_image {
+    return (Length::zero(), Length::Px(MARKER_GAP_PX));
+  }
+
+  match style_type {
+    ListStyleType::DisclosureOpen | ListStyleType::DisclosureClosed => {
+      (Length::zero(), Length::Em(INSIDE_DISCLOSURE_GAP_EM))
+    }
+    _ if style_type.is_symbolic() => (Length::Px(-1.0), Length::Em(INSIDE_SYMBOL_GAP_EM)),
+    _ => (Length::zero(), Length::zero()),
+  }
+}
+
+/// Blink's `ListMarker::InlineMarginsForOutside`: the inline-start and inline-end margins that
+/// hang an outside marker `marker_inline_size` wide outside its list item.
+pub(crate) fn inline_margins_for_outside(
+  context: &RenderContext,
+  marker_inline_size: LayoutUnit,
+) -> (LayoutUnit, LayoutUnit) {
+  let style_type = &context.style.misc_inherited1_data.list_style_type;
+
+  if available_marker_image(context).is_some() {
+    let gap = LayoutUnit::from_float(MARKER_GAP_PX);
+
+    return (-marker_inline_size - gap, gap);
+  }
+  if !style_type.is_symbolic() {
+    return (-marker_inline_size, LayoutUnit::ZERO);
+  }
+
+  let Some(ascent) = primary_font_ascent(context) else {
+    return (LayoutUnit::ZERO, LayoutUnit::ZERO);
+  };
+  let offset = match style_type {
+    ListStyleType::DisclosureOpen | ListStyleType::DisclosureClosed => {
+      disclosure_symbol_size(context)
+    }
+    _ => LayoutUnit::from_int(ascent * 2 / 3),
+  };
+  let gap = offset + LayoutUnit::from_float(MARKER_GAP_PX) + LayoutUnit::from_int(1);
+
+  (-gap, gap - marker_inline_size)
+}
+
+/// Blink's `FontMetrics::Ascent` of the primary font, in whole px.
+fn primary_font_ascent(context: &RenderContext) -> Option<i32> {
+  context
+    .primary_font_metrics(&context.style, context.sizing.font_size)
+    .map(|metrics| metrics.ascent as i32)
+}
+
+/// Blink's `DisclosureSymbolSize`.
+fn disclosure_symbol_size(context: &RenderContext) -> LayoutUnit {
+  LayoutUnit::from_float(context.sizing.font_size * DISCLOSURE_SYMBOL_SIZE_EM)
+}
+
+/// Blink's `ListMarker::WidthOfSymbol`: the width a symbol marker, painted as a shape, takes.
+pub(crate) fn width_of_symbol(context: &RenderContext) -> LayoutUnit {
+  let Some(ascent) = primary_font_ascent(context) else {
+    return LayoutUnit::ZERO;
+  };
+
+  match context.style.misc_inherited1_data.list_style_type {
+    ListStyleType::DisclosureOpen | ListStyleType::DisclosureClosed => {
+      disclosure_symbol_size(context)
+    }
+    _ => LayoutUnit::from_int((ascent * 2 / 3 + 1) / 2 + 2),
+  }
+}
+
+/// The shape Blink's `TextFragmentPainter::PaintSymbol` paints a symbol marker as.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum SymbolShape {
+  /// `disc`: a filled ellipse.
+  Disc,
+  /// `circle`: an ellipse stroked 1px wide.
+  Circle,
+  /// `square`: a filled rectangle.
+  Square,
+  /// `disclosure-open` and `disclosure-closed`: a filled triangle.
+  Disclosure(DisclosureOrientation),
+}
+
+/// Blink's `GetDisclosureOrientation` in `horizontal-tb`, the only writing mode takumi lays out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DisclosureOrientation {
+  /// Toward the inline end of right-to-left text.
+  Left,
+  /// Toward the inline end of left-to-right text.
+  Right,
+  /// Toward the block end.
+  Down,
+}
+
+/// A symbol marker's shape and where it paints.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SymbolMarker {
+  pub(crate) shape: SymbolShape,
+  /// Blink's `RelativeSymbolMarkerRect` top-left, from the marker text's start on its baseline.
+  pub(crate) offset: Point<f32>,
+  /// The side of that rect, which is square.
+  pub(crate) side: f32,
+}
+
+impl SymbolMarker {
+  /// Blink's `ListMarker::RelativeSymbolMarkerRect` for marker text in `context`.
+  pub(crate) fn of(context: &RenderContext) -> Option<Self> {
+    let style = &context.style;
+    let shape = match style.misc_inherited1_data.list_style_type {
+      ListStyleType::Disc => SymbolShape::Disc,
+      ListStyleType::Circle => SymbolShape::Circle,
+      ListStyleType::Square => SymbolShape::Square,
+      ListStyleType::DisclosureOpen => SymbolShape::Disclosure(DisclosureOrientation::Down),
+      ListStyleType::DisclosureClosed => {
+        SymbolShape::Disclosure(match style.inherited_data.direction {
+          Direction::Ltr => DisclosureOrientation::Right,
+          Direction::Rtl => DisclosureOrientation::Left,
+        })
+      }
+      _ => return None,
+    };
+    let ascent = primary_font_ascent(context)?;
+    let (offset, side) = match shape {
+      SymbolShape::Disclosure(_) => {
+        let side = disclosure_symbol_size(context).to_float();
+
+        (Point { x: 0.0, y: -side }, side)
+      }
+      _ => {
+        let top = 3 * (ascent - ascent * 2 / 3) / 2;
+
+        (
+          Point {
+            x: 1.0,
+            y: (top - ascent) as f32,
+          },
+          ((ascent * 2 / 3 + 1) / 2) as f32,
+        )
+      }
+    };
+
+    Some(Self {
+      shape,
+      offset,
+      side,
+    })
+  }
 }
 
 /// css-lists-3 §3.1: an image that is not available leaves the counter style
@@ -108,11 +264,7 @@ fn available_marker_image(item_context: &RenderContext) -> Option<BackgroundImag
 }
 
 /// A marker image at its natural size.
-fn marker_image(
-  context: &RenderContext,
-  mut image: BackgroundImage,
-  direction: Direction,
-) -> RenderNode {
+fn marker_image(context: &RenderContext, mut image: BackgroundImage) -> RenderNode {
   // Inheriting the image shares it, so its lengths resolve here rather than
   // once per node that inherited it.
   image.make_computed(&context.sizing);
@@ -122,25 +274,8 @@ fn marker_image(
   if let Some(layout_style) = &mut item.layout_style_override {
     Rc::make_mut(layout_style).max_size = TaffySize::auto();
   }
-  apply_marker_gap(&mut item, context, Length::Px(MARKER_GAP_PX), direction);
 
   item
-}
-
-/// A margin on the content's inline-end side keeps the marker box itself zero-width.
-fn apply_marker_gap(
-  item: &mut RenderNode,
-  context: &RenderContext,
-  gap: Length,
-  direction: Direction,
-) {
-  let Some(layout_style) = &mut item.layout_style_override else {
-    return;
-  };
-  let margin = &mut Rc::make_mut(layout_style).margin;
-  let (_, end) = direction.inline_sides(&mut margin.left, &mut margin.right);
-
-  *end = LengthPercentageAuto::length(gap.to_px(&context.sizing, 0.0));
 }
 
 /// The running count a list hands to its items, honoring `start` and `value`.

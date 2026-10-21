@@ -5,21 +5,19 @@
 
 **Lay out JSX, HTML, and CSS. Get back what to draw instead of pixels.**
 
-Every box, gradient, shadow, text run, and image, in paint order, with each CSS value resolved.
-
 [Documentation](https://takumi.kane.tw/docs/paint) · [Reference](https://takumi.kane.tw/docs/paint/reference)
 
 </div>
 
-## What it is for
+`takumi-paint` returns a **paint tree**: every box, gradient, shadow, text run, and image in paint order, with each CSS value resolved. Draw that tree with your own renderer.
 
-Takumi's other packages end in a PNG, an SVG, or a PDF. Use `takumi-paint` when you own the output:
+Takumi's packages share one layout engine, with text and inline layout ported from Chromium. `takumi-paint` runs it in WebAssembly and records what the other packages would draw. For finished images, use [`takumi-js`](https://www.npmjs.com/package/takumi-js). For PDF documents, use [`takumi-pdf`](https://www.npmjs.com/package/takumi-pdf).
+
+## What it is for
 
 - Write slides where text stays editable, such as PPTX.
 - Draw onto Canvas, Skia, or a native drawing API.
 - Read where layout put each box and line of text.
-
-It runs the same layout as the image, SVG, and PDF renderers, in WebAssembly. Where they draw, it records the **paint tree**.
 
 ## Install
 
@@ -27,7 +25,7 @@ It runs the same layout as the image, SVG, and PDF renderers, in WebAssembly. Wh
 npm install takumi-paint
 ```
 
-## Quick start
+## Paint an element
 
 ```tsx
 import { paint } from "takumi-paint";
@@ -47,18 +45,30 @@ const card = tree.nodes.find((node) => node.type === "box" && node.element?.id =
 console.log(card?.drawables[0]); // { type: "fill", role: "background", shape: { type: "rect", … }, … }
 
 for (const node of tree.nodes) {
-  if (node.type !== "text") continue;
-  for (const run of node.runs) console.log(run.text, run.font.family, run.fontSize);
+  if (node.type !== "text") {
+    continue;
+  }
+
+  for (const run of node.runs) {
+    console.log(run.text, run.font.family, run.fontSize);
+  }
 }
 ```
 
-`tree.steps` is the draw order. Replay it from the bottom up:
+`tree.steps` is the draw order, bottom layer first. Replay it in order. Here `ctx` is a Canvas 2D context and `draw` is your function for one drawable:
 
 ```ts
 for (const step of tree.steps) {
-  if (step.type !== "draw") continue; // begin-group, end-group, begin-clip, and end-clip wrap draws
+  // begin-group, end-group, begin-clip, and end-clip wrap the draw steps
+  if (step.type !== "draw") {
+    continue;
+  }
+
   ctx.setTransform(...step.node.transform);
-  for (const drawable of step.drawables) draw(ctx, drawable);
+
+  for (const drawable of step.drawables) {
+    draw(ctx, drawable);
+  }
 }
 ```
 

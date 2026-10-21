@@ -1,13 +1,13 @@
 use std::{
   collections::HashMap,
-  sync::{Arc, Mutex},
+  sync::{Arc, Mutex, MutexGuard},
 };
 
 use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Deserialize;
-use takumi_bindings_common::css_or_stylesheets;
+use takumi_bindings_common::{css_or_stylesheets, default_fonts, font_cache::FontCache};
 use takumi_core::{
   Fonts,
   resources::image::{
@@ -20,9 +20,9 @@ use takumi_raster::{
 };
 
 use crate::{
-  De, JsBytes, NodeSource, load_font_task::LoadFontTask, map_error, measure_task::MeasureTask,
-  parse_font_input, render_animation_task::RenderAnimationTask, render_task::RenderTask,
-  svg_render_task::SvgRenderTask,
+  De, JsBytes, NodeSource, RegisteredFamily, load_font_task::LoadFontTask, map_error,
+  measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
+  render_task::RenderTask, svg_render_task::SvgRenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -87,11 +87,41 @@ pub struct Renderer {
 }
 
 pub(crate) struct RendererState {
-  /// Wait-free reads via `fonts.load()`; registrations serialize on `font_write` and publish
-  /// a fresh `Arc<Fonts>` via `store`. Renders in flight keep their old snapshot alive.
+  /// Wait-free reads via `fonts.load()`; changes serialize on `font_cache` and publish a fresh
+  /// `Arc<Fonts>` via `store`. Renders in flight keep their old snapshot alive.
   pub(crate) fonts: ArcSwap<Fonts>,
-  pub(crate) font_write: Mutex<()>,
+  pub(crate) font_cache: Mutex<FontCache>,
   pub(crate) resource_cache: ResourceCache,
+}
+
+impl RendererState {
+  fn font_cache(&self) -> Result<MutexGuard<'_, FontCache>> {
+    self
+      .font_cache
+      .lock()
+      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))
+  }
+
+  /// Applies `change` to a copy of the fonts and publishes it, one change at a time.
+  pub(crate) fn update_fonts<T>(
+    &self,
+    change: impl FnOnce(&mut Fonts, &mut FontCache) -> Result<T>,
+  ) -> Result<T> {
+    let mut cache = self.font_cache()?;
+    let mut fonts = self.fonts.load_full().as_ref().clone();
+    let changed = change(&mut fonts, &mut cache)?;
+
+    self.fonts.store(Arc::new(fonts));
+
+    Ok(changed)
+  }
+
+  /// The fonts for a render that names `families`, which are marked used.
+  pub(crate) fn fonts_for_render(&self, families: Option<&[String]>) -> Result<Arc<Fonts>> {
+    self.font_cache()?.touch(families.unwrap_or_default());
+
+    Ok(self.fonts.load_full())
+  }
 }
 
 /// Decodes the per-call image buffers into a `src`-keyed map. The resource cache is
@@ -404,6 +434,12 @@ pub struct RendererOptions {
   /// rasters, parsed stylesheets. `0` disables caching.
   /// @default 64 MiB
   pub cache_max_bytes: Option<f64>,
+  /// Bytes of decoded fonts that renders' `fonts` lists may keep registered. Past it, the least
+  /// recently used families are released and load again when a render lists them. Fonts from
+  /// `registerFont` stay, and so does the font loaded last, even past the budget alone. A running
+  /// render keeps the fonts it started with.
+  /// @default unbounded
+  pub font_cache_max_bytes: Option<f64>,
 }
 
 #[napi]
@@ -413,11 +449,17 @@ impl Renderer {
   pub fn new(env: Env, options: Option<RendererOptions>) -> Result<Self> {
     crate::pool::register_cleanup(&env);
 
+    let options = options.unwrap_or_default();
+
     Ok(Self {
       state: Arc::new(RendererState {
-        fonts: ArcSwap::from_pointee(takumi_bindings_common::default_fonts().map_err(map_error)?),
-        font_write: Mutex::new(()),
-        resource_cache: match options.and_then(|options| options.cache_max_bytes) {
+        fonts: ArcSwap::from_pointee(default_fonts().map_err(map_error)?),
+        font_cache: Mutex::new(FontCache::new(
+          options
+            .font_cache_max_bytes
+            .map(|bytes| bytes.max(0.0) as u64),
+        )),
+        resource_cache: match options.cache_max_bytes {
           Some(bytes) => ResourceCache::new(bytes.max(0.0) as u64),
           None => ResourceCache::default(),
         },
@@ -425,16 +467,59 @@ impl Renderer {
     })
   }
 
-  /// Register font into the renderer, returning the families produced.
+  /// Register font into the renderer, under `key` when its loader gives one, returning the
+  /// families produced. It is never released for space.
   #[napi(
     js_name = "registerFont",
-    ts_args_type = "fonts: Font, signal?: AbortSignal",
+    ts_args_type = "fonts: Font, key?: string | null, signal?: AbortSignal",
     ts_return_type = "Promise<RegisteredFamily[]>"
   )]
   pub fn register_font(
     &self,
     env: Env,
     font: Object,
+    key: Option<String>,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<LoadFontTask>> {
+    self.load_font(env, font, key, true, signal)
+  }
+
+  /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
+  /// font cache is past its budget.
+  #[napi(
+    js_name = "cacheFont",
+    ts_args_type = "fonts: Font, key: string, signal?: AbortSignal",
+    ts_return_type = "Promise<RegisteredFamily[]>"
+  )]
+  pub fn cache_font(
+    &self,
+    env: Env,
+    font: Object,
+    key: String,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<LoadFontTask>> {
+    self.load_font(env, font, Some(key), false, signal)
+  }
+
+  /// The families a registration under `key` added, when the renderer still holds them; `pin`
+  /// keeps them from being released for space.
+  #[napi(js_name = "cachedFonts")]
+  pub fn cached_fonts(&self, key: String, pin: bool) -> Result<Option<Vec<RegisteredFamily>>> {
+    Ok(
+      self
+        .state
+        .font_cache()?
+        .lookup(&key, pin)
+        .map(|registered| registered.into_iter().map(Into::into).collect()),
+    )
+  }
+
+  fn load_font(
+    &self,
+    env: Env,
+    font: Object,
+    key: Option<String>,
+    pinned: bool,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
     let (info, buffer) = parse_font_input(env, font)?;
@@ -444,9 +529,33 @@ impl Renderer {
         state: Arc::clone(&self.state),
         buffer,
         info,
+        key,
+        pinned,
       },
       signal,
     ))
+  }
+
+  /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
+  /// whether it had any.
+  #[napi(js_name = "unregisterFont")]
+  pub fn unregister_font(&self, family: String) -> Result<bool> {
+    self.state.update_fonts(|fonts, cache| {
+      cache.forget(&family);
+
+      Ok(fonts.unregister_family(&family))
+    })
+  }
+
+  /// Removes every registered font, leaving the bundled fallback font.
+  #[napi(js_name = "clearFonts")]
+  pub fn clear_fonts(&self) -> Result<()> {
+    self.state.update_fonts(|fonts, cache| {
+      *fonts = default_fonts().map_err(map_error)?;
+      cache.clear();
+
+      Ok(())
+    })
   }
 
   /// Renders a node tree into an image buffer asynchronously.

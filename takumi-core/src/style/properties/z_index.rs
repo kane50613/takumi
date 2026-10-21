@@ -28,7 +28,7 @@ impl MakeComputed for ZIndex {}
 impl Animatable for ZIndex {}
 
 impl<'i> FromCss<'i> for ZIndex {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(value) = input.try_parse(Parser::expect_integer) {
       return Ok(Self::Integer(value));
     }

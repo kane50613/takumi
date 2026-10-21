@@ -14,13 +14,12 @@ mod test_utils;
 
 use std::{collections::HashMap, convert::identity, fs, path::Path};
 
-use image::ImageReader;
 use rayon::{iter::Either, prelude::*};
 use resvg::{
   tiny_skia::Pixmap,
   usvg::{Options, Transform, Tree},
 };
-use test_utils::GENERATED_DIR;
+use test_utils::{GENERATED_DIR, decode_rgba};
 
 /// Per-channel tolerance counted as "matching".
 const TOL: i32 = 16;
@@ -77,8 +76,8 @@ fn parity(svg_path: &Path, webp_path: &Path) -> Option<f32> {
   let mut svg_px = Pixmap::new(w, h)?;
   resvg::render(&tree, Transform::identity(), &mut svg_px.as_mut());
 
-  let webp = ImageReader::open(webp_path).ok()?.decode().ok()?.to_rgba8();
-  if webp.width() != w || webp.height() != h {
+  let (webp_width, webp_height, webp) = decode_rgba(&fs::read(webp_path).ok()?);
+  if webp_width != w || webp_height != h {
     return None;
   }
 
@@ -90,7 +89,7 @@ fn parity(svg_path: &Path, webp_path: &Path) -> Option<f32> {
       total += 1;
       if within(
         [s.red(), s.green(), s.blue(), s.alpha()],
-        webp.get_pixel(x, y).0,
+        webp.as_chunks::<4>().0[(y * w + x) as usize],
       ) {
         ok += 1;
       }

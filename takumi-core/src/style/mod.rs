@@ -3,9 +3,11 @@ mod calc;
 mod css_input;
 mod css_source;
 mod custom_properties;
+mod matched_style_cache;
 pub mod math;
 mod media_query;
 pub(crate) mod properties;
+mod raw_declaration;
 pub(crate) mod selector;
 mod sizing;
 mod stylesheets;
@@ -21,9 +23,12 @@ pub use css_source::{
   SupportsRule,
 };
 pub use custom_properties::CustomProperties;
+pub(crate) use custom_properties::Registrations;
+pub(crate) use matched_style_cache::{MatchedStyleCache, MatchedStyleKey};
 pub(crate) use math::lerp;
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
+pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
 // Selector matching internals (CssRule, SelectorImpl, Ident, …) stay crate-private
 // under `selector::` for the renderer's `layout::matching`; only the stylesheet
 // entry point and `@property` rule type are part of the public surface.

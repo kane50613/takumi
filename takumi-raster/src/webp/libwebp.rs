@@ -1,6 +1,5 @@
 use std::{borrow::Borrow, borrow::Cow, io::Write, mem::MaybeUninit, slice};
 
-use image::RgbaImage;
 use libwebp_sys::*;
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -64,7 +63,7 @@ fn animation_config(width: u32, height: u32, options: &AnimatedWebpOptions) -> R
 }
 
 fn import_rgba_picture(
-  image: &RgbaImage,
+  image: &Bitmap,
   region: &FrameRegion,
   config: &WebPConfig,
 ) -> Result<WebPPicture> {
@@ -77,7 +76,7 @@ fn import_rgba_picture(
   // https://github.com/webmproject/libwebp/blob/main/src/enc/picture_csp_enc.c
   picture.use_argb = config.lossless;
 
-  let stride = image.width() as usize * 4;
+  let stride = image.stride();
   let region_start = region.y as usize * stride + region.x as usize * 4;
   let import_ok = unsafe {
     WebPPictureImportRGBA(
@@ -134,7 +133,7 @@ impl Drop for WebPMemoryBuffer {
 
 /// Encodes `region` of `image` into a complete WebP file in memory.
 fn encode_picture(
-  image: &RgbaImage,
+  image: &Bitmap,
   region: &FrameRegion,
   config: &WebPConfig,
 ) -> Result<WebPMemoryBuffer> {
@@ -162,18 +161,14 @@ fn encode_single_frame<T: Borrow<Bitmap>>(
   frame: &UniqueFrame<T>,
   config: &WebPConfig,
 ) -> Result<EncodedFrame<WebPMemoryBuffer>> {
-  let encoded = encode_picture(
-    frame.image.borrow().as_rgba(),
-    &frame.placement.region,
-    config,
-  )?;
+  let encoded = encode_picture(frame.image.borrow(), &frame.placement.region, config)?;
 
   EncodedFrame::new(encoded, frame.placement, frame.duration_ms)
     .ok_or_else(|| WebPError::InvalidEncodedData.into())
 }
 
 pub(crate) fn write_webp_lossy(
-  image: Cow<'_, RgbaImage>,
+  image: Cow<'_, Bitmap>,
   destination: &mut impl Write,
   quality: Quality,
 ) -> Result<()> {
@@ -186,14 +181,14 @@ pub(crate) fn write_webp_lossy(
 }
 
 pub(crate) fn write_webp_lossless(
-  image: Cow<'_, RgbaImage>,
+  image: Cow<'_, Bitmap>,
   destination: &mut impl Write,
 ) -> Result<()> {
   write_webp(image, destination, webp_config(true, 0, 1)?)
 }
 
 fn write_webp(
-  image: Cow<'_, RgbaImage>,
+  image: Cow<'_, Bitmap>,
   destination: &mut impl Write,
   config: WebPConfig,
 ) -> Result<()> {
@@ -369,12 +364,10 @@ pub fn write_animated_webp<W: Write>(
 mod tests {
   use std::ptr::null_mut;
 
-  use image::Rgba;
-
   use super::*;
   use crate::write::Bitmap;
 
-  fn decode_rgba(encoded: &[u8]) -> RgbaImage {
+  fn decode_rgba(encoded: &[u8]) -> Bitmap {
     let mut width = 0;
     let mut height = 0;
     let pixels =
@@ -385,16 +378,16 @@ mod tests {
     let raw = unsafe { slice::from_raw_parts(pixels, len) }.to_vec();
     unsafe { WebPFree(pixels.cast()) };
 
-    RgbaImage::from_raw(width as u32, height as u32, raw).unwrap()
+    Bitmap::from_raw(width as u32, height as u32, raw).unwrap()
   }
 
   /// YUV420 subsampling destroys saturated chroma edges.
-  fn chroma_edges() -> RgbaImage {
-    RgbaImage::from_fn(64, 64, |x, y| match (x / 3 + y / 5) % 4 {
-      0 => Rgba([255, 0, 0, 255]),
-      1 => Rgba([0, 0, 255, 255]),
-      2 => Rgba([0, 255, 0, 255]),
-      _ => Rgba([255, 0, 255, 255]),
+  fn chroma_edges() -> Bitmap {
+    Bitmap::from_fn(64, 64, |x, y| match (x / 3 + y / 5) % 4 {
+      0 => [255, 0, 0, 255],
+      1 => [0, 0, 255, 255],
+      2 => [0, 255, 0, 255],
+      _ => [255, 0, 255, 255],
     })
   }
 
@@ -416,8 +409,8 @@ mod tests {
 
   #[test]
   fn threaded_lossy_writes_the_single_thread_bytes() {
-    let image = RgbaImage::from_fn(256, 256, |x, y| {
-      Rgba([x as u8, y as u8, (x ^ y) as u8, (x + y) as u8])
+    let image = Bitmap::from_fn(256, 256, |x, y| {
+      [x as u8, y as u8, (x ^ y) as u8, (x + y) as u8]
     });
     let mut threaded = Vec::new();
     write_webp_lossy(Cow::Borrowed(&image), &mut threaded, Quality::default()).unwrap();
@@ -442,7 +435,7 @@ mod tests {
     assert_eq!(decoded.dimensions(), image.dimensions());
   }
 
-  fn decode_animation(encoded: &[u8]) -> Vec<RgbaImage> {
+  fn decode_animation(encoded: &[u8]) -> Vec<Bitmap> {
     let data = WebPData {
       bytes: encoded.as_ptr(),
       size: encoded.len(),
@@ -478,7 +471,7 @@ mod tests {
       );
 
       let raw = unsafe { slice::from_raw_parts(pixels, canvas_bytes) }.to_vec();
-      composited.push(RgbaImage::from_raw(info.canvas_width, info.canvas_height, raw).unwrap());
+      composited.push(Bitmap::from_raw(info.canvas_width, info.canvas_height, raw).unwrap());
     }
 
     unsafe { WebPAnimDecoderDelete(decoder) };
@@ -520,27 +513,27 @@ mod tests {
     (0..6)
       .map(|frame_index| {
         let box_x = 11 + frame_index * 13;
-        let image = RgbaImage::from_fn(120, 80, |x, y| {
+        let image = Bitmap::from_fn(120, 80, |x, y| {
           if x < 4 || y < 4 || x >= 116 || y >= 76 {
-            return Rgba([0, 0, 0, 0]);
+            return [0, 0, 0, 0];
           }
           if x >= box_x && x < box_x + 30 && (25..45).contains(&y) {
-            return Rgba([255, 40, 40, 200]);
+            return [255, 40, 40, 200];
           }
-          Rgba([(x * 2) as u8, (y * 3) as u8, 90, 255])
+          [(x * 2) as u8, (y * 3) as u8, 90, 255]
         });
 
-        AnimationFrame::new(Bitmap::from_rgba(image), 40)
+        AnimationFrame::new(image, 40)
       })
       .collect()
   }
 
-  fn frames_visibly_equal(a: &RgbaImage, b: &RgbaImage) -> bool {
+  fn frames_visibly_equal(a: &Bitmap, b: &Bitmap) -> bool {
     a.dimensions() == b.dimensions()
       && a
         .pixels()
         .zip(b.pixels())
-        .all(|(a, b)| a == b || (a.0[3] == 0 && b.0[3] == 0))
+        .all(|(a, b)| a == b || (a[3] == 0 && b[3] == 0))
   }
 
   #[test]
@@ -559,7 +552,7 @@ mod tests {
 
     for (index, (decoded, source)) in composited.iter().zip(&frames).enumerate() {
       assert!(
-        frames_visibly_equal(decoded, source.image.as_rgba()),
+        frames_visibly_equal(decoded, &source.image),
         "composited frame {index} deviates from the source frame"
       );
     }
@@ -598,11 +591,11 @@ mod tests {
   fn full_canvas_partial_alpha_frames_replace_under_blend() {
     let frames: Vec<AnimationFrame> = (0..4)
       .map(|frame_index| {
-        let image = RgbaImage::from_fn(64, 48, |x, y| {
-          Rgba([(x * 3 + frame_index * 40) as u8, (y * 5) as u8, 120, 128])
+        let image = Bitmap::from_fn(64, 48, |x, y| {
+          [(x * 3 + frame_index * 40) as u8, (y * 5) as u8, 120, 128]
         });
 
-        AnimationFrame::new(Bitmap::from_rgba(image), 40)
+        AnimationFrame::new(image, 40)
       })
       .collect();
 
@@ -620,8 +613,8 @@ mod tests {
     for (index, (decoded, source)) in composited.iter().zip(&frames).enumerate() {
       let mismatch = decoded
         .enumerate_pixels()
-        .zip(source.image.as_rgba().enumerate_pixels())
-        .find(|((_, _, a), (_, _, b))| a != b && !(a.0[3] == 0 && b.0[3] == 0));
+        .zip(source.image.enumerate_pixels())
+        .find(|((_, _, a), (_, _, b))| a != b && !(a[3] == 0 && b[3] == 0));
 
       assert!(
         mismatch.is_none(),
@@ -649,15 +642,15 @@ mod tests {
 
   #[test]
   fn invisible_rgb_changes_under_alpha_zero_merge_frames() {
-    let visible = RgbaImage::from_pixel(16, 16, Rgba([10, 20, 30, 255]));
+    let visible = Bitmap::from_pixel(16, 16, [10, 20, 30, 255]);
     let mut transparent_a = visible.clone();
     let mut transparent_b = visible.clone();
-    transparent_a.put_pixel(3, 3, Rgba([1, 2, 3, 0]));
-    transparent_b.put_pixel(3, 3, Rgba([9, 9, 9, 0]));
+    transparent_a.put_pixel(3, 3, [1, 2, 3, 0]);
+    transparent_b.put_pixel(3, 3, [9, 9, 9, 0]);
 
     let frames = vec![
-      AnimationFrame::new(Bitmap::from_rgba(transparent_a), 40),
-      AnimationFrame::new(Bitmap::from_rgba(transparent_b), 40),
+      AnimationFrame::new(transparent_a, 40),
+      AnimationFrame::new(transparent_b, 40),
     ];
     let mut encoded = Vec::new();
     write_animated_webp(
@@ -695,25 +688,25 @@ mod tests {
     (0..6)
       .map(|frame_index| {
         let box_x = 11 + frame_index * 13;
-        let image = RgbaImage::from_fn(120, 80, |x, y| {
+        let image = Bitmap::from_fn(120, 80, |x, y| {
           if x >= box_x && x < box_x + 30 && (25..45).contains(&y) {
-            return Rgba([255, 40, 40, 255]);
+            return [255, 40, 40, 255];
           }
-          Rgba([(x * 2) as u8, (y * 3) as u8, 90, 255])
+          [(x * 2) as u8, (y * 3) as u8, 90, 255]
         });
 
-        AnimationFrame::new(Bitmap::from_rgba(image), 40)
+        AnimationFrame::new(image, 40)
       })
       .collect()
   }
 
-  fn worst_channel_error(composited: &[RgbaImage], frames: &[AnimationFrame]) -> u8 {
+  fn worst_channel_error(composited: &[Bitmap], frames: &[AnimationFrame]) -> u8 {
     let mut worst = 0u8;
 
     for (decoded, source) in composited.iter().zip(frames) {
-      for (decoded_pixel, source_pixel) in decoded.pixels().zip(source.image.as_rgba().pixels()) {
+      for (decoded_pixel, source_pixel) in decoded.pixels().zip(source.image.pixels()) {
         for channel in 0..3 {
-          worst = worst.max(decoded_pixel.0[channel].abs_diff(source_pixel.0[channel]));
+          worst = worst.max(decoded_pixel[channel].abs_diff(source_pixel[channel]));
         }
       }
     }
@@ -755,8 +748,6 @@ mod tests {
 mod bench {
   use std::time::{Duration, Instant};
 
-  use image::Rgba;
-
   use super::*;
   use crate::write::Bitmap;
 
@@ -764,32 +755,32 @@ mod bench {
   const HEIGHT: u32 = 216;
   const FRAMES: usize = 42;
 
-  fn background(x: u32, y: u32) -> Rgba<u8> {
-    Rgba([
+  fn background(x: u32, y: u32) -> [u8; 4] {
+    [
       ((x * 255) / WIDTH) as u8,
       ((y * 255) / HEIGHT) as u8,
       ((x + y) % 256) as u8,
       255,
-    ])
+    ]
   }
 
   fn sweep_frames() -> Vec<AnimationFrame> {
     (0..FRAMES)
       .map(|frame_index| {
         let band_start = (frame_index as u32) * 12;
-        let image = RgbaImage::from_fn(WIDTH, HEIGHT, |x, y| {
+        let image = Bitmap::from_fn(WIDTH, HEIGHT, |x, y| {
           let mut pixel = background(x, y);
 
           if x >= band_start && x < band_start + 60 {
-            pixel.0[0] = pixel.0[0].saturating_add(80);
-            pixel.0[1] = pixel.0[1].saturating_add(80);
-            pixel.0[2] = pixel.0[2].saturating_add(80);
+            pixel[0] = pixel[0].saturating_add(80);
+            pixel[1] = pixel[1].saturating_add(80);
+            pixel[2] = pixel[2].saturating_add(80);
           }
 
           pixel
         });
 
-        AnimationFrame::new(Bitmap::from_rgba(image), 33)
+        AnimationFrame::new(image, 33)
       })
       .collect()
   }
@@ -798,16 +789,16 @@ mod bench {
     (0..FRAMES)
       .map(|frame_index| {
         let phase = frame_index as u32 * 7;
-        let image = RgbaImage::from_fn(WIDTH, HEIGHT, |x, y| {
-          Rgba([
+        let image = Bitmap::from_fn(WIDTH, HEIGHT, |x, y| {
+          [
             (((x + phase) * 255) / WIDTH) as u8,
             (((y + phase) * 255) / HEIGHT) as u8,
             ((x + y + phase) % 256) as u8,
             255,
-          ])
+          ]
         });
 
-        AnimationFrame::new(Bitmap::from_rgba(image), 33)
+        AnimationFrame::new(image, 33)
       })
       .collect()
   }

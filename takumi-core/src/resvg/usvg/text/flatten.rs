@@ -4,15 +4,14 @@
 use std::mem;
 use std::sync::Arc;
 
-use super::fontdb::{Database, ID};
-use crate::resvg::usvg::GlyphId;
 use skrifa::MetadataProvider;
-use skrifa::Tag;
-use skrifa::outline::{DrawSettings, OutlinePen};
+use strict_num::NonZeroPositiveF32;
 use tiny_skia_path::{NonZeroRect, Transform};
 
-use crate::resources::glyph::draw_outline;
+use crate::geometry::PathCommand;
+use crate::resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph};
 use crate::resvg::usvg::*;
+use crate::style::Color as RgbaColor;
 
 fn resolve_rendering_mode(text: &Text) -> ShapeRendering {
   match text.rendering_mode {
@@ -22,193 +21,236 @@ fn resolve_rendering_mode(text: &Text) -> ShapeRendering {
   }
 }
 
-/// Returns the effective variation settings for a glyph: the span's explicit
-/// variations plus an automatically computed `opsz` value when
-/// `font-optical-sizing: auto` is in effect and the font has an `opsz` axis
-/// that wasn't set explicitly. This matches browser behavior
-/// (CSS font-optical-sizing: auto).
-fn effective_variations(
-  cache: &mut Cache,
-  span: &layout::Span,
-  glyph: &layout::PositionedGlyph,
-) -> Vec<FontVariation> {
-  let mut variations = span.variations.clone();
-  if span.font_optical_sizing == crate::resvg::usvg::FontOpticalSizing::Auto
-    && !variations.iter().any(|v| &v.tag == b"opsz")
-    && cache.has_opsz_axis(glyph.font)
-  {
-    variations.push(FontVariation::new(*b"opsz", glyph.font_size()));
-  }
-  variations
-}
-
-fn push_outline_paths(
-  span: &layout::Span,
-  builder: &mut tiny_skia_path::PathBuilder,
-  new_children: &mut Vec<Node>,
+/// The paths a `<text>` flattens to, in paint order.
+struct TextPaths {
+  children: Vec<Node>,
   rendering_mode: ShapeRendering,
   abs_transform: Transform,
-) {
-  let builder = mem::replace(builder, tiny_skia_path::PathBuilder::new());
-
-  if let Some(path) = builder.finish().and_then(|p| {
-    Path::new(
-      String::new(),
-      span.visible,
-      span.fill.clone(),
-      span.stroke.clone(),
-      span.paint_order,
-      rendering_mode,
-      Arc::new(p),
-      abs_transform,
-    )
-  }) {
-    new_children.push(Node::Path(Box::new(path)));
-  }
 }
 
-pub(crate) fn flatten(text: &mut Text, cache: &mut Cache) -> Option<(Group, NonZeroRect)> {
-  let mut new_children = vec![];
+impl TextPaths {
+  fn push(
+    &mut self,
+    span: &layout::Span,
+    fill: Option<Fill>,
+    stroke: Option<Stroke>,
+    path: tiny_skia_path::Path,
+  ) {
+    if let Some(path) = Path::new(
+      String::new(),
+      span.visible,
+      fill,
+      stroke,
+      span.paint_order,
+      self.rendering_mode,
+      Arc::new(path),
+      self.abs_transform,
+    ) {
+      self.children.push(Node::Path(Box::new(path)));
+    }
+  }
 
-  let abs_transform = text.abs_transform;
-  let rendering_mode = resolve_rendering_mode(text);
-
-  for span in &text.layouted {
-    if let Some(path) = span.overline.as_ref() {
+  fn push_decoration(&mut self, path: Option<&Path>) {
+    if let Some(path) = path {
       let mut path = path.clone();
-      path.rendering_mode = rendering_mode;
-      new_children.push(Node::Path(Box::new(path)));
+
+      path.rendering_mode = self.rendering_mode;
+      self.children.push(Node::Path(Box::new(path)));
+    }
+  }
+
+  /// Pushes the plain outlines `builder` collected as one path in the span's paint.
+  fn flush(&mut self, span: &layout::Span, builder: &mut tiny_skia_path::PathBuilder) {
+    let builder = mem::replace(builder, tiny_skia_path::PathBuilder::new());
+
+    if let Some(path) = builder.finish() {
+      self.push(span, span.fill.clone(), span.stroke.clone(), path);
+    }
+  }
+
+  /// Pushes the bitmap `glyph`, placed by `transform`, in the span's fill opacity: Skia draws a
+  /// color glyph in its own colors and the paint's alpha, and nothing without a fill.
+  fn push_bitmap(
+    &mut self,
+    span: &layout::Span,
+    glyph: &Arc<ResolvedGlyph>,
+    transform: Transform,
+  ) -> Option<()> {
+    let ResolvedGlyph::Bitmap(bitmap) = glyph.as_ref() else {
+      return None;
+    };
+    let fill = span.fill.as_ref()?;
+    let size = Size::from_wh(bitmap.image.width() as f32, bitmap.image.height() as f32)?;
+    let image_transform = transform.pre_concat(bitmap.image_transform().into());
+    let abs_transform = self.abs_transform.pre_concat(image_transform);
+    let mut group = Group::empty();
+
+    group.children.push(Node::Image(Box::new(Image {
+      id: String::new(),
+      visible: span.visible,
+      size,
+      rendering_mode: ImageRendering::default(),
+      kind: ImageKind::Glyph(Arc::clone(glyph)),
+      abs_transform,
+      abs_bounding_box: size.to_non_zero_rect(0.0, 0.0).transform(abs_transform)?,
+    })));
+    group.transform = image_transform;
+    group.abs_transform = abs_transform;
+    group.opacity = fill.opacity;
+    group.calculate_bounding_boxes();
+    self.children.push(Node::Group(Box::new(group)));
+
+    Some(())
+  }
+
+  /// Pushes `glyph`, collecting a plain outline into `builder` so consecutive ones share a path.
+  fn push_glyph(
+    &mut self,
+    span: &layout::Span,
+    glyph: &layout::PositionedGlyph,
+    builder: &mut tiny_skia_path::PathBuilder,
+    cache: &Cache,
+  ) -> Option<()> {
+    let font = glyph.font.typeface.font_ref()?;
+    let resolved = cache
+      .fonts
+      .resolve_glyph(glyph.font.face(), font, glyph.id.0)?;
+    let transform = glyph.transform();
+    let ResolvedGlyph::Outline(outline) = resolved.as_ref() else {
+      self.flush(span, builder);
+
+      return self.push_bitmap(span, &resolved, transform);
+    };
+    let path = PathCommand::build_path(outline.paths())?.transform(transform)?;
+    let layers = span.color_layer_fills(outline, glyph);
+    // Synthetic bold strokes the glyph in its own fill, as the raster backend does.
+    let bold = outline
+      .embolden()
+      .and_then(NonZeroPositiveF32::new)
+      .zip(span.fill.as_ref())
+      .map(|(width, fill)| Stroke {
+        paint: fill.paint.clone(),
+        dasharray: None,
+        dashoffset: 0.0,
+        miterlimit: StrokeMiterlimit::default(),
+        opacity: fill.opacity,
+        width,
+        linecap: LineCap::default(),
+        linejoin: LineJoin::default(),
+        context_element: fill.context_element.clone(),
+      });
+
+    if layers.is_empty() && bold.is_none() {
+      builder.push_path(&path);
+
+      return Some(());
     }
 
-    if let Some(path) = span.underline.as_ref() {
-      let mut path = path.clone();
-      path.rendering_mode = rendering_mode;
-      new_children.push(Node::Path(Box::new(path)));
-    }
+    self.flush(span, builder);
 
-    // Instead of always processing each glyph separately, we always collect
-    // as many outline glyphs as possible by pushing them into the span_builder
-    // and only if we encounter a different glyph, or we reach the very end of the
-    // span to we push the actual outline paths into new_children. This way, we don't need
-    // to create a new path for every glyph if we have many consecutive glyphs
-    // with just outlines (which is the most common case).
-    let mut span_builder = tiny_skia_path::PathBuilder::new();
+    let stroke_first = span.paint_order == PaintOrder::StrokeAndFill;
 
-    for glyph in &span.positioned_glyphs {
-      let variations = effective_variations(cache, span, glyph);
+    self.push(
+      span,
+      None,
+      span.stroke.clone().filter(|_| stroke_first),
+      path.clone(),
+    );
 
-      // Color glyph formats (COLR/SVG/bitmap) are stripped from this vendor;
-      // every glyph renders from its outline table.
-      let outline = cache.fontdb_outline(glyph.font, glyph.id, &variations);
-
-      if let Some(outline) = outline.and_then(|p| p.transform(glyph.outline_transform())) {
-        span_builder.push_path(&outline);
+    for (fill, layer_path) in layers {
+      if let Some(layer_path) = layer_path.transform(transform) {
+        self.push(span, Some(fill), None, layer_path);
       }
     }
 
-    push_outline_paths(
+    let fill = span.fill.clone().filter(|_| bold.is_some());
+
+    self.push(span, fill, bold, path.clone());
+    self.push(
       span,
-      &mut span_builder,
-      &mut new_children,
-      rendering_mode,
-      abs_transform,
+      None,
+      span.stroke.clone().filter(|_| !stroke_first),
+      path,
     );
 
-    if let Some(path) = span.line_through.as_ref() {
-      let mut path = path.clone();
-      path.rendering_mode = rendering_mode;
-      new_children.push(Node::Path(Box::new(path)));
+    Some(())
+  }
+}
+
+impl layout::Span {
+  /// The fills of a COLR glyph's layers over the span's fill, as the raster backend paints them;
+  /// empty for a span without a fill, which paints the glyph's outline instead.
+  fn color_layer_fills(
+    &self,
+    outline: &ResolvedOutlineGlyph,
+    glyph: &layout::PositionedGlyph,
+  ) -> Vec<(Fill, tiny_skia_path::Path)> {
+    let (Some(layers), Some(fill)) = (outline.color_layers(), self.fill.as_ref()) else {
+      return Vec::new();
+    };
+    let font = glyph.font.typeface.font_ref();
+    let palettes = font.as_ref().map(MetadataProvider::color_palettes);
+    let palette = palettes.as_ref().and_then(|palettes| palettes.get(0));
+    let opacity = (fill.opacity.get() * 255.0).round() as u8;
+    let foreground = match &fill.paint {
+      Paint::Color(color) => RgbaColor([color.red, color.green, color.blue, opacity]),
+      _ => RgbaColor([0, 0, 0, opacity]),
+    };
+
+    layers
+      .iter()
+      .filter_map(|layer| {
+        let path = PathCommand::build_path(&layer.paths)?;
+        let layer_fill = if layer.is_foreground() {
+          Fill {
+            opacity: Opacity::new_clamped(fill.opacity.get() * layer.alpha),
+            ..fill.clone()
+          }
+        } else {
+          let RgbaColor([red, green, blue, alpha]) = layer.color(palette.as_ref(), foreground)?;
+
+          Fill {
+            paint: Paint::Color(Color::new_rgb(red, green, blue)),
+            opacity: Opacity::new_clamped(f32::from(alpha) / 255.0),
+            rule: FillRule::NonZero,
+            context_element: None,
+          }
+        };
+
+        Some((layer_fill, path))
+      })
+      .collect()
+  }
+}
+
+pub(crate) fn flatten(text: &mut Text, cache: &Cache) -> Option<(Group, NonZeroRect)> {
+  let mut paths = TextPaths {
+    children: Vec::new(),
+    rendering_mode: resolve_rendering_mode(text),
+    abs_transform: text.abs_transform,
+  };
+
+  for span in &text.layouted {
+    paths.push_decoration(span.overline.as_ref());
+    paths.push_decoration(span.underline.as_ref());
+
+    let mut builder = tiny_skia_path::PathBuilder::new();
+
+    for glyph in &span.positioned_glyphs {
+      paths.push_glyph(span, glyph, &mut builder, cache);
     }
+
+    paths.flush(span, &mut builder);
+    paths.push_decoration(span.line_through.as_ref());
   }
 
   let mut group = Group {
     id: text.id.clone(),
+    children: paths.children,
     ..Group::empty()
   };
-
-  for child in new_children {
-    group.children.push(child);
-  }
 
   group.calculate_bounding_boxes();
   let stroke_bbox = group.stroke_bounding_box().to_non_zero_rect()?;
   Some((group, stroke_bbox))
-}
-
-#[derive(Default)]
-struct PathBuilder {
-  builder: tiny_skia_path::PathBuilder,
-}
-
-impl OutlinePen for PathBuilder {
-  fn move_to(&mut self, x: f32, y: f32) {
-    self.builder.move_to(x, y);
-  }
-
-  fn line_to(&mut self, x: f32, y: f32) {
-    self.builder.line_to(x, y);
-  }
-
-  fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-    self.builder.quad_to(cx0, cy0, x, y);
-  }
-
-  fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-    self.builder.cubic_to(cx0, cy0, cx1, cy1, x, y);
-  }
-
-  fn close(&mut self) {
-    self.builder.close();
-  }
-}
-
-pub(crate) trait DatabaseExt {
-  fn outline(
-    &self,
-    id: ID,
-    glyph_id: GlyphId,
-    variations: &[crate::resvg::usvg::FontVariation],
-  ) -> Option<tiny_skia_path::Path>;
-  fn has_opsz_axis(&self, id: ID) -> bool;
-}
-
-impl DatabaseExt for Database {
-  #[inline(never)]
-  fn outline(
-    &self,
-    id: ID,
-    glyph_id: GlyphId,
-    variations: &[crate::resvg::usvg::FontVariation],
-  ) -> Option<tiny_skia_path::Path> {
-    self.with_face_data(id, |data, face_index| -> Option<tiny_skia_path::Path> {
-      let font = skrifa::FontRef::from_index(data, face_index).ok()?;
-      let outline = font.outline_glyphs().get(glyph_id.into())?;
-
-      let mut builder = PathBuilder::default();
-
-      let size = skrifa::prelude::Size::unscaled();
-      // An empty variation list resolves to the default value of every
-      // variation axis, which is what we want for non-variable fonts and
-      // for variable fonts used without variations.
-      let location = font.axes().location(
-        variations
-          .iter()
-          .map(|v| (Tag::from_be_bytes(v.tag), v.value)),
-      );
-      draw_outline(
-        &outline,
-        DrawSettings::unhinted(size, &location),
-        &mut builder,
-      )
-      .ok()?;
-
-      builder.builder.finish()
-    })?
-  }
-
-  fn has_opsz_axis(&self, id: ID) -> bool {
-    // Diverges from upstream: fontique already knows this at registration
-    // time, so no need to re-parse the face with skrifa.
-    self.face(id).is_some_and(|face| face.has_opsz)
-  }
 }

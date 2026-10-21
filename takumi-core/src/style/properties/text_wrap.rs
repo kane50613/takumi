@@ -1,10 +1,7 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
-use crate::style::{
-  FromCss, MakeComputed, ParseResult, impl_css_enum, impl_from_taffy_enum,
-  tw::TailwindPropertyParser,
-};
+use crate::style::{FromCss, MakeComputed, ParseResult, impl_css_enum, tw::TailwindPropertyParser};
 
 /// Controls how text should be wrapped.
 /// Construct with [`TextWrap::builder`].
@@ -45,7 +42,7 @@ impl TailwindPropertyParser for TextWrap {
 }
 
 impl<'i> FromCss<'i> for TextWrap {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut mode = None;
     let mut style = TextWrapStyle::default();
 
@@ -83,13 +80,18 @@ pub enum TextWrapMode {
   NoWrap,
 }
 
+impl TextWrapMode {
+  /// Blink's `ShouldWrapLine`.
+  pub(crate) fn should_wrap_line(self) -> bool {
+    self != Self::NoWrap
+  }
+}
+
 impl_css_enum!(
   TextWrapMode,
   "wrap" => TextWrapMode::Wrap,
   "nowrap" => TextWrapMode::NoWrap,
 );
-
-impl_from_taffy_enum!(TextWrapMode, into_parley -> parley::TextWrapMode, Wrap, NoWrap);
 
 /// Controls the style of text wrapping.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

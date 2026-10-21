@@ -18,13 +18,12 @@ pub struct FontSynthesis {
 impl MakeComputed for FontSynthesis {}
 
 impl<'i> FromCss<'i> for FontSynthesis {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut weight = FontSynthesic::None;
     let mut style = FontSynthesic::None;
     let mut small_caps = FontSynthesic::None;
 
     while !input.is_exhausted() {
-      let location = input.current_source_location();
       let ident = input.expect_ident()?;
 
       match_ignore_ascii_case! {ident,
@@ -42,7 +41,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
         "small-caps" => {
           small_caps = FontSynthesic::Auto;
         },
-        _ => return Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
+        _ => return Err(unexpected_token!(&Token::Ident(ident.to_owned()))),
       };
     }
 

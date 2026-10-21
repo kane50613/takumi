@@ -3,34 +3,36 @@ title: Nuxt
 description: Generate Open Graph images from Vue templates with the Takumi renderer in Nuxt OG Image.
 ---
 
-[Nuxt OG Image](https://nuxtseo.com/docs/og-image/getting-started/introduction) renders Vue components as OG images. Its [Takumi renderer](https://nuxtseo.com/docs/og-image/renderers/takumi) drives Takumi from a Vue template.
+[Nuxt OG Image](https://nuxtseo.com/docs/og-image/getting-started/introduction) renders Vue components as Open Graph images. Its [Takumi renderer](https://nuxtseo.com/docs/og-image/renderers/takumi) draws a Vue template with Takumi.
 
 <Steps>
   <Step>
-    ### Install Nuxt OG Image and the Takumi binding
+    ### Install Nuxt OG Image and a Takumi binding
 
-    Add the Nuxt module, then the Takumi package that matches your runtime.
+    Add the Nuxt module:
 
     ```npm
     npx nuxt module add og-image
     ```
 
-    | Runtime | Package |
-    | --- | --- |
-    | Node | `@takumi-rs/core` |
+    Then add the Takumi binding for your runtime.
+
+    | Runtime                                | Package           |
+    | -------------------------------------- | ----------------- |
+    | Node.js                                | `@takumi-rs/core` |
     | Edge (Cloudflare Workers, Vercel Edge) | `@takumi-rs/wasm` |
 
     ```npm
-    npm install @takumi-rs/core
+    npm i -D @takumi-rs/core
     ```
+
+    <Callout type="warn">The binding must be version 2.15 or newer within v2.</Callout>
 
   </Step>
   <Step>
     ### Create a `.takumi.vue` template
 
-    Nuxt OG Image picks the Takumi renderer from the `.takumi.vue` suffix. No config is needed.
-
-    <Callout>Disable Takumi with `ogImage.compatibility.runtime.takumi = false` in `nuxt.config.ts`.</Callout>
+    The `.takumi.vue` suffix selects the Takumi renderer, so no config is needed.
 
     ```vue title="components/OgImage/BlogPost.takumi.vue"
     <script setup lang="ts">
@@ -56,7 +58,7 @@ description: Generate Open Graph images from Vue templates with the Takumi rende
   <Step>
     ### Attach the template to a page
 
-    Use `defineOgImageComponent()` in the page that should emit the image.
+    Call `defineOgImageComponent()` in the page that should have the image.
 
     ```vue title="pages/blog/[slug].vue"
     <script setup lang="ts">
@@ -69,3 +71,19 @@ description: Generate Open Graph images from Vue templates with the Takumi rende
 
   </Step>
 </Steps>
+
+## Turn Takumi off
+
+To keep Takumi installed but stop using it, set `ogImage.compatibility.runtime.takumi` to `false`:
+
+```ts title="nuxt.config.ts"
+export default defineNuxtConfig({
+  ogImage: {
+    compatibility: {
+      runtime: {
+        takumi: false,
+      },
+    },
+  },
+});
+```

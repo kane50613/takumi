@@ -1,9 +1,8 @@
 use std::fs;
 
-use image::ImageFormat;
 use takumi::{prelude::*, render, write_image};
 
-use crate::test_utils::{CONTEXT, create_test_viewport, generated_path};
+use crate::test_utils::{CONTEXT, create_test_viewport, decode_rgba, generated_path};
 
 /// Flat art large enough to deflate in segments, read back pixel for pixel.
 #[test]
@@ -32,10 +31,8 @@ fn png_output() {
   write_image(&image, &mut encoded, OutputFormat::Png).unwrap();
   fs::write(generated_path("png_output.png"), &encoded).unwrap();
 
-  let decoded = image::load_from_memory_with_format(&encoded, ImageFormat::Png)
-    .unwrap()
-    .to_rgba8();
+  let (width, height, decoded) = decode_rgba(&encoded);
 
-  assert_eq!(decoded.dimensions(), (image.width(), image.height()));
-  assert!(decoded.as_raw() == image.as_raw());
+  assert_eq!((width, height), (image.width(), image.height()));
+  assert!(decoded == image.as_raw());
 }

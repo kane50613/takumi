@@ -14,17 +14,27 @@
     },
     {
       "matchManagers": ["cargo"],
+      "matchPackageNames": ["cssparser", "selectors", "html5ever"],
+      "groupName": "servo parsers",
+      "description": "These move together, and html5ever waits on markup5ever_rcdom to follow it. A group of their own keeps a blocked bump from holding back the other updates."
+    },
+    {
+      "matchManagers": ["cargo"],
       "matchPackageNames": [
         "taffy",
-        "parley",
-        "fontique",
+        "harfrust",
         "skrifa",
         "read-fonts",
         "font-types",
         "write-fonts"
       ],
       "enabled": false,
-      "description": "The layout and font stack moves by hand: taffy is pinned by decision, and the fontations family is chained to the hinting-gate fork and parley's semver."
+      "description": "The layout, shaping and font stack moves by hand: taffy is pinned by decision, and harfrust and the fontations family resolve to takumi's forks through [patch.crates-io]."
+    },
+    {
+      "matchPackageNames": ["rolldown-plugin-dts"],
+      "allowedVersions": "<0.28.0",
+      "description": "0.28 needs rolldown 1.2, which tsdown does not use yet. Under an older rolldown its CommonJS declarations lose `export =`, and attw rejects @takumi-rs/image-response."
     }
   ]
 }

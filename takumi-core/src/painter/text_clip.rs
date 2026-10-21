@@ -1,8 +1,6 @@
 //! The text a box's `background-clip: text` background shows through: the inline content of the
 //! box and of every box inside it, as Blink's `kTextClip` paint phase walks them.
 
-use parley::InlineBoxKind;
-
 use super::{
   BoxFrame, BoxPainter, FillShape, GlyphDevice, OwnContent, PaintedInline, StripBackground,
 };
@@ -11,7 +9,7 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, NodeId, Point},
   layout::{
-    inline::ProcessedInlineSpan,
+    inline::{InlineBoxKind, ProcessedInlineSpan},
     inline_box::{InlineBoxPaint, InlineSubtree},
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },

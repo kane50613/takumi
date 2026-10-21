@@ -38,6 +38,6 @@ describe("generic font family", () => {
   test("an unknown generic keyword rejects", async () => {
     const renderer = new Renderer();
     // @ts-expect-error deliberately invalid keyword
-    expect(renderer.registerFont({ data: monoData, generic: "gothic" })).rejects.toThrow();
+    await expect(renderer.registerFont({ data: monoData, generic: "gothic" })).rejects.toThrow();
   });
 });

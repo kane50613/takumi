@@ -59,7 +59,7 @@ impl TailwindPropertyParser for BackgroundImage {
 }
 
 impl<'i> FromCss<'i> for BackgroundImage {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, BackgroundImage> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, BackgroundImage> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -71,7 +71,6 @@ impl<'i> FromCss<'i> for BackgroundImage {
       return Ok(BackgroundImage::Url((&*url).into()));
     }
 
-    let location = input.current_source_location();
     let start = input.state();
     let function = input.expect_function()?.to_owned();
 
@@ -81,7 +80,7 @@ impl<'i> FromCss<'i> for BackgroundImage {
       "linear-gradient" | "repeating-linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
       "radial-gradient" | "repeating-radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
       "conic-gradient" | "repeating-conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css(input)?)),
-      _ => Err(unexpected_token!(location, &Token::Function(function))),
+      _ => Err(unexpected_token!(&Token::Function(function))),
     }
   }
 
@@ -101,7 +100,7 @@ impl<'i> FromCss<'i> for BackgroundImage {
 pub type BackgroundImages = Box<[BackgroundImage]>;
 
 impl<'i> FromCss<'i> for BackgroundImages {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_comma_list(input, BackgroundImage::from_css)
   }
 
@@ -148,6 +147,26 @@ mod tests {
         "{css} parsed as valid"
       );
     }
+  }
+
+  #[test]
+  fn a_list_may_start_with_none() {
+    for css in [
+      "background-image: none, none",
+      "mask-image: none, url(a.png)",
+    ] {
+      assert_eq!(
+        StyleDeclarationBlock::parse_loosy(css).len(),
+        1,
+        "{css} parsed as invalid"
+      );
+    }
+
+    assert_eq!(
+      Option::<BackgroundImages>::from_css_str("none, none"),
+      Ok(Some([BackgroundImage::None, BackgroundImage::None].into()))
+    );
+    assert_eq!(Option::<BackgroundImages>::from_css_str("none"), Ok(None));
   }
 
   #[test]

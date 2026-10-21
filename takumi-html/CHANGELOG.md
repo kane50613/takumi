@@ -1,3 +1,27 @@
+## takumi-html@0.6.0
+
+### Parse a document that starts with a byte order mark as a document
+
+`from_html` now drops a leading byte order mark, as a browser does when it decodes a page. A document saved with one used to parse as a fragment, so it lost its `<body>` and the body's margin.
+
+### Keep the box of an element that holds only white space
+
+An element whose only content is white space, such as `<div style="height: 20px; background: green"> </div>`, now takes up space and paints its background and border in `fromHtml`, `fromJsx`, and `takumi-html`. It used to vanish along with its text.
+
+### Parse a source with a doctype as a document
+
+`from_html` parses a source that opens with a doctype as a document even without an `<html>` tag, so it gains the `<html>`, `<head>`, and `<body>` a browser builds, along with the body's default margin.
+
+## takumi-html@0.5.0
+
+### Render an `<img>` without a source
+
+An `<img>` with no `src`, or an empty one, used to fail the whole document. It now renders as an empty inline box its `width` and `height` size, as in Chrome, and `HtmlError::MissingImageSrc` is gone.
+
+### Build the parsed HTML into an arena
+
+`takumi-html` builds the DOM it parses into one `Vec` instead of `markup5ever_rcdom`'s reference-counted nodes, so it no longer depends on `markup5ever_rcdom` or `xml5ever`.
+
 ## takumi-html@0.4.2
 
 ### Parse repeated inline styles once

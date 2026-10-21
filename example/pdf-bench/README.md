@@ -1,10 +1,28 @@
 # Compare PDF rendering performance
 
-Render the same invoice with `takumi-pdf`, `@react-pdf/renderer`, and Puppeteer using system Chrome. The benchmark reports cold-start time, the median of 20 warm renders, and PDF size.
+Render the same invoice with `takumi-pdf`, `@react-pdf/renderer`, and Puppeteer, then compare time and file size.
+
+## Run
+
+Install Google Chrome; Puppeteer launches it with `channel: "chrome"`. Build the [PDF example packages](../README.md#pdf-examples). Then run the benchmark:
 
 ```bash
-bun install
+cd example/pdf-bench
 bun bench
 ```
 
-Puppeteer uses `channel: "chrome"`, so a local Google Chrome install is required. The [comparison page](https://takumi.kane.tw/docs/pdf/comparison) records results for specific package versions and hardware. Run this benchmark with your own templates to evaluate your workload.
+The first run downloads Inter from Google Fonts into `fonts/`. Later runs reuse it.
+
+## Results
+
+Each engine prints one JSON line:
+
+| Field          | Meaning                                                 |
+| -------------- | ------------------------------------------------------- |
+| `coldMs`       | Time from importing the renderer through the first PDF. |
+| `warmMedianMs` | The median time of 20 renders after the first.          |
+| `bytes`        | The size of the PDF.                                    |
+
+Each engine also writes its PDF to `out-takumi.pdf`, `out-reactpdf.pdf`, and `out-puppeteer.pdf`.
+
+The [comparison page](https://takumi.kane.tw/docs/pdf/comparison) records results for specific package versions and hardware. Run this benchmark with your own templates to measure your workload.

@@ -1,29 +1,44 @@
 // Copyright 2022 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::sort_key::sort_by_key;
-use std::collections::{HashMap, HashSet};
-use std::num::NonZeroU16;
+use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
-use super::fontdb::{Database, ID};
-use harfrust::ShapeOptions;
-use icu_properties::CodePointMapData;
-use icu_properties::props::Script;
+use harfrust::{Feature, Tag as HbTag, font::Variation};
 use kurbo::{ParamCurve, ParamCurveArclen, ParamCurveDeriv};
-use skrifa::MetadataProvider;
-use skrifa::Tag;
-use skrifa::prelude::Size;
-use skrifa::raw::TableProvider;
+use skrifa::raw::types::F2Dot14;
 use strict_num::NonZeroPositiveF32;
+use svgtypes::FontFamily;
 use tiny_skia_path::{NonZeroRect, Transform};
 
-use crate::resvg::usvg::tree::{BBox, IsValidLength};
-use crate::resvg::usvg::{
-  AlignmentBaseline, ApproxZeroUlps, BaselineShift, DominantBaseline, Fill, FillRule, Font,
-  FontResolver, GlyphId, LengthAdjust, PaintOrder, Path, ShapeRendering, Stroke, Text, TextAnchor,
-  TextChunk, TextDecorationStyle, TextFlow, TextPath, TextSpan, WritingMode,
+use crate::font_style::ExpandedFontFamily;
+use crate::fonts::font::Font as ShapingFont;
+use crate::fonts::font_baseline::FontBaseline;
+use crate::fonts::font_custom_platform_data::FontCustomPlatformData;
+use crate::fonts::font_description::{FontDescription, FontFallbackKey, FontSelectionDescription};
+use crate::fonts::font_selection_types::{
+  FontSelectionRequest, FontSelectionValue, ITALIC_SLOPE_VALUE, NORMAL_SLOPE_VALUE,
 };
+use crate::fonts::shaping::harfbuzz_shaper::HarfBuzzShaper;
+use crate::fonts::shaping::shape_result_spacing::ShapeResultSpacing;
+use crate::fonts::shaping::shape_result_view::ShapeResultView;
+use crate::fonts::simple_font_data::SimpleFontData;
+use crate::layout::inline::decorations::{DecoratingBox, DecorationFont};
+use crate::resources::font::{PrimaryFontMetrics, RunFace, RunSynthesis};
+use crate::resvg::usvg::tree::BBox;
+use crate::resvg::usvg::{
+  AlignmentBaseline, ApproxZeroUlps, BaselineShift, Cache, DominantBaseline, Fill, FillRule, Font,
+  FontOpticalSizing, FontStyle, GlyphId, LengthAdjust, PaintOrder, Path, ShapeRendering, Stroke,
+  Text, TextAnchor, TextChunk, TextDecorationStyle, TextFlow, TextPath, TextSpan, WritingMode,
+};
+use crate::sort_key::sort_by_key;
+use crate::style::{
+  Direction as TextDirection, FontFamilyToken, FontFeature, FontLanguageOverride,
+  FontOpticalSizing as CssFontOpticalSizing, FontSynthesic, FontVariantCaps, FontVariantLigatures,
+  GenericFamilyType, SizedTextDecorationThickness, TextDecorationLines, TextUnderlinePosition,
+};
+use crate::text::bidi_paragraph::{BidiParagraph, direction_from_level};
 
 /// A glyph that has already been positioned correctly.
 ///
@@ -39,113 +54,19 @@ pub struct PositionedGlyph {
   cluster_ts: Transform,
   /// Returns the transform of the span that the glyph is a part of.
   span_ts: Transform,
-  /// The units per em of the font the glyph belongs to.
-  units_per_em: u16,
-  /// The font size the glyph should be scaled to.
-  font_size: f32,
   /// The ID of the glyph.
   pub id: GlyphId,
-  /// The text from the original string that corresponds to that glyph.
-  pub text: String,
-  /// The ID of the font the glyph should be taken from. Can be used with the
-  /// [font database of the tree](crate::resvg::usvg::Tree::fontdb) this glyph is part of.
-  pub font: ID,
+  /// The font the glyph was shaped with.
+  pub(crate) font: Arc<ResolvedFont>,
 }
 
 impl PositionedGlyph {
-  /// Returns the font size for this glyph.
-  pub fn font_size(&self) -> f32 {
-    self.font_size
-  }
-
-  /// Returns the transform of glyph.
+  /// Returns the transform of the glyph's outline, which is in pixels at the font size.
   pub fn transform(&self) -> Transform {
-    let sx = self.font_size / self.units_per_em as f32;
-
     self
       .span_ts
       .pre_concat(self.cluster_ts)
-      .pre_concat(Transform::from_scale(sx, sx))
       .pre_concat(self.glyph_ts)
-  }
-
-  /// Returns the transform of glyph, assuming that an outline
-  /// glyph is being used (i.e. from the `glyf` or `CFF/CFF2` table).
-  pub fn outline_transform(&self) -> Transform {
-    // Outlines are mirrored by default.
-    self
-      .transform()
-      .pre_concat(Transform::from_scale(1.0, -1.0))
-  }
-
-  /// Returns the transform for the glyph, assuming that a CBTD-based raster glyph
-  /// is being used.
-  pub fn cbdt_transform(&self, x: f32, y: f32, pixels_per_em: f32) -> Transform {
-    self
-      .transform()
-      .pre_concat(Transform::from_scale(
-        self.units_per_em as f32 / pixels_per_em,
-        self.units_per_em as f32 / pixels_per_em,
-      ))
-      // Right now, the top-left corner of the image would be placed in
-      // on the "text cursor", but we want the bottom-left corner to be there,
-      // so we need to shift it up and also apply the x/y offset.
-      .pre_translate(x, -y)
-  }
-
-  /// Returns the transform for the glyph, assuming that a sbix-based raster glyph
-  /// is being used.
-  pub fn sbix_transform(
-    &self,
-    x: f32,
-    y: f32,
-    x_min: f32,
-    y_min: f32,
-    pixels_per_em: f32,
-    height: f32,
-  ) -> Transform {
-    // In contrast to CBDT, we also need to look at the outline bbox of the glyph and add a shift if necessary.
-    let bbox_x_shift = -x_min;
-
-    let bbox_y_shift = if y_min.approx_zero_ulps(4) {
-      // For unknown reasons, using Apple Color Emoji will lead to a vertical shift on MacOS, but this shift
-      // doesn't seem to be coming from the font and most likely is somehow hardcoded. On Windows,
-      // this shift will not be applied. However, if this shift is not applied the emojis are a bit
-      // too high up when being together with other text, so we try to imitate this.
-      // See also https://github.com/harfbuzz/harfbuzz/issues/2679#issuecomment-1345595425
-      // So whenever the y-shift is 0, we approximate this vertical shift that seems to be produced by it.
-      // This value seems to be pretty close to what is happening on MacOS.
-      // We can still remove this if it turns out to be a problem, but Apple Color Emoji is pretty
-      // much the only `sbix` font out there and they all seem to have a y-shift of 0, so it
-      // makes sense to keep it.
-      0.128 * self.units_per_em as f32
-    } else {
-      -y_min
-    };
-
-    self
-      .transform()
-      .pre_concat(Transform::from_translate(bbox_x_shift, bbox_y_shift))
-      .pre_concat(Transform::from_scale(
-        self.units_per_em as f32 / pixels_per_em,
-        self.units_per_em as f32 / pixels_per_em,
-      ))
-      // Right now, the top-left corner of the image would be placed in
-      // on the "text cursor", but we want the bottom-left corner to be there,
-      // so we need to shift it up and also apply the x/y offset.
-      .pre_translate(x, -height - y)
-  }
-
-  /// Returns the transform for the glyph, assuming that an SVG glyph is
-  /// being used.
-  pub fn svg_transform(&self) -> Transform {
-    self.transform()
-  }
-
-  /// Returns the transform for the glyph, assuming that a COLR glyph is
-  /// being used.
-  pub fn colr_transform(&self) -> Transform {
-    self.outline_transform()
   }
 }
 
@@ -161,10 +82,6 @@ pub struct Span {
   pub paint_order: PaintOrder,
   /// The font size of the span.
   pub font_size: NonZeroPositiveF32,
-  /// Font variation settings for variable fonts.
-  pub variations: Vec<crate::resvg::usvg::FontVariation>,
-  /// Font optical sizing mode.
-  pub font_optical_sizing: crate::resvg::usvg::FontOpticalSizing,
   /// The visibility of the span.
   pub visible: bool,
   /// The glyphs that make up the span.
@@ -205,24 +122,8 @@ impl GlyphCluster {
   }
 }
 
-pub(crate) fn layout_text(
-  text_node: &Text,
-  resolver: &FontResolver,
-  fontdb: &mut Arc<Database>,
-) -> Option<(Vec<Span>, NonZeroRect)> {
-  let mut fonts_cache: FontsCache = HashMap::new();
-
-  for chunk in &text_node.chunks {
-    for span in &chunk.spans {
-      if !fonts_cache.contains_key(&span.font) {
-        if let Some(font) = (resolver.select_font)(&span.font, fontdb)
-          .and_then(|id| fontdb.load_font(id, &span.font.variations))
-        {
-          fonts_cache.insert(span.font.clone(), Arc::new(font));
-        }
-      }
-    }
-  }
+pub(crate) fn layout_text(text_node: &Text, cache: &Cache) -> Option<(Vec<Span>, NonZeroRect)> {
+  let mut fonts_cache = FontsCache::new(text_node, cache);
 
   let mut spans = vec![];
   let mut char_offset = 0;
@@ -235,15 +136,13 @@ pub(crate) fn layout_text(
       TextFlow::Path(_) => (0.0, 0.0),
     };
 
-    let mut clusters = process_chunk(chunk, &fonts_cache, resolver, fontdb);
+    let mut clusters = process_chunk(chunk, &mut fonts_cache);
     if clusters.is_empty() {
       char_offset += chunk.text.chars().count();
       continue;
     }
 
     apply_writing_mode(text_node.writing_mode, &mut clusters);
-    apply_letter_spacing(chunk, &mut clusters);
-    apply_word_spacing(chunk, &mut clusters);
 
     apply_length_adjust(chunk, &mut clusters);
     let mut curr_pos = resolve_clusters_positions(
@@ -263,7 +162,7 @@ pub(crate) fn layout_text(
     }
 
     for span in &chunk.spans {
-      let font = match fonts_cache.get(&span.font) {
+      let font = match fonts_cache.primary(span) {
         Some(v) => v,
         None => continue,
       };
@@ -281,55 +180,43 @@ pub(crate) fn layout_text(
         span_ts = span_ts.pre_translate(0.0, shift);
       }
 
-      let mut underline = None;
-      let mut overline = None;
-      let mut line_through = None;
-
-      if let Some(decoration) = span.decoration.underline.clone() {
-        // TODO: No idea what offset should be used for top-to-bottom layout.
-        // There is
-        // https://www.w3.org/TR/css-text-decor-3/#text-underline-position-property
-        // but it doesn't go into details.
+      let mut decorate = |line, decoration: &Option<TextDecorationStyle>, vertical_offset| {
+        let decoration = decoration.clone()?;
+        let (center, thickness) = font.decoration_line(line);
         let offset = match text_node.writing_mode {
-          WritingMode::LeftToRight => -font.underline_position(span.font_size.get()),
-          WritingMode::TopToBottom => font.height(span.font_size.get()) / 2.0,
+          WritingMode::LeftToRight => center,
+          WritingMode::TopToBottom => vertical_offset,
         };
+        let path = convert_decoration(
+          (offset, thickness),
+          span,
+          decoration,
+          &decoration_spans,
+          span_ts,
+        )?;
 
-        if let Some(path) =
-          convert_decoration(offset, span, font, decoration, &decoration_spans, span_ts)
-        {
-          bbox = bbox.expand(path.data.bounds());
-          underline = Some(path);
-        }
-      }
-
-      if let Some(decoration) = span.decoration.overline.clone() {
-        let offset = match text_node.writing_mode {
-          WritingMode::LeftToRight => -font.ascent(span.font_size.get()),
-          WritingMode::TopToBottom => -font.height(span.font_size.get()) / 2.0,
-        };
-
-        if let Some(path) =
-          convert_decoration(offset, span, font, decoration, &decoration_spans, span_ts)
-        {
-          bbox = bbox.expand(path.data.bounds());
-          overline = Some(path);
-        }
-      }
-
-      if let Some(decoration) = span.decoration.line_through.clone() {
-        let offset = match text_node.writing_mode {
-          WritingMode::LeftToRight => -font.line_through_position(span.font_size.get()),
-          WritingMode::TopToBottom => 0.0,
-        };
-
-        if let Some(path) =
-          convert_decoration(offset, span, font, decoration, &decoration_spans, span_ts)
-        {
-          bbox = bbox.expand(path.data.bounds());
-          line_through = Some(path);
-        }
-      }
+        bbox = bbox.expand(path.data.bounds());
+        Some(path)
+      };
+      // TODO: No idea what offset should be used for top-to-bottom layout.
+      // There is
+      // https://www.w3.org/TR/css-text-decor-3/#text-underline-position-property
+      // but it doesn't go into details.
+      let underline = decorate(
+        TextDecorationLines::UNDERLINE,
+        &span.decoration.underline,
+        font.height() / 2.0,
+      );
+      let overline = decorate(
+        TextDecorationLines::OVERLINE,
+        &span.decoration.overline,
+        -font.height() / 2.0,
+      );
+      let line_through = decorate(
+        TextDecorationLines::LINE_THROUGH,
+        &span.decoration.line_through,
+        0.0,
+      );
 
       let mut fill = span.fill.clone();
       if let Some(ref mut fill) = fill {
@@ -361,8 +248,6 @@ pub(crate) fn layout_text(
           stroke: span.stroke.clone(),
           paint_order: span.paint_order,
           font_size: span.font_size,
-          variations: span.font.variations.clone(),
-          font_optical_sizing: span.font_optical_sizing,
           visible: span.visible,
           positioned_glyphs,
           underline,
@@ -460,17 +345,15 @@ fn collect_decoration_spans(span: &TextSpan, clusters: &[GlyphCluster]) -> Vec<D
   spans
 }
 
+/// The decoration `thickness` thick, centered `dy` below the baseline, under `decoration_spans`.
 pub(crate) fn convert_decoration(
-  dy: f32,
+  (dy, thickness): (f32, f32),
   span: &TextSpan,
-  font: &ResolvedFont,
   mut decoration: TextDecorationStyle,
   decoration_spans: &[DecorationSpan],
   transform: Transform,
 ) -> Option<Path> {
   debug_assert!(!decoration_spans.is_empty());
-
-  let thickness = font.underline_thickness(span.font_size.get());
 
   let mut builder = tiny_skia_path::PathBuilder::new();
   for dec_span in decoration_spans {
@@ -602,29 +485,28 @@ pub(crate) fn resolve_baseline(
   font: &ResolvedFont,
   writing_mode: WritingMode,
 ) -> f32 {
-  let mut shift = -resolve_baseline_shift(&span.baseline_shift, font, span.font_size.get());
+  let mut shift = -resolve_baseline_shift(&span.baseline_shift, font);
 
   // TODO: support vertical layout as well
   if writing_mode == WritingMode::LeftToRight {
-    if span.alignment_baseline == AlignmentBaseline::Auto
-      || span.alignment_baseline == AlignmentBaseline::Baseline
-    {
-      shift += font.dominant_baseline_shift(span.dominant_baseline, span.font_size.get());
-    } else {
-      shift += font.alignment_baseline_shift(span.alignment_baseline, span.font_size.get());
-    }
+    let baseline = span
+      .alignment_baseline
+      .font_baseline()
+      .unwrap_or_else(|| span.dominant_baseline.font_baseline());
+
+    shift += font.baseline_shift(baseline);
   }
 
   shift
 }
 
-fn resolve_baseline_shift(baselines: &[BaselineShift], font: &ResolvedFont, font_size: f32) -> f32 {
+fn resolve_baseline_shift(baselines: &[BaselineShift], font: &ResolvedFont) -> f32 {
   let mut shift = 0.0;
   for baseline in baselines.iter().rev() {
     match baseline {
       BaselineShift::Baseline => {}
-      BaselineShift::Subscript => shift -= font.subscript_offset(font_size),
-      BaselineShift::Superscript => shift += font.superscript_offset(font_size),
+      BaselineShift::Subscript => shift -= font.height() / 2.0,
+      BaselineShift::Superscript => shift += font.height() / 2.0,
       BaselineShift::Number(n) => shift += n,
     }
   }
@@ -683,7 +565,7 @@ fn resolve_clusters_positions_path(
 
     let baseline_shift = chunk_span_at(chunk, cluster.byte_idx)
       .map(|span| {
-        let font = match fonts_cache.get(&span.font) {
+        let font = match fonts_cache.primary(span) {
           Some(v) => v,
           None => return 0.0,
         };
@@ -859,130 +741,92 @@ fn collect_normals(
   normals
 }
 
-/// Converts a text chunk into a list of outlined clusters.
-///
-/// This function will do the BIDI reordering, text shaping and glyphs outlining,
-/// but not the text layouting. So all clusters are in the 0x0 position.
-fn process_chunk(
-  chunk: &TextChunk,
-  fonts_cache: &FontsCache,
-  resolver: &FontResolver,
-  fontdb: &mut Arc<Database>,
-) -> Vec<GlyphCluster> {
-  // The way this function works is a bit tricky.
-  //
-  // The first problem is BIDI reordering.
-  // We cannot shape text span-by-span, because glyph clusters are not guarantee to be continuous.
-  //
-  // For example:
-  // <text>Hel<tspan fill="url(#lg1)">lo של</tspan>ום.</text>
-  //
-  // Would be shaped as:
-  // H e l l o   ש ל  ו  ם .   (characters)
-  // 0 1 2 3 4 5 12 10 8 6 14  (cluster indices in UTF-8)
-  //       ---         ---     (green span)
-  //
-  // As you can see, our continuous `lo של` span was split into two separated one.
-  // So our 3 spans: black - green - black, become 5 spans: black - green - black - green - black.
-  // If we shape `Hel`, then `lo של` an then `ום` separately - we would get an incorrect output.
-  // To properly handle this we simply shape the whole chunk.
-  //
-  // But this introduces another issue - what to do when we have multiple fonts?
-  // The easy solution would be to simply shape text with each font,
-  // where the first font output is used as a base one and all others overwrite it.
-  // This way in case of:
-  // <text font-family="Arial">Hello <tspan font-family="Helvetica">world</tspan></text>
-  // we would replace Arial glyphs for `world` with Helvetica one. Pretty simple.
-  //
-  // Well, it would work most of the time, but not always.
-  // This is because different fonts can produce different amount of glyphs for the same text.
-  // The most common example are ligatures. Some fonts can shape `fi` as two glyphs `f` and `i`,
-  // but some can use `ﬁ` (U+FB01) instead.
-  // Meaning that during merging we have to overwrite not individual glyphs, but clusters.
-
-  // Glyph splitting assigns distinct glyphs to the same index in the original text, we need to
-  // store previously used indices to make sure we do not re-use the same index while overwriting
-  // span glyphs.
-  let mut positions = HashSet::new();
-
-  let mut glyphs = Vec::new();
-  for span in &chunk.spans {
-    let font = match fonts_cache.get(&span.font) {
-      Some(v) => v.clone(),
-      None => continue,
-    };
-
-    let tmp_glyphs = shape_text(
-      &chunk.text,
-      font,
-      span.small_caps,
-      span.apply_kerning,
-      &span.font.variations,
-      span.font_size.get(),
-      span.font_optical_sizing,
-      resolver,
-      fontdb,
-    );
-
-    // Do nothing with the first run.
-    if glyphs.is_empty() {
-      glyphs = tmp_glyphs;
-      continue;
-    }
-
-    positions.clear();
-
-    // Overwrite span's glyphs.
-    let mut iter = tmp_glyphs.into_iter();
-    while let Some(new_glyph) = iter.next() {
-      if !span_contains(span, new_glyph.byte_idx) {
-        continue;
-      }
-
-      let Some(idx) = glyphs
-        .iter()
-        .position(|g| g.byte_idx == new_glyph.byte_idx)
-        .filter(|pos| !positions.contains(pos))
-      else {
-        continue;
-      };
-
-      positions.insert(idx);
-
-      let prev_cluster_len = glyphs[idx].cluster_len;
-      if prev_cluster_len < new_glyph.cluster_len {
-        // If the new font represents the same cluster with fewer glyphs
-        // then remove remaining glyphs.
-        for _ in 1..new_glyph.cluster_len {
-          glyphs.remove(idx + 1);
-        }
-      } else if prev_cluster_len > new_glyph.cluster_len {
-        // If the new font represents the same cluster with more glyphs
-        // then insert them after the current one.
-        for j in 1..prev_cluster_len {
-          if let Some(g) = iter.next() {
-            glyphs.insert(idx + j, g);
-          }
-        }
-      }
-
-      glyphs[idx] = new_glyph;
-    }
-  }
-
-  // Convert glyphs to clusters.
+/// Shapes a text chunk into clusters at the 0x0 position, in visual order.
+fn process_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<GlyphCluster> {
+  let glyphs = shape_chunk(chunk, fonts_cache);
   let mut clusters = Vec::new();
+
   for (range, byte_idx) in GlyphClusters::new(&glyphs) {
-    if let Some(span) = chunk_span_at(chunk, byte_idx) {
-      clusters.push(form_glyph_clusters(
-        &glyphs[range],
-        &chunk.text,
-        span.font_size.get(),
-      ));
+    if chunk_span_at(chunk, byte_idx).is_some() {
+      clusters.push(form_glyph_clusters(&glyphs[range], &chunk.text));
     }
   }
 
   clusters
+}
+
+/// Shapes `chunk` through `HarfBuzzShaper` and spaces it through `ShapeResultSpacing`, in visual
+/// order. Each span shapes with its own font and spacing, as Blink's `InlineNode::ShapeText`
+/// shapes each item, so a bidi run is shaped piece by piece at span boundaries.
+fn shape_chunk(chunk: &TextChunk, fonts_cache: &mut FontsCache) -> Vec<Glyph> {
+  let bidi = BidiParagraph::new(&chunk.text, Some(TextDirection::Ltr));
+  let shaper = HarfBuzzShaper::new(&chunk.text);
+  let mut spacing = ShapeResultSpacing::new(&chunk.text, true);
+  let mut glyphs = Vec::new();
+
+  for run in bidi.get_visual_runs() {
+    let direction = direction_from_level(run.level);
+    let mut pieces: Vec<(&TextSpan, usize, usize)> = chunk
+      .spans
+      .iter()
+      .filter_map(|span| {
+        let start = span.start.max(run.start);
+        let end = span.end.min(run.end);
+
+        (start < end).then_some((span, start, end))
+      })
+      .collect();
+
+    if direction == TextDirection::Rtl {
+      pieces.reverse();
+    }
+
+    for (span, start, end) in pieces {
+      let Some(font) = fonts_cache.shaping_font(span) else {
+        continue;
+      };
+      let mut result = shaper.shape(&font, direction, start, end);
+
+      if spacing.set_spacing_from(
+        font.description.letter_spacing,
+        font.description.word_spacing,
+      ) {
+        result.apply_spacing(&mut spacing, 0);
+      }
+
+      let mut shaped = Vec::new();
+      let total_advance = ShapeResultView::create_from_result(&Rc::new(result)).for_each_glyph(
+        0.0,
+        |character_index, glyph, offset, advance, font_data| {
+          shaped.push((character_index, glyph, offset, advance, font_data.cloned()));
+        },
+      );
+
+      for (index, (character_index, glyph, offset, advance, font_data)) in shaped.iter().enumerate()
+      {
+        let next_advance = shaped
+          .get(index + 1)
+          .map_or(total_advance, |&(_, _, _, next_advance, _)| next_advance);
+        let Some(font) = font_data
+          .as_ref()
+          .and_then(|font_data| fonts_cache.resolved(font_data))
+        else {
+          continue;
+        };
+
+        glyphs.push(Glyph {
+          id: GlyphId(u32::from(*glyph)),
+          byte_idx: ByteIndex::new(*character_index as usize),
+          dx: offset.x,
+          dy: offset.y,
+          width: next_advance - advance,
+          font,
+        });
+      }
+    }
+  }
+
+  glyphs
 }
 
 fn apply_length_adjust(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
@@ -1007,7 +851,6 @@ fn apply_length_adjust(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
 
     for i in &cluster_indexes {
       // Use the original cluster `width` and not `advance`.
-      // This method essentially discards any `word-spacing` and `letter-spacing`.
       width += clusters[*i].width;
     }
 
@@ -1053,482 +896,50 @@ fn apply_writing_mode(writing_mode: WritingMode, _clusters: &mut [GlyphCluster])
   debug_assert!(writing_mode != WritingMode::TopToBottom);
 }
 
-/// Applies the `letter-spacing` property to a text chunk clusters.
-///
-/// [In the CSS spec](https://www.w3.org/TR/css-text-3/#letter-spacing-property).
-fn apply_letter_spacing(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
-  // At least one span should have a non-zero spacing.
-  if !chunk
-    .spans
-    .iter()
-    .any(|span| !span.letter_spacing.approx_zero_ulps(4))
-  {
-    return;
-  }
-
-  let num_clusters = clusters.len();
-  for (i, cluster) in clusters.iter_mut().enumerate() {
-    // Spacing must be applied only to characters that belongs to the script
-    // that supports spacing.
-    // We are checking only the first code point, since it should be enough.
-    // https://www.w3.org/TR/css-text-3/#cursive-tracking
-    let script = CodePointMapData::<Script>::new().get(cluster.codepoint);
-    if script_supports_letter_spacing(script) {
-      if let Some(span) = chunk_span_at(chunk, cluster.byte_idx) {
-        // A space after the last cluster should be ignored,
-        // since it affects the bbox and text alignment.
-        if i != num_clusters - 1 {
-          cluster.advance += span.letter_spacing;
-        }
-
-        // If the cluster advance became negative - clear it.
-        // This is an UB so we can do whatever we want, and we mimic Chrome's behavior.
-        if !cluster.advance.is_valid_length() {
-          cluster.width = 0.0;
-          cluster.advance = 0.0;
-          cluster.glyphs = vec![];
-        }
-      }
-    }
-  }
-}
-
-/// Applies the `word-spacing` property to a text chunk clusters.
-///
-/// [In the CSS spec](https://www.w3.org/TR/css-text-3/#propdef-word-spacing).
-fn apply_word_spacing(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
-  // At least one span should have a non-zero spacing.
-  if !chunk
-    .spans
-    .iter()
-    .any(|span| !span.word_spacing.approx_zero_ulps(4))
-  {
-    return;
-  }
-
-  for cluster in clusters {
-    if is_word_separator_characters(cluster.codepoint) {
-      if let Some(span) = chunk_span_at(chunk, cluster.byte_idx) {
-        // Technically, word spacing 'should be applied half on each
-        // side of the character', but it doesn't affect us in any way,
-        // so we are ignoring this.
-        cluster.advance += span.word_spacing;
-
-        // After word spacing, `advance` can be negative.
-      }
-    }
-  }
-}
-
-fn form_glyph_clusters(glyphs: &[Glyph], text: &str, font_size: f32) -> GlyphCluster {
+fn form_glyph_clusters(glyphs: &[Glyph], text: &str) -> GlyphCluster {
   debug_assert!(!glyphs.is_empty());
 
   let mut x = 0.0;
   let mut width = 0.0;
-  let mut advance = 0.0;
 
   let mut positioned_glyphs = vec![];
 
   for glyph in glyphs {
-    let sx = glyph.font.scale(font_size);
-
-    // Apply offset.
-    //
     // The first glyph in the cluster will have an offset from 0x0,
     // but the later one will have an offset from the "current position".
     // So we have to keep an advance.
-    // TODO: should be done only inside a single text span
-    let ts = Transform::from_translate(x + glyph.dx as f32, -glyph.dy as f32);
-
     positioned_glyphs.push(PositionedGlyph {
-      glyph_ts: ts,
+      glyph_ts: Transform::from_translate(x + glyph.dx, glyph.dy),
       // Will be set later.
       cluster_ts: Transform::default(),
       // Will be set later.
       span_ts: Transform::default(),
-      units_per_em: glyph.font.units_per_em.get(),
-      font_size,
-      font: glyph.font.id,
-      text: glyph.text.clone(),
       id: glyph.id,
+      font: Arc::clone(&glyph.font),
     });
 
-    x += glyph.width as f32;
+    x += glyph.width;
 
-    let glyph_width = glyph.width as f32 * sx;
-    advance += glyph_width;
-    if glyph_width > width {
-      width = glyph_width;
+    if glyph.width > width {
+      width = glyph.width;
     }
   }
 
   let byte_idx = glyphs[0].byte_idx;
-  let font = glyphs[0].font.clone();
+  let font = &glyphs[0].font;
   GlyphCluster {
     byte_idx,
     codepoint: byte_idx.char_from(text),
     width,
-    advance,
-    ascent: font.ascent(font_size),
-    descent: font.descent(font_size),
+    advance: x,
+    ascent: font.ascent(),
+    descent: font.descent(),
     has_relative_shift: false,
     transform: Transform::default(),
     path_transform: Transform::default(),
     glyphs: positioned_glyphs,
     visible: true,
   }
-}
-
-pub(crate) trait DatabaseExt {
-  fn load_font(
-    &self,
-    id: ID,
-    variations: &[crate::resvg::usvg::FontVariation],
-  ) -> Option<ResolvedFont>;
-  fn has_char(&self, id: ID, c: char) -> bool;
-}
-
-impl DatabaseExt for Database {
-  #[inline(never)]
-  fn load_font(
-    &self,
-    id: ID,
-    variations: &[crate::resvg::usvg::FontVariation],
-  ) -> Option<ResolvedFont> {
-    self.with_face_data(id, |data, face_index| -> Option<ResolvedFont> {
-      let font = skrifa::FontRef::from_index(data, face_index).ok()?;
-
-      // For variable fonts, metrics depend on the position in the design space,
-      // so resolve the requested variations to a normalized location first.
-      // Metrics are always in font units, so the size stays unscaled.
-      let location = font.axes().location(
-        variations
-          .iter()
-          .map(|v| (Tag::from_be_bytes(v.tag), v.value)),
-      );
-      let coords = location.coords();
-      let metrics = font.metrics(Size::unscaled(), &location);
-
-      // Reject fonts with an out-of-range unitsPerEm, like `ttf-parser` did.
-      if !(16..=16384).contains(&metrics.units_per_em) {
-        return None;
-      }
-      let units_per_em = NonZeroU16::new(metrics.units_per_em)?;
-
-      let ascent = metrics.ascent;
-      let descent = metrics.descent;
-
-      let x_height = metrics
-        .x_height
-        .filter(|x| *x > 0.0)
-        .and_then(|x| u16::try_from(x.round() as i32).ok())
-        .and_then(NonZeroU16::new);
-      let x_height = match x_height {
-        Some(height) => height,
-        None => {
-          // If not set - fallback to height * 45%.
-          // 45% is what Firefox uses.
-          u16::try_from(((ascent - descent) * 0.45).round() as i32)
-            .ok()
-            .and_then(NonZeroU16::new)?
-        }
-      };
-
-      let line_through = metrics.strikeout;
-      let line_through_position = match line_through {
-        Some(metrics) => metrics.offset.round() as i16,
-        None => x_height.get() as i16 / 2,
-      };
-
-      let (underline_position, underline_thickness) = match metrics.underline {
-        Some(metrics) => {
-          let thickness = u16::try_from(metrics.thickness.round() as i32)
-            .ok()
-            .and_then(NonZeroU16::new)
-            // `skrifa` guarantees that units_per_em is > 0
-            .unwrap_or_else(|| NonZeroU16::new(units_per_em.get() / 12).unwrap());
-
-          (metrics.offset.round() as i16, thickness)
-        }
-        None => (
-          -(units_per_em.get() as i16) / 9,
-          NonZeroU16::new(units_per_em.get() / 12).unwrap(),
-        ),
-      };
-
-      // 0.2 and 0.4 are generic offsets used by some applications (Inkscape/librsvg).
-      let mut subscript_offset = (units_per_em.get() as f32 / 0.2).round() as i16;
-      let mut superscript_offset = (units_per_em.get() as f32 / 0.4).round() as i16;
-
-      // TODO: Consider upstreaming into skrifa
-      if let Ok(os2) = font.os2() {
-        subscript_offset = os2.y_subscript_y_offset();
-        superscript_offset = os2.y_superscript_y_offset();
-      }
-      if let (Ok(mvar), true) = (font.mvar(), !coords.is_empty()) {
-        use skrifa::raw::tables::mvar::tags::*;
-        let metric_delta = |tag| mvar.metric_delta(tag, coords).unwrap_or_default().to_f32();
-
-        subscript_offset += metric_delta(SBYO).round() as i16;
-        superscript_offset += metric_delta(SPYO).round() as i16;
-      }
-
-      Some(ResolvedFont {
-        id,
-        units_per_em,
-        ascent: ascent.round() as i16,
-        descent: descent.round() as i16,
-        x_height,
-        underline_position,
-        underline_thickness,
-        line_through_position,
-        subscript_offset,
-        superscript_offset,
-      })
-    })?
-  }
-
-  #[inline(never)]
-  fn has_char(&self, id: ID, c: char) -> bool {
-    let res = self.with_face_data(id, |font_data, face_index| -> Option<bool> {
-      let font = skrifa::FontRef::from_index(font_data, face_index).ok()?;
-      let char_map = skrifa::charmap::Charmap::new(&font);
-      char_map.map(c)?;
-      Some(true)
-    });
-
-    res == Some(Some(true))
-  }
-}
-
-/// Text shaping with font fallback.
-pub(crate) fn shape_text(
-  text: &str,
-  font: Arc<ResolvedFont>,
-  small_caps: bool,
-  apply_kerning: bool,
-  variations: &[crate::resvg::usvg::FontVariation],
-  font_size: f32,
-  font_optical_sizing: crate::resvg::usvg::FontOpticalSizing,
-  resolver: &FontResolver,
-  fontdb: &mut Arc<Database>,
-) -> Vec<Glyph> {
-  let mut glyphs = shape_text_with_font(
-    text,
-    font.clone(),
-    small_caps,
-    apply_kerning,
-    variations,
-    font_size,
-    font_optical_sizing,
-    fontdb,
-  )
-  .unwrap_or_default();
-
-  // Remember all fonts used for shaping.
-  let mut used_fonts = vec![font.id];
-
-  // Loop until all glyphs become resolved or until no more fonts are left.
-  'outer: loop {
-    let mut missing = None;
-    for glyph in &glyphs {
-      if glyph.is_missing() {
-        missing = Some(glyph.byte_idx.char_from(text));
-        break;
-      }
-    }
-
-    if let Some(c) = missing {
-      let fallback_font = match (resolver.select_fallback)(c, &used_fonts, fontdb)
-        .and_then(|id| fontdb.load_font(id, variations))
-      {
-        Some(v) => Arc::new(v),
-        None => break 'outer,
-      };
-
-      // Shape again, using a new font.
-      let fallback_glyphs = shape_text_with_font(
-        text,
-        fallback_font.clone(),
-        small_caps,
-        apply_kerning,
-        variations,
-        font_size,
-        font_optical_sizing,
-        fontdb,
-      )
-      .unwrap_or_default();
-
-      let all_matched = fallback_glyphs.iter().all(|g| !g.is_missing());
-      if all_matched {
-        // Replace all glyphs when all of them were matched.
-        glyphs = fallback_glyphs;
-        break 'outer;
-      }
-
-      // We assume, that shaping with an any font will produce the same amount of glyphs.
-      // This is incorrect, but good enough for now.
-      if glyphs.len() != fallback_glyphs.len() {
-        break 'outer;
-      }
-
-      // TODO: Replace clusters and not glyphs. This should be more accurate.
-
-      // Copy new glyphs.
-      for i in 0..glyphs.len() {
-        if glyphs[i].is_missing() && !fallback_glyphs[i].is_missing() {
-          glyphs[i] = fallback_glyphs[i].clone();
-        }
-      }
-
-      // Remember this font.
-      used_fonts.push(fallback_font.id);
-    } else {
-      break 'outer;
-    }
-  }
-
-  // Warn about missing glyphs.
-  for glyph in &glyphs {
-    if glyph.is_missing() {
-      let c = glyph.byte_idx.char_from(text);
-      // TODO: print a full grapheme
-      log::warn!(
-        "No fonts with a {}/U+{:X} character were found.",
-        c,
-        c as u32
-      );
-    }
-  }
-
-  glyphs
-}
-
-/// Converts a text into a list of glyph IDs.
-///
-/// This function will do the BIDI reordering and text shaping.
-fn shape_text_with_font(
-  text: &str,
-  font: Arc<ResolvedFont>,
-  small_caps: bool,
-  apply_kerning: bool,
-  variations: &[crate::resvg::usvg::FontVariation],
-  font_size: f32,
-  font_optical_sizing: crate::resvg::usvg::FontOpticalSizing,
-  fontdb: &Database,
-) -> Option<Vec<Glyph>> {
-  fontdb.with_face_data(font.id, |font_data, face_index| -> Option<Vec<Glyph>> {
-    use harfrust::{Feature, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
-
-    use crate::resvg::usvg::text::OPSZ;
-
-    let hr_font = harfrust::FontRef::from_index(font_data, face_index).ok()?;
-
-    // Build the list of variations to apply
-    let mut variations: Vec<Variation> = variations
-      .iter()
-      .map(|v| Variation {
-        tag: Tag::from_be_bytes(v.tag),
-        value: v.value,
-      })
-      .collect();
-
-    // Automatic optical sizing: if font-optical-sizing is auto and the font has
-    // an 'opsz' axis that isn't explicitly set, auto-set it to match font size.
-    // This matches browser behavior (CSS font-optical-sizing: auto).
-    if font_optical_sizing == crate::resvg::usvg::FontOpticalSizing::Auto {
-      let has_explicit_opsz = variations.iter().any(|v| v.tag == *b"opsz");
-      if !has_explicit_opsz && hr_font.axes().get_by_tag(OPSZ).is_some() {
-        variations.push(Variation {
-          tag: OPSZ,
-          value: font_size,
-        });
-      }
-    }
-
-    let bidi_info = unicode_bidi::BidiInfo::new_with_data_source(
-      &super::bidi::IcuBidiData,
-      text,
-      Some(unicode_bidi::Level::ltr()),
-    );
-    let paragraph = &bidi_info.paragraphs[0];
-    let line = paragraph.range.clone();
-
-    let mut glyphs = Vec::new();
-
-    // A shaper instance is only needed to apply variations.
-    let instance_data =
-      (!variations.is_empty()).then(|| ShaperInstance::from_variations(&hr_font, &variations));
-    let shaper_data = ShaperData::new(&hr_font);
-    let shaper = shaper_data
-      .shaper(&hr_font)
-      .instance(instance_data.as_ref())
-      .build();
-
-    let mut features = Vec::new();
-    if small_caps {
-      features.push(Feature::new(Tag::new(b"smcp"), 1, ..));
-    }
-    if !apply_kerning {
-      features.push(Feature::new(Tag::new(b"kern"), 0, ..));
-    }
-
-    let (levels, runs) = bidi_info.visual_runs(paragraph, line);
-    for run in runs.iter() {
-      let sub_text = &text[run.clone()];
-      if sub_text.is_empty() {
-        continue;
-      }
-
-      let ltr = levels[run.start].is_ltr();
-      let direction = if ltr {
-        harfrust::Direction::LeftToRight
-      } else {
-        harfrust::Direction::RightToLeft
-      };
-
-      let mut buffer = UnicodeBuffer::new();
-      buffer.push_str(sub_text);
-      buffer.set_direction(direction);
-
-      // TODO: explicitly set language?
-      buffer.guess_segment_properties();
-
-      let output = shaper.shape(buffer, ShapeOptions::new().features(&features));
-
-      let positions = output.glyph_positions();
-      let infos = output.glyph_infos();
-
-      for i in 0..output.len() {
-        let pos = positions[i];
-        let info = infos[i];
-        let idx = run.start + info.cluster as usize;
-
-        let start = info.cluster as usize;
-
-        let end = if ltr {
-          i.checked_add(1)
-        } else {
-          i.checked_sub(1)
-        }
-        .and_then(|last| infos.get(last))
-        .map_or(sub_text.len(), |info| info.cluster as usize);
-
-        glyphs.push(Glyph {
-          byte_idx: ByteIndex::new(idx),
-          cluster_len: end.checked_sub(start).unwrap_or(0), // TODO: can fail?
-          text: sub_text[start..end].to_string(),
-          id: GlyphId(info.glyph_id),
-          dx: pos.x_offset,
-          dy: pos.y_offset,
-          width: pos.x_advance,
-          font: font.clone(),
-        });
-      }
-    }
-
-    Some(glyphs)
-  })?
 }
 
 /// An iterator over glyph clusters.
@@ -1568,33 +979,6 @@ impl Iterator for GlyphClusters<'_> {
   }
 }
 
-/// Checks that selected script supports letter spacing.
-///
-/// [In the CSS spec](https://www.w3.org/TR/css-text-3/#cursive-tracking).
-///
-/// The list itself is from: https://github.com/harfbuzz/harfbuzz/issues/64
-pub(crate) fn script_supports_letter_spacing(script: Script) -> bool {
-  !matches!(
-    script,
-    Script::Arabic
-      | Script::Syriac
-      | Script::Nko
-      | Script::Manichaean
-      | Script::PsalterPahlavi
-      | Script::Mandaic
-      | Script::Mongolian
-      | Script::PhagsPa
-      | Script::Devanagari
-      | Script::Bengali
-      | Script::Gurmukhi
-      | Script::Modi
-      | Script::Sharada
-      | Script::SylotiNagri
-      | Script::Tirhuta
-      | Script::Ogham
-  )
-}
-
 /// A glyph.
 ///
 /// Basically, a glyph ID and it's metrics.
@@ -1608,20 +992,14 @@ pub(crate) struct Glyph {
   /// We use it to match a glyph with a character in the text chunk and therefore with the style.
   pub(crate) byte_idx: ByteIndex,
 
-  // The length of the cluster in bytes.
-  pub(crate) cluster_len: usize,
+  /// The glyph offset in pixels.
+  pub(crate) dx: f32,
 
-  /// The text from the original string that corresponds to that glyph.
-  pub(crate) text: String,
+  /// The glyph offset in pixels, downward.
+  pub(crate) dy: f32,
 
-  /// The glyph offset in font units.
-  pub(crate) dx: i32,
-
-  /// The glyph offset in font units.
-  pub(crate) dy: i32,
-
-  /// The glyph width / X-advance in font units.
-  pub(crate) width: i32,
+  /// The glyph width / X-advance in pixels.
+  pub(crate) width: f32,
 
   /// Reference to the source font.
   ///
@@ -1629,33 +1007,211 @@ pub(crate) struct Glyph {
   pub(crate) font: Arc<ResolvedFont>,
 }
 
-impl Glyph {
-  fn is_missing(&self) -> bool {
-    self.id.0 == 0
+/// A face at the size and variation coordinates a glyph was shaped with, and its metrics.
+#[derive(Debug)]
+pub(crate) struct ResolvedFont {
+  pub(crate) typeface: Arc<FontCustomPlatformData>,
+  /// The normalized variation coordinates the face was shaped at.
+  normalized_coords: Vec<F2Dot14>,
+  size: f32,
+  synthesis: RunSynthesis,
+  metrics: PrimaryFontMetrics,
+}
+
+/// What of a span selects and shapes its font.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct SpanFontKey {
+  font: Font,
+  font_size: u32,
+  small_caps: bool,
+  apply_kerning: bool,
+  font_optical_sizing: FontOpticalSizing,
+  letter_spacing: u32,
+  word_spacing: u32,
+}
+
+impl SpanFontKey {
+  fn of(span: &TextSpan) -> Self {
+    Self {
+      font: span.font.clone(),
+      font_size: span.font_size.get().to_bits(),
+      small_caps: span.small_caps,
+      apply_kerning: span.apply_kerning,
+      font_optical_sizing: span.font_optical_sizing,
+      letter_spacing: span.letter_spacing.to_bits(),
+      word_spacing: span.word_spacing.to_bits(),
+    }
+  }
+
+  /// The span's presentation attributes as Blink's `FontBuilder` would resolve them. Approximate:
+  /// Blink shapes SVG text at its scaled size (`LayoutSVGInlineText::ScalingFactor`), where this
+  /// shapes at the size in user units.
+  fn description(&self) -> FontDescription {
+    let font_size = f32::from_bits(self.font_size);
+    let families = self
+      .font
+      .families
+      .iter()
+      .map(|family| match family {
+        FontFamily::Serif => FontFamilyToken::Generic(GenericFamilyType::Serif),
+        FontFamily::SansSerif => FontFamilyToken::Generic(GenericFamilyType::SansSerif),
+        FontFamily::Cursive => FontFamilyToken::Generic(GenericFamilyType::Cursive),
+        FontFamily::Fantasy => FontFamilyToken::Generic(GenericFamilyType::Fantasy),
+        FontFamily::Monospace => FontFamilyToken::Generic(GenericFamilyType::Monospace),
+        FontFamily::Named(name) => FontFamilyToken::Owned(name.clone()),
+      })
+      .collect();
+    let slope = match self.font.style {
+      FontStyle::Normal => NORMAL_SLOPE_VALUE,
+      FontStyle::Italic | FontStyle::Oblique => ITALIC_SLOPE_VALUE,
+    };
+    let letter_spacing = f32::from_bits(self.letter_spacing);
+    let mut font_features = Vec::new();
+
+    FontVariantLigatures::default().append_features(letter_spacing != 0.0, &mut font_features);
+
+    let mut features: Vec<Feature> = font_features
+      .into_iter()
+      .map(FontFeature::into_harfrust)
+      .collect();
+
+    if !self.apply_kerning {
+      features.push(Feature::new(HbTag::new(b"kern"), 0, ..));
+    }
+
+    FontDescription {
+      fallback: FontFallbackKey {
+        family: Rc::new(ExpandedFontFamily::new(families)),
+        selection: FontSelectionDescription {
+          font_selection_request: FontSelectionRequest::new(
+            FontSelectionValue::new(f32::from(self.font.weight)),
+            FontSelectionValue::new(self.font.stretch.percentage()),
+            slope,
+          ),
+          is_italic_keyword: self.font.style == FontStyle::Italic,
+          synthetic_bold_allowed: true,
+          synthetic_italic_allowed: true,
+          is_synthetic_bold: false,
+          is_synthetic_italic: false,
+          effective_font_size: font_size,
+          adjusted_specified_size: font_size,
+          font_optical_sizing: match self.font_optical_sizing {
+            FontOpticalSizing::Auto => CssFontOpticalSizing::Auto,
+            FontOpticalSizing::None => CssFontOpticalSizing::None,
+          },
+          variation_settings: self
+            .font
+            .variations
+            .iter()
+            .map(|variation| Variation {
+              tag: HbTag::from_be_bytes(variation.tag),
+              value: variation.value,
+            })
+            .collect(),
+        },
+        computed_size: font_size,
+        specified_size: font_size,
+      },
+      features,
+      locale: None,
+      language_override: FontLanguageOverride::Normal,
+      variant_caps: if self.small_caps {
+        FontVariantCaps::SmallCaps
+      } else {
+        FontVariantCaps::Normal
+      },
+      font_synthesis_small_caps: FontSynthesic::Auto,
+      letter_spacing,
+      word_spacing: f32::from_bits(self.word_spacing),
+      is_letter_spacing_fixed: true,
+      is_word_spacing_fixed: true,
+    }
   }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ResolvedFont {
-  pub(crate) id: ID,
+/// A span's shaping font, and the metrics of its primary font.
+struct SpanFont {
+  font: Rc<ShapingFont>,
+  primary: Arc<ResolvedFont>,
+}
 
-  units_per_em: NonZeroU16,
+/// The fonts a `<text>`'s spans shape with, and the faces shaping picked.
+pub(crate) struct FontsCache {
+  spans: HashMap<SpanFontKey, SpanFont>,
+  faces: Vec<(Rc<SimpleFontData>, Arc<ResolvedFont>)>,
+}
 
-  // All values below are in font units.
-  ascent: i16,
-  descent: i16,
-  x_height: NonZeroU16,
+impl FontsCache {
+  fn new(text_node: &Text, cache: &Cache) -> Self {
+    let mut fonts_cache = Self {
+      spans: HashMap::new(),
+      faces: Vec::new(),
+    };
 
-  underline_position: i16,
-  underline_thickness: NonZeroU16,
+    for span in text_node.chunks.iter().flat_map(|chunk| &chunk.spans) {
+      let key = SpanFontKey::of(span);
 
-  // line-through thickness should be the the same as underline thickness
-  // according to the TrueType spec:
-  // https://docs.microsoft.com/en-us/typography/opentype/spec/os2#ystrikeoutsize
-  line_through_position: i16,
+      if fonts_cache.spans.contains_key(&key) {
+        continue;
+      }
 
-  subscript_offset: i16,
-  superscript_offset: i16,
+      let description = key.description();
+      let font = ShapingFont {
+        fallback_list: cache
+          .font_fallback_map
+          .get(&cache.fonts, &description.fallback),
+        description,
+      };
+      let Some(primary) = font
+        .primary_font()
+        .and_then(|font_data| fonts_cache.resolved(&font_data))
+      else {
+        continue;
+      };
+
+      fonts_cache.spans.insert(
+        key,
+        SpanFont {
+          font: Rc::new(font),
+          primary,
+        },
+      );
+    }
+
+    fonts_cache
+  }
+
+  /// The metrics of `span`'s primary font.
+  fn primary(&self, span: &TextSpan) -> Option<&Arc<ResolvedFont>> {
+    self
+      .spans
+      .get(&SpanFontKey::of(span))
+      .map(|span_font| &span_font.primary)
+  }
+
+  fn shaping_font(&self, span: &TextSpan) -> Option<Rc<ShapingFont>> {
+    self
+      .spans
+      .get(&SpanFontKey::of(span))
+      .map(|span_font| Rc::clone(&span_font.font))
+  }
+
+  fn resolved(&mut self, font_data: &Rc<SimpleFontData>) -> Option<Arc<ResolvedFont>> {
+    if let Some((_, resolved)) = self
+      .faces
+      .iter()
+      .find(|(cached, _)| Rc::ptr_eq(cached, font_data))
+    {
+      return Some(Arc::clone(resolved));
+    }
+
+    let resolved = Arc::new(ResolvedFont::new(font_data)?);
+
+    self
+      .faces
+      .push((Rc::clone(font_data), Arc::clone(&resolved)));
+    Some(resolved)
+  }
 }
 
 pub(crate) fn chunk_span_at(chunk: &TextChunk, byte_offset: ByteIndex) -> Option<&TextSpan> {
@@ -1672,129 +1228,98 @@ pub(crate) fn span_contains(span: &TextSpan, byte_offset: ByteIndex) -> bool {
 /// Checks that the selected character is a word separator.
 ///
 /// According to: https://www.w3.org/TR/css-text-3/#word-separator
-pub(crate) fn is_word_separator_characters(c: char) -> bool {
-  matches!(
-    c as u32,
-    0x0020 | 0x00A0 | 0x1361 | 0x010100 | 0x010101 | 0x01039F | 0x01091F
-  )
+impl ResolvedFont {
+  /// `font_data`'s face and metrics; none for a face without metrics.
+  fn new(font_data: &SimpleFontData) -> Option<Self> {
+    Some(Self {
+      typeface: Arc::clone(&font_data.face.typeface),
+      normalized_coords: font_data.normalized_coords(),
+      size: font_data.size,
+      synthesis: font_data.synthesis(),
+      metrics: font_data.font_metrics()?,
+    })
+  }
+
+  /// The face its glyphs resolve against.
+  pub(crate) fn face(&self) -> RunFace<'_> {
+    RunFace {
+      font_id: self.typeface.id,
+      font_index: self.typeface.index,
+      font_size: self.size,
+      normalized_coords: &self.normalized_coords,
+      synthesis: self.synthesis,
+    }
+  }
+
+  pub(crate) fn ascent(&self) -> f32 {
+    self.metrics.ascent
+  }
+
+  /// Negative, below the baseline.
+  pub(crate) fn descent(&self) -> f32 {
+    -self.metrics.descent
+  }
+
+  pub(crate) fn height(&self) -> f32 {
+    self.metrics.float_height()
+  }
+
+  /// How far the text moves down to put `baseline` where its alphabetic baseline was, as Blink
+  /// aligns SVG text.
+  fn baseline_shift(&self, baseline: FontBaseline) -> f32 {
+    self.metrics.ascent - self.metrics.float_ascent(baseline)
+  }
+
+  /// The center of a `line` decoration below the baseline, and its thickness, as Blink's
+  /// `TextDecorationInfo` places it.
+  fn decoration_line(&self, line: TextDecorationLines) -> (f32, f32) {
+    let font = DecorationFont::new(self.metrics, self.size);
+    let thickness = font.thickness(SizedTextDecorationThickness::Auto);
+    let top = DecoratingBox::new(font, 0.0).line_top(
+      line,
+      (TextUnderlinePosition::Auto, None),
+      -self.ascent(),
+      thickness,
+    );
+
+    (top + thickness / 2.0, thickness)
+  }
 }
 
-impl ResolvedFont {
-  #[inline]
-  pub(crate) fn scale(&self, font_size: f32) -> f32 {
-    font_size / self.units_per_em.get() as f32
-  }
-
-  #[inline]
-  pub(crate) fn ascent(&self, font_size: f32) -> f32 {
-    self.ascent as f32 * self.scale(font_size)
-  }
-
-  #[inline]
-  pub(crate) fn descent(&self, font_size: f32) -> f32 {
-    self.descent as f32 * self.scale(font_size)
-  }
-
-  #[inline]
-  pub(crate) fn height(&self, font_size: f32) -> f32 {
-    self.ascent(font_size) - self.descent(font_size)
-  }
-
-  #[inline]
-  pub(crate) fn x_height(&self, font_size: f32) -> f32 {
-    self.x_height.get() as f32 * self.scale(font_size)
-  }
-
-  #[inline]
-  pub(crate) fn underline_position(&self, font_size: f32) -> f32 {
-    self.underline_position as f32 * self.scale(font_size)
-  }
-
-  #[inline]
-  fn underline_thickness(&self, font_size: f32) -> f32 {
-    self.underline_thickness.get() as f32 * self.scale(font_size)
-  }
-
-  #[inline]
-  pub(crate) fn line_through_position(&self, font_size: f32) -> f32 {
-    self.line_through_position as f32 * self.scale(font_size)
-  }
-
-  #[inline]
-  fn subscript_offset(&self, font_size: f32) -> f32 {
-    self.subscript_offset as f32 * self.scale(font_size)
-  }
-
-  #[inline]
-  fn superscript_offset(&self, font_size: f32) -> f32 {
-    self.superscript_offset as f32 * self.scale(font_size)
-  }
-
-  fn dominant_baseline_shift(&self, baseline: DominantBaseline, font_size: f32) -> f32 {
-    let alignment = match baseline {
-      DominantBaseline::Auto => AlignmentBaseline::Auto,
-      DominantBaseline::UseScript => AlignmentBaseline::Auto, // unsupported
-      DominantBaseline::NoChange => AlignmentBaseline::Auto,  // already resolved
-      DominantBaseline::ResetSize => AlignmentBaseline::Auto, // unsupported
-      DominantBaseline::Ideographic => AlignmentBaseline::Ideographic,
-      DominantBaseline::Alphabetic => AlignmentBaseline::Alphabetic,
-      DominantBaseline::Hanging => AlignmentBaseline::Hanging,
-      DominantBaseline::Mathematical => AlignmentBaseline::Mathematical,
-      DominantBaseline::Central => AlignmentBaseline::Central,
-      DominantBaseline::Middle => AlignmentBaseline::Middle,
-      DominantBaseline::TextAfterEdge => AlignmentBaseline::TextAfterEdge,
-      DominantBaseline::TextBeforeEdge => AlignmentBaseline::TextBeforeEdge,
-    };
-
-    self.alignment_baseline_shift(alignment, font_size)
-  }
-
-  // The `alignment-baseline` property is a mess.
-  //
-  // The SVG 1.1 spec (https://www.w3.org/TR/SVG11/text.html#BaselineAlignmentProperties)
-  // goes on and on about what this property suppose to do, but doesn't actually explain
-  // how it should be implemented. It's just a very verbose overview.
-  //
-  // As of Nov 2022, only Chrome and Safari support `alignment-baseline`. Firefox isn't.
-  // Same goes for basically every SVG library in existence.
-  // Meaning we have no idea how exactly it should be implemented.
-  //
-  // And even Chrome and Safari cannot agree on how to handle `baseline`, `after-edge`,
-  // `text-after-edge` and `ideographic` variants. Producing vastly different output.
-  //
-  // As per spec, a proper implementation should get baseline values from the font itself,
-  // using `BASE` and `bsln` TrueType tables. If those tables are not present,
-  // we have to synthesize them (https://drafts.csswg.org/css-inline/#baseline-synthesis-fonts).
-  // And in the worst case scenario simply fallback to hardcoded values.
-  //
-  // Also, most fonts do not provide `BASE` and `bsln` tables to begin with.
-  //
-  // Again, as of Nov 2022, Chrome does only the latter:
-  // https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/platform/fonts/font_metrics.cc#L153
-  //
-  // Since baseline TrueType tables parsing and baseline synthesis are pretty hard,
-  // we do what Chrome does - use hardcoded values. And it seems like Safari does the same.
-  //
-  //
-  // But that's not all! SVG 2 and CSS Inline Layout 3 did a baseline handling overhaul,
-  // and it's far more complex now. Not sure if anyone actually supports it.
-  fn alignment_baseline_shift(&self, alignment: AlignmentBaseline, font_size: f32) -> f32 {
-    match alignment {
-      AlignmentBaseline::Auto => 0.0,
-      AlignmentBaseline::Baseline => 0.0,
-      AlignmentBaseline::BeforeEdge | AlignmentBaseline::TextBeforeEdge => self.ascent(font_size),
-      AlignmentBaseline::Middle => self.x_height(font_size) * 0.5,
-      AlignmentBaseline::Central => self.ascent(font_size) - self.height(font_size) * 0.5,
-      AlignmentBaseline::AfterEdge | AlignmentBaseline::TextAfterEdge => self.descent(font_size),
-      AlignmentBaseline::Ideographic => self.descent(font_size),
-      AlignmentBaseline::Alphabetic => 0.0,
-      AlignmentBaseline::Hanging => self.ascent(font_size) * 0.8,
-      AlignmentBaseline::Mathematical => self.ascent(font_size) * 0.5,
+impl DominantBaseline {
+  /// Blink's `ComputedStyle::GetFontBaseline`.
+  fn font_baseline(self) -> FontBaseline {
+    match self {
+      Self::Auto | Self::UseScript | Self::NoChange | Self::ResetSize | Self::Alphabetic => {
+        FontBaseline::Alphabetic
+      }
+      Self::Ideographic => FontBaseline::IdeographicUnder,
+      Self::Hanging => FontBaseline::Hanging,
+      Self::Mathematical => FontBaseline::Math,
+      Self::Central => FontBaseline::Central,
+      Self::Middle => FontBaseline::XMiddle,
+      Self::TextAfterEdge => FontBaseline::TextUnder,
+      Self::TextBeforeEdge => FontBaseline::TextOver,
     }
   }
 }
 
-pub(crate) type FontsCache = HashMap<Font, Arc<ResolvedFont>>;
+impl AlignmentBaseline {
+  /// Blink's `InlineBoxState::ResetStyle` for SVG text; none where it takes the dominant baseline.
+  fn font_baseline(self) -> Option<FontBaseline> {
+    match self {
+      Self::Auto | Self::Baseline => None,
+      Self::BeforeEdge | Self::TextBeforeEdge => Some(FontBaseline::TextOver),
+      Self::Middle => Some(FontBaseline::XMiddle),
+      Self::Central => Some(FontBaseline::Central),
+      Self::AfterEdge | Self::TextAfterEdge => Some(FontBaseline::TextUnder),
+      Self::Ideographic => Some(FontBaseline::IdeographicUnder),
+      Self::Alphabetic => Some(FontBaseline::Alphabetic),
+      Self::Hanging => Some(FontBaseline::Hanging),
+      Self::Mathematical => Some(FontBaseline::Math),
+    }
+  }
+}
 
 /// A read-only text index in bytes.
 ///

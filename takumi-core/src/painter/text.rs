@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use super::{
   BoxBorderPainter, BoxFrame, FillShape, OpacityLayer, PaintDevice, PaintRole, SnappedBox,
+  StrokeStyle,
   background::{BackgroundClipArea, BoxBackground},
 };
 use crate::{
@@ -16,10 +17,11 @@ use crate::{
       DecorationLine, DecorationLink, FragmentBackground, InlineBackgroundFragment,
       InlineOutlineRect, InlineRunLayout, OutlineIsland, PositionedInlineRun, ProcessedInlineSpan,
     },
+    list_marker::{DisclosureOrientation, SymbolMarker, SymbolShape},
     tree::RenderNode,
   },
   shadow::SizedShadow,
-  style::{Affine, BackgroundClip},
+  style::{Affine, BackgroundClip, Color, SpacePair},
 };
 
 /// What a device fills a run's glyphs with.
@@ -457,6 +459,10 @@ impl PaintedRun<'_> {
   /// Paints the run's glyphs and decorations into a `background-clip: text` mask, as Blink's
   /// `kTextClip` phase does: in black, without shadows or opacity.
   fn paint_mask(&self, frame: BoxFrame, device: &mut dyn GlyphDevice) {
+    if let Some(symbol_marker) = self.run.glyph_run.symbol_marker {
+      return symbol_marker.paint(self.run, Color::black(), frame, device);
+    }
+
     for decoration in &self.decorations {
       decoration.paint_mask(device);
     }
@@ -475,6 +481,18 @@ impl PaintedRun<'_> {
     } = self;
     let shadow_pass = pass != RunPass::Proper;
     let paints_decorations = pass.paints_decorations();
+
+    // Blink's `TextFragmentPainter::Paint` paints a symbol marker's shape alone: no shadow, no
+    // decoration.
+    if let Some(symbol_marker) = run.glyph_run.symbol_marker {
+      if !shadow_pass {
+        device.with_opacity(run.glyph_run.brush.opacity, None, |device| {
+          device.set_role(PaintRole::Text);
+          symbol_marker.paint(run, run.glyph_run.brush.color, frame, device);
+        });
+      }
+      return;
+    }
 
     device.with_opacity(run.glyph_run.brush.opacity, None, |device| {
       if paints_decorations {
@@ -502,6 +520,80 @@ impl PaintedRun<'_> {
         }
       }
     });
+  }
+}
+
+impl SymbolMarker {
+  /// Blink's `TextFragmentPainter::PaintSymbol`: paints `run`'s marker in the block at `frame`.
+  fn paint(
+    self,
+    run: &PositionedInlineRun,
+    color: Color,
+    frame: BoxFrame,
+    device: &mut dyn GlyphDevice,
+  ) {
+    let shaped = &run.glyph_run;
+    let origin = run.glyph_offset(frame.layout)
+      + Point {
+        x: shaped.offset + self.offset.x,
+        y: shaped.baseline + self.offset.y,
+      };
+    let size = Size {
+      width: self.side,
+      height: self.side,
+    };
+    let local = run.transform(frame.translation());
+    let snapped = SnappedBox::new(run.paint_offset + origin, size);
+    let snapped_origin = origin + snapped.offset();
+    let snapped_size = snapped.size();
+    let at_snapped = local * Affine::translation(snapped_origin.x, snapped_origin.y);
+    let ellipse = FillShape::Ellipse {
+      center: Point {
+        x: snapped_size.width / 2.0,
+        y: snapped_size.height / 2.0,
+      },
+      radius: SpacePair {
+        x: snapped_size.width / 2.0,
+        y: snapped_size.height / 2.0,
+      },
+    };
+
+    match self.shape {
+      SymbolShape::Disc => device.fill_shape(&ellipse, color, at_snapped),
+      SymbolShape::Circle => device.stroke_shape(
+        &ellipse,
+        &StrokeStyle {
+          color,
+          width: 1.0,
+          dash: None,
+          round_cap: false,
+        },
+        at_snapped,
+      ),
+      SymbolShape::Square => device.fill_shape(&FillShape::Rect(snapped_size), color, at_snapped),
+      // Blink's `GetCanonicalDisclosurePath` fills the rect before it snaps.
+      SymbolShape::Disclosure(orientation) => device.fill_shape(
+        &FillShape::polygons([orientation.unit_points().map(|point| Point {
+          x: point.x * size.width,
+          y: point.y * size.height,
+        })]),
+        color,
+        local * Affine::translation(origin.x, origin.y),
+      ),
+    }
+  }
+}
+
+impl DisclosureOrientation {
+  /// Blink's `GetDisclosurePathPoints`: the triangle's corners in a unit square.
+  fn unit_points(self) -> [Point<f32>; 3] {
+    let corners = match self {
+      Self::Left => [(1.0, 0.0), (0.14, 0.5), (1.0, 1.0)],
+      Self::Right => [(0.0, 0.0), (0.86, 0.5), (0.0, 1.0)],
+      Self::Down => [(0.0, 0.07), (0.5, 0.93), (1.0, 0.07)],
+    };
+
+    corners.map(|(x, y)| Point { x, y })
   }
 }
 

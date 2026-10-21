@@ -1,20 +1,21 @@
 use takumi_core::{
-  geometry::ComputedLayout as Layout,
+  geometry::{ComputedLayout as Layout, Placement, Size},
   layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
-  painter::TextClip,
+  painter::{TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene, SceneBounds},
 };
 use tiny_skia::PixmapMut;
 
 use crate::{
-  BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error, NodeMasks,
-  PlacedMask, Result, apply_backdrop_filter, apply_filters_to_pixmap, draw_box_shell,
-  draw_debug_border,
+  BorderProperties, Canvas, CanvasDevice, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error,
+  NodeMasks, PlacedMask, RenderContext, Result, apply_backdrop_filter, apply_filters_to_pixmap,
+  draw_debug_border, draw_table_box_shell,
   inline_drawing::draw_own_content,
   layout::tree::{LayoutResults, RenderNode},
-  style::{Affine, BlendMode, Filter, SizingContext},
+  style::{Affine, BlendMode, Filter, SizingContext, expand_filter_bounds},
+  within_pixmap_pixel_budget,
 };
 
 /// Paints `scene` onto `canvas` chunk by chunk, entering each chunk's clips and effects.
@@ -100,10 +101,26 @@ impl ScenePainter<'_, '_> {
     match chunk.part {
       ChunkPart::Decorations if node.paints_own_box() => {
         let text_clip = TextClip::of(root, self.results, chunk.node)?;
+        let table = TableDecorations::of(root, self.results, &chunk.node.path, chunk.node.node_id)?;
 
-        draw_box_shell(&node.context, canvas, layout, text_clip.as_ref())
+        draw_table_box_shell(&node.context, canvas, layout, text_clip.as_ref(), table)
       }
-      ChunkPart::Decorations => Ok(()),
+      ChunkPart::CollapsedBorders if node.paints_collapsed_borders() => {
+        let mut result = Ok(());
+
+        CanvasDevice::paint(canvas, &node.context, |device| {
+          result = paint_collapsed_borders(
+            self.results,
+            chunk.node.node_id,
+            chunk.node.paint_offset,
+            Affine::IDENTITY,
+            None,
+            device,
+          );
+        })?;
+        result
+      }
+      ChunkPart::Decorations | ChunkPart::CollapsedBorders => Ok(()),
       ChunkPart::Content => draw_node_content(node, canvas, layout, chunk.node.transform),
       ChunkPart::Floats => {
         draw_own_content(node, &node.context, canvas, layout, InlinePass::Floats)
@@ -151,7 +168,7 @@ impl ScenePainter<'_, '_> {
     let viewport = canvas.viewport();
     let placement = effect
       .bounds
-      .and_then(|bounds| viewport.clamp_bounds(bounds, 2))
+      .and_then(|bounds| layer_placement(viewport, bounds, &node.context, paint.transform))
       .unwrap_or_else(|| viewport.placement());
     let layer = Box::new(canvas.begin_subcanvas(placement)?);
     let Some(masks) = NodeMasks::of(&node.context, layout, paint.transform, canvas.viewport())?
@@ -293,7 +310,7 @@ fn apply_filters(
   let filter_region = bounds.and_then(|bounds| {
     viewport
       .clamp_bounds(bounds, filter_padding)
-      .map(|region| region.translate(-(viewport.origin.x as i32), -(viewport.origin.y as i32)))
+      .map(|region| region.translate(-(viewport.origin.x), -(viewport.origin.y)))
   });
 
   if let Some(region) = filter_region
@@ -325,6 +342,36 @@ fn apply_filters(
       node.context.style.misc1_data.filter.iter(),
     )
   })
+}
+
+/// cc's `RenderSurfaceImpl::CalculateClippedAccumulatedContentRect`: the group's `bounds`, with a
+/// 2px margin, within the viewport grown by what its filters read and write past it
+/// (`CalculateExpandedClipForFilters`), which only a filter that moves pixels grows. Approximate:
+/// cc then clamps the surface to the max texture size, where a layer past takumi's pixmap budget
+/// keeps to the viewport.
+/// <https://source.chromium.org/chromium/chromium/src/+/main:cc/layers/render_surface_impl.cc>
+fn layer_placement(
+  viewport: CanvasViewport,
+  bounds: SceneBounds,
+  context: &RenderContext,
+  transform: Affine,
+) -> Option<Placement> {
+  let expanded = expand_filter_bounds(
+    &context.style.misc1_data.filter,
+    viewport.bounds(),
+    &context.sizing,
+    transform,
+  );
+
+  CanvasViewport::covering(expanded)
+    .and_then(|clip| clip.clamp_bounds(bounds, 2))
+    .filter(|placement| {
+      within_pixmap_pixel_budget(Size {
+        width: placement.width,
+        height: placement.height,
+      })
+    })
+    .or_else(|| viewport.clamp_bounds(bounds, 2))
 }
 
 fn filter_padding(filters: &[Filter], sizing: &SizingContext, transform: Affine) -> i32 {
@@ -377,11 +424,11 @@ fn draw_node_content(
 mod tests {
   use std::error::Error;
 
-  use crate::{Fonts, RenderOptions, layout::node::Node, render, viewport::Viewport};
+  use crate::{Bitmap, Fonts, RenderOptions, layout::node::Node, render, viewport::Viewport};
 
   type TestResult = Result<(), Box<dyn Error>>;
 
-  fn render_json(json: &str) -> Result<image::RgbaImage, Box<dyn Error>> {
+  fn render_json(json: &str) -> Result<Bitmap, Box<dyn Error>> {
     let fonts = Fonts::default();
     let node: Node = serde_json::from_str(json)?;
     let options = RenderOptions::builder()
@@ -389,7 +436,28 @@ mod tests {
       .node(node)
       .fonts(&fonts)
       .build();
-    Ok(render(options)?.into_rgba())
+    Ok(render(options)?)
+  }
+
+  #[test]
+  fn a_filter_reaching_past_the_pixmap_budget_keeps_to_the_canvas() -> TestResult {
+    let image = render_json(
+      r##"{
+        "type": "container",
+        "style": {"display": "flex", "position": "relative", "width": "100%", "height": "100%"},
+        "children": [{
+          "type": "container",
+          "style": {
+            "position": "absolute", "left": "-50px", "top": "0px", "width": "100px",
+            "height": "100px", "backgroundColor": "#ffffff", "filter": "blur(100000px)"
+          },
+          "children": []
+        }]
+      }"##,
+    )?;
+
+    assert_eq!(image.dimensions(), (100, 100));
+    Ok(())
   }
 
   #[test]
@@ -405,7 +473,7 @@ mod tests {
     let with_zero = render_json(&tree(&format!("{bar}, {zero_bar}")))?;
     let without_zero = render_json(&tree(bar))?;
 
-    assert_eq!(with_zero, without_zero);
+    assert_eq!(with_zero.as_raw(), without_zero.as_raw());
     Ok(())
   }
 
@@ -423,7 +491,7 @@ mod tests {
 
     let pixel = image.get_pixel(10, 10);
     assert!(
-      pixel.0[0] > 0 && pixel.0[3] > 0,
+      pixel[0] > 0 && pixel[3] > 0,
       "overflowing child of zero-sized opacity parent must still paint, got {pixel:?}"
     );
     Ok(())

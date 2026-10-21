@@ -3,7 +3,7 @@ title: TanStack Start
 description: Generate Open Graph images from React components in TanStack Start server file routes.
 ---
 
-Add a server file route that returns an `ImageResponse`. The example reads the image title and description from URL query parameters.
+Add a server file route that returns an `ImageResponse`. The example reads the title and description from the query string.
 
 <Steps>
   <Step>
@@ -17,7 +17,7 @@ Add a server file route that returns an `ImageResponse`. The example reads the i
   <Step>
     ### Create a server file route
 
-    TanStack Start lets you define HTTP handlers on a file route with `server.handlers`.
+    A file route defines HTTP handlers under `server.handlers`.
 
     ```tsx title="src/routes/og-image.tsx"
     import { createFileRoute } from "@tanstack/react-router";

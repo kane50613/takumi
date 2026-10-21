@@ -15,8 +15,8 @@ pub use tiny_skia_path;
 pub use self::geom::*;
 pub use self::text::*;
 
+use crate::resources::glyph::ResolvedGlyph;
 use crate::resvg::usvg::OptionLog;
-use crate::resvg::usvg::text::fontdb;
 
 /// An alias to `NormalizedF32`.
 pub type Opacity = NormalizedF32;
@@ -1470,6 +1470,8 @@ pub enum ImageKind {
   WEBP(Arc<Vec<u8>>),
   /// A preprocessed SVG tree. Can be rendered as is.
   SVG(Tree),
+  /// A bitmap glyph, sharing the glyph cache's decoded pixels.
+  Glyph(Arc<ResolvedGlyph>),
 }
 
 impl ImageKind {
@@ -1489,6 +1491,12 @@ impl ImageKind {
         .and_then(|(width, height)| Size::from_wh(width as f32, height as f32))
         .log_none(|| log::warn!("Image has an invalid size. Skipped.")),
       ImageKind::SVG(svg) => Some(svg.size),
+      ImageKind::Glyph(glyph) => match glyph.as_ref() {
+        ResolvedGlyph::Bitmap(bitmap) => {
+          Size::from_wh(bitmap.image.width() as f32, bitmap.image.height() as f32)
+        }
+        ResolvedGlyph::Outline(_) => None,
+      },
     }
   }
 }
@@ -1501,6 +1509,7 @@ impl std::fmt::Debug for ImageKind {
       ImageKind::GIF(_) => f.write_str("ImageKind::GIF(..)"),
       ImageKind::WEBP(_) => f.write_str("ImageKind::WEBP(..)"),
       ImageKind::SVG(_) => f.write_str("ImageKind::SVG(..)"),
+      ImageKind::Glyph(_) => f.write_str("ImageKind::Glyph(..)"),
     }
   }
 }
@@ -1597,7 +1606,6 @@ pub struct Tree {
   pub(crate) clip_paths: Vec<Arc<ClipPath>>,
   pub(crate) masks: Vec<Arc<Mask>>,
   pub(crate) filters: Vec<Arc<filter::Filter>>,
-  pub(crate) fontdb: Arc<fontdb::Database>,
 }
 
 impl Tree {

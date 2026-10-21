@@ -253,7 +253,7 @@ mod tests {
     for (child, style) in children.iter().zip(styles) {
       assert_eq!(
         child.metadata.style,
-        Some(from_value::<Style>(style).unwrap())
+        Some(Box::new(from_value::<Style>(style).unwrap()))
       );
     }
   }

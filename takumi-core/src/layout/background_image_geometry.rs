@@ -5,6 +5,8 @@
 
 use smallvec::SmallVec;
 
+#[cfg(feature = "svg-sizing")]
+use crate::resources::image::ImageSource;
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, Point, Rect, Size},
@@ -12,7 +14,6 @@ use crate::{
   layout_unit::{
     BoxStrut, LayoutUnit, UnitOffset, UnitRect, UnitSize, snap_size_to_pixel_allowing_zero,
   },
-  resources::image::ImageSource,
   style::{
     BackgroundClip, BackgroundImage, BackgroundOrigin, BackgroundRepeat, BackgroundRepeatStyle,
     BackgroundSize, BlendMode, BorderCollapse, BorderStyle, ComputedStyle, IntrinsicSizing, Length,
@@ -282,10 +283,10 @@ impl BoxBackgroundPaintContext {
     paint_offset: Point<f32>,
   ) -> Self {
     let strut = |sides: Rect<f32>| BoxStrut {
-      top: LayoutUnit::from_f32(sides.top),
-      right: LayoutUnit::from_f32(sides.right),
-      bottom: LayoutUnit::from_f32(sides.bottom),
-      left: LayoutUnit::from_f32(sides.left),
+      top: LayoutUnit::from_float(sides.top),
+      right: LayoutUnit::from_float(sides.right),
+      bottom: LayoutUnit::from_float(sides.bottom),
+      left: LayoutUnit::from_float(sides.left),
     };
     let obscures = |width: f32, color: [u8; 4], style: BorderStyle| {
       obscures_background(width as i32, color[3] == u8::MAX, style)
@@ -664,7 +665,7 @@ impl BackgroundImageGeometry {
             self.tile_size.width = if !image_aspect_ratio.is_empty() {
               resolve_clamped_width_for_ratio(self.tile_size.height, image_aspect_ratio)
             } else if let Some(width) = sizing_info.width {
-              LayoutUnit::from_f32_floor(width)
+              LayoutUnit::from_float_floor(width)
             } else {
               positioning_area_size.width
             };
@@ -673,7 +674,7 @@ impl BackgroundImageGeometry {
             self.tile_size.height = if !image_aspect_ratio.is_empty() {
               resolve_clamped_height_for_ratio(self.tile_size.width, image_aspect_ratio)
             } else if let Some(height) = sizing_info.height {
-              LayoutUnit::from_f32_floor(height)
+              LayoutUnit::from_float_floor(height)
             } else {
               positioning_area_size.height
             };
@@ -872,7 +873,7 @@ impl BackgroundImageGeometry {
     }
 
     let tile_dest_diff = self.tile_size - snapped_dest.size;
-    let half = LayoutUnit::from_raw(32);
+    let half = LayoutUnit::from_raw_value(32);
     let ref_tile_width = if tile_dest_diff.width.abs() <= half {
       snapped_dest.width()
     } else {
@@ -888,8 +889,8 @@ impl BackgroundImageGeometry {
       dest,
       phase: phase.to_point(),
       tile: Size {
-        width: ref_tile_width.to_f32(),
-        height: ref_tile_height.to_f32(),
+        width: ref_tile_width.to_float(),
+        height: ref_tile_height.to_float(),
       },
       spacing: self.repeat_spacing.to_size(),
     })
@@ -911,8 +912,8 @@ impl BackgroundImageGeometry {
       return ImageTiling {
         dest,
         phase: Point {
-          x: dest.left - offset_in_tile.left.to_f32(),
-          y: dest.top - offset_in_tile.top.to_f32(),
+          x: dest.left - offset_in_tile.left.to_float(),
+          y: dest.top - offset_in_tile.top.to_float(),
         },
         tile: tile_size,
         spacing: Size::ZERO,
@@ -925,12 +926,12 @@ impl BackgroundImageGeometry {
       height: tile_size.height / intrinsic_tile_size.height,
     };
     let visible_src_rect = snap_source_rect_if_near_integral(Rect {
-      left: offset_in_tile.left.to_f32() / scale.width,
-      top: offset_in_tile.top.to_f32() / scale.height,
-      right: offset_in_tile.left.to_f32() / scale.width
-        + dest_rect_for_subset.width().to_f32() / scale.width,
-      bottom: offset_in_tile.top.to_f32() / scale.height
-        + dest_rect_for_subset.height().to_f32() / scale.height,
+      left: offset_in_tile.left.to_float() / scale.width,
+      top: offset_in_tile.top.to_float() / scale.height,
+      right: offset_in_tile.left.to_float() / scale.width
+        + dest_rect_for_subset.width().to_float() / scale.width,
+      bottom: offset_in_tile.top.to_float() / scale.height
+        + dest_rect_for_subset.height().to_float() / scale.height,
     });
     let dest_per_source = Size {
       width: (dest.right - dest.left) / (visible_src_rect.right - visible_src_rect.left),
@@ -1162,8 +1163,8 @@ mod tests {
       },
     );
 
-    assert_eq!(geometry.tile_size.height, LayoutUnit::from_f32(78.75));
-    assert_eq!(geometry.tile_size.width, LayoutUnit::from_f32(78.75));
+    assert_eq!(geometry.tile_size.height, LayoutUnit::from_float(78.75));
+    assert_eq!(geometry.tile_size.width, LayoutUnit::from_float(78.75));
   }
 
   /// A tile under one layout unit truncates to empty and paints nothing.

@@ -5,14 +5,15 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MASK_RUN, MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
-  blit::{OverlayBounds, apply_mask_row, composite_run_over},
+  blit::{OverlayBounds, apply_mask_row, blend_row_masked, composite_run_over},
   mask::MaskRow,
   paint_source::{ResolvedSource, ScaledRows, sample_paint_source},
   whole_pixel_translation,
 };
 use crate::{
   Placement,
-  blend::{blend_premultiplied_pixel, composite_premultiplied_over, scale_premultiplied_pixel},
+  blend::{blend_premultiplied_pixel, composite_premultiplied_over_row, scale_premultiplied_pixel},
+  mul_div_255,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
@@ -270,10 +271,21 @@ fn try_translation_blit(
   let bounds = region.bounds;
   let source_width = source_pixmap.width() as i32;
   let source_height = source_pixmap.height() as i32;
-  let source_pixels = source_pixmap.pixels();
+  let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source_pixmap.pixels());
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let sample_dx = sample_offset.x as i32;
   let sample_dy = sample_offset.y as i32;
+  // The destination columns whose source column lies inside the source.
+  let x_min = bounds.x_min.max(-sample_dx);
+  let x_max = bounds.x_max.min(source_width - sample_dx);
+
+  if x_min >= x_max {
+    return true;
+  }
+
+  let skip = (x_min - bounds.x_min) as usize;
+  let len = (x_max - x_min) as usize;
+  let mut alphas = vec![0u8; len];
 
   for dest_y in bounds.y_min..bounds.y_max {
     let src_y = dest_y + sample_dy;
@@ -282,60 +294,29 @@ fn try_translation_blit(
       continue;
     }
 
-    let mask_row = &mask[region.mask_row(dest_y)];
-    let combined_row = options
+    let mask_row = &mask[region.mask_row(dest_y)][skip..skip + len];
+
+    match options
       .combined_mask
-      .as_ref()
-      .map(|view| view.row(dest_y, bounds.x_min));
-    let src_row_offset = src_y as usize * source_width as usize;
-    let dst_row = &mut pixels[region.dst_row(dest_y)];
-    let src_x_base = bounds.x_min + sample_dx;
-    for (i, (dst, &mask_alpha)) in dst_row.iter_mut().zip(mask_row).enumerate() {
-      if mask_alpha == 0 {
-        continue;
-      }
-      let alpha = match combined_row.as_ref() {
-        Some(row) => {
-          let extra = row.alpha_at_offset(i);
-          if extra == 0 {
-            continue;
-          }
-          if extra == u8::MAX {
-            mask_alpha
-          } else if mask_alpha == u8::MAX {
-            extra
-          } else {
-            crate::mul_div_255(mask_alpha, extra)
-          }
+      .map(|view| view.row(dest_y, bounds.x_min))
+    {
+      Some(clip_row) => {
+        clip_row.write_alphas(skip, &mut alphas);
+        for (alpha, &mask_alpha) in alphas.iter_mut().zip(mask_row) {
+          *alpha = mul_div_255(mask_alpha, *alpha);
         }
-        None => mask_alpha,
-      };
-      if alpha == 0 {
-        continue;
       }
-
-      let src_x = src_x_base + i as i32;
-      if src_x < 0 || src_x >= source_width {
-        continue;
-      }
-      let src_pixel = source_pixels[src_row_offset + src_x as usize];
-      let src_a = src_pixel.alpha();
-      if src_a == 0 {
-        continue;
-      }
-
-      let src_rgba = [src_pixel.red(), src_pixel.green(), src_pixel.blue(), src_a];
-      if alpha == u8::MAX && src_a == u8::MAX {
-        *dst = src_rgba;
-        continue;
-      }
-
-      let src = scale_premultiplied_pixel(src_rgba, alpha);
-      if src[3] == 0 {
-        continue;
-      }
-      composite_premultiplied_over(dst, src);
+      None => alphas.copy_from_slice(mask_row),
     }
+
+    let src_start = src_y as usize * source_width as usize + (x_min + sample_dx) as usize;
+
+    blend_row_masked(
+      &mut pixels[region.dst_row(dest_y)][skip..skip + len],
+      &source_pixels[src_start..src_start + len],
+      &alphas,
+      BlendMode::Normal,
+    );
   }
 
   true
@@ -455,6 +436,7 @@ fn source_scaled_rows(
 ) {
   let bounds = region.bounds;
   let mut row = vec![[0u8; 4]; region.span()];
+  let mut clip_alphas = vec![0u8; region.span()];
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
 
   for dest_y in bounds.y_min..bounds.y_max {
@@ -470,13 +452,24 @@ fn source_scaled_rows(
 
     let mask_row = &mask[region.mask_row(dest_y)];
     let dst_row = &mut pixels[region.dst_row(dest_y)];
+    let Some(clip_row) = combined_row else {
+      blend_row_masked(dst_row, &row, mask_row, options.mode);
+      continue;
+    };
 
-    for (i, ((dst, &mask_alpha), &src)) in dst_row.iter_mut().zip(mask_row).zip(&row).enumerate() {
-      if mask_alpha == 0 {
-        continue;
-      }
+    // The shape's alpha scales first and the clip's second, each rounding once.
+    clip_row.write_alphas(0, &mut clip_alphas);
+    for ((pixel, &mask_alpha), &clip_alpha) in row.iter_mut().zip(mask_row).zip(&clip_alphas) {
+      *pixel = scale_premultiplied_pixel(scale_premultiplied_pixel(*pixel, mask_alpha), clip_alpha);
+    }
 
-      blend_sampled(dst, src, mask_alpha, combined_row, i, options.mode);
+    if options.mode == BlendMode::Normal {
+      composite_premultiplied_over_row(dst_row, &row);
+      continue;
+    }
+
+    for (dst, &src) in dst_row.iter_mut().zip(&row) {
+      blend_premultiplied_pixel(dst, src, options.mode);
     }
   }
 }

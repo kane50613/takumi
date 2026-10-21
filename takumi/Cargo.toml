@@ -1,9 +1,9 @@
 [package]
 name = "takumi"
-version = "2.16.2"
+version = "2.17.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Render OG images from HTML, CSS, or component trees. No headless browser."
+description = "Render images, animations, and SVG from HTML, CSS, or node trees. No headless browser."
 keywords = ["html-to-image", "image", "css", "svg", "og-image"]
 categories = ["graphics", "rendering", "web-programming"]
 repository = "https://github.com/kane50613/takumi"
@@ -11,27 +11,28 @@ homepage = "https://takumi.kane.tw"
 readme = "README.md"
 rust-version = "1.91"
 autobenches = false
+autotests = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.29.1"
+version = "0.32.0"
 default-features = false
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
-version = "0.5.6"
+version = "0.5.9"
 default-features = false
 optional = true
 
 [dependencies.takumi-svg]
 path = "../takumi-svg"
-version = "0.3.28"
+version = "0.3.31"
 default-features = false
 optional = true
 
 [dependencies.takumi-html]
 path = "../takumi-html"
-version = "0.4.4"
+version = "0.6.0"
 default-features = false
 optional = true
 
@@ -55,16 +56,15 @@ from-html = ["dep:takumi-html"]
 
 [dev-dependencies]
 criterion.workspace = true
+gif.workspace = true
 image-webp.workspace = true
 png.workspace = true
-parley.workspace = true
 rayon.workspace = true
+roxmltree.workspace = true
 resvg.workspace = true
 serde_json.workspace = true
-
-[dev-dependencies.image]
-workspace = true
-features = ["jpeg", "png", "webp"]
+zune-core.workspace = true
+zune-jpeg.workspace = true
 
 [dev-dependencies.takumi]
 path = "."
@@ -82,6 +82,22 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
+
+# The suites share one binary, so they link takumi once. The allocator count, the SVG parity check
+# that reads the goldens the suites write, and the WPT run, which exits the process on a hung test,
+# keep their own.
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[[test]]
+name = "memory_retention"
+
+[[test]]
+name = "svg_parity"
+
+[[test]]
+name = "wpt_reftests"
 
 [[bench]]
 name = "animated_frames"

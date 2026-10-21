@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use cssparser::{Parser, ParserInput, Token};
+use cssparser::{Parser, Token};
 
 use super::DeferredDeclaration;
 use crate::style::{ComputedStyle, CssInput, CustomProperties};
@@ -21,7 +21,7 @@ fn charge(budget: &mut usize, bytes: usize) -> Option<()> {
 }
 
 fn resolve_var_function(
-  input: &mut Parser<'_, '_>,
+  input: &mut Parser<'_>,
   custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
   budget: &mut usize,
@@ -62,7 +62,7 @@ fn resolve_var_function(
 }
 
 fn resolve_var_tokens_into(
-  input: &mut Parser<'_, '_>,
+  input: &mut Parser<'_>,
   custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
   budget: &mut usize,
@@ -144,8 +144,7 @@ fn resolve_var_references_with(
   budget: &mut usize,
   depth: u32,
 ) -> Option<String> {
-  let mut parser_input = ParserInput::new(specified_value);
-  let mut parser = Parser::new(&mut parser_input);
+  let mut parser = Parser::new(specified_value);
   let mut output = String::with_capacity(specified_value.len());
   resolve_var_tokens_into(
     &mut parser,

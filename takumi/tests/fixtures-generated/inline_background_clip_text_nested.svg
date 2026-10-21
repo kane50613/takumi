@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
   <rect x="0" y="0" width="640" height="360" fill="#fff"/>
-  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="360">
     <g fill="#000">
       <use href="#g0" x="20" y="73"/>
       <use href="#g1" x="53.31" y="73"/>
@@ -8,16 +8,16 @@
       <use href="#g3" x="108.22" y="73"/>
     </g>
     <g fill="#000">
-      <use href="#g4" x="148.21" y="73"/>
-      <use href="#g5" x="176.48" y="73"/>
-      <use href="#g3" x="204.37" y="73"/>
-      <use href="#g6" x="232.93" y="73"/>
+      <use href="#g4" x="148.22" y="73"/>
+      <use href="#g5" x="176.49" y="73"/>
+      <use href="#g3" x="204.38" y="73"/>
+      <use href="#g6" x="232.94" y="73"/>
     </g>
     <g fill="#000">
-      <use href="#g7" x="264.27" y="73"/>
-      <use href="#g1" x="294.51" y="73"/>
-      <use href="#g6" x="323.02" y="73"/>
-      <use href="#g3" x="341.5" y="73"/>
+      <use href="#g7" x="264.3" y="73"/>
+      <use href="#g1" x="294.54" y="73"/>
+      <use href="#g6" x="323.05" y="73"/>
+      <use href="#g3" x="341.53" y="73"/>
     </g>
   </mask>
   <g mask="url(#mk0)">
@@ -94,12 +94,12 @@
       <rect x="20" y="25" width="351" height="62" fill="url(#lg2)"/>
     </g>
   </g>
-  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="360">
     <g fill="#000">
-      <use href="#g4" x="148.21" y="73"/>
-      <use href="#g5" x="176.48" y="73"/>
-      <use href="#g3" x="204.37" y="73"/>
-      <use href="#g6" x="232.93" y="73"/>
+      <use href="#g4" x="148.22" y="73"/>
+      <use href="#g5" x="176.49" y="73"/>
+      <use href="#g3" x="204.38" y="73"/>
+      <use href="#g6" x="232.94" y="73"/>
     </g>
   </mask>
   <g mask="url(#mk3)">
@@ -183,18 +183,18 @@
     <use href="#g3" x="108.22" y="73"/>
   </g>
   <g fill="#000" fill-opacity="0">
-    <use href="#g4" x="148.21" y="73"/>
-    <use href="#g5" x="176.48" y="73"/>
-    <use href="#g3" x="204.37" y="73"/>
-    <use href="#g6" x="232.93" y="73"/>
+    <use href="#g4" x="148.22" y="73"/>
+    <use href="#g5" x="176.49" y="73"/>
+    <use href="#g3" x="204.38" y="73"/>
+    <use href="#g6" x="232.94" y="73"/>
   </g>
   <g fill="#000" fill-opacity="0">
-    <use href="#g7" x="264.27" y="73"/>
-    <use href="#g1" x="294.51" y="73"/>
-    <use href="#g6" x="323.02" y="73"/>
-    <use href="#g3" x="341.5" y="73"/>
+    <use href="#g7" x="264.3" y="73"/>
+    <use href="#g1" x="294.54" y="73"/>
+    <use href="#g6" x="323.05" y="73"/>
+    <use href="#g3" x="341.53" y="73"/>
   </g>
-  <mask id="mk6" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk6" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="360">
     <g fill="#000">
       <use href="#g8" x="20" y="145"/>
       <use href="#g9" x="54.66" y="145"/>
@@ -203,8 +203,8 @@
     </g>
     <g fill="#000">
       <use href="#g7" x="124.45" y="145"/>
-      <use href="#g4" x="154.4" y="145"/>
-      <use href="#g12" x="181.04" y="145"/>
+      <use href="#g4" x="154.41" y="145"/>
+      <use href="#g12" x="181.05" y="145"/>
       <use href="#g3" x="209.22" y="145"/>
       <use href="#g13" x="237.78" y="145"/>
     </g>
@@ -292,12 +292,12 @@
   </g>
   <g fill="#000" fill-opacity="0">
     <use href="#g7" x="124.45" y="145"/>
-    <use href="#g4" x="154.4" y="145"/>
-    <use href="#g12" x="181.04" y="145"/>
+    <use href="#g4" x="154.41" y="145"/>
+    <use href="#g12" x="181.05" y="145"/>
     <use href="#g3" x="209.22" y="145"/>
     <use href="#g13" x="237.78" y="145"/>
   </g>
-  <mask id="mk9" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk9" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="360">
     <g fill="#000">
       <use href="#g14" x="20" y="217"/>
       <use href="#g15" x="53.02" y="217"/>

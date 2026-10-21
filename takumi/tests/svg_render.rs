@@ -4,8 +4,6 @@
 //! positioning/color regressions without requiring pixel-exact parity with the
 //! raster backend (a different rasterizer).
 
-mod test_utils;
-
 use std::fs;
 
 use resvg::{
@@ -14,7 +12,8 @@ use resvg::{
 };
 use takumi::prelude::{Length::*, *};
 use takumi_svg::{SvgOptions, render};
-use test_utils::repo_base_path;
+
+use crate::test_utils::repo_base_path;
 
 const W: u32 = 200;
 const H: u32 = 100;

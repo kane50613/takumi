@@ -4,14 +4,16 @@
 use std::collections::HashMap;
 
 use roxmltree::Error;
-use simplecss::Declaration;
 use svgtypes::FontShorthand;
 
-use super::{AId, Attribute, Document, EId, NodeData, NodeId, NodeKind, ShortRange};
+use super::{
+  AId, Attribute, Document, EId, NodeData, NodeId, NodeKind, ShortRange, style_sheet::StyleSheet,
+};
+use crate::style::RawDeclaration;
 
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
 const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
-const XML_NAMESPACE_NS: &str = "http://www.w3.org/XML/1998/namespace";
+pub(super) const XML_NAMESPACE_NS: &str = "http://www.w3.org/XML/1998/namespace";
 
 impl<'input> Document<'input> {
   /// Parses a [`Document`] from a [`roxmltree::Document`].
@@ -147,7 +149,7 @@ fn parse_xml_node_children<'input>(
   parent: roxmltree::Node<'_, 'input>,
   origin: roxmltree::Node,
   parent_id: NodeId,
-  style_sheet: &simplecss::StyleSheet,
+  style_sheet: &StyleSheet,
   ignore_ids: bool,
   depth: u32,
   doc: &mut Document<'input>,
@@ -173,7 +175,7 @@ fn parse_xml_node<'input>(
   node: roxmltree::Node<'_, 'input>,
   origin: roxmltree::Node,
   parent_id: NodeId,
-  style_sheet: &simplecss::StyleSheet,
+  style_sheet: &StyleSheet,
   ignore_ids: bool,
   depth: u32,
   doc: &mut Document<'input>,
@@ -223,7 +225,7 @@ pub(crate) fn parse_svg_element<'input>(
   xml_node: roxmltree::Node<'_, 'input>,
   parent_id: NodeId,
   tag_name: EId,
-  style_sheet: &simplecss::StyleSheet,
+  style_sheet: &StyleSheet,
   ignore_ids: bool,
   doc: &mut Document<'input>,
 ) -> Result<NodeId, Error> {
@@ -342,16 +344,17 @@ pub(crate) fn parse_svg_element<'input>(
     }
   };
 
-  let mut write_declaration = |declaration: &Declaration| {
+  let mut write_declaration = |declaration: &RawDeclaration| {
     // TODO: perform XML attribute normalization
     let imp = declaration.important;
     let val = declaration.value;
+    let name: &str = &declaration.name;
 
-    if declaration.name == "marker" {
+    if name == "marker" {
       insert_attribute(AId::MarkerStart, val, imp);
       insert_attribute(AId::MarkerMid, val, imp);
       insert_attribute(AId::MarkerEnd, val, imp);
-    } else if declaration.name == "font" {
+    } else if name == "font" {
       if let Ok(shorthand) = FontShorthand::from_str(val) {
         // First we need to reset all values to their default.
         insert_attribute(AId::FontStyle, "normal", imp);
@@ -389,7 +392,7 @@ pub(crate) fn parse_svg_element<'input>(
           declaration.value
         );
       }
-    } else if let Some(aid) = AId::from_str(declaration.name) {
+    } else if let Some(aid) = AId::from_str(name) {
       // Parse only the presentation attributes.
       if aid.is_presentation() {
         insert_attribute(aid, val, imp);
@@ -398,17 +401,11 @@ pub(crate) fn parse_svg_element<'input>(
   };
 
   // Apply CSS.
-  for rule in &style_sheet.rules {
-    if rule.selector.matches(&XmlNode(xml_node)) {
-      for declaration in &rule.declarations {
-        write_declaration(declaration);
-      }
-    }
-  }
+  style_sheet.cascade(xml_node, &mut write_declaration);
 
   // Split a `style` attribute.
   if let Some(value) = xml_node.attribute("style") {
-    for declaration in simplecss::DeclarationTokenizer::from(value) {
+    for declaration in RawDeclaration::parse_list(value) {
       write_declaration(&declaration);
     }
   }
@@ -580,7 +577,7 @@ fn parse_svg_use_element<'input>(
   node: roxmltree::Node<'_, 'input>,
   origin: roxmltree::Node,
   parent_id: NodeId,
-  style_sheet: &simplecss::StyleSheet,
+  style_sheet: &StyleSheet,
   depth: u32,
   doc: &mut Document<'input>,
   id_map: &HashMap<&str, roxmltree::Node<'_, 'input>>,
@@ -657,8 +654,8 @@ fn parse_svg_use_element<'input>(
 fn resolve_css<'a>(
   xml: &'a roxmltree::Document<'a>,
   style_sheet: Option<&'a str>,
-) -> simplecss::StyleSheet<'a> {
-  let mut sheet = simplecss::StyleSheet::new();
+) -> StyleSheet<'a> {
+  let mut sheet = StyleSheet::default();
 
   // Injected style sheets do not override internal ones (we mimic the logic of rsvg-convert),
   // so we need to parse it first.
@@ -682,37 +679,6 @@ fn resolve_css<'a>(
   }
 
   sheet
-}
-
-struct XmlNode<'a, 'input: 'a>(roxmltree::Node<'a, 'input>);
-
-impl simplecss::Element for XmlNode<'_, '_> {
-  fn parent_element(&self) -> Option<Self> {
-    self.0.parent_element().map(XmlNode)
-  }
-
-  fn prev_sibling_element(&self) -> Option<Self> {
-    self.0.prev_sibling_element().map(XmlNode)
-  }
-
-  fn has_local_name(&self, local_name: &str) -> bool {
-    self.0.tag_name().name() == local_name
-  }
-
-  fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
-    match self.0.attribute(local_name) {
-      Some(value) => operator.matches(value),
-      None => false,
-    }
-  }
-
-  fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
-    match class {
-      simplecss::PseudoClass::FirstChild => self.prev_sibling_element().is_none(),
-      // TODO: lang
-      _ => false, // Since we are querying a static SVG we can ignore other pseudo-classes.
-    }
-  }
 }
 
 fn fix_recursive_patterns(doc: &mut Document) {

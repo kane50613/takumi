@@ -1,14 +1,14 @@
 use std::{borrow::Cow, error::Error, fmt, sync::Arc};
 
 use cssparser::{
-  BasicParseErrorKind, ParseError as CssParseError, ParseErrorKind, Parser, ParserInput,
+  BasicParseErrorKind, ParseError as CssParseError, ParseErrorKind, Parser,
   ToCss as CssParserToCss, Token,
 };
 
 use crate::style::{Color, SizingContext, build_unexpected_token, math::lcm, merge_enum_values};
 
 /// Parser result type alias for CSS property parsers.
-pub(crate) type ParseResult<'i, T> = Result<T, CssParseError<'i, ValueError<'i>>>;
+pub(crate) type ParseResult<'i, T> = Result<T, CssParseError<ValueError<'i>>>;
 
 /// Why a CSS value failed to parse, put into words only when a caller shows it: parsers try
 /// alternatives and drop most failures.
@@ -63,7 +63,7 @@ impl Error for ParseError {}
 
 impl ParseError {
   /// Stringifies an internal `cssparser` error into an owned [`ParseError`].
-  pub(crate) fn from_css_error(error: &CssParseError<'_, ValueError<'_>>) -> Self {
+  pub(crate) fn from_css_error(error: &CssParseError<ValueError<'_>>) -> Self {
     let message = match &error.kind {
       ParseErrorKind::Custom(message) => message.to_string(),
       basic => format!("{basic:?}"),
@@ -79,8 +79,7 @@ pub(crate) fn parse_css_str<T>(source: &str) -> Result<T, ParseError>
 where
   T: for<'i> FromCss<'i>,
 {
-  let mut input = ParserInput::new(source);
-  let mut parser = Parser::new(&mut input);
+  let mut parser = Parser::new(source);
 
   T::from_css(&mut parser).map_err(|error| ParseError::from_css_error(&error))
 }
@@ -142,43 +141,30 @@ pub(crate) fn keyword_index(ident: &str, tokens: &[&'static str]) -> Option<usiz
 
 #[inline(never)]
 pub(crate) fn parse_enum_keyword<'i>(
-  input: &mut Parser<'i, '_>,
+  input: &mut Parser<'i>,
   valid_tokens: &'static [&'static str],
   expect: CssExpectedMessage,
 ) -> ParseResult<'i, usize> {
-  let location = input.current_source_location();
   let token = input.next()?;
 
   let Token::Ident(ident) = token else {
-    return Err(build_unexpected_token(
-      location,
-      token,
-      expect,
-      valid_tokens,
-    ));
+    return Err(build_unexpected_token(token, expect, valid_tokens));
   };
 
   keyword_index(ident, valid_tokens)
-    .ok_or_else(|| build_unexpected_token(location, token, expect, valid_tokens))
+    .ok_or_else(|| build_unexpected_token(token, expect, valid_tokens))
 }
 
 #[inline(never)]
 pub(crate) fn parse_ident_enum_keyword<'i>(
-  input: &mut Parser<'i, '_>,
+  input: &mut Parser<'i>,
   valid_tokens: &'static [&'static str],
   expect: CssExpectedMessage,
 ) -> ParseResult<'i, usize> {
-  let location = input.current_source_location();
   let ident = input.expect_ident()?;
 
-  keyword_index(ident, valid_tokens).ok_or_else(|| {
-    build_unexpected_token(
-      location,
-      &Token::Ident(ident.to_owned()),
-      expect,
-      valid_tokens,
-    )
-  })
+  keyword_index(ident, valid_tokens)
+    .ok_or_else(|| build_unexpected_token(&Token::Ident(ident.to_owned()), expect, valid_tokens))
 }
 
 /// Defines reusable message templates for CSS parse errors.
@@ -221,7 +207,7 @@ impl CssExpectedMessage {
 /// Trait for types that can be parsed from CSS.
 pub(crate) trait FromCss<'i> {
   /// Parses the type from a [`Parser`] instance.
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self>
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self>
   where
     Self: Sized;
 
@@ -239,8 +225,25 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
 
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    let start = input.state();
+
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      let after_none = input.state();
+
+      if input.try_parse(Parser::expect_comma).is_err() {
+        return Ok(None);
+      }
+
+      // `none, ...` starts a list whose first item is `none`, as `background-image: none, none`.
+      input.reset(&start);
+
+      if let Ok(value) = input.try_parse(T::from_css) {
+        return Ok(Some(value));
+      }
+
+      input.reset(&after_none);
+
       return Ok(None);
     }
 
@@ -251,7 +254,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
 impl<'i> FromCss<'i> for String {
   const VALID_TOKENS: &'static [&'static str] = &["<string>", "<custom-ident>"];
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(input.expect_ident_or_string()?.to_string())
   }
 }
@@ -631,10 +634,12 @@ impl Animatable for u32 {}
 impl<'i> FromCss<'i> for u32 {
   const VALID_TOKENS: &'static [&'static str] = &["<integer>"];
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let value = input.expect_integer()?;
     if value < 0 {
-      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      ));
     }
     Ok(value as u32)
   }
@@ -658,7 +663,7 @@ impl ToCss for Arc<str> {
   }
 }
 
-/// Macro to implement a `pub(crate)` conversion method into a foreign (taffy/parley) enum.
+/// Macro to implement a `pub(crate)` conversion method into a foreign (taffy) enum.
 macro_rules! impl_from_taffy_enum {
   ($from_ty:ty, $method:ident -> $to_ty:ty, $($variant:ident),*) => {
     impl $from_ty {
@@ -680,7 +685,7 @@ macro_rules! impl_comma_list_from_css {
   };
   ($list:ty, $elem:ty, $valid:expr) => {
     impl<'i> $crate::style::FromCss<'i> for $list {
-      fn from_css(input: &mut cssparser::Parser<'i, '_>) -> $crate::style::ParseResult<'i, Self> {
+      fn from_css(input: &mut cssparser::Parser<'i>) -> $crate::style::ParseResult<'i, Self> {
         input
           .parse_comma_separated(<$elem as $crate::style::FromCss>::from_css)
           .map(Vec::into_boxed_slice)
@@ -764,7 +769,7 @@ macro_rules! impl_css_enum {
         ),*
       ];
 
-      fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {
+      fn from_css(input: &mut cssparser::Parser<'i>) -> crate::style::ParseResult<'i, Self> {
         let index = $parser(
           input,
           Self::VALID_TOKENS,
@@ -818,30 +823,29 @@ macro_rules! declare_box_alignment_enum_impl {
         "unsafe",
       ];
 
-      fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {
+      fn from_css(input: &mut cssparser::Parser<'i>) -> crate::style::ParseResult<'i, Self> {
         let mut overflow_position = None;
 
         loop {
-          let location = input.current_source_location();
           let token = input.next()?;
 
           let cssparser::Token::Ident(ident) = token else {
-            return Err($crate::style::unexpected_token!(location, token));
+            return Err($crate::style::unexpected_token!(token));
           };
 
           cssparser::match_ignore_ascii_case! {&ident,
             "safe" | "unsafe" => {
               if overflow_position.replace(ident.eq_ignore_ascii_case("safe")).is_some() {
-                return Err($crate::style::unexpected_token!(location, token));
+                return Err($crate::style::unexpected_token!(token));
               }
             },
             $($safe_css => return Ok(if overflow_position.unwrap_or(false) { Self::$safe_variant } else { Self::$base_variant }),)*
             $($plain_css => return if overflow_position.unwrap_or(false) {
-              Err($crate::style::unexpected_token!(location, token))
+              Err($crate::style::unexpected_token!(token))
             } else {
               Ok(Self::$plain_variant)
             },)*
-            _ => return Err($crate::style::unexpected_token!(location, token)),
+            _ => return Err($crate::style::unexpected_token!(token)),
           }
         }
       }

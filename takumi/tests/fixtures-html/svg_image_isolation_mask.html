@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_image_isolation_mask</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        width: 100%;
+        height: 100%;
+        gap: 40px;
+        align-items: center;
+        justify-content: center;
+        background-color: rgb(255, 59, 48);
+      "
+      ><img
+        width="200"
+        height="200"
+        src="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22><circle cx=%22100%22 cy=%22100%22 r=%2280%22 fill=%22%235ac8fa%22 style=%22mix-blend-mode:multiply%22/></svg>" /><img
+        width="200"
+        height="200"
+        src="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%222000%22 height=%222000%22><defs><mask id=%22m%22 maskUnits=%22userSpaceOnUse%22 x=%220%22 y=%220%22 width=%222000%22 height=%222000%22><rect width=%222000%22 height=%222000%22 fill=%22white%22/></mask></defs><rect width=%222000%22 height=%222000%22 fill=%22%23102040%22/><rect x=%22200%22 y=%221400%22 width=%221600%22 height=%22500%22 fill=%22%23ffb454%22 mask=%22url(%23m)%22/></svg>"
+    /></div>
+  </body>
+</html>

@@ -38,7 +38,7 @@ test("registerFont retries loaders that failed before loading", async () => {
 
   let attempts = 0;
 
-  expect(
+  await expect(
     renderer.registerFont({
       name: "Geist Retry",
       weight: 400,

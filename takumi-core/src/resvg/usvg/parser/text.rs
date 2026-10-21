@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use kurbo::{ParamCurve, ParamCurveArclen};
-use svgtypes::{FontFamily, Length, LengthUnit, parse_font_families};
+use svgtypes::{Length, LengthUnit, parse_font_families};
 
 use super::svgtree::{AId, EId, FromValue, SvgNode};
 use super::{OptionLog, converter, style};
@@ -140,7 +140,7 @@ pub(crate) fn convert(
     layouted: vec![],
   };
 
-  if text::convert(&mut text, &state.opt.font_resolver, cache).is_none() {
+  if text::convert(&mut text, cache).is_none() {
     return;
   }
 
@@ -236,7 +236,7 @@ fn collect_text_chunks_impl(
       }
     };
 
-    let font = convert_font(parent, state);
+    let font = convert_font(parent);
 
     let raw_paint_order: svgtypes::PaintOrder =
       parent.find_attribute(AId::PaintOrder).unwrap_or_default();
@@ -393,82 +393,30 @@ fn resolve_text_flow(node: SvgNode, state: &converter::State) -> Option<TextFlow
   })))
 }
 
-fn convert_font(node: SvgNode, state: &converter::State) -> Font {
-  let style: FontStyle = node.find_attribute(AId::FontStyle).unwrap_or_default();
-  let stretch = conv_font_stretch(node);
-  let weight = resolve_font_weight(node);
-  let mut variations = parse_font_variation_settings(node);
-
-  // Auto-map standard font properties to variation axes if not explicitly set.
-  // This allows variable fonts to work with regular font-weight/font-stretch properties.
-  let has_wght = variations.iter().any(|v| &v.tag == b"wght");
-  let has_wdth = variations.iter().any(|v| &v.tag == b"wdth");
-  let has_ital = variations.iter().any(|v| &v.tag == b"ital");
-  let has_slnt = variations.iter().any(|v| &v.tag == b"slnt");
-
-  // Map font-weight to wght axis (if not already set)
-  if !has_wght {
-    variations.push(FontVariation::new(*b"wght", weight as f32));
-  }
-
-  // Map font-stretch to wdth axis (if not already set)
-  // CSS font-stretch percentages: ultra-condensed=50%, condensed=75%, normal=100%, expanded=125%, ultra-expanded=200%
-  if !has_wdth {
-    let wdth = match stretch {
-      FontStretch::UltraCondensed => 50.0,
-      FontStretch::ExtraCondensed => 62.5,
-      FontStretch::Condensed => 75.0,
-      FontStretch::SemiCondensed => 87.5,
-      FontStretch::Normal => 100.0,
-      FontStretch::SemiExpanded => 112.5,
-      FontStretch::Expanded => 125.0,
-      FontStretch::ExtraExpanded => 150.0,
-      FontStretch::UltraExpanded => 200.0,
-    };
-    if wdth != 100.0 {
-      variations.push(FontVariation::new(*b"wdth", wdth));
-    }
-  }
-
-  // Map font-style: italic to ital axis (if not already set)
-  if !has_ital && style == FontStyle::Italic {
-    variations.push(FontVariation::new(*b"ital", 1.0));
-  }
-
-  // Map font-style: oblique to slnt axis (if not already set)
-  // Default oblique angle is typically 12-14 degrees
-  if !has_slnt && style == FontStyle::Oblique {
-    variations.push(FontVariation::new(*b"slnt", -12.0));
-  }
-
+fn convert_font(node: SvgNode) -> Font {
   let font_families = if let Some(n) = node.ancestors().find(|n| n.has_attribute(AId::FontFamily)) {
     n.attribute(AId::FontFamily).unwrap_or("")
   } else {
     ""
   };
 
-  let mut families = parse_font_families(font_families)
+  let families = parse_font_families(font_families)
     .ok()
     .log_none(|| {
       log::warn!(
-        "Failed to parse {} value: '{}'. Falling back to {}.",
+        "Failed to parse {} value: '{}'. Falling back to the standard font.",
         AId::FontFamily,
         font_families,
-        state.opt.font_family
       );
     })
     .unwrap_or_default();
 
-  if families.is_empty() {
-    families.push(FontFamily::Named(state.opt.font_family.clone()));
-  }
-
   Font {
     families,
-    style,
-    stretch,
-    weight,
-    variations,
+    style: node.find_attribute(AId::FontStyle).unwrap_or_default(),
+    stretch: conv_font_stretch(node),
+    weight: resolve_font_weight(node),
+    variations: parse_font_variation_settings(node),
   }
 }
 

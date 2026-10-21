@@ -3,6 +3,7 @@ use std::{collections::HashMap, mem::take, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi_bindings_common::{parse_lang, stylesheet, time_ms};
 use takumi_core::{
+  Fonts,
   style::{FontFamily, Lang, StyleSheet},
   viewport::Viewport,
 };
@@ -18,6 +19,8 @@ use crate::{
 pub struct SvgRenderTask {
   pub(crate) node: Option<NodeSource>,
   pub(crate) state: Arc<RendererState>,
+  /// The fonts as they were when the call was made, so a later change leaves this one alone.
+  pub(crate) fonts: Arc<Fonts>,
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
   pub(crate) stylesheet: Arc<StyleSheet>,
@@ -42,6 +45,7 @@ impl SvgRenderTask {
 
     Ok(SvgRenderTask {
       node: Some(node),
+      fonts: state.fonts_for_render(options.font_families.as_deref())?,
       state,
       viewport: Viewport::new((options.width, options.height)),
       time_ms: time_ms(options.time_ms),
@@ -63,8 +67,6 @@ impl Task for SvgRenderTask {
     };
     let node = node.into_node()?;
 
-    let fonts = self.state.fonts.load();
-
     let images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
 
     takumi_svg::render(
@@ -74,7 +76,7 @@ impl Task for SvgRenderTask {
         .stylesheet(take(&mut self.stylesheet))
         .time_ms(self.time_ms)
         .node(node)
-        .fonts(&fonts)
+        .fonts(&self.fonts)
         .font_families(take(&mut self.font_families))
         .lang(take(&mut self.lang))
         .build(),

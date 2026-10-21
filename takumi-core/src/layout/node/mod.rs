@@ -1,7 +1,6 @@
 mod container;
 mod image;
 mod input;
-mod text;
 
 use std::{
   collections::BTreeMap,
@@ -22,7 +21,6 @@ use crate::{
     image_buffer::ImageBuffer,
   },
   style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss},
-  text_processing::COLLAPSIBLE_WHITESPACE,
   viewport::Viewport,
 };
 
@@ -42,9 +40,9 @@ pub(crate) struct NodeMetadata {
   /// Additional element attributes for selector matching and serialization.
   pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
   /// Default style presets from HTML element type (lowest priority).
-  pub preset: Option<Style>,
+  pub preset: Option<Box<Style>>,
   /// The styling properties for this node.
-  pub style: Option<Style>,
+  pub style: Option<Box<Style>>,
   /// The tailwind properties for this node.
   pub tw: Option<TailwindValues>,
   /// The text direction for this node.
@@ -350,21 +348,26 @@ impl Node {
     Some(text)
   }
 
-  pub(crate) fn text_data(&self) -> Option<&TextData> {
-    match &self.kind {
-      NodeKind::Text(text) => Some(text),
-      _ => None,
-    }
+  /// Blink's `IsBR`: a `<br>`, which takumi carries as a text node holding its line feed.
+  pub(crate) fn is_br(&self) -> bool {
+    matches!(self.kind, NodeKind::Text(_))
+      && self
+        .tag_name()
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
   }
 
   pub(crate) fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;
     };
+
+    if self.is_br() {
+      return false;
+    }
     data
       .text
       .chars()
-      .all(|ch| COLLAPSIBLE_WHITESPACE.contains(&ch))
+      .all(|ch| matches!(ch, ' ' | '\t' | '\n' | '\r' | '\u{c}'))
   }
 
   /// Sets the tag name and returns the updated node.
@@ -405,13 +408,13 @@ impl Node {
 
   /// Sets the preset style and returns the updated node.
   pub fn with_preset(mut self, preset: Style) -> Self {
-    self.metadata.preset = Some(preset);
+    self.metadata.preset = Some(Box::new(preset));
     self
   }
 
   /// Sets the inline style and returns the updated node.
   pub fn with_style(mut self, style: Style) -> Self {
-    self.metadata.style = Some(style);
+    self.metadata.style = Some(Box::new(style));
     self
   }
 
@@ -564,9 +567,8 @@ impl Node {
     style: &taffy::Style,
   ) -> Size<f32> {
     match &self.kind {
-      NodeKind::Container { .. } => Size::ZERO,
       NodeKind::Image(image) => image.measure(context, available_space, known_dimensions, style),
-      NodeKind::Text(text) => text.measure(context, available_space, known_dimensions),
+      NodeKind::Container { .. } | NodeKind::Text(_) => Size::ZERO,
     }
   }
 
@@ -665,13 +667,20 @@ impl Node {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
-  pub(crate) preset: Option<Style>,
+  pub(crate) preset: Option<Box<Style>>,
   /// Tailwind-derived author style for the element.
   pub(crate) author_tw: Option<TailwindValues>,
   /// Inline style attached directly to the element.
-  pub(crate) inline: Option<Style>,
+  pub(crate) inline: Option<Box<Style>>,
   pub(crate) dir: Option<Direction>,
   pub(crate) lang: Option<Lang>,
+}
+
+impl NodeStyleLayers {
+  /// Whether nothing but the preset styles the element beyond its matched rules.
+  pub(crate) fn is_preset_only(&self) -> bool {
+    self.author_tw.is_none() && self.inline.is_none() && self.dir.is_none() && self.lang.is_none()
+  }
 }
 
 /// Selector-matching queries read by [`crate::matching`].

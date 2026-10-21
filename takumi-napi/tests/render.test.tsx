@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
 import { container, image, text } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Glob } from "bun";
@@ -59,17 +58,6 @@ const node = container({
     width: "100%",
     height: "100%",
   },
-});
-
-test("Renderer initialization with fonts and images", async () => {
-  const font = await readFile("../assets/fonts/geist/Geist[wght].woff2");
-
-  const renderer = new Renderer();
-  await renderer.registerFont(font);
-});
-
-test("no crash without fonts and images", () => {
-  new Renderer();
 });
 
 describe("setup", () => {

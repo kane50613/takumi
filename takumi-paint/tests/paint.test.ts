@@ -1,11 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { type PaintTree, type TextRun, Painter } from "takumi-paint";
+import {
+  type BoxNode,
+  type PaintTree,
+  type SerializedPaintTree,
+  type TextRun,
+  Painter,
+} from "takumi-paint";
 
 const painter = new Painter();
 
-function box(tree: PaintTree, id: string) {
-  return tree.nodes.find((node) => node.type === "box" && node.element?.id === id);
+function box(tree: PaintTree, id: string): BoxNode | undefined {
+  return tree.nodes.find((node): node is BoxNode => node.type === "box" && node.element?.id === id);
 }
 
 function runs(tree: PaintTree): TextRun[] {
@@ -13,6 +19,69 @@ function runs(tree: PaintTree): TextRun[] {
 }
 
 describe("Painter.paint", () => {
+  it("points each glyph at where its cluster starts in the run's text", async () => {
+    const tree = await painter.paint(text("café ok", { fontSize: 32 }), {
+      width: 400,
+      height: 100,
+    });
+    const [run] = runs(tree);
+
+    expect(run?.glyphs.map((glyph) => glyph.cluster)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("writes every node, effect, and glyph outline to JSON", async () => {
+    const tree = await painter.paint(
+      container({
+        id: "card",
+        style: { display: "flex", width: 300, padding: 20 },
+        children: [
+          container({
+            id: "clipped",
+            style: { width: 100, height: 100, clipPath: "circle(40%)" },
+            children: [text("clipped")],
+          }),
+          text("Hello paint", { fontSize: 32 }),
+        ],
+      }),
+      { width: 400, height: 200 },
+    );
+    const json: SerializedPaintTree = JSON.parse(JSON.stringify(tree));
+    const clipped = json.tree.nodes.find((node) => node.element?.id === "clipped");
+    const node = json.tree.nodes.findIndex(
+      (each) => each.type === "text" && each.runs.some((run) => run.text === "Hello paint"),
+    );
+    const raw = json.tree.nodes[node];
+    const run =
+      raw?.type === "text" ? raw.runs.findIndex((each) => each.text === "Hello paint") : -1;
+
+    expect(json.version).toBe(1);
+    expect(json.tree.nodes).toHaveLength(tree.nodes.length);
+    expect(clipped?.type === "box" ? clipped.effects?.clip : undefined).toMatchObject({
+      type: "path",
+    });
+    expect(json.outlines.map((outlines) => outlines === null)).toEqual(
+      json.tree.nodes.map((each) => each.type !== "text"),
+    );
+    expect(json.outlines[node]?.[run]).toEqual(
+      runs(tree)
+        .find((each) => each.text === "Hello paint")
+        ?.outlines(),
+    );
+  });
+
+  it("outlines each glyph of a run on its own", async () => {
+    const tree = await painter.paint(text("paint", { fontSize: 32 }), { width: 400, height: 100 });
+    const [run] = runs(tree);
+    const outlines = run?.outlines() ?? [];
+
+    expect(outlines).toHaveLength(5);
+    expect(outlines.every((outline) => outline?.startsWith("M"))).toBe(true);
+
+    const spaced = await painter.paint(text("a b", { fontSize: 32 }), { width: 400, height: 100 });
+
+    expect(runs(spaced)[0]?.outlines()[1]).toBe("");
+  });
+
   it("resolves a box's decorations into drawables and its text into runs", async () => {
     const tree = await painter.paint(
       container({
@@ -32,7 +101,9 @@ describe("Painter.paint", () => {
 
     expect([tree.width, tree.height]).toEqual([600, 300]);
     const card = box(tree, "card");
-    expect(card?.drawables.map((drawable) => drawable.role)).toEqual(["background", "border"]);
+    expect(
+      card?.drawables.flatMap((drawable) => (drawable.type === "group" ? [] : [drawable.role])),
+    ).toEqual(["background", "border"]);
     expect(card?.drawables[0]).toMatchObject({
       type: "fill",
       paint: { type: "color", color: [247, 243, 236, 255] },
@@ -44,7 +115,7 @@ describe("Painter.paint", () => {
     expect(run?.fontSize).toBe(32);
     expect(run?.font.family).toBe("Geist");
     expect(run?.font.data().byteLength).toBeGreaterThan(0);
-    expect(run?.outline()).toStartWith("M");
+    expect(run?.outlines().join("")).toStartWith("M");
 
     const glyphs = tree.steps
       .flatMap((step) => (step.type === "draw" ? step.drawables : []))
@@ -117,7 +188,7 @@ describe("Painter.paint", () => {
       "box:behind",
       "text:behind",
     ]);
-    expect(tree.root).toBe(tree.nodes[0]);
+    expect(tree.nodes[0]).toBe(tree.root);
   });
 
   it("keeps a translucent span's opacity on its group, not its colors", async () => {

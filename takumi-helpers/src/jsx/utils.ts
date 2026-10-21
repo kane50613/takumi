@@ -4,8 +4,13 @@ import type { ReactElementLike } from "../types";
 
 const unrenderedElements = new Set(["head", "meta", "link", "style", "script"]);
 
-export function isUnrenderedElement(type: string) {
+export function isUnrenderedElement(type: string): boolean {
   return unrenderedElements.has(type);
+}
+
+/** Whether `text` holds nothing but HTML's ASCII white space. */
+export function isAsciiWhitespace(text: string): boolean {
+  return /^[\t\n\f\r ]*$/.test(text);
 }
 
 export function isHtmlElement<T extends keyof JSX.IntrinsicElements>(

@@ -552,7 +552,7 @@ pub(crate) enum TailwindProperty {
   /// `text-decoration-thickness` property.
   TextDecorationThickness(TextDecorationThickness),
   /// `text-transform` property.
-  TextTransform(TextTransform),
+  TextTransform(TextTransformCase),
   /// `width` and `height` property.
   Size(Size),
   /// `width` property.
@@ -1358,7 +1358,7 @@ impl TailwindProperty {
       }
       TailwindProperty::FlexWrap(flex_wrap) => push_decl!(builder, important, flex_wrap(flex_wrap)),
       TailwindProperty::Flex(flex) => {
-        builder.push_all(StyleDeclaration::expand_flex(Some(flex)), important);
+        builder.push_all(StyleDeclaration::expand_flex(flex), important);
       }
       TailwindProperty::FlexBasis(flex_basis) => {
         push_decl!(builder, important, flex_basis(Some(flex_basis)))
@@ -1405,7 +1405,7 @@ impl TailwindProperty {
         push_decl!(builder, important, text_decoration_thickness(thickness))
       }
       TailwindProperty::TextTransform(text_transform) => {
-        push_decl!(builder, important, text_transform(text_transform))
+        push_decl!(builder, important, text_transform(text_transform.into()))
       }
       TailwindProperty::Size(size) => {
         push_decl!(builder, important, width(size), height(size));

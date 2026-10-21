@@ -1,6 +1,6 @@
 [package]
 name = "takumi-pdf"
-version = "0.17.3"
+version = "0.18.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Vector PDF output backend for takumi. Emits selectable, searchable text with embedded subset fonts."
@@ -83,5 +83,9 @@ workspace = true
 path = "../takumi-html"
 
 [dev-dependencies]
-flate2.workspace = true
+criterion.workspace = true
 pretty_assertions.workspace = true
+
+[[bench]]
+name = "images"
+harness = false

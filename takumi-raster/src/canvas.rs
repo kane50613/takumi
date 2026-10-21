@@ -7,22 +7,19 @@ mod mask;
 mod paint_source;
 mod skia;
 
-use std::{borrow::Cow, mem::replace, sync::Arc};
+use std::{borrow::Cow, io, mem::replace, sync::Arc};
 
 use blit::{blit_paint_source_translation, blit_translucent_translation};
 pub(crate) use blit::{overlay_image, overlay_sampled_paint_source, placement_overlap};
 pub(crate) use gradient::try_overlay_gradient_tile;
-use image::{
-  ImageError, Rgba, RgbaImage,
-  error::{ParameterError, ParameterErrorKind},
-};
 use mask::MaskStackEntry;
 pub(crate) use mask::{
   CanvasViewport, MaskView, NodeMasks, PlacedMask, alpha_mask, attenuate_alpha_by_mask,
-  cull_bounds, intersect_alpha_masks, render_mask,
+  cull_bounds, intersect_alpha_masks, render_mask, union_alpha_masks,
 };
 pub(crate) use paint_source::{
-  BilinearAxis, BoxAxis, PaintSource, RowSource, SamplingFootprint, interpolate_with_footprint,
+  BilinearAxis, BilinearColumns, BoxAxis, PaintSource, RowSource, SamplingFootprint,
+  interpolate_with_footprint,
 };
 use takumi_core::{
   geometry::{Point, Size},
@@ -35,7 +32,7 @@ use tiny_skia::{
 
 use self::skia::to_tiny_blend_mode;
 use crate::{
-  BackgroundTile, BorderProperties, Placement, Result,
+  BackgroundTile, Bitmap, BorderProperties, Placement, Result,
   blend::*,
   error::Error,
   simd::Simd,
@@ -62,7 +59,7 @@ pub(crate) fn checked_area(width: u32, height: u32, bytes_per_pixel: u32) -> Opt
 /// or 256 MiB at 4 bytes per pixel.
 const MAX_PIXMAP_PIXELS: u64 = 64 << 20;
 
-fn within_pixmap_pixel_budget(size: Size<u32>) -> bool {
+pub(crate) fn within_pixmap_pixel_budget(size: Size<u32>) -> bool {
   u64::from(size.width) * u64::from(size.height) <= MAX_PIXMAP_PIXELS
 }
 
@@ -139,13 +136,13 @@ impl<'a> DrawTarget<'a, '_> {
 /// A canvas that can be used to draw images onto.
 pub(crate) struct Canvas {
   image: Pixmap,
-  origin: Point<u32>,
+  origin: Point<i32>,
   constraint_mask_stack: Vec<MaskStackEntry>,
 }
 
 pub(crate) struct CanvasSubcanvas {
   image: Pixmap,
-  origin: Option<Point<u32>>,
+  origin: Option<Point<i32>>,
   constraint_mask_stack: Option<Vec<MaskStackEntry>>,
   offset: Point<i32>,
 }
@@ -204,12 +201,12 @@ impl Canvas {
     }
 
     let offset = Point {
-      x: bounds.left - self.origin.x as i32,
-      y: bounds.top - self.origin.y as i32,
+      x: bounds.left - self.origin.x,
+      y: bounds.top - self.origin.y,
     };
     let origin = Point {
-      x: bounds.left as u32,
-      y: bounds.top as u32,
+      x: bounds.left,
+      y: bounds.top,
     };
     let constraint_mask_stack = self.constraint_mask_stack.clone();
 
@@ -377,12 +374,12 @@ impl Canvas {
     self.constraint_mask_stack.pop();
   }
 
-  pub(crate) fn into_inner(self) -> Result<RgbaImage> {
+  pub(crate) fn into_inner(self) -> Result<Bitmap> {
     let (width, height) = (self.image.width(), self.image.height());
     let mut data = self.image.take();
     demultiply_rgba_in_place(&mut data);
 
-    RgbaImage::from_raw(width, height, data).ok_or_else(dimension_mismatch)
+    Bitmap::from_raw(width, height, data).ok_or_else(dimension_mismatch)
   }
 
   pub(crate) fn with_pixmap<R>(&mut self, f: impl FnOnce(&mut Pixmap) -> R) -> R {
@@ -429,7 +426,7 @@ impl Canvas {
         target.pixmap,
         mask,
         placement,
-        Rgba(color.0),
+        color.0,
         mode,
         target.combined_mask,
       );
@@ -573,8 +570,8 @@ impl Canvas {
       canvas_origin: self.origin,
     };
     let mask_width = placed.mask.width() as usize;
-    let left = placed.origin.x as i32 - self.origin.x as i32;
-    let top = placed.origin.y as i32 - self.origin.y as i32;
+    let left = placed.origin.x - self.origin.x;
+    let top = placed.origin.y - self.origin.y;
 
     for (y, row) in placed
       .mask
@@ -616,15 +613,15 @@ impl Canvas {
 
   fn localize_placement(&self, placement: Placement) -> Placement {
     Placement {
-      left: placement.left - self.origin.x as i32,
-      top: placement.top - self.origin.y as i32,
+      left: placement.left - self.origin.x,
+      top: placement.top - self.origin.y,
       ..placement
     }
   }
 
   fn restore_subcanvas_state(
     &mut self,
-    origin: Option<Point<u32>>,
+    origin: Option<Point<i32>>,
     constraint_mask_stack: Option<Vec<MaskStackEntry>>,
   ) {
     if let Some(origin) = origin {
@@ -670,9 +667,10 @@ fn scale_by_alphas(pixels: &mut [[u8; 4]], alphas: &[u8]) {
 }
 
 fn dimension_mismatch() -> Error {
-  Error::encode(ImageError::Parameter(ParameterError::from_kind(
-    ParameterErrorKind::DimensionMismatch,
-  )))
+  Error::encode(io::Error::new(
+    io::ErrorKind::InvalidData,
+    "the canvas pixels do not match its dimensions",
+  ))
 }
 
 #[cfg(test)]

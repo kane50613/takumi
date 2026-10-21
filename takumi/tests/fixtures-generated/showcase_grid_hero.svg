@@ -35,7 +35,7 @@
     <use href="#g14" x="706.21" y="363.5"/>
     <use href="#g19" x="739.07" y="363.5"/>
   </g>
-  <mask id="mk1" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk1" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
     <radialGradient id="rg2" gradientUnits="userSpaceOnUse" cx="600" cy="630" r="840" gradientTransform="matrix(1 0 0 .45 0 346.5)">
       <stop offset="0" stop-color="#000"/>
       <stop offset=".016" stop-color="#000"/>

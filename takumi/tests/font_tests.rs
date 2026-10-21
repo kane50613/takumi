@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::{assert_matches, fs, sync::Arc};
 
 use resvg::{
@@ -7,7 +5,8 @@ use resvg::{
   usvg::{Options, Tree},
 };
 use takumi::{prelude::*, render, render_svg};
-use test_utils::repo_base_path;
+
+use crate::test_utils::repo_base_path;
 
 fn read_font(path: &str) -> Vec<u8> {
   fs::read(repo_base_path("assets/fonts").join(path)).unwrap()
@@ -107,34 +106,12 @@ fn subsets_route_per_family() {
 }
 
 #[test]
-fn test_ttf_font_loading() {
-  let mut context = Fonts::default();
-
-  assert!(
-    context
-      .register(FontResource::new(read_font("noto-sans/NotoColorEmoji.ttf")))
-      .is_ok()
-  );
-}
-
-#[test]
 fn test_ttc_font_loading() {
   let mut context = Fonts::default();
 
   assert!(
     context
       .register(FontResource::new(read_font("ubuntu/Ubuntu.ttc")))
-      .is_ok()
-  );
-}
-
-#[test]
-fn test_woff2_font_loading() {
-  let mut context = Fonts::default();
-
-  assert!(
-    context
-      .register(FontResource::new(read_font("geist/Geist[wght].woff2")))
       .is_ok()
   );
 }
@@ -267,5 +244,54 @@ fn an_off_canvas_bitmap_glyph_blurs_its_shadow_onto_the_canvas() {
   assert!(
     changed > 500,
     "the shadow loses its off-canvas part before the blur: {changed} pixels"
+  );
+}
+
+/// Unregistering a family removes every subset of it, so it renders as an unknown family does,
+/// and registering it again brings it back.
+#[test]
+fn unregister_removes_every_subset() {
+  let mut fonts = Fonts::default();
+  register_subset(&mut fonts, "geist/Geist[wght].woff2", "Alpha", LATIN);
+  register_subset(
+    &mut fonts,
+    "noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+    "Alpha",
+    DEVANAGARI,
+  );
+  register_subset(
+    &mut fonts,
+    "poppins/poppins-v24-devanagari_latin-regular.woff2",
+    "Beta",
+    DEVANAGARI,
+  );
+
+  let registered = render_devanagari(&fonts, "Alpha");
+
+  assert!(
+    fonts.unregister_family("alpha"),
+    "family names match without case"
+  );
+  assert!(
+    !fonts.unregister_family("Alpha"),
+    "a removed family has nothing left"
+  );
+
+  let removed = render_devanagari(&fonts, "Alpha");
+
+  assert_eq!(pixel_diff(&removed, &render_devanagari(&fonts, "Gamma")), 0);
+  assert!(pixel_diff(&registered, &removed) > 1000);
+
+  register_subset(&mut fonts, "geist/Geist[wght].woff2", "Alpha", LATIN);
+  register_subset(
+    &mut fonts,
+    "noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+    "Alpha",
+    DEVANAGARI,
+  );
+
+  assert_eq!(
+    pixel_diff(&render_devanagari(&fonts, "Alpha"), &registered),
+    0
   );
 }

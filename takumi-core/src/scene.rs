@@ -2,26 +2,20 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::{collections::HashMap, convert::Infallible};
-
-use skrifa::FontRef;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
+  geometry::{ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
     decoration::OutlineGeometry,
-    inline::{
-      InkBox, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan, ShapedRun,
-      collect_inline_items, create_inline_layout, glyph_run_rect, resolve_inline_max_height,
-    },
+    inline::InkBox,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
   painter::OwnContent,
-  resources::font::{RunFace, run_normalized_coords},
   shadow::SizedShadow,
   sort_key::sort_by_key,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
@@ -50,37 +44,48 @@ pub struct NodePaint {
 /// Device-space integer bounds of a node or stacking context's paint output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SceneBounds {
-  /// Left edge, inclusive.
-  pub left: usize,
-  /// Top edge, inclusive.
-  pub top: usize,
+  /// Left edge, inclusive; negative past the canvas's left edge.
+  pub left: i32,
+  /// Top edge, inclusive; negative past the canvas's top edge.
+  pub top: i32,
   /// Right edge, exclusive.
-  pub right: usize,
+  pub right: i32,
   /// Bottom edge, exclusive.
-  pub bottom: usize,
+  pub bottom: i32,
 }
 
 impl SceneBounds {
   /// The pixels a rectangle of `size` at the origin covers under `transform`.
   pub fn of_rect(size: Size<f32>, transform: Affine) -> Option<Self> {
     let (min_x, min_y, max_x, max_y) = transformed_rect_extents(Point::ZERO, size, transform)?;
-    let left = (min_x.floor() as i32).max(0) as usize;
-    let top = (min_y.floor() as i32).max(0) as usize;
-    let right = (max_x.ceil() as i32).max(0) as usize;
-    let bottom = (max_y.ceil() as i32).max(0) as usize;
-
     // Empty bounds mean "paints nothing"; None means "unknown" and forces full-viewport isolation.
-    Some(Self {
-      left,
-      top,
-      right,
-      bottom,
-    })
+    Some(Self::enclosing(min_x, min_y, max_x, max_y))
   }
 
   /// Whether the bounds enclose zero area.
   pub fn is_empty(self) -> bool {
     self.left >= self.right || self.top >= self.bottom
+  }
+
+  /// The pixels a rectangle from `(left, top)` to `(right, bottom)` touches, as
+  /// `gfx::ToEnclosingRect` rounds it.
+  pub fn enclosing(left: f32, top: f32, right: f32, bottom: f32) -> Self {
+    Self {
+      left: left.floor() as i32,
+      top: top.floor() as i32,
+      right: right.ceil() as i32,
+      bottom: bottom.ceil() as i32,
+    }
+  }
+
+  /// The smallest bounds holding both, as `gfx::Rect::Union` builds them.
+  pub fn union(self, other: Self) -> Self {
+    Self {
+      left: self.left.min(other.left),
+      top: self.top.min(other.top),
+      right: self.right.max(other.right),
+      bottom: self.bottom.max(other.bottom),
+    }
   }
 }
 
@@ -94,6 +99,9 @@ pub enum PaintItemKind {
   /// The floats inside a node's inline content, which paint in the floats phase apart from the
   /// rest of that content.
   Floats(NodePaint),
+  /// A table's collapsed borders, which paint once its cells' backgrounds have, as Blink paints
+  /// them in the descendant block backgrounds phase.
+  CollapsedBorders(NodePaint),
 }
 
 /// A paint entry plus its z-index and source order, which together order it uniquely.
@@ -116,6 +124,8 @@ impl PaintItem {
   pub(crate) fn part_in(&self, part: BoxPart) -> Option<BoxPart> {
     match (&self.kind, part) {
       (PaintItemKind::Node(_) | PaintItemKind::Floats(_), part) => Some(part),
+      (PaintItemKind::CollapsedBorders(_), BoxPart::Content) => None,
+      (PaintItemKind::CollapsedBorders(_), part) => Some(part),
       (PaintItemKind::Context(_), BoxPart::Whole) => Some(BoxPart::Whole),
       (PaintItemKind::Context(_), BoxPart::Decorations) => (!self.atomic).then_some(BoxPart::Whole),
       (PaintItemKind::Context(_), BoxPart::Content) => self.atomic.then_some(BoxPart::Whole),
@@ -358,6 +368,9 @@ impl SceneRequest<'_> {
     let mut containing_blocks = ContainingBlocks::default();
     let mut properties = PropertyTrees::default();
     let mut contents: HashMap<NodeId, ContainerContents> = HashMap::new();
+    // Each table with collapsed borders being visited: the context its boxes paint in, the
+    // visits left once its subtree is done, and its paint.
+    let mut collapsed_borders: Vec<(usize, usize, NodePaint)> = Vec::new();
     let mut visits = vec![StackingContextBuildVisit {
       path: Vec::new(),
       node_id: NodeId::ROOT,
@@ -373,12 +386,34 @@ impl SceneRequest<'_> {
       is_root: true,
     }];
 
-    while let Some(visit) = visits.pop() {
+    loop {
+      // A table's collapsed borders follow every box inside it, once the last has been visited.
+      while collapsed_borders
+        .last()
+        .is_some_and(|(_, remaining, _)| visits.len() <= *remaining)
+      {
+        let Some((context_id, _, borders)) = collapsed_borders.pop() else {
+          break;
+        };
+
+        contexts[context_id].push_item(
+          PaintBucket::InFlow,
+          PaintItemKind::CollapsedBorders(borders),
+          0,
+          source_order,
+          false,
+        );
+        source_order += 1;
+      }
+
+      let Some(visit) = visits.pop() else {
+        break;
+      };
       let Some(current) = root.node_at_path(&visit.path) else {
         return Err(Error::InvalidLayoutNode(visit.node_id.into()));
       };
       let layout = layout_results.layout(visit.node_id)?;
-      if current.context.style.is_invisible() {
+      if current.context.style.is_invisible() || layout_results.is_hidden_for_paint(visit.node_id) {
         continue;
       }
 
@@ -433,13 +468,14 @@ impl SceneRequest<'_> {
       };
       let inline_floats = (current.should_create_inline_layout() && current.has_inline_floats())
         .then(|| node_paint.clone());
+      let table_borders = layout_results
+        .table_fragment(visit.node_id)
+        .is_some_and(|fragment| fragment.borders.is_some())
+        .then(|| node_paint.clone());
 
-      let is_flex_or_grid_item = visit.parent_display.is_some_and(|display| {
-        matches!(
-          display,
-          Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
-        )
-      });
+      let is_flex_or_grid_item = visit
+        .parent_display
+        .is_some_and(|display| display.should_blockify_children());
 
       let creates_stacking_context = visit.is_root
         || current
@@ -509,6 +545,10 @@ impl SceneRequest<'_> {
         );
       }
 
+      if let Some(borders) = table_borders {
+        collapsed_borders.push((context_id, visits.len(), borders));
+      }
+
       let layout_children = layout_results.box_children(visit.node_id)?;
       let child_container_size = Size {
         width: Some(layout.content_box_width()),
@@ -573,9 +613,9 @@ impl SceneRequest<'_> {
       for bucket in contexts[context_id].buckets.in_paint_order() {
         for item in bucket {
           let item_bounds = match &item.kind {
-            PaintItemKind::Node(node_paint) | PaintItemKind::Floats(node_paint) => {
-              node_paint.paint_bounds
-            }
+            PaintItemKind::Node(node_paint)
+            | PaintItemKind::Floats(node_paint)
+            | PaintItemKind::CollapsedBorders(node_paint) => node_paint.paint_bounds,
             PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
           };
           match item_bounds {
@@ -626,7 +666,7 @@ pub struct Scene {
 impl Scene {
   /// Lays `root` out in `viewport` and builds its scene at the origin.
   pub fn lay_out(root: RenderNode, viewport: Viewport, paint_bounds: bool) -> Result<Self> {
-    root.clear_fragment_items();
+    root.clear_layout_caches();
     let results = LayoutResults::compute_for_paint(&root, viewport.into());
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
@@ -660,7 +700,9 @@ impl Scene {
     for context in &contexts {
       let items = context.buckets.in_paint_order().into_iter().flatten();
       let paints = items.filter_map(|item| match &item.kind {
-        PaintItemKind::Node(paint) | PaintItemKind::Floats(paint) => Some(paint),
+        PaintItemKind::Node(paint)
+        | PaintItemKind::Floats(paint)
+        | PaintItemKind::CollapsedBorders(paint) => Some(paint),
         PaintItemKind::Context(_) => None,
       });
 
@@ -856,8 +898,8 @@ fn outset_bounds(
     return Some(bounds);
   }
 
-  let pad_x = (reach * (transform.a.abs() + transform.c.abs())).ceil() as usize;
-  let pad_y = (reach * (transform.b.abs() + transform.d.abs())).ceil() as usize;
+  let pad_x = (reach * (transform.a.abs() + transform.c.abs())).ceil() as i32;
+  let pad_y = (reach * (transform.b.abs() + transform.d.abs())).ceil() as i32;
   bounds.left = bounds.left.saturating_sub(pad_x);
   bounds.top = bounds.top.saturating_sub(pad_y);
   bounds.right = bounds.right.saturating_add(pad_x);
@@ -887,203 +929,23 @@ fn compute_node_paint_bounds(
   let content_offset = layout.content_box_offset();
   let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
 
-  if let Some(items) = node.fragment_items_in(layout) {
-    let placed = |ink: Option<InkBox>, transform| {
-      let (origin, size) = ink?.rect();
+  let items = node
+    .fragment_items_in(layout)
+    .unwrap_or_else(|| Rc::new(node.lay_out_fragment_items(layout)));
+  let placed = |ink: Option<InkBox>, transform| {
+    let (origin, size) = ink?.rect();
 
-      bounds_for_placed_rect(origin, size, transform)
-    };
-
-    bounds = merge_bounds(bounds, placed(items.ink.content, inline_transform));
-    bounds = merge_bounds(bounds, placed(items.ink.decorations, transform));
-    return outset_bounds(
-      bounds,
-      items.span_ink_reach.max(text_ink_reach(&font_style)),
-      inline_transform,
-    );
-  }
-
-  let content = layout.content_box_size();
-  let available_space = Size {
-    width: AvailableSpace::Definite(content.width),
-    height: AvailableSpace::Definite(content.height),
+    bounds_for_placed_rect(origin, size, transform)
   };
-  let max_height = resolve_inline_max_height(&font_style, content.height);
 
-  let built = create_inline_layout(InlineLayoutRequest {
-    items: collect_inline_items(node),
-    available_space,
-    max_width: content.width,
-    max_height,
-    style: &font_style,
-    context: &node.context,
-    mode: InlineLayoutMode::Measure,
-    shape_cacheable: true,
-  });
-  let Ok(()) = built.walk_items::<Infallible>(layout, |line, item| {
-    let setup = &line.setup;
+  bounds = merge_bounds(bounds, placed(items.ink.content, inline_transform));
+  bounds = merge_bounds(bounds, placed(items.ink.decorations, transform));
 
-    match item {
-      PlacedItem::Run {
-        glyph_run,
-        static_inline_prefix,
-        hanging,
-        stretch,
-      } => {
-        let baseline_shift = built.run_baseline_shift(line, &glyph_run);
-        let relative_offset = built.run_relative_offset(&glyph_run);
-        let (glyph_origin, glyph_size) =
-          glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
-        let (glyph_origin, glyph_size) = setup.scale_rect(
-          glyph_origin,
-          glyph_size,
-          static_inline_prefix,
-          baseline_shift,
-        );
-
-        bounds = merge_bounds(
-          bounds,
-          bounds_for_placed_rect(glyph_origin + relative_offset, glyph_size, inline_transform),
-        );
-
-        // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
-        let brush = &glyph_run.style().brush;
-        if !brush.decorations.is_empty() {
-          let run = ShapedRun::of(
-            &glyph_run,
-            Vec::new(),
-            hanging,
-            &stretch,
-            brush.clone(),
-            Vec::new(),
-          );
-          let placement = built.decoration_placement(
-            line,
-            &run,
-            brush.source_span_id,
-            static_inline_prefix,
-            layout,
-          );
-
-          for line in run.decoration_lines(
-            &placement,
-            Affine::IDENTITY,
-            transform,
-            node.context.box_paint_offset(layout),
-          ) {
-            let area = line.bounds();
-
-            bounds = merge_bounds(
-              bounds,
-              bounds_for_placed_rect(
-                Point {
-                  x: area.left,
-                  y: area.top,
-                } + relative_offset,
-                Size {
-                  width: area.right - area.left,
-                  height: area.bottom - area.top,
-                },
-                transform,
-              ),
-            );
-          }
-        }
-
-        // The metrics box above misses ink outside advance × (ascent+descent):
-        // synthetic-italic skew, faux-bold outset, negative bearings, and
-        // glyphs taller than the font's metrics. Merge per-glyph ink extents
-        // so isolation surfaces sized from these bounds never clip text.
-        let Ok(font) = FontRef::from_index(
-          glyph_run.run().font().data.as_ref(),
-          glyph_run.run().font().index,
-        ) else {
-          return Ok(());
-        };
-        let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-        let normalized_coords = run_normalized_coords(&glyph_run);
-        let face = RunFace::of(&glyph_run, &normalized_coords);
-        let resolved_glyphs = node
-          .context
-          .fonts()
-          .with_context(|fonts| fonts.resolve_glyphs(face, font, glyph_ids));
-
-        for (index, glyph) in glyph_run.positioned_glyphs().enumerate() {
-          let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
-            .get(&glyph.id)
-            .and_then(|glyph| glyph.ink_extents())
-          else {
-            continue;
-          };
-          let (ink_origin, ink_size) = setup.scale_rect(
-            Point {
-              x: glyph.x + hanging.shift + stretch.shift(index) + min_x,
-              y: glyph.y + baseline_shift + min_y,
-            },
-            Size {
-              width: max_x - min_x,
-              height: max_y - min_y,
-            },
-            static_inline_prefix,
-            baseline_shift,
-          );
-
-          bounds = merge_bounds(
-            bounds,
-            bounds_for_placed_rect(ink_origin + relative_offset, ink_size, inline_transform),
-          );
-        }
-      }
-      PlacedItem::Box(inline_box) => {
-        bounds = merge_bounds(
-          bounds,
-          bounds_for_placed_rect(
-            Point::new(inline_box.x, inline_box.y) + built.span_relative_offset(inline_box.id),
-            Size::new(inline_box.width, inline_box.height),
-            inline_transform,
-          ),
-        );
-      }
-      PlacedItem::Placeholder(_) => {}
-    }
-    Ok(())
-  });
-
-  for inline_box in built.positioned_floats {
-    bounds = merge_bounds(
-      bounds,
-      bounds_for_placed_rect(
-        Point::new(inline_box.x, inline_box.y),
-        Size::new(inline_box.width, inline_box.height),
-        inline_transform,
-      ),
-    );
-  }
-
-  let decoration_reach = built
-    .spans
-    .iter()
-    .filter_map(ProcessedInlineSpan::text_chain)
-    .fold(0.0_f32, |mut max, chain| {
-      let mut next = Some(chain);
-
-      while let Some(link) = next {
-        max = max.max(link.decoration.reach());
-        next = link.parent.as_ref();
-      }
-      max
-    });
-
-  let text_reach = built
-    .spans
-    .iter()
-    .filter_map(|span| match span {
-      ProcessedInlineSpan::Text { style, .. } => Some(text_ink_reach(style)),
-      _ => None,
-    })
-    .fold(text_ink_reach(&font_style), f32::max);
-
-  outset_bounds(bounds, decoration_reach.max(text_reach), inline_transform)
+  outset_bounds(
+    bounds,
+    items.span_ink_reach.max(text_ink_reach(&font_style)),
+    inline_transform,
+  )
 }
 
 fn has_inline_paint_content(node: &RenderNode) -> bool {
@@ -1101,15 +963,10 @@ fn bounds_for_placed_rect(
 
 fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
   match (left, right) {
-    // Empty bounds paint nothing and sit at clamped positions; don't let them expand the union.
+    // Empty bounds paint nothing, so they never expand the union.
     (Some(left), Some(right)) if left.is_empty() => Some(right),
     (Some(left), Some(right)) if right.is_empty() => Some(left),
-    (Some(left), Some(right)) => Some(SceneBounds {
-      left: left.left.min(right.left),
-      top: left.top.min(right.top),
-      right: left.right.max(right.right),
-      bottom: left.bottom.max(right.bottom),
-    }),
+    (Some(left), Some(right)) => Some(left.union(right)),
     (Some(bounds), None) | (None, Some(bounds)) => Some(bounds),
     (None, None) => None,
   }

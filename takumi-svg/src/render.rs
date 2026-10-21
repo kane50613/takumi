@@ -7,7 +7,7 @@ use takumi_core::{
   context::RenderContext,
   error::Result,
   font_style::SizedFontStyle,
-  geometry::{Point, Rect, Size},
+  geometry::{ComputedLayout, Point, Rect, Size},
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
     border::BorderProperties,
@@ -17,9 +17,9 @@ use takumi_core::{
     tree::RenderNode,
   },
   painter::{
-    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
-    GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape,
-    StripBackground, StrokeStyle, TextClip, UNBOUNDED,
+    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, CellArea,
+    CellBackground, FillShape, GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent,
+    PaintDevice, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -164,86 +164,10 @@ impl<'n> PlacedBox<'n> {
     )
   }
 
-  /// The clip path `d` and fill rule for a background's `clip` area. A square border box needs
-  /// none, since the layers already stay inside it.
-  fn background_clip_path_data(&self, background: &BoxBackground) -> Option<(String, FillRule)> {
-    match background.clip.shape(background.size)? {
-      FillShape::Rect(_) => None,
-      shape => Some((
-        shape_path_data(&shape, self.frame.origin + background.offset),
-        shape.rule(),
-      )),
-    }
-  }
-
   /// Emits the element's background (color then image layers) clipped to the
   /// region selected by `background-clip`, or through `text_clip` when it has one.
   fn emit_background(&self, text_clip: Option<&TextClip>, doc: &mut SvgDocument) -> io::Result<()> {
-    let background = self.painter.background();
-    if matches!(background.clip, BackgroundClipArea::Text) {
-      let Some(text_clip) = text_clip else {
-        return Ok(());
-      };
-      let mut result = Ok(());
-
-      DocumentDevice::paint(doc, |device| {
-        result = text_clip.paint_background(self.frame.origin, device);
-      })?;
-
-      return result.map_err(io::Error::other);
-    }
-    // A blending layer mixes with the layers and color beneath it and nothing behind the box.
-    let isolate = background
-      .layers
-      .iter()
-      .any(|layer| layer.blend_mode != BlendMode::Normal)
-      .then(|| doc.begin_isolate_group())
-      .transpose()?;
-
-    // The colour fill carries the clip shape itself, so it goes outside the
-    // group. Only the image layers need the clip.
-    if background.color.is_some() {
-      DocumentDevice::paint(doc, |device| {
-        self.painter.background_color(self.frame.origin, device);
-      })?;
-    }
-
-    if background.layers.is_empty() {
-      return Ok(());
-    }
-    if let Some(mask) = background.clip.border_mask() {
-      DocumentDevice::paint(doc, |device| {
-        let origin = self.frame.origin + background.offset;
-
-        device.with_border_mask(&mask, background.size, origin, |device| {
-          device.write(|doc| {
-            LayerEmitter::new(&self.node.context, doc)
-              .layers(&background.layers, Frame::border_box(self.frame))
-          });
-        });
-      })?;
-      if let Some(isolate) = isolate {
-        doc.end_group(isolate)?;
-      }
-      return Ok(());
-    }
-    let group = self
-      .background_clip_path_data(&background)
-      .map(|(data, rule)| {
-        let clip = doc.clip_path(&data, rule, None)?;
-
-        doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
-      })
-      .transpose()?;
-    LayerEmitter::new(&self.node.context, doc)
-      .layers(&background.layers, Frame::border_box(self.frame))?;
-    if let Some(group) = group {
-      doc.end_group(group)?;
-    }
-    if let Some(isolate) = isolate {
-      doc.end_group(isolate)?;
-    }
-    Ok(())
+    emit_background(&self.painter, self.frame, text_clip, doc)
   }
 
   /// Emits the element's `mask-image` as an SVG `<mask>` painted into the border
@@ -261,7 +185,7 @@ impl<'n> PlacedBox<'n> {
       return Ok(None);
     }
 
-    let (token, reference) = doc.begin_mask()?;
+    let (token, reference) = doc.begin_mask(false)?;
     let border_box = Frame::border_box(self.frame);
 
     let layers = FillLayers::mask(style).resolve(
@@ -308,21 +232,74 @@ impl<'n> PlacedBox<'n> {
     })
   }
 
-  /// Emits the box's shadows, background, through `text_clip` when it has one, and border.
+  /// Emits the box's shadows, background, through `text_clip` when it has one, and border, as
+  /// its part in a table, if any, paints them.
   pub(crate) fn emit_decorations(
     &self,
     text_clip: Option<&TextClip>,
+    table: TableDecorations,
     doc: &mut SvgDocument,
   ) -> io::Result<()> {
     if !self.node.paints_own_box() {
       return Ok(());
     }
 
+    match table {
+      TableDecorations::None => self.emit_box(text_clip, true, doc),
+      TableDecorations::Cell {
+        paints_border,
+        clip: None,
+      } => self.emit_box(text_clip, paints_border, doc),
+      TableDecorations::Cell {
+        paints_border,
+        clip: Some(clip),
+      } => within_cell(doc, self.frame.origin, clip, |doc| {
+        self.emit_box(text_clip, paints_border, doc)
+      }),
+      TableDecorations::Table {
+        grid,
+        grid_offset,
+        paints_border,
+        columns,
+      } => {
+        PlacedBox::new(
+          self.node,
+          BoxFrame::new(grid, self.frame.origin + grid_offset),
+        )
+        .emit_box(text_clip, paints_border, doc)?;
+        for column in columns {
+          for background in column.cells {
+            emit_cell_background(&column.context, self.frame, background, doc)?;
+          }
+        }
+        Ok(())
+      }
+      TableDecorations::Part { cells } => {
+        self.emit_box_shadows(doc)?;
+        for background in cells {
+          emit_cell_background(&self.node.context, self.frame, background, doc)?;
+        }
+        self.emit_inset_box_shadows(doc)
+      }
+    }
+  }
+
+  /// Emits the box's shadows, background, through `text_clip` when it has one, and its border
+  /// when `paints_border`.
+  fn emit_box(
+    &self,
+    text_clip: Option<&TextClip>,
+    paints_border: bool,
+    doc: &mut SvgDocument,
+  ) -> io::Result<()> {
     self.emit_box_shadows(doc)?;
     // `background-clip` picks the shape a background fills, never when it paints:
     // the border draws over the ring, as it does in Blink.
     self.emit_background(text_clip, doc)?;
     self.emit_inset_box_shadows(doc)?;
+    if !paints_border {
+      return Ok(());
+    }
     DocumentDevice::paint(doc, |device| {
       self.painter.paint_border(self.frame.origin, device);
     })
@@ -721,7 +698,7 @@ impl DocumentDevice<'_> {
     if self.error.is_some() {
       return;
     }
-    let (token, reference) = match self.doc.begin_mask() {
+    let (token, reference) = match self.doc.begin_mask(false) {
       Ok(mask) => mask,
       Err(error) => {
         self.error = Some(error);
@@ -764,7 +741,7 @@ pub(crate) fn emit_inline_box(
       let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
       let groups = EffectGroups::open(&placed, group_transform, doc)?;
 
-      placed.emit_decorations(None, doc)?;
+      placed.emit_decorations(None, TableDecorations::None, doc)?;
 
       let content_clip = placed
         .overflow_clip_path_data()
@@ -779,6 +756,145 @@ pub(crate) fn emit_inline_box(
       groups.close(doc)
     }
   }
+}
+
+/// The clip path `d` and fill rule for a background's `clip` area. A square border box needs none,
+/// since the layers already stay inside it.
+fn background_clip_path_data(
+  background: &BoxBackground,
+  frame: BoxFrame,
+) -> Option<(String, FillRule)> {
+  match background.clip.shape(background.size)? {
+    FillShape::Rect(_) => None,
+    shape => Some((
+      shape_path_data(&shape, frame.origin + background.offset),
+      shape.rule(),
+    )),
+  }
+}
+
+/// Emits the background of `context`, a table part, over `background.area` inside its cell, both
+/// relative to `frame`, the box painting it.
+fn emit_cell_background(
+  context: &RenderContext,
+  frame: BoxFrame,
+  background: CellBackground,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let at = background.area.offset;
+  let layout = ComputedLayout {
+    location: frame.layout.location + at,
+    size: background.area.size,
+    border: Rect::default(),
+    padding: Rect::default(),
+  };
+  let painter = BoxPainter::new(context, layout);
+
+  within_cell(doc, frame.origin, background.cell, |doc| {
+    emit_background(
+      &painter,
+      BoxFrame::new(layout, frame.origin + at),
+      None,
+      doc,
+    )
+  })
+}
+
+/// Emits the background `painter` paints at `frame` (color then image layers) clipped to the
+/// region selected by `background-clip`, or through `text_clip` when it has one.
+fn emit_background(
+  painter: &BoxPainter<'_>,
+  frame: BoxFrame,
+  text_clip: Option<&TextClip>,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let background = painter.background();
+  if matches!(background.clip, BackgroundClipArea::Text) {
+    let Some(text_clip) = text_clip else {
+      return Ok(());
+    };
+    let mut result = Ok(());
+
+    DocumentDevice::paint(doc, |device| {
+      result = text_clip.paint_background(frame.origin, device);
+    })?;
+
+    return result.map_err(io::Error::other);
+  }
+  // A blending layer mixes with the layers and color beneath it and nothing behind the box.
+  let isolate = background
+    .layers
+    .iter()
+    .any(|layer| layer.blend_mode != BlendMode::Normal)
+    .then(|| doc.begin_isolate_group())
+    .transpose()?;
+
+  // The colour fill carries the clip shape itself, so it goes outside the
+  // group. Only the image layers need the clip.
+  if background.color.is_some() {
+    DocumentDevice::paint(doc, |device| {
+      painter.background_color(frame.origin, device);
+    })?;
+  }
+
+  if background.layers.is_empty() {
+    return Ok(());
+  }
+  if let Some(mask) = background.clip.border_mask() {
+    DocumentDevice::paint(doc, |device| {
+      let origin = frame.origin + background.offset;
+
+      device.with_border_mask(&mask, background.size, origin, |device| {
+        device.write(|doc| {
+          LayerEmitter::new(painter.context(), doc)
+            .layers(&background.layers, Frame::border_box(frame))
+        });
+      });
+    })?;
+    if let Some(isolate) = isolate {
+      doc.end_group(isolate)?;
+    }
+    return Ok(());
+  }
+  let group = background_clip_path_data(&background, frame)
+    .map(|(data, rule)| {
+      let clip = doc.clip_path(&data, rule, None)?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+    })
+    .transpose()?;
+  LayerEmitter::new(painter.context(), doc).layers(&background.layers, Frame::border_box(frame))?;
+  if let Some(group) = group {
+    doc.end_group(group)?;
+  }
+  if let Some(isolate) = isolate {
+    doc.end_group(isolate)?;
+  }
+  Ok(())
+}
+
+/// Runs `emit` in a group clipped to `cell`, relative to `origin`.
+fn within_cell(
+  doc: &mut SvgDocument,
+  origin: Point<f32>,
+  cell: CellArea,
+  emit: impl FnOnce(&mut SvgDocument) -> io::Result<()>,
+) -> io::Result<()> {
+  let at = origin + cell.offset;
+  let clip = doc.clip_path(
+    &edges_path_data(Rect {
+      left: at.x,
+      top: at.y,
+      right: at.x + cell.size.width,
+      bottom: at.y + cell.size.height,
+    }),
+    FillRule::NonZero,
+    None,
+  )?;
+  let group = doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)?;
+
+  emit(doc)?;
+  doc.end_group(group)
 }
 
 #[cfg(test)]

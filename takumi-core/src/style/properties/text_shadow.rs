@@ -1,6 +1,6 @@
 use std::fmt;
 
-use cssparser::{BasicParseErrorKind, Parser};
+use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser};
 use typed_builder::TypedBuilder;
 
 use super::box_shadow::parse_offsets_blur;
@@ -45,7 +45,7 @@ pub(crate) type TextShadows = Box<[TextShadow]>;
 impl_comma_list_from_css!(TextShadows, TextShadow);
 
 impl<'i> FromCss<'i> for TextShadow {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, TextShadow> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, TextShadow> {
     let mut color = None;
     let mut lengths = None;
 
@@ -67,7 +67,9 @@ impl<'i> FromCss<'i> for TextShadow {
       break;
     }
 
-    let lengths = lengths.ok_or(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid))?;
+    let lengths = lengths.ok_or(CssParseError::from_basic_kind(
+      BasicParseErrorKind::QualifiedRuleInvalid,
+    ))?;
 
     Ok(TextShadow {
       color: color.unwrap_or(ColorInput::CurrentColor),

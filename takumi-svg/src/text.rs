@@ -17,7 +17,7 @@ use takumi_core::{
 };
 
 use crate::{
-  Frame, GlyphStroke, Rgba, SvgDocument,
+  Frame, GlyphStroke, ImageKey, Rgba, SvgDocument,
   render::{DocumentDevice, emit_inline_box},
 };
 
@@ -125,17 +125,8 @@ pub(crate) fn emit_run_glyphs(
               }
             }
             None => {
-              let data = path_data(
-                outline.paths(),
-                Affine {
-                  x: 0.0,
-                  y: 0.0,
-                  ..placed
-                },
-              );
-
-              if !data.is_empty() {
-                uses.push((doc.glyph_ref(data), placed.x, placed.y));
+              if let Some(id) = doc.outline_ref(outline, placed) {
+                uses.push((id, placed.x, placed.y));
               }
             }
           }
@@ -155,21 +146,32 @@ pub(crate) fn emit_run_glyphs(
       // Color/bitmap glyphs (emoji) have no vector form, so embed the rasterized
       // pixmap as a `data:image/png` `<image>`, as a silhouette in the shadow pass.
       ResolvedGlyph::Bitmap(bitmap) => {
-        let Some(png) = bitmap.image.encode_png() else {
+        let key = ImageKey::BitmapGlyph {
+          font: run.glyph_run.font_id(),
+          index: run.glyph_run.font_index,
+          glyph: glyph.id,
+          size: run.glyph_run.font_size.to_bits(),
+        };
+        let Some(href) = doc.image_href(&key, || {
+          bitmap
+            .image
+            .encode_png()
+            .map(|png| to_data_url("image/png", &png))
+        }) else {
           continue;
         };
         doc.flush_glyph_uses(&mut uses, fill, stroke)?;
-        let (width, height) = (bitmap.image.width(), bitmap.image.height());
+        let (width, height) = (bitmap.image.width() as f32, bitmap.image.height() as f32);
         let bitmap_matrix = placed * bitmap.image_transform();
-        let href = to_data_url("image/png", &png);
         let silhouette = color_override
           .map(|color| doc.silhouette_filter(color))
           .transpose()?;
         let group = doc.begin_group(bitmap_matrix, 1.0, None, silhouette.as_deref())?;
-        doc.image(
-          Frame::new(0.0, 0.0, width as f32, height as f32),
+        doc.image_use(
+          &key,
           &href,
-          None,
+          (width, height),
+          Frame::new(0.0, 0.0, width, height),
         )?;
         doc.end_group(group)?;
       }

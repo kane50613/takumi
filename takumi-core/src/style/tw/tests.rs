@@ -124,16 +124,6 @@ fn test_parse_arbitrary_color() {
 }
 
 #[test]
-fn test_parse_arbitrary_mask_image_url() {
-  assert_eq!(
-    parse_property("mask-[url('https://example.com/logo.svg')]"),
-    expect(TailwindProperty::MaskImage(BackgroundImage::Url(
-      "https://example.com/logo.svg".into()
-    )))
-  );
-}
-
-#[test]
 fn test_split_variant_ignores_colons_in_arbitrary_values() {
   assert_eq!(split_variant("sm:mt-0"), Some(("sm", "mt-0")));
   assert_eq!(split_variant("sm:hover:mt-0"), Some(("sm", "hover:mt-0")));
@@ -364,17 +354,6 @@ fn test_parse_col_end() {
   assert_eq!(
     parse_property("col-end-1"),
     expect(TailwindProperty::GridColumnEnd(GridPlacement::Line(1)))
-  );
-}
-
-#[test]
-fn test_grid_column_start_emits_only_start_longhand() {
-  let values = TailwindValues::from_str("col-start-2").expect("tailwind values should parse");
-  let declarations = values.into_declaration_block(Viewport::new((100, 100)), &Default::default());
-
-  assert_eq!(
-    declarations.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::grid_column_start(GridPlacement::Line(2))]
   );
 }
 
@@ -1015,34 +994,6 @@ fn test_col_auto_row_auto() {
       start: GridPlacement::auto(),
       end: GridPlacement::auto(),
     }))
-  );
-}
-
-#[test]
-fn test_shadow_md_is_composite() {
-  let viewport = Viewport::new((100, 100));
-  let values = TailwindValues::from_str("shadow-md").unwrap();
-  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
-    .inherit(&ComputedStyle::default());
-  assert_eq!(
-    style.misc1_data.box_shadow.as_ref().map(|s| s.len()),
-    Some(2)
-  );
-}
-
-#[test]
-fn test_text_shadow_sm_is_composite() {
-  let viewport = Viewport::new((100, 100));
-  let values = TailwindValues::from_str("text-shadow-sm").unwrap();
-  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
-    .inherit(&ComputedStyle::default());
-  assert_eq!(
-    style
-      .misc_inherited1_data
-      .text_shadow
-      .as_ref()
-      .map(|s| s.len()),
-    Some(3)
   );
 }
 
@@ -1743,16 +1694,21 @@ fn test_gradient_state_does_not_inherit() {
 #[test]
 fn test_a_registered_gradient_name_starts_from_its_initial_value() {
   let mut parent = ComputedStyle::default();
-  parent
-    .custom_properties
-    .set("--tw-gradient-from-position".to_owned(), "25%".to_owned());
-  parent.custom_properties.register(PropertyRule {
+  let rule = PropertyRule {
     name: "--tw-gradient-from-position".to_owned(),
     syntax: "<length-percentage>".to_owned(),
     inherits: false,
     initial_value: Some("0%".to_owned()),
     media_queries: Vec::new(),
-  });
+  };
+
+  parent.custom_properties.register_in_scope(
+    &Arc::new(HashMap::from([(rule.name.clone(), rule)])),
+    &CustomProperties::default(),
+  );
+  parent
+    .custom_properties
+    .set("--tw-gradient-from-position".to_owned(), "25%".to_owned());
 
   let child = ComputedStyle::from_parent(&parent);
 

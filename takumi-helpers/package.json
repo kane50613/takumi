@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/helpers",
-  "version": "2.16.2",
+  "version": "2.17.1",
   "description": "Convert JSX and HTML to Takumi node trees. Load fonts and emoji.",
   "keywords": [
     "emoji",
@@ -92,7 +92,8 @@
   },
   "scripts": {
     "build": "tsdown --config-loader unrun",
-    "publish-lint": "attw --pack . && publint --strict ."
+    "publish-lint": "attw --pack . && publint --strict .",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

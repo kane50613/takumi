@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="1200" height="630">
     <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="300" cy="157.5" r="1016.492">
       <stop offset="0" stop-color="#000"/>
       <stop offset=".016" stop-color="#000" stop-opacity=".969"/>

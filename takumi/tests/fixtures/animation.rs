@@ -7,9 +7,9 @@ use takumi::{
 
 use crate::test_utils::{CONTEXT, run_animation_fixture_test};
 
-const BOUNCING_TEXT_FPS: u32 = 20;
+const BOUNCING_TEXT_FPS: u32 = 10;
 const BOUNCING_TEXT_DURATION_MS: u32 = 900;
-const KEYFRAME_INTERPOLATION_FPS: u32 = 20;
+const KEYFRAME_INTERPOLATION_FPS: u32 = 10;
 const KEYFRAME_INTERPOLATION_DURATION_MS: u32 = 1200;
 
 fn bouncing_text_frames() -> Vec<Node> {

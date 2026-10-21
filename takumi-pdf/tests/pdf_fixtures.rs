@@ -927,9 +927,9 @@ fn legacy_page_break_properties_split_the_page() {
 }
 
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
-/// wider one takes the intersection, and `hidden` clears the line. The last
-/// table pins the naive edge: a spanning cell resolves one winner for its
-/// whole side, so the 4px border under one column reaches both segments.
+/// wider one takes the intersection, and `hidden` clears the line. Each
+/// segment of a line resolves on its own, so the 4px border under one column
+/// stops where the column ends, above the cell spanning both.
 #[test]
 fn a_collapsing_table_paints_one_border_per_line() {
   run_pdf_fixture("collapsed-table", |fonts| {
@@ -1074,18 +1074,43 @@ fn content_beside_a_table_does_not_replay_with_its_header() {
   );
 }
 
-/// A header cell whose rowspan reaches into the body would replay body area
-/// with the band, so such a table does not repeat at all.
+/// A cell's tagged `RowSpan` stops where its row group ends, as its layout
+/// does, so `rowspan="0"` in a one-row header spans no further.
 #[test]
-fn a_header_rowspan_into_the_body_suppresses_repetition() {
+fn a_tagged_rowspan_stays_in_its_row_group() {
   let fonts = fonts();
-  let table = |thead_style: &str| {
+  let html = r#"<table>
+    <thead><tr><th rowspan="0">Name</th><th>Qty</th></tr></thead>
+    <tbody><tr><td>Item</td><td>3</td></tr><tr><td rowspan="5">Last</td><td>4</td></tr></tbody>
+  </table>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse table"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::On)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render table");
+
+  assert!(
+    !inflated_text(&pdf).contains("/RowSpan"),
+    "a row span reached past its row group"
+  );
+}
+
+/// A header cell's rowspan ends with its row group, as HTML's table model
+/// clips it, so the header still repeats.
+#[test]
+fn a_header_rowspan_stays_in_its_row_group() {
+  let fonts = fonts();
+  let table = |rowspan: &str| {
     let rows: String = (1..=30)
       .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
       .collect();
     let html = format!(
       r#"<table style="width: 100%; font-size: 12px; color: #141414">
-        <thead{thead_style}><tr><th rowspan="2">Name</th><th>Qty</th></tr></thead>
+        <thead><tr><th{rowspan}>Name</th><th>Qty</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>"#
     );
@@ -1106,9 +1131,9 @@ fn a_header_rowspan_into_the_body_suppresses_repetition() {
   };
 
   assert_eq!(
+    text_show_operators(&table(r#" rowspan="2""#)),
     text_show_operators(&table("")),
-    text_show_operators(&table(r#" style="display: table-row-group""#)),
-    "a cross-group rowspan header still repeated"
+    "a header rowspan reached into the body"
   );
 }
 
@@ -3646,12 +3671,13 @@ fn uncovered_character_renders_under_an_uncovered_text_policy() {
   let placeholder = render_with(UncoveredText::Placeholder).expect("render with the placeholder");
   let blank = render_with(UncoveredText::Blank).expect("render without the glyph");
 
+  // The primary font shapes the uncovered character in the run of the text before it.
   assert!(
-    inflated_text(&placeholder).contains("(\\000\\000)"),
+    inflated_text(&placeholder).contains("\\000\\000"),
     "the placeholder policy did not draw glyph 0"
   );
   assert!(
-    !inflated_text(&blank).contains("(\\000\\000)"),
+    !inflated_text(&blank).contains("\\000\\000"),
     "the blank policy drew glyph 0"
   );
 }
@@ -6282,4 +6308,117 @@ fn a_table_taller_than_one_grid_keeps_every_row() {
   );
 
   assert_eq!(inflated_text(&pdf).matches("/S/TR").count(), ROWS + 1);
+}
+
+/// A zero-width non-joiner keeps a glyph of its own that maps back to U+200C alone, so a reader
+/// that follows `ToUnicode`, as Poppler does, extracts each one between the letters it sits between
+/// in the source, in right-to-left Persian too. A mapping that joined it to a letter read it on the
+/// letter's other side.
+#[test]
+fn persian_zero_width_non_joiners_keep_their_own_glyph() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2"),
+  )
+  .expect("read arabic font");
+  let family = fonts
+    .register(FontResource::new(data))
+    .expect("load arabic font")
+    .first()
+    .expect("registered family")
+    .name
+    .clone();
+  let doc = format!(
+    r#"<p dir="rtl" lang="fa" style="font-family:{family};font-size:24px">سه‌ماهه می‌دهد لپ‌تاپ‌ها</p>"#
+  );
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(&doc, FromHtmlOptions::default()).expect("parse persian doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  );
+  let mappings: Vec<String> = inflated_text(&pdf)
+    .lines()
+    .filter(|line| line.contains("200C"))
+    .filter_map(|line| line.rsplit('<').next())
+    .map(|destination| destination.trim_end_matches('>').to_owned())
+    .collect();
+
+  assert!(!mappings.is_empty(), "no ToUnicode entry for U+200C");
+  assert!(
+    mappings.iter().all(|destination| destination == "200C"),
+    "U+200C joined to another character: {mappings:?}"
+  );
+}
+
+/// A synthesized italic leans right by a quarter, as raster output does, about its own baseline,
+/// so it stays where its advance puts it.
+#[test]
+fn synthesized_italic_leans_right_about_the_baseline() {
+  let fonts = latin_font();
+  let doc = r#"<p style="margin:0">one <i>two</i> three</p><p style="margin:40px 0 0">one <i>two</i> three</p>"#;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse italic doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  );
+  let lines: Vec<String> = content_lines(&pdf)
+    .map(|line| String::from_utf8_lossy(&line).into_owned())
+    .collect();
+  // The six operands before `operator`, as `cm` and `Tm` take.
+  let numbers = |line: &str, operator: &str| -> Vec<f32> {
+    let tokens: Vec<&str> = line[..line.find(operator).expect("operator in line")]
+      .split_whitespace()
+      .collect();
+
+    tokens[tokens.len() - 6..]
+      .iter()
+      .map(|token| token.parse().expect("numeric operand"))
+      .collect()
+  };
+  let upright_x = lines
+    .iter()
+    .find(|line| line.contains(" cm") && numbers(line, " cm")[2] == 0.0)
+    .map(|line| numbers(line, " cm")[4])
+    .expect("an upright run");
+  let mut sheared = 0;
+
+  for (index, line) in lines.iter().enumerate() {
+    if !line.contains(" cm") {
+      continue;
+    }
+
+    let [a, _, c, _, e, _] = numbers(line, " cm")[..] else {
+      panic!("cm takes six operands: {line}");
+    };
+
+    if c == 0.0 {
+      continue;
+    }
+
+    let baseline = lines[index..]
+      .iter()
+      .find(|line| line.contains(" Tm"))
+      .map(|line| numbers(line, " Tm")[5])
+      .expect("a text matrix after the shear");
+
+    sheared += 1;
+    // Device y points down, so a glyph's top lands right of its foot when `c` is negative.
+    assert!(
+      (c / a + 0.25).abs() < 1e-4,
+      "slant {} where a right lean is -0.25",
+      c / a
+    );
+    assert!(
+      (c * baseline + e - upright_x).abs() < 0.01,
+      "baseline moved by {} pt under a {a} {c} shear",
+      c * baseline + e - upright_x
+    );
+  }
+
+  assert_eq!(sheared, 2, "expected one sheared run per paragraph");
 }

@@ -17,6 +17,13 @@ function pageCount(pdf: Uint8Array): number {
   return match ? Number(match[1]) : 0;
 }
 
+/** The first page's width and height in pt. */
+function mediaBox(pdf: Uint8Array): [number, number] {
+  const box = decoder.decode(pdf).match(/\/MediaBox\s*\[0 0 ([\d.]+) ([\d.]+)\]/);
+
+  return [Number(box?.[1]), Number(box?.[2])];
+}
+
 function notoSansTc(): Uint8Array {
   return new Uint8Array(
     readFileSync(
@@ -201,7 +208,7 @@ test("css takes one string and rejects the stylesheets alias next to it", async 
 
   expect(pdfHeader(pdf)).toBe("%PDF-");
 
-  expect(
+  await expect(
     renderer.render(`<div>Hello</div>`, {
       viewport: { width: 600, height: 300 },
       css: "div {}",
@@ -318,8 +325,7 @@ test("auto-height viewport sizes the page to content", async () => {
 
   expect(pageCount(pdf)).toBe(1);
 
-  const box = decoder.decode(pdf).match(/\/MediaBox\s*\[0 0 ([\d.]+) ([\d.]+)\]/);
-  const [width, height] = [Number(box?.[1]), Number(box?.[2])];
+  const [width, height] = mediaBox(pdf);
 
   // Page geometry is written in pt: 300px at 96 dpi is 225pt.
   expect(width).toBe(225);
@@ -331,6 +337,7 @@ test("letter landscape", async () => {
   const pdf = await renderer.render(doc, { size: "letter", landscape: true });
 
   expect(pageCount(pdf)).toBe(1);
+  expect(mediaBox(pdf)).toEqual([792, 612]);
 });
 
 test("accepts case-insensitive presets and per-side margins", async () => {
@@ -354,8 +361,10 @@ test("a side left out of the margin object is auto", async () => {
   expect(pageCount(auto)).toBeGreaterThan(pageCount(zero));
 });
 
-test("rejects an unknown size keyword", () => {
-  expect(renderer.render(doc, { size: "tabloid" as "a4" })).rejects.toThrow("unknown page size");
+test("rejects an unknown size keyword", async () => {
+  await expect(renderer.render(doc, { size: "tabloid" as "a4" })).rejects.toThrow(
+    "unknown page size",
+  );
 });
 
 test("measures a band at full page width with counters filled", async () => {

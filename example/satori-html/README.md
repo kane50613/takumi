@@ -1,21 +1,18 @@
 # Render satori-html output with Takumi
 
-Convert an HTML template with `satori-html`, then render it as a PNG with `takumi-js`. Takumi also accepts HTML strings directly through `render()`.
+Convert an HTML template with `satori-html`, then render the result as a PNG with `takumi-js`.
 
-Install [Rust](https://www.rust-lang.org/tools/install), then build the native binary from the repository root.
+`render()` also accepts an HTML string directly. This example is for projects that already build templates with `satori-html`.
 
-```bash
-cd takumi-napi
-bun run build
-```
+## Run
 
-From `takumi-napi`, run the example:
+Build the [image example packages](../README.md#image-examples) first. Then run the script with Node.js:
 
 ```bash
-cd ../example/satori-html
+cd example/satori-html
 node index.ts
 ```
 
 Open `output.png` to see the result.
 
-Use a Node.js version that runs TypeScript files directly, such as Node.js 22.18 or newer. Bun currently encounters an [ultrahtml selector error](https://github.com/natemoo-re/ultrahtml/issues/66) in this example.
+Use a Node.js version that runs TypeScript files directly, such as 22.18 or newer. Bun crashes inside `ultrahtml`, the HTML parser `satori-html` uses ([ultrahtml#66](https://github.com/natemoo-re/ultrahtml/issues/66)).

@@ -96,17 +96,16 @@ impl FontSize {
     }
   }
 
-  fn parse_relative<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn parse_relative<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
       Token::Ident(ident) => match_ignore_ascii_case! { ident,
         "larger" => Ok(Self::Larger),
         "smaller" => Ok(Self::Smaller),
-        _ => Err(unexpected_token!(location, token)),
+        _ => Err(unexpected_token!(token)),
       },
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 }
@@ -130,7 +129,7 @@ impl From<FontSizeKeyword> for FontSize {
 }
 
 impl<'i> FromCss<'i> for FontSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     input
       .try_parse(FontSizeKeyword::from_css)
       .map(Self::Keyword)
@@ -212,6 +211,7 @@ mod tests {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 20.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     };
 
@@ -239,6 +239,7 @@ mod tests {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 16.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     };
 
@@ -259,6 +260,7 @@ mod tests {
       root_font_size: Some(root_font_size_device_px),
       line_height: 0.0,
       root_line_height: None,
+      ch: root_font_size_device_px / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     };
 

@@ -1,7 +1,7 @@
 {
   "name": "@takumi-rs/core",
-  "version": "2.16.2",
-  "description": "Render OG images from Takumi node trees with native Node.js bindings. No headless browser.",
+  "version": "2.17.1",
+  "description": "Native Node.js bindings for Takumi: render images, animations, and SVG from node trees. No headless browser.",
   "keywords": [
     "css",
     "image",
@@ -66,13 +66,14 @@
     "prepublishOnly": "bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
     "bench": "bun tests/bench/index.tsx",
-    "publish-lint": "attw --pack . && publint --strict ."
+    "publish-lint": "attw --pack . && publint --strict .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.9.0",
+    "@napi-rs/cli": "3.10.8",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "csstype": "catalog:",

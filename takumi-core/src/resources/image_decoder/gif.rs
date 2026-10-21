@@ -1,14 +1,13 @@
-//! GIF sizing and timelines, composited the way browsers and the `image` crate do.
+//! GIF sizing and timelines, composited the way browsers do.
 
 use std::{io::Cursor, mem::take, sync::Arc};
 
 use gif::{ColorOutput, DecodeOptions, Decoder as GifDecoder, DisposalMethod, Frame};
-use image::{ImageError, ImageFormat, ImageResult, error::DecodingError};
 
 use super::{
-  DecodeTarget, DetectedImageFormat, Dispose, FrameInfo, MAX_ANIMATION_FRAMES,
-  MAX_ANIMATION_TOTAL_PIXELS, MAX_IMAGE_DIMENSION, detect_image_format, fit_to_target,
-  invalid_buffer_error, pixel_budget_error,
+  DecodeError, DecodeResult, DecodeTarget, DetectedImageFormat, Dispose, FrameInfo,
+  MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS, check_dimensions, detect_image_format,
+  fit_to_target,
 };
 use crate::{geometry::Rect, resources::image_buffer::ImageBuffer};
 
@@ -16,11 +15,11 @@ pub(crate) fn is_gif(bytes: &[u8]) -> bool {
   matches!(detect_image_format(bytes), Some(DetectedImageFormat::Gif))
 }
 
-fn gif_decode_error(error: gif::DecodingError) -> ImageError {
-  ImageError::Decoding(DecodingError::new(ImageFormat::Gif.into(), error))
+fn gif_decode_error(error: gif::DecodingError) -> DecodeError {
+  DecodeError::format(DetectedImageFormat::Gif, error)
 }
 
-fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
+fn gif_decoder(bytes: &[u8]) -> DecodeResult<GifDecoder<Cursor<&[u8]>>> {
   let mut options = DecodeOptions::new();
   options.set_color_output(ColorOutput::RGBA);
 
@@ -28,15 +27,11 @@ fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
 }
 
 /// Reads the GIF header under `options`, rejecting a logical screen over the dimension limit.
-fn read_gif(options: DecodeOptions, bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
+fn read_gif(options: DecodeOptions, bytes: &[u8]) -> DecodeResult<GifDecoder<Cursor<&[u8]>>> {
   let decoder = options
     .read_info(Cursor::new(bytes))
     .map_err(gif_decode_error)?;
-  let (width, height) = (decoder.width() as u32, decoder.height() as u32);
-  if width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
-    return Err(pixel_budget_error(width, height));
-  }
-
+  check_dimensions(u32::from(decoder.width()), u32::from(decoder.height()))?;
   Ok(decoder)
 }
 
@@ -51,14 +46,14 @@ fn frame_rect(frame: &Frame) -> Rect<u32> {
 }
 
 /// GIF logical screen dimensions from the header; decodes no frame.
-pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+pub(crate) fn gif_dimensions(bytes: &[u8]) -> DecodeResult<(u32, u32)> {
   let decoder = gif_decoder(bytes)?;
   Ok((decoder.width() as u32, decoder.height() as u32))
 }
 
 /// Per-frame delays in milliseconds, in stream order (first frame included), without decoding any
 /// pixels.
-pub(crate) fn gif_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
+pub(crate) fn gif_frame_infos(bytes: &[u8]) -> DecodeResult<Box<[FrameInfo]>> {
   let mut options = DecodeOptions::new();
   options.skip_frame_decoding(true);
   let mut decoder = read_gif(options, bytes)?;
@@ -151,7 +146,7 @@ pub(crate) fn decode_gif_frames(
   limit: Option<usize>,
   target: Option<DecodeTarget>,
   mut push: impl FnMut(Arc<ImageBuffer>),
-) -> ImageResult<bool> {
+) -> DecodeResult<bool> {
   let mut decoder = gif_decoder(bytes)?;
   let (width, height) = (decoder.width() as u32, decoder.height() as u32);
   let target = target.filter(|target| target.shrinks(width, height));
@@ -243,7 +238,7 @@ pub(crate) fn decode_gif_frames(
     };
 
     if let Some(buffer) = buffer {
-      push(Arc::new(buffer.ok_or_else(invalid_buffer_error)?));
+      push(Arc::new(buffer.ok_or(DecodeError::InvalidBuffer)?));
       pushed += 1;
       if limit.is_some_and(|limit| pushed >= limit) {
         return Ok(false);
@@ -293,7 +288,6 @@ pub(crate) fn decode_gif_frame_alone(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::resources::image_decoder::rgba_to_buffer;
 
   #[test]
   fn frames_starting_outside_the_canvas_clear_nothing() {
@@ -340,23 +334,51 @@ mod tests {
     bytes
   }
 
+  /// The GIF's frames composited as the spec describes, premultiplied, with their durations: an
+  /// independent check on the decoder's compositing.
   fn reference_frames(bytes: &[u8]) -> Vec<(Vec<u8>, u32)> {
-    use image::AnimationDecoder;
+    let mut options = DecodeOptions::new();
 
-    let decoder = image::codecs::gif::GifDecoder::new(Cursor::new(bytes)).unwrap();
-    decoder
-      .into_frames()
-      .map(|frame| {
-        let frame = frame.unwrap();
-        let (numerator, denominator) = frame.delay().numer_denom_ms();
-        let duration_ms = numerator
-          .checked_div(denominator)
-          .unwrap_or(numerator)
-          .max(1);
-        let buffer = rgba_to_buffer(frame.into_buffer(), ImageFormat::Gif).unwrap();
-        (buffer.data().to_vec(), duration_ms)
-      })
-      .collect()
+    options.set_color_output(ColorOutput::RGBA);
+
+    let mut decoder = options.read_info(Cursor::new(bytes)).unwrap();
+    let (width, height) = (usize::from(decoder.width()), usize::from(decoder.height()));
+    let mut canvas = vec![0_u8; width * height * 4];
+    let mut frames = Vec::new();
+
+    while let Some(frame) = decoder.read_next_frame().unwrap() {
+      let previous = canvas.clone();
+      let (left, top) = (usize::from(frame.left), usize::from(frame.top));
+      let (frame_width, frame_height) = (usize::from(frame.width), usize::from(frame.height));
+      let inside = |x: usize, y: usize| x < width && y < height;
+
+      for (index, pixel) in frame.buffer.as_chunks::<4>().0.iter().enumerate() {
+        let (x, y) = (left + index % frame_width, top + index / frame_width);
+
+        if pixel[3] != 0 && inside(x, y) {
+          canvas[(y * width + x) * 4..][..4].copy_from_slice(pixel);
+        }
+      }
+
+      let buffer =
+        ImageBuffer::from_rgba_bytes(canvas.clone(), width as u32, height as u32).unwrap();
+
+      frames.push((buffer.data().to_vec(), (u32::from(frame.delay) * 10).max(1)));
+
+      match frame.dispose {
+        DisposalMethod::Background => {
+          for y in top..top + frame_height {
+            for x in (left..left + frame_width).filter(|&x| inside(x, y)) {
+              canvas[(y * width + x) * 4..][..4].fill(0);
+            }
+          }
+        }
+        DisposalMethod::Previous => canvas = previous,
+        _ => {}
+      }
+    }
+
+    frames
   }
 
   fn our_frames(bytes: &[u8], skip: usize) -> Vec<(Vec<u8>, u32)> {
@@ -380,7 +402,7 @@ mod tests {
   }
 
   #[test]
-  fn gif_compositing_matches_image_crate_for_keep_disposal() {
+  fn gif_compositing_matches_the_reference_for_keep_disposal() {
     let bytes = encode_test_gif(
       4,
       4,
@@ -415,7 +437,7 @@ mod tests {
   }
 
   #[test]
-  fn gif_compositing_matches_image_crate_for_transparent_patches() {
+  fn gif_compositing_matches_the_reference_for_transparent_patches() {
     let mut patch = rgba_patch(2, 2, [0, 255, 0, 255]);
     patch[4..8].fill(0);
 
@@ -438,7 +460,7 @@ mod tests {
   }
 
   #[test]
-  fn gif_compositing_matches_image_crate_for_background_disposal() {
+  fn gif_compositing_matches_the_reference_for_background_disposal() {
     let bytes = encode_test_gif(
       4,
       4,
@@ -473,7 +495,7 @@ mod tests {
   }
 
   #[test]
-  fn gif_compositing_matches_image_crate_for_previous_disposal() {
+  fn gif_compositing_matches_the_reference_for_previous_disposal() {
     let bytes = encode_test_gif(
       4,
       4,
@@ -508,7 +530,7 @@ mod tests {
   }
 
   #[test]
-  fn gif_compositing_matches_image_crate_for_interlaced_frames() {
+  fn gif_compositing_matches_the_reference_for_interlaced_frames() {
     let mut striped = Vec::new();
     for row in 0..8_u8 {
       let shade = row * 32;
@@ -536,7 +558,7 @@ mod tests {
   }
 
   #[test]
-  fn gif_zero_delay_clamps_to_one_ms_like_image_crate() {
+  fn gif_zero_delay_clamps_to_one_ms() {
     let bytes = encode_test_gif(
       2,
       2,

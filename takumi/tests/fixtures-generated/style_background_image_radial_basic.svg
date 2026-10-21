@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <radialGradient id="rg0" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="848.528" gradientTransform="matrix(1 0 0 .525 0 149.625)">
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="160" viewBox="0 0 300 160">
+  <radialGradient id="rg0" gradientUnits="userSpaceOnUse" cx="150" cy="80" r="212.132" gradientTransform="matrix(1 0 0 .533 0 37.333)">
     <stop offset="0" stop-color="#e66465"/>
     <stop offset=".016" stop-color="#e56567"/>
     <stop offset=".032" stop-color="#e36669"/>
@@ -65,5 +65,5 @@
     <stop offset=".984" stop-color="#9297e3"/>
     <stop offset="1" stop-color="#9198e5"/>
   </radialGradient>
-  <rect x="0" y="0" width="1200" height="630" fill="url(#rg0)"/>
+  <rect x="0" y="0" width="300" height="160" fill="url(#rg0)"/>
 </svg>

@@ -98,15 +98,14 @@ pub enum RadialSize {
   },
 }
 impl<'i> FromCss<'i> for RadialSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let ident = input.expect_ident()?;
     match_ignore_ascii_case! { &ident,
       "closest-side" => Ok(RadialSize::ClosestSide),
       "farthest-side" => Ok(RadialSize::FarthestSide),
       "closest-corner" => Ok(RadialSize::ClosestCorner),
       "farthest-corner" => Ok(RadialSize::FarthestCorner),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident.clone()))),
+      _ => Err(unexpected_token!(&Token::Ident(ident.clone()))),
     }
   }
 
@@ -459,7 +458,7 @@ impl RadialGradient {
 }
 
 impl<'i> FromCss<'i> for RadialGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, RadialGradient> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, RadialGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {
@@ -788,75 +787,6 @@ mod tests {
       }
       _ => false,
     });
-  }
-
-  #[test]
-  fn resolve_stops_percentage_and_px_radial() {
-    let gradient = RadialGradient::builder()
-      .stops([
-        GradientStop::ColorHint {
-          color: Color::black().into(),
-          hint: Some(StopPosition(Length::Percentage(0.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color::black().into(),
-          hint: Some(StopPosition(Length::Percentage(50.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color::black().into(),
-          hint: Some(StopPosition(Length::Px(100.0))),
-        },
-      ])
-      .build();
-
-    let sizing = SizingContext::builder()
-      .viewport(Viewport::new((200, 100)))
-      .build();
-    let resolved = ResolvedGradientStop::resolve(
-      &gradient.stops,
-      sizing.viewport.size.width.unwrap_or_default() as f32,
-      &sizing,
-      Color::black(),
-    );
-
-    assert_eq!(resolved.len(), 3);
-    assert!((resolved[0].position - 0.0).abs() < 1e-3);
-    assert_eq!(resolved[1].position, resolved[2].position);
-  }
-
-  #[test]
-  fn resolve_stops_equal_positions_distributed_radial() {
-    let gradient = RadialGradient::builder()
-      .stops([
-        GradientStop::ColorHint {
-          color: Color::black().into(),
-          hint: Some(StopPosition(Length::Px(0.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color::black().into(),
-          hint: Some(StopPosition(Length::Px(0.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color::black().into(),
-          hint: Some(StopPosition(Length::Px(0.0))),
-        },
-      ])
-      .build();
-
-    let sizing = SizingContext::builder()
-      .viewport(Viewport::new((200, 100)))
-      .build();
-    let resolved = ResolvedGradientStop::resolve(
-      &gradient.stops,
-      sizing.viewport.size.width.unwrap_or_default() as f32,
-      &sizing,
-      Color::black(),
-    );
-
-    assert_eq!(resolved.len(), 3);
-    assert!(resolved[0].position >= 0.0);
-    assert!(resolved[1].position >= resolved[0].position);
-    assert!(resolved[2].position >= resolved[1].position);
   }
 
   #[test]

@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_whitespace_only_elements</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 600px; height: 300px">
+    <div
+      style="
+        display: flex;
+        align-items: flex-start;
+        gap: 40px;
+        width: 100%;
+        height: 100%;
+        padding: 40px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 40px;
+      "
+    >
+      <div style="display: block; width: 120px; height: 80px; background-color: rgb(34, 197, 94)"
+        >&#32;</div
+      >
+      <div style="display: flex; gap: 10px; height: 80px"
+        ><div style="width: 40px; background-color: rgb(59, 130, 246)">&#32;</div
+        ><div style="width: 40px; background-color: rgb(234, 179, 8)">&#32;</div></div
+      >
+      <div style="display: block"
+        >A<span style="background-color: rgb(244, 114, 182)">&#32;</span>B</div
+      >
+    </div>
+  </body>
+</html>

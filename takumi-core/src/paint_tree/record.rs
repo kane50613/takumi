@@ -103,7 +103,7 @@ impl Recorder {
   }
 
   /// The open clips, as shapes to clip to at once.
-  fn clips(&self) -> Vec<Shape> {
+  pub(super) fn clips(&self) -> Vec<Shape> {
     self.clips.iter().map(|clip| clip.shape.clone()).collect()
   }
 

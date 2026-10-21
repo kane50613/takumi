@@ -10,16 +10,17 @@ use takumi_core::{
   painter::{BoxBackground, SnappedBox},
 };
 use tiny_skia::{
-  FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder, Pixmap, PixmapMut, PixmapRef,
-  PremultipliedColorU8, Rect as TinyRect, Transform as TinyTransform,
+  FillRule as TinyFillRule, IntRect, IntSize, Mask as TinyMask, PathBuilder, Pixmap, PixmapMut,
+  PixmapRef, PremultipliedColorU8, Rect as TinyRect, Transform as TinyTransform,
 };
 
 #[cfg(feature = "svg")]
 use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
 use crate::{
-  BilinearAxis, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions, PaintSource,
-  RenderContext, Result, RowSource, SamplingFootprint, checked_area, interpolate_with_footprint,
+  BilinearAxis, BilinearColumns, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions,
+  PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
+  interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
@@ -57,6 +58,31 @@ impl TileLayer {
         .iter()
         .chain(&self.ys)
         .all(|&origin| whole_pixel(origin).is_some())
+  }
+
+  /// The part of the tile at `(x, y)` inside `area`, in the tile's pixels, or `None` when no part is.
+  pub(crate) fn visible_part(&self, x: f32, y: f32, area: Rect<f32>) -> Option<IntRect> {
+    let (width, height) = self.tile.dimensions();
+
+    IntRect::from_ltrb(
+      (area.left - x).max(0.0).round() as i32,
+      (area.top - y).max(0.0).round() as i32,
+      (area.right - x).min(width as f32).round() as i32,
+      (area.bottom - y).min(height as f32).round() as i32,
+    )
+  }
+
+  /// Whether every tile lies wholly inside `area`.
+  pub(crate) fn fits(&self, area: Rect<f32>) -> bool {
+    let (width, height) = self.tile.dimensions();
+
+    self.ys.iter().all(|&y| {
+      self.xs.iter().all(|&x| {
+        self
+          .visible_part(x, y, area)
+          .is_some_and(|part| part.width() == width && part.height() == height)
+      })
+    })
   }
 
   /// Where the tile at `(x, y)` draws under `transform`, a translation within float error of whole
@@ -337,7 +363,7 @@ impl<'a> SampledBitmapView<'a> {
     Some(BilinearRows {
       source: self.source,
       logical_height: self.logical_size.height,
-      columns,
+      columns: BilinearColumns::new(columns),
     })
   }
 
@@ -395,19 +421,21 @@ impl BoxRows<'_> {
 pub(crate) struct BilinearRows<'a> {
   source: PixmapRef<'a>,
   logical_height: u32,
-  columns: Vec<BilinearAxis>,
+  columns: BilinearColumns,
 }
 
 impl BilinearRows<'_> {
   pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
     let source_height = self.source.height();
 
-    BilinearAxis::new(
-      (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
-      source_height,
-    )
-    .rows(self.source)
-    .fill(&self.columns, dst);
+    self.columns.fill(
+      self.source,
+      BilinearAxis::new(
+        (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
+        source_height,
+      ),
+      dst,
+    );
   }
 }
 
@@ -438,26 +466,11 @@ impl TileRows<'_> {
     let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
 
     match self {
-      Self::Linear(t) => fill_gradient_row(*t, y, pixels),
-      Self::Radial(t) => fill_gradient_row(*t, y, pixels),
-      Self::Conic(t) => fill_gradient_row(*t, y, pixels),
+      Self::Linear(t) => t.fill_row(0, y, pixels),
+      Self::Radial(t) => t.fill_row(0, y, pixels),
+      Self::Conic(t) => t.fill_row(0, y, pixels),
       Self::Source(rows) => rows.fill(y, pixels),
     }
-  }
-}
-
-fn fill_gradient_row<T: GradientOverlayTile>(t: &T, y: u32, pixels: &mut [[u8; 4]]) {
-  let lut_len = t.lut_len();
-  let mut row_state = t.begin_row(0, y, lut_len);
-  let dither = t.dither_active();
-  for (x, chunk) in pixels.iter_mut().enumerate() {
-    let lut_idx = t.next_lut_index(&mut row_state);
-    let p = if dither {
-      t.sample_dithered_at(lut_idx, x as u32, y)
-    } else {
-      t.sample_at(lut_idx)
-    };
-    *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
   }
 }
 
@@ -516,6 +529,29 @@ impl BackgroundTile {
     SampledBitmapView::new(source.as_ref(), *width, *height, *algo)
   }
 
+  /// The tile's pixels inside `part`.
+  pub(crate) fn cut(&self, part: IntRect) -> Option<Pixmap> {
+    if let Self::Pixmap(pixmap) = self {
+      return pixmap.clone_rect(part);
+    }
+
+    let mut cut = Pixmap::new(part.width(), part.height())?;
+    let rows = self.rows(self.width());
+    let mut row = vec![0; self.width() as usize * 4];
+    let start = part.x() as usize * 4;
+
+    for (y, dst) in cut
+      .data_mut()
+      .chunks_exact_mut(part.width() as usize * 4)
+      .enumerate()
+    {
+      rows.fill(part.y() as u32 + y as u32, &mut row);
+      dst.copy_from_slice(&row[start..start + dst.len()]);
+    }
+
+    Some(cut)
+  }
+
   pub(crate) fn rows(&self, width: u32) -> TileRows<'_> {
     match self {
       Self::Linear(t) => TileRows::Linear(t),
@@ -570,6 +606,10 @@ pub(crate) fn render_tile(
       let Ok(source) = resolve_image(url, context) else {
         return Ok(None);
       };
+
+      if !source.is_drawable_at(tile_w, tile_h) {
+        return Ok(None);
+      }
 
       match &source {
         ImageSource::Bitmap(bitmap) => Some(BackgroundTile::SampledBitmap {
@@ -951,16 +991,7 @@ pub(crate) fn background_image_layers(
   background: &BoxBackground<'_>,
   context: &RenderContext,
 ) -> Result<TileLayers> {
-  tile_layers(
-    &background.layers,
-    Rect {
-      left: background.offset.x,
-      top: background.offset.y,
-      right: background.offset.x + background.size.width,
-      bottom: background.offset.y + background.size.height,
-    },
-    context,
-  )
+  tile_layers(&background.layers, background.border_box(), context)
 }
 
 /// The `background-image` layers under a `background-color` layer.

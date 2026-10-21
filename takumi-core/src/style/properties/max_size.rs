@@ -18,6 +18,11 @@ pub enum MaxSize {
 }
 
 impl MaxSize {
+  /// Whether it is a negative length, which a sizing property rejects.
+  pub(crate) fn is_negative(self) -> bool {
+    matches!(self, Self::Length(length) if length.is_negative())
+  }
+
   /// The maximum as a [`Length`], or `None` for `none`.
   pub(crate) fn as_length(self) -> Option<Length> {
     match self {
@@ -58,7 +63,7 @@ impl Animatable for MaxSize {
 }
 
 impl<'i> FromCss<'i> for MaxSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()

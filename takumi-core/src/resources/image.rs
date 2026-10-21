@@ -25,6 +25,8 @@ use thiserror::Error;
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(feature = "svg")]
+use crate::resources::font::Fonts;
 #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "svg-sizing")]
@@ -214,7 +216,7 @@ impl SvgSource {
     let mut options = svg_parse_options();
 
     if let Some(fonts) = fonts.filter(|_| self.has_text) {
-      options.fontdb = fonts.svg_fontdb();
+      options.fonts = Fonts::clone(fonts);
     }
 
     configure(&mut options);
@@ -564,6 +566,19 @@ impl ImageSource {
       hash,
       cache,
     }))
+  }
+
+  /// Whether [`render_for_layout`](Self::render_for_layout) can render it at `width` by `height`.
+  pub fn is_drawable_at(&self, width: u32, height: u32) -> bool {
+    if width == 0 || height == 0 {
+      return false;
+    }
+
+    match self {
+      #[cfg(feature = "svg")]
+      ImageSource::Svg(_) => within_raster_pixel_budget(width, height),
+      _ => true,
+    }
   }
 
   /// Prepare image data for layout rendering.
@@ -1311,8 +1326,7 @@ mod resource_cache_tests {
 mod tests {
   use std::assert_matches;
 
-  use image::{Rgba, RgbaImage};
-
+  #[cfg(feature = "svg")]
   use crate::geometry::Size;
   #[cfg(feature = "png")]
   use crate::resources::animated::AnimatedFormat;
@@ -1472,21 +1486,19 @@ mod tests {
   /// must be multiples of 10 (GIF stores centiseconds).
   #[cfg(feature = "gif")]
   fn encoded_gif(frames: &[(usize, u32)]) -> Vec<u8> {
-    use image::{Delay, Frame, codecs::gif::GifEncoder};
+    use gif::{DisposalMethod, Encoder, Frame};
 
     let mut bytes = Vec::new();
-    let mut encoder = GifEncoder::new(&mut bytes);
+    let mut encoder = Encoder::new(&mut bytes, 4, 4, &[]).unwrap();
 
-    encoder
-      .encode_frames(frames.iter().map(|&(color, delay_ms)| {
-        Frame::from_parts(
-          RgbaImage::from_pixel(4, 4, Rgba(FRAME_COLORS[color])),
-          0,
-          0,
-          Delay::from_numer_denom_ms(delay_ms, 1),
-        )
-      }))
-      .unwrap();
+    for &(color, delay_ms) in frames {
+      let mut pixels = FRAME_COLORS[color].repeat(16);
+      let mut frame = Frame::from_rgba_speed(4, 4, &mut pixels, 10);
+
+      frame.delay = (delay_ms / 10) as u16;
+      frame.dispose = DisposalMethod::Background;
+      encoder.write_frame(&frame).unwrap();
+    }
     drop(encoder);
 
     bytes
@@ -1771,22 +1783,7 @@ mod tests {
   #[cfg(feature = "gif")]
   #[test]
   fn a_frame_after_a_background_dispose_stands_alone() {
-    use image::{Delay, Frame, RgbaImage, codecs::gif::GifEncoder, codecs::gif::Repeat};
-
-    let mut bytes = Vec::new();
-    let mut encoder = GifEncoder::new(&mut bytes);
-    encoder.set_repeat(Repeat::Infinite).unwrap();
-    encoder
-      .encode_frames((0..3).map(|index| {
-        Frame::from_parts(
-          RgbaImage::from_pixel(4, 4, Rgba(FRAME_COLORS[index])),
-          0,
-          0,
-          Delay::from_numer_denom_ms(100, 1),
-        )
-      }))
-      .unwrap();
-    drop(encoder);
+    let bytes = encoded_gif(&[(0, 100), (1, 100), (2, 100)]);
 
     let Ok(ImageSource::Animated(gif)) = ImageSource::from_bytes(&bytes) else {
       unreachable!("valid gif");
@@ -1923,25 +1920,6 @@ mod tests {
     assert_matches!(ImageSource::from_bytes(&bytes), Ok(ImageSource::Bitmap(_)));
   }
 
-  #[cfg(feature = "gif")]
-  fn expected_frame_index(durations: &[u32], time_ms: u64) -> usize {
-    let total: u64 = durations.iter().map(|d| *d as u64).sum();
-    if total == 0 {
-      return 0;
-    }
-
-    let target_time = time_ms % total;
-    let mut elapsed_ms = 0_u64;
-    for (index, duration_ms) in durations.iter().enumerate() {
-      elapsed_ms += *duration_ms as u64;
-      if target_time < elapsed_ms {
-        return index;
-      }
-    }
-
-    0
-  }
-
   #[test]
   fn sniffs_common_formats() {
     assert_eq!(
@@ -2064,28 +2042,6 @@ mod tests {
     Ok(())
   }
 
-  /// usvg drops `<text>`/`<tspan>` (text feature off), so we no longer strip
-  /// them: the SVG renders identically with and without the text nodes.
-  #[cfg(feature = "svg")]
-  #[test]
-  fn svg_text_nodes_are_ignored_not_stripped() -> Result<(), ImageError> {
-    fn rendered_data(svg: &str) -> Result<Vec<u8>, ImageError> {
-      let image: ImageSource = SvgSource::from_str(svg)?.into();
-      let rendered =
-        image.render_for_layout(8, 8, ImageScalingAlgorithm::Auto, 0, Color::black(), None)?;
-      let RenderedImage::Rasterized(pixmap) = rendered else {
-        unreachable!("svg renders to a rasterized pixmap");
-      };
-      Ok(pixmap.data().to_vec())
-    }
-
-    let with_text = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#ff0000"/><text x="1" y="5">hi <tspan>there</tspan></text></svg>"##;
-    let without_text = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#ff0000"/></svg>"##;
-
-    assert_eq!(rendered_data(with_text)?, rendered_data(without_text)?);
-    Ok(())
-  }
-
   /// `<text>` inside `clipPath` and `foreignObject` must not break parsing.
   #[cfg(feature = "svg")]
   #[test]
@@ -2100,10 +2056,8 @@ mod tests {
 
   #[test]
   fn bitmap_renders_sampled() -> Result<(), ImageError> {
-    let mut bitmap = RgbaImage::new(2, 2);
-    bitmap.put_pixel(0, 0, Rgba([12, 34, 56, 200]));
-    bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
-    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
+    let bitmap = [[12, 34, 56, 200], [78, 90, 12, 255], [0; 4], [0; 4]].concat();
+    let buffer = ImageBuffer::from_rgba_bytes(bitmap, 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
     let rendered =
@@ -2115,12 +2069,14 @@ mod tests {
 
   #[test]
   fn bitmap_render_for_layout_keeps_sampling_parameters() -> Result<(), ImageError> {
-    let mut bitmap = RgbaImage::new(2, 2);
-    bitmap.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
-    bitmap.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
-    bitmap.put_pixel(0, 1, Rgba([0, 0, 255, 255]));
-    bitmap.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
-    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
+    let bitmap = [
+      [255, 0, 0, 255],
+      [0, 255, 0, 255],
+      [0, 0, 255, 255],
+      [255, 255, 255, 255],
+    ]
+    .concat();
+    let buffer = ImageBuffer::from_rgba_bytes(bitmap, 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
     let rendered = image.render_for_layout(
@@ -2167,6 +2123,20 @@ mod tests {
     assert_matches!(result, Err(ImageError::InvalidPixmapSize));
   }
 
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_is_drawable_only_at_a_nonzero_size_within_budget() {
+    let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
+      .parse::<SvgSource>()
+      .unwrap()
+      .into();
+
+    assert!(source.is_drawable_at(8192, 8192));
+    assert!(!source.is_drawable_at(8193, 8192));
+    assert!(!source.is_drawable_at(0, 8));
+    assert!(!source.is_drawable_at(8, 0));
+  }
+
   #[cfg(feature = "gif")]
   #[test]
   fn gif_source_rejects_undecodable_stream() {
@@ -2176,14 +2146,21 @@ mod tests {
 
   #[cfg(feature = "gif")]
   #[test]
-  fn gif_source_frame_selection_matches_expected_indices() {
-    let durations = [10, 20, 30];
+  fn gif_source_frame_selection_follows_frame_durations() {
     let gif = gif_source(&[(0, 10), (1, 20), (2, 30)]);
-    let samples = [0_u64, 9, 10, 29, 30, 59, 60, 75];
+    let samples = [
+      (0, 0),
+      (9, 0),
+      (10, 1),
+      (29, 1),
+      (30, 2),
+      (59, 2),
+      (60, 0),
+      (75, 1),
+    ];
 
-    for time_ms in samples {
-      let expected_color = FRAME_COLORS[expected_frame_index(&durations, time_ms)];
-      assert_eq!(gif.frame_at_time(time_ms).pixel(2, 2), expected_color);
+    for (time_ms, frame) in samples {
+      assert_eq!(gif.frame_at_time(time_ms).pixel(2, 2), FRAME_COLORS[frame]);
     }
   }
 

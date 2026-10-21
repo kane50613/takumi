@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>list_outside_marker_position</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 8px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+        color: rgb(17, 24, 39);
+      }
+      .list {
+        display: block;
+        width: 220px;
+        padding: 6px 8px 6px 48px;
+        background: white;
+        font-size: 16px;
+        list-style-type: decimal;
+      }
+      .disc {
+        list-style-type: disc;
+      }
+      .item {
+        display: list-item;
+        background: rgb(219, 234, 254);
+        margin-bottom: 4px;
+      }
+      .padded {
+        padding-left: 16px;
+        border-left: 3px solid rgb(37, 99, 235);
+      }
+      .tall {
+        display: inline-block;
+        width: 20px;
+        height: 32px;
+        background: rgb(251, 191, 36);
+      }
+      .big {
+        font-size: 28px;
+      }
+      .block {
+        display: block;
+      }
+      .small {
+        font-size: 10px;
+      }
+      .large {
+        font-size: 28px;
+      }
+      .image {
+        list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAJUlEQVR42mNQTX79n5aYYdSCUQtGLRi1YNSCUQtGLRi1YGhYAABNdoDMrNJeUAAAAABJRU5ErkJggg==);
+      }
+      .rtl {
+        direction: rtl;
+        padding: 6px 48px 6px 8px;
+      }
+      .rtl .padded {
+        padding-left: 0;
+        padding-right: 16px;
+        border-left: none;
+        border-right: 3px solid rgb(37, 99, 235);
+      }
+    </style>
+  </head>
+  <body style="width: 800px; height: 420px">
+    <div class="root"
+      ><div class="list"
+        ><div class="item padded">padded item</div><div class="item padded disc">padded item</div
+        ><div class="item">plain item</div></div
+      ><div class="list"
+        ><div class="item">tall <span class="tall"></span> box</div
+        ><div class="item"><span class="big">Big</span> first</div
+        ><div class="item disc"><span class="big">Big</span> first</div></div
+      ><div class="list"
+        ><div class="item"><div class="block">block child</div><div class="block">next</div></div
+        ><div class="item"></div><div class="item">after empty</div></div
+      ><div class="list large"
+        ><div class="item"><div class="block small">smaller block child</div></div
+        ><div class="item small">small item</div></div
+      ><div class="list image"
+        ><div class="item">image marker</div><div class="item padded">padded image</div></div
+      ><div class="list rtl"
+        ><div class="item">سطر</div><div class="item padded">سطر</div
+        ><div class="item disc padded">سطر</div></div
+      ></div
+    >
+  </body>
+</html>

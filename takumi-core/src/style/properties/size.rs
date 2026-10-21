@@ -33,6 +33,11 @@ impl Default for Size {
 }
 
 impl Size {
+  /// Whether it is a negative length, which a sizing property rejects.
+  pub(crate) fn is_negative(self) -> bool {
+    matches!(self, Self::Length(length) if length.is_negative())
+  }
+
   /// An automatic size.
   pub const fn auto() -> Self {
     Self::Length(Length::Auto)
@@ -113,7 +118,7 @@ impl<'i> FromCss<'i> for Size {
     "stretch",
   ];
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(parse_sizing_keyword) {
       return Ok(keyword);
     }
@@ -122,8 +127,7 @@ impl<'i> FromCss<'i> for Size {
   }
 }
 
-fn parse_sizing_keyword<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Size> {
-  let location = input.current_source_location();
+fn parse_sizing_keyword<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Size> {
   let token = input.next()?.clone();
 
   match &token {
@@ -132,9 +136,9 @@ fn parse_sizing_keyword<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Size>
       "max-content" => Ok(Size::MaxContent),
       "fit-content" => Ok(Size::FitContent),
       "stretch" => Ok(Size::Stretch),
-      _ => Err(unexpected_token!(Size, location, &token)),
+      _ => Err(unexpected_token!(Size, &token)),
     },
-    _ => Err(unexpected_token!(Size, location, &token)),
+    _ => Err(unexpected_token!(Size, &token)),
   }
 }
 

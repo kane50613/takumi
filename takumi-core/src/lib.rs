@@ -1,12 +1,16 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
-//! Backend-agnostic core for takumi: the node tree, CSS-driven style and layout,
-//! and font/image resource management.
+//! The layout engine shared by every takumi output. It holds the node tree, the CSS cascade,
+//! layout, text shaping, and font and image resources. Text and inline layout port Chromium's
+//! Blink. Flexbox, grid, and block layout run on Taffy.
 //!
-//! The rendering backends [`takumi-raster`](https://docs.rs/takumi-raster) and
-//! [`takumi-svg`](https://docs.rs/takumi-svg) build on these types. Depend on the
-//! [`takumi`](https://docs.rs/takumi) umbrella crate instead of this one directly.
+//! Each backend builds on these types: [`takumi-raster`](https://docs.rs/takumi-raster) for
+//! images, [`takumi-svg`](https://docs.rs/takumi-svg) for SVG, and the PDF and paint-tree
+//! builds behind the `takumi-pdf` and `takumi-paint` npm packages.
+//!
+//! Depend on the [`takumi`](https://docs.rs/takumi) crate instead. Its prelude re-exports the
+//! stable subset of these types.
 
 /// Style resolution and box/inline layout.
 pub mod layout;
@@ -19,9 +23,12 @@ pub mod context;
 pub mod filter;
 /// Font style resolved against a sizing context.
 pub mod font_style;
+/// Fonts and text shaped with them, after Blink.
+pub(crate) mod fonts;
 /// Box, text, and inset shadow resolution.
 pub mod shadow;
-pub mod text_processing;
+/// Unicode facts about characters, after Blink.
+pub(crate) mod text;
 
 /// Error types.
 pub mod error;

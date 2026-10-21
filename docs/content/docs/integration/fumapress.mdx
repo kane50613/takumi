@@ -3,30 +3,13 @@ title: Fumapress
 description: Generate Open Graph images and page metadata with the built-in Fumapress Takumi plugin.
 ---
 
-[Fumapress](https://press.fumadocs.dev) is a docs framework on Waku. The plugin is **included in `fumapress`**. See the [Fumapress Takumi docs](https://press.fumadocs.dev/docs/plugins/takumi) for the upstream reference.
+[Fumapress](https://press.fumadocs.dev) is a docs framework on Waku. It ships a Takumi plugin that renders an image for every docs page and adds the matching meta tags. See the [Fumapress Takumi docs](https://press.fumadocs.dev/docs/plugins/takumi) for the full plugin API.
 
-It renders an image for every docs page through Takumi and injects the matching meta tags.
+## Default setup
 
-## Enable the plugin
+The plugin is part of Fumapress's `recommended` preset, which is on by default. With no setup, every docs page gets a 1200 × 630 WebP image and these tags:
 
-```tsx title="press.config.tsx"
-import { defineConfig } from "fumapress";
-// [!code ++]
-import { takumiPlugin } from "fumapress/plugins/takumi";
-
-export default defineConfig({
-  // ...
-})
-  // [!code ++]
-  .plugins(takumiPlugin());
-```
-
-With no options, the plugin:
-
-- Builds a WebP per page (default layout from `fumadocs-ui/og/takumi`: title, description, site name)
-- Injects Open Graph and Twitter meta on each page
-
-```html title="Enable the plugin"
+```html title="Generated meta tags"
 <meta property="og:image" content="/docs/page.webp" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
@@ -34,52 +17,49 @@ With no options, the plugin:
 ```
 
 <Callout type="warn">
-  Set `site.baseUrl` so `og:image` is an absolute URL. Relative paths break most crawlers.
+  Set `site.baseUrl` so `og:image` is an absolute URL. Without it, the tag holds a relative path,
+  which most crawlers cannot follow.
+</Callout>
 
 ```tsx title="press.config.tsx"
 import { defineConfig } from "fumapress";
 
 export default defineConfig({
   site: {
-    // [!code ++]
-    baseUrl: "https://example.com",
+    baseUrl: "https://example.com", // [!code ++]
   },
 });
 ```
 
-</Callout>
-
 ## Customize the image
 
-Pass `generate`. It runs as a method on the app context (`this.siteConfig`, loaders, and the rest of the Fumapress context).
-
-Return:
-
-| Field     | Type                            | Role                 |
-| --------- | ------------------------------- | -------------------- |
-| `node`    | `ReactNode`                     | Layout Takumi paints |
-| `options` | `Partial<ImageResponseOptions>` | Forwarded to Takumi  |
-
-For the stock card layout instead of custom JSX, import `generate` from `fumadocs-ui/og/takumi` (what the plugin uses by default):
+Add `takumiPlugin` yourself to pass options. A plugin you list replaces the preset's copy.
 
 ```tsx title="press.config.tsx"
-// [!code ++]
+import { defineConfig } from "fumapress";
+import { takumiPlugin } from "fumapress/plugins/takumi"; // [!code ++]
+
+export default defineConfig({
+  // ...
+}).plugins(takumiPlugin()); // [!code ++]
+```
+
+`generate` returns the image for one page. It runs with the app context as `this`, so `this.siteConfig` and the loaders are available. This example uses the docs card from `fumadocs-ui/og/takumi` with a Google font:
+
+```tsx title="press.config.tsx"
 import { generate as generateOgNode } from "fumadocs-ui/og/takumi";
 import { takumiPlugin } from "fumapress/plugins/takumi";
-// [!code ++]
 import { googleFonts } from "takumi-js/helpers";
 
 takumiPlugin({
   generate(page) {
     return {
-      // [!code ++:5]
       node: generateOgNode({
         title: page.data.title,
         description: page.data.description,
         site: this.siteConfig.name,
       }),
       options: {
-        // [!code ++]
         fonts: googleFonts([{ name: "Noto Serif", weight: [600, 800] }]),
       },
     };
@@ -87,25 +67,33 @@ takumiPlugin({
 });
 ```
 
+`generate` returns:
+
+| Field     | Type                            | Role                                      |
+| --------- | ------------------------------- | ----------------------------------------- |
+| `node`    | `ReactNode`                     | The content Takumi renders                |
+| `options` | `ImageResponseOptions`, partial | Forwarded to `ImageResponse`, no `format` |
+
 ## Options
 
-From `TakumiOptions` in `fumapress/plugins/takumi`:
+These come from `TakumiOptions` in `fumapress/plugins/takumi`:
 
-| Option     | Default                              | Notes                                                     |
-| ---------- | ------------------------------------ | --------------------------------------------------------- |
-| `generate` | `fumadocs-ui/og/takumi` default card | `(page) => { node, options? }`; `this` is the app context |
-| `width`    | `1200`                               | Image width; written into `og:image:width`                |
-| `height`   | `630`                                | Image height; written into `og:image:height`              |
-| `basePath` | `/` (static) or `/_takumi` (dynamic) | Route prefix for image URLs                               |
+| Option     | Default                               | Notes                                                                              |
+| ---------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `generate` | A built-in title and description card | `(page) => { node, options? }`. `this` is the app context.                         |
+| `options`  | None                                  | `ImageResponse` options shared by every image. `generate` overrides them per page. |
+| `width`    | `1200`                                | Image width, also written to `og:image:width`                                      |
+| `height`   | `630`                                 | Image height, also written to `og:image:height`                                    |
+| `basePath` | `/` (static) or `/_takumi` (dynamic)  | Route prefix for image URLs                                                        |
 
-### Paths
+The plugin always encodes WebP, so `format` is not an option.
 
-Image paths follow page slugs: a page at `/docs/styling` maps to `/docs/styling.webp` under `basePath`. The section index uses `index.webp`. With i18n, the locale segment is prepended.
+### Image paths
+
+Image paths follow page slugs. A page at `/docs/styling` gets `/docs/styling.webp` under `basePath`, and a section index gets `index.webp`. With i18n, the locale segment comes first.
 
 ## Fonts
 
-Takumi never reads system fonts. Load families through `options.fonts` on the image response to cover characters outside the built-in Latin fallback.
+Takumi never reads system fonts. To cover characters outside the built-in Latin font, load families through `options.fonts`. Put fonts every page uses in the shared `options`, so they resolve once.
 
 See [Typography & Fonts](/docs/typography-and-fonts).
-
-For the complete plugin API, see the [Fumapress Takumi reference](https://press.fumadocs.dev/docs/plugins/takumi).

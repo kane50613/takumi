@@ -4,11 +4,9 @@ description: Choose PNG, JPEG, WebP, ICO, raw pixels, or SVG output and configur
 icon: FileImage
 ---
 
-`render()` returns encoded image bytes. The `format` option picks the encoder.
+Set `format` to choose the encoder for `render()`. It returns the encoded bytes.
 
 ## Picking a format
-
-`format` defaults to `png`. `quality` and `lossless` apply only where the table marks a Yes, and are ignored elsewhere. `quality` runs `0`–`100` (default `75`).
 
 ```tsx twoslash title="Choose an image encoder"
 import { render } from "takumi-js";
@@ -18,43 +16,52 @@ const card = <div tw="w-full h-full grid place-items-center bg-white">Hello Taku
 // [!code highlight:3]
 const png = await render(card, { width: 1200, height: 630, format: "png" });
 const jpeg = await render(card, { width: 1200, height: 630, format: "jpeg", quality: 80 });
-const webp = await render(card, { width: 1200, height: 630, format: "webp", lossless: true });
+const webp = await render(card, { width: 1200, height: 630, format: "webp", quality: 80 });
 ```
 
-| Format          | Alpha | Honors `quality` | Honors `lossless` | Notes                                           |
-| :-------------- | :---- | :--------------- | :---------------- | :---------------------------------------------- |
-| `png` (default) | Yes   | No               | No                | Lossless. Use for transparency or exact pixels. |
-| `jpeg`          | No    | Yes              | No                | Lossy. Alpha is flattened. Best for photos.     |
-| `webp`          | Yes   | Yes              | Yes               | Lossy with `quality`; `lossless: true` wins.    |
-| `ico`           | Yes   | No               | No                | Favicon container, PNG-encoded inside.          |
-| `raw`           | Yes   | No               | No                | Uncompressed RGBA bytes, `width × height × 4`.  |
+| Format          | Alpha | `quality` | `lossless` | Notes                                                              |
+| :-------------- | :---- | :-------- | :--------- | :----------------------------------------------------------------- |
+| `png` (default) | Yes   | No        | No         | Lossless. Use it for transparency or exact pixels.                 |
+| `jpeg`          | No    | Yes       | No         | Lossy. Draw an opaque background, since JPEG has no alpha channel. |
+| `webp`          | Yes   | Yes       | Yes        | Lossless unless you set `quality`. `lossless: true` wins.          |
+| `ico`           | Yes   | No        | No         | Favicon file. At most 256 × 256 pixels.                            |
+| `raw`           | Yes   | No        | No         | Uncompressed RGBA bytes, `width × height × 4`.                     |
+
+`quality` runs from `0` to `100` and defaults to `75`. Formats marked No ignore it.
 
 <Callout type="info">
-  On `@takumi-rs/wasm`, WebP is always lossless and the `lossless` knob is absent from the types.
-  `quality` still exists there and applies to JPEG.
+  On the WebAssembly backend, WebP is always lossless. `quality` and `lossless` are accepted but
+  have no effect on WebP. `quality` still applies to JPEG.
 </Callout>
 
 ### Raw frames
 
-`format: "raw"` skips encoding and hands back the RGBA buffer directly. Feed it to ffmpeg or any encoder you already run. The [keyframe animation](/docs/keyframe-animation) page streams raw frames into ffmpeg for video output.
+`format: "raw"` skips encoding and returns the RGBA buffer. Feed it to ffmpeg or another encoder. The [keyframe animation](/docs/keyframe-animation) page streams raw frames into ffmpeg to make a video.
 
 ## Device pixel ratio
 
-`devicePixelRatio` scales the output resolution without touching the layout. A `1200 × 630` render at `devicePixelRatio: 2` produces a `2400 × 1260` image whose elements keep their CSS sizes.
+`devicePixelRatio` sets how many image pixels each CSS pixel takes. `width` and `height` stay the image size in pixels. To render a 1200 × 630 design at twice the resolution, double the size and set the ratio to `2`:
 
 ```tsx twoslash title="Render at twice the resolution"
 import { render } from "takumi-js";
 
-const image = await render(<div>Hello Takumi</div>, {
-  width: 1200,
-  height: 630,
+const image = await render(<div tw="w-full h-full text-6xl">Hello Takumi</div>, {
+  width: 2400,
+  height: 1260,
   devicePixelRatio: 2, // [!code highlight]
 });
 ```
 
+The result is a 2400 × 1260 image. Every CSS length draws twice as large, so the layout matches a 1200 × 630 render at ratio `1`.
+
+<Callout type="warn">
+  With `width: 1200` and `height: 630` at ratio `2`, the image stays 1200 × 630 and the layout gets
+  only 600 × 315 CSS pixels.
+</Callout>
+
 ## Dithering
 
-`dithering` adds ordered Bayer noise to gradient fills before they quantize to 8-bit, removing visible banding. It applies to static image exports and `raw` buffers.
+`dithering` adds ordered Bayer noise to gradient fills before they drop to 8-bit color. This removes visible banding. It applies to `render()`, including `raw` output.
 
 - `none` (default)
 - `ordered-bayer`
@@ -71,11 +78,11 @@ const image = await render(<div tw="w-full h-full bg-linear-to-r from-slate-900 
 
 ## Animated output
 
-`renderAnimation()` encodes a sequence as WebP, APNG, or GIF. See [Keyframe Animation](/docs/keyframe-animation).
+`renderAnimation()` encodes a sequence of scenes as WebP, APNG, or GIF. See [Keyframe Animation](/docs/keyframe-animation).
 
 ## Vector SVG
 
-`renderSvg()` is the second output backend. It returns an `<svg>` document string instead of a raster bitmap. The output is real `<rect>`, `<path>`, gradients, glyph outlines, and embedded images, drawn from the same layout.
+`renderSvg()` returns an SVG document string instead of a bitmap. It draws real `<rect>`, `<path>`, gradients, glyph outlines, and embedded images from the same layout.
 
 ```tsx twoslash title="Render PNG and SVG"
 import { render, renderSvg } from "takumi-js";
@@ -86,11 +93,11 @@ const png = await render(card, { width: 1200, height: 630 });
 const svg = await renderSvg(card, { width: 1200, height: 630 }); // [!code highlight]
 ```
 
-SVG is a vector format, so the raster-only knobs do not apply: `format`, `quality`, `lossless`, `dithering`, `drawDebugBorder`, `devicePixelRatio`.
+SVG is a vector format, so the raster options do not apply: `format`, `quality`, `lossless`, `dithering`, `drawDebugBorder`, and `devicePixelRatio`.
 
 ## Cancellation
 
-Every render takes an optional `AbortSignal`. Pass `signal` to abort a render that is still fetching fonts or images; an already-aborted signal throws before any work starts.
+Pass an `AbortSignal` as `signal` to cancel a render. Takumi checks it before work starts and again after fonts and images load. An aborted signal stops the render with the signal's reason.
 
 ```tsx twoslash title="Cancel with the request"
 import { ImageResponse } from "takumi-js/response";
@@ -103,3 +110,5 @@ export function GET(request: Request) {
   });
 }
 ```
+
+The signal also cancels image fetches that are still running.

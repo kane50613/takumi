@@ -3,21 +3,25 @@
 //! break. A run's glyphs sit in one flat array, eight bytes each for plain text, like the glyph
 //! data of Blink's `ShapeResult`.
 
-use std::{collections::HashMap, convert::Infallible, mem::take, ops::Range, rc::Rc};
+mod builder;
+
+pub(super) use builder::line_span_fragments;
+
+use std::{mem::take, ops::Range, rc::Rc};
+
+use rustc_hash::FxHashMap;
 
 use skrifa::FontRef;
 
 use super::{
-  BuiltInlineLayout, LineSetup, PlacedItem,
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationPlacement,
-  glyph_run_rect,
   items::ProcessedInlineSpan,
   metrics::VisualInlineBox,
   outline::InlineOutlineRect,
   runs::{
-    HangingWhitespace, InlineRunLayout, PositionedGlyph, PositionedInlineRun, ShapedRun,
-    glyph_clusters, glyph_skips_ink,
+    InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
+    ShapedRun, slice_text_at_char_boundaries,
   },
   text_fit::LineScaleState,
 };
@@ -25,9 +29,7 @@ use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, Point, Size},
   layout::{border::BorderProperties, tree::RenderNode},
-  resources::font::FontError,
-  scene::text_ink_reach,
-  style::Affine,
+  resources::{font::FontError, glyph::ResolvedGlyphs},
   style::Color,
 };
 
@@ -35,14 +37,16 @@ use crate::{
 pub struct FragmentItems {
   /// The content box it laid out in.
   pub(crate) content_box: ContentBox,
-  /// The text layout shaped.
+  /// The text layout shaped, then the ellipses and hyphens it generated.
   pub(crate) text: String,
+  /// Where the generated text starts in `text`.
+  generated_text_start: usize,
   /// Whether `text-overflow: ellipsis` cut the spans short, which collecting them again does not.
   pub(crate) ellipsized: bool,
   /// Each line box's top and bottom, below the content box's top.
   line_boxes: Vec<(f32, f32)>,
-  /// The first and last line's baselines, below the content box's top; `None` when it has no
-  /// lines or `line-clamp` cut lines off.
+  /// The first and last shown line's baselines, below the content box's top; `None` when it has
+  /// no lines.
   baselines: Option<(f32, f32)>,
   /// What its ink covers.
   pub(crate) ink: Ink,
@@ -52,6 +56,8 @@ pub struct FragmentItems {
   /// The runs' fonts, metrics and brushes, which every run one span shapes in one face shares:
   /// each a run holding no glyphs at no place.
   faces: Vec<Rc<ShapedRun>>,
+  /// The outlines of the glyphs each of [`Self::faces`] draws, resolved once for ink and paint.
+  face_glyphs: Vec<ResolvedGlyphs>,
   glyphs: GlyphStore,
   /// In-flow and out-of-flow inline boxes, sorted by id.
   inline_boxes: Vec<VisualInlineBox>,
@@ -193,7 +199,6 @@ struct TextItem {
   offset: f32,
   baseline: f32,
   advance: f32,
-  hanging: HangingWhitespace,
   text_range: Range<usize>,
   glyphs: RunGlyphs,
   placement: RunPlacement,
@@ -202,8 +207,6 @@ struct TextItem {
 /// Where a run paints on its line, past where it was shaped.
 struct RunPlacement {
   line_scale: LineScaleState,
-  static_inline_prefix: f32,
-  baseline_shift: f32,
   decoration_placement: DecorationPlacement,
   /// How far `position: relative` on its spans moves it.
   relative_offset: Point<f32>,
@@ -276,253 +279,6 @@ impl SimpleGlyph {
 struct FullGlyph {
   glyph: PositionedGlyph,
   cluster: (u32, u32),
-}
-
-impl BuiltInlineLayout<'_> {
-  /// The laid-out content as fragment items.
-  pub(crate) fn fragment_items(
-    &self,
-    layout: ComputedLayout,
-    context: &RenderContext,
-  ) -> FragmentItems {
-    let mut ink = None;
-    let mut decoration_ink = None;
-    let line_metrics = self.line_metrics();
-    let mut items = FragmentItems {
-      content_box: ContentBox::of(layout),
-      text: self.text.clone(),
-      ellipsized: self.ellipsized,
-      line_boxes: line_metrics
-        .iter()
-        .map(|line| (line.resolved_line_top, line.resolved_line_bottom))
-        .collect(),
-      baselines: line_metrics
-        .first()
-        .zip(line_metrics.last())
-        .filter(|_| !self.clamped)
-        .map(|(first, last)| (first.resolved_baseline, last.resolved_baseline)),
-      ink: Ink::default(),
-      span_ink_reach: self.span_ink_reach(),
-      text_items: Vec::new(),
-      faces: Vec::new(),
-      glyphs: GlyphStore::default(),
-      inline_boxes: Vec::new(),
-      outline_rects: Vec::new(),
-      backgrounds: Vec::new(),
-    };
-    let mut decoration_coverage = self.decoration_coverage();
-    let mut inline_boxes = HashMap::new();
-    let content = layout.content_box_offset();
-
-    let Ok(()) = self.walk_items::<Infallible>(layout, |line, item| {
-      let setup = &line.setup;
-
-      self.cover(&mut decoration_coverage, content, line, &item);
-
-      match item {
-        PlacedItem::Run {
-          glyph_run,
-          static_inline_prefix,
-          hanging,
-          stretch,
-        } => {
-          let baseline_shift = self.run_baseline_shift(line, &glyph_run);
-          let relative_offset = self.run_relative_offset(&glyph_run);
-          let (origin, size) = glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
-          let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix, baseline_shift);
-
-          InkBox::include(&mut ink, origin + relative_offset, size);
-
-          // A run carrying only the direction mark paints nothing; a run the
-          // mark's cluster merged into (emoji sequences) paints as the first
-          // real span.
-          let mut brush = glyph_run.style().brush.clone();
-
-          if brush.is_direction_mark {
-            if glyph_run.advance() == 0.0 {
-              return Ok(());
-            }
-            brush.is_direction_mark = false;
-          }
-
-          let mut glyphs: Vec<PositionedGlyph> = glyph_run
-            .positioned_glyphs()
-            .map(|g| PositionedGlyph {
-              id: g.id,
-              x: g.x,
-              y: g.y,
-              skips_ink: true,
-            })
-            .collect();
-          let clusters = glyph_clusters(&glyph_run, &glyphs);
-
-          for (glyph, cluster) in glyphs.iter_mut().zip(&clusters) {
-            glyph.skips_ink = !cluster.emoji && glyph_skips_ink(&self.text, cluster.range.clone());
-          }
-          let cluster_ranges = clusters.into_iter().map(|cluster| cluster.range).collect();
-          let shaped = ShapedRun::of(&glyph_run, glyphs, hanging, &stretch, brush, cluster_ranges);
-          let decoration_placement = self.decoration_placement(
-            line,
-            &shaped,
-            glyph_run.style().brush.source_span_id,
-            static_inline_prefix,
-            layout,
-          );
-          include_glyph_ink(
-            &mut ink,
-            &shaped,
-            context,
-            setup,
-            static_inline_prefix,
-            baseline_shift,
-            relative_offset,
-          );
-          if !shaped.brush.decorations.is_empty() {
-            let undecorated = ShapedRun {
-              glyphs: Vec::new(),
-              cluster_ranges: Vec::new(),
-              ..shaped.clone()
-            };
-
-            // Approximate: the lines snap to local pixels, where paint snaps them to the device's.
-            for line in undecorated.decoration_lines(
-              &decoration_placement,
-              Affine::IDENTITY,
-              Affine::IDENTITY,
-              Point::ZERO,
-            ) {
-              let area = line.bounds();
-
-              InkBox::include(
-                &mut decoration_ink,
-                Point {
-                  x: area.left,
-                  y: area.top,
-                } + relative_offset,
-                Size {
-                  width: area.right - area.left,
-                  height: area.bottom - area.top,
-                },
-              );
-            }
-          }
-
-          items.push_run(
-            context,
-            shaped,
-            RunPlacement {
-              line_scale: setup.run_scale(baseline_shift),
-              static_inline_prefix,
-              baseline_shift,
-              decoration_placement,
-              relative_offset,
-            },
-          );
-        }
-        PlacedItem::Box(inline_box) => {
-          let relative_offset = self.span_relative_offset(inline_box.id);
-          let inline_box = VisualInlineBox {
-            x: inline_box.x + relative_offset.x,
-            y: inline_box.y + relative_offset.y,
-            ..inline_box
-          };
-
-          InkBox::include(
-            &mut ink,
-            Point::new(inline_box.x, inline_box.y),
-            Size::new(inline_box.width, inline_box.height),
-          );
-          inline_boxes.insert(inline_box.id, inline_box);
-        }
-        PlacedItem::Placeholder(_) => {}
-      }
-      Ok(())
-    });
-
-    for inline_box in &self.positioned_floats {
-      InkBox::include(
-        &mut ink,
-        Point::new(inline_box.x, inline_box.y),
-        Size::new(inline_box.width, inline_box.height),
-      );
-    }
-    items.ink = Ink {
-      content: ink,
-      decorations: decoration_ink,
-    };
-    items.inline_boxes = self.with_floats(inline_boxes);
-    let (backgrounds, outline_rects) = decoration_coverage.into_fragments();
-
-    items.backgrounds = backgrounds.into_iter().map(BackgroundItem::of).collect();
-    items.outline_rects = outline_rects;
-    items.shrink_to_fit();
-    items
-  }
-}
-
-impl BuiltInlineLayout<'_> {
-  /// How far its spans' decorations, shadows and strokes reach past the glyphs.
-  fn span_ink_reach(&self) -> f32 {
-    let decoration_reach = self
-      .spans
-      .iter()
-      .filter_map(ProcessedInlineSpan::text_chain)
-      .flat_map(|chain| chain.ancestors())
-      .map(|link| link.decoration.reach())
-      .fold(0.0_f32, f32::max);
-
-    self
-      .spans
-      .iter()
-      .filter_map(|span| match span {
-        ProcessedInlineSpan::Text { style, .. } => Some(text_ink_reach(style)),
-        _ => None,
-      })
-      .fold(decoration_reach, f32::max)
-  }
-}
-
-/// `ink` grown to take the ink of `run`'s glyphs on the line `setup` sets up: what the run's
-/// metrics box misses, such as synthetic-italic skew, faux-bold outset, negative bearings, and
-/// glyphs taller than the font's metrics, moved by `relative_offset`.
-fn include_glyph_ink(
-  ink: &mut Option<InkBox>,
-  run: &ShapedRun,
-  context: &RenderContext,
-  setup: &LineSetup,
-  static_inline_prefix: f32,
-  baseline_shift: f32,
-  relative_offset: Point<f32>,
-) {
-  let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) else {
-    return;
-  };
-  let resolved_glyphs = context.fonts().with_context(|fonts| {
-    fonts.resolve_glyphs(run.face(), font, run.glyphs.iter().map(|glyph| glyph.id))
-  });
-
-  for glyph in &run.glyphs {
-    let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
-      .get(&glyph.id)
-      .and_then(|resolved| resolved.ink_extents())
-    else {
-      continue;
-    };
-    let (origin, size) = setup.scale_rect(
-      Point {
-        x: glyph.x + min_x,
-        y: glyph.y + baseline_shift + min_y,
-      },
-      Size {
-        width: max_x - min_x,
-        height: max_y - min_y,
-      },
-      static_inline_prefix,
-      baseline_shift,
-    );
-
-    InkBox::include(ink, origin + relative_offset, size);
-  }
 }
 
 impl GlyphStore {
@@ -633,6 +389,7 @@ impl FragmentItems {
     self.line_boxes.shrink_to_fit();
     self.text_items.shrink_to_fit();
     self.faces.shrink_to_fit();
+    self.face_glyphs.shrink_to_fit();
     self.glyphs.simple.shrink_to_fit();
     self.glyphs.full.shrink_to_fit();
     self.inline_boxes.shrink_to_fit();
@@ -640,40 +397,56 @@ impl FragmentItems {
     self.backgrounds.shrink_to_fit();
   }
 
-  fn push_run(&mut self, context: &RenderContext, run: ShapedRun, placement: RunPlacement) {
-    let (mut face, glyphs) = self.glyphs.push(run);
-    let offset = take(&mut face.offset);
-    let baseline = take(&mut face.baseline);
-    let advance = take(&mut face.advance);
-    let hanging = take(&mut face.hanging);
-    let text_range = take(&mut face.text_range);
-    let face = self.face_index(face, context);
+  /// Adds `run` as a text item, first passing it to `ink` with its face's glyphs resolved.
+  fn push_run(
+    &mut self,
+    context: &RenderContext,
+    run: ShapedRun,
+    placement: RunPlacement,
+    ink: impl FnOnce(&ShapedRun, &ResolvedGlyphs),
+  ) {
+    let existing = self
+      .faces
+      .iter()
+      .rposition(|existing| existing.same_face(&run));
+    let face = existing.unwrap_or_else(|| {
+      self.face_glyphs.push(ResolvedGlyphs::default());
+      self.face_glyphs.len() - 1
+    });
+    let resolved = &mut self.face_glyphs[face];
+
+    if let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) {
+      context.fonts().resolve_glyphs_into(
+        resolved,
+        run.face(),
+        font,
+        run.glyphs.iter().map(|glyph| glyph.id),
+      );
+    }
+
+    ink(&run, resolved);
+
+    let (mut shaped_face, glyphs) = self.glyphs.push(run);
+    let offset = take(&mut shaped_face.offset);
+    let baseline = take(&mut shaped_face.baseline);
+    let advance = take(&mut shaped_face.advance);
+    let text_range = take(&mut shaped_face.text_range);
+
+    if existing.is_none() {
+      self
+        .faces
+        .push(context.inline_cache().share_face(shaped_face));
+    }
 
     self.text_items.push(TextItem {
-      face,
+      face: face as u32,
       offset,
       baseline,
       advance,
-      hanging,
       text_range,
       glyphs,
       placement,
     });
-  }
-
-  /// The index of `face` among [`Self::faces`], added, shared with a box laid out lately when
-  /// one drew in it, when no run before draws in it.
-  fn face_index(&mut self, face: ShapedRun, context: &RenderContext) -> u32 {
-    let index = self
-      .faces
-      .iter()
-      .rposition(|existing| existing.same_face(&face))
-      .unwrap_or_else(|| {
-        self.faces.push(context.inline_cache().share_face(face));
-        self.faces.len() - 1
-      });
-
-    index as u32
   }
 
   /// The text layout shaped.
@@ -700,10 +473,66 @@ impl FragmentItems {
     &self.inline_boxes
   }
 
-  /// How many glyphs it stores as simple and as full glyphs.
-  #[cfg(test)]
-  pub(super) fn glyph_counts(&self) -> (usize, usize) {
-    (self.glyphs.simple.len(), self.glyphs.full.len())
+  /// Each run's text, link, and box, and each inline box's border box, all in the content box of
+  /// `node`, whose inline content these are.
+  pub fn measure_runs(
+    &self,
+    node: &RenderNode,
+  ) -> (Vec<MeasuredInlineRun<'_>>, Vec<MeasuredInlineBox>) {
+    let spans = node.inline_spans(self);
+    let mut runs = Vec::with_capacity(self.text_items.len());
+
+    for item in &self.text_items {
+      let face = &self.faces[item.face as usize];
+      let span = face
+        .brush
+        .source_span_id
+        .and_then(|id| spans.get(id as usize));
+      let text_range = match span {
+        Some(ProcessedInlineSpan::Text { byte_range, .. })
+          if item.text_range.start < self.generated_text_start =>
+        {
+          item.text_range.start.max(byte_range.start)..item.text_range.end.min(byte_range.end)
+        }
+        _ => item.text_range.clone(),
+      };
+      let text = slice_text_at_char_boundaries(&self.text, text_range);
+
+      if text.is_empty() {
+        continue;
+      }
+
+      let line_scale = item.placement.line_scale;
+      let scale = line_scale.scale;
+      let origin = line_scale.layout_origin - self.content_box.offset;
+      let top = item.baseline - face.metrics.ascent;
+      let link = match span {
+        Some(ProcessedInlineSpan::Text { link, .. }) => link.clone(),
+        _ => None,
+      };
+
+      runs.push(MeasuredInlineRun {
+        text,
+        x: origin.x + (item.offset - origin.x) * scale + item.placement.relative_offset.x,
+        y: origin.y + (top - origin.y) * scale + item.placement.relative_offset.y,
+        width: item.advance * scale,
+        height: (face.metrics.ascent + face.metrics.descent) * scale,
+        link,
+      });
+    }
+
+    let inline_boxes = self
+      .inline_boxes
+      .iter()
+      .map(|inline_box| MeasuredInlineBox {
+        x: inline_box.x,
+        y: inline_box.y,
+        width: inline_box.width,
+        height: inline_box.height,
+      })
+      .collect();
+
+    (runs, inline_boxes)
   }
 
   /// The runs resolved for painting at `layout` in `context`, among `spans`: their glyphs'
@@ -725,26 +554,16 @@ impl FragmentItems {
         offset: item.offset,
         baseline: item.baseline,
         advance: item.advance,
-        hanging: item.hanging,
         text_range: item.text_range.clone(),
         ..ShapedRun::clone(&self.faces[item.face as usize])
       };
-      let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
+      FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
         .map_err(|_| FontError::InvalidFontIndex)?;
-      let resolved_glyphs = context.fonts().with_context(|fonts| {
-        fonts.resolve_glyphs(
-          glyph_run.face(),
-          font,
-          glyph_run.glyphs.iter().map(|glyph| glyph.id),
-        )
-      });
 
       runs.push(PositionedInlineRun {
         glyph_run,
-        resolved_glyphs,
+        resolved_glyphs: self.face_glyphs[item.face as usize].clone(),
         line_scale: item.placement.line_scale,
-        static_inline_prefix: item.placement.static_inline_prefix,
-        baseline_shift: item.placement.baseline_shift,
         decoration_placement: item.placement.decoration_placement.clone(),
         paint_offset,
         relative_offset: item.placement.relative_offset,
@@ -775,7 +594,7 @@ impl FragmentItems {
 }
 
 /// The node of every span `spans` open, by decoration id.
-fn span_owners<'c>(spans: &[ProcessedInlineSpan<'c>]) -> HashMap<usize, &'c RenderNode> {
+fn span_owners<'c>(spans: &[ProcessedInlineSpan<'c>]) -> FxHashMap<usize, &'c RenderNode> {
   spans
     .iter()
     .filter_map(ProcessedInlineSpan::chain)

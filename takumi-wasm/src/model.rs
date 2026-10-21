@@ -53,6 +53,9 @@ pub struct RendererOptions {
   /// Byte budget shared by every cached resource — decoded images, SVG
   /// rasters, parsed stylesheets. `0` disables caching. Defaults to 64 MiB.
   pub cache_max_bytes: Option<u64>,
+  /// Bytes of decoded fonts that renders' `fonts` lists may keep registered; past it, the least
+  /// recently used families are released. Unbounded by default.
+  pub font_cache_max_bytes: Option<u64>,
 }
 
 /// Options for rendering an image.

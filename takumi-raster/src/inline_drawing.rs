@@ -40,7 +40,7 @@ pub(crate) fn draw_inline_box(
       let mut context = node.context.clone();
       context.transform = transform * Affine::translation(origin.x, origin.y);
 
-      draw_box_shell(&context, canvas, layout, None)?;
+      draw_box_shell(&context, canvas, layout, None, true)?;
       draw_own_content(node, &context, canvas, layout, InlinePass::Content)?;
       if let Some(outline) = DeferredOutline::of(&context, layout) {
         outline.paint(canvas)?;

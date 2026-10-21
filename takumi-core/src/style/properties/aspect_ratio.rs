@@ -75,7 +75,7 @@ impl From<AspectRatio> for Option<f32> {
 }
 
 impl<'i> FromCss<'i> for AspectRatio {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()

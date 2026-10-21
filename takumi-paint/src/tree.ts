@@ -50,11 +50,12 @@ export interface TextRun {
   /** Glyph ids in `font`, positioned from the baseline start. */
   readonly glyphs: readonly Glyph[];
   /**
-   * The outlines of the glyphs the run's color fills, as SVG path data positioned from the
-   * baseline start. Color font layers arrive as their own drawables, and bitmap glyphs such as
-   * some emoji are left out.
+   * Each glyph's outline as SVG path data from the baseline start, by its index in `glyphs`.
+   * An empty string for a glyph with no contours, such as a space. `null` for a glyph the run's
+   * color does not fill: color font layers arrive as their own drawables, and bitmap glyphs such
+   * as some emoji are left out. `join("")` draws the whole run.
    */
-  outline(): string;
+  outlines(): readonly (string | null)[];
   /** Present when `text-fit` scales the line; maps the run's space before it is placed at `x`, `y`. */
   readonly transform?: Matrix;
 }
@@ -107,14 +108,32 @@ export interface ImageNode extends NodeBase {
 
 /** One step of painting the tree, bottom to top. */
 export type PaintStep =
-  /** Draw these in order, under `node.transform`. */
-  | { readonly type: "draw"; readonly node: PaintNode; readonly drawables: readonly Drawable[] }
-  /** Start a layer for `node`; composite it per `effects` at the matching `end-group`. */
-  | { readonly type: "begin-group"; readonly node: BoxNode; readonly effects: Effects }
+  | DrawStep
+  | BeginGroupStep
   | { readonly type: "end-group"; readonly node: BoxNode }
-  /** Clip the enclosed steps to `clip`, in `node`'s local space. */
-  | { readonly type: "begin-clip"; readonly node: BoxNode; readonly clip: Shape }
+  | BeginClipStep
   | { readonly type: "end-clip"; readonly node: BoxNode };
+
+/** Draw these in order, under `node.transform`. */
+interface DrawStep {
+  readonly type: "draw";
+  readonly node: PaintNode;
+  readonly drawables: readonly Drawable[];
+}
+
+/** Start a layer for `node`; composite it per `effects` at the matching `end-group`. */
+interface BeginGroupStep {
+  readonly type: "begin-group";
+  readonly node: BoxNode;
+  readonly effects: Effects;
+}
+
+/** Clip the enclosed steps to `clip`, in `node`'s local space. */
+interface BeginClipStep {
+  readonly type: "begin-clip";
+  readonly node: BoxNode;
+  readonly clip: Shape;
+}
 
 type RawNode<Type extends RawPaintNode["type"]> = Extract<RawPaintNode, { type: Type }>;
 
@@ -133,12 +152,32 @@ export interface PaintTree {
   readonly nodes: readonly PaintNode[];
   /** The steps a renderer takes, in paint order. */
   readonly steps: readonly PaintStep[];
+  /**
+   * The tree as plain JSON, for `JSON.stringify` or a hand-off between processes. Font files are
+   * left out.
+   */
+  toJSON(): SerializedPaintTree;
 }
+
+/** The version of {@link SerializedPaintTree} this package writes and reads. */
+const SERIALIZED_VERSION = 1;
+
+/** A paint tree as plain JSON, from {@link PaintTree.toJSON}. */
+export type SerializedPaintTree = {
+  readonly version: typeof SERIALIZED_VERSION;
+  /** The tree as the wasm module serializes it, nodes and runs named by index. */
+  readonly tree: RawPaintTree;
+  /**
+   * Each glyph's outline, by node, run, and glyph index: `null` for a node without runs, and for
+   * a glyph its run's color does not fill.
+   */
+  readonly outlines: readonly (readonly (readonly (string | null)[])[] | null)[];
+};
 
 /** What the wasm module keeps of a painted tree: its font files and run outlines. */
 interface PaintedFiles {
   fontData(index: number): Uint8Array | undefined;
-  runOutline(node: number, run: number): string | undefined;
+  runOutlines(node: number, run: number): readonly (string | null)[] | undefined;
 }
 
 export class PaintTreeView implements PaintTree {
@@ -148,12 +187,14 @@ export class PaintTreeView implements PaintTree {
   readonly root: BoxNode;
   readonly nodes: readonly PaintNode[];
   readonly #raw: RawPaintTree;
+  readonly #files: PaintedFiles;
   readonly #listing: Listing;
   #steps: readonly PaintStep[] | undefined;
 
   /** Wraps the serialized tree `raw`, reading font files and run outlines from `files`. */
   constructor(raw: RawPaintTree, files: PaintedFiles) {
     this.#raw = raw;
+    this.#files = files;
     this.width = raw.width;
     this.height = raw.height;
     this.fonts = raw.fonts.map((font, index) => ({
@@ -193,6 +234,18 @@ export class PaintTreeView implements PaintTree {
       return [{ type: step.type, node }];
     });
     return this.#steps;
+  }
+
+  toJSON(): SerializedPaintTree {
+    return {
+      version: SERIALIZED_VERSION,
+      tree: this.#raw,
+      outlines: this.#raw.nodes.map((node) =>
+        node.type === "text"
+          ? node.runs.map((_, index) => this.#files.runOutlines(node.id, index) ?? [])
+          : null,
+      ),
+    };
   }
 }
 
@@ -379,7 +432,7 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
     return {
       ...fields,
       font: resolved,
-      outline: () => this.listing.files.runOutline(this.raw.id, index) ?? "",
+      outlines: () => this.listing.files.runOutlines(this.raw.id, index) ?? [],
     };
   }
 }

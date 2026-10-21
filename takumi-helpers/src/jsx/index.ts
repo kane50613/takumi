@@ -8,6 +8,7 @@ import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./
 import type { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
+  isAsciiWhitespace,
   isFunctionComponent,
   isHtmlElement,
   isUnrenderedElement,
@@ -173,7 +174,7 @@ class NodeBuilder implements RenderEnv {
       );
     }
 
-    const textChildren = collectText(element);
+    const textChildren = foldedText(element);
     if (textChildren !== undefined) {
       return nodeResult(text({ text: textChildren, ...metadata }));
     }
@@ -320,6 +321,13 @@ function dimensions({ width, height }: { width?: number | string; height?: numbe
 
 function getElementChildren(element: ReactElementLike): ReactNode | undefined {
   return getProperty(element.props, "children") as ReactNode | undefined;
+}
+
+/** The text an element folds into itself, its children as one string unless that is only white space. */
+function foldedText(element: ReactElementLike): string | undefined {
+  const text = collectText(element);
+
+  return text === undefined || isAsciiWhitespace(text) ? undefined : text;
 }
 
 /** An element's children as one string, when they are all text; fragments are looked through. */

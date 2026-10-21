@@ -23,7 +23,7 @@ impl MakeComputed for BlockEllipsis {}
 impl Animatable for BlockEllipsis {}
 
 impl<'i> FromCss<'i> for BlockEllipsis {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::None);
     }
@@ -46,10 +46,12 @@ impl ToCss for BlockEllipsis {
   }
 }
 
-/// `continue`: `normal | collapse`. Not inherited.
+/// `continue`: `normal | collapse | -webkit-legacy`. Not inherited.
 ///
-/// `collapse` turns the box into a fragmentation context that discards content
-/// past `max-lines`; `line-clamp`/`-webkit-line-clamp` set it.
+/// `collapse` turns the box into a fragmentation context that discards content past `max-lines`;
+/// `line-clamp` sets it. `-webkit-legacy`, which `-webkit-line-clamp` sets, does so only in a
+/// `display: -webkit-box` with `-webkit-box-orient: vertical`.
+/// <https://drafts.csswg.org/css-overflow-4/#continue>
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum Continue {
@@ -58,18 +60,20 @@ pub enum Continue {
   Normal,
   /// Discard content past the `max-lines` limit.
   Collapse,
+  /// Discard content past the `max-lines` limit in a vertical legacy `-webkit-box`.
+  WebkitLegacy,
 }
 
 impl_css_enum!(
   Continue,
   "normal" => Continue::Normal,
   "collapse" => Continue::Collapse,
+  "-webkit-legacy" => Continue::WebkitLegacy,
 );
 
 /// Parsed `line-clamp` shorthand: `none | <integer> || <'block-ellipsis'>`.
 ///
-/// Expands to `max-lines`, `block-ellipsis`, and `continue`. `-webkit-line-clamp`
-/// shares this parser via vendor-prefix stripping.
+/// Expands to `max-lines`, `block-ellipsis`, and `continue`.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub struct LineClamp {
@@ -104,7 +108,7 @@ impl From<u32> for LineClamp {
 impl MakeComputed for LineClamp {}
 
 impl<'i> FromCss<'i> for LineClamp {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::default());
     }
@@ -125,6 +129,38 @@ impl<'i> FromCss<'i> for LineClamp {
 
   const VALID_TOKENS: &'static [&'static str] = &["none", "<integer>", "<string>"];
 }
+
+/// Parsed `-webkit-line-clamp` legacy shorthand: `none | <integer>`, which expands as
+/// `line-clamp` does with `continue: -webkit-legacy`.
+/// <https://drafts.csswg.org/css-overflow-4/#webkit-line-clamp>
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct WebkitLineClamp(pub LineClamp);
+
+impl MakeComputed for WebkitLineClamp {}
+
+impl<'i> FromCss<'i> for WebkitLineClamp {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(Self::default());
+    }
+
+    let count = input.expect_integer()?;
+
+    if count < 1 {
+      return Ok(Self::default());
+    }
+
+    Ok(Self(LineClamp {
+      max_lines: Some(count as u32),
+      block_ellipsis: BlockEllipsis::Auto,
+      line_continue: Continue::WebkitLegacy,
+    }))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &["none", "<integer>"];
+}
+
+impl TailwindPropertyParser for WebkitLineClamp {}
 
 impl TailwindPropertyParser for LineClamp {
   fn parse_tw(token: &str) -> Option<Self> {

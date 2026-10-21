@@ -1,4 +1,4 @@
-use cssparser::Parser;
+use cssparser::{ParseError as CssParseError, Parser};
 
 use crate::style::{impl_comma_list_from_css, unexpected_token, *};
 
@@ -29,8 +29,22 @@ impl MakeComputed for Background {
   }
 }
 
+/// Blink's `ConsumeBackgroundAttachment`: `scroll`, `fixed`, or `local`.
+fn parse_attachment<'i>(input: &mut Parser<'i>) -> ParseResult<'i, ()> {
+  let ident = input.expect_ident()?;
+
+  if ["scroll", "fixed", "local"]
+    .iter()
+    .any(|keyword| ident.eq_ignore_ascii_case(keyword))
+  {
+    return Ok(());
+  }
+
+  Err(CssParseError::unexpected_token())
+}
+
 impl<'i> FromCss<'i> for Background {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut color = None;
     let mut image = None;
     let mut position = None;
@@ -39,6 +53,7 @@ impl<'i> FromCss<'i> for Background {
     let mut origin = None;
     let mut clip = None;
     let mut box_count = 0u8;
+    let mut has_attachment = false;
 
     while !input.is_exhausted() && !next_is_comma(input) {
       if color.is_none()
@@ -77,6 +92,13 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
+      // Approximate: takumi never scrolls, so `scroll` and `local` paint alike, and `fixed`, which
+      // positions against the viewport, paints like them too.
+      if !has_attachment && input.try_parse(parse_attachment).is_ok() {
+        has_attachment = true;
+        continue;
+      }
+
       // A `<box>` value: the first sets origin (and clip), a second overrides
       // clip only. https://drafts.csswg.org/css-backgrounds/#background
       if box_count < 2
@@ -90,10 +112,7 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        input.next()?,
-      ));
+      return Err(unexpected_token!(input.next()?,));
     }
 
     Ok(Background {
@@ -209,6 +228,20 @@ mod tests {
   #[test]
   fn test_parse_background_invalid() {
     assert!(Background::from_css_str("invalid-value").is_err());
+  }
+
+  /// An attachment keyword is part of the shorthand, so the rest of the layer still applies.
+  #[test]
+  fn an_attachment_keeps_the_rest_of_the_layer() {
+    for attachment in ["scroll", "fixed", "local"] {
+      assert_eq!(
+        Background::from_css_str(&format!("red {attachment}")),
+        Background::from_css_str("red"),
+        "{attachment}"
+      );
+    }
+
+    assert!(Background::from_css_str("red fixed scroll").is_err());
   }
 
   #[test]

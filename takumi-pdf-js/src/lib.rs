@@ -11,8 +11,8 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontStore,
-  input::{Font, decode_images, register_font},
+  FontCacheOptions, FontStore,
+  input::{Font, decode_images},
   parse_lang, stylesheet,
 };
 use takumi_core::{
@@ -45,6 +45,10 @@ extern "C" {
   /// JavaScript type for font input (details object or raw buffer).
   #[wasm_bindgen(typescript_type = "Font")]
   pub type FontType;
+
+  /// JavaScript object holding the font cache budget.
+  #[wasm_bindgen(typescript_type = "FontCacheOptions")]
+  pub type FontCacheOptionsType;
 
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
@@ -89,9 +93,9 @@ struct Layout {
 
 /// A PDF renderer holding registered fonts and a decoded-resource cache.
 ///
-/// State lives behind a lock and every method takes `&self`, mirroring the
+/// Every method takes `&self` and the fonts are copy-on-write, mirroring the
 /// other wasm bindings: a panic mid-call can't leave the wasm-bindgen borrow
-/// flag permanently set.
+/// flag or the font store held.
 #[wasm_bindgen]
 pub struct PdfRenderer {
   fonts: FontStore,
@@ -115,15 +119,32 @@ impl PdfRenderer {
       lang,
     })
   }
+
+  fn load_font(
+    &self,
+    font: FontType,
+    key: Option<&str>,
+    pinned: bool,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(map_error)?;
+    let registered = self.fonts.register(font, key, pinned).map_err(map_error)?;
+
+    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+  }
 }
 
 #[wasm_bindgen]
 impl PdfRenderer {
   /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
-  pub fn new() -> Result<PdfRenderer, js_sys::Error> {
+  pub fn new(options: Option<FontCacheOptionsType>) -> Result<PdfRenderer, js_sys::Error> {
+    let options: FontCacheOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+
     Ok(PdfRenderer {
-      fonts: FontStore::new().map_err(map_error)?,
+      fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
       resource_cache: ResourceCache::default(),
     })
   }
@@ -131,12 +152,51 @@ impl PdfRenderer {
   /// Registers a font (raw bytes or a details object), returning the families
   /// it produced.
   #[wasm_bindgen(js_name = registerFont)]
-  pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    let font: Font = from_value(font.into()).map_err(map_error)?;
-    let mut state = self.fonts.write().map_err(map_error)?;
+  pub fn register_font(
+    &self,
+    font: FontType,
+    key: Option<String>,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    self.load_font(font, key.as_deref(), true)
+  }
 
-    let registered = register_font(&mut state, font).map_err(map_error)?;
-    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+  /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
+  /// renderer's font cache is past its budget.
+  #[wasm_bindgen(js_name = cacheFont)]
+  pub fn cache_font(
+    &self,
+    font: FontType,
+    key: &str,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    self.load_font(font, Some(key), false)
+  }
+
+  /// The families a registration under `key` added, when the renderer still holds them; `pin`
+  /// keeps them from being released for space.
+  #[wasm_bindgen(js_name = cachedFonts)]
+  pub fn cached_fonts(
+    &self,
+    key: &str,
+    pin: bool,
+  ) -> Result<Option<RegisteredFamiliesType>, js_sys::Error> {
+    self
+      .fonts
+      .cached(key, pin)
+      .map(|registered| Ok(to_value(&registered).map_err(map_error)?.unchecked_into()))
+      .transpose()
+  }
+
+  /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
+  /// whether it had any.
+  #[wasm_bindgen(js_name = unregisterFont)]
+  pub fn unregister_font(&self, family: &str) -> bool {
+    self.fonts.unregister_family(family)
+  }
+
+  /// Removes every registered font, leaving the bundled fallback font.
+  #[wasm_bindgen(js_name = clearFonts)]
+  pub fn clear_fonts(&self) -> Result<(), js_sys::Error> {
+    self.fonts.reset().map_err(map_error)
   }
 
   /// Renders a node tree to PDF bytes. Without options the output is paged A4;
@@ -158,11 +218,11 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let state = self.fonts.read().map_err(map_error)?;
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
 
     takumi_pdf::render(PdfOptions {
       viewport,
-      fonts: &state,
+      fonts: &fonts,
       node,
       sections: options.take_sections()?,
       stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
@@ -216,10 +276,10 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let state = self.fonts.read().map_err(map_error)?;
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
     let measured = takumi_pdf::measure(MeasureOptions {
       viewport,
-      fonts: &state,
+      fonts: &fonts,
       node,
       stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
       images,

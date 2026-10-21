@@ -4,11 +4,11 @@ description: Embed SVG charts in PDF documents with vector output, chart fonts, 
 icon: ChartColumn
 ---
 
-Use an SVG chart to preserve vector lines and shapes in PDF. Generate the SVG before rendering the document. See [Charts](/docs/charts#render-an-echarts-chart) for a complete ECharts example.
+Embed a chart as SVG to keep its lines and shapes as vectors. Generate the SVG before rendering the document. For a complete ECharts example, see [Charts](/docs/charts#render-an-echarts-chart).
 
 ## Add a chart
 
-Pass the SVG string directly to `src`. Set its dimensions in CSS pixels and register the fonts used by its labels.
+Pass the SVG string to `src` and set its size in CSS px:
 
 ```tsx twoslash title="Add a chart"
 declare const svg: string;
@@ -16,7 +16,6 @@ declare const svg: string;
 import { render } from "takumi-pdf";
 import { googleFonts } from "@takumi-rs/helpers";
 
-const fonts = (await googleFonts(["Inter"])).map((font) => ({ ...font, ranges: [] }));
 const pdf = await render(
   <figure style={{ margin: 0, breakInside: "avoid" }}>
     <img
@@ -26,22 +25,50 @@ const pdf = await render(
     />
     <figcaption>Revenue by quarter</figcaption>
   </figure>,
-  { size: "a4", fonts },
+  { size: "a4", fonts: await googleFonts(["Inter"]) },
 );
 ```
 
-Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart and caption together when they fit on one page. Choose dimensions that fit within the page margins.
+Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart and caption on one page when they fit. Pick a size that fits inside the page margins.
 
-The empty `ranges` array prevents the renderer from discarding font subsets used only inside the SVG. See [Fonts for chart labels](/docs/charts#fonts-for-chart-labels) to load fewer subsets for large font families.
+## Fonts for chart labels
+
+<Callout type="warn">
+  `render()` loads only the font subsets that cover text in the document tree. It does not read text
+  inside an SVG image. If chart labels use characters the surrounding text does not, register their
+  fonts ahead of time.
+</Callout>
+
+Fonts from `registerFont()` stay loaded for every render:
+
+```tsx twoslash title="Register chart label fonts"
+declare const svg: string;
+// ---cut---
+import { PdfRenderer } from "takumi-pdf";
+import { googleFonts, subsetFonts } from "@takumi-rs/helpers";
+
+const chartText = "一月二月三月四月營收0123456789.,−-%";
+const renderer = new PdfRenderer();
+const fonts = subsetFonts({ fonts: await googleFonts(["Noto Sans TC"]), source: chartText });
+
+// [!code highlight]
+await Promise.all(fonts.map((font) => renderer.registerFont(font)));
+
+const pdf = await renderer.render(<img src={svg} alt="營收" style={{ width: 560, height: 360 }} />);
+```
+
+Include generated ticks and punctuation in `chartText`, not only your data labels. Set the chart library's font family to the registered name, here `"Noto Sans TC"`.
 
 ## Vector output and text
 
-SVG paths, supported gradients, and dashed lines remain vector. Embedded bitmaps and SVG effects that require rasterization still use pixels. A PNG chart stays raster even when placed in a PDF.
+- SVG paths, supported gradients, and dashed lines stay vector.
+- Embedded bitmaps, and SVG effects that need rasterizing, become pixels.
+- A PNG chart stays raster in the PDF.
 
-SVG labels are drawn as outlines. They remain visible but cannot be selected, searched, or extracted as text. Put searchable titles, captions, and data tables in the surrounding JSX.
+SVG labels are drawn as outlines. They stay visible, but readers cannot select, search, or copy them. Put titles, captions, and data tables that should be searchable in the surrounding JSX.
 
 ## Describe the data
 
-Give the chart a meaningful `alt`. Tagged output uses it as the figure description. A label such as “Bar chart” identifies the image but does not explain its data.
+Give the chart a meaningful `alt`. Tagged output uses it as the figure description. A label such as "Bar chart" names the image but says nothing about its data.
 
-For detailed charts, include a table with the underlying values. See [Reports and statements](/docs/pdf/reports#long-tables) for a table that continues across pages.
+For a detailed chart, add a table of the underlying values. See [Reports and statements](/docs/pdf/reports#long-tables) for a table that continues across pages.

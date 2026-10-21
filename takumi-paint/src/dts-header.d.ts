@@ -316,7 +316,16 @@ export type ElementInfo = {
   readonly path: readonly number[];
 };
 
-export type Glyph = { readonly id: number; readonly x: number; readonly y: number };
+export type Glyph = {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  /**
+   * Where the glyph's cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one
+   * cluster share it; absent when the shaper's clusters could not be matched to the glyphs.
+   */
+  readonly cluster?: number;
+};
 
 export type RawTextRun = {
   readonly text: string;
@@ -385,4 +394,15 @@ export type RawPaintTree = {
   readonly nodes: readonly RawPaintNode[];
   readonly fonts: readonly RawFont[];
   readonly steps: readonly RawPaintStep[];
+};
+
+export type FontCacheOptions = {
+  /**
+   * Bytes of decoded fonts that renders' `fonts` lists may keep registered. Past it, the least
+   * recently used families are released and load again when a render lists them. Fonts from
+   * `registerFont` stay, and so does the font loaded last, even past the budget alone. A running
+   * render keeps the fonts it started with.
+   * @default unbounded
+   */
+  fontCacheMaxBytes?: number;
 };

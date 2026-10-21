@@ -4,13 +4,20 @@ description: Compare takumi-pdf, react-pdf, and Puppeteer using recorded invoice
 icon: Scale
 ---
 
-This page records a benchmark of an 80-line invoice across three PDF renderers. The numbers apply to the package versions and environment below, not necessarily the current releases.
+This page records one benchmark, an 80-line invoice rendered by three PDF renderers.
 
-Each harness uses its engine's native template language. Geometry, columns, and the embedded font (Inter 400/700) are the same in each harness. react-pdf's pt values mirror the other renderers' px values. takumi and Chrome produce the same two-page layout.
+<Callout type="info">
+  The numbers hold for the package versions and machine listed here, not for current releases.
+</Callout>
 
-Warm figures are the median of 20 renders. The [bench source](https://github.com/kane50613/takumi/tree/master/example/pdf-bench) reproduces this table. Run it with `bun bench`.
+- Each harness uses its renderer's own template language.
+- Geometry, columns, and the embedded font (Inter 400/700) match across harnesses. react-pdf's pt values mirror the other renderers' px values.
+- takumi and Chrome produce the same two-page layout.
+- Warm figures are the median of 20 renders.
 
-Environment: Apple M1 Pro, macOS 15.7.4, Bun 1.3.14, Chrome 151.
+The environment is Apple M1 Pro, macOS 15.7.4, Bun 1.3.14, and Chrome 151.
+
+The [bench source](https://github.com/kane50613/takumi/tree/master/example/pdf-bench) now depends on newer package versions. Run `bun bench` there to measure them on your machine.
 
 |                               | takumi-pdf 0.4                              | @react-pdf/renderer 4.5.1                             | Puppeteer + Chrome              |
 | :---------------------------- | :------------------------------------------ | :---------------------------------------------------- | :------------------------------ |
@@ -25,7 +32,7 @@ Environment: Apple M1 Pro, macOS 15.7.4, Bun 1.3.14, Chrome 151.
 
 ## Bundle and install size
 
-These measurements use npm-registry packages and esbuild (`--bundle --minify`, gzip). Install size comes from a clean `bun add`.
+These figures come from npm-registry packages bundled with esbuild (`--bundle --minify`, then gzip). Install size comes from a clean `bun add`.
 
 |                           | JS bundle (min+gzip) | wasm (gzip)              | `node_modules`                  |
 | :------------------------ | :------------------- | :----------------------- | :------------------------------ |
@@ -36,14 +43,35 @@ These measurements use npm-registry packages and esbuild (`--bundle --minify`, g
 | jspdf 4.2.1               | 248 KB               | —                        | 59 MB                           |
 | Puppeteer + Chrome        | —                    | —                        | Chrome install (hundreds of MB) |
 
-pdf-lib, pdfkit, and jspdf are drawing primitives. You position each text line yourself. They are not in the benchmark above.
+pdf-lib, pdfkit, and jspdf are drawing libraries, so you position each text line yourself. They are not in the benchmark above.
 
-Measure the complete bundle for your deployment target. These figures exclude application code and should not be used as a current platform size limit.
+These figures exclude application code. Measure the complete bundle for your own deployment target.
 
 ## Interpret the results
 
-- Chrome's cold start includes launching a browser process. It varies with machine state. Its memory spans several processes. A single-process measurement misses this. Chrome performs well after warming. It has the most complete CSS support of the three.
-- react-pdf embeds the same Inter subsets as the other two. Subsetting on every render is most of its warm cost; the standard 14 PDF fonts avoid it. Documents use react-pdf's component set. Existing HTML, JSX, and Tailwind markup cannot be reused. It shapes Arabic, but paragraph direction is manual, and our Arabic sample dropped its first letter.
-- takumi-pdf reuses OG-image components unchanged. Its CSS coverage is narrower than Chromium's. PDF output does not support `filter: blur()`, `drop-shadow()`, or `backdrop-filter`. A blurred `box-shadow` is approximated with bands, and a blurred `text-shadow` draws sharp. Tagged output is on by default and adds about 4 KB to this invoice, down from 10 KB before the structure tree moved into an object stream. `tagged: false` removes it.
+### Puppeteer
 
-Choose based on your template and runtime. Puppeteer uses browser layout and executes page scripts. react-pdf uses document components. Takumi accepts HTML, JSX, and node trees with its supported CSS subset. Run your own documents through the benchmark before using these timings to estimate workload capacity.
+- Cold start includes launching a browser process, and it varies with machine state.
+- Chrome's memory spans several processes, which a single-process measurement misses.
+- Chrome is fast once warm, and its CSS support is the most complete of the three.
+
+### react-pdf
+
+- It embeds the same Inter subsets as the other two. Subsetting on every render is most of its warm cost. The 14 standard PDF fonts avoid that cost.
+- Documents use react-pdf's own components, so existing HTML, JSX, and Tailwind markup cannot be reused.
+- It shapes Arabic, but paragraph direction is manual. In this benchmark, the Arabic sample lost its first letter.
+
+### takumi-pdf
+
+- It renders the same components as takumi's image output, unchanged.
+- Its CSS coverage is narrower than Chromium's. PDF output rejects `filter: blur()` and `drop-shadow()`, and does not draw `backdrop-filter`.
+- Blurred `box-shadow` and `text-shadow` are approximated with stepped bands.
+- Tagged output is on by default and added about 4 KB to this invoice. `tagged: false` removes it.
+
+## Choose a renderer
+
+- **Puppeteer** uses browser layout and runs page scripts.
+- **react-pdf** uses its own document components.
+- **takumi-pdf** takes HTML, JSX, and node trees with its supported CSS.
+
+Run your own documents through the benchmark before you use these timings to plan capacity.

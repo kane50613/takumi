@@ -4,24 +4,27 @@
 //! [`takumi_core::layout::decoration`]; these functions composite it with
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Size},
+  geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::{
     decoration::ClipBox,
     inline::{PositionedGlyph, PositionedInlineRun},
   },
+  paint_property::ClipNode,
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, PaintDevice, PendingOutline, ShadowShape, StripBackground, StrokeStyle, TextClip,
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, CellArea, CellBackground,
+    FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice, PendingOutline, ShadowShape,
+    StripBackground, StrokeStyle, TableDecorations, TextClip,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
   scene::SceneBounds,
   shadow::SizedShadow,
   style::{Color, ImageScalingAlgorithm},
 };
+use tiny_skia::{IntRect, Pixmap};
 
 use super::{
   BackgroundTile, BorderProperties, Canvas, CanvasViewport, ColorTile, Fill, PaintSource,
@@ -29,21 +32,23 @@ use super::{
   collect_background_layers, draw_image, rasterize_layers,
 };
 use crate::{
-  BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, Placement, Result, Stroke, Style,
-  alpha_mask, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage, checked_area,
-  draw_glyph, intersect_alpha_masks,
+  BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, PlacedMask, Placement, Result,
+  Stroke, Style, alpha_mask, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage,
+  cached_glyph_mask, checked_area, draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
+  union_alpha_masks,
 };
 
 /// Paints a box's own decorations, bottom to top: outset shadows, background, through
-/// `text_clip` when it has one, inset shadows, and border.
+/// `text_clip` when it has one, inset shadows, and border when `paints_border`.
 pub(crate) fn draw_box_shell(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
   text_clip: Option<&TextClip>,
+  paints_border: bool,
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
 
@@ -54,7 +59,120 @@ pub(crate) fn draw_box_shell(
   CanvasDevice::paint(canvas, context, |device| {
     painter.paint_inset_box_shadows(Point::ZERO, device);
   })?;
-  draw_border(context, canvas, layout)
+  if paints_border {
+    draw_border(context, canvas, layout)?;
+  }
+  Ok(())
+}
+
+/// Paints a box's own decorations as its part in a table paints them.
+pub(crate) fn draw_table_box_shell(
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  layout: Layout,
+  text_clip: Option<&TextClip>,
+  table: TableDecorations,
+) -> Result<()> {
+  match table {
+    TableDecorations::None => draw_box_shell(context, canvas, layout, text_clip, true),
+    TableDecorations::Cell {
+      paints_border,
+      clip: None,
+    } => draw_box_shell(context, canvas, layout, text_clip, paints_border),
+    TableDecorations::Cell {
+      paints_border,
+      clip: Some(clip),
+    } => within_cell(canvas, context.transform, clip, |canvas| {
+      draw_box_shell(context, canvas, layout, text_clip, paints_border)
+    }),
+    TableDecorations::Table {
+      grid,
+      grid_offset,
+      paints_border,
+      columns,
+    } => {
+      let mut grid_context = context.clone();
+
+      grid_context.transform =
+        context.transform * Affine::translation(grid_offset.x, grid_offset.y);
+      draw_box_shell(&grid_context, canvas, grid, text_clip, paints_border)?;
+
+      for column in columns {
+        for background in column.cells {
+          draw_cell_background(
+            &column.context,
+            canvas,
+            context.transform,
+            layout,
+            background,
+          )?;
+        }
+      }
+      Ok(())
+    }
+    TableDecorations::Part { cells } => {
+      let painter = BoxPainter::new(context, layout);
+
+      CanvasDevice::paint(canvas, context, |device| {
+        painter.paint_normal_box_shadows(Point::ZERO, device);
+      })?;
+      for background in cells {
+        draw_cell_background(context, canvas, context.transform, layout, background)?;
+      }
+      CanvasDevice::paint(canvas, context, |device| {
+        painter.paint_inset_box_shadows(Point::ZERO, device);
+      })
+    }
+  }
+}
+
+/// Draws the background of `context`, a table part, over `background.area` inside its cell, both
+/// placed under `transform` relative to `layout`, the box painting it.
+fn draw_cell_background(
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  transform: Affine,
+  layout: Layout,
+  background: CellBackground,
+) -> Result<()> {
+  let at = background.area.offset;
+  let mut part_context = context.clone();
+
+  part_context.transform = transform * Affine::translation(at.x, at.y);
+  let part_layout = Layout {
+    location: layout.location + at,
+    size: background.area.size,
+    border: Rect::default(),
+    padding: Rect::default(),
+  };
+
+  within_cell(canvas, transform, background.cell, |canvas| {
+    draw_background(&part_context, canvas, part_layout, None)
+  })
+}
+
+/// Runs `paint` with the canvas masked to `cell`, placed under `transform`.
+fn within_cell(
+  canvas: &mut Canvas,
+  transform: Affine,
+  cell: CellArea,
+  paint: impl FnOnce(&mut Canvas) -> Result<()>,
+) -> Result<()> {
+  let clip = ClipNode {
+    parent: None,
+    transform: transform * Affine::translation(cell.offset.x, cell.offset.y),
+    shape: FillShape::Rect(cell.size),
+    owner: Vec::new(),
+  };
+  let Some(mask) = PlacedMask::of_clip(&clip, canvas.viewport()) else {
+    return Ok(());
+  };
+
+  canvas.push_mask(mask);
+  let result = paint(canvas);
+
+  canvas.pop_mask();
+  result
 }
 
 /// The canvas as a [`PaintDevice`]. An unclipped rounded rectangle composites
@@ -383,35 +501,60 @@ impl<'c> CanvasDevice<'c> {
       y: offset.y + glyph.y,
     };
 
+    // Approximate: the run's glyphs cast one shadow, their coverage drawn together and blurred
+    // once. Blink's `DropShadowPaintFilter` covers a whole text fragment, which can span several
+    // of these runs where font fallback or bidi splits it, so halos still stack across those.
     if let Some(shadow) = self.shadow {
+      // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`).
+      let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
+      let viewport = self.shadow_viewport(blur_radius);
+      let cast = self.transform * Affine::translation(shadow.offset_x, shadow.offset_y);
+      let text_stroke = (stroke.0 > 0.0).then(|| {
+        let mut text_stroke = Stroke::new(stroke.0);
+
+        text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin.into();
+        text_stroke
+      });
+      let mut coverages = Vec::with_capacity(glyph_run.glyphs.len());
+
       for glyph in &glyph_run.glyphs {
         let at = placed(glyph);
-        let transform = local * Affine::translation(at.x, at.y);
-        let outline = match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
-          Some(ResolvedGlyph::Outline(outline)) => outline,
-          Some(ResolvedGlyph::Bitmap(bitmap)) => {
-            let placed =
-              self.transform * Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
-            let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
+        let transform = cast * local * Affine::translation(at.x, at.y);
 
-            if let Some(coverage) =
-              bitmap_coverage(bitmap, placed, self.shadow_viewport(blur_radius))
-            {
-              self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
+        match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
+          Some(ResolvedGlyph::Outline(outline)) => {
+            let signature = outline.cache_signature();
+
+            coverages.push(cached_glyph_mask(
+              signature,
+              outline.paths(),
+              transform,
+              None,
+            ));
+            if let Some(text_stroke) = text_stroke {
+              coverages.push(cached_glyph_mask(
+                signature,
+                outline.paths(),
+                transform,
+                Some(text_stroke),
+              ));
             }
-            continue;
           }
-          None => continue,
-        };
-
-        self.draw_shadow_of(shadow, outline.paths(), Fill::NonZero.into(), transform);
-
-        if stroke.0 > 0.0 {
-          let mut text_stroke = Stroke::new(stroke.0);
-
-          text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin.into();
-          self.draw_shadow_of(shadow, outline.paths(), text_stroke.into(), transform);
+          Some(ResolvedGlyph::Bitmap(bitmap)) => {
+            coverages.extend(
+              bitmap_coverage(bitmap, transform, viewport)
+                .map(|(mask, placement)| (Arc::new(mask), placement)),
+            );
+          }
+          None => {}
         }
+      }
+
+      // The cached masks are uncropped, so one wholly outside would only widen the union.
+      coverages.retain(|(_, placement)| viewport.overlaps(*placement));
+
+      if let Some(coverage) = union_alpha_masks(coverages) {
+        self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
       }
 
       return Ok(());
@@ -750,34 +893,9 @@ pub(crate) fn draw_background(
       let layers = background_image_layers(&background, context)?;
 
       if border_radius.is_zero() && layers.iter().all(TileLayer::blits) {
-        for tile in layers {
-          for y in &tile.ys {
-            for x in &tile.xs {
-              let transform = tile.tile_transform(context.transform, *x, *y);
-              if transform.only_translation()
-                && canvas.overlay_background_tile_direct(
-                  &tile.tile,
-                  Point {
-                    x: transform.x,
-                    y: transform.y,
-                  },
-                  tile.blend_mode,
-                )
-              {
-                continue;
-              }
-
-              canvas.overlay_image(
-                &tile.tile,
-                border_radius,
-                transform,
-                context.style.misc_inherited_data.image_rendering,
-                tile.blend_mode,
-              );
-            }
-          }
-        }
-      } else if let Some(layer) = single_solid_color_layer(&layers, canvas) {
+        blit_background_tiles(&layers, background.border_box(), context, canvas);
+      } else if let Some(layer) = single_solid_color_layer(&layers, background.border_box(), canvas)
+      {
         let transform = context.transform * Affine::translation(layer.x, layer.y);
         canvas.overlay_image(
           layer.tile,
@@ -856,6 +974,74 @@ pub(crate) fn draw_background(
 /// Rasterizes the background layers into `clip`'s rounded region, relative to the snapped border
 /// box `offset` from the border box, and composites it. Shared by the padding-box and
 /// content-box `background-clip` modes.
+/// Blits each tile of `layers`, cutting the ones that cross the edge of `border_box` to it.
+fn blit_background_tiles(
+  layers: &[TileLayer],
+  border_box: Rect<f32>,
+  context: &RenderContext,
+  canvas: &mut Canvas,
+) {
+  let algorithm = context.style.misc_inherited_data.image_rendering;
+
+  for layer in layers {
+    let (width, height) = layer.tile.dimensions();
+    let mut cuts: Vec<(IntRect, Pixmap)> = Vec::new();
+
+    for y in &layer.ys {
+      for x in &layer.xs {
+        let Some(part) = layer.visible_part(*x, *y, border_box) else {
+          continue;
+        };
+        let transform = layer.tile_transform(context.transform, *x, *y);
+
+        if part.width() != width || part.height() != height {
+          let cut = match cuts.iter().position(|(cut, _)| *cut == part) {
+            Some(index) => &cuts[index].1,
+            None => {
+              let Some(pixmap) = layer.tile.cut(part) else {
+                continue;
+              };
+
+              cuts.push((part, pixmap));
+              &cuts[cuts.len() - 1].1
+            }
+          };
+
+          canvas.overlay_image(
+            cut,
+            BorderProperties::default(),
+            transform * Affine::translation(part.x() as f32, part.y() as f32),
+            algorithm,
+            layer.blend_mode,
+          );
+          continue;
+        }
+
+        if transform.only_translation()
+          && canvas.overlay_background_tile_direct(
+            &layer.tile,
+            Point {
+              x: transform.x,
+              y: transform.y,
+            },
+            layer.blend_mode,
+          )
+        {
+          continue;
+        }
+
+        canvas.overlay_image(
+          &layer.tile,
+          BorderProperties::default(),
+          transform,
+          algorithm,
+          layer.blend_mode,
+        );
+      }
+    }
+  }
+}
+
 fn draw_clipped_background(
   clip: ClipBox,
   offset: Point<f32>,
@@ -928,6 +1114,7 @@ struct SolidColorLayer<'a> {
 
 fn single_solid_color_layer<'a>(
   layers: &'a [TileLayer],
+  area: Rect<f32>,
   canvas: &Canvas,
 ) -> Option<SolidColorLayer<'a>> {
   if !canvas.has_no_constraint_mask() {
@@ -939,7 +1126,7 @@ fn single_solid_color_layer<'a>(
   if !matches!(layer.tile, BackgroundTile::Color(_)) {
     return None;
   }
-  if layer.xs.len() != 1 || layer.ys.len() != 1 || !layer.blits() {
+  if layer.xs.len() != 1 || layer.ys.len() != 1 || !layer.blits() || !layer.fits(area) {
     return None;
   }
   Some(SolidColorLayer {
@@ -1033,7 +1220,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    assert!((8..40).all(|x| image.get_pixel(x, 2).0[3] > 0));
+    assert!((8..40).all(|x| image.get_pixel(x, 2)[3] > 0));
   }
 
   #[test]
@@ -1056,7 +1243,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    assert!(image.pixels().all(|pixel| pixel.0[3] == 0));
+    assert!(image.pixels().all(|pixel| pixel[3] == 0));
   }
 
   #[test]
@@ -1080,7 +1267,7 @@ mod tests {
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
-    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2)[3]).collect();
     let has_opaque = row.iter().any(|&a| a > 0);
     let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);
 
@@ -1112,7 +1299,7 @@ mod tests {
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
-    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2)[3]).collect();
     let has_opaque = row.iter().any(|&a| a > 0);
     let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);
 
@@ -1160,7 +1347,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    let top_row: Vec<u8> = (8..40).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let top_row: Vec<u8> = (8..40).map(|x| image.get_pixel(x, 2)[3]).collect();
 
     assert!(
       top_row.iter().any(|&alpha| alpha > 0),
@@ -1171,17 +1358,17 @@ mod tests {
       "Top dashed side should contain transparent gaps"
     );
     assert_eq!(
-      image.get_pixel(24, 45).0[3],
+      image.get_pixel(24, 45)[3],
       0,
       "Bottom side should stay transparent for top-only dashed border"
     );
     assert_eq!(
-      image.get_pixel(2, 24).0[3],
+      image.get_pixel(2, 24)[3],
       0,
       "Left side should stay transparent for top-only dashed border"
     );
     assert_eq!(
-      image.get_pixel(45, 24).0[3],
+      image.get_pixel(45, 24)[3],
       0,
       "Right side should stay transparent for top-only dashed border"
     );
@@ -1209,7 +1396,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    let left_column: Vec<u8> = (8..40).map(|y| image.get_pixel(2, y).0[3]).collect();
+    let left_column: Vec<u8> = (8..40).map(|y| image.get_pixel(2, y)[3]).collect();
 
     assert!(
       left_column.iter().any(|&alpha| alpha > 0),
@@ -1220,17 +1407,17 @@ mod tests {
       "Left dotted side should contain transparent gaps"
     );
     assert_eq!(
-      image.get_pixel(24, 2).0[3],
+      image.get_pixel(24, 2)[3],
       0,
       "Top side should stay transparent for left-only dotted border"
     );
     assert_eq!(
-      image.get_pixel(45, 24).0[3],
+      image.get_pixel(45, 24)[3],
       0,
       "Right side should stay transparent for left-only dotted border"
     );
     assert_eq!(
-      image.get_pixel(24, 45).0[3],
+      image.get_pixel(24, 45)[3],
       0,
       "Bottom side should stay transparent for left-only dotted border"
     );
@@ -1260,11 +1447,11 @@ mod tests {
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
     assert_eq!(
-      image.get_pixel(24, 2).0[3],
+      image.get_pixel(24, 2)[3],
       0,
       "Hidden top side should stay transparent"
     );
-    let right_band_has_ink = (44..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    let right_band_has_ink = (44..48).any(|x| image.get_pixel(x, 24)[3] > 0);
     assert!(
       right_band_has_ink,
       "Visible right side should still be painted"
@@ -1295,11 +1482,11 @@ mod tests {
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
     assert_eq!(
-      image.get_pixel(24, 2).0[3],
+      image.get_pixel(24, 2)[3],
       0,
       "Hidden top side should stay transparent"
     );
-    let right_band_has_ink = (42..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    let right_band_has_ink = (42..48).any(|x| image.get_pixel(x, 24)[3] > 0);
     assert!(
       right_band_has_ink,
       "Visible right side should still be painted"
@@ -1334,11 +1521,11 @@ mod tests {
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
     assert!(
-      image.get_pixel(4, 3).0[3] > 0,
+      image.get_pixel(4, 3)[3] > 0,
       "Visible top side should not be clipped by hidden left width"
     );
     assert_eq!(
-      image.get_pixel(3, 32).0[3],
+      image.get_pixel(3, 32)[3],
       0,
       "Hidden left side should stay transparent"
     );
@@ -1367,7 +1554,7 @@ mod tests {
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
     assert!(
-      image.get_pixel(10, 10).0[3] > 0,
+      image.get_pixel(10, 10)[3] > 0,
       "Oversized border should still render a valid filled mask"
     );
   }

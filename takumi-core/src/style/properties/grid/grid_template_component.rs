@@ -12,7 +12,7 @@ use crate::style::{
 pub type GridTemplateComponents = Vec<GridTemplateComponent>;
 
 /// Parses a `[name1 name2 ...]` line-name block's body; caller consumes the opening bracket.
-pub(crate) fn parse_line_names<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Vec<String>> {
+pub(crate) fn parse_line_names<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Vec<String>> {
   input.parse_nested_block(|i| {
     let mut names = Vec::new();
     while let Ok(name) = i.try_parse(Parser::expect_ident_cloned) {
@@ -50,7 +50,7 @@ impl MakeComputed for GridTemplateComponent {
 }
 
 impl<'i> FromCss<'i> for GridTemplateComponent {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       return Ok(GridTemplateComponent::LineNames(parse_line_names(input)?));
     }
@@ -113,7 +113,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
 }
 
 impl<'i> FromCss<'i> for GridTemplateComponents {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut components = Vec::new();
     while let Ok(component) = GridTemplateComponent::from_css(input) {
       components.push(component);

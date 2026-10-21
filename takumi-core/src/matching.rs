@@ -19,7 +19,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    MediaQueryList, StyleDeclarationBlock,
+    LonghandId, MediaQueryList, StyleDeclarationBlock,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -373,6 +373,9 @@ pub(crate) struct MatchedDeclarationsView<'a> {
   /// order. The `tw` layer slots in here: above unlayered rules, below every
   /// named `@layer`.
   layered_important_start: usize,
+  /// The stylesheet position of the rule each block came from and whether it is the `!important`
+  /// block, in cascade order.
+  rules: SmallVec<[(usize, bool); 8]>,
 }
 
 impl<'a> MatchedDeclarationsView<'a> {
@@ -400,6 +403,20 @@ impl<'a> MatchedDeclarationsView<'a> {
   /// Matched blocks marked `!important` from named layers, in cascade order.
   pub(crate) fn layered_important(&self) -> &[&'a StyleDeclarationBlock] {
     &self.important[self.layered_important_start..]
+  }
+
+  /// The rules the blocks came from, which name the same blocks on every element of the render.
+  pub(crate) fn rules(&self) -> &[(usize, bool)] {
+    &self.rules
+  }
+
+  /// Whether a matched declaration may copy a non-inherited value from the parent.
+  pub(crate) fn inherits_explicitly(&self) -> bool {
+    self
+      .normal
+      .iter()
+      .chain(&self.important)
+      .any(|block| block.inherits_explicitly())
   }
 }
 
@@ -764,6 +781,8 @@ fn finalize_bucket<'a>(
     )
   });
   for rule in rules.drain(..) {
+    matched.rules.push((rule.source_order, rule.important));
+
     if rule.important {
       if rule.layer_order == 0 {
         matched.layered_important_start += 1;
@@ -782,7 +801,17 @@ fn take_pseudo_bucket<'a>(
   rules: &mut Vec<MatchedRule<'a>>,
   layer_count: usize,
 ) -> Option<MatchedDeclarationsView<'a>> {
-  if rules.is_empty() {
+  // `content` does not inherit, and its initial `normal` computes to `none` on these pseudo-elements.
+  let sets_content = rules.iter().any(|rule| {
+    rule.declarations.iter().any(|declaration| {
+      declaration
+        .affected_longhands()
+        .contains(&LonghandId::Content)
+    })
+  });
+
+  if !sets_content {
+    rules.clear();
     return None;
   }
   let mut view = MatchedDeclarationsView::default();
@@ -793,7 +822,7 @@ fn take_pseudo_bucket<'a>(
 /// RFC 4647 basic filtering, as `:lang()` uses: `range` matches `lang` if they're equal
 /// (case-insensitive) or `lang` extends `range` with a `-` boundary (`zh` matches `zh-Hant`).
 /// `*` matches any non-empty `lang`.
-fn lang_matches(lang: &str, range: &str) -> bool {
+pub(crate) fn lang_matches(lang: &str, range: &str) -> bool {
   if range == "*" {
     return true;
   }

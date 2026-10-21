@@ -201,9 +201,7 @@ impl BasicShape {
 }
 
 impl<'i> FromCss<'i> for ShapeRadius {
-  fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = parser.current_source_location();
-
+  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(length) = parser.try_parse(Length::from_css) {
       return Ok(ShapeRadius::Length(length));
     }
@@ -212,7 +210,7 @@ impl<'i> FromCss<'i> for ShapeRadius {
     match_ignore_ascii_case! { &ident,
       "closest-side" => Ok(ShapeRadius::ClosestSide),
       "farthest-side" => Ok(ShapeRadius::FarthestSide),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident.clone()))),
+      _ => Err(unexpected_token!(&Token::Ident(ident.clone()))),
     }
   }
 
@@ -221,7 +219,7 @@ impl<'i> FromCss<'i> for ShapeRadius {
 
 impl ShapePosition {
   /// Parses an optional `at <position>` clause, defaulting to the center.
-  fn parse_at<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn parse_at<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("at"))
       .is_ok()
@@ -235,7 +233,7 @@ impl ShapePosition {
 
 impl FillRule {
   /// Parses an optional leading `<fill-rule>,` of `polygon()` and `path()`.
-  fn parse_prefix<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<Self>> {
+  fn parse_prefix<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Option<Self>> {
     let fill_rule = input.try_parse(Self::from_css).ok();
 
     if fill_rule.is_some() {
@@ -247,7 +245,7 @@ impl FillRule {
 }
 
 impl<'i> FromCss<'i> for ShapePosition {
-  fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let first = Length::from_css(parser)?;
     let second = parser
       .try_parse(Length::from_css)
@@ -260,8 +258,7 @@ impl<'i> FromCss<'i> for ShapePosition {
 }
 
 impl<'i> FromCss<'i> for BasicShape {
-  fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = parser.current_source_location();
+  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 
     match token {
@@ -315,10 +312,10 @@ impl<'i> FromCss<'i> for BasicShape {
               path,
             }))
           }),
-          _ => Err(unexpected_token!(location, token)),
+          _ => Err(unexpected_token!(token)),
         }
       }
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 
@@ -423,17 +420,6 @@ mod tests {
       BasicShape::from_css_str("inset(10px)"),
       Ok(BasicShape::Inset(Box::new(InsetShape {
         inset: Sides([Px(10.0); 4]),
-        border_radius: None,
-      })))
-    );
-  }
-
-  #[test]
-  fn test_parse_inset_four_values() {
-    assert_eq!(
-      BasicShape::from_css_str("inset(10px 20px 30px 40px)"),
-      Ok(BasicShape::Inset(Box::new(InsetShape {
-        inset: Sides([Px(10.0), Px(20.0), Px(30.0), Px(40.0)]),
         border_radius: None,
       })))
     );

@@ -3,7 +3,7 @@ title: Nitro
 description: Return Open Graph images from Nitro server routes with Takumi node helpers and ImageResponse.
 ---
 
-Build an Open Graph image from a node tree and return it from a Nitro route. The helpers below work without JSX.
+Build an Open Graph image from a node tree and return it from a Nitro route. The [helpers](/docs/helpers) build the tree, so the route needs no JSX setup.
 
 <Steps>
   <Step>
@@ -17,7 +17,7 @@ Build an Open Graph image from a node tree and return it from a Nitro route. The
   <Step>
     ### Create a server route
 
-    Build the node tree with [helpers](/docs/helpers), so no JSX setup is needed. Nitro handlers can return a `Response`, so return an `ImageResponse` directly.
+    Nitro handlers can return a `Response`, so return the `ImageResponse` directly.
 
     ```ts title="routes/og.png.ts"
     import { defineHandler } from "nitro";
@@ -60,17 +60,24 @@ Build an Open Graph image from a node tree and return it from a Nitro route. The
 
     Visit `/og.png?title=Hello&description=From%20Nitro`.
 
-    Every Nitro preset renders on the WebAssembly backend. Nitro sets the [`unwasm`](https://github.com/unjs/unwasm) export condition while [`wasm`](https://nitro.build/config#wasm) is on (the default), so the WASM binary ships inside your server bundle. Nothing has to resolve a native addon at runtime, so the same route deploys to an edge preset and runs in a WebContainer (StackBlitz, CodeSandbox).
-
-    Prefer the faster native bindings on the Node preset? Drop the condition:
-
-    ```ts title="nitro.config.ts"
-    export default defineNitroConfig({
-      exportConditions: ["!unwasm"],
-    });
-    ```
-
-    `wasm: false` gets you the native bindings too, but it also unplugs unwasm from the build, so `.wasm` imports elsewhere in your app stop resolving. Negating the condition leaves the plugin in place.
-
   </Step>
 </Steps>
+
+## Choose the backend
+
+Every Nitro preset renders on the WebAssembly backend by default. While [`wasm`](https://nitro.build/config#wasm) is on, which is the default, Nitro sets the [`unwasm`](https://github.com/unjs/unwasm) export condition. Takumi then ships its WebAssembly binary inside your server bundle. No native addon has to resolve at runtime, so the same route runs on an edge preset and in a WebContainer, such as StackBlitz or CodeSandbox.
+
+To use the native binding on the Node.js preset, negate the condition:
+
+```ts title="nitro.config.ts"
+import { defineConfig } from "nitro";
+
+export default defineConfig({
+  exportConditions: ["!unwasm"],
+});
+```
+
+<Callout type="warn">
+  `wasm: false` also selects the native binding, but it removes unwasm from the build. Other `.wasm`
+  imports in your app then stop resolving. Negating the condition keeps the plugin.
+</Callout>

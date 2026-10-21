@@ -6,6 +6,17 @@ icon: Image
 
 ## External images
 
+`render()` and `ImageResponse` fetch every remote `http://` or `https://` URL the tree references:
+
+- an `<img>` `src`
+- `background-image`, `mask-image`, and `list-style-image` in a node's `style` or `tw`
+
+<Callout type="warn">
+  Takumi does not fetch URLs inside `css` or a `<style>` tag. Pass those images as [pre-fetched images](#pre-fetched-images).
+</Callout>
+
+Share a `fetchCache` across renders to reuse downloaded bytes and pending requests:
+
 ```tsx twoslash title="Share downloaded image bytes"
 import { render } from "takumi-js";
 
@@ -20,9 +31,12 @@ const image = await render(element, {
 });
 ```
 
-Takumi fetches remote images referenced by `src`, `background-image`, `mask-image`, and `list-style-image`. An optional `fetchCache` shares downloaded bytes and pending requests across renders. Use `Map<string, Promise<ArrayBuffer>>` or an object with the same `get`, `set`, and `delete` contract. Values are promises, not raw buffers.
+`fetchCache` takes a `Map<string, Promise<ArrayBuffer>>` or any object with the same `get`, `set`, and `delete` methods. Values are promises, not raw buffers.
 
-A plain `Map` never evicts. If each render uses a different URL, pass a bounded cache such as an LRU, or omit `fetchCache`.
+<Callout type="warn">
+  A plain `Map` never evicts entries. If each render uses a different URL, pass a bounded cache such
+  as an LRU, or leave `fetchCache` out.
+</Callout>
 
 ## Fetch limits
 
@@ -41,25 +55,43 @@ const image = await render(element, {
 });
 ```
 
-These options apply to Takumi's image fetches, `googleFonts`, and `fontFromUrl`. A custom `data` loader manages its own requests.
+`images`, `googleFonts`, and `fontFromUrl` take these options. A custom `data` loader makes its own requests, so they do not apply to it.
 
 | Option     | Default            | Effect                                                                          |
 | :--------- | :----------------- | :------------------------------------------------------------------------------ |
 | `timeout`  | `30000` ms         | Deadline for each request, including retry delays. `0` or negative disables it. |
-| `signal`   | none               | Cancel a request and any pending retry.                                         |
-| `maxBytes` | 32 MiB             | Reject oversized bodies, using `content-length` and streamed bytes.             |
-| `allowUrl` | allow all          | Reject a URL before fetching it, including redirect destinations.               |
-| `fetch`    | `globalThis.fetch` | Supply a custom fetch implementation.                                           |
+| `signal`   | none               | Cancels a request and any pending retry.                                        |
+| `maxBytes` | 32 MiB             | Rejects larger bodies, by `content-length` and by streamed bytes.               |
+| `allowUrl` | allow all          | Rejects a URL before fetching it, redirect destinations included.               |
+| `fetch`    | `globalThis.fetch` | Replaces the fetch implementation.                                              |
 
-GET and HEAD requests make up to three attempts for connection errors, transient timeouts, or HTTP `408`, `429`, `500`, `502`, `503`, and `504`. Retries wait 100 ms, then 200 ms. A `Retry-After` header can extend that delay up to one second; a longer value returns the error without retrying. Redirects use the same deadline, with a separate attempt limit per destination.
+### Retries
 
-Caller cancellation and an expired deadline stop retries. Other HTTP errors and failures while reading a response body are not retried. A custom `fetch` must honor the supplied abort signal.
+GET and HEAD requests make up to three attempts. They retry when `fetch` throws a `TypeError` (such as a connection error) or a `TimeoutError`, and on HTTP `408`, `429`, `500`, `502`, `503`, and `504`. The waits are 100 ms, then 200 ms. A `Retry-After` header can extend a wait up to one second. A longer `Retry-After` returns the error without retrying.
 
-`render()` and `ImageResponse` fetch these URLs from your server. Set `allowUrl` whenever user input can influence the markup. On a cache miss, it checks each redirect destination, with at most five hops. An image byte-cache hit checks only the entry URL: cached values do not retain redirect history. Do not share `images.fetchCache` across different URL policies or trust boundaries. DNS is not inspected; use a custom `fetch` for resolved-address filtering.
+These stop retries:
+
+- the caller's `signal` aborts
+- the deadline passes
+- any other HTTP error
+- a failure while reading the response body
+
+A custom `fetch` must honor the abort signal it receives.
+
+### URLs from user input
+
+<Callout type="warn">
+  Takumi fetches these URLs from your server. Set `allowUrl` whenever user input can reach the
+  markup.
+</Callout>
+
+- `allowUrl` checks each redirect destination, up to five hops. Each hop shares the same deadline and gets its own attempts.
+- A `fetchCache` hit checks only the requested URL, because cached bytes keep no redirect history. Do not share one `fetchCache` across different URL policies.
+- `allowUrl` sees URLs, not IP addresses. To filter by resolved address, pass a custom `fetch`.
 
 ## Pre-fetched images
 
-Provide images by key so the renderer doesn't have to fetch them itself. Each key can be used in any `src` field or in the `background-image` / `mask-image` CSS properties.
+Give images a key so the renderer never fetches them. Use the key in any `src` or CSS `url()`.
 
 ```tsx twoslash title="Load named image sources"
 import { ImageResponse } from "takumi-js/response";
@@ -93,11 +125,11 @@ function OgImage() {
 }
 ```
 
+`data` is raw bytes or a function that returns them. Takumi skips fetching any remote URL that already has an entry.
+
 ## Raw pixels
 
-This example fills a 64 × 64 image with opaque blue pixels.
-
-For pixels you compute yourself (charts, generative art), pass raw RGBA instead of encoding a PNG first; nothing is decoded. The `Bitmap` helper renders a row-major `width * height * 4` byte buffer as an `<img>`:
+Pass raw RGBA pixels instead of encoding a PNG first; Takumi skips decoding. The `Bitmap` helper renders a row-major buffer of `width * height * 4` bytes as an `<img>`. This example fills a 64 × 64 image with opaque blue:
 
 ```tsx twoslash title="Render raw RGBA pixels"
 import { render } from "takumi-js";
@@ -115,22 +147,22 @@ const image = await render(<Bitmap width={64} height={64} data={pixels} />, {
 });
 ```
 
-Set `premultiplied` when the bytes are already alpha-premultiplied and the renderer takes them as-is. Outside JSX, an image node's `src` takes the same `{ width, height, data, premultiplied? }` object.
+Set `premultiplied` when the bytes already have premultiplied alpha. Takumi then uses them as they are. Outside JSX, an image node's `src` takes the same `{ width, height, data, premultiplied? }` object.
 
 ## Decode caching
 
-Takumi caches each decoded image so repeated content is decoded once. Two independent layers exist:
+Takumi caches each decoded image, so repeated content decodes once. There are two caches:
 
-| Layer        | Stores         | Keyed by            | Set with                           |
+| Cache        | Stores         | Keyed by            | Set with                           |
 | ------------ | -------------- | ------------------- | ---------------------------------- |
 | Byte cache   | Fetched bytes  | URL                 | `images.fetchCache`                |
 | Decode cache | Decoded pixels | Hash of image bytes | per-image `cache` / `images.cache` |
 
-A `data:` URI in an `<img>` or a CSS `url()` goes through the same decode cache, keyed by the bytes it encodes, so a template that inlines its logo decodes it once. It always caches in `auto` mode, because `images.cache` applies only to `sources` and the URLs Takumi fetches.
+A `data:` URI in an `<img>` or a CSS `url()` uses the same decode cache, keyed by the bytes it holds. A template that inlines its logo decodes it once. `data:` URIs always cache in `auto` mode, because `images.cache` applies only to `sources` and to URLs Takumi fetches.
 
-The decode cache lives in the renderer and is bounded: entries weigh in at their decoded size against a byte budget (64 MiB by default), and once it fills the cache evicts the least recently used. A high-cardinality workload (a different image every render) won't grow memory; it misses the cache and decodes each time. SVG sources and their rasterized pixmaps share the same budget, as do parsed stylesheets.
+The decode cache belongs to the renderer and has a byte budget, 64 MiB by default. Each entry counts its decoded size. When the cache is full, it evicts the least recently used entry. SVG sources, their rasterized pixels, and parsed stylesheets share the same budget. A workload with a different image every render does not grow memory. It misses the cache and decodes each time.
 
-Set the budget when constructing the renderer; `0` disables caching:
+Set the budget when you create the renderer. `0` turns caching off.
 
 ```ts twoslash title="Set the decode cache budget"
 import { Renderer } from "takumi-js/node";
@@ -140,8 +172,8 @@ const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
 
 The per-image `cache` mode takes two values:
 
-- `auto` (default): cache the decoded image within the byte budget.
-- `none`: read the cache but never populate it. Use it for a one-off image you won't render again, so it can't displace images worth keeping.
+- `auto` (default): cache the decoded image within the budget.
+- `none`: read the cache but never add to it. Use it for a one-off image, so it does not push out images worth keeping.
 
 ```tsx twoslash title="Skip caching one image"
 import { ImageResponse } from "takumi-js/response";
@@ -159,7 +191,7 @@ export function GET(request: Request) {
 }
 ```
 
-To set the mode for every image in a render, including ones Takumi fetches itself, pass `images` as a group instead of an array. A per-source `cache` still wins. For a route where each request renders a different image, `cache: "none"` keeps one-off decodes out of the cache:
+To set the mode for every image in a render, pass `images` as an object instead of an array. This includes images Takumi fetches itself. A source's own `cache` still wins. For a route that renders a different image on every request, `cache: "none"` keeps one-off decodes out of the cache:
 
 ```tsx twoslash title="Skip caching all images"
 import { ImageResponse } from "takumi-js/response";
@@ -185,34 +217,36 @@ function OgImage() {
 
 ## Decode limits
 
-Takumi rejects oversized images at decode time. The limits guard server renders against decode bombs: small files that declare huge dimensions to force multi-gigabyte allocations.
+Takumi rejects oversized images when it decodes them. The limits protect servers from decode bombs: small files that declare huge dimensions to force huge allocations.
 
-| Input        | Limit                                       |
-| ------------ | ------------------------------------------- |
-| Image        | **8192×8192** pixels                        |
-| Animated GIF | 4× the image budget, summed over all frames |
+| Input                       | Limit                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| Image                       | **8192 × 8192** pixels                                                       |
+| Animated GIF, APNG, or WebP | 4 × 8192 × 8192 pixels summed over all frames. Frames past 1024 are dropped. |
 
 ## Emoji
 
+`takumi-js` turns emoji into images by default. It splits each emoji out of the text and fetches its SVG from a CDN, using Twemoji unless you pick another set.
+
 ### Dynamic fetching
 
-`ImageResponse` accepts a satori-compatible `emoji` option. The providers are `twemoji`, `blobmoji`, `noto`, `openmoji`, `fluent`, and `fluentFlat`.
+Set `emoji` to choose the set. The options match satori: `twemoji` (default), `blobmoji`, `noto`, `openmoji`, `fluent`, and `fluentFlat`. `render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take it.
 
 ```tsx twoslash title="Fetch emoji images"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
   return new ImageResponse(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>, {
-    emoji: "twemoji", // [!code ++]
+    emoji: "noto", // [!code ++]
   });
 }
 ```
 
-`extractEmojis` follows the Unicode presentation rules. A pictograph that defaults to text presentation, such as `‼` or `▶`, stays text and renders with your fonts. Add `U+FE0F` after it to force the emoji image, or `U+FE0E` after an emoji to keep the text glyph.
+Emoji detection follows the Unicode presentation rules. A pictograph that defaults to text presentation, such as `‼` or `▶`, stays text and renders with your fonts. Add `U+FE0F` after it to force the emoji image. Add `U+FE0E` after an emoji to keep the text glyph.
 
 #### Manual extraction
 
-`ImageResponse` calls the `extractEmojis` helper for you. The helper splits emoji from text into image nodes pointing at a CDN. Run the steps yourself to fetch emoji bytes alongside other images.
+The `extractEmojis` helper does the splitting. It replaces each emoji with an image node that points at the CDN. Call it yourself to fetch emoji with your other images on your own renderer.
 
 ```tsx twoslash title="Extract emoji before rendering"
 import { extractEmojis } from "takumi-js/helpers/emoji";
@@ -232,15 +266,13 @@ const image = await renderer.render(node, {
 });
 ```
 
-`prepareImages` returns image entries for remote URLs missing from `sources`. It accepts the same [fetch cache](#external-images) and [limits](#fetch-limits).
+`prepareImages` fetches the remote URLs missing from `sources`. It returns the supplied `sources` and the fetched entries together. It takes the same [fetch cache](#external-images) and [limits](#fetch-limits).
 
 ### COLR / bitmap fonts
 
-Takumi renders [COLR](/docs/typography-and-fonts) (Color Layer) fonts, the format behind packs like `Twemoji-COLR`. A COLR file is much smaller than a bitmap emoji font like `Noto Color Emoji`. The renderer draws emoji from the loaded glyphs, with no network request.
+Takumi draws emoji from color fonts: COLR fonts such as `Twemoji-COLR`, and bitmap fonts such as `Noto Color Emoji`. A COLR file is much smaller than a bitmap font. The glyphs come from the loaded font, so no emoji request goes out.
 
-Two steps:
-
-- Register the font through [`fonts`](/docs/typography-and-fonts).
+- Register the font through [`fonts`](/docs/typography-and-fonts#the-fonts-option).
 - Set `emoji: "from-font"`.
 
-Variation selectors override font order. A codepoint followed by `U+FE0F` renders as a color emoji even when a text font appears earlier in the stack. A codepoint followed by `U+FE0E` renders as a monochrome glyph even when a color font appears first. Bare codepoints follow stack order, as in browsers.
+Variation selectors take priority over font order. A code point followed by `U+FE0F` renders as a color emoji, even when a text font comes first in the stack. A code point followed by `U+FE0E` renders as a monochrome glyph, even when a color font comes first. Bare code points follow stack order, as in browsers.

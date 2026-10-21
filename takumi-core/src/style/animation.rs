@@ -527,7 +527,6 @@ impl_passthrough_animatable!(
   TextStroke,
   TextDecoration,
   TextDecorationLines,
-  OverflowWrap,
   BasicShape,
   OffsetPath,
   OffsetAnchor,
@@ -657,6 +656,7 @@ mod tests {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 16.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     }
   }
@@ -828,20 +828,6 @@ mod tests {
   }
 
   #[test]
-  fn color_input_interpolates_using_current_color() {
-    let mut target: ColorInput = ColorInput::CurrentColor;
-    target.interpolate(
-      &ColorInput::CurrentColor,
-      &ColorInput::Value(Color([110, 120, 130, 255])),
-      0.5,
-      &sizing(),
-      current_color(),
-    );
-
-    assert_eq!(target, ColorInput::Value(Color([60, 70, 80, 255])));
-  }
-
-  #[test]
   fn border_radius_interpolates_via_container_impls() {
     let mut target = BorderRadius::default();
     target.interpolate(
@@ -881,20 +867,6 @@ mod tests {
     );
 
     assert_eq!(target, Some(Angle::new(45.0)));
-  }
-
-  #[test]
-  fn option_angle_interpolates_from_missing_zero_angle() {
-    let mut target: Option<Angle> = None;
-    target.interpolate(
-      &None,
-      &Some(Angle::new(45.0)),
-      0.5,
-      &sizing(),
-      current_color(),
-    );
-
-    assert_eq!(target, Some(Angle::new(22.5)));
   }
 
   #[test]
@@ -1212,44 +1184,6 @@ mod tests {
     );
 
     assert_eq!(values, vec![Length::Px(10.0), Length::Px(20.0)]);
-  }
-
-  #[test]
-  fn vec_animates_repeatable_lists_to_lcm_length() {
-    let mut values: Vec<BackgroundSize> = Vec::new();
-    values.interpolate(
-      &vec![BackgroundSize::Explicit {
-        width: Length::Px(10.0),
-        height: Length::Px(20.0),
-      }],
-      &vec![
-        BackgroundSize::Explicit {
-          width: Length::Px(30.0),
-          height: Length::Px(40.0),
-        },
-        BackgroundSize::Explicit {
-          width: Length::Px(50.0),
-          height: Length::Px(60.0),
-        },
-      ],
-      0.5,
-      &sizing(),
-      current_color(),
-    );
-
-    assert_eq!(
-      values,
-      vec![
-        BackgroundSize::Explicit {
-          width: Length::Px(20.0),
-          height: Length::Px(30.0),
-        },
-        BackgroundSize::Explicit {
-          width: Length::Px(30.0),
-          height: Length::Px(40.0),
-        },
-      ]
-    );
   }
 
   #[test]

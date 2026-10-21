@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{FilterQuality, Pixmap, PixmapPaint};
@@ -114,15 +116,24 @@ fn draw_mask_with_cache(
     return;
   }
 
+  let (mask, placement) = cached_glyph_mask(glyph_signature, paths, transform, stroke);
+
+  canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+}
+
+/// The glyph cache's mask of `paths` drawn under `transform`, placed where the canvas draws it.
+pub(crate) fn cached_glyph_mask(
+  glyph_signature: u64,
+  paths: &[Command],
+  transform: Affine,
+  stroke: Option<Stroke>,
+) -> (Arc<Vec<u8>>, Placement) {
+  let bucket = GlyphBucket::of(transform);
   let (mask, placement) = glyph_mask(bucket.mask_key(glyph_signature, stroke), || {
     bucket.render_mask(paths, stroke)
   });
-  canvas.draw_mask(
-    &mask,
-    placement.translate(bucket.offset.0, bucket.offset.1),
-    color,
-    BlendMode::Normal,
-  );
+
+  (mask, placement.translate(bucket.offset.0, bucket.offset.1))
 }
 
 struct GlyphPaintCtx<'a, 'b> {
@@ -259,24 +270,8 @@ fn draw_color_outline_image(
   }
 
   for layer in color_layers {
-    let color = if layer.palette_index == u16::MAX {
-      let alpha = (foreground_opacity * layer.alpha * 255.0)
-        .round()
-        .clamp(0.0, 255.0) as u8;
-      Color([
-        foreground_color.0[0],
-        foreground_color.0[1],
-        foreground_color.0[2],
-        alpha,
-      ])
-    } else {
-      let Some(record) = palette.colors().get(usize::from(layer.palette_index)) else {
-        continue;
-      };
-      let alpha = ((record.alpha() as f32 / 255.0) * layer.alpha * foreground_opacity * 255.0)
-        .round()
-        .clamp(0.0, 255.0) as u8;
-      Color([record.red(), record.green(), record.blue(), alpha])
+    let Some(color) = layer.color(Some(palette), foreground_color) else {
+      continue;
     };
 
     let (mask, placement) =

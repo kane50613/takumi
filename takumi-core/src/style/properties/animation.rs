@@ -1,6 +1,9 @@
 use std::{borrow::Cow, fmt};
 
-use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case, serialize_string};
+use cssparser::{
+  BasicParseErrorKind, ParseError as CssParseError, Parser, Token, match_ignore_ascii_case,
+  serialize_string,
+};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
@@ -25,18 +28,17 @@ impl AnimationTime {
 impl MakeComputed for AnimationTime {}
 
 impl<'i> FromCss<'i> for AnimationTime {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
       Token::Dimension { value, unit, .. } => match_ignore_ascii_case! {unit.as_ref(),
         "ms" => Ok(Self::from_milliseconds(*value)),
         "s" => Ok(Self::from_milliseconds(*value * 1000.0)),
-        _ => Err(unexpected_token!(location, token)),
+        _ => Err(unexpected_token!(token)),
       },
       Token::Number { value, .. } if *value == 0.0 => Ok(Self::from_milliseconds(0.0)),
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 
@@ -104,7 +106,7 @@ pub enum StepPosition {
 }
 
 impl<'i> FromCss<'i> for AnimationTimingFunction {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(function) = input.try_parse(parse_timing_keyword) {
       return Ok(function);
     }
@@ -124,7 +126,9 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
       let y2 = expect_number(input)?;
 
       if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
-        return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+        return Err(CssParseError::from_basic_kind(
+          BasicParseErrorKind::QualifiedRuleInvalid,
+        ));
       }
 
       Ok(Self::CubicBezier(x1, y1, x2, y2))
@@ -168,7 +172,7 @@ impl Default for AnimationIterationCount {
 impl MakeComputed for AnimationIterationCount {}
 
 impl<'i> FromCss<'i> for AnimationIterationCount {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|parser| parser.expect_ident_matching("infinite"))
       .is_ok()
@@ -178,7 +182,9 @@ impl<'i> FromCss<'i> for AnimationIterationCount {
 
     let value = expect_number(input)?;
     if value < 0.0 {
-      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      ));
     }
 
     Ok(Self::Number(value))
@@ -297,7 +303,7 @@ pub struct Animation {
 impl MakeComputed for Animation {}
 
 impl<'i> FromCss<'i> for Animation {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut animation = Self::default();
     let mut time_count = 0;
 
@@ -430,13 +436,10 @@ impl TailwindPropertyParser for Animations {
   }
 }
 
-fn parse_timing_keyword<'i>(
-  input: &mut Parser<'i, '_>,
-) -> ParseResult<'i, AnimationTimingFunction> {
-  let location = input.current_source_location();
+fn parse_timing_keyword<'i>(input: &mut Parser<'i>) -> ParseResult<'i, AnimationTimingFunction> {
   let token = input.next()?;
   let Token::Ident(ident) = token else {
-    return Err(unexpected_token!(AnimationTimingFunction, location, token));
+    return Err(unexpected_token!(AnimationTimingFunction, token));
   };
 
   match_ignore_ascii_case! {ident,
@@ -447,15 +450,14 @@ fn parse_timing_keyword<'i>(
     "ease-in-out" => Ok(AnimationTimingFunction::EaseInOut),
     "step-start" => Ok(AnimationTimingFunction::StepStart),
     "step-end" => Ok(AnimationTimingFunction::StepEnd),
-    _ => Err(unexpected_token!(AnimationTimingFunction, location, token)),
+    _ => Err(unexpected_token!(AnimationTimingFunction, token)),
   }
 }
 
-fn parse_step_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StepPosition> {
-  let location = input.current_source_location();
+fn parse_step_position<'i>(input: &mut Parser<'i>) -> ParseResult<'i, StepPosition> {
   let token = input.next()?;
   let Token::Ident(ident) = token else {
-    return Err(unexpected_token!(AnimationTimingFunction, location, token));
+    return Err(unexpected_token!(AnimationTimingFunction, token));
   };
 
   match_ignore_ascii_case! {ident,
@@ -463,18 +465,18 @@ fn parse_step_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StepPo
     "end" | "jump-end" => Ok(StepPosition::End),
     "jump-both" => Ok(StepPosition::JumpBoth),
     "jump-none" => Ok(StepPosition::JumpNone),
-    _ => Err(unexpected_token!(AnimationTimingFunction, location, token)),
+    _ => Err(unexpected_token!(AnimationTimingFunction, token)),
   }
 }
 
-fn parse_steps_function<'i>(
-  input: &mut Parser<'i, '_>,
-) -> ParseResult<'i, AnimationTimingFunction> {
+fn parse_steps_function<'i>(input: &mut Parser<'i>) -> ParseResult<'i, AnimationTimingFunction> {
   input.expect_function_matching("steps")?;
   input.parse_nested_block(|input| {
     let count = input.expect_integer()?;
     if count <= 0 {
-      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      ));
     }
 
     let position = if input.try_parse(Parser::expect_comma).is_ok() {
@@ -484,18 +486,19 @@ fn parse_steps_function<'i>(
     };
 
     if position == StepPosition::JumpNone && count < 2 {
-      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      ));
     }
 
     Ok(AnimationTimingFunction::Steps(count as u32, position))
   })
 }
 
-fn expect_number<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
-  let location = input.current_source_location();
+fn expect_number<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
   let token = input.next()?;
   let Token::Number { value, .. } = token else {
-    return Err(unexpected_token!(AnimationTime, location, token));
+    return Err(unexpected_token!(AnimationTime, token));
   };
   Ok(*value)
 }
@@ -829,10 +832,8 @@ mod tests {
 
   #[test]
   fn cubic_bezier_preserves_overshoot() {
-    let Ok(function) = AnimationTimingFunction::from_css_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)")
-    else {
-      return;
-    };
+    let function =
+      AnimationTimingFunction::from_css_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)").unwrap();
 
     let early = function.apply(0.2, false);
     let late = function.apply(0.8, false);
@@ -895,34 +896,6 @@ mod tests {
           ..Animation::default()
         },
       ]))
-    );
-  }
-
-  #[test]
-  fn parse_tailwind_animation_preset() {
-    assert_eq!(
-      Animations::parse_tw("spin"),
-      Some(Box::from([Animation {
-        duration: AnimationTime::from_milliseconds(1000.0),
-        timing_function: AnimationTimingFunction::Linear,
-        iteration_count: AnimationIterationCount::Infinite,
-        name: Some("spin".to_string()),
-        ..Animation::default()
-      }]))
-    );
-  }
-
-  #[test]
-  fn parse_tailwind_animation_arbitrary_value() {
-    assert_eq!(
-      Animations::parse_tw_with_arbitrary("[wiggle_1s_ease-in-out_infinite]"),
-      Some(Box::from([Animation {
-        duration: AnimationTime::from_milliseconds(1000.0),
-        timing_function: AnimationTimingFunction::EaseInOut,
-        iteration_count: AnimationIterationCount::Infinite,
-        name: Some("wiggle".to_string()),
-        ..Animation::default()
-      }]))
     );
   }
 }

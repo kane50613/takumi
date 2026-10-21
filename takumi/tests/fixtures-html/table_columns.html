@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_columns</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 282px;
+        height: 290px;
+      }
+      .label {
+        font-size: 15px;
+        color: rgb(71, 85, 105);
+      }
+      table {
+        display: table;
+        border-spacing: 4px;
+        border-collapse: separate;
+        background: rgb(255, 255, 255);
+        font-size: 16px;
+        color: rgb(17, 24, 39);
+      }
+      caption {
+        display: table-caption;
+        text-align: center;
+      }
+      colgroup {
+        display: table-column-group;
+      }
+      col {
+        display: table-column;
+      }
+      thead {
+        display: table-header-group;
+        vertical-align: middle;
+      }
+      tbody {
+        display: table-row-group;
+        vertical-align: middle;
+      }
+      tfoot {
+        display: table-footer-group;
+        vertical-align: middle;
+      }
+      tr {
+        display: table-row;
+        vertical-align: inherit;
+      }
+      td,
+      th {
+        display: table-cell;
+        vertical-align: inherit;
+        padding: 3px 6px;
+        border: 1px solid rgb(148, 163, 184);
+        text-align: left;
+      }
+      th {
+        font-weight: bold;
+      }
+      .group {
+        background: rgb(219, 234, 254);
+      }
+      .lead {
+        width: 120px;
+        background: rgb(254, 226, 226);
+      }
+      .narrow {
+        width: 40px;
+      }
+      .collapsed {
+        visibility: collapse;
+      }
+      .rtl {
+        direction: rtl;
+      }
+      .rtl td {
+        text-align: right;
+      }
+      .collapse {
+        border-collapse: collapse;
+      }
+      .collapse col.ruled {
+        border-right: 4px solid rgb(37, 99, 235);
+      }
+      .fixed {
+        table-layout: fixed;
+        width: 270px;
+      }
+      .spanned {
+        background: rgb(220, 252, 231);
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="root">
+      <div class="cell">
+        <span class="label">col widths and backgrounds</span>
+        <table>
+          <colgroup class="group"><col class="lead" /><col /></colgroup>
+          <col class="narrow" />
+          <tr><td>a1</td><td>b1</td><td>c1</td></tr>
+          <tr><td>a2</td><td>b2</td><td>c2</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">a colgroup span covers columns</span>
+        <table>
+          <colgroup class="group" span="2"></colgroup>
+          <col class="spanned" />
+          <tr><td>a1</td><td>b1</td><td>c1</td></tr>
+          <tr><td>a2</td><td>b2</td><td>c2</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">a collapsed column takes no width</span>
+        <table>
+          <col /><col class="collapsed" /><col />
+          <tr><td>a1</td><td>b1</td><td>c1</td></tr>
+          <tr><td>a2</td><td>b2</td><td>c2</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">right to left columns</span>
+        <table class="rtl">
+          <col class="lead" />
+          <tr><td colspan="2">spans two</td><td>c1</td></tr>
+          <tr><td>a2</td><td>b2</td><td>c2</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">a column border collapses</span>
+        <table class="collapse">
+          <col class="ruled" /><col /><col />
+          <tr><td>a1</td><td>b1</td><td>c1</td></tr>
+          <tr><td>a2</td><td>b2</td><td>c2</td></tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">fixed layout reads the columns</span>
+        <table class="fixed">
+          <col class="narrow" /><col />
+          <tr><td>a1 wide content</td><td>b1</td></tr>
+          <tr><td>a2</td><td>b2</td></tr>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>
