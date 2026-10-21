@@ -13,7 +13,7 @@ use crate::{
   matching::MatchedDeclarationsView,
   style::{
     BackgroundImage, Direction, Display, Length, ListStylePosition, ListStyleType, MakeComputed,
-    TextWrapMode, WhiteSpaceCollapse,
+    TextWrapMode, TwMatches, WhiteSpaceCollapse,
   },
 };
 
@@ -38,8 +38,11 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   let style_type = &item_context.style.misc_inherited1_data.list_style_type;
   let image = available_marker_image(item_context);
   let has_image = image.is_some();
-  let (mut style, sizing, current_color) =
-    item_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
+  let (mut style, sizing, current_color) = item_context.resolve_pseudo_style(
+    &MatchedDeclarationsView::default(),
+    None,
+    &TwMatches::default(),
+  );
 
   match position {
     ListStylePosition::Outside => {

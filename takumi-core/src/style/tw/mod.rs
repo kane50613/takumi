@@ -66,7 +66,8 @@ pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
   for token in source.split_whitespace() {
     let value = TailwindValue::parse(token)?;
 
-    if value.breakpoint.is_some() || value.condition.is_some() {
+    if value.breakpoint.is_some() || value.condition.is_some() || value.target != TwTarget::Element
+    {
       return None;
     }
 
@@ -276,7 +277,12 @@ impl TailwindValues {
       .filter_map(|value| value.condition.as_ref())
   }
 
-  /// The blocks this class list expands to on an element whose position satisfies `matches`,
+  /// Whether any utility styles `target`.
+  pub(crate) fn styles(&self, target: TwTarget) -> bool {
+    self.inner.iter().any(|value| value.target == target)
+  }
+
+  /// The blocks this class list expands to for the box and position `matches` describe,
   /// resolved once per render.
   pub(crate) fn declaration_blocks(
     &self,
@@ -312,8 +318,8 @@ impl TailwindValues {
     blocks
   }
 
-  /// Resolves the utilities that apply at the viewport, on an element whose position satisfies
-  /// `matches`, into a declaration block.
+  /// Resolves the utilities that apply at the viewport, for the box and position `matches`
+  /// describe, into a declaration block.
   #[inline(never)]
   pub(crate) fn into_declaration_block(
     self,
@@ -333,6 +339,10 @@ impl TailwindValues {
         }
       }
 
+      if value.target != matches.target {
+        continue;
+      }
+
       value.apply(&mut builder, viewport, breakpoints);
     }
 
@@ -340,26 +350,47 @@ impl TailwindValues {
   }
 }
 
-/// Which of an element's variant-conditioned utilities, in [`TailwindValues::conditions`] order,
-/// its position in the tree satisfies.
+/// The box a utility styles: the element, or one of its `::before` and `::after`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub(crate) enum TwTarget {
+  #[default]
+  Element,
+  Before,
+  After,
+}
+
+/// Which of an element's utilities apply: the variant-conditioned ones, in
+/// [`TailwindValues::conditions`] order, that its position in the tree satisfies, and the box
+/// they style.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
-pub(crate) struct TwMatches(SmallVec<[u64; 1]>);
+pub(crate) struct TwMatches {
+  conditions: SmallVec<[u64; 1]>,
+  target: TwTarget,
+}
 
 impl TwMatches {
   pub(crate) fn insert(&mut self, index: usize) {
     let word = index / u64::BITS as usize;
 
-    if self.0.len() <= word {
-      self.0.resize(word + 1, 0);
+    if self.conditions.len() <= word {
+      self.conditions.resize(word + 1, 0);
     }
-    self.0[word] |= 1 << (index % u64::BITS as usize);
+    self.conditions[word] |= 1 << (index % u64::BITS as usize);
   }
 
   fn contains(&self, index: usize) -> bool {
     self
-      .0
+      .conditions
       .get(index / u64::BITS as usize)
       .is_some_and(|word| word & (1 << (index % u64::BITS as usize)) != 0)
+  }
+
+  /// The same element's matches, for the utilities that style `target`.
+  pub(crate) fn for_target(&self, target: TwTarget) -> Self {
+    Self {
+      conditions: self.conditions.clone(),
+      target,
+    }
   }
 }
 
@@ -385,6 +416,8 @@ pub(crate) struct TailwindValue {
   pub condition: Option<Selector<SelectorImpl>>,
   /// A bit for each structural variant, so comparing two sorts them as Tailwind does.
   pub variant_order: u16,
+  /// The box the utility styles, which `before:` and `after:` move off the element.
+  pub target: TwTarget,
   /// Whether the value is important.
   pub important: bool,
 }
@@ -458,16 +491,20 @@ impl TailwindValue {
     let mut breakpoint = None;
     let mut pseudo_classes = String::new();
     let mut variant_order = 0;
+    let mut target = TwTarget::Element;
 
-    // Variants, at most one of them a breakpoint. sm:first:mt-0
+    // Variants, at most one of them a breakpoint and one a pseudo-element. sm:first:mt-0
     while let Some((variant, rest)) = split_variant(token) {
-      match variant::pseudo_class(variant) {
-        Some(pseudo_class) => {
+      match (variant, variant::pseudo_class(variant)) {
+        (_, Some(pseudo_class)) => {
           pseudo_classes.push_str(&pseudo_class);
           variant_order |= variant::order_bit(variant);
         }
-        None if breakpoint.is_none() => breakpoint = Some(Breakpoint::parse(variant)?),
-        None => return None,
+        ("before" | "after", None) if target != TwTarget::Element => return None,
+        ("before", None) => target = TwTarget::Before,
+        ("after", None) => target = TwTarget::After,
+        (_, None) if breakpoint.is_none() => breakpoint = Some(Breakpoint::parse(variant)?),
+        _ => return None,
       }
       token = rest;
     }
@@ -494,6 +531,7 @@ impl TailwindValue {
       breakpoint,
       condition,
       variant_order,
+      target,
       important,
     })
   }
@@ -572,6 +610,8 @@ pub(crate) enum TailwindProperty {
   Justify(JustifyContent),
   /// `align-content` property.
   Content(JustifyContent),
+  /// `content`, for a `::before` or `::after` box.
+  GeneratedContent(ContentValue),
   /// `justify-self` property.
   JustifySelf(AlignItems),
   /// `justify-items` property.
@@ -1528,6 +1568,9 @@ impl TailwindProperty {
       }
       TailwindProperty::ListStyleImage(image) => {
         push_decl!(builder, important, list_style_image(image));
+      }
+      TailwindProperty::GeneratedContent(content) => {
+        push_decl!(builder, important, content(content))
       }
       TailwindProperty::OverflowX(overflow) => push_decl!(builder, important, overflow_x(overflow)),
       TailwindProperty::OverflowY(overflow) => push_decl!(builder, important, overflow_y(overflow)),

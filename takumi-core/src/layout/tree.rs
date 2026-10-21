@@ -54,7 +54,8 @@ use crate::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
     Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
-    StyleSheet, TwBlocks, TwMatches, WhiteSpaceCollapse, apply_stylesheet_animations,
+    StyleSheet, TailwindValues, TwBlocks, TwMatches, TwTarget, WhiteSpaceCollapse,
+    apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -2257,8 +2258,11 @@ impl RenderNode {
   /// An element's own text, moved into a child so generated content can precede it or its
   /// content can align.
   pub(super) fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
-    let (style, sizing, current_color) =
-      parent_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
+    let (style, sizing, current_color) = parent_context.resolve_pseudo_style(
+      &MatchedDeclarationsView::default(),
+      None,
+      &TwMatches::default(),
+    );
     let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
     Self::text_item(context, text)
@@ -2287,8 +2291,11 @@ impl RenderNode {
     parent_context: &RenderContext,
     originating_node: &Node,
     pseudo_matched: &MatchedDeclarationsView<'_>,
+    tw: Option<&TailwindValues>,
+    tw_matches: &TwMatches,
   ) -> Option<Self> {
-    let (mut style, sizing, current_color) = parent_context.resolve_pseudo_style(pseudo_matched);
+    let (mut style, sizing, current_color) =
+      parent_context.resolve_pseudo_style(pseudo_matched, tw, tw_matches);
 
     if matches!(style.base_data.display, Display::None) {
       return None;
@@ -3121,6 +3128,8 @@ impl PendingRenderNode {
   ) -> Self {
     let source_order = *source_cursor;
     *source_cursor += 1;
+    // The pseudo-elements read the utilities the element's own style takes.
+    let tw = node.metadata.tw.clone();
     let (style, sizing, current_color) =
       parent_context.resolve_child_style(&mut node, source_order, matched_declarations);
     let children = node.take_children();
@@ -3131,12 +3140,33 @@ impl PendingRenderNode {
     let element_matched = matched_declarations.get(source_order);
     let marker_ordinal =
       (context.style.base_data.display == Display::ListItem).then(|| counter.take(&node));
-    let pseudo_before = element_matched
-      .and_then(|m| m.before())
-      .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
-    let pseudo_after = element_matched
-      .and_then(|m| m.after())
-      .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+    let pseudo = |target, view: Option<&MatchedDeclarationsView<'_>>| {
+      let tw = tw.as_ref().filter(|tw| tw.styles(target));
+
+      if view.is_none() && tw.is_none() {
+        return None;
+      }
+
+      let tw_matches = element_matched.map_or_else(TwMatches::default, |matched| {
+        matched.tw().for_target(target)
+      });
+
+      RenderNode::from_pseudo_match(
+        &context,
+        &node,
+        view.unwrap_or(&MatchedDeclarationsView::default()),
+        tw,
+        &tw_matches,
+      )
+    };
+    let pseudo_before = pseudo(
+      TwTarget::Before,
+      element_matched.and_then(NodeMatchedDeclarations::before),
+    );
+    let pseudo_after = pseudo(
+      TwTarget::After,
+      element_matched.and_then(NodeMatchedDeclarations::after),
+    );
     let pseudo_before_present = pseudo_before.is_some();
 
     let has_generated_children =
@@ -3374,16 +3404,19 @@ impl RenderContext {
     registered_custom_property_parent_style(&self.style, &registrations)
   }
 
-  /// Resolves a generated box's style and sizing from its matched declarations.
+  /// Resolves a generated box's style and sizing from its matched declarations and the
+  /// originating element's `tw` utilities that `tw_matches` selects.
   pub(super) fn resolve_pseudo_style(
     &self,
     pseudo_matched: &MatchedDeclarationsView<'_>,
+    tw: Option<&TailwindValues>,
+    tw_matches: &TwMatches,
   ) -> (ComputedStyle, SizingContext, Color) {
-    let (style_layers, _) = self.cascade(
-      NodeStyleLayers::default(),
-      pseudo_matched,
-      &TwMatches::default(),
-    );
+    let layers = NodeStyleLayers {
+      author_tw: tw.cloned(),
+      ..NodeStyleLayers::default()
+    };
+    let (style_layers, _) = self.cascade(layers, pseudo_matched, tw_matches);
     let mut style = style_layers.inherit(&self.inherited_style());
     let sizing = self.child_sizing(&style, &self.sizing, false);
     let current_color = style.inherited_data.color.resolve(self.current_color);

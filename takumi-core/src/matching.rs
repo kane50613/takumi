@@ -19,7 +19,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    LonghandId, MediaQueryList, StyleDeclarationBlock, TwMatches,
+    LonghandId, MediaQueryList, StyleDeclarationBlock, TwMatches, TwTarget,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -744,10 +744,16 @@ pub(crate) fn match_stylesheets_view<'a>(
     add_node_unique_hashes_to_filter(arena.nodes[i].node, &mut ancestor_bloom_filter);
   }
 
-  for (matched, [element, before, after]) in per_node.iter_mut().zip(&mut matched_rules) {
+  for (index, (matched, [element, before, after])) in
+    per_node.iter_mut().zip(&mut matched_rules).enumerate()
+  {
+    let tw = arena.nodes[index].node.metadata.tw.as_ref();
+    let tw_styles = |target| tw.is_some_and(|tw| tw.styles(target));
+
     finalize_bucket(element, stylesheet.layer_count, &mut matched.element);
-    matched.before = take_pseudo_bucket(before, stylesheet.layer_count);
-    matched.after = take_pseudo_bucket(after, stylesheet.layer_count);
+    matched.before =
+      take_pseudo_bucket(before, stylesheet.layer_count, tw_styles(TwTarget::Before));
+    matched.after = take_pseudo_bucket(after, stylesheet.layer_count, tw_styles(TwTarget::After));
   }
 
   per_node
@@ -824,20 +830,24 @@ fn finalize_bucket<'a>(
   }
 }
 
+/// The view of a pseudo-element's matched rules, or `None` when they cannot give it a box: no
+/// rule sets `content`, and no `tw` utility styles it where `tw_styles` says one might.
 fn take_pseudo_bucket<'a>(
   rules: &mut Vec<MatchedRule<'a>>,
   layer_count: usize,
+  tw_styles: bool,
 ) -> Option<MatchedDeclarationsView<'a>> {
   // `content` does not inherit, and its initial `normal` computes to `none` on these pseudo-elements.
-  let sets_content = rules.iter().any(|rule| {
-    rule.declarations.iter().any(|declaration| {
-      declaration
-        .affected_longhands()
-        .contains(&LonghandId::Content)
-    })
-  });
+  let sets_content = tw_styles
+    || rules.iter().any(|rule| {
+      rule.declarations.iter().any(|declaration| {
+        declaration
+          .affected_longhands()
+          .contains(&LonghandId::Content)
+      })
+    });
 
-  if !sets_content {
+  if rules.is_empty() || !sets_content {
     rules.clear();
     return None;
   }
