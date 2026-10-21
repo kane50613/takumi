@@ -109,7 +109,7 @@ impl PrecomputedHash for Ident {
 }
 
 /// Selector type bindings for the `selectors` crate.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SelectorImpl;
 
 // Most pseudo-classes are parsed but never matched, so rules with `:hover`, `::before`,

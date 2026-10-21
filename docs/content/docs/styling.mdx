@@ -168,6 +168,33 @@ const isError = true;
 </div>;
 ```
 
+### Variants
+
+Breakpoints such as `md:` apply when the viewport is at least that wide. Structural variants apply by the element's place in the tree, or by its contents for `empty:`, so one class list can style every row of a list:
+
+```tsx twoslash title="Stripe and round a list"
+const rows = ["Plan", "Seats", "Total"];
+
+<div tw="flex flex-col">
+  {rows.map((row) => (
+    // [!code highlight]
+    <div tw="p-3 bg-white odd:bg-slate-100 first:rounded-t-lg last:rounded-b-lg">{row}</div>
+  ))}
+</div>;
+```
+
+The structural variants are `first:`, `last:`, `only:`, `odd:`, `even:`, `first-of-type:`, `last-of-type:`, `only-of-type:`, `empty:`, `nth-3:` and its `nth-last-`, `nth-of-type-`, and `nth-last-of-type-` forms, `nth-[2n+1]:`, `not-first:` for any of them, and an arbitrary variant on the element itself such as `[&:nth-child(3)]:`. Variants combine, as in `md:first:mt-0`. When two structural variants set the same property, the one Tailwind lists later wins, so `odd:` beats `first:` whatever their class order. Interactive ones such as `hover:` never apply to a static frame.
+
+`before:` and `after:` style the element's `::before` and `::after`, and `content-['…']` gives them their content. Write spaces in the string as underscores:
+
+```tsx twoslash title="Add a badge after a title"
+<h2 tw="text-2xl after:content-['NEW'] after:ml-2 after:px-2 after:rounded after:bg-amber-300 after:text-sm">
+  Release notes
+</h2>
+```
+
+As in Tailwind, the box exists without `content-*`, so `before:` utilities alone can draw a decoration such as a dot. Replaced elements such as `<img>` get no `::before` or `::after`.
+
 ### Preflight
 
 The built-in parser applies no Tailwind Preflight by default. Elements keep their default margins: an `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
