@@ -450,17 +450,18 @@ fn source_scaled_rows(
 
     rows.fill(dest_y as f32 + options.sampling.sample_bias.y, &mut row);
 
-    for (pixel, &mask_alpha) in row.iter_mut().zip(&mask[region.mask_row(dest_y)]) {
-      *pixel = scale_premultiplied_pixel(*pixel, mask_alpha);
-    }
-    if let Some(clip_row) = combined_row {
-      clip_row.write_alphas(0, &mut clip_alphas);
-      for (pixel, &alpha) in row.iter_mut().zip(&clip_alphas) {
-        *pixel = scale_premultiplied_pixel(*pixel, alpha);
-      }
-    }
-
+    let mask_row = &mask[region.mask_row(dest_y)];
     let dst_row = &mut pixels[region.dst_row(dest_y)];
+    let Some(clip_row) = combined_row else {
+      blend_row_masked(dst_row, &row, mask_row, options.mode);
+      continue;
+    };
+
+    // The shape's alpha scales first and the clip's second, each rounding once.
+    clip_row.write_alphas(0, &mut clip_alphas);
+    for ((pixel, &mask_alpha), &clip_alpha) in row.iter_mut().zip(mask_row).zip(&clip_alphas) {
+      *pixel = scale_premultiplied_pixel(scale_premultiplied_pixel(*pixel, mask_alpha), clip_alpha);
+    }
 
     if options.mode == BlendMode::Normal {
       composite_premultiplied_over_row(dst_row, &row);
