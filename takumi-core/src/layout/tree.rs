@@ -7,6 +7,7 @@ use std::{
   ptr,
   rc::Rc,
   slice,
+  sync::Arc,
   vec::IntoIter,
 };
 
@@ -52,8 +53,8 @@ use crate::{
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
-    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
-    TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
+    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
+    StyleSheet, TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -585,35 +586,37 @@ struct ElementImportant {
 
 fn registered_custom_property_parent_style<'a>(
   parent_style: &'a ComputedStyle,
-  stylesheets: &[StyleSheet],
-  viewport: Viewport,
+  registrations: &Registrations,
 ) -> Cow<'a, ComputedStyle> {
-  if stylesheets
-    .iter()
-    .all(|sheet| sheet.property_rules().is_empty())
-  {
+  // Every element below the first to take the registrations carries them already, and
+  // `inherited` hands a child each one's value from there.
+  if registrations.is_empty() || parent_style.custom_properties.registers(registrations) {
     return Cow::Borrowed(parent_style);
   }
 
   let mut adjusted_parent = parent_style.clone();
 
-  for sheet in stylesheets {
-    for property_rule in sheet.property_rules() {
-      if !property_rule
-        .media_queries
-        .iter()
-        .all(|media_query| media_query.matches(viewport))
-      {
-        continue;
-      }
-
-      adjusted_parent
-        .custom_properties
-        .register_in_scope(property_rule, &parent_style.custom_properties);
-    }
-  }
-
+  adjusted_parent
+    .custom_properties
+    .register_in_scope(registrations, &parent_style.custom_properties);
   Cow::Owned(adjusted_parent)
+}
+
+/// The `@property` rules in force at `viewport`, a later rule for a name replacing an earlier one.
+fn active_registrations(stylesheets: &[StyleSheet], viewport: Viewport) -> Registrations {
+  Arc::new(
+    stylesheets
+      .iter()
+      .flat_map(StyleSheet::property_rules)
+      .filter(|rule| {
+        rule
+          .media_queries
+          .iter()
+          .all(|media_query| media_query.matches(viewport))
+      })
+      .map(|rule| (rule.name.clone(), rule.clone()))
+      .collect(),
+  )
 }
 
 /// Whether a node claiming `claims` is the containing block of a box with `position`.
@@ -3345,11 +3348,27 @@ impl RenderContext {
 
   /// This style as a child inherits it, with the stylesheet's registered custom properties.
   fn inherited_style(&self) -> Cow<'_, ComputedStyle> {
-    registered_custom_property_parent_style(
-      &self.style,
+    // Registrations come only from this render's stylesheet, so a style that carries any carries
+    // them all, and its descendants take them through `inherited`.
+    if self.stylesheet().property_rules().is_empty()
+      || self.style.custom_properties.has_registrations()
+    {
+      return Cow::Borrowed(&self.style);
+    }
+
+    self.registered_inherited_style()
+  }
+
+  /// [`Self::inherited_style`] for a style the stylesheet's `@property` rules have not reached yet,
+  /// out of line so the common path stays small.
+  #[inline(never)]
+  fn registered_inherited_style(&self) -> Cow<'_, ComputedStyle> {
+    let registrations = active_registrations(
       slice::from_ref(self.stylesheet().as_ref()),
       self.sizing.viewport,
-    )
+    );
+
+    registered_custom_property_parent_style(&self.style, &registrations)
   }
 
   /// Resolves a generated box's style and sizing from its matched declarations.
@@ -3567,7 +3586,8 @@ mod tests {
   use taffy::NodeId as TaffyNodeId;
 
   use super::{
-    NodeOrigin, RenderNode, registered_custom_property_parent_style, sort_children_by_order,
+    NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
+    sort_children_by_order,
   };
   use crate::{
     context::RenderContext,
@@ -3665,8 +3685,10 @@ mod tests {
       media_queries: Vec::new(),
     }])];
 
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&stylesheets, Viewport::default()),
+    );
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some("10px")
@@ -3686,8 +3708,10 @@ mod tests {
       media_queries: Vec::new(),
     }])];
 
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&stylesheets, Viewport::default()),
+    );
     let child = ComputedStyle::from_parent(&adjusted_parent);
 
     assert_eq!(
@@ -3711,8 +3735,10 @@ mod tests {
       media_queries: Vec::new(),
     }])];
 
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&stylesheets, Viewport::default()),
+    );
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some("50px")
@@ -3731,8 +3757,10 @@ mod tests {
       media_queries: Vec::new(),
     }])];
 
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&stylesheets, Viewport::default()),
+    );
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some("10px")
@@ -3760,8 +3788,10 @@ mod tests {
       },
     ])];
 
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&stylesheets, Viewport::default()),
+    );
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some("20px")
@@ -3792,8 +3822,10 @@ mod tests {
       },
     ])];
 
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&stylesheets, Viewport::default()),
+    );
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some("50px")
@@ -3822,8 +3854,10 @@ mod tests {
       },
     ])];
 
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&stylesheets, Viewport::default()),
+    );
     assert_eq!(adjusted_parent.custom_properties.get("--box-size"), None);
   }
 
@@ -3839,8 +3873,10 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&[stylesheet], Viewport::default()),
+    );
     let style = Style::default().with(StyleDeclaration::CustomProperty(
       "--box-size".to_owned(),
       "red".to_owned(),
@@ -3872,8 +3908,10 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&[stylesheet], Viewport::default()),
+    );
     let style = Style::default()
       .with(StyleDeclaration::CustomProperty(
         "--fade-duration".to_owned(),
@@ -3915,8 +3953,10 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent =
-      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
+    let adjusted_parent = registered_custom_property_parent_style(
+      &parent,
+      &active_registrations(&[stylesheet], Viewport::default()),
+    );
     let declarations = StyleDeclarationBlock::from_str("width: var(--box-size)");
     assert!(
       declarations.is_ok(),
