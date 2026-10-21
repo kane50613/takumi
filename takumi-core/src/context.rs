@@ -1,9 +1,4 @@
-use std::{
-  cell::{Cell, RefCell},
-  collections::HashMap,
-  rc::Rc,
-  sync::Arc,
-};
+use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
 
 use taffy::Line;
 use typed_builder::TypedBuilder;
@@ -23,10 +18,9 @@ use crate::{
     image::{ImageSource, ResourceCache},
   },
   style::{
-    Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, Registrations,
-    SizingContext, StyleSheet, TwCache,
+    Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, SizingContext,
+    StyleSheet, TwCache,
   },
-  viewport::Viewport,
 };
 
 /// What every context of one render shares.
@@ -40,8 +34,6 @@ struct RenderShared {
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
   matched_styles: MatchedStyleCache,
-  /// The `@property` registrations in force, with the viewport their media queries matched.
-  property_registrations: RefCell<Option<(Viewport, Registrations)>>,
   time_ms: u64,
   draw_debug_border: bool,
   dither_gradients: bool,
@@ -92,7 +84,6 @@ impl From<RenderContextInit> for RenderContext {
         inline_cache: InlineLayoutCache::default(),
         tw_cache: TwCache::default(),
         matched_styles: MatchedStyleCache::default(),
-        property_registrations: RefCell::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
         dither_gradients: init.dither_gradients,
@@ -204,23 +195,6 @@ impl RenderContext {
   /// Per-render cache of the styles boxes resolved from the declarations they matched.
   pub(crate) fn matched_styles(&self) -> &MatchedStyleCache {
     &self.shared.matched_styles
-  }
-
-  /// The render's `@property` registrations at this context's viewport, which `collect` gathers
-  /// when the viewport changes.
-  pub(crate) fn property_registrations(
-    &self,
-    collect: impl FnOnce(Viewport) -> Registrations,
-  ) -> Registrations {
-    let viewport = self.sizing.viewport;
-    let mut cached = self.shared.property_registrations.borrow_mut();
-
-    match &*cached {
-      Some((cached_viewport, registrations)) if *cached_viewport == viewport => {
-        Arc::clone(registrations)
-      }
-      _ => Arc::clone(&cached.insert((viewport, collect(viewport))).1),
-    }
   }
 
   /// The font `description` names, its fallback list shared across the render.

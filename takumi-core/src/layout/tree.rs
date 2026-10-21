@@ -3348,13 +3348,25 @@ impl RenderContext {
 
   /// This style as a child inherits it, with the stylesheet's registered custom properties.
   fn inherited_style(&self) -> Cow<'_, ComputedStyle> {
-    if self.stylesheet().property_rules().is_empty() {
+    // Registrations come only from this render's stylesheet, so a style that carries any carries
+    // them all, and its descendants take them through `inherited`.
+    if self.stylesheet().property_rules().is_empty()
+      || self.style.custom_properties.has_registrations()
+    {
       return Cow::Borrowed(&self.style);
     }
 
-    let registrations = self.property_registrations(|viewport| {
-      active_registrations(slice::from_ref(self.stylesheet().as_ref()), viewport)
-    });
+    self.registered_inherited_style()
+  }
+
+  /// [`Self::inherited_style`] for a style the stylesheet's `@property` rules have not reached yet,
+  /// out of line so the common path stays small.
+  #[inline(never)]
+  fn registered_inherited_style(&self) -> Cow<'_, ComputedStyle> {
+    let registrations = active_registrations(
+      slice::from_ref(self.stylesheet().as_ref()),
+      self.sizing.viewport,
+    );
 
     registered_custom_property_parent_style(&self.style, &registrations)
   }

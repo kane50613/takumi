@@ -46,6 +46,11 @@ impl CustomProperties {
     self.registrations.get(name)
   }
 
+  /// Whether any `@property` registration is in scope here.
+  pub(crate) fn has_registrations(&self) -> bool {
+    !self.registrations.is_empty()
+  }
+
   /// Whether `registrations` are the ones in scope here.
   pub(crate) fn registers(&self, registrations: &Registrations) -> bool {
     Arc::ptr_eq(&self.registrations, registrations) || self.registrations == *registrations
