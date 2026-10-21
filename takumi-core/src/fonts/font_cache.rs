@@ -1,18 +1,27 @@
 //! Approximate stand-in for the fallback half of Blink's `FontCache`, searching registered fonts; see #2001.
 
-use std::rc::Rc;
+use std::{cell::RefCell, collections::hash_map::Entry, rc::Rc};
+
+use rustc_hash::FxHashMap;
 
 use super::{font_fallback_priority::FontFallbackPriority, simple_font_data::SimpleFontData};
+
+/// A fallback answer by character and whether color faces come first.
+type FallbackAnswers = FxHashMap<(char, bool), Option<Rc<SimpleFontData>>>;
 
 /// The registered faces at one size, in fallback order.
 #[derive(Debug)]
 pub(crate) struct FontCache {
   fallback_fonts: Vec<Rc<SimpleFontData>>,
+  fallbacks: RefCell<FallbackAnswers>,
 }
 
 impl FontCache {
   pub(crate) fn new(fallback_fonts: Vec<Rc<SimpleFontData>>) -> Self {
-    Self { fallback_fonts }
+    Self {
+      fallback_fonts,
+      fallbacks: RefCell::default(),
+    }
   }
 
   /// Blink's `FallbackFontForCharacter`.
@@ -32,7 +41,12 @@ impl FontCache {
       _ => (false, true),
     };
 
-    with_glyph(preferred).or_else(|| with_glyph(other)).cloned()
+    match self.fallbacks.borrow_mut().entry((hint, preferred)) {
+      Entry::Occupied(entry) => entry.get().clone(),
+      Entry::Vacant(entry) => entry
+        .insert(with_glyph(preferred).or_else(|| with_glyph(other)).cloned())
+        .clone(),
+    }
   }
 
   /// Blink's `GetLastResortFallbackFont`.
