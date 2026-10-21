@@ -528,11 +528,12 @@ impl SvgDocument {
         id
       }
     };
+    let definition = &self.image_defs[id as usize];
     let transform = Affine {
-      a: rect.w / natural.0,
+      a: rect.w / definition.width,
       b: 0.0,
       c: 0.0,
-      d: rect.h / natural.1,
+      d: rect.h / definition.height,
       x: rect.x,
       y: rect.y,
     };
@@ -1119,8 +1120,13 @@ pub(crate) enum ImageKey {
     src: Arc<str>,
     current_color: [u8; 4],
   },
-  /// A bitmap glyph of the font `font` at a size.
-  BitmapGlyph { font: u64, glyph: u32, size: u32 },
+  /// A bitmap glyph of face `index` in the font `font` at a size.
+  BitmapGlyph {
+    font: u64,
+    index: u32,
+    glyph: u32,
+    size: u32,
+  },
 }
 
 /// An image written once into `<defs>` at its own pixel size.

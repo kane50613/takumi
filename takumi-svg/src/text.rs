@@ -148,6 +148,7 @@ pub(crate) fn emit_run_glyphs(
       ResolvedGlyph::Bitmap(bitmap) => {
         let key = ImageKey::BitmapGlyph {
           font: run.glyph_run.font_id(),
+          index: run.glyph_run.font_index,
           glyph: glyph.id,
           size: run.glyph_run.font_size.to_bits(),
         };
