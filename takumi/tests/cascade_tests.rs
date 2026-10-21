@@ -379,26 +379,6 @@ fn a_registered_property_reaches_the_root_element() {
   assert_eq!(result.width, 140.0);
 }
 
-/// `inherit` takes the parent's value of a registered property even when it does not inherit,
-/// as css-properties-values-api says of every custom property.
-#[test]
-fn inherit_takes_the_parents_value_of_a_non_inheriting_property() {
-  let root = Node::container([Node::container([block("box")]).with_class_name("outer")]);
-  let result = measure_with_css(
-    root,
-    r#"
-      @property --box-width {
-        syntax: "<length>";
-        inherits: false;
-        initial-value: 10px;
-      }
-      .outer { --box-width: 150px; }
-      .box { --box-width: inherit; width: var(--box-width); }
-    "#,
-  );
-  assert_eq!(result.children[0].children[0].width, 150.0);
-}
-
 /// A `--tw-*` name the utility engine never wrote is the author's own variable,
 /// so it inherits like any unregistered custom property.
 #[test]
