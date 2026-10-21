@@ -4,11 +4,11 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
   prelude::{
     AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
-    Color, ColorInput, Display, FlexWrap, Fonts, FromCssStr, FromHtml, FromHtmlOptions,
-    JustifyContent,
+    Color, ColorInput, Display, FlexWrap, Fonts, FromCssStr, FromHtml, FromHtmlOptions, ImageData,
+    ImageSourceInput, JustifyContent,
     Length::{Percentage, Px},
-    Node, ObjectFit, Overflow, PositionValues, RenderOptions, SpacePair, Style, StyleDeclaration,
-    StylePresets, Viewport,
+    Node, ObjectFit, Overflow, PositionValues, RenderOptions, RgbaImage, SpacePair, Style,
+    StyleDeclaration, StylePresets, Viewport,
   },
   render,
 };
@@ -201,6 +201,33 @@ fn rounded_gradient_card_fixture() -> Node {
   )
 }
 
+/// A 640px photo-like image with rounded corners, drawn at its own size or scaled to `size`.
+fn rounded_image_fixture(size: &str) -> Node {
+  let pixels = (0..640 * 640)
+    .flat_map(|index: u32| {
+      let noise = index.wrapping_mul(2_654_435_761) >> 24;
+
+      [(index % 640) as u8, (index / 640) as u8, noise as u8, 255]
+    })
+    .collect();
+  let image = ImageData {
+    src: ImageSourceInput::Rgba(RgbaImage::new(pixels, 640, 640, true).unwrap()),
+    width: None,
+    height: None,
+  };
+
+  Node::container([Node::image(image).with_tw(
+    format!("w-[{size}] h-[{size}] rounded-[64px]")
+      .parse()
+      .unwrap(),
+  )])
+  .with_tw(
+    "flex w-full h-full items-center justify-center"
+      .parse()
+      .unwrap(),
+  )
+}
+
 fn bench_canvas(c: &mut Criterion) {
   let fonts = Fonts::default();
   let mut group = c.benchmark_group("canvas");
@@ -222,6 +249,12 @@ fn bench_canvas(c: &mut Criterion) {
   });
   group.bench_function("rounded_gradient_card", |b| {
     b.iter(|| render_node(&fonts, black_box(rounded_gradient_card_fixture())))
+  });
+  group.bench_function("rounded_image", |b| {
+    b.iter(|| render_node(&fonts, black_box(rounded_image_fixture("640px"))))
+  });
+  group.bench_function("rounded_scaled_image", |b| {
+    b.iter(|| render_node(&fonts, black_box(rounded_image_fixture("700px"))))
   });
   group.bench_function("square_border_sides", |b| {
     b.iter(|| {
