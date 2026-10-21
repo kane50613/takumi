@@ -1,7 +1,7 @@
-use std::{borrow::Cow, cell::RefCell};
+use std::{borrow::Cow, sync::LazyLock};
 
 use cssparser::{Parser, Token};
-use rustc_hash::FxHashMap;
+use quick_cache::{Equivalent, sync::Cache};
 
 use super::{DeferredDeclaration, ParsedDeclarations, PropertyId};
 use crate::style::{ComputedStyle, CssInput, CustomProperties};
@@ -158,49 +158,37 @@ fn resolve_var_references_with(
   Some(output)
 }
 
-/// Substituted values parsed for a property, `None` for one that does not parse. Elements sharing
-/// a variable substitute the same text, so each parses once.
-#[derive(Default)]
-struct ParsedValues {
-  by_property: FxHashMap<PropertyId, FxHashMap<Box<str>, Option<ParsedDeclarations>>>,
-  len: usize,
-}
+/// Substituted values parsed for a property, `None` for one that does not parse. Elements sharing a
+/// variable substitute the same text, so each parses once, on whichever thread renders first.
+static PARSED_VALUES: LazyLock<Cache<ParsedValue, Option<ParsedDeclarations>>> =
+  LazyLock::new(|| Cache::new(4096));
 
-impl ParsedValues {
-  /// The most values kept before starting over.
-  const LIMIT: usize = 4096;
+/// A substituted value and the property it was parsed for.
+type ParsedValue = (PropertyId, Box<str>);
 
-  /// `value` parsed for `property`, parsing it only the first time.
-  fn parse(&mut self, property: PropertyId, value: String) -> Option<ParsedDeclarations> {
-    if let Some(declarations) = self
-      .by_property
-      .get(&property)
-      .and_then(|values| values.get(value.as_str()))
-    {
-      return declarations.clone();
-    }
+/// A [`PARSED_VALUES`] key borrowed from the text being looked up.
+#[derive(Hash)]
+struct ParsedValueKey<'a>(PropertyId, &'a str);
 
-    let key = value.clone().into_boxed_str();
-    let declarations = property
-      .parse_css_input_declarations(CssInput::Str(Cow::Owned(value)))
-      .ok();
-
-    if self.len >= Self::LIMIT {
-      self.by_property.clear();
-      self.len = 0;
-    }
-    self.len += 1;
-    self
-      .by_property
-      .entry(property)
-      .or_default()
-      .insert(key, declarations.clone());
-    declarations
+impl Equivalent<ParsedValue> for ParsedValueKey<'_> {
+  fn equivalent(&self, key: &ParsedValue) -> bool {
+    self.0 == key.0 && self.1 == &*key.1
   }
 }
 
-thread_local! {
-  static PARSED_VALUES: RefCell<ParsedValues> = RefCell::default();
+/// `value` parsed for `property`, parsing it only the first time.
+fn parse_substituted(property: PropertyId, value: String) -> Option<ParsedDeclarations> {
+  if let Some(declarations) = PARSED_VALUES.get(&ParsedValueKey(property, &value)) {
+    return declarations;
+  }
+
+  let key = (property, value.clone().into_boxed_str());
+  let declarations = property
+    .parse_css_input_declarations(CssInput::Str(Cow::Owned(value)))
+    .ok();
+
+  PARSED_VALUES.insert(key, declarations.clone());
+  declarations
 }
 
 /// Applies a deferred declaration, reporting whether substitution produced a
@@ -215,9 +203,7 @@ pub(crate) fn apply_deferred_declaration(
   else {
     return false;
   };
-  let Some(declarations) =
-    PARSED_VALUES.with_borrow_mut(|parsed| parsed.parse(deferred.property, resolved_value))
-  else {
+  let Some(declarations) = parse_substituted(deferred.property, resolved_value) else {
     return false;
   };
 
@@ -226,4 +212,27 @@ pub(crate) fn apply_deferred_declaration(
   }
 
   true
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{PARSED_VALUES, ParsedValueKey, parse_substituted};
+  use crate::style::{LonghandId, PropertyId};
+
+  #[test]
+  fn a_substituted_value_parses_once_and_is_found_by_its_text() {
+    let property = PropertyId::Longhand(LonghandId::RowGap);
+    let parsed = parse_substituted(property, "12px".to_owned());
+
+    assert!(parsed.is_some());
+    assert_eq!(
+      PARSED_VALUES.get(&ParsedValueKey(property, "12px")),
+      Some(parsed)
+    );
+    assert_eq!(parse_substituted(property, "not a gap".to_owned()), None);
+    assert_eq!(
+      PARSED_VALUES.get(&ParsedValueKey(property, "not a gap")),
+      Some(None)
+    );
+  }
 }
