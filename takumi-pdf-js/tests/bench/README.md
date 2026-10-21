@@ -17,10 +17,10 @@ export RUSTFLAGS='--remap-path-prefix=/home/runner=~ --remap-path-prefix=/Users/
 Start from the candidate source checkout, at the workspace root. The commands below build both variants from identical Rust and JavaScript sources. For the baseline, they temporarily remove only the new wasm-opt inlining limit; for the candidate, they restore it. The manifest must match `HEAD` and contain the candidate flag. The saved manifest is restored even if a build fails.
 
 ```sh
+set -eu
 bun install --frozen-lockfile
 bun run --filter ./takumi-helpers build
 (
-  set -eu
   manifest=takumi-pdf-js/Cargo.toml
   git diff --exit-code HEAD -- "$manifest"
   grep -Fq -- '--inline-max-combined-binary-size=65536' "$manifest"
