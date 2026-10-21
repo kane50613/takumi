@@ -112,6 +112,37 @@ fn bench_cascade(c: &mut Criterion) {
     })
   });
 
+  // Values that come through `var()`, as Tailwind v4's utilities do, against the same values
+  // written out.
+  for (name, css) in [
+    (
+      "400x_var",
+      ":root { --c: rgb(20 40 60); --s: 4px; } * { color: var(--c); border-color: var(--c); padding: var(--s); margin: var(--s); }",
+    ),
+    (
+      "400x_literal",
+      "* { color: rgb(20 40 60); border-color: rgb(20 40 60); padding: 4px; margin: 4px; }",
+    ),
+  ] {
+    let stylesheet = StyleSheet::parse(css).expect("valid stylesheet");
+
+    group.bench_function(BenchmarkId::from_parameter(name), |b| {
+      b.iter(|| {
+        black_box(
+          render(
+            RenderOptions::builder()
+              .viewport(Viewport::new((64, 64)))
+              .node(node.clone())
+              .fonts(&fonts)
+              .stylesheet(stylesheet.clone().into())
+              .build(),
+          )
+          .expect("renders"),
+        )
+      })
+    });
+  }
+
   group.finish();
 }
 

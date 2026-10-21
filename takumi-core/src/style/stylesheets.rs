@@ -359,7 +359,7 @@ macro_rules! define_style {
     paste! {
       /// Identifies a single longhand property.
       #[repr(u8)]
-      #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+      #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
       #[non_exhaustive]
       pub(crate) enum LonghandId {
         $($(
@@ -416,7 +416,7 @@ macro_rules! define_style {
 
       /// Identifies a shorthand property that expands into longhands.
       #[repr(u8)]
-      #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+      #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
       #[non_exhaustive]
       pub(crate) enum ShorthandId {
         $(
@@ -501,7 +501,7 @@ macro_rules! define_style {
       }
 
       /// Identifies any property: longhand, shorthand, custom, or ignored.
-      #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+      #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
       #[non_exhaustive]
       pub(crate) enum PropertyId {
         /// An unrecognized property that is dropped.
