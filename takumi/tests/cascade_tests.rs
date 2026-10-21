@@ -549,3 +549,16 @@ fn all_unset_in_a_where_rule_yields_to_every_other_rule() {
 
   assert_eq!(result.children[0].width, 100.0);
 }
+
+#[test]
+fn a_var_that_substitutes_to_nothing_drops_the_earlier_value() {
+  let root = Node::container([block("box")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .box { width: 100px; width: var(--missing); }
+    "#,
+  );
+
+  assert_eq!(result.children[0].width, result.width);
+}

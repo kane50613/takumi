@@ -1728,3 +1728,56 @@ fn all_inherit_copies_non_inherited_longhands() {
   assert_eq!(style.box_data.width, parent.box_data.width);
   assert_eq!(style.box_data.height, Length::Px(4.0).into());
 }
+
+#[test]
+fn a_var_that_substitutes_to_nothing_unsets_the_property() {
+  let parent = inherited_style_from_pairs([("color", "red")], &ComputedStyle::default());
+  let style = inherited_style_from_pairs(
+    [
+      ("width", "10px"),
+      ("width", "var(--missing)"),
+      ("color", "blue"),
+      ("color", "var(--missing)"),
+      ("margin", "4px"),
+      ("margin", "var(--missing)"),
+    ],
+    &parent,
+  );
+
+  assert_eq!(
+    style.box_data.width,
+    ComputedStyle::default().box_data.width
+  );
+  assert_eq!(style.inherited_data.color, parent.inherited_data.color);
+  assert_eq!(
+    style.box_data.margin_top,
+    ComputedStyle::default().box_data.margin_top
+  );
+}
+
+#[test]
+fn a_var_that_substitutes_to_an_invalid_value_unsets_the_property() {
+  let style = inherited_style_from_pairs(
+    [
+      ("--size", "red"),
+      ("width", "10px"),
+      ("width", "var(--size)"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(
+    style.box_data.width,
+    ComputedStyle::default().box_data.width
+  );
+}
+
+#[test]
+fn a_var_fallback_still_applies() {
+  let style = inherited_style_from_pairs(
+    [("width", "10px"), ("width", "var(--missing, 6px)")],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(style.box_data.width, Length::Px(6.0).into());
+}

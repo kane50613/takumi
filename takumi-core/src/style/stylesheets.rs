@@ -98,6 +98,22 @@ pub(crate) struct DeferredDeclaration {
   pub(crate) specified_value: String,
 }
 
+impl DeferredDeclaration {
+  /// Applies the value its `var()` references substitute to, or `unset` to every longhand it
+  /// targets when that value is invalid at computed-value time.
+  /// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
+  fn apply_with_parent(&self, style: &mut ComputedStyle, parent: &ComputedStyle) {
+    if apply_deferred_declaration(style, Some(parent), self) {
+      return;
+    }
+
+    for longhand in self.property.target_longhands().iter() {
+      StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset)
+        .apply_with_parent(style, parent);
+    }
+  }
+}
+
 /// A utility value read from a custom property, with the built-in scale as its
 /// fallback. Tailwind compiles `bg-red-500` to `var(--color-red-500)`.
 #[derive(Debug, Clone, PartialEq)]
@@ -860,7 +876,7 @@ macro_rules! define_style {
               StyleDeclaration::Deferred(deferred)
                 if matches!(deferred.property, PropertyId::Longhand(LonghandId::Direction)) =>
               {
-                apply_deferred_declaration(&mut style, Some(parent), deferred);
+                deferred.apply_with_parent(&mut style, parent);
               }
               _ => {}
             }
@@ -1298,9 +1314,7 @@ macro_rules! define_style {
             Self::CustomProperty(name, value) => {
               style.custom_properties.set(name, value);
             }
-            Self::Deferred(deferred) => {
-              apply_deferred_declaration(style, Some(parent), &deferred);
-            }
+            Self::Deferred(deferred) => deferred.apply_with_parent(style, parent),
             Self::VarRef(var_ref) => var_ref.apply(style, Some(parent)),
             $($(Self::[<$longhand:camel>](value) => style.[<$group _mut>]().$longhand = value,)*)*
             $(
