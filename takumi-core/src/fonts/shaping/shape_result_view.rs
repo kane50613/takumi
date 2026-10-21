@@ -1,6 +1,8 @@
 //! Blink's [`ShapeResultView`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/shape_result_view.cc).
 
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
+
+use smallvec::SmallVec;
 
 use super::{
   glyph_data::{GlyphOffset, HarfBuzzRunGlyphData},
@@ -168,9 +170,9 @@ impl RunInfoPart {
   }
 }
 
-/// A result or a view as `PopulateRunInfoParts` reads it.
-struct PartSource {
-  parts: Vec<RunInfoPart>,
+/// A result or a view as `PopulateRunInfoParts` reads it, borrowing a view's parts.
+struct PartSource<'a> {
+  parts: Cow<'a, [RunInfoPart]>,
   start_index_offset_for_run: u32,
   start_index: u32,
   end_index: u32,
@@ -178,13 +180,15 @@ struct PartSource {
   has_vertical_offsets: bool,
 }
 
-impl PartSource {
-  fn of(source: SegmentSource<'_>) -> Self {
+impl<'a> PartSource<'a> {
+  fn of(source: SegmentSource<'a>) -> Self {
     match source {
       SegmentSource::Result(result) => Self {
-        parts: (0..result.runs.len())
-          .map(|run_index| RunInfoPart::whole_run(result, run_index))
-          .collect(),
+        parts: Cow::Owned(
+          (0..result.runs.len())
+            .map(|run_index| RunInfoPart::whole_run(result, run_index))
+            .collect(),
+        ),
         start_index_offset_for_run: 0,
         start_index: result.start_index,
         end_index: result.end_index(),
@@ -192,7 +196,7 @@ impl PartSource {
         has_vertical_offsets: result.has_vertical_offsets,
       },
       SegmentSource::View(view) => Self {
-        parts: view.parts.clone(),
+        parts: Cow::Borrowed(&view.parts),
         start_index_offset_for_run: view.char_index_offset,
         start_index: view.start_index(),
         end_index: view.end_index(),
@@ -221,7 +225,7 @@ impl ShapeResultView {
   pub(crate) fn create(segments: &[Segment<'_>]) -> Self {
     debug_assert!(!segments.is_empty());
 
-    let sources: Vec<PartSource> = segments
+    let sources: SmallVec<[PartSource<'_>; 2]> = segments
       .iter()
       .map(|segment| PartSource::of(segment.source))
       .collect();
@@ -292,7 +296,7 @@ impl ShapeResultView {
   }
 
   /// Blink's `PopulateRunInfoParts`.
-  fn populate_run_info_parts(&mut self, source: &PartSource, segment: &Segment<'_>) {
+  fn populate_run_info_parts(&mut self, source: &PartSource<'_>, segment: &Segment<'_>) {
     let source_start = segment.start_index.max(source.start_index);
     let index_diff = i64::from(self.start_index + self.num_characters) - i64::from(source_start);
 
@@ -300,7 +304,7 @@ impl ShapeResultView {
 
     let is_ltr = source.direction == TextDirection::Ltr;
 
-    for run in &source.parts {
+    for run in source.parts.iter() {
       let Some((part_start, part_end)) =
         run.compute_start_end(source.start_index_offset_for_run, is_ltr, segment)
       else {
