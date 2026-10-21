@@ -45,6 +45,14 @@ impl SectionPlan {
       let mut next_targets = HashMap::new();
 
       for (index, source) in sources.iter().enumerate() {
+        let mut rules = rules.clone();
+
+        if index > 0 {
+          rules.first = Default::default();
+        }
+        if index + 1 < sources.len() {
+          rules.last = Default::default();
+        }
         // The first source owns the document's default bands.
         let [header, footer] = [
           source.header.as_ref().or(sources[0].header.as_ref()),

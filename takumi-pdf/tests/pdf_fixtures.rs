@@ -743,6 +743,79 @@ fn mixed_sections_settle_when_total_digits_wrap_an_auto_band() {
   );
 }
 
+#[test]
+fn mixed_sections_auto_margins_ignore_unreachable_page_rules() {
+  fn band(name: &str, height: f32) -> Node {
+    text(name, 10.0).with_style(
+      Style::default()
+        .with(StyleDeclaration::font_size(FontSize::Length(Px(10.0))))
+        .with(StyleDeclaration::height(Px(height))),
+    )
+  }
+
+  fn options(fonts: &Fonts) -> PdfOptions<'_> {
+    PdfOptions::builder()
+      .fonts(fonts)
+      .node(text("Cover", 16.0))
+      .page(PageOptions {
+        width: 300.0,
+        height: 300.0,
+        margin: PageMargins::AUTO,
+      })
+      .header(band("Running header", 10.0))
+      .footer(band("Running footer", 10.0))
+      .sections(vec![
+        PdfSection::builder()
+          .node(column(
+            (1..=6)
+              .map(|row| {
+                text(&format!("Middle row {row}"), 16.0).with_style(
+                  Style::default()
+                    .with(StyleDeclaration::height(Px(30.0)))
+                    .with(StyleDeclaration::font_size(FontSize::Length(Px(16.0)))),
+                )
+              })
+              .collect(),
+          ))
+          .build(),
+        PdfSection::builder().node(text("Closing", 16.0)).build(),
+      ])
+      .pages(PageRules {
+        first: PageOverride {
+          header: Some(band("First header", 100.0).into()),
+          footer: Some(band("First footer", 70.0).into()),
+        },
+        last: PageOverride {
+          header: Some(band("Last header", 50.0).into()),
+          footer: Some(band("Last footer", 80.0).into()),
+        },
+        ..PageRules::default()
+      })
+      .build()
+  }
+
+  let fonts = fonts();
+  let pdf = run_pdf_fixture_with("mixed-sections-auto-bands", &fonts, options);
+
+  assert_eq!(page_count(&pdf), 3, "each section fits on one page");
+
+  let mut expected = options(&fonts);
+
+  expected.pages = PageRules::default();
+  expected.header = Some(band("First header", 100.0));
+  expected.footer = Some(band("First footer", 70.0));
+  expected.sections[0].header = Some(band("Running header", 10.0).into());
+  expected.sections[0].footer = Some(band("Running footer", 10.0).into());
+  expected.sections[1].header = Some(band("Last header", 50.0).into());
+  expected.sections[1].footer = Some(band("Last footer", 80.0).into());
+
+  assert_eq!(
+    pdf,
+    render_pinned(expected),
+    "global first/last rules must match explicit section-local bands"
+  );
+}
+
 /// `page_ranges` keeps pages 1 and 3 of a three-page report. The footer
 /// counters keep their full-output numbers, so the two pages read
 /// "Page 1 of 3" and "Page 3 of 3".
