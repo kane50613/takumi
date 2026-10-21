@@ -348,10 +348,22 @@ impl Node {
     Some(text)
   }
 
+  /// Blink's `IsBR`: a `<br>`, which takumi carries as a text node holding its line feed.
+  pub(crate) fn is_br(&self) -> bool {
+    matches!(self.kind, NodeKind::Text(_))
+      && self
+        .tag_name()
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
+  }
+
   pub(crate) fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;
     };
+
+    if self.is_br() {
+      return false;
+    }
     data
       .text
       .chars()
@@ -662,6 +674,13 @@ pub(crate) struct NodeStyleLayers {
   pub(crate) inline: Option<Style>,
   pub(crate) dir: Option<Direction>,
   pub(crate) lang: Option<Lang>,
+}
+
+impl NodeStyleLayers {
+  /// Whether nothing but the preset styles the element beyond its matched rules.
+  pub(crate) fn is_preset_only(&self) -> bool {
+    self.author_tw.is_none() && self.inline.is_none() && self.dir.is_none() && self.lang.is_none()
+  }
 }
 
 /// Selector-matching queries read by [`crate::matching`].

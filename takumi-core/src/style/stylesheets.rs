@@ -1037,6 +1037,20 @@ macro_rules! define_style {
           })
         }
 
+        /// Whether a child that inherits nothing explicitly resolves the same against both, as
+        /// Blink's `InheritedEqualIncludingInheritedVariables`.
+        pub(crate) fn inherited_equal(&self, other: &Self) -> bool {
+          self.custom_properties == other.custom_properties
+            && self.lang == other.lang
+            $(&& (!$group_ty::INHERITED || self.$group == other.$group))*
+        }
+
+        /// Whether the values only explicit inheritance reads match, as Blink's `NonInheritedEqual`.
+        pub(crate) fn non_inherited_equal(&self, other: &Self) -> bool {
+          self.original_display == other.original_display
+            $(&& ($group_ty::INHERITED || self.$group == other.$group))*
+        }
+
         /// Builds the style of an anonymous block box generated inside `parent`,
         /// resolved down to its used values like any other box's.
         pub(crate) fn for_anonymous(parent: &Self, sizing: &SizingContext) -> Self {
@@ -1167,6 +1181,18 @@ macro_rules! define_style {
                 define_style!(@non_negative value $(, $transient_non_negative)?)
               }
             )*
+            _ => false,
+          }
+        }
+
+        /// Whether applying it may copy a non-inherited value from the parent, which Blink's
+        /// `HasExplicitInheritance` tracks.
+        pub(crate) fn inherits_explicitly(&self) -> bool {
+          match self {
+            Self::CssWideKeyword(property, CssWideKeyword::Inherit) => {
+              !LonghandId::INHERITED[property.index()]
+            }
+            Self::Deferred(..) | Self::VarRef(..) => true,
             _ => false,
           }
         }
@@ -2337,6 +2363,14 @@ impl StyleDeclarationBlock {
   /// Iterates over the declarations in source order.
   pub fn iter(&self) -> std::slice::Iter<'_, StyleDeclaration> {
     self.declarations.iter()
+  }
+
+  /// Whether a declaration may copy a non-inherited value from the parent.
+  pub(crate) fn inherits_explicitly(&self) -> bool {
+    self
+      .declarations
+      .iter()
+      .any(StyleDeclaration::inherits_explicitly)
   }
 
   /// The number of declarations in this block.

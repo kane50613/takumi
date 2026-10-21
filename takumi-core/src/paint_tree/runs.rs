@@ -125,6 +125,16 @@ impl PositionedInlineRun {
       })
   }
 
+  /// Source order of the element the run's text belongs to.
+  pub(super) fn element(&self, spans: &[ProcessedInlineSpan<'_>]) -> Option<usize> {
+    let span_id = self.glyph_run.brush.source_span_id?;
+
+    match spans.get(span_id as usize)? {
+      ProcessedInlineSpan::Text { element, .. } => *element,
+      _ => None,
+    }
+  }
+
   /// The run's text without the bidi marks layout inserts.
   pub(super) fn text(&self, text: &str, spans: &[ProcessedInlineSpan<'_>]) -> String {
     let (_, slice) = self.text_slice(text, spans);

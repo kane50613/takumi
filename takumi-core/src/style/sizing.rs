@@ -55,6 +55,18 @@ impl SizingContext {
     self.viewport.to_css(device_px)
   }
 
+  /// Whether lengths resolve the same against both, whatever either read of a query container.
+  /// Both must come from one render, whose contexts all share its calc arena.
+  pub(crate) fn resolves_like(&self, other: &Self) -> bool {
+    self.viewport == other.viewport
+      && self.container_size == other.container_size
+      && self.font_size == other.font_size
+      && self.root_font_size == other.root_font_size
+      && self.line_height == other.line_height
+      && self.root_line_height == other.root_line_height
+      && self.ch == other.ch
+  }
+
   /// Returns a copy with the font and line-height metrics overridden, inheriting
   /// the viewport, container size, and shared calc arena.
   pub(crate) fn with_font_metrics(

@@ -21,7 +21,7 @@ use crate::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
     inline::{InlinePass, ProcessedInlineSpan},
     inline_box::{InlineBoxPaint, resolve_inline_box},
-    node::{ImageData, ImageSourceInput, NodeKind as InputKind},
+    node::{ImageData, ImageSourceInput},
     tree::RenderNode,
   },
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
@@ -33,7 +33,7 @@ use crate::{
   resources::image::{sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
   sort_key::sort_by_key,
-  style::{Affine, BackgroundImage, ComputedStyle, Filter, Isolation, TextAlign, ToCss},
+  style::{Affine, BackgroundImage, Filter, Isolation, TextAlign, ToCss},
 };
 
 /// A render node placed in the document, inside the box `parent`.
@@ -430,7 +430,7 @@ impl Walker {
 
         TextRun {
           text: run.text(text, spans),
-          element: ElementInfo::styled(node, style.parent, path),
+          element: ElementInfo::authored(node, run.element(spans), path),
           x: origin.x,
           y: origin.y,
           width: shaped.advance,
@@ -1063,21 +1063,12 @@ impl ElementInfo {
 }
 
 impl ElementInfo {
-  /// The element under `root`, at `path`, whose text takes `style`: an anonymous text node's
-  /// parent. `None` for `root` itself.
-  fn styled(root: &RenderNode, style: &ComputedStyle, path: &[usize]) -> Option<Self> {
-    let mut relative = root.path_where(or_marker(|candidate| {
-      ptr::eq(&*candidate.context.style, style)
-    }))?;
+  /// The element under `root` at `source_order`, at `path` from the input root. `None` for `root`
+  /// itself.
+  fn authored(root: &RenderNode, source_order: Option<usize>, path: &[usize]) -> Option<Self> {
+    let source_order = source_order?;
+    let relative = root.path_where(|candidate| candidate.source_order() == Some(source_order))?;
 
-    if root
-      .node_at_path(&relative)?
-      .node
-      .as_ref()
-      .is_some_and(|input| matches!(input.kind, InputKind::Text(_)) && input.tag_name().is_none())
-    {
-      relative.pop();
-    }
     if relative.is_empty() {
       return None;
     }

@@ -51,9 +51,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
-    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TwBlocks,
-    WhiteSpaceCollapse, apply_stylesheet_animations,
+    Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
+    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+    TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -2423,6 +2423,14 @@ impl RenderNode {
       .is_some_and(|children| children.iter().any(RenderNode::is_anonymous_text_item))
   }
 
+  /// Whether it is a text node without a tag, whose text belongs to its parent element.
+  pub(crate) fn is_untagged_text(&self) -> bool {
+    self
+      .node
+      .as_ref()
+      .is_some_and(|node| matches!(node.kind, NodeKind::Text(_)) && node.tag_name().is_none())
+  }
+
   /// The authored node's document-order position, absent for generated boxes.
   pub fn source_order(&self) -> Option<usize> {
     match self.origin {
@@ -3358,26 +3366,19 @@ impl RenderContext {
     (style, sizing, current_color)
   }
 
-  /// Resolves a child's style and sizing from its matched declarations.
+  /// Resolves a child's style and sizing from its matched declarations, sharing the style a box
+  /// with the same preset resolved to from the same declarations under an equal parent.
   fn resolve_child_style(
     &self,
     node: &mut Node,
     source_order: usize,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
-  ) -> (ComputedStyle, SizingContext, Color) {
+  ) -> (Rc<ComputedStyle>, SizingContext, Color) {
     let default_matched = MatchedDeclarationsView::default();
     let matched = matched_declarations
       .get(source_order)
       .map(NodeMatchedDeclarations::element)
       .unwrap_or(&default_matched);
-    let layers = node.take_style_layers();
-    let lang = layers.lang;
-
-    let (style_layers, element_important) = self.cascade(layers, matched);
-    let inherited_parent = self.inherited_style();
-
-    let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
-
     // A tree built in code is content, not a document: `rem` resolves against
     // the viewport, so a `font-size` on the outermost node styles text without
     // rescaling every `rem` length below it. A parsed document is the
@@ -3387,6 +3388,58 @@ impl RenderContext {
       && node
         .tag_name()
         .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
+    let layers = node.take_style_layers();
+    let key = (layers.is_preset_only() && !is_document_root)
+      .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
+    let cache = self.matched_styles();
+
+    if let Some(key) = &key
+      && let Some(resolved) = cache.get(key, &self.style, &self.sizing, layers.preset.as_ref())
+    {
+      return resolved;
+    }
+
+    let preset = key.as_ref().and(layers.preset.clone());
+    let (style, sizing, current_color) =
+      self.resolve_uncached_child_style(layers, matched, is_document_root);
+    let style = Rc::new(style);
+
+    // A style an animation or a query container decided holds for this box alone.
+    if let Some(key) = key
+      && style.misc1_data.animation_name.is_empty()
+      && !sizing.container_read.get()
+    {
+      let inherits_explicitly = matched.inherits_explicitly()
+        || preset
+          .as_ref()
+          .is_some_and(|preset| preset.declarations.inherits_explicitly());
+
+      cache.insert(
+        key,
+        Rc::clone(&self.style),
+        self.sizing.clone(),
+        preset,
+        inherits_explicitly,
+        (Rc::clone(&style), sizing.clone(), current_color),
+      );
+    }
+
+    (style, sizing, current_color)
+  }
+
+  /// Resolves a child's style and sizing from its style layers and matched declarations.
+  fn resolve_uncached_child_style(
+    &self,
+    layers: NodeStyleLayers,
+    matched: &MatchedDeclarationsView<'_>,
+    is_document_root: bool,
+  ) -> (ComputedStyle, SizingContext, Color) {
+    let lang = layers.lang;
+
+    let (style_layers, element_important) = self.cascade(layers, matched);
+    let inherited_parent = self.inherited_style();
+
+    let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
     if !style.misc1_data.animation_name.is_empty() {
@@ -3427,14 +3480,6 @@ impl RenderContext {
           .clone()
           .apply_with_parent(&mut style, &inherited_parent);
       }
-    }
-
-    // Blink's `LayoutBR` breaks the line whatever `white-space` says.
-    if node
-      .tag_name()
-      .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
-    {
-      style.inherited_data_mut().white_space_collapse = WhiteSpaceCollapse::PreserveBreaks;
     }
 
     let sizing = self.child_sizing(
@@ -3989,5 +4034,50 @@ mod tests {
       .with_id("root")
       .with_tag_name("html");
     assert_eq!(child_width(document), 32.0);
+  }
+
+  #[test]
+  fn boxes_under_parents_with_equal_inherited_values_share_a_style() {
+    use std::{rc::Rc, sync::Arc};
+
+    use crate::layout::node::Node;
+
+    let stylesheet = StyleSheet::parse(
+      ".a { width: 10px } .b { width: 20px } .cell { height: 5px } .inherits { width: inherit }",
+    )
+    .expect("stylesheet parses");
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let row = |class: &str| {
+      Node::container([
+        Node::container([]).with_class_name("cell"),
+        Node::container([]).with_class_name("inherits"),
+      ])
+      .with_class_name(class)
+    };
+    let tree = RenderNode::from_node(&context, Node::container([row("a"), row("b")]));
+    let rows = tree.children.as_deref().expect("rows");
+    let first = rows[0].children.as_deref().expect("cells");
+    let second = rows[1].children.as_deref().expect("cells");
+
+    assert!(Rc::ptr_eq(
+      &first[0].context.style,
+      &second[0].context.style
+    ));
+    assert_eq!(
+      first[1].context.style.box_data.width,
+      Length::Px(10.0).into()
+    );
+    assert_eq!(
+      second[1].context.style.box_data.width,
+      Length::Px(20.0).into()
+    );
   }
 }

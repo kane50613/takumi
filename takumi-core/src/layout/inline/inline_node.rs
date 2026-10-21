@@ -553,12 +553,7 @@ impl RenderNode {
       let metadata = &node.metadata;
 
       // A `<br>` is Blink's `LayoutBR`, a text, whatever styles it.
-      if matches!(node.kind, NodeKind::Text(_))
-        && metadata
-          .tag_name
-          .as_deref()
-          .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
-      {
+      if node.is_br() {
         return true;
       }
 
