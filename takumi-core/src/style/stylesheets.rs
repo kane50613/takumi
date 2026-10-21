@@ -789,25 +789,9 @@ macro_rules! define_style {
         }
 
         /// Appends another declaration block in source order.
+        #[cfg(test)]
         pub(crate) fn append_block(&mut self, declarations: StyleDeclarationBlock) {
           self.declarations.append(declarations);
-        }
-
-        /// Appends a borrowed declaration block in source order, cloning it.
-        pub(crate) fn append_block_cloned(&mut self, declarations: &StyleDeclarationBlock) {
-          self.declarations.append_cloned(declarations);
-        }
-
-        /// Merges a matched block declaration by declaration, which the cascade
-        /// does to keep each one's own importance, and takes its element state.
-        pub(crate) fn merge_matched_block(&mut self, declarations: &StyleDeclarationBlock) {
-          self
-            .declarations
-            .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
-
-          for declaration in declarations.iter() {
-            self.push(declaration.clone(), false);
-          }
         }
 
         /// Appends one declaration, recording its importance.
@@ -820,60 +804,16 @@ macro_rules! define_style {
           self.declarations.image_urls()
         }
 
-        pub(crate) fn inherit_with_lang(self, parent: &ComputedStyle, lang: Option<Lang>) -> ComputedStyle {
-          let mut style = self.inherit(parent);
-          if let Some(lang) = lang {
-            style.lang = Some(lang);
-          }
-          style
-        }
-
         /// Resolves this style against a parent into a computed style.
+        #[cfg(test)]
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
-          let mut style = ComputedStyle::from_parent(parent);
-          let mut declarations = ParsedDeclarations::new();
+          let StyleDeclarationBlock { declarations, element_state, .. } = self.declarations;
 
-          for name in &self.declarations.element_state {
-            style.custom_properties.register_element_state(name);
-          }
-
-          for declaration in self.declarations.declarations {
-            match declaration {
-              StyleDeclaration::CustomProperty(name, value) => {
-                style.custom_properties.set(name, value);
-              }
-              declaration => declarations.push(declaration),
-            }
-          }
-
-          // Pre-resolve `direction` so logical-axis applies below see the
-          // final value even if `direction:` is declared later in the block.
-          for declaration in &declarations {
-            match declaration {
-              StyleDeclaration::Direction(d) => style.inherited_data_mut().direction = *d,
-              StyleDeclaration::CssWideKeyword(LonghandId::Direction, keyword) => {
-                style.inherited_data_mut().direction = match keyword {
-                  CssWideKeyword::Initial => Direction::default(),
-                  CssWideKeyword::Inherit | CssWideKeyword::Unset => parent.inherited_data.direction,
-                };
-              }
-              StyleDeclaration::Deferred(deferred)
-                if matches!(deferred.property, PropertyId::Longhand(LonghandId::Direction)) =>
-              {
-                apply_deferred_declaration(&mut style, Some(parent), deferred);
-              }
-              _ => {}
-            }
-          }
-
-          let parent_font_weight = parent.inherited_data.font_weight.value();
-          for mut declaration in declarations {
-            if let StyleDeclaration::FontWeight(weight) = &mut declaration {
-              *weight = weight.resolve_against(parent_font_weight);
-            }
-            declaration.apply_with_parent(&mut style, parent);
-          }
-          style
+          ComputedStyle::cascaded(
+            parent,
+            element_state.iter().map(Box::as_ref),
+            declarations.into_iter().map(Cow::Owned),
+          )
         }
       }
 
@@ -1039,6 +979,62 @@ macro_rules! define_style {
       }
 
       impl ComputedStyle {
+        /// Resolves declarations in cascade order against a parent, cloning only borrowed ones.
+        pub(crate) fn cascaded<'d>(
+          parent: &Self,
+          element_state: impl IntoIterator<Item = &'d str>,
+          cascade: impl IntoIterator<Item = Cow<'d, StyleDeclaration>>,
+        ) -> Self {
+          let mut style = Self::from_parent(parent);
+          let mut declarations = SmallVec::<[Cow<'d, StyleDeclaration>; 16]>::new();
+
+          for name in element_state {
+            style.custom_properties.register_element_state(name);
+          }
+
+          for declaration in cascade {
+            match declaration {
+              Cow::Owned(StyleDeclaration::CustomProperty(name, value)) => {
+                style.custom_properties.set(name, value);
+              }
+              Cow::Borrowed(StyleDeclaration::CustomProperty(name, value)) => {
+                style.custom_properties.set(name.clone(), value.clone());
+              }
+              declaration => declarations.push(declaration),
+            }
+          }
+
+          // Pre-resolve `direction` so logical-axis applies below see the
+          // final value even if `direction:` is declared later in the block.
+          for declaration in &declarations {
+            match declaration.as_ref() {
+              StyleDeclaration::Direction(d) => style.inherited_data_mut().direction = *d,
+              StyleDeclaration::CssWideKeyword(LonghandId::Direction, keyword) => {
+                style.inherited_data_mut().direction = match keyword {
+                  CssWideKeyword::Initial => Direction::default(),
+                  CssWideKeyword::Inherit | CssWideKeyword::Unset => parent.inherited_data.direction,
+                };
+              }
+              StyleDeclaration::Deferred(deferred)
+                if matches!(deferred.property, PropertyId::Longhand(LonghandId::Direction)) =>
+              {
+                apply_deferred_declaration(&mut style, Some(parent), deferred);
+              }
+              _ => {}
+            }
+          }
+
+          let parent_font_weight = parent.inherited_data.font_weight.value();
+          for declaration in declarations {
+            let mut declaration = declaration.into_owned();
+            if let StyleDeclaration::FontWeight(weight) = &mut declaration {
+              *weight = weight.resolve_against(parent_font_weight);
+            }
+            declaration.apply_with_parent(&mut style, parent);
+          }
+          style
+        }
+
         /// Builds a child computed style inheriting from a parent: an inherited group is the
         /// parent's, a non-inherited one the initial one.
         pub(crate) fn from_parent(parent: &Self) -> Self {
@@ -2353,16 +2349,6 @@ impl StyleDeclarationBlock {
     }
 
     (normal, important)
-  }
-
-  /// Appends a borrowed block's declarations and importance, cloning them.
-  pub(crate) fn append_cloned(&mut self, other: &Self) {
-    self.importance.extend_from(&other.importance);
-    self.extend_element_state(other.element_state.iter().map(Box::as_ref));
-    self
-      .important
-      .append(self.declarations.len(), &other.important);
-    self.declarations.extend(other.declarations.iter().cloned());
   }
 
   /// Appends another block's declarations and importance.

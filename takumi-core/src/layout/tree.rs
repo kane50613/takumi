@@ -53,9 +53,8 @@ use crate::{
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
-    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
-    StyleSheet, TailwindValues, TwBlocks, TwMatches, TwTarget, WhiteSpaceCollapse,
-    apply_stylesheet_animations,
+    Registrations, SizingContext, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+    TailwindValues, TwBlocks, TwMatches, TwTarget, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -3302,16 +3301,15 @@ impl RenderContext {
       .font_metrics()
   }
 
-  /// A child's cascaded style and its element-owned important declarations, its `tw` utilities
-  /// filtered to those whose variants `tw_matches` admits.
+  /// A child's cascaded style against `parent` and its element-owned important declarations, its
+  /// `tw` utilities filtered to those whose variants `tw_matches` admits.
   fn cascade(
     &self,
     node_layers: NodeStyleLayers,
     matched_declarations: &MatchedDeclarationsView<'_>,
     tw_matches: &TwMatches,
-  ) -> (NodeStyle, ElementImportant) {
-    let mut style = NodeStyle::default();
-
+    parent: &ComputedStyle,
+  ) -> (ComputedStyle, ElementImportant) {
     // `tw` is the last declared layer, below unlayered author rules, so its
     // important half goes last: the cascade reverses layer order for important
     // declarations.
@@ -3324,28 +3322,6 @@ impl RenderContext {
       )
     });
 
-    if let Some(preset) = node_layers.preset {
-      style.append_block(preset.declarations);
-    }
-
-    if let Some(dir) = node_layers.dir {
-      style.push(StyleDeclaration::direction(dir), false);
-    }
-
-    for &declarations in matched_declarations.layered_normal() {
-      style.merge_matched_block(declarations);
-    }
-
-    // `tw` is the last declared layer, as Tailwind orders utilities: above every
-    // named `@layer`, below unlayered author rules.
-    if let Some(tw) = &tw {
-      style.append_block_cloned(&tw.normal);
-    }
-
-    for &declarations in matched_declarations.unlayered_normal() {
-      style.merge_matched_block(declarations);
-    }
-
     // An element's own declarations outrank selector-based ones at the same
     // importance.
     let (inline_normal, inline_important) = node_layers
@@ -3353,27 +3329,39 @@ impl RenderContext {
       .map(|inline| StyleDeclarationBlock::from(inline).split_importance())
       .unzip();
 
-    if let Some(inline_normal) = inline_normal {
-      style.append_block(inline_normal);
-    }
+    let preset = node_layers
+      .preset
+      .as_ref()
+      .map(|preset| &preset.declarations);
+    let dir = node_layers.dir.map(StyleDeclaration::direction);
 
-    // Important declarations reverse layer order, so `tw`, the last declared
-    // layer, sits above unlayered rules and below every named `@layer`.
-    for &declarations in matched_declarations.unlayered_important() {
-      style.merge_matched_block(declarations);
-    }
+    // `tw` is the last declared layer, as Tailwind orders utilities: above every
+    // named `@layer`, below unlayered author rules. Important declarations reverse
+    // layer order, so its important half sits above unlayered rules and below
+    // every named `@layer`.
+    let blocks = matched_declarations
+      .layered_normal()
+      .iter()
+      .copied()
+      .chain(tw.as_ref().map(|tw| &tw.normal))
+      .chain(matched_declarations.unlayered_normal().iter().copied())
+      .chain(inline_normal.as_ref())
+      .chain(matched_declarations.unlayered_important().iter().copied())
+      .chain(tw.as_ref().map(|tw| &tw.important))
+      .chain(matched_declarations.layered_important().iter().copied())
+      .chain(inline_important.as_ref());
+    let element_state = preset
+      .into_iter()
+      .chain(blocks.clone())
+      .flat_map(|block| block.element_state.iter().map(Box::as_ref));
+    let declarations = preset
+      .into_iter()
+      .flat_map(StyleDeclarationBlock::iter)
+      .chain(dir.as_ref())
+      .chain(blocks.flat_map(StyleDeclarationBlock::iter))
+      .map(Cow::Borrowed);
 
-    if let Some(tw) = &tw {
-      style.append_block_cloned(&tw.important);
-    }
-
-    for &declarations in matched_declarations.layered_important() {
-      style.merge_matched_block(declarations);
-    }
-
-    if let Some(inline_important) = &inline_important {
-      style.append_block(inline_important.clone());
-    }
+    let style = ComputedStyle::cascaded(parent, element_state, declarations);
 
     (
       style,
@@ -3421,8 +3409,7 @@ impl RenderContext {
       author_tw: tw.cloned(),
       ..NodeStyleLayers::default()
     };
-    let (style_layers, _) = self.cascade(layers, pseudo_matched, tw_matches);
-    let mut style = style_layers.inherit(&self.inherited_style());
+    let (mut style, _) = self.cascade(layers, pseudo_matched, tw_matches, &self.inherited_style());
     let sizing = self.child_sizing(&style, &self.sizing, false);
     let current_color = style.inherited_data.color.resolve(self.current_color);
 
@@ -3501,10 +3488,13 @@ impl RenderContext {
   ) -> (ComputedStyle, SizingContext, Color) {
     let lang = layers.lang;
 
-    let (style_layers, element_important) = self.cascade(layers, matched, tw_matches);
     let inherited_parent = self.inherited_style();
+    let (mut style, element_important) =
+      self.cascade(layers, matched, tw_matches, &inherited_parent);
 
-    let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
+    if let Some(lang) = lang {
+      style.lang = Some(lang);
+    }
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
     if !style.misc1_data.animation_name.is_empty() {
