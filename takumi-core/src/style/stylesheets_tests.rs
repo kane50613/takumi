@@ -1650,3 +1650,81 @@ fn negative_padding_and_sizes_are_invalid() {
 
   assert_eq!(style.box_data.padding_top, Length::Px(8.0));
 }
+
+#[test]
+fn all_sets_every_longhand_but_direction_and_unicode_bidi() {
+  let block = StyleDeclarationBlock::from_str("all: unset").unwrap();
+  let longhands: Vec<LonghandId> = block
+    .declarations
+    .iter()
+    .filter_map(|declaration| match declaration {
+      StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset) => Some(*longhand),
+      _ => None,
+    })
+    .collect();
+
+  assert_eq!(longhands.len(), block.declarations.len());
+  assert!(longhands.contains(&LonghandId::Color));
+  assert!(longhands.contains(&LonghandId::MarginLeft));
+  assert!(!longhands.contains(&LonghandId::Direction));
+  assert!(!longhands.contains(&LonghandId::UnicodeBidi));
+  assert!(!longhands.contains(&LonghandId::MarginInlineStart));
+
+  let from_object: Style = from_value(json!({ "all": "unset" })).unwrap();
+
+  assert_eq!(from_object.declarations.declarations, block.declarations);
+}
+
+#[test]
+fn all_takes_only_a_css_wide_keyword() {
+  for css in ["all: red", "all: unset red", "all: revert", "all: none"] {
+    assert!(
+      StyleDeclarationBlock::parse_loosy(css).is_empty(),
+      "{css} parsed as valid"
+    );
+  }
+}
+
+#[test]
+fn all_unset_inherits_inherited_longhands_and_resets_the_rest() {
+  let parent = inherited_style_from_pairs(
+    [("color", "red"), ("direction", "rtl"), ("width", "10px")],
+    &ComputedStyle::default(),
+  );
+  let style = inherited_style_from_pairs([("margin-top", "5px"), ("all", "unset")], &parent);
+
+  assert_eq!(style.inherited_data.color, parent.inherited_data.color);
+  assert_eq!(style.inherited_data.direction, Direction::Rtl);
+  assert_eq!(
+    style.box_data.margin_top,
+    ComputedStyle::default().box_data.margin_top
+  );
+  assert_eq!(
+    style.box_data.width,
+    ComputedStyle::default().box_data.width
+  );
+}
+
+#[test]
+fn all_initial_resets_inherited_longhands_but_direction() {
+  let parent = inherited_style_from_pairs(
+    [("color", "red"), ("direction", "rtl")],
+    &ComputedStyle::default(),
+  );
+  let style = inherited_style_from_pairs([("all", "initial")], &parent);
+
+  assert_eq!(
+    style.inherited_data.color,
+    ComputedStyle::default().inherited_data.color
+  );
+  assert_eq!(style.inherited_data.direction, Direction::Rtl);
+}
+
+#[test]
+fn all_inherit_copies_non_inherited_longhands() {
+  let parent = inherited_style_from_pairs([("width", "10px")], &ComputedStyle::default());
+  let style = inherited_style_from_pairs([("all", "inherit"), ("height", "4px")], &parent);
+
+  assert_eq!(style.box_data.width, parent.box_data.width);
+  assert_eq!(style.box_data.height, Length::Px(4.0).into());
+}
