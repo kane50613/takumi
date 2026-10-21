@@ -64,6 +64,16 @@ fn emoji_paragraph() -> Node {
     .with_tw("flex w-full h-full p-12 bg-white".parse().unwrap())
 }
 
+/// A paragraph with a blurred `text-shadow`, which every glyph casts.
+fn shadowed_paragraph() -> Node {
+  Node::container([Node::text(LONG_TEXT.to_string()).with_tw(
+    "text-[28px] text-gray-900 text-shadow-[2px_2px_6px_rgb(0_0_0/0.5)]"
+      .parse()
+      .unwrap(),
+  )])
+  .with_tw("flex w-full h-full p-12 bg-white".parse().unwrap())
+}
+
 fn bench_text(c: &mut Criterion) {
   let fonts = common::fonts();
   let mut group = c.benchmark_group("text");
@@ -80,6 +90,10 @@ fn bench_text(c: &mut Criterion) {
   });
   group.bench_function("emoji_paragraph", |b| {
     b.iter(|| render_node(&fonts, black_box(emoji_paragraph())))
+  });
+
+  group.bench_function("shadowed_paragraph", |b| {
+    b.iter(|| render_node(&fonts, black_box(shadowed_paragraph())))
   });
 
   group.finish();
