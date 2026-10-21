@@ -25,7 +25,10 @@ use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 #[cfg(feature = "svg")]
-use crate::fonts::font_baseline::FontBaseline;
+use std::iter::once;
+
+#[cfg(feature = "svg")]
+use crate::{fonts::font_baseline::FontBaseline, resources::glyph::ResolvedGlyph};
 use crate::{
   fonts::{
     css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
@@ -407,17 +410,17 @@ impl Fonts {
     })
   }
 
-  pub(crate) fn resolve_glyphs(
+  #[cfg(feature = "svg")]
+  pub(crate) fn resolve_glyph(
     &self,
     face: RunFace<'_>,
     font_ref: FontRef,
-    glyph_ids: impl Iterator<Item = u32> + Clone,
-  ) -> ResolvedGlyphs {
-    let mut resolved =
-      ResolvedGlyphs::with_capacity_and_hasher(glyph_ids.size_hint().0, Default::default());
+    glyph_id: u32,
+  ) -> Option<Arc<ResolvedGlyph>> {
+    let mut resolved = ResolvedGlyphs::default();
 
-    self.resolve_glyphs_into(&mut resolved, face, font_ref, glyph_ids);
-    resolved
+    self.resolve_glyphs_into(&mut resolved, face, font_ref, once(glyph_id));
+    resolved.remove(&glyph_id)
   }
 
   /// Adds the glyphs among `glyph_ids` that `resolved` lacks, drawn in `face`.
