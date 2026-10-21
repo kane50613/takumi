@@ -1,6 +1,13 @@
 //! Blink's [`HarfBuzzShaper`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/harfbuzz_shaper.cc).
 
-use std::{borrow::Cow, collections::VecDeque, rc::Rc};
+use std::{
+  borrow::Cow,
+  cell::Cell,
+  collections::VecDeque,
+  mem,
+  ops::{Deref, DerefMut},
+  rc::Rc,
+};
 
 use harfrust::{
   Buffer, Direction as HbDirection, Feature, GlyphInfo, GlyphPosition, Language, ShapeOptions,
@@ -99,7 +106,7 @@ struct RangeContext<'a> {
   text_direction: TextDirection,
   start: usize,
   end: usize,
-  font_features: Vec<Feature>,
+  font_features: &'a [Feature],
   reshape_queue: VecDeque<ReshapeQueueItem>,
 }
 
@@ -112,7 +119,7 @@ impl<'a> RangeContext<'a> {
       text_direction,
       start,
       end,
-      font_features: font.description.features.clone(),
+      font_features: &font.description.features,
       reshape_queue: VecDeque::new(),
     }
   }
@@ -203,10 +210,47 @@ fn round_harfbuzz_position(value: &mut i32) {
   }
 }
 
+thread_local! {
+  static POOLED_BUFFER: Cell<Option<Buffer>> = const { Cell::new(None) };
+}
+
+/// Blink's `PooledHarfBuzzBuffer`: the thread's shaping buffer, reset to its defaults and returned
+/// when dropped, so shaping reuses its allocations.
+struct PooledBuffer(Buffer);
+
+impl PooledBuffer {
+  fn take() -> Self {
+    Self(POOLED_BUFFER.take().map_or_else(Buffer::new, |mut buffer| {
+      buffer.reset();
+      buffer
+    }))
+  }
+}
+
+impl Deref for PooledBuffer {
+  type Target = Buffer;
+
+  fn deref(&self) -> &Buffer {
+    &self.0
+  }
+}
+
+impl DerefMut for PooledBuffer {
+  fn deref_mut(&mut self) -> &mut Buffer {
+    &mut self.0
+  }
+}
+
+impl Drop for PooledBuffer {
+  fn drop(&mut self) {
+    POOLED_BUFFER.set(Some(mem::replace(&mut self.0, Buffer::new())));
+  }
+}
+
 /// Blink's `ShapeRange`.
 #[allow(clippy::too_many_arguments)]
 fn shape_range(
-  mut buffer: Buffer,
+  buffer: &mut Buffer,
   font_features: &[Feature],
   current_font: &SimpleFontData,
   current_run_script: Script,
@@ -222,7 +266,7 @@ fn shape_range(
   buffer.set_direction(direction);
   shape(
     &shaper_font,
-    &mut buffer,
+    buffer,
     ShapeOptions::new()
       .plan(Some(&plan))
       .features(font_features)
@@ -586,7 +630,7 @@ impl<'t> HarfBuzzShaper<'t> {
         }
       }
 
-      let mut buffer = Buffer::new();
+      let mut buffer = PooledBuffer::take();
 
       case_map_intend.fill_buffer(
         &mut buffer,
@@ -604,7 +648,7 @@ impl<'t> HarfBuzzShaper<'t> {
         .append_features(&mut caps_features);
 
       let font_features: Cow<'_, [Feature]> = if caps_features.is_empty() {
-        Cow::Borrowed(&range_data.font_features)
+        Cow::Borrowed(range_data.font_features)
       } else {
         caps_features
           .into_iter()
@@ -614,7 +658,7 @@ impl<'t> HarfBuzzShaper<'t> {
       };
 
       let Some(buffer) = shape_range(
-        buffer,
+        &mut buffer,
         &font_features,
         &adjusted_font,
         segment.script,
