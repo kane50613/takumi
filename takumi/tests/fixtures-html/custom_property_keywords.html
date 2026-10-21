@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>custom_property_keywords</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      @property --tint {
+        syntax: "<color>";
+        inherits: false;
+        initial-value: #f43f5e;
+      }
+      .chart {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 20px;
+        width: 100%;
+        height: 100%;
+        padding: 0 160px;
+        background: white;
+        --bar: 600px;
+        --tint: #4f46e5;
+      }
+      .row {
+        display: flex;
+        --bar: 360px;
+        --tint: #0d9488;
+      }
+      .bar {
+        height: 48px;
+        border-radius: 8px;
+        width: var(--bar, 120px);
+        background: var(--tint, #a1a1aa);
+      }
+      .inherit {
+        --bar: inherit;
+        --tint: inherit;
+      }
+      .initial {
+        --bar: initial;
+        --tint: initial;
+      }
+      .unset {
+        --bar: unset;
+        --tint: unset;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="chart">
+      <div class="row"><div class="bar"></div></div>
+      <div class="row"><div class="bar inherit"></div></div>
+      <div class="row"><div class="bar initial"></div></div>
+      <div class="row"><div class="bar unset"></div></div>
+    </div>
+  </body>
+</html>
