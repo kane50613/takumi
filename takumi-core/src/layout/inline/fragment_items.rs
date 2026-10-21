@@ -27,7 +27,7 @@ use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, Point, Size},
   layout::{border::BorderProperties, tree::RenderNode},
-  resources::font::FontError,
+  resources::{font::FontError, glyph::ResolvedGlyphs},
   style::Color,
 };
 
@@ -54,6 +54,8 @@ pub struct FragmentItems {
   /// The runs' fonts, metrics and brushes, which every run one span shapes in one face shares:
   /// each a run holding no glyphs at no place.
   faces: Vec<Rc<ShapedRun>>,
+  /// The outlines of the glyphs each of [`Self::faces`] draws, resolved once for ink and paint.
+  face_glyphs: Vec<Rc<ResolvedGlyphs>>,
   glyphs: GlyphStore,
   /// In-flow and out-of-flow inline boxes, sorted by id.
   inline_boxes: Vec<VisualInlineBox>,
@@ -385,6 +387,7 @@ impl FragmentItems {
     self.line_boxes.shrink_to_fit();
     self.text_items.shrink_to_fit();
     self.faces.shrink_to_fit();
+    self.face_glyphs.shrink_to_fit();
     self.glyphs.simple.shrink_to_fit();
     self.glyphs.full.shrink_to_fit();
     self.inline_boxes.shrink_to_fit();
@@ -392,16 +395,49 @@ impl FragmentItems {
     self.backgrounds.shrink_to_fit();
   }
 
-  fn push_run(&mut self, context: &RenderContext, run: ShapedRun, placement: RunPlacement) {
-    let (mut face, glyphs) = self.glyphs.push(run);
-    let offset = take(&mut face.offset);
-    let baseline = take(&mut face.baseline);
-    let advance = take(&mut face.advance);
-    let text_range = take(&mut face.text_range);
-    let face = self.face_index(face, context);
+  /// Adds `run` as a text item, first passing it to `ink` with its face's glyphs resolved.
+  fn push_run(
+    &mut self,
+    context: &RenderContext,
+    run: ShapedRun,
+    placement: RunPlacement,
+    ink: impl FnOnce(&ShapedRun, &ResolvedGlyphs),
+  ) {
+    let existing = self
+      .faces
+      .iter()
+      .rposition(|existing| existing.same_face(&run));
+    let face = existing.unwrap_or_else(|| {
+      self.face_glyphs.push(Rc::default());
+      self.face_glyphs.len() - 1
+    });
+    let resolved = Rc::make_mut(&mut self.face_glyphs[face]);
+
+    if let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) {
+      context.fonts().resolve_glyphs_into(
+        resolved,
+        run.face(),
+        font,
+        run.glyphs.iter().map(|glyph| glyph.id),
+      );
+    }
+
+    ink(&run, resolved);
+
+    let (mut shaped_face, glyphs) = self.glyphs.push(run);
+    let offset = take(&mut shaped_face.offset);
+    let baseline = take(&mut shaped_face.baseline);
+    let advance = take(&mut shaped_face.advance);
+    let text_range = take(&mut shaped_face.text_range);
+
+    if existing.is_none() {
+      self
+        .faces
+        .push(context.inline_cache().share_face(shaped_face));
+    }
 
     self.text_items.push(TextItem {
-      face,
+      face: face as u32,
       offset,
       baseline,
       advance,
@@ -409,21 +445,6 @@ impl FragmentItems {
       glyphs,
       placement,
     });
-  }
-
-  /// The index of `face` among [`Self::faces`], added, shared with a box laid out lately when
-  /// one drew in it, when no run before draws in it.
-  fn face_index(&mut self, face: ShapedRun, context: &RenderContext) -> u32 {
-    let index = self
-      .faces
-      .iter()
-      .rposition(|existing| existing.same_face(&face))
-      .unwrap_or_else(|| {
-        self.faces.push(context.inline_cache().share_face(face));
-        self.faces.len() - 1
-      });
-
-    index as u32
   }
 
   /// The text layout shaped.
@@ -534,17 +555,12 @@ impl FragmentItems {
         text_range: item.text_range.clone(),
         ..ShapedRun::clone(&self.faces[item.face as usize])
       };
-      let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
+      FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
         .map_err(|_| FontError::InvalidFontIndex)?;
-      let resolved_glyphs = context.fonts().resolve_glyphs(
-        glyph_run.face(),
-        font,
-        glyph_run.glyphs.iter().map(|glyph| glyph.id),
-      );
 
       runs.push(PositionedInlineRun {
         glyph_run,
-        resolved_glyphs,
+        resolved_glyphs: Rc::clone(&self.face_glyphs[item.face as usize]),
         line_scale: item.placement.line_scale,
         decoration_placement: item.placement.decoration_placement.clone(),
         paint_offset,

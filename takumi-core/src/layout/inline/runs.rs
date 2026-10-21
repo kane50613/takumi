@@ -13,7 +13,7 @@ use crate::{
   style::{Affine, Color},
 };
 use skrifa::{FontRef, MetadataProvider, instance::LocationRef, raw::types::F2Dot14};
-use std::{ops::Range, sync::Arc};
+use std::{ops::Range, rc::Rc, sync::Arc};
 
 use super::{
   InlineBrush,
@@ -187,7 +187,7 @@ pub struct PositionedInlineRun {
   /// The shaped glyph run (metrics, brush, positioned glyphs, font).
   pub glyph_run: ShapedRun,
   /// Glyphs resolved to outlines/bitmaps, keyed by glyph id.
-  pub resolved_glyphs: ResolvedGlyphs,
+  pub resolved_glyphs: Rc<ResolvedGlyphs>,
   /// Text-fit scale state for the line.
   pub(crate) line_scale: LineScaleState,
   /// Where the run's decorations go.

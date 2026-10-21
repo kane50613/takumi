@@ -4,7 +4,6 @@
 use std::{ops::Range, rc::Rc};
 
 use rustc_hash::FxHashMap;
-use skrifa::FontRef;
 
 use super::{BackgroundItem, ContentBox, FragmentItems, GlyphStore, Ink, InkBox, RunPlacement};
 use crate::{
@@ -30,6 +29,7 @@ use crate::{
     list_marker::SymbolMarker,
   },
   layout_unit::LayoutUnit,
+  resources::glyph::ResolvedGlyphs,
   scene::text_ink_reach,
   style::{Affine, Direction},
 };
@@ -85,6 +85,7 @@ impl FragmentItems {
       span_ink_reach: 0.0,
       text_items: Vec::new(),
       faces: Vec::new(),
+      face_glyphs: Vec::new(),
       glyphs: GlyphStore::default(),
       inline_boxes: Vec::new(),
       outline_rects: Vec::new(),
@@ -561,7 +562,6 @@ impl FragmentItems {
           height: (ascent + descent) * scale,
         },
       );
-      include_glyph_ink(&mut ink.content, &run, context, scaled, scale);
       self.push_run(
         context,
         run,
@@ -569,6 +569,9 @@ impl FragmentItems {
           line_scale,
           decoration_placement,
           relative_offset: Point::ZERO,
+        },
+        |run, resolved_glyphs| {
+          include_glyph_ink(&mut ink.content, run, resolved_glyphs, scaled, scale);
         },
       );
     }
@@ -581,18 +584,10 @@ impl FragmentItems {
 fn include_glyph_ink(
   ink: &mut Option<InkBox>,
   run: &ShapedRun,
-  context: &RenderContext,
+  resolved_glyphs: &ResolvedGlyphs,
   scaled: impl Fn(Point<f32>) -> Point<f32>,
   scale: f32,
 ) {
-  let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) else {
-    return;
-  };
-  let resolved_glyphs =
-    context
-      .fonts()
-      .resolve_glyphs(run.face(), font, run.glyphs.iter().map(|glyph| glyph.id));
-
   for glyph in &run.glyphs {
     let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
       .get(&glyph.id)

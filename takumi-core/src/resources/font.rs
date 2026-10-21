@@ -413,6 +413,21 @@ impl Fonts {
     font_ref: FontRef,
     glyph_ids: impl Iterator<Item = u32> + Clone,
   ) -> ResolvedGlyphs {
+    let mut resolved =
+      ResolvedGlyphs::with_capacity_and_hasher(glyph_ids.size_hint().0, Default::default());
+
+    self.resolve_glyphs_into(&mut resolved, face, font_ref, glyph_ids);
+    resolved
+  }
+
+  /// Adds the glyphs among `glyph_ids` that `resolved` lacks, drawn in `face`.
+  pub(crate) fn resolve_glyphs_into(
+    &self,
+    resolved: &mut ResolvedGlyphs,
+    face: RunFace<'_>,
+    font_ref: FontRef,
+    glyph_ids: impl Iterator<Item = u32>,
+  ) {
     let RunFace {
       font_id,
       font_index,
@@ -443,18 +458,14 @@ impl Fonts {
       embolden,
       skew,
     );
-    let mut result =
-      ResolvedGlyphs::with_capacity_and_hasher(glyph_ids.size_hint().0, Default::default());
     for glyph_id in glyph_ids {
-      if let Entry::Vacant(slot) = result.entry(glyph_id) {
+      if let Entry::Vacant(slot) = resolved.entry(glyph_id) {
         let key = resolved_glyph_cache_key(key_prefix, glyph_id);
         if let Some(glyph) = resolved_glyph(key, || resolver().resolve_glyph(glyph_id)) {
           slot.insert(glyph);
         }
       }
     }
-
-    result
   }
 
   /// Registers a font, decoding it and skipping faces already registered under the same family
