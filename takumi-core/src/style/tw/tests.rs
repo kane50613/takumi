@@ -2017,3 +2017,19 @@ fn structural_variants_sort_after_plain_utilities_and_before_breakpoints() {
   assert!(TailwindValue::parse("md:lg:mt-2").is_none());
   assert!(expand_apply("first:mt-2").is_none());
 }
+
+#[test]
+fn structural_variants_sort_as_tailwind_registers_them() {
+  let values = TailwindValues::from_str("odd:mt-2 first:mt-4 nth-3:mt-6 empty:mt-8").unwrap();
+  let order: Vec<_> = values
+    .inner
+    .iter()
+    .map(|value| value.variant_order.trailing_zeros())
+    .collect();
+
+  assert!(order.is_sorted(), "{order:?}");
+  assert_eq!(
+    values.inner[0].variant_order,
+    TailwindValue::parse("first:mt-0").unwrap().variant_order
+  );
+}

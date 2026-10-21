@@ -196,14 +196,21 @@ impl<'a> ArenaElement<'a> {
     while let Some(current) = index {
       let style_node = &self.tree.nodes[current];
 
-      if style_node.node.tag_name().is_some() || !matches!(style_node.node.kind, NodeKind::Text(_))
-      {
+      if text_of(style_node.node).is_none() {
         return self.at(Some(current));
       }
       index = next(style_node);
     }
 
     None
+  }
+}
+
+/// The text of a text node, which selectors do not count as an element; `None` for an element.
+fn text_of(node: &Node) -> Option<&str> {
+  match &node.kind {
+    NodeKind::Text(data) if node.tag_name().is_none() => Some(&data.text),
+    _ => None,
   }
 }
 
@@ -288,8 +295,20 @@ impl Element for ArenaElement<'_> {
     false
   }
 
+  /// Blink's `:empty`: no element child, and no text with a character in it.
   fn is_empty(&self) -> bool {
-    self.style_node().first_child.is_none()
+    let mut index = self.style_node().first_child;
+
+    while let Some(current) = index {
+      let style_node = &self.tree.nodes[current];
+
+      if text_of(style_node.node).is_none_or(|text| !text.is_empty()) {
+        return false;
+      }
+      index = style_node.next_sibling;
+    }
+
+    true
   }
 
   fn is_root(&self) -> bool {

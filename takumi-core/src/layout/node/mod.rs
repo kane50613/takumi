@@ -1137,6 +1137,22 @@ mod matching_tests {
   }
 
   #[test]
+  fn empty_ignores_text_without_characters() {
+    let stylesheet = parse_stylesheet(".box:empty { width: 10px; }");
+    let root = Node::container([
+      Node::container([Node::text("")]).with_class_name("box"),
+      Node::container([Node::text("x")]).with_class_name("box"),
+      Node::container([Node::container([])]).with_class_name("box"),
+    ]);
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matches_empty = |index: usize| !matched[index].element().unlayered_normal().is_empty();
+
+    assert!(matches_empty(1));
+    assert!(!matches_empty(3));
+    assert!(!matches_empty(5));
+  }
+
+  #[test]
   fn pseudo_element_rules_land_in_before_after_buckets() {
     let root = Node::container([]).with_class_name("card");
     let stylesheet = parse_stylesheet(

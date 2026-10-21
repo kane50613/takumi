@@ -234,14 +234,18 @@ impl TailwindValues {
 
   fn parse(source: &str) -> Self {
     // Plain utilities first, then structural variants, then breakpoints, then both, as Tailwind
-    // sorts variants; then the `!important` set in the same order. Within a group the source
-    // order stays, so a later utility wins.
+    // sorts variants; then the `!important` set in the same order. Structural variants sort
+    // among themselves as Tailwind registers them. Otherwise the source order stays, so a later
+    // utility wins.
     let mut groups: [Vec<TailwindValue>; 8] = Default::default();
     for value in source.split_whitespace().filter_map(TailwindValue::parse) {
       let group = usize::from(value.important) * 4
         + usize::from(value.breakpoint.is_some()) * 2
         + usize::from(value.condition.is_some());
       groups[group].push(value);
+    }
+    for structural in [1, 5] {
+      groups[structural].sort_by_key(|value| value.variant_order);
     }
     let collected = groups.into_iter().flatten().collect::<Vec<_>>();
 
@@ -379,6 +383,8 @@ pub(crate) struct TailwindValue {
   pub breakpoint: Option<Breakpoint>,
   /// The selector structural variants put on the element, such as `:first-child` for `first:`.
   pub condition: Option<Selector<SelectorImpl>>,
+  /// A bit for each structural variant, so comparing two sorts them as Tailwind does.
+  pub variant_order: u16,
   /// Whether the value is important.
   pub important: bool,
 }
@@ -451,11 +457,15 @@ impl TailwindValue {
     let mut important = false;
     let mut breakpoint = None;
     let mut pseudo_classes = String::new();
+    let mut variant_order = 0;
 
     // Variants, at most one of them a breakpoint. sm:first:mt-0
     while let Some((variant, rest)) = split_variant(token) {
       match variant::pseudo_class(variant) {
-        Some(pseudo_class) => pseudo_classes.push_str(&pseudo_class),
+        Some(pseudo_class) => {
+          pseudo_classes.push_str(&pseudo_class);
+          variant_order |= variant::order_bit(variant);
+        }
         None if breakpoint.is_none() => breakpoint = Some(Breakpoint::parse(variant)?),
         None => return None,
       }
@@ -483,6 +493,7 @@ impl TailwindValue {
       property: TailwindProperty::parse(token)?,
       breakpoint,
       condition,
+      variant_order,
       important,
     })
   }

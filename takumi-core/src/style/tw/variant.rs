@@ -59,9 +59,58 @@ pub(super) fn pseudo_class(variant: &str) -> Option<String> {
   None
 }
 
-/// An arbitrary value, which Tailwind writes with underscores for spaces.
+/// The bit a structural variant takes in Tailwind's variant order, which puts a utility after
+/// those whose variants Tailwind registers earlier. Approximate: Tailwind also orders the values
+/// of one variant, such as `nth-2` before `nth-3`, and the variants inside `not-`; those keep
+/// their class order.
+pub(super) fn order_bit(variant: &str) -> u16 {
+  const REGISTERED: [&str; 9] = [
+    "first",
+    "last",
+    "only",
+    "odd",
+    "even",
+    "first-of-type",
+    "last-of-type",
+    "only-of-type",
+    "empty",
+  ];
+  const FUNCTIONAL: [&str; 4] = ["nth-", "nth-last-", "nth-of-type-", "nth-last-of-type-"];
+
+  let rank = if variant.starts_with("not-") {
+    0
+  } else if let Some(index) = REGISTERED.iter().position(|name| *name == variant) {
+    index + 1
+  } else if let Some(index) = FUNCTIONAL
+    .iter()
+    .rposition(|prefix| variant.starts_with(prefix))
+  {
+    REGISTERED.len() + 1 + index
+  } else {
+    REGISTERED.len() + 1 + FUNCTIONAL.len()
+  };
+
+  1 << rank
+}
+
+/// An arbitrary value, which Tailwind writes with underscores for spaces and `\_` for an
+/// underscore.
 fn arbitrary(value: &str) -> String {
-  value.replace('_', " ")
+  let mut decoded = String::with_capacity(value.len());
+  let mut chars = value.chars();
+
+  while let Some(character) = chars.next() {
+    match character {
+      '\\' if chars.as_str().starts_with('_') => {
+        decoded.push('_');
+        chars.next();
+      }
+      '_' => decoded.push(' '),
+      character => decoded.push(character),
+    }
+  }
+
+  decoded
 }
 
 /// The selector `pseudo_classes` form on the element itself, or `None` when they do not parse or
@@ -88,7 +137,7 @@ pub(super) fn condition(pseudo_classes: &str) -> Option<Selector<SelectorImpl>> 
 
 #[cfg(test)]
 mod tests {
-  use super::{condition, pseudo_class};
+  use super::{condition, order_bit, pseudo_class};
 
   #[test]
   fn structural_variants_compile_to_pseudo_classes() {
@@ -100,6 +149,10 @@ mod tests {
       ("nth-[2n_+_1]", Some(":nth-child(2n + 1)")),
       ("not-first", Some(":not(:first-child)")),
       ("[&:nth-child(4)]", Some(":nth-child(4)")),
+      (
+        "[&:is([data-state=foo\\_bar])]",
+        Some(":is([data-state=foo_bar])"),
+      ),
       ("nth-x", None),
       ("hover", None),
       ("md", None),
@@ -113,5 +166,22 @@ mod tests {
     assert!(condition(":first-child:nth-child(odd)").is_some());
     assert!(condition(":first-child > span").is_none());
     assert!(condition(":first-child, :last-child").is_none());
+  }
+
+  #[test]
+  fn variants_order_as_tailwind_registers_them() {
+    let ordered = [
+      "not-first",
+      "first",
+      "odd",
+      "empty",
+      "nth-3",
+      "nth-last-of-type-2",
+      "[&:nth-child(4)]",
+    ];
+
+    for pair in ordered.windows(2) {
+      assert!(order_bit(pair[0]) < order_bit(pair[1]), "{pair:?}");
+    }
   }
 }
