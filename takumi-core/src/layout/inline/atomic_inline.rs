@@ -1,5 +1,6 @@
 //! Blink's [`BlockNode::LayoutAtomicInline`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_node.cc)
-//! and its `Layout` of a block-in-inline for takumi's boxes, which taffy lays out.
+//! and its `Layout` of a block-in-inline for takumi's boxes, each laid out as the root of a
+//! layout tree of its own.
 
 use super::{inline_item_result::LayoutResult, line_breaker::AtomicInlineLayout};
 use crate::{
@@ -21,26 +22,7 @@ impl BoxAtomicInline {
   ) -> (Size<f32>, Option<f32>) {
     let metrics = node.layout_atomic_inline(available_space);
 
-    // An atomic subtree measures its border box; a replaced box, its content box.
-    if node.participates_as_inline_box() {
-      return (metrics.size, metrics.baseline_offset);
-    }
-
-    // Percentages resolve against the containing block's width, zero when it is indefinite.
-    let containing_block_width = match available_space.width {
-      AvailableSpace::Definite(width) => width,
-      _ => 0.0,
-    };
-    let padding = node.padding_px_against(containing_block_width);
-    let border = node.border_px();
-
-    (
-      Size {
-        width: metrics.size.width + padding.left + padding.right + border.left + border.right,
-        height: metrics.size.height + padding.top + padding.bottom + border.top + border.bottom,
-      },
-      metrics.baseline_offset,
-    )
+    (metrics.size, metrics.baseline_offset)
   }
 }
 
@@ -57,8 +39,8 @@ impl<'c> AtomicInlineLayout<'c> for BoxAtomicInline {
     }
   }
 
-  /// Approximate: taffy lays the block out without the floats beside the line, so they do not
-  /// shorten its lines.
+  /// Approximate: the block lays out without the floats beside the line, so they do not shorten
+  /// its lines.
   fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult {
     node
       .layout_block_in_inline(self.available_space)
@@ -67,7 +49,7 @@ impl<'c> AtomicInlineLayout<'c> for BoxAtomicInline {
 
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {
     if node.is_block_in_inline {
-      let (min_size, max_size) = node.min_max_widths();
+      let (min_size, max_size) = node.min_max_widths(self.available_space.height);
 
       return (
         LayoutUnit::from_float(min_size),

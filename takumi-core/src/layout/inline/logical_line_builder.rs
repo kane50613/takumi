@@ -509,7 +509,7 @@ mod tests {
       node,
       &data,
       LineBreakerMode::Content,
-      space,
+      space.clone(),
       LineLayoutOpportunity::new(available_width),
       &LeadingFloats::default(),
       None,

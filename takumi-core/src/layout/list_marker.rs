@@ -1,11 +1,10 @@
 use std::rc::Rc;
 
-use taffy::Size as TaffySize;
-
 use crate::{
   context::RenderContext,
-  geometry::Point,
+  geometry::{Point, Size},
   layout::{
+    layout_style::LayoutLength,
     node::{Node, resolve_image},
     tree::{NodeOrigin, RenderNode},
   },
@@ -272,7 +271,7 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage) -> RenderNo
   let mut item = RenderNode::anonymous_image_item(context, image);
 
   if let Some(layout_style) = &mut item.layout_style_override {
-    Rc::make_mut(layout_style).max_size = TaffySize::auto();
+    Rc::make_mut(layout_style).max_size = Size::all(LayoutLength::Auto);
   }
 
   item

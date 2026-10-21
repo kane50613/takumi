@@ -89,7 +89,7 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
         self.node,
         self.items_data,
         LineBreakerMode::Content,
-        *self.space,
+        self.space.clone(),
         line_opportunity,
         &leading_floats,
         self.break_token,

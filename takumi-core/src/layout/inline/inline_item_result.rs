@@ -4,8 +4,6 @@
 
 use std::{ops::Range, rc::Rc};
 
-use taffy::CollapsibleMarginSet;
-
 use super::{
   inline_item::{InlineItem, InlineItemType},
   inline_item_text_index::InlineItemTextIndex,
@@ -22,7 +20,10 @@ use crate::{
     },
   },
   geometry::Rect,
-  layout::{exclusions::exclusion_space::ExclusionSpace, floats_utils::PositionedFloat},
+  layout::{
+    exclusions::exclusion_space::ExclusionSpace, floats_utils::PositionedFloat,
+    margin_strut::MarginStrut,
+  },
   layout_unit::LayoutUnit,
   style::{Direction as TextDirection, HyphenateCharacter},
   text::character::{HYPHEN, HYPHEN_MINUS},
@@ -70,9 +71,9 @@ impl LineBoxStrut {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct CollapsedMargins {
   /// The margins adjoining its block start.
-  pub(crate) start: CollapsibleMarginSet,
+  pub(crate) start: MarginStrut,
   /// Blink's `EndMarginStrut`.
-  pub(crate) end: CollapsibleMarginSet,
+  pub(crate) end: MarginStrut,
   /// Blink's `IsSelfCollapsing`.
   pub(crate) is_self_collapsing: bool,
 }
@@ -98,19 +99,13 @@ impl LayoutResult {
     let Some(margins) = self.collapsed_margins else {
       return (LayoutUnit::ZERO, self.block_size);
     };
-    let start = LayoutUnit::from_float(margins.start.resolve());
+    let start = margins.start.sum();
 
     if margins.is_self_collapsing {
-      return (
-        start,
-        LayoutUnit::from_float(margins.start.collapse_with_set(margins.end).resolve()),
-      );
+      return (start, margins.start.collapse_with(margins.end).sum());
     }
 
-    (
-      start,
-      start + self.block_size + LayoutUnit::from_float(margins.end.resolve()),
-    )
+    (start, start + self.block_size + margins.end.sum())
   }
 
   /// Blink's `LogicalBoxFragment::BaselineMetrics` for the alphabetic baseline: the margin box

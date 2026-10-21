@@ -1,11 +1,11 @@
 //! Blink's [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc)
-//! for a block whose children form an inline formatting context, which taffy sizes as a leaf and
-//! paints through fragment items.
+//! for a block whose children form an inline formatting context, which lays its lines out as one
+//! child and paints through fragment items.
 
 use std::ptr;
 
 use rustc_hash::FxHashMap;
-use taffy::{CollapsibleMarginSet, Line};
+use taffy::Line;
 
 use super::{
   FragmentItems, InlineMeasurement, StaticPosition,
@@ -21,8 +21,7 @@ use super::{
 };
 use crate::{
   geometry::{AvailableSpace, ComputedLayout, Point, Size},
-  layout::logical_rect::LogicalOffset,
-  layout::tree::RenderNode,
+  layout::{logical_rect::LogicalOffset, margin_strut::MarginStrut, tree::RenderNode},
   layout_unit::LayoutUnit,
   style::Direction,
 };
@@ -102,9 +101,8 @@ impl<'c> InlineNode<'c> {
     (border_box_width - insets_width).max(0.0)
   }
 
-  /// The width taffy's constraint gives the content, the known content width or the min-content,
-  /// max-content, or fit-content width the available width asks for, and the width its lines lay
-  /// out at.
+  /// The content width, the known one or the min-content, max-content, or fit-content width the
+  /// available width asks for, and the width its lines lay out at.
   pub(crate) fn widths(
     self,
     items_data: &InlineNodeData<'c>,
@@ -113,29 +111,13 @@ impl<'c> InlineNode<'c> {
   ) -> (f32, f32) {
     let width =
       known_width.unwrap_or_else(|| self.content_inline_size(items_data, available_space));
-    // taffy lays a leaf out with no known width, at the definite width it offers.
+    // Without a known width the lines lay out at the definite width offered.
     let line_width = known_width.unwrap_or(match available_space.width {
       AvailableSpace::Definite(available) => available.max(width),
       _ => width,
     });
 
     (width, line_width)
-  }
-
-  /// The size and baselines of the lines in taffy's constraint, as [`Self::widths`] and
-  /// [`Self::measure_lines`] find them.
-  pub(crate) fn measure(
-    self,
-    items_data: &InlineNodeData<'c>,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
-  ) -> InlineMeasurement {
-    let known_width = known_dimensions
-      .width
-      .map(|width| self.content_width_of(width, None));
-    let (width, line_width) = self.widths(items_data, available_space, known_width);
-
-    self.measure_lines(items_data, width, line_width, available_space.height)
   }
 
   /// The size and baselines of the lines laid out `line_width` wide in `available_height`: `width`
@@ -164,6 +146,9 @@ impl<'c> InlineNode<'c> {
       last_baseline: lines[..shown].iter().rev().find_map(baseline),
       clamped,
       margins,
+      is_self_collapsing: lines
+        .iter()
+        .all(|line| line.line_box_bfc_block_offset.is_none()),
     }
   }
 }
@@ -174,10 +159,10 @@ impl<'c> InlineNode<'c> {
 fn margin_struts(
   lines: &[LineBoxFragment<'_, '_>],
   margins_adjoin: Line<bool>,
-) -> Line<CollapsibleMarginSet> {
+) -> Line<MarginStrut> {
   let end = lines
     .last()
-    .map_or(CollapsibleMarginSet::ZERO, |line| line.end_margin_strut);
+    .map_or(MarginStrut::default(), |line| line.end_margin_strut);
   let start = lines
     .iter()
     .enumerate()
@@ -186,7 +171,7 @@ fn margin_struts(
 
       let before = index
         .checked_sub(1)
-        .map_or(CollapsibleMarginSet::ZERO, |previous| {
+        .map_or(MarginStrut::default(), |previous| {
           lines[previous].end_margin_strut
         });
 
@@ -195,7 +180,7 @@ fn margin_struts(
           .block_in_inline_layout_result()
           .and_then(|result| result.collapsed_margins)
         {
-          Some(margins) => before.collapse_with_set(margins.start),
+          Some(margins) => before.collapse_with(margins.start),
           None => before,
         },
       )
@@ -206,12 +191,12 @@ fn margin_struts(
     start: if margins_adjoin.start {
       start
     } else {
-      CollapsibleMarginSet::ZERO
+      MarginStrut::default()
     },
     end: if margins_adjoin.end {
       end
     } else {
-      CollapsibleMarginSet::ZERO
+      MarginStrut::default()
     },
   }
 }
@@ -241,7 +226,7 @@ fn content_block_size(
       clamped = line.lines_until_clamp == Some(0);
     }
 
-    // Floats grow the formatting context, which takumi lays out as a leaf of its own.
+    // Floats grow the inline formatting context, which keeps its floats to itself.
     for child in &line.items.children {
       if let Some(LineFragment::Float {
         positioned_float, ..
@@ -261,7 +246,7 @@ fn content_block_size(
     && (resolved || !margins_adjoin.start)
     && let Some(last) = lines.last()
   {
-    bottom = bottom.max(end + LayoutUnit::from_float(last.end_margin_strut.resolve()));
+    bottom = bottom.max(end + last.end_margin_strut.sum());
   }
 
   let hides_lines = clamped

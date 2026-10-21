@@ -2,7 +2,7 @@
 //! from its captions, which cells and rows layout hid, the geometry of its columns and column
 //! groups, and its collapsed borders with the rows and columns they run along.
 
-use taffy::{NodeId as TaffyNodeId, RoundTree};
+use taffy::NodeId as TaffyNodeId;
 
 use crate::{
   geometry::{NodeId, Point, Size},
@@ -84,9 +84,9 @@ impl TableFragment {
     let mut union: Option<(Point<f32>, Size<f32>)> = None;
 
     for section in &structure.sections {
-      let layout = tree.get_unrounded_layout(section.node);
-      let origin = Point::from_taffy(layout.location);
-      let size = Size::from_taffy(layout.size);
+      let layout = tree.computed_layout(section.node);
+      let origin = layout.location;
+      let size = layout.size;
 
       union = Some(match union {
         None => (origin, size),

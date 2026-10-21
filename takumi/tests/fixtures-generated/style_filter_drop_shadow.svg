@@ -149,7 +149,7 @@
     </feMerge>
   </filter>
   <g filter="url(#ft0)">
-    <rect x="53.6" y="226" width="120" height="120" fill="#000" fill-opacity="0"/>
+    <rect x="53.594" y="226" width="120" height="120" fill="#000" fill-opacity="0"/>
     <use href="#i0" transform="matrix(.938 0 0 .938 54 226)"/>
   </g>
   <filter id="ft1" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
@@ -163,7 +163,7 @@
     </feMerge>
   </filter>
   <g filter="url(#ft1)">
-    <rect x="296.8" y="226" width="120" height="120" fill="#000" fill-opacity="0"/>
+    <rect x="296.794" y="226" width="120" height="120" fill="#000" fill-opacity="0"/>
     <use href="#i0" transform="matrix(.938 0 0 .938 297 226)"/>
   </g>
   <filter id="ft2" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
@@ -177,7 +177,7 @@
     </feMerge>
   </filter>
   <g filter="url(#ft2)">
-    <rect x="540" y="226" width="120" height="120" fill="#000" fill-opacity="0"/>
+    <rect x="539.994" y="226" width="120" height="120" fill="#000" fill-opacity="0"/>
     <use href="#i0" transform="matrix(.938 0 0 .938 540 226)"/>
   </g>
   <filter id="ft3" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
@@ -191,7 +191,7 @@
     </feMerge>
   </filter>
   <g filter="url(#ft3)">
-    <rect x="783.2" y="226" width="120" height="120" fill="#000" fill-opacity="0"/>
+    <rect x="783.194" y="226" width="120" height="120" fill="#000" fill-opacity="0"/>
     <use href="#i0" transform="matrix(.938 0 0 .938 783 226)"/>
   </g>
   <defs>

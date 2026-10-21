@@ -1,28 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <g fill="#000">
-    <use href="#g0" x="22.8" y="398.5"/>
-    <use href="#g1" x="32.24" y="398.5"/>
-    <use href="#g2" x="36.35" y="398.5"/>
-    <use href="#g3" x="45.55" y="398.5"/>
+    <use href="#g0" x="22.79" y="398.5"/>
+    <use href="#g1" x="32.23" y="398.5"/>
+    <use href="#g2" x="36.34" y="398.5"/>
+    <use href="#g3" x="45.54" y="398.5"/>
     <use href="#g4" x="51.61" y="398.5"/>
-    <use href="#g5" x="55.92" y="398.5"/>
+    <use href="#g5" x="55.91" y="398.5"/>
     <use href="#g6" x="65.72" y="398.5"/>
     <use href="#g7" x="74.44" y="398.5"/>
     <use href="#g8" x="83.8" y="398.5"/>
-    <use href="#g9" x="92.19" y="398.5"/>
+    <use href="#g9" x="92.18" y="398.5"/>
     <use href="#g3" x="101.69" y="398.5"/>
-    <use href="#g10" x="107.12" y="398.5"/>
-    <use href="#g11" x="115.55" y="398.5"/>
+    <use href="#g10" x="107.11" y="398.5"/>
+    <use href="#g11" x="115.54" y="398.5"/>
     <use href="#g12" x="123.72" y="398.5"/>
     <use href="#g13" x="131.88" y="398.5"/>
     <use href="#g10" x="140.68" y="398.5"/>
-    <use href="#g1" x="149.34" y="398.5"/>
-    <use href="#g14" x="153.52" y="398.5"/>
+    <use href="#g1" x="149.33" y="398.5"/>
+    <use href="#g14" x="153.51" y="398.5"/>
     <use href="#g4" x="162.49" y="398.5"/>
-    <use href="#g15" x="166.88" y="398.5"/>
+    <use href="#g15" x="166.87" y="398.5"/>
     <use href="#g16" x="176.57" y="398.5"/>
-    <use href="#g17" x="187.18" y="398.5"/>
+    <use href="#g17" x="187.17" y="398.5"/>
     <use href="#g8" x="200.01" y="398.5"/>
   </g>
   <g fill="#000">
@@ -112,36 +112,36 @@
     <use href="#g8" x="574.14" y="409"/>
   </g>
   <g fill="#000">
-    <use href="#g12" x="756.16" y="398.5"/>
+    <use href="#g12" x="756.15" y="398.5"/>
     <use href="#g10" x="764.54" y="398.5"/>
-    <use href="#g26" x="772.56" y="398.5"/>
-    <use href="#g2" x="778.74" y="398.5"/>
-    <use href="#g3" x="787.94" y="398.5"/>
-    <use href="#g10" x="793.36" y="398.5"/>
-    <use href="#g26" x="801.38" y="398.5"/>
+    <use href="#g26" x="772.55" y="398.5"/>
+    <use href="#g2" x="778.73" y="398.5"/>
+    <use href="#g3" x="787.93" y="398.5"/>
+    <use href="#g10" x="793.35" y="398.5"/>
+    <use href="#g26" x="801.37" y="398.5"/>
     <use href="#g14" x="807.39" y="398.5"/>
-    <use href="#g4" x="816.37" y="398.5"/>
+    <use href="#g4" x="816.36" y="398.5"/>
     <use href="#g23" x="820.75" y="398.5"/>
-    <use href="#g15" x="826.9" y="398.5"/>
+    <use href="#g15" x="826.89" y="398.5"/>
     <use href="#g16" x="836.59" y="398.5"/>
-    <use href="#g17" x="847.2" y="398.5"/>
+    <use href="#g17" x="847.19" y="398.5"/>
     <use href="#g8" x="860.03" y="398.5"/>
-    <use href="#g0" x="868.42" y="398.5"/>
-    <use href="#g1" x="877.86" y="398.5"/>
-    <use href="#g2" x="881.97" y="398.5"/>
-    <use href="#g3" x="891.17" y="398.5"/>
+    <use href="#g0" x="868.41" y="398.5"/>
+    <use href="#g1" x="877.85" y="398.5"/>
+    <use href="#g2" x="881.96" y="398.5"/>
+    <use href="#g3" x="891.16" y="398.5"/>
     <use href="#g4" x="897.23" y="398.5"/>
-    <use href="#g23" x="901.62" y="398.5"/>
-    <use href="#g6" x="907.76" y="398.5"/>
-    <use href="#g7" x="916.48" y="398.5"/>
-    <use href="#g8" x="925.84" y="398.5"/>
+    <use href="#g23" x="901.61" y="398.5"/>
+    <use href="#g6" x="907.75" y="398.5"/>
+    <use href="#g7" x="916.47" y="398.5"/>
+    <use href="#g8" x="925.83" y="398.5"/>
   </g>
   <filter id="ft0" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
     <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="f0"/>
     <feColorMatrix in="f0" type="matrix" values=".606 .358 .036 0 0 .106 .858 .036 0 0 .106 .358 .536 0 0 0 0 0 1 0" result="f1"/>
   </filter>
   <g filter="url(#ft0)">
-    <rect x="43.6" y="226.5" width="140" height="140" fill="#000" fill-opacity="0"/>
+    <rect x="43.594" y="226.5" width="140" height="140" fill="#000" fill-opacity="0"/>
     <use href="#i0" transform="matrix(1.094 0 0 1.094 44 227)"/>
   </g>
   <filter id="ft1" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
@@ -160,7 +160,7 @@
     </feComponentTransfer>
   </filter>
   <g filter="url(#ft1)">
-    <rect x="286.8" y="216" width="140" height="140" fill="#000" fill-opacity="0"/>
+    <rect x="286.794" y="216" width="140" height="140" fill="#000" fill-opacity="0"/>
     <use href="#i0" transform="matrix(1.094 0 0 1.094 287 216)"/>
   </g>
   <filter id="ft2" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
@@ -175,7 +175,7 @@
     </feMerge>
   </filter>
   <g filter="url(#ft2)">
-    <rect x="530" y="216" width="140" height="140" fill="#000" fill-opacity="0"/>
+    <rect x="529.994" y="216" width="140" height="140" fill="#000" fill-opacity="0"/>
     <use href="#i0" transform="matrix(1.094 0 0 1.094 530 216)"/>
   </g>
   <filter id="ft3" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
@@ -183,7 +183,7 @@
     <feGaussianBlur in="f0" stdDeviation="1" result="f1"/>
   </filter>
   <g filter="url(#ft3)">
-    <rect x="773.2" y="226.5" width="140" height="140" fill="#000" fill-opacity="0"/>
+    <rect x="773.194" y="226.5" width="140" height="140" fill="#000" fill-opacity="0"/>
     <use href="#i0" transform="matrix(1.094 0 0 1.094 773 227)"/>
   </g>
   <defs>
