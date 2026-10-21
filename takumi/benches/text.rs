@@ -50,6 +50,27 @@ fn document_paragraph() -> Node {
   .with_tw("flex w-[320px] bg-white".parse().unwrap())
 }
 
+/// A wrapping row of inline-block badges, each a short word that every measure of its box shapes.
+fn badge_row() -> Node {
+  let badges = LONG_TEXT
+    .split(' ')
+    .take(60)
+    .map(|word| {
+      Node::container([Node::text(word.to_string())]).with_tw(
+        "inline-block px-2 py-1 m-1 rounded bg-gray-100"
+          .parse()
+          .unwrap(),
+      )
+    })
+    .collect::<Vec<_>>();
+
+  Node::container(badges).with_tw(
+    "block w-full h-full p-12 text-[18px] bg-white"
+      .parse()
+      .unwrap(),
+  )
+}
+
 /// Words and emoji interleaved, so every emoji run asks font fallback for a face.
 fn emoji_paragraph() -> Node {
   let text = LONG_TEXT
@@ -92,6 +113,9 @@ fn bench_text(c: &mut Criterion) {
     b.iter(|| render_node(&fonts, black_box(emoji_paragraph())))
   });
 
+  group.bench_function("badge_row", |b| {
+    b.iter(|| render_node(&fonts, black_box(badge_row())))
+  });
   group.bench_function("shadowed_paragraph", |b| {
     b.iter(|| render_node(&fonts, black_box(shadowed_paragraph())))
   });
