@@ -313,9 +313,9 @@ fn own_text_is_a_flex_item_beside_after() {
   assert_eq!(run_texts(&measured.children[0]), ["Default content"]);
 }
 
-/// Collapsible white space a flex container holds is no flex item, even beside its `::after`.
+/// White space a flex container holds is no flex item beside its `::after`, even preserved.
 #[test]
-fn collapsible_own_white_space_is_no_flex_item_beside_after() {
+fn own_white_space_is_no_flex_item_beside_after() {
   let css = ".row { display: flex; height: 64px } \
      .row::after { content: ''; width: 16px; height: 16px } \
      .pre { white-space: pre }";
@@ -324,5 +324,5 @@ fn collapsible_own_white_space_is_no_flex_item_beside_after() {
   let preserved = measure_with_css(Node::text("  ".to_string()).with_class_name("row pre"), css);
 
   assert_eq!(collapsed.children.len(), 1);
-  assert_eq!(preserved.children.len(), 2);
+  assert_eq!(preserved.children.len(), 1);
 }

@@ -3228,11 +3228,10 @@ impl PendingRenderNode {
     let mut rendered_children = Vec::with_capacity(children.len() + 3);
     rendered_children.extend(pseudo_before);
 
-    // A flex or grid container drops collapsible white space, as `normalize_children` drops a
-    // text child.
-    let drops_own_text = context.style.base_data.display.should_blockify_children()
-      && context.style.inherited_data.white_space_collapse == WhiteSpaceCollapse::Collapse
-      && node.is_whitespace_only_text();
+    // As Blink's `CanHaveWhitespaceChildren` does, a flex or grid container drops white-space-only
+    // text that no text precedes, whatever its `white-space`. The element's own text comes first.
+    let drops_own_text =
+      context.style.base_data.display.should_blockify_children() && node.is_whitespace_only_text();
 
     // An element that folded its text hands it back as a child beside its generated content:
     // the inline collector emits its own text before any child, so `::before` could not come
