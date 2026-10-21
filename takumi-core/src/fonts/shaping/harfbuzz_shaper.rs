@@ -219,6 +219,11 @@ thread_local! {
 struct PooledBuffer(Buffer);
 
 impl PooledBuffer {
+  /// The most glyph storage the pool keeps for a thread, so a buffer one very long run grew is
+  /// freed instead of held for the thread's life. Measured by the glyphs it last held, since its
+  /// capacity is private to harfrust.
+  const MAX_POOLED_BYTES: usize = 64 << 10;
+
   fn take() -> Self {
     Self(POOLED_BUFFER.take().map_or_else(Buffer::new, |mut buffer| {
       buffer.reset();
@@ -243,7 +248,12 @@ impl DerefMut for PooledBuffer {
 
 impl Drop for PooledBuffer {
   fn drop(&mut self) {
-    POOLED_BUFFER.set(Some(mem::replace(&mut self.0, Buffer::new())));
+    let buffer = mem::replace(&mut self.0, Buffer::new());
+    let bytes = buffer.len() * (size_of::<GlyphInfo>() + size_of::<GlyphPosition>());
+
+    if bytes <= Self::MAX_POOLED_BYTES {
+      POOLED_BUFFER.set(Some(buffer));
+    }
   }
 }
 
