@@ -38,7 +38,7 @@ use crate::{
       StaticPosition,
       inline_item::InlineItemType,
       inline_item_result::{CollapsedMargins, LayoutResult},
-      inline_node::InlineNode,
+      inline_node::{InlineNode, ItemShapes},
       inline_node_data::InlineNodeData,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
@@ -464,6 +464,8 @@ pub struct RenderNode {
   pub(crate) fragment_items: FragmentItemsCache,
   /// The layouts it took as an atomic inline or a block-in-inline, by available space.
   atomic_inline_layouts: AtomicInlineCache,
+  /// The shapes its inline items took when its inline content was last prepared.
+  pub(crate) item_shapes: ItemShapes,
 }
 
 /// Drops the render tree iteratively; recursive drop glue overflows the stack
@@ -2102,6 +2104,7 @@ impl RenderNode {
       is_block_in_inline: false,
       fragment_items: FragmentItemsCache::default(),
       atomic_inline_layouts: AtomicInlineCache::default(),
+      item_shapes: ItemShapes::default(),
     }
   }
 
@@ -2148,6 +2151,7 @@ impl RenderNode {
     while let Some(node) = stack.pop() {
       node.fragment_items.0.take();
       node.atomic_inline_layouts.0.take();
+      node.item_shapes.clear();
       stack.extend(node.children.iter().flatten());
       stack.extend(node.marker.as_deref());
     }

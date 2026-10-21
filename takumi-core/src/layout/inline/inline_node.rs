@@ -1,6 +1,6 @@
 //! Blink's [`InlineNode`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_node.cc).
 
-use std::{ptr, rc::Rc};
+use std::{cell::RefCell, ptr, rc::Rc};
 
 use icu_properties::props::Script;
 
@@ -109,6 +109,55 @@ impl<'c> Frame<'c> {
   }
 }
 
+/// The shape results a block's inline items took, which a later preparation of the same items
+/// takes instead of shaping again: an atomic inline is laid out at several available widths,
+/// each in a layout tree of its own.
+#[derive(Default)]
+pub(crate) struct ItemShapes(RefCell<Option<Rc<[(Option<Rc<ShapeResult>>, bool)]>>>);
+
+impl ItemShapes {
+  /// Gives `items` the shapes kept from items like them, reporting whether there were any.
+  fn restore(&self, items: &mut [InlineItem<'_>]) -> bool {
+    let kept = self.0.borrow();
+    let Some(shapes) = kept.as_deref().filter(|shapes| shapes.len() == items.len()) else {
+      return false;
+    };
+
+    for (item, (shape_result, unsafe_to_reuse)) in items.iter_mut().zip(shapes) {
+      item.shape_result.clone_from(shape_result);
+      item.is_unsafe_to_reuse_shape_result = *unsafe_to_reuse;
+    }
+
+    true
+  }
+
+  /// Keeps the shapes `items` took.
+  fn keep(&self, items: &[InlineItem<'_>]) {
+    self.0.replace(Some(
+      items
+        .iter()
+        .map(|item| {
+          (
+            item.shape_result.clone(),
+            item.is_unsafe_to_reuse_shape_result,
+          )
+        })
+        .collect(),
+    ));
+  }
+
+  /// Forgets the kept shapes, which no longer hold once the tree may have changed.
+  pub(crate) fn clear(&self) {
+    self.0.take();
+  }
+}
+
+impl Clone for ItemShapes {
+  fn clone(&self) -> Self {
+    Self::default()
+  }
+}
+
 /// Blink's `InlineNode`: the inline formatting context `block` establishes.
 #[derive(Clone, Copy)]
 pub(crate) struct InlineNode<'c> {
@@ -189,13 +238,18 @@ impl<'c> InlineNode<'c> {
     builder.finish()
   }
 
-  /// Blink's `PrepareLayout`: the items of the context, segmented and shaped.
+  /// Blink's `PrepareLayout`: the items of the context, segmented and shaped. The shapes of an
+  /// earlier preparation carry over, as Blink keeps `InlineNodeData` on its block.
   pub(crate) fn prepare_layout(self) -> InlineNodeData<'c> {
     let mut data = self.collect_inlines();
 
     self.segment_text(&mut data);
     update_index(&mut data.items);
-    self.shape_text(&mut data);
+
+    if !self.block.item_shapes.restore(&mut data.items) {
+      self.shape_text(&mut data);
+      self.block.item_shapes.keep(&data.items);
+    }
     data
   }
 
