@@ -38,6 +38,7 @@ use crate::{
   layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
+  union_alpha_masks,
 };
 
 /// Paints a box's own decorations, bottom to top: outset shadows, background, through
@@ -500,35 +501,51 @@ impl<'c> CanvasDevice<'c> {
       y: offset.y + glyph.y,
     };
 
+    // The run's glyphs cast one shadow: their coverage drawn together, then blurred once, as
+    // Blink blurs a text shadow's whole layer.
     if let Some(shadow) = self.shadow {
+      // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`).
+      let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
+      let viewport = self.shadow_viewport(blur_radius);
+      let cast = self.transform * Affine::translation(shadow.offset_x, shadow.offset_y);
+      let text_stroke = (stroke.0 > 0.0).then(|| {
+        let mut text_stroke = Stroke::new(stroke.0);
+
+        text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin.into();
+        text_stroke
+      });
+      let mut coverages = Vec::with_capacity(glyph_run.glyphs.len());
+
       for glyph in &glyph_run.glyphs {
         let at = placed(glyph);
-        let transform = local * Affine::translation(at.x, at.y);
-        let outline = match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
-          Some(ResolvedGlyph::Outline(outline)) => outline,
-          Some(ResolvedGlyph::Bitmap(bitmap)) => {
-            let placed =
-              self.transform * Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
-            let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
+        let transform = cast * local * Affine::translation(at.x, at.y);
 
-            if let Some(coverage) =
-              bitmap_coverage(bitmap, placed, self.shadow_viewport(blur_radius))
-            {
-              self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
+        match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
+          Some(ResolvedGlyph::Outline(outline)) => {
+            coverages.push(render_mask(
+              outline.paths(),
+              Some(transform),
+              Some(Fill::NonZero.into()),
+              Some(viewport),
+            ));
+            if let Some(text_stroke) = text_stroke {
+              coverages.push(render_mask(
+                outline.paths(),
+                Some(transform),
+                Some(text_stroke.into()),
+                Some(viewport),
+              ));
             }
-            continue;
           }
-          None => continue,
-        };
-
-        self.draw_shadow_of(shadow, outline.paths(), Fill::NonZero.into(), transform);
-
-        if stroke.0 > 0.0 {
-          let mut text_stroke = Stroke::new(stroke.0);
-
-          text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin.into();
-          self.draw_shadow_of(shadow, outline.paths(), text_stroke.into(), transform);
+          Some(ResolvedGlyph::Bitmap(bitmap)) => {
+            coverages.extend(bitmap_coverage(bitmap, transform, viewport));
+          }
+          None => {}
         }
+      }
+
+      if let Some(coverage) = union_alpha_masks(coverages) {
+        self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
       }
 
       return Ok(());
