@@ -1819,3 +1819,27 @@ fn test_breakpoints_follow_the_viewport_and_theme() {
   );
   assert_ne!(active, themed);
 }
+
+/// A utility for one side sorts after one for every side, as Tailwind orders `padding-top` after
+/// `padding`, whatever the class order.
+#[test]
+fn a_side_utility_beats_an_every_side_one() {
+  let viewport = Viewport::new((100, 100));
+
+  for classes in ["pt-2 p-4", "p-4 pt-2"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.padding_top,
+      Length::from_spacing(2.0),
+      "{classes}"
+    );
+    assert_eq!(
+      style.box_data.padding_left,
+      Length::from_spacing(4.0),
+      "{classes}"
+    );
+  }
+}

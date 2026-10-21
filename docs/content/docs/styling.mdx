@@ -213,6 +213,8 @@ Utilities sit in the last declared layer, as Tailwind orders them:
 
 Prefix a utility with `!` to flip the result. Important declarations reverse the layer order, so a `!` utility beats an unlayered rule and a normal `style` declaration.
 
+Between two utilities that set the same property, Tailwind's order decides, not the class order. A utility for one side beats one for every side, so `pt-2 p-4` and `p-4 pt-2` both pad the top by `pt-2`. To let a later class override an earlier one, merge the class list first, as [`tailwind-merge`](https://github.com/dcastil/tailwind-merge) does.
+
 ### Tailwind at-rules
 
 A Tailwind source stylesheet drops into `css` unchanged. Takumi reads these directives and skips the rest:
