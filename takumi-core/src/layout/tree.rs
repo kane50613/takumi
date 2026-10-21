@@ -658,9 +658,10 @@ fn claims_box(claims: ContainingBlockClaims, position: Position) -> bool {
 impl<'r> LayoutTree<'r> {
   /// Builds a layout tree from a render-node root.
   pub fn from_render_node(render_root: &'r RenderNode) -> Self {
+    let capacity = render_root.layout_node_estimate();
     let mut tree = Self {
-      nodes: Vec::with_capacity(1),
-      render_nodes: Vec::with_capacity(1),
+      nodes: Vec::with_capacity(capacity),
+      render_nodes: Vec::with_capacity(capacity),
       inline_containing_blocks: Vec::new(),
       inline_measures: RefCell::default(),
       inline_node_data: RefCell::default(),
@@ -672,6 +673,8 @@ impl<'r> LayoutTree<'r> {
     let root_id = tree.push_subtree(render_root);
 
     debug_assert_eq!(root_id, TaffyNodeId::from(0usize));
+    tree.nodes.shrink_to_fit();
+    tree.render_nodes.shrink_to_fit();
     tree.prepare_tables();
 
     tree
@@ -2161,6 +2164,38 @@ impl RenderNode {
     let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
 
     OwnContent::of(self).has_inline_content(&font_style)
+  }
+
+  /// About how many layout nodes its subtree builds: one per box, including the out-of-flow
+  /// boxes inside inline content, and one per positioned inline span, which may stand in as their
+  /// containing block.
+  fn layout_node_estimate(&self) -> usize {
+    let mut count = 0;
+    let mut boxes = vec![self];
+    let mut inline = Vec::new();
+
+    while let Some(node) = boxes.pop() {
+      count += 1;
+
+      let children = node.children.iter().flatten();
+
+      if node.should_create_inline_layout() {
+        inline.extend(children);
+      } else {
+        boxes.extend(children);
+      }
+
+      while let Some(item) = inline.pop() {
+        if item.is_out_of_flow() {
+          boxes.push(item);
+        } else if item.is_inline_span() {
+          count += usize::from(item.context.style.base_data.position.is_positioned());
+          inline.extend(item.children.iter().flatten());
+        }
+      }
+    }
+
+    count
   }
 
   /// The fragment items its inline content laid out to in the content box of `layout`, if it
