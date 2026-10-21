@@ -71,6 +71,34 @@ fn badge_row() -> Node {
   )
 }
 
+/// A wrapping row of inline-block tags, each holding a word and a nested inline-block count, so
+/// every width the outer box is measured at lays the inner one out again.
+fn nested_tags() -> Node {
+  let tags = LONG_TEXT
+    .split(' ')
+    .take(40)
+    .enumerate()
+    .map(|(index, word)| {
+      Node::container([
+        Node::text(format!("{word} ")),
+        Node::container([Node::text(index.to_string())])
+          .with_tw("inline-block px-1 rounded bg-gray-300".parse().unwrap()),
+      ])
+      .with_tw(
+        "inline-block px-2 py-1 m-1 rounded bg-gray-100"
+          .parse()
+          .unwrap(),
+      )
+    })
+    .collect::<Vec<_>>();
+
+  Node::container(tags).with_tw(
+    "block w-full h-full p-12 text-[18px] bg-white"
+      .parse()
+      .unwrap(),
+  )
+}
+
 /// Words and emoji interleaved, so every emoji run asks font fallback for a face.
 fn emoji_paragraph() -> Node {
   let text = LONG_TEXT
@@ -115,6 +143,9 @@ fn bench_text(c: &mut Criterion) {
 
   group.bench_function("badge_row", |b| {
     b.iter(|| render_node(&fonts, black_box(badge_row())))
+  });
+  group.bench_function("nested_tags", |b| {
+    b.iter(|| render_node(&fonts, black_box(nested_tags())))
   });
   group.bench_function("shadowed_paragraph", |b| {
     b.iter(|| render_node(&fonts, black_box(shadowed_paragraph())))
