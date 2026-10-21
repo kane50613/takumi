@@ -57,9 +57,24 @@ fn backdrop_blur_cards() -> Node {
   )
 }
 
+/// A full-canvas SVG noise overlay, the grain texture many cards draw with `feTurbulence`.
+fn svg_turbulence_node() -> Node {
+  let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>"#;
+
+  Node::image(svg).with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Px(512.0)))
+      .with(StyleDeclaration::height(Px(512.0))),
+  )
+}
+
 fn bench_effects(c: &mut Criterion) {
   let fonts = Fonts::default();
   let mut group = c.benchmark_group("effects");
+
+  group.bench_function("svg_turbulence", |b| {
+    b.iter(|| render_node(&fonts, black_box(svg_turbulence_node())))
+  });
 
   group.bench_function("blur_md", |b| {
     b.iter(|| render_node(&fonts, effect_node(black_box("blur-md"))))
