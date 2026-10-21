@@ -878,18 +878,23 @@ fn test_logical_resolves_to_physical_ltr() {
   assert_eq!(style.box_data.padding_right, Length::from_spacing(1.0));
 }
 
+/// Tailwind sorts `margin-inline-start` before `margin-left`, so `ml-*` wins whatever the class
+/// order.
 #[test]
 fn test_logical_physical_cascade_order_ltr() {
   let viewport = Viewport::new((100, 100));
-  let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
-  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
-    .inherit(&ComputedStyle::default());
-  assert_eq!(style.box_data.margin_left, Length::from_spacing(4.0));
 
-  let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
-  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
-    .inherit(&ComputedStyle::default());
-  assert_eq!(style.box_data.margin_left, Length::from_spacing(2.0));
+  for classes in ["ms-2 ml-4", "ml-4 ms-2"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.margin_left,
+      Length::from_spacing(4.0),
+      "{classes}"
+    );
+  }
 }
 
 #[test]
