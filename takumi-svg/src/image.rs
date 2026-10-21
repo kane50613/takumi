@@ -3,9 +3,10 @@
 //! Raster sources are embedded as `data:` URLs (original encoded bytes when
 //! available, otherwise re-encoded PNG). SVG sources are written as their vector ops, or embed
 //! their original markup as `data:image/svg+xml` where an op needs a raster. An image node draws
-//! where takumi-core's replaced-content placement puts it.
+//! where takumi-core's replaced-content placement puts it. An image drawn again from the same
+//! `src` reuses its encoding and, when stretched to its box, one `<defs>` entry.
 
-use std::io;
+use std::{io, rc::Rc, sync::Arc};
 
 use takumi_core::{
   context::RenderContext,
@@ -16,7 +17,7 @@ use takumi_core::{
   style::{Affine, FillRule, ImageScalingAlgorithm},
 };
 
-use crate::{Frame, SvgDocument, render::DocumentDevice, svg_image::is_vector};
+use crate::{Frame, ImageKey, SvgDocument, render::DocumentDevice, svg_image::is_vector};
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
@@ -42,7 +43,7 @@ pub(crate) fn emit_image(
     (Some(ImageSource::Svg(svg)), Some(_)) => vector_ops(svg, context),
     _ => None,
   };
-  let Some(drawing) = vector.or_else(|| data_url(&image.src, context).map(Drawing::Href)) else {
+  let Some(drawing) = vector.or_else(|| raster(&image.src, source.as_ref(), context, doc)) else {
     return Ok(());
   };
   let replaced = painter.replaced_content(intrinsic.map_or(
@@ -86,14 +87,22 @@ fn intrinsic_size(source: &ImageSource, context: &RenderContext) -> Option<(f32,
 pub(crate) enum Drawing {
   /// An SVG image's vector ops, drawn on `canvas`.
   Ops { ops: Vec<SvgOp>, canvas: Frame },
-  /// A `data:` URL for an `<image>`.
-  Href(String),
+  /// A `data:` URL for an `<image>`, with the key and pixel size it can be defined once under.
+  Raster {
+    href: Rc<str>,
+    definition: Option<(ImageKey, (f32, f32))>,
+  },
 }
 
 impl Drawing {
   /// What a `background-image: url(...)` draws in a `tile`, or `None` if it cannot be resolved
   /// (usually no resource map was supplied) or, as in raster output, drawn at that size.
-  pub(crate) fn of_url(url: &str, tile: Frame, context: &RenderContext) -> Option<Self> {
+  pub(crate) fn of_url(
+    url: &Arc<str>,
+    tile: Frame,
+    context: &RenderContext,
+    doc: &mut SvgDocument,
+  ) -> Option<Self> {
     let source = resolve_image(url, context).ok()?;
 
     if !source.is_drawable_at(tile.w.round() as u32, tile.h.round() as u32) {
@@ -105,8 +114,65 @@ impl Drawing {
       _ => None,
     };
 
-    vector.or_else(|| loaded_data_url(&source, context).map(Self::Href))
+    vector.or_else(|| Self::raster_of(url, &source, context, doc))
   }
+
+  /// `source`, resolved from `src`, as a `data:` URL encoded once per document.
+  fn raster_of(
+    src: &Arc<str>,
+    source: &ImageSource,
+    context: &RenderContext,
+    doc: &mut SvgDocument,
+  ) -> Option<Self> {
+    let key = ImageKey::Src {
+      src: Arc::clone(src),
+      current_color: context.current_color.0,
+    };
+    let href = doc.image_href(&key, || loaded_data_url(source, context))?;
+
+    Some(Self::Raster {
+      href,
+      definition: pixel_size(source).map(|size| (key, size)),
+    })
+  }
+}
+
+/// The image `src` names, keyed by its `src` when it has one so a repeat reuses its encoding.
+fn raster(
+  src: &ImageSourceInput,
+  source: Option<&ImageSource>,
+  context: &RenderContext,
+  doc: &mut SvgDocument,
+) -> Option<Drawing> {
+  if let (ImageSourceInput::Url(url), Some(source)) = (src, source) {
+    return Drawing::raster_of(url, source, context, doc);
+  }
+
+  data_url(src, context).map(|href| Drawing::Raster {
+    href: href.into(),
+    definition: None,
+  })
+}
+
+/// The pixel size `source` is encoded at, which its `<defs>` entry takes.
+fn pixel_size(source: &ImageSource) -> Option<(f32, f32)> {
+  let (width, height) = match source {
+    ImageSource::Bitmap(buffer) => (buffer.width() as f32, buffer.height() as f32),
+    ImageSource::Encoded(encoded) => {
+      let (width, height) = encoded.dimensions();
+
+      (width as f32, height as f32)
+    }
+    ImageSource::Animated(animated) => {
+      let (width, height) = animated.dimensions();
+
+      (width as f32, height as f32)
+    }
+    ImageSource::Svg(svg) => svg.dimensions(),
+    _ => return None,
+  };
+
+  (width > 0.0 && height > 0.0).then_some((width, height))
 }
 
 /// `svg`'s ops, when SVG elements can express every op.
@@ -126,7 +192,11 @@ impl SvgDocument {
   pub(crate) fn draw(&mut self, drawing: &Drawing, rect: Frame, aspect: &str) -> io::Result<()> {
     match drawing {
       Drawing::Ops { ops, canvas } => self.svg_image(ops, *canvas, rect),
-      Drawing::Href(href) => self.image(rect, href, Some(aspect)),
+      Drawing::Raster {
+        href,
+        definition: Some((key, natural)),
+      } if aspect == PRESERVE_ASPECT_NONE => self.image_use(key, href, *natural, rect),
+      Drawing::Raster { href, .. } => self.image(rect, href, Some(aspect)),
     }
   }
 

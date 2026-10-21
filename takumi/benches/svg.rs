@@ -1,8 +1,9 @@
-use std::{fs, hint::black_box, path::Path};
+use std::{collections::HashMap, fs, hint::black_box, path::Path, sync::Arc};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::prelude::{
   BorderRadius, BorderStyle, Color, ColorInput, Display, FlexWrap, FontResource, Fonts, FromCssStr,
+  ImageSource,
   Length::{Percentage, Px},
   Node, Sides, Style, StyleDeclaration, Viewport,
 };
@@ -111,9 +112,38 @@ fn shape_border_fixture() -> Node {
   ]))
 }
 
+/// The same photo shown 24 times, as an avatar repeats down a list.
+fn repeated_photo_fixture() -> Node {
+  let photos: Vec<Node> = (0..24)
+    .map(|_| Node::image("photo").with_tw("w-[96px] h-[96px] rounded-full".parse().unwrap()))
+    .collect();
+
+  Node::container(photos).with_tw("flex flex-wrap gap-4 w-full h-full p-8".parse().unwrap())
+}
+
 fn bench_svg(c: &mut Criterion) {
   let fonts = fonts();
   let mut group = c.benchmark_group("svg");
+  let images: HashMap<Arc<str>, ImageSource> = HashMap::from([(
+    "photo".into(),
+    ImageSource::from_bytes(include_bytes!("../../assets/images/fuma.jpg")).unwrap(),
+  )]);
+
+  group.bench_function("repeated_photo", |b| {
+    b.iter(|| {
+      black_box(
+        render(
+          SvgOptions::builder()
+            .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
+            .node(black_box(repeated_photo_fixture()))
+            .fonts(&fonts)
+            .images(images.clone())
+            .build(),
+        )
+        .unwrap(),
+      )
+    })
+  });
 
   group.bench_function("paragraph", |b| {
     b.iter(|| render_node(&fonts, black_box(paragraph_fixture())))

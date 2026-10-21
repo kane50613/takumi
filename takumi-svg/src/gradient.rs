@@ -1,6 +1,6 @@
 //! CSS gradient / background-image → SVG paint emission.
 
-use std::{f32::consts::TAU, io};
+use std::{f32::consts::TAU, io, sync::Arc};
 
 use takumi_core::{
   context::RenderContext,
@@ -113,8 +113,8 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     }
   }
 
-  fn url(&mut self, url: &str, rect: Frame) -> io::Result<()> {
-    let Some(drawing) = Drawing::of_url(url, rect, self.context) else {
+  fn url(&mut self, url: &Arc<str>, rect: Frame) -> io::Result<()> {
+    let Some(drawing) = Drawing::of_url(url, rect, self.context, self.doc) else {
       return Ok(());
     };
 
