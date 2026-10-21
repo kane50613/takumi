@@ -1,7 +1,7 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{HashMap, HashSet},
+  collections::{HashMap, HashSet, VecDeque},
   iter::Copied,
   mem::{replace, take},
   ptr,
@@ -376,7 +376,8 @@ impl TableBoxStyle {
 type InlineMeasureKey = (usize, [u32; 5]);
 
 struct LayoutNodeState {
-  style: Style,
+  /// Shared with the recent nodes whose style came out equal, as rows of a list do.
+  style: Rc<Style>,
   /// Whether the style is the same whatever query container it resolves
   /// against, so taffy's repeated passes can reuse it.
   container_independent: bool,
@@ -399,9 +400,33 @@ struct LayoutNodeState {
   claims: ContainingBlockClaims,
 }
 
+/// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as
+/// the inline layout cache shares faces.
+#[derive(Default)]
+struct RecentStyles(VecDeque<Rc<Style>>);
+
+impl RecentStyles {
+  const LEN: usize = 8;
+
+  /// `style`, or an equal one a recent node laid out with.
+  fn share(&mut self, style: Style) -> Rc<Style> {
+    if let Some(shared) = self.0.iter().find(|shared| ***shared == style) {
+      return Rc::clone(shared);
+    }
+
+    let style = Rc::new(style);
+
+    if self.0.len() == Self::LEN {
+      self.0.pop_front();
+    }
+    self.0.push_back(Rc::clone(&style));
+    style
+  }
+}
+
 impl LayoutNodeState {
   fn new(
-    style: Style,
+    style: Rc<Style>,
     container_independent: bool,
     is_inline_children: bool,
     claims: ContainingBlockClaims,
@@ -710,6 +735,7 @@ impl<'r> LayoutTree<'r> {
     fn push_node_state<'r>(
       nodes: &mut Vec<LayoutNodeState>,
       render_nodes: &mut Vec<&'r RenderNode>,
+      recent_styles: &mut RecentStyles,
       InlineOutOfFlow {
         path: render_path,
         node: render_node,
@@ -743,7 +769,7 @@ impl<'r> LayoutTree<'r> {
       };
 
       nodes.push(LayoutNodeState::new(
-        style,
+        recent_styles.share(style),
         container_independent,
         is_inline_children,
         ContainingBlockClaims {
@@ -778,10 +804,10 @@ impl<'r> LayoutTree<'r> {
 
       render_nodes.push(container);
       nodes.push(LayoutNodeState::new(
-        Style {
+        Rc::new(Style {
           display: TaffyDisplay::Block,
           ..Style::DEFAULT
-        },
+        }),
         true,
         false,
         ContainingBlockClaims::ALL,
@@ -796,10 +822,12 @@ impl<'r> LayoutTree<'r> {
       ..
     } = self;
     let mut proxy_boxes: HashMap<TaffyNodeId, Vec<TaffyNodeId>> = HashMap::new();
+    let mut recent_styles = RecentStyles::default();
 
     let root = push_node_state(
       nodes,
       render_nodes,
+      &mut recent_styles,
       InlineOutOfFlow {
         path: SmallVec::new(),
         node: render_root,
@@ -812,7 +840,7 @@ impl<'r> LayoutTree<'r> {
     while let Some(current) = stack.last_mut() {
       if let Some(child) = current.children.get(current.next_child_index) {
         current.next_child_index += 1;
-        let pending = push_node_state(nodes, render_nodes, child);
+        let pending = push_node_state(nodes, render_nodes, &mut recent_styles, child);
 
         stack.push(pending);
         continue;
@@ -941,7 +969,7 @@ impl<'r> LayoutTree<'r> {
           .resolve_or_zero(Some(available), calc)
           .horizontal_axis_sum();
     }
-    self.nodes[0].style.size.width = Dimension::length(width.max(0.0));
+    Rc::make_mut(&mut self.nodes[0].style).size.width = Dimension::length(width.max(0.0));
   }
 
   /// Places the out-of-flow boxes inside the inline formatting context `node` lays out as
@@ -1297,8 +1325,10 @@ impl<'r> LayoutTree<'r> {
         .height
         .or(available_space.height.into_option()),
     };
-    node.style = render_node.layout_style(&sizing);
-    node.table_box.apply(&mut node.style);
+    let mut style = render_node.layout_style(&sizing);
+
+    node.table_box.apply(&mut style);
+    node.style = Rc::new(style);
   }
 
   /// The number of nodes in the tree.
@@ -1374,9 +1404,11 @@ impl<'r> LayoutTree<'r> {
       return;
     };
 
+    let mut style = render_node.layout_style(&render_node.context.sizing);
+
+    table_box.apply(&mut style);
     state.table_box = table_box;
-    state.style = render_node.layout_style(&render_node.context.sizing);
-    table_box.apply(&mut state.style);
+    state.style = Rc::new(style);
     state.cache.clear();
   }
 
@@ -1748,7 +1780,7 @@ impl<'r> LayoutTree<'r> {
 
           let mut output = compute_leaf_layout(
             inputs,
-            &node_data.style,
+            &*node_data.style,
             |val, basis| tree.resolve_calc_value(val, basis),
             |known_dimensions, available_space| {
               let known_dimensions = stripped_known_dimensions(known_dimensions);
