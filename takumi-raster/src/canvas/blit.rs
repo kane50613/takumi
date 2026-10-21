@@ -224,21 +224,36 @@ pub(super) fn blit_rows(
       continue;
     };
     let (first, alphas) = mask_row.covered(row.len());
-    let dst = &mut dst[first..first + alphas.len()];
-    let row = &row[first..first + alphas.len()];
-    let (dst_runs, dst_tail) = dst.as_chunks_mut::<MASK_RUN>();
-    let (row_runs, row_tail) = row.as_chunks::<MASK_RUN>();
-    let (alpha_runs, alpha_tail) = alphas.as_chunks::<MASK_RUN>();
 
-    for ((dst, row), alphas) in dst_runs.iter_mut().zip(row_runs).zip(alpha_runs) {
-      match u64::from_ne_bytes(*alphas) {
-        0 => {}
-        u64::MAX => blend_row(dst, row, mode),
-        _ => blend_masked(dst, row, alphas, mode),
-      }
-    }
-    blend_masked(dst_tail, row_tail, alpha_tail, mode);
+    blend_row_masked(
+      &mut dst[first..first + alphas.len()],
+      &row[first..first + alphas.len()],
+      alphas,
+      mode,
+    );
   }
+}
+
+/// `row` blended over `dst` in `mode` under `alphas`, a [`MASK_RUN`] at a time: a clear run
+/// skips, an opaque run blends unscaled, and only the rest scale by their alphas.
+pub(super) fn blend_row_masked(
+  dst: &mut [[u8; 4]],
+  row: &[[u8; 4]],
+  alphas: &[u8],
+  mode: BlendMode,
+) {
+  let (dst_runs, dst_tail) = dst.as_chunks_mut::<MASK_RUN>();
+  let (row_runs, row_tail) = row.as_chunks::<MASK_RUN>();
+  let (alpha_runs, alpha_tail) = alphas.as_chunks::<MASK_RUN>();
+
+  for ((dst, row), alphas) in dst_runs.iter_mut().zip(row_runs).zip(alpha_runs) {
+    match u64::from_ne_bytes(*alphas) {
+      0 => {}
+      u64::MAX => blend_row(dst, row, mode),
+      _ => blend_masked(dst, row, alphas, mode),
+    }
+  }
+  blend_masked(dst_tail, row_tail, alpha_tail, mode);
 }
 
 fn blend_masked(dst: &mut [[u8; 4]], row: &[[u8; 4]], alphas: &[u8], mode: BlendMode) {
