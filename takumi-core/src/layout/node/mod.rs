@@ -823,6 +823,24 @@ mod tests {
 
     assert_eq!(urls.into_iter().collect::<Vec<_>>(), vec![mask_url]);
   }
+
+  #[test]
+  fn collect_style_fetch_tasks_collects_tailwind_list_and_content_image_urls() {
+    let Ok(tw) =
+      TailwindValues::from_str("list-image-[url(/marker.svg)] before:content-[url(/icon.png)]")
+    else {
+      return;
+    };
+    let node = Node::container([]).with_tw(tw);
+
+    let mut urls = Xxh3HashSet::default();
+    node.style_image_urls(&mut urls);
+
+    let mut urls = urls.into_iter().collect::<Vec<_>>();
+
+    urls.sort_unstable();
+    assert_eq!(urls, vec!["/icon.png", "/marker.svg"]);
+  }
 }
 
 #[cfg(test)]

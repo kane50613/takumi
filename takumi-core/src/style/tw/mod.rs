@@ -145,7 +145,7 @@ impl TailwindValues {
       .inner
       .iter()
       .filter(|rule| rule.is_active(viewport, breakpoints))
-      .flat_map(|rule| rule.image_urls())
+      .flat_map(|rule| rule.declarations.image_urls())
       .collect::<Vec<_>>()
       .into_iter()
   }
