@@ -2,12 +2,12 @@
   <rect x="0" y="0" width="600" height="315" fill="#05010f"/>
   <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="600" height="315">
     <g fill="#000">
-      <use href="#g0" x="213.1" y="163.5"/>
-      <use href="#g1" x="250.86" y="163.5"/>
-      <use href="#g2" x="282.73" y="163.5"/>
-      <use href="#g3" x="302.83" y="163.5"/>
+      <use href="#g0" x="213.09" y="163.5"/>
+      <use href="#g1" x="250.85" y="163.5"/>
+      <use href="#g2" x="282.72" y="163.5"/>
+      <use href="#g3" x="302.82" y="163.5"/>
       <use href="#g2" x="334.97" y="163.5"/>
-      <use href="#g4" x="355.51" y="163.5"/>
+      <use href="#g4" x="355.5" y="163.5"/>
     </g>
   </mask>
   <g mask="url(#mk0)">
@@ -85,37 +85,37 @@
     </g>
   </g>
   <g fill="#000" fill-opacity="0">
-    <use href="#g0" x="213.1" y="163.5"/>
-    <use href="#g1" x="250.86" y="163.5"/>
-    <use href="#g2" x="282.73" y="163.5"/>
-    <use href="#g3" x="302.83" y="163.5"/>
+    <use href="#g0" x="213.09" y="163.5"/>
+    <use href="#g1" x="250.85" y="163.5"/>
+    <use href="#g2" x="282.72" y="163.5"/>
+    <use href="#g3" x="302.82" y="163.5"/>
     <use href="#g2" x="334.97" y="163.5"/>
-    <use href="#g4" x="355.51" y="163.5"/>
+    <use href="#g4" x="355.5" y="163.5"/>
   </g>
   <g fill="#fff" fill-opacity=".549">
-    <use href="#g5" x="194.7" y="201.5"/>
-    <use href="#g6" x="202.5" y="201.5"/>
-    <use href="#g7" x="210.3" y="201.5"/>
-    <use href="#g8" x="218.1" y="201.5"/>
-    <use href="#g9" x="233.7" y="201.5"/>
-    <use href="#g10" x="241.5" y="201.5"/>
-    <use href="#g11" x="249.3" y="201.5"/>
-    <use href="#g12" x="257.1" y="201.5"/>
-    <use href="#g13" x="264.9" y="201.5"/>
-    <use href="#g6" x="272.7" y="201.5"/>
-    <use href="#g14" x="280.5" y="201.5"/>
-    <use href="#g15" x="288.3" y="201.5"/>
-    <use href="#g7" x="296.1" y="201.5"/>
-    <use href="#g16" x="311.7" y="201.5"/>
-    <use href="#g17" x="327.3" y="201.5"/>
-    <use href="#g13" x="335.1" y="201.5"/>
-    <use href="#g18" x="342.9" y="201.5"/>
-    <use href="#g5" x="350.7" y="201.5"/>
-    <use href="#g9" x="366.3" y="201.5"/>
-    <use href="#g10" x="374.1" y="201.5"/>
-    <use href="#g11" x="381.9" y="201.5"/>
-    <use href="#g13" x="389.7" y="201.5"/>
-    <use href="#g14" x="397.5" y="201.5"/>
+    <use href="#g5" x="194.69" y="201.5"/>
+    <use href="#g6" x="202.49" y="201.5"/>
+    <use href="#g7" x="210.29" y="201.5"/>
+    <use href="#g8" x="218.09" y="201.5"/>
+    <use href="#g9" x="233.69" y="201.5"/>
+    <use href="#g10" x="241.49" y="201.5"/>
+    <use href="#g11" x="249.29" y="201.5"/>
+    <use href="#g12" x="257.09" y="201.5"/>
+    <use href="#g13" x="264.89" y="201.5"/>
+    <use href="#g6" x="272.69" y="201.5"/>
+    <use href="#g14" x="280.49" y="201.5"/>
+    <use href="#g15" x="288.29" y="201.5"/>
+    <use href="#g7" x="296.09" y="201.5"/>
+    <use href="#g16" x="311.69" y="201.5"/>
+    <use href="#g17" x="327.29" y="201.5"/>
+    <use href="#g13" x="335.09" y="201.5"/>
+    <use href="#g18" x="342.89" y="201.5"/>
+    <use href="#g5" x="350.69" y="201.5"/>
+    <use href="#g9" x="366.29" y="201.5"/>
+    <use href="#g10" x="374.09" y="201.5"/>
+    <use href="#g11" x="381.89" y="201.5"/>
+    <use href="#g13" x="389.69" y="201.5"/>
+    <use href="#g14" x="397.49" y="201.5"/>
   </g>
   <radialGradient id="rg3" gradientUnits="userSpaceOnUse" cx="180" cy="94.5" r="390" gradientTransform="matrix(1 0 0 .323 0 63.969)">
     <stop offset="0" stop-color="#6466f1" stop-opacity=".502"/>

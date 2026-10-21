@@ -1,4 +1,4 @@
-//! taffy's flexbox and grid algorithms, and the table algorithm written in taffy's terms, over the
+//! taffy's grid algorithm, and the table algorithm written in taffy's terms, over the
 //! native layout until Blink's replace them: a taffy `LayoutInput` turns into a `ConstraintSpace`
 //! and a `LayoutResult` back into a `LayoutOutput`.
 
@@ -6,11 +6,10 @@ use std::{iter::Copied, slice};
 
 use taffy::{
   AvailableSpace as TaffyAvailableSpace, AxisStaticEdge, AxisStaticPosition, Baselines, CacheTree,
-  DetailedGridInfo, DetailedLayoutInfo, Display as TaffyDisplay, FlexDirection, Layout,
-  LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree, Line,
-  NodeId as TaffyNodeId, OofCandidate, OofCandidates, Point as TaffyPoint,
-  Position as TaffyPosition, Rect as TaffyRect, RequestedAxis, RunMode, Size as TaffySize,
-  SizingMode, Style, TraversePartialTree, TraverseTree, compute_flexbox_layout,
+  DetailedGridInfo, DetailedLayoutInfo, Display as TaffyDisplay, Layout, LayoutGridContainer,
+  LayoutInput, LayoutOutput, LayoutPartialTree, Line, NodeId as TaffyNodeId, OofCandidate,
+  OofCandidates, Point as TaffyPoint, Position as TaffyPosition, Rect as TaffyRect, RequestedAxis,
+  RunMode, Size as TaffySize, SizingMode, Style, TraversePartialTree, TraverseTree,
   compute_grid_layout,
 };
 
@@ -34,7 +33,6 @@ use crate::{
 /// The taffy algorithm laying a container out.
 #[derive(Clone, Copy)]
 pub(crate) enum TaffyAlgorithm {
-  Flex,
   Grid,
   Table,
 }
@@ -58,9 +56,19 @@ impl<'r> LayoutTree<'r> {
       && space.available_inline_size.is_some();
     let inline_size = match algorithm {
       _ if space.is_fixed_inline_size => Some(space.inline_size()),
+      // A table sizes itself, unless its container stretches it explicitly.
+      TaffyAlgorithm::Table
+        if space.inline_auto_behavior == AutoSizeBehavior::StretchExplicit
+          && style.size.width.is_auto() =>
+      {
+        Some(
+          resolver
+            .inline_size_for_fragment(&mut |size_type| self.min_max_sizes(node, space, size_type)),
+        )
+      }
       TaffyAlgorithm::Table => None,
-      TaffyAlgorithm::Flex | TaffyAlgorithm::Grid if fits_content => None,
-      TaffyAlgorithm::Flex | TaffyAlgorithm::Grid => Some(
+      TaffyAlgorithm::Grid if fits_content => None,
+      TaffyAlgorithm::Grid => Some(
         resolver
           .inline_size_for_fragment(&mut |size_type| self.min_max_sizes(node, space, size_type)),
       ),
@@ -69,10 +77,14 @@ impl<'r> LayoutTree<'r> {
       space.available_block_size
     } else {
       match algorithm {
-        TaffyAlgorithm::Table => None,
-        TaffyAlgorithm::Flex | TaffyAlgorithm::Grid => {
+        TaffyAlgorithm::Table
+          if space.block_auto_behavior == AutoSizeBehavior::StretchExplicit
+            && style.size.height.is_auto() =>
+        {
           resolver.initial_block_size_for_fragment(None, inline_size)
         }
+        TaffyAlgorithm::Table => None,
+        TaffyAlgorithm::Grid => resolver.initial_block_size_for_fragment(None, inline_size),
       }
     };
     let to_float = |size: Option<LayoutUnit>| size.map(LayoutUnit::to_float);
@@ -112,7 +124,6 @@ impl<'r> LayoutTree<'r> {
     };
     let taffy_node = node.into_taffy();
     let output = match algorithm {
-      TaffyAlgorithm::Flex => compute_flexbox_layout(self, taffy_node, inputs),
       TaffyAlgorithm::Grid => {
         let output = compute_grid_layout(self, taffy_node, inputs);
 
@@ -131,24 +142,10 @@ impl<'r> LayoutTree<'r> {
     result.first_baseline = output.baselines.first.map(LayoutUnit::from_float);
     result.last_baseline = output.baselines.last.map(LayoutUnit::from_float);
 
-    // A column flex container aligns its out-of-flow children with `align-self` in the inline
-    // direction.
-    let is_column = matches!(algorithm, TaffyAlgorithm::Flex)
-      && matches!(
-        self.taffy_style(taffy_node).flex_direction,
-        FlexDirection::Column | FlexDirection::ColumnReverse
-      );
     let candidates: Vec<OutOfFlowCandidate> = output
       .oof_candidates
       .iter()
-      .map(|candidate| {
-        let mut converted = OutOfFlowCandidate::from_taffy(candidate);
-
-        if is_column && self.layout_children(taffy_node).contains(&candidate.node) {
-          converted.static_position.align_self_direction = LogicalAlignmentDirection::Inline;
-        }
-        converted
-      })
+      .map(OutOfFlowCandidate::from_taffy)
       .collect();
 
     result.out_of_flow = if candidates.is_empty() {
@@ -214,10 +211,8 @@ impl<'r> LayoutTree<'r> {
       let taffy_node = node.into_taffy();
       let output = if self.is_table(node) {
         self.compute_table_layout(taffy_node, inputs)
-      } else if self.taffy_style(taffy_node).display == TaffyDisplay::Grid {
-        compute_grid_layout(self, taffy_node, inputs)
       } else {
-        compute_flexbox_layout(self, taffy_node, inputs)
+        compute_grid_layout(self, taffy_node, inputs)
       };
 
       LayoutUnit::from_float(output.size.width)
@@ -239,7 +234,7 @@ impl<'r> LayoutTree<'r> {
     let direction = style.direction;
     let mut known_dimensions = inputs.known_dimensions;
 
-    // taffy's flexbox algorithm sizes an item's main size intrinsically at the cross size it
+    // taffy sizes an item's main size intrinsically at the cross size it
     // would stretch to, which a replaced item's aspect ratio would carry into its main size, so a
     // replaced item sizes that axis from its own style and natural size instead.
     let single_axis = match inputs.axis {
@@ -564,25 +559,6 @@ impl CacheTree for LayoutTree<'_> {
       .node_state_mut(NodeId::from_taffy(node_id))
       .cache
       .clear();
-  }
-}
-
-impl LayoutFlexboxContainer for LayoutTree<'_> {
-  type FlexboxContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type FlexboxItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_flexbox_container_style(&self, node_id: TaffyNodeId) -> Self::FlexboxContainerStyle<'_> {
-    self.taffy_style(node_id)
-  }
-
-  fn get_flexbox_child_style(&self, child_node_id: TaffyNodeId) -> Self::FlexboxItemStyle<'_> {
-    self.taffy_style(child_node_id)
   }
 }
 

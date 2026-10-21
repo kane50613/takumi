@@ -6,8 +6,9 @@ use crate::{
   geometry::{Point, Rect, Size},
   layout_unit::LayoutUnit,
   style::{
-    AlignItems, BoxSizing, ComputedStyle, Contain, Direction, Display, Length, MaxSize, Overflow,
-    Position, Size as SizeValue, SizingContext, calc::CalcLinear,
+    AlignItems, BoxSizing, ComputedStyle, Contain, Direction, Display, FlexBasis, FlexDirection,
+    FlexWrap, Gap, JustifyContent, Length, MaxSize, Overflow, Position, Size as SizeValue,
+    SizingContext, calc::CalcLinear,
   },
 };
 
@@ -146,6 +147,21 @@ pub(crate) struct LayoutStyle {
   /// `Normal` stands for `auto`.
   pub(crate) align_self: AlignItems,
   pub(crate) is_replaced: bool,
+  /// The direction `-webkit-box-orient` resolves to for a `-webkit-box`.
+  pub(crate) flex_direction: FlexDirection,
+  pub(crate) flex_wrap: FlexWrap,
+  /// The fewest lines `flex-wrap: balance` lays out into.
+  pub(crate) flex_line_count: usize,
+  pub(crate) justify_content: JustifyContent,
+  pub(crate) align_content: JustifyContent,
+  pub(crate) align_items: AlignItems,
+  pub(crate) flex_grow: f32,
+  pub(crate) flex_shrink: f32,
+  /// `content` stands as `max-content`.
+  pub(crate) flex_basis: LayoutLength,
+  /// `normal` stands as zero.
+  pub(crate) row_gap: LayoutLength,
+  pub(crate) column_gap: LayoutLength,
 }
 
 impl Default for LayoutStyle {
@@ -170,6 +186,17 @@ impl Default for LayoutStyle {
       justify_self: AlignItems::Normal,
       align_self: AlignItems::Normal,
       is_replaced: false,
+      flex_direction: FlexDirection::Row,
+      flex_wrap: FlexWrap::NoWrap,
+      flex_line_count: 1,
+      justify_content: JustifyContent::Normal,
+      align_content: JustifyContent::Normal,
+      align_items: AlignItems::Normal,
+      flex_grow: 0.0,
+      flex_shrink: 1.0,
+      flex_basis: LayoutLength::Auto,
+      row_gap: LayoutLength::Fixed(0.0),
+      column_gap: LayoutLength::Fixed(0.0),
     }
   }
 }
@@ -182,6 +209,10 @@ impl LayoutStyle {
     is_replaced: bool,
   ) -> Self {
     let length = |length: Length| length.to_layout_length(sizing);
+    let gap = |gap: Gap| match gap {
+      Gap::Normal => LayoutLength::Fixed(0.0),
+      Gap::Length(gap) => length(gap),
+    };
     let box_data = &style.box_data;
     let direction = style.inherited_data.direction;
     let overflow = style.resolve_overflows();
@@ -239,6 +270,20 @@ impl LayoutStyle {
       justify_self: style.misc_data.justify_self,
       align_self: style.misc_data.align_self,
       is_replaced,
+      flex_direction: style.resolved_flex_direction(),
+      flex_wrap: style.misc_data.flex_wrap,
+      flex_line_count: usize::from(style.misc2_data.flex_line_count.get()),
+      justify_content: style.box_data.justify_content,
+      align_content: style.misc_data.align_content,
+      align_items: style.box_data.align_items,
+      flex_grow: style.misc1_data.flex_grow.map_or(0.0, |grow| grow.0),
+      flex_shrink: style.misc2_data.flex_shrink.map_or(1.0, |shrink| shrink.0),
+      flex_basis: match style.misc1_data.flex_basis.unwrap_or_default() {
+        FlexBasis::Content => LayoutLength::MaxContent,
+        FlexBasis::Size(size) => LayoutLength::from_size(size, sizing),
+      },
+      row_gap: gap(style.misc3_data.row_gap),
+      column_gap: gap(style.misc1_data.column_gap),
     }
   }
 

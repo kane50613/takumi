@@ -12,6 +12,7 @@ pub(crate) mod corner_shape;
 /// Backend-agnostic box-decoration clip geometry.
 pub mod decoration;
 pub(crate) mod exclusions;
+pub(crate) mod flex;
 pub(crate) mod floats_utils;
 /// Inline-level layout: text shaping, line breaking, and text fitting.
 pub mod inline;

@@ -13,6 +13,7 @@ use crate::{
   layout::{
     block_layout_algorithm::{BlockLayoutAlgorithm, InlineContentLayout, block_min_max_sizes},
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
+    flex::flex_layout_algorithm::FlexLayoutAlgorithm,
     inline::{atomic_inline::BoxAtomicInline, inline_node::InlineNode},
     layout_result::{
       HorizontalEdge, LayoutResult, LayoutStatus, OutOfFlowCandidate, StaticPosition, VerticalEdge,
@@ -164,7 +165,7 @@ impl<'r> LayoutTree<'r> {
         LayoutResult::new(LogicalSize::default())
       }
       Algorithm::Table => self.lay_out_with_taffy(node, space, TaffyAlgorithm::Table),
-      Algorithm::Flex => self.lay_out_with_taffy(node, space, TaffyAlgorithm::Flex),
+      Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, false).layout(),
       Algorithm::Grid => self.lay_out_with_taffy(node, space, TaffyAlgorithm::Grid),
       Algorithm::Replaced => self.lay_out_replaced(node, space),
       Algorithm::Block => BlockLayoutAlgorithm::new(self, node, space).layout(),
@@ -279,7 +280,8 @@ impl<'r> LayoutTree<'r> {
     }
 
     let mut result = match algorithm {
-      Algorithm::Table | Algorithm::Flex | Algorithm::Grid => self.taffy_min_max_sizes(node, space),
+      Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, true).compute_min_max_sizes(),
+      Algorithm::Table | Algorithm::Grid => self.taffy_min_max_sizes(node, space),
       _ if self.has_inline_children(node) => {
         let render_node = self.render_node(node);
         let items_data = self.inline_node_data(usize::from(node));
@@ -389,6 +391,11 @@ impl<'r> LayoutTree<'r> {
         ..(*state.layout_style).clone()
       })
     }))
+  }
+
+  /// Blink's `IsReplaced`: whether `node` lays out as replaced content.
+  pub(crate) fn is_replaced(&self, node: NodeId) -> bool {
+    matches!(self.algorithm(node), Algorithm::Replaced)
   }
 
   /// Blink's `CreatesNewFormattingContext`.
