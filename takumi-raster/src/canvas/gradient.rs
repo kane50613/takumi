@@ -74,7 +74,7 @@ pub(crate) fn overlay_gradient_tile<T>(
     bounds,
     mode,
     combined_mask,
-    |y, row| gradient.fill_row(x_start, y, row),
+    |y, span, row| gradient.fill_row(x_start + span.start as u32, y, &mut row[span]),
   );
 }
 
