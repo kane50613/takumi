@@ -581,3 +581,33 @@ fn tw_boxes_share_styles_only_when_their_classes_agree() {
 
   assert_eq!(widths, [10.0, 20.0, 10.0, 40.0]);
 }
+
+/// A CSS-wide keyword on a custom property resolves in the cascade instead of becoming its value:
+/// `inherit` takes the parent's, `initial` the registered initial value or none, and `unset`
+/// either one as the property inherits.
+#[test]
+fn css_wide_keywords_resolve_on_custom_properties() {
+  let registered = "@property --w { syntax: '<length>'; inherits: false; initial-value: 10px; }";
+
+  for (css, width) in [
+    (".box { --w: inherit; width: var(--w); }".to_owned(), 50.0),
+    (
+      ".box { --w: initial; width: var(--w, 70px); }".to_owned(),
+      70.0,
+    ),
+    (".box { --w: unset; width: var(--w); }".to_owned(), 50.0),
+    (
+      format!("{registered} .box {{ --w: inherit; width: var(--w); }}"),
+      50.0,
+    ),
+    (
+      format!("{registered} .box {{ --w: unset; width: var(--w); }}"),
+      10.0,
+    ),
+  ] {
+    let root = Node::container([block("box")]).with_class_name("outer");
+    let result = measure_with_css(root, &format!(".outer {{ --w: 50px; }} {css}"));
+
+    assert_eq!(result.children[0].width, width, "{css}");
+  }
+}

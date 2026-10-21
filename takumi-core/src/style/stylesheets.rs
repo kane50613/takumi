@@ -851,7 +851,9 @@ macro_rules! define_style {
           for declaration in self.declarations.declarations {
             match declaration {
               StyleDeclaration::CustomProperty(name, value) => {
-                style.custom_properties.set(name, value);
+                style
+                  .custom_properties
+                  .declare(name, value, Some(&parent.custom_properties));
               }
               declaration => declarations.push(declaration),
             }
@@ -1307,7 +1309,9 @@ macro_rules! define_style {
               }
             }
             Self::CustomProperty(name, value) => {
-              style.custom_properties.set(name, value);
+              style
+                .custom_properties
+                .declare(name, value, Some(&parent.custom_properties));
             }
             Self::Deferred(deferred) => deferred.apply_with_parent(style, parent),
             Self::VarRef(var_ref) => var_ref.apply(style, Some(parent)),
@@ -1344,7 +1348,9 @@ macro_rules! define_style {
               CssWideKeyword::Inherit | CssWideKeyword::Unset => {}
             },
             Self::CustomProperty(name, value) => {
-              style.custom_properties.set(name.to_owned(), value.to_owned());
+              style
+                .custom_properties
+                .declare(name.to_owned(), value.to_owned(), None);
             }
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, None, deferred);
