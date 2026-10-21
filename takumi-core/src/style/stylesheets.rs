@@ -112,6 +112,7 @@ impl ToCss for DeferredDeclaration {
     let name = match self.property {
       PropertyId::Longhand(id) => id.css_name(),
       PropertyId::Shorthand(id) => id.css_name(),
+      PropertyId::All => "all",
       _ => return Ok(()),
     };
 
@@ -393,6 +394,16 @@ macro_rules! define_style {
           $({ let _ = stringify!($transient); false },)*
         ];
 
+        /// The longhands `all` resets: every one but `direction`, `unicode-bidi`, and the logical-axis
+        /// ones, which resolve onto the others.
+        /// <https://drafts.csswg.org/css-cascade-4/#all-shorthand>
+        fn affected_by_all() -> PropertyMask {
+          [$($(Self::[<$longhand:camel>],)*)*]
+            .into_iter()
+            .filter(|property| !matches!(property, Self::Direction | Self::UnicodeBidi))
+            .collect()
+        }
+
         /// The property's CSS name, e.g. `-webkit-text-fill-color`.
         pub(crate) fn css_name(self) -> &'static str {
           static NAMES: OnceLock<Box<[Box<str>]>> = OnceLock::new();
@@ -501,6 +512,8 @@ macro_rules! define_style {
         Longhand(LonghandId),
         /// A shorthand property.
         Shorthand(ShorthandId),
+        /// The `all` shorthand, which takes only a CSS-wide keyword.
+        All,
       }
 
       impl PropertyId {
@@ -509,6 +522,7 @@ macro_rules! define_style {
             $($(stringify!($longhand) => Self::Longhand(LonghandId::[<$longhand:camel>]),)*)*
             $(stringify!($transient) => Self::Longhand(LonghandId::[<$transient:camel>]),)*
             $(stringify!($shorthand) => Self::Shorthand(ShorthandId::[<$shorthand:camel>]),)*
+            "all" => Self::All,
             _ => Self::Ignored,
           }
         }
@@ -554,18 +568,13 @@ macro_rules! define_style {
               let state = input.state();
 
               if let Ok(keyword) = input.try_parse(CssWideKeyword::from_css) {
-                return Ok(
-                  self
-                    .target_longhands()
-                    .iter()
-                    .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, keyword))
-                    .collect(),
-                );
+                return Ok(self.expand_keyword(keyword));
               }
 
               input.reset(&state);
               property.parse_declarations(input)
             }
+            Self::All => Ok(self.expand_keyword(CssWideKeyword::from_css(input)?)),
             Self::Longhand(property) => property.parse_declarations(input),
           }
         }
@@ -596,13 +605,7 @@ macro_rules! define_style {
           }
 
           if let Some(keyword) = CssWideKeyword::from_css_input(&css_input) {
-            return Ok(
-              self
-                .target_longhands()
-                .iter()
-                .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, keyword))
-                .collect(),
-            );
+            return Ok(self.expand_keyword(keyword));
           }
 
           if let CssInput::Unexpected(unexpected) = css_input {
@@ -626,6 +629,7 @@ macro_rules! define_style {
             parser.parse_entirely(|parser| match self {
               Self::Shorthand(property) => property.parse_declarations(parser),
               Self::Longhand(property) => property.parse_declarations(parser),
+              Self::All => Ok(self.expand_keyword(CssWideKeyword::from_css(parser)?)),
               Self::Ignored | Self::Custom => unreachable!(),
             })
           }
@@ -646,6 +650,7 @@ macro_rules! define_style {
           let (message, valid_tokens) = match self {
             Self::Longhand(property) => property.expect_info(),
             Self::Shorthand(property) => property.expect_info(),
+            Self::All => (CssExpectedMessage::OneValue, CssWideKeyword::VALID_TOKENS),
             Self::Ignored | Self::Custom => return String::new(),
           };
 
@@ -662,7 +667,17 @@ macro_rules! define_style {
                 [$(LonghandId::$target),+].into_iter().collect()
               })*
             },
+            Self::All => LonghandId::affected_by_all(),
           }
+        }
+
+        /// `keyword` set on every longhand this property expands into.
+        fn expand_keyword(self, keyword: CssWideKeyword) -> ParsedDeclarations {
+          self
+            .target_longhands()
+            .iter()
+            .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, keyword))
+            .collect()
         }
       }
 

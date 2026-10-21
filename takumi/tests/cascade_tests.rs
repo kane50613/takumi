@@ -521,3 +521,31 @@ fn structural_pseudo_classes_skip_text_nodes() {
   assert!(widths.contains(&100.0), "{widths:?}");
   assert!(widths.contains(&200.0), "{widths:?}");
 }
+
+#[test]
+fn all_resets_what_earlier_rules_set() {
+  let root = Node::container([block("box reset")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .box { width: 100px; }
+      .reset { all: initial; }
+    "#,
+  );
+
+  assert_eq!(result.children[0].width, result.width);
+}
+
+#[test]
+fn all_unset_in_a_where_rule_yields_to_every_other_rule() {
+  let root = Node::container([block("box")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .box { width: 100px; }
+      :where(*) { all: unset; }
+    "#,
+  );
+
+  assert_eq!(result.children[0].width, 100.0);
+}
