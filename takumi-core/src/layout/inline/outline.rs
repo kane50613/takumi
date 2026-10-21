@@ -1,6 +1,6 @@
 //! Outlines of inline elements: each element's line fragments, grouped into islands.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::{
   context::RenderContext,
@@ -140,7 +140,7 @@ impl OutlineIsland {
   /// lines that meet once grown by the outline's reach, as Blink unites the grown rects into one
   /// region.
   pub fn of(rects: &[InlineOutlineRect]) -> Vec<Self> {
-    let mut rect_counts: HashMap<usize, usize> = HashMap::new();
+    let mut rect_counts: FxHashMap<usize, usize> = FxHashMap::default();
     let mut islands: Vec<Self> = Vec::new();
 
     for rect in rects {

@@ -7,7 +7,9 @@ mod builder;
 
 pub(super) use builder::line_span_fragments;
 
-use std::{collections::HashMap, mem::take, ops::Range, rc::Rc};
+use std::{mem::take, ops::Range, rc::Rc};
+
+use rustc_hash::FxHashMap;
 
 use skrifa::FontRef;
 
@@ -576,7 +578,7 @@ impl FragmentItems {
 }
 
 /// The node of every span `spans` open, by decoration id.
-fn span_owners<'c>(spans: &[ProcessedInlineSpan<'c>]) -> HashMap<usize, &'c RenderNode> {
+fn span_owners<'c>(spans: &[ProcessedInlineSpan<'c>]) -> FxHashMap<usize, &'c RenderNode> {
   spans
     .iter()
     .filter_map(ProcessedInlineSpan::chain)
