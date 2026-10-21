@@ -1936,6 +1936,47 @@ fn a_side_utility_beats_an_every_side_one() {
   }
 }
 
+/// Tailwind sorts `margin`, `margin-inline`, then `margin-inline-start`, so `m-4 mx-2 ms-1` gives
+/// the left margin to `ms-1` and the right to `mx-2`, whatever the class order.
+#[test]
+fn logical_side_utilities_sort_as_tailwind_writes_them() {
+  let viewport = Viewport::new((100, 100));
+
+  for classes in ["m-4 mx-2 ms-1", "ms-1 mx-2 m-4", "mx-2 ms-1 m-4"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.margin_top,
+      Length::from_spacing(4.0),
+      "{classes}"
+    );
+    assert_eq!(
+      style.box_data.margin_right,
+      Length::from_spacing(2.0),
+      "{classes}"
+    );
+    assert_eq!(
+      style.box_data.margin_left,
+      Length::from_spacing(1.0),
+      "{classes}"
+    );
+  }
+
+  for classes in ["px-4 pe-1", "pe-1 px-4"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.padding_right,
+      Length::from_spacing(1.0),
+      "{classes}"
+    );
+  }
+}
+
 /// Tailwind registers `odd:` after `first:`, so `odd:` wins whatever the class order.
 #[test]
 fn structural_variants_cascade_as_tailwind_registers_them() {

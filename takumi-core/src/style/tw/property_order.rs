@@ -4,6 +4,9 @@
 use std::sync::LazyLock;
 
 use rustc_hash::FxHashMap;
+use smallvec::SmallVec;
+
+use crate::style::{LonghandId, PropertyId, PropertyMask};
 
 const PROPERTY_ORDER: [&str; 359] = [
   "container-type",
@@ -375,7 +378,60 @@ static INDEX: LazyLock<FxHashMap<&str, u16>> = LazyLock::new(|| {
     .collect()
 });
 
+/// The longhands of each listed property takumi knows, in Tailwind's order.
+static LONGHANDS: LazyLock<Box<[(u16, PropertyMask)]>> = LazyLock::new(|| {
+  PROPERTY_ORDER
+    .iter()
+    .enumerate()
+    .map(|(index, name)| {
+      (
+        index as u16,
+        PropertyId::from_kebab_case(name).target_longhands(),
+      )
+    })
+    .filter(|(_, longhands)| !longhands.is_empty())
+    .collect()
+});
+
+/// The positions in `LONGHANDS` of the properties covering each longhand, ascending.
+static COVERING: LazyLock<Box<[SmallVec<[u16; 4]>]>> = LazyLock::new(|| {
+  let mut covering = vec![SmallVec::new(); LonghandId::COUNT];
+
+  for (position, (_, longhands)) in LONGHANDS.iter().enumerate() {
+    for longhand in longhands.iter() {
+      covering[longhand.index()].push(position as u16);
+    }
+  }
+
+  covering.into_boxed_slice()
+});
+
 /// Where `name` sorts among the properties Tailwind orders, or `None` for one it does not list.
 pub(super) fn property_index(name: &str) -> Option<u16> {
   INDEX.get(name).copied()
+}
+
+/// Where the properties that write `longhands` sort, reading each run of longhands back as the
+/// earliest listed property covering it, so `margin-inline` stands for the two longhands takumi
+/// expands it to.
+pub(super) fn property_indices(mut longhands: PropertyMask) -> impl Iterator<Item = u16> {
+  let mut positions: SmallVec<[u16; 8]> = longhands
+    .iter()
+    .flat_map(|longhand| COVERING[longhand.index()].iter().copied())
+    .collect();
+
+  positions.sort_unstable();
+  positions.dedup();
+
+  positions.into_iter().filter_map(move |position| {
+    let (index, covered) = &LONGHANDS[usize::from(position)];
+
+    if !longhands.contains_all(covered) {
+      return None;
+    }
+
+    longhands.difference(covered);
+
+    Some(*index)
+  })
 }

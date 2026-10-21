@@ -11,20 +11,21 @@ use xxhash_rust::xxh3::xxh3_64;
 use super::{
   Breakpoint, BreakpointOverrides,
   builder::TailwindDeclarationBuilder,
-  property_order::property_index,
+  property_order::{property_index, property_indices},
   utility,
   variant::{VariantOrder, Variants},
 };
 use crate::{
   style::{
-    ContentItem, ContentValue, StyleDeclaration, StyleDeclarationBlock,
+    ContentItem, ContentValue, PropertyMask, StyleDeclaration, StyleDeclarationBlock,
     selector::{PseudoElement, SelectorImpl},
   },
   viewport::Viewport,
 };
 
 /// Tailwind's sort key for a utility: its variants, the properties it sets in Tailwind's order,
-/// the one setting more properties first, then its name.
+/// the one setting more properties first, then its name. Approximate: it ignores the `--tw-sort`
+/// declaration that makes Tailwind sort `size-*` as `size` and a gradient stop as its variable.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct TwOrder {
   variants: VariantOrder,
@@ -38,21 +39,16 @@ pub(crate) struct TwOrder {
 impl TwOrder {
   fn new(name: &str, declarations: &StyleDeclarationBlock, variants: VariantOrder) -> Self {
     let mut properties = SmallVec::<[u16; 4]>::new();
+    let mut longhands = PropertyMask::default();
 
     for declaration in declarations.iter() {
-      if matches!(declaration, StyleDeclaration::CustomProperty(..)) {
-        continue;
+      match declaration {
+        StyleDeclaration::CustomProperty(name, _) => properties.extend(property_index(name)),
+        _ => longhands.union(&declaration.affected_longhands()),
       }
-
-      let longhands = declaration.affected_longhands();
-
-      properties.extend(
-        longhands
-          .iter()
-          .filter_map(|longhand| property_index(longhand.css_name())),
-      );
     }
 
+    properties.extend(property_indices(longhands));
     properties.sort_unstable();
     properties.dedup();
     properties.push(u16::MAX);
