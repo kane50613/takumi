@@ -3,7 +3,10 @@
 
 use std::rc::Rc;
 
-use crate::resvg::usvg::{ApproxEqUlps, ApproxZeroUlps};
+use crate::{
+  blur::blur_rgba,
+  resvg::usvg::{ApproxEqUlps, ApproxZeroUlps},
+};
 use tiny_skia::IntRect;
 
 /// A non-premultiplied RGBA pixel, layout-compatible with pixmap bytes.
@@ -650,11 +653,7 @@ fn apply_drop_shadow(
   if let Some((std_dx, std_dy, use_box_blur)) =
     resolve_std_dev(fe.std_dev_x().get(), fe.std_dev_y().get(), ts)
   {
-    if use_box_blur {
-      box_blur::apply(std_dx, std_dy, shadow_pixmap.as_image_ref_mut());
-    } else {
-      iir_blur::apply(std_dx, std_dy, shadow_pixmap.as_image_ref_mut());
-    }
+    gaussian_blur(&mut shadow_pixmap, std_dx, std_dy, use_box_blur);
   }
 
   // flood
@@ -711,13 +710,27 @@ fn apply_blur(
 
   let mut pixmap = input.into_color_space(cs)?.take()?;
 
-  if use_box_blur {
+  gaussian_blur(&mut pixmap, std_dx, std_dy, use_box_blur);
+  Ok(Image::from_image(pixmap, cs))
+}
+
+/// Blurs `pixmap` by `std_dx` and `std_dy`. An even blur large enough for a box approximation goes
+/// through takumi's three-box blur, which CSS `blur()` shares; resvg's own blurs take the rest.
+fn gaussian_blur(pixmap: &mut tiny_skia::Pixmap, std_dx: f64, std_dy: f64, use_box_blur: bool) {
+  if use_box_blur && std_dx == std_dy {
+    let (width, height) = (pixmap.width() as usize, pixmap.height() as usize);
+
+    blur_rgba(
+      bytemuck::cast_slice_mut(pixmap.data_mut()),
+      width,
+      height,
+      std_dx as f32,
+    );
+  } else if use_box_blur {
     box_blur::apply(std_dx, std_dy, pixmap.as_image_ref_mut());
   } else {
     iir_blur::apply(std_dx, std_dy, pixmap.as_image_ref_mut());
   }
-
-  Ok(Image::from_image(pixmap, cs))
 }
 
 fn apply_offset(
