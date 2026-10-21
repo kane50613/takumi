@@ -1,7 +1,6 @@
 // Copyright 2022 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::iter::once;
 use std::mem;
 use std::sync::Arc;
 
@@ -113,15 +112,14 @@ impl TextPaths {
     cache: &Cache,
   ) -> Option<()> {
     let font = glyph.font.typeface.font_ref()?;
-    let glyphs = cache
+    let resolved = cache
       .fonts
-      .resolve_glyphs(glyph.font.face(), font, once(glyph.id.0));
+      .resolve_glyph(glyph.font.face(), font, glyph.id.0)?;
     let transform = glyph.transform();
-    let resolved = glyphs.get(&glyph.id.0)?;
     let ResolvedGlyph::Outline(outline) = resolved.as_ref() else {
       self.flush(span, builder);
 
-      return self.push_bitmap(span, resolved, transform);
+      return self.push_bitmap(span, &resolved, transform);
     };
     let path = PathCommand::build_path(outline.paths())?.transform(transform)?;
     let layers = span.color_layer_fills(outline, glyph);

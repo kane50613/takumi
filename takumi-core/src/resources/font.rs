@@ -25,7 +25,10 @@ use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 #[cfg(feature = "svg")]
-use crate::fonts::font_baseline::FontBaseline;
+use std::iter::once;
+
+#[cfg(feature = "svg")]
+use crate::{fonts::font_baseline::FontBaseline, resources::glyph::ResolvedGlyph};
 use crate::{
   fonts::{
     css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
@@ -407,12 +410,27 @@ impl Fonts {
     })
   }
 
-  pub(crate) fn resolve_glyphs(
+  #[cfg(feature = "svg")]
+  pub(crate) fn resolve_glyph(
     &self,
     face: RunFace<'_>,
     font_ref: FontRef,
-    glyph_ids: impl Iterator<Item = u32> + Clone,
-  ) -> ResolvedGlyphs {
+    glyph_id: u32,
+  ) -> Option<Arc<ResolvedGlyph>> {
+    let mut resolved = ResolvedGlyphs::default();
+
+    self.resolve_glyphs_into(&mut resolved, face, font_ref, once(glyph_id));
+    resolved.remove(&glyph_id)
+  }
+
+  /// Adds the glyphs among `glyph_ids` that `resolved` lacks, drawn in `face`.
+  pub(crate) fn resolve_glyphs_into(
+    &self,
+    resolved: &mut ResolvedGlyphs,
+    face: RunFace<'_>,
+    font_ref: FontRef,
+    glyph_ids: impl Iterator<Item = u32>,
+  ) {
     let RunFace {
       font_id,
       font_index,
@@ -443,18 +461,14 @@ impl Fonts {
       embolden,
       skew,
     );
-    let mut result =
-      ResolvedGlyphs::with_capacity_and_hasher(glyph_ids.size_hint().0, Default::default());
     for glyph_id in glyph_ids {
-      if let Entry::Vacant(slot) = result.entry(glyph_id) {
+      if let Entry::Vacant(slot) = resolved.entry(glyph_id) {
         let key = resolved_glyph_cache_key(key_prefix, glyph_id);
         if let Some(glyph) = resolved_glyph(key, || resolver().resolve_glyph(glyph_id)) {
           slot.insert(glyph);
         }
       }
     }
-
-    result
   }
 
   /// Registers a font, decoding it and skipping faces already registered under the same family
