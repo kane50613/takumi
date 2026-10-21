@@ -3,7 +3,6 @@
 
 use std::{
   cell::{Cell, OnceCell, RefCell},
-  collections::HashMap,
   fmt::{self, Debug, Formatter},
   ops::Range,
   ptr,
@@ -164,7 +163,7 @@ impl<'c> InlineNodeData<'c> {
 /// The font of each style the context shapes with: Blink's `ComputedStyle::GetFont`.
 #[derive(Default)]
 pub(crate) struct StyleFonts {
-  fonts: RefCell<HashMap<*const RenderContext, Rc<Font>>>,
+  fonts: RefCell<FxHashMap<*const RenderContext, Rc<Font>>>,
 }
 
 impl StyleFonts {

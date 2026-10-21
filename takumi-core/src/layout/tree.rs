@@ -1,7 +1,7 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{HashMap, HashSet, VecDeque},
+  collections::{HashSet, VecDeque},
   iter::Copied,
   mem::{replace, take},
   ptr,
@@ -84,15 +84,15 @@ impl OrderedChild {
 /// against its containing block instead of its box-tree parent. A placement is what a child
 /// starts from: a device transform, or one with the paint offset beside it.
 pub(crate) struct ContainingBlocks<P = Affine> {
-  placements: HashMap<NodeId, P>,
-  content_boxes: HashMap<NodeId, Size<Option<f32>>>,
+  placements: FxHashMap<NodeId, P>,
+  content_boxes: FxHashMap<NodeId, Size<Option<f32>>>,
 }
 
 impl<P> Default for ContainingBlocks<P> {
   fn default() -> Self {
     Self {
-      placements: HashMap::new(),
-      content_boxes: HashMap::new(),
+      placements: FxHashMap::default(),
+      content_boxes: FxHashMap::default(),
     }
   }
 }
@@ -273,7 +273,7 @@ pub struct LayoutTree<'r> {
   /// Each inline formatting context's lines measured per width they lay out at, which a measure
   /// with a known width and one offered the same available width share. Only boxes inside see the
   /// available height, so text alone is keyed on the width.
-  inline_measures: RefCell<HashMap<InlineMeasureKey, InlineMeasurement>>,
+  inline_measures: RefCell<FxHashMap<InlineMeasureKey, InlineMeasurement>>,
   /// Each inline formatting context's prepared items, which every pass of one layout shares, as
   /// Blink keeps them until `NeedsCollectInlines`.
   inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
@@ -821,7 +821,7 @@ impl<'r> LayoutTree<'r> {
       inline_containing_blocks,
       ..
     } = self;
-    let mut proxy_boxes: HashMap<TaffyNodeId, Vec<TaffyNodeId>> = HashMap::new();
+    let mut proxy_boxes: FxHashMap<TaffyNodeId, Vec<TaffyNodeId>> = FxHashMap::default();
     let mut recent_styles = RecentStyles::default();
 
     let root = push_node_state(
@@ -1003,7 +1003,7 @@ impl<'r> LayoutTree<'r> {
       x: layout.border.left + layout.padding.left,
       y: layout.border.top + layout.padding.top,
     };
-    let positions: HashMap<TaffyNodeId, StaticPosition> = boxes
+    let positions: FxHashMap<TaffyNodeId, StaticPosition> = boxes
       .iter()
       .zip(positions)
       .map(|(&node, position)| {
@@ -1043,7 +1043,7 @@ impl<'r> LayoutTree<'r> {
     &mut self,
     proxy: TaffyNodeId,
     padding_box: PaddingBox,
-    positions: &HashMap<TaffyNodeId, StaticPosition>,
+    positions: &FxHashMap<TaffyNodeId, StaticPosition>,
   ) {
     let PaddingBox { origin, size } = padding_box;
     let candidates: Vec<OofCandidate> = self.nodes[usize::from(proxy)]
@@ -1250,7 +1250,7 @@ impl<'r> LayoutTree<'r> {
 
     // A box another node than its box-tree parent positioned resolves against that containing
     // block. Inline containing blocks are left out: their boxes now sit in their parent's space.
-    let mut containing_blocks: HashMap<TaffyNodeId, TaffyNodeId> = HashMap::new();
+    let mut containing_blocks: FxHashMap<TaffyNodeId, TaffyNodeId> = FxHashMap::default();
     let proxies: HashSet<TaffyNodeId> = self.inline_containing_blocks.iter().copied().collect();
 
     for (index, node) in self.nodes.iter().enumerate() {
