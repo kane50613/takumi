@@ -261,3 +261,38 @@ fn tw_structural_and_pseudo_element_variants_combine() {
 
   assert_eq!(run_texts(&measure_with_css(root, "")), ["→ ", "one", "two"]);
 }
+
+/// Tailwind opens `before:` with an empty `content`, so a utility alone makes the box.
+#[test]
+fn tw_before_without_content_generates_an_empty_box() {
+  let root = Node::container([])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+    .with_tw(
+      "before:block before:w-[10px] before:h-[10px]"
+        .parse()
+        .unwrap(),
+    );
+  let measured = measure_with_css(root, "");
+
+  assert_eq!(measured.children.len(), 1);
+  assert_eq!(
+    (measured.children[0].width, measured.children[0].height),
+    (10.0, 10.0)
+  );
+}
+
+#[test]
+fn tw_pseudo_elements_skip_replaced_elements() {
+  let png_signature: &[u8] = &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  let root = Node::image(png_signature.to_vec())
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Px(50.0)))
+        .with(StyleDeclaration::height(Px(50.0))),
+    )
+    .with_tw("before:content-['x'] after:block".parse().unwrap());
+  let measured = measure_with_css(root, "");
+
+  assert!(run_texts(&measured).is_empty());
+  assert!(measured.children.is_empty());
+}

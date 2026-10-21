@@ -329,6 +329,7 @@ impl TailwindValues {
   ) -> StyleDeclarationBlock {
     let mut builder = TailwindDeclarationBuilder::with_capacity(self.inner.len());
     let mut condition_index = 0;
+    let mut generates = false;
 
     for value in self.inner.iter().cloned() {
       if value.condition.is_some() {
@@ -339,8 +340,18 @@ impl TailwindValues {
         }
       }
 
-      if value.target != matches.target {
+      if value.target != matches.target || !value.is_active(viewport, breakpoints) {
         continue;
+      }
+
+      // Tailwind's `before:` and `after:` open each rule with `content: var(--tw-content)`, which
+      // `@property` starts as the empty string, so the box exists without a `content-*` utility.
+      if matches.target != TwTarget::Element && !generates {
+        generates = true;
+        TailwindProperty::GeneratedContent(ContentValue::Items(
+          [ContentItem::Text("".into())].into(),
+        ))
+        .apply(&mut builder, false);
       }
 
       value.apply(&mut builder, viewport, breakpoints);

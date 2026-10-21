@@ -3141,7 +3141,10 @@ impl PendingRenderNode {
     let marker_ordinal =
       (context.style.base_data.display == Display::ListItem).then(|| counter.take(&node));
     let pseudo = |target, view: Option<&MatchedDeclarationsView<'_>>| {
-      let tw = tw.as_ref().filter(|tw| tw.styles(target));
+      // A replaced element generates no `::before` or `::after`, as its matched rules say too.
+      let tw = tw
+        .as_ref()
+        .filter(|tw| !node.is_replaced_element() && tw.styles(target));
 
       if view.is_none() && tw.is_none() {
         return None;
