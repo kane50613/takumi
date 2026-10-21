@@ -506,7 +506,8 @@ impl<'c> InlineNode<'c> {
 }
 
 /// Blink's `IsNGShapeCacheAllowed`: whether `data` is only text, or text in one span, in one font
-/// with no spacing. Every font's features apply to the whole text, so they are always simple.
+/// with no spacing. Without Blink's `HasSimpleFontFeatures` check, which every font here passes:
+/// `FontFeature::into_harfrust` gives each feature the whole text.
 fn is_shape_cache_allowed(data: &InlineNodeData<'_>, spacing: &mut ShapeResultSpacing) -> bool {
   if data.text_content.is_empty() {
     return false;
