@@ -54,7 +54,7 @@ use crate::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
     Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
-    StyleSheet, TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
+    StyleSheet, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -605,9 +605,8 @@ enum InlineBaselineSource {
   LayoutFirstBaseline,
 }
 
-/// An element's own important declarations by cascade tier.
+/// An element's own important declarations.
 struct ElementImportant {
-  tw: Option<Rc<TwBlocks>>,
   inline: Option<StyleDeclarationBlock>,
 }
 
@@ -3360,17 +3359,6 @@ impl RenderContext {
   ) -> (NodeStyle, ElementImportant) {
     let mut style = NodeStyle::default();
 
-    // `tw` is the last declared layer, below unlayered author rules, so its
-    // important half goes last: the cascade reverses layer order for important
-    // declarations.
-    let tw = node_layers.author_tw.map(|author_tw| {
-      author_tw.declaration_blocks(
-        self.sizing.viewport,
-        &self.stylesheet().breakpoints,
-        self.tw_cache(),
-      )
-    });
-
     if let Some(preset) = node_layers.preset {
       style.append_block(preset.declarations);
     }
@@ -3379,17 +3367,11 @@ impl RenderContext {
       style.push(StyleDeclaration::direction(dir), false);
     }
 
-    for &declarations in matched_declarations.layered_normal() {
+    for declarations in matched_declarations.layered_normal() {
       style.merge_matched_block(declarations);
     }
 
-    // `tw` is the last declared layer, as Tailwind orders utilities: above every
-    // named `@layer`, below unlayered author rules.
-    if let Some(tw) = &tw {
-      style.append_block_cloned(&tw.normal);
-    }
-
-    for &declarations in matched_declarations.unlayered_normal() {
+    for declarations in matched_declarations.unlayered_normal() {
       style.merge_matched_block(declarations);
     }
 
@@ -3404,17 +3386,12 @@ impl RenderContext {
       style.append_block(inline_normal);
     }
 
-    // Important declarations reverse layer order, so `tw`, the last declared
-    // layer, sits above unlayered rules and below every named `@layer`.
-    for &declarations in matched_declarations.unlayered_important() {
+    // Important declarations reverse layer order.
+    for declarations in matched_declarations.unlayered_important() {
       style.merge_matched_block(declarations);
     }
 
-    if let Some(tw) = &tw {
-      style.append_block_cloned(&tw.important);
-    }
-
-    for &declarations in matched_declarations.layered_important() {
+    for declarations in matched_declarations.layered_important() {
       style.merge_matched_block(declarations);
     }
 
@@ -3425,7 +3402,6 @@ impl RenderContext {
     (
       style,
       ElementImportant {
-        tw,
         inline: inline_important,
       },
     )
@@ -3559,12 +3535,6 @@ impl RenderContext {
       .unlayered_important()
       .iter()
       .map(|declarations| declarations.iter())
-      .chain(
-        element_important
-          .tw
-          .iter()
-          .map(|blocks| blocks.important.iter()),
-      )
       .chain(
         matched
           .layered_important()

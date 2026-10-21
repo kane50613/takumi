@@ -76,31 +76,17 @@ impl TailwindDeclarationBuilder {
     self.push_deferred(longhand, chain.to_owned(), important);
   }
 
+  /// The block, with a border width that sets no style drawing in `--tw-border-style`, `solid`
+  /// until a style utility sets it, as Tailwind's border width utilities do.
   pub(super) fn finish(mut self) -> StyleDeclarationBlock {
-    type BorderSide = (LonghandId, LonghandId, fn(BorderStyle) -> StyleDeclaration);
-    let sides: [BorderSide; 4] = [
-      (
-        LonghandId::BorderTopWidth,
-        LonghandId::BorderTopStyle,
-        StyleDeclaration::border_top_style,
-      ),
-      (
-        LonghandId::BorderRightWidth,
-        LonghandId::BorderRightStyle,
-        StyleDeclaration::border_right_style,
-      ),
-      (
-        LonghandId::BorderBottomWidth,
-        LonghandId::BorderBottomStyle,
-        StyleDeclaration::border_bottom_style,
-      ),
-      (
-        LonghandId::BorderLeftWidth,
-        LonghandId::BorderLeftStyle,
-        StyleDeclaration::border_left_style,
-      ),
+    let sides = [
+      (LonghandId::BorderTopWidth, LonghandId::BorderTopStyle),
+      (LonghandId::BorderRightWidth, LonghandId::BorderRightStyle),
+      (LonghandId::BorderBottomWidth, LonghandId::BorderBottomStyle),
+      (LonghandId::BorderLeftWidth, LonghandId::BorderLeftStyle),
     ];
-    for (width_id, style_id, style_decl) in sides {
+
+    for (width_id, style_id) in sides {
       let sets = |longhand| {
         self
           .declarations
@@ -109,9 +95,7 @@ impl TailwindDeclarationBuilder {
       };
 
       if sets(width_id) && !sets(style_id) {
-        self
-          .declarations
-          .push(style_decl(BorderStyle::Solid), false);
+        self.push_deferred(style_id, "var(--tw-border-style, solid)".to_owned(), false);
       }
     }
 

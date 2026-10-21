@@ -30,8 +30,8 @@ fn parse_value(token: &str) -> Option<(Vec<StyleDeclaration>, Option<Breakpoint>
 
   Some((
     builtin_declarations(value.property),
-    value.breakpoint,
-    value.important,
+    value.rule.breakpoint.clone(),
+    value.rule.important,
   ))
 }
 
@@ -541,21 +541,25 @@ fn test_value_parsing() {
   );
 }
 
+/// The cascade applies the normal rules, then the `!important` ones, each with its breakpoint
+/// variant after the plain utility, as Tailwind sorts them.
 #[test]
 fn test_values_sorting() {
   let values = TailwindValues::from_str("md:!mt-4 sm:mt-8 !mt-12 mt-16")
     .expect("tailwind values should parse");
+  let order = cascade_order(values.inner.iter().map(|value| &*value.rule))
+    .into_iter()
+    .map(|rule| {
+      let declarations = rule
+        .declarations
+        .iter()
+        .map(|declaration| match declaration {
+          StyleDeclaration::VarRef(var_ref) => *var_ref.fallback.clone().unwrap(),
+          declaration => declaration.clone(),
+        })
+        .collect::<Vec<_>>();
 
-  let order = values
-    .inner
-    .iter()
-    .map(|value| {
-      let declarations = match &value.property {
-        TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
-        property => expand(property.clone()),
-      };
-
-      (declarations, value.breakpoint.clone(), value.important)
+      (declarations, rule.breakpoint.clone(), rule.important)
     })
     .collect::<Vec<_>>();
 
@@ -878,18 +882,23 @@ fn test_logical_resolves_to_physical_ltr() {
   assert_eq!(style.box_data.padding_right, Length::from_spacing(1.0));
 }
 
+/// Tailwind sorts `margin-inline-start` before `margin-left`, so `ml-*` wins whatever the class
+/// order.
 #[test]
 fn test_logical_physical_cascade_order_ltr() {
   let viewport = Viewport::new((100, 100));
-  let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
-  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
-    .inherit(&ComputedStyle::default());
-  assert_eq!(style.box_data.margin_left, Length::from_spacing(4.0));
 
-  let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
-  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
-    .inherit(&ComputedStyle::default());
-  assert_eq!(style.box_data.margin_left, Length::from_spacing(2.0));
+  for classes in ["ms-2 ml-4", "ml-4 ms-2"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.margin_left,
+      Length::from_spacing(4.0),
+      "{classes}"
+    );
+  }
 }
 
 #[test]
@@ -1785,93 +1794,52 @@ fn test_class_list_parsing_shares_storage() {
 }
 
 #[test]
-fn test_expansion_cache_keeps_class_lists_distinct() {
-  let first = TailwindValues::parse("w-1");
-  let second = TailwindValues::parse("w-2");
-  let viewport = Viewport::new((100, 100));
-  let breakpoints = BreakpointOverrides::default();
-  let cache = TwCache::default();
-  let first_blocks = first.declaration_blocks(viewport, &breakpoints, &cache);
-  let second_blocks = second.declaration_blocks(viewport, &breakpoints, &cache);
-
-  assert!(!Rc::ptr_eq(&first_blocks, &second_blocks));
-  assert_ne!(first_blocks.normal, second_blocks.normal);
-  assert!(Rc::ptr_eq(
-    &second_blocks,
-    &second.declaration_blocks(viewport, &breakpoints, &cache),
-  ));
-  assert_eq!(
-    first_blocks.normal,
-    first
-      .declaration_blocks(viewport, &breakpoints, &cache)
-      .normal,
-  );
-}
-
-#[test]
-fn test_expansion_cache_retains_its_key() {
-  let values = TailwindValues::parse("w-3");
-  let weak = Arc::downgrade(&values.inner);
-  let cache = TwCache::default();
-  values.declaration_blocks(Viewport::new((100, 100)), &Default::default(), &cache);
-  drop(values);
-  assert!(weak.upgrade().is_some());
-  drop(cache);
-  assert!(weak.upgrade().is_none());
-}
-
-#[test]
-fn test_expansion_cache_stops_retaining_unique_lists_when_full() {
-  let cache = TwCache::default();
-  let viewport = Viewport::new((100, 100));
-  let breakpoints = BreakpointOverrides::default();
-  let first = TailwindValues::parse("w-1");
-  let blocks = first.declaration_blocks(viewport, &breakpoints, &cache);
-  for _ in 1..EXPANSION_CACHE_MAX_ENTRIES {
-    TailwindValues::parse("w-1").declaration_blocks(viewport, &breakpoints, &cache);
-  }
-
-  let overflow = TailwindValues::parse("w-2");
-  let weak = Arc::downgrade(&overflow.inner);
-  let expanded = overflow.declaration_blocks(viewport, &breakpoints, &cache);
-  assert_eq!(cache.blocks.borrow().len(), EXPANSION_CACHE_MAX_ENTRIES);
-  assert_eq!(
-    expanded.normal,
-    overflow
-      .clone()
-      .into_declaration_block(viewport, &breakpoints)
-      .split_importance()
-      .0,
-  );
-  drop(overflow);
-  assert!(weak.upgrade().is_none());
-  assert!(Rc::ptr_eq(
-    &blocks,
-    &first.declaration_blocks(viewport, &breakpoints, &cache),
-  ));
-}
-
-#[test]
-fn test_expansion_cache_tracks_breakpoint_inputs() {
+fn test_breakpoints_follow_the_viewport_and_theme() {
   let values: TailwindValues = "w-1 sm:w-2".parse().unwrap();
   let viewport = Viewport::new((800, 100));
-  let cache = TwCache::default();
   let breakpoints = BreakpointOverrides::default();
-  let active = values.declaration_blocks(viewport, &breakpoints, &cache);
+  let active = values
+    .clone()
+    .into_declaration_block(viewport, &breakpoints);
 
   for inactive_viewport in [
     Viewport::new((400, 100)),
     viewport.with_font_size(32.0),
     viewport.with_device_pixel_ratio(2.0),
   ] {
-    let inactive = values.declaration_blocks(inactive_viewport, &breakpoints, &cache);
-    assert_ne!(active.normal, inactive.normal);
+    let inactive = values
+      .clone()
+      .into_declaration_block(inactive_viewport, &breakpoints);
+    assert_ne!(active, inactive);
   }
 
-  let themed = values.declaration_blocks(
+  let themed = values.into_declaration_block(
     viewport,
     &HashMap::from([("sm".to_owned(), Length::Px(900.0))]),
-    &TwCache::default(),
   );
-  assert_ne!(active.normal, themed.normal);
+  assert_ne!(active, themed);
+}
+
+/// A utility for one side sorts after one for every side, as Tailwind orders `padding-top` after
+/// `padding`, whatever the class order.
+#[test]
+fn a_side_utility_beats_an_every_side_one() {
+  let viewport = Viewport::new((100, 100));
+
+  for classes in ["pt-2 p-4", "p-4 pt-2"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.padding_top,
+      Length::from_spacing(2.0),
+      "{classes}"
+    );
+    assert_eq!(
+      style.box_data.padding_left,
+      Length::from_spacing(4.0),
+      "{classes}"
+    );
+  }
 }

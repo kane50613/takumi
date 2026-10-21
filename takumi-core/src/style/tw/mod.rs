@@ -5,13 +5,13 @@ mod map;
 mod namespace;
 /// Parsers for Tailwind utility-class suffixes.
 mod parser;
+mod property_order;
+mod rule;
 
 use std::{
   borrow::Cow,
-  cell::RefCell,
   collections::HashMap,
   convert::Infallible,
-  rc::Rc,
   str::FromStr,
   sync::{Arc, LazyLock},
 };
@@ -20,6 +20,7 @@ use builder::TailwindDeclarationBuilder;
 use cssparser::match_ignore_ascii_case;
 pub(crate) use namespace::Namespace;
 use quick_cache::{Weighter, sync::Cache};
+pub(crate) use rule::TwRule;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
 
@@ -58,19 +59,39 @@ fn blur_css(blur: &TwBlur) -> String {
 /// The list must arrive comment-free; the stylesheet tokenizer drops them.
 /// `None` when a token is unknown or carries a variant, which `@apply` rejects.
 pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
-  let mut builder = TailwindDeclarationBuilder::default();
+  let values = source
+    .split_whitespace()
+    .map(TailwindValue::parse)
+    .collect::<Option<Vec<_>>>()?;
 
-  for token in source.split_whitespace() {
-    let value = TailwindValue::parse(token)?;
-
-    if value.breakpoint.is_some() {
-      return None;
-    }
-
-    value.property.apply(&mut builder, value.important);
+  if values.iter().any(|value| value.rule.breakpoint.is_some()) {
+    return None;
   }
 
-  Some(builder.finish())
+  Some(cascaded_block(values.iter().map(|value| &*value.rule)))
+}
+
+/// `rules` in the order the cascade applies them: the normal ones, then the `!important` ones,
+/// each in Tailwind's sort.
+fn cascade_order<'r>(rules: impl IntoIterator<Item = &'r TwRule>) -> Vec<&'r TwRule> {
+  let mut rules: Vec<&TwRule> = rules.into_iter().collect();
+
+  rules.sort_by(|left, right| (left.important, &left.order).cmp(&(right.important, &right.order)));
+  rules
+}
+
+/// The declarations of `rules`, in the order the cascade applies them.
+fn cascaded_block<'r>(rules: impl IntoIterator<Item = &'r TwRule>) -> StyleDeclarationBlock {
+  let mut block = StyleDeclarationBlock::default();
+
+  for rule in cascade_order(rules) {
+    block.extend_element_state(rule.declarations.element_state.iter().map(Box::as_ref));
+    for declaration in rule.declarations.iter() {
+      block.push(declaration.clone(), rule.important);
+    }
+  }
+
+  block
 }
 
 /// `var(--shadow-md, <built-in layers>)`: the variable overrides the whole
@@ -160,22 +181,6 @@ fn text_shadow_css(shadow: &TextShadow) -> String {
   )
 }
 
-/// A class list's expansion, split at the importance boundary.
-pub(crate) struct TwBlocks {
-  pub(crate) normal: StyleDeclarationBlock,
-  pub(crate) important: StyleDeclarationBlock,
-}
-
-type TwCacheKey = (*const Vec<TailwindValue>, Option<u32>, u32, u32);
-
-const EXPANSION_CACHE_MAX_ENTRIES: usize = 2048;
-
-/// Expanded utilities for one render's immutable stylesheet.
-#[derive(Default)]
-pub(crate) struct TwCache {
-  blocks: RefCell<HashMap<TwCacheKey, (TailwindValues, Rc<TwBlocks>)>>,
-}
-
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone)]
 pub struct TailwindValues {
@@ -230,18 +235,19 @@ impl TailwindValues {
   }
 
   fn parse(source: &str) -> Self {
-    // Plain utilities first, then breakpoint ones, then the `!important` pair in the same
-    // order; within a group the source order stays, so a later utility wins.
-    let mut groups: [Vec<TailwindValue>; 4] = Default::default();
-    for value in source.split_whitespace().filter_map(TailwindValue::parse) {
-      let group = usize::from(value.important) * 2 + usize::from(value.breakpoint.is_some());
-      groups[group].push(value);
-    }
-    let collected = groups.into_iter().flatten().collect::<Vec<_>>();
-
     TailwindValues {
-      inner: Arc::new(collected),
+      inner: Arc::new(
+        source
+          .split_whitespace()
+          .filter_map(TailwindValue::parse)
+          .collect(),
+      ),
     }
+  }
+
+  /// The utilities, in the order they were written.
+  pub(crate) fn values(&self) -> &[TailwindValue] {
+    &self.inner
   }
 
   /// Collects resource URLs referenced by active Tailwind utilities for the given viewport.
@@ -258,53 +264,21 @@ impl TailwindValues {
       .into_iter()
   }
 
-  /// The blocks this class list expands to, resolved once per render.
-  pub(crate) fn declaration_blocks(
-    &self,
-    viewport: Viewport,
-    breakpoints: &BreakpointOverrides,
-    cache: &TwCache,
-  ) -> Rc<TwBlocks> {
-    let key = (
-      Arc::as_ptr(&self.inner),
-      viewport.size.width,
-      viewport.font_size.to_bits(),
-      viewport.effective_dpr().to_bits(),
-    );
-
-    if let Some((_, blocks)) = cache.blocks.borrow().get(&key) {
-      return blocks.clone();
-    }
-
-    let (normal, important) = self
-      .clone()
-      .into_declaration_block(viewport, breakpoints)
-      .split_importance();
-    let blocks = Rc::new(TwBlocks { normal, important });
-
-    let mut cache = cache.blocks.borrow_mut();
-    if cache.len() < EXPANSION_CACHE_MAX_ENTRIES {
-      // Retaining the parsed values prevents address reuse while the entry is cached.
-      cache.insert(key, (self.clone(), blocks.clone()));
-    }
-
-    blocks
-  }
-
-  /// Resolves all utilities for the viewport into a declaration block.
-  #[inline(never)]
+  /// The declarations of the utilities active at the viewport, in the order the cascade applies
+  /// them.
+  #[cfg(test)]
   pub(crate) fn into_declaration_block(
     self,
     viewport: Viewport,
     breakpoints: &BreakpointOverrides,
   ) -> StyleDeclarationBlock {
-    let mut builder = TailwindDeclarationBuilder::with_capacity(self.inner.len());
-
-    for value in self.inner.iter().cloned() {
-      value.apply(&mut builder, viewport, breakpoints);
-    }
-
-    builder.finish()
+    cascaded_block(
+      self
+        .inner
+        .iter()
+        .filter(|value| value.is_active(viewport, breakpoints))
+        .map(|value| &*value.rule),
+    )
   }
 }
 
@@ -324,10 +298,8 @@ impl<'de> Deserialize<'de> for TailwindValues {
 pub(crate) struct TailwindValue {
   /// The tailwind property.
   pub property: TailwindProperty,
-  /// The breakpoint.
-  pub breakpoint: Option<Breakpoint>,
-  /// Whether the value is important.
-  pub important: bool,
+  /// The rule the utility compiles to.
+  pub rule: Arc<TwRule>,
 }
 
 /// Splits a token at the first top-level variant `:`, mirroring Tailwind's
@@ -366,6 +338,7 @@ impl TailwindValue {
   /// Whether the utility's breakpoint, if any, admits the viewport.
   fn is_active(&self, viewport: Viewport, breakpoints: &BreakpointOverrides) -> bool {
     self
+      .rule
       .breakpoint
       .as_ref()
       .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
@@ -379,22 +352,9 @@ impl TailwindValue {
     self.property.resource_url()
   }
 
-  #[inline(never)]
-  fn apply(
-    self,
-    builder: &mut TailwindDeclarationBuilder,
-    viewport: Viewport,
-    breakpoints: &BreakpointOverrides,
-  ) {
-    if !self.is_active(viewport, breakpoints) {
-      return;
-    }
-
-    self.property.apply(builder, self.important);
-  }
-
   /// Parse a tailwind value from a token.
   pub fn parse(mut token: &str) -> Option<Self> {
+    let source = token;
     let mut important = false;
     let mut breakpoint = None;
 
@@ -416,11 +376,14 @@ impl TailwindValue {
       token = stripped;
     }
 
-    Some(TailwindValue {
-      property: TailwindProperty::parse(token)?,
-      breakpoint,
-      important,
-    })
+    let property = TailwindProperty::parse(token)?;
+    let mut builder = TailwindDeclarationBuilder::with_capacity(1);
+
+    property.clone().apply(&mut builder, false);
+
+    let rule = Arc::new(TwRule::new(source, builder.finish(), important, breakpoint));
+
+    Some(TailwindValue { property, rule })
   }
 }
 
@@ -1506,6 +1469,11 @@ impl TailwindProperty {
         );
       }
       TailwindProperty::BorderStyle(border_style) => {
+        builder.push_custom(
+          "--tw-border-style",
+          &border_style.to_css_string(),
+          important,
+        );
         push_decl!(
           builder,
           important,

@@ -20,7 +20,7 @@ use crate::{
     image::{ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss},
+  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule},
   viewport::Viewport,
 };
 
@@ -544,7 +544,6 @@ impl Node {
 
     NodeStyleLayers {
       preset,
-      author_tw: self.metadata.tw.take(),
       inline: self.metadata.style.take(),
       dir: self.metadata.dir.take(),
       lang: self.metadata.lang.take(),
@@ -668,8 +667,6 @@ impl Node {
 pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
   pub(crate) preset: Option<Box<Style>>,
-  /// Tailwind-derived author style for the element.
-  pub(crate) author_tw: Option<TailwindValues>,
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Box<Style>>,
   pub(crate) dir: Option<Direction>,
@@ -679,7 +676,7 @@ pub(crate) struct NodeStyleLayers {
 impl NodeStyleLayers {
   /// Whether nothing but the preset styles the element beyond its matched rules.
   pub(crate) fn is_preset_only(&self) -> bool {
-    self.author_tw.is_none() && self.inline.is_none() && self.dir.is_none() && self.lang.is_none()
+    self.inline.is_none() && self.dir.is_none() && self.lang.is_none()
   }
 }
 
@@ -698,6 +695,15 @@ impl Node {
   /// The element's `class` attribute, space-separated.
   pub fn class_name(&self) -> Option<&str> {
     self.metadata.class_name.as_deref()
+  }
+
+  /// The rules the element's `tw` utilities compile to, in the order they were written.
+  pub(crate) fn tw_rules(&self) -> impl Iterator<Item = &Arc<TwRule>> {
+    self
+      .metadata
+      .tw
+      .iter()
+      .flat_map(|tw| tw.values().iter().map(|value| &value.rule))
   }
 }
 
@@ -840,7 +846,7 @@ mod matching_tests {
 
   fn computed_style_from_matches(matches: &MatchedDeclarationsView<'_>) -> ComputedStyle {
     let mut style = Style::default();
-    for &declarations in matches
+    for declarations in matches
       .layered_normal()
       .iter()
       .chain(matches.unlayered_normal())
@@ -849,7 +855,7 @@ mod matching_tests {
         style.push(declaration.clone(), false);
       }
     }
-    for &declarations in matches.important() {
+    for declarations in matches.important() {
       for declaration in declarations.iter() {
         style.push(declaration.clone(), false);
       }

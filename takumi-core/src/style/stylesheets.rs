@@ -809,11 +809,6 @@ macro_rules! define_style {
           self.declarations.append(declarations);
         }
 
-        /// Appends a borrowed declaration block in source order, cloning it.
-        pub(crate) fn append_block_cloned(&mut self, declarations: &StyleDeclarationBlock) {
-          self.declarations.append_cloned(declarations);
-        }
-
         /// Merges a matched block declaration by declaration, which the cascade
         /// does to keep each one's own importance, and takes its element state.
         pub(crate) fn merge_matched_block(&mut self, declarations: &StyleDeclarationBlock) {
@@ -2367,16 +2362,6 @@ impl StyleDeclarationBlock {
     }
 
     (normal, important)
-  }
-
-  /// Appends a borrowed block's declarations and importance, cloning them.
-  pub(crate) fn append_cloned(&mut self, other: &Self) {
-    self.importance.extend_from(&other.importance);
-    self.extend_element_state(other.element_state.iter().map(Box::as_ref));
-    self
-      .important
-      .append(self.declarations.len(), &other.important);
-    self.declarations.extend(other.declarations.iter().cloned());
   }
 
   /// Appends another block's declarations and importance.
