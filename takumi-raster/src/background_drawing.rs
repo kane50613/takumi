@@ -466,26 +466,11 @@ impl TileRows<'_> {
     let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
 
     match self {
-      Self::Linear(t) => fill_gradient_row(*t, y, pixels),
-      Self::Radial(t) => fill_gradient_row(*t, y, pixels),
-      Self::Conic(t) => fill_gradient_row(*t, y, pixels),
+      Self::Linear(t) => t.fill_row(0, y, pixels),
+      Self::Radial(t) => t.fill_row(0, y, pixels),
+      Self::Conic(t) => t.fill_row(0, y, pixels),
       Self::Source(rows) => rows.fill(y, pixels),
     }
-  }
-}
-
-fn fill_gradient_row<T: GradientOverlayTile>(t: &T, y: u32, pixels: &mut [[u8; 4]]) {
-  let lut_len = t.lut_len();
-  let mut row_state = t.begin_row(0, y, lut_len);
-  let dither = t.dither_active();
-  for (x, chunk) in pixels.iter_mut().enumerate() {
-    let lut_idx = t.next_lut_index(&mut row_state);
-    let p = if dither {
-      t.sample_dithered_at(lut_idx, x as u32, y)
-    } else {
-      t.sample_at(lut_idx)
-    };
-    *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
   }
 }
 
