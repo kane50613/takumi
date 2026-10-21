@@ -17,7 +17,7 @@ use super::{
 };
 use crate::{
   style::{
-    BackgroundImage, ContentItem, ContentValue, StyleDeclaration, StyleDeclarationBlock,
+    ContentItem, ContentValue, StyleDeclaration, StyleDeclarationBlock,
     selector::{PseudoElement, SelectorImpl},
   },
   viewport::Viewport,
@@ -139,22 +139,5 @@ impl TwRule {
       .breakpoint
       .as_ref()
       .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
-  }
-
-  /// The URLs the rule's background and mask images load.
-  pub(super) fn image_urls(&self) -> impl Iterator<Item = &str> {
-    self
-      .declarations
-      .iter()
-      .filter_map(|declaration| match declaration {
-        StyleDeclaration::BackgroundImage(Some(images))
-        | StyleDeclaration::MaskImage(Some(images)) => Some(images.iter()),
-        _ => None,
-      })
-      .flatten()
-      .filter_map(|image| match image {
-        BackgroundImage::Url(url) => Some(url.as_ref()),
-        _ => None,
-      })
   }
 }
