@@ -3348,6 +3348,10 @@ impl RenderContext {
 
   /// This style as a child inherits it, with the stylesheet's registered custom properties.
   fn inherited_style(&self) -> Cow<'_, ComputedStyle> {
+    if self.stylesheet().property_rules().is_empty() {
+      return Cow::Borrowed(&self.style);
+    }
+
     let registrations = self.property_registrations(|viewport| {
       active_registrations(slice::from_ref(self.stylesheet().as_ref()), viewport)
     });
