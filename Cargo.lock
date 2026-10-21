@@ -1798,6 +1798,7 @@ dependencies = [
  "base64",
  "bumpalo",
  "crc32fast",
+ "criterion",
  "flate2",
  "float-cmp",
  "gif",

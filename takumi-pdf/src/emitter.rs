@@ -41,7 +41,7 @@ use takumi_core::{
 #[cfg(feature = "images")]
 use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
-use crate::paint::rasterized_image;
+use crate::paint::{RasterizedImages, rasterized_image};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
@@ -117,6 +117,8 @@ pub(crate) struct DocumentState<'a> {
   issues: RefCell<RenderIssues>,
   /// The document's default language.
   pub(crate) lang: Option<&'a str>,
+  #[cfg(feature = "images")]
+  images: RasterizedImages,
 }
 
 impl<'a> DocumentState<'a> {
@@ -129,6 +131,8 @@ impl<'a> DocumentState<'a> {
         failure: None,
       }),
       lang,
+      #[cfg(feature = "images")]
+      images: RasterizedImages::default(),
     }
   }
 
@@ -598,7 +602,13 @@ impl Emitter<'_> {
       };
       let Some(krilla_image) = self.drawable(
         url,
-        rasterized_image(&source, &node.context, size, self.color_filter.as_deref()),
+        self.document.images.get(
+          url,
+          &source,
+          &node.context,
+          size,
+          self.color_filter.as_deref(),
+        ),
       ) else {
         return;
       };
@@ -958,12 +968,21 @@ impl Emitter<'_> {
     let krilla_image = if vector.is_none() {
       let Some(image) = self.drawable(
         image_label(&image.src),
-        rasterized_image(
-          &source,
-          context,
-          placement.size,
-          self.color_filter.as_deref(),
-        ),
+        match &image.src {
+          ImageSourceInput::Url(src) => self.document.images.get(
+            src,
+            &source,
+            context,
+            placement.size,
+            self.color_filter.as_deref(),
+          ),
+          _ => rasterized_image(
+            &source,
+            context,
+            placement.size,
+            self.color_filter.as_deref(),
+          ),
+        },
       ) else {
         return;
       };
