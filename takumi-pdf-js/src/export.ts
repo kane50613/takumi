@@ -466,6 +466,9 @@ async function resolveSection(input: SectionInput) {
     ["node", "size", "landscape", "margin", "header", "footer"],
     "section field",
   );
+  if (!("node" in input)) {
+    throw new TypeError("section.node is required");
+  }
   const { node, header, footer, ...geometry } = input;
   const [main, top, bottom] = await Promise.all([
     resolveNode(node),

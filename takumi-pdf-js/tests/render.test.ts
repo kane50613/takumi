@@ -134,6 +134,18 @@ test("section geometry inherits document fields without accumulating orientation
   ).rejects.toThrow("unknown section field");
 });
 
+test("sections require a node field but accept empty document inputs", async () => {
+  await expect(
+    Reflect.apply(renderer.render, renderer, [doc, { sections: [{ landscape: true }] }]),
+  ).rejects.toThrow("section.node is required");
+
+  for (const node of [undefined, null, false, ""]) {
+    const pdf = await renderer.render(doc, { sections: [{ node }] });
+
+    expect(pageCount(pdf)).toBe(2);
+  }
+});
+
 test("section content and bands participate in lazy font collection", async () => {
   const own = new PdfRenderer();
   let loaded = false;
