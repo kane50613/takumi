@@ -111,19 +111,32 @@ impl<'c> Frame<'c> {
 
 /// The shape results a block's inline items took, which a later preparation of the same items
 /// takes instead of shaping again: an atomic inline is laid out at several available widths,
-/// each in a layout tree of its own.
+/// each in a layout tree of its own. Kept from the second preparation on, so a block prepared
+/// once allocates nothing.
 #[derive(Default)]
-pub(crate) struct ItemShapes(RefCell<Option<Rc<[(Option<Rc<ShapeResult>>, bool)]>>>);
+pub(crate) struct ItemShapes(RefCell<KeptShapes>);
+
+#[derive(Default)]
+enum KeptShapes {
+  #[default]
+  Unprepared,
+  PreparedOnce,
+  Kept(Rc<[(Option<Rc<ShapeResult>>, bool)]>),
+}
 
 impl ItemShapes {
   /// Gives `items` the shapes kept from items like them, reporting whether there were any.
   fn restore(&self, items: &mut [InlineItem<'_>]) -> bool {
     let kept = self.0.borrow();
-    let Some(shapes) = kept.as_deref().filter(|shapes| shapes.len() == items.len()) else {
+    let KeptShapes::Kept(shapes) = &*kept else {
       return false;
     };
 
-    for (item, (shape_result, unsafe_to_reuse)) in items.iter_mut().zip(shapes) {
+    if shapes.len() != items.len() {
+      return false;
+    }
+
+    for (item, (shape_result, unsafe_to_reuse)) in items.iter_mut().zip(shapes.iter()) {
       item.shape_result.clone_from(shape_result);
       item.is_unsafe_to_reuse_shape_result = *unsafe_to_reuse;
     }
@@ -131,19 +144,24 @@ impl ItemShapes {
     true
   }
 
-  /// Keeps the shapes `items` took.
+  /// Notes that `items` were shaped, keeping their shapes once they have been shaped before.
   fn keep(&self, items: &[InlineItem<'_>]) {
-    self.0.replace(Some(
-      items
-        .iter()
-        .map(|item| {
-          (
-            item.shape_result.clone(),
-            item.is_unsafe_to_reuse_shape_result,
-          )
-        })
-        .collect(),
-    ));
+    let mut kept = self.0.borrow_mut();
+
+    *kept = match *kept {
+      KeptShapes::Unprepared => KeptShapes::PreparedOnce,
+      _ => KeptShapes::Kept(
+        items
+          .iter()
+          .map(|item| {
+            (
+              item.shape_result.clone(),
+              item.is_unsafe_to_reuse_shape_result,
+            )
+          })
+          .collect(),
+      ),
+    };
   }
 
   /// Forgets the kept shapes, which no longer hold once the tree may have changed.
