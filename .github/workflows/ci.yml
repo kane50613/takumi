@@ -87,6 +87,9 @@ jobs:
       - name: Run Clippy without default features
         run: cargo clippy --locked -p takumi-core --all-targets --no-default-features -- -D warnings
 
+      - name: Run Clippy for PDF images without SVG
+        run: cargo clippy --locked -p takumi-pdf --all-targets --no-default-features --features images -- -D warnings
+
       - name: Test README.md is up to date
         run: |
           fail=0
