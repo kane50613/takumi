@@ -38,12 +38,12 @@ impl ImageData {
   }
 
   /// Pushes the element's `width` and `height` attributes into its preset style.
-  pub(super) fn push_size_preset(&self, preset: &mut Option<Style>) {
+  pub(super) fn push_size_preset(&self, preset: &mut Option<Box<Style>>) {
     if self.width.is_none() && self.height.is_none() {
       return;
     }
 
-    let preset = preset.get_or_insert_with(Style::default);
+    let preset = preset.get_or_insert_default();
 
     if let Some(width) = self.width {
       preset.push(StyleDeclaration::width(Length::Px(width)), false);

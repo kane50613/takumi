@@ -40,9 +40,9 @@ pub(crate) struct NodeMetadata {
   /// Additional element attributes for selector matching and serialization.
   pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
   /// Default style presets from HTML element type (lowest priority).
-  pub preset: Option<Style>,
+  pub preset: Option<Box<Style>>,
   /// The styling properties for this node.
-  pub style: Option<Style>,
+  pub style: Option<Box<Style>>,
   /// The tailwind properties for this node.
   pub tw: Option<TailwindValues>,
   /// The text direction for this node.
@@ -408,13 +408,13 @@ impl Node {
 
   /// Sets the preset style and returns the updated node.
   pub fn with_preset(mut self, preset: Style) -> Self {
-    self.metadata.preset = Some(preset);
+    self.metadata.preset = Some(Box::new(preset));
     self
   }
 
   /// Sets the inline style and returns the updated node.
   pub fn with_style(mut self, style: Style) -> Self {
-    self.metadata.style = Some(style);
+    self.metadata.style = Some(Box::new(style));
     self
   }
 
@@ -667,11 +667,11 @@ impl Node {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
-  pub(crate) preset: Option<Style>,
+  pub(crate) preset: Option<Box<Style>>,
   /// Tailwind-derived author style for the element.
   pub(crate) author_tw: Option<TailwindValues>,
   /// Inline style attached directly to the element.
-  pub(crate) inline: Option<Style>,
+  pub(crate) inline: Option<Box<Style>>,
   pub(crate) dir: Option<Direction>,
   pub(crate) lang: Option<Lang>,
 }
