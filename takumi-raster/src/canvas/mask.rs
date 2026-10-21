@@ -86,6 +86,16 @@ impl CanvasViewport {
       && bounds.top < self.bottom()
   }
 
+  /// Whether any pixel of `placement` lies in the viewport.
+  pub(crate) fn overlaps(self, placement: Placement) -> bool {
+    self.intersects(SceneBounds {
+      left: placement.left,
+      top: placement.top,
+      right: placement.right(),
+      bottom: placement.bottom(),
+    })
+  }
+
   /// The part of `bounds`, grown by `padding` on every side, inside the viewport.
   pub(crate) fn clamp_bounds(self, bounds: SceneBounds, padding: i32) -> Option<Placement> {
     Placement::from_bounds(

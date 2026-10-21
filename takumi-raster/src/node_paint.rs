@@ -550,6 +550,9 @@ impl<'c> CanvasDevice<'c> {
         }
       }
 
+      // The cached masks are uncropped, so one wholly outside would only widen the union.
+      coverages.retain(|(_, placement)| viewport.overlaps(*placement));
+
       if let Some(coverage) = union_alpha_masks(coverages) {
         self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
       }
