@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{FilterQuality, Pixmap, PixmapPaint};
@@ -114,15 +116,24 @@ fn draw_mask_with_cache(
     return;
   }
 
+  let (mask, placement) = cached_glyph_mask(glyph_signature, paths, transform, stroke);
+
+  canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+}
+
+/// The glyph cache's mask of `paths` drawn under `transform`, placed where the canvas draws it.
+pub(crate) fn cached_glyph_mask(
+  glyph_signature: u64,
+  paths: &[Command],
+  transform: Affine,
+  stroke: Option<Stroke>,
+) -> (Arc<Vec<u8>>, Placement) {
+  let bucket = GlyphBucket::of(transform);
   let (mask, placement) = glyph_mask(bucket.mask_key(glyph_signature, stroke), || {
     bucket.render_mask(paths, stroke)
   });
-  canvas.draw_mask(
-    &mask,
-    placement.translate(bucket.offset.0, bucket.offset.1),
-    color,
-    BlendMode::Normal,
-  );
+
+  (mask, placement.translate(bucket.offset.0, bucket.offset.1))
 }
 
 struct GlyphPaintCtx<'a, 'b> {

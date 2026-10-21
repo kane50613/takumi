@@ -1,4 +1,4 @@
-use std::{borrow::Cow, mem::take, sync::Arc};
+use std::{borrow::Cow, sync::Arc};
 
 use smallvec::SmallVec;
 
@@ -354,7 +354,9 @@ pub(crate) fn intersect_alpha_masks(
 
 /// `masks` drawn over one another, in the placement they span together, or `None` when none
 /// covers anything.
-pub(crate) fn union_alpha_masks(masks: Vec<(Vec<u8>, Placement)>) -> Option<(Vec<u8>, Placement)> {
+pub(crate) fn union_alpha_masks(
+  masks: Vec<(Arc<Vec<u8>>, Placement)>,
+) -> Option<(Vec<u8>, Placement)> {
   let mut masks: Vec<_> = masks
     .into_iter()
     .filter(|(mask, placement)| !mask.is_empty() && placement.width > 0 && placement.height > 0)
@@ -372,8 +374,10 @@ pub(crate) fn union_alpha_masks(masks: Vec<(Vec<u8>, Placement)>) -> Option<(Vec
       .unwrap_or(lhs)
     })?;
 
-  if let [only] = masks.as_mut_slice() {
-    return Some(take(only));
+  if masks.len() == 1 {
+    let (mask, placement) = masks.swap_remove(0);
+
+    return Some((Arc::unwrap_or_clone(mask), placement));
   }
 
   let mut union = vec![0u8; placement.width as usize * placement.height as usize];
