@@ -42,13 +42,6 @@ impl GridPlacement {
     Self::Span(GridPlacementSpan::Span(span))
   }
 
-  pub(crate) fn try_negative(self) -> Option<GridPlacement> {
-    match self {
-      GridPlacement::Line(n) => n.checked_neg().map(GridPlacement::Line),
-      _ => None,
-    }
-  }
-
   pub(crate) fn into_taffy(self) -> taffy::GridPlacement {
     match self {
       GridPlacement::Auto | GridPlacement::Named(_) => taffy::GridPlacement::Auto,

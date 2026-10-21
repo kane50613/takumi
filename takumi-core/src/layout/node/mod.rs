@@ -699,11 +699,7 @@ impl Node {
 
   /// The rules the element's `tw` utilities compile to, in the order they were written.
   pub(crate) fn tw_rules(&self) -> impl Iterator<Item = &Arc<TwRule>> {
-    self
-      .metadata
-      .tw
-      .iter()
-      .flat_map(|tw| tw.values().iter().map(|value| &value.rule))
+    self.metadata.tw.iter().flat_map(|tw| tw.rules().iter())
   }
 }
 

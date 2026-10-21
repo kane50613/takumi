@@ -165,6 +165,19 @@ pub(super) struct Variants {
 }
 
 impl Variants {
+  /// The variants a token opens with and the utility after them, or `None` when a variant is
+  /// unknown or repeats a breakpoint or pseudo-element.
+  pub(super) fn parse(mut token: &str) -> Option<(Self, &str)> {
+    let mut variants = Self::default();
+
+    while let Some((variant, rest)) = split_variant(token) {
+      variants.push(Variant::parse(variant)?)?;
+      token = rest;
+    }
+
+    Some((variants, token))
+  }
+
   /// Adds `variant`, or `None` for a second breakpoint or pseudo-element.
   pub(super) fn push(&mut self, variant: Variant) -> Option<()> {
     match variant {
@@ -316,9 +329,41 @@ fn condition(pseudo_classes: &str) -> Option<Selector<SelectorImpl>> {
     .then(|| selector.clone())
 }
 
+/// Splits a token at the first top-level variant `:`, mirroring Tailwind's
+/// `segment`: a `:` nested in brackets, quotes, or escaped by `\` is not a
+/// separator, so `url('https://…')` stays intact.
+fn split_variant(token: &str) -> Option<(&str, &str)> {
+  let bytes = token.as_bytes();
+  let mut stack: Vec<u8> = Vec::new();
+  let mut index = 0;
+  while index < bytes.len() {
+    match bytes[index] {
+      b'\\' => index += 1, // skip the escaped character
+      quote @ (b'\'' | b'"') => {
+        index += 1;
+        while index < bytes.len() && bytes[index] != quote {
+          index += if bytes[index] == b'\\' { 2 } else { 1 };
+        }
+      }
+      b'(' => stack.push(b')'),
+      b'[' => stack.push(b']'),
+      b'{' => stack.push(b'}'),
+      closing @ (b')' | b']' | b'}') => {
+        if stack.last() == Some(&closing) {
+          stack.pop();
+        }
+      }
+      b':' if stack.is_empty() => return Some((&token[..index], &token[index + 1..])),
+      _ => {}
+    }
+    index += 1;
+  }
+  None
+}
+
 #[cfg(test)]
 mod tests {
-  use super::{Variant, Variants, condition, pseudo_class};
+  use super::{Variant, Variants, condition, pseudo_class, split_variant};
   use crate::style::selector::PseudoElement;
 
   #[test]
@@ -401,5 +446,24 @@ mod tests {
     for pair in ordered.windows(2) {
       assert!(order(pair[0]) < order(pair[1]), "{pair:?}");
     }
+  }
+
+  #[test]
+  fn test_split_variant_ignores_colons_in_arbitrary_values() {
+    assert_eq!(split_variant("sm:mt-0"), Some(("sm", "mt-0")));
+    assert_eq!(split_variant("sm:hover:mt-0"), Some(("sm", "hover:mt-0")));
+    assert_eq!(split_variant("mt-0"), None);
+    assert_eq!(
+      split_variant("mask-[url('https://example.com/a.svg')]"),
+      None
+    );
+    assert_eq!(split_variant("grid-cols-[repeat(2,minmax(0,1fr))]"), None);
+    assert_eq!(split_variant("[mask:foo]"), None);
+    assert_eq!(
+      split_variant("md:mask-[url('https://example.com/a.svg')]"),
+      Some(("md", "mask-[url('https://example.com/a.svg')]"))
+    );
+    assert_eq!(split_variant(r#"content-['a:b]']"#), None);
+    assert_eq!(split_variant(r#"content-["a\":b"]"#), None);
   }
 }
