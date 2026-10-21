@@ -2264,23 +2264,38 @@ impl RenderNode {
     Self::text_item(context, text)
   }
 
-  fn pseudo_content_child(
+  /// The children `items` generate: an image each, and the text between them as one anonymous
+  /// text item, as Blink wraps adjacent generated text in one anonymous flex or grid item.
+  fn pseudo_content_children(
     originating_node: &Node,
     pseudo_context: &RenderContext,
-    item: ContentItem,
-  ) -> Option<Self> {
-    let text = match item {
-      ContentItem::Text(text) => text.as_ref().to_owned(),
-      ContentItem::Attr(attr) => originating_node
-        .attribute(&attr.name)
-        .map(str::to_owned)
-        .unwrap_or_else(|| attr.fallback.as_ref().to_owned()),
-      ContentItem::Image(image) => {
-        return Some(Self::anonymous_image_item(pseudo_context, *image));
+    items: Box<[ContentItem]>,
+  ) -> Box<[Self]> {
+    let mut children = Vec::with_capacity(items.len());
+    let mut text = String::new();
+    let flush = |text: &mut String, children: &mut Vec<Self>| {
+      if !text.is_empty() {
+        children.push(Self::anonymous_text_item(pseudo_context, take(text)));
       }
     };
 
-    (!text.is_empty()).then(|| Self::anonymous_text_item(pseudo_context, text))
+    for item in items {
+      match item {
+        ContentItem::Text(content) => text.push_str(&content),
+        ContentItem::Attr(attr) => text.push_str(
+          originating_node
+            .attribute(&attr.name)
+            .unwrap_or(&attr.fallback),
+        ),
+        ContentItem::Image(image) => {
+          flush(&mut text, &mut children);
+          children.push(Self::anonymous_image_item(pseudo_context, *image));
+        }
+      }
+    }
+
+    flush(&mut text, &mut children);
+    children.into_boxed_slice()
   }
 
   fn from_pseudo_match(
@@ -2294,11 +2309,6 @@ impl RenderNode {
       return None;
     }
 
-    // flex/grid add no semantics over a flat content list; downgrade per spec §8.
-    if style.base_data.display.should_blockify_children() {
-      style.base_data_mut().display = Display::Block;
-    }
-
     let items = match take(&mut style.misc1_data_mut().content) {
       ContentValue::Items(items) => items,
       _ => return None,
@@ -2307,13 +2317,17 @@ impl RenderNode {
     let mut pseudo_context =
       RenderContext::from_parent(parent_context, style, sizing, current_color);
 
-    let mut children: Box<[Self]> = items
-      .into_vec()
-      .into_iter()
-      .filter_map(|item| Self::pseudo_content_child(originating_node, &pseudo_context, item))
-      .collect();
+    let mut children = Self::pseudo_content_children(originating_node, &pseudo_context, items);
 
-    if Self::holds_table_parts(&pseudo_context) {
+    // A flex or grid pseudo-element lays its content out as items, as a table one fixes up its
+    // parts.
+    if Self::holds_table_parts(&pseudo_context)
+      || pseudo_context
+        .style
+        .base_data
+        .display
+        .should_blockify_children()
+    {
       children = Self::normalize_children(&mut pseudo_context, children, false);
     }
 

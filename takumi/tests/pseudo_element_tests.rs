@@ -150,7 +150,7 @@ fn display_none_on_pseudo_creates_no_box() {
 }
 
 #[test]
-fn display_flex_pseudo_downgrades_to_block() {
+fn display_flex_pseudo_lays_out_its_content_as_an_item() {
   let root = Node::container([Node::text("body".to_string())])
     .with_class_name("card")
     .with_style(
@@ -160,16 +160,18 @@ fn display_flex_pseudo_downgrades_to_block() {
     );
   let block = measure_with_css(
     root.clone(),
-    r#".card::before { content: "header"; display: block; }"#,
+    r#".card::before { content: "head" "er"; display: block; }"#,
   );
   let flex = measure_with_css(
     root,
-    r#".card::before { content: "header"; display: flex; }"#,
+    r#".card::before { content: "head" "er"; display: flex; justify-content: flex-end; }"#,
   );
-  assert_eq!(
-    flex.height, block.height,
-    "flex pseudo should match block; got flex={flex:?} block={block:?}"
-  );
+  let header = &flex.children[0];
+
+  assert_eq!(flex.height, block.height);
+  assert_eq!(header.children.len(), 1, "{header:?}");
+  assert_eq!(run_texts(&header.children[0]), ["header"]);
+  assert!(header.children[0].transform[4] > 100.0, "{header:?}");
 }
 
 #[test]
