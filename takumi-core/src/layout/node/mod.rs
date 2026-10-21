@@ -20,7 +20,7 @@ use crate::{
     image::{ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss},
+  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule},
   viewport::Viewport,
 };
 
@@ -695,6 +695,15 @@ impl Node {
   /// The element's `class` attribute, space-separated.
   pub fn class_name(&self) -> Option<&str> {
     self.metadata.class_name.as_deref()
+  }
+
+  /// The rules the element's `tw` utilities compile to, in the order they were written.
+  pub(crate) fn tw_rules(&self) -> impl Iterator<Item = &Arc<TwRule>> {
+    self
+      .metadata
+      .tw
+      .iter()
+      .flat_map(|tw| tw.values().iter().map(|value| &value.rule))
   }
 }
 

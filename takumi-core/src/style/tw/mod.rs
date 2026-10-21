@@ -59,19 +59,39 @@ fn blur_css(blur: &TwBlur) -> String {
 /// The list must arrive comment-free; the stylesheet tokenizer drops them.
 /// `None` when a token is unknown or carries a variant, which `@apply` rejects.
 pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
-  let mut builder = TailwindDeclarationBuilder::default();
+  let values = source
+    .split_whitespace()
+    .map(TailwindValue::parse)
+    .collect::<Option<Vec<_>>>()?;
 
-  for token in source.split_whitespace() {
-    let value = TailwindValue::parse(token)?;
-
-    if value.breakpoint.is_some() {
-      return None;
-    }
-
-    value.property.apply(&mut builder, value.important);
+  if values.iter().any(|value| value.rule.breakpoint.is_some()) {
+    return None;
   }
 
-  Some(builder.finish())
+  Some(cascaded_block(values.iter().map(|value| &*value.rule)))
+}
+
+/// `rules` in the order the cascade applies them: the normal ones, then the `!important` ones,
+/// each in Tailwind's sort.
+fn cascade_order<'r>(rules: impl IntoIterator<Item = &'r TwRule>) -> Vec<&'r TwRule> {
+  let mut rules: Vec<&TwRule> = rules.into_iter().collect();
+
+  rules.sort_by(|left, right| (left.important, &left.order).cmp(&(right.important, &right.order)));
+  rules
+}
+
+/// The declarations of `rules`, in the order the cascade applies them.
+fn cascaded_block<'r>(rules: impl IntoIterator<Item = &'r TwRule>) -> StyleDeclarationBlock {
+  let mut block = StyleDeclarationBlock::default();
+
+  for rule in cascade_order(rules) {
+    block.extend_element_state(rule.declarations.element_state.iter().map(Box::as_ref));
+    for declaration in rule.declarations.iter() {
+      block.push(declaration.clone(), rule.important);
+    }
+  }
+
+  block
 }
 
 /// `var(--shadow-md, <built-in layers>)`: the variable overrides the whole
@@ -215,17 +235,13 @@ impl TailwindValues {
   }
 
   fn parse(source: &str) -> Self {
-    // Plain utilities first, then breakpoint ones, then the `!important` pair in the same
-    // order; within a group the source order stays, so a later utility wins.
-    let mut groups: [Vec<TailwindValue>; 4] = Default::default();
-    for value in source.split_whitespace().filter_map(TailwindValue::parse) {
-      let group = usize::from(value.important) * 2 + usize::from(value.breakpoint.is_some());
-      groups[group].push(value);
-    }
-    let collected = groups.into_iter().flatten().collect::<Vec<_>>();
-
     TailwindValues {
-      inner: Arc::new(collected),
+      inner: Arc::new(
+        source
+          .split_whitespace()
+          .filter_map(TailwindValue::parse)
+          .collect(),
+      ),
     }
   }
 
@@ -248,33 +264,21 @@ impl TailwindValues {
       .into_iter()
   }
 
-  /// The declarations the utilities active at the viewport cascade in, as the rules they compile
-  /// to sort.
+  /// The declarations of the utilities active at the viewport, in the order the cascade applies
+  /// them.
   #[cfg(test)]
   pub(crate) fn into_declaration_block(
     self,
     viewport: Viewport,
     breakpoints: &BreakpointOverrides,
   ) -> StyleDeclarationBlock {
-    let mut rules: Vec<&TwRule> = self
-      .inner
-      .iter()
-      .filter(|value| value.is_active(viewport, breakpoints))
-      .map(|value| &*value.rule)
-      .collect();
-    let mut block = StyleDeclarationBlock::default();
-
-    rules
-      .sort_by(|left, right| (left.important, &left.order).cmp(&(right.important, &right.order)));
-
-    for rule in rules {
-      block.extend_element_state(rule.declarations.element_state.iter().map(Box::as_ref));
-      for declaration in rule.declarations.iter() {
-        block.push(declaration.clone(), rule.important);
-      }
-    }
-
-    block
+    cascaded_block(
+      self
+        .inner
+        .iter()
+        .filter(|value| value.is_active(viewport, breakpoints))
+        .map(|value| &*value.rule),
+    )
   }
 }
 
@@ -294,10 +298,6 @@ impl<'de> Deserialize<'de> for TailwindValues {
 pub(crate) struct TailwindValue {
   /// The tailwind property.
   pub property: TailwindProperty,
-  /// The breakpoint.
-  pub breakpoint: Option<Breakpoint>,
-  /// Whether the value is important.
-  pub important: bool,
   /// The rule the utility compiles to.
   pub rule: Arc<TwRule>,
 }
@@ -338,6 +338,7 @@ impl TailwindValue {
   /// Whether the utility's breakpoint, if any, admits the viewport.
   fn is_active(&self, viewport: Viewport, breakpoints: &BreakpointOverrides) -> bool {
     self
+      .rule
       .breakpoint
       .as_ref()
       .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
@@ -380,19 +381,9 @@ impl TailwindValue {
 
     property.clone().apply(&mut builder, false);
 
-    let rule = Arc::new(TwRule::new(
-      source,
-      builder.finish(),
-      important,
-      breakpoint.clone(),
-    ));
+    let rule = Arc::new(TwRule::new(source, builder.finish(), important, breakpoint));
 
-    Some(TailwindValue {
-      property,
-      breakpoint,
-      important,
-      rule,
-    })
+    Some(TailwindValue { property, rule })
   }
 }
 

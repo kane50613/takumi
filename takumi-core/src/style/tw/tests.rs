@@ -30,8 +30,8 @@ fn parse_value(token: &str) -> Option<(Vec<StyleDeclaration>, Option<Breakpoint>
 
   Some((
     builtin_declarations(value.property),
-    value.breakpoint,
-    value.important,
+    value.rule.breakpoint.clone(),
+    value.rule.important,
   ))
 }
 
@@ -541,21 +541,25 @@ fn test_value_parsing() {
   );
 }
 
+/// The cascade applies the normal rules, then the `!important` ones, each with its breakpoint
+/// variant after the plain utility, as Tailwind sorts them.
 #[test]
 fn test_values_sorting() {
   let values = TailwindValues::from_str("md:!mt-4 sm:mt-8 !mt-12 mt-16")
     .expect("tailwind values should parse");
+  let order = cascade_order(values.inner.iter().map(|value| &*value.rule))
+    .into_iter()
+    .map(|rule| {
+      let declarations = rule
+        .declarations
+        .iter()
+        .map(|declaration| match declaration {
+          StyleDeclaration::VarRef(var_ref) => *var_ref.fallback.clone().unwrap(),
+          declaration => declaration.clone(),
+        })
+        .collect::<Vec<_>>();
 
-  let order = values
-    .inner
-    .iter()
-    .map(|value| {
-      let declarations = match &value.property {
-        TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
-        property => expand(property.clone()),
-      };
-
-      (declarations, value.breakpoint.clone(), value.important)
+      (declarations, rule.breakpoint.clone(), rule.important)
     })
     .collect::<Vec<_>>();
 

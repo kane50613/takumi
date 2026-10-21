@@ -738,16 +738,7 @@ pub(crate) fn match_stylesheets_view<'a>(
       }
     }
 
-    let utilities = arena.nodes[i]
-      .node
-      .metadata
-      .tw
-      .iter()
-      .flat_map(|tw| tw.values());
-
-    for value in utilities {
-      let rule = &value.rule;
-
+    for rule in arena.nodes[i].node.tw_rules() {
       if rule
         .breakpoint
         .as_ref()
@@ -799,7 +790,7 @@ fn record_matches<'a>(
   if !rule.normal_declarations.is_empty() {
     bucket.push(MatchedRule {
       important: false,
-      layer_order: rule.layer_order.unwrap_or(layers),
+      layer_order: layer_order(rule.layer_order, false, layers),
       specificity,
       source_order,
       id: RuleId::Sheet(source_order),
@@ -809,12 +800,23 @@ fn record_matches<'a>(
   if !rule.important_declarations.is_empty() {
     bucket.push(MatchedRule {
       important: true,
-      layer_order: rule.layer_order.map_or(0, |order| layers - order),
+      layer_order: layer_order(rule.layer_order, true, layers),
       specificity,
       source_order,
       id: RuleId::Sheet(source_order),
       declarations: MatchedBlock::Sheet(&rule.important_declarations),
     });
+  }
+}
+
+/// Where a block of `layer`, or of no layer, sorts among `layers`: layers in declaration order
+/// and unlayered last, or for `!important` blocks the reverse.
+fn layer_order(layer: Option<usize>, important: bool, layers: usize) -> usize {
+  match (layer, important) {
+    (Some(layer), false) => layer,
+    (None, false) => layers,
+    (Some(layer), true) => layers - layer,
+    (None, true) => 0,
   }
 }
 
@@ -827,15 +829,10 @@ fn record_tw_match<'a>(
   bucket: &mut Vec<MatchedRule<'a>>,
 ) {
   const CLASS_SPECIFICITY: u32 = 1 << 10;
-  let tw_layer = layers - 1;
 
   bucket.push(MatchedRule {
     important: tw_rule.important,
-    layer_order: if tw_rule.important {
-      layers - tw_layer
-    } else {
-      tw_layer
-    },
+    layer_order: layer_order(Some(layers - 1), tw_rule.important, layers),
     specificity: CLASS_SPECIFICITY,
     source_order,
     id: RuleId::Tw(tw_rule.id),
@@ -901,14 +898,8 @@ fn tw_rule_order(arena: &StyleArena<'_>) -> FxHashMap<u64, usize> {
   let mut rules: FxHashMap<u64, &TwRule> = FxHashMap::default();
 
   for style_node in &arena.nodes {
-    for value in style_node
-      .node
-      .metadata
-      .tw
-      .iter()
-      .flat_map(|tw| tw.values())
-    {
-      rules.entry(value.rule.id).or_insert(&value.rule);
+    for rule in style_node.node.tw_rules() {
+      rules.entry(rule.id).or_insert(rule);
     }
   }
 
