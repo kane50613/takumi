@@ -23,6 +23,7 @@ pub use css_source::{
   SupportsRule,
 };
 pub use custom_properties::CustomProperties;
+pub(crate) use custom_properties::Registrations;
 pub(crate) use matched_style_cache::{MatchedStyleCache, MatchedStyleKey};
 pub(crate) use math::lerp;
 pub(crate) use properties::unexpected_token;

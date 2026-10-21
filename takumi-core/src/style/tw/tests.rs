@@ -1694,16 +1694,21 @@ fn test_gradient_state_does_not_inherit() {
 #[test]
 fn test_a_registered_gradient_name_starts_from_its_initial_value() {
   let mut parent = ComputedStyle::default();
-  parent
-    .custom_properties
-    .set("--tw-gradient-from-position".to_owned(), "25%".to_owned());
-  parent.custom_properties.register(PropertyRule {
+  let rule = PropertyRule {
     name: "--tw-gradient-from-position".to_owned(),
     syntax: "<length-percentage>".to_owned(),
     inherits: false,
     initial_value: Some("0%".to_owned()),
     media_queries: Vec::new(),
-  });
+  };
+
+  parent.custom_properties.register_in_scope(
+    &Arc::new(HashMap::from([(rule.name.clone(), rule)])),
+    &CustomProperties::default(),
+  );
+  parent
+    .custom_properties
+    .set("--tw-gradient-from-position".to_owned(), "25%".to_owned());
 
   let child = ComputedStyle::from_parent(&parent);
 

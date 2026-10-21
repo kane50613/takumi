@@ -83,6 +83,35 @@ fn bench_cascade(c: &mut Criterion) {
     })
   });
 
+  // Tailwind v4's output registers its `--tw-*` names with `@property` and resets them on every
+  // element.
+  let registrations: String = (0..30)
+    .map(|index| {
+      format!("@property --tw-p{index} {{ syntax: \"*\"; inherits: false; initial-value: 0; }}\n")
+    })
+    .collect();
+  let resets: String = (0..10)
+    .map(|index| format!("--tw-p{index}: {index};"))
+    .collect();
+  let properties = format!("{registrations}* {{ {resets} }}");
+  let property_rules = StyleSheet::parse(&properties).expect("valid stylesheet");
+
+  group.bench_function(BenchmarkId::from_parameter("400x_property_rules"), |b| {
+    b.iter(|| {
+      black_box(
+        render(
+          RenderOptions::builder()
+            .viewport(Viewport::new((64, 64)))
+            .node(node.clone())
+            .fonts(&fonts)
+            .stylesheet(property_rules.clone().into())
+            .build(),
+        )
+        .expect("renders"),
+      )
+    })
+  });
+
   group.finish();
 }
 

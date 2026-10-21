@@ -8,6 +8,9 @@ use std::{
 
 use crate::style::selector::PropertyRule;
 
+/// The `@property` rules in force, by name, shared by every element they reach.
+pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
+
 /// The custom properties an element resolves `var()` against, with the
 /// `@property` registrations that decide how each one inherits.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -43,20 +46,23 @@ impl CustomProperties {
     self.registrations.get(name)
   }
 
-  pub(crate) fn register(&mut self, rule: PropertyRule) {
-    Arc::make_mut(&mut self.registrations).insert(rule.name.clone(), rule);
+  /// Whether `registrations` are the ones in scope here.
+  pub(crate) fn registers(&self, registrations: &Registrations) -> bool {
+    Arc::ptr_eq(&self.registrations, registrations) || self.registrations == *registrations
   }
 
-  /// Applies one `@property` registration, leaving the value the rule puts in
-  /// scope: the parent's when it inherits, the rule's initial value otherwise.
-  pub(crate) fn register_in_scope(&mut self, rule: &PropertyRule, parent: &Self) {
-    self.register(rule.clone());
+  /// Puts `registrations` in scope, leaving the value each rule puts there: the parent's when it
+  /// inherits, the rule's initial value otherwise.
+  pub(crate) fn register_in_scope(&mut self, registrations: &Registrations, parent: &Self) {
+    self.registrations = Arc::clone(registrations);
 
-    let inherited = rule.inherits.then(|| parent.get(&rule.name)).flatten();
+    for rule in registrations.values() {
+      let inherited = rule.inherits.then(|| parent.get(&rule.name)).flatten();
 
-    match inherited.or(rule.initial_value.as_deref()) {
-      Some(value) => self.set(rule.name.clone(), value.to_owned()),
-      None => self.remove(&rule.name),
+      match inherited.or(rule.initial_value.as_deref()) {
+        Some(value) => self.set(rule.name.clone(), value.to_owned()),
+        None => self.remove(&rule.name),
+      }
     }
   }
 
