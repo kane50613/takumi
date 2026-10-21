@@ -74,6 +74,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
           }
 
           let Ok(size) = input.try_parse(GridTrackSize::from_css) else {
+            pending_leading_names = names;
             break;
           };
 
@@ -234,6 +235,21 @@ mod tests {
             end_names: None
           }
         ]
+      ))
+    );
+  }
+
+  #[test]
+  fn test_parse_template_component_repeat_end_names() {
+    assert_eq!(
+      GridTemplateComponent::from_css_str("repeat(2, 1fr [a b])"),
+      Ok(GridTemplateComponent::Repeat(
+        GridRepetitionCount::Count(2),
+        vec![GridRepeatTrack {
+          names: Vec::new(),
+          size: GridTrackSize::Fixed(GridLength::Fr(1.0)),
+          end_names: Some(vec!["a".to_string(), "b".to_string()])
+        }]
       ))
     );
   }

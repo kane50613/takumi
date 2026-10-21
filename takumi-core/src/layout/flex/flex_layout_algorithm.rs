@@ -54,7 +54,7 @@ pub(crate) enum BaselineGroup {
 
 /// Blink's `ContentPosition`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ContentPosition {
+pub(crate) enum ContentPosition {
   Normal,
   Start,
   End,
@@ -65,7 +65,7 @@ enum ContentPosition {
 
 /// Blink's `ContentDistributionType`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ContentDistribution {
+pub(crate) enum ContentDistribution {
   Default,
   SpaceBetween,
   SpaceAround,
@@ -75,14 +75,14 @@ enum ContentDistribution {
 
 /// Blink's `StyleContentAlignmentData`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ContentAlignment {
-  position: ContentPosition,
-  distribution: ContentDistribution,
-  is_safe: bool,
+pub(crate) struct ContentAlignment {
+  pub(crate) position: ContentPosition,
+  pub(crate) distribution: ContentDistribution,
+  pub(crate) is_safe: bool,
 }
 
 impl ContentAlignment {
-  fn of(value: JustifyContent) -> Self {
+  pub(crate) fn of(value: JustifyContent) -> Self {
     let (position, distribution, is_safe) = match value {
       JustifyContent::Start => (ContentPosition::Start, ContentDistribution::Default, false),
       JustifyContent::SafeStart => (ContentPosition::Start, ContentDistribution::Default, true),

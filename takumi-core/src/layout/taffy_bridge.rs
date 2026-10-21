@@ -6,11 +6,9 @@ use std::{iter::Copied, slice};
 
 use taffy::{
   AvailableSpace as TaffyAvailableSpace, AxisStaticEdge, AxisStaticPosition, Baselines, CacheTree,
-  DetailedGridInfo, DetailedLayoutInfo, Display as TaffyDisplay, Layout, LayoutGridContainer,
-  LayoutInput, LayoutOutput, LayoutPartialTree, Line, NodeId as TaffyNodeId, OofCandidate,
+  Layout, LayoutInput, LayoutOutput, LayoutPartialTree, Line, NodeId as TaffyNodeId, OofCandidate,
   OofCandidates, Point as TaffyPoint, Position as TaffyPosition, Rect as TaffyRect, RequestedAxis,
   RunMode, Size as TaffySize, SizingMode, Style, TraversePartialTree, TraverseTree,
-  compute_grid_layout,
 };
 
 use crate::{
@@ -33,7 +31,6 @@ use crate::{
 /// The taffy algorithm laying a container out.
 #[derive(Clone, Copy)]
 pub(crate) enum TaffyAlgorithm {
-  Grid,
   Table,
 }
 
@@ -49,11 +46,6 @@ impl<'r> LayoutTree<'r> {
   ) -> LayoutResult {
     let style = self.layout_style_for(node, space);
     let resolver = LengthResolver::new(space, &style);
-    // taffy fits an `auto` width to its content itself, in the available space, which its
-    // intrinsic sizes alone do not always say.
-    let fits_content = space.inline_auto_behavior == AutoSizeBehavior::FitContent
-      && style.size.width.is_auto()
-      && space.available_inline_size.is_some();
     let inline_size = match algorithm {
       _ if space.is_fixed_inline_size => Some(space.inline_size()),
       // A table sizes itself, unless its container stretches it explicitly.
@@ -67,11 +59,6 @@ impl<'r> LayoutTree<'r> {
         )
       }
       TaffyAlgorithm::Table => None,
-      TaffyAlgorithm::Grid if fits_content => None,
-      TaffyAlgorithm::Grid => Some(
-        resolver
-          .inline_size_for_fragment(&mut |size_type| self.min_max_sizes(node, space, size_type)),
-      ),
     };
     let block_size = if space.is_fixed_block_size {
       space.available_block_size
@@ -84,7 +71,6 @@ impl<'r> LayoutTree<'r> {
           resolver.initial_block_size_for_fragment(None, inline_size)
         }
         TaffyAlgorithm::Table => None,
-        TaffyAlgorithm::Grid => resolver.initial_block_size_for_fragment(None, inline_size),
       }
     };
     let to_float = |size: Option<LayoutUnit>| size.map(LayoutUnit::to_float);
@@ -124,11 +110,6 @@ impl<'r> LayoutTree<'r> {
     };
     let taffy_node = node.into_taffy();
     let output = match algorithm {
-      TaffyAlgorithm::Grid => {
-        let output = compute_grid_layout(self, taffy_node, inputs);
-
-        self.with_first_row_baseline(taffy_node, inputs, output)
-      }
       TaffyAlgorithm::Table => self.compute_table_layout(taffy_node, inputs),
     };
     let size = LogicalSize::new(
@@ -209,11 +190,7 @@ impl<'r> LayoutTree<'r> {
         vertical_margins_are_collapsible: Line::FALSE,
       };
       let taffy_node = node.into_taffy();
-      let output = if self.is_table(node) {
-        self.compute_table_layout(taffy_node, inputs)
-      } else {
-        compute_grid_layout(self, taffy_node, inputs)
-      };
+      let output = self.compute_table_layout(taffy_node, inputs);
 
       LayoutUnit::from_float(output.size.width)
     };
@@ -310,78 +287,10 @@ impl<'r> LayoutTree<'r> {
       .inline_size_for_fragment(&mut |size_type| self.min_max_sizes(node, space, size_type))
   }
 
-  /// `output` with the grid's first baseline its first row's first item's, which taffy takes from
-  /// the item's bottom edge unless the item aligns to the baseline.
-  /// <https://drafts.csswg.org/css-grid-2/#grid-baselines>
-  fn with_first_row_baseline(
-    &self,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-    mut output: LayoutOutput,
-  ) -> LayoutOutput {
-    if inputs.run_mode != RunMode::PerformLayout || output.baselines.first.is_none() {
-      return output;
-    }
-
-    let first_item = self
-      .layout_children(node)
-      .iter()
-      .map(|&child| self.node_state(NodeId::from_taffy(child)))
-      .filter(|child| {
-        child.style.position != TaffyPosition::Absolute && child.style.display != TaffyDisplay::None
-      })
-      .min_by(|left, right| left.layout.location.y.total_cmp(&right.layout.location.y));
-
-    if let Some(item) = first_item
-      && let Some(baseline) = item.first_baseline_y
-    {
-      output.baselines.first = Some(item.layout.location.y + baseline);
-    }
-
-    output
-  }
-
   /// Lays `node` and every box under it out empty, as `display: none` leaves them.
   pub(in crate::layout) fn compute_hidden(&mut self, node: TaffyNodeId) -> LayoutOutput {
     self.hide(NodeId::from_taffy(node));
     LayoutOutput::HIDDEN
-  }
-
-  /// The grid area a grid container `container` places the out-of-flow `node` in, or
-  /// `containing_block` when it is no grid or `node` has no placement in it.
-  pub(crate) fn grid_area(
-    &self,
-    container: NodeId,
-    node: NodeId,
-    containing_block: ContainingBlock,
-  ) -> ContainingBlock {
-    let DetailedLayoutInfo::Grid(grid) = &self.node_state(container).detailed_layout_info else {
-      return containing_block;
-    };
-    let style = self.taffy_style(node.into_taffy());
-    let padding_box = TaffyRect {
-      left: containing_block.origin.x.to_float(),
-      right: (containing_block.origin.x + containing_block.size.width).to_float(),
-      top: containing_block.origin.y.to_float(),
-      bottom: (containing_block.origin.y + containing_block.size.height).to_float(),
-    };
-    let area = grid.resolve_absolute_grid_area(
-      style.grid_row.clone(),
-      style.grid_column.clone(),
-      self.taffy_style(container.into_taffy()).direction,
-      padding_box,
-    );
-
-    ContainingBlock {
-      origin: Point::new(
-        LayoutUnit::from_float(area.left),
-        LayoutUnit::from_float(area.top),
-      ),
-      size: Size {
-        width: LayoutUnit::from_float(area.right - area.left),
-        height: LayoutUnit::from_float(area.bottom - area.top),
-      },
-    }
   }
 }
 
@@ -559,30 +468,5 @@ impl CacheTree for LayoutTree<'_> {
       .node_state_mut(NodeId::from_taffy(node_id))
       .cache
       .clear();
-  }
-}
-
-impl LayoutGridContainer for LayoutTree<'_> {
-  type GridContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type GridItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_grid_container_style(&self, node_id: TaffyNodeId) -> Self::GridContainerStyle<'_> {
-    self.taffy_style(node_id)
-  }
-
-  fn get_grid_child_style(&self, child_node_id: TaffyNodeId) -> Self::GridItemStyle<'_> {
-    self.taffy_style(child_node_id)
-  }
-
-  fn set_detailed_grid_info(&mut self, node_id: TaffyNodeId, info: DetailedGridInfo<String>) {
-    self
-      .node_state_mut(NodeId::from_taffy(node_id))
-      .detailed_layout_info = DetailedLayoutInfo::Grid(Box::new(info));
   }
 }

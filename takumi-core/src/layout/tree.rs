@@ -12,8 +12,8 @@ use std::{
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use taffy::{
-  DetailedLayoutInfo, Display as TaffyDisplay, LengthPercentage, Line, NodeId as TaffyNodeId,
-  Rect as TaffyRect, Size as TaffySize, Style,
+  Display as TaffyDisplay, LengthPercentage, Line, NodeId as TaffyNodeId, Rect as TaffyRect,
+  Size as TaffySize, Style,
 };
 
 use crate::{
@@ -25,6 +25,7 @@ use crate::{
   layout::{
     block_node::LayoutCache,
     constraint_space::CacheSlot,
+    grid::grid_layout_algorithm::GridGeometry,
     inline::{
       ContentBox, FragmentItems, InlineContentKind, InlineMeasurement, InlineOutOfFlow,
       inline_item_result::{CollapsedMargins, LayoutResult as LineItemLayoutResult},
@@ -427,7 +428,7 @@ pub(crate) struct LayoutNodeState {
   /// The out-of-flow boxes this node positioned as their containing block, from its last layout.
   pub(crate) hoisted_children: Vec<NodeId>,
   /// The grid this node last laid out, which places its out-of-flow children in their areas.
-  pub(crate) detailed_layout_info: DetailedLayoutInfo<String>,
+  pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
   /// The out-of-flow boxes this node is the containing block for.
   pub(crate) claims: ContainingBlockClaims,
 }
@@ -482,7 +483,7 @@ impl LayoutNodeState {
       children: Box::new([]),
       box_children: Box::new([]),
       hoisted_children: Vec::new(),
-      detailed_layout_info: DetailedLayoutInfo::None,
+      grid_geometry: None,
       claims,
     }
   }

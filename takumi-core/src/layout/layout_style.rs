@@ -1,9 +1,12 @@
 //! The style a box lays out with: its computed box model, with lengths in device px.
 
+use std::rc::Rc;
+
 use taffy::{Clear, CompactLength, Dimension, Float, LengthPercentage, LengthPercentageAuto};
 
 use crate::{
   geometry::{Point, Rect, Size},
+  layout::grid::grid_style::{GridPosition, GridStyle},
   layout_unit::LayoutUnit,
   style::{
     AlignItems, BoxSizing, ComputedStyle, Contain, Direction, Display, FlexBasis, FlexDirection,
@@ -162,6 +165,14 @@ pub(crate) struct LayoutStyle {
   /// `normal` stands as zero.
   pub(crate) row_gap: LayoutLength,
   pub(crate) column_gap: LayoutLength,
+  /// `Normal` stands for `legacy`.
+  pub(crate) justify_items: AlignItems,
+  pub(crate) grid_row_start: GridPosition,
+  pub(crate) grid_row_end: GridPosition,
+  pub(crate) grid_column_start: GridPosition,
+  pub(crate) grid_column_end: GridPosition,
+  /// A grid container's grid.
+  pub(crate) grid: Option<Rc<GridStyle>>,
 }
 
 impl Default for LayoutStyle {
@@ -197,6 +208,12 @@ impl Default for LayoutStyle {
       flex_basis: LayoutLength::Auto,
       row_gap: LayoutLength::Fixed(0.0),
       column_gap: LayoutLength::Fixed(0.0),
+      justify_items: AlignItems::Normal,
+      grid_row_start: GridPosition::Auto,
+      grid_row_end: GridPosition::Auto,
+      grid_column_start: GridPosition::Auto,
+      grid_column_end: GridPosition::Auto,
+      grid: None,
     }
   }
 }
@@ -284,6 +301,13 @@ impl LayoutStyle {
       },
       row_gap: gap(style.misc3_data.row_gap),
       column_gap: gap(style.misc1_data.column_gap),
+      justify_items: style.misc_data.justify_items,
+      grid_row_start: GridPosition::of(&style.misc2_data.grid_row_start),
+      grid_row_end: GridPosition::of(&style.misc2_data.grid_row_end),
+      grid_column_start: GridPosition::of(&style.misc2_data.grid_column_start),
+      grid_column_end: GridPosition::of(&style.misc2_data.grid_column_end),
+      grid: matches!(style.base_data.display, Display::Grid | Display::InlineGrid)
+        .then(|| Rc::new(GridStyle::of(style, sizing))),
     }
   }
 
