@@ -21,48 +21,36 @@ impl TailwindDeclarationBuilder {
     Self { declarations }
   }
 
-  pub(super) fn push(&mut self, declaration: StyleDeclaration, important: bool) {
+  pub(super) fn push(&mut self, declaration: StyleDeclaration) {
     if let StyleDeclaration::CustomProperty(name, _) = &declaration {
       self.declarations.push_element_state(name);
     }
 
-    self.declarations.push(declaration, important);
+    self.declarations.push(declaration, false);
   }
 
-  pub(super) fn push_all(
-    &mut self,
-    declarations: impl IntoIterator<Item = StyleDeclaration>,
-    important: bool,
-  ) {
+  pub(super) fn push_all(&mut self, declarations: impl IntoIterator<Item = StyleDeclaration>) {
     for declaration in declarations {
-      self.push(declaration, important);
+      self.push(declaration);
     }
   }
 
-  pub(super) fn push_custom(&mut self, name: &str, value: &str, important: bool) {
-    self.push(
-      StyleDeclaration::CustomProperty(name.to_owned(), value.to_owned()),
-      important,
-    );
+  pub(super) fn push_custom(&mut self, name: &str, value: &str) {
+    self.push(StyleDeclaration::CustomProperty(
+      name.to_owned(),
+      value.to_owned(),
+    ));
   }
 
-  pub(super) fn push_deferred(
-    &mut self,
-    longhand: LonghandId,
-    specified_value: String,
-    important: bool,
-  ) {
-    self.push(
-      StyleDeclaration::Deferred(DeferredDeclaration {
-        property: PropertyId::Longhand(longhand),
-        specified_value,
-      }),
-      important,
-    );
+  pub(super) fn push_deferred(&mut self, longhand: LonghandId, specified_value: String) {
+    self.push(StyleDeclaration::Deferred(DeferredDeclaration {
+      property: PropertyId::Longhand(longhand),
+      specified_value,
+    }));
   }
 
   /// Sets one `--tw-*` filter variable and the chain that reads them all.
-  pub(super) fn push_filter(&mut self, backdrop: bool, name: &str, value: &str, important: bool) {
+  pub(super) fn push_filter(&mut self, backdrop: bool, name: &str, value: &str) {
     let (prefix, longhand, chain) = match backdrop {
       false => ("--tw-", LonghandId::Filter, FILTER_CHAIN),
       true => (
@@ -72,8 +60,17 @@ impl TailwindDeclarationBuilder {
       ),
     };
 
-    self.push_custom(&format!("{prefix}{name}"), value, important);
-    self.push_deferred(longhand, chain.to_owned(), important);
+    self.push_custom(&format!("{prefix}{name}"), value);
+    self.push_deferred(longhand, chain.to_owned());
+  }
+
+  /// Sets each axis variable and the pair that reads them, as `translate-*` and `scale-*` do.
+  pub(super) fn push_axes(&mut self, axes: &[&str], value: &str, longhand: LonghandId, pair: &str) {
+    for axis in axes {
+      self.push_custom(axis, value);
+    }
+
+    self.push_deferred(longhand, pair.to_owned());
   }
 
   /// The block, with a border width that sets no style drawing in `--tw-border-style`, `solid`
@@ -95,7 +92,7 @@ impl TailwindDeclarationBuilder {
       };
 
       if sets(width_id) && !sets(style_id) {
-        self.push_deferred(style_id, "var(--tw-border-style, solid)".to_owned(), false);
+        self.push_deferred(style_id, "var(--tw-border-style, solid)".to_owned());
       }
     }
 

@@ -312,14 +312,6 @@ impl Length {
     }
   }
 
-  /// Negated value, or `None` for non-negatable forms like `auto`.
-  pub(crate) fn try_negative(self) -> Option<Self> {
-    if matches!(self, Length::Auto) {
-      return None;
-    }
-    Some(self.negative())
-  }
-
   /// Returns a negative length unit.
   pub fn negative(self) -> Self {
     match self {

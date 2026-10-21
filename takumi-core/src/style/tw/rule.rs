@@ -9,13 +9,18 @@ use smallvec::SmallVec;
 use xxhash_rust::xxh3::xxh3_64;
 
 use super::{
-  Breakpoint,
+  Breakpoint, BreakpointOverrides,
+  builder::TailwindDeclarationBuilder,
   property_order::property_index,
+  utility,
   variant::{VariantOrder, Variants},
 };
-use crate::style::{
-  StyleDeclaration, StyleDeclarationBlock,
-  selector::{PseudoElement, SelectorImpl},
+use crate::{
+  style::{
+    BackgroundImage, ContentItem, ContentValue, StyleDeclaration, StyleDeclarationBlock,
+    selector::{PseudoElement, SelectorImpl},
+  },
+  viewport::Viewport,
 };
 
 /// Tailwind's sort key for a utility: its variants, the properties it sets in Tailwind's order,
@@ -79,8 +84,31 @@ pub(crate) struct TwRule {
 }
 
 impl TwRule {
+  /// The rule a class compiles to: its variants, then the utility, `!` marking it important at
+  /// either end, as Tailwind's `parseCandidate` reads one.
+  pub(super) fn parse(source: &str) -> Option<Self> {
+    let (variants, token) = Variants::parse(source)?;
+    let (token, important) = match token.strip_prefix('!').or_else(|| token.strip_suffix('!')) {
+      Some(stripped) => (stripped, true),
+      None => (token, false),
+    };
+    let mut builder = TailwindDeclarationBuilder::with_capacity(1);
+
+    // Tailwind's `before:` and `after:` open each rule with `content: var(--tw-content)`, which
+    // `@property` starts as the empty string, so the box exists without a `content-*` utility.
+    if variants.pseudo_element.is_some() {
+      builder.push(StyleDeclaration::content(ContentValue::Items(
+        [ContentItem::Text("".into())].into(),
+      )));
+    }
+
+    utility::emit(token, &mut builder)?;
+
+    Self::new(source, builder.finish(), important, variants)
+  }
+
   /// The rule `token` compiles to, or `None` when its variants form no selector.
-  pub(super) fn new(
+  fn new(
     token: &str,
     declarations: StyleDeclarationBlock,
     important: bool,
@@ -103,5 +131,30 @@ impl TwRule {
       specificity,
       id: xxh3_64(token.as_bytes()),
     })
+  }
+
+  /// Whether the rule's breakpoint, if any, admits the viewport.
+  pub(super) fn is_active(&self, viewport: Viewport, breakpoints: &BreakpointOverrides) -> bool {
+    self
+      .breakpoint
+      .as_ref()
+      .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
+  }
+
+  /// The URLs the rule's background and mask images load.
+  pub(super) fn image_urls(&self) -> impl Iterator<Item = &str> {
+    self
+      .declarations
+      .iter()
+      .filter_map(|declaration| match declaration {
+        StyleDeclaration::BackgroundImage(Some(images))
+        | StyleDeclaration::MaskImage(Some(images)) => Some(images.iter()),
+        _ => None,
+      })
+      .flatten()
+      .filter_map(|image| match image {
+        BackgroundImage::Url(url) => Some(url.as_ref()),
+        _ => None,
+      })
   }
 }
