@@ -178,7 +178,7 @@ type ViewportOptions = {
   header?: never;
   footer?: never;
   pages?: never;
-  sections?: never;
+  sections?: [];
   pageRanges?: never;
 };
 

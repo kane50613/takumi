@@ -369,7 +369,10 @@ pub(crate) fn resolve_geometry(
     || options.header.is_some()
     || options.footer.is_some()
     || options.pages.is_some()
-    || options.sections.is_some()
+    || options
+      .sections
+      .as_ref()
+      .is_some_and(|sections| !sections.is_empty())
     || options.page_ranges.is_some();
 
   match options.viewport {

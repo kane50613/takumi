@@ -50,6 +50,9 @@ test("renders a single fixed page", async () => {
   expect(pdf).toBeInstanceOf(Uint8Array);
   expect(pdfHeader(pdf)).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
+  expect(
+    await renderer.render(doc, { viewport: { width: 600, height: 300 }, sections: [] }),
+  ).toEqual(pdf);
 });
 
 test("defaults to paged A4 without options", async () => {
@@ -324,6 +327,7 @@ test("auto-height viewport sizes the page to content", async () => {
   const pdf = await renderer.render(rows(40), { viewport: { width: 300 } });
 
   expect(pageCount(pdf)).toBe(1);
+  expect(await renderer.render(rows(40), { viewport: { width: 300 }, sections: [] })).toEqual(pdf);
 
   const [width, height] = mediaBox(pdf);
 

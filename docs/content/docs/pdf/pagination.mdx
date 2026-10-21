@@ -41,7 +41,7 @@ Each section accepts `node`, `size`, `landscape`, `margin`, `header`, and `foote
 
 Headers and footers inherit too; pass `false` to remove one for a section. Document `pages.first`, `pages.last`, `pages.odd`, and `pages.even` rules still override these bands using document-wide page numbers.
 
-`PageNumber`, `TotalPages`, target-page counters, page ranges, internal links, the outline, metadata, attachments, and the tagged structure tree belong to the whole document. A section can contain JSX, HTML (including its stylesheet), or a node tree. Fonts, images, and CSS are shared across sections. `sections` cannot be combined with `viewport`.
+`PageNumber`, `TotalPages`, target-page counters, page ranges, internal links, the outline, metadata, attachments, and the tagged structure tree belong to the whole document. A section can contain JSX, HTML (including its stylesheet), or a node tree. Fonts, images, and CSS are shared across sections. Nonempty `sections` cannot be combined with `viewport`; an empty list is a no-op.
 
 ## Break properties
 
