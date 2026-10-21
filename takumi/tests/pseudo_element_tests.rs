@@ -296,3 +296,33 @@ fn tw_pseudo_elements_skip_replaced_elements() {
   assert!(run_texts(&measured).is_empty());
   assert!(measured.children.is_empty());
 }
+
+/// A flex container's own text is an anonymous flex item beside its `::after`, as it is beside a
+/// `::before`.
+#[test]
+fn own_text_is_a_flex_item_beside_after() {
+  let root = Node::text("Default content".to_string()).with_class_name("row");
+  let measured = measure_with_css(
+    root,
+    ".row { display: flex; align-items: center; height: 64px } \
+     .row::after { content: ''; width: 16px; height: 16px }",
+  );
+
+  assert!(measured.runs.is_empty());
+  assert_eq!(measured.children.len(), 2);
+  assert_eq!(run_texts(&measured.children[0]), ["Default content"]);
+}
+
+/// White space a flex container holds is no flex item beside its `::after`, even preserved.
+#[test]
+fn own_white_space_is_no_flex_item_beside_after() {
+  let css = ".row { display: flex; height: 64px } \
+     .row::after { content: ''; width: 16px; height: 16px } \
+     .pre { white-space: pre }";
+
+  let collapsed = measure_with_css(Node::text("  ".to_string()).with_class_name("row"), css);
+  let preserved = measure_with_css(Node::text("  ".to_string()).with_class_name("row pre"), css);
+
+  assert_eq!(collapsed.children.len(), 1);
+  assert_eq!(preserved.children.len(), 1);
+}

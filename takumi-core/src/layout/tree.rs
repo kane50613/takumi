@@ -3228,10 +3228,18 @@ impl PendingRenderNode {
     let mut rendered_children = Vec::with_capacity(children.len() + 3);
     rendered_children.extend(pseudo_before);
 
-    // The inline collector emits an element's own text before any child, so
-    // an element that folded its text has to hand it back as a child for the
-    // generated content to come first.
-    if pseudo_before_present && let Some(text) = node.take_text() {
+    // As Blink's `CanHaveWhitespaceChildren` does, a flex or grid container drops white-space-only
+    // text that no text precedes, whatever its `white-space`. The element's own text comes first.
+    let drops_own_text =
+      context.style.base_data.display.should_blockify_children() && node.is_whitespace_only_text();
+
+    // An element that folded its text hands it back as a child beside its generated content:
+    // the inline collector emits its own text before any child, so `::before` could not come
+    // first, and a flex or grid container lays the text out as an item only as a child.
+    if (pseudo_before_present || pseudo_after.is_some())
+      && !drops_own_text
+      && let Some(text) = node.take_text()
+    {
       rendered_children.push(RenderNode::generated_sibling_text(&context, text));
     }
 
