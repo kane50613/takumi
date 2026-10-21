@@ -24,6 +24,7 @@ use quick_cache::{Weighter, sync::Cache};
 use selectors::parser::Selector;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
   style::{
@@ -184,6 +185,8 @@ pub(crate) struct TwCache {
 #[derive(Debug, Clone)]
 pub struct TailwindValues {
   inner: Arc<Vec<TailwindValue>>,
+  /// A digest of the class list it was parsed from, which keys the styles boxes resolve to.
+  digest: u64,
 }
 
 const TAILWIND_CACHE_MAX_BYTES: usize = 1 << 20;
@@ -252,7 +255,13 @@ impl TailwindValues {
 
     TailwindValues {
       inner: Arc::new(collected),
+      digest: xxh3_64(source.as_bytes()),
     }
+  }
+
+  /// A digest of the class list it was parsed from.
+  pub(crate) fn digest(&self) -> u64 {
+    self.digest
   }
 
   /// Collects resource URLs referenced by active Tailwind utilities for the given viewport.

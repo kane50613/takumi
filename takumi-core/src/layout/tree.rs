@@ -3440,28 +3440,42 @@ impl RenderContext {
         .tag_name()
         .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
     let layers = node.take_style_layers();
-    let key = (layers.is_preset_only() && !is_document_root)
-      .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
+    let tw_matches = node_matched.tw();
+    // An inline style is the element's own and seldom repeats, so it has no key to share under.
+    let key = (layers.inline.is_none() && !is_document_root).then(|| {
+      MatchedStyleKey::new(
+        matched,
+        layers.author_tw.as_ref(),
+        tw_matches,
+        &self.sizing,
+        self.current_color,
+      )
+    });
     let cache = self.matched_styles();
 
     if let Some(key) = &key
-      && let Some(resolved) = cache.get(key, &self.style, &self.sizing, layers.preset.as_ref())
+      && let Some(resolved) = cache.get(key, &self.style, &self.sizing, &layers)
     {
       return resolved;
     }
 
-    let preset = key.as_ref().and(layers.preset.clone());
+    let kept_layers = key.as_ref().map(|_| layers.clone());
     let (style, sizing, current_color) =
-      self.resolve_uncached_child_style(layers, matched, node_matched.tw(), is_document_root);
+      self.resolve_uncached_child_style(layers, matched, tw_matches, is_document_root);
     let style = Rc::new(style);
 
     // A style an animation or a query container decided holds for this box alone.
     if let Some(key) = key
+      && let Some(kept_layers) = kept_layers
       && style.misc1_data.animation_name.is_empty()
       && !sizing.container_read.get()
     {
+      // A `tw` utility may read the parent, as `bg-inherit` does, so one keeps the parent's
+      // non-inherited values in the comparison too.
       let inherits_explicitly = matched.inherits_explicitly()
-        || preset
+        || kept_layers.author_tw.is_some()
+        || kept_layers
+          .preset
           .as_ref()
           .is_some_and(|preset| preset.declarations.inherits_explicitly());
 
@@ -3469,7 +3483,7 @@ impl RenderContext {
         key,
         Rc::clone(&self.style),
         self.sizing.clone(),
-        preset,
+        kept_layers,
         inherits_explicitly,
         (Rc::clone(&style), sizing.clone(), current_color),
       );
