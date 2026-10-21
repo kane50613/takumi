@@ -799,6 +799,18 @@ impl<'a> MaskRow<'a> {
     self.data.is_empty()
   }
 
+  /// Writes the alphas at offsets `start..start + out.len()` into `out`, zero outside the mask.
+  pub(crate) fn write_alphas(&self, start: usize, out: &mut [u8]) {
+    let (first, covered) = self.covered(start + out.len());
+    let from = first.max(start);
+    let to = (first + covered.len()).min(start + out.len());
+
+    out.fill(0);
+    if from < to {
+      out[from - start..to - start].copy_from_slice(&covered[from - first..to - first]);
+    }
+  }
+
   /// The mask bytes under offsets `0..len`: the first covered offset and the bytes from there.
   /// Offsets outside them read as `0`.
   pub(crate) fn covered(&self, len: usize) -> (usize, &'a [u8]) {

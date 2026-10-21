@@ -194,6 +194,13 @@ fn translucent_layers_fixture() -> Node {
   ))
 }
 
+/// A card with rounded corners over a gradient, the most common OG image layout.
+fn rounded_gradient_card_fixture() -> Node {
+  html_fixture(
+    r#"<body><div style="width: 100%; height: 100%; padding: 40px; background-color: white"><div style="width: 100%; height: 100%; border-radius: 48px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71)"></div></div></body>"#,
+  )
+}
+
 fn bench_canvas(c: &mut Criterion) {
   let fonts = Fonts::default();
   let mut group = c.benchmark_group("canvas");
@@ -212,6 +219,9 @@ fn bench_canvas(c: &mut Criterion) {
   });
   group.bench_function("translucent_layers", |b| {
     b.iter(|| render_node(&fonts, black_box(translucent_layers_fixture())))
+  });
+  group.bench_function("rounded_gradient_card", |b| {
+    b.iter(|| render_node(&fonts, black_box(rounded_gradient_card_fixture())))
   });
   group.bench_function("square_border_sides", |b| {
     b.iter(|| {
