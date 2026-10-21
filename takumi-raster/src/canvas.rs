@@ -15,7 +15,7 @@ pub(crate) use gradient::try_overlay_gradient_tile;
 use mask::MaskStackEntry;
 pub(crate) use mask::{
   CanvasViewport, MaskView, NodeMasks, PlacedMask, alpha_mask, attenuate_alpha_by_mask,
-  cull_bounds, intersect_alpha_masks, render_mask,
+  cull_bounds, intersect_alpha_masks, render_mask, union_alpha_masks,
 };
 pub(crate) use paint_source::{
   BilinearAxis, BilinearColumns, BoxAxis, PaintSource, RowSource, SamplingFootprint,

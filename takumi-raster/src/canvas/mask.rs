@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, mem::take, sync::Arc};
 
 use smallvec::SmallVec;
 
@@ -350,6 +350,55 @@ pub(crate) fn intersect_alpha_masks(
   }
 
   Some((mask, overlap.placement))
+}
+
+/// `masks` drawn over one another, in the placement they span together, or `None` when none
+/// covers anything.
+pub(crate) fn union_alpha_masks(masks: Vec<(Vec<u8>, Placement)>) -> Option<(Vec<u8>, Placement)> {
+  let mut masks: Vec<_> = masks
+    .into_iter()
+    .filter(|(mask, placement)| !mask.is_empty() && placement.width > 0 && placement.height > 0)
+    .collect();
+  let placement = masks
+    .iter()
+    .map(|(_, placement)| *placement)
+    .reduce(|lhs, rhs| {
+      Placement::from_bounds(
+        lhs.left.min(rhs.left),
+        lhs.top.min(rhs.top),
+        lhs.right().max(rhs.right()),
+        lhs.bottom().max(rhs.bottom()),
+      )
+      .unwrap_or(lhs)
+    })?;
+
+  if let [only] = masks.as_mut_slice() {
+    return Some(take(only));
+  }
+
+  let mut union = vec![0u8; placement.width as usize * placement.height as usize];
+
+  for (mask, mask_placement) in &masks {
+    let Some(overlap) = AlphaOverlap::new(placement, *mask_placement) else {
+      continue;
+    };
+    let width = overlap.placement.width as usize;
+
+    for row_index in 0..overlap.placement.height as usize {
+      let union_start = overlap.lhs_origin + row_index * overlap.lhs_stride;
+      let mask_start = overlap.rhs_origin + row_index * overlap.rhs_stride;
+
+      for (covered, &alpha) in union[union_start..union_start + width]
+        .iter_mut()
+        .zip(&mask[mask_start..mask_start + width])
+      {
+        *covered =
+          (u16::from(*covered) + u16::from(alpha) - u16::from(mul_div_255(*covered, alpha))) as u8;
+      }
+    }
+  }
+
+  Some((union, placement))
 }
 
 pub(crate) fn attenuate_alpha_by_mask(
