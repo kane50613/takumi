@@ -193,6 +193,8 @@ The structural variants are `first:`, `last:`, `only:`, `odd:`, `even:`, `first-
 </h2>
 ```
 
+As in Tailwind, the box exists without `content-*`, so `before:` utilities alone can draw a decoration such as a dot. Replaced elements such as `<img>` get no `::before` or `::after`.
+
 ### Preflight
 
 The built-in parser applies no Tailwind Preflight by default. Elements keep their default margins: an `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
