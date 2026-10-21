@@ -138,15 +138,39 @@ impl PixmapExt for tiny_skia::Pixmap {
   }
 
   fn into_srgb(&mut self) {
-    demultiply_alpha(self.data_mut().as_rgba_mut());
-    from_linear_rgb(self.data_mut().as_rgba_mut());
-    multiply_alpha(self.data_mut().as_rgba_mut());
+    convert_premultiplied(self.data_mut().as_rgba_mut(), &LINEAR_RGB_TO_SRGB_TABLE);
   }
 
   fn into_linear_rgb(&mut self) {
-    demultiply_alpha(self.data_mut().as_rgba_mut());
-    into_linear_rgb(self.data_mut().as_rgba_mut());
-    multiply_alpha(self.data_mut().as_rgba_mut());
+    convert_premultiplied(self.data_mut().as_rgba_mut(), &SRGB_TO_LINEAR_RGB_TABLE);
+  }
+}
+
+/// Maps premultiplied pixels' colour channels through `table`, which reads straight alpha, in one
+/// pass: [`demultiply_alpha`], the table, then [`multiply_alpha`], with the same rounding. An opaque
+/// pixel only needs the table, and a clear one ends black either way.
+fn convert_premultiplied(data: &mut [RGBA8], table: &[u8; 256]) {
+  for p in data {
+    match p.a {
+      0 => (p.r, p.g, p.b) = (0, 0, 0),
+      u8::MAX => {
+        p.r = table[p.r as usize];
+        p.g = table[p.g as usize];
+        p.b = table[p.b as usize];
+      }
+      alpha => {
+        let a = alpha as f32 / 255.0;
+        let convert = |channel: u8| {
+          let straight = (channel as f32 / a + 0.5) as u8;
+
+          (table[straight as usize] as f32 * a + 0.5) as u8
+        };
+
+        p.r = convert(p.r);
+        p.g = convert(p.g);
+        p.b = convert(p.b);
+      }
+    }
   }
 }
 
