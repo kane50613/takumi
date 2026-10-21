@@ -197,14 +197,21 @@ impl<'a> ArenaElement<'a> {
     while let Some(current) = index {
       let style_node = &self.tree.nodes[current];
 
-      if style_node.node.tag_name().is_some() || !matches!(style_node.node.kind, NodeKind::Text(_))
-      {
+      if text_of(style_node.node).is_none() {
         return self.at(Some(current));
       }
       index = next(style_node);
     }
 
     None
+  }
+}
+
+/// The text of a text node, which selectors do not count as an element; `None` for an element.
+fn text_of(node: &Node) -> Option<&str> {
+  match &node.kind {
+    NodeKind::Text(data) if node.tag_name().is_none() => Some(&data.text),
+    _ => None,
   }
 }
 
@@ -289,8 +296,20 @@ impl Element for ArenaElement<'_> {
     false
   }
 
+  /// Blink's `:empty`: no element child, and no text with a character in it.
   fn is_empty(&self) -> bool {
-    self.style_node().first_child.is_none()
+    let mut index = self.style_node().first_child;
+
+    while let Some(current) = index {
+      let style_node = &self.tree.nodes[current];
+
+      if text_of(style_node.node).is_none_or(|text| !text.is_empty()) {
+        return false;
+      }
+      index = style_node.next_sibling;
+    }
+
+    true
   }
 
   fn is_root(&self) -> bool {
@@ -739,16 +758,27 @@ pub(crate) fn match_stylesheets_view<'a>(
     }
 
     for rule in arena.nodes[i].node.tw_rules() {
-      if rule
-        .breakpoint
-        .as_ref()
-        .is_none_or(|breakpoint| breakpoint.matches(viewport, &stylesheet.breakpoints))
-      {
+      let target = match &rule.pseudo_element {
+        None => SelectorTarget::Element,
+        Some(PseudoElement::Before) => SelectorTarget::Before,
+        Some(_) => SelectorTarget::After,
+      };
+      let applies = (!is_replaced || target == SelectorTarget::Element)
+        && rule
+          .breakpoint
+          .as_ref()
+          .is_none_or(|breakpoint| breakpoint.matches(viewport, &stylesheet.breakpoints))
+        && rule
+          .condition
+          .as_ref()
+          .is_none_or(|condition| matches_selector(condition, 0, None, &element, &mut element_ctx));
+
+      if applies {
         record_tw_match(
           rule,
           tw_order[&rule.id],
           layers,
-          &mut node_rules[SelectorTarget::Element as usize],
+          &mut node_rules[target as usize],
         );
       }
     }
@@ -820,20 +850,17 @@ fn layer_order(layer: Option<usize>, important: bool, layers: usize) -> usize {
   }
 }
 
-/// Records the rule `tw_rule` compiles to in `bucket`, in the `tw` layer, the last of `layers`, at
-/// a class's specificity, as Tailwind writes a utility.
+/// Records the rule `tw_rule` compiles to in `bucket`, in the `tw` layer, the last of `layers`.
 fn record_tw_match<'a>(
   tw_rule: &Arc<TwRule>,
   source_order: usize,
   layers: usize,
   bucket: &mut Vec<MatchedRule<'a>>,
 ) {
-  const CLASS_SPECIFICITY: u32 = 1 << 10;
-
   bucket.push(MatchedRule {
     important: tw_rule.important,
     layer_order: layer_order(Some(layers - 1), tw_rule.important, layers),
-    specificity: CLASS_SPECIFICITY,
+    specificity: tw_rule.specificity,
     source_order,
     id: RuleId::Tw(tw_rule.id),
     declarations: MatchedBlock::Tw(Arc::clone(tw_rule)),

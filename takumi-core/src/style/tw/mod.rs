@@ -7,22 +7,23 @@ mod namespace;
 mod parser;
 mod property_order;
 mod rule;
+mod variant;
 
 use std::{
   borrow::Cow,
-  collections::HashMap,
   convert::Infallible,
   str::FromStr,
   sync::{Arc, LazyLock},
 };
 
 use builder::TailwindDeclarationBuilder;
-use cssparser::match_ignore_ascii_case;
 pub(crate) use namespace::Namespace;
 use quick_cache::{Weighter, sync::Cache};
 pub(crate) use rule::TwRule;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
+pub(crate) use variant::{Breakpoint, BreakpointOverrides};
+use variant::{Variant, Variants};
 
 use crate::{
   style::{
@@ -352,92 +353,41 @@ impl TailwindValue {
     self.property.resource_url()
   }
 
-  /// Parse a tailwind value from a token.
+  /// Parse a tailwind value from a token: its variants, then the utility, `!` marking it
+  /// important at either end, as Tailwind's `parseCandidate` reads one.
   pub fn parse(mut token: &str) -> Option<Self> {
     let source = token;
-    let mut important = false;
-    let mut breakpoint = None;
+    let mut variants = Variants::default();
 
-    // Breakpoint. sm:mt-0
-    if let Some((breakpoint_token, rest)) = split_variant(token) {
-      breakpoint = Some(Breakpoint::parse(breakpoint_token)?);
+    while let Some((variant, rest)) = split_variant(token) {
+      variants.push(Variant::parse(variant)?)?;
       token = rest;
     }
 
-    // Check for important flag. !mt-0
-    if let Some(stripped) = token.strip_prefix('!') {
-      important = true;
-      token = stripped;
-    }
-
-    // Check for important flag. mt-0!
-    if let Some(stripped) = token.strip_suffix('!') {
-      important = true;
-      token = stripped;
-    }
-
+    let (token, important) = match token.strip_prefix('!').or_else(|| token.strip_suffix('!')) {
+      Some(stripped) => (stripped, true),
+      None => (token, false),
+    };
     let property = TailwindProperty::parse(token)?;
     let mut builder = TailwindDeclarationBuilder::with_capacity(1);
 
-    property.clone().apply(&mut builder, false);
-
-    let rule = Arc::new(TwRule::new(source, builder.finish(), important, breakpoint));
-
-    Some(TailwindValue { property, rule })
-  }
-}
-
-/// Widths a stylesheet's `--breakpoint-*` variables assign, keyed by token.
-pub(crate) type BreakpointOverrides = HashMap<String, Length>;
-
-/// Represents a breakpoint.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Breakpoint {
-  /// Built-in width; `None` for a token only a `--breakpoint-*` variable defines.
-  pub width: Option<Length>,
-  /// The variant token, which a `--breakpoint-<token>` variable re-sizes.
-  pub token: Arc<str>,
-}
-
-impl Breakpoint {
-  /// Parse a breakpoint from a token.
-  pub fn parse(token: &str) -> Option<Self> {
-    let width = match_ignore_ascii_case! {token,
-      "sm" => Some(Length::Rem(40.0)),
-      "md" => Some(Length::Rem(48.0)),
-      "lg" => Some(Length::Rem(64.0)),
-      "xl" => Some(Length::Rem(80.0)),
-      "2xl" => Some(Length::Rem(96.0)),
-      _ => None,
-    };
-
-    if width.is_none() && !is_ident(token) {
-      return None;
+    // Tailwind's `before:` and `after:` open each rule with `content: var(--tw-content)`, which
+    // `@property` starts as the empty string, so the box exists without a `content-*` utility.
+    if variants.pseudo_element.is_some() {
+      builder.push(
+        StyleDeclaration::content(ContentValue::Items([ContentItem::Text("".into())].into())),
+        false,
+      );
     }
 
-    Some(Breakpoint {
-      width,
-      token: token.to_ascii_lowercase().into(),
+    property.clone().apply(&mut builder, false);
+
+    let rule = TwRule::new(source, builder.finish(), important, variants)?;
+
+    Some(TailwindValue {
+      property,
+      rule: Arc::new(rule),
     })
-  }
-
-  /// Check if the breakpoint matches the viewport width.
-  pub fn matches(&self, viewport: Viewport, overrides: &BreakpointOverrides) -> bool {
-    let Some(viewport_width) = viewport.size.width else {
-      return false;
-    };
-    let Some(width) = overrides.get(&*self.token).copied().or(self.width) else {
-      return false;
-    };
-
-    let breakpoint_width = match width {
-      Length::Rem(value) => viewport.to_device(value * viewport.font_size),
-      Length::Px(value) => viewport.to_device(value),
-      Length::Vw(value) => (value / 100.0) * viewport_width as f32,
-      _ => return false,
-    };
-
-    viewport_width >= breakpoint_width as u32
   }
 }
 
@@ -460,6 +410,8 @@ pub(crate) enum TailwindProperty {
   Justify(JustifyContent),
   /// `align-content` property.
   Content(JustifyContent),
+  /// `content`, for a `::before` or `::after` box.
+  GeneratedContent(ContentValue),
   /// `justify-self` property.
   JustifySelf(AlignItems),
   /// `justify-items` property.
@@ -1416,6 +1368,9 @@ impl TailwindProperty {
       }
       TailwindProperty::ListStyleImage(image) => {
         push_decl!(builder, important, list_style_image(image));
+      }
+      TailwindProperty::GeneratedContent(content) => {
+        push_decl!(builder, important, content(content))
       }
       TailwindProperty::OverflowX(overflow) => push_decl!(builder, important, overflow_x(overflow)),
       TailwindProperty::OverflowY(overflow) => push_decl!(builder, important, overflow_y(overflow)),

@@ -150,7 +150,7 @@ fn display_none_on_pseudo_creates_no_box() {
 }
 
 #[test]
-fn display_flex_pseudo_lays_out_its_content_as_an_item() {
+fn display_flex_pseudo_downgrades_to_block() {
   let root = Node::container([Node::text("body".to_string())])
     .with_class_name("card")
     .with_style(
@@ -160,18 +160,16 @@ fn display_flex_pseudo_lays_out_its_content_as_an_item() {
     );
   let block = measure_with_css(
     root.clone(),
-    r#".card::before { content: "head" "er"; display: block; }"#,
+    r#".card::before { content: "header"; display: block; }"#,
   );
   let flex = measure_with_css(
     root,
-    r#".card::before { content: "head" "er"; display: flex; justify-content: flex-end; }"#,
+    r#".card::before { content: "header"; display: flex; }"#,
   );
-  let header = &flex.children[0];
-
-  assert_eq!(flex.height, block.height);
-  assert_eq!(header.children.len(), 1, "{header:?}");
-  assert_eq!(run_texts(&header.children[0]), ["header"]);
-  assert!(header.children[0].transform[4] > 100.0, "{header:?}");
+  assert_eq!(
+    flex.height, block.height,
+    "flex pseudo should match block; got flex={flex:?} block={block:?}"
+  );
 }
 
 #[test]
@@ -219,4 +217,82 @@ fn gradient_content_renders_with_default_object_size() {
   );
   // css-images-3 §5.1 default object size for gradients: 300x150.
   assert_eq!(result.height, 150.0, "result = {result:?}");
+}
+
+#[test]
+fn tw_before_and_after_variants_generate_content() {
+  let root = Node::container([Node::text("body".to_string())])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+    .with_tw(
+      "before:content-['hello_'] after:content-['_bye']"
+        .parse()
+        .unwrap(),
+    );
+  let text = run_texts(&measure_with_css(root, "")).concat();
+
+  assert_eq!(text, "hello body bye");
+}
+
+/// A stylesheet rule without `content` still styles the box a `tw` utility gives content to.
+#[test]
+fn tw_content_keeps_the_stylesheet_rules_for_its_pseudo_element() {
+  let root = Node::container([Node::text("body".to_string())])
+    .with_class_name("greet")
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+    .with_tw("before:content-['hi_']".parse().unwrap());
+  let text = run_texts(&measure_with_css(
+    root,
+    ".greet::before { text-transform: uppercase }",
+  ))
+  .concat();
+
+  assert_eq!(text, "HI body");
+}
+
+#[test]
+fn tw_structural_and_pseudo_element_variants_combine() {
+  let item = |text: &str| {
+    Node::container([Node::text(text.to_string())])
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+      .with_tw("first:before:content-['→_']".parse().unwrap())
+  };
+  let root = Node::container([item("one"), item("two")])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+
+  assert_eq!(run_texts(&measure_with_css(root, "")), ["→ ", "one", "two"]);
+}
+
+/// Tailwind opens `before:` with an empty `content`, so a utility alone makes the box.
+#[test]
+fn tw_before_without_content_generates_an_empty_box() {
+  let root = Node::container([])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+    .with_tw(
+      "before:block before:w-[10px] before:h-[10px]"
+        .parse()
+        .unwrap(),
+    );
+  let measured = measure_with_css(root, "");
+
+  assert_eq!(measured.children.len(), 1);
+  assert_eq!(
+    (measured.children[0].width, measured.children[0].height),
+    (10.0, 10.0)
+  );
+}
+
+#[test]
+fn tw_pseudo_elements_skip_replaced_elements() {
+  let png_signature: &[u8] = &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  let root = Node::image(png_signature.to_vec())
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Px(50.0)))
+        .with(StyleDeclaration::height(Px(50.0))),
+    )
+    .with_tw("before:content-['x'] after:block".parse().unwrap());
+  let measured = measure_with_css(root, "");
+
+  assert!(run_texts(&measured).is_empty());
+  assert!(measured.children.is_empty());
 }

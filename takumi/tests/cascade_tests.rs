@@ -562,3 +562,22 @@ fn a_var_that_substitutes_to_nothing_drops_the_earlier_value() {
 
   assert_eq!(result.children[0].width, result.width);
 }
+
+/// Boxes that match the same rules share a resolved style only when their `tw` classes and the
+/// variants their place admits agree.
+#[test]
+fn tw_boxes_share_styles_only_when_their_classes_agree() {
+  let root = block_of([
+    tw_block("row", "block w-[10px] last:w-[40px]"),
+    tw_block("row", "block w-[20px]"),
+    tw_block("row", "block w-[10px] last:w-[40px]"),
+    tw_block("row", "block w-[10px] last:w-[40px]"),
+  ]);
+  let widths: Vec<f32> = measure_with_css(root, "")
+    .children
+    .iter()
+    .map(|child| child.width)
+    .collect();
+
+  assert_eq!(widths, [10.0, 20.0, 10.0, 40.0]);
+}

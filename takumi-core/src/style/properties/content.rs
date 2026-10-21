@@ -1,6 +1,6 @@
 use std::{fmt, sync::Arc};
 
-use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
+use cssparser::{Parser, Token, serialize_string};
 
 use crate::style::{
   Animatable, BackgroundImage, FromCss, MakeComputed, ParseResult, SizingContext, ToCss,
@@ -55,13 +55,12 @@ impl MakeComputed for ContentValue {
 
 impl Animatable for ContentValue {}
 
+// `content-normal` is Tailwind's `align-content: normal`, so only `none` names a content.
 impl TailwindPropertyParser for ContentValue {
   fn parse_tw(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
-      "none" => Some(ContentValue::None),
-      "normal" => Some(ContentValue::Normal),
-      _ => None,
-    }
+    token
+      .eq_ignore_ascii_case("none")
+      .then_some(ContentValue::None)
   }
 }
 

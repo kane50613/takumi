@@ -1,4 +1,4 @@
-use std::{assert_matches, sync::Arc};
+use std::{assert_matches, collections::HashMap, sync::Arc};
 
 use super::*;
 use crate::style::{ComputedStyle, LonghandId, PropertyRule, Style, properties::BackgroundImage};
@@ -1842,4 +1842,27 @@ fn a_side_utility_beats_an_every_side_one() {
       "{classes}"
     );
   }
+}
+
+/// Tailwind registers `odd:` after `first:`, so `odd:` wins whatever the class order.
+#[test]
+fn structural_variants_cascade_as_tailwind_registers_them() {
+  let order = |classes: &str| {
+    let values = TailwindValues::from_str(classes).unwrap();
+
+    cascade_order(values.inner.iter().map(|value| &*value.rule))
+      .into_iter()
+      .map(|rule| rule.order.clone())
+      .collect::<Vec<_>>()
+  };
+
+  assert_eq!(order("odd:mt-2 first:mt-4"), order("first:mt-4 odd:mt-2"));
+
+  let values = TailwindValues::from_str("odd:mt-2 first:mt-4").unwrap();
+  let last = cascade_order(values.inner.iter().map(|value| &*value.rule))
+    .pop()
+    .unwrap()
+    .id;
+
+  assert_eq!(last, TailwindValue::parse("odd:mt-2").unwrap().rule.id);
 }
