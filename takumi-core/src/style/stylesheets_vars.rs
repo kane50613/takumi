@@ -1,7 +1,7 @@
 use std::{borrow::Cow, sync::LazyLock};
 
 use cssparser::{Parser, Token};
-use quick_cache::{Equivalent, sync::Cache};
+use quick_cache::{Equivalent, Weighter, sync::Cache};
 
 use super::{DeferredDeclaration, ParsedDeclarations, PropertyId};
 use crate::style::{ComputedStyle, CssInput, CustomProperties};
@@ -159,12 +159,26 @@ fn resolve_var_references_with(
 }
 
 /// Substituted values parsed for a property, `None` for one that does not parse. Elements sharing a
-/// variable substitute the same text, so each parses once, on whichever thread renders first.
-static PARSED_VALUES: LazyLock<Cache<ParsedValue, Option<ParsedDeclarations>>> =
-  LazyLock::new(|| Cache::new(4096));
+/// variable substitute the same text, so it parses once until the cache evicts it to stay within
+/// [`PARSED_VALUES_MAX_BYTES`] of text.
+static PARSED_VALUES: LazyLock<Cache<ParsedValue, Option<ParsedDeclarations>, ByTextBytes>> =
+  LazyLock::new(|| Cache::with_weighter(4096, PARSED_VALUES_MAX_BYTES, ByTextBytes));
+
+/// The substituted text [`PARSED_VALUES`] keeps across its entries.
+const PARSED_VALUES_MAX_BYTES: u64 = 1 << 20;
 
 /// A substituted value and the property it was parsed for.
 type ParsedValue = (PropertyId, Box<str>);
+
+/// Weighs an entry by its text, which its parsed declarations grow with.
+#[derive(Clone)]
+struct ByTextBytes;
+
+impl Weighter<ParsedValue, Option<ParsedDeclarations>> for ByTextBytes {
+  fn weight(&self, (_, text): &ParsedValue, _: &Option<ParsedDeclarations>) -> u64 {
+    text.len() as u64 + 1
+  }
+}
 
 /// A [`PARSED_VALUES`] key borrowed from the text being looked up.
 #[derive(Hash)]
