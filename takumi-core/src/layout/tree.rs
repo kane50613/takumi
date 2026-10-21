@@ -2131,17 +2131,32 @@ impl RenderNode {
     OwnContent::of(self).has_inline_content(&font_style)
   }
 
-  /// About how many layout nodes its subtree builds: one per box, not counting the out-of-flow
-  /// boxes inside inline content or the nodes standing in for their containing blocks.
+  /// About how many layout nodes its subtree builds: one per box, including the out-of-flow
+  /// boxes inside inline content, and one per positioned inline span, which may stand in as their
+  /// containing block.
   fn layout_node_estimate(&self) -> usize {
     let mut count = 0;
-    let mut stack = vec![self];
+    let mut boxes = vec![self];
+    let mut inline = Vec::new();
 
-    while let Some(node) = stack.pop() {
+    while let Some(node) = boxes.pop() {
       count += 1;
 
-      if !node.should_create_inline_layout() {
-        stack.extend(node.children.iter().flatten());
+      let children = node.children.iter().flatten();
+
+      if node.should_create_inline_layout() {
+        inline.extend(children);
+      } else {
+        boxes.extend(children);
+      }
+
+      while let Some(item) = inline.pop() {
+        if item.is_out_of_flow() {
+          boxes.push(item);
+        } else if item.is_inline_span() {
+          count += usize::from(item.context.style.base_data.position.is_positioned());
+          inline.extend(item.children.iter().flatten());
+        }
       }
     }
 

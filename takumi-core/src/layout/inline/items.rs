@@ -131,7 +131,7 @@ impl RenderNode {
 
   /// Whether the node is an inline box whose content joins its parent's lines rather than an
   /// atomic box of its own.
-  fn is_inline_span(&self) -> bool {
+  pub(crate) fn is_inline_span(&self) -> bool {
     self.context.style.base_data.display.is_inline() && !self.participates_as_inline_box()
   }
 
