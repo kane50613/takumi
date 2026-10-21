@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>pseudo_flex</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .steps {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 20px;
+        width: 100%;
+        height: 100%;
+        padding: 0 200px;
+        background: white;
+        font-size: 28px;
+        color: #18181b;
+      }
+      .step {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .step::before {
+        content: attr(data-step);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #4f46e5;
+        color: white;
+        font-weight: 700;
+      }
+      .grid::before {
+        display: grid;
+        place-items: center;
+        background: #0d9488;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="steps">
+      <div class="step" data-step="1"><span>Lay out ::before as a flex container</span></div>
+      <div class="step" data-step="2"><span>Center its generated text</span></div>
+      <div class="step grid" data-step="3"><span>Or place it with a grid</span></div>
+    </div>
+  </body>
+</html>
