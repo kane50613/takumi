@@ -285,8 +285,7 @@ fn take_repeating_fixed(node: &mut RenderNode) -> Vec<(RenderNode, RenderContext
   repeating
 }
 
-/// The page area a repeated box positions against. Layout gives a layout root
-/// the origin, so the box has to be a child of one to see its own insets.
+/// The page area a repeated box positions against, as a layout root ignores its own insets.
 pub(crate) fn page_root(context: &RenderContext, child: RenderNode) -> RenderNode {
   let area = Node::container([]).with_style(
     Style::default()
