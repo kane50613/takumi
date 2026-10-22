@@ -326,7 +326,7 @@ mod tests {
     assert!(canvas.iter().all(|byte| *byte == 255));
   }
 
-  /// A 1x1 logical screen holding one 65535x65535 frame, in 35 bytes.
+  /// A 1x1 logical screen holding one 65535x65535 frame.
   fn oversized_frame_gif() -> Vec<u8> {
     let mut bytes = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff".to_vec();
 
