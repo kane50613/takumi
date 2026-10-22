@@ -91,13 +91,13 @@ fn character_after(boxes: &[&RenderNode], character_before: char) -> char {
     match step {
       Step::Enter(node) => {
         steps.push(Step::Exit(node));
-        steps.extend(node.marker.as_deref().map(Step::Enter));
+        steps.extend(node.marker().map(Step::Enter));
 
         if node.own_text().is_some() {
           steps.push(Step::Text(node));
         }
 
-        steps.extend(node.children.iter().flatten().map(Step::Enter));
+        steps.extend(node.children_after_marker().iter().map(Step::Enter));
       }
       Step::Text(node) => {
         let Some(text) = node.own_text() else {

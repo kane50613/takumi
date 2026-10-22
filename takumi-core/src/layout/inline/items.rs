@@ -12,11 +12,7 @@ use super::{
 use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Rect, Size},
-  layout::{
-    border::BorderProperties,
-    node::Node,
-    tree::{NodeOrigin, RenderNode},
-  },
+  layout::{border::BorderProperties, node::Node, tree::RenderNode},
   layout_unit::LayoutUnit,
   style::{Color, Direction, Display, Float, Length, Position, Sides, SizingContext, SpacePair},
 };
@@ -130,16 +126,9 @@ impl RenderNode {
     })
   }
 
-  /// Whether its inline formatting context lays it out as a box of the layout tree beside the
-  /// text, which the scene paints as a box of its own: an atomic inline container or a float, not
-  /// an outside list marker.
-  pub(crate) fn is_atomic_inline_box(&self) -> bool {
-    self.participates_as_inline_box() && self.origin != NodeOrigin::Marker
-  }
-
-  /// Whether it is an atomic inline box or a block-in-inline, which its line holds as a tree box.
+  /// Whether it is an atomic inline, a float, an outside marker, or a block-in-inline.
   pub(crate) fn is_inline_content_box(&self) -> bool {
-    self.is_atomic_inline_box() || self.is_block_in_inline
+    self.participates_as_inline_box() || self.is_block_in_inline
   }
 
   /// The child-index path from this node to `target` among its inline content, through the inline

@@ -471,8 +471,6 @@ pub struct RenderNode {
   pub(crate) layout_style_override: Option<Rc<LayoutStyle>>,
   /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
-  /// Generated marker box, emitted before this box's own inline content.
-  pub(crate) marker: Option<Box<RenderNode>>,
   pub(crate) force_inline_layout: bool,
   /// Blink's `IsBlockInInline`: the anonymous block holding block-level children of an inline box.
   pub(crate) is_block_in_inline: bool,
@@ -490,9 +488,6 @@ impl Drop for RenderNode {
     let collect = |node: &mut RenderNode, stack: &mut Vec<RenderNode>| {
       if let Some(children) = node.children.take() {
         stack.extend(children.into_vec());
-      }
-      if let Some(marker) = node.marker.take() {
-        stack.push(*marker);
       }
     };
 
@@ -1214,7 +1209,7 @@ impl RenderNode {
     self.node.as_ref().is_some_and(Node::is_replaced_element)
   }
 
-  /// A box with no layout override or marker.
+  /// A box with no layout override.
   pub(super) fn new(
     context: RenderContext,
     origin: NodeOrigin,
@@ -1228,7 +1223,6 @@ impl RenderNode {
       children,
       layout_style_override: None,
       anonymous_text_content: None,
-      marker: None,
       force_inline_layout: false,
       is_block_in_inline: false,
       fragment_items: FragmentItemsCache::default(),
@@ -1317,7 +1311,6 @@ impl RenderNode {
       node.fragment_items.0.take();
       node.item_shapes.clear();
       stack.extend(node.children.iter().flatten());
-      stack.extend(node.marker.as_deref());
     }
   }
 
@@ -1508,7 +1501,7 @@ impl RenderNode {
   /// inside marker is the item's own content and stays on the item.
   fn attach_marker(&mut self, marker: RenderNode) {
     if self.should_create_inline_layout() {
-      self.marker = Some(Box::new(marker));
+      self.insert_first_child(marker);
       return;
     }
 
@@ -1528,18 +1521,38 @@ impl RenderNode {
     if !has_block_content {
       // Text of its own, or nothing at all: the marker shares that line.
       self.force_inline_layout = true;
-      self.marker = Some(Box::new(marker));
+      self.insert_first_child(marker);
       return;
     }
 
     // Block-level content the marker may not join, so it gets a line of its own.
-    let mut line = RenderNode::anonymous_block_container(&self.context, Vec::new());
+    let mut line = RenderNode::anonymous_block_container(&self.context, vec![marker]);
     line.force_inline_layout = true;
-    line.marker = Some(Box::new(marker));
 
+    self.insert_first_child(line);
+  }
+
+  fn insert_first_child(&mut self, child: RenderNode) {
     let mut children = Vec::from(self.children.take().unwrap_or_default());
-    children.insert(0, line);
+
+    children.insert(0, child);
     self.children = Some(children.into_boxed_slice());
+  }
+
+  /// The generated `::marker` box, its first child as Blink's `::marker` pseudo-element is.
+  pub(crate) fn marker(&self) -> Option<&RenderNode> {
+    self
+      .children
+      .as_deref()?
+      .first()
+      .filter(|child| child.origin == NodeOrigin::Marker)
+  }
+
+  /// Its children after the marker, which its own text comes between.
+  pub(crate) fn children_after_marker(&self) -> &[RenderNode] {
+    let children = self.children.as_deref().unwrap_or_default();
+
+    &children[usize::from(self.marker().is_some())..]
   }
 
   /// The block box the marker travels into when this box has no line of its own.
