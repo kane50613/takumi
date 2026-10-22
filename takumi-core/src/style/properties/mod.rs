@@ -931,6 +931,12 @@ declare_box_alignment_enum_impl!(
     "space-between" => SpaceBetween,
     "space-around" => SpaceAround,
     "space-evenly" => SpaceEvenly,
+  },
+  // Blink's `GetUsedPosition` gives `flex-start` and `flex-end` the flow's positions, so the flow
+  // keywords align as they do in every container.
+  alias {
+    "flow-start" => FlexStart / SafeFlexStart,
+    "flow-end" => FlexEnd / SafeFlexEnd,
   }
 );
 

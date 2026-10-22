@@ -31,7 +31,7 @@ use crate::{
     tree::{LayoutTree, NodeOrigin},
   },
   layout_unit::LayoutUnit,
-  style::Display,
+  style::{Display, JustifyContent},
 };
 
 /// The layouts a box keeps: Blink's layout result cache, one layout that placed its children and
@@ -391,6 +391,8 @@ impl<'r> LayoutTree<'r> {
       || style.is_scroll_container()
       || style.applies_layout_containment()
       || self.render_node(node).context.style.line_clamp().is_some()
+      // https://drafts.csswg.org/css-align/#distribution-block
+      || style.align_content != JustifyContent::Normal
       || !matches!(
         style.display,
         Display::Block | Display::ListItem | Display::Inline

@@ -164,4 +164,16 @@ mod tests {
     // Content distribution takes no self-position keyword.
     assert!(JustifyContent::from_css_str("self-start").is_err());
   }
+
+  /// The flow keywords align as `flex-start` and `flex-end`, whose used positions they are.
+  #[test]
+  fn flow_positions_parse_as_flex_positions() {
+    for (css, expected) in [
+      ("flow-start", JustifyContent::FlexStart),
+      ("flow-end", JustifyContent::FlexEnd),
+      ("safe flow-end", JustifyContent::SafeFlexEnd),
+    ] {
+      assert_eq!(JustifyContent::from_css_str(css), Ok(expected), "{css}");
+    }
+  }
 }

@@ -47,7 +47,7 @@ use crate::{
     tree::LayoutTree,
   },
   layout_unit::LayoutUnit,
-  style::{AlignItems, Direction, TextFitMode, TextFitTarget, TextWrapStyle},
+  style::{AlignItems, Direction, JustifyContent, TextFitMode, TextFitTarget, TextWrapStyle},
 };
 
 /// Blink's `PreviousInflowPosition`.
@@ -402,17 +402,23 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
   /// Blink's `Layout`, and its `HandleNonsuccessfulLayoutResult` for a clamp that hid no line.
   pub(crate) fn layout(mut self) -> LayoutResult {
+    let items_data = self
+      .tree
+      .has_inline_children(self.node)
+      .then(|| self.tree.inline_node_data(usize::from(self.node)));
     let status = self.start_layout().and_then(|mut previous| {
-      if self.tree.has_inline_children(self.node) {
-        self.layout_inline_child(&mut previous)?;
-      } else {
-        self.layout_block_children(&mut previous)?;
-      }
+      let lines = match &items_data {
+        Some(items_data) => Some(self.layout_lines(items_data, &mut previous)?),
+        None => {
+          self.layout_block_children(&mut previous)?;
+          None
+        }
+      };
 
-      Ok(previous)
+      Ok((previous, lines))
     });
-    let mut previous = match status {
-      Ok(previous) => previous,
+    let (mut previous, lines) = match status {
+      Ok(laid_out) => laid_out,
       Err(status) => return self.abort(status),
     };
 
@@ -421,7 +427,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
 
     self.intrinsic_block_size = self.border_padding.block_start;
-    self.finish_layout(&mut previous)
+    self.finish_layout(&mut previous, items_data.as_deref().zip(lines))
   }
 
   /// Blink's `FinishLayout` asking for `RelayoutIgnoringLineClamp`: the clamp hid no line.
@@ -500,7 +506,11 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   }
 
   /// Blink's `FinishLayout`.
-  fn finish_layout(mut self, previous: &mut PreviousInflowPosition) -> LayoutResult {
+  fn finish_layout(
+    mut self,
+    previous: &mut PreviousInflowPosition,
+    lines: Option<(&InlineNodeData<'r>, Vec<LineBoxFragment<'_, 'r>>)>,
+  ) -> LayoutResult {
     let space = self.space;
     let clamped = self.line_clamp_data.previous_inflow_position_when_clamped;
 
@@ -584,6 +594,24 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       self.adjoining_object_types = AdjoiningObjectTypes::empty();
     }
 
+    let content_offset = self.align_block_content(block_size);
+
+    // Blink's `InlineNode` child keeps its lines until the fragment knows its size.
+    if let Some((items_data, mut lines)) = lines {
+      let available_space = self.inline_available_space();
+
+      for line in &mut lines {
+        line.move_by(BfcOffset::new(LayoutUnit::ZERO, content_offset));
+      }
+      self.tree.keep_inline_content(
+        self.node,
+        space,
+        self.inline_size,
+        (items_data, &lines),
+        available_space,
+      );
+    }
+
     let size = LogicalSize::new(self.inline_size, block_size);
     let mut result = LayoutResult::of_box(size, &self.style, space);
 
@@ -614,6 +642,39 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       out_of_flow: self.out_of_flow,
       ..result
     }
+  }
+
+  /// Blink's `AlignBlockContent`: how far `align-content` moves the content of a box `block_size`
+  /// tall down, its children, out-of-flow boxes, and baselines moved with it. Approximate: takumi
+  /// parses no `unsafe` alignment, and Blink's block containers align safely by default.
+  fn align_block_content(&mut self, block_size: LayoutUnit) -> LayoutUnit {
+    // Blink's `FinalizeTableCellLayout` aligns a cell by `vertical-align` instead.
+    if self.space.is_table_cell {
+      return LayoutUnit::ZERO;
+    }
+
+    let free_space = (block_size - self.intrinsic_block_size).clamp_negative_to_zero();
+    let offset = match compute_content_alignment_for_block(self.style.align_content) {
+      BlockContentAlignment::Start => return LayoutUnit::ZERO,
+      BlockContentAlignment::Center => free_space / 2,
+      BlockContentAlignment::End => free_space,
+    };
+    let shift = Point::new(LayoutUnit::ZERO, offset);
+
+    for child in &mut self.children {
+      child.location = child.location + shift;
+    }
+    for candidate in &mut self.out_of_flow {
+      *candidate = candidate.moved_by(shift);
+    }
+    for baseline in [&mut self.first_baseline, &mut self.last_baseline]
+      .into_iter()
+      .flatten()
+    {
+      *baseline += offset;
+    }
+
+    offset
   }
 
   /// Lays out the out-of-flow boxes this box contains once its size is known, as Blink's
@@ -1676,29 +1737,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
   }
 
-  /// Blink's `LayoutInlineChild`: the lines of the inline content, kept for the boxes and paint
-  /// they place.
-  fn layout_inline_child(
-    &mut self,
-    previous: &mut PreviousInflowPosition,
-  ) -> Result<(), LayoutStatus> {
-    let items_data = self.tree.inline_node_data(usize::from(self.node));
-    let lines = self.layout_lines(&items_data, previous)?;
-    let available_space = self.inline_available_space();
-
-    self.tree.keep_inline_content(
-      self.node,
-      self.space,
-      self.inline_size,
-      (&items_data, &lines),
-      available_space,
-    );
-
-    Ok(())
-  }
-
-  /// The lines `LayoutInlineChild` lays the inline content of `items_data` out in, at the scale a
-  /// consistent `text-fit` measures.
+  /// Blink's `LayoutInlineChild`: the lines it lays the inline content of `items_data` out in, at
+  /// the scale a consistent `text-fit` measures.
   pub(in crate::layout) fn layout_lines<'a>(
     &mut self,
     items_data: &'a InlineNodeData<'r>,
@@ -1870,6 +1910,30 @@ fn calculate_out_of_flow_static_inline_level_offset(
   }
 
   inline_offset
+}
+
+/// Blink's `BlockContentAlignment`, the safe values alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockContentAlignment {
+  Start,
+  Center,
+  End,
+}
+
+/// Blink's `ComputeContentAlignmentForBlock`: a distribution takes its fallback alignment, and
+/// `flex-start` and `flex-end` align as `start` and `end`.
+fn compute_content_alignment_for_block(align_content: JustifyContent) -> BlockContentAlignment {
+  match align_content {
+    JustifyContent::Center
+    | JustifyContent::SafeCenter
+    | JustifyContent::SpaceAround
+    | JustifyContent::SpaceEvenly => BlockContentAlignment::Center,
+    JustifyContent::End
+    | JustifyContent::SafeEnd
+    | JustifyContent::FlexEnd
+    | JustifyContent::SafeFlexEnd => BlockContentAlignment::End,
+    _ => BlockContentAlignment::Start,
+  }
 }
 
 /// Blink's `WebkitTextAlignAndJustifySelfOffset`, for `justify-self` alone.

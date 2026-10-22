@@ -797,6 +797,7 @@ macro_rules! declare_box_alignment_enum_impl {
     $enum_type:ty,
     safe { $($safe_css:literal => $base_variant:ident / $safe_variant:ident),+ $(,)? },
     plain { $($plain_css:literal => $plain_variant:ident),* $(,)? }
+    $(, alias { $($alias_css:literal => $alias_variant:ident / $alias_safe_variant:ident),+ $(,)? })?
   ) => {
     impl crate::style::MakeComputed for $enum_type {}
 
@@ -804,6 +805,7 @@ macro_rules! declare_box_alignment_enum_impl {
       const VALID_TOKENS: &'static [&'static str] = &[
         $($plain_css,)*
         $($safe_css,)*
+        $($($alias_css,)+)?
         "safe",
         "unsafe",
       ];
@@ -825,6 +827,7 @@ macro_rules! declare_box_alignment_enum_impl {
               }
             },
             $($safe_css => return Ok(if overflow_position.unwrap_or(false) { Self::$safe_variant } else { Self::$base_variant }),)*
+            $($($alias_css => return Ok(if overflow_position.unwrap_or(false) { Self::$alias_safe_variant } else { Self::$alias_variant }),)+)?
             $($plain_css => return if overflow_position.unwrap_or(false) {
               Err($crate::style::unexpected_token!(token))
             } else {
