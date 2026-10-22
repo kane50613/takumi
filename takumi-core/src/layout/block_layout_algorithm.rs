@@ -487,6 +487,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       is_pushed_by_floats: self.is_pushed_by_floats,
       first_baseline: self.first_baseline,
       last_baseline: self.last_baseline,
+      use_last_baseline_for_inline_baseline: space.baseline_algorithm
+        == BaselineAlgorithmType::InlineBlock,
       out_of_flow: self.out_of_flow,
       ..result
     }
@@ -1454,11 +1456,24 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     let use_last_baseline =
       algorithm == BaselineAlgorithmType::Default || result.use_last_baseline_for_inline_baseline;
-    let last = if use_last_baseline {
+    let mut last = if use_last_baseline {
       result.last_baseline
     } else {
       result.first_baseline
     };
+
+    // Some scroll containers force an inline-block's baseline to their block-end margin edge.
+    if algorithm == BaselineAlgorithmType::InlineBlock
+      && result.forces_inline_baseline_synthesis(self.tree.layout_style(child))
+    {
+      let margins = margins_for(
+        self.tree.layout_style(child),
+        self.child_percentage_size.inline_size,
+        self.direction(),
+      );
+
+      last = Some(result.size.block_size + margins.block_end);
+    }
 
     if let Some(last) = last {
       self.last_baseline = Some(block_offset + last);

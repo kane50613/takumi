@@ -242,6 +242,25 @@ impl LayoutResult {
     }
   }
 
+  /// Blink's `ForceInlineBaselineSynthesis`: an inline-block's scroll container that scrolls in
+  /// the block axis takes its block-end margin edge for a baseline.
+  pub(crate) fn forces_inline_baseline_synthesis(&self, style: &LayoutStyle) -> bool {
+    self.use_last_baseline_for_inline_baseline && !style.overflow.y.is_clip_or_visible()
+  }
+
+  /// Blink's `LogicalBoxFragment::BaselineMetrics` baseline for `baseline-source: auto`, none where
+  /// the line synthesizes one.
+  pub(crate) fn inline_baseline(&self, style: &LayoutStyle) -> Option<LayoutUnit> {
+    if self.forces_inline_baseline_synthesis(style) {
+      return None;
+    }
+    if self.use_last_baseline_for_inline_baseline {
+      return self.last_baseline;
+    }
+
+    self.first_baseline
+  }
+
   /// A layout that stopped at `bfc_block_offset`, which its container resolves and lays it out at
   /// again.
   pub(crate) fn aborted(

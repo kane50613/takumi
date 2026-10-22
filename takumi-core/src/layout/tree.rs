@@ -1,5 +1,5 @@
 use std::{
-  borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, rc::Rc, slice, sync::Arc,
+  borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, ptr, rc::Rc, slice, sync::Arc,
   vec::IntoIter,
 };
 
@@ -18,15 +18,14 @@ use crate::{
     grid::grid_layout_algorithm::GridGeometry,
     inline::{
       ContentBox, FragmentItems, InlineContentKind, InlineMeasurement, InlineOutOfFlow,
-      inline_item_result::{CollapsedMargins, LayoutResult as LineItemLayoutResult},
+      atomic_inline::BoxAtomicInline,
       inline_node::{InlineNode, ItemShapes},
       inline_node_data::InlineNodeData,
     },
-    layout_result::{LayoutResult, LayoutStatus, OutOfFlowCandidate, StaticPosition},
+    layout_result::{OutOfFlowCandidate, StaticPosition},
     layout_style::{LayoutLength, LayoutStyle},
     length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
-    margin_strut::MarginStrut,
     node::{Node, NodeKind, NodeStyleLayers},
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::{ColumnConstraints, TableFragment, TableStructure},
@@ -38,9 +37,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey,
-    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
-    StyleSheet, WhiteSpaceCollapse, apply_stylesheet_animations,
+    Direction, Display, Float, LineHeight, ListStylePosition, MatchedStyleKey, Registrations,
+    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+    WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -144,7 +143,6 @@ pub struct LayoutResults {
 
 struct LayoutResultNode {
   layout: ComputedLayout,
-  first_baseline_y: Option<f32>,
   box_children: Box<[OrderedChild]>,
 }
 
@@ -208,10 +206,6 @@ impl LayoutResults {
     self.node(node_id).map(|node| node.box_children.as_ref())
   }
 
-  pub(crate) fn first_baseline_y(&self, node_id: NodeId) -> crate::Result<Option<f32>> {
-    self.node(node_id).map(|node| node.first_baseline_y)
-  }
-
   /// The paint data of the table `node_id`, when it is one.
   pub fn table_fragment(&self, node_id: NodeId) -> Option<&TableFragment> {
     self.tables.get(&usize::from(node_id))
@@ -221,13 +215,6 @@ impl LayoutResults {
   /// columns or empty under `empty-cells: hide`, or a collapsed row.
   pub fn is_hidden_for_paint(&self, node_id: NodeId) -> bool {
     self.hidden.contains(&usize::from(node_id))
-  }
-
-  /// The root's border-box size, zero when the tree is empty.
-  pub(super) fn root_size(&self) -> Size<f32> {
-    self
-      .node(NodeId::ROOT)
-      .map_or(Size::ZERO, |node| node.layout.size)
   }
 
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
@@ -288,6 +275,9 @@ pub struct LayoutTree<'r> {
   table_columns: FxHashMap<usize, Rc<ColumnConstraints>>,
   /// Each table's paint data from its last full layout.
   table_fragments: FxHashMap<usize, TableFragment>,
+  /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
+  /// context lays out as, made the first time its line lays it out.
+  atomic_inlines: FxHashMap<*const RenderNode, NodeId>,
 }
 
 /// What a box's part in a table changes in the styles it is laid out with.
@@ -380,8 +370,10 @@ pub(crate) struct LayoutNodeState {
   container_independent: bool,
   pub(crate) cache: LayoutCache,
   pub(crate) layout: ComputedLayout,
-  pub(crate) first_baseline_y: Option<f32>,
   pub(crate) is_inline_children: bool,
+  /// Whether its inline formatting context lays it out as an atomic inline, float, list marker,
+  /// or block-in-inline.
+  pub(crate) is_atomic_inline: bool,
   /// What its part in a table changes in its styles.
   pub(crate) table_box: TableBoxStyle,
   /// Its children in layout order, or for an inline formatting context the out-of-flow boxes in
@@ -437,8 +429,8 @@ impl LayoutNodeState {
       container_independent,
       cache: LayoutCache::default(),
       layout: ComputedLayout::default(),
-      first_baseline_y: None,
       is_inline_children,
+      is_atomic_inline: false,
       table_box: TableBoxStyle::default(),
       children: Box::new([]),
       box_children: Box::new([]),
@@ -486,8 +478,6 @@ pub struct RenderNode {
   pub(crate) is_block_in_inline: bool,
   /// The fragment items its inline content last laid out to.
   pub(crate) fragment_items: FragmentItemsCache,
-  /// The layouts it took as an atomic inline or a block-in-inline, by available space.
-  atomic_inline_layouts: AtomicInlineCache,
   /// The shapes its inline items took when its inline content was last prepared.
   pub(crate) item_shapes: ItemShapes,
 }
@@ -530,42 +520,6 @@ impl Clone for FragmentItemsCache {
   }
 }
 
-/// Blink's layout result cache for an atomic inline box: a line breaker and each ancestor's
-/// intrinsic sizing ask for the same few available spaces, and every miss lays the whole subtree
-/// out again, so nested inline blocks would cost exponential time.
-#[derive(Default)]
-struct AtomicInlineCache(RefCell<Vec<(Size<AvailableSpace>, AtomicInlineMetrics)>>);
-
-impl AtomicInlineCache {
-  fn get_or_insert_with(
-    &self,
-    available_space: Size<AvailableSpace>,
-    lay_out: impl FnOnce() -> AtomicInlineMetrics,
-  ) -> AtomicInlineMetrics {
-    let cached = self
-      .0
-      .borrow()
-      .iter()
-      .find(|(space, _)| *space == available_space)
-      .map(|&(_, metrics)| metrics);
-
-    if let Some(metrics) = cached {
-      return metrics;
-    }
-
-    let metrics = lay_out();
-
-    self.0.borrow_mut().push((available_space, metrics));
-    metrics
-  }
-}
-
-impl Clone for AtomicInlineCache {
-  fn clone(&self) -> Self {
-    Self::default()
-  }
-}
-
 thread_local! {
   /// The layout an anonymous block box takes in place of a computed style, shared by all of them.
   static BLOCK_STYLE: Rc<LayoutStyle> = Rc::new(LayoutStyle::default());
@@ -573,32 +527,6 @@ thread_local! {
 
 fn block_style() -> Rc<LayoutStyle> {
   BLOCK_STYLE.with(Rc::clone)
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct AtomicInlineMetrics {
-  pub(crate) size: Size<f32>,
-  pub(crate) baseline_offset: Option<f32>,
-  /// A block-in-inline's margins, none for an atomic inline.
-  pub(crate) collapsed_margins: Option<CollapsedMargins>,
-}
-
-impl AtomicInlineMetrics {
-  /// The metrics as the line takes them, in layout units.
-  pub(crate) fn into_layout_result(self) -> LineItemLayoutResult {
-    LineItemLayoutResult {
-      inline_size: LayoutUnit::from_float(self.size.width),
-      block_size: LayoutUnit::from_float(self.size.height),
-      baseline: self.baseline_offset.map(LayoutUnit::from_float),
-      collapsed_margins: self.collapsed_margins,
-    }
-  }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum InlineBaselineSource {
-  InlineContentLastLine,
-  LayoutFirstBaseline,
 }
 
 /// An element's own important declarations.
@@ -655,14 +583,32 @@ impl<'r> LayoutTree<'r> {
       tables: FxHashMap::default(),
       table_columns: FxHashMap::default(),
       table_fragments: FxHashMap::default(),
+      atomic_inlines: FxHashMap::default(),
     };
 
     tree.push_subtree(render_root);
     tree.nodes.shrink_to_fit();
     tree.render_nodes.shrink_to_fit();
-    tree.prepare_tables();
+    tree.prepare_tables(0);
 
     tree
+  }
+
+  /// The node the box `render_node` of an inline formatting context lays out as, its subtree
+  /// appended to the tree the first time.
+  pub(crate) fn atomic_inline_node(&mut self, render_node: &'r RenderNode) -> NodeId {
+    if let Some(&node) = self.atomic_inlines.get(&ptr::from_ref(render_node)) {
+      return node;
+    }
+
+    let start = self.nodes.len();
+    let node = NodeId::new(start);
+
+    self.push_subtree(render_node);
+    self.nodes[start].is_atomic_inline = true;
+    self.prepare_tables(start);
+    self.atomic_inlines.insert(ptr::from_ref(render_node), node);
+    node
   }
 
   /// The prepared items of the inline formatting context the node at `index` establishes.
@@ -842,7 +788,7 @@ impl<'r> LayoutTree<'r> {
   /// `available_space`, which is the initial containing block of the out-of-flow boxes no other
   /// box contains.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
-    let space = self.root_space(available_space, false);
+    let space = self.root_space(available_space);
     let definite = |available: AvailableSpace| match available {
       AvailableSpace::Definite(size) => LayoutUnit::from_float(size),
       AvailableSpace::MinContent | AvailableSpace::MaxContent => LayoutUnit::ZERO,
@@ -922,7 +868,7 @@ impl<'r> LayoutTree<'r> {
   /// as, its known border-box width less its laid-out padding and border `insets_width`, its lines
   /// cached by the width they lay out at.
   pub(crate) fn inline_measurement(
-    &self,
+    &mut self,
     idx: usize,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
@@ -934,7 +880,12 @@ impl<'r> LayoutTree<'r> {
     let known_width = known_dimensions
       .width
       .map(|width| node.content_width_of(width, Some(insets_width)));
-    let (width, line_width) = node.widths(&items_data, available_space, known_width);
+    let (width, line_width) = node.widths(
+      &items_data,
+      available_space,
+      known_width,
+      &mut BoxAtomicInline::new(self, available_space),
+    );
     let key = (
       idx,
       inline_lines_bits(
@@ -946,12 +897,21 @@ impl<'r> LayoutTree<'r> {
       ),
     );
     let measured = self.inline_measures.borrow().get(&key).copied();
-    let measurement = measured.unwrap_or_else(|| {
-      let measurement = node.measure_lines(&items_data, width, line_width, available_space.height);
+    let measurement = match measured {
+      Some(measurement) => measurement,
+      None => {
+        let measurement = node.measure_lines(
+          &items_data,
+          width,
+          line_width,
+          available_space.height,
+          &mut BoxAtomicInline::new(self, available_space),
+        );
 
-      self.inline_measures.borrow_mut().insert(key, measurement);
-      measurement
-    });
+        self.inline_measures.borrow_mut().insert(key, measurement);
+        measurement
+      }
+    };
 
     InlineMeasurement {
       size: Size {
@@ -960,25 +920,6 @@ impl<'r> LayoutTree<'r> {
       },
       ..measurement
     }
-  }
-
-  /// The root laid out as an in-flow block of a block formatting context, as Blink's
-  /// `BlockNode::Layout` lays out a block-in-inline: an auto width fills a definite
-  /// `available_space`'s, and the margins of its first and last children collapse through it.
-  pub(crate) fn lay_out_root_in_flow(
-    &mut self,
-    available_space: Size<AvailableSpace>,
-  ) -> Rc<LayoutResult> {
-    let mut space = self.root_space(available_space, true);
-    let result = self.layout(NodeId::ROOT, &space);
-
-    if result.status == LayoutStatus::Success {
-      return result;
-    }
-
-    // Floats adjoining its block start move once its block offset resolves.
-    space.forced_bfc_block_offset = result.bfc_block_offset;
-    self.layout(NodeId::ROOT, &space)
   }
 
   /// The initial containing block of a document laid out in `available_space`: a min-content or
@@ -1008,13 +949,10 @@ impl<'r> LayoutTree<'r> {
   /// `available_height` tall, sized without laying out its height, as Blink's
   /// `ComputeMinMaxSizes` sizes a box's inline axis alone.
   pub(crate) fn root_min_max_widths(&mut self, available_height: AvailableSpace) -> (f32, f32) {
-    let mut space = self.root_space(
-      Size {
-        width: AvailableSpace::MaxContent,
-        height: available_height,
-      },
-      false,
-    );
+    let mut space = self.root_space(Size {
+      width: AvailableSpace::MaxContent,
+      height: available_height,
+    });
 
     space.available_inline_size = None;
     space.cache_slot = CacheSlot::Measure;
@@ -1051,7 +989,6 @@ impl<'r> LayoutTree<'r> {
 
     nodes.extend(self.nodes.into_iter().map(|node| LayoutResultNode {
       layout: node.layout,
-      first_baseline_y: node.first_baseline_y,
       box_children: node.box_children,
     }));
     let hidden = self
@@ -1108,8 +1045,16 @@ impl<'r> LayoutTree<'r> {
 
     self.nodes[index].layout = layout;
 
-    if self.keeps_fragment_items && self.render_nodes[index].has_own_inline_content() {
-      self.render_nodes[index].keep_fragment_items(&self.inline_node_data(index), layout);
+    let render_node = self.render_nodes[index];
+
+    if self.keeps_fragment_items && render_node.has_own_inline_content() {
+      let items_data = self.inline_node_data(index);
+
+      render_node.keep_fragment_items(
+        &items_data,
+        layout,
+        &mut BoxAtomicInline::new(self, Size::all(AvailableSpace::MaxContent)),
+      );
     }
   }
 
@@ -1257,7 +1202,6 @@ impl RenderNode {
       force_inline_layout: false,
       is_block_in_inline: false,
       fragment_items: FragmentItemsCache::default(),
-      atomic_inline_layouts: AtomicInlineCache::default(),
       item_shapes: ItemShapes::default(),
     }
   }
@@ -1268,14 +1212,19 @@ impl RenderNode {
     &'c self,
     items_data: &InlineNodeData<'c>,
     layout: ComputedLayout,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) {
     if self.fragment_items_in(layout).is_some() || !self.has_own_inline_content() {
       return;
     }
 
-    self.fragment_items.keep(Rc::new(
-      self.lay_out_fragment_items_from(items_data, layout),
-    ));
+    self
+      .fragment_items
+      .keep(Rc::new(self.lay_out_fragment_items_from(
+        items_data,
+        layout,
+        atomic_inline,
+      )));
   }
 
   /// Whether it has inline content of its own to lay out.
@@ -1329,14 +1278,13 @@ impl RenderNode {
       .map(Rc::clone)
   }
 
-  /// Forgets the fragment items and atomic inline layouts it and the boxes under it took, which no
-  /// longer hold once the tree may have changed since.
+  /// Forgets the fragment items and item shapes it and the boxes under it took, which no longer
+  /// hold once the tree may have changed since.
   pub(crate) fn clear_layout_caches(&self) {
     let mut stack = vec![self];
 
     while let Some(node) = stack.pop() {
       node.fragment_items.0.take();
-      node.atomic_inline_layouts.0.take();
       node.item_shapes.clear();
       stack.extend(node.children.iter().flatten());
       stack.extend(node.marker.as_deref());
@@ -1961,258 +1909,6 @@ impl RenderNode {
       left: style.box_data.margin_left,
     }
     .map(|length| length.to_px(&self.context.sizing, 0.0))
-  }
-
-  fn inline_content_baseline_offset(
-    &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-    use_last_line: bool,
-  ) -> Option<f32> {
-    let items_data = InlineNode::new(self).prepare_layout();
-    let baseline = self.inline_content_border_box_baseline(
-      &items_data,
-      available_space,
-      size,
-      use_last_line,
-      None,
-      None,
-    )?;
-
-    Some(self.margin_px().top + baseline)
-  }
-
-  /// Baseline of the first or last line box, measured from the border box top.
-  /// Reads the baseline from the fragment items it kept for `kept`, when it kept them, instead of
-  /// laying its content out again.
-  fn inline_content_border_box_baseline<'c>(
-    &'c self,
-    items_data: &InlineNodeData<'c>,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-    use_last_line: bool,
-    kept: Option<ComputedLayout>,
-    laid_out_insets: Option<Rect<f32>>,
-  ) -> Option<f32> {
-    if matches!(
-      self.node.as_ref().and_then(Node::inline_content),
-      Some(InlineContentKind::Box)
-    ) {
-      return None;
-    }
-
-    let content_top = laid_out_insets.map_or_else(|| self.content_top(), |insets| insets.top);
-
-    if let Some(baseline) = kept
-      .and_then(|layout| self.fragment_items_in(layout))
-      .and_then(|items| items.baseline(use_last_line))
-    {
-      return Some(content_top + baseline);
-    }
-
-    let baseline = self.inline_content_baseline(
-      items_data,
-      available_space,
-      size.width,
-      laid_out_insets.map(|insets| insets.left + insets.right),
-      use_last_line,
-    )?;
-
-    Some(content_top + baseline)
-  }
-
-  /// The top border and padding the baselines of its inline content sit below.
-  fn content_top(&self) -> f32 {
-    let sizing = &self.context.sizing;
-    let border_top = Length::from(self.context.style.box_data.border_top_width).to_px(sizing, 0.0);
-    let padding_top = self.context.style.box_data.padding_top.to_px(sizing, 0.0);
-
-    border_top + padding_top
-  }
-
-  fn layout_first_baseline_offset(&self, results: &LayoutResults) -> Option<f32> {
-    let baseline = results.first_baseline_y(NodeId::ROOT).ok().flatten()?;
-
-    Some(self.margin_px().top + baseline)
-  }
-
-  fn valid_baseline_offset(candidate: Option<f32>, box_height: f32) -> Option<f32> {
-    candidate
-      .filter(|baseline| baseline.is_finite() && *baseline >= 0.0 && *baseline <= box_height + 0.5)
-  }
-
-  /// Where an atomic inline box takes its baseline from, in order; an empty list, or no source
-  /// that resolves, falls back to the bottom margin edge.
-  fn inline_baseline_sources(&self) -> &'static [InlineBaselineSource] {
-    match self.context.style.base_data.display {
-      Display::InlineBlock if self.context.style.clips_overflow() => &[],
-      Display::InlineBlock => &[
-        InlineBaselineSource::InlineContentLastLine,
-        InlineBaselineSource::LayoutFirstBaseline,
-      ],
-      Display::InlineFlex
-      | Display::InlineGrid
-      | Display::InlineTable
-      | Display::WebkitInlineBox => &[InlineBaselineSource::LayoutFirstBaseline],
-      _ => &[],
-    }
-  }
-
-  fn resolve_inline_baseline_source(
-    &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-    source: InlineBaselineSource,
-    results: &LayoutResults,
-  ) -> Option<f32> {
-    match source {
-      InlineBaselineSource::InlineContentLastLine => {
-        self.inline_content_baseline_offset(available_space, size, true)
-      }
-      InlineBaselineSource::LayoutFirstBaseline => self.layout_first_baseline_offset(results),
-    }
-  }
-
-  fn resolve_inline_baseline_offset(
-    &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-    results: &LayoutResults,
-  ) -> Option<f32> {
-    let margin = self.margin_px();
-    let margin_box_height = size.height + margin.top + margin.bottom;
-
-    self.inline_baseline_sources().iter().find_map(|&source| {
-      let candidate = self.resolve_inline_baseline_source(available_space, size, source, results);
-
-      Self::valid_baseline_offset(candidate, margin_box_height)
-    })
-  }
-
-  pub(crate) fn measure_inline_box(
-    &self,
-    available_space: Size<AvailableSpace>,
-  ) -> AtomicInlineMetrics {
-    if self.participates_as_inline_box() {
-      return self.measure_atomic_subtree(available_space);
-    }
-
-    // Only an atomic box has a baseline of its own; a replaced one sits on its bottom margin edge.
-    AtomicInlineMetrics {
-      size: LayoutResults::compute(self, available_space).root_size(),
-      baseline_offset: None,
-      collapsed_margins: None,
-    }
-  }
-
-  /// Blink's `LayoutAtomicInline` sizing: an auto width shrinks to fit, and any other resolves
-  /// against the containing block, which `available_space` stands in for.
-  pub(crate) fn layout_atomic_inline(
-    &self,
-    available_space: Size<AvailableSpace>,
-  ) -> AtomicInlineMetrics {
-    self
-      .atomic_inline_layouts
-      .get_or_insert_with(available_space, || {
-        self.lay_out_atomic_inline(available_space)
-      })
-  }
-
-  fn lay_out_atomic_inline(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
-    if !self.participates_as_inline_box()
-      || self
-        .layout_box_style(&self.context.sizing)
-        .size
-        .width
-        .is_auto()
-    {
-      return self.measure_inline_box(available_space);
-    }
-
-    let results = LayoutResults::compute(self, available_space);
-    let size = results.root_size();
-
-    AtomicInlineMetrics {
-      size,
-      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
-      collapsed_margins: None,
-    }
-  }
-
-  /// Blink's `BlockNode::Layout` of a block-in-inline: an auto width fills `available_space`'s,
-  /// and the margins of its first and last blocks collapse through it. Approximate: the margins
-  /// collapsing through its block start come out as their sum, which collapses with the margins
-  /// before it as one margin.
-  pub(crate) fn layout_block_in_inline(
-    &self,
-    available_space: Size<AvailableSpace>,
-  ) -> AtomicInlineMetrics {
-    self
-      .atomic_inline_layouts
-      .get_or_insert_with(available_space, || {
-        let result = LayoutTree::from_render_node(self).lay_out_root_in_flow(available_space);
-        let start = if result.is_self_collapsing {
-          result.end_margin_strut
-        } else {
-          let mut start = MarginStrut::default();
-
-          start.append(result.bfc_block_offset.unwrap_or_default());
-          start
-        };
-
-        AtomicInlineMetrics {
-          size: Size {
-            width: result.size.inline_size.to_float(),
-            height: result.size.block_size.to_float(),
-          },
-          baseline_offset: result.first_baseline.map(LayoutUnit::to_float),
-          collapsed_margins: Some(CollapsedMargins {
-            start,
-            end: result.end_margin_strut,
-            is_self_collapsing: result.is_self_collapsing,
-          }),
-        }
-      })
-  }
-
-  /// The border box's min-content and max-content widths in a containing block
-  /// `available_height` tall, laid out as a tree's root.
-  pub(crate) fn min_max_widths(&self, available_height: AvailableSpace) -> (f32, f32) {
-    LayoutTree::from_render_node(self).root_min_max_widths(available_height)
-  }
-
-  /// An atomic inline box's shrink-to-fit size and baseline.
-  fn measure_atomic_subtree(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
-    let at_width = |width| Size {
-      width,
-      height: available_space.height,
-    };
-
-    // CSS shrink-to-fit for inline-level atomic boxes:
-    // width = min(max-content, max(min-content, available)).
-    // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
-    let (min_content, max_content) = self.min_max_widths(available_space.height);
-    let used_width = match available_space.width {
-      AvailableSpace::Definite(available) => max_content.min(min_content.max(available)),
-      AvailableSpace::MinContent => min_content,
-      AvailableSpace::MaxContent => max_content,
-    };
-    // A root fills the space beside its margins, so they go back around the border box
-    // shrink-to-fit sized.
-    let margin = self.margin_px();
-    let results = LayoutResults::compute(
-      self,
-      at_width(AvailableSpace::Definite(
-        used_width + margin.left + margin.right,
-      )),
-    );
-    let size = results.root_size();
-
-    AtomicInlineMetrics {
-      size,
-      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
-      collapsed_margins: None,
-    }
   }
 
   /// Whether it measures as the inline content it holds: a text node, or an inline box that tree

@@ -127,27 +127,19 @@ impl<'r> LayoutTree<'r> {
       },
     );
 
-    let cached = self.node_state(node).cache.get(space);
-    let result = match cached {
-      Some(result) => result,
-      None => {
-        if space.cache_slot == CacheSlot::Layout {
-          self.node_state_mut(node).hoisted_children.clear();
-        }
-
-        let result = Rc::new(self.run_algorithm(node, space));
-
-        if result.status == LayoutStatus::Success {
-          self.node_state_mut(node).cache.store(space, &result);
-        }
-        result
-      }
-    };
-
-    if space.cache_slot == CacheSlot::Layout {
-      self.node_state_mut(node).first_baseline_y = result.first_baseline.map(LayoutUnit::to_float);
+    if let Some(result) = self.node_state(node).cache.get(space) {
+      return result;
     }
 
+    if space.cache_slot == CacheSlot::Layout {
+      self.node_state_mut(node).hoisted_children.clear();
+    }
+
+    let result = Rc::new(self.run_algorithm(node, space));
+
+    if result.status == LayoutStatus::Success {
+      self.node_state_mut(node).cache.store(space, &result);
+    }
     result
   }
 
@@ -288,20 +280,22 @@ impl<'r> LayoutTree<'r> {
         let content_block_size = initial_block_size.map(|block_size| {
           (block_size - resolver.border_padding.block_sum()).clamp_negative_to_zero()
         });
-        let mut atomic_inline = BoxAtomicInline {
-          available_space: Size {
+        let available_height = content_block_size
+          .or(
+            space
+              .percentage_resolution_block_size
+              .filter(|_| self.is_anonymous(node)),
+          )
+          .map_or(AvailableSpace::MaxContent, |height| {
+            AvailableSpace::Definite(height.to_float())
+          });
+        let mut atomic_inline = BoxAtomicInline::new(
+          self,
+          Size {
             width: AvailableSpace::MaxContent,
-            height: content_block_size
-              .or(
-                space
-                  .percentage_resolution_block_size
-                  .filter(|_| self.is_anonymous(node)),
-              )
-              .map_or(AvailableSpace::MaxContent, |height| {
-                AvailableSpace::Definite(height.to_float())
-              }),
+            height: available_height,
           },
-        };
+        );
         let sizes =
           InlineNode::new(render_node).compute_min_max_sizes(&items_data, &mut atomic_inline);
 
@@ -400,10 +394,10 @@ impl<'r> LayoutTree<'r> {
   pub(crate) fn has_inline_children(&self, node: NodeId) -> bool {
     let state = self.node_state(node);
 
-    // A replaced root is an atomic inline laid out alone, not the block wrapping one.
+    // A replaced atomic inline lays out as itself, not as the block wrapping one.
     state.is_inline_children
       || (state.children.is_empty()
-        && !(state.layout_style.is_replaced && node == NodeId::ROOT)
+        && !(state.layout_style.is_replaced && (state.is_atomic_inline || node == NodeId::ROOT))
         && self.render_node(node).measures_as_inline_content())
   }
 
@@ -467,7 +461,6 @@ impl<'r> LayoutTree<'r> {
       let state = self.node_state_mut(node);
 
       state.layout = ComputedLayout::default();
-      state.first_baseline_y = None;
       state.hoisted_children.clear();
       stack.extend(state.children.iter().copied());
     }
@@ -566,7 +559,11 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
-    let (positions, padding_boxes) = render_node.inline_out_of_flow_geometry(layout, &containers);
+    let (positions, padding_boxes) = render_node.inline_out_of_flow_geometry(
+      layout,
+      &containers,
+      &mut BoxAtomicInline::new(self, Size::all(AvailableSpace::MaxContent)),
+    );
     let content = layout.content_box_offset();
     let mut candidates = Vec::new();
 
@@ -621,17 +618,9 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// The space the root lays out in, `available_space` its initial containing block: a block-level
-  /// box filling its definite width, a new formatting context unless `in_flow`.
-  pub(crate) fn root_space(
-    &self,
-    available_space: Size<AvailableSpace>,
-    in_flow: bool,
-  ) -> ConstraintSpace {
+  /// box filling its definite width, in a new formatting context.
+  pub(crate) fn root_space(&self, available_space: Size<AvailableSpace>) -> ConstraintSpace {
     let style = self.layout_style(NodeId::ROOT);
-    let definite = |space: AvailableSpace| match space {
-      AvailableSpace::Definite(size) => Some(LayoutUnit::from_float(size)),
-      AvailableSpace::MinContent | AvailableSpace::MaxContent => None,
-    };
     let available_inline_size = match available_space.width {
       AvailableSpace::Definite(width) => LayoutUnit::from_float(width),
       AvailableSpace::MinContent => LayoutUnit::ZERO,
@@ -642,15 +631,15 @@ impl<'r> LayoutTree<'r> {
       || !matches!(available_space.width, AvailableSpace::Definite(_));
     let mut space = ConstraintSpace::new(Some(available_inline_size), style.direction);
 
-    space.available_block_size = definite(available_space.height);
-    space.percentage_resolution_inline_size = definite(available_space.width);
-    space.percentage_resolution_block_size = definite(available_space.height);
+    space.available_block_size = available_space.height.definite();
+    space.percentage_resolution_inline_size = available_space.width.definite();
+    space.percentage_resolution_block_size = available_space.height.definite();
     space.inline_auto_behavior = if fits_content {
       AutoSizeBehavior::FitContent
     } else {
       AutoSizeBehavior::StretchImplicit
     };
-    space.is_new_formatting_context = !in_flow;
+    space.is_new_formatting_context = true;
     space.cache_slot = CacheSlot::Layout;
     space
   }
