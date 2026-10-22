@@ -468,6 +468,7 @@ impl SceneRequest<'_> {
         ContainerContents {
           clip: node_properties.contents.clip,
           path: visit.path.clone(),
+          fragment_index: visit.fragment_index,
         },
       );
 
@@ -567,8 +568,13 @@ impl SceneRequest<'_> {
       containing_blocks.record_content_box(visit.node_id, child_container_size);
 
       for child in layout_children.iter().rev() {
+        // A hoisted box belongs to the fragment of its containing block that positioned it.
+        let container_fragment_index = child
+          .hoisted_cb
+          .and_then(|cb| contents.get(&cb))
+          .map_or(visit.fragment_index, |container| container.fragment_index);
         let Some(child_fragment_index) =
-          layout_results.fragment_in(child.node_id, visit.fragment_index)
+          layout_results.fragment_in(child.node_id, container_fragment_index)
         else {
           continue;
         };

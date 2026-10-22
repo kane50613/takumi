@@ -484,6 +484,14 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
+  /// Makes the out-of-flow boxes `container` positioned belong to its fragment `fragment_index`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn hold_hoisted_children(&mut self, container: NodeId, fragment_index: usize) {
+    for child in self.node_state(container).hoisted_children.clone() {
+      self.node_state_mut(child).fragments[0].container_fragment_index = fragment_index;
+    }
+  }
+
   /// Records that `container` laid out the out-of-flow `node` as its containing block.
   pub(crate) fn add_hoisted_child(&mut self, container: NodeId, node: NodeId) {
     self.node_state_mut(container).hoisted_children.push(node);

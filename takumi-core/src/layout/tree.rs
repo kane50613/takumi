@@ -857,9 +857,10 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes, `@page`, or out-of-flow boxes the
-  /// initial containing block holds: the root laid out a page `page_size` at a time, each page
-  /// resuming where the one before broke. Returns the page count.
+  /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes or `@page`: the root laid out a page
+  /// `page_size` at a time, each page resuming where the one before broke, the page area its
+  /// container and the initial containing block. Approximate: a fixed box is not repeated on every
+  /// page. Returns the page count.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn compute_pages(&mut self, page_size: Size<f32>) -> usize {
     let page_block_size = LayoutUnit::from_float(page_size.height);
@@ -898,6 +899,27 @@ impl<'r> LayoutTree<'r> {
       );
       self.node_state_mut(NodeId::ROOT).fragments[fragment_index].container_fragment_index =
         page_count;
+
+      // The page area is the initial containing block of the out-of-flow boxes no box contains.
+      if !result.out_of_flow.is_empty() {
+        self.lay_out_out_of_flow(
+          NodeId::ROOT,
+          ContainingBlockClaims::ALL,
+          result.out_of_flow.clone(),
+          ContainingBlock {
+            origin: Point::new(
+              LayoutUnit::ZERO - margins.inline_start,
+              LayoutUnit::ZERO - margins.block_start,
+            ),
+            size: Size {
+              width: LayoutUnit::from_float(page_size.width),
+              height: page_block_size,
+            },
+          },
+          &space,
+        );
+        self.hold_hoisted_children(NodeId::ROOT, fragment_index);
+      }
       page_count += 1;
       break_token = result.break_info.break_token.clone();
 

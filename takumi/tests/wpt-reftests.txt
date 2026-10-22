@@ -984,7 +984,7 @@ css/css-break/table/table-grid-paint-htb-ltr.html
 css/css-break/table/table-grid-paint-vlr-rtl.html
 css/css-break/table/table-grid-paint-vrl-rtl.html
 css/css-break/transform-017.html
-css/css-break/underflow-from-next-page-print.html
+css/css-break/transform-023-print.html
 css/css-break/widows-block-in-inline-001.html
 css/css-break/widows-orphans-001.html
 css/css-break/widows-orphans-002.html
@@ -2202,7 +2202,6 @@ css/css-overflow/text-overflow-string-in-textarea-not-inherited.html
 !css/css-position/position-absolute-in-inline-010.html
 !css/css-position/position-absolute-in-inline-011.html
 !css/css-position/position-absolute-in-inline-012.html
-!css/css-position/position-fixed-overflow-print.html
 !css/css-position/position-relative-002.html
 !css/css-position/position-relative-011.html
 !css/css-position/position-relative-012.html

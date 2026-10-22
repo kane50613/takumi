@@ -819,6 +819,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       self
         .tree
         .lay_out_out_of_flow(self.node, claims, candidates, containing_block, self.space);
+    #[cfg(feature = "fragmentation")]
+    self
+      .tree
+      .hold_hoisted_children(self.node, self.fragment_index());
   }
 
   /// Writes each placed child's geometry once the layout stands, which only a layout that places
