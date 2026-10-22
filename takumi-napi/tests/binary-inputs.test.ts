@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { container, image } from "@takumi-rs/helpers";
+import { Renderer as NativeRenderer } from "../index";
 import { Renderer } from "../src/export";
 
 const fontArrayBuffer = await Bun.file("../assets/fonts/geist/Geist[wght].woff2").arrayBuffer();
@@ -181,5 +182,35 @@ describe("binary inputs", () => {
 
       expect(result).toBeInstanceOf(Buffer);
     }
+  });
+});
+
+// The native renderer, since the wrapper awaits before handing bytes to it.
+describe("input bytes rewritten after the call returns", () => {
+  test("registerFont keeps the bytes it was given", async () => {
+    const font = new Uint8Array(fontArrayBuffer.slice(0));
+
+    const registering = new NativeRenderer().registerFont(font);
+    font.fill(0);
+
+    const families = await registering;
+    expect(families.some((family) => Boolean(family.name))).toBe(true);
+  });
+
+  test("render keeps the image bytes it was given", async () => {
+    const options = { width: 64, height: 64 };
+    const expected = await new NativeRenderer().render(imageNode, {
+      ...options,
+      images: [{ src: "test://binary-input-image", data: imageBuffer }],
+    });
+    const data = new Uint8Array(imageArrayBuffer.slice(0));
+
+    const rendering = new NativeRenderer().render(imageNode, {
+      ...options,
+      images: [{ src: "test://binary-input-image", data }],
+    });
+    data.fill(0);
+
+    expect(Buffer.compare(await rendering, expected)).toBe(0);
   });
 });
