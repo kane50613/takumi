@@ -828,6 +828,18 @@ fn a_float_among_lines_that_avoids_breaking_moves_to_the_next_page_alone() {
 }
 
 #[test]
+fn a_box_that_clones_its_decorations_grows_by_those_of_each_fragment() {
+  let tree = render(
+    root([block("box", "clone")]),
+    ".clone { box-decoration-break: clone; box-sizing: content-box; padding: 20px 0; height: 300px }",
+  );
+  let (boxes, _) = pages(&tree, 200.0);
+
+  // The 300px content and the padding of both fragments make 380px.
+  assert_eq!(boxes["box"], [placed(0, 0.0, 200.0), placed(1, 0.0, 180.0)]);
+}
+
+#[test]
 fn a_fixed_box_repeats_on_the_pages_an_absolute_box_adds() {
   let body =
     Node::container([block("fixed", "fixed"), block("abs", "abs")]).with_class_name("block");

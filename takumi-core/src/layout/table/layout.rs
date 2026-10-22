@@ -805,7 +805,10 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     }
 
     let style = &self.style;
-    let resolver = LengthResolver::new(space, style);
+    let mut resolver = LengthResolver::new(space, style);
+
+    resolver.border_padding = self.border_padding_for_size(resolver.border_padding);
+
     let min_length = style.min_size.height;
     // A definite intrinsic block size makes a resolvable `min-height` resolve.
     let intrinsic_block_size = (!min_length.is_auto()

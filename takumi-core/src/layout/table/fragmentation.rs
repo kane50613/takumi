@@ -10,6 +10,7 @@ use crate::{
     constraint_space::ConstraintSpace,
     fragmentation_layout_input::ChildBreakToken,
     layout_result::{LayoutResult, LayoutStatus, OutOfFlowCandidate},
+    logical_rect::LogicalBoxStrut,
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::{TableLayoutAlgorithm, TableStructure, rows::Rows},
   },
@@ -28,7 +29,6 @@ use crate::{
       fragmentation_layout_input_for_child, is_avoid_break_inside_value, is_break_inside,
       is_early_break_target, move_past_breakpoint, setup_space_builder_for_fragmentation,
     },
-    logical_rect::LogicalBoxStrut,
     table::TableBreakTokenData,
   },
   style::{BoxDecorationBreak, Overflow},
@@ -424,6 +424,12 @@ impl TableLayoutAlgorithm<'_, '_> {
     self.builder.previously_consumed_block_size()
   }
 
+  /// Blink's `BorderPadding`: the table's `border_padding`, with the cloned decorations of every
+  /// fragment so far.
+  pub(super) fn border_padding_for_size(&self, border_padding: LogicalBoxStrut) -> LogicalBoxStrut {
+    self.builder.border_padding_for_size(border_padding)
+  }
+
   /// Blink's `FragmentainerSpaceLeftForChildren` where the page's size is known.
   pub(super) fn fragmentainer_space_at_start(&self) -> Option<LayoutUnit> {
     self
@@ -744,6 +750,10 @@ impl TableLayoutAlgorithm<'_, '_> {
 
   pub(super) fn previously_consumed_block_size(&self) -> LayoutUnit {
     LayoutUnit::ZERO
+  }
+
+  pub(super) fn border_padding_for_size(&self, border_padding: LogicalBoxStrut) -> LogicalBoxStrut {
+    border_padding
   }
 
   pub(super) fn fragmentainer_space_at_start(&self) -> Option<LayoutUnit> {

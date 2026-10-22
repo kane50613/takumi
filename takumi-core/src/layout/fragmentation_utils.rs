@@ -251,9 +251,21 @@ pub(crate) fn setup_fragment_builder_for_fragmentation(
   let clone_box_start_decorations = builder.should_clone_block_start_border_padding();
   let mut clone_box_end_decorations = clone_box_start_decorations;
 
+  // Blink's `UpdateBorderPaddingForClonedBoxDecorations`.
+  if clone_box_start_decorations
+    && let Some(token) = previous_break_token
+      .as_deref()
+      .filter(|token| is_break_inside(Some(token)))
+  {
+    builder.cloned_decorations_fragment_count = token.sequence_number as i32 + 2;
+  }
+
   if space.has_block_fragmentation() {
     let mut requires_content_before_breaking = space.requires_content_before_breaking();
-    let resolver = LengthResolver::new(space, style);
+    let mut resolver = LengthResolver::new(space, style);
+
+    resolver.border_padding = builder.border_padding_for_size(resolver.border_padding);
+
     let max_block_size = resolver
       .block_size_for_fragment(Some(LayoutUnit::MAX), Some(inline_size), None)
       .unwrap_or(LayoutUnit::MAX);

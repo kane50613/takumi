@@ -58,6 +58,9 @@ pub(crate) struct BoxFragmentBuilder {
   pub(crate) is_known_to_fit_in_fragmentainer: bool,
   pub(crate) should_clone_box_end_decorations: bool,
   pub(crate) should_prevent_break_before_block_end_decorations: bool,
+  /// The fragments whose cloned block-start and block-end decorations the box's size counts,
+  /// this one included: one unless they clone after a break inside.
+  pub(crate) cloned_decorations_fragment_count: i32,
   pub(crate) requires_content_before_breaking: bool,
   /// Blink's `FragmentsTotalBlockSize`: the box's block size as if it did not fragment.
   pub(crate) fragments_total_block_size: LayoutUnit,
@@ -110,6 +113,7 @@ impl BoxFragmentBuilder {
       is_known_to_fit_in_fragmentainer: false,
       should_clone_box_end_decorations: false,
       should_prevent_break_before_block_end_decorations: false,
+      cloned_decorations_fragment_count: 1,
       requires_content_before_breaking: space.requires_content_before_breaking(),
       fragments_total_block_size: LayoutUnit::ZERO,
       fragment_block_size: LayoutUnit::ZERO,
@@ -469,6 +473,18 @@ impl BoxFragmentBuilder {
       child_break_tokens: std::mem::take(&mut self.child_break_tokens),
       algorithm_data: self.break_token_data.take(),
     }
+  }
+
+  /// Blink's `BorderPadding` from the box's `border_padding`: the block size resolves with the
+  /// block-start and block-end decorations of every fragment so far when they clone.
+  pub(crate) fn border_padding_for_size(
+    &self,
+    mut border_padding: LogicalBoxStrut,
+  ) -> LogicalBoxStrut {
+    border_padding.block_start =
+      border_padding.block_start * self.cloned_decorations_fragment_count;
+    border_padding.block_end = border_padding.block_end * self.cloned_decorations_fragment_count;
+    border_padding
   }
 
   /// Blink's `ShouldCloneBlockStartBorderPadding`.
