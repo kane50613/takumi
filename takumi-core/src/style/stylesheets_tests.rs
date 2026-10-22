@@ -1577,15 +1577,14 @@ fn shorthands_take_css_wide_keywords() {
   );
 }
 
-/// Inline-axis logical properties follow `direction`; block-axis and size ones map as in
-/// `horizontal-tb`.
+/// Inline-start and inline-end properties follow `direction`; the rest map as in `horizontal-tb`.
 #[test]
 fn logical_properties_map_to_physical_sides() {
   let style = style_with(
     StyleDeclarationBlock::parse_loosy(
       "direction: rtl; inset-inline-start: 10px; border-inline-end-width: 3px; \
        border-start-start-radius: 4px; margin-block-start: 5px; inline-size: 20px; \
-       border-block-end: 2px solid red",
+       border-block-end: 2px solid red; overflow-inline: hidden; overflow-block: clip",
     )
     .declarations,
   )
@@ -1606,6 +1605,8 @@ fn logical_properties_map_to_physical_sides() {
     style.box_data.border_bottom_width,
     LineWidth::Length(Length::Px(2.0))
   );
+  assert_eq!(style.base_data.overflow_x, Overflow::Hidden);
+  assert_eq!(style.base_data.overflow_y, Overflow::Clip);
 }
 
 /// Padding and sizes reject a negative value, which leaves the earlier declaration in place, while

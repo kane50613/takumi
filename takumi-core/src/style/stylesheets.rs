@@ -2027,6 +2027,12 @@ define_style! {
     overflow: SpacePair<Overflow> => [OverflowX, OverflowY] |value, target| {
       push_axis_declarations!(target, value, overflow_x, overflow_y);
     },
+    overflow_inline: Overflow => [OverflowX] |value, target| {
+      target.push(StyleDeclaration::overflow_x(value));
+    },
+    overflow_block: Overflow => [OverflowY] |value, target| {
+      target.push(StyleDeclaration::overflow_y(value));
+    },
     background: Backgrounds => [BackgroundImage, BackgroundPosition, BackgroundSize, BackgroundRepeat, BackgroundColor, BackgroundClip, BackgroundOrigin] |value, target| {
       target.push(StyleDeclaration::background_position(
         value.iter().map(|background| background.position).collect(),
