@@ -278,3 +278,38 @@ fn each_page_paints_the_lines_its_fragment_holds() {
     );
   }
 }
+
+#[test]
+fn a_sliced_box_leaves_its_border_out_where_it_breaks() {
+  let tree = render(
+    root([block("a", "h100"), block("b", "framed")]),
+    ".h100 { height: 100px } .framed { height: 200px; border: 5px solid black; padding: 4px }",
+  );
+  let (results, page_count) = LayoutResults::compute_pages(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+  );
+  let b = results.box_children(NodeId::ROOT).expect("children")[1].node_id;
+  let fragments = results.fragments(b).expect("fragments");
+
+  assert_eq!(page_count, 2);
+  assert_eq!(fragments.len(), 2);
+  assert_eq!(
+    (
+      fragments[0].layout.border.top,
+      fragments[0].layout.border.bottom
+    ),
+    (5.0, 0.0)
+  );
+  assert_eq!(
+    (
+      fragments[1].layout.border.top,
+      fragments[1].layout.border.bottom
+    ),
+    (0.0, 5.0)
+  );
+  assert_eq!(fragments[1].layout.padding.top, 0.0);
+}

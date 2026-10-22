@@ -851,6 +851,14 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       }
     }
 
+    if previously_consumed_block_size > LayoutUnit::ZERO
+      && (builder.box_decoration_break == BoxDecorationBreak::Slice || is_past_end)
+    {
+      builder.includes_block_start = false;
+    }
+    if (builder.did_break_self && !builder.should_clone_box_end_decorations) || is_past_end {
+      builder.includes_block_end = false;
+    }
     builder.consumed_block_size = previously_consumed_block_size + final_block_size;
     builder.fragment_block_size = final_block_size;
 
@@ -885,6 +893,8 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       if builder.is_at_block_end {
         builder.consumed_block_size =
           previously_consumed_block_size + final_block_size.max(space_left);
+      } else if !builder.should_clone_box_end_decorations {
+        builder.includes_block_end = false;
       }
       return Ok(());
     }
@@ -907,6 +917,19 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
     builder.is_at_block_end = true;
     Ok(())
+  }
+
+  /// Blink's `SidesToInclude`: a fragment's border and padding on the side a break cut, which
+  /// layout left out, are none in `result` either, so they paint nowhere.
+  pub(super) fn exclude_broken_sides(&self, result: &mut LayoutResult) {
+    if !self.builder.includes_block_start {
+      result.border.top = 0.0;
+      result.padding.top = 0.0;
+    }
+    if !self.builder.includes_block_end {
+      result.border.bottom = 0.0;
+      result.padding.bottom = 0.0;
+    }
   }
 
   /// What the box's layout result tells its container about breaking: the break token where it

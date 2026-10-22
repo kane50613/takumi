@@ -67,6 +67,9 @@ pub(crate) struct BoxFragmentBuilder {
   /// Blink's `LineCount`: the non-empty lines added.
   pub(crate) line_count: usize,
   pub(crate) is_first_for_node: bool,
+  /// Blink's `SidesToInclude` on the block start and end.
+  pub(crate) includes_block_start: bool,
+  pub(crate) includes_block_end: bool,
 }
 
 impl BoxFragmentBuilder {
@@ -108,6 +111,8 @@ impl BoxFragmentBuilder {
       is_block_size_for_fragmentation_clamped: false,
       line_count: 0,
       is_first_for_node: true,
+      includes_block_start: true,
+      includes_block_end: true,
     }
   }
 

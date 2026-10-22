@@ -722,6 +722,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let size = LogicalSize::new(self.inline_size, block_size);
     let mut result = LayoutResult::of_box(size, &self.style, space);
 
+    self.exclude_broken_sides(&mut result);
+
     if self.tree.has_inline_children(self.node) {
       let candidates =
         self
@@ -2231,6 +2233,8 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
   fn handle_nonsuccessful_layout_result(self, status: LayoutStatus) -> LayoutResult {
     self.abort(status)
   }
+
+  fn exclude_broken_sides(&self, _result: &mut LayoutResult) {}
 }
 
 /// Blink's `CalculateOutOfFlowStaticInlineLevelOffset`: where a zero-sized line from `origin`
