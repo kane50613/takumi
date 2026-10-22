@@ -3,9 +3,9 @@
   <g fill="#000">
     <use href="#g0" x="63.88" y="406.5"/>
     <use href="#g1" x="78.04" y="406.5"/>
-    <use href="#g2" x="84.21" y="406.5"/>
-    <use href="#g3" x="98.01" y="406.5"/>
-    <use href="#g4" x="107.11" y="406.5"/>
+    <use href="#g2" x="84.2" y="406.5"/>
+    <use href="#g3" x="98" y="406.5"/>
+    <use href="#g4" x="107.1" y="406.5"/>
     <use href="#g5" x="113.68" y="406.5"/>
     <use href="#g6" x="129.59" y="406.5"/>
     <use href="#g7" x="142.67" y="406.5"/>
@@ -34,16 +34,16 @@
     <use href="#g8" x="642.67" y="406.5"/>
   </g>
   <g fill="#000">
-    <use href="#g0" x="789" y="406.5"/>
-    <use href="#g1" x="803.16" y="406.5"/>
-    <use href="#g2" x="809.33" y="406.5"/>
-    <use href="#g3" x="823.13" y="406.5"/>
-    <use href="#g4" x="832.22" y="406.5"/>
-    <use href="#g11" x="838.8" y="406.5"/>
+    <use href="#g0" x="788.99" y="406.5"/>
+    <use href="#g1" x="803.15" y="406.5"/>
+    <use href="#g2" x="809.32" y="406.5"/>
+    <use href="#g3" x="823.12" y="406.5"/>
+    <use href="#g4" x="832.21" y="406.5"/>
+    <use href="#g11" x="838.79" y="406.5"/>
     <use href="#g5" x="847.77" y="406.5"/>
-    <use href="#g6" x="863.69" y="406.5"/>
-    <use href="#g7" x="876.77" y="406.5"/>
-    <use href="#g8" x="890.81" y="406.5"/>
+    <use href="#g6" x="863.68" y="406.5"/>
+    <use href="#g7" x="876.76" y="406.5"/>
+    <use href="#g8" x="890.8" y="406.5"/>
   </g>
   <filter id="ft0" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
     <feGaussianBlur in="SourceGraphic" stdDeviation="0" result="f0"/>

@@ -130,6 +130,35 @@ pub(crate) fn transferred_min_max_inline_sizes(
   transferred
 }
 
+/// Blink's `ComputeTransferredMinMaxBlockSizes`.
+pub(crate) fn transferred_min_max_block_sizes(
+  aspect_ratio: f32,
+  inline_min_max: MinMaxSizes,
+  border_padding: LogicalBoxStrut,
+  box_sizing: BoxSizing,
+) -> MinMaxSizes {
+  let mut transferred = MinMaxSizes::UNCONSTRAINED;
+
+  if inline_min_max.min_size > LayoutUnit::ZERO {
+    transferred.min_size = block_size_from_aspect_ratio(
+      border_padding,
+      aspect_ratio,
+      box_sizing,
+      inline_min_max.min_size,
+    );
+  }
+  if inline_min_max.max_size != LayoutUnit::MAX {
+    transferred.max_size = block_size_from_aspect_ratio(
+      border_padding,
+      aspect_ratio,
+      box_sizing,
+      inline_min_max.max_size,
+    );
+  }
+  transferred.max_size = transferred.max_size.max(transferred.min_size);
+  transferred
+}
+
 /// Blink's `ResolveInlineAutoMargins`: `margins` with its auto inline sides taking the space a box
 /// `inline_size` wide leaves.
 pub(crate) fn resolve_inline_auto_margins(

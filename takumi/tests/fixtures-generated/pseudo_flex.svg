@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <path d="M228 211c15.46 0 28 12.54 28 28s-12.54 28-28 28-28-12.54-28-28 12.54-28 28-28Z" fill="#4f46e5"/>
-  <use href="#g0" x="221.71" y="249" fill="#fff"/>
+  <use href="#g0" x="221.7" y="249" fill="#fff"/>
   <g fill="#18181b">
     <use href="#g1" x="276" y="249"/>
     <use href="#g2" x="292.24" y="249"/>
@@ -34,7 +34,7 @@
     <use href="#g11" x="708.68" y="249"/>
   </g>
   <path d="M228 287c15.46 0 28 12.54 28 28s-12.54 28-28 28-28-12.54-28-28 12.54-28 28-28Z" fill="#4f46e5"/>
-  <use href="#g18" x="218.85" y="325" fill="#fff"/>
+  <use href="#g18" x="218.84" y="325" fill="#fff"/>
   <g fill="#18181b">
     <use href="#g19" x="276" y="325"/>
     <use href="#g9" x="295.46" y="325"/>
