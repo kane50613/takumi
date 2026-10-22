@@ -53,6 +53,11 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
   pub(super) fn fragment_index(&self) -> usize {
     fragment_index(self.input.break_token.as_deref())
   }
+  /// Whether this fragment holds every line of the box, which places the out-of-flow boxes of its
+  /// inline content that sit on no line.
+  pub(super) fn holds_every_line(&self) -> bool {
+    !self.is_resuming() && !self.builder.should_break()
+  }
 
   /// Blink's `SetupFragmentBuilderForFragmentation`, and the early break the constructor keeps.
   pub(super) fn setup_fragment_builder_for_fragmentation(&mut self) {

@@ -725,10 +725,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     self.exclude_broken_sides(&mut result);
 
     if self.tree.has_inline_children(self.node) {
-      let candidates =
-        self
-          .tree
-          .finish_inline_content(self.node, self.fragment_index(), &result, space);
+      let candidates = self.tree.finish_inline_content(
+        self.node,
+        (self.fragment_index(), self.holds_every_line()),
+        &result,
+        space,
+      );
 
       self.out_of_flow.extend(candidates);
     }
@@ -2120,6 +2122,10 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   fn fragment_index(&self) -> usize {
     0
+  }
+
+  fn holds_every_line(&self) -> bool {
+    true
   }
 
   fn start_fragment(&mut self, _previous: &mut PreviousInflowPosition) {}

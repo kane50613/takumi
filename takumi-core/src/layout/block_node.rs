@@ -560,7 +560,7 @@ impl<'r> LayoutTree<'r> {
   pub(crate) fn finish_inline_content(
     &mut self,
     node: NodeId,
-    fragment_index: usize,
+    (fragment_index, holds_every_line): (usize, bool),
     result: &LayoutResult,
     space: &ConstraintSpace,
   ) -> Vec<OutOfFlowCandidate> {
@@ -618,6 +618,11 @@ impl<'r> LayoutTree<'r> {
     }
 
     for (child, &position) in boxes.into_iter().zip(&geometry.out_of_flow) {
+      // A box on the lines of another fragment is that fragment's to place; one on no line goes
+      // where the content starts.
+      let Some(position) = position.or(holds_every_line.then(Default::default)) else {
+        continue;
+      };
       let candidate = OutOfFlowCandidate {
         node: child,
         static_position: StaticPosition {

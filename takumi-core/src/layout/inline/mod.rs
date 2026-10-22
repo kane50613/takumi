@@ -69,7 +69,7 @@ pub(crate) use self::{
 pub(crate) use cache::InlineLayoutCache;
 
 /// Where an out-of-flow box sits before insets move it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct StaticPosition {
   /// The inline-start and block-start corner of its margin box.
   pub(crate) point: Point<f32>,
