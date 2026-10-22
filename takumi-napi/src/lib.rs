@@ -78,20 +78,12 @@ impl From<takumi_core::resources::font::RegisteredFace> for RegisteredFace {
   }
 }
 
-/// Ref-counted view of JS-owned bytes, sendable into async tasks without copying.
-/// Callers must not mutate the bytes on the JS side while a task reads them —
-/// the same aliasing contract Buffer inputs have always had.
-pub(crate) enum JsBytes {
-  Buffer(Buffer),
-  Array(Uint8Array),
-}
+/// Bytes copied out of a JS buffer, so a worker thread never reads memory JS can rewrite or detach.
+pub(crate) struct JsBytes(Box<[u8]>);
 
 impl AsRef<[u8]> for JsBytes {
   fn as_ref(&self) -> &[u8] {
-    match self {
-      JsBytes::Buffer(buffer) => buffer,
-      JsBytes::Array(array) => array,
-    }
+    &self.0
   }
 }
 
@@ -99,17 +91,17 @@ impl JsBytes {
   pub(crate) fn from_object(env: Env, value: Object) -> Result<Self> {
     if value.is_buffer()? {
       let buffer = unsafe { BufferSlice::from_napi_value(env.raw(), value.raw()) }?;
-      return Ok(JsBytes::Buffer(buffer.into_buffer(&env)?));
+      return Ok(Self(Box::from(&*buffer)));
     }
 
     if value.is_typedarray()? {
-      let array = unsafe { Uint8Array::from_napi_value(env.raw(), value.raw()) }?;
-      return Ok(JsBytes::Array(array));
+      let array = unsafe { Uint8ArraySlice::from_napi_value(env.raw(), value.raw()) }?;
+      return Ok(Self(Box::from(&*array)));
     }
 
     if value.is_arraybuffer()? {
       let buffer = unsafe { ArrayBuffer::from_napi_value(env.raw(), value.raw()) }?;
-      return Ok(JsBytes::Buffer(Buffer::from(buffer.to_vec())));
+      return Ok(Self(Box::from(&*buffer)));
     }
 
     Err(Error::from_reason(
