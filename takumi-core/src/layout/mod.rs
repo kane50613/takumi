@@ -24,6 +24,7 @@ pub mod intercept;
 pub(crate) mod layout_result;
 pub(crate) mod layout_style;
 pub(crate) mod length_utils;
+pub(crate) mod line_clamp_data;
 /// Generated marker boxes for `display: list-item`.
 pub(crate) mod list_marker;
 pub(crate) mod logical_rect;

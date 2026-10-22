@@ -11,15 +11,13 @@ use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
-  geometry::{AvailableSpace, ComputedLayout, Line, NodeId, Point, Rect, Size},
+  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     block_node::LayoutCache,
     constraint_space::CacheSlot,
     grid::grid_layout_algorithm::GridGeometry,
     inline::{
-      ContentBox, FragmentItems, InlineContent, InlineContentKind, InlineMeasurement,
-      InlineOutOfFlow,
-      atomic_inline::BoxAtomicInline,
+      ContentBox, FragmentItems, InlineContent, InlineContentKind, InlineOutOfFlow,
       inline_node::{InlineNode, ItemShapes},
       inline_node_data::InlineNodeData,
     },
@@ -145,6 +143,7 @@ pub struct LayoutResults {
 struct LayoutResultNode {
   layout: ComputedLayout,
   box_children: Box<[OrderedChild]>,
+  is_line_clamp_clipped_float: bool,
 }
 
 impl LayoutResults {
@@ -211,39 +210,21 @@ impl LayoutResults {
     self.hidden.contains(&usize::from(node_id))
   }
 
+  /// Blink's `IsLineClampClippedFloat`: whether `node_id` is a float its line-clamp container
+  /// clips to its content box's block end.
+  pub fn is_line_clamp_clipped_float(&self, node_id: NodeId) -> bool {
+    self
+      .nodes
+      .get(usize::from(node_id))
+      .is_some_and(|node| node.is_line_clamp_clipped_float)
+  }
+
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
     self
       .nodes
       .get(usize::from(node_id))
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
-}
-
-/// The lines a measurement lays out, as bits: the width they lay out at, then the available
-/// height as a kind and a size and the known height, left out unless `with_height`, then the edges
-/// its margins adjoin.
-fn inline_lines_bits(
-  line_width: f32,
-  available_height: AvailableSpace,
-  known_height: Option<f32>,
-  margins_adjoin: Line<bool>,
-  with_height: bool,
-) -> [u32; 5] {
-  let known_height = known_height.unwrap_or(f32::NAN).to_bits();
-  let (height_kind, height, known_height) = match available_height {
-    _ if !with_height => (u32::MAX, 0, 0),
-    AvailableSpace::Definite(value) => (0, value.to_bits(), known_height),
-    AvailableSpace::MinContent => (1, 0, known_height),
-    AvailableSpace::MaxContent => (2, 0, known_height),
-  };
-
-  [
-    line_width.to_bits(),
-    height_kind,
-    height,
-    known_height,
-    u32::from(margins_adjoin.start) | (u32::from(margins_adjoin.end) << 1),
-  ]
 }
 
 /// The boxes of a render tree as layout lays them out.
@@ -253,10 +234,6 @@ pub struct LayoutTree<'r> {
   /// The inline box that is the containing block of each out-of-flow box an inline formatting
   /// context holds, by node, when one is.
   inline_containers: FxHashMap<usize, &'r RenderNode>,
-  /// Each inline formatting context's lines measured per width they lay out at, which a measure
-  /// with a known width and one offered the same available width share. Only boxes inside see the
-  /// available height, so text alone is keyed on the width.
-  inline_measures: RefCell<FxHashMap<InlineMeasureKey, InlineMeasurement>>,
   /// Each inline formatting context's prepared items, which every pass of one layout shares, as
   /// Blink keeps them until `NeedsCollectInlines`.
   inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
@@ -351,9 +328,6 @@ impl TableBoxStyle {
   }
 }
 
-/// A node and the lines it measures, as bits.
-type InlineMeasureKey = (usize, [u32; 5]);
-
 /// A box as layout lays it out: its styles, what it keeps of its layouts, and where it went.
 pub(crate) struct LayoutNodeState {
   /// The style it lays out with, shared with recent nodes whose style came out equal.
@@ -379,6 +353,8 @@ pub(crate) struct LayoutNodeState {
   pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
   /// The out-of-flow boxes this node is the containing block for.
   pub(crate) claims: ContainingBlockClaims,
+  /// Blink's `IsLineClampClippedFloat` of the layout that placed it.
+  pub(crate) is_line_clamp_clipped_float: bool,
 }
 
 /// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as
@@ -430,6 +406,7 @@ impl LayoutNodeState {
       hoisted_children: Vec::new(),
       grid_geometry: None,
       claims,
+      is_line_clamp_clipped_float: false,
     }
   }
 }
@@ -509,12 +486,17 @@ impl Clone for FragmentItemsCache {
 }
 
 thread_local! {
-  /// The layout an anonymous block box takes in place of a computed style, shared by all of them.
-  static BLOCK_STYLE: Rc<LayoutStyle> = Rc::new(LayoutStyle::default());
+  /// The layout an anonymous block box takes in place of a computed style, shared by all of them
+  /// in each direction.
+  static BLOCK_STYLES: [Rc<LayoutStyle>; 2] = [Direction::Ltr, Direction::Rtl]
+    .map(|direction| Rc::new(LayoutStyle { direction, ..LayoutStyle::default() }));
 }
 
-fn block_style() -> Rc<LayoutStyle> {
-  BLOCK_STYLE.with(Rc::clone)
+/// The layout of an anonymous block box in `context`, whose direction it inherits.
+fn block_style(context: &RenderContext) -> Rc<LayoutStyle> {
+  let index = usize::from(context.style.inherited_data.direction == Direction::Rtl);
+
+  BLOCK_STYLES.with(|styles| Rc::clone(&styles[index]))
 }
 
 /// An element's own important declarations.
@@ -565,7 +547,6 @@ impl<'r> LayoutTree<'r> {
       nodes: Vec::with_capacity(capacity),
       render_nodes: Vec::with_capacity(capacity),
       inline_containers: FxHashMap::default(),
-      inline_measures: RefCell::default(),
       inline_node_data: RefCell::default(),
       tables: FxHashMap::default(),
       table_columns: FxHashMap::default(),
@@ -882,64 +863,6 @@ impl<'r> LayoutTree<'r> {
     );
   }
 
-  /// The measurement of the inline formatting context the node at `idx` establishes or measures
-  /// as, its known border-box width less its laid-out padding and border `insets_width`, its lines
-  /// cached by the width they lay out at.
-  pub(crate) fn inline_measurement(
-    &mut self,
-    idx: usize,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
-    insets_width: f32,
-  ) -> InlineMeasurement {
-    let render_node = self.render_nodes[idx];
-    let items_data = self.inline_node_data(idx);
-    let node = InlineNode::new(render_node);
-    let known_width = known_dimensions
-      .width
-      .map(|width| node.content_width_of(width, Some(insets_width)));
-    let (width, line_width) = node.widths(
-      &items_data,
-      available_space,
-      known_width,
-      &mut BoxAtomicInline::new(self, available_space),
-    );
-    let key = (
-      idx,
-      inline_lines_bits(
-        line_width,
-        available_space.height,
-        known_dimensions.height,
-        render_node.context.margins_adjoin(),
-        !items_data.holds_only_text(),
-      ),
-    );
-    let measured = self.inline_measures.borrow().get(&key).copied();
-    let measurement = match measured {
-      Some(measurement) => measurement,
-      None => {
-        let measurement = node.measure_lines(
-          &items_data,
-          width,
-          line_width,
-          available_space.height,
-          &mut BoxAtomicInline::new(self, available_space),
-        );
-
-        self.inline_measures.borrow_mut().insert(key, measurement);
-        measurement
-      }
-    };
-
-    InlineMeasurement {
-      size: Size {
-        width,
-        height: measurement.size.height,
-      },
-      ..measurement
-    }
-  }
-
   /// The initial containing block of a document laid out in `available_space`: a min-content or
   /// max-content width becomes the root's contribution and margins, which the root then fills.
   fn initial_containing_block(
@@ -1008,6 +931,7 @@ impl<'r> LayoutTree<'r> {
     nodes.extend(self.nodes.into_iter().map(|node| LayoutResultNode {
       layout: node.layout,
       box_children: node.box_children,
+      is_line_clamp_clipped_float: node.is_line_clamp_clipped_float,
     }));
     let hidden = self
       .table_fragments
@@ -1303,7 +1227,8 @@ impl RenderNode {
   }
 
   fn text_item(context: RenderContext, text: String) -> Self {
-    let mut item = Self::anonymous(context, None, None, block_style());
+    let layout_style = block_style(&context);
+    let mut item = Self::anonymous(context, None, None, layout_style);
 
     item.anonymous_text_content = Some(text);
     item.force_inline_layout = true;
@@ -1314,11 +1239,14 @@ impl RenderNode {
     parent_context: &RenderContext,
     children: Vec<RenderNode>,
   ) -> Self {
+    let context = RenderContext::for_anonymous(parent_context);
+    let layout_style = block_style(&context);
+
     Self::anonymous(
-      RenderContext::for_anonymous(parent_context),
+      context,
       None,
       Some(children.into_boxed_slice()),
-      block_style(),
+      layout_style,
     )
   }
 
@@ -1326,10 +1254,7 @@ impl RenderNode {
   /// direction for the blocks it holds.
   fn block_in_inline(parent_context: &RenderContext, children: Vec<RenderNode>) -> Self {
     let context = RenderContext::for_anonymous(parent_context);
-    let layout_style = Rc::new(LayoutStyle {
-      direction: context.style.inherited_data.direction,
-      ..LayoutStyle::default()
-    });
+    let layout_style = block_style(&context);
     let mut block = Self::anonymous(
       context,
       None,
@@ -1648,6 +1573,12 @@ impl RenderNode {
       || self.anonymous_text_content.is_some()
   }
 
+  /// Blink's `IsOriginalDisplayInlineType`: whether the box was inline-level before positioning or
+  /// floating blockified it.
+  pub(crate) fn is_original_display_inline_type(&self) -> bool {
+    self.context.style.original_display.is_inline_level()
+  }
+
   pub(crate) fn participates_in_inline_formatting_context(&self) -> bool {
     self.participates_in_inflow_inline_formatting_context()
       || self.is_out_of_flow()
@@ -1806,10 +1737,11 @@ impl RenderNode {
     .into_boxed_slice();
 
     // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
-    // must not be swept into an anonymous block box.
+    // must not be swept into an anonymous block box, nor floats, which Blink's
+    // `LayoutBlockFlow::AddChild` keeps among the block children.
     let has_inline = children
       .iter()
-      .any(|child| child.participates_in_inline_formatting_context() && !child.is_out_of_flow());
+      .any(RenderNode::participates_in_inflow_inline_formatting_context);
     let has_block = children
       .iter()
       .any(|child| !child.participates_in_inline_formatting_context());
@@ -1824,7 +1756,7 @@ impl RenderNode {
         return wrap_runs(
           children,
           |child| !child.participates_in_inline_formatting_context(),
-          |run| RenderNode::block_in_inline(context, run),
+          |run| vec![RenderNode::block_in_inline(context, run)],
         );
       }
 
@@ -1839,12 +1771,21 @@ impl RenderNode {
       return children;
     }
 
-    // An out-of-flow box stays in the run of inline content around it, as a placeholder
-    // marking its static position, rather than breaking the run into two lines.
+    // Blink's `MakeChildrenNonInline`: an out-of-flow box or float stays in the run of inline
+    // content around it, and a run of them alone stays among the block children.
     wrap_runs(
       children,
       RenderNode::participates_in_inline_formatting_context,
-      |run| RenderNode::anonymous_block_container(context, run),
+      |run| {
+        if run
+          .iter()
+          .any(RenderNode::participates_in_inflow_inline_formatting_context)
+        {
+          vec![RenderNode::anonymous_block_container(context, run)]
+        } else {
+          run
+        }
+      },
     )
   }
 
@@ -1936,11 +1877,11 @@ impl RenderNode {
   }
 }
 
-/// `children` with each run of the ones `in_run` picks wrapped in the box `wrap` makes of it.
+/// `children` with each run of the ones `in_run` picks replaced by what `wrap` makes of it.
 fn wrap_runs(
   children: Box<[RenderNode]>,
   in_run: impl Fn(&RenderNode) -> bool,
-  wrap: impl Fn(Vec<RenderNode>) -> RenderNode,
+  wrap: impl Fn(Vec<RenderNode>) -> Vec<RenderNode>,
 ) -> Box<[RenderNode]> {
   let mut wrapped = Vec::new();
   let mut run = Vec::new();
@@ -1953,14 +1894,14 @@ fn wrap_runs(
     }
 
     if !run.is_empty() {
-      wrapped.push(wrap(take(&mut run)));
+      wrapped.extend(wrap(take(&mut run)));
     }
 
     wrapped.push(child);
   }
 
   if !run.is_empty() {
-    wrapped.push(wrap(run));
+    wrapped.extend(wrap(run));
   }
 
   wrapped.into_boxed_slice()

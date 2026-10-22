@@ -14,7 +14,7 @@ use crate::{
   geometry::{AvailableSpace, NodeId, Size},
   layout::{
     constraint_space::{AutoSizeBehavior, BaselineAlgorithmType, CacheSlot, ConstraintSpace},
-    layout_result::{LayoutResult as BoxLayoutResult, LayoutStatus},
+    layout_result::LayoutResult as BoxLayoutResult,
     margin_strut::MarginStrut,
     tree::{LayoutTree, RenderNode},
   },
@@ -51,35 +51,15 @@ impl<'t, 'r> BoxAtomicInline<'t, 'r> {
     (node, self.tree.layout(node, &space))
   }
 
-  /// The block-in-inline `render_node` laid out as Blink's `BlockNode::Layout` lays out a block
-  /// child: its `auto` width stretching, and laid out again once floats adjoining its block start
-  /// resolve its block offset.
-  fn lay_out_block_in_inline(
-    &mut self,
-    render_node: &'r RenderNode,
-  ) -> (NodeId, Rc<BoxLayoutResult>) {
-    let node = self.tree.atomic_inline_node(render_node);
-    let mut space = self.block_space(node);
-
-    space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
-
-    let result = self.tree.layout(node, &space);
-
-    if result.status == LayoutStatus::Success {
-      return (node, result);
-    }
-
-    space.forced_bfc_block_offset = result.bfc_block_offset;
-    (node, self.tree.layout(node, &space))
-  }
-
-  /// The inline content box `render_node` laid out as its line lays it out.
+  /// The inline content box `render_node` laid out as its line lays it out, a block-in-inline
+  /// or a float as its line laid it out to `line_result`.
   pub(crate) fn lay_out_inline_content_box(
     &mut self,
     render_node: &'r RenderNode,
+    line_result: Option<Rc<BoxLayoutResult>>,
   ) -> (NodeId, Rc<BoxLayoutResult>) {
-    if render_node.is_block_in_inline {
-      return self.lay_out_block_in_inline(render_node);
+    if let Some(result) = line_result {
+      return (self.tree.atomic_inline_node(render_node), result);
     }
 
     self.lay_out_atomic_inline(render_node)
@@ -125,8 +105,26 @@ impl<'r> AtomicInlineLayout<'r> for BoxAtomicInline<'_, 'r> {
     }
   }
 
-  fn layout_block_in_inline(&mut self, render_node: &'r RenderNode) -> LayoutResult {
-    LayoutResult::of_block_in_inline(&self.lay_out_block_in_inline(render_node).1)
+  fn layout_float(
+    &mut self,
+    render_node: &'r RenderNode,
+    space: &ConstraintSpace,
+  ) -> Rc<BoxLayoutResult> {
+    let node = self.tree.atomic_inline_node(render_node);
+
+    self.tree.layout(node, space)
+  }
+
+  fn layout_block_in_inline(
+    &mut self,
+    render_node: &'r RenderNode,
+    space: &ConstraintSpace,
+  ) -> Rc<BoxLayoutResult> {
+    let node = self.tree.atomic_inline_node(render_node);
+    let mut space = space.clone();
+
+    space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
+    self.tree.layout(node, &space)
   }
 
   fn min_max_sizes(&mut self, render_node: &'r RenderNode) -> (LayoutUnit, LayoutUnit) {
@@ -145,15 +143,18 @@ impl<'r> AtomicInlineLayout<'r> for BoxAtomicInline<'_, 'r> {
 }
 
 impl LayoutResult {
-  /// A block-in-inline laid out as `result`, its margins collapsing through its block start and
-  /// end.
-  pub(crate) fn of_block_in_inline(result: &BoxLayoutResult) -> Self {
+  /// A block-in-inline laid out as `result` in its line's `space`, its margins collapsing through
+  /// its block start and end. Approximate: the start margins include those before the line, which
+  /// Blink's anonymous block does not paint over.
+  pub(crate) fn of_block_in_inline(result: &BoxLayoutResult, space: &ConstraintSpace) -> Self {
     let start = if result.is_self_collapsing {
       result.end_margin_strut
     } else {
       let mut start = MarginStrut::default();
 
-      start.append(result.bfc_block_offset.unwrap_or_default());
+      start.append(result.bfc_block_offset.map_or(LayoutUnit::ZERO, |offset| {
+        offset - space.bfc_offset.block_offset
+      }));
       start
     };
 

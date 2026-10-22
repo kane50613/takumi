@@ -1,16 +1,20 @@
 //! The tree and atomic inline layout the inline layout tests share.
 
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use crate::{
   context::RenderContext,
   fonts::shaping::testing::{GEIST_MONO, register},
-  geometry::{AvailableSpace, Size},
+  geometry::{AvailableSpace, NodeId, Size},
   layout::{
+    block_layout_algorithm::BlockLayoutAlgorithm,
+    constraint_space::{AutoSizeBehavior, ConstraintSpace},
     inline::{
       atomic_inline::BoxAtomicInline, inline_item_result::LayoutResult,
+      inline_layout_algorithm::LineBoxFragment, inline_node_data::InlineNodeData,
       line_breaker::AtomicInlineLayout,
     },
+    layout_result::LayoutResult as BoxLayoutResult,
     node::Node,
     tree::{LayoutTree, RenderNode},
   },
@@ -39,11 +43,21 @@ impl<'c> AtomicInlineLayout<'c> for TestAtomicInline {
     }
   }
 
-  fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult {
+  fn layout_float(&mut self, node: &'c RenderNode, space: &ConstraintSpace) -> Rc<BoxLayoutResult> {
+    let mut tree = LayoutTree::from_render_node(node);
+
+    BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent)).layout_float(node, space)
+  }
+
+  fn layout_block_in_inline(
+    &mut self,
+    node: &'c RenderNode,
+    space: &ConstraintSpace,
+  ) -> Rc<BoxLayoutResult> {
     let mut tree = LayoutTree::from_render_node(node);
 
     BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent))
-      .layout_block_in_inline(node)
+      .layout_block_in_inline(node, space)
   }
 
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {
@@ -84,4 +98,44 @@ pub(crate) fn render_tree(children: impl Into<Vec<Node>>, css: &str) -> RenderNo
 
 pub(crate) fn span(text: &str) -> Node {
   Node::text(text).with_class_name("span")
+}
+
+/// `block`'s lines laid out `available_width` wide as the root of a layout tree of its own, for
+/// `read` to read with the items they lay out.
+pub(crate) fn read_lines<'r, R>(
+  block: &'r RenderNode,
+  available_width: f32,
+  read: impl FnOnce(&InlineNodeData<'r>, &[LineBoxFragment<'_, 'r>]) -> R,
+) -> R {
+  let mut tree = LayoutTree::from_render_node(block);
+  let items_data = tree.inline_node_data(usize::from(NodeId::ROOT));
+  let mut space = ConstraintSpace::new(
+    Some(LayoutUnit::from_float(available_width)),
+    block.context.style.inherited_data.direction,
+  );
+
+  space.is_new_formatting_context = true;
+  space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
+
+  let mut ignore_line_clamp = false;
+
+  loop {
+    let mut algorithm = BlockLayoutAlgorithm::new(&mut tree, NodeId::ROOT, &space);
+
+    if ignore_line_clamp {
+      algorithm = algorithm.ignoring_line_clamp();
+    }
+
+    let lines = algorithm
+      .start_layout()
+      .and_then(|mut previous| algorithm.layout_lines(&items_data, &mut previous))
+      .expect("the lines lay out");
+
+    if !ignore_line_clamp && algorithm.should_relayout_ignoring_line_clamp() {
+      ignore_line_clamp = true;
+      continue;
+    }
+
+    return read(&items_data, &lines);
+  }
 }

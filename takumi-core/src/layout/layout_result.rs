@@ -191,6 +191,12 @@ pub(crate) struct LayoutResult {
   pub(crate) bfc_line_offset: LayoutUnit,
   /// Blink's `BfcBlockOffset`, `None` while the box collapses through.
   pub(crate) bfc_block_offset: Option<LayoutUnit>,
+  /// Blink's `LineBoxBfcBlockOffset`: a line box's top, below any floats it moved under.
+  pub(crate) line_box_bfc_block_offset: Option<LayoutUnit>,
+  /// Blink's `ClearanceAfterLine`: the space a `<br clear>` adds after a line box.
+  pub(crate) clearance_after_line: LayoutUnit,
+  /// Blink's `LinesUntilClamp`, after a line box.
+  pub(crate) lines_until_clamp: Option<i32>,
   pub(crate) end_margin_strut: MarginStrut,
   /// The floats of the block formatting context after the box.
   pub(crate) exclusion_space: Rc<ExclusionSpace>,
@@ -202,6 +208,8 @@ pub(crate) struct LayoutResult {
   pub(crate) last_baseline: Option<LayoutUnit>,
   /// Blink's `UseLastBaselineForInlineBaseline`.
   pub(crate) use_last_baseline_for_inline_baseline: bool,
+  /// Blink's `IsLineClampClippedFloat`: a float its line-clamp container clips.
+  pub(crate) is_line_clamp_clipped_float: bool,
   /// The out-of-flow boxes inside that their containing block has yet to place.
   pub(crate) out_of_flow: Vec<OutOfFlowCandidate>,
 }
@@ -217,6 +225,9 @@ impl LayoutResult {
       intrinsic_block_size: size.block_size,
       bfc_line_offset: LayoutUnit::ZERO,
       bfc_block_offset: None,
+      line_box_bfc_block_offset: None,
+      clearance_after_line: LayoutUnit::ZERO,
+      lines_until_clamp: None,
       end_margin_strut: MarginStrut::default(),
       exclusion_space: Rc::default(),
       adjoining_object_types: AdjoiningObjectTypes::empty(),
@@ -225,6 +236,7 @@ impl LayoutResult {
       first_baseline: None,
       last_baseline: None,
       use_last_baseline_for_inline_baseline: false,
+      is_line_clamp_clipped_float: false,
       out_of_flow: Vec::new(),
     }
   }

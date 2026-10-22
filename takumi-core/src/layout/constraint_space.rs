@@ -8,7 +8,8 @@ use bitflags::bitflags;
 
 use crate::{
   layout::{
-    bfc_rect::BfcOffset, exclusions::exclusion_space::ExclusionSpace, margin_strut::MarginStrut,
+    bfc_rect::BfcOffset, exclusions::exclusion_space::ExclusionSpace,
+    line_clamp_data::LineClampData, logical_rect::AvailableLogicalSize, margin_strut::MarginStrut,
   },
   layout_unit::LayoutUnit,
   style::Direction,
@@ -70,8 +71,10 @@ pub(crate) struct ConstraintSpace {
   /// Blink's `PercentageResolutionSize`, none where indefinite.
   pub(crate) percentage_resolution_inline_size: Option<LayoutUnit>,
   pub(crate) percentage_resolution_block_size: Option<LayoutUnit>,
-  /// Blink's `GetLineClampData().LinesUntilClamp()`, for a box clamped by lines.
-  pub(crate) lines_until_clamp: Option<i32>,
+  /// Blink's `GetLineClampData`.
+  pub(crate) line_clamp_data: LineClampData,
+  /// Blink's `IsLineClampClippedFloat`: a float a line-clamp container clips.
+  pub(crate) is_line_clamp_clipped_float: bool,
   pub(crate) is_fixed_inline_size: bool,
   pub(crate) is_fixed_block_size: bool,
   pub(crate) inline_auto_behavior: AutoSizeBehavior,
@@ -108,7 +111,8 @@ impl ConstraintSpace {
       direction,
       percentage_resolution_inline_size: available_inline_size,
       percentage_resolution_block_size: None,
-      lines_until_clamp: None,
+      line_clamp_data: LineClampData::default(),
+      is_line_clamp_clipped_float: false,
       is_fixed_inline_size: false,
       is_fixed_block_size: false,
       inline_auto_behavior: AutoSizeBehavior::FitContent,
@@ -139,14 +143,20 @@ impl ConstraintSpace {
       }
   }
 
-  /// Blink's `LineClampData::IsAtClampPoint`: the line the clamp ellipsizes.
-  pub(crate) fn is_at_clamp_point(&self) -> bool {
-    self.lines_until_clamp == Some(1)
-  }
-
-  /// Blink's `IsPastClampPoint`.
-  pub(crate) fn is_past_clamp_point(&self) -> bool {
-    self.lines_until_clamp.is_some_and(|lines| lines <= 0)
+  /// Blink's `AvailableSize` and `PercentageResolutionSize`.
+  pub(crate) fn available_and_percentage_sizes(
+    &self,
+  ) -> (AvailableLogicalSize, AvailableLogicalSize) {
+    (
+      AvailableLogicalSize {
+        inline_size: self.available_inline_size,
+        block_size: self.available_block_size,
+      },
+      AvailableLogicalSize {
+        inline_size: self.percentage_resolution_inline_size,
+        block_size: self.percentage_resolution_block_size,
+      },
+    )
   }
 
   /// The available inline size, zero while computing intrinsic sizes.

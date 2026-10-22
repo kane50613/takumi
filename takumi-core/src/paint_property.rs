@@ -12,8 +12,8 @@ use std::iter::successors;
 
 use crate::{
   context::RenderContext,
-  geometry::{ComputedLayout, Point},
-  painter::{FillShape, OverflowClip},
+  geometry::{ComputedLayout, Point, Size},
+  painter::{FillShape, OverflowClip, UNBOUNDED},
   scene::SceneBounds,
   style::Affine,
 };
@@ -120,6 +120,54 @@ impl NodeProperties {
         effect,
       },
       contents: PropertyState { clip, effect },
+    }
+  }
+}
+
+/// Blink's `line_clamp_float_clip_state`: where a line-clamp container clips the floats inside it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LineClampFloatClip {
+  /// The container's transform.
+  pub(crate) transform: Affine,
+  /// Its content box's block end, in its border box.
+  pub(crate) block_end: f32,
+}
+
+impl LineClampFloatClip {
+  /// The clip a line-clamp container sets up for its floats, as Blink's paint property tree builder
+  /// records it: its content box's block end.
+  pub(crate) fn of(
+    context: &RenderContext,
+    layout: ComputedLayout,
+    transform: Affine,
+  ) -> Option<Self> {
+    context.style.line_clamp().map(|_| Self {
+      transform,
+      block_end: layout.content_box_offset().y + layout.content_box_height(),
+    })
+  }
+
+  /// Blink's `UpdateLineClampFloatClip`: `state` clipped past the block end, unbounded on every
+  /// other side, for the float at `owner`.
+  pub(crate) fn apply(
+    self,
+    trees: &mut PropertyTrees,
+    state: PropertyState,
+    owner: &[usize],
+  ) -> PropertyState {
+    let clip = trees.add_clip(ClipNode {
+      parent: state.clip,
+      transform: self.transform * Affine::translation(-UNBOUNDED, -UNBOUNDED),
+      shape: FillShape::Rect(Size {
+        width: 2.0 * UNBOUNDED,
+        height: UNBOUNDED + self.block_end,
+      }),
+      owner: owner.to_vec(),
+    });
+
+    PropertyState {
+      clip: Some(clip),
+      ..state
     }
   }
 }

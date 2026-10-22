@@ -3,9 +3,8 @@
 //! holds it. Approximate: Blink's list item places the marker from its own border box, while
 //! takumi's marker travels into the first block that holds a line, so a list item whose content
 //! sits in a nested block measures from that block instead and grows that block, not the item,
-//! to push the content down. It also skips `ComputeIntrudedFloatOffset`, since the inline layout
-//! sees no float outside its own block, and `AddToBoxWithoutLineBoxes`, since takumi always gives
-//! the marker a line.
+//! to push the content down. It also skips `ComputeIntrudedFloatOffset` and
+//! `AddToBoxWithoutLineBoxes`, since takumi always gives the marker a line.
 
 use super::{
   inline_item::InlineItemType,
@@ -61,28 +60,22 @@ impl<'c> UnpositionedListMarker<'c> {
       .find(|(_, line)| line.line_box_bfc_block_offset.is_some())
   }
 
-  /// Blink's `AddToBox` block offset: a marker whose ascent passes the line's pushes the line, and
-  /// the content after it, down.
-  pub(crate) fn push_content_down(
+  /// Blink's `AddToBox` block offset: a marker whose ascent passes `line`'s pushes the line at
+  /// `block_offset`, and the content after it, down.
+  pub(crate) fn add_to_box(
     self,
-    lines: &mut [LineBoxFragment<'_, 'c>],
+    line: &LineBoxFragment<'_, 'c>,
+    block_offset: &mut LayoutUnit,
     atomic_inline: &mut dyn AtomicInlineLayout<'c>,
   ) {
-    let Some((index, line)) = Self::content_alignment_line(lines) else {
-      return;
-    };
     let marker_ascent = self
       .layout(atomic_inline)
       .baseline_metrics(&LineBoxStrut::default())
       .ascent;
     let baseline_adjust = line.metrics.ascent - marker_ascent;
 
-    if baseline_adjust >= LayoutUnit::ZERO {
-      return;
-    }
-
-    for line in &mut lines[index..] {
-      line.move_in_block_direction(-baseline_adjust);
+    if baseline_adjust < LayoutUnit::ZERO {
+      *block_offset -= baseline_adjust;
     }
   }
 
@@ -116,7 +109,10 @@ mod tests {
   use crate::{
     geometry::{AvailableSpace, ComputedLayout, Point, Rect, Size},
     layout::{
-      inline::{atomic_inline::BoxAtomicInline, inline_node::InlineNode, testing::render_tree},
+      inline::{
+        atomic_inline::BoxAtomicInline,
+        testing::{read_lines, render_tree},
+      },
       node::Node,
       tree::LayoutTree,
     },
@@ -171,24 +167,24 @@ mod tests {
       css,
     );
     let item = &tree.children.as_deref().expect("children")[0];
-    let node = InlineNode::new(item);
-    let data = node.prepare_layout();
     let mut layout_tree = LayoutTree::from_render_node(&tree);
     let mut atomic_inline = atomic_inline(&mut layout_tree);
-    let lines = node.layout_lines(&data, LayoutUnit::from_int(100), &mut atomic_inline);
-    let marker = UnpositionedListMarker::of(&data).expect("an outside marker");
-    let (_, line) = UnpositionedListMarker::content_alignment_line(&lines).expect("a line");
-    let result = marker.layout(&mut atomic_inline);
 
-    (
-      marker.offset(
-        &result,
-        line,
-        item_layout(),
-        host.unwrap_or(item.context.style.inherited_data.direction),
-      ),
-      result.inline_size.to_float(),
-    )
+    read_lines(item, 100.0, |data, lines| {
+      let marker = UnpositionedListMarker::of(data).expect("an outside marker");
+      let (_, line) = UnpositionedListMarker::content_alignment_line(lines).expect("a line");
+      let result = marker.layout(&mut atomic_inline);
+
+      (
+        marker.offset(
+          &result,
+          line,
+          item_layout(),
+          host.unwrap_or(item.context.style.inherited_data.direction),
+        ),
+        result.inline_size.to_float(),
+      )
+    })
   }
 
   /// Blink's `InlineOffset` hangs a counter marker from the item's border box, past its padding
@@ -225,18 +221,10 @@ mod tests {
       &format!(".item {{ display: list-item; list-style-image: url({SQUARE_DATA_URI}) }}"),
     );
     let item = &tree.children.as_deref().expect("children")[0];
-    let node = InlineNode::new(item);
-    let data = node.prepare_layout();
-    let mut layout_tree = LayoutTree::from_render_node(&tree);
-    let mut atomic_inline = atomic_inline(&mut layout_tree);
-    let mut lines = node.layout_lines(&data, LayoutUnit::from_int(100), &mut atomic_inline);
-    let marker = UnpositionedListMarker::of(&data).expect("an outside marker");
+    let (top, ascent) = read_lines(item, 100.0, |_, lines| {
+      (lines[0].line_box_bfc_block_offset, lines[0].metrics.ascent)
+    });
 
-    marker.push_content_down(&mut lines, &mut atomic_inline);
-
-    assert_eq!(
-      lines[0].line_box_bfc_block_offset,
-      Some(LayoutUnit::from_int(24) - lines[0].metrics.ascent)
-    );
+    assert_eq!(top, Some(LayoutUnit::from_int(24) - ascent));
   }
 }

@@ -16,6 +16,7 @@ use crate::{
   layout::{
     bfc_rect::BfcOffset,
     floats_utils::PositionedFloat,
+    layout_result::LayoutResult as BoxLayoutResult,
     logical_rect::{LogicalOffset, LogicalRect, LogicalSize},
     tree::RenderNode,
   },
@@ -62,10 +63,11 @@ pub(crate) enum LineFragment<'c> {
     node: &'c RenderNode,
     layout_result: LayoutResult,
   },
-  /// A block-in-inline, laid out.
+  /// A block-in-inline, laid out in its line's space to `result`.
   BlockInInline {
     node: &'c RenderNode,
     layout_result: LayoutResult,
+    result: Rc<BoxLayoutResult>,
   },
   /// A float placed with the line.
   Float {
@@ -309,11 +311,11 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
     positioned_float: PositionedFloat,
   ) -> Self {
     Self {
+      bfc_offset: positioned_float.bfc_offset,
       layout_result: inline_item.layout_object.map(|object| LineFragment::Float {
         node: object.node(),
         positioned_float,
       }),
-      bfc_offset: positioned_float.bfc_offset,
       bidi_level: inline_item.bidi_level(),
       ..Self::default()
     }

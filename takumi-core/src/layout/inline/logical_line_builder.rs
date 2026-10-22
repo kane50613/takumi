@@ -221,8 +221,10 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
           self.has_out_of_flow_positioned_items = true;
         }
         InlineItemType::Floating => {
-          line_box.add_child(match item_result.positioned_float {
-            Some(positioned_float) => LogicalLineItem::positioned_float(item, positioned_float),
+          line_box.add_child(match &item_result.positioned_float {
+            Some(positioned_float) => {
+              LogicalLineItem::positioned_float(item, positioned_float.clone())
+            }
             None => LogicalLineItem::unpositioned_float(item),
           });
           self.has_floating_items = true;
@@ -338,8 +340,11 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
     item_result: &InlineItemResult<'a, 'c>,
     line_box: &mut LogicalLineItems<'a, 'c>,
   ) {
-    let (Some(object), Some(layout_result)) = (item.layout_object, item_result.layout_result)
-    else {
+    let (Some(object), Some(layout_result), Some(result)) = (
+      item.layout_object,
+      item_result.layout_result,
+      item_result.block_in_inline_result.clone(),
+    ) else {
       return;
     };
 
@@ -355,6 +360,7 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
       LineFragment::BlockInInline {
         node: object.node(),
         layout_result,
+        result,
       },
       LogicalOffset::default(),
       item_result.inline_size,

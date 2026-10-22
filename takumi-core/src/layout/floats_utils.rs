@@ -3,17 +3,20 @@
 //! and [`PositionedFloat`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/positioned_float.h),
 //! without block fragmentation or `shape-outside`.
 
+use std::rc::Rc;
+
 use crate::{
   layout::{
     bfc_rect::{BfcOffset, BfcRect},
+    constraint_space::{CacheSlot, ConstraintSpace},
     exclusions::{
       exclusion_area::ExclusionArea, exclusion_space::ExclusionSpace,
       layout_opportunity::LayoutOpportunity,
     },
-    inline::{
-      inline_item_result::{LayoutResult, LineBoxStrut},
-      line_breaker::AtomicInlineLayout,
-    },
+    inline::inline_item_result::LineBoxStrut,
+    layout_result::LayoutResult,
+    line_clamp_data::LineClampFloatState,
+    logical_rect::AvailableLogicalSize,
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
@@ -39,15 +42,24 @@ pub(crate) enum Clear {
   Both,
 }
 
-/// Blink's `UnpositionedFloat`: a float to place, and where its search starts.
+/// Lays a float out in a space, as Blink's `BlockNode::Layout` lays out the float's node.
+pub(crate) type LayoutFloat<'l, 'c> =
+  dyn FnMut(&'c RenderNode, &ConstraintSpace) -> Rc<LayoutResult> + 'l;
+
+/// Blink's `UnpositionedFloat`: a float to place, and where its search starts. It keeps the
+/// parent space's direction and cache slot rather than the space itself.
 pub(crate) struct UnpositionedFloat<'c> {
   pub(crate) node: &'c RenderNode,
-  /// The containing block's available inline size.
-  pub(crate) available_inline_size: LayoutUnit,
+  /// The containing block's available size.
+  pub(crate) available_size: AvailableLogicalSize,
+  /// The size the float's percentages resolve against.
+  pub(crate) percentage_size: AvailableLogicalSize,
   pub(crate) origin_bfc_offset: BfcOffset,
   /// The containing block's direction, which `float` and `clear` resolve against.
   pub(crate) direction: TextDirection,
-  pub(crate) layout_result: Option<LayoutResult>,
+  cache_slot: CacheSlot,
+  pub(crate) line_clamp_state: LineClampFloatState,
+  pub(crate) layout_result: Option<Rc<LayoutResult>>,
   /// The margins, in the containing block's line-relative directions.
   pub(crate) margins: LineBoxStrut,
 }
@@ -55,18 +67,40 @@ pub(crate) struct UnpositionedFloat<'c> {
 impl<'c> UnpositionedFloat<'c> {
   pub(crate) fn new(
     node: &'c RenderNode,
-    available_inline_size: LayoutUnit,
+    (available_size, percentage_size): (AvailableLogicalSize, AvailableLogicalSize),
     origin_bfc_offset: BfcOffset,
-    direction: TextDirection,
+    parent_space: &ConstraintSpace,
+    line_clamp_state: LineClampFloatState,
   ) -> Self {
     Self {
       node,
-      available_inline_size,
+      available_size,
+      percentage_size,
       origin_bfc_offset,
-      direction,
+      direction: parent_space.direction,
+      cache_slot: parent_space.cache_slot,
+      line_clamp_state,
       layout_result: None,
       margins: LineBoxStrut::default(),
     }
+  }
+
+  /// Blink's `CreateConstraintSpaceForFloat`, without fragmentation: a new formatting context in
+  /// the containing block's available size. Approximate: a float past the clamp point is not
+  /// hidden here, as the line that holds it hides it.
+  fn create_constraint_space_for_float(&self) -> ConstraintSpace {
+    let mut space = ConstraintSpace::new(
+      self.available_size.inline_size,
+      self.node.context.style.inherited_data.direction,
+    );
+
+    space.available_block_size = self.available_size.block_size;
+    space.percentage_resolution_inline_size = self.percentage_size.inline_size;
+    space.percentage_resolution_block_size = self.percentage_size.block_size;
+    space.is_new_formatting_context = true;
+    space.cache_slot = self.cache_slot;
+    space.is_line_clamp_clipped_float = self.line_clamp_state == LineClampFloatState::Clip;
+    space
   }
 
   /// Blink's `ClearType`.
@@ -97,17 +131,14 @@ impl<'c> UnpositionedFloat<'c> {
   }
 
   /// Blink's `LayoutFloatWithoutFragmentation`: lays the float out once, keeping its margins.
-  fn layout_without_fragmentation(
-    &mut self,
-    layout: &mut dyn AtomicInlineLayout<'c>,
-  ) -> LayoutResult {
-    if let Some(layout_result) = self.layout_result {
-      return layout_result;
+  fn layout_without_fragmentation(&mut self, layout: &mut LayoutFloat<'_, 'c>) -> Rc<LayoutResult> {
+    if let Some(layout_result) = &self.layout_result {
+      return Rc::clone(layout_result);
     }
 
-    let layout_result = layout.layout(self.node);
+    let layout_result = layout(self.node, &self.create_constraint_space_for_float());
 
-    self.layout_result = Some(layout_result);
+    self.layout_result = Some(Rc::clone(&layout_result));
     self.margins = LineBoxStrut::from_physical(self.node.margin_px(), self.direction);
 
     layout_result
@@ -115,9 +146,9 @@ impl<'c> UnpositionedFloat<'c> {
 }
 
 /// Blink's `PositionedFloat`: a float placed in the block formatting context.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) struct PositionedFloat {
-  pub(crate) layout_result: LayoutResult,
+  pub(crate) layout_result: Rc<LayoutResult>,
   /// The border box's offset.
   pub(crate) bfc_offset: BfcOffset,
 }
@@ -159,7 +190,10 @@ fn find_layout_opportunity_for_float(
 
   exclusion_space.find_layout_opportunity(
     adjusted_origin_point,
-    unpositioned_float.available_inline_size,
+    unpositioned_float
+      .available_size
+      .inline_size
+      .unwrap_or(LayoutUnit::ZERO),
     unpositioned_float.direction,
     inline_size + unpositioned_float.margins.inline_sum(),
   )
@@ -168,11 +202,12 @@ fn find_layout_opportunity_for_float(
 /// Blink's `ComputeMarginBoxInlineSizeForUnpositionedFloat`.
 pub(crate) fn compute_margin_box_inline_size_for_unpositioned_float<'c>(
   unpositioned_float: &mut UnpositionedFloat<'c>,
-  layout: &mut dyn AtomicInlineLayout<'c>,
+  layout: &mut LayoutFloat<'_, 'c>,
 ) -> LayoutUnit {
   let layout_result = unpositioned_float.layout_without_fragmentation(layout);
 
-  (layout_result.inline_size + unpositioned_float.margins.inline_sum()).clamp_negative_to_zero()
+  (layout_result.size.inline_size + unpositioned_float.margins.inline_sum())
+    .clamp_negative_to_zero()
 }
 
 /// Blink's `PositionFloat`: places the float in the first opportunity it fits, and adds it to the
@@ -180,20 +215,20 @@ pub(crate) fn compute_margin_box_inline_size_for_unpositioned_float<'c>(
 pub(crate) fn position_float<'c>(
   unpositioned_float: &mut UnpositionedFloat<'c>,
   exclusion_space: &mut ExclusionSpace,
-  layout: &mut dyn AtomicInlineLayout<'c>,
+  layout: &mut LayoutFloat<'_, 'c>,
 ) -> PositionedFloat {
   let layout_result = unpositioned_float.layout_without_fragmentation(layout);
   let opportunity = find_layout_opportunity_for_float(
     unpositioned_float,
     exclusion_space,
-    layout_result.inline_size,
+    layout_result.size.inline_size,
   );
   let margins = unpositioned_float.margins;
   // The margin box's offset.
   let mut float_margin_bfc_offset = opportunity.rect.start_offset;
 
   if unpositioned_float.is_line_right() {
-    let float_margin_box_inline_size = layout_result.inline_size + margins.inline_sum();
+    let float_margin_box_inline_size = layout_result.size.inline_size + margins.inline_sum();
 
     float_margin_bfc_offset.line_offset +=
       opportunity.rect.inline_size() - float_margin_box_inline_size;
@@ -202,9 +237,9 @@ pub(crate) fn position_float<'c>(
   // Blink's `CreateExclusionArea`.
   let end_offset = BfcOffset::new(
     float_margin_bfc_offset.line_offset
-      + (layout_result.inline_size + margins.inline_sum()).clamp_negative_to_zero(),
+      + (layout_result.size.inline_size + margins.inline_sum()).clamp_negative_to_zero(),
     float_margin_bfc_offset.block_offset
-      + (layout_result.block_size + margins.line_over + margins.line_under)
+      + (layout_result.size.block_size + margins.line_over + margins.line_under)
         .clamp_negative_to_zero(),
   );
 
