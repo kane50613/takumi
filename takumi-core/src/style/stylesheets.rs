@@ -1004,14 +1004,6 @@ macro_rules! define_style {
                 self.$group = COMPUTED_INITIAL_STYLE.with(|computed| Rc::clone(&computed.$group));
               }
             )*
-
-            // The computed initial `outline-width` is zero for its `none` outline style, which
-            // lives in another group, so a rendered outline style resolves its own copy.
-            if self.misc_data.outline_style.is_rendered()
-              && COMPUTED_INITIAL_STYLE.with(|computed| Rc::ptr_eq(&self.misc3_data, &computed.misc3_data))
-            {
-              self.misc3_data = Rc::new((*initial.misc3_data).clone());
-            }
           });
         }
 
@@ -1516,7 +1508,6 @@ define_style! {
       justify_items: AlignItems,
       align_self: AlignItems,
       flex_wrap: FlexWrap,
-      outline_style: BorderStyle,
       object_fit: ObjectFit where anonymous = true,
       r#continue: Continue where anonymous = true,
       unicode_bidi: UnicodeBidi,
@@ -1578,6 +1569,8 @@ define_style! {
       order: Order,
       outline_color: ColorInput,
       outline_offset: Length,
+      // Beside `outline-width`, which computes to zero under a `none` style.
+      outline_style: BorderStyle,
       outline_width: LineWidth,
       rotate: Option<Angle>,
       row_gap: Gap,

@@ -104,7 +104,7 @@ impl ComputedStyle {
         }
       }
     }
-    if unrendered(self.misc_data.outline_style, self.misc3_data.outline_width) {
+    if unrendered(self.misc3_data.outline_style, self.misc3_data.outline_width) {
       self.misc3_data_mut().outline_width = none;
     }
 
