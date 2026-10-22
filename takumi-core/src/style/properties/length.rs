@@ -752,26 +752,6 @@ mod tests {
   }
 
   #[test]
-  fn compact_length_calc_pointer_resolves_through_callback() {
-    let value: Length = Length::Calc(
-      CalcFormula {
-        percent: 0.5,
-        px: 10.0,
-        ..Default::default()
-      }
-      .compress()
-      .unwrap(),
-    );
-    let sizing = sizing();
-    let compact = value.to_compact_length(&sizing);
-    assert!(compact.is_plain_calc());
-    let resolved = sizing
-      .calc_arena
-      .resolve_calc_value(compact.calc_value(), 200.0);
-    assert_near(resolved, 120.0);
-  }
-
-  #[test]
   fn compact_length_percent_does_not_use_calc_pointer() {
     let sizing = sizing();
     let compact = Length::Percentage(50.0).to_compact_length(&sizing);

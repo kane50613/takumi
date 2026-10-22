@@ -10,15 +10,16 @@
 
 use std::rc::Rc;
 
-use taffy::{
-  AvailableSpace as TaffyAvailableSpace, Baselines, BoxSizing as TaffyBoxSizing, Layout,
-  LayoutInput, LayoutOutput, LayoutPartialTree, LengthPercentageAuto, Line, MaybeResolve,
-  NodeId as TaffyNodeId, OofCandidates, Point as TaffyPoint, Rect as TaffyRect, RequestedAxis,
-  ResolveOrZero, RunMode, Size as TaffySize, SizingMode,
-};
-
 use crate::{
+  geometry::{ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
+    constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
+    layout_result::{LayoutResult, OutOfFlowCandidate},
+    layout_style::LayoutStyle,
+    length_utils::{LengthResolver, inline_size_from_aspect_ratio},
+    logical_rect::LogicalSize,
+    min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
+    out_of_flow::ContainingBlock,
     table::{
       borders::TableBorders,
       columns::{
@@ -44,7 +45,7 @@ use crate::{
 
 /// One cell, where the table's grid puts it.
 pub(crate) struct CellPart {
-  pub(crate) node: TaffyNodeId,
+  pub(crate) node: NodeId,
   pub(crate) column: usize,
   pub(crate) colspan: usize,
   pub(crate) rowspan: usize,
@@ -53,12 +54,12 @@ pub(crate) struct CellPart {
 }
 
 pub(crate) struct RowPart {
-  pub(crate) node: TaffyNodeId,
+  pub(crate) node: NodeId,
   pub(crate) cells: Vec<CellPart>,
 }
 
 pub(crate) struct SectionPart {
-  pub(crate) node: TaffyNodeId,
+  pub(crate) node: NodeId,
   pub(crate) rows: Vec<RowPart>,
   pub(crate) is_tbody: bool,
 }
@@ -68,8 +69,8 @@ pub(crate) struct TableStructure {
   pub(crate) grouped: TableGroupedChildren,
   pub(crate) borders: TableBorders,
   pub(crate) sections: Vec<SectionPart>,
-  pub(crate) captions: Vec<TaffyNodeId>,
-  pub(crate) columns: Vec<TaffyNodeId>,
+  pub(crate) captions: Vec<NodeId>,
+  pub(crate) columns: Vec<NodeId>,
   /// Whether a column percentage widens the table's max-content width, which Blink's
   /// `AllowColumnPercentages` denies a table inside a cell, flex item, or grid item.
   pub(crate) allows_intrinsic_column_percentages: bool,
@@ -83,10 +84,9 @@ struct CaptionConstraint {
 
 /// A caption laid out at the table's inline size, Blink's `CaptionResult`.
 struct CaptionResult {
-  node: TaffyNodeId,
-  size: TaffySize<f32>,
+  node: NodeId,
+  result: Rc<LayoutResult>,
   margins: BoxStrut,
-  output: LayoutOutput,
   is_bottom: bool,
 }
 
@@ -105,7 +105,7 @@ impl<'r> LayoutTree<'r> {
     let mut inside_cell_flex_or_grid = vec![false; self.node_count()];
 
     for index in 0..self.node_count() {
-      let node = TaffyNodeId::from(index);
+      let node = NodeId::new(index);
       let render_node = self.render_node(node);
       let display = render_node.context.style.base_data.display;
       let denies_percentages = inside_cell_flex_or_grid[index]
@@ -113,7 +113,7 @@ impl<'r> LayoutTree<'r> {
         || display.is_flex()
         || matches!(display, Display::Grid | Display::InlineGrid);
 
-      for &child in self.layout_children(node) {
+      for child in self.child_nodes(node) {
         inside_cell_flex_or_grid[usize::from(child)] = denies_percentages;
       }
 
@@ -125,11 +125,11 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  fn table_structure_of(&mut self, table: TaffyNodeId, allows_percentages: bool) -> TableStructure {
+  fn table_structure_of(&mut self, table: NodeId, allows_percentages: bool) -> TableStructure {
     let render_node = self.render_node(table);
     let grouped = TableGroupedChildren::of(render_node);
     let borders = TableBorders::of(render_node, &grouped);
-    let children: Vec<TaffyNodeId> = self.layout_children(table).to_vec();
+    let children = self.child_nodes(table);
     let mut sections = Vec::new();
     let mut row_index = 0;
 
@@ -138,11 +138,11 @@ impl<'r> LayoutTree<'r> {
       let mut tabulator = ColspanCellTabulator::default();
       let mut rows = Vec::new();
 
-      for &row in self.layout_children(section) {
+      for row in self.child_nodes(section) {
         let mut cells = Vec::new();
 
         tabulator.start_row();
-        for &cell in self.layout_children(row) {
+        for cell in self.child_nodes(row) {
           let cell_node = self.render_node(cell);
           let colspan = cell_node.table_cell_colspan();
           let rowspan = cell_node.table_cell_rowspan();
@@ -199,7 +199,7 @@ impl<'r> LayoutTree<'r> {
         }
       }
     }
-    let columns: Vec<TaffyNodeId> = grouped
+    let columns: Vec<NodeId> = grouped
       .columns
       .iter()
       .map(|&index| children[index])
@@ -207,7 +207,7 @@ impl<'r> LayoutTree<'r> {
 
     for &column in &columns {
       self.set_table_box_style(column, TableBoxStyle::HIDDEN);
-      for &col in &self.layout_children(column).to_vec() {
+      for col in self.child_nodes(column) {
         self.set_table_box_style(col, TableBoxStyle::HIDDEN);
       }
     }
@@ -225,26 +225,14 @@ impl<'r> LayoutTree<'r> {
       allows_intrinsic_column_percentages: allows_percentages,
     }
   }
-
-  /// Lays out the table `node` for `inputs`.
-  pub(in crate::layout) fn compute_table_layout(
-    &mut self,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-  ) -> LayoutOutput {
-    let Some(structure) = self.table_structure(node) else {
-      return self.compute_hidden(node);
-    };
-
-    TableLayout::new(self, node, inputs, structure).run()
-  }
 }
 
-/// One layout of one table.
-struct TableLayout<'t, 'r> {
+/// Blink's `TableLayoutAlgorithm`, with the `TableNode` methods it calls.
+pub(crate) struct TableLayoutAlgorithm<'t, 'r> {
   tree: &'t mut LayoutTree<'r>,
-  node: TaffyNodeId,
-  inputs: LayoutInput,
+  node: NodeId,
+  space: &'t ConstraintSpace,
+  style: Rc<LayoutStyle>,
   structure: Rc<TableStructure>,
   border_padding: BoxStrut,
   /// The inline and block `border-spacing`, none when borders collapse.
@@ -253,20 +241,23 @@ struct TableLayout<'t, 'r> {
   rtl: bool,
 }
 
-impl<'t, 'r> TableLayout<'t, 'r> {
-  fn new(
+impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
+  /// The algorithm for the table `node` in `space`, none for a box the tree gathered no table
+  /// parts for.
+  pub(crate) fn new(
     tree: &'t mut LayoutTree<'r>,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-    structure: Rc<TableStructure>,
-  ) -> Self {
+    node: NodeId,
+    space: &'t ConstraintSpace,
+  ) -> Option<Self> {
+    let structure = tree.table_structure(node)?;
+    let style = Rc::clone(tree.layout_style_rc(node));
     let render_node = tree.render_node(node);
-    let style = &render_node.context.style;
-    let is_collapsed = style.inherited_data.border_collapse == BorderCollapse::Collapse;
+    let computed_style = &render_node.context.style;
+    let is_collapsed = computed_style.inherited_data.border_collapse == BorderCollapse::Collapse;
     let spacing = if is_collapsed {
       (LayoutUnit::ZERO, LayoutUnit::ZERO)
     } else {
-      let spacing = style.inherited_data.border_spacing.0;
+      let spacing = computed_style.inherited_data.border_spacing.0;
       let sizing = &render_node.context.sizing;
 
       (
@@ -274,42 +265,36 @@ impl<'t, 'r> TableLayout<'t, 'r> {
         LayoutUnit::from_float(spacing.y.to_px(sizing, 0.0)),
       )
     };
-    let border_padding = tree.border_padding(node, inputs.parent_size.width);
+    let border_padding = tree.border_padding(node, space.percentage_resolution_inline_size);
 
-    Self {
+    Some(Self {
       is_fixed_layout: render_node.is_fixed_table_layout(),
-      rtl: style.inherited_data.direction == Direction::Rtl,
+      rtl: computed_style.inherited_data.direction == Direction::Rtl,
       tree,
       node,
-      inputs,
+      space,
+      style,
       structure,
       border_padding,
       spacing,
-    }
+    })
   }
 
   fn render_node(&self) -> &'r RenderNode {
     self.tree.render_node(self.node)
   }
 
-  fn run(mut self) -> LayoutOutput {
+  /// Blink's `Layout`.
+  pub(crate) fn layout(mut self) -> LayoutResult {
     let columns = self.column_constraints();
     let undistributable =
       columns.undistributable_space(self.inline_border_padding(), self.spacing.0);
     let caption_constraint = self.caption_constraint();
-    if self.inputs.run_mode == RunMode::ComputeSize
-      && self.inputs.axis == RequestedAxis::Horizontal
-      && self.inputs.known_dimensions.width.is_none()
-    {
-      let width = self.intrinsic_inline_size(&columns, undistributable, caption_constraint);
-
-      return LayoutOutput::from_outer_size(TaffySize {
-        width: width.to_float(),
-        height: 0.0,
-      });
-    }
-
-    // The start of Blink's `TableLayoutAlgorithm::Layout`.
+    let table_inline_size = if self.space.is_fixed_inline_size {
+      self.space.inline_size()
+    } else {
+      self.table_inline_size(&columns, undistributable, caption_constraint)
+    };
     let assignable = self.assignable_inline_size(&columns, undistributable, caption_constraint);
     let column_sizes = columns.sizes(assignable, self.is_fixed_layout);
     let (mut column_locations, has_collapsed_columns) =
@@ -320,26 +305,10 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     } else {
       self.size_from_columns(&column_locations)
     };
-
-    // A container stretching an `auto`-width table gives it the width Blink would stretch it to,
-    // which still loses its collapsed columns.
-    let table_inline_size =
-      match self.known_inline_size(&columns, undistributable, caption_constraint) {
-        Some(width)
-          if !has_collapsed_columns
-            || !self.render_node().context.style.box_data.width.is_auto() =>
-        {
-          width
-        }
-        _ => self.table_inline_size(&columns, undistributable, caption_constraint),
-      };
-
     let captions = self.lay_out_captions(table_inline_size);
     let captions_block_size = captions
       .iter()
-      .map(|caption| {
-        LayoutUnit::from_float(caption.size.height) + caption.margins.top + caption.margins.bottom
-      })
+      .map(|caption| caption.result.size.block_size + caption.margins.top + caption.margins.bottom)
       .fold(LayoutUnit::ZERO, |total, size| total + size);
     let grid_inline_size = table_inline_size_before_collapse - self.inline_border_padding();
     let mut rows = Rows::default();
@@ -368,6 +337,35 @@ impl<'t, 'r> TableLayout<'t, 'r> {
       &captions,
       spacing,
     )
+  }
+
+  /// Blink's `ComputeMinMaxSizes`.
+  pub(crate) fn compute_min_max_sizes(mut self) -> MinMaxSizesResult {
+    let columns = self.column_constraints();
+    let undistributable =
+      columns.undistributable_space(self.inline_border_padding(), self.spacing.0);
+    let caption_constraint = self.caption_constraint();
+    let style = &self.render_node().context.style;
+    let allows_percentages = self.structure.allows_intrinsic_column_percentages
+      && style.box_data.width != StyleSize::MaxContent;
+    let (grid_min, grid_max) =
+      columns.grid_inline_min_max(undistributable, self.is_fixed_layout, allows_percentages);
+    let mut sizes = MinMaxSizes {
+      min_size: grid_min.max(caption_constraint.min_size),
+      max_size: grid_max.max(caption_constraint.min_size),
+    };
+
+    if self.is_fixed_layout
+      && matches!(
+        style.box_data.width.as_length(),
+        Some(Length::Percentage(_))
+      )
+    {
+      sizes.max_size = TABLE_MAX_INLINE_SIZE;
+    }
+    sizes.max_size = sizes.max_size.max(sizes.min_size);
+
+    MinMaxSizesResult::new(sizes, false)
   }
 
   fn inline_border_padding(&self) -> LayoutUnit {
@@ -455,37 +453,17 @@ impl<'t, 'r> TableLayout<'t, 'r> {
       self.is_fixed_layout,
       border_padding,
       || {
-        let mut width = |available| {
-          LayoutUnit::from_float_ceil(
-            tree
-              .compute_child_layout(
-                cell.node,
-                LayoutInput {
-                  run_mode: RunMode::ComputeSize,
-                  sizing_mode: SizingMode::ContentSize,
-                  axis: RequestedAxis::Horizontal,
-                  known_dimensions: TaffySize::NONE,
-                  known_dimensions_are_definite: TaffySize {
-                    width: true,
-                    height: true,
-                  },
-                  parent_size: TaffySize::NONE,
-                  available_space: TaffySize {
-                    width: available,
-                    height: TaffyAvailableSpace::MaxContent,
-                  },
-                  vertical_margins_are_collapsible: Line::FALSE,
-                },
-              )
-              .size
-              .width,
-          )
-        };
+        let mut space = ConstraintSpace::new(None, tree.layout_style(cell.node).direction);
 
-        (
-          width(TaffyAvailableSpace::MinContent),
-          width(TaffyAvailableSpace::MaxContent),
-        )
+        space.is_new_formatting_context = true;
+        space.is_table_cell = true;
+        space.cache_slot = CacheSlot::Measure;
+
+        let sizes = tree
+          .min_max_sizes(cell.node, &space, SizeType::Intrinsic)
+          .sizes;
+
+        (sizes.min_size, sizes.max_size)
       },
     )
   }
@@ -497,68 +475,27 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     let mut constraint = CaptionConstraint::default();
 
     for &caption in &structure.captions {
-      let width = self.tree.compute_child_layout(
-        caption,
-        LayoutInput {
-          run_mode: RunMode::ComputeSize,
-          sizing_mode: SizingMode::InherentSize,
-          axis: RequestedAxis::Horizontal,
-          known_dimensions: TaffySize::NONE,
-          known_dimensions_are_definite: TaffySize {
-            width: true,
-            height: true,
-          },
-          parent_size: TaffySize::NONE,
-          available_space: TaffySize {
-            width: TaffyAvailableSpace::MinContent,
-            height: TaffyAvailableSpace::MaxContent,
-          },
-          vertical_margins_are_collapsible: Line::FALSE,
-        },
-      );
-      let margins = self.tree.margins(caption, None);
-      let size = LayoutUnit::from_float_ceil(width.size.width) + margins.left + margins.right;
+      let mut space = ConstraintSpace::new(None, self.tree.layout_style(caption).direction);
 
-      constraint.min_size = constraint.min_size.max(size);
+      space.is_new_formatting_context = true;
+      space.percentage_resolution_block_size = self.space.percentage_resolution_block_size;
+      space.cache_slot = CacheSlot::Measure;
+
+      let width = self
+        .tree
+        .min_and_max_content_contribution(caption, &space)
+        .sizes
+        .min_size;
+      let margins = self
+        .tree
+        .margins(caption, self.space.percentage_resolution_inline_size);
+
+      constraint.min_size = constraint
+        .min_size
+        .max(width + margins.left + margins.right);
     }
 
     constraint
-  }
-
-  /// Blink's `TableLayoutAlgorithm::ComputeMinMaxSizes`, the table's own border and padding
-  /// included, for an intrinsic sizing pass.
-  fn intrinsic_inline_size(
-    &self,
-    columns: &ColumnConstraints,
-    undistributable: LayoutUnit,
-    caption_constraint: CaptionConstraint,
-  ) -> LayoutUnit {
-    let style = &self.render_node().context.style;
-    let allows_percentages = self.structure.allows_intrinsic_column_percentages
-      && style.box_data.width != StyleSize::MaxContent;
-    let (grid_min, grid_max) =
-      columns.grid_inline_min_max(undistributable, self.is_fixed_layout, allows_percentages);
-    let min = grid_min.max(caption_constraint.min_size);
-    let mut max = grid_max.max(caption_constraint.min_size);
-
-    if self.is_fixed_layout
-      && matches!(
-        style.box_data.width.as_length(),
-        Some(Length::Percentage(_))
-      )
-    {
-      max = TABLE_MAX_INLINE_SIZE;
-    }
-
-    let max = min.max(max);
-
-    match self.inputs.available_space.width {
-      TaffyAvailableSpace::MinContent => min,
-      TaffyAvailableSpace::MaxContent => max,
-      TaffyAvailableSpace::Definite(_) => {
-        self.table_inline_size(columns, undistributable, caption_constraint)
-      }
-    }
   }
 
   /// Blink's `ComputeTableInlineSize`: the width its columns take once the collapsed ones drop
@@ -590,94 +527,43 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     undistributable: LayoutUnit,
     caption_constraint: CaptionConstraint,
   ) -> LayoutUnit {
-    if let Some(width) = self.known_inline_size(columns, undistributable, caption_constraint) {
-      return (width - undistributable).clamp_negative_to_zero();
+    if self.space.is_fixed_inline_size {
+      return (self.space.inline_size() - undistributable).clamp_negative_to_zero();
     }
 
-    let (grid_min, grid_max) = self.grid_inline_min_max(columns, undistributable);
+    let allows_percentages =
+      self.render_node().context.style.box_data.width != StyleSize::MaxContent;
+    let (min_size, max_size) =
+      columns.grid_inline_min_max(undistributable, self.is_fixed_layout, allows_percentages);
     let used = self
-      .used_inline_size(grid_min, grid_max)
+      .used_inline_size(MinMaxSizes { min_size, max_size })
       .max(caption_constraint.min_size);
 
     used - undistributable
   }
 
-  /// Blink's `ComputeGridInlineMinMax` for the layout pass.
-  fn grid_inline_min_max(
-    &self,
-    columns: &ColumnConstraints,
-    undistributable: LayoutUnit,
-  ) -> (LayoutUnit, LayoutUnit) {
-    let allows_percentages =
-      self.render_node().context.style.box_data.width != StyleSize::MaxContent;
+  /// Blink's `ComputeUsedInlineSizeForTableFragment`: the table's inline size with its content
+  /// sized as its grid, `grid_min_max`.
+  fn used_inline_size(&self, grid_min_max: MinMaxSizes) -> LayoutUnit {
+    let style = &self.style;
+    let resolver = LengthResolver::new(self.space, style);
 
-    columns.grid_inline_min_max(undistributable, self.is_fixed_layout, allows_percentages)
-  }
+    resolver.inline_size_for_fragment_ignoring_fixed(&mut |size_type| {
+      if let (Some(aspect_ratio), SizeType::Content) = (style.aspect_ratio, size_type)
+        && let Some(block_size) = resolver.block_size_for_fragment(None, None, None)
+      {
+        let inline_size = inline_size_from_aspect_ratio(
+          resolver.border_padding,
+          aspect_ratio,
+          style.box_sizing_for_aspect_ratio(),
+          block_size,
+        );
 
-  /// The width the table's container gives it, never narrower than its columns and captions
-  /// need, as Blink lays out a table no narrower than its min-content width.
-  fn known_inline_size(
-    &self,
-    columns: &ColumnConstraints,
-    undistributable: LayoutUnit,
-    caption_constraint: CaptionConstraint,
-  ) -> Option<LayoutUnit> {
-    let width = LayoutUnit::from_float(self.inputs.known_dimensions.width?);
-    let (grid_min, _) = self.grid_inline_min_max(columns, undistributable);
+        return MinMaxSizesResult::new(MinMaxSizes::both(inline_size), false);
+      }
 
-    Some(width.max(grid_min).max(caption_constraint.min_size))
-  }
-
-  /// Blink's `ComputeUsedInlineSizeForTableFragment`: the table's `width`, fitting its content
-  /// when `auto`, held between its `min-width` and `max-width` and never narrower than
-  /// `grid_min`.
-  fn used_inline_size(&self, grid_min: LayoutUnit, grid_max: LayoutUnit) -> LayoutUnit {
-    let render_node = self.render_node();
-    let style = &render_node.context.style;
-    let sizing = &render_node.context.sizing;
-    let available = match self.inputs.available_space.width {
-      TaffyAvailableSpace::Definite(width) => Some(LayoutUnit::from_float(width)),
-      _ => None,
-    };
-    let basis = self.inputs.parent_size.width;
-    let margins = self.tree.margins(self.node, basis);
-    let border_padding = self.inline_border_padding();
-    let content_box = style.box_data.box_sizing == BoxSizing::ContentBox;
-    let resolve = |length: Option<Length>| -> Option<LayoutUnit> {
-      let value = match TableLength::of(length, sizing) {
-        TableLength::Fixed(value) => value,
-        TableLength::Percent(percent) => LayoutUnit::from_float(percent * basis? / 100.0),
-        TableLength::Other => return None,
-      };
-
-      Some(if content_box {
-        value + border_padding
-      } else {
-        value.max(border_padding)
-      })
-    };
-    let margin_sum = margins.left + margins.right;
-    let stretch = available.map(|available| (available - margin_sum).max(border_padding));
-    // Under a min- or max-content constraint, fitting the content takes that size of it.
-    let fit_content = || match (stretch, self.inputs.available_space.width) {
-      (Some(stretch), _) => grid_min.max(grid_max.min(stretch)),
-      (None, TaffyAvailableSpace::MaxContent) => grid_max,
-      (None, _) => grid_min,
-    };
-    let extent = match style.box_data.width {
-      StyleSize::Length(length) => resolve(Some(length)).unwrap_or_else(fit_content),
-      StyleSize::MinContent => grid_min,
-      StyleSize::MaxContent => grid_max,
-      StyleSize::FitContent => fit_content(),
-      StyleSize::Stretch => stretch.unwrap_or_else(fit_content),
-    };
-    let min = resolve(Some(style.box_data.min_width))
-      .unwrap_or(LayoutUnit::ZERO)
-      .max(grid_min);
-    let max =
-      resolve(style.box_data.max_width.as_length()).map_or(LayoutUnit::MAX, |max| max.max(min));
-
-    extent.max(min).min(max)
+      MinMaxSizesResult::new(grid_min_max, false)
+    })
   }
 
   /// Blink's `ComputeEmptyTableInlineSize`.
@@ -689,7 +575,7 @@ impl<'t, 'r> TableLayout<'t, 'r> {
   ) -> LayoutUnit {
     let style = &self.render_node().context.style;
 
-    if self.inputs.known_dimensions.width.is_some()
+    if self.space.is_fixed_inline_size
       || !style.box_data.width.is_auto()
       || style.box_data.min_width != Length::Auto
     {
@@ -717,52 +603,28 @@ impl<'t, 'r> TableLayout<'t, 'r> {
   /// Lays every caption out at the table's inline size, Blink's `ComputeCaptionFragments`.
   fn lay_out_captions(&mut self, table_inline_size: LayoutUnit) -> Vec<CaptionResult> {
     let structure = Rc::clone(&self.structure);
-    let table_width = table_inline_size.to_float();
-    let run_mode = self.inputs.run_mode;
 
     structure
       .captions
       .iter()
       .map(|&caption| {
-        let mut margins = self.tree.margins(caption, Some(table_width));
-        let auto_margins = self.tree.auto_inline_margins(caption);
-        let width = self.tree.stretched_width(caption, table_width, margins);
-        let output = self.tree.compute_child_layout(
-          caption,
-          LayoutInput {
-            run_mode: if run_mode == RunMode::PerformLayout {
-              RunMode::PerformLayout
-            } else {
-              RunMode::ComputeSize
-            },
-            sizing_mode: SizingMode::InherentSize,
-            axis: RequestedAxis::Both,
-            known_dimensions: TaffySize {
-              width: Some(width),
-              height: None,
-            },
-            known_dimensions_are_definite: TaffySize {
-              width: true,
-              height: true,
-            },
-            parent_size: TaffySize {
-              width: Some(table_width),
-              height: None,
-            },
-            available_space: TaffySize {
-              width: TaffyAvailableSpace::Definite(table_width),
-              height: TaffyAvailableSpace::MaxContent,
-            },
-            vertical_margins_are_collapsible: Line::FALSE,
-          },
-        );
-        // Blink's `ResolveInlineAutoMargins`.
-        let free = table_inline_size
-          - LayoutUnit::from_float(output.size.width)
-          - margins.left
-          - margins.right;
+        let caption_style = Rc::clone(self.tree.layout_style_rc(caption));
+        let mut margins = self.tree.margins(caption, Some(table_inline_size));
+        // Blink's `CreateCaptionConstraintSpace`.
+        let mut space = ConstraintSpace::new(Some(table_inline_size), caption_style.direction);
 
-        match auto_margins {
+        space.is_new_formatting_context = true;
+        space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
+        space.cache_slot = self.space.cache_slot;
+
+        let result = self.tree.layout(caption, &space);
+        // Blink's `ResolveInlineAutoMargins`.
+        let free = table_inline_size - result.size.inline_size - margins.left - margins.right;
+
+        match (
+          caption_style.margin.left.is_auto(),
+          caption_style.margin.right.is_auto(),
+        ) {
           (true, true) => {
             margins.left = (free / 2).clamp_negative_to_zero();
             margins.right = (free - margins.left).clamp_negative_to_zero();
@@ -774,7 +636,7 @@ impl<'t, 'r> TableLayout<'t, 'r> {
 
         CaptionResult {
           node: caption,
-          size: output.size,
+          result,
           margins,
           is_bottom: self
             .tree
@@ -784,7 +646,6 @@ impl<'t, 'r> TableLayout<'t, 'r> {
             .inherited_data
             .caption_side
             == CaptionSide::Bottom,
-          output,
         }
       })
       .collect()
@@ -812,7 +673,7 @@ impl<'t, 'r> TableLayout<'t, 'r> {
 
     let mut minimal_grid_block_size = LayoutUnit::ZERO;
 
-    if let Some(table_block_size) = self.css_block_size(captions_block_size) {
+    if let Some(table_block_size) = self.css_block_size(grid_inline_size, captions_block_size) {
       minimal_grid_block_size = table_block_size;
       let distributable = (table_block_size - self.border_padding.top - self.border_padding.bottom)
         .clamp_negative_to_zero();
@@ -843,57 +704,37 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     minimal_grid_block_size
   }
 
-  /// The table's `height` to share among its sections, or `None` when it has none or a flex
-  /// container asks for its intrinsic height.
-  fn css_block_size(&self, captions_block_size: LayoutUnit) -> Option<LayoutUnit> {
-    if let Some(height) = self.inputs.known_dimensions.height {
-      return Some(LayoutUnit::from_float(height) - captions_block_size);
-    }
-    if self.inputs.run_mode == RunMode::ComputeSize
-      && self.inputs.sizing_mode == SizingMode::ContentSize
-    {
+  /// The table's block size to share among its sections, Blink's `css_table_block_size`: none
+  /// when it has none, or a flex container asks for its intrinsic block size.
+  fn css_block_size(
+    &self,
+    grid_inline_size: LayoutUnit,
+    captions_block_size: LayoutUnit,
+  ) -> Option<LayoutUnit> {
+    let space = self.space;
+
+    if space.is_initial_block_size_indefinite && !space.is_fixed_block_size {
       return None;
     }
 
-    let render_node = self.render_node();
-    let style = &render_node.context.style;
-    let sizing = &render_node.context.sizing;
-    let basis = self.inputs.parent_size.height.map(|height| {
-      (LayoutUnit::from_float(height) - captions_block_size).clamp_negative_to_zero()
-    });
-    let border_padding = self.border_padding.top + self.border_padding.bottom;
-    let content_box = style.box_data.box_sizing == BoxSizing::ContentBox;
-    let resolve = |length| -> Option<LayoutUnit> {
-      let value = match TableLength::of(length, sizing) {
-        TableLength::Fixed(value) => value,
-        TableLength::Percent(percent) => {
-          LayoutUnit::from_float(percent * basis?.to_float() / 100.0)
-        }
-        TableLength::Other => return None,
-      };
+    let style = &self.style;
+    let resolver = LengthResolver::new(space, style);
+    let min_length = style.min_size.height;
+    // A definite intrinsic block size makes a resolvable `min-height` resolve.
+    let intrinsic_block_size = (!min_length.is_auto()
+      && resolver
+        .resolve_main_block_length(min_length, None, &mut |_| None, None)
+        .is_some())
+    .then(|| resolver.border_padding.block_sum());
+    let override_available_block_size = space
+      .available_block_size
+      .map(|block_size| (block_size - captions_block_size).clamp_negative_to_zero());
 
-      Some(if content_box {
-        value + border_padding
-      } else {
-        value.max(border_padding)
-      })
-    };
-    let height = resolve(style.box_data.height.as_length());
-    let min = resolve(Some(style.box_data.min_height));
-    let max = resolve(style.box_data.max_height.as_length());
-
-    match (height, min) {
-      (None, None) => None,
-      (height, min) => {
-        let size = height
-          .unwrap_or(border_padding)
-          .max(min.unwrap_or(LayoutUnit::ZERO));
-
-        Some(max.map_or(size, |max| {
-          size.min(max.max(min.unwrap_or(LayoutUnit::ZERO)))
-        }))
-      }
-    }
+    resolver.block_size_for_fragment(
+      intrinsic_block_size,
+      Some(grid_inline_size),
+      override_available_block_size,
+    )
   }
 
   /// Blink's `ComputeSectionMinimumRowBlockSizes`.
@@ -999,11 +840,9 @@ impl<'t, 'r> TableLayout<'t, 'r> {
       let sizing = &render_node.context.sizing;
       let alignment = CellAlignment::of(style);
       let inline_size = span_inline_size(column_locations, cell.column, cell.colspan);
-      let measure = self.measure_cell(cell, inline_size, grid_inline_size, alignment);
+      let measure = self.measure_cell(cell, inline_size, grid_inline_size);
       let height = TableLength::of(style.box_data.height.as_length(), sizing);
-      let padding = self
-        .tree
-        .padding(cell.node, Some(grid_inline_size.to_float()));
+      let padding = self.tree.padding(cell.node, Some(grid_inline_size));
       let border_padding = cell.borders.top + cell.borders.bottom + padding.top + padding.bottom;
       let constraint = CellBlockConstraint {
         min_block_size: measure.block_size,
@@ -1091,54 +930,53 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     }
   }
 
-  /// Measures a cell at `inline_size` with an indefinite block size: only its size, unless it
-  /// aligns to its row's baseline, which takes a full layout to find its first baseline.
+  /// Measures a cell at `inline_size` with an indefinite block size.
   fn measure_cell(
     &mut self,
     cell: &CellPart,
     inline_size: LayoutUnit,
     percentage_inline_size: LayoutUnit,
-    alignment: CellAlignment,
   ) -> CellMeasure {
-    let baseline = alignment == CellAlignment::Baseline;
-
     self.tree.set_table_cell_aligned_padding(cell.node, None);
-    let output = self.tree.without_fragment_items(|tree| {
-      tree.compute_child_layout(
-        cell.node,
-        LayoutInput {
-          run_mode: if baseline {
-            RunMode::PerformLayout
-          } else {
-            RunMode::ComputeSize
-          },
-          sizing_mode: SizingMode::InherentSize,
-          axis: RequestedAxis::Both,
-          known_dimensions: TaffySize {
-            width: Some(inline_size.to_float()),
-            height: None,
-          },
-          known_dimensions_are_definite: TaffySize {
-            width: true,
-            height: true,
-          },
-          parent_size: TaffySize {
-            width: Some(percentage_inline_size.to_float()),
-            height: None,
-          },
-          available_space: TaffySize {
-            width: TaffyAvailableSpace::Definite(inline_size.to_float()),
-            height: TaffyAvailableSpace::MaxContent,
-          },
-          vertical_margins_are_collapsible: Line::FALSE,
-        },
-      )
-    });
+
+    let space = self.cell_space(
+      cell.node,
+      inline_size,
+      None,
+      false,
+      percentage_inline_size,
+      CacheSlot::Measure,
+    );
+    let result = self.tree.layout(cell.node, &space);
 
     CellMeasure {
-      block_size: LayoutUnit::from_float_round(output.size.height),
-      first_baseline: output.baselines.first.map(LayoutUnit::from_float_round),
+      block_size: result.size.block_size,
+      first_baseline: result.first_baseline,
     }
+  }
+
+  /// Blink's `SetupTableCellConstraintSpaceBuilder`: a space fixing the cell's inline size, and
+  /// its block size when there is one.
+  fn cell_space(
+    &self,
+    cell: NodeId,
+    inline_size: LayoutUnit,
+    block_size: Option<LayoutUnit>,
+    is_initial_block_size_indefinite: bool,
+    percentage_inline_size: LayoutUnit,
+    cache_slot: CacheSlot,
+  ) -> ConstraintSpace {
+    let mut space = ConstraintSpace::new(Some(inline_size), self.tree.layout_style(cell).direction);
+
+    space.is_new_formatting_context = true;
+    space.is_table_cell = true;
+    space.is_fixed_inline_size = true;
+    space.available_block_size = block_size;
+    space.is_fixed_block_size = block_size.is_some();
+    space.is_initial_block_size_indefinite = is_initial_block_size_indefinite;
+    space.percentage_resolution_inline_size = Some(percentage_inline_size);
+    space.cache_slot = cache_slot;
+    space
   }
 
   /// Blink's `TableLayoutAlgorithm::GenerateFragment`, with each section and row placed as
@@ -1151,43 +989,37 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     rows: &Rows,
     captions: &[CaptionResult],
     spacing: (LayoutUnit, LayoutUnit),
-  ) -> LayoutOutput {
+  ) -> LayoutResult {
     let structure = Rc::clone(&self.structure);
-    let perform = self.inputs.run_mode == RunMode::PerformLayout;
-    let is_table_block_size_specified = !self.render_node().context.style.box_data.height.is_auto();
+    let perform = self.space.cache_slot == CacheSlot::Layout;
+    let is_table_block_size_specified = !self.style.size.height.is_auto();
     let mut offset = LayoutUnit::ZERO;
-    let mut oof_candidates = OofCandidates::NONE;
+    let mut out_of_flow = Vec::new();
     let mut first_baseline = None;
     let mut fragment = TableFragment::default();
     let add_caption = |tree: &mut LayoutTree<'r>,
                        caption: &CaptionResult,
                        offset: &mut LayoutUnit,
-                       oof: &mut OofCandidates,
-                       perform: bool| {
+                       out_of_flow: &mut Vec<OutOfFlowCandidate>| {
       *offset += caption.margins.top;
+
+      let location = Point::new(caption.margins.left, *offset);
+
       if perform {
-        let location = TaffyPoint {
-          x: caption.margins.left.to_float(),
-          y: offset.to_float(),
-        };
-
-        tree.place(caption.node, location, caption.size);
-        let mut candidates = caption.output.oof_candidates.clone();
-
-        candidates.translate(location);
-        oof.append(&mut candidates);
+        tree.place_child(caption.node, location, &caption.result);
       }
-      *offset += LayoutUnit::from_float(caption.size.height) + caption.margins.bottom;
+      out_of_flow.extend(
+        caption
+          .result
+          .out_of_flow
+          .iter()
+          .map(|candidate| candidate.moved_by(location)),
+      );
+      *offset += caption.result.size.block_size + caption.margins.bottom;
     };
 
     for caption in captions.iter().filter(|caption| !caption.is_bottom) {
-      add_caption(
-        self.tree,
-        caption,
-        &mut offset,
-        &mut oof_candidates,
-        perform,
-      );
+      add_caption(self.tree, caption, &mut offset, &mut out_of_flow);
     }
 
     // The table box starts at the first section, or wherever the last top caption ends.
@@ -1215,13 +1047,9 @@ impl<'t, 'r> TableLayout<'t, 'r> {
         section_inline_size,
         is_table_block_size_specified,
         spacing,
-        perform,
         &mut fragment,
-        &mut oof_candidates,
-        TaffyPoint {
-          x: section_inline_offset,
-          y: offset,
-        },
+        &mut out_of_flow,
+        Point::new(section_inline_offset, offset),
       );
 
       spacing_after_last_section = spacing.1;
@@ -1229,16 +1057,10 @@ impl<'t, 'r> TableLayout<'t, 'r> {
         // An empty section takes no border spacing before it.
         offset = before_section;
         if perform {
-          self.tree.place(
+          self.tree.place_table_part(
             section.node,
-            TaffyPoint {
-              x: section_inline_offset.to_float(),
-              y: offset.to_float(),
-            },
-            TaffySize {
-              width: section_inline_size.to_float(),
-              height: block_size.to_float(),
-            },
+            Point::new(section_inline_offset, offset),
+            LogicalSize::new(section_inline_size, block_size),
           );
         }
       }
@@ -1266,24 +1088,19 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     fragment.grid_rect = (table_box_start.to_float(), grid_block_size.to_float());
 
     for caption in captions.iter().filter(|caption| caption.is_bottom) {
-      add_caption(
-        self.tree,
-        caption,
-        &mut offset,
-        &mut oof_candidates,
-        perform,
-      );
+      add_caption(self.tree, caption, &mut offset, &mut out_of_flow);
     }
 
     let intrinsic_block_size = offset.clamp_negative_to_zero() - grid_block_size_inflation;
-    let block_size = match self.inputs.known_dimensions.height {
-      Some(height) => LayoutUnit::from_float(height),
-      None => offset.clamp_negative_to_zero(),
+    let block_size = if self.space.is_fixed_block_size {
+      self.space.available_block_size.unwrap_or_default()
+    } else {
+      offset.clamp_negative_to_zero()
     };
 
     if perform {
       for &column in &structure.columns {
-        self.tree.compute_hidden(column);
+        self.tree.hide(column);
       }
       fragment.finish(
         self.tree,
@@ -1295,22 +1112,31 @@ impl<'t, 'r> TableLayout<'t, 'r> {
       self.tree.set_table_fragment(self.node, fragment);
     }
 
-    let size = TaffySize {
-      width: table_inline_size.to_float(),
-      height: block_size.to_float(),
-    };
-    let mut output = LayoutOutput::from_sizes_and_baselines(
-      size,
-      TaffyRect::ZERO,
-      Baselines {
-        first: first_baseline.map(LayoutUnit::to_float),
-        last: None,
-      },
-    );
+    let size = LogicalSize::new(table_inline_size, block_size);
+    let mut result = LayoutResult::of_box(size, &self.style, self.space);
 
-    let _ = intrinsic_block_size;
-    output.oof_candidates = oof_candidates;
-    output
+    if !out_of_flow.is_empty() {
+      let claims = self.tree.claims(self.node);
+      let containing_block = ContainingBlock::padding_box(
+        Size {
+          width: size.inline_size,
+          height: size.block_size,
+        },
+        result.border,
+      );
+
+      out_of_flow =
+        self
+          .tree
+          .lay_out_out_of_flow(self.node, claims, out_of_flow, containing_block, self.space);
+    }
+
+    result.intrinsic_block_size = intrinsic_block_size;
+    result.bfc_line_offset = self.space.bfc_offset.line_offset;
+    result.bfc_block_offset = Some(self.space.bfc_offset.block_offset);
+    result.first_baseline = first_baseline;
+    result.out_of_flow = out_of_flow;
+    result
   }
 
   /// Places a section's rows at `origin` in the table, Blink's
@@ -1327,11 +1153,11 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     inline_size: LayoutUnit,
     is_table_block_size_specified: bool,
     spacing: (LayoutUnit, LayoutUnit),
-    perform: bool,
     fragment: &mut TableFragment,
-    oof: &mut OofCandidates,
-    origin: TaffyPoint<LayoutUnit>,
+    out_of_flow: &mut Vec<OutOfFlowCandidate>,
+    origin: Point<LayoutUnit>,
   ) -> (LayoutUnit, Option<LayoutUnit>, bool) {
+    let perform = self.space.cache_slot == CacheSlot::Layout;
     let mut offset = LayoutUnit::ZERO;
     let mut first_baseline = None;
     let mut is_first_non_collapsed_row = true;
@@ -1345,11 +1171,6 @@ impl<'t, 'r> TableLayout<'t, 'r> {
         offset += spacing.1;
       }
 
-      let row_origin = TaffyPoint {
-        x: origin.x,
-        y: origin.y + offset,
-      };
-
       if perform {
         self.place_row(
           row,
@@ -1360,19 +1181,13 @@ impl<'t, 'r> TableLayout<'t, 'r> {
           is_table_block_size_specified,
           spacing,
           fragment,
-          oof,
-          row_origin,
+          out_of_flow,
+          Point::new(origin.x, origin.y + offset),
         );
-        self.tree.place(
+        self.tree.place_table_part(
           row.node,
-          TaffyPoint {
-            x: 0.0,
-            y: offset.to_float(),
-          },
-          TaffySize {
-            width: inline_size.to_float(),
-            height: row_data.block_size.to_float(),
-          },
+          Point::new(LayoutUnit::ZERO, offset),
+          LogicalSize::new(inline_size, row_data.block_size),
         );
         if row_data.is_collapsed {
           fragment.hidden.push(row.node);
@@ -1393,16 +1208,10 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     };
 
     if perform {
-      self.tree.place(
+      self.tree.place_table_part(
         section.node,
-        TaffyPoint {
-          x: origin.x.to_float(),
-          y: origin.y.to_float(),
-        },
-        TaffySize {
-          width: inline_size.to_float(),
-          height: block_size.to_float(),
-        },
+        origin,
+        LogicalSize::new(inline_size, block_size),
       );
       if self.structure.borders.is_collapsed && row_offsets.len() > 1 {
         fragment
@@ -1427,8 +1236,8 @@ impl<'t, 'r> TableLayout<'t, 'r> {
     is_table_block_size_specified: bool,
     spacing: (LayoutUnit, LayoutUnit),
     fragment: &mut TableFragment,
-    oof: &mut OofCandidates,
-    row_origin: TaffyPoint<LayoutUnit>,
+    out_of_flow: &mut Vec<OutOfFlowCandidate>,
+    row_origin: Point<LayoutUnit>,
   ) {
     let row_data = &rows.rows[row_index];
 
@@ -1464,9 +1273,7 @@ impl<'t, 'r> TableLayout<'t, 'r> {
       } else {
         LayoutUnit::ZERO
       };
-      let padding = self
-        .tree
-        .padding(cell.node, Some(row_inline_size.to_float()));
+      let padding = self.tree.padding(cell.node, Some(row_inline_size));
 
       self.tree.set_table_cell_aligned_padding(
         cell.node,
@@ -1475,31 +1282,16 @@ impl<'t, 'r> TableLayout<'t, 'r> {
           (padding.bottom + below).to_float(),
         )),
       );
-      let output = self.tree.compute_child_layout(
+
+      let space = self.cell_space(
         cell.node,
-        LayoutInput {
-          run_mode: RunMode::PerformLayout,
-          sizing_mode: SizingMode::InherentSize,
-          axis: RequestedAxis::Both,
-          known_dimensions: TaffySize {
-            width: Some(inline_size.to_float()),
-            height: Some(block_size.to_float()),
-          },
-          known_dimensions_are_definite: TaffySize {
-            width: true,
-            height: !is_initial_block_size_indefinite,
-          },
-          parent_size: TaffySize {
-            width: Some(row_inline_size.to_float()),
-            height: None,
-          },
-          available_space: TaffySize {
-            width: TaffyAvailableSpace::Definite(inline_size.to_float()),
-            height: TaffyAvailableSpace::Definite(block_size.to_float()),
-          },
-          vertical_margins_are_collapsible: Line::FALSE,
-        },
+        inline_size,
+        Some(block_size),
+        is_initial_block_size_indefinite,
+        row_inline_size,
+        CacheSlot::Layout,
       );
+      let result = self.tree.layout(cell.node, &space);
       let start = column_locations
         .get(cell.column)
         .map_or(LayoutUnit::ZERO, |location| location.offset)
@@ -1509,20 +1301,16 @@ impl<'t, 'r> TableLayout<'t, 'r> {
       } else {
         start
       };
-      let location = TaffyPoint {
-        x: x.to_float(),
-        y: 0.0,
-      };
 
-      self.tree.place(cell.node, location, output.size);
-
-      let mut candidates = output.oof_candidates;
-
-      candidates.translate(TaffyPoint {
-        x: (row_origin.x + x).to_float(),
-        y: row_origin.y.to_float(),
-      });
-      oof.append(&mut candidates);
+      self
+        .tree
+        .place_child(cell.node, Point::new(x, LayoutUnit::ZERO), &result);
+      out_of_flow.extend(
+        result
+          .out_of_flow
+          .iter()
+          .map(|candidate| candidate.moved_by(Point::new(row_origin.x + x, row_origin.y))),
+      );
 
       if row_data.is_collapsed
         || is_hidden_due_to_layout(column_locations, cell.column, cell.colspan)
@@ -1568,116 +1356,45 @@ struct Rows {
   measures: Vec<CellMeasure>,
 }
 
-impl<'r> LayoutTree<'r> {
-  /// Sets `node`'s unrounded layout at `location` with `size`, its border and padding as its
-  /// layout style resolves them.
-  fn place(&mut self, node: TaffyNodeId, location: TaffyPoint<f32>, size: TaffySize<f32>) {
-    let style = self.taffy_style(node);
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-    let border = style.border.resolve_or_zero(None, calc);
-    let padding = style.padding.resolve_or_zero(None, calc);
-
-    self.set_unrounded_layout(
+impl LayoutTree<'_> {
+  /// Places the table section or row `node`, which lays out with no border or padding, at
+  /// `location` with `size`.
+  fn place_table_part(&mut self, node: NodeId, location: Point<LayoutUnit>, size: LogicalSize) {
+    self.set_layout(
       node,
-      &Layout {
-        location,
-        size,
-        border,
-        padding,
-        ..Layout::new()
-      },
+      ComputedLayout::new(
+        location.map(LayoutUnit::to_float),
+        Size {
+          width: size.inline_size.to_float(),
+          height: size.block_size.to_float(),
+        },
+        Rect::default(),
+        Rect::default(),
+      ),
     );
   }
 
   /// The border and padding of `node`'s layout style, its percentages of `basis`.
-  fn border_padding(&self, node: TaffyNodeId, basis: Option<f32>) -> BoxStrut {
-    let border = self.border(node, basis);
-    let padding = self.padding(node, basis);
+  fn border_padding(&self, node: NodeId, basis: Option<LayoutUnit>) -> BoxStrut {
+    let style = self.layout_style(node);
 
-    BoxStrut {
-      top: border.top + padding.top,
-      right: border.right + padding.right,
-      bottom: border.bottom + padding.bottom,
-      left: border.left + padding.left,
-    }
+    BoxStrut::from(style.border.map(LayoutUnit::from_float)) + self.padding(node, basis)
   }
 
-  fn border(&self, node: TaffyNodeId, basis: Option<f32>) -> BoxStrut {
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-
-    strut(self.taffy_style(node).border.resolve_or_zero(basis, calc))
+  fn padding(&self, node: NodeId, basis: Option<LayoutUnit>) -> BoxStrut {
+    self
+      .layout_style(node)
+      .padding
+      .map(|padding| padding.resolve_or_zero(basis))
+      .into()
   }
 
-  fn padding(&self, node: TaffyNodeId, basis: Option<f32>) -> BoxStrut {
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-
-    strut(self.taffy_style(node).padding.resolve_or_zero(basis, calc))
-  }
-
-  fn margins(&self, node: TaffyNodeId, basis: Option<f32>) -> BoxStrut {
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-
-    strut(self.taffy_style(node).margin.resolve_or_zero(basis, calc))
-  }
-
-  /// Whether `node`'s inline-start and inline-end margins are `auto`.
-  fn auto_inline_margins(&self, node: TaffyNodeId) -> (bool, bool) {
-    let margin = self.taffy_style(node).margin;
-
-    (
-      margin.left == LengthPercentageAuto::auto(),
-      margin.right == LengthPercentageAuto::auto(),
-    )
-  }
-
-  /// The width `node` takes stretched across `container` with `margins`, as a caption's
-  /// implicit stretch resolves it: its `width` when set, held between `min-width` and
-  /// `max-width`.
-  fn stretched_width(&self, node: TaffyNodeId, container: f32, margins: BoxStrut) -> f32 {
-    let style = self.taffy_style(node);
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-    let border_padding = self.border_padding(node, Some(container));
-    let inline_border_padding = (border_padding.left + border_padding.right).to_float();
-    let content_box = style.box_sizing == TaffyBoxSizing::ContentBox;
-    let to_border_box = |value: f32| {
-      if content_box {
-        value + inline_border_padding
-      } else {
-        value.max(inline_border_padding)
-      }
-    };
-    let width = style
-      .size
-      .width
-      .maybe_resolve(Some(container), calc)
-      .map_or(
-        container - (margins.left + margins.right).to_float(),
-        to_border_box,
-      );
-    let min = style
-      .min_size
-      .width
-      .maybe_resolve(Some(container), calc)
-      .map(to_border_box);
-    let max = style
-      .max_size
-      .width
-      .maybe_resolve(Some(container), calc)
-      .map(to_border_box);
-    let width = max.map_or(width, |max| width.min(max));
-
-    min
-      .map_or(width, |min| width.max(min))
-      .max(inline_border_padding)
-  }
-}
-
-fn strut(rect: TaffyRect<f32>) -> BoxStrut {
-  BoxStrut {
-    top: LayoutUnit::from_float(rect.top),
-    right: LayoutUnit::from_float(rect.right),
-    bottom: LayoutUnit::from_float(rect.bottom),
-    left: LayoutUnit::from_float(rect.left),
+  fn margins(&self, node: NodeId, basis: Option<LayoutUnit>) -> BoxStrut {
+    self
+      .layout_style(node)
+      .margin
+      .map(|margin| margin.resolve_or_zero(basis))
+      .into()
   }
 }
 

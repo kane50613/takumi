@@ -543,6 +543,17 @@ impl BoxStrut {
   }
 }
 
+impl From<Rect<LayoutUnit>> for BoxStrut {
+  fn from(rect: Rect<LayoutUnit>) -> Self {
+    Self {
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left,
+    }
+  }
+}
+
 impl Neg for BoxStrut {
   type Output = Self;
 

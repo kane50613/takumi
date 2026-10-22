@@ -95,9 +95,6 @@ pub(crate) struct ConstraintSpace {
   pub(crate) cache_slot: CacheSlot,
   /// Blink's `IgnoreMarginsForStretch` on the block start and end.
   pub(crate) ignore_block_margins_for_stretch: (bool, bool),
-  /// taffy's `SizingMode::ContentSize`: the box sized by its content, its own sizes left out, for
-  /// taffy's flexbox and grid algorithms.
-  pub(crate) sizes_by_content: bool,
 }
 
 impl ConstraintSpace {
@@ -130,7 +127,6 @@ impl ConstraintSpace {
       baseline_algorithm: BaselineAlgorithmType::Default,
       cache_slot: CacheSlot::Layout,
       ignore_block_margins_for_stretch: (false, false),
-      sizes_by_content: false,
     }
   }
 

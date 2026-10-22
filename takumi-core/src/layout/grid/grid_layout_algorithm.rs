@@ -673,7 +673,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     space: &'t ConstraintSpace,
     is_intrinsic: bool,
   ) -> Self {
-    let style = tree.layout_style_for(node, space);
+    let style = Rc::clone(tree.layout_style_rc(node));
     let grid_style = style.grid.clone().unwrap_or_default();
     let resolver = LengthResolver::new(space, &style);
     let border_padding = resolver.border_padding;

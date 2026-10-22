@@ -194,7 +194,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     node: NodeId,
     space: &'t ConstraintSpace,
   ) -> Self {
-    let style = tree.layout_style_for(node, space);
+    let style = Rc::clone(tree.layout_style_rc(node));
     let resolver = LengthResolver::new(space, &style);
     let border_padding = resolver.border_padding;
     let inline_size = resolver
@@ -802,7 +802,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     child: NodeId,
     child_style: &LayoutStyle,
   ) -> AutoSizeBehavior {
-    if self.tree.is_anonymous(child) {
+    if self.tree.is_anonymous(child) && !self.tree.is_table(child) {
       return AutoSizeBehavior::StretchImplicit;
     }
 
@@ -1559,7 +1559,7 @@ pub(crate) fn block_min_max_sizes(
   node: NodeId,
   space: &ConstraintSpace,
 ) -> MinMaxSizesResult {
-  let style = tree.layout_style_for(node, space);
+  let style = Rc::clone(tree.layout_style_rc(node));
   let resolver = LengthResolver::new(space, &style);
   let border_padding = resolver.border_padding;
   // Blink's intrinsic fragment geometry: an indefinite inline size, and the block size the style

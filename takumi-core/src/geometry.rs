@@ -43,10 +43,6 @@ impl<T> Point<T> {
       y: f(self.y),
     }
   }
-
-  pub(crate) fn from_taffy(p: taffy::geometry::Point<T>) -> Self {
-    Self { x: p.x, y: p.y }
-  }
 }
 
 impl Point<f32> {
@@ -115,13 +111,6 @@ impl<T> Size<T> {
     Size {
       width: f(self.width, other.width),
       height: f(self.height, other.height),
-    }
-  }
-
-  pub(crate) fn from_taffy(s: taffy::geometry::Size<T>) -> Self {
-    Self {
-      width: s.width,
-      height: s.height,
     }
   }
 
@@ -213,15 +202,6 @@ impl<T> Rect<T> {
       right: f(self.right),
       top: f(self.top),
       bottom: f(self.bottom),
-    }
-  }
-
-  pub(crate) fn from_taffy(r: taffy::geometry::Rect<T>) -> Self {
-    Self {
-      left: r.left,
-      right: r.right,
-      top: r.top,
-      bottom: r.bottom,
     }
   }
 
@@ -336,16 +316,6 @@ impl ComputedLayout {
       self.border.top + self.padding.top,
     )
   }
-
-  /// Converts a taffy layout.
-  pub(crate) fn from_taffy(l: &taffy::Layout) -> Self {
-    Self {
-      location: Point::from_taffy(l.location),
-      size: Size::from_taffy(l.size),
-      border: Rect::from_taffy(l.border),
-      padding: Rect::from_taffy(l.padding),
-    }
-  }
 }
 
 /// Opaque identifier for a node within a computed layout tree.
@@ -356,12 +326,13 @@ impl NodeId {
   /// The root of any layout tree; construction always assigns it index 0.
   pub const ROOT: Self = Self(0);
 
-  pub(crate) fn from_taffy(id: taffy::NodeId) -> Self {
-    Self(id.into())
+  /// The node at `index` in its layout tree.
+  pub(crate) const fn new(index: usize) -> Self {
+    Self(index)
   }
 
-  pub(crate) fn into_taffy(self) -> taffy::NodeId {
-    taffy::NodeId::from(self.0)
+  pub(crate) fn from_taffy(id: taffy::NodeId) -> Self {
+    Self(id.into())
   }
 }
 

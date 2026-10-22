@@ -400,7 +400,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     space: &'t ConstraintSpace,
     is_intrinsic: bool,
   ) -> Self {
-    let style = tree.layout_style_for(node, space);
+    let style = Rc::clone(tree.layout_style_rc(node));
     let resolver = LengthResolver::new(space, &style);
     let border_padding = resolver.border_padding;
     let inline_size = (!is_intrinsic).then(|| {

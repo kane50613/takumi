@@ -87,11 +87,6 @@ impl SizingContext {
     }
   }
 
-  /// Resolves an interned `calc(...)` handle against this context's arena.
-  pub(crate) fn resolve_calc(&self, value: *const (), basis: f32) -> f32 {
-    self.calc_arena.resolve_calc_value(value, basis)
-  }
-
   /// Device-pixel basis for the `rem` unit.
   pub(crate) fn rem_basis(&self) -> f32 {
     self
