@@ -383,6 +383,7 @@ impl<'r> LayoutTree<'r> {
       || style.is_out_of_flow()
       || style.is_scroll_container()
       || style.applies_layout_containment()
+      || self.render_node(node).context.style.line_clamp().is_some()
       || !matches!(
         style.display,
         Display::Block | Display::ListItem | Display::Inline
