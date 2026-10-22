@@ -4,6 +4,8 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
+use std::rc::Rc;
+
 use super::{
   inline_item_result::{CollapsedMargins, LayoutResult},
   line_breaker::AtomicInlineLayout,
@@ -24,6 +26,8 @@ use crate::{
 pub(crate) struct BoxAtomicInline<'t, 'r> {
   pub(crate) tree: &'t mut LayoutTree<'r>,
   pub(crate) available_space: Size<AvailableSpace>,
+  /// Whether its boxes lay out to be placed, or only to be measured.
+  pub(crate) cache_slot: CacheSlot,
 }
 
 impl<'t, 'r> BoxAtomicInline<'t, 'r> {
@@ -31,7 +35,19 @@ impl<'t, 'r> BoxAtomicInline<'t, 'r> {
     Self {
       tree,
       available_space,
+      cache_slot: CacheSlot::Measure,
     }
+  }
+
+  /// The atomic inline `render_node` laid out as [`AtomicInlineLayout::layout`] lays it out.
+  pub(crate) fn lay_out_atomic_inline(
+    &mut self,
+    render_node: &'r RenderNode,
+  ) -> (NodeId, Rc<BoxLayoutResult>) {
+    let node = self.tree.atomic_inline_node(render_node);
+    let space = self.atomic_inline_space(node);
+
+    (node, self.tree.layout(node, &space))
   }
 
   /// The space Blink's `LayoutAtomicInline` lays `node` out in: a new formatting context in the
@@ -53,16 +69,14 @@ impl<'t, 'r> BoxAtomicInline<'t, 'r> {
 
     space.available_block_size = self.available_space.height.definite();
     space.percentage_resolution_block_size = space.available_block_size;
-    space.cache_slot = CacheSlot::Measure;
+    space.cache_slot = self.cache_slot;
     space
   }
 }
 
 impl<'r> AtomicInlineLayout<'r> for BoxAtomicInline<'_, 'r> {
   fn layout(&mut self, render_node: &'r RenderNode) -> LayoutResult {
-    let node = self.tree.atomic_inline_node(render_node);
-    let space = self.atomic_inline_space(node);
-    let result = self.tree.layout(node, &space);
+    let (node, result) = self.lay_out_atomic_inline(render_node);
 
     LayoutResult {
       inline_size: result.size.inline_size,

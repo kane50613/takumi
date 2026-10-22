@@ -12,7 +12,11 @@ use super::{
 use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Rect, Size},
-  layout::{border::BorderProperties, node::Node, tree::RenderNode},
+  layout::{
+    border::BorderProperties,
+    node::Node,
+    tree::{NodeOrigin, RenderNode},
+  },
   layout_unit::LayoutUnit,
   style::{Color, Direction, Display, Float, Length, Position, Sides, SizingContext, SpacePair},
 };
@@ -74,18 +78,6 @@ pub struct InlineBoxItem<'c> {
 }
 
 impl RenderNode {
-  /// Whether a float sits among the inline content this node lays out, found the way
-  /// [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines) walks it.
-  pub(crate) fn has_inline_floats(&self) -> bool {
-    self.children.iter().flatten().any(|child| {
-      if child.participates_as_inline_box() {
-        child.inline_box_kind() == InlineBoxKind::Float
-      } else {
-        !child.is_block_in_inline && child.has_inline_floats()
-      }
-    })
-  }
-
   /// Whether an out-of-flow box sits among the inline content this node lays out, found the way
   /// [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines) walks it.
   pub(crate) fn holds_inline_out_of_flow(&self) -> bool {
@@ -127,6 +119,40 @@ impl RenderNode {
       &mut found,
     );
     found
+  }
+
+  /// Whether an atomic inline box sits among the inline content this node lays out, found
+  /// the way [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines)
+  /// walks it.
+  pub(crate) fn holds_atomic_inline_box(&self) -> bool {
+    self.children.iter().flatten().any(|child| {
+      child.is_atomic_inline_box() || (child.is_inline_span() && child.holds_atomic_inline_box())
+    })
+  }
+
+  /// Whether its inline formatting context lays it out as a box of the layout tree beside the
+  /// text, which the scene paints as a box of its own: an atomic inline container or a float, not
+  /// an outside list marker.
+  pub(crate) fn is_atomic_inline_box(&self) -> bool {
+    self.participates_as_inline_box() && self.origin != NodeOrigin::Marker
+  }
+
+  /// The child-index path from this node to `target` among its inline content, through the inline
+  /// spans holding it.
+  pub(crate) fn inline_child_path(&self, target: &RenderNode) -> Option<SmallVec<[usize; 2]>> {
+    for (index, child) in self.children.iter().flatten().enumerate() {
+      if ptr::eq(child, target) {
+        return Some(SmallVec::from_elem(index, 1));
+      }
+      if child.is_inline_span()
+        && let Some(mut path) = child.inline_child_path(target)
+      {
+        path.insert(0, index);
+        return Some(path);
+      }
+    }
+
+    None
   }
 
   /// Whether the node is an inline box whose content joins its parent's lines rather than an

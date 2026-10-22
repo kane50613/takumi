@@ -109,9 +109,11 @@ impl<'r> TextMask<'r> {
   ) -> Result<()> {
     self.paint_inline_content(node, node_id, origin, device)?;
 
-    if node.children.is_none() || node.should_create_inline_layout() {
+    if node.children.is_none() {
       return Ok(());
     }
+
+    let is_inline_formatting_context = node.should_create_inline_layout();
 
     self.containing_blocks.record_placement(node_id, origin);
 
@@ -133,6 +135,12 @@ impl<'r> TextMask<'r> {
       let Some(child_node) = node.node_at_path(&path) else {
         return Err(Error::InvalidLayoutNode(child.node_id.into()));
       };
+
+      // Of an inline formatting context's boxes, only its atomic inline containers draw text in.
+      if is_inline_formatting_context && !child_node.is_atomic_inline_box() {
+        continue;
+      }
+
       let child_layout = self.results.layout(child.node_id)?;
       let child_context = &child_node.context;
 
@@ -187,6 +195,12 @@ impl<'r> TextMask<'r> {
       let Some(ProcessedInlineSpan::Box(item)) = spans.get(positioned.id as usize) else {
         continue;
       };
+
+      // An atomic inline container paints as a box of the layout tree.
+      if item.render_node.is_atomic_inline_box() {
+        continue;
+      }
+
       let (box_origin, InlineBoxPaint::Container(subtree)) =
         InlineBoxPaint::of(positioned, item, layout)
       else {

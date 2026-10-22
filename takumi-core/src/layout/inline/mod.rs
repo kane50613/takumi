@@ -54,7 +54,7 @@ pub use self::{
   decorations::DecorationLine,
   fragment_items::FragmentItems,
   items::{DecorationLink, InlineBoxItem, ProcessedInlineSpan},
-  metrics::{InlineBoxKind, InlinePass, VisualInlineBox},
+  metrics::{InlineBoxKind, VisualInlineBox},
   outline::InlineOutlineRect,
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,

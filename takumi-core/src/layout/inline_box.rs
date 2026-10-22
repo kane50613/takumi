@@ -49,13 +49,16 @@ pub struct InlineSubtree {
   paint_offset: Point<f32>,
 }
 
-/// Resolves what `positioned` paints, and where, or nothing for a box at zero opacity.
+/// Resolves what `positioned` paints, and where, or nothing for a box at zero opacity or an atomic
+/// inline container, which its scene paints as a box of the layout tree.
 pub fn resolve_inline_box<'n>(
   positioned: &VisualInlineBox,
   item: &InlineBoxItem<'n>,
   container: ComputedLayout,
 ) -> Option<(Point<f32>, InlineBoxPaint<'n>)> {
-  (item.render_node.context.style.svg_data.opacity.0 != 0.0)
+  let node = item.render_node;
+
+  (node.context.style.svg_data.opacity.0 != 0.0 && !node.is_atomic_inline_box())
     .then(|| InlineBoxPaint::of(positioned, item, container))
 }
 

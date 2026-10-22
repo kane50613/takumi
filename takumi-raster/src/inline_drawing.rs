@@ -6,7 +6,7 @@ use takumi_core::{
 use crate::{
   Canvas, CanvasDevice, DeferredOutline, RenderContext, Result, SizedFontStyle, draw_box_shell,
   layout::{
-    inline::{InlineBoxItem, InlinePass, ProcessedInlineSpan, VisualInlineBox},
+    inline::{InlineBoxItem, InlineBoxKind, ProcessedInlineSpan, VisualInlineBox},
     tree::RenderNode,
   },
   node_paint::draw_image_node_content,
@@ -41,7 +41,7 @@ pub(crate) fn draw_inline_box(
       context.transform = transform * Affine::translation(origin.x, origin.y);
 
       draw_box_shell(&context, canvas, layout, None, true)?;
-      draw_own_content(node, &context, canvas, layout, InlinePass::Content)?;
+      draw_own_content(node, &context, canvas, layout)?;
       if let Some(outline) = DeferredOutline::of(&context, layout) {
         outline.paint(canvas)?;
       }
@@ -57,15 +57,11 @@ pub(crate) fn draw_own_content(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
-  pass: InlinePass,
 ) -> Result<()> {
   let content = OwnContent::of(node);
 
   if let OwnContent::Image(image) = content {
-    return match pass {
-      InlinePass::Content => draw_image_node_content(image, context, canvas, layout),
-      InlinePass::Floats => Ok(()),
-    };
+    return draw_image_node_content(image, context, canvas, layout);
   }
 
   let font_style = SizedFontStyle::from_style(&context.style, context);
@@ -74,15 +70,13 @@ pub(crate) fn draw_own_content(
   };
   let painted = painted?;
 
-  if pass == InlinePass::Content {
-    draw_inline_layout(context, canvas, layout, &painted, &font_style)?;
-  }
+  draw_inline_layout(context, canvas, layout, &painted, &font_style)?;
 
   for positioned in painted
     .runs
     .inline_boxes
     .iter()
-    .filter(|positioned| pass.paints(positioned))
+    .filter(|positioned| positioned.kind == InlineBoxKind::InFlow)
   {
     if let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(positioned.id as usize) {
       draw_inline_box(positioned, item, layout, canvas, context.transform)?;

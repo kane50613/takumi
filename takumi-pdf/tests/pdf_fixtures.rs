@@ -4744,14 +4744,9 @@ fn font_format_standards() {
   }
 }
 
-/// An inline box carries its own language, and the text around it goes back to
-/// the paragraph's when the box ends. Both sit on a path of their own: the box
-/// is tagged where the inline run places it, not where a block would be, and
-/// the owner reopens after it.
-///
-/// The box's own subtree is a separate matter. It renders through a nested
-/// emitter that tags nothing at all, so the Hindi word inside it reaches the
-/// page unmarked.
+/// An inline box carries its own language, and the text around it keeps the
+/// paragraph's. The box paints as a box of the page's own scene, so its text is
+/// tagged in its own language too.
 #[test]
 fn inline_box_language() {
   let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
@@ -4783,8 +4778,8 @@ fn inline_box_language() {
   let haystack = inflated_text(&pdf);
 
   assert!(
-    haystack.matches("/Lang(ar)").count() >= 2,
-    "the paragraph's language stops at the inline box instead of resuming after it"
+    haystack.contains("/Lang(ar)"),
+    "the paragraph's text does not carry its language"
   );
   assert!(
     haystack.contains("/Lang(hi)"),

@@ -97,21 +97,15 @@ css/
 !css/CSS2/borders/border-width-011.xht
 !css/CSS2/borders/border-width-012.xht
 !css/CSS2/borders/shand-border-001.xht
-!css/CSS2/floats/float-after-block-with-collapsed-margin-inside-inline.html
 !css/CSS2/floats/float-in-inline-anonymous-block-with-overflow-hidden.html
-!css/CSS2/floats/float-no-content-beside-001.html
-!css/CSS2/floats/float-nowrap-4.html
 !css/CSS2/floats/float-nowrap-7.html
 !css/CSS2/floats/float-nowrap-8.html
 !css/CSS2/floats/float-nowrap-9.html
 !css/CSS2/floats/float-root.html
 !css/CSS2/floats/floats-line-wrap-shifted-001.html
-!css/CSS2/floats/floats-placement-004.html
 !css/CSS2/floats/floats-placement-vertical-001a.xht
 !css/CSS2/floats/floats-placement-vertical-001b.xht
 !css/CSS2/floats/floats-placement-vertical-001c.xht
-!css/CSS2/floats/floats-placement-vertical-004-ref2.xht
-!css/CSS2/floats/floats-placement-vertical-004.xht
 !css/CSS2/floats/floats-rule3-outside-left-002.xht
 !css/CSS2/floats/floats-rule3-outside-right-002.xht
 !css/CSS2/floats/floats-rule7-outside-left-001.xht
@@ -407,7 +401,6 @@ css/CSS2/lists/list-style-type-applies-to-016.html
 !css/CSS2/normal-flow/inline-block-replaced-height-009.xht
 !css/CSS2/normal-flow/inline-block-replaced-width-002.xht
 !css/CSS2/normal-flow/inline-block-replaced-width-003.xht
-!css/CSS2/normal-flow/inline-block-replaced-width-006.xht
 !css/CSS2/normal-flow/inline-block-replaced-width-007.xht
 !css/CSS2/normal-flow/inline-block-replaced-width-008.xht
 !css/CSS2/normal-flow/inline-block-valign-001.xht
@@ -1107,7 +1100,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/flexbox-flex-wrap-flexing-003.html
 !css/css-flexbox/flexbox-items-as-stacking-contexts-001.xhtml
 !css/css-flexbox/flexbox-items-as-stacking-contexts-002.html
-!css/css-flexbox/flexbox-items-as-stacking-contexts-003.html
 !css/css-flexbox/flexbox-justify-content-horiz-001a.xhtml
 !css/css-flexbox/flexbox-justify-content-horiz-001b.xhtml
 !css/css-flexbox/flexbox-justify-content-horiz-002.xhtml
@@ -1169,7 +1161,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/flexbox_flex-0-0-N-unitless-basis.html
 !css/css-flexbox/flexbox_flex-0-1-1-unitless-basis.html
 !css/css-flexbox/flexbox_flex-0-1-N-unitless-basis.html
-!css/css-flexbox/flexbox_flex-natural.html
 !css/css-flexbox/flexbox_justifycontent-left-001.html
 !css/css-flexbox/flexbox_justifycontent-left-002.html
 !css/css-flexbox/flexbox_justifycontent-right-001.html
@@ -1380,6 +1371,7 @@ css/css-grid/abspos/positioned-grid-descendant-containing-block-014.html
 css/css-grid/abspos/positioned-grid-descendant-containing-block-015.html
 css/css-grid/abspos/positioned-grid-descendant-containing-block-016.html
 css/css-grid/abspos/positioned-grid-items-018.html
+css/css-grid/abspos/positioned-grid-items-019.html
 css/css-grid/abspos/positioned-grid-items-020.html
 css/css-grid/abspos/positioned-grid-items-021.html
 css/css-grid/abspos/positioned-grid-items-022.html
@@ -2552,8 +2544,6 @@ css/css-text/text-autospace/text-autospace-vertical-combine-001.html
 css/css-text/text-autospace/text-autospace-vertical-upright-001.html
 !css/css-text/text-encoding/
 !css/css-text/text-fit/grow-per-line-all.html
-!css/css-text/text-indent/below-float.html
-!css/css-text/text-indent/below-float2.html
 !css/css-text/text-indent/below-float3.html
 !css/css-text/text-indent/text-indent-length-002.html
 !css/css-text/text-indent/text-indent-percentage-001.xht

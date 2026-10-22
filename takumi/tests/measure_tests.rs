@@ -2952,3 +2952,18 @@ fn test_measure_root_without_a_viewport_size_fits_its_content() {
     measured.height
   );
 }
+
+#[test]
+fn test_measure_inline_block_reports_its_own_content() {
+  let node = Node::from_html(
+    r#"<div style="display:block;width:400px;font-size:20px">a <span style="display:inline-block;padding:4px">inner</span></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let measured = measure(node, create_test_viewport());
+  let inline_block = &measured.children[0];
+
+  assert_eq!(measured.children.len(), 1);
+  assert_eq!(inline_block.runs.len(), 1);
+  assert_eq!(inline_block.runs[0].text, "inner");
+}

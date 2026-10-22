@@ -30,25 +30,3 @@ pub struct VisualInlineBox {
   /// How the box sits in its line.
   pub kind: InlineBoxKind,
 }
-
-/// Which draws of an inline formatting context one pass paints: CSS 2.1 Appendix E paints the
-/// floats in a phase of their own, before the line content, and out-of-flow boxes with their
-/// stacking context rather than here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InlinePass {
-  /// The text and every box that does not float.
-  Content,
-  /// The floats alone.
-  Floats,
-}
-
-impl InlinePass {
-  /// Whether the pass paints `inline_box`.
-  pub fn paints(self, inline_box: &VisualInlineBox) -> bool {
-    match inline_box.kind {
-      InlineBoxKind::InFlow => self == Self::Content,
-      InlineBoxKind::Float => self == Self::Floats,
-      InlineBoxKind::OutOfFlow => false,
-    }
-  }
-}

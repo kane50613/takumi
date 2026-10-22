@@ -512,9 +512,16 @@ impl FragmentItems {
       });
     }
 
+    // An atomic inline container measures as a box of the layout tree.
     let inline_boxes = self
       .inline_boxes
       .iter()
+      .filter(|inline_box| {
+        !matches!(
+          spans.get(inline_box.id as usize),
+          Some(ProcessedInlineSpan::Box(item)) if item.render_node.is_atomic_inline_box()
+        )
+      })
       .map(|inline_box| MeasuredInlineBox {
         x: inline_box.x,
         y: inline_box.y,
