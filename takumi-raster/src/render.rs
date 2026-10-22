@@ -1,6 +1,8 @@
 use std::{collections::HashMap, mem, rc::Rc, sync::Arc};
 
 pub use takumi_core::layout::measure::{MeasuredNode, MeasuredTextRun};
+#[cfg(feature = "fragmentation")]
+use takumi_core::{geometry::Size, scene::PagedScene};
 use takumi_core::{
   scene::Scene,
   style::{ComputedStyle, Lang},
@@ -143,6 +145,32 @@ pub fn render<'g>(mut options: RenderOptions<'g>) -> Result<Bitmap> {
   let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
 
   render_with_context(render_context, options.node, options.viewport)
+}
+
+/// Renders a node across pages `page_size`, the viewport its lengths resolve against, one image
+/// per page.
+#[cfg(feature = "fragmentation")]
+pub fn render_pages<'g>(
+  mut options: RenderOptions<'g>,
+  page_size: Size<f32>,
+) -> Result<Vec<Bitmap>> {
+  let images = Rc::new(mem::take(&mut options.images));
+  let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
+  let mut paged = PagedScene::lay_out(
+    RenderNode::from_node(&render_context, options.node),
+    page_size,
+    true,
+  )?;
+  let size = page_size.map(|length| length.round() as u32);
+
+  (0..paged.page_count())
+    .map(|index| {
+      let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
+
+      paint_scene(paged.page(index), &mut canvas)?;
+      canvas.into_inner()
+    })
+    .collect()
 }
 
 /// Rasterizes `node` under an already-built [`RenderContext`]. The context

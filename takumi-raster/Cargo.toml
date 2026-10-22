@@ -58,6 +58,8 @@ png = ["takumi-core/png"]
 gif = ["takumi-core/gif"]
 webp = ["takumi-core/webp"]
 rayon = ["dep:rayon", "takumi-core/rayon"]
+# Rendering across pages, through takumi-core's block fragmentation.
+fragmentation = ["takumi-core/fragmentation"]
 
 [dev-dependencies]
 serde_json.workspace = true
