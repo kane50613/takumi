@@ -3,15 +3,15 @@
 //! and the parts of
 //! [`fragmentation_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/fragmentation_utils.cc)
 //! that read the fragment builder, for pages alone. Approximate: floats, out-of-flow boxes, and
-//! flex, grid, and table boxes do not break, a block-in-inline does not break inside its line,
-//! and `box-decoration-break: clone` sizes a box without the border and padding its earlier
-//! fragments repeat.
+//! flex and grid boxes do not break, a block-in-inline does not break inside its line, and
+//! `box-decoration-break: clone` sizes a box without the border and padding its earlier fragments
+//! repeat.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
 use std::rc::Rc;
 
-use super::{BlockLayoutAlgorithm, ChildBreakToken, InlineChild, PreviousInflowPosition};
+use super::{BlockLayoutAlgorithm, InlineChild, PreviousInflowPosition};
 use crate::{
   geometry::NodeId,
   layout::{
@@ -19,7 +19,7 @@ use crate::{
     break_token::BreakToken,
     constraint_space::ConstraintSpace,
     early_break::EarlyBreak,
-    fragmentation_layout_input::FragmentationLayoutInput,
+    fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     fragmentation_utils::{
       adjust_margins_for_fragmentation, adjusted_margin_after_final_child_fragment,
       attempt_soft_break, block_child_entries, break_before_child, calculate_break_appeal_before,
@@ -222,17 +222,10 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     }
 
     let child_style = Rc::clone(self.tree.layout_style_rc(node));
-    let is_floating_or_out_of_flow = child_style.is_floating() || child_style.is_out_of_flow();
 
-    self.builder.add_child_break_token(result);
     self
       .builder
-      .propagate_break_info(result, block_offset, is_floating_or_out_of_flow);
-    if self.space.should_propagate_child_break_values() {
-      self
-        .builder
-        .propagate_child_break_values(result, &child_style);
-    }
+      .add_result(self.space, &child_style, result, block_offset);
   }
 
   /// The line count and break token Blink's `FragmentBuilder::PropagateFromFragment` reads off a

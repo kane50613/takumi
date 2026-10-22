@@ -363,7 +363,58 @@ pub(crate) fn setup_space_builder_for_fragmentation(
     requires_content_before_breaking: builder.requires_content_before_breaking,
     should_propagate_child_break_values: true,
     min_break_appeal: parent.min_break_appeal,
+    min_block_size_should_encompass_intrinsic_size: false,
   });
+}
+
+/// Blink's `BreakBeforeChildIfNeeded` for a block-level `child` laid out as `result` at
+/// `fragmentainer_block_offset`: whether the layout broke before it.
+pub(crate) fn break_before_child_if_needed(
+  space: &ConstraintSpace,
+  builder: &mut BoxFragmentBuilder,
+  child: (NodeId, &LayoutStyle),
+  result: &LayoutResult,
+  fragmentainer_block_offset: LayoutUnit,
+  has_container_separation: bool,
+) -> Result<bool, LayoutStatus> {
+  if has_container_separation {
+    let break_between = calculate_break_between_value(Some(child.1), result, builder);
+
+    if is_forced_break_value(space, break_between) {
+      break_before_child(
+        space,
+        builder,
+        Some(child),
+        result,
+        BreakAppeal::Perfect,
+        true,
+      );
+      return Ok(true);
+    }
+  }
+
+  let appeal_before = calculate_break_appeal_before(
+    space,
+    Some(child.1),
+    result,
+    builder,
+    has_container_separation,
+  );
+
+  if move_past_breakpoint(
+    space,
+    builder,
+    Some(child),
+    result,
+    fragmentainer_block_offset,
+    appeal_before,
+  ) {
+    return Ok(false);
+  }
+  if !attempt_soft_break(space, builder, Some(child), result, appeal_before) {
+    return Err(LayoutStatus::NeedsEarlierBreak);
+  }
+  Ok(true)
 }
 
 /// Blink's `BreakBeforeChild`, for a block child or, as `None`, the next line.

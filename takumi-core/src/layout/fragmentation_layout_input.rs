@@ -9,6 +9,12 @@ use crate::layout::{
   block_break_token::BlockBreakToken, early_break::EarlyBreak, fragmentation_utils::is_break_inside,
 };
 
+/// Where a child resumes, as Blink's `BlockChildIterator::Entry` gives it.
+#[cfg(feature = "fragmentation")]
+pub(crate) type ChildBreakToken = Option<Rc<BlockBreakToken>>;
+#[cfg(not(feature = "fragmentation"))]
+pub(crate) type ChildBreakToken = ();
+
 /// Where a layout resumes the box, and where it has to break.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct FragmentationLayoutInput {

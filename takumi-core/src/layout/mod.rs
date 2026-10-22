@@ -13,6 +13,8 @@ pub(crate) mod box_fragment_builder;
 pub(crate) mod break_appeal;
 #[cfg(feature = "fragmentation")]
 pub(crate) mod break_token;
+#[cfg(feature = "fragmentation")]
+pub(crate) mod break_token_algorithm_data;
 pub mod clip;
 pub(crate) mod constraint_space;
 pub(crate) mod content_alignment;

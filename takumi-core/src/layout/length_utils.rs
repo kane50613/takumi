@@ -745,12 +745,17 @@ impl<'a> LengthResolver<'a> {
       &mut block_size,
       override_available_size,
     )?;
-    let min_max = self.min_max_block_sizes(
+    let mut min_max = self.min_max_block_sizes(
       applies_automatic_min_size.then_some(LayoutLength::MinIntrinsic),
       &mut block_size,
       override_available_size,
     );
 
+    if self.space.min_block_size_should_encompass_intrinsic_size()
+      && let Some(intrinsic_size) = intrinsic_size
+    {
+      min_max.encompass(intrinsic_size.min(min_max.max_size));
+    }
     Some(min_max.clamp_size_to_min_and_max(extent))
   }
 
@@ -763,7 +768,12 @@ impl<'a> LengthResolver<'a> {
     override_available_size: Option<LayoutUnit>,
   ) -> Option<LayoutUnit> {
     if self.space.is_fixed_block_size {
-      return override_available_size.or(self.space.available_block_size);
+      let block_size = override_available_size.or(self.space.available_block_size);
+
+      if self.space.min_block_size_should_encompass_intrinsic_size() {
+        return block_size.max(intrinsic_size);
+      }
+      return block_size;
     }
     if self.space.is_table_cell && intrinsic_size.is_some() {
       return intrinsic_size;

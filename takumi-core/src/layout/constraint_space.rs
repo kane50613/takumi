@@ -122,6 +122,9 @@ pub(crate) struct BlockFragmentation {
   pub(crate) should_propagate_child_break_values: bool,
   /// Blink's `MinBreakAppeal`.
   pub(crate) min_break_appeal: BreakAppeal,
+  /// Blink's `MinBlockSizeShouldEncompassIntrinsicSize`: a fixed block size grows to the content
+  /// a break pushed down.
+  pub(crate) min_block_size_should_encompass_intrinsic_size: bool,
 }
 
 impl ConstraintSpace {
@@ -167,6 +170,32 @@ impl ConstraintSpace {
       #[cfg(feature = "fragmentation")]
       block_fragmentation: None,
       ..self.clone()
+    }
+  }
+
+  /// Blink's `HasBlockFragmentation`, which for pages is `HasKnownFragmentainerBlockSize` too.
+  pub(crate) fn has_block_fragmentation(&self) -> bool {
+    #[cfg(feature = "fragmentation")]
+    {
+      self.block_fragmentation.is_some()
+    }
+    #[cfg(not(feature = "fragmentation"))]
+    {
+      false
+    }
+  }
+
+  /// Blink's `MinBlockSizeShouldEncompassIntrinsicSize`.
+  pub(crate) fn min_block_size_should_encompass_intrinsic_size(&self) -> bool {
+    #[cfg(feature = "fragmentation")]
+    {
+      self
+        .block_fragmentation
+        .is_some_and(|fragmentation| fragmentation.min_block_size_should_encompass_intrinsic_size)
+    }
+    #[cfg(not(feature = "fragmentation"))]
+    {
+      false
     }
   }
 
@@ -224,11 +253,6 @@ impl ConstraintSpace {
 
 #[cfg(feature = "fragmentation")]
 impl ConstraintSpace {
-  /// Blink's `HasBlockFragmentation`, which for pages is `HasKnownFragmentainerBlockSize` too.
-  pub(crate) fn has_block_fragmentation(&self) -> bool {
-    self.block_fragmentation.is_some()
-  }
-
   /// Blink's `RequiresContentBeforeBreaking`.
   pub(crate) fn requires_content_before_breaking(&self) -> bool {
     self

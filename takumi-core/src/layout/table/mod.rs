@@ -3,15 +3,20 @@
 //! under the notice in LICENSE-CHROMIUM.
 
 mod borders;
+#[cfg(feature = "fragmentation")]
+mod break_token_data;
 mod columns;
 mod constraint_space_data;
 mod fragment;
+mod fragmentation;
 mod layout;
 mod parts;
 mod row_layout_algorithm;
 mod rows;
 mod section_layout_algorithm;
 
+#[cfg(feature = "fragmentation")]
+pub(crate) use self::break_token_data::TableBreakTokenData;
 pub(crate) use self::{
   borders::{TableBorders, style_rank},
   columns::ColumnConstraints,

@@ -487,7 +487,7 @@ impl SceneRequest<'_> {
         properties: node_properties,
       };
       let table_borders = layout_results
-        .table_fragment(visit.node_id)
+        .table_fragment(visit.node_id, visit.fragment_index)
         .is_some_and(|fragment| fragment.borders.is_some())
         .then(|| node_paint.clone());
 

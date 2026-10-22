@@ -1547,6 +1547,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
               &scene.results,
               &chunk.node.path,
               chunk.node.node_id,
+              chunk.node.fragment_index,
             )?;
 
             emitter.emit_decorations(node, decoration_frame, text_clip.as_ref(), table, surface);
@@ -1564,6 +1565,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
         paint_collapsed_borders(
           &emitter.scene.results,
           chunk.node.node_id,
+          chunk.node.fragment_index,
           chunk.node.paint_offset,
           frame.translation(),
           visible,

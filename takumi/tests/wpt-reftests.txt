@@ -981,6 +981,10 @@ css/css-break/table/repeated-section/background-001.tentative.html
 css/css-break/table/repeated-section/image.tentative.html
 css/css-break/table/table-cell-expansion-006.html
 css/css-break/table/table-collapsed-borders-paint-htb-ltr.html
+css/css-break/table/table-fragmentation-001a-print.html
+css/css-break/table/table-fragmentation-001b-print.html
+css/css-break/table/table-fragmentation-002a-print.html
+css/css-break/table/table-fragmentation-002b-print.html
 css/css-break/table/table-grid-paint-htb-ltr.html
 css/css-break/table/table-grid-paint-vlr-rtl.html
 css/css-break/table/table-grid-paint-vrl-rtl.html
@@ -2397,7 +2401,6 @@ css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-027.html
 !css/css-tables/caption-relative-positioning.html
 !css/css-tables/col-definite-max-size-001.html
 !css/css-tables/col-definite-size-001.html
-!css/css-tables/collapsed-border-fragmentation-001-print.html
 !css/css-tables/collapsed-border-fragmentation-002-print.html
 !css/css-tables/colspan-004.html
 !css/css-tables/display-contents-001.html

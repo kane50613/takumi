@@ -617,7 +617,13 @@ impl StepWriter<'_, '_> {
           return Ok(None);
         };
         let text_clip = TextClip::of(&scene.root, &scene.results, paint)?;
-        let table = TableDecorations::of(&scene.root, &scene.results, &paint.path, paint.node_id)?;
+        let table = TableDecorations::of(
+          &scene.root,
+          &scene.results,
+          &paint.path,
+          paint.node_id,
+          paint.fragment_index,
+        )?;
 
         self
           .walker
@@ -689,6 +695,7 @@ impl StepWriter<'_, '_> {
         let result = paint_collapsed_borders(
           &self.scene.results,
           chunk.node.node_id,
+          chunk.node.fragment_index,
           chunk.node.paint_offset,
           Affine::IDENTITY,
           None,

@@ -2,7 +2,11 @@
 //! for pages alone: no column spanners, repeated content, out-of-flow fragmentation, or list
 //! markers left unpositioned.
 
-use crate::{geometry::NodeId, layout::break_token::BreakToken, layout_unit::LayoutUnit};
+use crate::{
+  geometry::NodeId,
+  layout::{break_token::BreakToken, break_token_algorithm_data::BreakTokenAlgorithmData},
+  layout_unit::LayoutUnit,
+};
 
 /// Blink's `BlockBreakToken`: where a box resumes in the next fragmentainer.
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +28,8 @@ pub(crate) struct BlockBreakToken {
   pub(crate) has_seen_all_children: bool,
   /// Blink's `ChildBreakTokens`: where each child laid out so far resumes.
   pub(crate) child_break_tokens: Vec<BreakToken>,
+  /// Blink's `TokenData`: what the box's algorithm resumes from.
+  pub(crate) algorithm_data: Option<BreakTokenAlgorithmData>,
 }
 
 impl BlockBreakToken {
@@ -39,6 +45,7 @@ impl BlockBreakToken {
       is_at_block_end: false,
       has_seen_all_children: false,
       child_break_tokens: Vec::new(),
+      algorithm_data: None,
     }
   }
 }

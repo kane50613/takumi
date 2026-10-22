@@ -11,6 +11,7 @@ use std::{
 use crate::{
   layout::{
     constraint_space::{CacheSlot, ConstraintSpace},
+    fragmentation_layout_input::FragmentationLayoutInput,
     layout_result::LayoutResult,
     table::{
       columns::ColumnLocation, layout::TableStructure,
@@ -30,7 +31,7 @@ pub(crate) struct TableConstraintSpaceData {
   /// The table layout that made it, so a section or row reuses a layout only within that one.
   layout_id: u64,
   pub(super) structure: Rc<TableStructure>,
-  pub(super) rows: Rows,
+  pub(super) rows: Rc<Rows>,
   pub(super) column_locations: Vec<ColumnLocation>,
   /// The inline size of every section and row.
   pub(super) inline_size: LayoutUnit,
@@ -43,7 +44,7 @@ pub(crate) struct TableConstraintSpaceData {
 impl TableConstraintSpaceData {
   pub(super) fn new(
     structure: Rc<TableStructure>,
-    rows: Rows,
+    rows: Rc<Rows>,
     column_locations: Vec<ColumnLocation>,
     inline_size: LayoutUnit,
     spacing: (LayoutUnit, LayoutUnit),
@@ -125,13 +126,18 @@ pub(crate) struct TablePartSpace {
 
 impl TablePartSpace {
   /// Blink's `DetermineAlgorithmAndRun` for a table section or row.
-  pub(crate) fn lay_out(&self, tree: &mut LayoutTree<'_>, space: &ConstraintSpace) -> LayoutResult {
+  pub(crate) fn lay_out(
+    &self,
+    tree: &mut LayoutTree<'_>,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> LayoutResult {
     match self.part {
       TablePart::Section(section) => {
-        TableSectionLayoutAlgorithm::new(tree, &self.data, section, space).layout()
+        TableSectionLayoutAlgorithm::new(tree, &self.data, section, space, input).layout()
       }
       TablePart::Row { section, row } => {
-        TableRowLayoutAlgorithm::new(tree, &self.data, section, row).layout()
+        TableRowLayoutAlgorithm::new(tree, &self.data, section, row, space, input).layout()
       }
     }
   }
