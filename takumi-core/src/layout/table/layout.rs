@@ -18,7 +18,6 @@ use taffy::{
 };
 
 use crate::{
-  geometry::NodeId,
   layout::{
     table::{
       borders::TableBorders,
@@ -657,12 +656,7 @@ impl<'t, 'r> TableLayout<'t, 'r> {
         value.max(border_padding)
       })
     };
-    // Taffy hands a root the space left beside its margins.
-    let margin_sum = if self.node == NodeId::ROOT.into_taffy() {
-      LayoutUnit::ZERO
-    } else {
-      margins.left + margins.right
-    };
+    let margin_sum = margins.left + margins.right;
     let stretch = available.map(|available| (available - margin_sum).max(border_padding));
     // Under a min- or max-content constraint, fitting the content takes that size of it.
     let fit_content = || match (stretch, self.inputs.available_space.width) {
@@ -1316,7 +1310,6 @@ impl<'t, 'r> TableLayout<'t, 'r> {
 
     let _ = intrinsic_block_size;
     output.oof_candidates = oof_candidates;
-    output.oof_positioning_area = Some(self.tree.padding_box_area(self.node, size));
     output
   }
 
@@ -1579,7 +1572,7 @@ impl<'r> LayoutTree<'r> {
   /// Sets `node`'s unrounded layout at `location` with `size`, its border and padding as its
   /// layout style resolves them.
   fn place(&mut self, node: TaffyNodeId, location: TaffyPoint<f32>, size: TaffySize<f32>) {
-    let style = self.layout_style(node);
+    let style = self.taffy_style(node);
     let calc = |value, basis| self.resolve_calc_value(value, basis);
     let border = style.border.resolve_or_zero(None, calc);
     let padding = style.padding.resolve_or_zero(None, calc);
@@ -1612,24 +1605,24 @@ impl<'r> LayoutTree<'r> {
   fn border(&self, node: TaffyNodeId, basis: Option<f32>) -> BoxStrut {
     let calc = |value, basis| self.resolve_calc_value(value, basis);
 
-    strut(self.layout_style(node).border.resolve_or_zero(basis, calc))
+    strut(self.taffy_style(node).border.resolve_or_zero(basis, calc))
   }
 
   fn padding(&self, node: TaffyNodeId, basis: Option<f32>) -> BoxStrut {
     let calc = |value, basis| self.resolve_calc_value(value, basis);
 
-    strut(self.layout_style(node).padding.resolve_or_zero(basis, calc))
+    strut(self.taffy_style(node).padding.resolve_or_zero(basis, calc))
   }
 
   fn margins(&self, node: TaffyNodeId, basis: Option<f32>) -> BoxStrut {
     let calc = |value, basis| self.resolve_calc_value(value, basis);
 
-    strut(self.layout_style(node).margin.resolve_or_zero(basis, calc))
+    strut(self.taffy_style(node).margin.resolve_or_zero(basis, calc))
   }
 
   /// Whether `node`'s inline-start and inline-end margins are `auto`.
   fn auto_inline_margins(&self, node: TaffyNodeId) -> (bool, bool) {
-    let margin = self.layout_style(node).margin;
+    let margin = self.taffy_style(node).margin;
 
     (
       margin.left == LengthPercentageAuto::auto(),
@@ -1641,7 +1634,7 @@ impl<'r> LayoutTree<'r> {
   /// implicit stretch resolves it: its `width` when set, held between `min-width` and
   /// `max-width`.
   fn stretched_width(&self, node: TaffyNodeId, container: f32, margins: BoxStrut) -> f32 {
-    let style = self.layout_style(node);
+    let style = self.taffy_style(node);
     let calc = |value, basis| self.resolve_calc_value(value, basis);
     let border_padding = self.border_padding(node, Some(container));
     let inline_border_padding = (border_padding.left + border_padding.right).to_float();

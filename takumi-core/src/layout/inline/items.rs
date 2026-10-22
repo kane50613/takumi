@@ -137,7 +137,7 @@ impl RenderNode {
 
   /// Whether this inline span is the containing block of fixed-position descendants, as Blink's
   /// `LayoutObject::ComputeIsFixedContainer` decides for a box that is not atomic.
-  fn contains_fixed_as_inline(&self) -> bool {
+  pub(crate) fn contains_fixed_as_inline(&self) -> bool {
     let style = &self.context.style;
 
     !style.misc1_data.filter.is_empty() || !style.misc1_data.backdrop_filter.is_empty()
@@ -145,7 +145,7 @@ impl RenderNode {
 
   /// Whether this inline span is the containing block of absolutely positioned descendants, as
   /// Blink's `LayoutObject::ComputeIsAbsoluteContainer` decides.
-  fn contains_absolute_as_inline(&self) -> bool {
+  pub(crate) fn contains_absolute_as_inline(&self) -> bool {
     self.context.style.base_data.position.is_positioned() || self.contains_fixed_as_inline()
   }
 

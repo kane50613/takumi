@@ -2,7 +2,7 @@
 //! and the line boxes it builds, without ruby, initial letters, SVG text, `text-combine-upright`,
 //! `text-box-trim`, block fragmentation, shapes, or margin collapsing.
 
-use taffy::{Clear, CollapsibleMarginSet};
+use taffy::Clear;
 
 use super::{
   inline_break_token::InlineBreakToken,
@@ -33,6 +33,7 @@ use crate::{
     },
     floats_utils::{PositionedFloat, UnpositionedFloat, adjust_to_clearance, position_float},
     logical_rect::LogicalOffset,
+    margin_strut::MarginStrut,
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
@@ -63,7 +64,7 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   pub(crate) break_token: Option<InlineBreakToken<'c>>,
   pub(crate) is_empty_line_box: bool,
   /// Blink's `EndMarginStrut`: the margins after the line, which collapse with the next ones.
-  pub(crate) end_margin_strut: CollapsibleMarginSet,
+  pub(crate) end_margin_strut: MarginStrut,
   /// Where the line starts, below the margins before it: an empty line's out-of-flow boxes sit
   /// there, and a block-in-inline that collapses through sits there as if it had a bottom border.
   pub(crate) static_bfc_block_offset: LayoutUnit,
@@ -93,7 +94,7 @@ impl LineBoxFragment<'_, '_> {
       base_direction: TextDirection::Ltr,
       break_token: None,
       is_empty_line_box: false,
-      end_margin_strut: CollapsibleMarginSet::ZERO,
+      end_margin_strut: MarginStrut::default(),
       static_bfc_block_offset: LayoutUnit::ZERO,
       is_hidden_due_to_layout: false,
       clearance_after_line: LayoutUnit::ZERO,
@@ -327,7 +328,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         self.node,
         self.items_data,
         LineBreakerMode::Content,
-        *space,
+        space.clone(),
         line_opportunity,
         &leading_floats,
         self.break_token,
@@ -995,8 +996,13 @@ impl<'c> InlineNode<'c> {
 
     space.lines_until_clamp = style.line_clamp().map(|lines| lines as i32);
 
-    let paragraph_scale = self.measure_paragraph_scale(items_data, space, atomic_inline);
-    let lines = self.layout_lines_in(items_data, space, Some(paragraph_scale), atomic_inline);
+    let paragraph_scale = self.measure_paragraph_scale(items_data, space.clone(), atomic_inline);
+    let lines = self.layout_lines_in(
+      items_data,
+      space.clone(),
+      Some(paragraph_scale),
+      atomic_inline,
+    );
 
     // Blink's `ShouldRelayoutWithNoForcedTruncate`: no line follows the clamp line, so it relays
     // out ignoring the clamp.
@@ -1030,7 +1036,7 @@ impl<'c> InlineNode<'c> {
       return ParagraphScale::default();
     }
 
-    let lines = self.layout_lines_in(items_data, space, None, atomic_inline);
+    let lines = self.layout_lines_in(items_data, space.clone(), None, atomic_inline);
     let paragraph_scale = self.measure_per_block_scale(items_data, &lines, space.inline_size());
 
     if (paragraph_scale.scale < 1.0 && !shrink_consistent)
@@ -1068,13 +1074,13 @@ impl<'c> InlineNode<'c> {
     // block start when they adjoin it.
     let margins_adjoin = self.block.context.margins_adjoin();
     let mut position = LayoutUnit::ZERO;
-    let mut margin_strut = CollapsibleMarginSet::ZERO;
+    let mut margin_strut = MarginStrut::default();
     let mut is_bfc_block_offset_resolved = !margins_adjoin.start;
 
     loop {
       // A float or an out-of-flow box on an empty line sits below the margins before it.
       let margin_offset = if is_bfc_block_offset_resolved {
-        LayoutUnit::from_float(margin_strut.resolve())
+        margin_strut.sum()
       } else {
         LayoutUnit::ZERO
       };
@@ -1102,21 +1108,21 @@ impl<'c> InlineNode<'c> {
         .and_then(|result| result.collapsed_margins)
       {
         Some(margins) if margins.is_self_collapsing => {
-          let start = margin_strut.collapse_with_set(margins.start);
+          let start = margin_strut.collapse_with(margins.start);
 
           if is_bfc_block_offset_resolved {
-            line.static_bfc_block_offset = position + LayoutUnit::from_float(start.resolve());
+            line.static_bfc_block_offset = position + start.sum();
           }
 
-          margin_strut = start.collapse_with_set(margins.end);
+          margin_strut = start.collapse_with(margins.end);
         }
         // Blink's `PlaceBlockInInline` keeps the block's `EndMarginStrut`, its start margins
         // collapsing with the ones before it.
         Some(margins) => {
           if is_bfc_block_offset_resolved {
-            let start = margin_strut.collapse_with_set(margins.start).resolve();
+            let start = margin_strut.collapse_with(margins.start).sum();
 
-            line.move_in_block_direction(LayoutUnit::from_float(start) - margin_offset);
+            line.move_in_block_direction(start - margin_offset);
           }
 
           is_bfc_block_offset_resolved = true;
@@ -1125,7 +1131,7 @@ impl<'c> InlineNode<'c> {
         // A line box resolves the margins before it; an empty line leaves them.
         None if line.line_box_bfc_block_offset.is_some() => {
           is_bfc_block_offset_resolved = true;
-          margin_strut = CollapsibleMarginSet::ZERO;
+          margin_strut = MarginStrut::default();
         }
         None => {}
       }

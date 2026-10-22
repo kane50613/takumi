@@ -14,8 +14,7 @@ pub use self::image::resolve_image;
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
-  geometry::{AvailableSpace, Size},
-  layout::inline::InlineContentKind,
+  layout::{inline::InlineContentKind, length_utils::NaturalSize},
   resources::{
     image::{ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
@@ -558,16 +557,11 @@ impl Node {
     }
   }
 
-  pub(crate) fn measure(
-    &self,
-    context: &RenderContext,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
-    style: &taffy::Style,
-  ) -> Size<f32> {
+  /// The natural size of the replaced content it lays out, none for other content.
+  pub(crate) fn natural_size(&self, context: &RenderContext) -> NaturalSize {
     match &self.kind {
-      NodeKind::Image(image) => image.measure(context, available_space, known_dimensions, style),
-      NodeKind::Container { .. } | NodeKind::Text(_) => Size::ZERO,
+      NodeKind::Image(image) => image.natural_size(context),
+      NodeKind::Container { .. } | NodeKind::Text(_) => NaturalSize::default(),
     }
   }
 

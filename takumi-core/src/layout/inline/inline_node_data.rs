@@ -14,12 +14,12 @@ use rustc_hash::FxHashMap;
 use super::{
   inline_item::{InlineItem, InlineItemType, InlineItems, LayoutObject},
   inline_item_segment::InlineItemSegments,
-  min_max_sizes::MinMaxSizes,
 };
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
   fonts::{font::Font, font_description::FontDescription},
+  layout::min_max_sizes::MinMaxSizes,
   style::Direction as TextDirection,
   text::{
     bidi_paragraph::BidiParagraph,

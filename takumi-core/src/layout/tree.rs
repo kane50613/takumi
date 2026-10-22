@@ -1,10 +1,8 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{HashSet, VecDeque},
-  iter::Copied,
+  collections::VecDeque,
   mem::{replace, take},
-  ptr,
   rc::Rc,
   slice,
   sync::Arc,
@@ -14,16 +12,8 @@ use std::{
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use taffy::{
-  AvailableSpace as TaffyAvailableSpace, AxisStaticEdge, AxisStaticPosition, BlockContext,
-  BoxSizing, Cache, CacheTree, ContainingBlockClaims, CoreStyle, DetailedGridInfo,
-  DetailedLayoutInfo, Dimension, Display as TaffyDisplay, Layout, LayoutBlockContainer,
-  LayoutContainingBlock, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
-  LayoutPartialTree, LengthPercentage, Line, MaybeMath, MaybeResolve, NodeId as TaffyNodeId,
-  OofCandidate, OofPositioningArea, Position as TaffyPosition, Rect as TaffyRect, RequestedAxis,
-  ResolveOrZero, RoundTree, RunMode, Size as TaffySize, SizingMode, Style, TraversePartialTree,
-  TraverseTree, compute_block_layout, compute_cached_layout, compute_flexbox_layout,
-  compute_grid_layout, compute_hidden_layout, compute_leaf_layout, compute_oof_layout_for_area,
-  compute_root_layout,
+  DetailedLayoutInfo, Display as TaffyDisplay, LengthPercentage, Line, NodeId as TaffyNodeId,
+  Rect as TaffyRect, Size as TaffySize, Style,
 };
 
 use crate::{
@@ -33,16 +23,21 @@ use crate::{
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
+    block_node::LayoutCache,
+    constraint_space::CacheSlot,
     inline::{
-      ContentBox, FragmentItems, InlineContentKind, InlineMeasurement, InlineOutOfFlow, PaddingBox,
-      StaticPosition,
-      inline_item::InlineItemType,
-      inline_item_result::{CollapsedMargins, LayoutResult},
+      ContentBox, FragmentItems, InlineContentKind, InlineMeasurement, InlineOutOfFlow,
+      inline_item_result::{CollapsedMargins, LayoutResult as LineItemLayoutResult},
       inline_node::{InlineNode, ItemShapes},
       inline_node_data::InlineNodeData,
     },
+    layout_result::{LayoutResult, LayoutStatus, OutOfFlowCandidate, StaticPosition},
+    layout_style::{LayoutLength, LayoutStyle},
+    length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
+    margin_strut::MarginStrut,
     node::{Node, NodeKind, NodeStyleLayers},
+    out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::{ColumnConstraints, TableFragment, TableStructure},
   },
   layout_unit::{BoxStrut, LayoutUnit},
@@ -52,7 +47,7 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
+    Direction, Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey,
     Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
     StyleSheet, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
@@ -157,7 +152,7 @@ pub struct LayoutResults {
 }
 
 struct LayoutResultNode {
-  layout: Layout,
+  layout: ComputedLayout,
   first_baseline_y: Option<f32>,
   box_children: Box<[OrderedChild]>,
 }
@@ -166,29 +161,46 @@ impl LayoutResults {
   /// Lays out the tree under `root`, a box its parent placed, in `available_space`. The root's
   /// margins shrink the space but leave its border box at the origin, where the parent expects it.
   pub fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
-    let mut results = Self::lay_out(root, available_space, false);
+    let mut results = Self::lay_out(root, available_space, false, false);
 
     if let Some(root) = results.nodes.first_mut() {
-      root.layout.location = taffy::Point::ZERO;
+      root.layout.location = Point::new(0.0, 0.0);
     }
     results
   }
 
-  /// [`Self::compute`] for paint: each inline formatting context keeps the fragment items it
-  /// lays out to, and lets go of the shaped text no other box shares.
+  /// [`Self::compute`] for the root of a document, whose initial containing block fits the root
+  /// when `available_space` leaves its width to the content.
+  pub fn compute_document(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
+    let mut results = Self::lay_out(root, available_space, false, true);
+
+    if let Some(root) = results.nodes.first_mut() {
+      root.layout.location = Point::new(0.0, 0.0);
+    }
+    results
+  }
+
+  /// [`Self::compute_document`] for paint: each inline formatting context keeps the fragment
+  /// items it lays out to, and lets go of the shaped text no other box shares.
   pub(crate) fn compute_for_paint(
     root: &RenderNode,
     available_space: Size<AvailableSpace>,
   ) -> Self {
-    Self::lay_out(root, available_space, true)
+    Self::lay_out(root, available_space, true, true)
   }
 
   fn lay_out(
     root: &RenderNode,
     available_space: Size<AvailableSpace>,
     keeps_fragment_items: bool,
+    is_document: bool,
   ) -> Self {
     let mut tree = LayoutTree::from_render_node(root);
+    let available_space = if is_document {
+      tree.initial_containing_block(available_space)
+    } else {
+      available_space
+    };
 
     tree.keeps_fragment_items = keeps_fragment_items;
     tree.compute_layout(available_space);
@@ -197,9 +209,7 @@ impl LayoutResults {
 
   /// Computed layout of a node.
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
-    self
-      .node(node_id)
-      .map(|node| ComputedLayout::from_taffy(&node.layout))
+    self.node(node_id).map(|node| node.layout)
   }
 
   /// Paint-ordered children of a node.
@@ -226,7 +236,7 @@ impl LayoutResults {
   pub(super) fn root_size(&self) -> Size<f32> {
     self
       .node(NodeId::ROOT)
-      .map_or(Size::ZERO, |node| Size::from_taffy(node.layout.size))
+      .map_or(Size::ZERO, |node| node.layout.size)
   }
 
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
@@ -264,12 +274,13 @@ fn inline_lines_bits(
   ]
 }
 
-/// Mutable taffy tree wrapping render nodes during layout.
+/// The boxes of a render tree as layout lays them out.
 pub struct LayoutTree<'r> {
   nodes: Vec<LayoutNodeState>,
   render_nodes: Vec<&'r RenderNode>,
-  /// The nodes standing in for inline containing blocks.
-  inline_containing_blocks: Vec<TaffyNodeId>,
+  /// The inline box that is the containing block of each out-of-flow box an inline formatting
+  /// context holds, by node, when one is.
+  inline_containers: FxHashMap<usize, &'r RenderNode>,
   /// Each inline formatting context's lines measured per width they lay out at, which a measure
   /// with a known width and one offered the same available width share. Only boxes inside see the
   /// available height, so text alone is keyed on the width.
@@ -288,7 +299,7 @@ pub struct LayoutTree<'r> {
   table_fragments: FxHashMap<usize, TableFragment>,
 }
 
-/// What a box's part in a table changes in the layout style it is laid out with.
+/// What a box's part in a table changes in the styles it is laid out with.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct TableBoxStyle {
   /// The border it lays out with in place of its own.
@@ -333,31 +344,45 @@ impl TableBoxStyle {
     ..Self::TABLE
   };
 
-  /// `style` as this part of a table lays out with it.
-  fn apply(&self, style: &mut Style) {
+  /// `style` and `layout_style` as this part of a table lays out with them.
+  fn apply(&self, style: &mut Style, layout_style: &mut LayoutStyle) {
     if *self == Self::default() {
       return;
     }
     if self.hidden {
       style.display = TaffyDisplay::None;
+      layout_style.display = Display::None;
       return;
     }
     if let Some(border) = self.border {
-      style.border = TaffyRect {
-        top: LengthPercentage::length(border.top.to_float()),
-        right: LengthPercentage::length(border.right.to_float()),
-        bottom: LengthPercentage::length(border.bottom.to_float()),
-        left: LengthPercentage::length(border.left.to_float()),
+      let border = Rect {
+        top: border.top.to_float(),
+        right: border.right.to_float(),
+        bottom: border.bottom.to_float(),
+        left: border.left.to_float(),
       };
+
+      style.border = TaffyRect {
+        top: LengthPercentage::length(border.top),
+        right: LengthPercentage::length(border.right),
+        bottom: LengthPercentage::length(border.bottom),
+        left: LengthPercentage::length(border.left),
+      };
+      layout_style.border = border;
     }
     if self.clears_padding {
       style.padding = TaffyRect::zero();
+      layout_style.padding = Rect::all(LayoutLength::Fixed(0.0));
     }
     if self.sized_by_table {
       style.size = TaffySize::auto();
       style.min_size = TaffySize::auto();
       style.max_size = TaffySize::auto();
       style.margin = TaffyRect::zero();
+      layout_style.size = Size::all(LayoutLength::Auto);
+      layout_style.min_size = Size::all(LayoutLength::Auto);
+      layout_style.max_size = Size::all(LayoutLength::Auto);
+      layout_style.margin = Rect::all(LayoutLength::Fixed(0.0));
     }
     style.item_is_table = self.is_table;
     // A table establishes a formatting context of its own, and is not a block box a root or
@@ -368,6 +393,8 @@ impl TableBoxStyle {
     if let Some((top, bottom)) = self.aligned_padding {
       style.padding.top = LengthPercentage::length(top);
       style.padding.bottom = LengthPercentage::length(bottom);
+      layout_style.padding.top = LayoutLength::Fixed(top);
+      layout_style.padding.bottom = LayoutLength::Fixed(bottom);
     }
   }
 }
@@ -375,41 +402,51 @@ impl TableBoxStyle {
 /// A node and the lines it measures, as bits.
 type InlineMeasureKey = (usize, [u32; 5]);
 
-struct LayoutNodeState {
-  /// Shared with the recent nodes whose style came out equal, as rows of a list do.
-  style: Rc<Style>,
-  /// Whether the style is the same whatever query container it resolves
-  /// against, so taffy's repeated passes can reuse it.
+/// A box as layout lays it out: its styles, what it keeps of its layouts, and where it went.
+pub(crate) struct LayoutNodeState {
+  /// The style taffy's flexbox, grid, and table code reads, shared with the recent nodes whose
+  /// style came out equal, as rows of a list do.
+  pub(crate) style: Rc<Style>,
+  /// The style the native layout reads, shared the same way.
+  pub(crate) layout_style: Rc<LayoutStyle>,
+  /// `layout_style` without its sizes, for taffy's `SizingMode::ContentSize`.
+  pub(crate) content_style: Option<Rc<LayoutStyle>>,
+  /// Whether the styles are the same whatever query container they resolve against, so repeated
+  /// layouts can reuse them.
   container_independent: bool,
-  cache: Cache,
-  unrounded_layout: Layout,
-  final_layout: Layout,
-  first_baseline_y: Option<f32>,
-  is_inline_children: bool,
-  /// Whether the node is a flex or grid item, which its container may stretch.
-  flex_or_grid_item: bool,
-  /// What its part in a table changes in its layout style.
-  table_box: TableBoxStyle,
-  children: Box<[TaffyNodeId]>,
+  pub(crate) cache: LayoutCache,
+  pub(crate) layout: ComputedLayout,
+  pub(crate) first_baseline_y: Option<f32>,
+  pub(crate) is_inline_children: bool,
+  /// What its part in a table changes in its styles.
+  pub(crate) table_box: TableBoxStyle,
+  /// Its children in layout order, or for an inline formatting context the out-of-flow boxes in
+  /// its inline content.
+  pub(crate) children: Box<[TaffyNodeId]>,
   box_children: Box<[OrderedChild]>,
   /// The out-of-flow boxes this node positioned as their containing block, from its last layout.
-  hoisted_children: Vec<TaffyNodeId>,
+  pub(crate) hoisted_children: Vec<NodeId>,
   /// The grid this node last laid out, which places its out-of-flow children in their areas.
-  detailed_layout_info: DetailedLayoutInfo<String>,
+  pub(crate) detailed_layout_info: DetailedLayoutInfo<String>,
   /// The out-of-flow boxes this node is the containing block for.
-  claims: ContainingBlockClaims,
+  pub(crate) claims: ContainingBlockClaims,
 }
 
 /// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as
 /// the inline layout cache shares faces.
-#[derive(Default)]
-struct RecentStyles(VecDeque<Rc<Style>>);
+struct RecentStyles<T>(VecDeque<Rc<T>>);
 
-impl RecentStyles {
+impl<T> Default for RecentStyles<T> {
+  fn default() -> Self {
+    Self(VecDeque::new())
+  }
+}
+
+impl<T: PartialEq> RecentStyles<T> {
   const LEN: usize = 8;
 
   /// `style`, or an equal one a recent node laid out with.
-  fn share(&mut self, style: Style) -> Rc<Style> {
+  fn share(&mut self, style: T) -> Rc<T> {
     if let Some(shared) = self.0.iter().find(|shared| ***shared == style) {
       return Rc::clone(shared);
     }
@@ -427,19 +464,20 @@ impl RecentStyles {
 impl LayoutNodeState {
   fn new(
     style: Rc<Style>,
+    layout_style: Rc<LayoutStyle>,
     container_independent: bool,
     is_inline_children: bool,
     claims: ContainingBlockClaims,
   ) -> Self {
     Self {
       style,
+      layout_style,
+      content_style: None,
       container_independent,
-      cache: Cache::new(),
-      unrounded_layout: Layout::new(),
-      final_layout: Layout::new(),
+      cache: LayoutCache::default(),
+      layout: ComputedLayout::default(),
       first_baseline_y: None,
       is_inline_children,
-      flex_or_grid_item: false,
       table_box: TableBoxStyle::default(),
       children: Box::new([]),
       box_children: Box::new([]),
@@ -477,7 +515,7 @@ pub struct RenderNode {
   pub origin: NodeOrigin,
   /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
-  pub(crate) layout_style_override: Option<Rc<Style>>,
+  pub(crate) layout_style_override: Option<Rc<LayoutStyle>>,
   /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
   /// Generated marker box, emitted before this box's own inline content.
@@ -569,13 +607,10 @@ impl Clone for AtomicInlineCache {
 
 thread_local! {
   /// The layout an anonymous block box takes in place of a computed style, shared by all of them.
-  static BLOCK_STYLE: Rc<Style> = Rc::new(Style {
-    display: TaffyDisplay::Block,
-    ..Style::default()
-  });
+  static BLOCK_STYLE: Rc<LayoutStyle> = Rc::new(LayoutStyle::default());
 }
 
-fn block_style() -> Rc<Style> {
+fn block_style() -> Rc<LayoutStyle> {
   BLOCK_STYLE.with(Rc::clone)
 }
 
@@ -589,8 +624,8 @@ pub(crate) struct AtomicInlineMetrics {
 
 impl AtomicInlineMetrics {
   /// The metrics as the line takes them, in layout units.
-  pub(crate) fn into_layout_result(self) -> LayoutResult {
-    LayoutResult {
+  pub(crate) fn into_layout_result(self) -> LineItemLayoutResult {
+    LineItemLayoutResult {
       inline_size: LayoutUnit::from_float(self.size.width),
       block_size: LayoutUnit::from_float(self.size.height),
       baseline: self.baseline_offset.map(LayoutUnit::from_float),
@@ -645,15 +680,6 @@ fn active_registrations(stylesheets: &[StyleSheet], viewport: Viewport) -> Regis
   )
 }
 
-/// Whether a node claiming `claims` is the containing block of a box with `position`.
-fn claims_box(claims: ContainingBlockClaims, position: Position) -> bool {
-  match position {
-    Position::Absolute => claims.absolute,
-    Position::Fixed => claims.fixed,
-    Position::Static | Position::Relative => false,
-  }
-}
-
 impl<'r> LayoutTree<'r> {
   /// Builds a layout tree from a render-node root.
   pub fn from_render_node(render_root: &'r RenderNode) -> Self {
@@ -661,7 +687,7 @@ impl<'r> LayoutTree<'r> {
     let mut tree = Self {
       nodes: Vec::with_capacity(capacity),
       render_nodes: Vec::with_capacity(capacity),
-      inline_containing_blocks: Vec::new(),
+      inline_containers: FxHashMap::default(),
       inline_measures: RefCell::default(),
       inline_node_data: RefCell::default(),
       keeps_fragment_items: false,
@@ -669,9 +695,8 @@ impl<'r> LayoutTree<'r> {
       table_columns: FxHashMap::default(),
       table_fragments: FxHashMap::default(),
     };
-    let root_id = tree.push_subtree(render_root);
 
-    debug_assert_eq!(root_id, TaffyNodeId::from(0usize));
+    tree.push_subtree(render_root);
     tree.nodes.shrink_to_fit();
     tree.render_nodes.shrink_to_fit();
     tree.prepare_tables();
@@ -680,7 +705,7 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// The prepared items of the inline formatting context the node at `index` establishes.
-  fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
+  pub(crate) fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
     Rc::clone(
       self
         .inline_node_data
@@ -690,8 +715,8 @@ impl<'r> LayoutTree<'r> {
     )
   }
 
-  /// Appends the layout nodes of the subtree under `render_root`, returning its root id.
-  fn push_subtree(&mut self, render_root: &'r RenderNode) -> TaffyNodeId {
+  /// Appends the layout nodes of the subtree under `render_root`.
+  fn push_subtree(&mut self, render_root: &'r RenderNode) {
     /// What the walk descends into: a node's render children, or for an inline formatting
     /// context the out-of-flow boxes inside its inline content.
     enum PendingChildren<'r> {
@@ -721,33 +746,32 @@ impl<'r> LayoutTree<'r> {
 
     struct PendingNode<'r> {
       node_id: TaffyNodeId,
-      render_node: &'r RenderNode,
       /// The path from its parent, as its parent's [`OrderedChild`] records it.
       render_path: SmallVec<[usize; 2]>,
-      /// The inline span containing it, when it is out of flow.
+      /// The inline box containing it, when it is out of flow.
       inline_container: Option<&'r RenderNode>,
-      /// For an inline formatting context, the node standing in for each inline span, or the
-      /// context itself, that contains out-of-flow boxes.
-      inline_containing_blocks: Vec<(&'r RenderNode, TaffyNodeId)>,
-      position: Position,
       next_child_index: usize,
       children: PendingChildren<'r>,
-      taffy_child_ids: Vec<TaffyNodeId>,
+      child_ids: Vec<TaffyNodeId>,
       box_children: Vec<OrderedChild>,
+    }
+
+    struct RecentNodeStyles {
+      taffy: RecentStyles<Style>,
+      layout: RecentStyles<LayoutStyle>,
     }
 
     fn push_node_state<'r>(
       nodes: &mut Vec<LayoutNodeState>,
       render_nodes: &mut Vec<&'r RenderNode>,
-      recent_styles: &mut RecentStyles,
+      recent_styles: &mut RecentNodeStyles,
       InlineOutOfFlow {
         path: render_path,
         node: render_node,
         container: inline_container,
       }: InlineOutOfFlow<'r>,
     ) -> PendingNode<'r> {
-      let node_index = nodes.len();
-      let node_id = TaffyNodeId::from(node_index);
+      let node_id = TaffyNodeId::from(nodes.len());
       let is_inline_children = render_node.should_create_inline_layout();
       let children = if is_inline_children {
         PendingChildren::OutOfFlow(render_node.inline_out_of_flow())
@@ -759,7 +783,7 @@ impl<'r> LayoutTree<'r> {
 
       render_nodes.push(render_node);
 
-      let (style, container_independent) = {
+      let (style, layout_style, container_independent) = {
         let sizing = &render_node.context.sizing;
 
         // Resolution reports whether it read the query container, which is
@@ -767,13 +791,15 @@ impl<'r> LayoutTree<'r> {
         // agrees across two large containers and disagrees with a small one.
         sizing.container_read.set(false);
         let style = render_node.layout_style(sizing);
+        let layout_style = render_node.layout_box_style(sizing);
         let independent = !sizing.container_read.get();
 
-        (style, independent)
+        (style, layout_style, independent)
       };
 
       nodes.push(LayoutNodeState::new(
-        recent_styles.share(style),
+        recent_styles.taffy.share(style),
+        recent_styles.layout.share(layout_style),
         container_independent,
         is_inline_children,
         ContainingBlockClaims {
@@ -785,49 +811,25 @@ impl<'r> LayoutTree<'r> {
       let capacity = children.len();
       PendingNode {
         node_id,
-        render_node,
         render_path,
         inline_container,
-        inline_containing_blocks: Vec::new(),
-        position,
         next_child_index: 0,
         children,
-        taffy_child_ids: Vec::with_capacity(capacity),
+        child_ids: Vec::with_capacity(capacity),
         box_children: Vec::with_capacity(capacity),
       }
-    }
-
-    /// Appends a block standing in for `container`, laid out over the padding box its fragments
-    /// bound.
-    fn push_inline_containing_block<'r>(
-      nodes: &mut Vec<LayoutNodeState>,
-      render_nodes: &mut Vec<&'r RenderNode>,
-      container: &'r RenderNode,
-    ) -> TaffyNodeId {
-      let node_id = TaffyNodeId::from(nodes.len());
-
-      render_nodes.push(container);
-      nodes.push(LayoutNodeState::new(
-        Rc::new(Style {
-          display: TaffyDisplay::Block,
-          ..Style::DEFAULT
-        }),
-        true,
-        false,
-        ContainingBlockClaims::ALL,
-      ));
-      node_id
     }
 
     let Self {
       nodes,
       render_nodes,
-      inline_containing_blocks,
+      inline_containers,
       ..
     } = self;
-    let mut proxy_boxes: FxHashMap<TaffyNodeId, Vec<TaffyNodeId>> = FxHashMap::default();
-    let mut recent_styles = RecentStyles::default();
-
+    let mut recent_styles = RecentNodeStyles {
+      taffy: RecentStyles::default(),
+      layout: RecentStyles::default(),
+    };
     let root = push_node_state(
       nodes,
       render_nodes,
@@ -838,7 +840,6 @@ impl<'r> LayoutTree<'r> {
         container: None,
       },
     );
-    let root_id = root.node_id;
     let mut stack = vec![root];
 
     while let Some(current) = stack.last_mut() {
@@ -853,282 +854,124 @@ impl<'r> LayoutTree<'r> {
       let Some(finished) = stack.pop() else {
         break;
       };
-      let fid = finished.node_id;
+      let index = usize::from(finished.node_id);
+      let mut child_ids = finished.child_ids;
 
-      let mut taffy_children = finished.taffy_child_ids;
-      for &(_, proxy) in &finished.inline_containing_blocks {
-        nodes[usize::from(proxy)].children = proxy_boxes
-          .remove(&proxy)
-          .unwrap_or_default()
-          .into_boxed_slice();
-      }
-      let idx: usize = fid.into();
       if matches!(
-        nodes[idx].style.display,
+        nodes[index].style.display,
         TaffyDisplay::Flex | TaffyDisplay::Grid
       ) {
-        for &child in &taffy_children {
-          let child = &mut nodes[usize::from(child)];
-
-          child.flex_or_grid_item = !child.style.position.is_out_of_flow();
-        }
-        sort_children_by_order(&mut taffy_children, |child_id| {
-          let child_idx: usize = child_id.into();
+        sort_children_by_order(&mut child_ids, |child_id| {
           render_nodes
-            .get(child_idx)
+            .get(usize::from(child_id))
             .map_or(0, |child| child.context.style.misc3_data.order.0)
         });
       }
-      nodes[idx].children = taffy_children.into_boxed_slice();
-      nodes[idx].box_children = finished.box_children.into_boxed_slice();
+      nodes[index].children = child_ids.into_boxed_slice();
+      nodes[index].box_children = finished.box_children.into_boxed_slice();
 
       if let Some(parent) = stack.last_mut() {
-        let parent_state = &nodes[usize::from(parent.node_id)];
-        let inline_container = finished.inline_container.or_else(|| {
-          (parent_state.is_inline_children && claims_box(parent_state.claims, finished.position))
-            .then_some(parent.render_node)
-        });
-
-        // A box an inline span contains, or the inline formatting context it sits in, goes under
-        // a node standing in for that span, which the context lays out once its lines are known.
-        // Any other box an inline formatting context holds escapes it as a taffy candidate, and
-        // the rest stay with their parent while taffy carries them to their containing block.
-        if let Some(container) = inline_container {
-          let proxy = parent
-            .inline_containing_blocks
-            .iter()
-            .find(|(span, _)| ptr::eq(*span, container))
-            .map(|&(_, proxy)| proxy)
-            .unwrap_or_else(|| {
-              let proxy = push_inline_containing_block(nodes, render_nodes, container);
-
-              inline_containing_blocks.push(proxy);
-              parent.inline_containing_blocks.push((container, proxy));
-              parent.taffy_child_ids.push(proxy);
-              proxy
-            });
-
-          proxy_boxes.entry(proxy).or_default().push(fid);
-        } else if !parent_state.is_inline_children {
-          parent.taffy_child_ids.push(fid);
+        if let Some(container) = finished.inline_container {
+          inline_containers.insert(index, container);
         }
+        parent.child_ids.push(finished.node_id);
 
         let (&render_index, inline_path) = finished.render_path.split_first().unwrap_or((&0, &[]));
 
         parent.box_children.push(OrderedChild {
           render_index,
           inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
-          node_id: NodeId::from_taffy(fid),
+          node_id: NodeId::from_taffy(finished.node_id),
           hoisted_cb: None,
         });
       }
     }
-
-    root_id
   }
 
-  /// Computes the layout for the whole tree.
+  /// Computes the layout for the whole tree: the root at its margin edge's offset in
+  /// `available_space`, which is the initial containing block of the out-of-flow boxes no other
+  /// box contains.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
-    let root_node_id = NodeId::ROOT.into_taffy();
-
-    self.stretch_root(available_space.width);
-    compute_root_layout(
-      self,
-      root_node_id,
-      available_space.map(AvailableSpace::into_taffy).into_taffy(),
-    );
-    self.finalize_layout();
-  }
-
-  /// Gives a block-level flex, grid or flow-root root with an `auto` width the width a definite
-  /// `available_width` stretches it to, as CSS sizes every block-level box but a table. Taffy
-  /// stretches only a block root, and an atomic inline laid out as a root shrinks to fit.
-  fn stretch_root(&mut self, available_width: AvailableSpace) {
-    let AvailableSpace::Definite(available) = available_width else {
-      return;
+    let space = self.root_space(available_space, false);
+    let definite = |available: AvailableSpace| match available {
+      AvailableSpace::Definite(size) => LayoutUnit::from_float(size),
+      AvailableSpace::MinContent | AvailableSpace::MaxContent => LayoutUnit::ZERO,
     };
-    let stretches = self.render_nodes.first().is_some_and(|root| {
-      matches!(
-        root.context.style.base_data.display,
-        Display::Flex | Display::WebkitBox | Display::Grid | Display::FlowRoot
+    let (location, result) = if self.layout_style(NodeId::ROOT).is_out_of_flow() {
+      // An out-of-flow root is positioned in the initial containing block.
+      let initial_containing_block = ContainingBlock {
+        origin: Point::new(LayoutUnit::ZERO, LayoutUnit::ZERO),
+        size: available_space.map(definite),
+      };
+
+      self.lay_out_out_of_flow_box(
+        OutOfFlowCandidate {
+          node: NodeId::ROOT,
+          static_position: StaticPosition::default(),
+        },
+        initial_containing_block,
+        &space,
       )
-    });
-    let style = &self.nodes[0].style;
+    } else {
+      let margins = margins_for(
+        self.layout_style(NodeId::ROOT),
+        space.percentage_resolution_inline_size,
+        Direction::Ltr,
+      );
 
-    if !stretches || !style.size.width.is_auto() {
+      (
+        Point::new(margins.inline_start, margins.block_start),
+        self.layout(NodeId::ROOT, &space),
+      )
+    };
+
+    self.place_child(NodeId::ROOT, location, &result);
+
+    if result.out_of_flow.is_empty() {
       return;
     }
 
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-    let margin = style.margin.resolve_or_zero(Some(available), calc);
-    let mut width = available - margin.horizontal_axis_sum();
-
-    if style.box_sizing == BoxSizing::ContentBox {
-      width -= style
-        .padding
-        .resolve_or_zero(Some(available), calc)
-        .horizontal_axis_sum()
-        + style
-          .border
-          .resolve_or_zero(Some(available), calc)
-          .horizontal_axis_sum();
-    }
-    Rc::make_mut(&mut self.nodes[0].style).size.width = Dimension::length(width.max(0.0));
-  }
-
-  /// Places the out-of-flow boxes inside the inline formatting context `node` lays out as
-  /// `layout`: the ones an inline span or the context contains under the nodes standing in for
-  /// them, and the rest as candidates in `output` for taffy to carry to their containing block.
-  /// Kept out of the recursive layout closure, whose frame every level of the tree pays for.
-  #[inline(never)]
-  fn lay_out_inline_out_of_flow(
-    &mut self,
-    node: TaffyNodeId,
-    _available_space: Size<AvailableSpace>,
-    layout: ComputedLayout,
-    output: &mut LayoutOutput,
-  ) {
-    let state = &self.nodes[usize::from(node)];
-    let render_node = self.render_nodes[usize::from(node)];
-    let proxies = state.children.clone();
-    let boxes: Vec<TaffyNodeId> = state
-      .box_children
-      .iter()
-      .map(|child| child.node_id.into_taffy())
-      .collect();
-    let containers: Vec<&RenderNode> = proxies
-      .iter()
-      .map(|&proxy| self.render_nodes[usize::from(proxy)])
-      .collect();
-    let (positions, containing_blocks) =
-      render_node.inline_out_of_flow_geometry(layout, &containers);
-    // Static positions arrive in the content box; candidates sit in the border box.
-    let content = Point {
-      x: layout.border.left + layout.padding.left,
-      y: layout.border.top + layout.padding.top,
+    // An indefinite axis of the initial containing block falls back to the root's padding box.
+    let root_padding_box = ContainingBlock::padding_box(
+      Size {
+        width: result.size.inline_size,
+        height: result.size.block_size,
+      },
+      result.border,
+    );
+    let viewport = |available: AvailableSpace,
+                    origin: LayoutUnit,
+                    fallback: (LayoutUnit, LayoutUnit)| match available {
+      AvailableSpace::Definite(size) => (LayoutUnit::ZERO - origin, LayoutUnit::from_float(size)),
+      AvailableSpace::MinContent | AvailableSpace::MaxContent => fallback,
     };
-    let positions: FxHashMap<TaffyNodeId, StaticPosition> = boxes
-      .iter()
-      .zip(positions)
-      .map(|(&node, position)| {
-        (
-          node,
-          StaticPosition {
-            point: content + position.point,
-            ..position
-          },
-        )
-      })
-      .collect();
+    let (x, width) = viewport(
+      available_space.width,
+      location.x,
+      (root_padding_box.origin.x, root_padding_box.size.width),
+    );
+    let (y, height) = viewport(
+      available_space.height,
+      location.y,
+      (root_padding_box.origin.y, root_padding_box.size.height),
+    );
 
-    for (&proxy, padding_box) in proxies.iter().zip(containing_blocks) {
-      self.lay_out_inline_containing_block(proxy, padding_box, &positions);
-    }
-
-    for (order, &node) in boxes.iter().enumerate() {
-      let held = proxies
-        .iter()
-        .any(|&proxy| self.nodes[usize::from(proxy)].children.contains(&node));
-
-      if let (false, Some(position)) = (held, positions.get(&node)) {
-        output.oof_candidates.push(self.out_of_flow_candidate(
-          node,
-          order,
-          position.point,
-          position.from_end,
-        ));
-      }
-    }
-  }
-
-  /// Lays out `proxy`, standing in for an inline containing block, over its padding box, and
-  /// positions the out-of-flow boxes it contains from their static positions in `positions`.
-  fn lay_out_inline_containing_block(
-    &mut self,
-    proxy: TaffyNodeId,
-    padding_box: PaddingBox,
-    positions: &FxHashMap<TaffyNodeId, StaticPosition>,
-  ) {
-    let PaddingBox { origin, size } = padding_box;
-    let candidates: Vec<OofCandidate> = self.nodes[usize::from(proxy)]
-      .children
-      .iter()
-      .enumerate()
-      .filter_map(|(order, &node)| {
-        let position = positions.get(&node)?;
-
-        Some(self.out_of_flow_candidate(node, order, position.point - origin, position.from_end))
-      })
-      .collect();
-    let direction = self.render_nodes[usize::from(proxy)]
-      .context
-      .style
-      .inherited_data
-      .direction
-      .into_taffy();
-    let result = compute_oof_layout_for_area(
-      self,
-      proxy,
-      &candidates,
-      OofPositioningArea {
-        size: size.into_taffy(),
-        offset: taffy::Point::ZERO,
-      },
-      direction,
+    self.lay_out_out_of_flow(
+      NodeId::ROOT,
       ContainingBlockClaims::ALL,
-    );
-
-    self.clear_hoisted_children(proxy);
-    self.add_hoisted_children(proxy, &result.hoisted);
-    self.set_unrounded_layout(
-      proxy,
-      &Layout {
-        location: origin.into_taffy(),
-        size: size.into_taffy(),
-        ..Layout::new()
+      result.out_of_flow.clone(),
+      ContainingBlock {
+        origin: Point::new(x, y),
+        size: Size { width, height },
       },
+      &space,
     );
-  }
-
-  /// The taffy candidate the out-of-flow `node` is, its margin box's inline-start corner at
-  /// `point` in the border box of the node holding it.
-  fn out_of_flow_candidate(
-    &self,
-    node: TaffyNodeId,
-    order: usize,
-    point: Point<f32>,
-    from_end: bool,
-  ) -> OofCandidate {
-    OofCandidate {
-      node,
-      order: order as u32,
-      position: self.nodes[usize::from(node)].style.position,
-      static_position: taffy::Point {
-        x: AxisStaticPosition::from_edge(
-          point.x,
-          if from_end {
-            AxisStaticEdge::End
-          } else {
-            AxisStaticEdge::Start
-          },
-        ),
-        y: AxisStaticPosition::from_edge(point.y, AxisStaticEdge::Start),
-      },
-    }
-  }
-
-  /// Keeps every box where it laid out, unrounded: Blink holds layout in layout units and snaps a
-  /// box to pixels only as it paints it.
-  fn finalize_layout(&mut self) {
-    for node in &mut self.nodes {
-      node.final_layout = node.unrounded_layout;
-    }
   }
 
   /// The measurement of the inline formatting context the node at `idx` establishes or measures
   /// as, its known border-box width less its laid-out padding and border `insets_width`, its lines
   /// cached by the width they lay out at.
-  fn inline_measurement(
+  pub(crate) fn inline_measurement(
     &self,
     idx: usize,
     available_space: Size<AvailableSpace>,
@@ -1169,107 +1012,87 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// The root laid out as an in-flow block of a block formatting context, an auto width filling a
-  /// definite `available_space`'s: its size leaves out the margins collapsing through its edges,
-  /// which the output carries.
+  /// The root laid out as an in-flow block of a block formatting context, as Blink's
+  /// `BlockNode::Layout` lays out a block-in-inline: an auto width fills a definite
+  /// `available_space`'s, and the margins of its first and last children collapse through it.
   pub(crate) fn lay_out_root_in_flow(
     &mut self,
     available_space: Size<AvailableSpace>,
-  ) -> LayoutOutput {
-    let available_space: TaffySize<TaffyAvailableSpace> =
-      available_space.map(AvailableSpace::into_taffy).into_taffy();
+  ) -> Rc<LayoutResult> {
+    let mut space = self.root_space(available_space, true);
+    let result = self.layout(NodeId::ROOT, &space);
 
-    self.compute_child_layout(
-      NodeId::ROOT.into_taffy(),
-      LayoutInput {
-        run_mode: RunMode::PerformLayout,
-        sizing_mode: SizingMode::InherentSize,
-        axis: RequestedAxis::Both,
-        known_dimensions: TaffySize {
-          width: available_space.width.into_option(),
-          height: None,
-        },
-        known_dimensions_are_definite: TaffySize {
-          width: true,
-          height: true,
-        },
-        parent_size: available_space.into_options(),
-        available_space,
-        vertical_margins_are_collapsible: Line::TRUE,
-      },
-    )
+    if result.status == LayoutStatus::Success {
+      return result;
+    }
+
+    // Floats adjoining its block start move once its block offset resolves.
+    space.forced_bfc_block_offset = result.bfc_block_offset;
+    self.layout(NodeId::ROOT, &space)
   }
 
-  /// The root's border-box min-content and max-content widths, sized without laying out its
-  /// height, as Blink's `ComputeMinMaxSizes` sizes a box's inline axis alone.
-  pub(crate) fn root_min_max_widths(&mut self) -> (f32, f32) {
-    let mut width = |available_width: TaffyAvailableSpace| {
-      let available_space = TaffySize {
-        width: available_width,
-        height: TaffyAvailableSpace::MaxContent,
-      };
+  /// The initial containing block of a document laid out in `available_space`: a min-content or
+  /// max-content width becomes the root's contribution and margins, which the root then fills.
+  fn initial_containing_block(
+    &mut self,
+    available_space: Size<AvailableSpace>,
+  ) -> Size<AvailableSpace> {
+    if let AvailableSpace::Definite(_) = available_space.width {
+      return available_space;
+    }
 
-      self
-        .compute_child_layout(
-          NodeId::ROOT.into_taffy(),
-          LayoutInput {
-            run_mode: RunMode::ComputeSize,
-            sizing_mode: SizingMode::InherentSize,
-            axis: RequestedAxis::Horizontal,
-            known_dimensions: TaffySize::NONE,
-            known_dimensions_are_definite: TaffySize {
-              width: true,
-              height: true,
-            },
-            parent_size: available_space.into_options(),
-            available_space,
-            vertical_margins_are_collapsible: Line::FALSE,
-          },
-        )
-        .size
-        .width
+    let (min_width, max_width) = self.root_min_max_widths(available_space.height);
+    let margins = margins_for(self.layout_style(NodeId::ROOT), None, Direction::Ltr);
+    let width = match available_space.width {
+      AvailableSpace::MinContent => min_width,
+      _ => max_width,
     };
 
-    (
-      width(TaffyAvailableSpace::MinContent),
-      width(TaffyAvailableSpace::MaxContent),
-    )
+    Size {
+      width: AvailableSpace::Definite(width + margins.inline_sum().to_float()),
+      ..available_space
+    }
+  }
+
+  /// The root's border-box min-content and max-content widths in a containing block
+  /// `available_height` tall, sized without laying out its height, as Blink's
+  /// `ComputeMinMaxSizes` sizes a box's inline axis alone.
+  pub(crate) fn root_min_max_widths(&mut self, available_height: AvailableSpace) -> (f32, f32) {
+    let mut space = self.root_space(
+      Size {
+        width: AvailableSpace::MaxContent,
+        height: available_height,
+      },
+      false,
+    );
+
+    space.available_inline_size = None;
+    space.cache_slot = CacheSlot::Measure;
+
+    let sizes = self
+      .min_and_max_content_contribution(NodeId::ROOT, &space)
+      .sizes;
+
+    (sizes.min_size.to_float(), sizes.max_size.to_float())
   }
 
   /// Consumes the tree into immutable per-node layout results.
   pub(crate) fn into_results(mut self) -> LayoutResults {
-    // A box an inline containing block holds is placed in the inline formatting context, its
-    // box-tree parent, rather than in the node standing in for the containing block.
-    for &proxy in &self.inline_containing_blocks {
-      let proxy = &self.nodes[usize::from(proxy)];
-      let (location, unrounded) = (proxy.final_layout.location, proxy.unrounded_layout.location);
-
-      for child in proxy.hoisted_children.clone() {
-        let child = &mut self.nodes[usize::from(child)];
-
-        child.final_layout.location = child.final_layout.location + location;
-        child.unrounded_layout.location = child.unrounded_layout.location + unrounded;
-      }
-    }
-
     // A box another node than its box-tree parent positioned resolves against that containing
-    // block. Inline containing blocks are left out: their boxes now sit in their parent's space.
-    let mut containing_blocks: FxHashMap<TaffyNodeId, TaffyNodeId> = FxHashMap::default();
-    let proxies: HashSet<TaffyNodeId> = self.inline_containing_blocks.iter().copied().collect();
+    // block.
+    let mut containing_blocks: FxHashMap<usize, usize> = FxHashMap::default();
 
     for (index, node) in self.nodes.iter().enumerate() {
-      if !proxies.contains(&TaffyNodeId::from(index)) {
-        for &child in &node.hoisted_children {
-          containing_blocks.insert(child, TaffyNodeId::from(index));
-        }
+      for &child in &node.hoisted_children {
+        containing_blocks.insert(usize::from(child), index);
       }
     }
     for (index, node) in self.nodes.iter_mut().enumerate() {
       for child in node.box_children.iter_mut() {
         child.hoisted_cb = containing_blocks
-          .get(&child.node_id.into_taffy())
-          .filter(|&&cb| cb != TaffyNodeId::from(index))
-          .map(|&cb| NodeId::from_taffy(cb));
+          .get(&usize::from(child.node_id))
+          .filter(|&&cb| cb != index)
+          .map(|&cb| NodeId::from_taffy(TaffyNodeId::from(cb)));
       }
     }
 
@@ -1277,7 +1100,7 @@ impl<'r> LayoutTree<'r> {
     let mut nodes = Vec::with_capacity(self.nodes.len());
 
     nodes.extend(self.nodes.into_iter().map(|node| LayoutResultNode {
-      layout: node.final_layout,
+      layout: node.layout,
       first_baseline_y: node.first_baseline_y,
       box_children: node.box_children,
     }));
@@ -1295,44 +1118,54 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  fn get_layout_node_ref(&self, node_id: TaffyNodeId) -> Option<&LayoutNodeState> {
-    self.nodes.get(usize::from(node_id))
+  pub(crate) fn node_state(&self, node: NodeId) -> &LayoutNodeState {
+    &self.nodes[usize::from(node)]
   }
 
-  fn get_layout_node_mut_ref(&mut self, node_id: TaffyNodeId) -> Option<&mut LayoutNodeState> {
-    self.nodes.get_mut(usize::from(node_id))
+  pub(crate) fn node_state_mut(&mut self, node: NodeId) -> &mut LayoutNodeState {
+    &mut self.nodes[usize::from(node)]
   }
 
-  fn update_node_style_for_available_space(
+  /// Resolves `node`'s styles again against a query container of `container_size`, unless they
+  /// read no query container.
+  pub(crate) fn restyle_for_container(
     &mut self,
-    node_id: TaffyNodeId,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
+    node: NodeId,
+    container_size: Size<Option<LayoutUnit>>,
   ) {
-    let idx = usize::from(node_id);
-    let (Some(node), Some(render_node)) = (self.nodes.get_mut(idx), self.render_nodes.get(idx))
-    else {
-      return;
-    };
+    let index = usize::from(node);
+    let render_node = self.render_nodes[index];
+    let state = &mut self.nodes[index];
 
-    if node.container_independent {
+    if state.container_independent {
       return;
     }
 
     let mut sizing = render_node.context.sizing.clone();
 
-    sizing.container_size = Size {
-      width: known_dimensions
-        .width
-        .or(available_space.width.into_option()),
-      height: known_dimensions
-        .height
-        .or(available_space.height.into_option()),
-    };
-    let mut style = render_node.layout_style(&sizing);
+    sizing.container_size = container_size.map(|size| size.map(LayoutUnit::to_float));
 
-    node.table_box.apply(&mut style);
-    node.style = Rc::new(style);
+    let mut style = render_node.layout_style(&sizing);
+    let mut layout_style = render_node.layout_box_style(&sizing);
+
+    state.table_box.apply(&mut style, &mut layout_style);
+    if *state.layout_style != layout_style {
+      state.content_style = None;
+    }
+    state.style = Rc::new(style);
+    state.layout_style = Rc::new(layout_style);
+  }
+
+  /// Sets `node`'s layout, and lays its inline content out to the fragment items paint reads when
+  /// the tree keeps them.
+  pub(crate) fn set_layout(&mut self, node: NodeId, layout: ComputedLayout) {
+    let index = usize::from(node);
+
+    self.nodes[index].layout = layout;
+
+    if self.keeps_fragment_items && self.render_nodes[index].has_own_inline_content() {
+      self.render_nodes[index].keep_fragment_items(&self.inline_node_data(index), layout);
+    }
   }
 
   /// The number of nodes in the tree.
@@ -1341,20 +1174,43 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// The render node `node` lays out.
-  pub(in crate::layout) fn render_node(&self, node: TaffyNodeId) -> &'r RenderNode {
-    self.render_nodes[usize::from(node)]
+  pub(in crate::layout) fn render_node(&self, node: impl Into<usize>) -> &'r RenderNode {
+    self.render_nodes[node.into()]
   }
 
   /// The children `node` lays out, in layout order.
   pub(in crate::layout) fn layout_children(&self, node: TaffyNodeId) -> &[TaffyNodeId] {
+    &self.nodes[usize::from(node)].children
+  }
+
+  /// [`Self::layout_children`] as layout nodes.
+  pub(crate) fn child_nodes(&self, node: NodeId) -> Vec<NodeId> {
     self
-      .get_layout_node_ref(node)
-      .map_or(&[], |state| &state.children)
+      .node_state(node)
+      .children
+      .iter()
+      .map(|&child| NodeId::from_taffy(child))
+      .collect()
   }
 
   /// The taffy style `node` lays out with.
-  pub(in crate::layout) fn layout_style(&self, node: TaffyNodeId) -> &Style {
-    self.get_core_container_style(node)
+  pub(in crate::layout) fn taffy_style(&self, node: TaffyNodeId) -> &Style {
+    &self.nodes[usize::from(node)].style
+  }
+
+  /// The style `node` lays out with.
+  pub(crate) fn layout_style(&self, node: NodeId) -> &LayoutStyle {
+    &self.node_state(node).layout_style
+  }
+
+  pub(crate) fn layout_style_rc(&self, node: NodeId) -> &Rc<LayoutStyle> {
+    &self.node_state(node).layout_style
+  }
+
+  /// The inline box that is the containing block of the out-of-flow `node` in an inline
+  /// formatting context, if one is.
+  pub(crate) fn inline_container(&self, node: NodeId) -> Option<&'r RenderNode> {
+    self.inline_containers.get(&usize::from(node)).copied()
   }
 
   pub(in crate::layout) fn table_structure(
@@ -1395,24 +1251,24 @@ impl<'r> LayoutTree<'r> {
     self.table_fragments.insert(usize::from(table), fragment);
   }
 
-  /// Changes what `node`'s part in a table changes in its layout style.
+  /// Changes what `node`'s part in a table changes in its styles.
   pub(in crate::layout) fn set_table_box_style(
     &mut self,
     node: TaffyNodeId,
     table_box: TableBoxStyle,
   ) {
-    let Some(&render_node) = self.render_nodes.get(usize::from(node)) else {
-      return;
-    };
-    let Some(state) = self.nodes.get_mut(usize::from(node)) else {
-      return;
-    };
+    let index = usize::from(node);
+    let render_node = self.render_nodes[index];
+    let sizing = &render_node.context.sizing;
+    let mut style = render_node.layout_style(sizing);
+    let mut layout_style = render_node.layout_box_style(sizing);
+    let state = &mut self.nodes[index];
 
-    let mut style = render_node.layout_style(&render_node.context.sizing);
-
-    table_box.apply(&mut style);
+    table_box.apply(&mut style, &mut layout_style);
     state.table_box = table_box;
     state.style = Rc::new(style);
+    state.layout_style = Rc::new(layout_style);
+    state.content_style = None;
     state.cache.clear();
   }
 
@@ -1423,16 +1279,14 @@ impl<'r> LayoutTree<'r> {
     cell: TaffyNodeId,
     padding: Option<(f32, f32)>,
   ) {
-    let Some(state) = self.nodes.get(usize::from(cell)) else {
-      return;
-    };
+    let table_box = self.nodes[usize::from(cell)].table_box;
 
-    if state.table_box.aligned_padding != padding {
+    if table_box.aligned_padding != padding {
       self.set_table_box_style(
         cell,
         TableBoxStyle {
           aligned_padding: padding,
-          ..state.table_box
+          ..table_box
         },
       );
     }
@@ -1451,71 +1305,9 @@ impl<'r> LayoutTree<'r> {
     output
   }
 
-  /// The padding box of `node` laid out at `size`, as an out-of-flow positioning area.
-  pub(in crate::layout) fn padding_box_area(
-    &self,
-    node: TaffyNodeId,
-    size: TaffySize<f32>,
-  ) -> taffy::OofPositioningArea {
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-    let border = self.layout_style(node).border.resolve_or_zero(None, calc);
-
-    taffy::OofPositioningArea {
-      size: TaffySize {
-        width: (size.width - border.left - border.right).max(0.0),
-        height: (size.height - border.top - border.bottom).max(0.0),
-      },
-      offset: taffy::Point {
-        x: border.left,
-        y: border.top,
-      },
-    }
-  }
-}
-
-impl RenderNode {
-  // Taffy may inject a flex stretch-derived cross-size into leaf `known_dimensions`
-  // during intrinsic single-axis sizing (`ComputeSize` with `InherentSize` or `ContentSize`). For replaced
-  // elements, letting that value participate in aspect-ratio transfer can
-  // incorrectly inflate the measured main-size. Strip that hint at the leaf boundary.
-  fn should_strip_flex_intrinsic_stretch_known_dimension(
-    &self,
-    inputs: LayoutInput,
-    known_dimensions: Size<Option<f32>>,
-  ) -> bool {
-    if inputs.run_mode != RunMode::ComputeSize
-      || !matches!(
-        inputs.sizing_mode,
-        SizingMode::InherentSize | SizingMode::ContentSize
-      )
-    {
-      return false;
-    }
-
-    if !matches!(
-      inputs.axis,
-      RequestedAxis::Horizontal | RequestedAxis::Vertical
-    ) {
-      return false;
-    }
-
-    let Some(node) = self.node.as_ref() else {
-      return false;
-    };
-
-    if !node.is_replaced_element() {
-      return false;
-    }
-
-    match inputs.axis {
-      RequestedAxis::Horizontal => {
-        known_dimensions.width.is_none() && known_dimensions.height.is_some()
-      }
-      RequestedAxis::Vertical => {
-        known_dimensions.height.is_none() && known_dimensions.width.is_some()
-      }
-      RequestedAxis::Both => false,
-    }
+  /// `node`'s layout so far.
+  pub(in crate::layout) fn computed_layout(&self, node: TaffyNodeId) -> ComputedLayout {
+    self.nodes[usize::from(node)].layout
   }
 }
 
@@ -1527,596 +1319,38 @@ fn sort_children_by_order(
   if children.iter().all(|&child_id| child_order(child_id) == 0) {
     return;
   }
-
   sort_by_key(children, |&child_id| child_order(child_id));
-}
-
-impl TraversePartialTree for LayoutTree<'_> {
-  type ChildIter<'a>
-    = Copied<slice::Iter<'a, TaffyNodeId>>
-  where
-    Self: 'a;
-
-  fn child_ids(&self, parent_node_id: TaffyNodeId) -> Self::ChildIter<'_> {
-    let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      return [].iter().copied();
-    };
-
-    node.children.iter().copied()
-  }
-
-  fn child_count(&self, parent_node_id: TaffyNodeId) -> usize {
-    let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      return 0;
-    };
-
-    node.children.len()
-  }
-
-  fn get_child_id(&self, parent_node_id: TaffyNodeId, child_index: usize) -> TaffyNodeId {
-    let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      return TaffyNodeId::from(0usize);
-    };
-
-    node.children[child_index]
-  }
-}
-
-impl TraverseTree for LayoutTree<'_> {}
-
-impl LayoutPartialTree for LayoutTree<'_> {
-  type CoreContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type CustomIdent = String;
-
-  fn get_core_container_style(&self, node_id: TaffyNodeId) -> Self::CoreContainerStyle<'_> {
-    if let Some(node) = self.get_layout_node_ref(node_id) {
-      return &node.style;
-    }
-    &self.nodes[0].style
-  }
-
-  fn set_unrounded_layout(&mut self, node_id: TaffyNodeId, layout: &Layout) {
-    let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      return;
-    };
-
-    node.unrounded_layout = *layout;
-
-    let index = usize::from(node_id);
-
-    if self.keeps_fragment_items
-      && let Some(render_node) = self.render_nodes.get(index)
-      && render_node.has_own_inline_content()
-    {
-      render_node.keep_fragment_items(
-        &self.inline_node_data(index),
-        ComputedLayout::from_taffy(layout),
-      );
-    }
-  }
-
-  fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
-    let Some(root) = self.render_nodes.first() else {
-      return 0.0;
-    };
-
-    root.context.sizing.resolve_calc(val, basis)
-  }
-
-  fn compute_child_layout(&mut self, node: TaffyNodeId, inputs: LayoutInput) -> LayoutOutput {
-    self.compute_child_layout_inner(node, inputs, None)
-  }
-}
-
-impl<'r> LayoutTree<'r> {
-  /// Positions the out-of-flow boxes `output` collected that `node` is the containing block for,
-  /// leaving the rest to bubble up. Claims follow takumi's style, which taffy's cannot express.
-  fn lay_out_out_of_flow(&mut self, node: TaffyNodeId, output: &mut LayoutOutput) {
-    let (Some(area), Some(claims)) = (
-      output.oof_positioning_area,
-      self.get_layout_node_ref(node).map(|state| state.claims),
-    ) else {
-      return;
-    };
-    let direction = self.get_core_container_style(node).direction();
-    let candidates = output.oof_candidates.take();
-    let result =
-      compute_oof_layout_for_area(self, node, candidates.as_slice(), area, direction, claims);
-
-    self.clear_hoisted_children(node);
-    self.add_hoisted_children(node, &result.hoisted);
-    output.oof_candidates = result.unclaimed;
-  }
-
-  /// `output` with the grid's first baseline its first row's first item's, which taffy takes from
-  /// the item's bottom edge unless the item aligns to the baseline.
-  /// <https://drafts.csswg.org/css-grid-2/#grid-baselines>
-  fn with_first_row_baseline(
-    &self,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-    mut output: LayoutOutput,
-  ) -> LayoutOutput {
-    if inputs.run_mode != RunMode::PerformLayout || output.baselines.first.is_none() {
-      return output;
-    }
-
-    let Some(state) = self.get_layout_node_ref(node) else {
-      return output;
-    };
-    let first_item = state
-      .children
-      .iter()
-      .filter_map(|&child| self.get_layout_node_ref(child))
-      .filter(|child| {
-        child.style.position != TaffyPosition::Absolute && child.style.display != TaffyDisplay::None
-      })
-      .min_by(|left, right| {
-        left
-          .unrounded_layout
-          .location
-          .y
-          .total_cmp(&right.unrounded_layout.location.y)
-      });
-
-    if let Some(item) = first_item
-      && let Some(baseline) = item.first_baseline_y
-    {
-      output.baselines.first = Some(item.unrounded_layout.location.y + baseline);
-    }
-
-    output
-  }
-
-  /// Lays `node` and every box under it out empty, as `display: none` leaves them, without
-  /// keeping fragment items no paint reads.
-  pub(in crate::layout) fn compute_hidden(&mut self, node: TaffyNodeId) -> LayoutOutput {
-    let keeps_fragment_items = replace(&mut self.keeps_fragment_items, false);
-    let output = compute_hidden_layout(self, node);
-
-    self.keeps_fragment_items = keeps_fragment_items;
-    output
-  }
-
-  fn compute_child_layout_inner(
-    &mut self,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-    block_ctx: Option<&mut BlockContext<'_>>,
-  ) -> LayoutOutput {
-    self.update_node_style_for_available_space(
-      node,
-      Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-      Size::from_taffy(inputs.known_dimensions),
-    );
-
-    if inputs.run_mode == RunMode::PerformHiddenLayout {
-      return self.compute_hidden(node);
-    }
-
-    let output = compute_cached_layout(self, node, inputs, |tree, node, inputs| {
-      let Some(node_data) = tree.get_layout_node_ref(node) else {
-        return tree.compute_hidden(node);
-      };
-
-      let display_mode = node_data.style.display;
-      // An inline formatting context's only children stand in for its inline containing blocks,
-      // which it lays out itself.
-      let has_children = !node_data.children.is_empty() && !node_data.is_inline_children;
-      let is_table = node_data.table_box.is_table;
-
-      let mut output = match (display_mode, has_children) {
-        (TaffyDisplay::None, _) => tree.compute_hidden(node),
-        _ if is_table => tree.compute_table_layout(node, inputs),
-        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs, block_ctx),
-        // A flow-root box is a block formatting context root, so it never joins
-        // its parent's context. <https://drafts.csswg.org/css-display-3/#valdef-display-flow-root>
-        (TaffyDisplay::FlowRoot, true) => compute_block_layout(tree, node, inputs, None),
-        (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
-        (TaffyDisplay::Grid, true) => {
-          let output = compute_grid_layout(tree, node, inputs);
-
-          tree.with_first_row_baseline(node, inputs, output)
-        }
-        (_, false) => {
-          let idx: usize = node.into();
-          let Some(&render_node) = tree.render_nodes.get(idx) else {
-            return tree.compute_hidden(node);
-          };
-
-          let stripped_known_dimensions = |known_dimensions: TaffySize<Option<f32>>| {
-            if render_node.should_strip_flex_intrinsic_stretch_known_dimension(
-              inputs,
-              Size::from_taffy(known_dimensions),
-            ) {
-              TaffySize::NONE
-            } else {
-              known_dimensions
-            }
-          };
-          let calc = |value, basis| tree.resolve_calc_value(value, basis);
-          let padding = node_data
-            .style
-            .padding
-            .resolve_or_zero(inputs.parent_size.width, calc);
-          let border = node_data
-            .style
-            .border
-            .resolve_or_zero(inputs.parent_size.width, calc);
-          let insets = padding.sum_axes() + border.sum_axes();
-          // The border-box size `compute_leaf_layout` gives the box before its content.
-          let fixed_size =
-            stripped_known_dimensions(inputs.known_dimensions).or(match inputs.sizing_mode {
-              SizingMode::InherentSize => node_data
-                .style
-                .size
-                .maybe_resolve(inputs.parent_size, calc)
-                .maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
-                .maybe_add(if node_data.style.box_sizing == BoxSizing::ContentBox {
-                  insets
-                } else {
-                  TaffySize::ZERO
-                }),
-              SizingMode::ContentSize => TaffySize::NONE,
-            });
-
-          render_node.context.set_definite_height(
-            fixed_size
-              .height
-              .map(|height| (height - insets.height).max(0.0)),
-          );
-
-          // taffy's `children_margins_adjoin_own_edges`, the end one for an auto height only.
-          if node_data.is_inline_children {
-            let collapsible = inputs.vertical_margins_are_collapsible;
-
-            render_node.context.set_margins_adjoin(Line {
-              start: collapsible.start && padding.top == 0.0 && border.top == 0.0,
-              end: collapsible.end
-                && padding.bottom == 0.0
-                && border.bottom == 0.0
-                && fixed_size.height.is_none(),
-            });
-          }
-
-          let mut output = compute_leaf_layout(
-            inputs,
-            &*node_data.style,
-            |val, basis| tree.resolve_calc_value(val, basis),
-            |known_dimensions, available_space| {
-              let known_dimensions = stripped_known_dimensions(known_dimensions);
-
-              if let TaffySize {
-                width: Some(width),
-                height: Some(height),
-              } = known_dimensions.maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
-              {
-                return TaffySize { width, height };
-              }
-
-              let available_space =
-                Size::from_taffy(available_space).map(AvailableSpace::from_taffy);
-              let known_dimensions = Size::from_taffy(known_dimensions);
-
-              // A width alone needs no line laid out, as Blink's `ComputeMinMaxSizes` lays out
-              // none.
-              if inputs.run_mode == RunMode::ComputeSize
-                && inputs.axis == RequestedAxis::Horizontal
-                && known_dimensions.width.is_none()
-                && (node_data.is_inline_children || render_node.measures_as_inline_content())
-              {
-                return TaffySize {
-                  width: InlineNode::new(render_node)
-                    .content_inline_size(&tree.inline_node_data(idx), available_space),
-                  height: 0.0,
-                };
-              }
-
-              if !node_data.is_inline_children && !render_node.measures_as_inline_content() {
-                return render_node
-                  .measure(available_space, known_dimensions, &node_data.style)
-                  .into_taffy();
-              }
-
-              tree
-                .inline_measurement(idx, available_space, known_dimensions, insets.width)
-                .size
-                .into_taffy()
-            },
-          );
-
-          // Margins of a block-in-inline at the content's edges collapse out through them.
-          if node_data.is_inline_children
-            && tree
-              .inline_node_data(idx)
-              .items
-              .iter()
-              .any(|item| item.item_type == InlineItemType::BlockInInline)
-          {
-            let margins = tree
-              .inline_measurement(
-                idx,
-                Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-                Size {
-                  width: Some(output.size.width),
-                  height: None,
-                },
-                insets.width,
-              )
-              .margins;
-
-            output.top_margin = margins.start;
-            output.bottom_margin = margins.end;
-          }
-
-          let lays_out_text = node_data.is_inline_children
-            || matches!(
-              render_node.node.as_ref().and_then(Node::inline_content),
-              Some(InlineContentKind::Text(_))
-            );
-
-          let border_box = || {
-            ComputedLayout::new(
-              Point::ZERO,
-              Size::from_taffy(output.size),
-              Rect::from_taffy(border),
-              Rect::from_taffy(padding),
-            )
-          };
-
-          // `compute_leaf_layout` reports no baseline, which leaves flexbox
-          // baseline alignment on its bottom margin edge fallback.
-          if lays_out_text && inputs.run_mode == RunMode::PerformLayout {
-            let kept = tree.keeps_fragment_items.then(border_box);
-
-            let items_data = tree.inline_node_data(idx);
-
-            if let Some(layout) = kept {
-              render_node.keep_fragment_items(&items_data, layout);
-            }
-            // The padding and border it lays out with, which its style alone does not say for a
-            // cell its table borders or a percentage its containing block resolves.
-            let laid_out_insets = Rect::from_taffy(padding + border);
-
-            output.baselines.first = render_node.inline_content_border_box_baseline(
-              &items_data,
-              Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-              Size::from_taffy(output.size),
-              false,
-              kept,
-              Some(laid_out_insets),
-            );
-          }
-
-          // A block-level box measured whole at a definite width lays out at that size, so its
-          // fragment items laid out now let its shaped text go before the boxes after it shape
-          // theirs. A flex or grid item is measured at sizes its container then changes.
-          if tree.keeps_fragment_items
-            && lays_out_text
-            && !node_data.flex_or_grid_item
-            && inputs.run_mode == RunMode::ComputeSize
-            && inputs.axis == RequestedAxis::Both
-            && matches!(
-              inputs.available_space.width,
-              TaffyAvailableSpace::Definite(_)
-            )
-          {
-            render_node.keep_fragment_items(&tree.inline_node_data(idx), border_box());
-          }
-
-          if node_data.is_inline_children
-            && !node_data.box_children.is_empty()
-            && inputs.run_mode == RunMode::PerformLayout
-          {
-            tree.lay_out_inline_out_of_flow(
-              node,
-              Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-              border_box(),
-              &mut output,
-            );
-          }
-
-          output
-        }
-      };
-
-      // Only a full layout writes the boxes it positions, which a later cache hit must still hold.
-      if inputs.run_mode == RunMode::PerformLayout {
-        tree.lay_out_out_of_flow(node, &mut output);
-      }
-
-      output
-    });
-
-    if let Some(node_data) = self.get_layout_node_mut_ref(node) {
-      node_data.first_baseline_y = output.baselines.first;
-    }
-
-    output
-  }
-}
-
-impl CacheTree for LayoutTree<'_> {
-  fn cache_get(&mut self, node_id: TaffyNodeId, input: &LayoutInput) -> Option<LayoutOutput> {
-    let node = self.get_layout_node_mut_ref(node_id)?;
-    node.cache.get(input)
-  }
-
-  fn cache_store(
-    &mut self,
-    node_id: TaffyNodeId,
-    input: &LayoutInput,
-    layout_output: LayoutOutput,
-  ) {
-    let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      return;
-    };
-
-    node.cache.store(input, layout_output);
-  }
-
-  fn cache_clear(&mut self, node_id: TaffyNodeId) {
-    let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      return;
-    };
-
-    node.cache.clear();
-  }
-}
-
-impl LayoutBlockContainer for LayoutTree<'_> {
-  type BlockContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type BlockItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_block_container_style(&self, node_id: TaffyNodeId) -> Self::BlockContainerStyle<'_> {
-    self.get_core_container_style(node_id)
-  }
-
-  fn get_block_child_style(&self, child_node_id: TaffyNodeId) -> Self::BlockItemStyle<'_> {
-    self.get_core_container_style(child_node_id)
-  }
-
-  fn compute_block_child_layout(
-    &mut self,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-    block_ctx: Option<&mut BlockContext<'_>>,
-  ) -> LayoutOutput {
-    self.compute_child_layout_inner(node, inputs, block_ctx)
-  }
-}
-
-impl LayoutFlexboxContainer for LayoutTree<'_> {
-  type FlexboxContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type FlexboxItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_flexbox_container_style(&self, node_id: TaffyNodeId) -> Self::FlexboxContainerStyle<'_> {
-    self.get_core_container_style(node_id)
-  }
-
-  fn get_flexbox_child_style(&self, child_node_id: TaffyNodeId) -> Self::FlexboxItemStyle<'_> {
-    self.get_core_container_style(child_node_id)
-  }
-}
-
-impl LayoutGridContainer for LayoutTree<'_> {
-  type GridContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type GridItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_grid_container_style(&self, node_id: TaffyNodeId) -> Self::GridContainerStyle<'_> {
-    self.get_core_container_style(node_id)
-  }
-
-  fn get_grid_child_style(&self, child_node_id: TaffyNodeId) -> Self::GridItemStyle<'_> {
-    self.get_core_container_style(child_node_id)
-  }
-
-  fn set_detailed_grid_info(&mut self, node_id: TaffyNodeId, info: DetailedGridInfo<String>) {
-    if let Some(node) = self.get_layout_node_mut_ref(node_id) {
-      node.detailed_layout_info = DetailedLayoutInfo::Grid(Box::new(info));
-    }
-  }
-}
-
-impl LayoutContainingBlock for LayoutTree<'_> {
-  type OofItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_oof_item_style(&self, node_id: TaffyNodeId) -> Self::OofItemStyle<'_> {
-    self.get_core_container_style(node_id)
-  }
-
-  fn clear_hoisted_children(&mut self, node_id: TaffyNodeId) {
-    if let Some(node) = self.get_layout_node_mut_ref(node_id) {
-      node.hoisted_children.clear();
-    }
-  }
-
-  fn add_hoisted_children(&mut self, node_id: TaffyNodeId, hoisted: &[TaffyNodeId]) {
-    if let Some(node) = self.get_layout_node_mut_ref(node_id) {
-      node.hoisted_children.extend_from_slice(hoisted);
-    }
-  }
-
-  fn get_detailed_layout_info(&self, node_id: TaffyNodeId) -> &DetailedLayoutInfo<String> {
-    self
-      .get_layout_node_ref(node_id)
-      .map_or(&DetailedLayoutInfo::None, |node| &node.detailed_layout_info)
-  }
-}
-
-impl RoundTree for LayoutTree<'_> {
-  fn get_unrounded_layout(&self, node_id: TaffyNodeId) -> Layout {
-    let Some(node) = self.get_layout_node_ref(node_id) else {
-      return Layout::new();
-    };
-
-    node.unrounded_layout
-  }
-
-  fn set_final_layout(&mut self, node_id: TaffyNodeId, layout: &Layout) {
-    let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      return;
-    };
-
-    node.final_layout = *layout;
-  }
-
-  fn is_out_of_flow(&self, node_id: TaffyNodeId) -> bool {
-    self.get_layout_node_ref(node_id).is_some_and(|node| {
-      node.style.position.is_out_of_flow() && node.style.display != TaffyDisplay::None
-    })
-  }
-
-  fn hoisted_child_count(&self, node_id: TaffyNodeId) -> usize {
-    self
-      .get_layout_node_ref(node_id)
-      .map_or(0, |node| node.hoisted_children.len())
-  }
-
-  fn get_hoisted_child_id(&self, node_id: TaffyNodeId, index: usize) -> TaffyNodeId {
-    self
-      .get_layout_node_ref(node_id)
-      .and_then(|node| node.hoisted_children.get(index).copied())
-      // Taffy asks only below `hoisted_child_count`.
-      .unwrap_or(node_id)
-  }
 }
 
 impl RenderNode {
   /// The taffy style this node lays out with: its own override when it has one, otherwise
   /// its computed style.
   fn layout_style(&self, sizing: &SizingContext) -> taffy::Style {
-    match self.layout_style_override.as_deref() {
-      Some(style) => style.clone(),
-      None => taffy::Style {
-        item_is_replaced: self.node.as_ref().is_some_and(Node::is_replaced_element),
-        ..self.context.style.to_taffy_style(sizing)
-      },
+    let style = match self.layout_style_override.as_deref() {
+      Some(style) => style.to_taffy_style(sizing),
+      None => self.context.style.to_taffy_style(sizing),
+    };
+
+    taffy::Style {
+      item_is_replaced: self.is_replaced(),
+      ..style
     }
+  }
+
+  /// The style the native layout lays this node out with: its own override when it has one,
+  /// otherwise its computed style.
+  pub(crate) fn layout_box_style(&self, sizing: &SizingContext) -> LayoutStyle {
+    match self.layout_style_override.as_deref() {
+      Some(style) => LayoutStyle {
+        is_replaced: self.is_replaced(),
+        ..style.clone()
+      },
+      None => LayoutStyle::from_computed(&self.context.style, sizing, self.is_replaced()),
+    }
+  }
+
+  fn is_replaced(&self) -> bool {
+    self.node.as_ref().is_some_and(Node::is_replaced_element)
   }
 
   /// A box with no layout override or marker.
@@ -2228,7 +1462,7 @@ impl RenderNode {
     context: RenderContext,
     node: Option<Node>,
     children: Option<Box<[RenderNode]>>,
-    layout_style: Rc<Style>,
+    layout_style: Rc<LayoutStyle>,
   ) -> Self {
     let mut anonymous = Self::new(context, NodeOrigin::Anonymous, node, children);
 
@@ -2264,10 +1498,9 @@ impl RenderNode {
   /// direction for the blocks it holds.
   fn block_in_inline(parent_context: &RenderContext, children: Vec<RenderNode>) -> Self {
     let context = RenderContext::for_anonymous(parent_context);
-    let layout_style = Rc::new(Style {
-      display: TaffyDisplay::Block,
-      direction: context.style.inherited_data.direction.into_taffy(),
-      ..Style::default()
+    let layout_style = Rc::new(LayoutStyle {
+      direction: context.style.inherited_data.direction,
+      ..LayoutStyle::default()
     });
     let mut block = Self::anonymous(
       context,
@@ -2286,19 +1519,16 @@ impl RenderNode {
   ) -> Self {
     // Cap image content to the parent pseudo's box so explicit `width` / `height`
     // on the pseudo wins over intrinsic / default sizing.
-    let max_size = TaffySize {
-      width: taffy::LengthPercentageAuto::percent(1.0),
-      height: taffy::LengthPercentageAuto::percent(1.0),
-    };
+    let max_size = Size::all(LayoutLength::Percent(1.0));
 
     match image {
       BackgroundImage::Url(url) => Self::anonymous(
         RenderContext::for_anonymous(parent_context),
         Some(Node::image(url)),
         None,
-        Rc::new(Style {
+        Rc::new(LayoutStyle {
           max_size,
-          ..Style::default()
+          ..LayoutStyle::default()
         }),
       ),
       gradient => {
@@ -2311,13 +1541,13 @@ impl RenderNode {
           Some(Node::container([])),
           None,
           // css-images-3 §5.1 default object size when the parent is auto.
-          Rc::new(Style {
-            size: TaffySize {
-              width: taffy::Dimension::length(300.0),
-              height: taffy::Dimension::length(150.0),
+          Rc::new(LayoutStyle {
+            size: Size {
+              width: LayoutLength::Fixed(300.0),
+              height: LayoutLength::Fixed(150.0),
             },
             max_size,
-            ..Style::default()
+            ..LayoutStyle::default()
           }),
         )
       }
@@ -2983,14 +2213,7 @@ impl RenderNode {
 
     // Only an atomic box has a baseline of its own; a replaced one sits on its bottom margin edge.
     AtomicInlineMetrics {
-      size: self.node.as_ref().map_or(Size::ZERO, |node| {
-        node.measure(
-          &self.context,
-          available_space,
-          Size::NONE,
-          &self.layout_style(&self.context.sizing),
-        )
-      }),
+      size: LayoutResults::compute(self, available_space).root_size(),
       baseline_offset: None,
       collapsed_margins: None,
     }
@@ -3011,7 +2234,11 @@ impl RenderNode {
 
   fn lay_out_atomic_inline(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
     if !self.participates_as_inline_box()
-      || self.layout_style(&self.context.sizing).size.width.is_auto()
+      || self
+        .layout_box_style(&self.context.sizing)
+        .size
+        .width
+        .is_auto()
     {
       return self.measure_inline_box(available_space);
     }
@@ -3027,9 +2254,9 @@ impl RenderNode {
   }
 
   /// Blink's `BlockNode::Layout` of a block-in-inline: an auto width fills `available_space`'s,
-  /// and the margins of its first and last blocks collapse through it. Approximate: its first
-  /// baseline stands in for its last, which taffy does not give, and it collapses through when it
-  /// has no height, without Blink's check of its content.
+  /// and the margins of its first and last blocks collapse through it. Approximate: the margins
+  /// collapsing through its block start come out as their sum, which collapses with the margins
+  /// before it as one margin.
   pub(crate) fn layout_block_in_inline(
     &self,
     available_space: Size<AvailableSpace>,
@@ -3037,23 +2264,35 @@ impl RenderNode {
     self
       .atomic_inline_layouts
       .get_or_insert_with(available_space, || {
-        let output = LayoutTree::from_render_node(self).lay_out_root_in_flow(available_space);
+        let result = LayoutTree::from_render_node(self).lay_out_root_in_flow(available_space);
+        let start = if result.is_self_collapsing {
+          result.end_margin_strut
+        } else {
+          let mut start = MarginStrut::default();
+
+          start.append(result.bfc_block_offset.unwrap_or_default());
+          start
+        };
 
         AtomicInlineMetrics {
-          size: Size::from_taffy(output.size),
-          baseline_offset: output.baselines.first,
+          size: Size {
+            width: result.size.inline_size.to_float(),
+            height: result.size.block_size.to_float(),
+          },
+          baseline_offset: result.first_baseline.map(LayoutUnit::to_float),
           collapsed_margins: Some(CollapsedMargins {
-            start: output.top_margin,
-            end: output.bottom_margin,
-            is_self_collapsing: output.size.height == 0.0,
+            start,
+            end: result.end_margin_strut,
+            is_self_collapsing: result.is_self_collapsing,
           }),
         }
       })
   }
 
-  /// The border box's min-content and max-content widths, laid out as a tree's root.
-  pub(crate) fn min_max_widths(&self) -> (f32, f32) {
-    LayoutTree::from_render_node(self).root_min_max_widths()
+  /// The border box's min-content and max-content widths in a containing block
+  /// `available_height` tall, laid out as a tree's root.
+  pub(crate) fn min_max_widths(&self, available_height: AvailableSpace) -> (f32, f32) {
+    LayoutTree::from_render_node(self).root_min_max_widths(available_height)
   }
 
   /// An atomic inline box's shrink-to-fit size and baseline.
@@ -3066,14 +2305,14 @@ impl RenderNode {
     // CSS shrink-to-fit for inline-level atomic boxes:
     // width = min(max-content, max(min-content, available)).
     // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
-    let (min_content, max_content) = self.min_max_widths();
+    let (min_content, max_content) = self.min_max_widths(available_space.height);
     let used_width = match available_space.width {
       AvailableSpace::Definite(available) => max_content.min(min_content.max(available)),
       AvailableSpace::MinContent => min_content,
       AvailableSpace::MaxContent => max_content,
     };
-    // Taffy lays a root out in the space beside its margins, so they go back around the border
-    // box shrink-to-fit sized.
+    // A root fills the space beside its margins, so they go back around the border box
+    // shrink-to-fit sized.
     let margin = self.margin_px();
     let results = LayoutResults::compute(
       self,
@@ -3098,27 +2337,6 @@ impl RenderNode {
       matches!(node.kind, NodeKind::Text(_))
         || self.context.style.base_data.display == Display::Inline
     })
-  }
-
-  pub(crate) fn measure(
-    &self,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
-    style: &Style,
-  ) -> Size<f32> {
-    let Some(node) = &self.node else {
-      return Size::ZERO;
-    };
-
-    if self.measures_as_inline_content() {
-      let node = InlineNode::new(self);
-
-      return node
-        .measure(&node.prepare_layout(), available_space, known_dimensions)
-        .size;
-    }
-
-    node.measure(&self.context, available_space, known_dimensions, style)
   }
 }
 

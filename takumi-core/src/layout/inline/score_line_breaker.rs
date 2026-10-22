@@ -180,7 +180,7 @@ impl<'s, 'a, 'c> ScoreLineBreaker<'s, 'a, 'c> {
       self.node,
       self.items_data,
       LineBreakerMode::Content,
-      *self.space,
+      self.space.clone(),
       LineLayoutOpportunity::new(line_width),
       leading_floats,
       self.break_token,

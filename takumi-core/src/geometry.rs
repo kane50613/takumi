@@ -28,6 +28,14 @@ impl<T> Point<T> {
     Self { x, y }
   }
 
+  /// A point with both coordinates `value`.
+  pub(crate) fn all(value: T) -> Self
+  where
+    T: Copy,
+  {
+    Self { x: value, y: value }
+  }
+
   /// Maps both coordinates through `f`.
   pub fn map<R>(self, f: impl Fn(T) -> R) -> Point<R> {
     Point {
@@ -38,13 +46,6 @@ impl<T> Point<T> {
 
   pub(crate) fn from_taffy(p: taffy::geometry::Point<T>) -> Self {
     Self { x: p.x, y: p.y }
-  }
-
-  pub(crate) fn into_taffy(self) -> taffy::geometry::Point<T> {
-    taffy::geometry::Point {
-      x: self.x,
-      y: self.y,
-    }
   }
 }
 
@@ -88,6 +89,17 @@ impl<T> Size<T> {
   /// Creates a size from its dimensions.
   pub const fn new(width: T, height: T) -> Self {
     Self { width, height }
+  }
+
+  /// A size with both dimensions `value`.
+  pub(crate) fn all(value: T) -> Self
+  where
+    T: Copy,
+  {
+    Self {
+      width: value,
+      height: value,
+    }
   }
 
   /// Maps both dimensions through `f`.
@@ -165,22 +177,6 @@ impl Size<Option<f32>> {
     width: None,
     height: None,
   };
-
-  /// When exactly one axis is set, fills the other from `aspect_ratio` (width /
-  /// height). Mirrors `taffy::geometry::Size::maybe_apply_aspect_ratio`.
-  pub(crate) fn fill_missing_axis_from_aspect_ratio(self, aspect_ratio: Option<f32>) -> Self {
-    match (aspect_ratio, self.width, self.height) {
-      (Some(ratio), Some(width), None) => Self {
-        width: Some(width),
-        height: Some(width / ratio),
-      },
-      (Some(ratio), None, Some(height)) => Self {
-        width: Some(height * ratio),
-        height: Some(height),
-      },
-      _ => self,
-    }
-  }
 }
 
 /// A 2D rect defined by its four edges.
@@ -197,6 +193,19 @@ pub struct Rect<T> {
 }
 
 impl<T> Rect<T> {
+  /// A rect with all four edges `value`.
+  pub(crate) fn all(value: T) -> Self
+  where
+    T: Copy,
+  {
+    Self {
+      left: value,
+      right: value,
+      top: value,
+      bottom: value,
+    }
+  }
+
   /// Maps all four edges through `f`.
   pub fn map<R>(self, f: impl Fn(T) -> R) -> Rect<R> {
     Rect {
@@ -213,6 +222,15 @@ impl<T> Rect<T> {
       right: r.right,
       top: r.top,
       bottom: r.bottom,
+    }
+  }
+
+  pub(crate) fn into_taffy(self) -> taffy::geometry::Rect<T> {
+    taffy::geometry::Rect {
+      left: self.left,
+      right: self.right,
+      top: self.top,
+      bottom: self.bottom,
     }
   }
 }
@@ -368,32 +386,6 @@ pub enum AvailableSpace {
   MinContent,
   /// Indefinite space; the node should size to its maximum content.
   MaxContent,
-}
-
-impl AvailableSpace {
-  /// The definite amount of space, or `None` for indefinite space.
-  pub(crate) fn into_option(self) -> Option<f32> {
-    match self {
-      Self::Definite(space) => Some(space),
-      _ => None,
-    }
-  }
-
-  pub(crate) fn from_taffy(space: taffy::AvailableSpace) -> Self {
-    match space {
-      taffy::AvailableSpace::Definite(value) => Self::Definite(value),
-      taffy::AvailableSpace::MinContent => Self::MinContent,
-      taffy::AvailableSpace::MaxContent => Self::MaxContent,
-    }
-  }
-
-  pub(crate) fn into_taffy(self) -> taffy::AvailableSpace {
-    match self {
-      Self::Definite(value) => taffy::AvailableSpace::Definite(value),
-      Self::MinContent => taffy::AvailableSpace::MinContent,
-      Self::MaxContent => taffy::AvailableSpace::MaxContent,
-    }
-  }
 }
 
 /// One command of a resolved outline path, in device space.
@@ -612,56 +604,5 @@ impl Placement {
       self.right().clamp(0, size.width as i32),
       self.bottom().clamp(0, size.height as i32),
     )
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::Size;
-
-  #[test]
-  fn aspect_ratio_fills_height_from_width() {
-    let filled = Size {
-      width: Some(10.0),
-      height: None,
-    }
-    .fill_missing_axis_from_aspect_ratio(Some(2.0));
-    assert_eq!(filled.width, Some(10.0));
-    assert_eq!(filled.height, Some(5.0));
-  }
-
-  #[test]
-  fn aspect_ratio_fills_width_from_height() {
-    let filled = Size {
-      width: None,
-      height: Some(10.0),
-    }
-    .fill_missing_axis_from_aspect_ratio(Some(2.0));
-    assert_eq!(filled.width, Some(20.0));
-    assert_eq!(filled.height, Some(10.0));
-  }
-
-  #[test]
-  fn aspect_ratio_leaves_both_known_and_both_unknown_untouched() {
-    let both = Size {
-      width: Some(3.0),
-      height: Some(4.0),
-    };
-    assert_eq!(both.fill_missing_axis_from_aspect_ratio(Some(2.0)), both);
-
-    let neither = Size::<Option<f32>>::NONE;
-    assert_eq!(
-      neither.fill_missing_axis_from_aspect_ratio(Some(2.0)),
-      neither
-    );
-  }
-
-  #[test]
-  fn no_aspect_ratio_is_a_noop() {
-    let one_axis = Size {
-      width: Some(10.0),
-      height: None,
-    };
-    assert_eq!(one_axis.fill_missing_axis_from_aspect_ratio(None), one_axis);
   }
 }

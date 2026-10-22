@@ -1,9 +1,10 @@
 //! Inline layout, ported from Blink's `core/layout/inline`.
 
-use taffy::{CollapsibleMarginSet, Line};
+use taffy::Line;
 
 use crate::{
   geometry::{Point, Size},
+  layout::margin_strut::MarginStrut,
   style::{AppliedTextDecorations, Color, TextDecorationSkipInk},
 };
 
@@ -50,12 +51,6 @@ pub(crate) mod text_fit_utils;
 mod unpositioned_list_marker;
 
 pub(crate) use self::items::InlineContentKind;
-pub(crate) use self::{
-  background::PaddingBox,
-  fragment_items::{ContentBox, InkBox},
-  items::InlineOutOfFlow,
-  outline::{OutlineIsland, RightAngleContour},
-};
 pub use self::{
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationLine,
@@ -67,6 +62,11 @@ pub use self::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
     RunMetrics, ShapedRun,
   },
+};
+pub(crate) use self::{
+  fragment_items::{ContentBox, InkBox},
+  items::InlineOutOfFlow,
+  outline::{OutlineIsland, RightAngleContour},
 };
 pub(crate) use cache::InlineLayoutCache;
 
@@ -90,7 +90,9 @@ pub struct InlineMeasurement {
   /// Whether a height or line limit may have dropped lines.
   pub(crate) clamped: bool,
   /// The margins collapsing out through the content's block-start and block-end edges.
-  pub(crate) margins: Line<CollapsibleMarginSet>,
+  pub(crate) margins: Line<MarginStrut>,
+  /// Whether no line box resolves the block offset, so the content collapses through.
+  pub(crate) is_self_collapsing: bool,
 }
 
 #[derive(Clone, PartialEq, Debug)]

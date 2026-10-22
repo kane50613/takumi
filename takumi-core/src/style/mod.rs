@@ -1,5 +1,5 @@
 mod animation;
-mod calc;
+pub(crate) mod calc;
 mod css_input;
 mod css_source;
 mod custom_properties;

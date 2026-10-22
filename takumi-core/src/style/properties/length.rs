@@ -7,10 +7,11 @@ pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
 };
 use crate::{
+  layout::layout_style::LayoutLength,
   layout_unit::LayoutUnit,
   style::{
     AspectRatio, FromCss, FromCssStr, MakeComputed, ParseResult, SizingContext, ToCss,
-    calc::{CalcLinear, CalcTerms, CalcUnit, CalcValue, parse_calc_sum},
+    calc::{CalcTerms, CalcUnit, CalcValue, parse_calc_sum},
     tw::Namespace,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
     unexpected_token,
@@ -436,11 +437,11 @@ impl Length {
     }
   }
 
-  /// Resolves to a taffy `CompactLength`, keeping percent and calc unresolved.
-  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
+  /// Resolves to a layout length, keeping percent and calc unresolved.
+  pub(crate) fn to_layout_length(self, sizing: &SizingContext) -> LayoutLength {
     match self {
-      Length::Auto => CompactLength::auto(),
-      Length::Percentage(value) => CompactLength::percent(clamp_px_for_integer_cast(value / 100.0)),
+      Length::Auto => LayoutLength::Auto,
+      Length::Percentage(value) => LayoutLength::Percent(clamp_px_for_integer_cast(value / 100.0)),
       Length::Rem(_)
       | Length::Em(_)
       | Length::Lh(_)
@@ -453,31 +454,32 @@ impl Length {
       | Length::CqMin(_)
       | Length::CqMax(_)
       | Length::VMin(_)
-      | Length::VMax(_) => CompactLength::length(self.to_px_pre_dpr(sizing, 0.0)),
+      | Length::VMax(_) => LayoutLength::Fixed(self.to_px_pre_dpr(sizing, 0.0)),
       Length::Calc(formula) => {
         let linear = formula.resolve(sizing);
         let px = clamp_px_for_integer_cast(linear.px);
         let percent = clamp_px_for_integer_cast(linear.percent);
 
         if is_near_zero(percent) {
-          return CompactLength::length(px);
+          return LayoutLength::Fixed(px);
         }
 
         if is_near_zero(px) {
-          return CompactLength::percent(percent);
+          return LayoutLength::Percent(percent);
         }
 
-        CompactLength::calc(
-          sizing
-            .calc_arena
-            .register_linear(CalcLinear { px, percent }),
-        )
+        LayoutLength::Calc { px, percent }
       }
-      _ => CompactLength::length(self.to_px(
+      _ => LayoutLength::Fixed(self.to_px(
         sizing,
         sizing.viewport.size.width.unwrap_or_default() as f32,
       )),
     }
+  }
+
+  /// Resolves to a taffy `CompactLength`, keeping percent and calc unresolved.
+  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
+    self.to_layout_length(sizing).to_compact_length(sizing)
   }
 
   /// Resolves to a taffy `LengthPercentage`, treating auto as zero.
