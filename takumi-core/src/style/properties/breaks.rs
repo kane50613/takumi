@@ -12,8 +12,8 @@ use crate::style::{
 
 /// A `break-before` / `break-after` value, Blink's `EBreakBetween`. The legacy
 /// `always` of `page-break-before` and `page-break-after` is `page`.
-/// Approximate: a sided break forces a page break without adding a blank page
-/// to start on the side it names.
+/// A sided break forces a page break, and like Blink adds no blank page to
+/// start on the side it names.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum BreakBetween {
