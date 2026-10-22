@@ -213,7 +213,7 @@ impl<'r> LayoutTree<'r> {
         || LayoutResult::new(LogicalSize::default()),
         TableLayoutAlgorithm::layout,
       ),
-      Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, false).layout(),
+      Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, false, input).layout(),
       Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, false).layout(),
       Algorithm::Replaced => self.lay_out_replaced(node, space),
       Algorithm::Block => BlockLayoutAlgorithm::new(self, node, space, input).layout(),
@@ -325,7 +325,14 @@ impl<'r> LayoutTree<'r> {
     }
 
     let mut result = match algorithm {
-      Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, true).compute_min_max_sizes(),
+      Algorithm::Flex => FlexLayoutAlgorithm::new(
+        self,
+        node,
+        space,
+        true,
+        &FragmentationLayoutInput::default(),
+      )
+      .compute_min_max_sizes(),
       Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, true).compute_min_max_sizes(),
       Algorithm::Table => {
         TableLayoutAlgorithm::new(self, node, space, &FragmentationLayoutInput::default())

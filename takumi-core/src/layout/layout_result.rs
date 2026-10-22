@@ -36,6 +36,9 @@ pub(crate) enum LayoutStatus {
   /// to break there.
   #[cfg(feature = "fragmentation")]
   NeedsEarlierBreak,
+  /// A flex row grew to fit its items on the page, so the container lays out again with it.
+  #[cfg(feature = "fragmentation")]
+  NeedsRelayoutWithRowCrossSizeChanges,
 }
 
 /// Blink's `LogicalStaticPosition::InlineEdge`.

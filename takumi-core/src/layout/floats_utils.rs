@@ -14,7 +14,7 @@ use crate::{
     break_appeal::BreakAppeal,
     constraint_space::BlockFragmentation,
     fragmentation_utils::{
-      adjust_margins_for_fragmentation, is_break_inside, move_past_breakpoint,
+      FlexItemBreak, adjust_margins_for_fragmentation, is_break_inside, move_past_breakpoint,
     },
     inline::{inline_break_token::InlineBreakToken, inline_item_text_index::InlineItemTextIndex},
     layout_style::LayoutStyle,
@@ -575,5 +575,6 @@ fn move_past_float_breakpoint(
     layout_result,
     fragmentainer_block_offset,
     BreakAppeal::Perfect,
+    &mut FlexItemBreak::default(),
   )
 }

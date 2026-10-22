@@ -24,7 +24,7 @@ use crate::{
     break_token_algorithm_data::BreakTokenAlgorithmData,
     fragmentation_layout_input::FragmentationLayoutInput,
     fragmentation_utils::{
-      adjust_margins_for_fragmentation, block_child_entries, break_before_child,
+      FlexItemBreak, adjust_margins_for_fragmentation, block_child_entries, break_before_child,
       break_before_child_if_needed, finish_fragmentation, fragment_index,
       fragmentation_layout_input_for_child, is_avoid_break_inside_value, is_break_inside,
       is_early_break_target, move_past_breakpoint, setup_space_builder_for_fragmentation,
@@ -308,6 +308,7 @@ impl TableLayoutAlgorithm<'_, '_> {
       result,
       fragmentainer_block_offset,
       BreakAppeal::LastResort,
+      &mut FlexItemBreak::default(),
     )
   }
 
@@ -319,7 +320,7 @@ impl TableLayoutAlgorithm<'_, '_> {
       self.space,
       &mut self.builder,
       Some((footer, &style)),
-      result,
+      Some(result),
       BreakAppeal::LastResort,
       false,
     );
@@ -400,7 +401,7 @@ impl TableLayoutAlgorithm<'_, '_> {
 
     match token.algorithm_data.as_ref()? {
       BreakTokenAlgorithmData::Table(data) => Some(data),
-      BreakTokenAlgorithmData::TableRow { .. } => None,
+      _ => None,
     }
   }
 
@@ -516,6 +517,7 @@ impl TableLayoutAlgorithm<'_, '_> {
       result,
       fragmentainer_block_offset,
       has_container_separation,
+      FlexItemBreak::default(),
     )
   }
 

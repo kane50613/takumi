@@ -1,11 +1,24 @@
 //! Blink's [`FlexLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/flex/flex_layout_algorithm.cc),
-//! in a horizontal writing mode, without fragmentation, gap decorations, `reading-flow`, scrollbars,
-//! `calc-size()`, or `box-flex` and `box-ordinal-group` for a `-webkit-box`. Every item's
+//! in a horizontal writing mode, without gap decorations, `reading-flow`, scrollbars, `calc-size()`,
+//! or `box-flex` and `box-ordinal-group` for a `-webkit-box`. Every item's
 //! baseline is alphabetic, and a column container synthesizes its items' baselines.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
+#[cfg(feature = "fragmentation")]
+mod fragmentation;
+
 use std::{cell::Cell, mem::take, rc::Rc};
+
+#[cfg(feature = "fragmentation")]
+pub(crate) use fragmentation::FlexBreakTokenData;
+#[cfg(feature = "fragmentation")]
+use fragmentation::{FlexFragmentation, flex_fragment_builder};
+
+#[cfg(feature = "fragmentation")]
+use crate::layout::box_fragment_builder::BoxFragmentBuilder;
+#[cfg(not(feature = "fragmentation"))]
+use crate::layout::out_of_flow::ContainingBlockClaims;
 
 use crate::{
   geometry::{NodeId, Point, Size},
@@ -17,9 +30,10 @@ use crate::{
       flex_line_breaker::break_flex_items_into_lines,
       line_flexer::LineFlexer,
     },
+    fragmentation_layout_input::FragmentationLayoutInput,
     layout_result::{
-      BlockEdge, InlineEdge, LayoutResult, LogicalAlignmentDirection, LogicalStaticPosition,
-      OutOfFlowCandidate,
+      BlockEdge, InlineEdge, LayoutResult, LayoutStatus, LogicalAlignmentDirection,
+      LogicalStaticPosition, OutOfFlowCandidate,
     },
     layout_style::{LayoutLength, LayoutStyle},
     length_utils::{
@@ -203,6 +217,15 @@ impl<T: Copy> FlexSides<T> {
       }
     }
   }
+
+  /// The block-end side: the main end of a column, the cross end of a row.
+  fn block_end(&self, is_column: bool) -> T {
+    if is_column {
+      self.main_end
+    } else {
+      self.cross_end
+    }
+  }
 }
 
 /// Blink's `FlexLayoutAlgorithm::Phase`.
@@ -311,16 +334,22 @@ pub(crate) struct FlexLayoutAlgorithm<'t, 'r> {
   out_of_flow: Vec<OutOfFlowCandidate>,
   first_baseline: Option<LayoutUnit>,
   last_baseline: Option<LayoutUnit>,
+  #[cfg(feature = "fragmentation")]
+  builder: BoxFragmentBuilder,
+  #[cfg(feature = "fragmentation")]
+  fragmentation: FlexFragmentation,
 }
 
 impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
-  /// The algorithm for `node` in `space`, with its intrinsic fragment geometry, an indefinite
-  /// inline size, when `is_intrinsic`.
+  /// The algorithm for `node` in `space`, resumed as `input` says, with its intrinsic fragment
+  /// geometry, an indefinite inline size, when `is_intrinsic`.
   pub(crate) fn new(
     tree: &'t mut LayoutTree<'r>,
     node: NodeId,
     space: &'t ConstraintSpace,
     is_intrinsic: bool,
+    #[cfg_attr(not(feature = "fragmentation"), expect(unused_variables))]
+    input: &FragmentationLayoutInput,
   ) -> Self {
     let style = Rc::clone(tree.layout_style_rc(node));
     let resolver = LengthResolver::new(space, &style);
@@ -389,6 +418,10 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
       out_of_flow: Vec::new(),
       first_baseline: None,
       last_baseline: None,
+      #[cfg(feature = "fragmentation")]
+      builder: flex_fragment_builder(space, &style, border_padding, inline_size, input),
+      #[cfg(feature = "fragmentation")]
+      fragmentation: FlexFragmentation::new(input),
       style,
     }
   }
@@ -1315,6 +1348,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
 
   /// Blink's `GiveItemsFinalPositionAndSize`.
   fn give_items_final_position_and_size(&mut self, flex_lines: &mut [FlexLine]) {
+    self.reset_row_break_between(flex_lines.len());
     if flex_lines.is_empty() {
       return;
     }
@@ -1416,6 +1450,9 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
           Some(line.line_cross_size),
         );
         let result = self.tree.layout(item.node, &child_space);
+
+        self.join_row_break_between(&line, line_index, item_index, &item_style, &result);
+
         let cross_axis_size = if self.is_column {
           result.size.inline_size
         } else {
@@ -1502,8 +1539,20 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
           + space_between_items.next()
           + self.gap_between_items;
 
-        baselines.accumulate_item(&result, offset.block_offset, is_first_line, is_last_line);
-        self.add_result(item.node, result, offset);
+        // A container that breaks lays its items out on each page from where they sit here.
+        if self.is_involved_in_block_fragmentation() {
+          Self::keep_item_for_fragmentation(
+            flex_line,
+            &item,
+            item_index,
+            offset,
+            margin.block_end(self.is_column),
+            &result,
+          );
+        } else {
+          baselines.accumulate_item(&result, offset.block_offset, is_first_line, is_last_line);
+          self.add_result(item.node, result, offset);
+        }
       }
 
       line_cross_axis_offset +=
@@ -1562,8 +1611,13 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
   }
 
   /// Blink's `HandleOutOfFlowPositionedItems`: each out-of-flow child's static position in the
-  /// content box, aligned by `justify-content` and its own `align-self`.
-  fn handle_out_of_flow_positioned_items(&mut self, children: Vec<NodeId>) {
+  /// content box, aligned by `justify-content` and its own `align-self`. Returns the children a
+  /// later page places, at a block end or center this fragment does not reach.
+  fn handle_out_of_flow_positioned_items(
+    &mut self,
+    total_intrinsic_block_size: LayoutUnit,
+    children: Vec<NodeId>,
+  ) -> Vec<NodeId> {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum AxisEdge {
       Start,
@@ -1571,6 +1625,14 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
       End,
     }
 
+    if children.is_empty() {
+      return children;
+    }
+
+    let (should_process_block_end, should_process_block_center) =
+      self.out_of_flow_block_edges(total_intrinsic_block_size);
+    let previously_consumed_block_size = self.previously_consumed_block_size();
+    let mut held = Vec::new();
     let inline_size = self.inline_size.unwrap_or_default();
     let content_size = LogicalSize::new(
       (inline_size - self.border_padding.inline_sum()).clamp_negative_to_zero(),
@@ -1630,9 +1692,17 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
 
       match block_axis_edge {
         AxisEdge::Start => static_position.block_edge = BlockEdge::Start,
+        AxisEdge::Center if !should_process_block_center => {
+          held.push(child);
+          continue;
+        }
         AxisEdge::Center => {
           static_position.block_edge = BlockEdge::Center;
           static_position.offset.block_offset += content_size.block_size / 2;
+        }
+        AxisEdge::End if !should_process_block_end => {
+          held.push(child);
+          continue;
         }
         AxisEdge::End => {
           static_position.block_edge = BlockEdge::End;
@@ -1652,34 +1722,53 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
         }
       }
 
+      static_position.offset.block_offset -= previously_consumed_block_size;
       self.out_of_flow.push(OutOfFlowCandidate::new(
         child,
         static_position.to_physical(self.direction(), inline_size),
       ));
     }
+    held
   }
 
-  /// Blink's `Layout`.
+  /// Blink's `Layout`: the container laid out, again when fragmentation asks for it.
   pub(crate) fn layout(mut self) -> LayoutResult {
-    let (mut flex_lines, out_of_flow, total_intrinsic_block_size) =
-      self.place_flex_items(Phase::Layout);
+    match self.layout_internal() {
+      Ok(result) => result,
+      Err(status) => self.relayout(status),
+    }
+  }
+
+  /// Blink's `LayoutInternal`.
+  fn layout_internal(&mut self) -> Result<LayoutResult, LayoutStatus> {
+    let (mut flex_lines, out_of_flow, mut total_intrinsic_block_size) = match self.resumed_lines() {
+      Some(resumed) => resumed,
+      None => self.place_flex_items(Phase::Layout),
+    };
     let inline_size = self.inline_size.unwrap_or_default();
     let style = Rc::clone(&self.style);
-    let resolver = LengthResolver::new(self.space, &style);
+    let mut resolver = LengthResolver::new(self.space, &style);
 
+    resolver.border_padding = self.border_padding_for_size(resolver.border_padding);
     self.total_block_size = resolver
       .block_size_for_fragment(Some(total_intrinsic_block_size), Some(inline_size), None)
       .unwrap_or(total_intrinsic_block_size);
-    self.apply_reversals(&mut flex_lines);
-    self.give_items_final_position_and_size(&mut flex_lines);
-    self.handle_out_of_flow_positioned_items(out_of_flow);
+    if !self.is_resuming() {
+      self.apply_reversals(&mut flex_lines);
+      self.give_items_final_position_and_size(&mut flex_lines);
+    }
 
-    let size = LogicalSize::new(inline_size, self.total_block_size);
+    let block_size = self.fragment_block_size(&mut flex_lines, &mut total_intrinsic_block_size)?;
+    let held_out_of_flow =
+      self.handle_out_of_flow_positioned_items(total_intrinsic_block_size, out_of_flow);
+
+    self.keep_break_token_data(flex_lines, held_out_of_flow, total_intrinsic_block_size);
+
+    let size = LogicalSize::new(inline_size, block_size);
     let mut result = LayoutResult::of_box(size, &style, self.space);
 
     if !self.out_of_flow.is_empty() {
       let claims = self.tree.claims(self.node);
-      let candidates = take(&mut self.out_of_flow);
       let containing_block = ContainingBlock::padding_box(
         Size {
           width: size.inline_size,
@@ -1688,27 +1777,43 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
         style.border,
       );
 
-      self.out_of_flow =
-        self
-          .tree
-          .lay_out_out_of_flow(self.node, claims, candidates, containing_block, self.space);
-    }
+      if self.defers_out_of_flow() {
+        self.defer_out_of_flow_children(claims, containing_block);
+      } else {
+        let candidates = take(&mut self.out_of_flow);
 
-    if self.space.cache_slot == CacheSlot::Layout {
-      for child in take(&mut self.children) {
-        self
-          .tree
-          .place_child(child.node, 0, 0, child.location, &child.result);
+        self.out_of_flow = self.tree.lay_out_out_of_flow(
+          self.node,
+          claims,
+          candidates,
+          containing_block,
+          self.space,
+        );
       }
     }
 
-    result.intrinsic_block_size = total_intrinsic_block_size;
+    if self.space.cache_slot == CacheSlot::Layout {
+      let fragment_index = self.fragment_index();
+
+      for child in take(&mut self.children) {
+        self.tree.place_child(
+          child.node,
+          child.result.fragment_index(),
+          fragment_index,
+          child.location,
+          &child.result,
+        );
+      }
+    }
+
+    result.intrinsic_block_size = self.fragment_intrinsic_block_size(total_intrinsic_block_size);
     result.bfc_line_offset = self.space.bfc_offset.line_offset;
     result.bfc_block_offset = Some(self.space.bfc_offset.block_offset);
     result.first_baseline = self.first_baseline;
     result.last_baseline = self.last_baseline;
-    result.out_of_flow = self.out_of_flow;
-    result
+    result.out_of_flow = take(&mut self.out_of_flow);
+    self.finish_break_info(&mut result);
+    Ok(result)
   }
 
   /// Blink's `ComputeMinMaxSizes`.
@@ -1862,5 +1967,99 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     container_sizes.encompass(LayoutUnit::ZERO);
     container_sizes += self.border_padding.inline_sum();
     MinMaxSizesResult::new(container_sizes, depends_on_block_constraints)
+  }
+}
+
+/// The block fragmentation hooks without the `fragmentation` feature, where nothing breaks.
+#[cfg(not(feature = "fragmentation"))]
+impl FlexLayoutAlgorithm<'_, '_> {
+  fn is_involved_in_block_fragmentation(&self) -> bool {
+    false
+  }
+
+  fn is_resuming(&self) -> bool {
+    false
+  }
+
+  fn fragment_index(&self) -> usize {
+    0
+  }
+
+  fn border_padding_for_size(&self, border_padding: LogicalBoxStrut) -> LogicalBoxStrut {
+    border_padding
+  }
+
+  fn previously_consumed_block_size(&self) -> LayoutUnit {
+    LayoutUnit::ZERO
+  }
+
+  fn resumed_lines(&mut self) -> Option<(Vec<FlexLine>, Vec<NodeId>, LayoutUnit)> {
+    None
+  }
+
+  fn reset_row_break_between(&mut self, _line_count: usize) {}
+
+  fn join_row_break_between(
+    &mut self,
+    _line: &FlexLine,
+    _line_index: usize,
+    _item_index: usize,
+    _item_style: &LayoutStyle,
+    _result: &LayoutResult,
+  ) {
+  }
+
+  fn keep_item_for_fragmentation(
+    _flex_line: &mut FlexLine,
+    _item: &FlexItem,
+    _item_index: usize,
+    _offset: LogicalOffset,
+    _margin_block_end: LayoutUnit,
+    _result: &LayoutResult,
+  ) {
+  }
+
+  fn fragment_block_size(
+    &mut self,
+    _flex_lines: &mut [FlexLine],
+    _total_intrinsic_block_size: &mut LayoutUnit,
+  ) -> Result<LayoutUnit, LayoutStatus> {
+    Ok(self.total_block_size)
+  }
+
+  fn fragment_intrinsic_block_size(&self, total_intrinsic_block_size: LayoutUnit) -> LayoutUnit {
+    total_intrinsic_block_size
+  }
+
+  fn keep_break_token_data(
+    &mut self,
+    _flex_lines: Vec<FlexLine>,
+    _out_of_flow_children: Vec<NodeId>,
+    _intrinsic_block_size: LayoutUnit,
+  ) {
+  }
+
+  fn out_of_flow_block_edges(&mut self, _total_intrinsic_block_size: LayoutUnit) -> (bool, bool) {
+    (true, true)
+  }
+
+  fn defers_out_of_flow(&self) -> bool {
+    false
+  }
+
+  fn defer_out_of_flow_children(
+    &mut self,
+    _claims: ContainingBlockClaims,
+    _containing_block: ContainingBlock,
+  ) {
+  }
+
+  fn finish_break_info(&mut self, _result: &mut LayoutResult) {}
+
+  fn relayout(self, status: LayoutStatus) -> LayoutResult {
+    let mut result = LayoutResult::new(LogicalSize::default());
+
+    result.status = status;
+    result
   }
 }

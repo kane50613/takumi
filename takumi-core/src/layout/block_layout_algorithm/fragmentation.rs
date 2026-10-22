@@ -2,7 +2,7 @@
 //! [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc)
 //! and the parts of
 //! [`fragmentation_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/fragmentation_utils.cc)
-//! that read the fragment builder, for pages alone. Approximate: flex and grid boxes do not break.
+//! that read the fragment builder, for pages alone. Approximate: grid boxes do not break.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -19,7 +19,7 @@ use crate::{
     floats_utils::{FloatFragmentation, PositionedFloat, UnpositionedFloat},
     fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     fragmentation_utils::{
-      adjust_margins_for_fragmentation, adjusted_margin_after_final_child_fragment,
+      FlexItemBreak, adjust_margins_for_fragmentation, adjusted_margin_after_final_child_fragment,
       attempt_soft_break, block_child_entries, break_before_child, calculate_break_appeal_before,
       calculate_break_between_value, finish_fragmentation, fragment_index,
       fragmentation_layout_input_for_child, is_break_inside, is_early_break_target,
@@ -502,7 +502,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
           self.space,
           &mut self.builder,
           child,
-          result,
+          Some(result),
           BreakAppeal::Perfect,
           true,
         );
@@ -527,6 +527,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
         result,
         fragmentainer_block_offset,
         appeal_before,
+        &mut FlexItemBreak::default(),
       )
     {
       return Ok(false);
@@ -568,7 +569,14 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       self.fit_all_lines = true;
     }
 
-    if !attempt_soft_break(self.space, &mut self.builder, child, result, appeal_before) {
+    if !attempt_soft_break(
+      self.space,
+      &mut self.builder,
+      child,
+      Some(result),
+      appeal_before,
+      &FlexItemBreak::default(),
+    ) {
       return Err(LayoutStatus::NeedsEarlierBreak);
     }
     self.consume_remaining_fragmentainer_space(previous);
