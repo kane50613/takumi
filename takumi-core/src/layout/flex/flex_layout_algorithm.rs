@@ -5,7 +5,7 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::{cell::Cell, rc::Rc};
+use std::{cell::Cell, mem::take, rc::Rc};
 
 use crate::{
   geometry::{NodeId, Point, Size},
@@ -1757,7 +1757,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
 
     if !self.out_of_flow.is_empty() {
       let claims = self.tree.claims(self.node);
-      let candidates = std::mem::take(&mut self.out_of_flow);
+      let candidates = take(&mut self.out_of_flow);
       let containing_block = ContainingBlock::padding_box(
         Size {
           width: size.inline_size,
@@ -1773,7 +1773,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     }
 
     if self.space.cache_slot == CacheSlot::Layout {
-      for child in std::mem::take(&mut self.children) {
+      for child in take(&mut self.children) {
         self
           .tree
           .place_child(child.node, child.location, &child.result);
