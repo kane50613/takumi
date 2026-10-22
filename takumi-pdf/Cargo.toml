@@ -89,3 +89,7 @@ pretty_assertions.workspace = true
 [[bench]]
 name = "images"
 harness = false
+
+[[bench]]
+name = "pagination"
+harness = false
