@@ -1007,7 +1007,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       let location = Point::new(caption.margins.left, *offset);
 
       if perform {
-        tree.place_child(caption.node, location, &caption.result);
+        tree.place_child(caption.node, 0, location, &caption.result);
       }
       out_of_flow.extend(
         caption
@@ -1303,7 +1303,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
 
       self
         .tree
-        .place_child(cell.node, Point::new(x, LayoutUnit::ZERO), &result);
+        .place_child(cell.node, 0, Point::new(x, LayoutUnit::ZERO), &result);
       out_of_flow.extend(
         result
           .out_of_flow
@@ -1372,7 +1372,9 @@ impl LayoutTree<'_> {
           Rect::default(),
           Rect::default(),
         ),
-        ..BoxFragment::default()
+        is_line_clamp_clipped_float: false,
+        #[cfg(feature = "fragmentation")]
+        container_fragment_index: 0,
       },
     );
   }

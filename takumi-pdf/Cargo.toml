@@ -73,7 +73,7 @@ optional = true
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["woff2", "png"]
+features = ["woff2", "png", "fragmentation"]
 
 
 [lints]

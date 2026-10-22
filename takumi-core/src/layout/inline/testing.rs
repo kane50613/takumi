@@ -9,6 +9,7 @@ use crate::{
   layout::{
     block_layout_algorithm::BlockLayoutAlgorithm,
     constraint_space::{AutoSizeBehavior, ConstraintSpace},
+    fragmentation_layout_input::FragmentationLayoutInput,
     inline::{
       atomic_inline::BoxAtomicInline, inline_item_result::LayoutResult,
       inline_layout_algorithm::LineBoxFragment, inline_node_data::InlineNodeData,
@@ -120,7 +121,12 @@ pub(crate) fn read_lines<'r, R>(
   let mut ignore_line_clamp = false;
 
   loop {
-    let mut algorithm = BlockLayoutAlgorithm::new(&mut tree, NodeId::ROOT, &space);
+    let mut algorithm = BlockLayoutAlgorithm::new(
+      &mut tree,
+      NodeId::ROOT,
+      &space,
+      &FragmentationLayoutInput::default(),
+    );
 
     if ignore_line_clamp {
       algorithm = algorithm.ignoring_line_clamp();

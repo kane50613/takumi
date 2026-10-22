@@ -6,6 +6,15 @@ use std::{
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
+#[cfg(all(test, feature = "fragmentation"))]
+use crate::layout::{
+  block_break_token::BlockBreakToken,
+  break_appeal::BreakAppeal,
+  constraint_space::BlockFragmentation,
+  fragmentation_layout_input::FragmentationLayoutInput,
+  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index},
+};
+
 use crate::{
   Error,
   context::RenderContext,
@@ -218,6 +227,21 @@ impl LayoutResults {
       .is_some_and(|node| node.fragments[0].is_line_clamp_clipped_float)
   }
 
+  /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.
+  #[cfg(all(test, feature = "fragmentation"))]
+  pub(crate) fn compute_pages(root: &RenderNode, page_size: Size<f32>) -> (Self, usize) {
+    let mut tree = LayoutTree::from_render_node(root);
+    let page_count = tree.compute_pages(page_size);
+
+    (tree.into_results(), page_count)
+  }
+
+  /// Each fragment of `node_id`, by fragment index.
+  #[cfg(all(test, feature = "fragmentation"))]
+  pub(crate) fn fragments(&self, node_id: NodeId) -> crate::Result<&[BoxFragment]> {
+    self.node(node_id).map(|node| node.fragments.as_slice())
+  }
+
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
     self
       .nodes
@@ -364,6 +388,10 @@ pub(crate) struct BoxFragment {
   pub(crate) layout: ComputedLayout,
   /// Blink's `IsLineClampClippedFloat` of the layout that placed it.
   pub(crate) is_line_clamp_clipped_float: bool,
+  /// Which of the parent's fragments holds it, as Blink's `PhysicalFragmentLink` in that
+  /// fragment's children says.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) container_fragment_index: usize,
 }
 
 /// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as
@@ -791,6 +819,56 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
+  /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes, `@page`, or out-of-flow boxes the
+  /// initial containing block holds: the root laid out a page `page_size` at a time, each page
+  /// resuming where the one before broke. Returns the page count.
+  #[cfg(all(test, feature = "fragmentation"))]
+  pub(crate) fn compute_pages(&mut self, page_size: Size<f32>) -> usize {
+    let page_block_size = LayoutUnit::from_float(page_size.height);
+    let mut break_token: Option<Rc<BlockBreakToken>> = None;
+    let mut page_count = 0;
+
+    loop {
+      let mut space = self.root_space(page_size.map(AvailableSpace::Definite));
+      let mut margins = margins_for(
+        self.layout_style(NodeId::ROOT),
+        space.percentage_resolution_inline_size,
+        Direction::Ltr,
+      );
+
+      adjust_margins_for_fragmentation(break_token.as_deref(), false, &mut margins);
+      space.block_fragmentation = Some(BlockFragmentation {
+        fragmentainer_block_size: page_block_size,
+        fragmentainer_offset: margins.block_start,
+        requires_content_before_breaking: false,
+        should_propagate_child_break_values: true,
+        min_break_appeal: BreakAppeal::LastResort,
+      });
+
+      let input = FragmentationLayoutInput {
+        break_token: break_token.clone(),
+        early_break: None,
+      };
+      let result = self.layout_fragment(NodeId::ROOT, &space, &input);
+      let fragment_index = fragment_index(break_token.as_deref());
+
+      self.place_child(
+        NodeId::ROOT,
+        fragment_index,
+        Point::new(margins.inline_start, margins.block_start),
+        &result,
+      );
+      self.node_state_mut(NodeId::ROOT).fragments[fragment_index].container_fragment_index =
+        page_count;
+      page_count += 1;
+      break_token = result.break_info.break_token.clone();
+
+      if break_token.is_none() {
+        return page_count;
+      }
+    }
+  }
+
   /// Computes the layout for the whole tree: the root at its margin edge's offset in
   /// `available_space`, which is the initial containing block of the out-of-flow boxes no other
   /// box contains.
@@ -828,7 +906,7 @@ impl<'r> LayoutTree<'r> {
       )
     };
 
-    self.place_child(NodeId::ROOT, location, &result);
+    self.place_child(NodeId::ROOT, 0, location, &result);
 
     if result.out_of_flow.is_empty() {
       return;

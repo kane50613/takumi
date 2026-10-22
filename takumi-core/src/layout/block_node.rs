@@ -12,6 +12,7 @@ use crate::{
     block_layout_algorithm::{BlockLayoutAlgorithm, block_min_max_sizes},
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
     flex::flex_layout_algorithm::FlexLayoutAlgorithm,
+    fragmentation_layout_input::FragmentationLayoutInput,
     grid::grid_layout_algorithm::GridLayoutAlgorithm,
     inline::{
       atomic_inline::BoxAtomicInline, inline_layout_algorithm::LineBoxFragment,
@@ -122,6 +123,17 @@ enum Algorithm {
 impl<'r> LayoutTree<'r> {
   /// Blink's `BlockNode::Layout`: the box `node` laid out in `space`, or the layout it kept for it.
   pub(crate) fn layout(&mut self, node: NodeId, space: &ConstraintSpace) -> Rc<LayoutResult> {
+    self.layout_fragment(node, space, &FragmentationLayoutInput::default())
+  }
+
+  /// [`Self::layout`] resuming the box as `input` says. Approximate: only a fresh layout is cached,
+  /// where Blink keeps one per fragment.
+  pub(crate) fn layout_fragment(
+    &mut self,
+    node: NodeId,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> Rc<LayoutResult> {
     self.restyle_for_container(
       node,
       Size {
@@ -130,7 +142,9 @@ impl<'r> LayoutTree<'r> {
       },
     );
 
-    if let Some(result) = self.node_state(node).cache.get(space) {
+    if input.is_fresh()
+      && let Some(result) = self.node_state(node).cache.get(space)
+    {
       return result;
     }
 
@@ -141,17 +155,22 @@ impl<'r> LayoutTree<'r> {
     // Blink's `BoxFragmentBuilder` takes the flag from the space whatever algorithm runs.
     let result = Rc::new(LayoutResult {
       is_line_clamp_clipped_float: space.is_line_clamp_clipped_float,
-      ..self.run_algorithm(node, space)
+      ..self.run_algorithm(node, space, input)
     });
 
-    if result.status == LayoutStatus::Success {
+    if result.status == LayoutStatus::Success && input.is_fresh() {
       self.node_state_mut(node).cache.store(space, &result);
     }
     result
   }
 
   /// Blink's `DetermineAlgorithmAndRun`.
-  fn run_algorithm(&mut self, node: NodeId, space: &ConstraintSpace) -> LayoutResult {
+  fn run_algorithm(
+    &mut self,
+    node: NodeId,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> LayoutResult {
     match self.algorithm(node) {
       Algorithm::Hidden => {
         if space.cache_slot == CacheSlot::Layout {
@@ -166,7 +185,7 @@ impl<'r> LayoutTree<'r> {
       Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, false).layout(),
       Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, false).layout(),
       Algorithm::Replaced => self.lay_out_replaced(node, space),
-      Algorithm::Block => BlockLayoutAlgorithm::new(self, node, space).layout(),
+      Algorithm::Block => BlockLayoutAlgorithm::new(self, node, space, input).layout(),
     }
   }
 
@@ -399,6 +418,17 @@ impl<'r> LayoutTree<'r> {
       )
   }
 
+  /// Blink's `LayoutBox::IsMonolithic` when printing: replaced content, an atomic inline, or a
+  /// line-clamp container, which no page break splits.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn is_monolithic(&self, node: NodeId) -> bool {
+    let state = self.node_state(node);
+
+    state.layout_style.is_replaced
+      || state.is_atomic_inline
+      || self.render_node(node).context.style.line_clamp().is_some()
+  }
+
   /// Whether `node` lays inline content out: its children form an inline formatting context, or
   /// it is a childless text or inline box laid out as a block.
   pub(crate) fn has_inline_children(&self, node: NodeId) -> bool {
@@ -425,19 +455,23 @@ impl<'r> LayoutTree<'r> {
     self.node_state(node).claims
   }
 
-  /// Places `node`, laid out as `result`, with its border box at `location` in its parent's.
+  /// Places `node`'s fragment `fragment_index`, laid out as `result`, with its border box at
+  /// `location` in its parent's.
   pub(crate) fn place_child(
     &mut self,
     node: NodeId,
+    fragment_index: usize,
     location: Point<LayoutUnit>,
     result: &LayoutResult,
   ) {
     self.set_fragment(
       node,
-      0,
+      fragment_index,
       BoxFragment {
         layout: result.computed_layout(location),
         is_line_clamp_clipped_float: result.is_line_clamp_clipped_float,
+        #[cfg(feature = "fragmentation")]
+        container_fragment_index: 0,
       },
     );
   }
@@ -537,7 +571,7 @@ impl<'r> LayoutTree<'r> {
         );
         let tree = &mut *atomic_inline.tree;
 
-        tree.place_child(child, location, &child_result);
+        tree.place_child(child, 0, location, &child_result);
         if let Some(path) = render_node.inline_child_path(child_render_node) {
           tree.add_inline_box_child(node, child, &path);
         }

@@ -1,10 +1,18 @@
 /// Tile geometry of background and mask layers.
 pub mod background_image_geometry;
 pub(crate) mod bfc_rect;
+#[cfg(feature = "fragmentation")]
+pub(crate) mod block_break_token;
 pub(crate) mod block_layout_algorithm;
 pub(crate) mod block_node;
 /// Backend-agnostic border geometry shared across rasterization backends.
 pub mod border;
+#[cfg(feature = "fragmentation")]
+pub(crate) mod box_fragment_builder;
+#[cfg(feature = "fragmentation")]
+pub(crate) mod break_appeal;
+#[cfg(feature = "fragmentation")]
+pub(crate) mod break_token;
 pub mod clip;
 pub(crate) mod constraint_space;
 pub(crate) mod content_alignment;
@@ -12,9 +20,16 @@ pub(crate) mod contoured_rect;
 pub(crate) mod corner_shape;
 /// Backend-agnostic box-decoration clip geometry.
 pub mod decoration;
+#[cfg(feature = "fragmentation")]
+pub(crate) mod early_break;
 pub(crate) mod exclusions;
 pub(crate) mod flex;
 pub(crate) mod floats_utils;
+pub(crate) mod fragmentation_layout_input;
+#[cfg(all(test, feature = "fragmentation"))]
+mod fragmentation_tests;
+#[cfg(feature = "fragmentation")]
+pub(crate) mod fragmentation_utils;
 pub(crate) mod grid;
 /// Inline-level layout: text shaping, line breaking, and text fitting.
 pub mod inline;
