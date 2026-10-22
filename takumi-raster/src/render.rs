@@ -321,18 +321,9 @@ fn resolve_at_time(
 }
 
 #[cfg(test)]
-fn resolve_scene_at_time<'a, 'g>(
-  scenes: &'a [SequentialScene<'g>],
-  time_ms: u64,
-) -> Option<(&'a SequentialScene<'g>, u64)> {
-  resolve_at_time(scenes.len(), |index| scenes[index].duration_ms, time_ms)
-    .map(|(index, local_time_ms)| (&scenes[index], local_time_ms))
-}
-
-#[cfg(test)]
 mod tests {
 
-  use super::{RenderOptions, SequentialScene, render, render_animation, resolve_scene_at_time};
+  use super::{RenderOptions, SequentialScene, render, render_animation, resolve_at_time};
   use crate::{
     Fonts,
     layout::node::Node,
@@ -344,6 +335,14 @@ mod tests {
     },
     viewport::Viewport,
   };
+
+  fn resolve_scene_at_time<'a, 'g>(
+    scenes: &'a [SequentialScene<'g>],
+    time_ms: u64,
+  ) -> Option<(&'a SequentialScene<'g>, u64)> {
+    resolve_at_time(scenes.len(), |index| scenes[index].duration_ms, time_ms)
+      .map(|(index, local_time_ms)| (&scenes[index], local_time_ms))
+  }
 
   fn make_scene<'g>(fonts: &'g Fonts, duration_ms: u32) -> SequentialScene<'g> {
     let options = RenderOptions::builder()

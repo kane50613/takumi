@@ -36,18 +36,6 @@ impl FontSelectionValue {
   pub(crate) fn raw_value(self) -> i16 {
     self.backing
   }
-
-  #[cfg(test)]
-  /// Blink's `MaximumValue`.
-  pub(crate) const fn maximum_value() -> Self {
-    Self::from_raw(i16::MAX)
-  }
-
-  #[cfg(test)]
-  /// Blink's `MinimumValue`.
-  pub(crate) const fn minimum_value() -> Self {
-    Self::from_raw(i16::MIN)
-  }
 }
 
 // Blink narrows the `int` sum back to `int16_t`, which wraps.
@@ -95,9 +83,6 @@ pub(crate) const ITALIC_SLOPE_VALUE: FontSelectionValue = FontSelectionValue::ne
 /// Blink's `kBoldThreshold`.
 pub(crate) const BOLD_THRESHOLD: FontSelectionValue = FontSelectionValue::new(600.0);
 #[cfg(test)]
-/// Blink's `kBlackWeightValue`.
-pub(crate) const BLACK_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(900.0);
-#[cfg(test)]
 /// Blink's `kBoldWeightValue`.
 pub(crate) const BOLD_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(700.0);
 #[cfg(test)]
@@ -105,12 +90,6 @@ pub(crate) const BOLD_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new
 pub(crate) const MEDIUM_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(500.0);
 /// Blink's `kNormalWeightValue`.
 pub(crate) const NORMAL_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(400.0);
-#[cfg(test)]
-/// Blink's `kLightWeightValue`.
-pub(crate) const LIGHT_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(300.0);
-#[cfg(test)]
-/// Blink's `kThinWeightValue`.
-pub(crate) const THIN_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(100.0);
 
 /// Blink's `kUpperWeightSearchThreshold`.
 pub(crate) const UPPER_WEIGHT_SEARCH_THRESHOLD: FontSelectionValue = FontSelectionValue::new(500.0);
@@ -322,6 +301,25 @@ mod tests {
   };
 
   use super::*;
+
+  /// Blink's `kBlackWeightValue`.
+  const BLACK_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(900.0);
+  /// Blink's `kLightWeightValue`.
+  const LIGHT_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(300.0);
+  /// Blink's `kThinWeightValue`.
+  const THIN_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(100.0);
+
+  impl FontSelectionValue {
+    /// Blink's `MaximumValue`.
+    const fn maximum_value() -> Self {
+      Self::from_raw(i16::MAX)
+    }
+
+    /// Blink's `MinimumValue`.
+    const fn minimum_value() -> Self {
+      Self::from_raw(i16::MIN)
+    }
+  }
 
   #[test]
   fn hash_collisions() {
