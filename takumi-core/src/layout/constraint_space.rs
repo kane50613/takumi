@@ -11,6 +11,7 @@ use crate::{
   layout::{
     bfc_rect::BfcOffset, exclusions::exclusion_space::ExclusionSpace,
     line_clamp_data::LineClampData, logical_rect::AvailableLogicalSize, margin_strut::MarginStrut,
+    table::TablePartSpace,
   },
   layout_unit::LayoutUnit,
   style::Direction,
@@ -99,6 +100,8 @@ pub(crate) struct ConstraintSpace {
   pub(crate) cache_slot: CacheSlot,
   /// Blink's `IgnoreMarginsForStretch` on the block start and end.
   pub(crate) ignore_block_margins_for_stretch: (bool, bool),
+  /// The table section or row the space lays out, with the grid its table computed.
+  pub(crate) table_part: Option<TablePartSpace>,
   /// Blink's block fragmentation fields, none outside a fragmentation context.
   #[cfg(feature = "fragmentation")]
   pub(crate) block_fragmentation: Option<BlockFragmentation>,
@@ -152,6 +155,7 @@ impl ConstraintSpace {
       baseline_algorithm: BaselineAlgorithmType::Default,
       cache_slot: CacheSlot::Layout,
       ignore_block_margins_for_stretch: (false, false),
+      table_part: None,
       #[cfg(feature = "fragmentation")]
       block_fragmentation: None,
     }

@@ -1,17 +1,16 @@
-//! A table laid out in one pass over its parts: Blink's
+//! Blink's
 //! [`TableLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/table/table_layout_algorithm.cc),
-//! with the `TableSectionLayoutAlgorithm` and `TableRowLayoutAlgorithm` it runs folded in, under
-//! the notice in LICENSE-CHROMIUM.
+//! which lays its sections out through their own algorithm, under the notice in LICENSE-CHROMIUM.
 //!
 //! Naive next to Blink: a cell's percentage-height descendants are not tracked, so a row's
 //! baseline is always the one measured before the rows grow, and alignment moves a cell's
 //! content by growing its padding, so a `content-box` background and the measured runs of the
 //! cell's own text start at the moved content.
 
-use std::rc::Rc;
+use std::{iter, rc::Rc};
 
 use crate::{
-  geometry::{ComputedLayout, NodeId, Point, Rect, Size},
+  geometry::{NodeId, Point, Size},
   layout::{
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
     content_alignment::BlockContentAlignment,
@@ -25,17 +24,18 @@ use crate::{
       borders::TableBorders,
       columns::{
         CellInlineConstraint, ColspanCell, ColumnConstraints, ColumnLocation,
-        TABLE_MAX_INLINE_SIZE, TableLength,
+        TABLE_MAX_INLINE_SIZE, TableLength, span_inline_size,
       },
+      constraint_space_data::{TableConstraintSpaceData, TablePart},
       fragment::TableFragment,
       parts::TableGroupedChildren,
       rows::{
-        CellBlockConstraint, ColspanCellTabulator, Row, RowBaselineTabulator, RowspanCell, Section,
-        cell_block_size, distribute_rowspan_cell_to_rows,
+        CellBlockConstraint, CellMeasure, ColspanCellTabulator, Row, RowBaselineTabulator, Rows,
+        RowspanCell, Section, distribute_rowspan_cell_to_rows,
         distribute_section_fixed_block_size_to_rows, distribute_table_block_size_to_sections,
       },
     },
-    tree::{BoxFragment, LayoutTree, RenderNode, TableBoxStyle},
+    tree::{LayoutTree, RenderNode, TableBoxStyle},
   },
   layout_unit::{BoxStrut, LayoutUnit},
   style::{
@@ -89,13 +89,6 @@ struct CaptionResult {
   result: Rc<LayoutResult>,
   margins: BoxStrut,
   is_bottom: bool,
-}
-
-/// One cell's measure-pass size and baseline.
-#[derive(Clone, Copy)]
-struct CellMeasure {
-  block_size: LayoutUnit,
-  first_baseline: Option<LayoutUnit>,
 }
 
 impl<'r> LayoutTree<'r> {
@@ -334,7 +327,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       table_inline_size,
       minimal_grid_block_size,
       &column_locations,
-      &rows,
+      rows,
       &captions,
       spacing,
     )
@@ -940,8 +933,8 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
   ) -> CellMeasure {
     self.tree.set_table_cell_aligned_padding(cell.node, None);
 
-    let space = self.cell_space(
-      cell.node,
+    let space = ConstraintSpace::for_table_cell(
+      self.tree.layout_style(cell.node).direction,
       inline_size,
       None,
       false,
@@ -956,30 +949,6 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     }
   }
 
-  /// Blink's `SetupTableCellConstraintSpaceBuilder`: a space fixing the cell's inline size, and
-  /// its block size when there is one.
-  fn cell_space(
-    &self,
-    cell: NodeId,
-    inline_size: LayoutUnit,
-    block_size: Option<LayoutUnit>,
-    is_initial_block_size_indefinite: bool,
-    percentage_inline_size: LayoutUnit,
-    cache_slot: CacheSlot,
-  ) -> ConstraintSpace {
-    let mut space = ConstraintSpace::new(Some(inline_size), self.tree.layout_style(cell).direction);
-
-    space.is_new_formatting_context = true;
-    space.is_table_cell = true;
-    space.is_fixed_inline_size = true;
-    space.available_block_size = block_size;
-    space.is_fixed_block_size = block_size.is_some();
-    space.is_initial_block_size_indefinite = is_initial_block_size_indefinite;
-    space.percentage_resolution_inline_size = Some(percentage_inline_size);
-    space.cache_slot = cache_slot;
-    space
-  }
-
   /// Blink's `TableLayoutAlgorithm::GenerateFragment`, with each section and row placed as
   /// Blink's section and row algorithms place them.
   fn generate(
@@ -987,7 +956,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     table_inline_size: LayoutUnit,
     minimal_grid_block_size: LayoutUnit,
     column_locations: &[ColumnLocation],
-    rows: &Rows,
+    rows: Rows,
     captions: &[CaptionResult],
     spacing: (LayoutUnit, LayoutUnit),
   ) -> LayoutResult {
@@ -1034,43 +1003,50 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     let mut spacing_after_last_section = LayoutUnit::ZERO;
     let mut entered_section = false;
 
+    let data = Rc::new(TableConstraintSpaceData::new(
+      Rc::clone(&structure),
+      rows,
+      column_locations.to_vec(),
+      section_inline_size,
+      spacing,
+      is_table_block_size_specified,
+      self.rtl,
+    ));
+
     for (section_index, section) in structure.sections.iter().enumerate() {
-      let section_rows = &rows.sections[section_index];
       let before_section = offset;
 
       offset += spacing.1;
-      let (block_size, section_first_baseline, has_descendants) = self.place_section(
-        section,
-        section_index,
-        section_rows,
-        rows,
-        column_locations,
-        section_inline_size,
-        is_table_block_size_specified,
-        spacing,
-        &mut fragment,
-        &mut out_of_flow,
-        Point::new(section_inline_offset, offset),
+      let space = data.space(
+        TablePart::Section(section_index),
+        self.tree.layout_style(section.node).direction,
+        self.space.cache_slot,
       );
+      let result = self.tree.layout(section.node, &space);
 
       spacing_after_last_section = spacing.1;
-      if !has_descendants {
+      if section.rows.is_empty() {
         // An empty section takes no border spacing before it.
         offset = before_section;
-        if perform {
-          self.tree.place_table_part(
-            section.node,
-            Point::new(section_inline_offset, offset),
-            LogicalSize::new(section_inline_size, block_size),
-          );
-        }
       }
+
+      let location = Point::new(section_inline_offset, offset);
+
+      if perform {
+        self.tree.place_child(section.node, 0, location, &result);
+      }
+      out_of_flow.extend(
+        result
+          .out_of_flow
+          .iter()
+          .map(|candidate| candidate.moved_by(location)),
+      );
       if first_baseline.is_none()
-        && let Some(baseline) = section_first_baseline
+        && let Some(baseline) = result.first_baseline
       {
         first_baseline = Some(offset + baseline);
       }
-      offset += block_size;
+      offset += result.size.block_size;
       table_box_end = offset;
       entered_section = true;
     }
@@ -1100,6 +1076,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     };
 
     if perform {
+      self.record_parts(&data, &mut fragment);
       for &column in &structure.columns {
         self.tree.hide(column);
       }
@@ -1140,200 +1117,48 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     result
   }
 
-  /// Places a section's rows at `origin` in the table, Blink's
-  /// `TableSectionLayoutAlgorithm::Layout`: its block size, first baseline, and whether it holds
-  /// any rows.
-  #[allow(clippy::too_many_arguments)]
-  fn place_section(
-    &mut self,
-    section: &SectionPart,
-    section_index: usize,
-    section_rows: &Section,
-    rows: &Rows,
-    column_locations: &[ColumnLocation],
-    inline_size: LayoutUnit,
-    is_table_block_size_specified: bool,
-    spacing: (LayoutUnit, LayoutUnit),
-    fragment: &mut TableFragment,
-    out_of_flow: &mut Vec<OutOfFlowCandidate>,
-    origin: Point<LayoutUnit>,
-  ) -> (LayoutUnit, Option<LayoutUnit>, bool) {
-    let perform = self.space.cache_slot == CacheSlot::Layout;
-    let mut offset = LayoutUnit::ZERO;
-    let mut first_baseline = None;
-    let mut is_first_non_collapsed_row = true;
-    let mut row_offsets = vec![LayoutUnit::ZERO];
+  /// Records which rows and cells layout hid, the column each cell starts at, and the rows each
+  /// section's collapsed borders run along.
+  fn record_parts(&self, data: &TableConstraintSpaceData, fragment: &mut TableFragment) {
+    for (section_index, section) in data.structure.sections.iter().enumerate() {
+      let start_row = data.rows.sections[section_index].start_row;
 
-    for (index, row) in section.rows.iter().enumerate() {
-      let row_index = section_rows.start_row + index;
-      let row_data = &rows.rows[row_index];
+      for (index, row) in section.rows.iter().enumerate() {
+        let is_collapsed = data.rows.rows[start_row + index].is_collapsed;
 
-      if !is_first_non_collapsed_row && !row_data.is_collapsed {
-        offset += spacing.1;
-      }
+        for cell in &row.cells {
+          let render_node = self.tree.render_node(cell.node);
 
-      if perform {
-        self.place_row(
-          row,
-          row_index,
-          rows,
-          column_locations,
-          inline_size,
-          is_table_block_size_specified,
-          spacing,
-          fragment,
-          out_of_flow,
-          Point::new(origin.x, origin.y + offset),
-        );
-        self.tree.place_table_part(
-          row.node,
-          Point::new(LayoutUnit::ZERO, offset),
-          LogicalSize::new(inline_size, row_data.block_size),
-        );
-        if row_data.is_collapsed {
+          if is_collapsed
+            || is_hidden_due_to_layout(&data.column_locations, cell.column, cell.colspan)
+            || (!self.structure.borders.is_collapsed
+              && render_node.context.style.inherited_data.empty_cells == EmptyCells::Hide
+              && !render_node.has_table_cell_content())
+          {
+            fragment.hidden.push(cell.node);
+          }
+          fragment.cell_columns.push((cell.node, cell.column));
+        }
+        if is_collapsed {
           fragment.hidden.push(row.node);
         }
       }
-      if first_baseline.is_none() {
-        first_baseline = Some(offset + row_data.baseline.unwrap_or(LayoutUnit::ZERO));
-      }
-      offset += row_data.block_size;
-      is_first_non_collapsed_row &= row_data.is_collapsed;
-      row_offsets.push(offset);
-    }
+      if self.structure.borders.is_collapsed && !section.rows.is_empty() {
+        let row_offsets = iter::once(LayoutUnit::ZERO)
+          .chain(
+            data
+              .row_extents(section_index)
+              .into_iter()
+              .map(|(_, end)| end),
+          )
+          .collect();
 
-    let block_size = if section.rows.is_empty() {
-      section_rows.block_size
-    } else {
-      offset
-    };
-
-    if perform {
-      self.tree.place_table_part(
-        section.node,
-        origin,
-        LogicalSize::new(inline_size, block_size),
-      );
-      if self.structure.borders.is_collapsed && row_offsets.len() > 1 {
         fragment
           .section_row_offsets
-          .push((section_index, section_rows.start_row, row_offsets));
+          .push((section_index, start_row, row_offsets));
       }
     }
-
-    (block_size, first_baseline, !section.rows.is_empty())
   }
-
-  /// Places a row's cells, Blink's `TableRowLayoutAlgorithm::Layout`: each cell laid out at the
-  /// block size of the rows it spans and its content aligned in it.
-  #[allow(clippy::too_many_arguments)]
-  fn place_row(
-    &mut self,
-    row: &RowPart,
-    row_index: usize,
-    rows: &Rows,
-    column_locations: &[ColumnLocation],
-    row_inline_size: LayoutUnit,
-    is_table_block_size_specified: bool,
-    spacing: (LayoutUnit, LayoutUnit),
-    fragment: &mut TableFragment,
-    out_of_flow: &mut Vec<OutOfFlowCandidate>,
-    row_origin: Point<LayoutUnit>,
-  ) {
-    let row_data = &rows.rows[row_index];
-
-    for (index, cell) in row.cells.iter().enumerate() {
-      let cell_index = row_data.start_cell_index + index;
-      let constraint = &rows.cells[cell_index];
-      let measure = rows.measures[cell_index];
-      let (rowspan_block_size, is_initial_block_size_indefinite) = cell_block_size(
-        constraint,
-        &rows.rows,
-        row_index,
-        spacing.1,
-        is_table_block_size_specified,
-      );
-      let block_size = if constraint.effective_rowspan > 1 {
-        rowspan_block_size
-      } else {
-        row_data.block_size
-      };
-      let inline_size = span_inline_size(column_locations, cell.column, cell.colspan);
-      let render_node = self.tree.render_node(cell.node);
-      let alignment = BlockContentAlignment::for_table_cell(&render_node.context.style);
-      let shift = match (alignment, row_data.baseline, measure.first_baseline) {
-        (BlockContentAlignment::Baseline, Some(row), Some(cell)) => row - cell,
-        _ => alignment.offset(block_size - measure.block_size),
-      };
-      // The content lays out moved down, in a content box the size it measured at unless the
-      // cell's block size is definite.
-      let below = if is_initial_block_size_indefinite {
-        (block_size - measure.block_size - shift).clamp_negative_to_zero()
-      } else {
-        LayoutUnit::ZERO
-      };
-      let padding = self.tree.padding(cell.node, Some(row_inline_size));
-
-      self.tree.set_table_cell_aligned_padding(
-        cell.node,
-        Some((
-          (padding.top + shift).to_float(),
-          (padding.bottom + below).to_float(),
-        )),
-      );
-
-      let space = self.cell_space(
-        cell.node,
-        inline_size,
-        Some(block_size),
-        is_initial_block_size_indefinite,
-        row_inline_size,
-        CacheSlot::Layout,
-      );
-      let result = self.tree.layout(cell.node, &space);
-      let start = column_locations
-        .get(cell.column)
-        .map_or(LayoutUnit::ZERO, |location| location.offset)
-        - spacing.0;
-      let x = if self.rtl {
-        row_inline_size - start - inline_size
-      } else {
-        start
-      };
-
-      self
-        .tree
-        .place_child(cell.node, 0, Point::new(x, LayoutUnit::ZERO), &result);
-      out_of_flow.extend(
-        result
-          .out_of_flow
-          .iter()
-          .map(|candidate| candidate.moved_by(Point::new(row_origin.x + x, row_origin.y))),
-      );
-
-      if row_data.is_collapsed
-        || is_hidden_due_to_layout(column_locations, cell.column, cell.colspan)
-        || (!self.structure.borders.is_collapsed
-          && render_node.context.style.inherited_data.empty_cells == EmptyCells::Hide
-          && !render_node.has_table_cell_content())
-      {
-        fragment.hidden.push(cell.node);
-      }
-      fragment.cell_columns.push((cell.node, cell.column));
-    }
-  }
-}
-
-/// The inline size of the `colspan` columns from `column`, Blink's cell inline size in
-/// `SetupTableCellConstraintSpaceBuilder`.
-fn span_inline_size(locations: &[ColumnLocation], column: usize, colspan: usize) -> LayoutUnit {
-  let Some(last) = locations.len().checked_sub(1) else {
-    return LayoutUnit::ZERO;
-  };
-  let start = column.min(last);
-  let end = (column + colspan - 1).min(last);
-
-  locations[end].offset + locations[end].size - locations[start].offset
 }
 
 /// Whether every column a cell spans is collapsed, which hides it.
@@ -1345,40 +1170,7 @@ fn is_hidden_due_to_layout(locations: &[ColumnLocation], column: usize, colspan:
   (column.min(last)..=(column + colspan - 1).min(last)).all(|index| locations[index].is_collapsed)
 }
 
-/// The rows, sections, and cells of one table layout, Blink's `TableTypes::Rows`, `Sections`, and
-/// `CellBlockConstraints`, with each cell's measure.
-#[derive(Default)]
-struct Rows {
-  rows: Vec<Row>,
-  sections: Vec<Section>,
-  cells: Vec<CellBlockConstraint>,
-  measures: Vec<CellMeasure>,
-}
-
 impl LayoutTree<'_> {
-  /// Places the table section or row `node`, which lays out with no border or padding, at
-  /// `location` with `size`.
-  fn place_table_part(&mut self, node: NodeId, location: Point<LayoutUnit>, size: LogicalSize) {
-    self.set_fragment(
-      node,
-      0,
-      BoxFragment {
-        layout: ComputedLayout::new(
-          location.map(LayoutUnit::to_float),
-          Size {
-            width: size.inline_size.to_float(),
-            height: size.block_size.to_float(),
-          },
-          Rect::default(),
-          Rect::default(),
-        ),
-        is_line_clamp_clipped_float: false,
-        #[cfg(feature = "fragmentation")]
-        container_fragment_index: 0,
-      },
-    );
-  }
-
   /// The border and padding of `node`'s layout style, its percentages of `basis`.
   fn border_padding(&self, node: NodeId, basis: Option<LayoutUnit>) -> BoxStrut {
     let style = self.layout_style(node);
@@ -1386,7 +1178,7 @@ impl LayoutTree<'_> {
     BoxStrut::from(style.border.map(LayoutUnit::from_float)) + self.padding(node, basis)
   }
 
-  fn padding(&self, node: NodeId, basis: Option<LayoutUnit>) -> BoxStrut {
+  pub(super) fn padding(&self, node: NodeId, basis: Option<LayoutUnit>) -> BoxStrut {
     self
       .layout_style(node)
       .padding
@@ -1400,6 +1192,31 @@ impl LayoutTree<'_> {
       .margin
       .map(|margin| margin.resolve_or_zero(basis))
       .into()
+  }
+}
+
+impl ConstraintSpace {
+  /// Blink's `SetupTableCellConstraintSpaceBuilder`: a space fixing a cell's inline size, and its
+  /// block size when there is one.
+  pub(super) fn for_table_cell(
+    direction: Direction,
+    inline_size: LayoutUnit,
+    block_size: Option<LayoutUnit>,
+    is_initial_block_size_indefinite: bool,
+    percentage_inline_size: LayoutUnit,
+    cache_slot: CacheSlot,
+  ) -> Self {
+    let mut space = Self::new(Some(inline_size), direction);
+
+    space.is_new_formatting_context = true;
+    space.is_table_cell = true;
+    space.is_fixed_inline_size = true;
+    space.available_block_size = block_size;
+    space.is_fixed_block_size = block_size.is_some();
+    space.is_initial_block_size_indefinite = is_initial_block_size_indefinite;
+    space.percentage_resolution_inline_size = Some(percentage_inline_size);
+    space.cache_slot = cache_slot;
+    space
   }
 }
 

@@ -7,6 +7,23 @@ use std::cmp::Ordering;
 
 use crate::{layout::content_alignment::BlockContentAlignment, layout_unit::LayoutUnit};
 
+/// The rows, sections, and cells of one table layout, Blink's `TableTypes::Rows`, `Sections`, and
+/// `CellBlockConstraints`, with each cell's measure.
+#[derive(Default)]
+pub(super) struct Rows {
+  pub(super) rows: Vec<Row>,
+  pub(super) sections: Vec<Section>,
+  pub(super) cells: Vec<CellBlockConstraint>,
+  pub(super) measures: Vec<CellMeasure>,
+}
+
+/// One cell's measure-pass size and baseline.
+#[derive(Clone, Copy)]
+pub(super) struct CellMeasure {
+  pub(super) block_size: LayoutUnit,
+  pub(super) first_baseline: Option<LayoutUnit>,
+}
+
 /// What one cell asks of its rows, Blink's `TableTypes::CellBlockConstraint`.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CellBlockConstraint {

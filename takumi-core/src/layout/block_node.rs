@@ -171,6 +171,10 @@ impl<'r> LayoutTree<'r> {
     space: &ConstraintSpace,
     input: &FragmentationLayoutInput,
   ) -> LayoutResult {
+    if let Some(table_part) = &space.table_part {
+      return table_part.lay_out(self, space);
+    }
+
     match self.algorithm(node) {
       Algorithm::Hidden => {
         if space.cache_slot == CacheSlot::Layout {
