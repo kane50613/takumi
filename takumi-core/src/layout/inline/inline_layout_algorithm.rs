@@ -334,13 +334,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let mut is_pushed_by_floats = false;
 
     #[cfg(feature = "fragmentation")]
-    {
-      self.context.parallel_flow_break_tokens.clear();
-      self.container_builder.is_line_for_parallel_flow = self
-        .break_token
-        .as_ref()
-        .is_some_and(|break_token| break_token.is_in_parallel_block_flow);
-    }
+    self.context.parallel_flow_break_tokens.clear();
 
     // The layout opportunities count the floats ahead of any content.
     self.position_leading_floats(&mut initial_exclusion_space, &mut leading_floats);
@@ -374,6 +368,13 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       let opportunity = opportunities[opportunities_index];
 
       self.container_builder = LineBoxFragment::new(initial_exclusion_space.clone());
+      #[cfg(feature = "fragmentation")]
+      {
+        self.container_builder.is_line_for_parallel_flow = self
+          .break_token
+          .as_ref()
+          .is_some_and(|break_token| break_token.is_in_parallel_block_flow);
+      }
 
       let line_opportunity = opportunity.compute_line_layout_opportunity(
         space.bfc_offset.line_offset,
