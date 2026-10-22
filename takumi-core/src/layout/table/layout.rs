@@ -259,7 +259,7 @@ pub(crate) struct TableLayoutAlgorithm<'t, 'r> {
   pub(super) space: &'t ConstraintSpace,
   #[cfg_attr(not(feature = "fragmentation"), allow(dead_code))]
   pub(super) input: &'t FragmentationLayoutInput,
-  style: Rc<LayoutStyle>,
+  pub(super) style: Rc<LayoutStyle>,
   pub(super) structure: Rc<TableStructure>,
   border_padding: BoxStrut,
   /// The inline and block `border-spacing`, none when borders collapse.

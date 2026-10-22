@@ -439,6 +439,7 @@ impl<'r> LayoutTree<'r> {
       },
     };
     let mut next = 0;
+    let mut fixed = Vec::new();
 
     while let Some(descendant) = descendants.get(next) {
       let FragmentainerDescendant {
@@ -472,7 +473,16 @@ impl<'r> LayoutTree<'r> {
       if candidate.fragmented_containing_block.is_none()
         && self.layout_style(node).position == Position::Fixed
       {
-        self.repeat_fixed_on_pages(node, offset, &result, page_block_size, root_fragments);
+        descendants.extend(
+          result
+            .out_of_flow
+            .iter()
+            .map(|nested| FragmentainerDescendant {
+              candidate: nested.moved_by(offset),
+              root_fragment,
+            }),
+        );
+        fixed.push((node, offset, result, root_fragment));
         continue;
       }
 
@@ -527,6 +537,25 @@ impl<'r> LayoutTree<'r> {
         block_offset = page_block_size * page as i32;
       }
     }
+
+    // A fixed box repeats on every page, those the other boxes added too, which it places from
+    // the root fragment it came with.
+    for (node, offset, result, root_fragment) in fixed {
+      let pages: Vec<_> = (0..page_count)
+        .map(|page| {
+          (
+            page,
+            root_fragments
+              .get(page)
+              .copied()
+              .flatten()
+              .unwrap_or(root_fragment),
+          )
+        })
+        .collect();
+
+      self.repeat_fixed_on_pages(node, offset, &result, page_block_size, &pages);
+    }
     page_count
   }
 
@@ -558,7 +587,7 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Blink's repeated fixed box: the fixed `node` laid out once as `result` at `offset` in the
-  /// first page's area, then at the same place on every page the root reaches.
+  /// first page's area, then at the same place on each of `pages`, from the root fragment given.
   #[cfg(feature = "fragmentation")]
   fn repeat_fixed_on_pages(
     &mut self,
@@ -566,14 +595,9 @@ impl<'r> LayoutTree<'r> {
     offset: Point<LayoutUnit>,
     result: &LayoutResult,
     page_block_size: LayoutUnit,
-    root_fragments: &[Option<(usize, Point<LayoutUnit>)>],
+    pages: &[(usize, (usize, Point<LayoutUnit>))],
   ) {
-    let pages = root_fragments
-      .iter()
-      .enumerate()
-      .filter_map(|(page, root_fragment)| root_fragment.map(|root_fragment| (page, root_fragment)));
-
-    for (repetition, (page, (root_fragment_index, root_origin))) in pages.enumerate() {
+    for (repetition, &(page, (root_fragment_index, root_origin))) in pages.iter().enumerate() {
       let page_offset = Point::new(LayoutUnit::ZERO, page_block_size * page as i32);
 
       self.place_child(
@@ -593,25 +617,27 @@ impl<'r> LayoutTree<'r> {
   /// Blink's `AddOutOfFlowFragmentainerDescendant` for each of `candidates` that
   /// `containing_block` contains: a containing block that lays out with fragmentation leaves its
   /// out-of-flow boxes to the fragmentation root, which lays them out across pages. Returns every
-  /// candidate, for the root to receive.
+  /// candidate, for the root to receive. A box that `clips_overflow` marks every deferred box on
+  /// its way up.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn defer_out_of_flow(
     &self,
     claims: ContainingBlockClaims,
     candidates: Vec<OutOfFlowCandidate>,
     containing_block: FragmentedContainingBlock,
+    clips_overflow: bool,
   ) -> Vec<OutOfFlowCandidate> {
     candidates
       .into_iter()
-      .map(|candidate| {
-        if candidate.is_deferred() || !claims.claims(self.layout_style(candidate.node).position) {
-          return candidate;
+      .map(|mut candidate| {
+        if !candidate.is_deferred() && claims.claims(self.layout_style(candidate.node).position) {
+          candidate.fragmented_containing_block = Some(containing_block);
         }
-
-        OutOfFlowCandidate {
-          fragmented_containing_block: Some(containing_block),
-          ..candidate
+        if clips_overflow && let Some(containing_block) = &mut candidate.fragmented_containing_block
+        {
+          containing_block.is_inside_clipped_container = true;
         }
+        candidate
       })
       .collect()
   }

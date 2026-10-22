@@ -31,7 +31,7 @@ use crate::{
     logical_rect::LogicalBoxStrut,
     table::TableBreakTokenData,
   },
-  style::BoxDecorationBreak,
+  style::{BoxDecorationBreak, Overflow},
 };
 
 /// A child of the table's box the table lays out: its caption or section, by index in the
@@ -374,11 +374,12 @@ impl TableLayoutAlgorithm<'_, '_> {
         .builder
         .fragmented_containing_block(self.node, self.fragment_index(), containing_block);
 
-    Ok(
-      self
-        .tree
-        .defer_out_of_flow(claims, candidates, fragmented_containing_block),
-    )
+    Ok(self.tree.defer_out_of_flow(
+      claims,
+      candidates,
+      fragmented_containing_block,
+      self.style.overflow.y != Overflow::Visible,
+    ))
   }
 
   /// The monolithic overflow an earlier page pushed into this one.

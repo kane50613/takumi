@@ -672,3 +672,65 @@ fn an_absolute_box_inside_a_clipping_box_adds_no_pages() {
 
   assert_eq!(page_count, 1);
 }
+
+#[test]
+fn a_fixed_box_repeats_on_the_pages_an_absolute_box_adds() {
+  let body =
+    Node::container([block("fixed", "fixed"), block("abs", "abs")]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".fixed { position: fixed; top: 10px; height: 20px } \
+     .abs { position: absolute; top: 0; height: 500px }",
+  );
+  let (fragments, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 3);
+  // The pages past the root's own fragment place it from that fragment.
+  assert_eq!(
+    fragments,
+    [(0, 10.0, 20.0), (0, 210.0, 20.0), (0, 410.0, 20.0)]
+  );
+}
+
+#[test]
+fn a_fixed_box_inside_a_repeated_fixed_box_repeats_too() {
+  let outer = Node::container([block("inner", "inner")]).with_class_name("block fixed");
+  let body = Node::container([outer, block("a", "h500")]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".fixed { position: fixed; top: 10px; height: 20px } \
+     .inner { position: fixed; top: 50px; height: 7px } .h500 { height: 500px }",
+  );
+  let (results, page_count) = LayoutResults::compute_pages(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+  );
+  let inner_fragments = (0..)
+    .map_while(|index| results.fragments(NodeId::new(index)).ok())
+    .find(|fragments| {
+      fragments
+        .first()
+        .is_some_and(|fragment| fragment.layout.size.height == 7.0)
+    })
+    .map_or(0, <[_]>::len);
+
+  assert_eq!(page_count, 3);
+  assert_eq!(inner_fragments, 3);
+}
+
+#[test]
+fn an_absolute_box_inside_a_clipping_table_adds_no_pages() {
+  let table = Node::container([block("tall", "tall")]).with_class_name("table clip");
+  let body = Node::container([table]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".table { display: table; position: relative; overflow: clip; width: 10px; height: 10px } \
+     .tall { position: absolute; height: 700px }",
+  );
+  let (_, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 1);
+}

@@ -132,24 +132,17 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     candidates: Vec<OutOfFlowCandidate>,
     containing_block: ContainingBlock,
   ) {
-    let clips_overflow = self.style.overflow.y != Overflow::Visible;
     let fragmented_containing_block =
       self
         .builder
         .fragmented_containing_block(self.node, self.fragment_index(), containing_block);
-    let mut deferred = self
-      .tree
-      .defer_out_of_flow(claims, candidates, fragmented_containing_block);
 
-    if clips_overflow {
-      for containing_block in deferred
-        .iter_mut()
-        .filter_map(|candidate| candidate.fragmented_containing_block.as_mut())
-      {
-        containing_block.is_inside_clipped_container = true;
-      }
-    }
-    self.out_of_flow = deferred;
+    self.out_of_flow = self.tree.defer_out_of_flow(
+      claims,
+      candidates,
+      fragmented_containing_block,
+      self.style.overflow.y != Overflow::Visible,
+    );
   }
 
   /// Blink's `HasInflowChildBreakInside`: something in this flow broke, so no sibling follows.
