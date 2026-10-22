@@ -101,10 +101,10 @@ impl<'r> LayoutTree<'r> {
   /// Gathers every table's parts and gives them the layout styles the table algorithm expects:
   /// a table part has no border or padding of its own, a cell lays out with the border the table
   /// resolves for it and takes the size the table gives it, and a column does not lay out.
-  pub(in crate::layout) fn prepare_tables(&mut self) {
+  pub(in crate::layout) fn prepare_tables(&mut self, start: usize) {
     let mut inside_cell_flex_or_grid = vec![false; self.node_count()];
 
-    for index in 0..self.node_count() {
+    for index in start..self.node_count() {
       let node = NodeId::new(index);
       let render_node = self.render_node(node);
       let display = render_node.context.style.base_data.display;

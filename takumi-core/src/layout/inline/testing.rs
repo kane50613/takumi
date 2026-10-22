@@ -7,9 +7,12 @@ use crate::{
   fonts::shaping::testing::{GEIST_MONO, register},
   geometry::{AvailableSpace, Size},
   layout::{
-    inline::{inline_item_result::LayoutResult, line_breaker::AtomicInlineLayout},
+    inline::{
+      atomic_inline::BoxAtomicInline, inline_item_result::LayoutResult,
+      line_breaker::AtomicInlineLayout,
+    },
     node::Node,
-    tree::RenderNode,
+    tree::{LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
   resources::font::Fonts,
@@ -26,28 +29,21 @@ pub(crate) struct TestAtomicInline;
 
 impl<'c> AtomicInlineLayout<'c> for TestAtomicInline {
   fn layout(&mut self, node: &'c RenderNode) -> LayoutResult {
-    let size = node
-      .measure_inline_box(Size {
-        width: AvailableSpace::MaxContent,
-        height: AvailableSpace::MaxContent,
-      })
-      .size;
+    let mut tree = LayoutTree::from_render_node(node);
+    let result =
+      BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent)).layout(node);
 
     LayoutResult {
-      inline_size: LayoutUnit::from_float(size.width),
-      block_size: LayoutUnit::from_float(size.height),
       baseline: None,
-      collapsed_margins: None,
+      ..result
     }
   }
 
   fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult {
-    node
-      .layout_block_in_inline(Size {
-        width: AvailableSpace::MaxContent,
-        height: AvailableSpace::MaxContent,
-      })
-      .into_layout_result()
+    let mut tree = LayoutTree::from_render_node(node);
+
+    BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent))
+      .layout_block_in_inline(node)
   }
 
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {

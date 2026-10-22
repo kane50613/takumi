@@ -20,7 +20,11 @@ use super::{
 };
 use crate::{
   geometry::{AvailableSpace, ComputedLayout, Line, Point, Size},
-  layout::{logical_rect::LogicalOffset, margin_strut::MarginStrut, tree::RenderNode},
+  layout::{
+    logical_rect::LogicalOffset,
+    margin_strut::MarginStrut,
+    tree::{LayoutTree, RenderNode},
+  },
   layout_unit::LayoutUnit,
   style::Direction,
 };
@@ -33,22 +37,21 @@ impl<'c> InlineNode<'c> {
     items_data: &'a InlineNodeData<'c>,
     inline_size: f32,
     block_size: AvailableSpace,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> Vec<LineBoxFragment<'a, 'c>> {
-    let mut atomic_inline = BoxAtomicInline {
-      available_space: Size {
-        width: AvailableSpace::Definite(inline_size),
-        height: block_size,
-      },
+    atomic_inline.available_space = Size {
+      width: AvailableSpace::Definite(inline_size),
+      height: block_size,
     };
 
     let mut lines = self.layout_lines(
       items_data,
       LayoutUnit::from_float(inline_size),
-      &mut atomic_inline,
+      atomic_inline,
     );
 
     if let Some(marker) = UnpositionedListMarker::of(items_data) {
-      marker.push_content_down(&mut lines, &mut atomic_inline);
+      marker.push_content_down(&mut lines, atomic_inline);
     }
 
     lines
@@ -59,13 +62,20 @@ impl<'c> InlineNode<'c> {
     self,
     items_data: &'a InlineNodeData<'c>,
     layout: ComputedLayout,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> Vec<LineBoxFragment<'a, 'c>> {
-    let content = layout.content_box_size();
+    // Atomic inlines resolve percentages as the measure that sized the lines did.
+    let percentage_block_size = self
+      .block
+      .context
+      .definite_height()
+      .map_or(AvailableSpace::MaxContent, AvailableSpace::Definite);
 
     self.layout_lines_at(
       items_data,
-      content.width,
-      AvailableSpace::Definite(content.height),
+      layout.content_box_size().width,
+      percentage_block_size,
+      atomic_inline,
     )
   }
 
@@ -75,9 +85,11 @@ impl<'c> InlineNode<'c> {
     self,
     items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> f32 {
-    let mut atomic_inline = BoxAtomicInline { available_space };
-    let sizes = self.compute_min_max_sizes(items_data, &mut atomic_inline);
+    atomic_inline.available_space = available_space;
+
+    let sizes = self.compute_min_max_sizes(items_data, atomic_inline);
     let (min_size, max_size) = (sizes.min_size.to_float(), sizes.max_size.to_float());
 
     match available_space.width {
@@ -107,9 +119,10 @@ impl<'c> InlineNode<'c> {
     items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
     known_width: Option<f32>,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> (f32, f32) {
-    let width =
-      known_width.unwrap_or_else(|| self.content_inline_size(items_data, available_space));
+    let width = known_width
+      .unwrap_or_else(|| self.content_inline_size(items_data, available_space, atomic_inline));
     // Without a known width the lines lay out at the definite width offered.
     let line_width = known_width.unwrap_or(match available_space.width {
       AvailableSpace::Definite(available) => available.max(width),
@@ -127,8 +140,9 @@ impl<'c> InlineNode<'c> {
     width: f32,
     line_width: f32,
     available_height: AvailableSpace,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> InlineMeasurement {
-    let lines = self.layout_lines_at(items_data, line_width, available_height);
+    let lines = self.layout_lines_at(items_data, line_width, available_height, atomic_inline);
     let margins_adjoin = self.block.context.margins_adjoin();
     let margins = margin_struts(&lines, margins_adjoin);
     let (height, clamped) = content_block_size(&lines, margins_adjoin);
@@ -259,9 +273,17 @@ fn content_block_size(
 }
 
 impl RenderNode {
-  /// The fragment items of this node's inline content laid out in the content box of `layout`.
+  /// The fragment items of this node's inline content laid out in the content box of `layout`,
+  /// its atomic inlines in a layout tree of their own.
   pub(crate) fn lay_out_fragment_items(&self, layout: ComputedLayout) -> FragmentItems {
-    self.lay_out_fragment_items_from(&InlineNode::new(self).prepare_layout(), layout)
+    let mut tree = LayoutTree::from_render_node(self);
+    let mut atomic_inline = BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent));
+
+    self.lay_out_fragment_items_from(
+      &InlineNode::new(self).prepare_layout(),
+      layout,
+      &mut atomic_inline,
+    )
   }
 
   /// [`Self::lay_out_fragment_items`] from its prepared `items_data`.
@@ -269,11 +291,20 @@ impl RenderNode {
     &'c self,
     items_data: &InlineNodeData<'c>,
     layout: ComputedLayout,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> FragmentItems {
-    let lines = InlineNode::new(self).layout_lines_in_content_box(items_data, layout);
+    let lines =
+      InlineNode::new(self).layout_lines_in_content_box(items_data, layout, atomic_inline);
     let mut spans = InlineSpans::of(self, items_data);
 
-    FragmentItems::from_lines(items_data, &lines, &mut spans, layout, &self.context)
+    FragmentItems::from_lines(
+      items_data,
+      &lines,
+      &mut spans,
+      layout,
+      &self.context,
+      atomic_inline,
+    )
   }
 
   /// The spans `items`, this node's fragment items, paint with.
@@ -288,14 +319,15 @@ impl RenderNode {
   /// Where each out-of-flow box in this node's inline content sits, in its content box, in tree
   /// order, and the padding box each of `containers` bounds the boxes it contains with, in
   /// `layout`'s border box: an inline span's from its line fragments, this node's its own.
-  pub(crate) fn inline_out_of_flow_geometry(
-    &self,
+  pub(crate) fn inline_out_of_flow_geometry<'c>(
+    &'c self,
     layout: ComputedLayout,
     containers: &[&RenderNode],
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> (Vec<StaticPosition>, Vec<PaddingBox>) {
     let node = InlineNode::new(self);
     let items_data = node.prepare_layout();
-    let lines = node.layout_lines_in_content_box(&items_data, layout);
+    let lines = node.layout_lines_in_content_box(&items_data, layout, atomic_inline);
     let mut placed: FxHashMap<*const RenderNode, StaticPosition> = FxHashMap::default();
 
     for line in &lines {
@@ -369,29 +401,6 @@ impl RenderNode {
 
     (positions, containing_blocks)
   }
-
-  /// The first or last line's baseline below the content box's top, laid out at the border box
-  /// width `width` in `available_space`, less `insets_width` when its layout resolved its padding
-  /// and border.
-  pub(crate) fn inline_content_baseline<'c>(
-    &'c self,
-    items_data: &InlineNodeData<'c>,
-    available_space: Size<AvailableSpace>,
-    width: f32,
-    insets_width: Option<f32>,
-    use_last_line: bool,
-  ) -> Option<f32> {
-    let node = InlineNode::new(self);
-    let known_width = node.content_width_of(width, insets_width);
-    let (width, line_width) = node.widths(items_data, available_space, Some(known_width));
-    let measurement = node.measure_lines(items_data, width, line_width, available_space.height);
-
-    if use_last_line {
-      measurement.last_baseline
-    } else {
-      measurement.first_baseline
-    }
-  }
 }
 
 #[cfg(test)]
@@ -403,6 +412,7 @@ mod tests {
   use crate::layout::{
     inline::{atomic_inline::BoxAtomicInline, inline_node::InlineNode, testing::render_tree},
     node::Node,
+    tree::LayoutTree,
   };
   use crate::layout_unit::LayoutUnit;
 
@@ -413,12 +423,14 @@ mod tests {
       [Node::container([Node::container([]).with_class_name("inner")]).with_class_name("span")],
       ".inner { display: block; margin-top: 20px }",
     );
-    let mut atomic_inline = BoxAtomicInline {
-      available_space: Size {
+    let mut tree = LayoutTree::from_render_node(&block);
+    let mut atomic_inline = BoxAtomicInline::new(
+      &mut tree,
+      Size {
         width: AvailableSpace::Definite(60.0),
         height: AvailableSpace::MaxContent,
       },
-    };
+    );
 
     block.context.set_margins_adjoin(margins_adjoin);
 

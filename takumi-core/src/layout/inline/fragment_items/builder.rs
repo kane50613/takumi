@@ -73,6 +73,7 @@ impl FragmentItems {
     spans: &mut InlineSpans<'c>,
     layout: ComputedLayout,
     context: &RenderContext,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> Self {
     let mut items = Self {
       content_box: ContentBox::of(layout),
@@ -266,6 +267,7 @@ impl FragmentItems {
       spans,
       (layout, context.style.inherited_data.direction),
       &mut ink.content,
+      atomic_inline,
     );
     let span_fragments = line_span_fragments(lines, spans, content);
 
@@ -639,6 +641,7 @@ impl FragmentItems {
     spans: &mut InlineSpans<'c>,
     (layout, direction): (ComputedLayout, Direction),
     ink: &mut Option<InkBox>,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) {
     let Some(marker) = UnpositionedListMarker::of(items_data) else {
       return;
@@ -652,13 +655,12 @@ impl FragmentItems {
     let Some(ProcessedInlineSpan::Box(item)) = spans.spans.get_mut(span) else {
       return;
     };
-    let mut atomic_inline = BoxAtomicInline {
-      available_space: Size {
-        width: AvailableSpace::Definite(self.content_box.size.width),
-        height: AvailableSpace::MaxContent,
-      },
+    atomic_inline.available_space = Size {
+      width: AvailableSpace::Definite(self.content_box.size.width),
+      height: AvailableSpace::MaxContent,
     };
-    let result = marker.layout(&mut atomic_inline);
+
+    let result = marker.layout(atomic_inline);
     let size = item.paint_border_box(result.inline_size, result.block_size);
     let offset = marker.offset(&result, line, layout, direction);
 

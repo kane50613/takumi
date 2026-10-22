@@ -118,6 +118,7 @@ mod tests {
     layout::{
       inline::{atomic_inline::BoxAtomicInline, inline_node::InlineNode, testing::render_tree},
       node::Node,
+      tree::LayoutTree,
     },
     layout_unit::LayoutUnit,
     style::Direction,
@@ -129,13 +130,14 @@ mod tests {
   const ITEM_CSS: &str = ".item { display: list-item; list-style-type: decimal; padding-left: 6px; \
      border-left: 2px solid }";
 
-  fn atomic_inline() -> BoxAtomicInline {
-    BoxAtomicInline {
-      available_space: Size {
+  fn atomic_inline<'t, 'r>(tree: &'t mut LayoutTree<'r>) -> BoxAtomicInline<'t, 'r> {
+    BoxAtomicInline::new(
+      tree,
+      Size {
         width: AvailableSpace::Definite(100.0),
         height: AvailableSpace::MaxContent,
       },
-    }
+    )
   }
 
   /// The item's 100px content box behind its 2px border and 6px padding.
@@ -171,7 +173,8 @@ mod tests {
     let item = &tree.children.as_deref().expect("children")[0];
     let node = InlineNode::new(item);
     let data = node.prepare_layout();
-    let mut atomic_inline = atomic_inline();
+    let mut layout_tree = LayoutTree::from_render_node(&tree);
+    let mut atomic_inline = atomic_inline(&mut layout_tree);
     let lines = node.layout_lines(&data, LayoutUnit::from_int(100), &mut atomic_inline);
     let marker = UnpositionedListMarker::of(&data).expect("an outside marker");
     let (_, line) = UnpositionedListMarker::content_alignment_line(&lines).expect("a line");
@@ -224,7 +227,8 @@ mod tests {
     let item = &tree.children.as_deref().expect("children")[0];
     let node = InlineNode::new(item);
     let data = node.prepare_layout();
-    let mut atomic_inline = atomic_inline();
+    let mut layout_tree = LayoutTree::from_render_node(&tree);
+    let mut atomic_inline = atomic_inline(&mut layout_tree);
     let mut lines = node.layout_lines(&data, LayoutUnit::from_int(100), &mut atomic_inline);
     let marker = UnpositionedListMarker::of(&data).expect("an outside marker");
 

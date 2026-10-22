@@ -459,15 +459,6 @@ impl FragmentItems {
     &self.line_boxes
   }
 
-  /// The first line's baseline, or the last's with `use_last_line`, below the content box's top;
-  /// `None` without a run or inline box, which content laid out from no items never has.
-  pub(crate) fn baseline(&self, use_last_line: bool) -> Option<f32> {
-    self
-      .baselines
-      .filter(|_| !self.text_items.is_empty() || !self.inline_boxes.is_empty())
-      .map(|(first, last)| if use_last_line { last } else { first })
-  }
-
   /// The in-flow and out-of-flow inline boxes, sorted by id.
   pub fn inline_boxes(&self) -> &[VisualInlineBox] {
     &self.inline_boxes

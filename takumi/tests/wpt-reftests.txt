@@ -304,7 +304,6 @@ css/
 !css/CSS2/inline-svg-100-percent-in-body.html
 !css/CSS2/inline-svg-intrinsic-size-100-percent-1.html
 !css/CSS2/inline-svg-intrinsic-size-100-percent-2.html
-!css/CSS2/linebox/baseline-block-with-overflow-001.html
 !css/CSS2/linebox/border-padding-bleed-001.xht
 !css/CSS2/linebox/border-padding-bleed-002.xht
 !css/CSS2/linebox/border-padding-bleed-003.xht
@@ -462,7 +461,6 @@ css/CSS2/lists/list-style-type-applies-to-016.html
 !css/CSS2/normal-flow/height-083.xht
 !css/CSS2/normal-flow/height-084.xht
 !css/CSS2/normal-flow/height-percentage-003.xht
-!css/CSS2/normal-flow/height-percentage-005.xht
 !css/CSS2/normal-flow/inline-block-000.xht
 !css/CSS2/normal-flow/inline-block-replaced-height-002.xht
 !css/CSS2/normal-flow/inline-block-replaced-height-004.xht
@@ -754,9 +752,6 @@ css/CSS2/lists/list-style-type-applies-to-016.html
 !css/CSS2/text/white-space-processing-051.xht
 !css/CSS2/text/white-space-processing-054.xht
 !css/CSS2/text/white-space-processing-055.xht
-!css/CSS2/visudet/content-height-001.html
-!css/CSS2/visudet/content-height-002.html
-!css/CSS2/visudet/content-height-003.html
 !css/CSS2/visudet/content-height-004.html
 !css/CSS2/visudet/content-height-005.html
 !css/CSS2/visudet/height-percentage-003a.xht
@@ -764,7 +759,6 @@ css/CSS2/lists/list-style-type-applies-to-016.html
 !css/CSS2/visudet/inline-block-baseline-006.xht
 !css/CSS2/visudet/line-height-203.html
 !css/CSS2/visudet/line-height-206.html
-!css/CSS2/visuren/anonymous-boxes-001a.xht
 !css/CSS2/visuren/clear-applies-to-016.xht
 !css/CSS2/visuren/clear-applies-to-017.xht
 !css/CSS2/visuren/emptyspan-1.html
@@ -1128,6 +1122,7 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/css-flexbox-row.html
 !css/css-flexbox/css-flexbox-test1.html
 !css/css-flexbox/fieldset-as-item-overflow.html
+!css/css-flexbox/fieldset-baseline-alignment.html
 !css/css-flexbox/flex-aspect-ratio-img-column-008.html
 !css/css-flexbox/flex-aspect-ratio-img-row-015.html
 !css/css-flexbox/flex-basis-004.html
@@ -1152,7 +1147,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/flexbox-align-self-baseline-horiz-007.xhtml
 !css/css-flexbox/flexbox-align-self-baseline-horiz-008.xhtml
 !css/css-flexbox/flexbox-align-self-horiz-002.xhtml
-!css/css-flexbox/flexbox-align-self-horiz-003.xhtml
 !css/css-flexbox/flexbox-align-self-vert-004.xhtml
 !css/css-flexbox/flexbox-align-self-vert-rtl-002.xhtml
 !css/css-flexbox/flexbox-align-self-vert-rtl-004.xhtml
@@ -1251,7 +1245,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/flexbox_flex-0-1-1-unitless-basis.html
 !css/css-flexbox/flexbox_flex-0-1-N-unitless-basis.html
 !css/css-flexbox/flexbox_flex-natural.html
-!css/css-flexbox/flexbox_inline.html
 !css/css-flexbox/flexbox_justifycontent-left-001.html
 !css/css-flexbox/flexbox_justifycontent-left-002.html
 !css/css-flexbox/flexbox_justifycontent-right-001.html
@@ -1278,6 +1271,7 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/percentage-max-height-004.html
 !css/css-flexbox/relayout-intrinsic-block-size.html
 !css/css-flexbox/select-element-zero-height-002.html
+!css/css-flexbox/svg-no-natural-size-grandchild.html
 !css/css-flexbox/svg-root-as-flex-item-002.html
 !css/css-flexbox/table-as-item-inflexible-in-column-2.html
 !css/css-flexbox/table-as-item-min-content-height-1.tentative.html
@@ -1527,7 +1521,6 @@ css/css-grid/alignment/self-baseline/grid-self-baseline-vertical-rl-001.html
 !css/css-grid/grid-items/grid-item-inline-contribution-003.html
 !css/css-grid/grid-items/grid-item-inline-contribution-004.html
 !css/css-grid/grid-items/grid-item-inline-contribution-005.html
-!css/css-grid/grid-items/grid-item-minmax-img-001.html
 !css/css-grid/grid-items/grid-item-percentage-sizes-001.html
 !css/css-grid/grid-items/grid-item-percentage-sizes-002.html
 !css/css-grid/grid-items/grid-item-percentage-sizes-003.html
@@ -2320,8 +2313,6 @@ css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-027.html
 !css/css-sizing/hori-block-size-small-or-larger-than-container-with-min-or-max-content-1.html
 !css/css-sizing/hori-block-size-small-or-larger-than-container-with-min-or-max-content-2a.html
 !css/css-sizing/hori-block-size-small-or-larger-than-container-with-min-or-max-content-2b.html
-!css/css-sizing/image-max-width-and-height-behaves-as-auto.html
-!css/css-sizing/image-percentage-max-height-in-anonymous-block.html
 !css/css-sizing/intrinsic-percent-non-replaced-002.html
 !css/css-sizing/intrinsic-percent-non-replaced-003.html
 !css/css-sizing/intrinsic-percent-non-replaced-005.html

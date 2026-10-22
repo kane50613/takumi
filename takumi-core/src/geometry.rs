@@ -5,7 +5,7 @@ use std::ops::{Add, Sub};
 use tiny_skia::{Path, PathBuilder as TinyPathBuilder};
 use xxhash_rust::xxh3::Xxh3;
 
-use crate::style::Affine;
+use crate::{layout_unit::LayoutUnit, style::Affine};
 
 /// The smallest difference between two layout values a browser can tell apart:
 /// Blink stores layout in 1/64px fixed point, so anything closer is one value
@@ -350,6 +350,16 @@ pub enum AvailableSpace {
   MinContent,
   /// Indefinite space; the node should size to its maximum content.
   MaxContent,
+}
+
+impl AvailableSpace {
+  /// The space in layout units, none where indefinite.
+  pub(crate) fn definite(self) -> Option<LayoutUnit> {
+    match self {
+      Self::Definite(size) => Some(LayoutUnit::from_float(size)),
+      Self::MinContent | Self::MaxContent => None,
+    }
+  }
 }
 
 /// One command of a resolved outline path, in device space.

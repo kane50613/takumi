@@ -110,9 +110,8 @@ impl<'c> Frame<'c> {
 }
 
 /// The shape results a block's inline items took, which a later preparation of the same items
-/// takes instead of shaping again: an atomic inline is laid out at several available widths,
-/// each in a layout tree of its own. Kept from the second preparation on, so a block prepared
-/// once allocates nothing.
+/// takes instead of shaping again, as each layout tree holding the block prepares them. Kept from
+/// the second preparation on, so a block prepared once allocates nothing.
 #[derive(Default)]
 pub(crate) struct ItemShapes(RefCell<KeptShapes>);
 

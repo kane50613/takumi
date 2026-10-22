@@ -1163,7 +1163,7 @@ mod tests {
       testing::{TestAtomicInline, render_tree, span},
     },
     node::Node,
-    tree::RenderNode,
+    tree::{LayoutTree, RenderNode},
   };
   use crate::layout_unit::LayoutUnit;
 
@@ -1217,12 +1217,14 @@ mod tests {
 
   /// The tops of `block`'s lines, the margins at its edges collapsing out where `margins_adjoin`.
   fn line_tops(block: &RenderNode, margins_adjoin: Line<bool>) -> Vec<f32> {
-    let mut atomic_inline = BoxAtomicInline {
-      available_space: Size {
+    let mut tree = LayoutTree::from_render_node(block);
+    let mut atomic_inline = BoxAtomicInline::new(
+      &mut tree,
+      Size {
         width: AvailableSpace::Definite(60.0),
         height: AvailableSpace::MaxContent,
       },
-    };
+    );
 
     block.context.set_margins_adjoin(margins_adjoin);
 
@@ -1285,12 +1287,14 @@ mod tests {
       .with_class_name("span")],
       ".container { text-align: center } .block { display: block; height: 20px }",
     );
-    let mut atomic_inline = BoxAtomicInline {
-      available_space: Size {
+    let mut tree = LayoutTree::from_render_node(&block);
+    let mut atomic_inline = BoxAtomicInline::new(
+      &mut tree,
+      Size {
         width: AvailableSpace::Definite(60.0),
         height: AvailableSpace::MaxContent,
       },
-    };
+    );
 
     assert_eq!(
       layout_lines_with(&block, 60.0, &mut atomic_inline),
