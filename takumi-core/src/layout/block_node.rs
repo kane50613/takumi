@@ -28,7 +28,7 @@ use crate::{
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::TableLayoutAlgorithm,
-    tree::{LayoutTree, NodeOrigin},
+    tree::{BoxFragment, LayoutTree, NodeOrigin},
   },
   layout_unit::LayoutUnit,
   style::{Display, JustifyContent},
@@ -432,8 +432,14 @@ impl<'r> LayoutTree<'r> {
     location: Point<LayoutUnit>,
     result: &LayoutResult,
   ) {
-    self.set_layout(node, result.computed_layout(location));
-    self.node_state_mut(node).is_line_clamp_clipped_float = result.is_line_clamp_clipped_float;
+    self.set_fragment(
+      node,
+      0,
+      BoxFragment {
+        layout: result.computed_layout(location),
+        is_line_clamp_clipped_float: result.is_line_clamp_clipped_float,
+      },
+    );
   }
 
   /// Records that `container` laid out the out-of-flow `node` as its containing block.
@@ -448,7 +454,7 @@ impl<'r> LayoutTree<'r> {
     while let Some(node) = stack.pop() {
       let state = self.node_state_mut(node);
 
-      state.layout = ComputedLayout::default();
+      state.fragments[0].layout = ComputedLayout::default();
       state.hoisted_children.clear();
       stack.extend(state.children.iter().copied());
     }
