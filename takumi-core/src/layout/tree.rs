@@ -1278,8 +1278,8 @@ impl RenderNode {
       .map(Rc::clone)
   }
 
-  /// Forgets the fragment items and atomic inline layouts it and the boxes under it took, which no
-  /// longer hold once the tree may have changed since.
+  /// Forgets the fragment items and item shapes it and the boxes under it took, which no longer
+  /// hold once the tree may have changed since.
   pub(crate) fn clear_layout_caches(&self) {
     let mut stack = vec![self];
 
