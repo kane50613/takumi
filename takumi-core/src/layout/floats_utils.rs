@@ -13,7 +13,9 @@ use crate::{
     box_fragment_builder::BoxFragmentBuilder,
     break_appeal::BreakAppeal,
     constraint_space::BlockFragmentation,
-    fragmentation_utils::{is_break_inside, move_past_breakpoint},
+    fragmentation_utils::{
+      adjust_margins_for_fragmentation, is_break_inside, move_past_breakpoint,
+    },
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
   },
@@ -345,10 +347,21 @@ fn position_fragmented_float<'c>(
   layout: &mut LayoutFloat<'_, 'c>,
   fragmentation: &FloatFragmentation,
 ) -> PositionedFloat {
-  let mut margins = LineBoxStrut::from_physical(
-    unpositioned_float.node.margin_px(),
+  let mut fragment_margins = LogicalBoxStrut::from_physical(
+    unpositioned_float
+      .node
+      .margin_px()
+      .map(LayoutUnit::from_float),
     unpositioned_float.direction,
   );
+
+  adjust_margins_for_fragmentation(
+    fragmentation.break_token.as_deref(),
+    true,
+    &mut fragment_margins,
+  );
+
+  let mut margins = LineBoxStrut::from(fragment_margins);
   // Without a layout to size it by, the float goes at its origin, and moves once it has one.
   let mut opportunity = unpositioned_float
     .layout_result

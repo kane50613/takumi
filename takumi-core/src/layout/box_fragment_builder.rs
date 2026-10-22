@@ -158,8 +158,23 @@ impl BoxFragmentBuilder {
     self.has_inflow_child_break_inside
   }
 
-  /// Blink's `AddBreakBeforeChild`, for a block child or, as `None`, the inline content.
+  /// Blink's `AddBreakBeforeChild`, for an inflow block child or, as `None`, the inline content.
   pub(crate) fn add_break_before_child(
+    &mut self,
+    child: Option<NodeId>,
+    appeal: BreakAppeal,
+    is_forced_break: bool,
+  ) {
+    self.has_inflow_child_break_inside = true;
+    self.add_break_before(child, appeal, is_forced_break);
+  }
+
+  /// Blink's `AddBreakBeforeChild` for a float a forced break pushes, which is a parallel flow.
+  pub(crate) fn add_break_before_float(&mut self, float: NodeId) {
+    self.add_break_before(Some(float), BreakAppeal::Perfect, true);
+  }
+
+  fn add_break_before(
     &mut self,
     child: Option<NodeId>,
     appeal: BreakAppeal,
@@ -170,7 +185,6 @@ impl BoxFragmentBuilder {
     } else {
       self.clamp_break_appeal(appeal);
     }
-    self.has_inflow_child_break_inside = true;
 
     let Some(child) = child else {
       // The lines resume where the last one added broke, or where this fragment resumed them.

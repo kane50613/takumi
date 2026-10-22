@@ -201,9 +201,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     if !is_forced_break_value(self.space, break_between) {
       return false;
     }
-    self
-      .builder
-      .add_break_before_child(Some(child), BreakAppeal::Perfect, true);
+    self.builder.add_break_before_float(child);
     true
   }
 
