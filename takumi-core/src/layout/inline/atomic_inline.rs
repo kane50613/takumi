@@ -40,7 +40,7 @@ impl<'t, 'r> BoxAtomicInline<'t, 'r> {
   }
 
   /// The atomic inline `render_node` laid out as [`AtomicInlineLayout::layout`] lays it out.
-  pub(crate) fn lay_out_atomic_inline(
+  fn lay_out_atomic_inline(
     &mut self,
     render_node: &'r RenderNode,
   ) -> (NodeId, Rc<BoxLayoutResult>) {
@@ -48,6 +48,40 @@ impl<'t, 'r> BoxAtomicInline<'t, 'r> {
     let space = self.atomic_inline_space(node);
 
     (node, self.tree.layout(node, &space))
+  }
+
+  /// The block-in-inline `render_node` laid out as Blink's `BlockNode::Layout` lays out a block
+  /// child: its `auto` width stretching, and laid out again once floats adjoining its block start
+  /// resolve its block offset.
+  fn lay_out_block_in_inline(
+    &mut self,
+    render_node: &'r RenderNode,
+  ) -> (NodeId, Rc<BoxLayoutResult>) {
+    let node = self.tree.atomic_inline_node(render_node);
+    let mut space = self.block_space(node);
+
+    space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
+
+    let result = self.tree.layout(node, &space);
+
+    if result.status == LayoutStatus::Success {
+      return (node, result);
+    }
+
+    space.forced_bfc_block_offset = result.bfc_block_offset;
+    (node, self.tree.layout(node, &space))
+  }
+
+  /// The inline content box `render_node` laid out as its line lays it out.
+  pub(crate) fn lay_out_inline_content_box(
+    &mut self,
+    render_node: &'r RenderNode,
+  ) -> (NodeId, Rc<BoxLayoutResult>) {
+    if render_node.is_block_in_inline {
+      return self.lay_out_block_in_inline(render_node);
+    }
+
+    self.lay_out_atomic_inline(render_node)
   }
 
   /// The space Blink's `LayoutAtomicInline` lays `node` out in: a new formatting context in the
@@ -87,20 +121,7 @@ impl<'r> AtomicInlineLayout<'r> for BoxAtomicInline<'_, 'r> {
   }
 
   fn layout_block_in_inline(&mut self, render_node: &'r RenderNode) -> LayoutResult {
-    let node = self.tree.atomic_inline_node(render_node);
-    let mut space = self.block_space(node);
-
-    space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
-
-    let mut result = self.tree.layout(node, &space);
-
-    // Floats adjoining its block start move once its block offset resolves.
-    if result.status != LayoutStatus::Success {
-      space.forced_bfc_block_offset = result.bfc_block_offset;
-      result = self.tree.layout(node, &space);
-    }
-
-    LayoutResult::of_block_in_inline(&result)
+    LayoutResult::of_block_in_inline(&self.lay_out_block_in_inline(render_node).1)
   }
 
   fn min_max_sizes(&mut self, render_node: &'r RenderNode) -> (LayoutUnit, LayoutUnit) {

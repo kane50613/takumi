@@ -523,7 +523,7 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Places the atomic inline boxes of the inline content of `node`, laid out as `result`, where its
+  /// Places the inline content boxes of the inline content of `node`, laid out as `result`, where its
   /// lines put them, then lays out the out-of-flow boxes of that content that an inline box
   /// contains and returns the rest for `node` and its ancestors. Blink lays the first out in the
   /// inline box's padding box as `OutOfFlowLayoutPart` does for an inline containing block.
@@ -535,10 +535,10 @@ impl<'r> LayoutTree<'r> {
   ) -> Vec<OutOfFlowCandidate> {
     let boxes = self.child_nodes(node);
     let render_node = self.render_node(node);
-    let places_atomic_inlines =
-      space.cache_slot == CacheSlot::Layout && render_node.holds_atomic_inline_box();
+    let places_inline_content_boxes =
+      space.cache_slot == CacheSlot::Layout && render_node.holds_inline_content_box();
 
-    if boxes.is_empty() && !places_atomic_inlines {
+    if boxes.is_empty() && !places_inline_content_boxes {
       return Vec::new();
     }
 
@@ -567,13 +567,13 @@ impl<'r> LayoutTree<'r> {
 
     let geometry = render_node.inline_geometry(layout, &containers, &mut atomic_inline);
     let content = layout.content_box_offset();
-    // The out-of-flow boxes inside an atomic inline that it does not contain go on to the
+    // The out-of-flow boxes inside an inline content box that it does not contain go on to the
     // containing blocks around this one.
     let mut candidates = Vec::new();
 
-    if places_atomic_inlines {
-      for (child_render_node, offset) in geometry.atomic_inlines {
-        let (child, child_result) = atomic_inline.lay_out_atomic_inline(child_render_node);
+    if places_inline_content_boxes {
+      for (child_render_node, offset) in geometry.inline_content_boxes {
+        let (child, child_result) = atomic_inline.lay_out_inline_content_box(child_render_node);
         let location = Point::new(
           LayoutUnit::from_float(content.x + offset.x),
           LayoutUnit::from_float(content.y + offset.y),
