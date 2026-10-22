@@ -96,9 +96,11 @@ impl<'a> GridNamedLineCollection<'a> {
       return find(self.named_lines_indexes, line);
     }
     if line > self.insertion_point + self.auto_repeat_total_tracks {
+      // Blink subtracts `auto_repeat_total_tracks - 1` in unsigned arithmetic, which wraps to
+      // `line + 1` when no repetition fits.
       return find(
         self.named_lines_indexes,
-        line - (self.auto_repeat_total_tracks - 1),
+        line + 1 - self.auto_repeat_total_tracks,
       );
     }
     if self.auto_repeat_total_tracks == 0 {
@@ -499,5 +501,26 @@ impl<'a> GridLineResolver<'a> {
     }
 
     GridSpan::untranslated_definite(start_line, end_line)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::GridNamedLineCollection;
+
+  #[test]
+  fn line_after_an_auto_repeater_with_no_repetitions() {
+    let named_lines = [3];
+    let collection = GridNamedLineCollection {
+      named_lines_indexes: Some(&named_lines),
+      auto_repeat_named_lines_indexes: None,
+      implicit_named_lines_indexes: None,
+      insertion_point: 1,
+      last_line: 4,
+      auto_repeat_total_tracks: 0,
+      auto_repeat_track_list_length: 1,
+    };
+
+    assert!(collection.contains(2));
   }
 }

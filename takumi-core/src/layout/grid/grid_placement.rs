@@ -12,7 +12,7 @@ use crate::layout::{
   grid::{
     grid_area::{GridArea, GridSpan},
     grid_line_resolver::GridLineResolver,
-    grid_style::{GridStyle, GridTrackSizingDirection},
+    grid_style::{GridPosition, GridStyle, GridTrackSizingDirection},
     grid_track_collection::GridTrackCollection,
   },
   layout_style::LayoutStyle,
@@ -610,7 +610,7 @@ impl<'a> GridPlacement<'a> {
       }
       GridTrackSizingDirection::ForRows => (&item_style.grid_row_start, &item_style.grid_row_end),
     };
-    let line = |line: i32, position: &crate::layout::grid::grid_style::GridPosition| {
+    let line = |line: i32, position: &GridPosition| {
       let line = line + start_offset as i32;
 
       (line >= 0

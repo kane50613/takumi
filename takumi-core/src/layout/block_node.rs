@@ -190,9 +190,6 @@ impl<'r> LayoutTree<'r> {
     if state.layout_style.is_replaced {
       return Algorithm::Replaced;
     }
-    if state.children.is_empty() {
-      return Algorithm::Block;
-    }
 
     match state.style.display {
       TaffyDisplay::Flex => Algorithm::Flex,

@@ -8,8 +8,11 @@
 use bitflags::bitflags;
 
 use crate::{
-  layout::grid::grid_style::{
-    GridStyle, GridTrackList, GridTrackSize, GridTrackSizingDirection, RepeatType, TrackBreadth,
+  layout::{
+    grid::grid_style::{
+      GridStyle, GridTrackList, GridTrackSize, GridTrackSizingDirection, RepeatType, TrackBreadth,
+    },
+    layout_style::LayoutLength,
   },
   layout_unit::LayoutUnit,
 };
@@ -354,7 +357,7 @@ impl GridSet {
       if is_available_size_indefinite && track_definition.fit_content_track_breadth.has_percent() {
         GridTrackSize::min_max(
           TrackBreadth::AUTO,
-          TrackBreadth::Length(crate::layout::layout_style::LayoutLength::MaxContent),
+          TrackBreadth::Length(LayoutLength::MaxContent),
         )
       } else {
         track_definition
