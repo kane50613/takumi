@@ -588,9 +588,19 @@ fn dimension(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<Length> {
       .or_else(|| value.parse().ok().map(Length::Px));
   }
 
-  let number_end = value
-    .find(|character: char| !character.is_ascii_digit() && character != '.')
-    .unwrap_or(value.len());
+  let digits_end = |start: usize| {
+    value[start..]
+      .find(|character: char| !character.is_ascii_digit())
+      .map_or(value.len(), |end| start + end)
+  };
+  let integer_end = digits_end(0);
+  // A fraction needs a digit after its point; anything past the number is ignored.
+  let number_end = match value[integer_end..].strip_prefix('.') {
+    Some(fraction) if fraction.starts_with(|character: char| character.is_ascii_digit()) => {
+      digits_end(integer_end + 1)
+    }
+    _ => integer_end,
+  };
   let number: f32 = value[..number_end].parse().ok()?;
 
   Some(if value[number_end..].starts_with('%') {
@@ -651,7 +661,7 @@ mod tests {
   /// CSS length, as Chrome maps them to style; a number of pixels stays in `ImageData`.
   #[test]
   fn image_size_attributes_in_other_units_style_the_image() {
-    let image = parse(r#"<img src="a.png" width="50%" height="20">"#);
+    let image = parse(r#"<img src="a.png" width="50%" height="20..5">"#);
     let svg = parse(r#"<svg width="100%" height="2em" viewBox="0 0 1 1"></svg>"#);
 
     assert!(matches!(
