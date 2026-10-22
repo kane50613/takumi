@@ -4,6 +4,8 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
+use std::mem::swap;
+
 use crate::layout::{
   grid::{
     grid_area::GridSpan,
@@ -495,7 +497,7 @@ impl<'a> GridLineResolver<'a> {
     let mut end_line = self.resolve_grid_position(&final_position, final_side);
 
     if end_line < start_line {
-      std::mem::swap(&mut start_line, &mut end_line);
+      swap(&mut start_line, &mut end_line);
     } else if end_line == start_line {
       end_line = start_line + 1;
     }
