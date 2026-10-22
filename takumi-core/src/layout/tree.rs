@@ -12,7 +12,7 @@ use crate::layout::{
   break_appeal::BreakAppeal,
   constraint_space::BlockFragmentation,
   fragmentation_layout_input::FragmentationLayoutInput,
-  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index},
+  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
 };
 
 use crate::{
@@ -890,6 +890,19 @@ impl<'r> LayoutTree<'r> {
       };
       let result = self.layout_fragment(NodeId::ROOT, &space, &input);
       let fragment_index = fragment_index(break_token.as_deref());
+      let space_left = page_block_size - margins.block_start;
+
+      // Blink's page area breaks before a root that starts past the page end, leaving the page
+      // blank, as `MovePastBreakpoint` must break before such a child.
+      if break_token.is_none()
+        && (space_left < LayoutUnit::ZERO
+          || (space_left == LayoutUnit::ZERO
+            && is_break_inside(result.break_info.break_token.as_deref())))
+      {
+        break_token = Some(Rc::new(BlockBreakToken::break_before(NodeId::ROOT, false)));
+        page_count += 1;
+        continue;
+      }
 
       self.place_child(
         NodeId::ROOT,

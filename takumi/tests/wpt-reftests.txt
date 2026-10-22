@@ -971,6 +971,7 @@ css/css-break/out-of-flow-in-multicolumn-116.html
 css/css-break/overflow-clip-004.html
 css/css-break/overflow-clip-013.html
 css/css-break/overflowed-abs-pos-with-percentage-height-print.html
+css/css-break/root-margin-001-print.html
 css/css-break/table/monolithic-overflow-001.tentative.html
 css/css-break/table/monolithic-overflow-002.tentative.html
 css/css-break/table/oof-in-cell-with-alignment-001.html
