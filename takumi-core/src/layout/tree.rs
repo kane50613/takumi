@@ -373,8 +373,7 @@ type InlineMeasureKey = (usize, [u32; 5]);
 
 /// A box as layout lays it out: its styles, what it keeps of its layouts, and where it went.
 pub(crate) struct LayoutNodeState {
-  /// The style it lays out with, shared with the recent nodes whose style came out equal, as rows
-  /// of a list do.
+  /// The style it lays out with, shared with recent nodes whose style came out equal.
   pub(crate) layout_style: Rc<LayoutStyle>,
   /// Whether the styles are the same whatever query container they resolve against, so repeated
   /// layouts can reuse them.
