@@ -302,11 +302,11 @@ impl Walker {
       let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(inline_box.id as usize) else {
         continue;
       };
-      let Some(ReplacedInlineBox { node, layout }) = resolve_inline_box(inline_box, item, layout)
-      else {
+      let Some(relative) = node.path_where(|candidate| ptr::eq(candidate, item.render_node)) else {
         continue;
       };
-      let Some(relative) = node.path_where(|candidate| ptr::eq(candidate, item.render_node)) else {
+      let Some(ReplacedInlineBox { node, layout }) = resolve_inline_box(inline_box, item, layout)
+      else {
         continue;
       };
       let box_path = [path, &relative].concat();

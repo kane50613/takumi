@@ -1080,7 +1080,7 @@ impl Emitter<'_> {
     self.emit_inline_boxes(node, painted, frame, surface);
   }
 
-  /// Paints the inline layout's replaced boxes and nested container subtrees.
+  /// Paints the inline layout's replaced boxes.
   fn emit_inline_boxes(
     &mut self,
     owner: &RenderNode,

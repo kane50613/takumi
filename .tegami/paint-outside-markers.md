@@ -1,6 +1,6 @@
 ---
 packages:
-  takumi-core: patch
+  takumi-core: minor
   takumi-pdf: patch
 ---
 
