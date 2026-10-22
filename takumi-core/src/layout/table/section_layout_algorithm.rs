@@ -52,7 +52,7 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
           section: self.section,
           row: index,
         };
-        let space = data.space(part, self.space.direction, CacheSlot::Layout);
+        let space = data.space(part, CacheSlot::Layout);
         let result = self.tree.layout(row.node, &space);
         let location = Point::new(LayoutUnit::ZERO, start);
 

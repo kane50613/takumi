@@ -1017,11 +1017,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       let before_section = offset;
 
       offset += spacing.1;
-      let space = data.space(
-        TablePart::Section(section_index),
-        self.tree.layout_style(section.node).direction,
-        self.space.cache_slot,
-      );
+      let space = data.space(TablePart::Section(section_index), self.space.cache_slot);
       let result = self.tree.layout(section.node, &space);
 
       spacing_after_last_section = spacing.1;
