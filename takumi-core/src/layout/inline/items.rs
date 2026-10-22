@@ -121,12 +121,12 @@ impl RenderNode {
     found
   }
 
-  /// Whether an atomic inline box sits among the inline content this node lays out, found
+  /// Whether an inline content box sits among the inline content this node lays out, found
   /// the way [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines)
   /// walks it.
-  pub(crate) fn holds_atomic_inline_box(&self) -> bool {
+  pub(crate) fn holds_inline_content_box(&self) -> bool {
     self.children.iter().flatten().any(|child| {
-      child.is_atomic_inline_box() || (child.is_inline_span() && child.holds_atomic_inline_box())
+      child.is_inline_content_box() || (child.is_inline_span() && child.holds_inline_content_box())
     })
   }
 
@@ -135,6 +135,12 @@ impl RenderNode {
   /// an outside list marker.
   pub(crate) fn is_atomic_inline_box(&self) -> bool {
     self.participates_as_inline_box() && self.origin != NodeOrigin::Marker
+  }
+
+  /// Whether its inline formatting context lays it out as a box of the layout tree its line holds:
+  /// an atomic inline box or a block-in-inline, which the scene paints as boxes of their own.
+  pub(crate) fn is_inline_content_box(&self) -> bool {
+    self.is_atomic_inline_box() || self.is_block_in_inline
   }
 
   /// The child-index path from this node to `target` among its inline content, through the inline

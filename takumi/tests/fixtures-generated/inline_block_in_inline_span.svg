@@ -1,5 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="420" viewBox="0 0 600 420">
   <rect x="0" y="0" width="600" height="420" fill="#fff"/>
+  <rect x="20" y="58" width="560" height="48" fill="#bfdbfe"/>
+  <rect x="20" y="144" width="560" height="44" fill="#ddd6fe"/>
   <rect x="99" y="13" width="129" height="45" fill="#fef08a"/>
   <rect x="99" y="13" width="129" height="3" fill="#ea580c"/>
   <rect x="99" y="55" width="129" height="3" fill="#ea580c"/>
@@ -84,7 +86,6 @@
     <use href="#g8" x="87.59" y="212"/>
     <use href="#g9" x="99.35" y="212"/>
   </g>
-  <rect x="20" y="58" width="560" height="48" fill="#bfdbfe"/>
   <g fill="#0f172a">
     <use href="#g0" x="28" y="90"/>
     <use href="#g7" x="44.08" y="90"/>
@@ -105,7 +106,6 @@
     <use href="#g10" x="236.66" y="90"/>
     <use href="#g6" x="249.78" y="90"/>
   </g>
-  <rect x="20" y="144" width="560" height="44" fill="#ddd6fe"/>
   <g fill="#0f172a">
     <use href="#g18" x="26" y="174"/>
     <use href="#g1" x="43.59" y="174"/>

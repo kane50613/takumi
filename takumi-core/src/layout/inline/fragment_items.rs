@@ -519,7 +519,7 @@ impl FragmentItems {
       .filter(|inline_box| {
         !matches!(
           spans.get(inline_box.id as usize),
-          Some(ProcessedInlineSpan::Box(item)) if item.render_node.is_atomic_inline_box()
+          Some(ProcessedInlineSpan::Box(item)) if item.render_node.is_inline_content_box()
         )
       })
       .map(|inline_box| MeasuredInlineBox {

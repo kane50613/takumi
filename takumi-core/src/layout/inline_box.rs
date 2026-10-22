@@ -1,8 +1,8 @@
 //! Resolving what an inline box paints.
 //!
 //! An inline box is positioned by the inline layout rather than the paint list,
-//! so every backend has to decide what it holds and, for an inline-level
-//! container, lay its subtree out again at the size the line gave it. That
+//! so every backend has to decide what it holds and, for an outside list
+//! marker, lay its subtree out again at the size the line gave it. That
 //! decision is the same everywhere; only the drawing differs.
 
 use crate::{
@@ -26,16 +26,11 @@ pub enum InlineBoxPaint<'n> {
     /// The box's own layout, its location the box's origin in the container's border box.
     layout: ComputedLayout,
   },
-  /// An inline-level container: `inline-block`, `inline-flex`, `inline-grid`,
-  /// or a float, or a block-in-inline. It carries a scene of its own.
-  ///
-  /// Approximate for a block-in-inline: Blink paints it as a block child, its backgrounds before
-  /// the line content and its positioned descendants in their stacking contexts, where takumi
-  /// paints it whole after the text, as an `inline-block`.
+  /// An outside list marker, which carries a scene of its own.
   Container(Box<InlineSubtree>),
 }
 
-/// An inline-level container, laid out again at the size the line gave it.
+/// An outside list marker, laid out again at the size the line gave it.
 pub struct InlineSubtree {
   /// The subtree root, cloned so it can own its layout.
   pub root: RenderNode,
@@ -49,8 +44,8 @@ pub struct InlineSubtree {
   paint_offset: Point<f32>,
 }
 
-/// Resolves what `positioned` paints, and where, or nothing for a box at zero opacity or an atomic
-/// inline container, which its scene paints as a box of the layout tree.
+/// Resolves what `positioned` paints, and where, or nothing for a box at zero opacity or an inline
+/// content box, which its scene paints as a box of the layout tree.
 pub fn resolve_inline_box<'n>(
   positioned: &VisualInlineBox,
   item: &InlineBoxItem<'n>,
@@ -58,7 +53,7 @@ pub fn resolve_inline_box<'n>(
 ) -> Option<(Point<f32>, InlineBoxPaint<'n>)> {
   let node = item.render_node;
 
-  (node.context.style.svg_data.opacity.0 != 0.0 && !node.is_atomic_inline_box())
+  (node.context.style.svg_data.opacity.0 != 0.0 && !node.is_inline_content_box())
     .then(|| InlineBoxPaint::of(positioned, item, container))
 }
 
@@ -84,7 +79,7 @@ impl<'n> InlineBoxPaint<'n> {
 
     // The line advances by the margin box, but the box itself is its border box inside it, as
     // Blink's `LogicalLineBuilder::PlaceAtomicInline` places the fragment past its start margin.
-    if !node.participates_as_inline_box() && !node.is_block_in_inline {
+    if !node.participates_as_inline_box() {
       let border_box = origin + margin_offset;
 
       return (

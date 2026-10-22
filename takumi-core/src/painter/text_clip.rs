@@ -136,8 +136,8 @@ impl<'r> TextMask<'r> {
         return Err(Error::InvalidLayoutNode(child.node_id.into()));
       };
 
-      // Of an inline formatting context's boxes, only its atomic inline containers draw text in.
-      if is_inline_formatting_context && !child_node.is_atomic_inline_box() {
+      // Of an inline formatting context's boxes, only its inline content boxes draw text in.
+      if is_inline_formatting_context && !child_node.is_inline_content_box() {
         continue;
       }
 
@@ -196,8 +196,8 @@ impl<'r> TextMask<'r> {
         continue;
       };
 
-      // An atomic inline container paints as a box of the layout tree.
-      if item.render_node.is_atomic_inline_box() {
+      // An inline content box paints as a box of the layout tree.
+      if item.render_node.is_inline_content_box() {
         continue;
       }
 

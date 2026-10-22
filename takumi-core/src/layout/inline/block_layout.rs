@@ -278,8 +278,8 @@ pub(crate) struct InlineGeometry<'c> {
   pub(crate) out_of_flow: Vec<StaticPosition>,
   /// The padding box each containing block asked for bounds its out-of-flow boxes with.
   pub(crate) containing_blocks: Vec<PaddingBox>,
-  /// Each atomic inline box and its border box's offset in the content box.
-  pub(crate) atomic_inlines: Vec<(&'c RenderNode, Point<f32>)>,
+  /// Each inline content box and its border box's offset in the content box.
+  pub(crate) inline_content_boxes: Vec<(&'c RenderNode, Point<f32>)>,
 }
 
 impl RenderNode {
@@ -339,7 +339,7 @@ impl RenderNode {
     let items_data = node.prepare_layout();
     let lines = node.layout_lines_in_content_box(&items_data, layout, atomic_inline);
     let mut placed: FxHashMap<*const RenderNode, StaticPosition> = FxHashMap::default();
-    let mut atomic_inlines = Vec::new();
+    let mut inline_content_boxes = Vec::new();
 
     for line in &lines {
       let line_top = line
@@ -365,7 +365,7 @@ impl RenderNode {
         }
 
         let shown = !child.is_hidden_due_to_layout && !child.is_truncated;
-        let atomic_inline = match &child.layout_result {
+        let inline_content_box = match &child.layout_result {
           Some(LineFragment::AtomicInline { node, .. }) if shown && node.is_atomic_inline_box() => {
             Some((
               *node,
@@ -381,11 +381,16 @@ impl RenderNode {
             positioned_float.bfc_offset.line_offset,
             positioned_float.bfc_offset.block_offset,
           )),
+          Some(LineFragment::BlockInInline { node, .. }) if shown => Some((
+            *node,
+            line_left + child.rect.offset.inline_offset,
+            line_top + child.rect.offset.block_offset,
+          )),
           _ => None,
         };
 
-        if let Some((node, x, y)) = atomic_inline {
-          atomic_inlines.push((node, Point::new(x.to_float(), y.to_float())));
+        if let Some((node, x, y)) = inline_content_box {
+          inline_content_boxes.push((node, Point::new(x.to_float(), y.to_float())));
         }
 
         // An inline box's fragment took the out-of-flow boxes inside it.
@@ -437,7 +442,7 @@ impl RenderNode {
     InlineGeometry {
       out_of_flow: positions,
       containing_blocks,
-      atomic_inlines,
+      inline_content_boxes,
     }
   }
 }

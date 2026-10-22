@@ -241,7 +241,6 @@ css/
 !css/CSS2/linebox/border-padding-bleed-002.xht
 !css/CSS2/linebox/border-padding-bleed-003.xht
 !css/CSS2/linebox/empty-inline-002.xht
-!css/CSS2/linebox/inline-box-001.xht
 !css/CSS2/linebox/inline-formatting-context-001.xht
 !css/CSS2/linebox/inline-formatting-context-009.xht
 !css/CSS2/linebox/inline-formatting-context-013.xht
@@ -374,9 +373,7 @@ css/CSS2/lists/list-style-type-applies-to-016.html
 !css/CSS2/normal-flow/block-in-inline-insert-017.xht
 !css/CSS2/normal-flow/block-in-inline-margins-001b.xht
 !css/CSS2/normal-flow/block-in-inline-margins-002b.xht
-!css/CSS2/normal-flow/block-in-inline-margins-004.html
 !css/CSS2/normal-flow/block-in-inline-nested-002.xht
-!css/CSS2/normal-flow/block-in-inline-percents-001.xht
 !css/CSS2/normal-flow/block-in-inline-whitespace-001a.xht
 !css/CSS2/normal-flow/block-replaced-height-002.xht
 !css/CSS2/normal-flow/block-replaced-height-004.xht
@@ -685,7 +682,6 @@ css/CSS2/lists/list-style-type-applies-to-016.html
 !css/CSS2/visuren/emptyspan-4.html
 !css/CSS2/visuren/float-inside-inline-between-blocks-1.html
 !css/CSS2/visuren/inline-formatting-context-001.xht
-!css/CSS2/visuren/percent-height-1.html
 !css/CSS2/visuren/split-inner-inline-2.html
 !css/CSS2/visuren/whitespace-present-1a.html
 !css/compositing/mix-blend-mode/mix-blend-mode-border-image.html
