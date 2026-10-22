@@ -73,18 +73,8 @@ impl GlyphDataCollection {
     self.offsets.is_some()
   }
 
-  #[cfg(test)]
-  pub(crate) fn has_graphemes(&self) -> bool {
-    self.graphemes.is_some()
-  }
-
   pub(crate) fn graphemes(&self) -> Option<&[u32]> {
     self.graphemes.as_deref()
-  }
-
-  #[cfg(test)]
-  pub(crate) fn set_graphemes(&mut self, graphemes: Vec<u32>) {
-    self.graphemes = Some(graphemes);
   }
 
   /// The offsets when [`Self::has_non_zero_offsets`], or none.
@@ -133,14 +123,6 @@ impl GlyphDataCollection {
     if range.has_offsets() && !range.is_empty() {
       self.offsets = Some(range.offsets().to_vec());
     }
-  }
-
-  #[cfg(test)]
-  /// Blink's `AddOffsetHeightAt`.
-  pub(crate) fn add_offset_height_at(&mut self, index: usize, delta: f32) {
-    debug_assert!(delta != 0.0);
-
-    self.allocate_offsets_if_needed()[index].y += delta;
   }
 
   /// Blink's `AddOffsetWidthAt`.
@@ -717,6 +699,12 @@ mod tests {
     )
   }
 
+  impl GlyphDataCollection {
+    fn set_graphemes(&mut self, graphemes: Vec<u32>) {
+      self.graphemes = Some(graphemes);
+    }
+  }
+
   #[test]
   fn glyph_data_copy_constructor() {
     let mut run = create_test_shape_result_run(2, 2);
@@ -818,20 +806,6 @@ mod tests {
 
     assert_eq!(run.glyph_data.offsets()[0], GlyphOffset::default());
     assert_eq!(run.glyph_data.offsets()[1], GlyphOffset::new(1.0, 1.0));
-  }
-
-  #[test]
-  fn glyph_data_add_offset_height_at() {
-    let mut run = create_test_shape_result_run(2, 2);
-
-    run.glyph_data.add_offset_height_at(1, 1.5);
-
-    assert!(run.glyph_data.has_non_zero_offsets());
-    assert_eq!(run.glyph_data.offsets()[1], GlyphOffset::new(0.0, 1.5));
-
-    run.glyph_data.add_offset_height_at(1, 2.0);
-
-    assert_eq!(run.glyph_data.offsets()[1], GlyphOffset::new(0.0, 3.5));
   }
 
   #[test]

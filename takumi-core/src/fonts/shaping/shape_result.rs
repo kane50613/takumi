@@ -19,8 +19,6 @@ use crate::{
   style::Direction as TextDirection,
   style::TextJustify,
 };
-#[cfg(test)]
-use icu_segmenter::GraphemeClusterSegmenter;
 
 /// Blink's `ShapeResultCharacterData`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -263,19 +261,6 @@ impl ShapeResult {
     self.direction == TextDirection::Rtl
   }
 
-  #[cfg(test)]
-  /// Blink's `CharacterData`.
-  pub(crate) fn character_data(&self, offset: u32) -> ShapeResultCharacterData {
-    debug_assert!(offset >= self.start_index);
-    debug_assert!(offset < self.end_index());
-
-    let character_position = self.character_position.borrow();
-
-    debug_assert!(!character_position.is_empty());
-
-    character_position[(offset - self.start_index) as usize]
-  }
-
   /// Blink's `IsStartSafeToBreak`.
   pub(crate) fn is_start_safe_to_break(&self) -> bool {
     let run = if self.is_ltr() {
@@ -354,53 +339,6 @@ impl ShapeResult {
     self.start_index
   }
 
-  #[cfg(test)]
-  /// Blink's `AddUnsafeToBreak`.
-  pub(crate) fn add_unsafe_to_break(&mut self, offsets: &[u32]) {
-    if self.is_ltr() {
-      self.add_unsafe_to_break_in_order(offsets.iter().copied());
-    } else {
-      self.add_unsafe_to_break_in_order(offsets.iter().rev().copied());
-    }
-  }
-
-  #[cfg(test)]
-  fn add_unsafe_to_break_in_order(&mut self, mut offsets: impl Iterator<Item = u32>) {
-    let Some(mut offset) = offsets.next() else {
-      debug_assert!(false, "AddUnsafeToBreak needs an offset");
-
-      return;
-    };
-
-    debug_assert!(self.character_position.borrow().is_empty());
-    debug_assert!(offset >= self.start_index);
-
-    for run in &mut self.runs {
-      let mut run_offset = offset.wrapping_sub(run.start_index);
-
-      if run_offset >= run.num_characters {
-        continue;
-      }
-
-      for glyph in run.glyph_data.glyphs_mut() {
-        if u32::from(glyph.character_index) == run_offset {
-          glyph.set_safe_to_break_before(SafeToBreak::Unsafe);
-
-          let Some(next) = offsets.next() else {
-            return;
-          };
-
-          offset = next;
-          run_offset = offset.wrapping_sub(run.start_index);
-
-          if run_offset >= run.num_characters {
-            break;
-          }
-        }
-      }
-    }
-  }
-
   /// Blink's `OffsetForPosition` with a `GlyphIndexResult`.
   pub(crate) fn offset_for_position_result(
     &self,
@@ -459,22 +397,6 @@ impl ShapeResult {
     result
   }
 
-  #[cfg(test)]
-  /// Blink's `OffsetForPosition`.
-  pub(crate) fn offset_for_position(&self, x: f32) -> u32 {
-    let result = self.offset_for_position_result(x, true);
-
-    if self.is_ltr() {
-      return result.left_character_index;
-    }
-
-    if x == result.origin_x {
-      return result.left_character_index;
-    }
-
-    result.right_character_index
-  }
-
   /// Blink's `OffsetToFit`.
   pub(crate) fn offset_to_fit(&self, x: f32, line_direction: TextDirection) -> u32 {
     let result = self.offset_for_position_result(x, false);
@@ -519,35 +441,6 @@ impl ShapeResult {
     }
 
     0.0
-  }
-
-  #[cfg(test)]
-  /// Blink's `EnsureGraphemes`, counting graphemes with ICU4X instead of Blink's LGPL code.
-  pub(crate) fn ensure_graphemes(&mut self, text: &str) {
-    assert_eq!(self.num_characters as usize, text.len());
-
-    if self.runs.is_empty() || self.runs[0].glyph_data.has_graphemes() {
-      return;
-    }
-
-    let result_start_index = self.start_index;
-    let segmenter = GraphemeClusterSegmenter::new();
-
-    for run in &mut self.runs {
-      debug_assert!(run.start_index >= result_start_index);
-
-      let start = (run.start_index - result_start_index) as usize;
-      let run_text = &text[start..start + run.num_characters as usize];
-      let mut graphemes = vec![0; run_text.len()];
-      let mut position = 0;
-
-      for (count, boundary) in segmenter.segment_str(run_text).skip(1).enumerate() {
-        graphemes[position..boundary].fill(count as u32);
-        position = boundary;
-      }
-
-      run.glyph_data.set_graphemes(graphemes);
-    }
   }
 
   /// Blink's `ApplySpacing`.
@@ -961,16 +854,6 @@ impl ShapeResult {
     run_index
   }
 
-  #[cfg(test)]
-  /// Blink's `SubRange`.
-  pub(crate) fn sub_range(&self, start_offset: u32, end_offset: u32) -> Self {
-    let mut sub_range = Self::new(0, 0, self.direction);
-
-    self.copy_range(start_offset, end_offset, &mut sub_range);
-
-    sub_range
-  }
-
   /// Blink's `InsertRun` for glyphs `start_glyph.
   pub(crate) fn insert_run_from_buffer(
     &mut self,
@@ -1056,51 +939,6 @@ impl ShapeResult {
     };
 
     self.runs.insert(position, run);
-  }
-
-  /// Blink's `InsertRunForTesting`.
-  #[cfg(test)]
-  pub(crate) fn insert_run_for_testing(
-    &mut self,
-    start_index: u32,
-    num_characters: u32,
-    direction: TextDirection,
-    safe_break_offsets: &[u16],
-  ) -> &mut ShapeResultRun {
-    let hb_direction = if direction == TextDirection::Ltr {
-      HbDirection::LeftToRight
-    } else {
-      HbDirection::RightToLeft
-    };
-    let mut run = ShapeResultRun::new(
-      None,
-      hb_direction,
-      HbScript::COMMON,
-      start_index,
-      num_characters,
-      num_characters,
-    );
-
-    for (i, glyph) in run.glyph_data.glyphs_mut().iter_mut().enumerate() {
-      *glyph = HarfBuzzRunGlyphData::new(0, i as u32, SafeToBreak::Unsafe, TextRunLayoutUnit::ZERO);
-    }
-
-    for &offset in safe_break_offsets {
-      run.glyph_data.glyphs_mut()[usize::from(offset)].set_safe_to_break_before(SafeToBreak::Safe);
-    }
-
-    if self.is_rtl() {
-      run.glyph_data.reverse();
-    }
-
-    self.insert_run(run);
-
-    let position = self
-      .runs
-      .iter()
-      .position(|run| run.start_index == start_index);
-
-    &mut self.runs[position.unwrap_or_default()]
   }
 }
 
@@ -1191,66 +1029,63 @@ mod tests {
     (0..num_characters).collect()
   }
 
-  #[test]
-  fn add_unsafe_to_break_ltr() {
-    let mut result = ShapeResult::new(0, 8, TextDirection::Ltr);
+  impl ShapeResult {
+    /// Blink's `CharacterData`.
+    fn character_data(&self, offset: u32) -> ShapeResultCharacterData {
+      debug_assert!(offset >= self.start_index);
+      debug_assert!(offset < self.end_index());
 
-    result.insert_run_for_testing(0, 8, TextDirection::Ltr, &all_safe(8));
+      let character_position = self.character_position.borrow();
 
-    let offsets = [2, 5];
+      debug_assert!(!character_position.is_empty());
 
-    for offset in offsets {
-      assert_eq!(result.next_safe_to_break_offset(offset), offset);
+      character_position[(offset - self.start_index) as usize]
     }
 
-    result.add_unsafe_to_break(&offsets);
-    result.ensure_position_data();
+    /// Blink's `InsertRunForTesting`.
+    fn insert_run_for_testing(
+      &mut self,
+      start_index: u32,
+      num_characters: u32,
+      direction: TextDirection,
+      safe_break_offsets: &[u16],
+    ) -> &mut ShapeResultRun {
+      let hb_direction = if direction == TextDirection::Ltr {
+        HbDirection::LeftToRight
+      } else {
+        HbDirection::RightToLeft
+      };
+      let mut run = ShapeResultRun::new(
+        None,
+        hb_direction,
+        HbScript::COMMON,
+        start_index,
+        num_characters,
+        num_characters,
+      );
 
-    for offset in offsets {
-      assert_ne!(result.next_safe_to_break_offset(offset), offset);
-      assert_ne!(result.cached_next_safe_to_break_offset(offset), offset);
-    }
-  }
+      for (i, glyph) in run.glyph_data.glyphs_mut().iter_mut().enumerate() {
+        *glyph =
+          HarfBuzzRunGlyphData::new(0, i as u32, SafeToBreak::Unsafe, TextRunLayoutUnit::ZERO);
+      }
 
-  #[test]
-  fn add_unsafe_to_break_rtl() {
-    let mut result = ShapeResult::new(0, 6, TextDirection::Rtl);
+      for &offset in safe_break_offsets {
+        run.glyph_data.glyphs_mut()[usize::from(offset)]
+          .set_safe_to_break_before(SafeToBreak::Safe);
+      }
 
-    result.insert_run_for_testing(0, 6, TextDirection::Rtl, &all_safe(6));
+      if self.is_rtl() {
+        run.glyph_data.reverse();
+      }
 
-    let offsets = [2, 5];
+      self.insert_run(run);
 
-    for offset in offsets {
-      assert_eq!(result.next_safe_to_break_offset(offset), offset);
-    }
+      let position = self
+        .runs
+        .iter()
+        .position(|run| run.start_index == start_index);
 
-    result.add_unsafe_to_break(&offsets);
-    result.ensure_position_data();
-
-    for offset in offsets {
-      assert_ne!(result.next_safe_to_break_offset(offset), offset);
-      assert_ne!(result.cached_next_safe_to_break_offset(offset), offset);
-    }
-  }
-
-  #[test]
-  fn add_unsafe_to_break_range() {
-    let mut result = ShapeResult::new(1, 8, TextDirection::Ltr);
-
-    result.insert_run_for_testing(1, 8, TextDirection::Ltr, &all_safe(8));
-
-    let offsets = [2, 5, 7];
-
-    for offset in offsets {
-      assert_eq!(result.next_safe_to_break_offset(offset), offset);
-    }
-
-    result.add_unsafe_to_break(&offsets);
-    result.ensure_position_data();
-
-    for offset in offsets {
-      assert_ne!(result.next_safe_to_break_offset(offset), offset);
-      assert_ne!(result.cached_next_safe_to_break_offset(offset), offset);
+      &mut self.runs[position.unwrap_or_default()]
     }
   }
 
@@ -1328,23 +1163,6 @@ mod tests {
   }
 
   #[test]
-  fn sub_range_spans_runs_in_visual_order() {
-    let ltr = two_runs(TextDirection::Ltr).sub_range(2, 6);
-    let rtl = two_runs(TextDirection::Rtl).sub_range(2, 6);
-
-    assert_eq!(
-      (ltr.start_index, ltr.num_characters, ltr.width()),
-      (2, 4, 40.0)
-    );
-    assert_eq!(run_ranges(&ltr), [(2, 2), (4, 2)]);
-    assert_eq!(
-      (rtl.start_index, rtl.num_characters, rtl.width()),
-      (2, 4, 40.0)
-    );
-    assert_eq!(run_ranges(&rtl), [(4, 2), (2, 2)]);
-  }
-
-  #[test]
   fn copy_ranges_fill_each_target() {
     let result = two_runs(TextDirection::Rtl);
     let mut first = ShapeResult::new(0, 0, TextDirection::Rtl);
@@ -1365,8 +1183,6 @@ mod tests {
 
     assert_eq!(run_ranges(&first), [(0, 3)]);
     assert_eq!(run_ranges(&second), [(4, 4), (3, 1)]);
-    assert_eq!(run_ranges(&first), run_ranges(&result.sub_range(0, 3)));
-    assert_eq!(run_ranges(&second), run_ranges(&result.sub_range(3, 8)));
   }
 
   #[test]
@@ -1381,10 +1197,6 @@ mod tests {
       result.position_for_offset(8, AdjustMidCluster::ToStart),
       80.0
     );
-    assert_eq!(result.offset_for_position(25.0), 2);
-    assert_eq!(result.offset_for_position(45.0), 4);
-    assert_eq!(result.offset_for_position(-1.0), 0);
-    assert_eq!(result.offset_for_position(90.0), 8);
 
     result.ensure_position_data();
 
@@ -1410,19 +1222,5 @@ mod tests {
     assert_eq!(result.previous_safe_to_break_offset(7), 6);
     assert_eq!(result.next_safe_to_break_offset(1), 4);
     assert_eq!(result.next_safe_to_break_offset(5), 6);
-  }
-
-  #[test]
-  fn graphemes_count_clusters_per_byte() {
-    let text = "e\u{301}x";
-    let mut result = ShapeResult::new(0, text.len() as u32, TextDirection::Ltr);
-
-    result.insert_run_for_testing(0, text.len() as u32, TextDirection::Ltr, &[]);
-    result.ensure_graphemes(text);
-
-    assert_eq!(
-      result.runs[0].glyph_data.graphemes(),
-      Some(&[0, 0, 0, 1][..])
-    );
   }
 }

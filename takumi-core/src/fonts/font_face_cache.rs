@@ -52,21 +52,7 @@ impl FontFaceCache {
     self.segmented_faces.remove_font_face(font_face)
   }
 
-  #[cfg(test)]
-  /// Blink's `Get`: the bucket of `family` that best matches `request`.
-  pub(crate) fn get(
-    &self,
-    request: FontSelectionRequest,
-    family: &str,
-  ) -> Option<&CssSegmentedFontFace> {
-    self
-      .segmented_faces
-      .find(family)?
-      .font_selection_query_result(request)
-  }
-
-  /// The buckets of `family`, the one [`Self::get`] picks first, then the rest from the better
-  /// match for `request` to the worse.
+  /// The buckets of `family`, from the best match for `request` to the worst.
   pub(crate) fn get_ranked(
     &self,
     request: FontSelectionRequest,
@@ -76,17 +62,6 @@ impl FontFaceCache {
       .segmented_faces
       .find(family)
       .map_or_else(Vec::new, |faces| faces.ranked(request))
-  }
-
-  #[cfg(test)]
-  /// Blink's `GetNumSegmentedFacesForTesting`.
-  pub(crate) fn get_num_segmented_faces_for_testing(&self) -> usize {
-    self
-      .segmented_faces
-      .map
-      .values()
-      .map(|family_faces| family_faces.map.len())
-      .sum()
   }
 }
 
@@ -205,16 +180,6 @@ impl CapabilitiesSet {
 
     best
   }
-
-  #[cfg(test)]
-  fn font_selection_query_result(
-    &self,
-    request: FontSelectionRequest,
-  ) -> Option<&CssSegmentedFontFace> {
-    let candidates: Vec<&CssSegmentedFontFace> = self.map.iter().collect();
-
-    Self::best_of(&candidates, request).map(|best| candidates[best])
-  }
 }
 
 #[cfg(test)]
@@ -284,6 +249,37 @@ mod tests {
 
   fn value(value: f32) -> FontSelectionValue {
     FontSelectionValue::new(value)
+  }
+
+  impl FontFaceCache {
+    /// Blink's `Get`: the bucket of `family` that best matches `request`.
+    fn get(&self, request: FontSelectionRequest, family: &str) -> Option<&CssSegmentedFontFace> {
+      self
+        .segmented_faces
+        .find(family)?
+        .font_selection_query_result(request)
+    }
+
+    /// Blink's `GetNumSegmentedFacesForTesting`.
+    fn get_num_segmented_faces_for_testing(&self) -> usize {
+      self
+        .segmented_faces
+        .map
+        .values()
+        .map(|family_faces| family_faces.map.len())
+        .sum()
+    }
+  }
+
+  impl CapabilitiesSet {
+    fn font_selection_query_result(
+      &self,
+      request: FontSelectionRequest,
+    ) -> Option<&CssSegmentedFontFace> {
+      let candidates: Vec<&CssSegmentedFontFace> = self.map.iter().collect();
+
+      Self::best_of(&candidates, request).map(|best| candidates[best])
+    }
   }
 
   #[test]

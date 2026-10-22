@@ -294,12 +294,6 @@ pub(crate) mod avx2 {
       // SAFETY: `self` exists only after AVX2 was detected.
       unsafe { edit_mixed_alpha_runs(pixels, edit) }
     }
-
-    #[cfg(test)]
-    pub(crate) fn alpha_is_uniform(self, run: &PixelRun) -> bool {
-      // SAFETY: `self` exists only after AVX2 was detected.
-      unsafe { alpha_is_uniform(run) }
-    }
   }
 
   #[target_feature(enable = "avx2")]
@@ -309,7 +303,7 @@ pub(crate) mod avx2 {
 
   #[target_feature(enable = "avx2")]
   #[inline]
-  fn alpha_is_uniform(run: &PixelRun) -> bool {
+  pub(super) fn alpha_is_uniform(run: &PixelRun) -> bool {
     // SAFETY: the unaligned loads stay inside `run`.
     unsafe {
       let p = run.as_ptr() as *const __m256i;
@@ -362,6 +356,14 @@ mod tests {
         scalar::alpha_is_uniform(&run),
         "{name} disagrees with scalar on {run:?}"
       );
+    }
+  }
+
+  #[cfg(target_arch = "x86_64")]
+  impl Avx2 {
+    fn alpha_is_uniform(self, run: &PixelRun) -> bool {
+      // SAFETY: `self` exists only after AVX2 was detected.
+      unsafe { avx2::alpha_is_uniform(run) }
     }
   }
 
