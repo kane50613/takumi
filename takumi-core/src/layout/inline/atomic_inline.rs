@@ -19,6 +19,7 @@ use crate::{
     tree::{LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
+  style::BaselineSource,
 };
 
 /// Lays out the atomic inlines of an inline formatting context in its content box,
@@ -51,12 +52,16 @@ impl<'t, 'r> BoxAtomicInline<'t, 'r> {
   }
 
   /// The space Blink's `LayoutAtomicInline` lays `node` out in: a new formatting context in the
-  /// containing block's available size, its baselines an inline-block's.
+  /// containing block's available size, its baselines an inline-block's unless `baseline-source`
+  /// picks one.
   fn atomic_inline_space(&self, node: NodeId) -> ConstraintSpace {
     let mut space = self.block_space(node);
 
     space.is_new_formatting_context = true;
-    space.baseline_algorithm = BaselineAlgorithmType::InlineBlock;
+    space.baseline_algorithm = match self.tree.layout_style(node).baseline_source {
+      BaselineSource::Auto => BaselineAlgorithmType::InlineBlock,
+      BaselineSource::First | BaselineSource::Last => BaselineAlgorithmType::Default,
+    };
     space
   }
 

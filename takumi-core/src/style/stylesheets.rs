@@ -1452,6 +1452,7 @@ define_style! {
       border_bottom_style: BorderStyle,
       border_left_style: BorderStyle,
       box_decoration_break: BoxDecorationBreak,
+      baseline_source: BaselineSource,
     }
     /// Blink's `surround` field group: insets, corner radii, and border colors.
     surround_data: StyleSurroundData {

@@ -10,9 +10,9 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   style::{
-    AlignItems, BoxSizing, ComputedStyle, Contain, Direction, Display, FlexBasis, FlexDirection,
-    FlexWrap, Gap, JustifyContent, Length, MaxSize, Overflow, Position, Size as SizeValue,
-    SizingContext,
+    AlignItems, BaselineSource, BoxSizing, ComputedStyle, Contain, Direction, Display, FlexBasis,
+    FlexDirection, FlexWrap, Gap, JustifyContent, Length, MaxSize, Overflow, Position,
+    Size as SizeValue, SizingContext,
   },
 };
 
@@ -116,6 +116,7 @@ pub(crate) struct LayoutStyle {
   pub(crate) max_size: Size<LayoutLength>,
   pub(crate) aspect_ratio: Option<f32>,
   pub(crate) box_sizing: BoxSizing,
+  pub(crate) baseline_source: BaselineSource,
   pub(crate) margin: Rect<LayoutLength>,
   pub(crate) padding: Rect<LayoutLength>,
   /// The used border widths.
@@ -168,6 +169,7 @@ impl Default for LayoutStyle {
       max_size: Size::all(LayoutLength::Auto),
       aspect_ratio: None,
       box_sizing: BoxSizing::ContentBox,
+      baseline_source: BaselineSource::Auto,
       margin: Rect::all(LayoutLength::Fixed(0.0)),
       padding: Rect::all(LayoutLength::Fixed(0.0)),
       border: Rect::all(0.0),
@@ -239,6 +241,7 @@ impl LayoutStyle {
       },
       aspect_ratio: style.surround_data.aspect_ratio.into(),
       box_sizing: box_data.box_sizing,
+      baseline_source: box_data.baseline_source,
       margin: Rect {
         top: length(box_data.margin_top),
         right: length(box_data.margin_right),

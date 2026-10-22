@@ -14,7 +14,7 @@ use crate::{
     margin_strut::MarginStrut,
   },
   layout_unit::LayoutUnit,
-  style::Direction,
+  style::{BaselineSource, Direction},
 };
 
 /// Blink's `LayoutResult::EStatus`.
@@ -248,17 +248,14 @@ impl LayoutResult {
     self.use_last_baseline_for_inline_baseline && !style.overflow.y.is_clip_or_visible()
   }
 
-  /// Blink's `LogicalBoxFragment::BaselineMetrics` baseline for `baseline-source: auto`, none where
-  /// the line synthesizes one.
+  /// Blink's `LogicalBoxFragment::BaselineMetrics` baseline, none where the line synthesizes one.
   pub(crate) fn inline_baseline(&self, style: &LayoutStyle) -> Option<LayoutUnit> {
-    if self.forces_inline_baseline_synthesis(style) {
-      return None;
+    match style.baseline_source {
+      BaselineSource::Auto if self.forces_inline_baseline_synthesis(style) => None,
+      BaselineSource::Auto if self.use_last_baseline_for_inline_baseline => self.last_baseline,
+      BaselineSource::Auto | BaselineSource::First => self.first_baseline,
+      BaselineSource::Last => self.last_baseline,
     }
-    if self.use_last_baseline_for_inline_baseline {
-      return self.last_baseline;
-    }
-
-    self.first_baseline
   }
 
   /// A layout that stopped at `bfc_block_offset`, which its container resolves and lays it out at

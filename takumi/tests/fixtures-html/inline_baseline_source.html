@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_baseline_source</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: block;
+        font-size: 32px;
+        line-height: 40px;
+        margin-bottom: 48px;
+        border-bottom: 1px dashed rgb(148, 163, 184);
+      }
+      .box {
+        display: inline-block;
+        width: 140px;
+        padding: 4px 8px;
+        background-color: rgb(253, 224, 71);
+        font-size: 20px;
+        line-height: 28px;
+      }
+      .flex {
+        display: inline-flex;
+        flex-direction: column;
+        width: 140px;
+        padding: 4px 8px;
+        background-color: rgb(147, 197, 253);
+        font-size: 20px;
+        line-height: 28px;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div style="padding: 32px; background-color: rgb(255, 255, 255)">
+      <div class="row"
+        >Ag <div class="box">auto<br />two<br />three</div> Ag
+        <div class="box" style="baseline-source: first">first<br />two<br />three</div> Ag
+        <div class="box" style="baseline-source: last">last<br />two<br />three</div> Ag</div
+      >
+      <div class="row"
+        >Ag <div class="flex"><span>auto</span><span>two</span><span>three</span></div> Ag
+        <div class="flex" style="baseline-source: last"
+          ><span>last</span><span>two</span><span>three</span></div
+        >
+        Ag</div
+      >
+    </div>
+  </body>
+</html>
