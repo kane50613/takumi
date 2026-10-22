@@ -11,6 +11,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   resources::font::Fonts,
+  scene::{PagedScene, PaintItemKind},
   style::{SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -211,4 +212,69 @@ fn lines_split_between_pages_as_widows_ask() {
 
   // Six widows leave two lines on the first page.
   assert_eq!(boxes["p"], [placed(0, 140.0, 60.0), placed(1, 0.0, 120.0)]);
+}
+
+#[test]
+fn each_page_paints_the_lines_its_fragment_holds() {
+  let tree = render(
+    root([
+      block("a", "h140"),
+      Node::container([Node::text("1\n2\n3\n4\n5\n6\n7\n8")])
+        .with_tag_name("p")
+        .with_id("p"),
+    ]),
+    ".h140 { height: 140px }",
+  );
+  let mut paged = PagedScene::lay_out(
+    tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+    false,
+  )
+  .expect("pages lay out");
+
+  assert_eq!(paged.page_count(), 2);
+
+  for (page, line_count) in [(0, 3), (1, 5), (0, 3)] {
+    let scene = paged.page(page);
+    let paint = scene
+      .contexts
+      .iter()
+      .flat_map(|context| context.in_paint_order().into_iter().flatten())
+      .find_map(|item| match &item.kind {
+        PaintItemKind::Node(paint)
+          if scene
+            .root
+            .node_at_path(&paint.path)
+            .and_then(|node| node.node.as_ref())
+            .and_then(|node| node.id())
+            == Some("p") =>
+        {
+          Some(paint.clone())
+        }
+        _ => None,
+      })
+      .expect("the paragraph paints on every page");
+    let node = scene
+      .root
+      .node_at_path(&paint.path)
+      .expect("paragraph node");
+    let layout = scene
+      .results
+      .fragment_layout(paint.node_id, paint.fragment_index)
+      .expect("fragment layout");
+
+    assert_eq!(paint.fragment_index, page);
+    assert_eq!(
+      node
+        .fragment_items_in(layout)
+        .expect("the fragment's lines")
+        .line_boxes()
+        .len(),
+      line_count,
+      "page {page}"
+    );
+  }
 }

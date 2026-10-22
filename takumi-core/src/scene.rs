@@ -3,6 +3,8 @@
 //! independently.
 
 use std::collections::HashMap;
+#[cfg(feature = "fragmentation")]
+use std::mem::swap;
 
 use crate::{
   error::{Error, Result},
@@ -355,6 +357,11 @@ pub struct SceneRequest<'a> {
 impl SceneRequest<'_> {
   /// Flattens the node tree into CSS-ordered stacking contexts for painting.
   pub fn build(self) -> Result<SceneLayers> {
+    self.build_fragment(0)
+  }
+
+  /// [`Self::build`] for the root's fragment `root_fragment_index` and the fragments it holds.
+  fn build_fragment(self, root_fragment_index: usize) -> Result<SceneLayers> {
     let SceneRequest {
       root,
       layout_results,
@@ -372,7 +379,7 @@ impl SceneRequest<'_> {
     let mut visits = vec![StackingContextBuildVisit {
       path: Vec::new(),
       node_id: NodeId::ROOT,
-      fragment_index: 0,
+      fragment_index: root_fragment_index,
       base: ChildBase {
         transform: Affine::IDENTITY,
         paint_offset: Point::ZERO,
@@ -699,13 +706,29 @@ impl Scene {
     layers: SceneLayers,
     size: Size<f32>,
   ) -> Self {
+    set_paint_offsets(&mut root, &layers.placements(&results));
+
     let SceneLayers {
       contexts,
       properties,
     } = layers;
-    let mut offsets = HashMap::new();
 
-    for context in &contexts {
+    Self {
+      root,
+      results,
+      contexts,
+      properties,
+      size,
+    }
+  }
+}
+
+impl SceneLayers {
+  /// Where these layers place each box they paint, by child path.
+  fn placements(&self, results: &LayoutResults) -> HashMap<Vec<usize>, ScenePlacement> {
+    let mut placements = HashMap::new();
+
+    for context in &self.contexts {
       let items = context.buckets.in_paint_order().into_iter().flatten();
       let paints = items.filter_map(|item| match &item.kind {
         PaintItemKind::Node(paint) | PaintItemKind::CollapsedBorders(paint) => Some(paint),
@@ -714,7 +737,7 @@ impl Scene {
 
       for paint in context.root.iter().chain(paints) {
         if let Ok(layout) = results.fragment_layout(paint.node_id, paint.fragment_index) {
-          offsets.insert(
+          placements.insert(
             paint.path.clone(),
             ScenePlacement {
               paint_offset: paint.paint_offset,
@@ -725,15 +748,91 @@ impl Scene {
         }
       }
     }
-    set_paint_offsets(&mut root, &offsets);
+    placements
+  }
+}
 
-    Self {
-      root,
-      results,
-      contexts,
-      properties,
-      size,
+/// A render tree laid out across pages, as Blink's paginated root lays a document out, with the
+/// stacking contexts of each page.
+#[cfg(feature = "fragmentation")]
+pub struct PagedScene {
+  /// The tree, its layout, and the page [`Self::page`] last set up.
+  scene: Scene,
+  /// Each page's stacking contexts, the set-up page's held by `scene`.
+  pages: Vec<ScenePage>,
+  current: usize,
+}
+
+/// One page of a [`PagedScene`].
+#[cfg(feature = "fragmentation")]
+struct ScenePage {
+  layers: SceneLayers,
+  placements: HashMap<Vec<usize>, ScenePlacement>,
+}
+
+#[cfg(feature = "fragmentation")]
+impl PagedScene {
+  /// Lays `root` out on pages `page_size` and builds the scene of each.
+  pub fn lay_out(root: RenderNode, page_size: Size<f32>, paint_bounds: bool) -> Result<Self> {
+    root.clear_layout_caches();
+    let (results, page_count) = LayoutResults::compute_pages(&root, page_size);
+    let mut pages = Vec::with_capacity(page_count);
+
+    for page in 0..page_count {
+      let root_fragment_index = results
+        .fragment_in(NodeId::ROOT, page)
+        .ok_or(Error::InvalidLayoutNode(NodeId::ROOT.into()))?;
+      let layers = SceneRequest {
+        root: &root,
+        layout_results: &results,
+        container_size: page_size.map(Some),
+        paint_bounds,
+      }
+      .build_fragment(root_fragment_index)?;
+      let placements = layers.placements(&results);
+
+      pages.push(ScenePage { layers, placements });
     }
+
+    let mut paged = Self {
+      scene: Scene {
+        root,
+        results,
+        contexts: Vec::new(),
+        properties: PropertyTrees::default(),
+        size: page_size,
+      },
+      pages,
+      current: 0,
+    };
+
+    paged.swap_layers(0);
+    set_paint_offsets(&mut paged.scene.root, &paged.pages[0].placements);
+    Ok(paged)
+  }
+
+  /// The number of pages.
+  pub fn page_count(&self) -> usize {
+    self.pages.len()
+  }
+
+  /// The scene of page `index`, its boxes set up to paint their fragments on it.
+  pub fn page(&mut self, index: usize) -> &Scene {
+    if index != self.current {
+      self.swap_layers(self.current);
+      self.swap_layers(index);
+      self.current = index;
+      set_paint_offsets(&mut self.scene.root, &self.pages[index].placements);
+    }
+    &self.scene
+  }
+
+  /// Swaps page `index`'s stacking contexts with those `scene` holds.
+  fn swap_layers(&mut self, index: usize) {
+    let layers = &mut self.pages[index].layers;
+
+    swap(&mut self.scene.contexts, &mut layers.contexts);
+    swap(&mut self.scene.properties, &mut layers.properties);
   }
 }
 

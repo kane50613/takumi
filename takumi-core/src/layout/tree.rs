@@ -6,7 +6,7 @@ use std::{
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
-#[cfg(all(test, feature = "fragmentation"))]
+#[cfg(feature = "fragmentation")]
 use crate::layout::{
   block_break_token::BlockBreakToken,
   break_appeal::BreakAppeal,
@@ -260,7 +260,7 @@ impl LayoutResults {
   }
 
   /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.
-  #[cfg(all(test, feature = "fragmentation"))]
+  #[cfg(feature = "fragmentation")]
   pub(crate) fn compute_pages(root: &RenderNode, page_size: Size<f32>) -> (Self, usize) {
     let mut tree = LayoutTree::from_render_node(root);
     let page_count = tree.compute_pages(page_size);
@@ -860,7 +860,7 @@ impl<'r> LayoutTree<'r> {
   /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes, `@page`, or out-of-flow boxes the
   /// initial containing block holds: the root laid out a page `page_size` at a time, each page
   /// resuming where the one before broke. Returns the page count.
-  #[cfg(all(test, feature = "fragmentation"))]
+  #[cfg(feature = "fragmentation")]
   pub(crate) fn compute_pages(&mut self, page_size: Size<f32>) -> usize {
     let page_block_size = LayoutUnit::from_float(page_size.height);
     let mut break_token: Option<Rc<BlockBreakToken>> = None;
