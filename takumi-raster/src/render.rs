@@ -150,7 +150,7 @@ pub fn render<'g>(mut options: RenderOptions<'g>) -> Result<Bitmap> {
   render_with_context(render_context, options.node, options.viewport)
 }
 
-/// Paints a laid-out scene to an image the size of its viewport.
+/// Paints a laid-out scene to an image the size of `scene.size`.
 pub fn render_scene(scene: &mut Scene) -> Result<Bitmap> {
   let size = scene.size.map(|length| length.round() as u32);
 
