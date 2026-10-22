@@ -1004,6 +1004,14 @@ macro_rules! define_style {
                 self.$group = COMPUTED_INITIAL_STYLE.with(|computed| Rc::clone(&computed.$group));
               }
             )*
+
+            // The computed initial `outline-width` is zero for its `none` outline style, which
+            // lives in another group, so a rendered outline style resolves its own copy.
+            if self.misc_data.outline_style.is_rendered()
+              && COMPUTED_INITIAL_STYLE.with(|computed| Rc::ptr_eq(&self.misc3_data, &computed.misc3_data))
+            {
+              self.misc3_data = Rc::new((*initial.misc3_data).clone());
+            }
           });
         }
 

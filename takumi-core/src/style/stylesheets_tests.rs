@@ -1121,6 +1121,30 @@ fn test_position_absolute_blockifies_inline_display() {
 }
 
 #[test]
+fn test_outline_style_alone_keeps_the_initial_outline_width() {
+  let mut style = style_with([StyleDeclaration::outline_style(BorderStyle::Solid)])
+    .inherit(&ComputedStyle::default());
+
+  let sizing = SizingContext {
+    viewport: Viewport::new((1200, 630)),
+    container_size: Size::NONE,
+    container_read: Default::default(),
+    font_size: 16.0,
+    root_font_size: None,
+    line_height: 0.0,
+    root_line_height: None,
+    ch: 16.0 / 2.0,
+  };
+
+  style.make_computed(&sizing);
+
+  assert_ne!(
+    style.misc3_data.outline_width,
+    LineWidth::Length(Length::zero())
+  );
+}
+
+#[test]
 fn test_inherited_em_text_lengths_are_computed_once() {
   let mut parent = style_with([
     StyleDeclaration::font_size(Length::Em(2.0).into()),
