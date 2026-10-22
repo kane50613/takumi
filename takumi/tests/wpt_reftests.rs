@@ -861,7 +861,7 @@ impl Runner {
   /// `match` reference, and unlike every `mismatch` one.
   fn compare(&self, path: &Path) -> Result<bool, String> {
     let source = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    let print = is_print_reftest(path);
+    let print = is_print_reftest(path.strip_prefix(&self.root).unwrap_or(path));
     let test = self.render(path, &source, print)?;
     let pages = reftest_pages(&source);
     let mut has_match_reference = false;
