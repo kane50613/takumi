@@ -77,6 +77,10 @@ features = ["paint-tree"]
 [dev-dependencies.takumi-svg]
 path = "../takumi-svg"
 
+[dev-dependencies.takumi-raster]
+path = "../takumi-raster"
+features = ["fragmentation"]
+
 [lints]
 workspace = true
 

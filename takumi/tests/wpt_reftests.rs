@@ -39,11 +39,16 @@ use takumi::{
   },
   render, write_image,
 };
-use takumi_core::resources::image::ResourceCache;
+use takumi_core::{geometry::Size, resources::image::ResourceCache};
+use takumi_raster::render_pages;
 use test_utils::{CONTEXT, matches_fragments};
 
 /// The WPT harness's viewport.
 const VIEWPORT: (u32, u32) = (800, 600);
+
+/// The page area of a print reftest: WPT's 5 by 3 inch page less its half-inch margins, at 96
+/// pixels an inch.
+const PRINT_PAGE_AREA: (u32, u32) = (384, 192);
 
 /// The run reports progress every this many finished tests.
 const PROGRESS_EVERY: usize = 500;
@@ -493,6 +498,47 @@ fn references(source: &str) -> Vec<(String, bool)> {
     .collect()
 }
 
+/// Whether the test at `path` is a print reftest, which compares page by page: `-print` ends its
+/// name, or it sits under a `print` directory.
+fn is_print_reftest(path: &Path) -> bool {
+  path
+    .file_stem()
+    .is_some_and(|stem| stem.to_string_lossy().ends_with("-print"))
+    || path
+      .parent()
+      .is_some_and(|parent| parent.components().any(|part| part.as_os_str() == "print"))
+}
+
+/// The 1-based page ranges a `<meta name=reftest-pages>` in `source` compares, none for every page.
+fn reftest_pages(source: &str) -> Option<Vec<(usize, usize)>> {
+  let content = tags(source, "meta")
+    .into_iter()
+    .find(|attributes| {
+      attributes
+        .get("name")
+        .is_some_and(|name| name == "reftest-pages")
+    })?
+    .remove("content")?;
+
+  let bound = |text: &str, open: usize| {
+    let text = text.trim();
+
+    if text.is_empty() {
+      Some(open)
+    } else {
+      text.parse().ok()
+    }
+  };
+
+  content
+    .split(',')
+    .map(|item| match item.split_once('-') {
+      Some((first, last)) => Some((bound(first, 1)?, bound(last, usize::MAX)?)),
+      None => item.trim().parse().ok().map(|page| (page, page)),
+    })
+    .collect()
+}
+
 /// The attributes of each `<name ...>` tag in `source`, by lowercase name.
 fn tags(source: &str, name: &str) -> Vec<HashMap<String, String>> {
   positioned_tags(source, name)
@@ -812,21 +858,23 @@ impl Runner {
   /// `match` reference, and unlike every `mismatch` one.
   fn compare(&self, path: &Path) -> Result<bool, String> {
     let source = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    let test = self.render(path, &source)?;
+    let print = is_print_reftest(path);
+    let test = self.render(path, &source, print)?;
+    let pages = reftest_pages(&source);
     let mut has_match_reference = false;
     let mut matched = false;
 
     for (href, matches) in references(&source) {
       let reference_path = self.resolve(path, &href);
       let reference = if href == "about:blank" {
-        self.render(path, "")?
+        self.render(path, "", print)?
       } else {
         fs::read_to_string(&reference_path)
           .map_err(|error| format!("{href}: {error}"))
-          .and_then(|reference| self.render(&reference_path, &reference))?
+          .and_then(|reference| self.render(&reference_path, &reference, print))?
       };
 
-      let is_alike = Fuzzy::of(&source, &href).allows(&test, &reference);
+      let is_alike = test.is_alike(&reference, Fuzzy::of(&source, &href), pages.as_deref());
 
       has_match_reference |= matches;
       matched |= matches && is_alike;
@@ -834,15 +882,23 @@ impl Runner {
       if is_alike != matches {
         if let Some(dump) = &self.dump {
           let name = self.relative(path).replace('/', "__");
-          let (width, height) = VIEWPORT;
 
-          for (suffix, pixels) in [("test", test.clone()), ("ref", reference)] {
-            let bitmap = Bitmap::from_raw(width, height, pixels).ok_or("render size")?;
-            let mut file = fs::File::create(dump.join(format!("{name}-{suffix}.png")))
-              .map_err(|error| error.to_string())?;
+          for (suffix, rendering) in [("test", &test), ("ref", &reference)] {
+            let (width, height) = rendering.size;
 
-            write_image(&bitmap, &mut file, OutputFormat::Png)
-              .map_err(|error| error.to_string())?;
+            for (index, pixels) in rendering.pages.iter().enumerate() {
+              let page = if print {
+                format!("-page{}", index + 1)
+              } else {
+                String::new()
+              };
+              let bitmap = Bitmap::from_raw(width, height, pixels.clone()).ok_or("render size")?;
+              let mut file = fs::File::create(dump.join(format!("{name}-{suffix}{page}.png")))
+                .map_err(|error| error.to_string())?;
+
+              write_image(&bitmap, &mut file, OutputFormat::Png)
+                .map_err(|error| error.to_string())?;
+            }
           }
         }
 
@@ -855,8 +911,8 @@ impl Runner {
     Ok(!has_match_reference || matched)
   }
 
-  /// The document at `path` rendered onto white, as RGBA.
-  fn render(&self, path: &Path, source: &str) -> Result<Vec<u8>, String> {
+  /// The document at `path` rendered onto white, as RGBA, across print pages when `print`.
+  fn render(&self, path: &Path, source: &str, print: bool) -> Result<Rendering, String> {
     let linked: Vec<(usize, PathBuf, String)> = positioned_tags(source, "link")
       .into_iter()
       .filter_map(|(start, attributes)| {
@@ -929,33 +985,82 @@ impl Runner {
         .into_iter()
         .chain(sheets.into_iter().map(|(.., sheet)| sheet)),
     );
-    let bitmap = render(
-      RenderOptions::builder()
-        .viewport(Viewport::new(VIEWPORT))
-        .node(node)
-        .fonts(&self.fonts)
-        .images(images)
-        .stylesheet(stylesheet.into())
-        .build(),
-    )
+    let size = if print { PRINT_PAGE_AREA } else { VIEWPORT };
+    let options = RenderOptions::builder()
+      .viewport(Viewport::new(size))
+      .node(node)
+      .fonts(&self.fonts)
+      .images(images)
+      .stylesheet(stylesheet.into())
+      .build();
+    let bitmaps = if print {
+      render_pages(
+        options,
+        Size {
+          width: size.0 as f32,
+          height: size.1 as f32,
+        },
+      )
+    } else {
+      render(options).map(|bitmap| vec![bitmap])
+    }
     .map_err(|error| format!("render: {error}"))?;
 
-    Ok(
-      bitmap
-        .as_raw()
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .flat_map(|&[red, green, blue, alpha]| {
-          let alpha = u32::from(alpha);
-          let over_white =
-            |channel: u8| ((u32::from(channel) * alpha + 255 * (255 - alpha)) / 255) as u8;
-
-          [over_white(red), over_white(green), over_white(blue), 255]
-        })
-        .collect(),
-    )
+    Ok(Rendering {
+      size,
+      pages: bitmaps.iter().map(over_white).collect(),
+    })
   }
+}
+
+/// A document rendered onto white: one page, or one per print page.
+struct Rendering {
+  size: (u32, u32),
+  pages: Vec<Vec<u8>>,
+}
+
+impl Rendering {
+  /// Whether it renders like `reference` within `fuzzy` on every page, or the 1-based `pages` a
+  /// `reftest-pages` names.
+  fn is_alike(&self, reference: &Self, fuzzy: Fuzzy, pages: Option<&[(usize, usize)]>) -> bool {
+    let selected = |index: usize| {
+      pages.is_none_or(|ranges| {
+        ranges
+          .iter()
+          .any(|&(first, last)| (first..=last).contains(&(index + 1)))
+      })
+    };
+
+    if pages.is_none() && self.pages.len() != reference.pages.len() {
+      return false;
+    }
+
+    (0..self.pages.len().max(reference.pages.len()))
+      .filter(|&index| selected(index))
+      .all(
+        |index| match (self.pages.get(index), reference.pages.get(index)) {
+          (Some(test), Some(reference)) => fuzzy.allows(test, reference),
+          _ => false,
+        },
+      )
+  }
+}
+
+/// `bitmap`'s RGBA over white.
+fn over_white(bitmap: &Bitmap) -> Vec<u8> {
+  bitmap
+    .as_raw()
+    .as_chunks::<4>()
+    .0
+    .iter()
+    .flat_map(|&[red, green, blue, alpha]| {
+      let alpha = u32::from(alpha);
+      let over_white =
+        |channel: u8| ((u32::from(channel) * alpha + 255 * (255 - alpha)) / 255) as u8;
+
+      [over_white(red), over_white(green), over_white(blue), 255]
+    })
+    .collect()
 }
 
 #[test]
@@ -1035,4 +1140,17 @@ fn xhtml_style_blocks_read_as_xml() {
     style_blocks("<style>e &gt; f {}</style>", false)[0].1,
     "e &gt; f {}"
   );
+}
+
+#[test]
+fn reftest_pages_reads_open_and_single_ranges() {
+  assert_eq!(
+    reftest_pages(r#"<meta name="reftest-pages" content="1, 3-4, -2, 5-">"#),
+    Some(vec![(1, 1), (3, 4), (1, 2), (5, usize::MAX)])
+  );
+  assert_eq!(
+    reftest_pages(r#"<meta name="reftest-pages" content="x">"#),
+    None
+  );
+  assert_eq!(reftest_pages("<p>"), None);
 }
