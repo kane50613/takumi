@@ -33,7 +33,7 @@ use crate::{
     },
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
     out_of_flow::ContainingBlock,
-    relative_utils::compute_relative_offset_for_inline,
+    relative_utils::compute_relative_offset,
     tree::LayoutTree,
   },
   layout_unit::LayoutUnit,
@@ -1516,7 +1516,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         item.is_overflow_safe(ForRows),
       );
 
-      let relative_offset = compute_relative_offset_for_inline(
+      let relative_offset = compute_relative_offset(
         self.tree.render_node(item.node),
         self.direction(),
         Some(containing_grid_area.size.inline_size.to_float()),
