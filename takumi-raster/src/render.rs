@@ -132,7 +132,7 @@ pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
   let images = Rc::new(mem::take(&mut options.images));
   let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
   let mut root = RenderNode::from_node(&render_context, options.node);
-  let layout_results = LayoutResults::compute(&root, options.viewport.into());
+  let layout_results = LayoutResults::compute_document(&root, options.viewport.into());
 
   MeasuredNode::of(&mut root, &layout_results, options.viewport.size.into())
 }

@@ -2936,3 +2936,24 @@ fn test_measure_float_lays_out_its_content_in_its_own_direction() {
 
   assert_close(float.children[0].transform[4] - float.transform[4], 80.0);
 }
+
+#[test]
+fn test_measure_root_without_a_viewport_size_fits_its_content() {
+  let node = Node::from_html(
+    r#"<div style="width:100%;height:100%;gap:24px;background-color:white"><img width="96" height="96" style="border-radius:50%" src="assets/images/yeecord.png"><span>Remote</span></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let measured = measure(node, Viewport::default());
+
+  assert!(
+    measured.width > 96.0 && measured.width < 400.0,
+    "{}",
+    measured.width
+  );
+  assert!(
+    measured.height > 96.0 && measured.height < 400.0,
+    "{}",
+    measured.height
+  );
+}

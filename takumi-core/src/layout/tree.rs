@@ -161,7 +161,7 @@ impl LayoutResults {
   /// Lays out the tree under `root`, a box its parent placed, in `available_space`. The root's
   /// margins shrink the space but leave its border box at the origin, where the parent expects it.
   pub fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
-    let mut results = Self::lay_out(root, available_space, false);
+    let mut results = Self::lay_out(root, available_space, false, false);
 
     if let Some(root) = results.nodes.first_mut() {
       root.layout.location = Point::new(0.0, 0.0);
@@ -169,21 +169,38 @@ impl LayoutResults {
     results
   }
 
-  /// [`Self::compute`] for paint: each inline formatting context keeps the fragment items it
-  /// lays out to, and lets go of the shaped text no other box shares.
+  /// [`Self::compute`] for the root of a document, whose initial containing block fits the root
+  /// when `available_space` leaves its width to the content.
+  pub fn compute_document(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
+    let mut results = Self::lay_out(root, available_space, false, true);
+
+    if let Some(root) = results.nodes.first_mut() {
+      root.layout.location = Point::new(0.0, 0.0);
+    }
+    results
+  }
+
+  /// [`Self::compute_document`] for paint: each inline formatting context keeps the fragment
+  /// items it lays out to, and lets go of the shaped text no other box shares.
   pub(crate) fn compute_for_paint(
     root: &RenderNode,
     available_space: Size<AvailableSpace>,
   ) -> Self {
-    Self::lay_out(root, available_space, true)
+    Self::lay_out(root, available_space, true, true)
   }
 
   fn lay_out(
     root: &RenderNode,
     available_space: Size<AvailableSpace>,
     keeps_fragment_items: bool,
+    is_document: bool,
   ) -> Self {
     let mut tree = LayoutTree::from_render_node(root);
+    let available_space = if is_document {
+      tree.initial_containing_block(available_space)
+    } else {
+      available_space
+    };
 
     tree.keeps_fragment_items = keeps_fragment_items;
     tree.compute_layout(available_space);
@@ -1012,6 +1029,29 @@ impl<'r> LayoutTree<'r> {
     // Floats adjoining its block start move once its block offset resolves.
     space.forced_bfc_block_offset = result.bfc_block_offset;
     self.layout(NodeId::ROOT, &space)
+  }
+
+  /// The initial containing block of a document laid out in `available_space`: a min-content or
+  /// max-content width becomes the root's contribution and margins, which the root then fills.
+  fn initial_containing_block(
+    &mut self,
+    available_space: Size<AvailableSpace>,
+  ) -> Size<AvailableSpace> {
+    if let AvailableSpace::Definite(_) = available_space.width {
+      return available_space;
+    }
+
+    let (min_width, max_width) = self.root_min_max_widths(available_space.height);
+    let margins = margins_for(self.layout_style(NodeId::ROOT), None, Direction::Ltr);
+    let width = match available_space.width {
+      AvailableSpace::MinContent => min_width,
+      _ => max_width,
+    };
+
+    Size {
+      width: AvailableSpace::Definite(width + margins.inline_sum().to_float()),
+      ..available_space
+    }
   }
 
   /// The root's border-box min-content and max-content widths in a containing block

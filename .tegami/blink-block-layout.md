@@ -5,4 +5,4 @@ packages:
 
 # Place margins, floats, and positioned boxes where Chrome does
 
-Block containers now follow Chromium's block layout for margin collapsing, floats, clearance, `position: relative`, and absolutely and fixed positioned boxes, so these land where Chrome puts them. Positions now round to Chromium's 1/64px layout unit, which can move text by up to 0.01px. Flex and grid containers still use taffy's algorithms.
+Block layout now collapses margins and places floats, cleared boxes, and positioned boxes as Chrome does. Positions round to 1/64px, so text can move by up to 0.01px.
