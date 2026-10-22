@@ -84,12 +84,12 @@ impl LayoutLength {
     }
   }
 
-  /// Blink's `HasContentOrIntrinsic`.
   /// Blink's `HasPercentOrStretch`.
   pub(crate) fn has_percent_or_stretch(self) -> bool {
     self.has_percent() || self == Self::Stretch
   }
 
+  /// Blink's `HasContentOrIntrinsic`.
   pub(crate) fn is_content_or_intrinsic(self) -> bool {
     matches!(self, Self::MinContent | Self::MaxContent | Self::FitContent)
   }

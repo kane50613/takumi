@@ -6,7 +6,7 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::rc::Rc;
+use std::{mem::take, rc::Rc};
 
 use taffy::{Clear, Float};
 
@@ -34,7 +34,7 @@ use crate::{
     margin_strut::MarginStrut,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
     out_of_flow::ContainingBlock,
-    relative_utils::compute_relative_offset_for_inline,
+    relative_utils::compute_relative_offset,
     tree::{LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
@@ -502,7 +502,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
 
     let claims = self.tree.claims(self.node);
-    let candidates = std::mem::take(&mut self.out_of_flow);
+    let candidates = take(&mut self.out_of_flow);
     let containing_block = ContainingBlock::padding_box(
       Size {
         width: size.inline_size,
@@ -524,7 +524,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       return;
     }
 
-    for child in std::mem::take(&mut self.children) {
+    for child in take(&mut self.children) {
       self
         .tree
         .place_child(child.node, child.location, &child.result);
@@ -548,7 +548,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   /// Blink's `BoxFragmentBuilder::AddResult`: the child moved by `position: relative`, its
   /// out-of-flow boxes along with it.
   fn add_result(&mut self, node: NodeId, result: Rc<LayoutResult>, offset: LogicalOffset) {
-    let relative_offset = compute_relative_offset_for_inline(
+    let relative_offset = compute_relative_offset(
       self.tree.render_node(node),
       self.direction(),
       self
@@ -681,8 +681,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
-    let mut float_space =
-      ConstraintSpace::new(self.child_available_size.inline_size, space.direction);
+    let mut float_space = ConstraintSpace::new(
+      self.child_available_size.inline_size,
+      self.tree.layout_style(child).direction,
+    );
 
     float_space.available_block_size = self.child_available_size.block_size;
     float_space.percentage_resolution_inline_size = self.child_percentage_size.inline_size;

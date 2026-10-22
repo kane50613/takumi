@@ -6,7 +6,7 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::rc::Rc;
+use std::{mem::take, rc::Rc};
 
 use crate::{
   geometry::{NodeId, Point, Rect, Size},
@@ -373,7 +373,7 @@ impl<'r> LayoutTree<'r> {
     let mut unclaimed = Vec::new();
 
     while !candidates.is_empty() {
-      for candidate in std::mem::take(&mut candidates) {
+      for candidate in take(&mut candidates) {
         if !claims.claims(self.layout_style(candidate.node).position) {
           unclaimed.push(candidate);
           continue;

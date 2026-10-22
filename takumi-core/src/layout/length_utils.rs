@@ -15,7 +15,7 @@ use crate::{
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
   },
   layout_unit::LayoutUnit,
-  style::{BoxSizing, Direction, Overflow},
+  style::{BoxSizing, Direction, Overflow, SizingContext},
 };
 
 /// Blink's `LengthTypeInternal`.
@@ -51,14 +51,18 @@ pub(crate) struct NaturalSize {
   pub(crate) block_size: Option<LayoutUnit>,
   /// The aspect ratio as width over height, `aspect-ratio` or the natural one.
   pub(crate) aspect_ratio: Option<f32>,
+  /// The size it takes with no natural size and no aspect ratio.
+  pub(crate) default_size: LogicalSize,
 }
 
-/// The default object size of replaced content with no natural size and no aspect ratio.
+/// Blink's `ComputeDefaultNaturalSize`: 300 by 150 CSS pixels, in device pixels.
 /// <https://www.w3.org/TR/CSS22/visudet.html#inline-replaced-width>
-const DEFAULT_NATURAL_SIZE: LogicalSize = LogicalSize {
-  inline_size: LayoutUnit::from_int(300),
-  block_size: LayoutUnit::from_int(150),
-};
+pub(crate) fn default_natural_size(sizing: &SizingContext) -> LogicalSize {
+  LogicalSize::new(
+    LayoutUnit::from_float(sizing.to_device(300.0)),
+    LayoutUnit::from_float(sizing.to_device(150.0)),
+  )
+}
 
 /// Blink's `InlineSizeFromAspectRatio`.
 pub(crate) fn inline_size_from_aspect_ratio(
@@ -767,7 +771,7 @@ impl<'a> LengthResolver<'a> {
         natural
           .aspect_ratio
           .is_none()
-          .then(|| DEFAULT_NATURAL_SIZE.inline_size + border_padding.inline_sum())
+          .then(|| natural.default_size.inline_size + border_padding.inline_sum())
       });
     let mut block_size = natural
       .block_size
@@ -776,7 +780,7 @@ impl<'a> LengthResolver<'a> {
         natural
           .aspect_ratio
           .is_none()
-          .then(|| DEFAULT_NATURAL_SIZE.block_size + border_padding.block_sum())
+          .then(|| natural.default_size.block_size + border_padding.block_sum())
       });
 
     // If we have one natural size reflect via. the aspect-ratio.
@@ -971,7 +975,7 @@ impl<'a> LengthResolver<'a> {
       }
       // All browsers now use the default natural-size for a percentage.
       if style.size.width.has_percent() {
-        return DEFAULT_NATURAL_SIZE.inline_size + border_padding.inline_sum();
+        return natural.default_size.inline_size + border_padding.inline_sum();
       }
 
       border_padding.inline_sum()
@@ -1009,7 +1013,7 @@ impl<'a> LengthResolver<'a> {
       );
     }
 
-    let natural_size = natural_size.unwrap_or(DEFAULT_NATURAL_SIZE);
+    let natural_size = natural_size.unwrap_or(natural.default_size);
 
     LogicalSize::new(
       inline_min_max_sizes.clamp_size_to_min_and_max(natural_size.inline_size),

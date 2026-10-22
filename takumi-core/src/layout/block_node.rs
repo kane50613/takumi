@@ -4,7 +4,7 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::rc::Rc;
+use std::{ptr, rc::Rc};
 
 use taffy::{Display as TaffyDisplay, Line};
 
@@ -18,7 +18,10 @@ use crate::{
       HorizontalEdge, LayoutResult, LayoutStatus, OutOfFlowCandidate, StaticPosition, VerticalEdge,
     },
     layout_style::LayoutStyle,
-    length_utils::{LengthResolver, NaturalSize, ReplacedSizeMode, inline_size_from_aspect_ratio},
+    length_utils::{
+      LengthResolver, NaturalSize, ReplacedSizeMode, default_natural_size,
+      inline_size_from_aspect_ratio,
+    },
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalSize},
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
@@ -347,6 +350,7 @@ impl<'r> LayoutTree<'r> {
 
     NaturalSize {
       aspect_ratio: style.aspect_ratio.or(natural.aspect_ratio),
+      default_size: default_natural_size(&render_node.context.sizing),
       ..natural
     }
   }
@@ -574,9 +578,7 @@ impl<'r> LayoutTree<'r> {
 
     for &child in &boxes {
       if let Some(container) = self.inline_container(child)
-        && !containers
-          .iter()
-          .any(|known| std::ptr::eq(*known, container))
+        && !containers.iter().any(|known| ptr::eq(*known, container))
       {
         containers.push(container);
       }
@@ -609,7 +611,7 @@ impl<'r> LayoutTree<'r> {
       };
       let padding_box = containers
         .iter()
-        .position(|known| std::ptr::eq(*known, container))
+        .position(|known| ptr::eq(*known, container))
         .map(|index| padding_boxes[index]);
       let Some(padding_box) = padding_box else {
         candidates.push(candidate);

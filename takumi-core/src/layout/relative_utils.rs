@@ -10,7 +10,7 @@ use crate::{
 impl ConstraintSpace {
   /// Blink's `ComputeRelativeOffsetForInline`, line-left and down.
   pub(crate) fn compute_relative_offset_for_inline(&self, node: &RenderNode) -> LogicalOffset {
-    let offset = compute_relative_offset_for_inline(
+    let offset = compute_relative_offset(
       node,
       self.direction,
       self
@@ -31,7 +31,7 @@ impl ConstraintSpace {
 /// Blink's `ComputeRelativeOffset`: how far `position: relative` moves `node` in a container of
 /// `direction`, its start inset winning when both horizontal ones are set. A percentage inset
 /// against an indefinite size counts as `auto`.
-pub(crate) fn compute_relative_offset_for_inline(
+pub(crate) fn compute_relative_offset(
   node: &RenderNode,
   direction: Direction,
   inline_size: Option<f32>,

@@ -2908,3 +2908,31 @@ fn ch_matches_the_advance_of_zero() {
     "10ch is {box_width}px, ten zeros {zeros_width}px"
   );
 }
+
+#[test]
+fn test_measure_default_object_size_scales_with_device_pixel_ratio() {
+  // An SVG with no size and no viewBox has no natural size, so it takes the 300x150 default
+  // object size in CSS pixels.
+  let node = Node::from_html(
+    r#"<div style="display:flex"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg=="></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let image = &measure(node, create_measure_viewport_with_dpr(2.0)).children[0];
+
+  assert_close(image.width, 600.0);
+  assert_close(image.height, 300.0);
+}
+
+#[test]
+fn test_measure_float_lays_out_its_content_in_its_own_direction() {
+  let node = Node::from_html(
+    r#"<div style="display:block;width:400px"><div style="float:left;width:100px;direction:rtl"><div style="width:20px;height:10px"></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let measured = measure(node, create_test_viewport());
+  let float = &measured.children[0];
+
+  assert_close(float.children[0].transform[4] - float.transform[4], 80.0);
+}

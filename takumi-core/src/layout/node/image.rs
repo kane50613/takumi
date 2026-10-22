@@ -48,7 +48,7 @@ impl ImageData {
       return NaturalSize {
         inline_size: Some(LayoutUnit::ZERO),
         block_size: Some(LayoutUnit::ZERO),
-        aspect_ratio: None,
+        ..NaturalSize::default()
       };
     };
     let intrinsic_sizing = image_source.intrinsic_sizing();
@@ -64,6 +64,7 @@ impl ImageData {
           (Some(width), Some(height)) if height != 0.0 => Some(width / height),
           _ => None,
         }),
+      ..NaturalSize::default()
     }
   }
 }
