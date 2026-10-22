@@ -1,6 +1,5 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
-  layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{TableDecorations, TextClip, paint_collapsed_borders},
@@ -122,9 +121,6 @@ impl ScenePainter<'_, '_> {
       }
       ChunkPart::Decorations | ChunkPart::CollapsedBorders => Ok(()),
       ChunkPart::Content => draw_node_content(node, canvas, layout, chunk.node.transform),
-      ChunkPart::Floats => {
-        draw_own_content(node, &node.context, canvas, layout, InlinePass::Floats)
-      }
       ChunkPart::Outline => {
         DeferredOutline::of(&node.context, layout).map_or(Ok(()), |outline| outline.paint(canvas))
       }
@@ -409,13 +405,13 @@ fn draw_node_content(
   let inline = node.should_create_inline_layout();
 
   if !inline {
-    draw_own_content(node, &node.context, canvas, layout, InlinePass::Content)?;
+    draw_own_content(node, &node.context, canvas, layout)?;
   }
   if node.context.draw_debug_border() {
     draw_debug_border(canvas, layout, transform);
   }
   if inline {
-    draw_own_content(node, &node.context, canvas, layout, InlinePass::Content)?;
+    draw_own_content(node, &node.context, canvas, layout)?;
   }
   Ok(())
 }

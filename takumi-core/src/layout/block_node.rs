@@ -523,19 +523,22 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Lays out the out-of-flow boxes in the inline content of `node`, laid out as `result`, that an
-  /// inline box contains, and returns the rest for `node` and its ancestors. Blink lays the first
-  /// out in the inline box's padding box as `OutOfFlowLayoutPart` does for an inline containing
-  /// block.
-  pub(crate) fn lay_out_inline_out_of_flow(
+  /// Places the atomic inline boxes of the inline content of `node`, laid out as `result`, where its
+  /// lines put them, then lays out the out-of-flow boxes of that content that an inline box
+  /// contains and returns the rest for `node` and its ancestors. Blink lays the first out in the
+  /// inline box's padding box as `OutOfFlowLayoutPart` does for an inline containing block.
+  pub(crate) fn finish_inline_content(
     &mut self,
     node: NodeId,
     result: &LayoutResult,
     space: &ConstraintSpace,
   ) -> Vec<OutOfFlowCandidate> {
     let boxes = self.child_nodes(node);
+    let render_node = self.render_node(node);
+    let places_atomic_inlines =
+      space.cache_slot == CacheSlot::Layout && render_node.holds_atomic_inline_box();
 
-    if boxes.is_empty() {
+    if boxes.is_empty() && !places_atomic_inlines {
       return Vec::new();
     }
 
@@ -548,7 +551,6 @@ impl<'r> LayoutTree<'r> {
       result.border,
       result.padding,
     );
-    let render_node = self.render_node(node);
     let mut containers: Vec<&RenderNode> = Vec::new();
 
     for &child in &boxes {
@@ -559,15 +561,39 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
-    let (positions, padding_boxes) = render_node.inline_out_of_flow_geometry(
-      layout,
-      &containers,
-      &mut BoxAtomicInline::new(self, Size::all(AvailableSpace::MaxContent)),
-    );
+    let mut atomic_inline = BoxAtomicInline::new(self, Size::all(AvailableSpace::MaxContent));
+
+    atomic_inline.cache_slot = space.cache_slot;
+
+    let geometry = render_node.inline_geometry(layout, &containers, &mut atomic_inline);
     let content = layout.content_box_offset();
+    // The out-of-flow boxes inside an atomic inline that it does not contain go on to the
+    // containing blocks around this one.
     let mut candidates = Vec::new();
 
-    for (child, position) in boxes.into_iter().zip(positions) {
+    if places_atomic_inlines {
+      for (child_render_node, offset) in geometry.atomic_inlines {
+        let (child, child_result) = atomic_inline.lay_out_atomic_inline(child_render_node);
+        let location = Point::new(
+          LayoutUnit::from_float(content.x + offset.x),
+          LayoutUnit::from_float(content.y + offset.y),
+        );
+        let tree = &mut *atomic_inline.tree;
+
+        tree.place_child(child, location, &child_result);
+        if let Some(path) = render_node.inline_child_path(child_render_node) {
+          tree.add_inline_box_child(node, child, &path);
+        }
+        candidates.extend(
+          child_result
+            .out_of_flow
+            .iter()
+            .map(|candidate| candidate.moved_by(location)),
+        );
+      }
+    }
+
+    for (child, position) in boxes.into_iter().zip(geometry.out_of_flow) {
       let candidate = OutOfFlowCandidate {
         node: child,
         static_position: StaticPosition {
@@ -591,7 +617,7 @@ impl<'r> LayoutTree<'r> {
       let padding_box = containers
         .iter()
         .position(|known| ptr::eq(*known, container))
-        .map(|index| padding_boxes[index]);
+        .map(|index| geometry.containing_blocks[index]);
       let Some(padding_box) = padding_box else {
         candidates.push(candidate);
         continue;

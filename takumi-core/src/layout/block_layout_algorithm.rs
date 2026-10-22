@@ -464,9 +464,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let mut result = LayoutResult::of_box(size, &self.style, space);
 
     if self.tree.has_inline_children(self.node) {
-      let candidates = self
-        .tree
-        .lay_out_inline_out_of_flow(self.node, &result, space);
+      let candidates = self.tree.finish_inline_content(self.node, &result, space);
 
       self.out_of_flow.extend(candidates);
     }

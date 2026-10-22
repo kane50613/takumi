@@ -96,9 +96,6 @@ pub enum PaintItemKind {
   Node(NodePaint),
   /// Index of a nested stacking context.
   Context(usize),
-  /// The floats inside a node's inline content, which paint in the floats phase apart from the
-  /// rest of that content.
-  Floats(NodePaint),
   /// A table's collapsed borders, which paint once its cells' backgrounds have, as Blink paints
   /// them in the descendant block backgrounds phase.
   CollapsedBorders(NodePaint),
@@ -123,7 +120,7 @@ impl PaintItem {
   /// What the item paints in a phase painting `part`: a nested context paints whole once.
   pub(crate) fn part_in(&self, part: BoxPart) -> Option<BoxPart> {
     match (&self.kind, part) {
-      (PaintItemKind::Node(_) | PaintItemKind::Floats(_), part) => Some(part),
+      (PaintItemKind::Node(_), part) => Some(part),
       (PaintItemKind::CollapsedBorders(_), BoxPart::Content) => None,
       (PaintItemKind::CollapsedBorders(_), part) => Some(part),
       (PaintItemKind::Context(_), BoxPart::Whole) => Some(BoxPart::Whole),
@@ -466,8 +463,6 @@ impl SceneRequest<'_> {
           .flatten(),
         properties: node_properties,
       };
-      let inline_floats = (current.should_create_inline_layout() && current.has_inline_floats())
-        .then(|| node_paint.clone());
       let table_borders = layout_results
         .table_fragment(visit.node_id)
         .is_some_and(|fragment| fragment.borders.is_some())
@@ -500,7 +495,9 @@ impl SceneRequest<'_> {
           visit.context_id
         };
         // Atomic boxes paint as if stacking contexts, but lift positioned descendants to the real one.
-        let atomic = !matches!(bucket, PaintBucket::InFlow) || is_flex_or_grid_item;
+        let atomic = !matches!(bucket, PaintBucket::InFlow)
+          || is_flex_or_grid_item
+          || current.is_atomic_inline_box();
 
         if creates_stacking_context || atomic {
           let child_context = contexts.len();
@@ -533,18 +530,9 @@ impl SceneRequest<'_> {
         continue;
       }
 
-      // An inline formatting context paints its content itself; its layout children are the
-      // out-of-flow boxes inside that content, which paint as boxes of their own.
-      if let Some(floats) = inline_floats {
-        contexts[context_id].push_item(
-          PaintBucket::Float,
-          PaintItemKind::Floats(floats),
-          0,
-          source_order,
-          true,
-        );
-      }
-
+      // An inline formatting context paints its text itself; its layout children are the
+      // out-of-flow boxes, atomic inlines, and floats inside that content, which paint as boxes
+      // of their own.
       if let Some(borders) = table_borders {
         collapsed_borders.push((context_id, visits.len(), borders));
       }
@@ -613,9 +601,9 @@ impl SceneRequest<'_> {
       for bucket in contexts[context_id].buckets.in_paint_order() {
         for item in bucket {
           let item_bounds = match &item.kind {
-            PaintItemKind::Node(node_paint)
-            | PaintItemKind::Floats(node_paint)
-            | PaintItemKind::CollapsedBorders(node_paint) => node_paint.paint_bounds,
+            PaintItemKind::Node(node_paint) | PaintItemKind::CollapsedBorders(node_paint) => {
+              node_paint.paint_bounds
+            }
             PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
           };
           match item_bounds {
@@ -700,9 +688,7 @@ impl Scene {
     for context in &contexts {
       let items = context.buckets.in_paint_order().into_iter().flatten();
       let paints = items.filter_map(|item| match &item.kind {
-        PaintItemKind::Node(paint)
-        | PaintItemKind::Floats(paint)
-        | PaintItemKind::CollapsedBorders(paint) => Some(paint),
+        PaintItemKind::Node(paint) | PaintItemKind::CollapsedBorders(paint) => Some(paint),
         PaintItemKind::Context(_) => None,
       });
 

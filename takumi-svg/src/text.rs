@@ -7,7 +7,7 @@ use std::io;
 use takumi_core::{
   font_style::SizedFontStyle,
   layout::{
-    inline::{InlinePass, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
+    inline::{InlineBoxKind, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
     tree::RenderNode,
   },
   painter::{BoxFrame, OwnContent, PaintedInline},
@@ -26,7 +26,6 @@ use crate::{
 pub(crate) fn emit_inline_content(
   node: &RenderNode,
   frame: BoxFrame,
-  pass: InlinePass,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let context = &node.context;
@@ -36,16 +35,14 @@ pub(crate) fn emit_inline_content(
   };
   let PaintedInline { spans, runs, .. } = painted.map_err(font_error)?;
 
-  if pass == InlinePass::Content {
-    DocumentDevice::paint(doc, |device| {
-      runs.paint(&spans, &font_style, frame, device);
-    })?;
-  }
+  DocumentDevice::paint(doc, |device| {
+    runs.paint(&spans, &font_style, frame, device);
+  })?;
 
   for inline_box in runs
     .inline_boxes
     .iter()
-    .filter(|inline_box| pass.paints(inline_box))
+    .filter(|inline_box| inline_box.kind == InlineBoxKind::InFlow)
   {
     if let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) {
       emit_inline_box(inline_box, item, frame, doc)?;

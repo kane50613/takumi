@@ -9,7 +9,6 @@ use std::io;
 
 use takumi_core::{
   geometry::Point,
-  layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{BoxFrame, TableDecorations, TextClip, paint_collapsed_borders},
@@ -166,8 +165,7 @@ impl ChunkWriter<'_, '_, '_> {
           result.map_err(io::Error::other)?;
         }
         ChunkPart::CollapsedBorders => {}
-        ChunkPart::Content => placed.emit_own_content(InlinePass::Content, doc)?,
-        ChunkPart::Floats => placed.emit_own_content(InlinePass::Floats, doc)?,
+        ChunkPart::Content => placed.emit_own_content(doc)?,
         ChunkPart::Outline => placed.emit_outline(doc)?,
       }
 

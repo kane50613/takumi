@@ -195,7 +195,7 @@ impl PreparedTree {
           match &item.kind {
             PaintItemKind::Node(paint) => visit(paint),
             PaintItemKind::Context(child) => walk(tree, *child, visit),
-            PaintItemKind::Floats(_) | PaintItemKind::CollapsedBorders(_) => {}
+            PaintItemKind::CollapsedBorders(_) => {}
           }
         }
       }

@@ -594,6 +594,36 @@ impl<'r> LayoutTree<'r> {
     tree
   }
 
+  /// Adds the atomic inline `child` its inline content placed to the boxes `parent` paints, at
+  /// `path` among `parent`'s render children, keeping them in tree order.
+  pub(crate) fn add_inline_box_child(&mut self, parent: NodeId, child: NodeId, path: &[usize]) {
+    let Some((&render_index, inline_path)) = path.split_first() else {
+      return;
+    };
+    let state = &mut self.nodes[usize::from(parent)];
+
+    if state
+      .box_children
+      .iter()
+      .any(|known| known.node_id == child)
+    {
+      return;
+    }
+
+    let mut box_children = state.box_children.to_vec();
+
+    box_children.push(OrderedChild {
+      render_index,
+      inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
+      node_id: child,
+      hoisted_cb: None,
+    });
+    box_children.sort_by(|a, b| {
+      (a.render_index, a.inline_path.as_deref()).cmp(&(b.render_index, b.inline_path.as_deref()))
+    });
+    state.box_children = box_children.into_boxed_slice();
+  }
+
   /// The node the box `render_node` of an inline formatting context lays out as, its subtree
   /// appended to the tree the first time.
   pub(crate) fn atomic_inline_node(&mut self, render_node: &'r RenderNode) -> NodeId {
