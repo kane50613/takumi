@@ -436,8 +436,8 @@ impl NodeBuilder<'_> {
       "img" => match handle.attribute("src").filter(|src| !src.trim().is_empty()) {
         Some(src) => Node::image(ImageData {
           src: ImageSourceInput::Url(src.into()),
-          width: dimension(handle, "width"),
-          height: dimension(handle, "height"),
+          width: pixels(handle, tag, "width"),
+          height: pixels(handle, tag, "height"),
         }),
         // Chrome draws an `<img>` without a source as an empty inline box its `width` and
         // `height` size.
@@ -446,8 +446,8 @@ impl NodeBuilder<'_> {
       _ if UNRENDERED_TAGS.contains(&tag) => return Ok(None),
       "svg" => Node::image(ImageData {
         src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
-        width: dimension(handle, "width"),
-        height: dimension(handle, "height"),
+        width: pixels(handle, tag, "width"),
+        height: pixels(handle, tag, "height"),
       }),
       _ => match text_only_contents(handle) {
         Some(text) => Node::text(text),
@@ -468,8 +468,29 @@ impl NodeBuilder<'_> {
   fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
     node = node.with_tag_name(tag);
 
-    if let Some(preset) = self.presets.get(tag) {
-      node = node.with_preset(preset.clone());
+    let mut preset = self.presets.get(tag).cloned();
+
+    // A size in other units than pixels, which `ImageData` cannot hold, styles the image.
+    if matches!(node.kind, NodeKind::Image(_)) {
+      for (name, declaration) in [
+        (
+          "width",
+          StyleDeclaration::width as fn(Length) -> StyleDeclaration,
+        ),
+        ("height", StyleDeclaration::height),
+      ] {
+        if let Some(length) =
+          dimension(handle, tag, name).filter(|length| !matches!(length, Length::Px(_)))
+        {
+          preset
+            .get_or_insert_default()
+            .push(declaration(length), false);
+        }
+      }
+    }
+
+    if let Some(preset) = preset {
+      node = node.with_preset(preset);
     }
 
     let NodeData::Element { attrs, .. } = handle.data() else {
@@ -554,20 +575,49 @@ fn text_only_contents(handle: NodeRef<'_>) -> Option<String> {
     .then_some(text)
 }
 
-fn dimension(handle: NodeRef<'_>, name: &str) -> Option<f32> {
-  handle.attribute(name).and_then(|value| value.parse().ok())
+/// The `width` or `height` attribute of an `<img>` or `<svg>` as Blink maps it to style: an
+/// `<img>` takes HTML's rules for parsing dimension values, a number of pixels or a percentage,
+/// and an `<svg>` a CSS length, a number counting as pixels.
+/// <https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-dimension-values>
+fn dimension(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<Length> {
+  let value = handle.attribute(name)?.trim();
+
+  if tag == "svg" {
+    return Length::from_css_str(value)
+      .ok()
+      .or_else(|| value.parse().ok().map(Length::Px));
+  }
+
+  let number_end = value
+    .find(|character: char| !character.is_ascii_digit() && character != '.')
+    .unwrap_or(value.len());
+  let number: f32 = value[..number_end].parse().ok()?;
+
+  Some(if value[number_end..].starts_with('%') {
+    Length::Percentage(number)
+  } else {
+    Length::Px(number)
+  })
+}
+
+/// [`dimension`] when it is a number of pixels, which `ImageData` holds.
+fn pixels(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<f32> {
+  match dimension(handle, tag, name)? {
+    Length::Px(pixels) => Some(pixels),
+    _ => None,
+  }
 }
 
 /// The style of an `<img>` without a source: an inline-block, sized by its `width` and `height`.
 fn empty_image_style(handle: NodeRef<'_>) -> Style {
   let mut style = Style::default().with(StyleDeclaration::display(Display::InlineBlock));
 
-  if let Some(width) = dimension(handle, "width") {
-    style = style.with(StyleDeclaration::width(Length::Px(width)));
+  if let Some(width) = dimension(handle, "img", "width") {
+    style = style.with(StyleDeclaration::width(width));
   }
 
-  if let Some(height) = dimension(handle, "height") {
-    style = style.with(StyleDeclaration::height(Length::Px(height)));
+  if let Some(height) = dimension(handle, "img", "height") {
+    style = style.with(StyleDeclaration::height(height));
   }
 
   style
@@ -595,6 +645,25 @@ mod tests {
 
   fn parse(source: &str) -> Node {
     from_html(source, FromHtmlOptions::default()).unwrap()
+  }
+
+  /// An `<img>` takes a percentage `width` the way HTML parses a dimension, and an `<svg>` any
+  /// CSS length, as Chrome maps them to style; a number of pixels stays in `ImageData`.
+  #[test]
+  fn image_size_attributes_in_other_units_style_the_image() {
+    let image = parse(r#"<img src="a.png" width="50%" height="20">"#);
+    let svg = parse(r#"<svg width="100%" height="2em" viewBox="0 0 1 1"></svg>"#);
+
+    assert!(matches!(
+      image.kind,
+      NodeKind::Image(ImageData {
+        width: None,
+        height: Some(20.0),
+        ..
+      })
+    ));
+    assert!(image.to_html().contains("width: 50%"));
+    assert!(svg.to_html().contains("width: 100%; height: 2em"));
   }
 
   /// A `style` attribute is a declaration list, and CSS drops only the declaration it
