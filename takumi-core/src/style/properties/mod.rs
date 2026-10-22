@@ -157,9 +157,7 @@ pub use text_shadow::*;
 pub use text_stroke::*;
 pub use text_wrap::*;
 pub use traits::*;
-pub(crate) use traits::{
-  declare_box_alignment_enum_impl, impl_comma_list_from_css, impl_css_enum, impl_from_taffy_enum,
-};
+pub(crate) use traits::{declare_box_alignment_enum_impl, impl_comma_list_from_css, impl_css_enum};
 pub use transform::*;
 pub use unicode_bidi::*;
 pub use vertical_align::*;
@@ -167,7 +165,10 @@ pub use white_space::*;
 pub use word_break::*;
 pub use z_index::*;
 
-use crate::style::{SizingContext, tw::TailwindPropertyParser};
+use crate::{
+  layout::floats_utils::{Clear as PhysicalClear, Float as PhysicalFloat},
+  style::{SizingContext, tw::TailwindPropertyParser},
+};
 
 /// Whether `ident` is a CSS-wide keyword or `default`, which a `<custom-ident>` excludes.
 /// <https://drafts.csswg.org/css-values-4/#custom-idents>
@@ -450,8 +451,6 @@ impl_css_enum!(
   "border-box" => BoxSizing::BorderBox
 );
 
-impl_from_taffy_enum!(BoxSizing, into_taffy -> taffy::BoxSizing, ContentBox, BorderBox);
-
 /// Text alignment options for text rendering.
 ///
 /// Corresponds to CSS text-align property values.
@@ -707,15 +706,6 @@ impl_css_enum!(
 );
 
 impl Position {
-  pub(crate) fn into_taffy(self) -> taffy::Position {
-    match self {
-      Position::Static => taffy::Position::Static,
-      Position::Relative => taffy::Position::Relative,
-      Position::Absolute => taffy::Position::Absolute,
-      Position::Fixed => taffy::Position::Fixed,
-    }
-  }
-
   /// `position: relative`, which moves a box from where it lays out.
   pub(crate) const fn is_relative(self) -> bool {
     matches!(self, Self::Relative)
@@ -768,8 +758,6 @@ impl_css_enum!(
   "rtl" => Direction::Rtl
 );
 
-impl_from_taffy_enum!(Direction, into_taffy -> taffy::Direction, Ltr, Rtl);
-
 /// Defines whether an element should be placed along the left or right side of its container.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
@@ -798,13 +786,13 @@ impl_css_enum!(
 
 impl Float {
   /// Resolves the floating direction based on the layout direction.
-  pub(crate) fn resolve(self, direction: Direction) -> taffy::Float {
-    let (start, end) = direction.inline_sides(taffy::Float::Left, taffy::Float::Right);
+  pub(crate) fn resolve(self, direction: Direction) -> PhysicalFloat {
+    let (start, end) = direction.inline_sides(PhysicalFloat::Left, PhysicalFloat::Right);
 
     match self {
-      Self::None => taffy::Float::None,
-      Self::Left => taffy::Float::Left,
-      Self::Right => taffy::Float::Right,
+      Self::None => PhysicalFloat::None,
+      Self::Left => PhysicalFloat::Left,
+      Self::Right => PhysicalFloat::Right,
       Self::InlineStart => start,
       Self::InlineEnd => end,
     }
@@ -842,14 +830,14 @@ impl_css_enum!(
 
 impl Clear {
   /// Resolves the clearing direction based on the layout direction.
-  pub(crate) fn resolve(self, direction: Direction) -> taffy::Clear {
-    let (start, end) = direction.inline_sides(taffy::Clear::Left, taffy::Clear::Right);
+  pub(crate) fn resolve(self, direction: Direction) -> PhysicalClear {
+    let (start, end) = direction.inline_sides(PhysicalClear::Left, PhysicalClear::Right);
 
     match self {
-      Self::None => taffy::Clear::None,
-      Self::Left => taffy::Clear::Left,
-      Self::Right => taffy::Clear::Right,
-      Self::Both => taffy::Clear::Both,
+      Self::None => PhysicalClear::None,
+      Self::Left => PhysicalClear::Left,
+      Self::Right => PhysicalClear::Right,
+      Self::Both => PhysicalClear::Both,
       Self::InlineStart => start,
       Self::InlineEnd => end,
     }
@@ -879,15 +867,6 @@ impl_css_enum!(
   "column" => FlexDirection::Column,
   "row-reverse" => FlexDirection::RowReverse,
   "column-reverse" => FlexDirection::ColumnReverse
-);
-
-impl_from_taffy_enum!(
-  FlexDirection,
-  into_taffy -> taffy::FlexDirection,
-  Row,
-  Column,
-  RowReverse,
-  ColumnReverse
 );
 
 /// Defines how flex items are aligned along the main axis.
@@ -966,27 +945,7 @@ impl TailwindPropertyParser for JustifyContent {
   }
 }
 
-impl JustifyContent {
-  pub(crate) fn into_taffy(self) -> taffy::JustifyContent {
-    match self {
-      JustifyContent::Normal => taffy::JustifyContent::NORMAL,
-      JustifyContent::Start => taffy::JustifyContent::START,
-      JustifyContent::End => taffy::JustifyContent::END,
-      JustifyContent::FlexStart => taffy::JustifyContent::FLEX_START,
-      JustifyContent::FlexEnd => taffy::JustifyContent::FLEX_END,
-      JustifyContent::Center => taffy::JustifyContent::CENTER,
-      JustifyContent::Stretch => taffy::JustifyContent::STRETCH,
-      JustifyContent::SpaceBetween => taffy::JustifyContent::SPACE_BETWEEN,
-      JustifyContent::SpaceAround => taffy::JustifyContent::SPACE_AROUND,
-      JustifyContent::SpaceEvenly => taffy::JustifyContent::SPACE_EVENLY,
-      JustifyContent::SafeStart => taffy::JustifyContent::SAFE_START,
-      JustifyContent::SafeEnd => taffy::JustifyContent::SAFE_END,
-      JustifyContent::SafeFlexStart => taffy::JustifyContent::SAFE_FLEX_START,
-      JustifyContent::SafeFlexEnd => taffy::JustifyContent::SAFE_FLEX_END,
-      JustifyContent::SafeCenter => taffy::JustifyContent::SAFE_CENTER,
-    }
-  }
-}
+impl JustifyContent {}
 
 /// This enum determines the layout algorithm used for the children of a node.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -1110,6 +1069,10 @@ impl Display {
     )
   }
 
+  pub(crate) fn is_grid(self) -> bool {
+    matches!(self, Display::Grid | Display::InlineGrid)
+  }
+
   /// Blink's `IsDeprecatedWebkitBox`.
   pub(crate) fn is_deprecated_webkit_box(self) -> bool {
     matches!(self, Display::WebkitBox | Display::WebkitInlineBox)
@@ -1161,32 +1124,6 @@ impl Display {
   /// Mutate the display to be block level.
   pub(crate) fn blockify(&mut self) {
     *self = self.as_blockified();
-  }
-
-  pub(crate) fn into_taffy(self) -> taffy::Display {
-    match self {
-      Display::Flex | Display::InlineFlex | Display::WebkitBox | Display::WebkitInlineBox => {
-        taffy::Display::Flex
-      }
-      Display::Grid | Display::InlineGrid => taffy::Display::Grid,
-      Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
-        taffy::Display::Block
-      }
-      Display::FlowRoot => taffy::Display::FlowRoot,
-      // The table algorithm lays out a table and its parts; taffy only sees a table as a block
-      // child it does not stretch.
-      Display::Table
-      | Display::InlineTable
-      | Display::TableHeaderGroup
-      | Display::TableRowGroup
-      | Display::TableFooterGroup
-      | Display::TableRow
-      | Display::TableColumnGroup
-      | Display::TableColumn
-      | Display::TableCell
-      | Display::TableCaption => taffy::Display::Block,
-      Display::None => taffy::Display::None,
-    }
   }
 }
 
@@ -1348,34 +1285,7 @@ declare_box_alignment_enum_impl!(
   }
 );
 
-impl AlignItems {
-  pub(crate) fn into_taffy(self) -> taffy::AlignItems {
-    match self {
-      AlignItems::Normal => taffy::AlignItems::NORMAL,
-      AlignItems::Start => taffy::AlignItems::START,
-      AlignItems::End => taffy::AlignItems::END,
-      AlignItems::FlexStart => taffy::AlignItems::FLEX_START,
-      AlignItems::FlexEnd => taffy::AlignItems::FLEX_END,
-      AlignItems::Center => taffy::AlignItems::CENTER,
-      AlignItems::Baseline => taffy::AlignItems::BASELINE,
-      AlignItems::Stretch => taffy::AlignItems::STRETCH,
-      AlignItems::SafeStart => taffy::AlignItems::SAFE_START,
-      AlignItems::SafeEnd => taffy::AlignItems::SAFE_END,
-      AlignItems::SafeFlexStart => taffy::AlignItems::SAFE_FLEX_START,
-      AlignItems::SafeFlexEnd => taffy::AlignItems::SAFE_FLEX_END,
-      AlignItems::SelfStart => taffy::AlignItems::SELF_START,
-      AlignItems::SelfEnd => taffy::AlignItems::SELF_END,
-      AlignItems::SafeSelfStart => taffy::AlignItems::SAFE_SELF_START,
-      AlignItems::SafeSelfEnd => taffy::AlignItems::SAFE_SELF_END,
-      AlignItems::SafeCenter => taffy::AlignItems::SAFE_CENTER,
-    }
-  }
-
-  /// As `align-self` or `justify-self`, where `Normal` stands for `auto`.
-  pub(crate) fn into_taffy_self(self) -> Option<taffy::AlignSelf> {
-    (self != Self::Normal).then(|| self.into_taffy())
-  }
-}
+impl AlignItems {}
 
 /// The case `text-transform` maps text to.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -1641,7 +1551,6 @@ mod display_tests {
 
     assert_eq!(webkit_box, Display::WebkitBox);
     assert_eq!(webkit_inline_box.as_blockified(), Display::WebkitBox);
-    assert_eq!(webkit_box.into_taffy(), taffy::Display::Flex);
     assert!(webkit_inline_box.is_inline_level() && webkit_inline_box.is_flex());
     assert_eq!(Display::from_css_str("-webkit-flex"), Ok(Display::Flex));
     assert_eq!(
@@ -1655,7 +1564,6 @@ mod display_tests {
     let flow_root = Display::from_css_str("flow-root").unwrap();
 
     assert_eq!(flow_root, Display::FlowRoot);
-    assert_eq!(flow_root.into_taffy(), taffy::Display::FlowRoot);
     assert_eq!(flow_root.as_blockified(), Display::FlowRoot);
     assert!(!flow_root.is_inline_level());
   }

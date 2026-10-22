@@ -1,12 +1,10 @@
 use std::fmt;
 
-use cssparser::{Parser, match_ignore_ascii_case};
-use taffy::{MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction};
-
 use crate::style::{
   FromCss, GridLength, GridMinMaxSize, Length, MakeComputed, ParseResult, SizingContext, ToCss,
   tw::TailwindPropertyParser,
 };
+use cssparser::{Parser, match_ignore_ascii_case};
 
 /// A list of `GridTrackSize`
 pub(crate) type GridTrackSizes = Vec<GridTrackSize>;
@@ -34,25 +32,7 @@ pub enum GridTrackSize {
   Fixed(GridLength),
 }
 
-impl GridTrackSize {
-  pub(crate) fn to_min_max(self, sizing: &SizingContext) -> TrackSizingFunction {
-    match self {
-      // SAFETY: The compact length is a valid track sizing function.
-      Self::Fixed(size) => unsafe {
-        TrackSizingFunction {
-          min: MinTrackSizingFunction::from_raw(size.to_compact_length(sizing)),
-          max: MaxTrackSizingFunction::from_raw(size.to_compact_length(sizing)),
-        }
-      },
-      Self::MinMax(min_max) => unsafe {
-        TrackSizingFunction {
-          min: MinTrackSizingFunction::from_raw(min_max.min.to_compact_length(sizing)),
-          max: MaxTrackSizingFunction::from_raw(min_max.max.to_compact_length(sizing)),
-        }
-      },
-    }
-  }
-}
+impl GridTrackSize {}
 
 impl TailwindPropertyParser for GridTrackSize {
   fn parse_tw(token: &str) -> Option<Self> {

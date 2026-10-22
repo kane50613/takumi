@@ -224,9 +224,7 @@ impl PreparedTree {
   }
 }
 
-// The root fills the content box like a browser body: a fit-content root
-// resolves child percentages against a tentative width first and the final
-// width later, and taffy does not reconcile heights across those passes.
+// The root fills the content box like a browser body.
 fn fill_root(node: Node, viewport: Viewport) -> Node {
   let mut style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
@@ -287,8 +285,7 @@ fn take_repeating_fixed(node: &mut RenderNode) -> Vec<(RenderNode, RenderContext
   repeating
 }
 
-/// The page area a repeated box positions against. Taffy gives a layout root
-/// the origin, so the box has to be a child of one to see its own insets.
+/// The page area a repeated box positions against, as a layout root ignores its own insets.
 pub(crate) fn page_root(context: &RenderContext, child: RenderNode) -> RenderNode {
   let area = Node::container([]).with_style(
     Style::default()

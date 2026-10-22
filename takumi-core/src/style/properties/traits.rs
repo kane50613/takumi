@@ -663,21 +663,6 @@ impl ToCss for Arc<str> {
   }
 }
 
-/// Macro to implement a `pub(crate)` conversion method into a foreign (taffy) enum.
-macro_rules! impl_from_taffy_enum {
-  ($from_ty:ty, $method:ident -> $to_ty:ty, $($variant:ident),*) => {
-    impl $from_ty {
-      pub(crate) fn $method(self) -> $to_ty {
-        match self {
-          $(<$from_ty>::$variant => <$to_ty>::$variant,)*
-        }
-      }
-    }
-  };
-}
-
-pub(crate) use impl_from_taffy_enum;
-
 /// Implements `FromCss` for a `Box<[$elem]>` list as a comma-separated list of `$elem`.
 macro_rules! impl_comma_list_from_css {
   ($list:ty, $elem:ty) => {

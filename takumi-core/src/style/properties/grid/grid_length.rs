@@ -1,7 +1,6 @@
 use std::fmt;
 
 use cssparser::{Parser, Token};
-use taffy::CompactLength;
 
 use crate::style::{
   FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, unexpected_token,
@@ -15,15 +14,6 @@ pub enum GridLength {
   Fr(f32),
   /// A fixed length
   Unit(Length),
-}
-
-impl GridLength {
-  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
-    match self {
-      GridLength::Fr(fr) => CompactLength::fr(fr),
-      GridLength::Unit(unit) => unit.to_compact_length(sizing),
-    }
-  }
 }
 
 impl<'i> FromCss<'i> for GridLength {

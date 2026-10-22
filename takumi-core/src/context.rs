@@ -1,6 +1,5 @@
 use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
 
-use taffy::Line;
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -11,7 +10,7 @@ use crate::{
     font_fallback_list::FontFallbackList,
     font_fallback_map::FontFallbackMap,
   },
-  geometry::{ComputedLayout, Point},
+  geometry::{ComputedLayout, Line, Point},
   layout::inline::InlineLayoutCache,
   resources::{
     font::FontsSnapshot,

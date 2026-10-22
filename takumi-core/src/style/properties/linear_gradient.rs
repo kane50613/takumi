@@ -870,7 +870,6 @@ impl ToCss for LinearGradient {
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
 
   use color::{ColorSpaceTag, HueDirection};
   use tiny_skia::ColorU8;
@@ -878,7 +877,7 @@ mod tests {
   use super::*;
   use crate::{
     geometry::Size,
-    style::{CalcArena, FromCssStr, properties::gradient_utils::red_blue_stops},
+    style::{FromCssStr, properties::gradient_utils::red_blue_stops},
     viewport::Viewport,
   };
   fn sizing() -> SizingContext {
@@ -891,7 +890,6 @@ mod tests {
       line_height: 0.0,
       root_line_height: None,
       ch: 16.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
     }
   }
 

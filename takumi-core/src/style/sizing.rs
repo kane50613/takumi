@@ -1,8 +1,8 @@
-use std::{cell::Cell, rc::Rc};
+use std::cell::Cell;
 
 use typed_builder::TypedBuilder;
 
-use crate::{geometry::Size, style::CalcArena, viewport::Viewport};
+use crate::{geometry::Size, viewport::Viewport};
 
 /// The sizing context used for length value resolving.
 #[derive(Clone, TypedBuilder)]
@@ -36,9 +36,6 @@ pub struct SizingContext {
   /// `FontSizes::Ch` reads it from `PrimaryFontWithDigitZero`.
   #[builder(default = viewport.to_device(viewport.font_size) / 2.0)]
   pub(crate) ch: f32,
-  /// The calc arena shared by the current layout tree.
-  #[builder(default, setter(skip))]
-  pub(crate) calc_arena: Rc<CalcArena>,
 }
 
 impl SizingContext {
@@ -56,7 +53,6 @@ impl SizingContext {
   }
 
   /// Whether lengths resolve the same against both, whatever either read of a query container.
-  /// Both must come from one render, whose contexts all share its calc arena.
   pub(crate) fn resolves_like(&self, other: &Self) -> bool {
     self.viewport == other.viewport
       && self.container_size == other.container_size
@@ -67,8 +63,7 @@ impl SizingContext {
       && self.ch == other.ch
   }
 
-  /// Returns a copy with the font and line-height metrics overridden, inheriting
-  /// the viewport, container size, and shared calc arena.
+  /// A copy with its font and line-height metrics replaced, keeping its viewport and container.
   pub(crate) fn with_font_metrics(
     &self,
     font_size: f32,

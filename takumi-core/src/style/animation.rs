@@ -657,7 +657,6 @@ mod tests {
       line_height: 0.0,
       root_line_height: None,
       ch: 16.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
     }
   }
 

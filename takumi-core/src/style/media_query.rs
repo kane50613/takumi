@@ -1,12 +1,11 @@
 use cssparser::ParseError as CssParseError;
-use std::rc::Rc;
 
 use cssparser::*;
 
 use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   geometry::{LAYOUT_UNIT_EPSILON, Size},
-  style::{CalcArena, FromCss, Length, SizingContext},
+  style::{FromCss, Length, SizingContext},
   viewport::{MediaTarget, Viewport},
 };
 
@@ -608,7 +607,6 @@ impl MediaQueryList {
       line_height: viewport.font_size,
       root_line_height: Some(viewport.font_size),
       ch: viewport.font_size / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
     };
 
     self

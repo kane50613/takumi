@@ -10,8 +10,8 @@ use super::{
 use crate::{
   geometry::Size,
   style::{
-    CalcArena, ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style,
-    StyleBaseData, StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
+    ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style, StyleBaseData,
+    StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
   },
   viewport::Viewport,
 };
@@ -427,7 +427,6 @@ fn webkit_line_clamp_needs_a_vertical_webkit_box() {
       line_height: 0.0,
       root_line_height: None,
       ch: 16.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
     });
     computed
   };
@@ -1038,7 +1037,6 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     line_height: 0.0,
     root_line_height: None,
     ch: 16.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
   };
   let border_box = Size {
     width: 100.0,
@@ -1115,7 +1113,6 @@ fn test_position_absolute_blockifies_inline_display() {
     line_height: 0.0,
     root_line_height: None,
     ch: 16.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
   };
 
   style.make_computed(&sizing);
@@ -1140,7 +1137,6 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     line_height: 0.0,
     root_line_height: None,
     ch: 32.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
   });
 
   let inherited_child = Style::default().inherit(&parent);
@@ -1153,7 +1149,6 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     line_height: 0.0,
     root_line_height: None,
     ch: 32.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
   };
   let inherited_font_size = inherited_child
     .inherited_data
@@ -1172,7 +1167,6 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     line_height: 0.0,
     root_line_height: None,
     ch: 10.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
   };
 
   let inherited_letter_spacing = child_with_own_font_size
@@ -1458,7 +1452,6 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     line_height: 0.0,
     root_line_height: None,
     ch: 16.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
   };
   let radius = style.surround_data.border_top_left_radius.x.to_px(
     &sizing,

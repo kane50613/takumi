@@ -1,8 +1,5 @@
 use std::{fmt, ops::Neg};
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
-use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
-
 pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
 };
@@ -17,6 +14,7 @@ use crate::{
     unexpected_token,
   },
 };
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 const CALC_ZERO_EPSILON: f32 = 1e-6;
 const SAFE_INT_MIN_PX: f32 = i32::MIN as f32;
@@ -477,22 +475,6 @@ impl Length {
     }
   }
 
-  /// Resolves to a taffy `CompactLength`, keeping percent and calc unresolved.
-  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
-    self.to_layout_length(sizing).to_compact_length(sizing)
-  }
-
-  /// Resolves to a taffy `LengthPercentage`, treating auto as zero.
-  pub(crate) fn resolve_to_length_percentage(self, sizing: &SizingContext) -> LengthPercentage {
-    let compact_length = self.to_compact_length(sizing);
-
-    if compact_length.is_auto() {
-      return LengthPercentage::length(0.0);
-    }
-
-    unsafe { LengthPercentage::from_raw(compact_length) }
-  }
-
   /// Resolves to device pixels, applying the device-pixel ratio to absolute units.
   pub fn to_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     let value = self.to_px_pre_dpr(sizing, percentage_full_px);
@@ -535,19 +517,6 @@ impl Length {
   pub(crate) fn to_border_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     snap_as_border_width(self.to_px(sizing, percentage_full_px))
   }
-
-  /// Resolves to a taffy `LengthPercentageAuto`.
-  pub(crate) fn resolve_to_length_percentage_auto(
-    self,
-    sizing: &SizingContext,
-  ) -> LengthPercentageAuto {
-    unsafe { LengthPercentageAuto::from_raw(self.to_compact_length(sizing)) }
-  }
-
-  /// Resolves to a taffy `Dimension`.
-  pub(crate) fn resolve_to_dimension(self, sizing: &SizingContext) -> Dimension {
-    self.resolve_to_length_percentage_auto(sizing).into()
-  }
 }
 
 impl MakeComputed for Length {
@@ -589,14 +558,10 @@ impl MakeComputed for Length {
 
 #[cfg(test)]
 mod tests {
-  use std::{assert_matches, rc::Rc};
+  use std::assert_matches;
 
   use super::*;
-  use crate::{
-    geometry::Size,
-    style::calc::{CalcArena, CalcFormula},
-    viewport::Viewport,
-  };
+  use crate::{geometry::Size, style::calc::CalcFormula, viewport::Viewport};
 
   fn sizing() -> SizingContext {
     SizingContext {
@@ -614,7 +579,6 @@ mod tests {
       line_height: 30.0,
       root_line_height: Some(40.0),
       ch: 7.0,
-      calc_arena: Rc::new(CalcArena::default()),
     }
   }
 
@@ -752,12 +716,11 @@ mod tests {
   }
 
   #[test]
-  fn compact_length_percent_does_not_use_calc_pointer() {
-    let sizing = sizing();
-    let compact = Length::Percentage(50.0).to_compact_length(&sizing);
-    assert!(!compact.is_plain_calc());
-    assert_eq!(compact.tag(), CompactLength::PERCENT_TAG);
-    assert_near(compact.value(), 0.5);
+  fn percentage_lays_out_as_a_fraction() {
+    assert_eq!(
+      Length::Percentage(50.0).to_layout_length(&sizing()),
+      LayoutLength::Percent(0.5)
+    );
   }
 
   #[test]
@@ -781,10 +744,13 @@ mod tests {
   }
 
   #[test]
-  fn rem_to_compact_length_does_not_double_apply_dpr_when_root_font_size_set() {
+  fn rem_to_layout_length_does_not_double_apply_dpr_when_root_font_size_set() {
     let sizing = descendant_sizing();
-    let compact = Length::Rem(1.0).to_compact_length(&sizing);
-    assert_near(compact.value(), 32.0);
+
+    assert_eq!(
+      Length::Rem(1.0).to_layout_length(&sizing),
+      LayoutLength::Fixed(32.0)
+    );
   }
 
   #[test]
@@ -1063,7 +1029,7 @@ mod tests {
   }
 
   #[test]
-  fn calc_non_finite_never_reaches_compact_length() {
+  fn calc_non_finite_never_reaches_layout_length() {
     let sizing = sizing();
 
     for css in [
@@ -1078,26 +1044,29 @@ mod tests {
       let Ok(length) = parsed else {
         continue;
       };
-      let compact = length.to_compact_length(&sizing);
+      let finite = match length.to_layout_length(&sizing) {
+        LayoutLength::Fixed(px) => px.is_finite(),
+        LayoutLength::Percent(percent) => percent.is_finite(),
+        LayoutLength::Calc { px, percent } => px.is_finite() && percent.is_finite(),
+        _ => true,
+      };
 
-      assert!(
-        compact.is_plain_calc() || compact.value().is_finite(),
-        "{css} produced a non-finite CompactLength"
-      );
+      assert!(finite, "{css} produced a non-finite LayoutLength");
     }
   }
 
   #[test]
-  fn infinite_percentage_never_reaches_compact_length() {
+  fn infinite_percentage_never_reaches_layout_length() {
     for (value, expected) in [
       (f32::INFINITY, SAFE_INT_MAX_PX),
       (f32::NEG_INFINITY, SAFE_INT_MIN_PX),
       (f32::NAN, 0.0),
     ] {
-      let compact = Length::Percentage(value).to_compact_length(&sizing());
-
-      assert_eq!(compact.tag(), CompactLength::PERCENT_TAG, "for {value}");
-      assert_eq!(compact.value(), expected, "for {value}");
+      assert_eq!(
+        Length::Percentage(value).to_layout_length(&sizing()),
+        LayoutLength::Percent(expected),
+        "for {value}"
+      );
     }
   }
 

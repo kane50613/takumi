@@ -34,19 +34,6 @@ impl Contain {
   pub const fn contains(self, other: Self) -> bool {
     self.0 & other.0 == other.0
   }
-
-  pub(crate) fn into_taffy(self) -> taffy::Contain {
-    let mut contain = taffy::Contain::NONE;
-
-    if self.contains(Self::LAYOUT) {
-      contain |= taffy::Contain::LAYOUT;
-    }
-    if self.contains(Self::PAINT) {
-      contain |= taffy::Contain::PAINT;
-    }
-
-    contain
-  }
 }
 
 impl MakeComputed for Contain {}
@@ -165,14 +152,5 @@ mod tests {
     ] {
       assert!(Contain::from_css_str(css).is_err(), "{css}");
     }
-  }
-
-  #[test]
-  fn only_layout_and_paint_reach_taffy() {
-    assert_eq!(Contain::NONE.into_taffy(), taffy::Contain::NONE);
-    assert_eq!(Contain::STYLE.into_taffy(), taffy::Contain::NONE);
-    assert_eq!(Contain::LAYOUT.into_taffy(), taffy::Contain::LAYOUT);
-    assert_eq!(Contain::PAINT.into_taffy(), taffy::Contain::PAINT);
-    assert_eq!(Contain::CONTENT.into_taffy(), taffy::Contain::CONTENT);
   }
 }

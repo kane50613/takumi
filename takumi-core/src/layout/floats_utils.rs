@@ -3,8 +3,6 @@
 //! and [`PositionedFloat`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/positioned_float.h),
 //! without block fragmentation or `shape-outside`.
 
-use taffy::{Clear, Float};
-
 use crate::{
   layout::{
     bfc_rect::{BfcOffset, BfcRect},
@@ -21,6 +19,25 @@ use crate::{
   layout_unit::LayoutUnit,
   style::Direction as TextDirection,
 };
+
+/// Blink's `EFloat` resolved to a physical side, as `ComputedStyle::Floating` returns it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum Float {
+  #[default]
+  None,
+  Left,
+  Right,
+}
+
+/// Blink's `EClear` resolved to physical sides, as `ComputedStyle::Clear` returns it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum Clear {
+  #[default]
+  None,
+  Left,
+  Right,
+  Both,
+}
 
 /// Blink's `UnpositionedFloat`: a float to place, and where its search starts.
 pub(crate) struct UnpositionedFloat<'c> {

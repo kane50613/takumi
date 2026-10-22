@@ -504,12 +504,11 @@ impl ToCss for Filter {
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
 
   use super::*;
   use crate::{
     geometry::Size,
-    style::{CalcArena, Color, ColorInput, FromCssStr, Length::Px},
+    style::{Color, ColorInput, FromCssStr, Length::Px},
     viewport::Viewport,
   };
 
@@ -523,7 +522,6 @@ mod tests {
       line_height: 0.0,
       root_line_height: None,
       ch: 16.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
     }
   }
 

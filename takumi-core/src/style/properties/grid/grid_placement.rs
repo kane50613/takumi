@@ -41,14 +41,6 @@ impl GridPlacement {
   pub const fn span(span: u16) -> Self {
     Self::Span(GridPlacementSpan::Span(span))
   }
-
-  pub(crate) fn into_taffy(self) -> taffy::GridPlacement {
-    match self {
-      GridPlacement::Auto | GridPlacement::Named(_) => taffy::GridPlacement::Auto,
-      GridPlacement::Line(line) => taffy::GridPlacement::Line(line.into()),
-      GridPlacement::Span(GridPlacementSpan::Span(span)) => taffy::GridPlacement::Span(span),
-    }
-  }
 }
 
 impl TailwindPropertyParser for GridPlacement {

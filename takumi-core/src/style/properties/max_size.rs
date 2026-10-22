@@ -1,11 +1,9 @@
 use std::fmt;
 
-use cssparser::Parser;
-use taffy::LengthPercentageAuto;
-
 use crate::style::{
   Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
 };
+use cssparser::Parser;
 
 /// Represents the `max-width`/`max-height` value: either `none` (unbounded) or a [`Length`].
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -89,19 +87,6 @@ impl<'i> FromCss<'i> for MaxSize {
 impl From<Length> for MaxSize {
   fn from(length: Length) -> Self {
     Self::Length(length)
-  }
-}
-
-impl MaxSize {
-  /// Resolves to taffy, treating `none` as `auto`.
-  pub(crate) fn resolve_to_length_percentage_auto(
-    self,
-    sizing: &SizingContext,
-  ) -> LengthPercentageAuto {
-    match self {
-      Self::None => Length::Auto.resolve_to_length_percentage_auto(sizing),
-      Self::Length(length) => length.resolve_to_length_percentage_auto(sizing),
-    }
   }
 }
 

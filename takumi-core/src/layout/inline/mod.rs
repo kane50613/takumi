@@ -1,9 +1,7 @@
 //! Inline layout, ported from Blink's `core/layout/inline`.
 
-use taffy::Line;
-
 use crate::{
-  geometry::{Point, Size},
+  geometry::{Line, Point, Size},
   layout::margin_strut::MarginStrut,
   style::{AppliedTextDecorations, Color, TextDecorationSkipInk},
 };

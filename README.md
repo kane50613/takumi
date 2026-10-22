@@ -266,7 +266,7 @@ More projects in the [showcase](https://takumi.kane.tw/showcase). Takumi is part
 
 ## Core Architecture
 
-Takumi converts JSX or HTML to a node tree and lays it out in `takumi-core`. Text and inline layout port Chromium's Blink. [Taffy](https://github.com/DioxusLabs/taffy) runs flexbox, grid, and block layout, and tables lay out on its grid algorithm. HarfRust shapes text, and Skrifa reads fonts.
+Takumi converts JSX or HTML to a node tree and lays it out in `takumi-core`, whose block, inline, flexbox, grid, and table layout port Chromium's Blink. HarfRust shapes text, and Skrifa reads fonts.
 
 The laid-out tree goes to one of four backends: raster (`takumi-raster`), SVG (`takumi-svg`), PDF (`takumi-pdf`), or the paint tree (`takumi-paint`). See the [node reference](https://takumi.kane.tw/docs/reference#node-types) for the input format.
 

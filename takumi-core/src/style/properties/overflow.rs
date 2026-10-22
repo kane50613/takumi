@@ -1,6 +1,6 @@
 use cssparser::match_ignore_ascii_case;
 
-use crate::style::{impl_css_enum, impl_from_taffy_enum, tw::TailwindPropertyParser};
+use crate::style::{impl_css_enum, tw::TailwindPropertyParser};
 
 /// How children overflowing their container should affect layout
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -44,8 +44,6 @@ impl Overflow {
     matches!(self, Overflow::Visible | Overflow::Clip)
   }
 }
-
-impl_from_taffy_enum!(Overflow, into_taffy -> taffy::Overflow, Visible, Clip, Hidden);
 
 #[cfg(test)]
 mod tests {
