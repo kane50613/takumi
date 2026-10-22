@@ -1269,6 +1269,8 @@ macro_rules! define_style {
           style: &mut ComputedStyle,
           parent: &ComputedStyle,
         ) {
+          self.apply_wide_overlapping(style);
+
           let is_rtl = style.inherited_data.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => {
@@ -1330,6 +1332,8 @@ macro_rules! define_style {
 
         /// Applies this declaration to a computed style without a parent.
         pub(crate) fn apply_to_computed(&self, style: &mut ComputedStyle) {
+          self.apply_wide_overlapping(style);
+
           let is_rtl = style.inherited_data.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => match keyword {
@@ -1452,6 +1456,7 @@ define_style! {
       border_bottom_style: BorderStyle,
       border_left_style: BorderStyle,
       box_decoration_break: BoxDecorationBreak,
+      baseline_source: BaselineSource,
     }
     /// Blink's `surround` field group: insets, corner radii, and border colors.
     surround_data: StyleSurroundData {
@@ -2137,6 +2142,18 @@ define_style! {
 }
 
 impl StyleDeclaration {
+  /// Blink's `StyleCascade::ApplyWideOverlapping` for `vertical-align`, which is to become a
+  /// shorthand of `baseline-source`: it resets `baseline-source`, which a later declaration sets
+  /// again.
+  fn apply_wide_overlapping(&self, style: &mut ComputedStyle) {
+    if matches!(
+      self,
+      Self::VerticalAlign(_) | Self::CssWideKeyword(LonghandId::VerticalAlign, _)
+    ) {
+      style.box_data_mut().baseline_source = BaselineSource::default();
+    }
+  }
+
   /// Applies this declaration against `parent`, or as the root's when there is none.
   pub(crate) fn apply(self, style: &mut ComputedStyle, parent: Option<&ComputedStyle>) {
     match parent {

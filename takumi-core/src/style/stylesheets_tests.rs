@@ -1775,3 +1775,28 @@ fn a_var_fallback_still_applies() {
 
   assert_eq!(style.box_data.width, Length::Px(6.0).into());
 }
+
+/// `vertical-align` resets an earlier `baseline-source`, as Chrome treats it as the shorthand it is
+/// to become, while a later `baseline-source` still applies.
+#[test]
+fn vertical_align_resets_an_earlier_baseline_source() {
+  let baseline_source = |css: &str| {
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+      .inherit(&ComputedStyle::default())
+      .box_data
+      .baseline_source
+  };
+
+  assert_eq!(
+    baseline_source("baseline-source: first; vertical-align: baseline"),
+    BaselineSource::Auto
+  );
+  assert_eq!(
+    baseline_source("vertical-align: middle; baseline-source: last"),
+    BaselineSource::Last
+  );
+  assert_eq!(
+    baseline_source("baseline-source: last; vertical-align: inherit"),
+    BaselineSource::Auto
+  );
+}
