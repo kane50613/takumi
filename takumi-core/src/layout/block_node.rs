@@ -19,7 +19,6 @@ use crate::{
     layout_result::{
       HorizontalEdge, LayoutResult, LayoutStatus, OutOfFlowCandidate, StaticPosition, VerticalEdge,
     },
-    layout_style::LayoutStyle,
     length_utils::{
       LengthResolver, NaturalSize, ReplacedSizeMode, default_natural_size,
       inline_size_from_aspect_ratio,
@@ -27,7 +26,7 @@ use crate::{
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalSize},
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
-    taffy_bridge::TaffyAlgorithm,
+    table::TableLayoutAlgorithm,
     tree::{LayoutTree, NodeOrigin, RenderNode},
   },
   layout_unit::LayoutUnit,
@@ -50,7 +49,6 @@ struct MinMaxKey {
   percentage_resolution_block_size: Option<LayoutUnit>,
   available_block_size: Option<LayoutUnit>,
   is_new_formatting_context: bool,
-  sizes_by_content: bool,
 }
 
 impl MinMaxKey {
@@ -60,7 +58,6 @@ impl MinMaxKey {
       percentage_resolution_block_size: space.percentage_resolution_block_size,
       available_block_size: space.available_block_size,
       is_new_formatting_context: space.is_new_formatting_context,
-      sizes_by_content: space.sizes_by_content,
     }
   }
 }
@@ -165,7 +162,10 @@ impl<'r> LayoutTree<'r> {
         }
         LayoutResult::new(LogicalSize::default())
       }
-      Algorithm::Table => self.lay_out_with_taffy(node, space, TaffyAlgorithm::Table),
+      Algorithm::Table => TableLayoutAlgorithm::new(self, node, space).map_or_else(
+        || LayoutResult::new(LogicalSize::default()),
+        TableLayoutAlgorithm::layout,
+      ),
       Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, false).layout(),
       Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, false).layout(),
       Algorithm::Replaced => self.lay_out_replaced(node, space),
@@ -229,7 +229,7 @@ impl<'r> LayoutTree<'r> {
     size_type: SizeType,
   ) -> MinMaxSizesResult {
     let algorithm = self.algorithm(node);
-    let style = self.layout_style_for(node, space);
+    let style = Rc::clone(self.layout_style_rc(node));
     let resolver = LengthResolver::new(space, &style);
     let depends_on_block_constraints = style.size.height.has_percent_or_stretch()
       || style.min_size.height.has_percent_or_stretch()
@@ -280,7 +280,10 @@ impl<'r> LayoutTree<'r> {
     let mut result = match algorithm {
       Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, true).compute_min_max_sizes(),
       Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, true).compute_min_max_sizes(),
-      Algorithm::Table => self.taffy_min_max_sizes(node, space),
+      Algorithm::Table => TableLayoutAlgorithm::new(self, node, space).map_or_else(
+        MinMaxSizesResult::default,
+        TableLayoutAlgorithm::compute_min_max_sizes,
+      ),
       _ if self.has_inline_children(node) => {
         let render_node = self.render_node(node);
         let items_data = self.inline_node_data(usize::from(node));
@@ -331,7 +334,7 @@ impl<'r> LayoutTree<'r> {
     node: NodeId,
     space: &ConstraintSpace,
   ) -> MinMaxSizesResult {
-    let style = self.layout_style_for(node, space);
+    let style = Rc::clone(self.layout_style_rc(node));
     let resolver = LengthResolver::new(space, &style);
 
     if matches!(self.algorithm(node), Algorithm::Replaced) {
@@ -361,7 +364,7 @@ impl<'r> LayoutTree<'r> {
 
   /// Blink's `LayoutReplaced` sizing a replaced box in `space`.
   fn lay_out_replaced(&mut self, node: NodeId, space: &ConstraintSpace) -> LayoutResult {
-    let style = self.layout_style_for(node, space);
+    let style = Rc::clone(self.layout_style_rc(node));
     let size = LengthResolver::new(space, &style)
       .replaced_size(self.natural_size(node), ReplacedSizeMode::Normal);
 
@@ -370,29 +373,6 @@ impl<'r> LayoutTree<'r> {
       bfc_block_offset: Some(space.bfc_offset.block_offset),
       ..LayoutResult::of_box(size, &style, space)
     }
-  }
-
-  /// The style `node` lays out with in `space`: its own, or without its sizes for taffy's
-  /// `SizingMode::ContentSize`.
-  pub(crate) fn layout_style_for(
-    &mut self,
-    node: NodeId,
-    space: &ConstraintSpace,
-  ) -> Rc<LayoutStyle> {
-    let state = self.node_state_mut(node);
-
-    if !space.sizes_by_content {
-      return Rc::clone(&state.layout_style);
-    }
-
-    Rc::clone(state.content_style.get_or_insert_with(|| {
-      Rc::new(LayoutStyle {
-        size: Size::all(Default::default()),
-        min_size: Size::all(Default::default()),
-        max_size: Size::all(Default::default()),
-        ..(*state.layout_style).clone()
-      })
-    }))
   }
 
   /// Blink's `IsReplaced`: whether `node` lays out as replaced content.
@@ -511,7 +491,7 @@ impl<'r> LayoutTree<'r> {
     border_padding: LogicalBoxStrut,
     child_percentage_size: AvailableLogicalSize,
   ) -> InlineContentLayout {
-    let style = self.layout_style_for(node, space);
+    let style = Rc::clone(self.layout_style_rc(node));
     let has_definite_block_size = space.is_fixed_block_size
       || LengthResolver::new(space, &style)
         .initial_block_size_for_fragment(None, Some(inline_size))

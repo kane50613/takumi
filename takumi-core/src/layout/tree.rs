@@ -1,11 +1,5 @@
 use std::{
-  borrow::Cow,
-  cell::RefCell,
-  collections::VecDeque,
-  mem::{replace, take},
-  rc::Rc,
-  slice,
-  sync::Arc,
+  borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, rc::Rc, slice, sync::Arc,
   vec::IntoIter,
 };
 
@@ -405,13 +399,11 @@ type InlineMeasureKey = (usize, [u32; 5]);
 
 /// A box as layout lays it out: its styles, what it keeps of its layouts, and where it went.
 pub(crate) struct LayoutNodeState {
-  /// The style taffy's flexbox, grid, and table code reads, shared with the recent nodes whose
-  /// style came out equal, as rows of a list do.
+  /// The taffy style whose `display` picks the layout algorithm, shared with the recent nodes
+  /// whose style came out equal, as rows of a list do.
   pub(crate) style: Rc<Style>,
   /// The style the native layout reads, shared the same way.
   pub(crate) layout_style: Rc<LayoutStyle>,
-  /// `layout_style` without its sizes, for taffy's `SizingMode::ContentSize`.
-  pub(crate) content_style: Option<Rc<LayoutStyle>>,
   /// Whether the styles are the same whatever query container they resolve against, so repeated
   /// layouts can reuse them.
   container_independent: bool,
@@ -473,7 +465,6 @@ impl LayoutNodeState {
     Self {
       style,
       layout_style,
-      content_style: None,
       container_independent,
       cache: LayoutCache::default(),
       layout: ComputedLayout::default(),
@@ -1150,9 +1141,6 @@ impl<'r> LayoutTree<'r> {
     let mut layout_style = render_node.layout_box_style(&sizing);
 
     state.table_box.apply(&mut style, &mut layout_style);
-    if *state.layout_style != layout_style {
-      state.content_style = None;
-    }
     state.style = Rc::new(style);
     state.layout_style = Rc::new(layout_style);
   }
@@ -1180,11 +1168,6 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// The children `node` lays out, in layout order.
-  pub(in crate::layout) fn layout_children(&self, node: TaffyNodeId) -> &[TaffyNodeId] {
-    &self.nodes[usize::from(node)].children
-  }
-
-  /// [`Self::layout_children`] as layout nodes.
   pub(crate) fn child_nodes(&self, node: NodeId) -> Vec<NodeId> {
     self
       .node_state(node)
@@ -1192,11 +1175,6 @@ impl<'r> LayoutTree<'r> {
       .iter()
       .map(|&child| NodeId::from_taffy(child))
       .collect()
-  }
-
-  /// The taffy style `node` lays out with.
-  pub(in crate::layout) fn taffy_style(&self, node: TaffyNodeId) -> &Style {
-    &self.nodes[usize::from(node)].style
   }
 
   /// The style `node` lays out with.
@@ -1214,16 +1192,13 @@ impl<'r> LayoutTree<'r> {
     self.inline_containers.get(&usize::from(node)).copied()
   }
 
-  pub(in crate::layout) fn table_structure(
-    &self,
-    table: TaffyNodeId,
-  ) -> Option<Rc<TableStructure>> {
+  pub(in crate::layout) fn table_structure(&self, table: NodeId) -> Option<Rc<TableStructure>> {
     self.tables.get(&usize::from(table)).cloned()
   }
 
   pub(in crate::layout) fn set_table_structure(
     &mut self,
-    table: TaffyNodeId,
+    table: NodeId,
     structure: TableStructure,
   ) {
     self.tables.insert(usize::from(table), Rc::new(structure));
@@ -1231,33 +1206,25 @@ impl<'r> LayoutTree<'r> {
 
   pub(in crate::layout) fn table_column_constraints(
     &self,
-    table: TaffyNodeId,
+    table: NodeId,
   ) -> Option<Rc<ColumnConstraints>> {
     self.table_columns.get(&usize::from(table)).cloned()
   }
 
   pub(in crate::layout) fn set_table_column_constraints(
     &mut self,
-    table: TaffyNodeId,
+    table: NodeId,
     columns: Rc<ColumnConstraints>,
   ) {
     self.table_columns.insert(usize::from(table), columns);
   }
 
-  pub(in crate::layout) fn set_table_fragment(
-    &mut self,
-    table: TaffyNodeId,
-    fragment: TableFragment,
-  ) {
+  pub(in crate::layout) fn set_table_fragment(&mut self, table: NodeId, fragment: TableFragment) {
     self.table_fragments.insert(usize::from(table), fragment);
   }
 
   /// Changes what `node`'s part in a table changes in its styles.
-  pub(in crate::layout) fn set_table_box_style(
-    &mut self,
-    node: TaffyNodeId,
-    table_box: TableBoxStyle,
-  ) {
+  pub(in crate::layout) fn set_table_box_style(&mut self, node: NodeId, table_box: TableBoxStyle) {
     let index = usize::from(node);
     let render_node = self.render_nodes[index];
     let sizing = &render_node.context.sizing;
@@ -1269,7 +1236,6 @@ impl<'r> LayoutTree<'r> {
     state.table_box = table_box;
     state.style = Rc::new(style);
     state.layout_style = Rc::new(layout_style);
-    state.content_style = None;
     state.cache.clear();
   }
 
@@ -1277,7 +1243,7 @@ impl<'r> LayoutTree<'r> {
   /// its own padding.
   pub(in crate::layout) fn set_table_cell_aligned_padding(
     &mut self,
-    cell: TaffyNodeId,
+    cell: NodeId,
     padding: Option<(f32, f32)>,
   ) {
     let table_box = self.nodes[usize::from(cell)].table_box;
@@ -1293,21 +1259,8 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Runs `measure` without keeping fragment items, as a measuring pass whose layout paint never
-  /// reads.
-  pub(in crate::layout) fn without_fragment_items<T>(
-    &mut self,
-    measure: impl FnOnce(&mut Self) -> T,
-  ) -> T {
-    let keeps_fragment_items = replace(&mut self.keeps_fragment_items, false);
-    let output = measure(self);
-
-    self.keeps_fragment_items = keeps_fragment_items;
-    output
-  }
-
   /// `node`'s layout so far.
-  pub(in crate::layout) fn computed_layout(&self, node: TaffyNodeId) -> ComputedLayout {
+  pub(in crate::layout) fn computed_layout(&self, node: NodeId) -> ComputedLayout {
     self.nodes[usize::from(node)].layout
   }
 }

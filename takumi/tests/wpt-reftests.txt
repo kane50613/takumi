@@ -1280,11 +1280,8 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/select-element-zero-height-002.html
 !css/css-flexbox/svg-root-as-flex-item-002.html
 !css/css-flexbox/table-as-item-inflexible-in-column-2.html
-!css/css-flexbox/table-as-item-large-intrinsic-size.html
 !css/css-flexbox/table-as-item-min-content-height-1.tentative.html
 !css/css-flexbox/table-as-item-min-content-height-2.tentative.html
-!css/css-flexbox/table-as-item-min-height-1.html
-!css/css-flexbox/table-as-item-specified-height.html
 !css/css-flexbox/table-as-item-stretch-cross-size-3.html
 !css/css-flexbox/table-as-item-stretch-cross-size-5.html
 !css/css-flexbox/whitespace-in-flexitem-001.html
@@ -1510,10 +1507,6 @@ css/css-grid/alignment/self-baseline/grid-self-baseline-vertical-lr-001.html
 css/css-grid/alignment/self-baseline/grid-self-baseline-vertical-rl-001.html
 !css/css-grid/child-border-box-and-max-content-002.html
 !css/css-grid/grid-child-percent-basis-resize-1.html
-!css/css-grid/grid-container-baseline-synthesized-001.html
-!css/css-grid/grid-container-baseline-synthesized-002.html
-!css/css-grid/grid-container-baseline-synthesized-003.html
-!css/css-grid/grid-container-baseline-synthesized-004.html
 !css/css-grid/grid-definition/flex-item-grid-container-percentage-rows-001.html
 !css/css-grid/grid-definition/grid-auto-repeat-aspect-ratio-001.html
 !css/css-grid/grid-definition/grid-auto-repeat-aspect-ratio-002.html
@@ -1526,7 +1519,6 @@ css/css-grid/alignment/self-baseline/grid-self-baseline-vertical-rl-001.html
 !css/css-grid/grid-item-percentage-quirk-001.html
 !css/css-grid/grid-item-percentage-quirk-002.html
 !css/css-grid/grid-items/aspect-ratio-005.html
-!css/css-grid/grid-items/explicitly-sized-grid-item-as-table.html
 !css/css-grid/grid-items/grid-auto-margin-and-replaced-item-001.html
 !css/css-grid/grid-items/grid-inline-order-property-painting-001.html
 !css/css-grid/grid-items/grid-inline-order-property-painting-002.html
@@ -2403,7 +2395,6 @@ css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-027.html
 !css/css-tables/display-contents-003.html
 !css/css-tables/height-distribution/td-different-subpixel-padding-in-same-row-vertical-rl.html
 !css/css-tables/min-height-table-2.html
-!css/css-tables/min-max-size-table-content-box.html
 !css/css-tables/paint/col-paint-vrl-rtl.html
 !css/css-tables/percent-height-replaced-in-percent-cell-002.html
 !css/css-tables/percent-height-replaced-in-percent-cell-003.html

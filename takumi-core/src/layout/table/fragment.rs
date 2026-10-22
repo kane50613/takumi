@@ -2,8 +2,6 @@
 //! from its captions, which cells and rows layout hid, the geometry of its columns and column
 //! groups, and its collapsed borders with the rows and columns they run along.
 
-use taffy::NodeId as TaffyNodeId;
-
 use crate::{
   geometry::{NodeId, Point, Size},
   layout::{
@@ -43,9 +41,9 @@ pub struct TableFragment {
   pub(crate) grid_rect: (f32, f32),
   /// The cells and rows layout hid: collapsed, in collapsed columns, or empty with
   /// `empty-cells: hide`.
-  pub(crate) hidden: Vec<TaffyNodeId>,
+  pub(crate) hidden: Vec<NodeId>,
   /// Each cell's first column.
-  pub(crate) cell_columns: Vec<(TaffyNodeId, usize)>,
+  pub(crate) cell_columns: Vec<(NodeId, usize)>,
   pub(crate) section_row_offsets: Vec<SectionRowOffsets>,
   /// The sections, in layout order.
   pub(crate) sections: Vec<NodeId>,
@@ -78,7 +76,7 @@ impl TableFragment {
     self.sections = structure
       .sections
       .iter()
-      .map(|section| NodeId::from_taffy(section.node))
+      .map(|section| section.node)
       .collect();
 
     let mut union: Option<(Point<f32>, Size<f32>)> = None;
@@ -139,13 +137,11 @@ impl TableFragment {
 
   /// Whether layout hid the cell or row `node`, which then paints nothing.
   pub fn hides(&self, node: NodeId) -> bool {
-    self.hidden.contains(&node.into_taffy())
+    self.hidden.contains(&node)
   }
 
   /// The first column of the cell `node`.
   pub(crate) fn cell_column(&self, node: NodeId) -> Option<usize> {
-    let node = node.into_taffy();
-
     self
       .cell_columns
       .iter()

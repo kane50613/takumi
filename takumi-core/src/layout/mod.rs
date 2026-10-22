@@ -38,6 +38,5 @@ pub(crate) mod relative_utils;
 pub mod replaced;
 /// CSS tables, laid out by Blink's table algorithm.
 pub mod table;
-pub(crate) mod taffy_bridge;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;

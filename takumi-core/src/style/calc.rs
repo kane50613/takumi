@@ -20,35 +20,11 @@ impl CalcArena {
     linear_values.push(linear);
     encode_linear_id(linear_values.len())
   }
-
-  /// Resolves an interned `calc(...)` value against a percentage basis.
-  pub(crate) fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
-    let Some(id) = decode_linear_id(val) else {
-      return 0.0;
-    };
-
-    let linear_values = self.linear_values.borrow();
-    linear_values
-      .get(id - 1)
-      .map(|linear| linear.resolve(basis))
-      .unwrap_or(0.0)
-  }
 }
 
 fn encode_linear_id(id: usize) -> *const () {
   // The low 3 bits are reserved because aligned pointers keep them as zero.
   (id << 3) as *const ()
-}
-
-fn decode_linear_id(ptr: *const ()) -> Option<usize> {
-  let raw = ptr as usize;
-  // Reject pointers that `encode_linear_id` could not have produced: the low 3
-  // bits must be clear and the 1-based id must be non-zero.
-  if raw & 0b111 != 0 {
-    return None;
-  }
-  let id = raw >> 3;
-  (id != 0).then_some(id)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

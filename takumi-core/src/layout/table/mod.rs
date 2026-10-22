@@ -12,7 +12,7 @@ mod rows;
 pub(crate) use self::{
   borders::{TableBorders, style_rank},
   columns::ColumnConstraints,
-  layout::TableStructure,
+  layout::{TableLayoutAlgorithm, TableStructure},
 };
 pub use self::{fragment::TableFragment, parts::TableSectionKind};
 
