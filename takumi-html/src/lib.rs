@@ -594,6 +594,10 @@ fn dimension(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<Length> {
       .map_or(value.len(), |end| start + end)
   };
   let integer_end = digits_end(0);
+
+  if integer_end == 0 {
+    return None;
+  }
   // A fraction needs a digit after its point; anything past the number is ignored.
   let number_end = match value[integer_end..].strip_prefix('.') {
     Some(fraction) if fraction.starts_with(|character: char| character.is_ascii_digit()) => {
@@ -662,6 +666,7 @@ mod tests {
   #[test]
   fn image_size_attributes_in_other_units_style_the_image() {
     let image = parse(r#"<img src="a.png" width="50%" height="20..5">"#);
+    let fraction_only = parse(r#"<img src="a.png" width=".5">"#);
     let svg = parse(r#"<svg width="100%" height="2em" viewBox="0 0 1 1"></svg>"#);
 
     assert!(matches!(
@@ -671,6 +676,10 @@ mod tests {
         height: Some(20.0),
         ..
       })
+    ));
+    assert!(matches!(
+      fraction_only.kind,
+      NodeKind::Image(ImageData { width: None, .. })
     ));
     assert!(image.to_html().contains("width: 50%"));
     assert!(svg.to_html().contains("width: 100%; height: 2em"));
