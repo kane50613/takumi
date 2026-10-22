@@ -74,6 +74,9 @@ pub(crate) struct BoxFragmentBuilder {
   pub(crate) includes_block_end: bool,
   /// Blink's `SetBreakTokenData`: what the algorithm resumes from in the next fragment.
   pub(crate) break_token_data: Option<BreakTokenAlgorithmData>,
+  /// Blink's `HasFragmentainerBreak` of a new formatting context's exclusion space: a float in it
+  /// broke before or inside.
+  pub(crate) has_float_break: bool,
 }
 
 impl BoxFragmentBuilder {
@@ -118,6 +121,7 @@ impl BoxFragmentBuilder {
       includes_block_start: true,
       includes_block_end: true,
       break_token_data: None,
+      has_float_break: false,
     }
   }
 
