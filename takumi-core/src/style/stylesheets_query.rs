@@ -74,8 +74,9 @@ impl ComputedStyle {
 
     self.make_computed_values(sizing);
 
-    // The used value of `border-width`/`outline-width` is zero when the line's
-    // style is `none` or `hidden`, even though the computed value is `medium`.
+    // The used value of `border-width` is zero when the line's style is `none` or
+    // `hidden`, even though the computed value is `medium`. `outline-width` keeps its
+    // value, as Blink's does, and the outline's readers check its style.
     let none = LineWidth::Length(Length::zero());
     let unrendered = |style: BorderStyle, width: LineWidth| !style.is_rendered() && width != none;
     let box_data = &self.box_data;
@@ -103,9 +104,6 @@ impl ComputedStyle {
           *width = none;
         }
       }
-    }
-    if unrendered(self.misc_data.outline_style, self.misc3_data.outline_width) {
-      self.misc3_data_mut().outline_width = none;
     }
 
     // Text truncates only in a box that clips its overflow
