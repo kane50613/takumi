@@ -34,7 +34,7 @@ pub struct ColumnGeometry {
 pub(crate) type SectionRowOffsets = (usize, usize, Vec<LayoutUnit>);
 
 /// A laid-out table's paint data.
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct TableFragment {
   /// The block offset and size of the table box in the table's border box: everything but its
   /// captions, Blink's `TableGridRect`.

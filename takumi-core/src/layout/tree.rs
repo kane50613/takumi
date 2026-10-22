@@ -13,6 +13,7 @@ use crate::layout::{
   constraint_space::BlockFragmentation,
   fragmentation_layout_input::FragmentationLayoutInput,
   fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
+  layout_result::LayoutResult,
 };
 
 use crate::{
@@ -303,6 +304,10 @@ pub struct LayoutTree<'r> {
   atomic_inlines: FxHashMap<*const RenderNode, NodeId>,
   /// Each inline formatting context's lines from its block layout, until it finishes.
   pub(crate) inline_contents: FxHashMap<NodeId, InlineContent<'r>>,
+  /// The first layout of each repeated table header and footer, which every repetition reuses,
+  /// as Blink reads a repeated root's first layout result.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) repeated_roots: FxHashMap<NodeId, Rc<LayoutResult>>,
 }
 
 /// What a box's part in a table changes in the styles it is laid out with.
@@ -409,6 +414,14 @@ pub(crate) struct LayoutNodeState {
   pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
   /// The out-of-flow boxes this node is the containing block for.
   pub(crate) claims: ContainingBlockClaims,
+}
+
+impl LayoutNodeState {
+  /// Its children in paint order, the boxes of its inline content among them.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn box_children(&self) -> &[OrderedChild] {
+    &self.box_children
+  }
 }
 
 /// A box's fragments, one unless it fragmented.
@@ -553,6 +566,18 @@ impl FragmentItemsCache {
   }
 }
 
+impl FragmentItemsCache {
+  /// Keeps fragment `source`'s items as fragment `target`'s too.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn repeat(&self, source: usize, target: usize) {
+    let items = self.0.borrow().get(source).cloned().flatten();
+
+    if let Some(items) = items {
+      self.keep(target, items);
+    }
+  }
+}
+
 impl Clone for FragmentItemsCache {
   fn clone(&self) -> Self {
     Self::default()
@@ -627,6 +652,8 @@ impl<'r> LayoutTree<'r> {
       table_fragments: FxHashMap::default(),
       atomic_inlines: FxHashMap::default(),
       inline_contents: FxHashMap::default(),
+      #[cfg(feature = "fragmentation")]
+      repeated_roots: FxHashMap::default(),
     };
 
     tree.push_subtree(render_root);
@@ -1233,6 +1260,27 @@ impl<'r> LayoutTree<'r> {
     columns: Rc<ColumnConstraints>,
   ) {
     self.table_columns.insert(usize::from(table), columns);
+  }
+
+  /// Copies the table `table`'s paint data for fragment `source` to fragment `target`.
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) fn repeat_table_fragment(
+    &mut self,
+    table: NodeId,
+    source: usize,
+    target: usize,
+  ) {
+    let Some(fragments) = self.table_fragments.get_mut(&usize::from(table)) else {
+      return;
+    };
+    let Some(fragment) = fragments.get(source).cloned() else {
+      return;
+    };
+
+    if fragments.len() <= target {
+      fragments.resize_with(target + 1, TableFragment::default);
+    }
+    fragments[target] = fragment;
   }
 
   pub(in crate::layout) fn set_table_fragment(

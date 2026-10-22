@@ -105,6 +105,9 @@ pub(crate) struct ConstraintSpace {
   /// Blink's block fragmentation fields, none outside a fragmentation context.
   #[cfg(feature = "fragmentation")]
   pub(crate) block_fragmentation: Option<BlockFragmentation>,
+  /// Blink's `ShouldRepeat`: a repeated table header or footer repeats again on the next page.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) should_repeat: bool,
 }
 
 /// The fields Blink's `ConstraintSpace` keeps for block fragmentation, for pages alone: a space
@@ -161,6 +164,8 @@ impl ConstraintSpace {
       table_part: None,
       #[cfg(feature = "fragmentation")]
       block_fragmentation: None,
+      #[cfg(feature = "fragmentation")]
+      should_repeat: false,
     }
   }
 

@@ -1,6 +1,6 @@
 //! Blink's [`BlockBreakToken`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_break_token.h),
-//! for pages alone: no column spanners, repeated content, out-of-flow fragmentation, or list
-//! markers left unpositioned.
+//! for pages alone: no column spanners, out-of-flow fragmentation, or list markers left
+//! unpositioned.
 
 use crate::{
   geometry::NodeId,
@@ -21,6 +21,8 @@ pub(crate) struct BlockBreakToken {
   /// Blink's `IsBreakBefore`: the box made no fragment before the break.
   pub(crate) is_break_before: bool,
   pub(crate) is_forced_break: bool,
+  /// Blink's `IsRepeated`: the box repeats, as a table header or footer does on each page.
+  pub(crate) is_repeated: bool,
   /// Blink's `IsAtBlockEnd`: layout was past the block-end border edge, so only overflow
   /// resumes.
   pub(crate) is_at_block_end: bool,
@@ -33,6 +35,16 @@ pub(crate) struct BlockBreakToken {
 }
 
 impl BlockBreakToken {
+  /// Blink's `CreateRepeated`: where `node` repeats after its fragment `sequence_number`.
+  pub(crate) fn repeated(node: NodeId, sequence_number: u32) -> Self {
+    Self {
+      sequence_number,
+      is_break_before: false,
+      is_repeated: true,
+      ..Self::break_before(node, false)
+    }
+  }
+
   /// Blink's `CreateBreakBefore`: a break before `node`, which made no fragment yet.
   pub(crate) fn break_before(node: NodeId, is_forced_break: bool) -> Self {
     Self {
@@ -42,6 +54,7 @@ impl BlockBreakToken {
       monolithic_overflow: LayoutUnit::ZERO,
       is_break_before: true,
       is_forced_break,
+      is_repeated: false,
       is_at_block_end: false,
       has_seen_all_children: false,
       child_break_tokens: Vec::new(),

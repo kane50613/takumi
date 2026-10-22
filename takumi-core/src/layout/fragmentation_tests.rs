@@ -457,3 +457,100 @@ fn a_top_caption_comes_before_the_rows_it_breaks_with() {
   assert_eq!(boxes["r0"], [placed(0, 40.0, 60.0)]);
   assert_eq!(boxes["r1"], [placed(0, 100.0, 50.0), placed(1, 0.0, 10.0)]);
 }
+
+/// A table with a header group of `header_class`, a body of five 60px rows that avoid breaking,
+/// and, with `footer_class`, a footer group.
+fn table_with_groups(header_class: &str, footer_class: Option<&str>) -> Node {
+  let group = |class: &str, id: &str, rows: Vec<Node>| {
+    Node::container(rows)
+      .with_class_name(class.to_owned())
+      .with_id(id)
+  };
+  let row = |id: String, height: &str| {
+    Node::container([Node::container([block(&format!("{id}-cell"), height)]).with_class_name("td")])
+      .with_class_name("tr")
+      .with_id(id.as_str())
+  };
+  let mut sections = vec![
+    group(
+      &format!("thead {header_class}"),
+      "thead",
+      vec![row("h".into(), "h20")],
+    ),
+    group(
+      "tbody",
+      "tbody",
+      (0..5)
+        .map(|index| row(format!("r{index}"), "h60"))
+        .collect(),
+    ),
+  ];
+
+  if let Some(footer_class) = footer_class {
+    sections.push(group(
+      &format!("tfoot {footer_class}"),
+      "tfoot",
+      vec![row("f".into(), "h20")],
+    ));
+  }
+  Node::container(sections)
+    .with_class_name("table")
+    .with_id("table")
+}
+
+const GROUP_CSS: &str = ".thead { display: table-header-group } .tbody { display: table-row-group } \
+  .tfoot { display: table-footer-group } .tbody .tr { break-inside: avoid } .h20 { height: 20px } \
+  .h80 { height: 80px } .avoid { break-inside: avoid }";
+
+#[test]
+fn a_short_table_header_repeats_on_every_page() {
+  let tree = render(
+    root([table_with_groups("avoid", None)]),
+    &format!("{TABLE_CSS} {GROUP_CSS}"),
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["thead"], [placed(0, 0.0, 20.0), placed(1, 0.0, 20.0)]);
+  assert_eq!(boxes["h"], [placed(0, 0.0, 20.0), placed(1, 0.0, 20.0)]);
+  assert_eq!(boxes["r2"], [placed(0, 140.0, 60.0)]);
+  assert_eq!(boxes["r3"], [placed(1, 20.0, 60.0)]);
+}
+
+#[test]
+fn a_table_header_repeats_only_when_it_avoids_breaks_and_is_short() {
+  for header_class in ["", "avoid h80"] {
+    let tree = render(
+      root([table_with_groups(header_class, None)]),
+      &format!("{TABLE_CSS} {GROUP_CSS} .h80 .h20 {{ height: 80px }}"),
+    );
+    let (boxes, _) = pages(&tree, 200.0);
+
+    assert_eq!(boxes["thead"].len(), 1, "{header_class:?} does not repeat");
+  }
+}
+
+#[test]
+fn a_short_table_footer_repeats_at_the_end_of_every_page() {
+  let tree = render(
+    root([table_with_groups("avoid", Some("avoid"))]),
+    &format!("{TABLE_CSS} {GROUP_CSS}"),
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  // The header and footer take 40px of each page, so two rows fit on each, and the footer follows
+  // the last row on the page.
+  assert_eq!(page_count, 3);
+  assert_eq!(boxes["r1"], [placed(0, 80.0, 60.0)]);
+  assert_eq!(boxes["r2"], [placed(1, 20.0, 60.0)]);
+  assert_eq!(boxes["r4"], [placed(2, 20.0, 60.0)]);
+  assert_eq!(
+    boxes["tfoot"],
+    [
+      placed(0, 140.0, 20.0),
+      placed(1, 140.0, 20.0),
+      placed(2, 80.0, 20.0)
+    ]
+  );
+  assert_eq!(boxes["f"].len(), 3);
+}
