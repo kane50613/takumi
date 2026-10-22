@@ -240,6 +240,15 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
   let scene = paged.page(1);
 
   assert_eq!(scene.origin, Point::new(0.0, 200.0));
+  // The root paints once on each page.
+  assert_eq!(
+    scene.contexts[0]
+      .roots()
+      .iter()
+      .map(|root| root.fragment_index)
+      .collect::<Vec<_>>(),
+    [0, 1]
+  );
 
   let paints: Vec<NodePaint> = scene
     .contexts

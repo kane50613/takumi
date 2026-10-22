@@ -151,6 +151,15 @@ impl ScenePainter<'_, '_> {
   /// Opens the group of `effect` owned by `paint`: its filtered backdrop, its layer, then its
   /// `clip-path` and `mask-image` masks.
   fn open_effect(&mut self, paint: &NodePaint, effect: &EffectNode) -> Result<OpenEffect> {
+    // The masks read the owner's paint offset, which differs between its fragments.
+    if let Some(fragments) = self.fragments
+      && let Ok(layout) = self
+        .results
+        .fragment_layout(paint.node_id, paint.fragment_index)
+    {
+      fragments.enter(self.root, paint, layout.location);
+    }
+
     let (node, layout) = placed(self.root, self.results, paint)?;
     let canvas = &mut *self.canvas;
     let style = &node.context.style;

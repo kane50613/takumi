@@ -217,7 +217,8 @@ pub(crate) enum PaintPhase<'a> {
 
 /// One stacking context: an optional root node and its descendants bucketed into CSS paint order.
 pub struct StackingContextNode {
-  root: Option<NodePaint>,
+  /// The node that owns this context, one paint per fragment for the root of a paged scene.
+  roots: Vec<NodePaint>,
   buckets: StackingBuckets,
   paint_bounds: Option<SceneBounds>,
 }
@@ -225,7 +226,12 @@ pub struct StackingContextNode {
 impl StackingContextNode {
   /// The node that owns this context, if any (the synthetic root has none).
   pub fn root(&self) -> Option<&NodePaint> {
-    self.root.as_ref()
+    self.roots.first()
+  }
+
+  /// Each fragment of the node that owns this context, in page order.
+  pub fn roots(&self) -> &[NodePaint] {
+    &self.roots
   }
 
   /// The context's device-space paint bounds, once computed.
@@ -255,7 +261,7 @@ impl StackingContextNode {
 
   fn with_root(root: Option<NodePaint>) -> Self {
     Self {
-      root,
+      roots: root.into_iter().collect(),
       buckets: StackingBuckets::default(),
       paint_bounds: None,
     }
@@ -510,7 +516,7 @@ impl SceneRequest<'_> {
       let mut stacking_id = visit.stacking_id;
 
       if visit.is_root {
-        contexts[0].root = Some(node_paint);
+        contexts[0].roots.push(node_paint);
       } else {
         let (bucket, z_index) = PaintBucket::of(
           &current.context.style,
@@ -632,9 +638,9 @@ impl SceneRequest<'_> {
     for context_id in (0..contexts.len()).rev() {
       let mut paint_bounds = None;
       let mut unknown = false;
-      if let Some(root) = &contexts[context_id].root {
+      for root in &contexts[context_id].roots {
         match root.paint_bounds {
-          Some(bounds) => paint_bounds = Some(bounds),
+          Some(bounds) => paint_bounds = merge_bounds(paint_bounds, Some(bounds)),
           None => unknown = true,
         }
       }
@@ -652,7 +658,7 @@ impl SceneRequest<'_> {
           }
         }
       }
-      if let Some(root_paint) = &contexts[context_id].root
+      if let Some(root_paint) = contexts[context_id].roots.first()
         && let Some(root_node) = root.node_at_path(&root_paint.path)
       {
         paint_bounds = outset_bounds(paint_bounds, filter_reach(root_node), root_paint.transform);
@@ -791,7 +797,7 @@ impl SceneLayers {
         PaintItemKind::Context(_) => None,
       });
 
-      for paint in context.root.iter().chain(paints) {
+      for paint in context.roots.iter().chain(paints) {
         if let Ok(layout) = results.fragment_layout(paint.node_id, paint.fragment_index) {
           placements.insert(
             paint.path.clone(),
