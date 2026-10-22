@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
-use criterion::{Criterion, criterion_group, criterion_main};
-use takumi_core::{Fonts, resources::font::FontResource};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use takumi_core::{Fonts, layout::node::Node, resources::font::FontResource};
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{PageOptions, PdfOptions, render};
 
@@ -37,9 +37,11 @@ fn long_text(paragraphs: usize) -> String {
   paragraph.repeat(paragraphs)
 }
 
-fn render_html(fonts: &Fonts, html: &str) -> Vec<u8> {
-  let node = from_html(html, FromHtmlOptions::default()).expect("parse bench document");
+fn parse(html: &str) -> Node {
+  from_html(html, FromHtmlOptions::default()).expect("parse bench document")
+}
 
+fn render_node(fonts: &Fonts, node: Node) -> Vec<u8> {
   render(
     PdfOptions::builder()
       .node(node)
@@ -76,28 +78,35 @@ fn fonts() -> Fonts {
 
 fn bench_pagination(c: &mut Criterion) {
   let fonts = fonts();
-  let table = long_table(3000);
-  let text = long_text(600);
-  let report = format!("{}{}{}", long_text(100), long_table(1000), long_text(100));
+  let documents = [
+    ("long_table", parse(&long_table(3000))),
+    ("long_text", parse(&long_text(600))),
+    (
+      "report",
+      parse(&format!(
+        "{}{}{}",
+        long_text(100),
+        long_table(1000),
+        long_text(100)
+      )),
+    ),
+  ];
   let mut group = c.benchmark_group("pdf_pagination");
 
-  for html in [&table, &text, &report] {
+  group.sample_size(10);
+  for (name, node) in &documents {
     assert!(
-      page_count(&render_html(&fonts, html)) >= 30,
+      page_count(&render_node(&fonts, node.clone())) >= 30,
       "a bench document spans 30 pages"
     );
+    group.bench_function(*name, |b| {
+      b.iter_batched(
+        || node.clone(),
+        |node| black_box(render_node(&fonts, node)),
+        BatchSize::SmallInput,
+      )
+    });
   }
-
-  group.sample_size(10);
-  group.bench_function("long_table", |b| {
-    b.iter(|| black_box(render_html(&fonts, &table)))
-  });
-  group.bench_function("long_text", |b| {
-    b.iter(|| black_box(render_html(&fonts, &text)))
-  });
-  group.bench_function("report", |b| {
-    b.iter(|| black_box(render_html(&fonts, &report)))
-  });
   group.finish();
 }
 
