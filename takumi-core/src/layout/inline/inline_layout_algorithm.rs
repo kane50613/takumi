@@ -61,7 +61,7 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   pub(crate) hang_inline_size: LayoutUnit,
   pub(crate) block_size: LayoutUnit,
   pub(crate) base_direction: TextDirection,
-  pub(crate) break_token: Option<InlineBreakToken<'c>>,
+  pub(crate) break_token: Option<InlineBreakToken>,
   pub(crate) is_empty_line_box: bool,
   /// Blink's `EndMarginStrut`: the margins after the line, which collapse with the next ones.
   pub(crate) end_margin_strut: MarginStrut,
@@ -234,7 +234,7 @@ impl LineBreakStrategy {
   fn new(
     context: &InlineChildLayoutContext<'_, '_>,
     text_wrap: TextWrapStyle,
-    break_token: Option<InlineBreakToken<'_>>,
+    break_token: Option<InlineBreakToken>,
   ) -> Self {
     let score_context = context.score_line_break_context.as_ref();
 
@@ -275,7 +275,7 @@ pub(crate) struct InlineLayoutAlgorithm<'s, 'a, 'c> {
   node: InlineNode<'c>,
   items_data: &'a InlineNodeData<'c>,
   constraint_space: &'s ConstraintSpace,
-  break_token: Option<InlineBreakToken<'c>>,
+  break_token: Option<InlineBreakToken>,
   context: &'s mut InlineChildLayoutContext<'a, 'c>,
   atomic_inline: &'s mut dyn AtomicInlineLayout<'c>,
   container_builder: LineBoxFragment<'a, 'c>,
@@ -289,7 +289,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     node: InlineNode<'c>,
     items_data: &'a InlineNodeData<'c>,
     constraint_space: &'s ConstraintSpace,
-    break_token: Option<InlineBreakToken<'c>>,
+    break_token: Option<InlineBreakToken>,
     context: &'s mut InlineChildLayoutContext<'a, 'c>,
     atomic_inline: &'s mut dyn AtomicInlineLayout<'c>,
   ) -> Self {

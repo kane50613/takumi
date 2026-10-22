@@ -115,7 +115,7 @@ struct InlineChild<'a, 'r> {
   items_data: &'a InlineNodeData<'r>,
   context: InlineChildLayoutContext<'a, 'r>,
   /// Blink's `previous_inline_break_token`: where the next line starts.
-  break_token: Option<InlineBreakToken<'r>>,
+  break_token: Option<InlineBreakToken>,
   /// The outside list marker the box has yet to place beside a line.
   unpositioned_list_marker: Option<UnpositionedListMarker<'r>>,
   /// The lines laid out, in the content box.

@@ -12,6 +12,7 @@ use std::{
 use rustc_hash::FxHashMap;
 
 use super::{
+  inline_break_token::BreakTokenStyle,
   inline_item::{InlineItem, InlineItemType, InlineItems, LayoutObject},
   inline_item_segment::InlineItemSegments,
 };
@@ -53,6 +54,8 @@ pub(crate) struct InlineNodeData<'c> {
   /// The min-content and max-content sizes, kept once no box inside can make them depend on the
   /// available space.
   pub(crate) min_max_sizes: Cell<Option<MinMaxSizes>>,
+  /// The first item each inline box's style belongs to, which names it in a break token.
+  pub(crate) break_token_styles: OnceCell<FxHashMap<*const RenderContext, usize>>,
 }
 
 impl<'c> InlineNodeData<'c> {
@@ -118,6 +121,50 @@ impl<'c> InlineNodeData<'c> {
   /// Blink's `HasFloatingOrOutOfFlowPositioned`.
   pub(crate) fn has_floating_or_out_of_flow_positioned(&self) -> bool {
     self.has_floats || self.has_out_of_flow_positioned
+  }
+
+  /// How a break token names `context`, the style of `block` or of an inline box inside.
+  pub(crate) fn break_token_style(
+    &self,
+    context: &RenderContext,
+    block: &RenderContext,
+  ) -> BreakTokenStyle {
+    if ptr::eq(context, block) {
+      return BreakTokenStyle::Block;
+    }
+
+    let styles = self.break_token_styles.get_or_init(|| {
+      let mut styles = FxHashMap::default();
+
+      for (index, item) in self.items.iter().enumerate() {
+        if let Some(layout_object) = item.layout_object {
+          styles
+            .entry(ptr::from_ref(layout_object.context()))
+            .or_insert(index);
+        }
+      }
+      styles
+    });
+
+    styles
+      .get(&ptr::from_ref(context))
+      .map_or(BreakTokenStyle::Block, |&index| {
+        BreakTokenStyle::Item(index)
+      })
+  }
+
+  /// The style a break token's `style` names, inside `block`.
+  pub(crate) fn break_token_context(
+    &self,
+    style: BreakTokenStyle,
+    block: &'c RenderContext,
+  ) -> &'c RenderContext {
+    match style {
+      BreakTokenStyle::Block => block,
+      BreakTokenStyle::Item(index) => self.items[index]
+        .layout_object
+        .map_or(block, LayoutObject::context),
+    }
   }
 
   /// The style an item after the close tag at `index` takes: the box enclosing that tag's box,

@@ -28,7 +28,7 @@ impl LineWidths {
     node: InlineNode<'_>,
     items_data: &InlineNodeData<'_>,
     opportunities: &[LayoutOpportunity],
-    break_token: Option<InlineBreakToken<'_>>,
+    break_token: Option<InlineBreakToken>,
   ) -> Option<Self> {
     let first_opportunity = opportunities.first()?;
 

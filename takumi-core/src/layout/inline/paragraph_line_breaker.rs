@@ -36,7 +36,7 @@ struct LineBreakResults<'s, 'a, 'c> {
   space: &'s ConstraintSpace,
   atomic_inline: &'s mut dyn AtomicInlineLayout<'c>,
   line_widths: Vec<LayoutUnit>,
-  break_token: Option<InlineBreakToken<'c>>,
+  break_token: Option<InlineBreakToken>,
 }
 
 impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
@@ -75,7 +75,7 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
     &mut self,
     available_width: LayoutUnit,
     mut max_lines: usize,
-    stop_at: Option<InlineBreakToken<'c>>,
+    stop_at: Option<InlineBreakToken>,
   ) -> Status {
     debug_assert!(self.line_widths.is_empty());
 
@@ -132,7 +132,7 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
     min_available_width: LayoutUnit,
     epsilon: LayoutUnit,
     num_lines: usize,
-    stop_at: Option<InlineBreakToken<'c>>,
+    stop_at: Option<InlineBreakToken>,
   ) -> LayoutUnit {
     debug_assert!(epsilon > LayoutUnit::ZERO);
     debug_assert!(num_lines > 0);
