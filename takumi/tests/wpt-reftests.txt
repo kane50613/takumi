@@ -1470,7 +1470,6 @@ css/css-grid/abspos/positioned-grid-items-025.html
 css/css-grid/abspos/positioned-grid-items-026.html
 css/css-grid/abspos/positioned-grid-items-negative-indices-003.html
 !css/css-grid/alignment/grid-align-baseline-005.html
-!css/css-grid/alignment/grid-baseline-002.html
 !css/css-grid/alignment/grid-baseline-align-001.html
 !css/css-grid/alignment/grid-baseline-align-cycles-001.html
 !css/css-grid/alignment/grid-baseline-justify-001.html
@@ -1508,8 +1507,6 @@ css/css-grid/alignment/self-baseline/grid-self-baseline-vertical-rl-001.html
 !css/css-grid/child-border-box-and-max-content-002.html
 !css/css-grid/grid-child-percent-basis-resize-1.html
 !css/css-grid/grid-definition/flex-item-grid-container-percentage-rows-001.html
-!css/css-grid/grid-definition/grid-auto-repeat-aspect-ratio-001.html
-!css/css-grid/grid-definition/grid-auto-repeat-aspect-ratio-002.html
 !css/css-grid/grid-definition/grid-auto-repeat-minmax.html
 !css/css-grid/grid-definition/grid-support-named-grid-lines-002.html
 !css/css-grid/grid-definition/grid-support-named-grid-lines-003.html
