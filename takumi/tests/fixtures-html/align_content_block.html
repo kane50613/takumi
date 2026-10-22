@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>align_content_block</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        gap: 24px;
+        padding: 32px;
+      }
+      .box {
+        display: block;
+        width: 240px;
+        height: 240px;
+        padding: 12px;
+        font-size: 24px;
+        line-height: 32px;
+        background-color: rgb(241, 245, 249);
+        border: 2px solid rgb(30, 41, 59);
+      }
+      .chip {
+        display: block;
+        height: 40px;
+        margin-top: 8px;
+        background-color: rgb(59, 130, 246);
+      }
+      .short {
+        height: 48px;
+      }
+      .badge {
+        display: inline-block;
+        width: 48px;
+        height: 24px;
+        background-color: rgb(234, 88, 12);
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="row"
+      ><div class="box">Normal <span class="badge"></span><div class="chip"></div></div
+      ><div class="box" style="align-content: center"
+        >Center <span class="badge"></span><div class="chip"></div></div
+      ><div class="box" style="align-content: end"
+        >End <span class="badge"></span><div class="chip"></div></div
+      ><div class="box" style="align-content: space-around"
+        >Space around wraps over two lines</div
+      ></div
+    ><div class="row"
+      ><div class="box short" style="align-content: end">Safe end overflows downward</div
+      ><div class="box short" style="align-content: unsafe end">Unsafe end overflows upward</div
+      ><div class="box short" style="align-content: unsafe center"
+        >Unsafe center overflows both ways</div
+      ><div class="box short" style="align-content: flow-end">Flow end</div></div
+    >
+  </body>
+</html>

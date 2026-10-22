@@ -5,10 +5,7 @@
 
 use std::cmp::Ordering;
 
-use crate::{
-  layout_unit::LayoutUnit,
-  style::{ComputedStyle, JustifyContent, VerticalAlign, VerticalAlignKeyword},
-};
+use crate::{layout::content_alignment::BlockContentAlignment, layout_unit::LayoutUnit};
 
 /// What one cell asks of its rows, Blink's `TableTypes::CellBlockConstraint`.
 #[derive(Clone, Copy, Debug)]
@@ -534,68 +531,6 @@ impl ColspanCellTabulator {
   }
 }
 
-/// How a cell aligns its content in its row, Blink's `BlockContentAlignment` for a table cell.
-/// Every alignment is safe: takumi parses no `unsafe` overflow position.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CellAlignment {
-  Start,
-  Center,
-  End,
-  Baseline,
-}
-
-impl CellAlignment {
-  /// Blink's `ComputeContentAlignmentForTableCell`: `align-content`, or for `normal` the cell's
-  /// `vertical-align`, where anything but `top`, `middle`, and `bottom` aligns baselines.
-  pub(crate) fn of(style: &ComputedStyle) -> Self {
-    match style.misc_data.align_content {
-      JustifyContent::Normal => match style.base_data.vertical_align {
-        VerticalAlign::Keyword(VerticalAlignKeyword::Top) => Self::Start,
-        VerticalAlign::Keyword(VerticalAlignKeyword::Middle) => Self::Center,
-        VerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => Self::End,
-        _ => Self::Baseline,
-      },
-      JustifyContent::SpaceAround
-      | JustifyContent::SpaceEvenly
-      | JustifyContent::Center
-      | JustifyContent::SafeCenter => Self::Center,
-      JustifyContent::End
-      | JustifyContent::FlexEnd
-      | JustifyContent::SafeEnd
-      | JustifyContent::SafeFlexEnd => Self::End,
-      JustifyContent::Start
-      | JustifyContent::FlexStart
-      | JustifyContent::SafeStart
-      | JustifyContent::SafeFlexStart
-      | JustifyContent::SpaceBetween
-      | JustifyContent::Stretch => Self::Start,
-    }
-  }
-
-  /// How far the content of a cell `block_size` tall moves down from where it laid out
-  /// `intrinsic_block_size` tall, as Blink's `FinalizeTableCellLayout` moves it: a baseline-aligned
-  /// cell moves its `first_baseline` to `row_baseline`.
-  pub(crate) fn content_offset(
-    self,
-    block_size: LayoutUnit,
-    intrinsic_block_size: LayoutUnit,
-    first_baseline: Option<LayoutUnit>,
-    row_baseline: Option<LayoutUnit>,
-  ) -> LayoutUnit {
-    let free_space = (block_size - intrinsic_block_size).clamp_negative_to_zero();
-
-    match self {
-      Self::Start => LayoutUnit::ZERO,
-      Self::Center => free_space / 2,
-      Self::End => free_space,
-      Self::Baseline => match (row_baseline, first_baseline) {
-        (Some(row), Some(cell)) => row - cell,
-        _ => LayoutUnit::ZERO,
-      },
-    }
-  }
-}
-
 /// Blink's `RowBaselineTabulator`: a row's block size and baseline from its cells' baselines.
 #[derive(Default)]
 pub(super) struct RowBaselineTabulator {
@@ -612,11 +547,11 @@ impl RowBaselineTabulator {
     block_size: LayoutUnit,
     first_baseline: Option<LayoutUnit>,
     block_end_border_padding: LayoutUnit,
-    alignment: CellAlignment,
+    alignment: BlockContentAlignment,
     has_descendants: bool,
     is_rowspanned: bool,
   ) {
-    if alignment == CellAlignment::Baseline
+    if alignment == BlockContentAlignment::Baseline
       && has_descendants
       && let Some(baseline) = first_baseline
     {

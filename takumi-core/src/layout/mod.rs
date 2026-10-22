@@ -7,6 +7,7 @@ pub(crate) mod block_node;
 pub mod border;
 pub mod clip;
 pub(crate) mod constraint_space;
+pub(crate) mod content_alignment;
 pub(crate) mod contoured_rect;
 pub(crate) mod corner_shape;
 /// Backend-agnostic box-decoration clip geometry.

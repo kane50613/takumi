@@ -795,7 +795,7 @@ pub(crate) use impl_css_enum;
 macro_rules! declare_box_alignment_enum_impl {
   (
     $enum_type:ty,
-    safe { $($safe_css:literal => $base_variant:ident / $safe_variant:ident),+ $(,)? },
+    safe { $($safe_css:literal => $base_variant:ident / $safe_variant:ident $(/ $unsafe_variant:ident)?),+ $(,)? },
     plain { $($plain_css:literal => $plain_variant:ident),* $(,)? }
   ) => {
     impl crate::style::MakeComputed for $enum_type {}
@@ -824,7 +824,11 @@ macro_rules! declare_box_alignment_enum_impl {
                 return Err($crate::style::unexpected_token!(token));
               }
             },
-            $($safe_css => return Ok(if overflow_position.unwrap_or(false) { Self::$safe_variant } else { Self::$base_variant }),)*
+            $($safe_css => return Ok(match overflow_position {
+              Some(true) => Self::$safe_variant,
+              $(Some(false) => Self::$unsafe_variant,)?
+              _ => Self::$base_variant,
+            }),)*
             $($plain_css => return if overflow_position.unwrap_or(false) {
               Err($crate::style::unexpected_token!(token))
             } else {
@@ -845,6 +849,10 @@ macro_rules! declare_box_alignment_enum_impl {
             dest.write_str("safe ")?;
             dest.write_str($safe_css)
           })*
+          $($(Self::$unsafe_variant => {
+            dest.write_str("unsafe ")?;
+            dest.write_str($safe_css)
+          })?)*
         }
       }
     }

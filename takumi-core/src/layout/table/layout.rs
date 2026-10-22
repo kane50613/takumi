@@ -14,6 +14,7 @@ use crate::{
   geometry::{ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
+    content_alignment::BlockContentAlignment,
     layout_result::{LayoutResult, OutOfFlowCandidate},
     layout_style::LayoutStyle,
     length_utils::{LengthResolver, inline_size_from_aspect_ratio},
@@ -29,8 +30,8 @@ use crate::{
       fragment::TableFragment,
       parts::TableGroupedChildren,
       rows::{
-        CellAlignment, CellBlockConstraint, ColspanCellTabulator, Row, RowBaselineTabulator,
-        RowspanCell, Section, cell_block_size, distribute_rowspan_cell_to_rows,
+        CellBlockConstraint, ColspanCellTabulator, Row, RowBaselineTabulator, RowspanCell, Section,
+        cell_block_size, distribute_rowspan_cell_to_rows,
         distribute_section_fixed_block_size_to_rows, distribute_table_block_size_to_sections,
       },
     },
@@ -838,7 +839,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       let render_node = self.tree.render_node(cell.node);
       let style = &render_node.context.style;
       let sizing = &render_node.context.sizing;
-      let alignment = CellAlignment::of(style);
+      let alignment = BlockContentAlignment::for_table_cell(style);
       let inline_size = span_inline_size(column_locations, cell.column, cell.colspan);
       let measure = self.measure_cell(cell, inline_size, grid_inline_size);
       let height = TableLength::of(style.box_data.height.as_length(), sizing);
@@ -1259,13 +1260,11 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       };
       let inline_size = span_inline_size(column_locations, cell.column, cell.colspan);
       let render_node = self.tree.render_node(cell.node);
-      let alignment = CellAlignment::of(&render_node.context.style);
-      let shift = alignment.content_offset(
-        block_size,
-        measure.block_size,
-        measure.first_baseline,
-        row_data.baseline,
-      );
+      let alignment = BlockContentAlignment::for_table_cell(&render_node.context.style);
+      let shift = match (alignment, row_data.baseline, measure.first_baseline) {
+        (BlockContentAlignment::Baseline, Some(row), Some(cell)) => row - cell,
+        _ => alignment.offset(block_size - measure.block_size),
+      };
       // The content lays out moved down, in a content box the size it measured at unless the
       // cell's block size is definite.
       let below = if is_initial_block_size_indefinite {
