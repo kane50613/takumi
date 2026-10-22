@@ -383,6 +383,13 @@ impl GlyphStore {
 }
 
 impl FragmentItems {
+  /// The items placed in the content box of `layout`, the box they were laid out in once its
+  /// block size is known.
+  pub(crate) fn in_content_box_of(mut self, layout: ComputedLayout) -> Self {
+    self.content_box = ContentBox::of(layout);
+    self
+  }
+
   /// Frees the room its lists grew past their items, since a node keeps them for the render.
   fn shrink_to_fit(&mut self) {
     self.text.shrink_to_fit();

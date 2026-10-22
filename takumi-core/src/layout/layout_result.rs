@@ -5,7 +5,7 @@
 use std::rc::Rc;
 
 use crate::{
-  geometry::{NodeId, Point, Rect},
+  geometry::{ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     constraint_space::{AdjoiningObjectTypes, ConstraintSpace},
     exclusions::exclusion_space::ExclusionSpace,
@@ -240,6 +240,19 @@ impl LayoutResult {
         .map(|padding| padding.resolve_or_zero(percentage_inline_size).to_float()),
       ..Self::new(size)
     }
+  }
+
+  /// The box's layout with its border box at `location`.
+  pub(crate) fn computed_layout(&self, location: Point<LayoutUnit>) -> ComputedLayout {
+    ComputedLayout::new(
+      location.map(LayoutUnit::to_float),
+      Size {
+        width: self.size.inline_size.to_float(),
+        height: self.size.block_size.to_float(),
+      },
+      self.border,
+      self.padding,
+    )
   }
 
   /// Blink's `ForceInlineBaselineSynthesis`: an inline-block's scroll container that scrolls in

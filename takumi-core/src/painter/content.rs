@@ -86,12 +86,7 @@ impl<'n> OwnContent<'n> {
       return None;
     }
 
-    Some(node.fragment_items_in(layout).unwrap_or_else(|| {
-      let items = Rc::new(node.lay_out_fragment_items(layout));
-
-      node.fragment_items.keep(Rc::clone(&items));
-      items
-    }))
+    node.fragment_items_in(layout)
   }
 
   /// The inline content laid out in the content box of `layout`, styled by `font_style`, its

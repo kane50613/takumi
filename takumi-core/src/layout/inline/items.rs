@@ -117,15 +117,6 @@ impl RenderNode {
     found
   }
 
-  /// Whether an inline content box sits among the inline content this node lays out, found
-  /// the way [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines)
-  /// walks it.
-  pub(crate) fn holds_inline_content_box(&self) -> bool {
-    self.children.iter().flatten().any(|child| {
-      child.is_inline_content_box() || (child.is_inline_span() && child.holds_inline_content_box())
-    })
-  }
-
   /// Whether it is an atomic inline, a float, an outside marker, or a block-in-inline.
   pub(crate) fn is_inline_content_box(&self) -> bool {
     self.participates_as_inline_box() || self.is_block_in_inline

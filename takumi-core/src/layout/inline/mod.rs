@@ -62,6 +62,7 @@ pub use self::{
   },
 };
 pub(crate) use self::{
+  block_layout::InlineContent,
   fragment_items::{ContentBox, InkBox},
   items::InlineOutOfFlow,
   outline::{OutlineIsland, RightAngleContour},
