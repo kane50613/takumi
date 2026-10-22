@@ -174,20 +174,6 @@ pub struct Rect<T> {
   pub bottom: T,
 }
 
-/// A start and an end along one axis, such as a box's block-start and block-end sides.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct Line<T> {
-  pub(crate) start: T,
-  pub(crate) end: T,
-}
-
-impl Line<bool> {
-  pub(crate) const FALSE: Self = Self {
-    start: false,
-    end: false,
-  };
-}
-
 impl<T> Rect<T> {
   /// A rect with all four edges `value`.
   pub(crate) fn all(value: T) -> Self

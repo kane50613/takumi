@@ -568,15 +568,9 @@ impl<'l, 'a, 'c> LineFitter<'l, 'a, 'c> {
 
 #[cfg(test)]
 mod tests {
-  use crate::{
-    layout::{
-      inline::{
-        inline_node::InlineNode,
-        testing::{TestAtomicInline, render_tree, span},
-      },
-      node::Node,
-    },
-    layout_unit::LayoutUnit,
+  use crate::layout::{
+    inline::testing::{read_lines, render_tree, span},
+    node::Node,
   };
 
   /// A text item's scale, font size, and inline size.
@@ -585,39 +579,33 @@ mod tests {
   /// Each line's `text-fit` scale and text items.
   fn fitted_lines(text: &str, css: &str, available_width: f32) -> Vec<(f32, Vec<FittedText>)> {
     let block = render_tree([Node::text(text)], css);
-    let node = InlineNode::new(&block);
-    let data = node.prepare_layout();
-    let mut atomic_inline = TestAtomicInline;
 
-    node
-      .layout_lines(
-        &data,
-        LayoutUnit::from_float(available_width),
-        &mut atomic_inline,
-      )
-      .iter()
-      .map(|line| {
-        let items = line
-          .items
-          .children
-          .iter()
-          .filter(|item| item.shape_result.is_some())
-          .map(|item| {
-            let scale = item.text_fit_scale.as_ref();
+    read_lines(&block, available_width, |_, lines| {
+      lines
+        .iter()
+        .map(|line| {
+          let items = line
+            .items
+            .children
+            .iter()
+            .filter(|item| item.shape_result.is_some())
+            .map(|item| {
+              let scale = item.text_fit_scale.as_ref();
 
-            (
-              scale.map_or(1.0, |scale| scale.scale),
-              scale
-                .and_then(|scale| scale.font.as_ref())
-                .map_or(10.0, |font| font.description.fallback.computed_size),
-              item.inline_size.to_float(),
-            )
-          })
-          .collect();
+              (
+                scale.map_or(1.0, |scale| scale.scale),
+                scale
+                  .and_then(|scale| scale.font.as_ref())
+                  .map_or(10.0, |font| font.description.fallback.computed_size),
+                item.inline_size.to_float(),
+              )
+            })
+            .collect();
 
-        (line.text_fit_scale, items)
-      })
-      .collect()
+          (line.text_fit_scale, items)
+        })
+        .collect()
+    })
   }
 
   /// A line grows at paint time to fill its width.
@@ -636,11 +624,9 @@ mod tests {
       [Node::text("aaa")],
       ".container { text-fit: grow per-line-all }",
     );
-    let node = InlineNode::new(&block);
-    let data = node.prepare_layout();
-    let lines = node.layout_lines(&data, LayoutUnit::from_float(36.0), &mut TestAtomicInline);
+    let block_size = read_lines(&block, 36.0, |_, lines| lines[0].block_size);
 
-    assert_eq!(lines[0].block_size.to_float(), 20.0);
+    assert_eq!(block_size.to_float(), 20.0);
   }
 
   /// A reshaped text's unitless `line-height` multiplies its scaled font size.
@@ -650,14 +636,11 @@ mod tests {
       [span("aaa")],
       ".container { text-fit: grow per-line-all; letter-spacing: 1px } .span { line-height: 3 }",
     );
-    let node = InlineNode::new(&block);
-    let data = node.prepare_layout();
-    let lines = node.layout_lines(&data, LayoutUnit::from_float(42.0), &mut TestAtomicInline);
+    let block_size = read_lines(&block, 42.0, |_, lines| lines[0].block_size);
 
     assert!(
-      (lines[0].block_size.to_float() - 3.0 * 10.0 * 39.0 / 18.0).abs() < 0.1,
-      "{:?}",
-      lines[0].block_size
+      (block_size.to_float() - 3.0 * 10.0 * 39.0 / 18.0).abs() < 0.1,
+      "{block_size:?}"
     );
   }
 

@@ -4,16 +4,19 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::{ptr, rc::Rc};
+use std::{mem::take, ptr, rc::Rc};
 
 use crate::{
-  geometry::{AvailableSpace, ComputedLayout, Line, NodeId, Point, Size},
+  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
   layout::{
-    block_layout_algorithm::{BlockLayoutAlgorithm, InlineContentLayout, block_min_max_sizes},
+    block_layout_algorithm::{BlockLayoutAlgorithm, block_min_max_sizes},
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
     flex::flex_layout_algorithm::FlexLayoutAlgorithm,
     grid::grid_layout_algorithm::GridLayoutAlgorithm,
-    inline::{atomic_inline::BoxAtomicInline, inline_node::InlineNode},
+    inline::{
+      atomic_inline::BoxAtomicInline, inline_layout_algorithm::LineBoxFragment,
+      inline_node::InlineNode, inline_node_data::InlineNodeData,
+    },
     layout_result::{
       HorizontalEdge, LayoutResult, LayoutStatus, OutOfFlowCandidate, StaticPosition, VerticalEdge,
     },
@@ -21,7 +24,7 @@ use crate::{
       LengthResolver, NaturalSize, ReplacedSizeMode, default_natural_size,
       inline_size_from_aspect_ratio,
     },
-    logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalSize},
+    logical_rect::LogicalSize,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::TableLayoutAlgorithm,
@@ -135,7 +138,11 @@ impl<'r> LayoutTree<'r> {
       self.node_state_mut(node).hoisted_children.clear();
     }
 
-    let result = Rc::new(self.run_algorithm(node, space));
+    // Blink's `BoxFragmentBuilder` takes the flag from the space whatever algorithm runs.
+    let result = Rc::new(LayoutResult {
+      is_line_clamp_clipped_float: space.is_line_clamp_clipped_float,
+      ..self.run_algorithm(node, space)
+    });
 
     if result.status == LayoutStatus::Success {
       self.node_state_mut(node).cache.store(space, &result);
@@ -424,6 +431,7 @@ impl<'r> LayoutTree<'r> {
     result: &LayoutResult,
   ) {
     self.set_layout(node, result.computed_layout(location));
+    self.node_state_mut(node).is_line_clamp_clipped_float = result.is_line_clamp_clipped_float;
   }
 
   /// Records that `container` laid out the out-of-flow `node` as its containing block.
@@ -444,81 +452,35 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// The inline content of the inline formatting context root `node` laid out in its content box,
-  /// `inline_size` wide in `space`, as Blink's `InlineNode::Layout` gives it to the block holding
-  /// it.
-  pub(crate) fn lay_out_inline_content(
+  /// Keeps the inline content of `node`, laid out to `lines` in its content box `inline_size`
+  /// wide in `space`, for its boxes and paint to read once its block size is known.
+  pub(crate) fn keep_inline_content(
     &mut self,
     node: NodeId,
     space: &ConstraintSpace,
     inline_size: LayoutUnit,
-    border_padding: LogicalBoxStrut,
-    child_percentage_size: AvailableLogicalSize,
-  ) -> InlineContentLayout {
+    lines: (&InlineNodeData<'r>, &[LineBoxFragment<'_, 'r>]),
+    available_space: Size<AvailableSpace>,
+  ) {
     let style = Rc::clone(self.layout_style_rc(node));
-    let has_definite_block_size = space.is_fixed_block_size
-      || LengthResolver::new(space, &style)
-        .initial_block_size_for_fragment(None, Some(inline_size))
-        .is_some();
     let render_node = self.render_node(node);
-    let collapses_through = !space.is_new_formatting_context;
-
-    render_node.context.set_margins_adjoin(Line {
-      start: collapses_through && border_padding.block_start == LayoutUnit::ZERO,
-      end: collapses_through
-        && border_padding.block_end == LayoutUnit::ZERO
-        && !has_definite_block_size,
-    });
-    render_node
-      .context
-      .set_definite_height(child_percentage_size.block_size.map(LayoutUnit::to_float));
-
     let boxes = self.child_nodes(node);
-    let measurement = if space.cache_slot == CacheSlot::Layout || !boxes.is_empty() {
-      let containers = self.inline_containers_of(&boxes);
-      let layout = LayoutResult::of_box(
-        LogicalSize::new(inline_size, LayoutUnit::ZERO),
-        &style,
-        space,
-      )
-      .computed_layout(Point::default());
-      let items_data = self.inline_node_data(usize::from(node));
-      let paints = space.cache_slot == CacheSlot::Layout && render_node.has_own_inline_content();
-      let mut atomic_inline = BoxAtomicInline::new(self, Size::all(AvailableSpace::MaxContent));
-      let (measurement, content) =
-        render_node.lay_out_lines(&items_data, layout, &containers, paints, &mut atomic_inline);
+    let containers = self.inline_containers_of(&boxes);
+    let layout = LayoutResult::of_box(
+      LogicalSize::new(inline_size, LayoutUnit::ZERO),
+      &style,
+      space,
+    )
+    .computed_layout(Point::default());
+    let paints = space.cache_slot == CacheSlot::Layout && render_node.has_own_inline_content();
+    let mut atomic_inline = BoxAtomicInline::new(self, available_space);
 
-      self.inline_contents.insert(node, content);
-      measurement
-    } else {
-      let available_height = child_percentage_size
-        .block_size
-        .map_or(AvailableSpace::MaxContent, |height| {
-          AvailableSpace::Definite(height.to_float())
-        });
+    atomic_inline.cache_slot = space.cache_slot;
 
-      self.inline_measurement(
-        usize::from(node),
-        Size {
-          width: AvailableSpace::Definite(inline_size.to_float()),
-          height: available_height,
-        },
-        Size {
-          width: Some(inline_size.to_float()),
-          height: None,
-        },
-        border_padding.inline_sum().to_float(),
-      )
-    };
+    let content =
+      render_node.inline_content(lines, layout, &containers, paints, &mut atomic_inline);
 
-    InlineContentLayout {
-      is_self_collapsing: measurement.is_self_collapsing,
-      block_size: LayoutUnit::from_float(measurement.size.height),
-      start_margin: measurement.margins.start,
-      end_margin: measurement.margins.end,
-      first_baseline: measurement.first_baseline.map(LayoutUnit::from_float),
-      last_baseline: measurement.last_baseline.map(LayoutUnit::from_float),
-    }
+    self.inline_contents.insert(node, content);
   }
 
   /// Places the inline content boxes of `node`, laid out as `result`, where its lines put them,
@@ -545,7 +507,7 @@ impl<'r> LayoutTree<'r> {
     }
 
     let containers = self.inline_containers_of(&boxes);
-    let geometry = inline_content.geometry;
+    let mut geometry = inline_content.geometry;
     let mut atomic_inline = BoxAtomicInline::new(self, inline_content.available_space);
 
     atomic_inline.cache_slot = space.cache_slot;
@@ -556,8 +518,11 @@ impl<'r> LayoutTree<'r> {
     let mut candidates = Vec::new();
 
     if space.cache_slot == CacheSlot::Layout {
-      for &(child_render_node, offset) in &geometry.inline_content_boxes {
-        let (child, child_result) = atomic_inline.lay_out_inline_content_box(child_render_node);
+      for inline_content_box in take(&mut geometry.inline_content_boxes) {
+        let child_render_node = inline_content_box.node;
+        let offset = inline_content_box.offset;
+        let (child, child_result) = atomic_inline
+          .lay_out_inline_content_box(child_render_node, inline_content_box.line_result);
         let location = Point::new(
           LayoutUnit::from_float(content.x + offset.x),
           LayoutUnit::from_float(content.y + offset.y),

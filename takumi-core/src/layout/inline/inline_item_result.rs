@@ -22,7 +22,7 @@ use crate::{
   geometry::Rect,
   layout::{
     exclusions::exclusion_space::ExclusionSpace, floats_utils::PositionedFloat,
-    margin_strut::MarginStrut,
+    layout_result::LayoutResult as BoxLayoutResult, margin_strut::MarginStrut,
   },
   layout_unit::LayoutUnit,
   style::{Direction as TextDirection, HyphenateCharacter},
@@ -173,6 +173,9 @@ pub(crate) struct InlineItemResult<'a, 'c> {
   pub(crate) hyphen: Option<HyphenResult>,
   pub(crate) text_fit_scale: Option<TextFitScale>,
   pub(crate) layout_result: Option<LayoutResult>,
+  /// Blink's `layout_result` of a block-in-inline, which its line takes its offset and margins
+  /// from.
+  pub(crate) block_in_inline_result: Option<Rc<BoxLayoutResult>>,
   pub(crate) positioned_float: Option<PositionedFloat>,
   /// The exclusion space before the float was placed, which a rewind restores.
   pub(crate) exclusion_space_before_position_float: Option<ExclusionSpace>,
@@ -208,6 +211,7 @@ impl<'a, 'c> InlineItemResult<'a, 'c> {
       hyphen: None,
       text_fit_scale: None,
       layout_result: None,
+      block_in_inline_result: None,
       positioned_float: None,
       exclusion_space_before_position_float: None,
       margins: LineBoxStrut::default(),

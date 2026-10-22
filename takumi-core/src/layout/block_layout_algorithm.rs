@@ -1,8 +1,8 @@
 //! Blink's [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc):
 //! a block container's children in a block formatting context, with margins collapsing, floats,
-//! and clearance. Without fragmentation, line clamp relayout, `text-box-trim`, `margin-trim`,
-//! ruby annotations, list marker propagation, or quirks mode. An inline formatting context lays
-//! its lines out without the floats of the block formatting context around it.
+//! and clearance, an inline formatting context's lines among them. Without fragmentation, clamping
+//! by height, `text-box-trim`, `margin-trim`, ruby annotations, list marker propagation, or quirks
+//! mode.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -10,7 +10,7 @@ use std::{mem::take, rc::Rc};
 
 use crate::{
   context::RenderContext,
-  geometry::{NodeId, Point, Size},
+  geometry::{AvailableSpace, NodeId, Point, Size},
   layout::{
     bfc_rect::BfcOffset,
     constraint_space::{
@@ -19,8 +19,16 @@ use crate::{
     exclusions::exclusion_space::ExclusionSpace,
     floats_utils::{Clear, Float, UnpositionedFloat, adjust_to_clearance, position_float},
     inline::{
-      inline_item_result::LayoutResult as LineItemLayoutResult, line_breaker::AtomicInlineLayout,
+      atomic_inline::BoxAtomicInline,
+      inline_break_token::InlineBreakToken,
+      inline_child_layout_context::InlineChildLayoutContext,
+      inline_layout_algorithm::{InlineLayoutAlgorithm, LineBoxFragment},
+      inline_node::InlineNode,
+      inline_node_data::InlineNodeData,
       line_info::text_align,
+      score_line_breaker::ScoreLineBreakContext,
+      text_fit_utils::ParagraphScale,
+      unpositioned_list_marker::UnpositionedListMarker,
     },
     layout_result::{
       InlineEdge, LayoutResult, LayoutStatus, LogicalStaticPosition, OutOfFlowCandidate,
@@ -30,15 +38,16 @@ use crate::{
       LengthResolver, child_available_size, child_percentage_size, margins_for,
       resolve_inline_auto_margins,
     },
+    line_clamp_data::LineClampData,
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
     margin_strut::MarginStrut,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
     out_of_flow::ContainingBlock,
     relative_utils::compute_relative_offset,
-    tree::{LayoutTree, RenderNode},
+    tree::LayoutTree,
   },
   layout_unit::LayoutUnit,
-  style::{AlignItems, Direction},
+  style::{AlignItems, Direction, TextFitMode, TextFitTarget, TextWrapStyle},
 };
 
 /// Blink's `PreviousInflowPosition`.
@@ -47,6 +56,107 @@ pub(crate) struct PreviousInflowPosition {
   pub(crate) logical_block_offset: LayoutUnit,
   pub(crate) margin_strut: MarginStrut,
   pub(crate) self_collapsing_child_had_clearance: bool,
+}
+
+/// Blink's `BlockLineClampData`, clamping by lines alone. Approximate: a block child's lines do not
+/// count toward its container's clamp, so only the clamp container's own lines clamp.
+#[derive(Debug, Clone, Copy, Default)]
+struct BlockLineClampData {
+  data: LineClampData,
+  ignore_line_clamp: bool,
+  previous_inflow_position_when_clamped: Option<PreviousInflowPosition>,
+}
+
+impl BlockLineClampData {
+  /// Blink's `Setup`: the clamp a `line-clamp` sets, else the one the space passes down.
+  fn setup(&mut self, line_clamp: Option<u32>, space: &ConstraintSpace) {
+    self.data = match line_clamp {
+      Some(_) if self.ignore_line_clamp => LineClampData::default(),
+      Some(lines) => LineClampData {
+        lines_until_clamp: Some(lines as i32),
+      },
+      None => space.line_clamp_data,
+    };
+  }
+
+  /// Blink's `ShouldRelayoutWithNoForcedTruncate`: no line followed the clamp line.
+  fn should_relayout_with_no_forced_truncate(&self) -> bool {
+    self.previous_inflow_position_when_clamped.is_some() && self.data.lines_until_clamp == Some(0)
+  }
+
+  /// Blink's `UpdateAfterLayout`, the child laid out as `result` ending at `previous`.
+  fn update_after_layout(
+    &mut self,
+    result: &LayoutResult,
+    previous: &PreviousInflowPosition,
+    is_line_box: bool,
+  ) {
+    let Some(old_lines_until_clamp) = self.data.lines_until_clamp else {
+      return;
+    };
+
+    if is_line_box {
+      self.data.lines_until_clamp = result.lines_until_clamp;
+    } else if old_lines_until_clamp == 0 {
+      // A lineless box right after the clamp point is content after it.
+      self.data.lines_until_clamp = Some(-1);
+    }
+
+    if self.data.is_past_clamp_point() && self.previous_inflow_position_when_clamped.is_none() {
+      self.previous_inflow_position_when_clamped = Some(*previous);
+    }
+  }
+}
+
+/// The `InlineNode` child of an inline formatting context root, laid out a line at a time.
+struct InlineChild<'a, 'r> {
+  node: InlineNode<'r>,
+  items_data: &'a InlineNodeData<'r>,
+  context: InlineChildLayoutContext<'a, 'r>,
+  /// Blink's `previous_inline_break_token`: where the next line starts.
+  break_token: Option<InlineBreakToken<'r>>,
+  /// The outside list marker the box has yet to place beside a line.
+  unpositioned_list_marker: Option<UnpositionedListMarker<'r>>,
+  /// The lines laid out, in the content box.
+  lines: Vec<LineBoxFragment<'a, 'r>>,
+}
+
+impl<'a, 'r> InlineChild<'a, 'r> {
+  fn new(node: InlineNode<'r>, items_data: &'a InlineNodeData<'r>) -> Self {
+    let mut context = InlineChildLayoutContext::default();
+
+    // Blink's `LayoutWithOptimalInlineChildLayoutContext`.
+    if node.block.context.style.inherited_data.text_wrap_style != TextWrapStyle::Auto
+      && !items_data.is_score_line_break_disabled
+    {
+      context.score_line_break_context = Some(ScoreLineBreakContext::default());
+    }
+
+    Self {
+      node,
+      items_data,
+      context,
+      break_token: None,
+      unpositioned_list_marker: UnpositionedListMarker::of(items_data),
+      lines: Vec::new(),
+    }
+  }
+}
+
+/// Blink's `LayoutInputNode` as `HandleInflow` lays it out: a block, or the next line of the inline
+/// content.
+enum InflowChild<'i, 'a, 'r> {
+  Block(NodeId),
+  Inline(&'i mut InlineChild<'a, 'r>),
+}
+
+impl InflowChild<'_, '_, '_> {
+  fn block(&self) -> Option<NodeId> {
+    match self {
+      Self::Block(node) => Some(*node),
+      Self::Inline(_) => None,
+    }
+  }
 }
 
 /// Blink's `InflowChildData`.
@@ -122,42 +232,6 @@ fn apply_clearance(space: &ConstraintSpace, bfc_block_offset: &mut LayoutUnit) -
   false
 }
 
-/// Lays one float out in the space Blink's `UnpositionedFloat` gives it, for `position_float`.
-struct FloatLayout<'t, 'r> {
-  tree: &'t mut LayoutTree<'r>,
-  node: NodeId,
-  space: ConstraintSpace,
-  result: Option<Rc<LayoutResult>>,
-}
-
-impl<'c> AtomicInlineLayout<'c> for FloatLayout<'_, '_> {
-  fn layout(&mut self, _node: &'c RenderNode) -> LineItemLayoutResult {
-    let result = self.tree.layout(self.node, &self.space);
-    let line_result = LineItemLayoutResult {
-      inline_size: result.size.inline_size,
-      block_size: result.size.block_size,
-      baseline: result.first_baseline,
-      collapsed_margins: None,
-    };
-
-    self.result = Some(result);
-    line_result
-  }
-
-  fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LineItemLayoutResult {
-    self.layout(node)
-  }
-
-  fn min_max_sizes(&mut self, _node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {
-    let sizes = self
-      .tree
-      .min_and_max_content_contribution(self.node, &self.space)
-      .sizes;
-
-    (sizes.min_size, sizes.max_size)
-  }
-}
-
 /// A child placed in the fragment: its border box's location and its layout.
 struct PlacedChild {
   node: NodeId,
@@ -181,6 +255,7 @@ pub(crate) struct BlockLayoutAlgorithm<'t, 'r> {
   adjoining_object_types: AdjoiningObjectTypes,
   is_pushed_by_floats: bool,
   abort_when_bfc_block_offset_updated: bool,
+  line_clamp_data: BlockLineClampData,
   intrinsic_block_size: LayoutUnit,
   first_baseline: Option<LayoutUnit>,
   last_baseline: Option<LayoutUnit>,
@@ -225,6 +300,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       adjoining_object_types: AdjoiningObjectTypes::empty(),
       is_pushed_by_floats: false,
       abort_when_bfc_block_offset_updated: false,
+      line_clamp_data: BlockLineClampData::default(),
       intrinsic_block_size: LayoutUnit::ZERO,
       first_baseline: None,
       last_baseline: None,
@@ -324,14 +400,64 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     LayoutResult::aborted(status, self.bfc_block_offset, self.is_pushed_by_floats)
   }
 
-  /// Blink's `Layout`.
+  /// Blink's `Layout`, and its `HandleNonsuccessfulLayoutResult` for a clamp that hid no line.
   pub(crate) fn layout(mut self) -> LayoutResult {
+    let status = self.start_layout().and_then(|mut previous| {
+      if self.tree.has_inline_children(self.node) {
+        self.layout_inline_child(&mut previous)?;
+      } else {
+        self.layout_block_children(&mut previous)?;
+      }
+
+      Ok(previous)
+    });
+    let mut previous = match status {
+      Ok(previous) => previous,
+      Err(status) => return self.abort(status),
+    };
+
+    if self.should_relayout_ignoring_line_clamp() {
+      return self.relayout_ignoring_line_clamp();
+    }
+
+    self.intrinsic_block_size = self.border_padding.block_start;
+    self.finish_layout(&mut previous)
+  }
+
+  /// Blink's `FinishLayout` asking for `RelayoutIgnoringLineClamp`: the clamp hid no line.
+  pub(in crate::layout) fn should_relayout_ignoring_line_clamp(&self) -> bool {
+    self.space.is_new_formatting_context
+      && self
+        .line_clamp_data
+        .should_relayout_with_no_forced_truncate()
+  }
+
+  /// Blink's `RelayoutIgnoringLineClamp`.
+  fn relayout_ignoring_line_clamp(self) -> LayoutResult {
+    Self::new(self.tree, self.node, self.space)
+      .ignoring_line_clamp()
+      .layout()
+  }
+
+  /// The algorithm set up as `RelayoutIgnoringLineClamp` sets it up.
+  pub(in crate::layout) fn ignoring_line_clamp(mut self) -> Self {
+    self.line_clamp_data.ignore_line_clamp = true;
+    self
+  }
+
+  /// Blink's `Layout` up to the children: the margins coming in, the offset resolved where none
+  /// collapses through the block start, and the clamp set up.
+  pub(in crate::layout) fn start_layout(&mut self) -> Result<PreviousInflowPosition, LayoutStatus> {
     let space = self.space;
 
     if !space.adjoining_object_types.is_empty() {
       self.abort_when_bfc_block_offset_updated = true;
       self.adjoining_object_types = space.adjoining_object_types;
     }
+
+    let line_clamp = self.tree.render_node(self.node).context.style.line_clamp();
+
+    self.line_clamp_data.setup(line_clamp, space);
 
     let content_edge = self.border_padding.block_start;
     let mut previous = PreviousInflowPosition {
@@ -343,23 +469,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     // Margins do not collapse through border or padding, or into a new formatting context.
     if content_edge != LayoutUnit::ZERO || space.is_new_formatting_context {
       if !self.resolve_bfc_block_offset_here(&mut previous) {
-        return self.abort(LayoutStatus::BfcBlockOffsetResolved);
+        return Err(LayoutStatus::BfcBlockOffsetResolved);
       }
       previous.logical_block_offset = content_edge;
     }
 
-    let status = if self.tree.has_inline_children(self.node) {
-      self.layout_inline_content(&mut previous)
-    } else {
-      self.layout_block_children(&mut previous)
-    };
-
-    if let Err(status) = status {
-      return self.abort(status);
-    }
-
-    self.intrinsic_block_size = content_edge;
-    self.finish_layout(&mut previous)
+    Ok(previous)
   }
 
   /// The loop over the children in Blink's `Layout`.
@@ -377,7 +492,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       } else if self.tree.creates_new_formatting_context(child) {
         self.handle_new_formatting_context(child, &child_style, previous)?;
       } else {
-        self.handle_inflow(child, &child_style, previous)?;
+        self.handle_inflow(InflowChild::Block(child), &child_style, previous)?;
       }
     }
 
@@ -387,6 +502,13 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   /// Blink's `FinishLayout`.
   fn finish_layout(mut self, previous: &mut PreviousInflowPosition) -> LayoutResult {
     let space = self.space;
+    let clamped = self.line_clamp_data.previous_inflow_position_when_clamped;
+
+    // A clamp sizes the box as if nothing followed the clamp point.
+    if let Some(clamped) = clamped {
+      *previous = clamped;
+    }
+
     let mut end_margin_strut = previous.margin_strut;
     let block_end = self.border_padding.block_end;
 
@@ -394,8 +516,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       || previous.self_collapsing_child_had_clearance
       || space.is_new_formatting_context
     {
-      // A new formatting context encloses its floats.
-      if space.is_new_formatting_context {
+      // A new formatting context encloses its floats, unless it clamped.
+      if space.is_new_formatting_context && clamped.is_none() {
         self.intrinsic_block_size = self
           .intrinsic_block_size
           .max(self.exclusion_space.clearance_offset(Clear::Both));
@@ -660,9 +782,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let render_node = self.tree.render_node(child);
     let mut unpositioned_float = UnpositionedFloat::new(
       render_node,
-      self.child_available_inline_size(),
+      (self.child_available_size, self.child_percentage_size),
       origin_bfc_offset,
-      space.direction,
+      space,
+      self.line_clamp_data.data.float_state(),
     );
 
     if self.bfc_block_offset.is_none() {
@@ -677,31 +800,13 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
-    let mut float_space = ConstraintSpace::new(
-      self.child_available_size.inline_size,
-      self.tree.layout_style(child).direction,
-    );
-
-    float_space.available_block_size = self.child_available_size.block_size;
-    float_space.percentage_resolution_inline_size = self.child_percentage_size.inline_size;
-    float_space.percentage_resolution_block_size = self.child_percentage_size.block_size;
-    float_space.is_new_formatting_context = true;
-    float_space.cache_slot = space.cache_slot;
-
-    let mut layout = FloatLayout {
-      tree: self.tree,
-      node: child,
-      space: float_space,
-      result: None,
-    };
+    let tree = &mut *self.tree;
     let positioned = position_float(
       &mut unpositioned_float,
       &mut self.exclusion_space,
-      &mut layout,
+      &mut |_, float_space| tree.layout(child, float_space),
     );
-    let Some(result) = layout.result else {
-      return;
-    };
+    let result = positioned.layout_result;
     let bfc_offset = BfcOffset::new(
       space.bfc_offset.line_offset,
       self
@@ -819,11 +924,15 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   fn compute_child_data(
     &mut self,
     previous: &PreviousInflowPosition,
-    child: NodeId,
+    child: Option<NodeId>,
     child_style: &LayoutStyle,
     is_new_fc: bool,
   ) -> InflowChildData {
-    let (margins, additional_line_offset) = self.calculate_margins(child, child_style, is_new_fc);
+    // Blink's `CalculateMargins` gives an inline child none.
+    let (margins, additional_line_offset) = child
+      .map_or((LogicalBoxStrut::default(), LayoutUnit::ZERO), |child| {
+        self.calculate_margins(child, child_style, is_new_fc)
+      });
     let mut margin_strut = previous.margin_strut;
 
     margin_strut.append(margins.block_start);
@@ -849,7 +958,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   #[allow(clippy::too_many_arguments)]
   fn create_constraint_space_for_child(
     &self,
-    child: NodeId,
+    child: Option<NodeId>,
     child_style: &LayoutStyle,
     child_data: &InflowChildData,
     child_available_size: AvailableLogicalSize,
@@ -860,13 +969,19 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let space = self.space;
     let mut builder = ConstraintSpace::new(child_available_size.inline_size, child_style.direction);
 
-    builder.inline_auto_behavior = self.inline_auto_behavior_for_child(child, child_style);
+    builder.inline_auto_behavior = child.map_or(AutoSizeBehavior::StretchImplicit, |child| {
+      self.inline_auto_behavior_for_child(child, child_style)
+    });
     builder.available_block_size = child_available_size.block_size;
     builder.percentage_resolution_inline_size = self.child_percentage_size.inline_size;
     builder.percentage_resolution_block_size = self.child_percentage_size.block_size;
     builder.is_new_formatting_context = is_new_fc;
     builder.cache_slot = space.cache_slot;
-    builder.lines_until_clamp = space.lines_until_clamp;
+    // Approximate: only the lines count toward the clamp, a block child getting the one above.
+    builder.line_clamp_data = match child {
+      Some(_) => space.line_clamp_data,
+      None => self.line_clamp_data.data,
+    };
 
     let has_bfc_block_offset = self.bfc_block_offset.is_some();
 
@@ -891,8 +1006,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       space.clearance_offset
     };
 
-    clearance_offset =
-      clearance_offset.max(self.exclusion_space.clearance_offset(child_style.clear));
+    if child.is_some() {
+      clearance_offset =
+        clearance_offset.max(self.exclusion_space.clearance_offset(child_style.clear));
+    }
     builder.clearance_offset = clearance_offset;
     builder.baseline_algorithm = space.baseline_algorithm;
 
@@ -927,7 +1044,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     previous: &mut PreviousInflowPosition,
   ) -> Result<(), LayoutStatus> {
     let space = self.space;
-    let child_data = self.compute_child_data(previous, child, child_style, true);
+    let child_data = self.compute_child_data(previous, Some(child), child_style, true);
     let child_origin_line_offset =
       space.bfc_offset.line_offset + self.border_padding.line_left(self.direction());
     let adjoining_bfc_offset_estimate =
@@ -1085,7 +1202,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       let child_available_inline_size =
         (opportunity_size + child_data.margins.inline_sum()).clamp_negative_to_zero();
       let child_space = self.create_constraint_space_for_child(
-        child,
+        Some(child),
         child_style,
         child_data,
         AvailableLogicalSize {
@@ -1174,14 +1291,15 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     })
   }
 
-  /// Blink's `HandleInflow` and `FinishInflow` for a block child.
+  /// Blink's `HandleInflow` and `FinishInflow`.
   fn handle_inflow(
     &mut self,
-    child: NodeId,
+    mut child: InflowChild<'_, '_, 'r>,
     child_style: &LayoutStyle,
     previous: &mut PreviousInflowPosition,
   ) -> Result<(), LayoutStatus> {
     let has_clearance_past_adjoining_floats = self.bfc_block_offset.is_none()
+      && child.block().is_some()
       && has_clearance_past_adjoining_floats(self.adjoining_object_types, child_style);
     let mut forced_bfc_block_offset = None;
     let mut is_pushed_by_floats = false;
@@ -1196,12 +1314,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       is_pushed_by_floats = true;
     }
 
-    let mut child_data = self.compute_child_data(previous, child, child_style, false);
+    let mut child_data = self.compute_child_data(previous, child.block(), child_style, false);
 
     child_data.is_pushed_by_floats = is_pushed_by_floats;
 
     let child_space = self.create_constraint_space_for_child(
-      child,
+      child.block(),
       child_style,
       &child_data,
       self.child_available_size,
@@ -1209,7 +1327,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       forced_bfc_block_offset,
       has_clearance_past_adjoining_floats,
     );
-    let mut result = self.tree.layout(child, &child_space);
+    let (mut result, mut line) = self.layout_inflow(&child_space, &mut child);
     let mut child_bfc_block_offset = result.bfc_block_offset;
     let is_self_collapsing = result.is_self_collapsing;
     let normal_child_had_clearance = result.is_pushed_by_floats && !is_self_collapsing;
@@ -1298,7 +1416,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       child_data.is_pushed_by_floats = result.is_pushed_by_floats;
 
       let new_space = self.create_constraint_space_for_child(
-        child,
+        child.block(),
         child_style,
         &child_data,
         self.child_available_size,
@@ -1307,13 +1425,13 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         false,
       );
 
-      result = self.tree.layout(child, &new_space);
+      (result, line) = self.layout_inflow(&new_space, &mut child);
 
       if result.status == LayoutStatus::BfcBlockOffsetResolved {
         child_bfc_block_offset = result.bfc_block_offset;
 
         let final_space = self.create_constraint_space_for_child(
-          child,
+          child.block(),
           child_style,
           &child_data,
           self.child_available_size,
@@ -1322,7 +1440,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
           false,
         );
 
-        result = self.tree.layout(child, &final_space);
+        (result, line) = self.layout_inflow(&final_space, &mut child);
       }
     }
 
@@ -1340,14 +1458,42 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
-    let offset = self.calculate_logical_offset(
+    if let Some(line_box_bfc_block_offset) = result.line_box_bfc_block_offset {
+      child_bfc_block_offset = Some(line_box_bfc_block_offset);
+    }
+
+    let mut offset = self.calculate_logical_offset(
       result.size.inline_size,
       result.bfc_line_offset,
       child_bfc_block_offset,
     );
 
-    self.propagate_baseline_from_block_child(child, &result, offset.block_offset);
-    self.add_result(child, Rc::clone(&result), offset);
+    match (&mut child, line) {
+      (InflowChild::Block(node), _) => {
+        self.propagate_baseline_from_block_child(*node, &result, offset.block_offset);
+        self.add_result(*node, Rc::clone(&result), offset);
+      }
+      (InflowChild::Inline(inline_child), Some(mut line)) => {
+        // Where the line box sits in the block formatting context, which `offset` places, and
+        // its out-of-flow boxes with it.
+        let line_box_bfc_block_offset =
+          child_bfc_block_offset.unwrap_or_else(|| self.bfc_block_offset_or_estimate());
+
+        line.static_bfc_block_offset = line_box_bfc_block_offset;
+        self.position_or_propagate_list_marker(inline_child, &line, &mut offset.block_offset);
+        self.propagate_baseline_from_line_box(&line, offset.block_offset);
+
+        // The line moves from the block formatting context into the content box.
+        line.move_by(BfcOffset::new(
+          -child_space.bfc_offset.line_offset,
+          offset.block_offset - line_box_bfc_block_offset - self.border_padding.block_start,
+        ));
+        inline_child.break_token = line.break_token;
+        inline_child.lines.push(line);
+      }
+      (InflowChild::Inline(_), None) => unreachable!("an inline child lays out a line"),
+    }
+
     *previous = self.compute_inflow_position(
       previous,
       &child_data,
@@ -1356,8 +1502,62 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       &result,
       self_collapsing_child_had_clearance,
     );
+    self.line_clamp_data.update_after_layout(
+      &result,
+      previous,
+      matches!(child, InflowChild::Inline(_)),
+    );
 
     Ok(())
+  }
+
+  /// Blink's `LayoutInflow`: a block child laid out by its algorithm, or the next line of the
+  /// inline content by Blink's `InlineNode::Layout`.
+  fn layout_inflow<'a>(
+    &mut self,
+    child_space: &ConstraintSpace,
+    child: &mut InflowChild<'_, 'a, 'r>,
+  ) -> (Rc<LayoutResult>, Option<LineBoxFragment<'a, 'r>>) {
+    match child {
+      InflowChild::Block(node) => (self.tree.layout(*node, child_space), None),
+      InflowChild::Inline(inline_child) => {
+        let mut atomic_inline = self.box_atomic_inline();
+        let line = InlineLayoutAlgorithm::new(
+          inline_child.node,
+          inline_child.items_data,
+          child_space,
+          inline_child.break_token,
+          &mut inline_child.context,
+          &mut atomic_inline,
+        )
+        .layout();
+
+        (Rc::new(line.layout_result(child_space)), Some(line))
+      }
+    }
+  }
+
+  /// The atomic inlines of the inline content laid out in the content box.
+  fn box_atomic_inline(&mut self) -> BoxAtomicInline<'_, 'r> {
+    let available_space = self.inline_available_space();
+    let mut atomic_inline = BoxAtomicInline::new(self.tree, available_space);
+
+    atomic_inline.cache_slot = self.space.cache_slot;
+    atomic_inline
+  }
+
+  /// The space the inline content's atomic inlines lay out in: the content box's inline size, and
+  /// the block size percentages resolve against.
+  fn inline_available_space(&self) -> Size<AvailableSpace> {
+    Size {
+      width: AvailableSpace::Definite(self.child_available_inline_size().to_float()),
+      height: self
+        .child_percentage_size
+        .block_size
+        .map_or(AvailableSpace::MaxContent, |size| {
+          AvailableSpace::Definite(size.to_float())
+        }),
+    }
   }
 
   /// Blink's `CalculateLogicalOffset`.
@@ -1416,7 +1616,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
       logical_block_offset
     } else {
-      logical_offset.block_offset + result.size.block_size
+      logical_offset.block_offset + result.size.block_size + result.clearance_after_line
     };
     let mut margin_strut = result.end_margin_strut;
 
@@ -1476,44 +1676,151 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
   }
 
-  /// Blink's `HandleInflow` for the `InlineNode` child of an inline formatting context root: the
-  /// lines take the margins adjoining them and resolve the block offset unless they collapse
-  /// through.
-  fn layout_inline_content(
+  /// Blink's `LayoutInlineChild`: the lines of the inline content, kept for the boxes and paint
+  /// they place.
+  fn layout_inline_child(
     &mut self,
     previous: &mut PreviousInflowPosition,
   ) -> Result<(), LayoutStatus> {
-    let content = self.tree.lay_out_inline_content(
+    let items_data = self.tree.inline_node_data(usize::from(self.node));
+    let lines = self.layout_lines(&items_data, previous)?;
+    let available_space = self.inline_available_space();
+
+    self.tree.keep_inline_content(
       self.node,
       self.space,
       self.inline_size,
-      self.border_padding,
-      self.child_percentage_size,
+      (&items_data, &lines),
+      available_space,
     );
 
-    if content.is_self_collapsing {
-      // A self-collapsing line takes no space, its margins with the ones around it.
-      previous.margin_strut = previous.margin_strut.collapse_with(content.start_margin);
-      previous.margin_strut = previous.margin_strut.collapse_with(content.end_margin);
-      previous.logical_block_offset += content.block_size;
-      return Ok(());
-    }
-
-    previous.margin_strut = previous.margin_strut.collapse_with(content.start_margin);
-    if !self.resolve_bfc_block_offset_here(previous) {
-      return Err(LayoutStatus::BfcBlockOffsetResolved);
-    }
-
-    let block_start = previous.logical_block_offset + previous.margin_strut.sum();
-
-    self.first_baseline = content
-      .first_baseline
-      .map(|baseline| block_start + baseline);
-    self.last_baseline = content.last_baseline.map(|baseline| block_start + baseline);
-    previous.logical_block_offset = block_start + content.block_size;
-    previous.margin_strut = content.end_margin;
-
     Ok(())
+  }
+
+  /// The lines `LayoutInlineChild` lays the inline content of `items_data` out in, at the scale a
+  /// consistent `text-fit` measures.
+  pub(in crate::layout) fn layout_lines<'a>(
+    &mut self,
+    items_data: &'a InlineNodeData<'r>,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<Vec<LineBoxFragment<'a, 'r>>, LayoutStatus> {
+    let node = InlineNode::new(self.tree.render_node(self.node));
+    let paragraph_scale = self.measure_paragraph_scale(node, items_data)?;
+    let mut inline_child = InlineChild::new(node, items_data);
+
+    inline_child
+      .context
+      .enable_measuring_mode_if_necessary(Some(paragraph_scale));
+    self.layout_inline_children(&mut inline_child, previous)?;
+
+    Ok(inline_child.lines)
+  }
+
+  /// The scale every line of a consistent `text-fit` takes, as Blink's `LayoutInlineChild`
+  /// measures it with a layout of its own.
+  fn measure_paragraph_scale(
+    &mut self,
+    node: InlineNode<'r>,
+    items_data: &InlineNodeData<'r>,
+  ) -> Result<ParagraphScale, LayoutStatus> {
+    let text_fit = node.block.context.style.misc_inherited1_data.text_fit;
+    let grow_consistent =
+      text_fit.mode == TextFitMode::Grow && text_fit.target == TextFitTarget::Consistent;
+    let shrink_consistent =
+      text_fit.mode == TextFitMode::Shrink && text_fit.target == TextFitTarget::Consistent;
+
+    if !grow_consistent && !shrink_consistent {
+      return Ok(ParagraphScale::default());
+    }
+
+    let available_inline_size = self.child_available_inline_size();
+    let mut measuring = BlockLayoutAlgorithm::new(&mut *self.tree, self.node, self.space);
+    let mut inline_child = InlineChild::new(node, items_data);
+
+    measuring.line_clamp_data = self.line_clamp_data;
+    inline_child
+      .context
+      .enable_measuring_mode_if_necessary(None);
+
+    if let Err(status) = measuring
+      .start_layout()
+      .and_then(|mut previous| measuring.layout_inline_children(&mut inline_child, &mut previous))
+    {
+      // The container reads the offset the measuring layout resolved.
+      if status == LayoutStatus::BfcBlockOffsetResolved {
+        self.bfc_block_offset = measuring.bfc_block_offset;
+      }
+
+      return Err(status);
+    }
+
+    let paragraph_scale =
+      node.measure_per_block_scale(items_data, &inline_child.lines, available_inline_size);
+
+    if (paragraph_scale.scale < 1.0 && !shrink_consistent)
+      || (paragraph_scale.scale > 1.0 && !grow_consistent)
+    {
+      return Ok(ParagraphScale::default());
+    }
+
+    Ok(paragraph_scale)
+  }
+
+  /// The loop over the children in Blink's `Layout` for an inline formatting context: a line at a
+  /// time until the content ends.
+  fn layout_inline_children(
+    &mut self,
+    inline_child: &mut InlineChild<'_, 'r>,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<(), LayoutStatus> {
+    let style = Rc::clone(&self.style);
+
+    loop {
+      self.handle_inflow(InflowChild::Inline(&mut *inline_child), &style, previous)?;
+
+      if inline_child.break_token.is_none() {
+        return Ok(());
+      }
+    }
+  }
+
+  /// Blink's `PositionOrPropagateListMarker` for a line: the outside marker goes beside the first
+  /// line box, which moves down from `block_offset` when the marker reaches higher.
+  fn position_or_propagate_list_marker(
+    &mut self,
+    inline_child: &mut InlineChild<'_, 'r>,
+    line: &LineBoxFragment<'_, 'r>,
+    block_offset: &mut LayoutUnit,
+  ) {
+    if line.line_box_bfc_block_offset.is_none() {
+      return;
+    }
+
+    let Some(marker) = inline_child.unpositioned_list_marker.take() else {
+      return;
+    };
+
+    marker.add_to_box(line, block_offset, &mut self.box_atomic_inline());
+  }
+
+  /// Blink's `PropagateBaselineFromLineBox`.
+  fn propagate_baseline_from_line_box(
+    &mut self,
+    line: &LineBoxFragment<'_, 'r>,
+    block_offset: LayoutUnit,
+  ) {
+    if line.is_empty_line_box || self.line_clamp_data.data.is_past_clamp_point() {
+      return;
+    }
+
+    let Some(baseline) = line.baseline() else {
+      return;
+    };
+
+    if self.first_baseline.is_none() {
+      self.first_baseline = Some(block_offset + baseline);
+    }
+    self.last_baseline = Some(block_offset + baseline);
   }
 }
 
@@ -1592,21 +1899,6 @@ fn justify_self_offset(
     InlineEdge::End => free_space,
     InlineEdge::Start => LayoutUnit::ZERO,
   }
-}
-
-/// What laying out an inline formatting context gives the block that holds it.
-pub(crate) struct InlineContentLayout {
-  /// Whether no line box resolves the block offset, so the content collapses through.
-  pub(crate) is_self_collapsing: bool,
-  /// The content's block size, the lines' and their floats'.
-  pub(crate) block_size: LayoutUnit,
-  /// The margins adjoining the content's block start.
-  pub(crate) start_margin: MarginStrut,
-  /// The margins after the last line, adjoining the content's block end.
-  pub(crate) end_margin: MarginStrut,
-  /// Below the content's block start.
-  pub(crate) first_baseline: Option<LayoutUnit>,
-  pub(crate) last_baseline: Option<LayoutUnit>,
 }
 
 /// Blink's `BlockLayoutAlgorithm::ComputeMinMaxSizes`: the min-content and max-content sizes of a

@@ -36,6 +36,7 @@ use crate::{
     floats_utils::{
       UnpositionedFloat, compute_margin_box_inline_size_for_unpositioned_float, position_float,
     },
+    layout_result::{LayoutResult as BoxLayoutResult, LayoutStatus},
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
@@ -117,8 +118,15 @@ pub(crate) trait AtomicInlineLayout<'c> {
   /// The box laid out in the line's available space.
   fn layout(&mut self, node: &'c RenderNode) -> LayoutResult;
 
-  /// The block-in-inline laid out in the containing block's available space.
-  fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult;
+  /// The float laid out in `space`, which Blink's `CreateConstraintSpaceForFloat` builds.
+  fn layout_float(&mut self, node: &'c RenderNode, space: &ConstraintSpace) -> Rc<BoxLayoutResult>;
+
+  /// The block-in-inline laid out in its line's `space`, as Blink's `BlockNode::Layout`.
+  fn layout_block_in_inline(
+    &mut self,
+    node: &'c RenderNode,
+    space: &ConstraintSpace,
+  ) -> Rc<BoxLayoutResult>;
 
   /// The box's min-content and max-content contributions, without margins.
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit);
@@ -2479,14 +2487,30 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     let result_index = self.add_item(item_index, line_info);
 
     if self.mode == LineBreakerMode::Content {
-      let layout_result = self.atomic_inline.layout_block_in_inline(object.node());
+      // The block sees the floats the line placed so far.
+      let mut child_space = self.constraint_space.clone();
+
+      child_space.exclusion_space = Rc::new(self.exclusion_space.clone());
+
+      let result = self
+        .atomic_inline
+        .layout_block_in_inline(object.node(), &child_space);
       let item_result = &mut line_info.results[result_index];
 
-      item_result.inline_size = layout_result.inline_size;
-      item_result.should_create_line_box = !layout_result
-        .collapsed_margins
-        .is_some_and(|margins| margins.is_self_collapsing);
-      item_result.layout_result = Some(layout_result);
+      item_result.inline_size = result.size.inline_size;
+      item_result.should_create_line_box = !result.is_self_collapsing;
+      item_result.layout_result = Some(LayoutResult::of_block_in_inline(&result, &child_space));
+
+      let status = result.status;
+
+      item_result.block_in_inline_result = Some(result);
+
+      // Blink stops the line where the block's layout did not succeed.
+      if status != LayoutStatus::Success {
+        self.state = LineBreakState::Done;
+
+        return;
+      }
     } else {
       // Blink's `ComputeMinMaxContentSizeForBlockChild`.
       let (min_size, max_size) = self.atomic_inline.min_max_sizes(object.node());
@@ -2515,7 +2539,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   ) -> bool {
     let inline_margin_size = compute_margin_box_inline_size_for_unpositioned_float(
       unpositioned_float,
-      &mut *self.atomic_inline,
+      &mut |node, space| self.atomic_inline.layout_float(node, space),
     );
     let used_size = self.position
       + inline_margin_size
@@ -2590,7 +2614,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     if self.current.item_index <= self.leading_floats.handled_index
       && !self.leading_floats.floats.is_empty()
     {
-      let positioned_float = self.leading_floats.floats[self.leading_floats_index];
+      let positioned_float = self.leading_floats.floats[self.leading_floats_index].clone();
       let item_result = &mut line_info.results[result_index];
 
       self.leading_floats_index += 1;
@@ -2606,12 +2630,13 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     };
     let mut unpositioned_float = UnpositionedFloat::new(
       object.node(),
-      self.constraint_space.inline_size(),
+      self.constraint_space.available_and_percentage_sizes(),
       BfcOffset::new(
         self.constraint_space.bfc_offset.line_offset,
         self.line_opportunity.bfc_block_offset,
       ),
-      self.constraint_space.direction,
+      &self.constraint_space,
+      self.constraint_space.line_clamp_data.float_state(),
     );
     let float_after_line = self.should_push_float_after_line(&mut unpositioned_float, line_info);
 
@@ -2626,7 +2651,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     let positioned_float = position_float(
       &mut unpositioned_float,
       self.exclusion_space,
-      &mut *self.atomic_inline,
+      &mut |node, space| self.atomic_inline.layout_float(node, space),
     );
     let item_result = &mut line_info.results[result_index];
 
@@ -2692,11 +2717,17 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
     // A leading float is handed out again.
     if item_result.item_index < self.leading_floats.handled_index
-      && let Some(index) = self
-        .leading_floats
-        .floats
-        .iter()
-        .position(|leading_float| Some(*leading_float) == item_result.positioned_float)
+      && let Some(index) = self.leading_floats.floats.iter().position(|leading_float| {
+        item_result
+          .positioned_float
+          .as_ref()
+          .is_some_and(|positioned_float| {
+            Rc::ptr_eq(
+              &leading_float.layout_result,
+              &positioned_float.layout_result,
+            )
+          })
+      })
     {
       self.leading_floats_index = index;
     }

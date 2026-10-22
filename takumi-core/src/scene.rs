@@ -14,7 +14,9 @@ use crate::{
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   paint_chunk::PaintChunk,
-  paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
+  paint_property::{
+    ContainerContents, LineClampFloatClip, NodeProperties, PropertyState, PropertyTrees,
+  },
   painter::OwnContent,
   shadow::SizedShadow,
   sort_key::sort_by_key,
@@ -298,6 +300,8 @@ struct StackingContextBuildVisit {
   context_id: usize,
   /// The nearest stacking context, where positioned boxes paint.
   stacking_id: usize,
+  /// The clip the nearest line-clamp container gives the floats it clips.
+  line_clamp_float_clip: Option<LineClampFloatClip>,
   parent_display: Option<Display>,
   is_root: bool,
 }
@@ -373,6 +377,7 @@ impl SceneRequest<'_> {
       state: PropertyState::default(),
       context_id: 0,
       stacking_id: 0,
+      line_clamp_float_clip: None,
       parent_display: None,
       is_root: true,
     }];
@@ -428,9 +433,18 @@ impl SceneRequest<'_> {
       };
       containing_blocks.record_placement(visit.node_id, child_base);
 
+      let state = match visit.line_clamp_float_clip {
+        Some(clip) if layout_results.is_line_clamp_clipped_float(visit.node_id) => {
+          clip.apply(&mut properties, visit.state, &visit.path)
+        }
+        _ => visit.state,
+      };
+      let line_clamp_float_clip =
+        LineClampFloatClip::of(&current.context, layout, current_transform)
+          .or(visit.line_clamp_float_clip);
       let node_properties = NodeProperties::build(
         &mut properties,
-        visit.state,
+        state,
         &visit.path,
         &current.context,
         layout,
@@ -562,6 +576,7 @@ impl SceneRequest<'_> {
           },
           context_id,
           stacking_id,
+          line_clamp_float_clip,
           parent_display: Some(current.context.style.base_data.display),
           is_root: false,
         });

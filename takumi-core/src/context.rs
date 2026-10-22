@@ -1,4 +1,4 @@
-use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use typed_builder::TypedBuilder;
 
@@ -10,7 +10,7 @@ use crate::{
     font_fallback_list::FontFallbackList,
     font_fallback_map::FontFallbackMap,
   },
-  geometry::{ComputedLayout, Line, Point},
+  geometry::{ComputedLayout, Point},
   layout::inline::InlineLayoutCache,
   resources::{
     font::FontsSnapshot,
@@ -92,8 +92,6 @@ impl From<RenderContextInit> for RenderContext {
       style: init.style,
       text_decorations: AppliedTextDecorations::default(),
       collapsed_borders: init.collapsed_borders,
-      definite_height: Cell::new(None),
-      margins_adjoin: Cell::new(Line::FALSE),
     }
   }
 }
@@ -118,12 +116,6 @@ pub struct RenderContext {
   pub(crate) text_decorations: AppliedTextDecorations,
   /// Whether this box is a cell of a table that collapses its borders.
   pub(crate) collapsed_borders: bool,
-  /// The content height the box's last layout fixed before its content, Blink's definite block
-  /// size.
-  definite_height: Cell<Option<f32>>,
-  /// Whether its children's margins adjoin its block-start and block-end edges in its last layout,
-  /// so they collapse through it.
-  margins_adjoin: Cell<Line<bool>>,
 }
 
 /// A [`RenderContextBuilder`] with nothing set yet.
@@ -214,8 +206,6 @@ impl RenderContext {
       style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
-      definite_height: Cell::new(None),
-      margins_adjoin: Cell::new(Line::FALSE),
     }
   }
 
@@ -241,27 +231,7 @@ impl RenderContext {
       current_color,
       style,
       collapsed_borders: false,
-      definite_height: Cell::new(None),
-      margins_adjoin: Cell::new(Line::FALSE),
     }
-  }
-
-  /// The content height the box's last layout fixed before its content.
-  pub(crate) fn definite_height(&self) -> Option<f32> {
-    self.definite_height.get()
-  }
-
-  pub(crate) fn set_definite_height(&self, height: Option<f32>) {
-    self.definite_height.set(height);
-  }
-
-  /// Whether its children's margins adjoin its block-start and block-end edges in its last layout.
-  pub(crate) fn margins_adjoin(&self) -> Line<bool> {
-    self.margins_adjoin.get()
-  }
-
-  pub(crate) fn set_margins_adjoin(&self, margins_adjoin: Line<bool>) {
-    self.margins_adjoin.set(margins_adjoin);
   }
 
   /// The style to change in place, copied first when another box shares it.

@@ -1,6 +1,8 @@
 //! Blink's [`LineInfo`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/line_info.cc),
 //! without ruby, initial letters, or block fragmentation.
 
+use std::rc::Rc;
+
 use super::{
   inline_break_token::InlineBreakToken,
   inline_item::{CollapseType, InlineItemType},
@@ -11,7 +13,7 @@ use super::{
 use crate::{
   context::RenderContext,
   fonts::shaping::shape_result_run::AdjustMidCluster,
-  layout::bfc_rect::BfcOffset,
+  layout::{bfc_rect::BfcOffset, layout_result::LayoutResult as BoxLayoutResult},
   layout_unit::LayoutUnit,
   style::{ComputedStyle, Direction as TextDirection, TextAlign, WhiteSpaceCollapse},
   text::character::{LINE_FEED, is_other_space_separator},
@@ -120,6 +122,14 @@ impl<'a, 'c> LineInfo<'a, 'c> {
       .iter()
       .find(|result| result.item.item_type == InlineItemType::BlockInInline)
       .and_then(|result| result.layout_result)
+  }
+
+  /// Blink's `BlockInInlineLayoutResult`: the layout of the line's block-in-inline.
+  pub(crate) fn block_in_inline_result(&self) -> Option<&Rc<BoxLayoutResult>> {
+    self
+      .results
+      .iter()
+      .find_map(|result| result.block_in_inline_result.as_ref())
   }
 
   /// Blink's `IsEndParagraph`.

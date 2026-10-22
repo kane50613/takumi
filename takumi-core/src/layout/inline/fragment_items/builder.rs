@@ -166,6 +166,7 @@ impl FragmentItems {
             | LineFragment::BlockInInline {
               node,
               layout_result,
+              ..
             },
           ) => {
             let Some(span) = spans.span_of(node) else {
@@ -204,8 +205,8 @@ impl FragmentItems {
             let Some(ProcessedInlineSpan::Box(item)) = spans.spans.get_mut(span) else {
               continue;
             };
-            let result = positioned_float.layout_result;
-            let size = item.paint_border_box(result.inline_size, result.block_size);
+            let result = &positioned_float.layout_result;
+            let size = item.paint_border_box(result.size.inline_size, result.size.block_size);
             let margin = item.margin;
 
             items.push_inline_box(
