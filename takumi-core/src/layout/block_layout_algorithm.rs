@@ -1995,8 +1995,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
 
     let available_inline_size = self.child_available_inline_size();
-    let mut measuring =
-      BlockLayoutAlgorithm::new(&mut *self.tree, self.node, self.space, &self.input);
+    // The scale takes every line of the paragraph into account, not this page's alone.
+    let space = self.space.without_fragmentation();
+    let input = FragmentationLayoutInput::default();
+    let mut measuring = BlockLayoutAlgorithm::new(&mut *self.tree, self.node, &space, &input);
     let mut inline_child = InlineChild::new(node, items_data);
 
     measuring.line_clamp_data = self.line_clamp_data;

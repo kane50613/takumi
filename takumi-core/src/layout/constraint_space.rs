@@ -157,6 +157,15 @@ impl ConstraintSpace {
     }
   }
 
+  /// Blink's `CloneWithoutFragmentation`: the space with no pages to break across.
+  pub(crate) fn without_fragmentation(&self) -> Self {
+    Self {
+      #[cfg(feature = "fragmentation")]
+      block_fragmentation: None,
+      ..self.clone()
+    }
+  }
+
   /// Whether a box laid out in `self` lays out as in `other`, which may only measure it.
   pub(crate) fn lays_out_like(&self, other: &Self) -> bool {
     *self
