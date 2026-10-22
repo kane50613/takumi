@@ -38,14 +38,14 @@ impl InlineOutline {
       .outline_color
       .resolve(context.current_color);
 
-    (width > 0.0 && style.misc3_data.outline_style.is_rendered() && color.0[3] != 0).then(|| Self {
+    (width > 0.0 && style.misc_data.outline_style.is_rendered() && color.0[3] != 0).then(|| Self {
       width,
       offset: style
         .misc3_data
         .outline_offset
         .to_border_px(&context.sizing, 0.0),
       color,
-      style: style.misc3_data.outline_style,
+      style: style.misc_data.outline_style,
     })
   }
 

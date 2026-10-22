@@ -1508,6 +1508,7 @@ define_style! {
       justify_items: AlignItems,
       align_self: AlignItems,
       flex_wrap: FlexWrap,
+      outline_style: BorderStyle,
       object_fit: ObjectFit where anonymous = true,
       r#continue: Continue where anonymous = true,
       unicode_bidi: UnicodeBidi,
@@ -1569,8 +1570,6 @@ define_style! {
       order: Order,
       outline_color: ColorInput,
       outline_offset: Length,
-      // Beside `outline-width`, which computes to zero under a `none` style.
-      outline_style: BorderStyle,
       outline_width: LineWidth,
       rotate: Option<Angle>,
       row_gap: Gap,

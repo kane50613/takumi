@@ -197,7 +197,7 @@ impl OutlineGeometry {
       .to_used_px(&context.sizing)
       .max(0.0);
 
-    if width <= 0.0 || !style.misc3_data.outline_style.is_rendered() {
+    if width <= 0.0 || !style.misc_data.outline_style.is_rendered() {
       return None;
     }
     Some(Self::of(context, size))
@@ -229,7 +229,7 @@ impl OutlineGeometry {
             .resolve(context.current_color); 4],
         )
         .into(),
-        style: Sides([style.misc3_data.outline_style; 4]).into(),
+        style: Sides([style.misc_data.outline_style; 4]).into(),
         image_rendering: style.misc_inherited_data.image_rendering,
         radius: BorderProperties::resolve_radius_part(context, size),
         shape: BorderProperties::resolve_shape_part(context),
