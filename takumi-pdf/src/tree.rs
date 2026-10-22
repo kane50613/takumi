@@ -218,7 +218,6 @@ impl PreparedTree {
       chunks,
       window: Window::default(),
       tagged: tagged && state.tags.is_some(),
-      tag_prefix: Vec::new(),
       color_filter: None,
     }
   }

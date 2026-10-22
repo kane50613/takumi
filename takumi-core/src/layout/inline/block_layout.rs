@@ -366,7 +366,9 @@ impl RenderNode {
 
         let shown = !child.is_hidden_due_to_layout && !child.is_truncated;
         let inline_content_box = match &child.layout_result {
-          Some(LineFragment::AtomicInline { node, .. }) if shown && node.is_atomic_inline_box() => {
+          Some(LineFragment::AtomicInline { node, .. })
+            if shown && node.participates_as_inline_box() =>
+          {
             Some((
               *node,
               line_left + child.rect.offset.inline_offset,
@@ -404,6 +406,20 @@ impl RenderNode {
           }
         }
       }
+    }
+
+    if let Some(marker) = UnpositionedListMarker::of(&items_data)
+      && let Some((_, line)) = UnpositionedListMarker::content_alignment_line(&lines)
+    {
+      let result = marker.layout(atomic_inline);
+      let offset = marker.offset(
+        &result,
+        line,
+        layout,
+        self.context.style.inherited_data.direction,
+      );
+
+      inline_content_boxes.push((marker.node, offset));
     }
 
     let positions = self

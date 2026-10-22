@@ -20,7 +20,7 @@ use crate::{
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
     inline::{InlineBoxKind, ProcessedInlineSpan},
-    inline_box::{InlineBoxPaint, resolve_inline_box},
+    inline_box::{ReplacedInlineBox, resolve_inline_box},
     node::{ImageData, ImageSourceInput},
     tree::RenderNode,
   },
@@ -302,81 +302,70 @@ impl Walker {
       let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(inline_box.id as usize) else {
         continue;
       };
-      let Some((offset, paint)) = resolve_inline_box(inline_box, item, layout) else {
+      let Some(relative) = node.path_where(|candidate| ptr::eq(candidate, item.render_node)) else {
         continue;
       };
-      let Some(relative) =
-        node.path_where(or_marker(|candidate| ptr::eq(candidate, item.render_node)))
+      let Some(ReplacedInlineBox { node, layout }) = resolve_inline_box(inline_box, item, layout)
       else {
         continue;
       };
       let box_path = [path, &relative].concat();
 
-      match paint {
-        InlineBoxPaint::Container(subtree) => {
-          let at = subtree.border_box_origin(offset);
-          let scene = subtree.into_scene(transform * Affine::translation(at.x, at.y), false)?;
+      let local = node.context.style.local_transform(
+        layout.size.width,
+        layout.size.height,
+        &node.context.sizing,
+      );
+      let placed = transform * Affine::translation(layout.location.x, layout.location.y) * local;
+      let id = self.record_box(
+        node,
+        layout,
+        placed,
+        box_path.clone(),
+        None,
+        &TableDecorations::None,
+      )?;
+      let (group, clip, outline) = match &self.nodes[id].kind {
+        NodeKind::Box {
+          effects,
+          overflow_clip,
+          outline,
+          ..
+        } => (
+          effects.is_some(),
+          overflow_clip.is_some(),
+          !outline.is_empty(),
+        ),
+        _ => (false, false, false),
+      };
 
-          self.scene(&scene, &box_path)?;
-        }
-        InlineBoxPaint::Replaced { node, layout } => {
-          let local = node.context.style.local_transform(
-            layout.size.width,
-            layout.size.height,
-            &node.context.sizing,
-          );
-          let placed = transform * Affine::translation(offset.x, offset.y) * local;
-          let id = self.record_box(
-            node,
-            layout,
-            placed,
-            box_path.clone(),
-            None,
-            &TableDecorations::None,
-          )?;
-          let (group, clip, outline) = match &self.nodes[id].kind {
-            NodeKind::Box {
-              effects,
-              overflow_clip,
-              outline,
-              ..
-            } => (
-              effects.is_some(),
-              overflow_clip.is_some(),
-              !outline.is_empty(),
-            ),
-            _ => (false, false, false),
-          };
-
-          if group {
-            self.steps.push(PaintStep::BeginGroup { node: id });
-          }
-          if !self.nodes[id].drawables.is_empty() {
-            self.draw(id);
-          }
-          if clip {
-            self.steps.push(PaintStep::BeginClip { node: id });
-          }
-          self.own_content(Placed {
-            node,
-            layout,
-            transform: placed,
-            path: &box_path,
-            parent: id,
-          })?;
-          if clip {
-            self.steps.push(PaintStep::EndClip { node: id });
-          }
-          if outline {
-            self.steps.push(PaintStep::Draw {
-              node: id,
-              part: DrawPart::Outline,
-            });
-          }
-          if group {
-            self.steps.push(PaintStep::EndGroup { node: id });
-          }
-        }
+      if group {
+        self.steps.push(PaintStep::BeginGroup { node: id });
+      }
+      if !self.nodes[id].drawables.is_empty() {
+        self.draw(id);
+      }
+      if clip {
+        self.steps.push(PaintStep::BeginClip { node: id });
+      }
+      self.own_content(Placed {
+        node,
+        layout,
+        transform: placed,
+        path: &box_path,
+        parent: id,
+      })?;
+      if clip {
+        self.steps.push(PaintStep::EndClip { node: id });
+      }
+      if outline {
+        self.steps.push(PaintStep::Draw {
+          node: id,
+          part: DrawPart::Outline,
+        });
+      }
+      if group {
+        self.steps.push(PaintStep::EndGroup { node: id });
       }
     }
     Ok(())
@@ -1062,10 +1051,4 @@ impl ElementInfo {
 
     Self::of(root.node_at_path(&relative)?, [path, &relative].concat())
   }
-}
-
-/// Accepts a node when `matches` accepts it or its marker, so a list item's marker sits at the
-/// item's path.
-fn or_marker(matches: impl Fn(&RenderNode) -> bool + Copy) -> impl Fn(&RenderNode) -> bool + Copy {
-  move |node| matches(node) || node.marker.as_deref().is_some_and(matches)
 }

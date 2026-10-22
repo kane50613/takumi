@@ -339,10 +339,6 @@ pub struct SceneRequest<'a> {
   pub root: &'a RenderNode,
   /// Its layout.
   pub layout_results: &'a LayoutResults,
-  /// The transform the root paints under.
-  pub transform: Affine,
-  /// Blink's paint offset of the space the root's layout location is measured in.
-  pub paint_offset: Point<f32>,
   /// The size percentages of the root resolve against.
   pub container_size: Size<Option<f32>>,
   /// Whether to compute each node's paint bounds, which the raster and SVG backends clip and cull by.
@@ -355,8 +351,6 @@ impl SceneRequest<'_> {
     let SceneRequest {
       root,
       layout_results,
-      transform,
-      paint_offset,
       container_size,
       paint_bounds: with_bounds,
     } = self;
@@ -372,8 +366,8 @@ impl SceneRequest<'_> {
       path: Vec::new(),
       node_id: NodeId::ROOT,
       base: ChildBase {
-        transform,
-        paint_offset,
+        transform: Affine::IDENTITY,
+        paint_offset: Point::ZERO,
       },
       container_size,
       state: PropertyState::default(),
@@ -497,7 +491,7 @@ impl SceneRequest<'_> {
         // Atomic boxes paint as if stacking contexts, but lift positioned descendants to the real one.
         let atomic = !matches!(bucket, PaintBucket::InFlow)
           || is_flex_or_grid_item
-          || current.is_atomic_inline_box();
+          || current.participates_as_inline_box();
 
         if creates_stacking_context || atomic {
           let child_context = contexts.len();
@@ -661,8 +655,6 @@ impl Scene {
     let layers = SceneRequest {
       root: &root,
       layout_results: &results,
-      transform: Affine::IDENTITY,
-      paint_offset: Point::ZERO,
       container_size,
       paint_bounds,
     }
@@ -728,7 +720,6 @@ fn set_paint_offsets(
         path.push(index);
         offsets.get(path.as_slice())
       }
-      OffsetSlot::Unplaced => None,
     };
     let (base, own) = match placed {
       Some(&(own, location)) => (
@@ -741,25 +732,15 @@ fn set_paint_offsets(
       None => (inherited, inherited),
     };
     let depth = path.len();
-    let unplaced = matches!(slot, OffsetSlot::Unplaced);
 
     node.context.paint_offset = base;
-    if let Some(marker) = node.marker.as_deref_mut() {
-      stack.push((marker, OffsetSlot::Unplaced, own));
-    }
     for (index, child) in node
       .children
       .iter_mut()
       .flat_map(|children| children.iter_mut())
       .enumerate()
     {
-      let slot = if unplaced {
-        OffsetSlot::Unplaced
-      } else {
-        OffsetSlot::Child { depth, index }
-      };
-
-      stack.push((child, slot, own));
+      stack.push((child, OffsetSlot::Child { depth, index }, own));
     }
   }
 }
@@ -773,8 +754,6 @@ enum OffsetSlot {
     depth: usize,
     index: usize,
   },
-  /// A `::marker` box or one inside it, which no path reaches.
-  Unplaced,
 }
 
 /// Bounds each effect of `properties` by what paints under it, nested effects grown by their
@@ -991,7 +970,7 @@ mod tests {
     let scene = Scene::lay_out(RenderNode::from_node(&context, list), viewport, false)
       .expect("scene lays out");
     let item = &scene.root.children.as_deref().expect("children")[0];
-    let marker = item.marker.as_deref().expect("marker");
+    let marker = item.marker().expect("marker");
 
     assert_eq!(marker.context.paint_offset, Point { x: 10.5, y: 10.5 });
   }

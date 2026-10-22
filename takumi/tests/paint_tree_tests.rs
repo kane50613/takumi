@@ -273,6 +273,26 @@ fn paint_tree_records_used_values() {
   assert_eq!(depth, Some(0));
 }
 
+/// An image inside a line records its own element, not the box whose inline content holds it.
+#[test]
+fn an_inline_image_records_its_own_element() {
+  let document = build(Node::container([
+    Node::text("before "),
+    Node::image("assets/images/yeecord.png")
+      .with_id("pic")
+      .with_class_name("pic"),
+  ]));
+  let image = find(&document, "pic");
+
+  assert_eq!(
+    image
+      .element
+      .as_ref()
+      .map(|element| element.path.as_slice()),
+    Some([1].as_slice())
+  );
+}
+
 #[test]
 fn padded_image_clips_to_its_whole_content_box() {
   let document = build(Node::container([

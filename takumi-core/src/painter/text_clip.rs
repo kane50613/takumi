@@ -8,11 +8,7 @@ use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, NodeId, Point},
-  layout::{
-    inline::{InlineBoxKind, ProcessedInlineSpan},
-    inline_box::{InlineBoxPaint, InlineSubtree},
-    tree::{ContainingBlocks, LayoutResults, RenderNode},
-  },
+  layout::tree::{ContainingBlocks, LayoutResults, RenderNode},
   scene::NodePaint,
   style::{Affine, BackgroundClip, Display},
 };
@@ -163,8 +159,7 @@ impl<'r> TextMask<'r> {
     Ok(())
   }
 
-  /// Paints `node`'s inline content, laid out as `node_id` with its border box at `origin`, then
-  /// the text of the inline-level containers it places.
+  /// Paints `node`'s inline content, laid out as `node_id` with its border box at `origin`.
   fn paint_inline_content(
     &self,
     node: &RenderNode,
@@ -186,39 +181,6 @@ impl<'r> TextMask<'r> {
       BoxFrame::new(layout, origin),
       device,
     );
-
-    for positioned in runs
-      .inline_boxes
-      .iter()
-      .filter(|positioned| positioned.kind != InlineBoxKind::OutOfFlow)
-    {
-      let Some(ProcessedInlineSpan::Box(item)) = spans.get(positioned.id as usize) else {
-        continue;
-      };
-
-      // An inline content box paints as a box of the layout tree.
-      if item.render_node.is_inline_content_box() {
-        continue;
-      }
-
-      let (box_origin, InlineBoxPaint::Container(subtree)) =
-        InlineBoxPaint::of(positioned, item, layout)
-      else {
-        continue;
-      };
-      let root_context = &subtree.root.context;
-
-      if root_context.style.floats_in_own_layer(false) {
-        continue;
-      }
-
-      TextMask::new(&subtree.results).paint(
-        &subtree.root,
-        InlineSubtree::ROOT,
-        origin + subtree.border_box_origin(box_origin),
-        device,
-      )?;
-    }
 
     Ok(())
   }

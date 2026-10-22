@@ -12,7 +12,7 @@ use takumi_core::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
     border::BorderProperties,
     inline::{InlineBoxItem, PositionedInlineRun, VisualInlineBox},
-    inline_box::{InlineBoxPaint, resolve_inline_box},
+    inline_box::{ReplacedInlineBox, resolve_inline_box},
     node::Node,
     tree::RenderNode,
   },
@@ -712,48 +712,38 @@ impl DocumentDevice<'_> {
   }
 }
 
-/// Recurses into an in-flow inline box (an atomic inline element such as an inline-block or
-/// replaced box) positioned by the inline layout.
+/// Emits an in-flow replaced inline box where the inline layout positioned it.
 pub(crate) fn emit_inline_box(
   inline_box: &VisualInlineBox,
   item: &InlineBoxItem<'_>,
   container: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let Some((offset, paint)) = resolve_inline_box(inline_box, item, container.layout) else {
+  let Some(ReplacedInlineBox { node, layout }) =
+    resolve_inline_box(inline_box, item, container.layout)
+  else {
     return Ok(());
   };
-  let origin = container.origin + offset;
+  let placed = PlacedBox::new(
+    node,
+    BoxFrame::new(layout, container.origin + layout.location),
+  );
+  let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
+  let groups = EffectGroups::open(&placed, group_transform, doc)?;
 
-  match paint {
-    InlineBoxPaint::Container(subtree) => {
-      let at = subtree.border_box_origin(origin);
-      let scene = subtree
-        .into_scene(Affine::translation(at.x, at.y), true)
-        .map_err(io::Error::other)?;
+  placed.emit_decorations(None, TableDecorations::None, doc)?;
 
-      SceneEmitter { scene: &scene }.emit(doc)
-    }
-    InlineBoxPaint::Replaced { node, layout } => {
-      let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));
-      let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
-      let groups = EffectGroups::open(&placed, group_transform, doc)?;
+  let content_clip = placed
+    .overflow_clip_path_data()
+    .map(|data| doc.begin_clipped_group(&data))
+    .transpose()?;
 
-      placed.emit_decorations(None, TableDecorations::None, doc)?;
-
-      let content_clip = placed
-        .overflow_clip_path_data()
-        .map(|data| doc.begin_clipped_group(&data))
-        .transpose()?;
-
-      placed.emit_own_content(doc)?;
-      if let Some(group) = content_clip {
-        doc.end_group(group)?;
-      }
-      placed.emit_outline(doc)?;
-      groups.close(doc)
-    }
+  placed.emit_own_content(doc)?;
+  if let Some(group) = content_clip {
+    doc.end_group(group)?;
   }
+  placed.emit_outline(doc)?;
+  groups.close(doc)
 }
 
 /// The clip path `d` and fill rule for a background's `clip` area. A square border box needs none,

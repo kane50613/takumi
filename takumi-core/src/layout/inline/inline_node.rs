@@ -78,12 +78,12 @@ impl<'c> Frame<'c> {
     is_inline: bool,
     has_inline_children: bool,
   ) -> Self {
-    let mut children: Vec<Child<'c>> = node.marker.as_deref().map(Child::Box).into_iter().collect();
+    let mut children: Vec<Child<'c>> = node.marker().map(Child::Box).into_iter().collect();
 
     children.push(Child::OwnText);
 
     if has_inline_children {
-      children.extend(node.children.iter().flatten().map(Child::Box));
+      children.extend(node.children_after_marker().iter().map(Child::Box));
     }
 
     children.reverse();
@@ -1146,7 +1146,7 @@ mod tests {
     let list = Node::container([Node::text("a").with_class_name("item")]).with_class_name("list");
     let tree = render_tree(list, "");
     let item = &tree.children.as_deref().expect("children")[0];
-    let marker = item.marker.as_deref().expect("marker");
+    let marker = item.marker().expect("marker");
     let data = InlineNode::new(marker).collect_inlines();
 
     assert_eq!(data.text_content, "\u{2022}");
@@ -1441,7 +1441,7 @@ mod tests {
         &format!(".list {{ list-style: inside {list_style_type}; font: 16px Geist }}"),
       );
       let item = &tree.children.as_deref().expect("children")[0];
-      let marker = item.marker.as_deref().expect("marker");
+      let marker = item.marker().expect("marker");
       let content = &marker.children.as_deref().expect("marker content")[0];
 
       SymbolMarker::of(&content.context).expect("a symbol marker")

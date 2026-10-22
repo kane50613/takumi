@@ -18,7 +18,7 @@ use takumi_core::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers, ImageTiling},
     border::BorderProperties,
     inline::{InlineBoxKind, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
-    inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
+    inline_box::resolve_inline_box,
     tree::{NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
@@ -94,8 +94,6 @@ pub(crate) struct Emitter<'a> {
   pub(crate) window: Window,
   /// Whether this walk records marked content for the structure tree.
   pub(crate) tagged: bool,
-  /// Path from the document root to this emitter's own root.
-  pub(crate) tag_prefix: Vec<usize>,
   /// Color transform from the `filter` properties of the enclosing stacking contexts, applied to
   /// every color this subtree paints.
   pub(crate) color_filter: Option<Rc<ColorFilter>>,
@@ -1082,7 +1080,7 @@ impl Emitter<'_> {
     self.emit_inline_boxes(node, painted, frame, surface);
   }
 
-  /// Paints the inline layout's replaced boxes and nested container subtrees.
+  /// Paints the inline layout's replaced boxes.
   fn emit_inline_boxes(
     &mut self,
     owner: &RenderNode,
@@ -1125,40 +1123,25 @@ impl Emitter<'_> {
       }) {
         continue;
       }
-      let Some((offset, paint)) = resolve_inline_box(positioned, item, layout) else {
+      let Some(replaced) = resolve_inline_box(positioned, item, layout) else {
         continue;
       };
-      let marker_target = (self.tagged && node.origin == NodeOrigin::Marker)
-        .then(|| self.marker_tag_target(owner))
-        .flatten();
-      let marker_tagged = marker_target.is_some();
 
       // The box never reaches `emit_box`, so the state that would paint it
       // there is applied here: its own opacity, and its `filter` composed onto
       // the one the enclosing stacking contexts left.
       let opacity = node.context.style.svg_data.opacity.0;
       let faded = opacity < 1.0;
-      // A container box runs its own emitter, which tags every node it walks.
-      // A replaced one paints here. Its decorations are artifacts and marked
-      // content cannot nest within one stream, so the box's region wraps the
-      // whole box only when opacity moves it into a group of its own, and
-      // wraps just the content otherwise.
-      let box_tagged = cfg!(feature = "images")
-        && self.tagged
-        && !marker_tagged
-        && matches!(paint, InlineBoxPaint::Replaced { .. });
+      // Its decorations are artifacts and marked content cannot nest within
+      // one stream, so the box's region wraps the whole box only when opacity
+      // moves it into a group of its own, and wraps just the content otherwise.
+      let box_tagged = cfg!(feature = "images") && self.tagged;
       let box_wrapped = box_tagged && faded;
 
       if owner_tagged {
         surface.end_tagged();
       }
-      if let Some(path) = marker_target.as_ref() {
-        let identifier = surface.start_tagged(self.content_tag(node));
-
-        if let Some(tags) = self.tags() {
-          tags.borrow_mut().record_label(path, identifier);
-        }
-      } else if box_wrapped {
+      if box_wrapped {
         self.start_tagged_node(node, surface);
       }
 
@@ -1171,30 +1154,21 @@ impl Emitter<'_> {
         &node.context.style.misc1_data.filter,
       );
 
-      let origin = frame.origin + offset;
+      #[cfg(feature = "images")]
+      self.emit_inline_replaced(
+        replaced.node,
+        BoxFrame::new(replaced.layout, frame.origin + replaced.layout.location),
+        box_tagged && !box_wrapped,
+        surface,
+      );
+      #[cfg(not(feature = "images"))]
+      let _ = replaced;
 
-      match paint {
-        #[cfg(feature = "images")]
-        InlineBoxPaint::Replaced {
-          node,
-          layout: box_layout,
-        } => self.emit_inline_replaced(
-          node,
-          BoxFrame::new(box_layout, origin),
-          box_tagged && !box_wrapped,
-          surface,
-        ),
-        #[cfg(not(feature = "images"))]
-        InlineBoxPaint::Replaced { .. } => {}
-        InlineBoxPaint::Container(subtree) => {
-          self.emit_inline_subtree(subtree, node, origin, surface)
-        }
-      }
       self.color_filter = outer_filter;
       if faded {
         surface.pop();
       }
-      if marker_tagged || box_wrapped {
+      if box_wrapped {
         surface.end_tagged();
       }
       if owner_tagged {
@@ -1231,38 +1205,6 @@ impl Emitter<'_> {
     );
   }
 
-  /// Paints an inline-level container from the scene it carries.
-  fn emit_inline_subtree(
-    &mut self,
-    subtree: Box<InlineSubtree>,
-    node: &RenderNode,
-    origin: CorePoint<f32>,
-    surface: &mut Surface,
-  ) {
-    let at = subtree.border_box_origin(origin);
-    let Ok(scene) = subtree.into_scene(Affine::IDENTITY, true) else {
-      return;
-    };
-    // The subtree root is a clone of `node`, so the box's own path is the
-    // prefix that puts the subtree's nodes back on the document tree.
-    let box_path = self.tagged.then(|| self.path_of(node)).flatten();
-    let tagged = box_path.is_some();
-    let tag_prefix = self.tag_path(box_path.as_deref().unwrap_or_default());
-    let mut emitter = Emitter {
-      scene: &scene,
-      document: self.document,
-      inline: None,
-      chunks: None,
-      window: self.window.within(at),
-      tagged,
-      tag_prefix,
-      color_filter: self.color_filter.clone(),
-    };
-    surface.push_transform(&Transform::from_translate(at.x, at.y));
-    let _ = emitter.emit(surface);
-    surface.pop();
-  }
-
   /// Opens the marked-content region a node's own content draws in: an
   /// artifact for a decorative image, otherwise a region recorded at `path`.
   fn start_node_region(&self, node: &RenderNode, path: Option<&[usize]>, surface: &mut Surface) {
@@ -1272,10 +1214,21 @@ impl Emitter<'_> {
     }
     let identifier = surface.start_tagged(self.content_tag(node));
 
-    if let Some(tags) = self.tags()
-      && let Some(path) = path
+    let Some(tags) = self.tags() else {
+      return;
+    };
+    let Some(path) = path else {
+      return;
+    };
+
+    if node.origin == NodeOrigin::Marker
+      && let Some((_, owner_path)) = path.split_last()
     {
-      tags.borrow_mut().record(&self.tag_path(path), identifier);
+      tags
+        .borrow_mut()
+        .record_label(self.marker_tag_target(owner_path), identifier);
+    } else {
+      tags.borrow_mut().record(path, identifier);
     }
   }
 
@@ -1293,21 +1246,8 @@ impl Emitter<'_> {
       .path_where(|candidate| ptr::eq(candidate, node))
   }
 
-  /// The document-rooted path of a node this emitter reached at `path`.
-  fn tag_path(&self, path: &[usize]) -> Vec<usize> {
-    if self.tag_prefix.is_empty() {
-      return path.to_vec();
-    }
-    let mut full = self.tag_prefix.clone();
-
-    full.extend_from_slice(path);
-    full
-  }
-
-  /// Tag target for a generated marker: its nearest `display: list-item` ancestor, whose `Lbl`
-  /// holds the label.
-  fn marker_tag_target(&self, owner: &RenderNode) -> Option<Vec<usize>> {
-    let owner_path = self.path_of(owner)?;
+  /// The nearest list item holding the box at `owner_path`, whose `Lbl` holds its marker.
+  fn marker_tag_target<'p>(&self, owner_path: &'p [usize]) -> &'p [usize] {
     let mut current = &self.scene.root;
     let mut length = owner_path.len();
 
@@ -1315,13 +1255,20 @@ impl Emitter<'_> {
       if current.context.style.base_data.display == Display::ListItem {
         length = depth;
       }
-      current = current.children.as_deref()?.get(*index)?;
+      let Some(child) = current
+        .children
+        .as_deref()
+        .and_then(|children| children.get(*index))
+      else {
+        break;
+      };
+      current = child;
     }
     if current.context.style.base_data.display == Display::ListItem {
       length = owner_path.len();
     }
 
-    Some(self.tag_path(&owner_path[..length]))
+    &owner_path[..length]
   }
 
   /// One layer as a pattern glyphs can be filled with, over a box whose border box sits at

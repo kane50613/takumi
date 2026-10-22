@@ -326,7 +326,7 @@ mod tests {
     context::RenderContext,
     layout::{
       node::{Node, NodeKind},
-      tree::RenderNode,
+      tree::{NodeOrigin, RenderNode},
     },
     resources::font::Fonts,
     style::{SizingContext, StyleSheet},
@@ -368,8 +368,9 @@ mod tests {
 
   /// Every marker in the tree, in document order.
   fn collect_markers(node: &RenderNode, collected: &mut Vec<String>) {
-    if let Some(marker) = &node.marker {
-      collected.extend(text_runs(marker));
+    if node.origin == NodeOrigin::Marker {
+      collected.extend(text_runs(node));
+      return;
     }
 
     for child in node.children.iter().flat_map(|children| children.iter()) {
@@ -388,7 +389,7 @@ mod tests {
   }
 
   fn marker_of(node: &RenderNode) -> &RenderNode {
-    node.marker.as_deref().expect("marker")
+    node.marker().expect("marker")
   }
 
   fn item(children: impl Into<Vec<Node>>) -> Node {
@@ -537,7 +538,10 @@ mod tests {
     ));
     let item = first_child(&tree);
 
-    assert!(item.marker.is_none(), "the marker joined the block's line");
+    assert!(
+      item.marker().is_none(),
+      "the marker joined the block's line"
+    );
     assert_eq!(text_runs(marker_of(first_child(item))), ["1. "]);
   }
 
