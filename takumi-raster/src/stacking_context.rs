@@ -3,7 +3,7 @@ use takumi_core::{
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{TableDecorations, TextClip, paint_collapsed_borders},
-  scene::{NodePaint, Scene, SceneBounds},
+  scene::{FragmentPlacements, NodePaint, Scene, SceneBounds},
 };
 use tiny_skia::PixmapMut;
 
@@ -24,6 +24,7 @@ pub(crate) fn paint_scene(scene: &mut Scene, canvas: &mut Canvas) -> Result<()> 
     results,
     contexts,
     properties,
+    fragments,
     ..
   } = scene;
   let chunks = PaintChunk::in_paint_order(contexts);
@@ -33,6 +34,7 @@ pub(crate) fn paint_scene(scene: &mut Scene, canvas: &mut Canvas) -> Result<()> 
     ScenePainter {
       root,
       results,
+      fragments: fragments.as_ref(),
       canvas,
       owners,
       effects: Vec::new(),
@@ -64,6 +66,7 @@ struct OpenEffect {
 struct ScenePainter<'s, 'c> {
   root: &'s mut RenderNode,
   results: &'s LayoutResults,
+  fragments: Option<&'s FragmentPlacements>,
   canvas: &'c mut Canvas,
   owners: Vec<Option<&'s NodePaint>>,
   effects: Vec<OpenEffect>,
@@ -84,7 +87,12 @@ impl ScenePainter<'_, '_> {
 
     let result = placed(self.root, self.results, chunk.node)
       .map(|(_, layout)| layout)
-      .and_then(|layout| self.paint_part(chunk, layout));
+      .and_then(|layout| {
+        if let Some(fragments) = self.fragments {
+          fragments.enter(self.root, chunk.node, layout.location);
+        }
+        self.paint_part(chunk, layout)
+      });
 
     self.record(result);
   }

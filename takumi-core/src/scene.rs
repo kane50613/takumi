@@ -2,10 +2,6 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::collections::HashMap;
-#[cfg(feature = "fragmentation")]
-use std::mem::swap;
-
 use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
@@ -25,6 +21,7 @@ use crate::{
   style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
 };
+use std::collections::{HashMap, HashSet};
 
 /// A node's resolved paint inputs.
 #[derive(Clone)]
@@ -357,11 +354,12 @@ pub struct SceneRequest<'a> {
 impl SceneRequest<'_> {
   /// Flattens the node tree into CSS-ordered stacking contexts for painting.
   pub fn build(self) -> Result<SceneLayers> {
-    self.build_fragment(0)
+    self.build_fragments(&[(0, Point::ZERO)])
   }
 
-  /// [`Self::build`] for the root's fragment `root_fragment_index` and the fragments it holds.
-  fn build_fragment(self, root_fragment_index: usize) -> Result<SceneLayers> {
+  /// [`Self::build`] for each of the root's fragments `roots` names and the fragments they hold,
+  /// each at its paint offset. Each root fragment stacks its own content.
+  fn build_fragments(self, roots: &[(usize, Point<f32>)]) -> Result<SceneLayers> {
     let SceneRequest {
       root,
       layout_results,
@@ -376,22 +374,29 @@ impl SceneRequest<'_> {
     // Each table with collapsed borders being visited: the context its boxes paint in, the
     // visits left once its subtree is done, and its paint.
     let mut collapsed_borders: Vec<(usize, usize, NodePaint)> = Vec::new();
-    let mut visits = vec![StackingContextBuildVisit {
-      path: Vec::new(),
-      node_id: NodeId::ROOT,
-      fragment_index: root_fragment_index,
-      base: ChildBase {
-        transform: Affine::IDENTITY,
-        paint_offset: Point::ZERO,
-      },
-      container_size,
-      state: PropertyState::default(),
-      context_id: 0,
-      stacking_id: 0,
-      line_clamp_float_clip: None,
-      parent_display: None,
-      is_root: true,
-    }];
+    // The first root fragment pops first, so its page paints first.
+    let mut visits: Vec<StackingContextBuildVisit> = roots
+      .iter()
+      .rev()
+      .map(
+        |&(fragment_index, paint_offset)| StackingContextBuildVisit {
+          path: Vec::new(),
+          node_id: NodeId::ROOT,
+          fragment_index,
+          base: ChildBase {
+            transform: Affine::translation(paint_offset.x, paint_offset.y),
+            paint_offset,
+          },
+          container_size,
+          state: PropertyState::default(),
+          context_id: 0,
+          stacking_id: 0,
+          line_clamp_float_clip: None,
+          parent_display: None,
+          is_root: true,
+        },
+      )
+      .collect();
 
     loop {
       // A table's collapsed borders follow every box inside it, once the last has been visited.
@@ -684,6 +689,10 @@ pub struct Scene {
   pub properties: PropertyTrees,
   /// The size it paints at: the viewport on a definite axis, the root's border box otherwise.
   pub size: Size<f32>,
+  /// Where the area it paints starts: the page a paged scene paints, the origin otherwise.
+  pub origin: Point<f32>,
+  /// The boxes it paints more than one fragment of, set up before each paints.
+  pub fragments: Option<FragmentPlacements>,
 }
 
 impl Scene {
@@ -725,6 +734,47 @@ impl Scene {
       contexts,
       properties,
       size,
+      origin: Point::ZERO,
+      fragments: None,
+    }
+  }
+}
+
+/// The boxes a scene placed, by child path, for a scene that paints several fragments of a box.
+pub struct FragmentPlacements(HashSet<Vec<usize>>);
+
+impl FragmentPlacements {
+  /// Sets the box `paint` paints, laid out at `location`, and the boxes of its content no other
+  /// paint places, to paint the fragment `paint` names, as [`set_paint_offsets`] sets them for
+  /// a scene with one fragment of each box.
+  pub fn enter(&self, root: &mut RenderNode, paint: &NodePaint, location: Point<f32>) {
+    let Some(node) = root.node_at_path_mut(&paint.path) else {
+      return;
+    };
+    let mut stack = vec![(node, paint.path.clone(), paint.paint_offset - location)];
+
+    while let Some((node, path, base)) = stack.pop() {
+      let own = if path == paint.path {
+        paint.paint_offset
+      } else {
+        base
+      };
+
+      node.context.paint_offset = base;
+      node.context.fragment_index = paint.fragment_index;
+      for (index, child) in node
+        .children
+        .iter_mut()
+        .flat_map(|children| children.iter_mut())
+        .enumerate()
+      {
+        let mut child_path = path.clone();
+
+        child_path.push(index);
+        if !self.0.contains(&child_path) {
+          stack.push((child, child_path, own));
+        }
+      }
     }
   }
 }
@@ -758,91 +808,61 @@ impl SceneLayers {
   }
 }
 
-/// A render tree laid out across pages, as Blink's paginated root lays a document out, with the
-/// stacking contexts of each page.
+/// A render tree laid out across pages, as Blink's paginated root lays a document out: one scene
+/// of every page's fragments stacked in page order, which paints a page by painting its area of
+/// it. Content overflowing its page paints on the next or the one before, as Blink paints each
+/// page from every fragment that reaches into it.
 #[cfg(feature = "fragmentation")]
 pub struct PagedScene {
-  /// The tree, its layout, and the page [`Self::page`] last set up.
   scene: Scene,
-  /// Each page's stacking contexts, the set-up page's held by `scene`.
-  pages: Vec<ScenePage>,
-  current: usize,
-}
-
-/// One page of a [`PagedScene`].
-#[cfg(feature = "fragmentation")]
-struct ScenePage {
-  layers: SceneLayers,
-  placements: HashMap<Vec<usize>, ScenePlacement>,
+  page_count: usize,
 }
 
 #[cfg(feature = "fragmentation")]
 impl PagedScene {
-  /// Lays `root` out on pages `page_size` and builds the scene of each.
+  /// Lays `root` out on pages `page_size` and builds the scene of them all.
   pub fn lay_out(root: RenderNode, page_size: Size<f32>, paint_bounds: bool) -> Result<Self> {
     root.clear_layout_caches();
     let (results, page_count) = LayoutResults::compute_pages(&root, page_size);
-    let mut pages = Vec::with_capacity(page_count);
-
-    for page in 0..page_count {
-      // A page the root starts after holds none of it.
-      let layers = match results.fragment_in(NodeId::ROOT, page) {
-        Some(root_fragment_index) => SceneRequest {
-          root: &root,
-          layout_results: &results,
-          container_size: page_size.map(Some),
-          paint_bounds,
-        }
-        .build_fragment(root_fragment_index)?,
-        None => SceneLayers {
-          contexts: vec![StackingContextNode::with_root(None)],
-          properties: PropertyTrees::default(),
-        },
-      };
-      let placements = layers.placements(&results);
-
-      pages.push(ScenePage { layers, placements });
+    // A page the root starts after holds none of it.
+    let roots: Vec<(usize, Point<f32>)> = (0..page_count)
+      .filter_map(|page| {
+        results
+          .fragment_in(NodeId::ROOT, page)
+          .map(|fragment_index| (fragment_index, Self::page_origin(page_size, page)))
+      })
+      .collect();
+    let layers = SceneRequest {
+      root: &root,
+      layout_results: &results,
+      container_size: page_size.map(Some),
+      paint_bounds,
     }
+    .build_fragments(&roots)?;
+    let placed = layers.placements(&results).into_keys().collect();
+    let mut scene = Scene::new(root, results, layers, page_size);
 
-    let mut paged = Self {
-      scene: Scene {
-        root,
-        results,
-        contexts: Vec::new(),
-        properties: PropertyTrees::default(),
-        size: page_size,
-      },
-      pages,
-      current: 0,
-    };
+    scene.fragments = Some(FragmentPlacements(placed));
+    Ok(Self { scene, page_count })
+  }
 
-    paged.swap_layers(0);
-    set_paint_offsets(&mut paged.scene.root, &paged.pages[0].placements);
-    Ok(paged)
+  /// Where page `page` starts in the scene: the pages stack in the block direction.
+  fn page_origin(page_size: Size<f32>, page: usize) -> Point<f32> {
+    Point {
+      x: 0.0,
+      y: page_size.height * page as f32,
+    }
   }
 
   /// The number of pages.
   pub fn page_count(&self) -> usize {
-    self.pages.len()
+    self.page_count
   }
 
-  /// The scene of page `index`, its boxes set up to paint their fragments on it.
+  /// The scene set to paint page `index`.
   pub fn page(&mut self, index: usize) -> &mut Scene {
-    if index != self.current {
-      self.swap_layers(self.current);
-      self.swap_layers(index);
-      self.current = index;
-      set_paint_offsets(&mut self.scene.root, &self.pages[index].placements);
-    }
+    self.scene.origin = Self::page_origin(self.scene.size, index);
     &mut self.scene
-  }
-
-  /// Swaps page `index`'s stacking contexts with those `scene` holds.
-  fn swap_layers(&mut self, index: usize) {
-    let layers = &mut self.pages[index].layers;
-
-    swap(&mut self.scene.contexts, &mut layers.contexts);
-    swap(&mut self.scene.properties, &mut layers.properties);
   }
 }
 

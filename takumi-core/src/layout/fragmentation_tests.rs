@@ -11,7 +11,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   resources::font::Fonts,
-  scene::{PagedScene, PaintItemKind},
+  scene::{NodePaint, PagedScene, PaintItemKind},
   style::{SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -215,7 +215,7 @@ fn lines_split_between_pages_as_widows_ask() {
 }
 
 #[test]
-fn each_page_paints_the_lines_its_fragment_holds() {
+fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
   let tree = render(
     root([
       block("a", "h140"),
@@ -237,36 +237,55 @@ fn each_page_paints_the_lines_its_fragment_holds() {
 
   assert_eq!(paged.page_count(), 2);
 
-  for (page, line_count) in [(0, 3), (1, 5), (0, 3)] {
-    let scene = paged.page(page);
-    let paint = scene
-      .contexts
+  let scene = paged.page(1);
+
+  assert_eq!(scene.origin, Point::new(0.0, 200.0));
+
+  let paints: Vec<NodePaint> = scene
+    .contexts
+    .iter()
+    .flat_map(|context| context.in_paint_order().into_iter().flatten())
+    .filter_map(|item| match &item.kind {
+      PaintItemKind::Node(paint)
+        if scene
+          .root
+          .node_at_path(&paint.path)
+          .and_then(|node| node.node.as_ref())
+          .and_then(|node| node.id())
+          == Some("p") =>
+      {
+        Some(paint.clone())
+      }
+      _ => None,
+    })
+    .collect();
+
+  // One scene paints both fragments, the second where the second page starts.
+  assert_eq!(
+    paints
       .iter()
-      .flat_map(|context| context.in_paint_order().into_iter().flatten())
-      .find_map(|item| match &item.kind {
-        PaintItemKind::Node(paint)
-          if scene
-            .root
-            .node_at_path(&paint.path)
-            .and_then(|node| node.node.as_ref())
-            .and_then(|node| node.id())
-            == Some("p") =>
-        {
-          Some(paint.clone())
-        }
-        _ => None,
-      })
-      .expect("the paragraph paints on every page");
-    let node = scene
-      .root
-      .node_at_path(&paint.path)
-      .expect("paragraph node");
+      .map(|paint| (paint.fragment_index, paint.paint_offset.y))
+      .collect::<Vec<_>>(),
+    [(0, 140.0), (1, 200.0)]
+  );
+
+  for (paint, line_count) in paints.iter().zip([3, 5]) {
     let layout = scene
       .results
       .fragment_layout(paint.node_id, paint.fragment_index)
       .expect("fragment layout");
+    let fragments = scene
+      .fragments
+      .as_ref()
+      .expect("a paged scene places fragments");
 
-    assert_eq!(paint.fragment_index, page);
+    fragments.enter(&mut scene.root, paint, layout.location);
+
+    let node = scene
+      .root
+      .node_at_path(&paint.path)
+      .expect("paragraph node");
+
     assert_eq!(
       node
         .fragment_items_in(layout)
@@ -274,7 +293,8 @@ fn each_page_paints_the_lines_its_fragment_holds() {
         .line_boxes()
         .len(),
       line_count,
-      "page {page}"
+      "fragment {}",
+      paint.fragment_index
     );
   }
 }

@@ -908,6 +908,7 @@ css/css-break/box-decoration-break-clone-013.html
 css/css-break/box-decoration-break-clone-inline-001.html
 css/css-break/box-decoration-break-clone-split-inline.html
 css/css-break/break-inside-avoid-multicol-iframe-crash-print.html
+css/css-break/break-nested-float-in-table-001-print.html
 css/css-break/contain-strict-with-opacity-and-oof.html
 css/css-break/flexbox/flex-container-fragmentation-008.html
 css/css-break/flexbox/flex-container-fragmentation-009.html
@@ -992,6 +993,7 @@ css/css-break/table/table-grid-paint-vlr-rtl.html
 css/css-break/table/table-grid-paint-vrl-rtl.html
 css/css-break/transform-017.html
 css/css-break/transform-023-print.html
+css/css-break/underflow-from-next-page-print.html
 css/css-break/widows-block-in-inline-001.html
 css/css-break/widows-orphans-001.html
 css/css-break/widows-orphans-002.html
@@ -1133,8 +1135,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/baseline-synthesis-003.html
 !css/css-flexbox/baseline-synthesis-004.html
 !css/css-flexbox/baseline-synthesis-vert-lr-line-under.html
-!css/css-flexbox/break-nested-float-in-flex-item-001-print.html
-!css/css-flexbox/break-nested-float-in-flex-item-002-print.html
 !css/css-flexbox/canvas-contain-size.html
 !css/css-flexbox/content-height-with-scrollbars.html
 !css/css-flexbox/cross-axis-scrollbar.html
