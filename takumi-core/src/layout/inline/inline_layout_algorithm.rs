@@ -285,7 +285,6 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     // The layout opportunities count the floats ahead of any content.
     self.position_leading_floats(&mut initial_exclusion_space, &mut leading_floats);
 
-    // The line's block offset, unset on the fragment until the line proves not empty.
     let mut bfc_block_offset = space
       .forced_bfc_block_offset
       .unwrap_or(space.bfc_offset.block_offset + space.margin_strut.sum());
