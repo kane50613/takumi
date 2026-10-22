@@ -285,7 +285,14 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     // The layout opportunities count the floats ahead of any content.
     self.position_leading_floats(&mut initial_exclusion_space, &mut leading_floats);
 
-    let bfc_block_offset = space.bfc_offset.block_offset;
+    let mut bfc_block_offset = space
+      .forced_bfc_block_offset
+      .unwrap_or(space.bfc_offset.block_offset + space.margin_strut.sum());
+
+    if space.has_clearance_offset() && bfc_block_offset < space.clearance_offset {
+      bfc_block_offset = space.clearance_offset;
+    }
+
     let opportunities = initial_exclusion_space.all_layout_opportunities(
       BfcOffset::new(space.bfc_offset.line_offset, bfc_block_offset),
       space.inline_size(),
@@ -794,7 +801,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let origin_bfc_block_offset = opportunity.bfc_block_offset + metrics.line_height();
     let bfc_line_offset = self.container_builder.bfc_line_offset;
     let bfc_block_offset = if line_info.is_empty_line {
-      space.bfc_offset.block_offset
+      space.expected_bfc_block_offset()
     } else {
       line_info.bfc_offset.block_offset
     };
@@ -897,7 +904,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         // An empty line's block offset is the expected one.
         leading_floats.floats.push(Self::position_float(
           self.constraint_space,
-          self.constraint_space.bfc_offset.block_offset,
+          self.constraint_space.expected_bfc_block_offset(),
           object.node(),
           exclusion_space,
           &mut *self.atomic_inline,
@@ -1085,7 +1092,13 @@ impl<'c> InlineNode<'c> {
         LayoutUnit::ZERO
       };
 
-      space.bfc_offset.block_offset = position + margin_offset;
+      space.bfc_offset.block_offset = position;
+      space.margin_strut = if is_bfc_block_offset_resolved {
+        margin_strut
+      } else {
+        MarginStrut::default()
+      };
+      space.optimistic_bfc_block_offset = Some(position + margin_offset);
 
       let mut line = InlineLayoutAlgorithm::new(
         self,
@@ -1098,7 +1111,7 @@ impl<'c> InlineNode<'c> {
       )
       .layout();
 
-      line.static_bfc_block_offset = space.bfc_offset.block_offset;
+      line.static_bfc_block_offset = position + margin_offset;
       exclusion_space = line.exclusion_space.clone();
       break_token = line.break_token;
       space.lines_until_clamp = line.lines_until_clamp;
