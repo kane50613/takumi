@@ -6,7 +6,7 @@
 
 use crate::{
   layout::{
-    flex::flex_layout_algorithm::{ContentAlignment, ContentDistribution, ContentPosition},
+    content_alignment::{ContentAlignment, ContentDistribution, ContentPosition},
     grid::{
       grid_item::GridItemData,
       grid_style::GridTrackSizingDirection,
