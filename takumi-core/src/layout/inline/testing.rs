@@ -44,10 +44,16 @@ impl<'c> AtomicInlineLayout<'c> for TestAtomicInline {
     }
   }
 
-  fn layout_float(&mut self, node: &'c RenderNode, space: &ConstraintSpace) -> Rc<BoxLayoutResult> {
+  fn layout_float(
+    &mut self,
+    node: &'c RenderNode,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> Rc<BoxLayoutResult> {
     let mut tree = LayoutTree::from_render_node(node);
 
-    BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent)).layout_float(node, space)
+    BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent))
+      .layout_float(node, space, input)
   }
 
   fn layout_block_in_inline(

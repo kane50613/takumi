@@ -221,12 +221,22 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
           self.has_out_of_flow_positioned_items = true;
         }
         InlineItemType::Floating => {
-          line_box.add_child(match &item_result.positioned_float {
+          // A float the page pushed to the next one is not on this line.
+          match &item_result.positioned_float {
+            Some(positioned_float) if positioned_float.is_pushed_to_next_page() => {}
             Some(positioned_float) => {
-              LogicalLineItem::positioned_float(item, positioned_float.clone())
+              line_box.add_child(LogicalLineItem::positioned_float(
+                item,
+                positioned_float.clone(),
+              ));
             }
-            None => LogicalLineItem::unpositioned_float(item),
-          });
+            None => {
+              line_box.add_child(LogicalLineItem::unpositioned_float(
+                item,
+                item_result.start(),
+              ));
+            }
+          }
           self.has_floating_items = true;
           self.has_relative_positioned_items |= is_relative_positioned(item);
         }

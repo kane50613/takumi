@@ -1,6 +1,6 @@
 //! Blink's [`LineBreaker`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/line_breaker.cc),
 //! without ruby, SVG text, initial letters, `text-combine-upright`, hyphenation dictionaries,
-//! `word-break: auto-phrase`, floats that break across pages, or `::first-line`.
+//! `word-break: auto-phrase`, or `::first-line`.
 
 use std::rc::Rc;
 
@@ -119,8 +119,24 @@ pub(crate) trait AtomicInlineLayout<'c> {
   /// The box laid out in the line's available space.
   fn layout(&mut self, node: &'c RenderNode) -> LayoutResult;
 
-  /// The float laid out in `space`, which Blink's `CreateConstraintSpaceForFloat` builds.
-  fn layout_float(&mut self, node: &'c RenderNode, space: &ConstraintSpace) -> Rc<BoxLayoutResult>;
+  /// The float laid out in `space`, which Blink's `CreateConstraintSpaceForFloat` builds, resumed
+  /// as `input` says.
+  fn layout_float(
+    &mut self,
+    node: &'c RenderNode,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> Rc<BoxLayoutResult>;
+
+  /// Gives a float of a line laid out in `space` the pages it breaks across, resumed as `input`
+  /// says. Nothing breaks by default.
+  fn setup_float_for_fragmentation(
+    &mut self,
+    _unpositioned_float: &mut UnpositionedFloat<'c>,
+    _space: &ConstraintSpace,
+    _input: &FragmentationLayoutInput,
+  ) {
+  }
 
   /// The block-in-inline laid out in its line's `space`, resumed as `input` says, as Blink's
   /// `BlockNode::Layout`.
@@ -977,7 +993,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
           continue;
         }
         InlineItemType::Floating => {
-          self.handle_float(item_index, line_info);
+          self.handle_float(item_index, FragmentationLayoutInput::default(), line_info);
 
           continue;
         }
@@ -2564,11 +2580,17 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   fn should_push_float_after_line(
     &mut self,
     unpositioned_float: &mut UnpositionedFloat<'c>,
+    input: &FragmentationLayoutInput,
     line_info: &mut LineInfo<'a, 'c>,
   ) -> bool {
+    // A float resumed after a break goes where its line starts.
+    if !input.is_fresh() {
+      return false;
+    }
+
     let inline_margin_size = compute_margin_box_inline_size_for_unpositioned_float(
       unpositioned_float,
-      &mut |node, space| self.atomic_inline.layout_float(node, space),
+      &mut |node, space| self.atomic_inline.layout_float(node, space, input),
     );
     let used_size = self.position
       + inline_margin_size
@@ -2618,9 +2640,15 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
   /// Blink's `HandleFloat`: places the float on this line when it fits, and narrows the line by
   /// it; otherwise it goes below the line.
-  fn handle_float(&mut self, item_index: usize, line_info: &mut LineInfo<'a, 'c>) {
+  fn handle_float(
+    &mut self,
+    item_index: usize,
+    input: FragmentationLayoutInput,
+    line_info: &mut LineInfo<'a, 'c>,
+  ) {
     let item = &self.items()[item_index];
     let result_index = self.add_item(item_index, line_info);
+    let index_before_float = self.current;
     let item_result = &mut line_info.results[result_index];
 
     // Out-of-flow boxes take no part in text processing.
@@ -2643,11 +2671,17 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     if self.current.item_index <= self.leading_floats.handled_index
       && !self.leading_floats.floats.is_empty()
     {
-      let positioned_float = self.leading_floats.floats[self.leading_floats_index].clone();
+      let leading_float = self.leading_floats.floats[self.leading_floats_index].clone();
+
+      #[cfg(feature = "fragmentation")]
+      line_info
+        .parallel_flow_break_tokens
+        .extend(leading_float.parallel_flow_break_token);
+
       let item_result = &mut line_info.results[result_index];
 
       self.leading_floats_index += 1;
-      item_result.positioned_float = Some(positioned_float);
+      item_result.positioned_float = Some(leading_float.positioned_float);
       // Kept even though a leading float leaves the space as it is; see `rewind_floats`.
       item_result.exclusion_space_before_position_float = Some(self.exclusion_space.clone());
 
@@ -2657,17 +2691,15 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     let Some(object) = item.layout_object else {
       return;
     };
-    let mut unpositioned_float = UnpositionedFloat::new(
+    let mut unpositioned_float = UnpositionedFloat::in_line(
       object.node(),
-      self.constraint_space.available_and_percentage_sizes(),
-      BfcOffset::new(
-        self.constraint_space.bfc_offset.line_offset,
-        self.line_opportunity.bfc_block_offset,
-      ),
       &self.constraint_space,
-      self.constraint_space.line_clamp_data.float_state(),
+      self.line_opportunity.bfc_block_offset,
+      &input,
+      &mut *self.atomic_inline,
     );
-    let float_after_line = self.should_push_float_after_line(&mut unpositioned_float, line_info);
+    let float_after_line =
+      self.should_push_float_after_line(&mut unpositioned_float, &input, line_info);
 
     // A float sits no higher than one before it.
     if line_info.results[result_index].has_unpositioned_floats || float_after_line {
@@ -2680,13 +2712,20 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     let positioned_float = position_float(
       &mut unpositioned_float,
       self.exclusion_space,
-      &mut |node, space| self.atomic_inline.layout_float(node, space),
+      &mut |node, space| self.atomic_inline.layout_float(node, space, &input),
     );
+    let is_pushed_to_next_page = positioned_float.is_pushed_to_next_page();
+
+    line_info.propagate_float_break(&positioned_float, index_before_float);
+
     let item_result = &mut line_info.results[result_index];
 
     item_result.exclusion_space_before_position_float = Some(exclusion_space_before);
     item_result.positioned_float = Some(positioned_float);
-    self.update_line_opportunity();
+    // A float the page pushed to the next one leaves this line as wide as it was.
+    if !is_pushed_to_next_page {
+      self.update_line_opportunity();
+    }
   }
 
   /// Blink's `ComputeFloatOffset`: how far the floats on the line's start side move it from the
@@ -2736,13 +2775,19 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   }
 
   /// Blink's `RewindFloats`: the exclusion space before the first float in the rewound results.
-  fn rewind_floats(&mut self, new_end: usize, line_info: &LineInfo<'a, 'c>) {
+  fn rewind_floats(&mut self, new_end: usize, line_info: &mut LineInfo<'a, 'c>) {
     let Some(item_result) = line_info.results[new_end..]
       .iter()
       .find(|result| result.positioned_float.is_some())
     else {
       return;
     };
+
+    // Blink's `RemoveParallelFlowBreakToken`: the floats rewound resume nowhere.
+    #[cfg(feature = "fragmentation")]
+    line_info
+      .parallel_flow_break_tokens
+      .retain(|token| token.start.item_index < item_result.item_index);
 
     // A leading float is handed out again.
     if item_result.item_index < self.leading_floats.handled_index
@@ -2752,7 +2797,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
           .as_ref()
           .is_some_and(|positioned_float| {
             Rc::ptr_eq(
-              &leading_float.layout_result,
+              &leading_float.positioned_float.layout_result,
               &positioned_float.layout_result,
             )
           })
@@ -3851,8 +3896,8 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 /// The block fragmentation of blocks-in-inline, which breaks them inside their line.
 #[cfg(feature = "fragmentation")]
 impl<'a, 'c> LineBreaker<'a, '_, 'c> {
-  /// Blink's `NextLine` for a break token in a parallel flow: the line resumes the
-  /// block-in-inline whose content overflowed, and holds nothing else.
+  /// Blink's `NextLine` for a break token in a parallel flow: the line resumes the float or the
+  /// block-in-inline a page broke, and holds nothing else.
   fn resumes_parallel_flow(&mut self, line_info: &mut LineInfo<'a, 'c>) -> bool {
     let Some(block_break_token) = self
       .break_token
@@ -3867,8 +3912,13 @@ impl<'a, 'c> LineBreaker<'a, '_, 'c> {
       break_token: Some(block_break_token),
       early_break: None,
     };
+    let item_index = self.current.item_index;
 
-    self.handle_block_in_inline(self.current.item_index, input, line_info);
+    if self.items()[item_index].item_type == InlineItemType::Floating {
+      self.handle_float(item_index, input, line_info);
+    } else {
+      self.handle_block_in_inline(item_index, input, line_info);
+    }
     self.state = LineBreakState::Done;
     line_info.is_empty_line = true;
     true

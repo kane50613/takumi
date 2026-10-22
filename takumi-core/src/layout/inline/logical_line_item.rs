@@ -9,6 +9,7 @@ use std::{
 use super::{
   inline_item::{InlineItem, LayoutObject},
   inline_item_result::{InlineItemResult, LayoutResult, LineBoxStrut},
+  inline_item_text_index::InlineItemTextIndex,
   text_fit_scale::TextFitScale,
 };
 use crate::{
@@ -102,7 +103,8 @@ pub(crate) struct LogicalLineItem<'a, 'c> {
   /// The box an ellipsis belongs to, which has no item.
   pub(crate) layout_object: Option<LayoutObject<'c>>,
   pub(crate) out_of_flow_positioned_box: Option<&'c RenderNode>,
-  pub(crate) unpositioned_float: Option<&'c RenderNode>,
+  /// A float the line places after it, and where its item starts.
+  pub(crate) unpositioned_float: Option<(&'c RenderNode, InlineItemTextIndex)>,
   /// The border box, at first in this child's own coordinates; `ComputeInlinePositions` makes it
   /// the line box's.
   pub(crate) rect: LogicalRect,
@@ -322,9 +324,14 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
   }
 
   /// Blink's `UnpositionedFloat`.
-  pub(crate) fn unpositioned_float(inline_item: &InlineItem<'c>) -> Self {
+  pub(crate) fn unpositioned_float(
+    inline_item: &InlineItem<'c>,
+    start: InlineItemTextIndex,
+  ) -> Self {
     Self {
-      unpositioned_float: inline_item.layout_object.map(LayoutObject::node),
+      unpositioned_float: inline_item
+        .layout_object
+        .map(|layout_object| (layout_object.node(), start)),
       bidi_level: inline_item.bidi_level(),
       ..Self::default()
     }

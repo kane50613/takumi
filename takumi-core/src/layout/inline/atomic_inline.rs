@@ -6,6 +6,9 @@
 
 use std::rc::Rc;
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::floats_utils::{FloatFragmentation, UnpositionedFloat};
+
 use super::{
   inline_item_result::{CollapsedMargins, LayoutResult},
   line_breaker::AtomicInlineLayout,
@@ -110,10 +113,35 @@ impl<'r> AtomicInlineLayout<'r> for BoxAtomicInline<'_, 'r> {
     &mut self,
     render_node: &'r RenderNode,
     space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
   ) -> Rc<BoxLayoutResult> {
     let node = self.tree.atomic_inline_node(render_node);
 
-    self.tree.layout(node, space)
+    self.tree.layout_fragment(node, space, input)
+  }
+
+  #[cfg(feature = "fragmentation")]
+  fn setup_float_for_fragmentation(
+    &mut self,
+    unpositioned_float: &mut UnpositionedFloat<'r>,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) {
+    let Some(block_fragmentation) = space.block_fragmentation else {
+      return;
+    };
+    let node = self.tree.atomic_inline_node(unpositioned_float.node);
+
+    unpositioned_float.fragmentation = Some(FloatFragmentation {
+      node,
+      style: Rc::clone(self.tree.layout_style_rc(node)),
+      break_token: input.break_token.clone(),
+      fragmentainer_block_size: block_fragmentation.fragmentainer_block_size,
+      fragmentainer_offset_at_bfc: block_fragmentation.fragmentainer_offset
+        - space.expected_bfc_block_offset(),
+      min_break_appeal: space.min_break_appeal(),
+      is_monolithic: self.tree.is_monolithic(node),
+    });
   }
 
   fn layout_block_in_inline(

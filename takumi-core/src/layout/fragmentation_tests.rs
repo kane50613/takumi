@@ -800,6 +800,34 @@ fn a_block_in_inline_whose_content_overflows_resumes_in_a_parallel_flow() {
 }
 
 #[test]
+fn a_float_among_lines_breaks_across_pages() {
+  let paragraph = Node::container([block("float", "float h300"), Node::text("a")])
+    .with_tag_name("p")
+    .with_id("p");
+  let tree = render(root([paragraph]), FLOAT_CSS);
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(
+    boxes["float"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+}
+
+#[test]
+fn a_float_among_lines_that_avoids_breaking_moves_to_the_next_page_alone() {
+  let paragraph = Node::container([block("float", "float h80 avoid"), Node::text("x")])
+    .with_tag_name("p")
+    .with_id("p");
+  let tree = render(root([block("a", "h150"), paragraph]), FLOAT_CSS);
+  let (boxes, _) = pages(&tree, 200.0);
+
+  assert_eq!(boxes["float"], [placed(1, 0.0, 80.0)]);
+  // The float flows in parallel, so the line beside it stays on the first page.
+  assert_eq!(boxes["p"][0], placed(0, 150.0, 20.0));
+}
+
+#[test]
 fn a_fixed_box_repeats_on_the_pages_an_absolute_box_adds() {
   let body =
     Node::container([block("fixed", "fixed"), block("abs", "abs")]).with_class_name("block");

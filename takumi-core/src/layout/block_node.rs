@@ -428,13 +428,15 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Blink's `LayoutBox::IsMonolithic` when printing: replaced content, an atomic inline, or a
-  /// line-clamp container, which no page break splits.
+  /// line-clamp container, which no page break splits. A float or a block-in-inline of inline
+  /// content is laid out as an atomic inline, but is not one.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn is_monolithic(&self, node: NodeId) -> bool {
     let state = self.node_state(node);
+    let style = &state.layout_style;
 
-    state.layout_style.is_replaced
-      || state.is_atomic_inline
+    style.is_replaced
+      || (state.is_atomic_inline && style.display.is_inline_level() && !style.is_floating())
       || self.render_node(node).context.style.line_clamp().is_some()
   }
 
