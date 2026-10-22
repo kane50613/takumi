@@ -199,7 +199,39 @@ impl LayoutResults {
 
   /// Computed layout of a node.
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
-    self.node(node_id).map(|node| node.fragments[0].layout)
+    self.fragment_layout(node_id, 0)
+  }
+
+  /// Computed layout of a node's fragment `fragment_index`.
+  pub fn fragment_layout(
+    &self,
+    node_id: NodeId,
+    fragment_index: usize,
+  ) -> crate::Result<ComputedLayout> {
+    self
+      .node(node_id)?
+      .fragments
+      .get(fragment_index)
+      .map(|fragment| fragment.layout)
+      .ok_or(Error::InvalidLayoutNode(node_id.into()))
+  }
+
+  /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds, none when
+  /// it holds none.
+  pub(crate) fn fragment_in(
+    &self,
+    node_id: NodeId,
+    container_fragment_index: usize,
+  ) -> Option<usize> {
+    #[cfg(feature = "fragmentation")]
+    return self
+      .node(node_id)
+      .ok()?
+      .fragments
+      .iter()
+      .position(|fragment| fragment.container_fragment_index == container_fragment_index);
+    #[cfg(not(feature = "fragmentation"))]
+    return (self.node(node_id).is_ok() && container_fragment_index == 0).then_some(0);
   }
 
   /// Paint-ordered children of a node.
@@ -504,14 +536,20 @@ impl Drop for RenderNode {
   }
 }
 
-/// The fragment items a node's inline content last laid out to. They belong to that node, so a
-/// clone, which may change its style or content, starts without them.
+/// The fragment items a node's inline content last laid out to, by fragment index. They belong to
+/// that node, so a clone, which may change its style or content, starts without them.
 #[derive(Default)]
-pub(crate) struct FragmentItemsCache(RefCell<Option<Rc<FragmentItems>>>);
+pub(crate) struct FragmentItemsCache(RefCell<SmallVec<[Option<Rc<FragmentItems>>; 1]>>);
 
 impl FragmentItemsCache {
-  pub(crate) fn keep(&self, items: Rc<FragmentItems>) {
-    self.0.replace(Some(items));
+  /// Keeps `items` as fragment `fragment_index`'s.
+  pub(crate) fn keep(&self, fragment_index: usize, items: Rc<FragmentItems>) {
+    let mut fragments = self.0.borrow_mut();
+
+    if fragments.len() <= fragment_index {
+      fragments.resize(fragment_index + 1, None);
+    }
+    fragments[fragment_index] = Some(items);
   }
 }
 
@@ -1288,13 +1326,24 @@ impl RenderNode {
     count
   }
 
-  /// The fragment items its inline content laid out to in the content box of `layout`, if it
-  /// laid out there last.
+  /// The fragment items the fragment its scene paints laid out to in the content box of `layout`,
+  /// if that fragment laid out there last.
   pub(crate) fn fragment_items_in(&self, layout: ComputedLayout) -> Option<Rc<FragmentItems>> {
+    self.fragment_items_of(self.context.fragment_index, layout)
+  }
+
+  /// The fragment items fragment `fragment_index` laid out to in the content box of `layout`, if
+  /// that fragment laid out there last.
+  pub(crate) fn fragment_items_of(
+    &self,
+    fragment_index: usize,
+    layout: ComputedLayout,
+  ) -> Option<Rc<FragmentItems>> {
     self
       .fragment_items
       .0
       .borrow()
+      .get(fragment_index)?
       .as_ref()
       .filter(|items| items.content_box == ContentBox::of(layout))
       .map(Rc::clone)
@@ -1306,7 +1355,7 @@ impl RenderNode {
     let mut stack = vec![self];
 
     while let Some(node) = stack.pop() {
-      node.fragment_items.0.take();
+      node.fragment_items.0.borrow_mut().clear();
       node.item_shapes.clear();
       stack.extend(node.children.iter().flatten());
     }

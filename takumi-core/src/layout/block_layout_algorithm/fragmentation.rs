@@ -48,6 +48,11 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     is_break_inside(self.input.break_token.as_deref())
   }
 
+  /// Blink's `FragmentIndex` of the box's fragment this layout makes.
+  pub(super) fn fragment_index(&self) -> usize {
+    fragment_index(self.input.break_token.as_deref())
+  }
+
   /// Blink's `SetupFragmentBuilderForFragmentation`, and the early break the constructor keeps.
   pub(super) fn setup_fragment_builder_for_fragmentation(&mut self) {
     let previous_break_token = self.input.break_token.clone();

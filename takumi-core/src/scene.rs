@@ -31,6 +31,8 @@ pub struct NodePaint {
   pub path: Vec<usize>,
   /// Layout id of the node.
   pub node_id: NodeId,
+  /// Which of the node's fragments it paints.
+  pub fragment_index: usize,
   /// Accumulated transform applied when painting.
   pub transform: Affine,
   /// Blink's paint offset of the border box: where it sits in the space paint snaps to pixels in.
@@ -291,6 +293,7 @@ struct ChildBase {
 struct StackingContextBuildVisit {
   path: Vec<usize>,
   node_id: NodeId,
+  fragment_index: usize,
   base: ChildBase,
   container_size: Size<Option<f32>>,
   /// The clip and effect the box starts from: its parent's contents state, with the clip of its
@@ -369,6 +372,7 @@ impl SceneRequest<'_> {
     let mut visits = vec![StackingContextBuildVisit {
       path: Vec::new(),
       node_id: NodeId::ROOT,
+      fragment_index: 0,
       base: ChildBase {
         transform: Affine::IDENTITY,
         paint_offset: Point::ZERO,
@@ -408,7 +412,7 @@ impl SceneRequest<'_> {
       let Some(current) = root.node_at_path(&visit.path) else {
         return Err(Error::InvalidLayoutNode(visit.node_id.into()));
       };
-      let layout = layout_results.layout(visit.node_id)?;
+      let layout = layout_results.fragment_layout(visit.node_id, visit.fragment_index)?;
       if current.context.style.is_invisible() || layout_results.is_hidden_for_paint(visit.node_id) {
         continue;
       }
@@ -463,11 +467,14 @@ impl SceneRequest<'_> {
       let node_paint = NodePaint {
         path: visit.path.clone(),
         node_id: visit.node_id,
+        fragment_index: visit.fragment_index,
         transform: current_transform,
         paint_offset: child_base.paint_offset,
         container_size: visit.container_size,
         paint_bounds: with_bounds
-          .then(|| compute_node_paint_bounds(current, layout, current_transform))
+          .then(|| {
+            compute_node_paint_bounds(current, visit.fragment_index, layout, current_transform)
+          })
           .flatten(),
         properties: node_properties,
       };
@@ -553,6 +560,11 @@ impl SceneRequest<'_> {
       containing_blocks.record_content_box(visit.node_id, child_container_size);
 
       for child in layout_children.iter().rev() {
+        let Some(child_fragment_index) =
+          layout_results.fragment_in(child.node_id, visit.fragment_index)
+        else {
+          continue;
+        };
         let mut child_path = visit.path.clone();
         child.extend_path(&mut child_path);
         let (base, base_container) =
@@ -568,6 +580,7 @@ impl SceneRequest<'_> {
         visits.push(StackingContextBuildVisit {
           path: child_path,
           node_id: child.node_id,
+          fragment_index: child_fragment_index,
           base,
           container_size: base_container,
           state: PropertyState {
@@ -700,8 +713,15 @@ impl Scene {
       });
 
       for paint in context.root.iter().chain(paints) {
-        if let Ok(layout) = results.layout(paint.node_id) {
-          offsets.insert(paint.path.clone(), (paint.paint_offset, layout.location));
+        if let Ok(layout) = results.fragment_layout(paint.node_id, paint.fragment_index) {
+          offsets.insert(
+            paint.path.clone(),
+            ScenePlacement {
+              paint_offset: paint.paint_offset,
+              location: layout.location,
+              fragment_index: paint.fragment_index,
+            },
+          );
         }
       }
     }
@@ -717,17 +737,24 @@ impl Scene {
   }
 }
 
-/// Sets the context of each box under `root` to the paint offset its layout location adds to:
-/// from `offsets`, keyed by child path, for a box the scene placed, else the offset of the box
-/// whose inline content it paints in.
-fn set_paint_offsets(
-  root: &mut RenderNode,
-  offsets: &HashMap<Vec<usize>, (Point<f32>, Point<f32>)>,
-) {
-  let mut path = Vec::new();
-  let mut stack = vec![(root, OffsetSlot::Root, Point::ZERO)];
+/// Where a scene placed a box.
+#[derive(Clone, Copy)]
+struct ScenePlacement {
+  /// Blink's paint offset of the border box.
+  paint_offset: Point<f32>,
+  /// The layout location the paint offset adds to.
+  location: Point<f32>,
+  fragment_index: usize,
+}
 
-  while let Some((node, slot, inherited)) = stack.pop() {
+/// Sets the context of each box under `root` to the paint offset its layout location adds to and
+/// the fragment it paints: from `offsets`, keyed by child path, for a box the scene placed, else
+/// those of the box whose inline content it paints in.
+fn set_paint_offsets(root: &mut RenderNode, offsets: &HashMap<Vec<usize>, ScenePlacement>) {
+  let mut path = Vec::new();
+  let mut stack = vec![(root, OffsetSlot::Root, Point::ZERO, 0)];
+
+  while let Some((node, slot, inherited, inherited_fragment_index)) = stack.pop() {
     let placed = match slot {
       OffsetSlot::Root => offsets.get(path.as_slice()),
       OffsetSlot::Child { depth, index } => {
@@ -736,26 +763,30 @@ fn set_paint_offsets(
         offsets.get(path.as_slice())
       }
     };
-    let (base, own) = match placed {
-      Some(&(own, location)) => (
-        Point {
-          x: own.x - location.x,
-          y: own.y - location.y,
-        },
-        own,
+    let (base, own, fragment_index) = match placed {
+      Some(placement) => (
+        placement.paint_offset - placement.location,
+        placement.paint_offset,
+        placement.fragment_index,
       ),
-      None => (inherited, inherited),
+      None => (inherited, inherited, inherited_fragment_index),
     };
     let depth = path.len();
 
     node.context.paint_offset = base;
+    node.context.fragment_index = fragment_index;
     for (index, child) in node
       .children
       .iter_mut()
       .flat_map(|children| children.iter_mut())
       .enumerate()
     {
-      stack.push((child, OffsetSlot::Child { depth, index }, own));
+      stack.push((
+        child,
+        OffsetSlot::Child { depth, index },
+        own,
+        fragment_index,
+      ));
     }
   }
 }
@@ -889,6 +920,7 @@ fn outset_bounds(
 
 fn compute_node_paint_bounds(
   node: &RenderNode,
+  fragment_index: usize,
   layout: ComputedLayout,
   transform: Affine,
 ) -> Option<SceneBounds> {
@@ -909,7 +941,7 @@ fn compute_node_paint_bounds(
   let content_offset = layout.content_box_offset();
   let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
 
-  let Some(items) = node.fragment_items_in(layout) else {
+  let Some(items) = node.fragment_items_of(fragment_index, layout) else {
     return bounds;
   };
   let placed = |ink: Option<InkBox>, transform| {

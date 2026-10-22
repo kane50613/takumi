@@ -12,10 +12,7 @@ mod fragmentation;
 use std::{mem::take, rc::Rc};
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::{
-  block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder,
-  fragmentation_utils::fragment_index,
-};
+use crate::layout::{block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder};
 
 use crate::{
   context::RenderContext,
@@ -726,7 +723,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let mut result = LayoutResult::of_box(size, &self.style, space);
 
     if self.tree.has_inline_children(self.node) {
-      let candidates = self.tree.finish_inline_content(self.node, &result, space);
+      let candidates =
+        self
+          .tree
+          .finish_inline_content(self.node, self.fragment_index(), &result, space);
 
       self.out_of_flow.extend(candidates);
     }
@@ -827,7 +827,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
 
     #[cfg(feature = "fragmentation")]
-    let container_fragment_index = fragment_index(self.input.break_token.as_deref());
+    let container_fragment_index = self.fragment_index();
 
     for child in take(&mut self.children) {
       self.tree.place_child(
@@ -2105,6 +2105,10 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   fn is_resuming(&self) -> bool {
     false
+  }
+
+  fn fragment_index(&self) -> usize {
+    0
   }
 
   fn start_fragment(&mut self, _previous: &mut PreviousInflowPosition) {}

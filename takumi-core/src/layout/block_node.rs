@@ -532,6 +532,7 @@ impl<'r> LayoutTree<'r> {
   pub(crate) fn finish_inline_content(
     &mut self,
     node: NodeId,
+    fragment_index: usize,
     result: &LayoutResult,
     space: &ConstraintSpace,
   ) -> Vec<OutOfFlowCandidate> {
@@ -545,7 +546,7 @@ impl<'r> LayoutTree<'r> {
     if let Some(items) = inline_content.fragment_items {
       render_node
         .fragment_items
-        .keep(Rc::new(items.in_content_box_of(layout)));
+        .keep(fragment_index, Rc::new(items.in_content_box_of(layout)));
     }
 
     let containers = self.inline_containers_of(&boxes);
@@ -572,6 +573,10 @@ impl<'r> LayoutTree<'r> {
         let tree = &mut *atomic_inline.tree;
 
         tree.place_child(child, 0, location, &child_result);
+        #[cfg(feature = "fragmentation")]
+        {
+          tree.node_state_mut(child).fragments[0].container_fragment_index = fragment_index;
+        }
         if let Some(path) = render_node.inline_child_path(child_render_node) {
           tree.add_inline_box_child(node, child, &path);
         }

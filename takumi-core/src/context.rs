@@ -88,6 +88,7 @@ impl From<RenderContextInit> for RenderContext {
       sizing: init.sizing,
       transform: init.transform,
       paint_offset: Point::ZERO,
+      fragment_index: 0,
       current_color: init.current_color,
       style: init.style,
       text_decorations: AppliedTextDecorations::default(),
@@ -108,6 +109,9 @@ pub struct RenderContext {
   /// Blink's paint offset of the space the box's layout location is measured in: where that space
   /// sits in the space Blink snaps paint to pixels in.
   pub paint_offset: Point<f32>,
+  /// Which of the box's fragments the scene last set up paints, as [`Self::paint_offset`] is
+  /// that scene's.
+  pub(crate) fragment_index: usize,
   /// What the `currentColor` value is resolved to.
   pub current_color: Color,
   /// The style after inheritance.
@@ -202,6 +206,7 @@ impl RenderContext {
       sizing: parent.sizing.clone(),
       transform: parent.transform,
       paint_offset: parent.paint_offset,
+      fragment_index: parent.fragment_index,
       current_color: parent.current_color,
       style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
@@ -228,6 +233,7 @@ impl RenderContext {
       sizing,
       transform: parent.transform,
       paint_offset: parent.paint_offset,
+      fragment_index: parent.fragment_index,
       current_color,
       style,
       collapsed_borders: false,
