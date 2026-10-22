@@ -457,7 +457,7 @@ impl GridTrackSizingAlgorithm {
     let free_space = || {
       let free_space = available_size - track_collection.total_track_size();
 
-      if alignment.is_safe {
+      if alignment.is_safe() {
         free_space.clamp_negative_to_zero()
       } else {
         free_space

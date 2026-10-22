@@ -165,15 +165,20 @@ mod tests {
     assert!(JustifyContent::from_css_str("self-start").is_err());
   }
 
-  /// The flow keywords align as `flex-start` and `flex-end`, whose used positions they are.
   #[test]
-  fn flow_positions_parse_as_flex_positions() {
+  fn content_positions_round_trip() {
     for (css, expected) in [
-      ("flow-start", JustifyContent::FlexStart),
-      ("flow-end", JustifyContent::FlexEnd),
-      ("safe flow-end", JustifyContent::SafeFlexEnd),
+      ("flow-start", JustifyContent::FlowStart),
+      ("flow-end", JustifyContent::FlowEnd),
+      ("safe flow-end", JustifyContent::SafeFlowEnd),
+      ("unsafe center", JustifyContent::UnsafeCenter),
+      ("unsafe flex-end", JustifyContent::UnsafeFlexEnd),
+      ("unsafe flow-start", JustifyContent::UnsafeFlowStart),
     ] {
-      assert_eq!(JustifyContent::from_css_str(css), Ok(expected), "{css}");
+      let parsed = JustifyContent::from_css_str(css).unwrap();
+
+      assert_eq!(parsed, expected, "{css}");
+      assert_eq!(parsed.to_css_string(), css);
     }
   }
 }

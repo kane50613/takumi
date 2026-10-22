@@ -16,6 +16,7 @@ use crate::{
     constraint_space::{
       AdjoiningObjectTypes, AutoSizeBehavior, BaselineAlgorithmType, CacheSlot, ConstraintSpace,
     },
+    content_alignment::BlockContentAlignment,
     exclusions::exclusion_space::ExclusionSpace,
     floats_utils::{Clear, Float, UnpositionedFloat, adjust_to_clearance, position_float},
     inline::{
@@ -47,7 +48,7 @@ use crate::{
     tree::LayoutTree,
   },
   layout_unit::LayoutUnit,
-  style::{AlignItems, Direction, JustifyContent, TextFitMode, TextFitTarget, TextWrapStyle},
+  style::{AlignItems, Direction, TextFitMode, TextFitTarget, TextWrapStyle},
 };
 
 /// Blink's `PreviousInflowPosition`.
@@ -645,20 +646,20 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   }
 
   /// Blink's `AlignBlockContent`: how far `align-content` moves the content of a box `block_size`
-  /// tall down, its children, out-of-flow boxes, and baselines moved with it. Approximate: takumi
-  /// parses no `unsafe` alignment, and Blink's block containers align safely by default.
+  /// tall down, its children, out-of-flow boxes, and baselines moved with it.
   fn align_block_content(&mut self, block_size: LayoutUnit) -> LayoutUnit {
     // Blink's `FinalizeTableCellLayout` aligns a cell by `vertical-align` instead.
     if self.space.is_table_cell {
       return LayoutUnit::ZERO;
     }
 
-    let free_space = (block_size - self.intrinsic_block_size).clamp_negative_to_zero();
-    let offset = match compute_content_alignment_for_block(self.style.align_content) {
-      BlockContentAlignment::Start => return LayoutUnit::ZERO,
-      BlockContentAlignment::Center => free_space / 2,
-      BlockContentAlignment::End => free_space,
-    };
+    let offset = BlockContentAlignment::for_block(self.style.align_content)
+      .offset(block_size - self.intrinsic_block_size);
+
+    if offset == LayoutUnit::ZERO {
+      return offset;
+    }
+
     let shift = Point::new(LayoutUnit::ZERO, offset);
 
     for child in &mut self.children {
@@ -1910,30 +1911,6 @@ fn calculate_out_of_flow_static_inline_level_offset(
   }
 
   inline_offset
-}
-
-/// Blink's `BlockContentAlignment`, the safe values alone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BlockContentAlignment {
-  Start,
-  Center,
-  End,
-}
-
-/// Blink's `ComputeContentAlignmentForBlock`: a distribution takes its fallback alignment, and
-/// `flex-start` and `flex-end` align as `start` and `end`.
-fn compute_content_alignment_for_block(align_content: JustifyContent) -> BlockContentAlignment {
-  match align_content {
-    JustifyContent::Center
-    | JustifyContent::SafeCenter
-    | JustifyContent::SpaceAround
-    | JustifyContent::SpaceEvenly => BlockContentAlignment::Center,
-    JustifyContent::End
-    | JustifyContent::SafeEnd
-    | JustifyContent::FlexEnd
-    | JustifyContent::SafeFlexEnd => BlockContentAlignment::End,
-    _ => BlockContentAlignment::Start,
-  }
 }
 
 /// Blink's `WebkitTextAlignAndJustifySelfOffset`, for `justify-self` alone.

@@ -27,6 +27,9 @@
         margin-top: 8px;
         background-color: rgb(59, 130, 246);
       }
+      .short {
+        height: 48px;
+      }
       .badge {
         display: inline-block;
         width: 48px;
@@ -45,6 +48,12 @@
       ><div class="box" style="align-content: space-around"
         >Space around wraps over two lines</div
       ></div
+    ><div class="row"
+      ><div class="box short" style="align-content: end">Safe end overflows downward</div
+      ><div class="box short" style="align-content: unsafe end">Unsafe end overflows upward</div
+      ><div class="box short" style="align-content: unsafe center"
+        >Unsafe center overflows both ways</div
+      ><div class="box short" style="align-content: flow-end">Flow end</div></div
     >
   </body>
 </html>

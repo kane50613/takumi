@@ -91,7 +91,7 @@ impl ContentAlignment {
       ContentDistribution::Stretch => return flow_start,
     }
 
-    if free_space <= LayoutUnit::ZERO && self.is_safe {
+    if free_space <= LayoutUnit::ZERO && self.is_safe() {
       return LayoutUnit::ZERO;
     }
 

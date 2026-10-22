@@ -914,16 +914,40 @@ pub enum JustifyContent {
   SafeFlexEnd,
   /// `safe center`: like `Center`, falling back to start-edge alignment on overflow.
   SafeCenter,
+  /// Items are packed toward the start of the flow: the main-start side in a flex container.
+  FlowStart,
+  /// Items are packed toward the end of the flow: the main-end side in a flex container.
+  FlowEnd,
+  /// `safe flow-start`.
+  SafeFlowStart,
+  /// `safe flow-end`.
+  SafeFlowEnd,
+  /// `unsafe start`.
+  UnsafeStart,
+  /// `unsafe end`: like `End`, overflowing past the start edge.
+  UnsafeEnd,
+  /// `unsafe flex-start`.
+  UnsafeFlexStart,
+  /// `unsafe flex-end`.
+  UnsafeFlexEnd,
+  /// `unsafe flow-start`.
+  UnsafeFlowStart,
+  /// `unsafe flow-end`.
+  UnsafeFlowEnd,
+  /// `unsafe center`: like `Center`, overflowing past both edges.
+  UnsafeCenter,
 }
 
 declare_box_alignment_enum_impl!(
   JustifyContent,
   safe {
-    "start" => Start / SafeStart,
-    "end" => End / SafeEnd,
-    "flex-start" => FlexStart / SafeFlexStart,
-    "flex-end" => FlexEnd / SafeFlexEnd,
-    "center" => Center / SafeCenter,
+    "start" => Start / SafeStart / UnsafeStart,
+    "end" => End / SafeEnd / UnsafeEnd,
+    "flex-start" => FlexStart / SafeFlexStart / UnsafeFlexStart,
+    "flex-end" => FlexEnd / SafeFlexEnd / UnsafeFlexEnd,
+    "flow-start" => FlowStart / SafeFlowStart / UnsafeFlowStart,
+    "flow-end" => FlowEnd / SafeFlowEnd / UnsafeFlowEnd,
+    "center" => Center / SafeCenter / UnsafeCenter,
   },
   plain {
     "normal" => Normal,
@@ -931,12 +955,6 @@ declare_box_alignment_enum_impl!(
     "space-between" => SpaceBetween,
     "space-around" => SpaceAround,
     "space-evenly" => SpaceEvenly,
-  },
-  // Blink's `GetUsedPosition` gives `flex-start` and `flex-end` the flow's positions, so the flow
-  // keywords align as they do in every container.
-  alias {
-    "flow-start" => FlexStart / SafeFlexStart,
-    "flow-end" => FlexEnd / SafeFlexEnd,
   }
 );
 
