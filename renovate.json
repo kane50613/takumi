@@ -20,16 +20,9 @@
     },
     {
       "matchManagers": ["cargo"],
-      "matchPackageNames": [
-        "taffy",
-        "harfrust",
-        "skrifa",
-        "read-fonts",
-        "font-types",
-        "write-fonts"
-      ],
+      "matchPackageNames": ["harfrust", "skrifa", "read-fonts", "font-types", "write-fonts"],
       "enabled": false,
-      "description": "The layout, shaping and font stack moves by hand: taffy is pinned by decision, and harfrust and the fontations family resolve to takumi's forks through [patch.crates-io]."
+      "description": "The shaping and font stack moves by hand: harfrust and the fontations family resolve to takumi's forks through [patch.crates-io]."
     },
     {
       "matchPackageNames": ["rolldown-plugin-dts"],

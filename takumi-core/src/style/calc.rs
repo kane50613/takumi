@@ -1,31 +1,9 @@
-use std::cell::RefCell;
-
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Length, ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
   ParseResult, SizingContext, length_from_dimension_unit, unexpected_token,
 };
-
-/// Interns `calc(...)` linear values so `CompactLength` can reference them by id.
-#[derive(Default)]
-pub(crate) struct CalcArena {
-  linear_values: RefCell<Vec<CalcLinear>>,
-}
-
-impl CalcArena {
-  pub(crate) fn register_linear(&self, linear: CalcLinear) -> *const () {
-    let mut linear_values = self.linear_values.borrow_mut();
-
-    linear_values.push(linear);
-    encode_linear_id(linear_values.len())
-  }
-}
-
-fn encode_linear_id(id: usize) -> *const () {
-  // The low 3 bits are reserved because aligned pointers keep them as zero.
-  (id << 3) as *const ()
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Internal linear form of a `calc(...)` expression: `px + percent * basis`.

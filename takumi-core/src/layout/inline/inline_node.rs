@@ -60,7 +60,8 @@ impl<'c> Frame<'c> {
     Self::with_children(node, parent, is_inline, true)
   }
 
-  /// The frame of the context's block, whose children taffy lays out when one is block-level.
+  /// The frame of the context's block, whose children the block algorithm lays out when one is
+  /// block-level.
   fn root(block: &'c RenderNode) -> Self {
     let has_inline_children = block.force_inline_layout
       || block

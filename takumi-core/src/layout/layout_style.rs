@@ -2,16 +2,17 @@
 
 use std::rc::Rc;
 
-use taffy::{Clear, CompactLength, Dimension, Float, LengthPercentage, LengthPercentageAuto};
-
 use crate::{
   geometry::{Point, Rect, Size},
-  layout::grid::grid_style::{GridPosition, GridStyle},
+  layout::{
+    floats_utils::{Clear, Float},
+    grid::grid_style::{GridPosition, GridStyle},
+  },
   layout_unit::LayoutUnit,
   style::{
     AlignItems, BoxSizing, ComputedStyle, Contain, Direction, Display, FlexBasis, FlexDirection,
     FlexWrap, Gap, JustifyContent, Length, MaxSize, Overflow, Position, Size as SizeValue,
-    SizingContext, calc::CalcLinear,
+    SizingContext,
   },
 };
 
@@ -53,25 +54,6 @@ impl LayoutLength {
     match size {
       MaxSize::None => Self::Auto,
       MaxSize::Length(length) => length.to_layout_length(sizing),
-    }
-  }
-
-  /// As taffy takes it, a `calc()` registered in `sizing`'s arena.
-  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
-    match self {
-      Self::Auto => CompactLength::auto(),
-      Self::Fixed(px) => CompactLength::length(px),
-      Self::Percent(percent) => CompactLength::percent(percent),
-      Self::Calc { px, percent } => CompactLength::calc(
-        sizing
-          .calc_arena
-          .register_linear(CalcLinear { px, percent }),
-      ),
-      Self::MinContent => CompactLength::min_content(),
-      Self::MaxContent => CompactLength::max_content(),
-      Self::FitContent => CompactLength::fit_content_keyword(),
-      Self::Stretch => CompactLength::stretch(),
-      Self::MinIntrinsic => CompactLength::min_content(),
     }
   }
 
@@ -306,46 +288,11 @@ impl LayoutStyle {
       grid_row_end: GridPosition::of(&style.misc2_data.grid_row_end),
       grid_column_start: GridPosition::of(&style.misc2_data.grid_column_start),
       grid_column_end: GridPosition::of(&style.misc2_data.grid_column_end),
-      grid: matches!(style.base_data.display, Display::Grid | Display::InlineGrid)
+      grid: style
+        .base_data
+        .display
+        .is_grid()
         .then(|| Rc::new(GridStyle::of(style, sizing))),
-    }
-  }
-
-  /// The taffy style of an anonymous box laid out with this style, for taffy's flexbox and grid
-  /// algorithms, its other properties taffy's initial values.
-  pub(crate) fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
-    // SAFETY: `to_compact_length` gives `auto`, a length, a percentage, or a calc registered in
-    // `sizing`, which every one of these taffy types holds.
-    let length_percentage_auto = |length: LayoutLength| unsafe {
-      LengthPercentageAuto::from_raw(length.to_compact_length(sizing))
-    };
-    let dimension =
-      |length: LayoutLength| unsafe { Dimension::from_raw(length.to_compact_length(sizing)) };
-    let length_percentage = |length: LayoutLength| match length {
-      LayoutLength::Auto => LengthPercentage::length(0.0),
-      length => unsafe { LengthPercentage::from_raw(length.to_compact_length(sizing)) },
-    };
-
-    taffy::Style {
-      display: self.display.into_taffy(),
-      position: self.position.into_taffy(),
-      direction: self.direction.into_taffy(),
-      box_sizing: self.box_sizing.into_taffy(),
-      inset: self.inset.map(length_percentage_auto).into_taffy(),
-      size: self.size.map(dimension).into_taffy(),
-      min_size: self.min_size.map(length_percentage_auto).into_taffy(),
-      max_size: self.max_size.map(length_percentage_auto).into_taffy(),
-      aspect_ratio: self.aspect_ratio,
-      margin: self.margin.map(length_percentage_auto).into_taffy(),
-      padding: self.padding.map(length_percentage).into_taffy(),
-      border: self.border.map(LengthPercentage::length).into_taffy(),
-      overflow: taffy::Point {
-        x: self.overflow.x.into_taffy(),
-        y: self.overflow.y.into_taffy(),
-      },
-      float: self.float,
-      clear: self.clear,
-      ..taffy::Style::default()
     }
   }
 

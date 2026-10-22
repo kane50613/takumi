@@ -6,8 +6,7 @@ use cssparser::{
 
 use crate::style::{
   Animatable, AspectRatio, Color, FlexDirection, FromCss, FromCssStr, Length, MakeComputed,
-  ParseResult, Size, SizingContext, ToCss, discrete, impl_from_taffy_enum, merge_token_lists,
-  merged_token_len,
+  ParseResult, Size, SizingContext, ToCss, discrete, merge_token_lists, merged_token_len,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -37,13 +36,6 @@ impl FlexBasis {
   /// A zero basis.
   pub const fn zero() -> Self {
     Self::Size(Size::zero())
-  }
-
-  pub(crate) fn resolve_to_dimension(self, sizing: &SizingContext) -> taffy::Dimension {
-    match self {
-      Self::Content => taffy::Dimension::content(),
-      Self::Size(size) => size.resolve_to_dimension(sizing),
-    }
   }
 }
 
@@ -150,16 +142,6 @@ pub enum FlexWrap {
 impl MakeComputed for FlexWrap {}
 
 impl Animatable for FlexWrap {}
-
-impl_from_taffy_enum!(
-  FlexWrap,
-  into_taffy -> taffy::FlexWrap,
-  NoWrap,
-  Wrap,
-  WrapReverse,
-  Balance,
-  BalanceReverse
-);
 
 impl<'i> FromCss<'i> for FlexWrap {
   const VALID_TOKENS: &'static [&'static str] = &["nowrap", "wrap", "wrap-reverse", "balance"];

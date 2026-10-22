@@ -2,8 +2,6 @@
 //! and the line boxes it builds, without ruby, initial letters, SVG text, `text-combine-upright`,
 //! `text-box-trim`, block fragmentation, shapes, or margin collapsing.
 
-use taffy::Clear;
-
 use super::{
   inline_break_token::InlineBreakToken,
   inline_child_layout_context::InlineChildLayoutContext,
@@ -31,7 +29,9 @@ use crate::{
       exclusion_space::ExclusionSpace,
       layout_opportunity::{LayoutOpportunity, LineLayoutOpportunity},
     },
-    floats_utils::{PositionedFloat, UnpositionedFloat, adjust_to_clearance, position_float},
+    floats_utils::{
+      Clear, PositionedFloat, UnpositionedFloat, adjust_to_clearance, position_float,
+    },
     logical_rect::LogicalOffset,
     margin_strut::MarginStrut,
     tree::RenderNode,
@@ -1152,7 +1152,7 @@ impl<'c> InlineNode<'c> {
 
 #[cfg(test)]
 mod tests {
-  use taffy::Line;
+  use crate::geometry::Line;
 
   use crate::geometry::{AvailableSpace, Size};
   use crate::layout::{

@@ -24,19 +24,7 @@ pub enum GridRepetitionCount {
   Count(u16),
 }
 
-impl GridRepetitionCount {
-  pub(crate) fn into_taffy(self) -> taffy::RepetitionCount {
-    match self {
-      GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFill) => {
-        taffy::RepetitionCount::AutoFill
-      }
-      GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFit) => {
-        taffy::RepetitionCount::AutoFit
-      }
-      GridRepetitionCount::Count(count) => taffy::RepetitionCount::Count(count),
-    }
-  }
-}
+impl GridRepetitionCount {}
 
 impl<'i> FromCss<'i> for GridRepetitionCount {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {

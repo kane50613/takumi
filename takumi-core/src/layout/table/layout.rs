@@ -111,7 +111,7 @@ impl<'r> LayoutTree<'r> {
       let denies_percentages = inside_cell_flex_or_grid[index]
         || display == Display::TableCell
         || display.is_flex()
-        || matches!(display, Display::Grid | Display::InlineGrid);
+        || display.is_grid();
 
       for child in self.child_nodes(node) {
         inside_cell_flex_or_grid[usize::from(child)] = denies_percentages;

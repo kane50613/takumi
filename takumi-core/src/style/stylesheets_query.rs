@@ -1,6 +1,4 @@
-use std::{borrow::Cow, marker::PhantomData};
-
-use taffy::{LengthPercentage, Line, Rect, Size};
+use std::borrow::Cow;
 
 use super::ComputedStyle;
 use crate::{
@@ -436,17 +434,6 @@ impl ComputedStyle {
   }
 
   #[inline]
-  fn grid_template(
-    components: &Option<GridTemplateComponents>,
-    sizing: &SizingContext,
-  ) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>) {
-    components.as_deref().map_or_else(
-      || (Vec::new(), vec![Vec::new()]),
-      |components| collect_components_and_names(components, sizing),
-    )
-  }
-
-  #[inline]
   /// The decoration thickness resolved to pixels or `from-font`.
   pub(crate) fn resolved_text_decoration_thickness(
     &self,
@@ -538,144 +525,5 @@ impl ComputedStyle {
 
     features.extend_from_slice(&self.inherited_data.font_feature_settings);
     Cow::Owned(features)
-  }
-
-  /// Converts the computed style into a `taffy::Style` for layout.
-  pub(crate) fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
-    // Convert grid templates and associated line names
-    let (grid_template_columns, grid_template_column_names) =
-      Self::grid_template(&self.misc2_data.grid_template_columns, sizing);
-    let (grid_template_rows, grid_template_row_names) =
-      Self::grid_template(&self.misc2_data.grid_template_rows, sizing);
-
-    taffy::Style {
-      contain: self.misc_data.contain.into_taffy(),
-      float: self.base_data.float.resolve(self.inherited_data.direction),
-      clear: self.base_data.clear.resolve(self.inherited_data.direction),
-      direction: self.inherited_data.direction.into_taffy(),
-      box_sizing: self.box_data.box_sizing.into_taffy(),
-      size: Size {
-        width: self.box_data.width,
-        height: self.box_data.height,
-      }
-      .map(|length| length.resolve_to_dimension(sizing)),
-      // Used widths are already zeroed for non-rendered styles in `make_computed`.
-      border: Rect {
-        top: self.box_data.border_top_width,
-        right: self.box_data.border_right_width,
-        bottom: self.box_data.border_bottom_width,
-        left: self.box_data.border_left_width,
-      }
-      .map(|border| LengthPercentage::length(border.to_used_px(sizing))),
-      padding: Rect {
-        top: self.box_data.padding_top,
-        right: self.box_data.padding_right,
-        bottom: self.box_data.padding_bottom,
-        left: self.box_data.padding_left,
-      }
-      .map(|padding| padding.resolve_to_length_percentage(sizing)),
-      inset: Rect {
-        top: self.surround_data.top,
-        right: self.surround_data.right,
-        bottom: self.surround_data.bottom,
-        left: self.surround_data.left,
-      }
-      .map(|inset| inset.resolve_to_length_percentage_auto(sizing)),
-      margin: Rect {
-        top: self.box_data.margin_top,
-        right: self.box_data.margin_right,
-        bottom: self.box_data.margin_bottom,
-        left: self.box_data.margin_left,
-      }
-      .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
-      display: self.base_data.display.into_taffy(),
-      flex_direction: self.resolved_flex_direction().into_taffy(),
-      position: self.base_data.position.into_taffy(),
-      justify_content: self.box_data.justify_content.into_taffy(),
-      align_content: self.misc_data.align_content.into_taffy(),
-      justify_items: self.misc_data.justify_items.into_taffy(),
-      flex_grow: self.misc1_data.flex_grow.map(|grow| grow.0).unwrap_or(0.0),
-      align_items: self.box_data.align_items.into_taffy(),
-      gap: Size {
-        width: self
-          .misc1_data
-          .column_gap
-          .resolve_to_length_percentage(sizing),
-        height: self.misc3_data.row_gap.resolve_to_length_percentage(sizing),
-      },
-      flex_basis: self
-        .misc1_data
-        .flex_basis
-        .unwrap_or_default()
-        .resolve_to_dimension(sizing),
-      flex_shrink: self
-        .misc2_data
-        .flex_shrink
-        .map(|shrink| shrink.0)
-        .unwrap_or(1.0),
-      flex_wrap: self.misc_data.flex_wrap.into_taffy(),
-      flex_line_count: self.misc2_data.flex_line_count.get(),
-      min_size: Size {
-        width: self.box_data.min_width,
-        height: self.box_data.min_height,
-      }
-      .map(|length| length.resolve_to_length_percentage_auto(sizing)),
-      max_size: Size {
-        width: self.box_data.max_width,
-        height: self.box_data.max_height,
-      }
-      .map(|length| length.resolve_to_length_percentage_auto(sizing)),
-      grid_auto_columns: self.misc2_data.grid_auto_columns.as_ref().map_or_else(
-        Vec::new,
-        |tracks| {
-          tracks
-            .iter()
-            .map(|track| track.to_min_max(sizing))
-            .collect()
-        },
-      ),
-      grid_auto_rows: self
-        .misc2_data
-        .grid_auto_rows
-        .as_ref()
-        .map_or_else(Vec::new, |tracks| {
-          tracks
-            .iter()
-            .map(|track| track.to_min_max(sizing))
-            .collect()
-        }),
-      grid_auto_flow: self.misc2_data.grid_auto_flow.into_taffy(),
-      grid_column: Line {
-        start: self.misc2_data.grid_column_start.clone().into_taffy(),
-        end: self.misc2_data.grid_column_end.clone().into_taffy(),
-      },
-      grid_row: Line {
-        start: self.misc2_data.grid_row_start.clone().into_taffy(),
-        end: self.misc2_data.grid_row_end.clone().into_taffy(),
-      },
-      grid_template_columns,
-      grid_template_rows,
-      grid_template_column_names,
-      grid_template_row_names,
-      grid_template_areas: self
-        .misc2_data
-        .grid_template_areas
-        .as_ref()
-        .cloned()
-        .and_then(GridTemplateAreas::into_taffy),
-      aspect_ratio: self.surround_data.aspect_ratio.into(),
-      align_self: self.misc_data.align_self.into_taffy_self(),
-      justify_self: self.misc_data.justify_self.into_taffy_self(),
-      overflow: self
-        .resolve_overflows()
-        .into_taffy()
-        .map(Overflow::into_taffy),
-      dummy: PhantomData,
-      item_is_table: false,
-      item_is_replaced: false,
-      item_is_compressible_replaced: false,
-      scrollbar_width: 0.0,
-      text_align: taffy::TextAlign::Auto,
-    }
   }
 }

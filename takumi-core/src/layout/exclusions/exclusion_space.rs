@@ -4,11 +4,12 @@
 
 use std::cell::RefCell;
 
-use taffy::{Clear, Float};
-
 use super::{exclusion_area::ExclusionArea, layout_opportunity::LayoutOpportunity};
 use crate::{
-  layout::bfc_rect::{BfcOffset, BfcRect},
+  layout::{
+    bfc_rect::{BfcOffset, BfcRect},
+    floats_utils::{Clear, Float},
+  },
   layout_unit::LayoutUnit,
   style::Direction as TextDirection,
 };
@@ -625,7 +626,7 @@ impl ExclusionSpace {
 
 #[cfg(test)]
 mod tests {
-  use taffy::Float;
+  use crate::layout::floats_utils::Float;
 
   use super::ExclusionSpace;
   use crate::{

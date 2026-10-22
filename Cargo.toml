@@ -163,21 +163,6 @@ features = ["std"]
 version = "1.16"
 features = ["serde"]
 
-[workspace.dependencies.taffy]
-version = "0.15"
-default-features = false
-features = [
-  "flexbox",
-  "flexbox_balance",
-  "grid",
-  "alloc",
-  "calc",
-  "taffy_tree",
-  "strict_provenance",
-  "block_layout",
-  "float_layout",
-]
-
 [workspace.dependencies.tokio]
 version = "1"
 features = ["rt-multi-thread", "macros"]
@@ -305,8 +290,6 @@ opt-level = "z"
 [profile.release.package.harfrust]
 opt-level = "s"
 [profile.release.package.unicode-bidi]
-opt-level = "z"
-[profile.release.package.taffy]
 opt-level = "z"
 [profile.release.package.kurbo]
 opt-level = "z"

@@ -6,10 +6,8 @@
 
 use std::{ptr, rc::Rc};
 
-use taffy::{Display as TaffyDisplay, Line};
-
 use crate::{
-  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
+  geometry::{AvailableSpace, ComputedLayout, Line, NodeId, Point, Size},
   layout::{
     block_layout_algorithm::{BlockLayoutAlgorithm, InlineContentLayout, block_min_max_sizes},
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
@@ -191,9 +189,9 @@ impl<'r> LayoutTree<'r> {
       return Algorithm::Replaced;
     }
 
-    match state.style.display {
-      TaffyDisplay::Flex => Algorithm::Flex,
-      TaffyDisplay::Grid => Algorithm::Grid,
+    match state.layout_style.display {
+      display if display.is_flex() => Algorithm::Flex,
+      display if display.is_grid() => Algorithm::Grid,
       _ => Algorithm::Block,
     }
   }
@@ -471,12 +469,7 @@ impl<'r> LayoutTree<'r> {
       state.layout = ComputedLayout::default();
       state.first_baseline_y = None;
       state.hoisted_children.clear();
-      stack.extend(
-        state
-          .children
-          .iter()
-          .map(|&child| NodeId::from_taffy(child)),
-      );
+      stack.extend(state.children.iter().copied());
     }
   }
 

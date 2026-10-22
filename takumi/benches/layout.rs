@@ -11,8 +11,8 @@ mod common;
 const FANOUT: usize = 4;
 const DEPTHS: [u32; 3] = [4, 5, 6];
 
-/// A nested flex tree, the shape that makes taffy run several sizing passes
-/// over every node.
+/// A nested flex tree, the shape that makes the flex algorithm run several
+/// sizing passes over every node.
 fn nested_flex(depth: u32) -> Node {
   if depth == 0 {
     return Node::container([]).with_tw("w-2 h-2 bg-white".parse().expect("valid classes"));

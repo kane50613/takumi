@@ -320,8 +320,7 @@ fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
   assert!(fit.children[0].height > no_fit.children[0].height);
 }
 
-/// taffy subtracts the content-box inset without a floor, so the available
-/// width reaching the text can be negative.
+/// Padding wider than the box leaves the text a negative available width.
 #[test]
 fn test_measure_padding_wider_than_the_box_does_not_panic() {
   let node = Node::from_html(
@@ -334,8 +333,7 @@ fn test_measure_padding_wider_than_the_box_does_not_panic() {
   assert_close(out.width, 40.0);
 }
 
-/// taffy hands the measure function a border-box width whatever `box-sizing`
-/// says, so a content-box box used to wrap against its border-box width.
+/// A content-box box once wrapped its text against its border-box width.
 #[test]
 fn test_measure_content_box_wraps_inside_its_padding() {
   let text = "aa bb cc dd ee ff gg hh";
@@ -1399,9 +1397,7 @@ fn test_measure_auto_sized_replaced_element_keeps_its_natural_size() {
   let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACWCAYAAACb3McZAAAAHUlEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAB4DSMgAAGIL7gAAAAAAElFTkSuQmCC";
 
   // css 2.1 10.3.2 gives a replaced element with no `width` or `height` its natural size,
-  // which Chrome measures as 200x150 here. A block-level box still stretches instead: taffy
-  // stretches every auto-width block child to its container and reads the width off the
-  // style rather than off the measure, so takumi cannot state the exception yet.
+  // which Chrome measures as 200x150 here.
   let html = format!(
     r#"<div style="display:block;width:600px"><img style="display:inline" src="{png}"></div>"#
   );
@@ -2492,8 +2488,7 @@ fn test_measure_replaced_element_reads_its_insets_the_way_box_sizing_states_them
 
   // A 200x150 picture with 20px of padding and a 5px border, in a 600px container. Chrome
   // measures the border box of each of these, and the box type never changes the answer.
-  // An auto width is left to the inline cases: a block-level box stretches to its
-  // container before any of this applies, which taffy decides and takumi cannot override.
+  // An auto width is left to the inline cases.
   for (width, sizing, displays, expected) in [
     ("", "content-box", &["inline"][..], (250.0, 200.0)),
     ("", "border-box", &["inline"][..], (250.0, 200.0)),

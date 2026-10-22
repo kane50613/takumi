@@ -8,8 +8,6 @@
 
 use std::{mem::take, rc::Rc};
 
-use taffy::{Clear, Float};
-
 use crate::{
   geometry::{NodeId, Point, Size},
   layout::{
@@ -18,7 +16,7 @@ use crate::{
       AdjoiningObjectTypes, AutoSizeBehavior, BaselineAlgorithmType, CacheSlot, ConstraintSpace,
     },
     exclusions::exclusion_space::ExclusionSpace,
-    floats_utils::{UnpositionedFloat, adjust_to_clearance, position_float},
+    floats_utils::{Clear, Float, UnpositionedFloat, adjust_to_clearance, position_float},
     inline::{
       inline_item_result::LayoutResult as LineItemLayoutResult, line_breaker::AtomicInlineLayout,
     },

@@ -192,12 +192,11 @@ impl ToCss for FontSize {
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
 
   use super::*;
   use crate::{
     geometry::Size,
-    style::{CalcArena, FromCssStr, SizingContext},
+    style::{FromCssStr, SizingContext},
     viewport::Viewport,
   };
 
@@ -212,7 +211,6 @@ mod tests {
       line_height: 0.0,
       root_line_height: None,
       ch: 20.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
     };
 
     assert_eq!(FontSize::from_css_str("larger"), Ok(FontSize::Larger));
@@ -240,7 +238,6 @@ mod tests {
       line_height: 0.0,
       root_line_height: None,
       ch: 16.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
     };
 
     assert_eq!(FontSize::default().to_px(&sizing, sizing.font_size), 16.0);
@@ -261,7 +258,6 @@ mod tests {
       line_height: 0.0,
       root_line_height: None,
       ch: root_font_size_device_px / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
     };
 
     assert_eq!(

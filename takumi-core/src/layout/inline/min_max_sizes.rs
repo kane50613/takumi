@@ -3,8 +3,6 @@
 //! second pass where Blink derives it from the min-content pass, which it checks gives the same
 //! size.
 
-use taffy::{Clear, Float};
-
 use super::{
   inline_item::{InlineItemType, LayoutObject},
   inline_item_result::LineBoxStrut,
@@ -18,6 +16,7 @@ use crate::{
   layout::{
     constraint_space::ConstraintSpace,
     exclusions::{exclusion_space::ExclusionSpace, layout_opportunity::LineLayoutOpportunity},
+    floats_utils::{Clear, Float},
     min_max_sizes::MinMaxSizes,
     tree::RenderNode,
   },

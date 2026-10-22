@@ -113,13 +113,6 @@ impl<T> Size<T> {
       height: f(self.height, other.height),
     }
   }
-
-  pub(crate) fn into_taffy(self) -> taffy::geometry::Size<T> {
-    taffy::geometry::Size {
-      width: self.width,
-      height: self.height,
-    }
-  }
 }
 
 impl Size<f32> {
@@ -181,6 +174,20 @@ pub struct Rect<T> {
   pub bottom: T,
 }
 
+/// A start and an end along one axis, such as a box's block-start and block-end sides.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Line<T> {
+  pub(crate) start: T,
+  pub(crate) end: T,
+}
+
+impl Line<bool> {
+  pub(crate) const FALSE: Self = Self {
+    start: false,
+    end: false,
+  };
+}
+
 impl<T> Rect<T> {
   /// A rect with all four edges `value`.
   pub(crate) fn all(value: T) -> Self
@@ -202,15 +209,6 @@ impl<T> Rect<T> {
       right: f(self.right),
       top: f(self.top),
       bottom: f(self.bottom),
-    }
-  }
-
-  pub(crate) fn into_taffy(self) -> taffy::geometry::Rect<T> {
-    taffy::geometry::Rect {
-      left: self.left,
-      right: self.right,
-      top: self.top,
-      bottom: self.bottom,
     }
   }
 }
@@ -255,8 +253,7 @@ impl Rect<f32> {
   }
 }
 
-/// The computed box geometry of a laid-out node — the core-owned replacement for
-/// `taffy::Layout` at the public boundary. Carries only what backends read.
+/// The computed box geometry of a laid-out node, as backends read it.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ComputedLayout {
   /// Top-left corner relative to the parent's content box.
@@ -329,10 +326,6 @@ impl NodeId {
   /// The node at `index` in its layout tree.
   pub(crate) const fn new(index: usize) -> Self {
     Self(index)
-  }
-
-  pub(crate) fn from_taffy(id: taffy::NodeId) -> Self {
-    Self(id.into())
   }
 }
 

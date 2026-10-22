@@ -1,11 +1,9 @@
 use std::fmt;
 
-use cssparser::Parser;
-use taffy::LengthPercentage;
-
 use crate::style::{
   Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
 };
+use cssparser::Parser;
 
 /// Represents the `column-gap`/`row-gap` value: either `normal` (computes to `0`) or a [`Length`].
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -75,11 +73,6 @@ impl Gap {
       Self::Normal => Length::zero(),
       Self::Length(length) => length,
     }
-  }
-
-  /// Resolves to a taffy `LengthPercentage`, treating `normal` as `0`.
-  pub(crate) fn resolve_to_length_percentage(self, sizing: &SizingContext) -> LengthPercentage {
-    self.to_length().resolve_to_length_percentage(sizing)
   }
 }
 

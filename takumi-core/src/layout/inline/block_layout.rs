@@ -5,7 +5,6 @@
 use std::ptr;
 
 use rustc_hash::FxHashMap;
-use taffy::Line;
 
 use super::{
   FragmentItems, InlineMeasurement, StaticPosition,
@@ -20,7 +19,7 @@ use super::{
   unpositioned_list_marker::UnpositionedListMarker,
 };
 use crate::{
-  geometry::{AvailableSpace, ComputedLayout, Point, Size},
+  geometry::{AvailableSpace, ComputedLayout, Line, Point, Size},
   layout::{logical_rect::LogicalOffset, margin_strut::MarginStrut, tree::RenderNode},
   layout_unit::LayoutUnit,
   style::Direction,
@@ -397,7 +396,7 @@ impl RenderNode {
 
 #[cfg(test)]
 mod tests {
-  use taffy::Line;
+  use crate::geometry::Line;
 
   use super::content_block_size;
   use crate::geometry::{AvailableSpace, Size};

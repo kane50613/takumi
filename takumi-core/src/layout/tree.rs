@@ -5,17 +5,13 @@ use std::{
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
-use taffy::{
-  Display as TaffyDisplay, LengthPercentage, Line, NodeId as TaffyNodeId, Rect as TaffyRect,
-  Size as TaffySize, Style,
-};
 
 use crate::{
   Error,
   context::RenderContext,
   font_style::SizedFontStyle,
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
-  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
+  geometry::{AvailableSpace, ComputedLayout, Line, NodeId, Point, Rect, Size},
   layout::{
     block_node::LayoutCache,
     constraint_space::CacheSlot,
@@ -339,55 +335,33 @@ impl TableBoxStyle {
     ..Self::TABLE
   };
 
-  /// `style` and `layout_style` as this part of a table lays out with them.
-  fn apply(&self, style: &mut Style, layout_style: &mut LayoutStyle) {
+  /// `layout_style` as this part of a table lays out with it.
+  fn apply(&self, layout_style: &mut LayoutStyle) {
     if *self == Self::default() {
       return;
     }
     if self.hidden {
-      style.display = TaffyDisplay::None;
       layout_style.display = Display::None;
       return;
     }
     if let Some(border) = self.border {
-      let border = Rect {
+      layout_style.border = Rect {
         top: border.top.to_float(),
         right: border.right.to_float(),
         bottom: border.bottom.to_float(),
         left: border.left.to_float(),
       };
-
-      style.border = TaffyRect {
-        top: LengthPercentage::length(border.top),
-        right: LengthPercentage::length(border.right),
-        bottom: LengthPercentage::length(border.bottom),
-        left: LengthPercentage::length(border.left),
-      };
-      layout_style.border = border;
     }
     if self.clears_padding {
-      style.padding = TaffyRect::zero();
       layout_style.padding = Rect::all(LayoutLength::Fixed(0.0));
     }
     if self.sized_by_table {
-      style.size = TaffySize::auto();
-      style.min_size = TaffySize::auto();
-      style.max_size = TaffySize::auto();
-      style.margin = TaffyRect::zero();
       layout_style.size = Size::all(LayoutLength::Auto);
       layout_style.min_size = Size::all(LayoutLength::Auto);
       layout_style.max_size = Size::all(LayoutLength::Auto);
       layout_style.margin = Rect::all(LayoutLength::Fixed(0.0));
     }
-    style.item_is_table = self.is_table;
-    // A table establishes a formatting context of its own, and is not a block box a root or
-    // block container stretches.
-    if self.is_table {
-      style.display = TaffyDisplay::FlowRoot;
-    }
     if let Some((top, bottom)) = self.aligned_padding {
-      style.padding.top = LengthPercentage::length(top);
-      style.padding.bottom = LengthPercentage::length(bottom);
       layout_style.padding.top = LayoutLength::Fixed(top);
       layout_style.padding.bottom = LayoutLength::Fixed(bottom);
     }
@@ -399,10 +373,8 @@ type InlineMeasureKey = (usize, [u32; 5]);
 
 /// A box as layout lays it out: its styles, what it keeps of its layouts, and where it went.
 pub(crate) struct LayoutNodeState {
-  /// The taffy style whose `display` picks the layout algorithm, shared with the recent nodes
-  /// whose style came out equal, as rows of a list do.
-  pub(crate) style: Rc<Style>,
-  /// The style the native layout reads, shared the same way.
+  /// The style it lays out with, shared with the recent nodes whose style came out equal, as rows
+  /// of a list do.
   pub(crate) layout_style: Rc<LayoutStyle>,
   /// Whether the styles are the same whatever query container they resolve against, so repeated
   /// layouts can reuse them.
@@ -415,7 +387,7 @@ pub(crate) struct LayoutNodeState {
   pub(crate) table_box: TableBoxStyle,
   /// Its children in layout order, or for an inline formatting context the out-of-flow boxes in
   /// its inline content.
-  pub(crate) children: Box<[TaffyNodeId]>,
+  pub(crate) children: Box<[NodeId]>,
   box_children: Box<[OrderedChild]>,
   /// The out-of-flow boxes this node positioned as their containing block, from its last layout.
   pub(crate) hoisted_children: Vec<NodeId>,
@@ -456,14 +428,12 @@ impl<T: PartialEq> RecentStyles<T> {
 
 impl LayoutNodeState {
   fn new(
-    style: Rc<Style>,
     layout_style: Rc<LayoutStyle>,
     container_independent: bool,
     is_inline_children: bool,
     claims: ContainingBlockClaims,
   ) -> Self {
     Self {
-      style,
       layout_style,
       container_independent,
       cache: LayoutCache::default(),
@@ -737,33 +707,28 @@ impl<'r> LayoutTree<'r> {
     }
 
     struct PendingNode<'r> {
-      node_id: TaffyNodeId,
+      node_id: NodeId,
       /// The path from its parent, as its parent's [`OrderedChild`] records it.
       render_path: SmallVec<[usize; 2]>,
       /// The inline box containing it, when it is out of flow.
       inline_container: Option<&'r RenderNode>,
       next_child_index: usize,
       children: PendingChildren<'r>,
-      child_ids: Vec<TaffyNodeId>,
+      child_ids: Vec<NodeId>,
       box_children: Vec<OrderedChild>,
-    }
-
-    struct RecentNodeStyles {
-      taffy: RecentStyles<Style>,
-      layout: RecentStyles<LayoutStyle>,
     }
 
     fn push_node_state<'r>(
       nodes: &mut Vec<LayoutNodeState>,
       render_nodes: &mut Vec<&'r RenderNode>,
-      recent_styles: &mut RecentNodeStyles,
+      recent_styles: &mut RecentStyles<LayoutStyle>,
       InlineOutOfFlow {
         path: render_path,
         node: render_node,
         container: inline_container,
       }: InlineOutOfFlow<'r>,
     ) -> PendingNode<'r> {
-      let node_id = TaffyNodeId::from(nodes.len());
+      let node_id = NodeId::new(nodes.len());
       let is_inline_children = render_node.should_create_inline_layout();
       let children = if is_inline_children {
         PendingChildren::OutOfFlow(render_node.inline_out_of_flow())
@@ -775,23 +740,21 @@ impl<'r> LayoutTree<'r> {
 
       render_nodes.push(render_node);
 
-      let (style, layout_style, container_independent) = {
+      let (layout_style, container_independent) = {
         let sizing = &render_node.context.sizing;
 
         // Resolution reports whether it read the query container, which is
         // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
         // agrees across two large containers and disagrees with a small one.
         sizing.container_read.set(false);
-        let style = render_node.layout_style(sizing);
         let layout_style = render_node.layout_box_style(sizing);
         let independent = !sizing.container_read.get();
 
-        (style, layout_style, independent)
+        (layout_style, independent)
       };
 
       nodes.push(LayoutNodeState::new(
-        recent_styles.taffy.share(style),
-        recent_styles.layout.share(layout_style),
+        recent_styles.share(layout_style),
         container_independent,
         is_inline_children,
         ContainingBlockClaims {
@@ -818,10 +781,7 @@ impl<'r> LayoutTree<'r> {
       inline_containers,
       ..
     } = self;
-    let mut recent_styles = RecentNodeStyles {
-      taffy: RecentStyles::default(),
-      layout: RecentStyles::default(),
-    };
+    let mut recent_styles = RecentStyles::default();
     let root = push_node_state(
       nodes,
       render_nodes,
@@ -849,10 +809,9 @@ impl<'r> LayoutTree<'r> {
       let index = usize::from(finished.node_id);
       let mut child_ids = finished.child_ids;
 
-      if matches!(
-        nodes[index].style.display,
-        TaffyDisplay::Flex | TaffyDisplay::Grid
-      ) {
+      let display = nodes[index].layout_style.display;
+
+      if display.is_flex() || display.is_grid() {
         sort_children_by_order(&mut child_ids, |child_id| {
           render_nodes
             .get(usize::from(child_id))
@@ -873,7 +832,7 @@ impl<'r> LayoutTree<'r> {
         parent.box_children.push(OrderedChild {
           render_index,
           inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
-          node_id: NodeId::from_taffy(finished.node_id),
+          node_id: finished.node_id,
           hoisted_cb: None,
         });
       }
@@ -1084,7 +1043,7 @@ impl<'r> LayoutTree<'r> {
         child.hoisted_cb = containing_blocks
           .get(&usize::from(child.node_id))
           .filter(|&&cb| cb != index)
-          .map(|&cb| NodeId::from_taffy(TaffyNodeId::from(cb)));
+          .map(|&cb| NodeId::new(cb));
       }
     }
 
@@ -1137,11 +1096,9 @@ impl<'r> LayoutTree<'r> {
 
     sizing.container_size = container_size.map(|size| size.map(LayoutUnit::to_float));
 
-    let mut style = render_node.layout_style(&sizing);
     let mut layout_style = render_node.layout_box_style(&sizing);
 
-    state.table_box.apply(&mut style, &mut layout_style);
-    state.style = Rc::new(style);
+    state.table_box.apply(&mut layout_style);
     state.layout_style = Rc::new(layout_style);
   }
 
@@ -1169,12 +1126,7 @@ impl<'r> LayoutTree<'r> {
 
   /// The children `node` lays out, in layout order.
   pub(crate) fn child_nodes(&self, node: NodeId) -> Vec<NodeId> {
-    self
-      .node_state(node)
-      .children
-      .iter()
-      .map(|&child| NodeId::from_taffy(child))
-      .collect()
+    self.node_state(node).children.to_vec()
   }
 
   /// The style `node` lays out with.
@@ -1228,13 +1180,11 @@ impl<'r> LayoutTree<'r> {
     let index = usize::from(node);
     let render_node = self.render_nodes[index];
     let sizing = &render_node.context.sizing;
-    let mut style = render_node.layout_style(sizing);
     let mut layout_style = render_node.layout_box_style(sizing);
     let state = &mut self.nodes[index];
 
-    table_box.apply(&mut style, &mut layout_style);
+    table_box.apply(&mut layout_style);
     state.table_box = table_box;
-    state.style = Rc::new(style);
     state.layout_style = Rc::new(layout_style);
     state.cache.clear();
   }
@@ -1266,10 +1216,7 @@ impl<'r> LayoutTree<'r> {
 }
 
 /// Stable-sorts flex/grid children by `order`, keeping source order for ties.
-fn sort_children_by_order(
-  children: &mut [TaffyNodeId],
-  mut child_order: impl FnMut(TaffyNodeId) -> i32,
-) {
+fn sort_children_by_order(children: &mut [NodeId], mut child_order: impl FnMut(NodeId) -> i32) {
   if children.iter().all(|&child_id| child_order(child_id) == 0) {
     return;
   }
@@ -1277,20 +1224,6 @@ fn sort_children_by_order(
 }
 
 impl RenderNode {
-  /// The taffy style this node lays out with: its own override when it has one, otherwise
-  /// its computed style.
-  fn layout_style(&self, sizing: &SizingContext) -> taffy::Style {
-    let style = match self.layout_style_override.as_deref() {
-      Some(style) => style.to_taffy_style(sizing),
-      None => self.context.style.to_taffy_style(sizing),
-    };
-
-    taffy::Style {
-      item_is_replaced: self.is_replaced(),
-      ..style
-    }
-  }
-
   /// The style the native layout lays this node out with: its own override when it has one,
   /// otherwise its computed style.
   pub(crate) fn layout_box_style(&self, sizing: &SizingContext) -> LayoutStyle {
@@ -2818,10 +2751,8 @@ impl RenderContext {
 mod tests {
   use std::str::FromStr;
 
-  use taffy::NodeId as TaffyNodeId;
-
   use super::{
-    NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
+    NodeId, NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
     sort_children_by_order,
   };
   use crate::{
@@ -2886,22 +2817,14 @@ mod tests {
 
   #[test]
   fn sort_children_by_order_keeps_source_order_for_equal_values() {
-    let mut children = vec![
-      TaffyNodeId::from(3usize),
-      TaffyNodeId::from(1usize),
-      TaffyNodeId::from(2usize),
-    ];
+    let mut children = vec![NodeId::new(3), NodeId::new(1), NodeId::new(2)];
     sort_children_by_order(&mut children, |child_id| match usize::from(child_id) {
       1 => -1,
       _ => 0,
     });
     assert_eq!(
       children,
-      vec![
-        TaffyNodeId::from(1usize),
-        TaffyNodeId::from(3usize),
-        TaffyNodeId::from(2usize)
-      ]
+      vec![NodeId::new(1), NodeId::new(3), NodeId::new(2)]
     );
   }
 
