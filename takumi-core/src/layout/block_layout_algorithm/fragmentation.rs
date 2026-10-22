@@ -3,8 +3,8 @@
 //! and the parts of
 //! [`fragmentation_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/fragmentation_utils.cc)
 //! that read the fragment builder, for pages alone. Approximate: flex and grid boxes do not break,
-//! a block-in-inline does not break inside its line, and `box-decoration-break: clone` sizes a box
-//! without the border and padding its earlier fragments repeat.
+//! nor do floats among lines, and `box-decoration-break: clone` sizes a box without the border and
+//! padding its earlier fragments repeat.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -349,33 +349,51 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
   }
 
   /// The line count and break token Blink's `FragmentBuilder::PropagateFromFragment` reads off a
-  /// line it adds.
-  pub(super) fn add_line_for_fragmentation(&mut self, line: &LineBoxFragment<'_, 'r>) {
+  /// line it adds at `block_offset`, and the break data of its block-in-inline, which Blink's
+  /// `AddResult` propagates in its place.
+  pub(super) fn add_line_for_fragmentation(
+    &mut self,
+    line: &LineBoxFragment<'_, 'r>,
+    block_offset: LayoutUnit,
+  ) {
     if !self.space.has_block_fragmentation() {
       return;
     }
+    if let Some((render_node, result)) = line.block_in_inline() {
+      let node = self.tree.atomic_inline_node(render_node);
+      let child_style = Rc::clone(self.tree.layout_style_rc(node));
 
-    self
-      .builder
-      .add_line(line.break_token, line.is_empty_line_box);
+      self
+        .builder
+        .propagate_result(self.space, &child_style, result, block_offset);
+    }
+    // A line that resumes a block-in-inline in a parallel flow counts for neither `orphans` nor
+    // `widows`, nor where the lines resume.
+    if !line.is_line_for_parallel_flow {
+      self
+        .builder
+        .add_line(line.break_token.clone(), line.is_empty_line_box);
+    }
   }
 
   /// Where the lines of a box resumed after a break inside start, or `false` when they ended on
-  /// an earlier page.
+  /// an earlier page. The lines take the break tokens in order: those of the blocks-in-inline in
+  /// parallel flows, then where the lines broke.
   pub(super) fn resume_inline_child(&mut self, inline_child: &mut InlineChild<'_, 'r>) -> bool {
     let Some(token) = self.input.break_token.as_deref() else {
       return true;
     };
-    let inline_break_token = token
+
+    inline_child.resumed_break_tokens = token
       .child_break_tokens
       .iter()
-      .rev()
-      .find_map(|token| match token {
-        BreakToken::Inline(token) => Some(*token),
+      .filter_map(|token| match token {
+        BreakToken::Inline(token) => Some(token.clone()),
         BreakToken::Block(_) => None,
-      });
+      })
+      .collect();
 
-    match inline_break_token {
+    match inline_child.resumed_break_tokens.pop_front() {
       Some(inline_break_token) => {
         inline_child.break_token = Some(inline_break_token);
         // The marker went beside a line on an earlier page.
@@ -383,6 +401,34 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
         true
       }
       None => !token.has_seen_all_children,
+    }
+  }
+
+  /// Blink's `IsLineForParallelFlow`.
+  pub(super) fn is_line_for_parallel_flow(line: &LineBoxFragment<'_, 'r>) -> bool {
+    line.is_line_for_parallel_flow
+  }
+
+  /// The break tokens of the blocks-in-inline the last line resumes in parallel flows, which
+  /// Blink's `HandleInflow` adds to the fragment from the inline child layout context.
+  pub(super) fn add_parallel_flow_break_tokens(&mut self, inline_child: &mut InlineChild<'_, 'r>) {
+    if !self.space.has_block_fragmentation() {
+      return;
+    }
+
+    for token in inline_child.context.parallel_flow_break_tokens.drain(..) {
+      self.builder.add_parallel_flow_break_token(token);
+    }
+  }
+
+  /// Blink's `BlockChildIterator::NextChild` in an inline formatting context: the next line
+  /// resumes where the last one broke, and after a line that ends nothing, at the next break
+  /// token the box resumed at.
+  pub(super) fn advance_inline_break_token(&mut self, inline_child: &mut InlineChild<'_, 'r>) {
+    if inline_child.break_token.is_some() {
+      inline_child.resumed_break_tokens.clear();
+    } else {
+      inline_child.break_token = inline_child.resumed_break_tokens.pop_front();
     }
   }
 

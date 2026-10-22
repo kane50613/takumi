@@ -9,6 +9,8 @@
 #[cfg(feature = "fragmentation")]
 mod fragmentation;
 
+#[cfg(feature = "fragmentation")]
+use std::collections::VecDeque;
 use std::{mem::take, rc::Rc};
 
 #[cfg(feature = "fragmentation")]
@@ -129,6 +131,9 @@ struct InlineChild<'a, 'r> {
   unpositioned_list_marker: Option<UnpositionedListMarker<'r>>,
   /// The lines laid out, in the content box.
   lines: Vec<LineBoxFragment<'a, 'r>>,
+  /// The break tokens the box resumed at that the lines have yet to take, after `break_token`.
+  #[cfg(feature = "fragmentation")]
+  resumed_break_tokens: VecDeque<InlineBreakToken>,
 }
 
 impl<'a, 'r> InlineChild<'a, 'r> {
@@ -149,6 +154,8 @@ impl<'a, 'r> InlineChild<'a, 'r> {
       break_token: None,
       unpositioned_list_marker: UnpositionedListMarker::of(items_data),
       lines: Vec::new(),
+      #[cfg(feature = "fragmentation")]
+      resumed_break_tokens: VecDeque::new(),
     }
   }
 }
@@ -238,6 +245,16 @@ fn logical_from_bfc_offsets(
     ),
     child_bfc_offset.block_offset - parent_bfc_offset.block_offset,
   )
+}
+
+/// Blink's `LayoutResultForPropagation`: a line holding a block-in-inline breaks as the block does.
+fn result_for_propagation<'l>(
+  result: &'l LayoutResult,
+  line: Option<&'l LineBoxFragment<'_, '_>>,
+) -> &'l LayoutResult {
+  line
+    .and_then(LineBoxFragment::block_in_inline)
+    .map_or(result, |(_, block_in_inline)| block_in_inline)
 }
 
 /// Blink's `ApplyClearance`.
@@ -1729,7 +1746,9 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       return Err(result.status);
     }
 
+    // A line that resumes a block-in-inline in a parallel flow cannot break before.
     if self.bfc_block_offset.is_some()
+      && !line.as_ref().is_some_and(Self::is_line_for_parallel_flow)
       && let Some(child_bfc_block_offset) = child_bfc_block_offset
     {
       let line_box_bfc_block_offset = result.line_box_bfc_block_offset;
@@ -1739,13 +1758,16 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
       if self.break_before_child_if_needed(
         block_child,
-        &result,
+        result_for_propagation(&result, line.as_ref()),
         previous,
         line_box_bfc_block_offset.unwrap_or(child_bfc_block_offset),
         !self.is_pushed_by_floats && (result.is_pushed_by_floats || is_line_box_pushed_by_floats),
       )? {
         return Ok(());
       }
+    }
+    if let InflowChild::Inline(inline_child) = &mut child {
+      self.add_parallel_flow_break_tokens(inline_child);
     }
 
     self.exclusion_space = (*result.exclusion_space).clone();
@@ -1793,8 +1815,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
           -child_space.bfc_offset.line_offset,
           offset.block_offset - line_box_bfc_block_offset - self.border_padding.block_start,
         ));
-        inline_child.break_token = line.break_token;
-        self.add_line_for_fragmentation(&line);
+        inline_child.break_token = line.break_token.clone();
+        self.add_line_for_fragmentation(&line, offset.block_offset);
         inline_child.lines.push(line);
       }
       (InflowChild::Inline(_), None) => unreachable!("an inline child lays out a line"),
@@ -1836,7 +1858,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
           inline_child.node,
           inline_child.items_data,
           child_space,
-          inline_child.break_token,
+          inline_child.break_token.clone(),
           &mut inline_child.context,
           &mut atomic_inline,
         )
@@ -2078,6 +2100,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
 
       self.handle_inflow(InflowChild::Inline(&mut *inline_child), &style, previous)?;
+      self.advance_inline_break_token(inline_child);
 
       if inline_child.break_token.is_none() {
         self.set_has_seen_all_children();
@@ -2248,11 +2271,24 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
   ) {
   }
 
-  fn add_line_for_fragmentation(&mut self, _line: &LineBoxFragment<'_, 'r>) {}
+  fn add_line_for_fragmentation(
+    &mut self,
+    _line: &LineBoxFragment<'_, 'r>,
+    _block_offset: LayoutUnit,
+  ) {
+  }
 
   fn resume_inline_child(&mut self, _inline_child: &mut InlineChild<'_, 'r>) -> bool {
     true
   }
+
+  fn is_line_for_parallel_flow(_line: &LineBoxFragment<'_, 'r>) -> bool {
+    false
+  }
+
+  fn add_parallel_flow_break_tokens(&mut self, _inline_child: &mut InlineChild<'_, 'r>) {}
+
+  fn advance_inline_break_token(&mut self, _inline_child: &mut InlineChild<'_, 'r>) {}
 
   fn update_break_opportunity_before_next_child(
     &mut self,

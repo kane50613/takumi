@@ -85,9 +85,13 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   /// resolves.
   pub(crate) adjoining_object_types: AdjoiningObjectTypes,
   pub(crate) is_pushed_by_floats: bool,
+  /// Blink's `IsLineForParallelFlow`: the line holds only a block-in-inline resumed in a parallel
+  /// flow.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) is_line_for_parallel_flow: bool,
 }
 
-impl LineBoxFragment<'_, '_> {
+impl<'c> LineBoxFragment<'_, 'c> {
   fn new(exclusion_space: ExclusionSpace) -> Self {
     Self {
       items: LogicalLineItems::default(),
@@ -111,6 +115,8 @@ impl LineBoxFragment<'_, '_> {
       status: LayoutStatus::Success,
       adjoining_object_types: AdjoiningObjectTypes::empty(),
       is_pushed_by_floats: false,
+      #[cfg(feature = "fragmentation")]
+      is_line_for_parallel_flow: false,
     }
   }
 
@@ -131,6 +137,19 @@ impl LineBoxFragment<'_, '_> {
       .iter()
       .find_map(|child| match &child.layout_result {
         Some(LineFragment::BlockInInline { layout_result, .. }) => Some(layout_result),
+        _ => None,
+      })
+  }
+
+  /// The line's block-in-inline and its box layout, which Blink's `LayoutResultForPropagation`
+  /// reads the line's break data off.
+  pub(crate) fn block_in_inline(&self) -> Option<(&'c RenderNode, &Rc<BoxLayoutResult>)> {
+    self
+      .items
+      .children
+      .iter()
+      .find_map(|child| match &child.layout_result {
+        Some(LineFragment::BlockInInline { node, result, .. }) => Some((*node, result)),
         _ => None,
       })
   }
@@ -234,7 +253,7 @@ impl LineBreakStrategy {
   fn new(
     context: &InlineChildLayoutContext<'_, '_>,
     text_wrap: TextWrapStyle,
-    break_token: Option<InlineBreakToken>,
+    break_token: Option<&InlineBreakToken>,
   ) -> Self {
     let score_context = context.score_line_break_context.as_ref();
 
@@ -314,6 +333,15 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let mut end_margin_strut = space.margin_strut;
     let mut is_pushed_by_floats = false;
 
+    #[cfg(feature = "fragmentation")]
+    {
+      self.context.parallel_flow_break_tokens.clear();
+      self.container_builder.is_line_for_parallel_flow = self
+        .break_token
+        .as_ref()
+        .is_some_and(|break_token| break_token.is_in_parallel_block_flow);
+    }
+
     // The layout opportunities count the floats ahead of any content.
     self.position_leading_floats(&mut initial_exclusion_space, &mut leading_floats);
 
@@ -335,7 +363,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let line_break_strategy = LineBreakStrategy::new(
       self.context,
       self.node.block.context.style.inherited_data.text_wrap_style,
-      self.break_token,
+      self.break_token.as_ref(),
     );
     let mut line_box = LogicalLineItems::default();
     let mut line_block_size = LayoutUnit::ZERO;
@@ -371,7 +399,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         space.clone(),
         line_opportunity,
         &leading_floats,
-        self.break_token,
+        self.break_token.clone(),
         &mut *self.atomic_inline,
         &mut self.container_builder.exclusion_space,
       );
@@ -496,8 +524,13 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         continue;
       }
 
-      self.container_builder.break_token = line_info.break_token;
+      self.container_builder.break_token = line_info.break_token.clone();
       self.container_builder.base_direction = line_info.base_direction;
+      #[cfg(feature = "fragmentation")]
+      self
+        .context
+        .parallel_flow_break_tokens
+        .append(&mut line_info.parallel_flow_break_tokens);
 
       if line_info.is_empty_line {
         self.container_builder.is_empty_line_box = true;
@@ -549,7 +582,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let break_token = if strategy.initiate_balancing {
       None
     } else {
-      self.break_token
+      self.break_token.as_ref()
     };
     let Some(score_context) = self.context.score_line_break_context.as_mut() else {
       if strategy.initiate_balancing {
@@ -569,7 +602,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         self.items_data,
         self.constraint_space,
         line_widths,
-        break_token,
+        break_token.cloned(),
         &mut self.container_builder.exclusion_space,
         &mut *self.atomic_inline,
       );
@@ -612,7 +645,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
   /// Blink's `PrepareBoxStates`: the boxes open at the line's start, kept from the last line when
   /// it ended there.
   fn prepare_box_states(&mut self, line_info: &LineInfo<'a, 'c>, should_scale_line_height: bool) {
-    let Some(break_token) = self.break_token else {
+    let Some(break_token) = &self.break_token else {
       self.context.reset_box_states();
 
       return;
@@ -984,6 +1017,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let items = &self.items_data.items;
     let mut index = self
       .break_token
+      .as_ref()
       .map_or(0, |break_token| break_token.start.item_index);
 
     while index < items.len() {

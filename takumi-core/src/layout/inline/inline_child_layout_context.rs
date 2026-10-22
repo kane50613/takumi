@@ -1,6 +1,8 @@
 //! Blink's [`InlineChildLayoutContext`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_child_layout_context.cc),
-//! without fragment items or parallel flows.
+//! without fragment items or the parallel flows of floats.
 
+#[cfg(feature = "fragmentation")]
+use super::inline_break_token::InlineBreakToken;
 use super::{
   inline_box_state::InlineLayoutStateStack, score_line_breaker::ScoreLineBreakContext,
   text_fit_utils::ParagraphScale,
@@ -21,6 +23,10 @@ pub(crate) struct InlineChildLayoutContext<'a, 'c> {
   pub(crate) is_measuring_scale: bool,
   /// Blink's `MeasuredScale`: the scale every line of a consistent `text-fit` takes.
   pub(crate) measured_scale: ParagraphScale,
+  /// Blink's `ParallelFlowBreakTokens`: where the blocks-in-inline of the last line that
+  /// overflowed resume.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) parallel_flow_break_tokens: Vec<InlineBreakToken>,
 }
 
 impl<'a, 'c> InlineChildLayoutContext<'a, 'c> {

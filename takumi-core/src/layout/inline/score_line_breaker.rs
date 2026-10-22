@@ -183,7 +183,7 @@ impl<'s, 'a, 'c> ScoreLineBreaker<'s, 'a, 'c> {
       self.space.clone(),
       LineLayoutOpportunity::new(line_width),
       leading_floats,
-      self.break_token,
+      self.break_token.clone(),
       &mut *self.atomic_inline,
       &mut *self.exclusion_space,
     );
