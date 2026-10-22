@@ -8,7 +8,7 @@ use takumi_core::{
   layout::tree::RenderNode,
   painter::{BoxPainter, OwnContent},
   scene::{NodePaint, PaintItemKind, Scene},
-  style::{Affine, BreakBetween, BreakInside},
+  style::Affine,
 };
 
 use crate::{
@@ -183,13 +183,13 @@ impl AtomCollector<'_> {
       });
     }
 
-    if style.misc_data.break_before == BreakBetween::Page {
+    if style.misc_data.break_before.forces_page_break() {
       atoms.forced.push(y);
     }
-    if style.misc_data.break_after == BreakBetween::Page {
+    if style.misc_data.break_after.forces_page_break() {
       atoms.forced.push(y + layout.size.height);
     }
-    if style.misc_data.break_inside == BreakInside::Avoid {
+    if style.misc_data.break_inside.avoids_page_break() {
       atoms.extents.push(extent);
     }
     let mut shows = node

@@ -662,6 +662,38 @@ fn legacy_page_break_properties_split_the_page() {
   });
 }
 
+/// css-break-3 §3.1: a sided break such as `recto` forces a page break, and
+/// `avoid-page` keeps a box on one page as `avoid` does.
+#[test]
+fn sided_and_page_avoiding_breaks_split_the_page() {
+  run_pdf_fixture("sided-avoid-page-breaks", |fonts| {
+    let filler: String = (1..=8)
+      .map(|i| format!("<p style=\"margin: 0\">line {i}</p>"))
+      .collect();
+    let html = format!(
+      r#"<div style="font-size: 12px; color: #141414">
+        <div>first page</div>
+        <div style="break-before: recto">{filler}</div>
+        <div style="break-inside: avoid-page; background: #e2e8f0; padding: 8px">
+          <p style="margin: 0">kept together</p>
+          <p style="margin: 0">across the break</p>
+          <p style="margin: 0">by avoid-page</p>
+        </div>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse sided page breaks"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. Each
 /// segment of a line resolves on its own, so the 4px border under one column
