@@ -456,7 +456,8 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Places `node`'s fragment `fragment_index`, laid out as `result`, with its border box at
-  /// `location` in its parent's.
+  /// `location` in its parent's. A fragment that does not break ends the box, so the fragments an
+  /// earlier layout left after it go, as Blink's `LayoutBox::SetLayoutResult` drops them.
   pub(crate) fn place_child(
     &mut self,
     node: NodeId,
@@ -474,6 +475,13 @@ impl<'r> LayoutTree<'r> {
         container_fragment_index: 0,
       },
     );
+    #[cfg(feature = "fragmentation")]
+    if result.break_info.break_token.is_none() {
+      self
+        .node_state_mut(node)
+        .fragments
+        .truncate(fragment_index + 1);
+    }
   }
 
   /// Records that `container` laid out the out-of-flow `node` as its containing block.
