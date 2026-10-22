@@ -25,7 +25,7 @@ use crate::{
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::TableLayoutAlgorithm,
-    tree::{LayoutTree, NodeOrigin, RenderNode},
+    tree::{LayoutTree, NodeOrigin},
   },
   layout_unit::LayoutUnit,
   style::Display,
@@ -434,18 +434,7 @@ impl<'r> LayoutTree<'r> {
     location: Point<LayoutUnit>,
     result: &LayoutResult,
   ) {
-    self.set_layout(
-      node,
-      ComputedLayout::new(
-        location.map(LayoutUnit::to_float),
-        Size {
-          width: result.size.inline_size.to_float(),
-          height: result.size.block_size.to_float(),
-        },
-        result.border,
-        result.padding,
-      ),
-    );
+    self.set_layout(node, result.computed_layout(location));
   }
 
   /// Records that `container` laid out the out-of-flow `node` as its containing block.
@@ -495,23 +484,43 @@ impl<'r> LayoutTree<'r> {
       .context
       .set_definite_height(child_percentage_size.block_size.map(LayoutUnit::to_float));
 
-    let available_height = child_percentage_size
-      .block_size
-      .map_or(AvailableSpace::MaxContent, |height| {
-        AvailableSpace::Definite(height.to_float())
-      });
-    let measurement = self.inline_measurement(
-      usize::from(node),
-      Size {
-        width: AvailableSpace::Definite(inline_size.to_float()),
-        height: available_height,
-      },
-      Size {
-        width: Some(inline_size.to_float()),
-        height: None,
-      },
-      border_padding.inline_sum().to_float(),
-    );
+    let boxes = self.child_nodes(node);
+    let measurement = if space.cache_slot == CacheSlot::Layout || !boxes.is_empty() {
+      let containers = self.inline_containers_of(&boxes);
+      let layout = LayoutResult::of_box(
+        LogicalSize::new(inline_size, LayoutUnit::ZERO),
+        &style,
+        space,
+      )
+      .computed_layout(Point::default());
+      let items_data = self.inline_node_data(usize::from(node));
+      let paints = space.cache_slot == CacheSlot::Layout && render_node.has_own_inline_content();
+      let mut atomic_inline = BoxAtomicInline::new(self, Size::all(AvailableSpace::MaxContent));
+      let (measurement, content) =
+        render_node.lay_out_lines(&items_data, layout, &containers, paints, &mut atomic_inline);
+
+      self.inline_contents.insert(node, content);
+      measurement
+    } else {
+      let available_height = child_percentage_size
+        .block_size
+        .map_or(AvailableSpace::MaxContent, |height| {
+          AvailableSpace::Definite(height.to_float())
+        });
+
+      self.inline_measurement(
+        usize::from(node),
+        Size {
+          width: AvailableSpace::Definite(inline_size.to_float()),
+          height: available_height,
+        },
+        Size {
+          width: Some(inline_size.to_float()),
+          height: None,
+        },
+        border_padding.inline_sum().to_float(),
+      )
+    };
 
     InlineContentLayout {
       is_self_collapsing: measurement.is_self_collapsing,
@@ -523,56 +532,42 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Places the inline content boxes of the inline content of `node`, laid out as `result`, where its
-  /// lines put them, then lays out the out-of-flow boxes of that content that an inline box
-  /// contains and returns the rest for `node` and its ancestors. Blink lays the first out in the
-  /// inline box's padding box as `OutOfFlowLayoutPart` does for an inline containing block.
+  /// Places the inline content boxes of `node`, laid out as `result`, where its lines put them,
+  /// then lays out the out-of-flow boxes of that content that an inline box contains and returns
+  /// the rest for `node` and its ancestors. Blink lays the first out in the inline box's padding
+  /// box as `OutOfFlowLayoutPart` does for an inline containing block.
   pub(crate) fn finish_inline_content(
     &mut self,
     node: NodeId,
     result: &LayoutResult,
     space: &ConstraintSpace,
   ) -> Vec<OutOfFlowCandidate> {
+    let Some(inline_content) = self.inline_contents.remove(&node) else {
+      return Vec::new();
+    };
     let boxes = self.child_nodes(node);
     let render_node = self.render_node(node);
-    let places_inline_content_boxes =
-      space.cache_slot == CacheSlot::Layout && render_node.holds_inline_content_box();
+    let layout = result.computed_layout(Point::default());
 
-    if boxes.is_empty() && !places_inline_content_boxes {
-      return Vec::new();
+    if let Some(items) = inline_content.fragment_items {
+      render_node
+        .fragment_items
+        .keep(Rc::new(items.in_content_box_of(layout)));
     }
 
-    let layout = ComputedLayout::new(
-      Point::new(0.0, 0.0),
-      Size {
-        width: result.size.inline_size.to_float(),
-        height: result.size.block_size.to_float(),
-      },
-      result.border,
-      result.padding,
-    );
-    let mut containers: Vec<&RenderNode> = Vec::new();
-
-    for &child in &boxes {
-      if let Some(container) = self.inline_container(child)
-        && !containers.iter().any(|known| ptr::eq(*known, container))
-      {
-        containers.push(container);
-      }
-    }
-
-    let mut atomic_inline = BoxAtomicInline::new(self, Size::all(AvailableSpace::MaxContent));
+    let containers = self.inline_containers_of(&boxes);
+    let geometry = inline_content.geometry;
+    let mut atomic_inline = BoxAtomicInline::new(self, inline_content.available_space);
 
     atomic_inline.cache_slot = space.cache_slot;
 
-    let geometry = render_node.inline_geometry(layout, &containers, &mut atomic_inline);
     let content = layout.content_box_offset();
     // The out-of-flow boxes inside an inline content box that it does not contain go on to the
     // containing blocks around this one.
     let mut candidates = Vec::new();
 
-    if places_inline_content_boxes {
-      for (child_render_node, offset) in geometry.inline_content_boxes {
+    if space.cache_slot == CacheSlot::Layout {
+      for &(child_render_node, offset) in &geometry.inline_content_boxes {
         let (child, child_result) = atomic_inline.lay_out_inline_content_box(child_render_node);
         let location = Point::new(
           LayoutUnit::from_float(content.x + offset.x),
@@ -593,7 +588,7 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
-    for (child, position) in boxes.into_iter().zip(geometry.out_of_flow) {
+    for (child, &position) in boxes.into_iter().zip(&geometry.out_of_flow) {
       let candidate = OutOfFlowCandidate {
         node: child,
         static_position: StaticPosition {
@@ -617,7 +612,7 @@ impl<'r> LayoutTree<'r> {
       let padding_box = containers
         .iter()
         .position(|known| ptr::eq(*known, container))
-        .map(|index| geometry.containing_blocks[index]);
+        .map(|index| geometry.containing_block(index, layout));
       let Some(padding_box) = padding_box else {
         candidates.push(candidate);
         continue;

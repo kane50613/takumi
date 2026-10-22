@@ -2,7 +2,7 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use crate::{
   error::{Error, Result},
@@ -894,9 +894,9 @@ fn compute_node_paint_bounds(
   let content_offset = layout.content_box_offset();
   let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
 
-  let items = node
-    .fragment_items_in(layout)
-    .unwrap_or_else(|| Rc::new(node.lay_out_fragment_items(layout)));
+  let Some(items) = node.fragment_items_in(layout) else {
+    return bounds;
+  };
   let placed = |ink: Option<InkBox>, transform| {
     let (origin, size) = ink?.rect();
 

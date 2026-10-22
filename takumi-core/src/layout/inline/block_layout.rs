@@ -20,11 +20,7 @@ use super::{
 };
 use crate::{
   geometry::{AvailableSpace, ComputedLayout, Line, Point, Size},
-  layout::{
-    logical_rect::LogicalOffset,
-    margin_strut::MarginStrut,
-    tree::{LayoutTree, RenderNode},
-  },
+  layout::{logical_rect::LogicalOffset, margin_strut::MarginStrut, tree::RenderNode},
   layout_unit::LayoutUnit,
   style::Direction,
 };
@@ -58,7 +54,7 @@ impl<'c> InlineNode<'c> {
   }
 
   /// The lines laid out in the content box of `layout`.
-  fn layout_lines_in_content_box<'a>(
+  pub(crate) fn layout_lines_in_content_box<'a>(
     self,
     items_data: &'a InlineNodeData<'c>,
     layout: ComputedLayout,
@@ -143,9 +139,20 @@ impl<'c> InlineNode<'c> {
     atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> InlineMeasurement {
     let lines = self.layout_lines_at(items_data, line_width, available_height, atomic_inline);
+
+    self.measurement_of(&lines, width)
+  }
+
+  /// The size and baselines of `lines`, `width` wide and as tall as the lines down to a
+  /// `line-clamp`.
+  pub(crate) fn measurement_of(
+    self,
+    lines: &[LineBoxFragment<'_, 'c>],
+    width: f32,
+  ) -> InlineMeasurement {
     let margins_adjoin = self.block.context.margins_adjoin();
-    let margins = margin_struts(&lines, margins_adjoin);
-    let (height, clamped) = content_block_size(&lines, margins_adjoin);
+    let margins = margin_struts(lines, margins_adjoin);
+    let (height, clamped) = content_block_size(lines, margins_adjoin);
     let baseline = |line: &LineBoxFragment<'_, '_>| line.bfc_baseline().map(LayoutUnit::to_float);
 
     let shown = lines
@@ -276,44 +283,62 @@ fn content_block_size(
 pub(crate) struct InlineGeometry<'c> {
   /// The static position of each out-of-flow box of its inline content, in tree order.
   pub(crate) out_of_flow: Vec<StaticPosition>,
-  /// The padding box each containing block asked for bounds its out-of-flow boxes with.
-  pub(crate) containing_blocks: Vec<PaddingBox>,
+  /// Each containing block's padding box, `None` for the node's own.
+  pub(crate) containing_blocks: Vec<Option<PaddingBox>>,
   /// Each inline content box and its border box's offset in the content box.
   pub(crate) inline_content_boxes: Vec<(&'c RenderNode, Point<f32>)>,
 }
 
-impl RenderNode {
-  /// The fragment items of this node's inline content laid out in the content box of `layout`,
-  /// its atomic inlines in a layout tree of their own.
-  pub(crate) fn lay_out_fragment_items(&self, layout: ComputedLayout) -> FragmentItems {
-    let mut tree = LayoutTree::from_render_node(self);
-    let mut atomic_inline = BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent));
-
-    self.lay_out_fragment_items_from(
-      &InlineNode::new(self).prepare_layout(),
-      layout,
-      &mut atomic_inline,
-    )
+impl InlineGeometry<'_> {
+  /// The padding box of the `index`th containing block, the node's own laid out as `layout`.
+  pub(crate) fn containing_block(&self, index: usize, layout: ComputedLayout) -> PaddingBox {
+    self.containing_blocks[index].unwrap_or_else(|| PaddingBox::of(layout))
   }
+}
 
-  /// [`Self::lay_out_fragment_items`] from its prepared `items_data`.
-  pub(crate) fn lay_out_fragment_items_from<'c>(
+/// An inline formatting context's lines, laid out once for the boxes they place and paint.
+pub(crate) struct InlineContent<'c> {
+  pub(crate) geometry: InlineGeometry<'c>,
+  /// The space its lines laid their inline content boxes out in.
+  pub(crate) available_space: Size<AvailableSpace>,
+  /// The fragment items paint reads, in a content box whose block size is not known yet.
+  pub(crate) fragment_items: Option<FragmentItems>,
+}
+
+impl RenderNode {
+  /// Its inline content's size and lines in `layout`'s content box, and fragment items to paint.
+  pub(crate) fn lay_out_lines<'c>(
     &'c self,
     items_data: &InlineNodeData<'c>,
     layout: ComputedLayout,
+    containers: &[&RenderNode],
+    paints: bool,
     atomic_inline: &mut BoxAtomicInline<'_, 'c>,
-  ) -> FragmentItems {
-    let lines =
-      InlineNode::new(self).layout_lines_in_content_box(items_data, layout, atomic_inline);
-    let mut spans = InlineSpans::of(self, items_data);
+  ) -> (InlineMeasurement, InlineContent<'c>) {
+    let node = InlineNode::new(self);
+    let lines = node.layout_lines_in_content_box(items_data, layout, atomic_inline);
+    let measurement = node.measurement_of(&lines, layout.content_box_size().width);
+    // Placing an outside marker changes the space, which the boxes lay out in again as here.
+    let available_space = atomic_inline.available_space;
+    let geometry = self.inline_geometry(items_data, &lines, layout, containers, atomic_inline);
+    let fragment_items = paints.then(|| {
+      FragmentItems::from_lines(
+        items_data,
+        &lines,
+        &mut InlineSpans::of(self, items_data),
+        layout,
+        &self.context,
+        atomic_inline,
+      )
+    });
 
-    FragmentItems::from_lines(
-      items_data,
-      &lines,
-      &mut spans,
-      layout,
-      &self.context,
-      atomic_inline,
+    (
+      measurement,
+      InlineContent {
+        geometry,
+        available_space,
+        fragment_items,
+      },
     )
   }
 
@@ -326,22 +351,19 @@ impl RenderNode {
     spans
   }
 
-  /// Where the boxes of this node's inline content sit, its lines laid out in the content box of
-  /// `layout`, and the padding box each of `containers` bounds the out-of-flow boxes it contains
-  /// with, in `layout`'s border box: an inline span's from its line fragments, this node's its own.
+  /// Where `lines` put this node's boxes, and each of `containers`' padding box, its own `None`.
   pub(crate) fn inline_geometry<'c>(
     &'c self,
+    items_data: &InlineNodeData<'c>,
+    lines: &[LineBoxFragment<'_, 'c>],
     layout: ComputedLayout,
     containers: &[&RenderNode],
     atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> InlineGeometry<'c> {
-    let node = InlineNode::new(self);
-    let items_data = node.prepare_layout();
-    let lines = node.layout_lines_in_content_box(&items_data, layout, atomic_inline);
     let mut placed: FxHashMap<*const RenderNode, StaticPosition> = FxHashMap::default();
     let mut inline_content_boxes = Vec::new();
 
-    for line in &lines {
+    for line in lines {
       let line_top = line
         .line_box_bfc_block_offset
         .unwrap_or(line.static_bfc_block_offset);
@@ -408,8 +430,8 @@ impl RenderNode {
       }
     }
 
-    if let Some(marker) = UnpositionedListMarker::of(&items_data)
-      && let Some((_, line)) = UnpositionedListMarker::content_alignment_line(&lines)
+    if let Some(marker) = UnpositionedListMarker::of(items_data)
+      && let Some((_, line)) = UnpositionedListMarker::content_alignment_line(lines)
     {
       let result = marker.layout(atomic_inline);
       let offset = marker.offset(
@@ -436,12 +458,11 @@ impl RenderNode {
       })
       .collect();
 
-    let own_padding_box = PaddingBox::of(layout);
     let spans = if containers.iter().all(|container| ptr::eq(*container, self)) {
       Vec::new()
     } else {
-      let spans = InlineSpans::of(self, &items_data);
-      let fragments = line_span_fragments(&lines, &spans, layout.content_box_offset());
+      let spans = InlineSpans::of(self, items_data);
+      let fragments = line_span_fragments(lines, &spans, layout.content_box_offset());
 
       containing_blocks(&fragments, self.context.style.inherited_data.direction)
     };
@@ -451,7 +472,7 @@ impl RenderNode {
         spans
           .iter()
           .find(|span| ptr::eq(span.owner, *container))
-          .map_or(own_padding_box, |span| span.padding_box)
+          .map(|span| span.padding_box)
       })
       .collect();
 

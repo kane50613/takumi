@@ -17,7 +17,8 @@ use crate::{
     constraint_space::CacheSlot,
     grid::grid_layout_algorithm::GridGeometry,
     inline::{
-      ContentBox, FragmentItems, InlineContentKind, InlineMeasurement, InlineOutOfFlow,
+      ContentBox, FragmentItems, InlineContent, InlineContentKind, InlineMeasurement,
+      InlineOutOfFlow,
       atomic_inline::BoxAtomicInline,
       inline_node::{InlineNode, ItemShapes},
       inline_node_data::InlineNodeData,
@@ -150,7 +151,7 @@ impl LayoutResults {
   /// Lays out the tree under `root`, a box its parent placed, in `available_space`. The root's
   /// margins shrink the space but leave its border box at the origin, where the parent expects it.
   pub fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
-    let mut results = Self::lay_out(root, available_space, false, false);
+    let mut results = Self::lay_out(root, available_space, false);
 
     if let Some(root) = results.nodes.first_mut() {
       root.layout.location = Point::new(0.0, 0.0);
@@ -161,7 +162,7 @@ impl LayoutResults {
   /// [`Self::compute`] for the root of a document, whose initial containing block fits the root
   /// when `available_space` leaves its width to the content.
   pub fn compute_document(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
-    let mut results = Self::lay_out(root, available_space, false, true);
+    let mut results = Self::lay_out(root, available_space, true);
 
     if let Some(root) = results.nodes.first_mut() {
       root.layout.location = Point::new(0.0, 0.0);
@@ -169,21 +170,15 @@ impl LayoutResults {
     results
   }
 
-  /// [`Self::compute_document`] for paint: each inline formatting context keeps the fragment
-  /// items it lays out to, and lets go of the shaped text no other box shares.
+  /// [`Self::compute_document`] for paint, the root at its margin-offset location.
   pub(crate) fn compute_for_paint(
     root: &RenderNode,
     available_space: Size<AvailableSpace>,
   ) -> Self {
-    Self::lay_out(root, available_space, true, true)
+    Self::lay_out(root, available_space, true)
   }
 
-  fn lay_out(
-    root: &RenderNode,
-    available_space: Size<AvailableSpace>,
-    keeps_fragment_items: bool,
-    is_document: bool,
-  ) -> Self {
+  fn lay_out(root: &RenderNode, available_space: Size<AvailableSpace>, is_document: bool) -> Self {
     let mut tree = LayoutTree::from_render_node(root);
     let available_space = if is_document {
       tree.initial_containing_block(available_space)
@@ -191,7 +186,6 @@ impl LayoutResults {
       available_space
     };
 
-    tree.keeps_fragment_items = keeps_fragment_items;
     tree.compute_layout(available_space);
     tree.into_results()
   }
@@ -266,9 +260,6 @@ pub struct LayoutTree<'r> {
   /// Each inline formatting context's prepared items, which every pass of one layout shares, as
   /// Blink keeps them until `NeedsCollectInlines`.
   inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
-  /// Whether each inline formatting context keeps the fragment items it lays out to, as a layout
-  /// that paint reads does.
-  keeps_fragment_items: bool,
   /// Each table's parts, gathered when the tree is built.
   tables: FxHashMap<usize, Rc<TableStructure>>,
   /// Each table's column constraints, measured on its first layout.
@@ -278,6 +269,8 @@ pub struct LayoutTree<'r> {
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
   /// context lays out as, made the first time its line lays it out.
   atomic_inlines: FxHashMap<*const RenderNode, NodeId>,
+  /// Each inline formatting context's lines from its block layout, until it finishes.
+  pub(crate) inline_contents: FxHashMap<NodeId, InlineContent<'r>>,
 }
 
 /// What a box's part in a table changes in the styles it is laid out with.
@@ -574,11 +567,11 @@ impl<'r> LayoutTree<'r> {
       inline_containers: FxHashMap::default(),
       inline_measures: RefCell::default(),
       inline_node_data: RefCell::default(),
-      keeps_fragment_items: false,
       tables: FxHashMap::default(),
       table_columns: FxHashMap::default(),
       table_fragments: FxHashMap::default(),
       atomic_inlines: FxHashMap::default(),
+      inline_contents: FxHashMap::default(),
     };
 
     tree.push_subtree(render_root);
@@ -1063,24 +1056,8 @@ impl<'r> LayoutTree<'r> {
     state.layout_style = Rc::new(layout_style);
   }
 
-  /// Sets `node`'s layout, and lays its inline content out to the fragment items paint reads when
-  /// the tree keeps them.
   pub(crate) fn set_layout(&mut self, node: NodeId, layout: ComputedLayout) {
-    let index = usize::from(node);
-
-    self.nodes[index].layout = layout;
-
-    let render_node = self.render_nodes[index];
-
-    if self.keeps_fragment_items && render_node.has_own_inline_content() {
-      let items_data = self.inline_node_data(index);
-
-      render_node.keep_fragment_items(
-        &items_data,
-        layout,
-        &mut BoxAtomicInline::new(self, Size::all(AvailableSpace::MaxContent)),
-      );
-    }
+    self.nodes[usize::from(node)].layout = layout;
   }
 
   /// The number of nodes in the tree.
@@ -1111,6 +1088,21 @@ impl<'r> LayoutTree<'r> {
   /// formatting context, if one is.
   pub(crate) fn inline_container(&self, node: NodeId) -> Option<&'r RenderNode> {
     self.inline_containers.get(&usize::from(node)).copied()
+  }
+
+  /// The inline spans containing any of `boxes`, each once, in the order `boxes` first meets them.
+  pub(crate) fn inline_containers_of(&self, boxes: &[NodeId]) -> Vec<&'r RenderNode> {
+    let mut containers: Vec<&'r RenderNode> = Vec::new();
+
+    for &child in boxes {
+      if let Some(container) = self.inline_container(child)
+        && !containers.iter().any(|known| ptr::eq(*known, container))
+      {
+        containers.push(container);
+      }
+    }
+
+    containers
   }
 
   pub(in crate::layout) fn table_structure(&self, table: NodeId) -> Option<Rc<TableStructure>> {
@@ -1228,27 +1220,6 @@ impl RenderNode {
       fragment_items: FragmentItemsCache::default(),
       item_shapes: ItemShapes::default(),
     }
-  }
-
-  /// Lays its inline content out to the fragment items it keeps, in the content box of `layout`,
-  /// unless it keeps ones for that content box already.
-  pub(crate) fn keep_fragment_items<'c>(
-    &'c self,
-    items_data: &InlineNodeData<'c>,
-    layout: ComputedLayout,
-    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
-  ) {
-    if self.fragment_items_in(layout).is_some() || !self.has_own_inline_content() {
-      return;
-    }
-
-    self
-      .fragment_items
-      .keep(Rc::new(self.lay_out_fragment_items_from(
-        items_data,
-        layout,
-        atomic_inline,
-      )));
   }
 
   /// Whether it has inline content of its own to lay out.
