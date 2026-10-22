@@ -14,6 +14,7 @@ pub mod decoration;
 pub(crate) mod exclusions;
 pub(crate) mod flex;
 pub(crate) mod floats_utils;
+pub(crate) mod grid;
 /// Inline-level layout: text shaping, line breaking, and text fitting.
 pub mod inline;
 /// Resolving what an inline box paints.
