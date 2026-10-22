@@ -68,18 +68,14 @@ zune-jpeg.workspace = true
 
 [dev-dependencies.takumi]
 path = "."
-features = ["from-html", "svg-backend"]
+features = ["from-html", "svg-backend", "unstable"]
 
 [dev-dependencies.takumi-core]
 path = "../takumi-core"
-features = ["paint-tree"]
+features = ["paint-tree", "fragmentation"]
 
 [dev-dependencies.takumi-svg]
 path = "../takumi-svg"
-
-[dev-dependencies.takumi-raster]
-path = "../takumi-raster"
-features = ["fragmentation"]
 
 [lints]
 workspace = true

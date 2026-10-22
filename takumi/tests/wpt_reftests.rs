@@ -37,10 +37,13 @@ use takumi::{
     Bitmap, FontOverride, FontResource, Fonts, FromHtml, FromHtmlOptions, ImageCacheMode,
     ImageSource, Node, OutputFormat, RenderOptions, StyleSheet, Viewport,
   },
-  render, write_image,
+  render,
+  unstable::raster::render_scene,
+  write_image,
 };
-use takumi_core::{geometry::Size, resources::image::ResourceCache};
-use takumi_raster::render_pages;
+use takumi_core::{
+  geometry::Size, layout::tree::RenderNode, resources::image::ResourceCache, scene::PagedScene,
+};
 use test_utils::{CONTEXT, matches_fragments};
 
 /// The WPT harness's viewport.
@@ -988,29 +991,41 @@ impl Runner {
     let size = if print { PRINT_PAGE_AREA } else { VIEWPORT };
     let options = RenderOptions::builder()
       .viewport(Viewport::new(size))
-      .node(node)
+      .node(node.clone())
       .fonts(&self.fonts)
       .images(images)
       .stylesheet(stylesheet.into())
       .build();
     let bitmaps = if print {
-      render_pages(
-        options,
-        Size {
-          width: size.0 as f32,
-          height: size.1 as f32,
-        },
-      )
+      render_pages(options, node, size)?
     } else {
-      render(options).map(|bitmap| vec![bitmap])
-    }
-    .map_err(|error| format!("render: {error}"))?;
+      vec![render(options).map_err(|error| format!("render: {error}"))?]
+    };
 
     Ok(Rendering {
       size,
       pages: bitmaps.iter().map(over_white).collect(),
     })
   }
+}
+
+/// `node` laid out across pages `size` under `options`, one image per page.
+fn render_pages(
+  mut options: RenderOptions,
+  node: Node,
+  size: (u32, u32),
+) -> Result<Vec<Bitmap>, String> {
+  let context = options.take_render_context();
+  let page_size = Size {
+    width: size.0 as f32,
+    height: size.1 as f32,
+  };
+  let mut paged = PagedScene::lay_out(RenderNode::from_node(&context, node), page_size, true)
+    .map_err(|error| format!("layout: {error}"))?;
+
+  (0..paged.page_count())
+    .map(|index| render_scene(paged.page(index)).map_err(|error| format!("render: {error}")))
+    .collect()
 }
 
 /// A document rendered onto white: one page, or one per print page.
