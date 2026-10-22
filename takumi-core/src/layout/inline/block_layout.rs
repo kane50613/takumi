@@ -318,6 +318,8 @@ impl RenderNode {
     let node = InlineNode::new(self);
     let lines = node.layout_lines_in_content_box(items_data, layout, atomic_inline);
     let measurement = node.measurement_of(&lines, layout.content_box_size().width);
+    // Placing an outside marker changes the space, which the boxes lay out in again as here.
+    let available_space = atomic_inline.available_space;
     let geometry = self.inline_geometry(items_data, &lines, layout, containers, atomic_inline);
     let fragment_items = paints.then(|| {
       FragmentItems::from_lines(
@@ -334,7 +336,7 @@ impl RenderNode {
       measurement,
       InlineContent {
         geometry,
-        available_space: atomic_inline.available_space,
+        available_space,
         fragment_items,
       },
     )
