@@ -381,8 +381,91 @@ impl BoxFragmentBuilder {
     }
   }
 
+  /// Blink's `ShouldCloneBlockStartBorderPadding`.
+  pub(crate) fn should_clone_block_start_border_padding(&self) -> bool {
+    if self.box_decoration_break != BoxDecorationBreak::Clone {
+      return false;
+    }
+
+    let Some(previous_break_token) = self.previous_break_token.as_deref() else {
+      return true;
+    };
+
+    if previous_break_token.monolithic_overflow > LayoutUnit::ZERO
+      && self.fragmentainer_space_left(false)
+        < self.border_padding.block_start + self.border_padding.block_end
+    {
+      return false;
+    }
+    !previous_break_token.is_at_block_end
+  }
+
+  /// Blink's `ConsumedBlockSize` of the incoming break token.
+  pub(crate) fn previously_consumed_block_size(&self) -> LayoutUnit {
+    self
+      .previous_break_token
+      .as_deref()
+      .filter(|token| !token.is_break_before)
+      .map_or(LayoutUnit::ZERO, |token| token.consumed_block_size)
+  }
+
+  /// Blink's `ShouldIncludeBlockEndBorderPadding`, for a box that establishes a new formatting
+  /// context when `is_new_formatting_context`.
+  pub(crate) fn should_include_block_end_border_padding(
+    &self,
+    is_new_formatting_context: bool,
+  ) -> bool {
+    if self
+      .previous_break_token
+      .as_deref()
+      .is_some_and(|token| token.is_at_block_end)
+    {
+      return false;
+    }
+    if !self.should_break_inside_for_content()
+      || self.is_known_to_fit_in_fragmentainer
+      || self.should_clone_box_end_decorations
+    {
+      return true;
+    }
+    if is_new_formatting_context {
+      return false;
+    }
+    !self.has_inflow_child_break_inside()
+  }
+
+  /// Blink's `SidesToInclude`: a fragment's border and padding on the side a break cut, which
+  /// layout left out, are none in `result` either, so they paint nowhere.
+  pub(crate) fn exclude_broken_sides(&self, result: &mut LayoutResult) {
+    if !self.includes_block_start {
+      result.border.top = 0.0;
+      result.padding.top = 0.0;
+    }
+    if !self.includes_block_end {
+      result.border.bottom = 0.0;
+      result.padding.bottom = 0.0;
+    }
+  }
+
+  /// What `node`'s layout result tells its container about breaking: the break token where it
+  /// resumes, once it breaks.
+  pub(crate) fn finish_break_info(&mut self, node: NodeId) -> BreakInfo {
+    if !self.has_block_fragmentation() {
+      return BreakInfo {
+        is_first_for_node: self.is_first_for_node,
+        ..BreakInfo::default()
+      };
+    }
+
+    let break_token = self
+      .should_break()
+      .then(|| Rc::new(self.create_break_token(node)));
+
+    self.break_info(break_token)
+  }
+
   /// What the box's layout result tells its container about breaking, with its `break_token`.
-  pub(crate) fn break_info(&self, break_token: Option<Rc<BlockBreakToken>>) -> BreakInfo {
+  fn break_info(&self, break_token: Option<Rc<BlockBreakToken>>) -> BreakInfo {
     BreakInfo {
       break_token,
       break_appeal: self.break_appeal,
