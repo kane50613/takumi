@@ -815,6 +815,9 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       self.style.border,
     );
 
+    #[cfg(feature = "fragmentation")]
+    let first_hoisted = self.tree.node_state(self.node).hoisted_children.len();
+
     self.out_of_flow =
       self
         .tree
@@ -822,7 +825,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     #[cfg(feature = "fragmentation")]
     self
       .tree
-      .hold_hoisted_children(self.node, self.fragment_index());
+      .hold_hoisted_children(self.node, self.fragment_index(), first_hoisted);
   }
 
   /// Writes each placed child's geometry once the layout stands, which only a layout that places

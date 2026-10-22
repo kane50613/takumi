@@ -915,6 +915,8 @@ impl<'r> LayoutTree<'r> {
 
       // The page area is the initial containing block of the out-of-flow boxes no box contains.
       if !result.out_of_flow.is_empty() {
+        let first_hoisted = self.node_state(NodeId::ROOT).hoisted_children.len();
+
         self.lay_out_out_of_flow(
           NodeId::ROOT,
           ContainingBlockClaims::ALL,
@@ -931,7 +933,7 @@ impl<'r> LayoutTree<'r> {
           },
           &space,
         );
-        self.hold_hoisted_children(NodeId::ROOT, fragment_index);
+        self.hold_hoisted_children(NodeId::ROOT, fragment_index, first_hoisted);
       }
       page_count += 1;
       break_token = result.break_info.break_token.clone();
