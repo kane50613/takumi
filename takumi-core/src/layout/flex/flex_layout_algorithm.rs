@@ -28,7 +28,7 @@ use crate::{
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::ContainingBlock,
-    relative_utils::compute_relative_offset_for_inline,
+    relative_utils::compute_relative_offset,
     tree::LayoutTree,
   },
   layout_unit::{BoxStrut, LayoutUnit},
@@ -1611,7 +1611,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
   /// Blink's `BoxFragmentBuilder::AddResult`: the item moved by `position: relative`, its
   /// out-of-flow boxes along with it.
   fn add_result(&mut self, node: NodeId, result: Rc<LayoutResult>, offset: LogicalOffset) {
-    let relative_offset = compute_relative_offset_for_inline(
+    let relative_offset = compute_relative_offset(
       self.tree.render_node(node),
       self.direction(),
       self
