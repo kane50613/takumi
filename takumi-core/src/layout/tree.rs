@@ -1648,6 +1648,12 @@ impl RenderNode {
       || self.anonymous_text_content.is_some()
   }
 
+  /// Blink's `IsOriginalDisplayInlineType`: whether the box was inline-level before positioning or
+  /// floating blockified it.
+  pub(crate) fn is_original_display_inline_type(&self) -> bool {
+    self.context.style.original_display.is_inline_level()
+  }
+
   pub(crate) fn participates_in_inline_formatting_context(&self) -> bool {
     self.participates_in_inflow_inline_formatting_context()
       || self.is_out_of_flow()
@@ -1806,10 +1812,11 @@ impl RenderNode {
     .into_boxed_slice();
 
     // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
-    // must not be swept into an anonymous block box.
+    // must not be swept into an anonymous block box, nor floats, which Blink's
+    // `LayoutBlockFlow::AddChild` keeps among the block children.
     let has_inline = children
       .iter()
-      .any(|child| child.participates_in_inline_formatting_context() && !child.is_out_of_flow());
+      .any(RenderNode::participates_in_inflow_inline_formatting_context);
     let has_block = children
       .iter()
       .any(|child| !child.participates_in_inline_formatting_context());
@@ -1824,7 +1831,7 @@ impl RenderNode {
         return wrap_runs(
           children,
           |child| !child.participates_in_inline_formatting_context(),
-          |run| RenderNode::block_in_inline(context, run),
+          |run| vec![RenderNode::block_in_inline(context, run)],
         );
       }
 
@@ -1839,12 +1846,21 @@ impl RenderNode {
       return children;
     }
 
-    // An out-of-flow box stays in the run of inline content around it, as a placeholder
-    // marking its static position, rather than breaking the run into two lines.
+    // Blink's `MakeChildrenNonInline`: an out-of-flow box or float stays in the run of inline
+    // content around it, and a run of them alone stays among the block children.
     wrap_runs(
       children,
       RenderNode::participates_in_inline_formatting_context,
-      |run| RenderNode::anonymous_block_container(context, run),
+      |run| {
+        if run
+          .iter()
+          .any(RenderNode::participates_in_inflow_inline_formatting_context)
+        {
+          vec![RenderNode::anonymous_block_container(context, run)]
+        } else {
+          run
+        }
+      },
     )
   }
 
@@ -1936,11 +1952,11 @@ impl RenderNode {
   }
 }
 
-/// `children` with each run of the ones `in_run` picks wrapped in the box `wrap` makes of it.
+/// `children` with each run of the ones `in_run` picks replaced by what `wrap` makes of it.
 fn wrap_runs(
   children: Box<[RenderNode]>,
   in_run: impl Fn(&RenderNode) -> bool,
-  wrap: impl Fn(Vec<RenderNode>) -> RenderNode,
+  wrap: impl Fn(Vec<RenderNode>) -> Vec<RenderNode>,
 ) -> Box<[RenderNode]> {
   let mut wrapped = Vec::new();
   let mut run = Vec::new();
@@ -1953,14 +1969,14 @@ fn wrap_runs(
     }
 
     if !run.is_empty() {
-      wrapped.push(wrap(take(&mut run)));
+      wrapped.extend(wrap(take(&mut run)));
     }
 
     wrapped.push(child);
   }
 
   if !run.is_empty() {
-    wrapped.push(wrap(run));
+    wrapped.extend(wrap(run));
   }
 
   wrapped.into_boxed_slice()

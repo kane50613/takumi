@@ -9,6 +9,7 @@
 use std::{mem::take, rc::Rc};
 
 use crate::{
+  context::RenderContext,
   geometry::{NodeId, Point, Size},
   layout::{
     bfc_rect::BfcOffset,
@@ -19,6 +20,7 @@ use crate::{
     floats_utils::{Clear, Float, UnpositionedFloat, adjust_to_clearance, position_float},
     inline::{
       inline_item_result::LayoutResult as LineItemLayoutResult, line_breaker::AtomicInlineLayout,
+      line_info::text_align,
     },
     layout_result::{
       InlineEdge, LayoutResult, LayoutStatus, LogicalStaticPosition, OutOfFlowCandidate,
@@ -594,7 +596,11 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       static_position.offset.block_offset += previous.margin_strut.sum();
     }
 
-    if self.tree.is_original_display_inline(child) {
+    if self
+      .tree
+      .render_node(child)
+      .is_original_display_inline_type()
+    {
       // An inline-level box's static position follows the floats before it.
       if self.bfc_block_offset.is_none() {
         self.adjoining_object_types |= AdjoiningObjectTypes::INLINE_OUT_OF_FLOW;
@@ -609,21 +615,13 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         self.space.bfc_offset.line_offset + self.border_padding.line_left(self.direction()),
         origin_bfc_block_offset,
       );
-      let opportunity = self.exclusion_space.find_layout_opportunity(
-        origin,
-        self.child_available_inline_size(),
-        self.direction(),
-        LayoutUnit::ZERO,
-      );
-      let line_offset = opportunity.rect.line_start_offset() - origin.line_offset;
 
-      static_position.offset.inline_offset += match self.direction() {
-        Direction::Ltr => line_offset,
-        Direction::Rtl => {
-          origin.line_offset + self.child_available_inline_size()
-            - opportunity.rect.line_end_offset()
-        }
-      };
+      static_position.offset.inline_offset += calculate_out_of_flow_static_inline_level_offset(
+        &self.tree.render_node(self.node).context,
+        origin,
+        &self.exclusion_space,
+        self.child_available_inline_size(),
+      );
     } else {
       // The alignment container for a block-level out-of-flow box is a zero-thickness line in the
       // inline direction. https://drafts.csswg.org/css-position-3/#staticpos-rect
@@ -1517,6 +1515,54 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     Ok(())
   }
+}
+
+/// Blink's `CalculateOutOfFlowStaticInlineLevelOffset`: where a zero-sized line from `origin`
+/// would start beside the floats, aligned and indented as the lines of `container` are.
+fn calculate_out_of_flow_static_inline_level_offset(
+  container: &RenderContext,
+  origin: BfcOffset,
+  exclusion_space: &ExclusionSpace,
+  child_available_inline_size: LayoutUnit,
+) -> LayoutUnit {
+  let style = &container.style;
+  let direction = style.inherited_data.direction;
+  let is_ltr = direction == Direction::Ltr;
+  let opportunity = exclusion_space.find_layout_opportunity(
+    origin,
+    child_available_inline_size,
+    direction,
+    LayoutUnit::ZERO,
+  );
+  let child_line_offset = if is_ltr {
+    opportunity.rect.line_start_offset()
+  } else {
+    opportunity.rect.line_end_offset()
+  };
+  let relative_line_offset = child_line_offset - origin.line_offset;
+  let mut inline_offset = if is_ltr {
+    relative_line_offset
+  } else {
+    child_available_inline_size - relative_line_offset
+  };
+  let line_offset =
+    text_align(style, false).line_offset_for_text_align(direction, opportunity.rect.inline_size());
+
+  inline_offset += if is_ltr {
+    line_offset
+  } else {
+    opportunity.rect.inline_size() - line_offset
+  };
+
+  let text_indent = style.misc_inherited1_data.text_indent;
+
+  if !text_indent.hanging {
+    inline_offset += text_indent
+      .amount
+      .minimum_value_for(&container.sizing, child_available_inline_size);
+  }
+
+  inline_offset
 }
 
 /// Blink's `WebkitTextAlignAndJustifySelfOffset`, for `justify-self` alone.

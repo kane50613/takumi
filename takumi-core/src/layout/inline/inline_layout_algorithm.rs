@@ -975,13 +975,6 @@ impl LogicalLineItems<'_, '_> {
   }
 }
 
-impl RenderNode {
-  /// Blink's `IsOriginalDisplayInlineType`.
-  fn is_original_display_inline_type(&self) -> bool {
-    self.context.style.original_display.is_inline_level()
-  }
-}
-
 impl<'c> InlineNode<'c> {
   /// Blink's `BlockLayoutAlgorithm` laying out its inline child: a line at a time, each below the
   /// last, until the content ends.

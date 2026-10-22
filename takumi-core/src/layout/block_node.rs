@@ -410,18 +410,6 @@ impl<'r> LayoutTree<'r> {
     self.node_state(node).table_box.is_table
   }
 
-  /// Blink's `IsOriginallyInlineLevel`: whether an out-of-flow box was inline-level before it was
-  /// taken out of flow.
-  pub(crate) fn is_original_display_inline(&self, node: NodeId) -> bool {
-    self
-      .render_node(node)
-      .context
-      .style
-      .base_data
-      .display
-      .is_inline_level()
-  }
-
   /// The out-of-flow boxes `node` is the containing block for.
   pub(crate) fn claims(&self, node: NodeId) -> ContainingBlockClaims {
     self.node_state(node).claims
