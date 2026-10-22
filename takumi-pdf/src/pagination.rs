@@ -1,5 +1,7 @@
 //! Cutting the content column into pages without splitting unsplittable atoms.
 
+use std::collections::HashMap;
+
 use takumi_core::{
   geometry::{Point, transformed_rect_extents},
   layout::node::Node,
@@ -349,6 +351,14 @@ pub(crate) struct Paginated {
   window: f32,
 }
 
+/// Document-wide counters supplied when laying out one section.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PageCounters<'a> {
+  pub(crate) offset: usize,
+  pub(crate) total: Option<usize>,
+  pub(crate) targets: Option<&'a HashMap<Box<str>, usize>>,
+}
+
 /// One page's window into the content column.
 pub(crate) struct PageSlice {
   /// 0-based; display page numbers are `index + 1`.
@@ -388,6 +398,7 @@ impl Paginated {
     mut node: Node,
     inputs: &TreeInputs<'_>,
     frame: &PageFrame,
+    counters: PageCounters<'_>,
   ) -> Result<Self, PdfError> {
     if !has_page_counters(&node) && !has_target_counters(&node) {
       return Self::build_once(node, inputs, frame);
@@ -402,7 +413,7 @@ impl Paginated {
 
       passes += 1;
       if pages < MAX_PAGES {
-        paginated.substitute_counters(&mut node, &mut written);
+        paginated.substitute_counters(&mut node, &mut written, counters);
       }
       if written == previous {
         return Ok(paginated);
@@ -441,9 +452,14 @@ impl Paginated {
 
   /// Fills both kinds of counter from this laid-out pass, collecting what it
   /// wrote so the caller can see whether the numbers moved.
-  fn substitute_counters(&self, node: &mut Node, written: &mut Vec<String>) {
-    let pages = self.starts.len();
-    let page_at = |top: &f32| self.page_index(*top) + 1;
+  fn substitute_counters(
+    &self,
+    node: &mut Node,
+    written: &mut Vec<String>,
+    counters: PageCounters<'_>,
+  ) {
+    let pages = counters.total.unwrap_or(self.starts.len());
+    let page_at = |top: &f32| counters.offset + self.page_index(*top) + 1;
     // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
     let page_of = self
       .interactive
@@ -468,7 +484,10 @@ impl Paginated {
     FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
 
     let anchors = &self.interactive.anchors;
-    let target_page = |id: &str| anchors.get(id).map(|anchor| page_at(&anchor.top));
+    let target_page = |id: &str| match counters.targets {
+      Some(targets) => targets.get(id).copied(),
+      None => anchors.get(id).map(|anchor| page_at(&anchor.top)),
+    };
 
     substitute_target_counters(node, None, &target_page, written);
   }

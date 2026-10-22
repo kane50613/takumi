@@ -11,6 +11,38 @@ Content lays out at the width inside the margins, then flows across pages. Use C
   the height of the page area inside the margins, as in print.
 </Callout>
 
+## Mixed page sizes
+
+Use `sections` to append content with a different page size or orientation in one `render()` call. Each section starts on a new page and paginates at its own content width and height. The PDF writes the physical size into each page's `MediaBox`; it does not rotate portrait pages or merge separate PDFs.
+
+```tsx twoslash title="Portrait report with a landscape appendix"
+declare const report: import("react").ReactNode;
+declare const ledger: import("react").ReactNode;
+// ---cut---
+import { render, PageNumber, TotalPages } from "takumi-pdf";
+
+const pdf = await render(report, {
+  size: "a4",
+  footer: (
+    <div>
+      Page <PageNumber /> of <TotalPages />
+    </div>
+  ),
+  // [!code highlight:6]
+  sections: [
+    { node: ledger, landscape: true, margin: 32 },
+    { node: <p>Closing note, back on portrait A4.</p> },
+    { node: <p>Custom paper.</p>, size: { width: 600, height: 400 } },
+  ],
+});
+```
+
+Each section accepts `node`, `size`, `landscape`, `margin`, `header`, and `footer`. Omitted geometry fields inherit the **document options**, not the preceding section. `landscape: false` explicitly selects the unswapped size. A supplied `margin` replaces the whole margin setting. Explicit dimensions use CSS pixels, like the document's `size`.
+
+Headers and footers inherit too; pass `false` to remove one for a section. Document `pages.first`, `pages.last`, `pages.odd`, and `pages.even` rules still override these bands using document-wide page numbers.
+
+`PageNumber`, `TotalPages`, target-page counters, page ranges, internal links, the outline, metadata, attachments, and the tagged structure tree belong to the whole document. A section can contain JSX, HTML (including its stylesheet), or a node tree. Fonts, images, and CSS are shared across sections. Nonempty `sections` cannot be combined with `viewport`; an empty list is a no-op.
+
 ## Break properties
 
 ```tsx twoslash title="Break properties"

@@ -50,6 +50,9 @@ test("renders a single fixed page", async () => {
   expect(pdf).toBeInstanceOf(Uint8Array);
   expect(pdfHeader(pdf)).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
+  expect(
+    await renderer.render(doc, { viewport: { width: 600, height: 300 }, sections: [] }),
+  ).toEqual(pdf);
 });
 
 test("defaults to paged A4 without options", async () => {
@@ -57,6 +60,123 @@ test("defaults to paged A4 without options", async () => {
 
   expect(pdfHeader(pdf)).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
+  expect(await renderer.render(doc, { sections: [] })).toEqual(pdf);
+});
+
+test("sections paginate at their own width with real page boxes", async () => {
+  const pdf = await renderer.render(`<h1>Portrait report</h1>`, {
+    size: "a4",
+    margin: 24,
+    outline: true,
+    metadata: { title: "Mixed report" },
+    footer: `<div>Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>`,
+    sections: [
+      {
+        node: `<style>.ledger-page { height:100vh; }</style><main><section class="ledger-page"><h1>Ledger</h1></section><section class="ledger-page">Continuation</section></main>`,
+        landscape: true,
+        margin: 32,
+      },
+      { node: `<h1>Back to portrait</h1>`, footer: false },
+      { node: text("Custom paper"), size: { width: 320, height: 180 } },
+    ],
+  });
+  const raw = decoder.decode(pdf);
+  const boxes = [...raw.matchAll(/\/MediaBox\s*\[([^\]]+)\]/g)].map((match) =>
+    match[1]?.trim().split(/\s+/).map(Number),
+  );
+
+  expect(pageCount(pdf)).toBe(5);
+  expect(boxes).toHaveLength(5);
+  for (const [index, expected] of [
+    [595.28, 841.89],
+    [841.89, 595.28],
+    [841.89, 595.28],
+    [595.28, 841.89],
+    [240, 135],
+  ].entries()) {
+    expect(boxes[index]?.[2]).toBeCloseTo(expected[0] ?? 0, 1);
+    expect(boxes[index]?.[3]).toBeCloseTo(expected[1] ?? 0, 1);
+  }
+  expect(raw).not.toContain("/Rotate");
+  expect(raw.match(/\/Title\(/g)).toHaveLength(4);
+});
+
+test("section geometry inherits document fields without accumulating orientation swaps", async () => {
+  const pdf = await renderer.render(text("Main"), {
+    size: { width: 200, height: 400 },
+    landscape: true,
+    margin: 12,
+    sections: [
+      { node: text("Inherited") },
+      { node: text("Explicit portrait"), landscape: false },
+      { node: text("Inherited landscape on new paper"), size: { width: 160, height: 300 } },
+    ],
+  });
+
+  expect(
+    [...decoder.decode(pdf).matchAll(/\/MediaBox\s*\[([^\]]+)\]/g)].map((match) => match[1]),
+  ).toEqual(["0 0 300 150", "0 0 300 150", "0 0 150 300", "0 0 225 120"]);
+  await expect(
+    renderer.render(doc, {
+      viewport: { width: 400, height: 300 },
+      sections: [{ node: doc }],
+    } as never),
+  ).rejects.toThrow("mutually exclusive");
+  await expect(
+    renderer.render(doc, {
+      sections: [{ node: doc, size: "unknown" }],
+    } as never),
+  ).rejects.toThrow("unknown page size");
+  await expect(
+    renderer.render(doc, {
+      sections: [{ node: doc, landscape: true, typo: true }],
+    } as never),
+  ).rejects.toThrow("unknown section field");
+});
+
+test("sections require a node field but accept empty document inputs", async () => {
+  await expect(
+    Reflect.apply(renderer.render, renderer, [doc, { sections: [{ landscape: true }] }]),
+  ).rejects.toThrow("section.node is required");
+
+  for (const node of [undefined, null, false, ""]) {
+    const pdf = await renderer.render(doc, { sections: [{ node }] });
+
+    expect(pageCount(pdf)).toBe(2);
+  }
+});
+
+test("section content and bands participate in lazy font collection", async () => {
+  const own = new PdfRenderer();
+  let loaded = false;
+
+  try {
+    const pdf = await own.render(text("Latin cover"), {
+      fonts: [
+        {
+          name: "Section CJK",
+          ranges: [[0x4e00, 0x9fff]],
+          data: () => {
+            loaded = true;
+            return notoSansTc();
+          },
+        },
+      ],
+      sections: [
+        {
+          node: text("中文 appendix"),
+          landscape: true,
+          header: `<div>中文 <span class="pageNumber trad-chinese-informal"></span></div>`,
+          footer: TotalPages({ format: "trad-chinese-informal" }),
+        },
+      ],
+    });
+
+    expect(loaded).toBe(true);
+    expect(pageCount(pdf)).toBe(2);
+  } finally {
+    own.free();
+  }
 });
 
 test("renders an HTML string with its own stylesheet", async () => {
@@ -219,6 +339,7 @@ test("auto-height viewport sizes the page to content", async () => {
   const pdf = await renderer.render(rows(40), { viewport: { width: 300 } });
 
   expect(pageCount(pdf)).toBe(1);
+  expect(await renderer.render(rows(40), { viewport: { width: 300 }, sections: [] })).toEqual(pdf);
 
   const [width, height] = mediaBox(pdf);
 

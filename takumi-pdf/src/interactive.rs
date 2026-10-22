@@ -40,6 +40,7 @@ pub(crate) struct LinkTarget {
 }
 
 /// Link, heading and anchor targets collected from one tree.
+#[derive(Default)]
 pub(crate) struct Interactive {
   pub(crate) links: Vec<LinkTarget>,
   pub(crate) headings: Vec<HeadingTarget>,
@@ -68,6 +69,7 @@ pub(crate) struct AnchorTarget {
 }
 
 /// A heading in content coordinates, for the outline.
+#[derive(Clone)]
 pub(crate) struct HeadingTarget {
   level: u8,
   text: String,
@@ -122,6 +124,21 @@ fn heading_level(tag: &str) -> Option<u8> {
 }
 
 impl Interactive {
+  pub(crate) fn append_section(&mut self, section: &Self, index: usize) {
+    self
+      .headings
+      .extend(section.headings.iter().cloned().map(|mut heading| {
+        heading.path.insert(0, index);
+        heading
+      }));
+    for (id, anchor) in &section.anchors {
+      let mut anchor = anchor.clone();
+
+      anchor.path.insert(0, index);
+      self.anchors.entry(id.clone()).or_insert(anchor);
+    }
+  }
+
   /// Collects hyperlinks and headings from the prepared scene, in paint order.
   pub(crate) fn collect(tree: &PreparedTree) -> Self {
     let mut collected = Self {
