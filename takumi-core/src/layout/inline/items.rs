@@ -137,8 +137,7 @@ impl RenderNode {
     self.participates_as_inline_box() && self.origin != NodeOrigin::Marker
   }
 
-  /// Whether its inline formatting context lays it out as a box of the layout tree its line holds:
-  /// an atomic inline box or a block-in-inline, which the scene paints as boxes of their own.
+  /// Whether it is an atomic inline box or a block-in-inline, which its line holds as a tree box.
   pub(crate) fn is_inline_content_box(&self) -> bool {
     self.is_atomic_inline_box() || self.is_block_in_inline
   }

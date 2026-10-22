@@ -44,8 +44,7 @@ pub struct InlineSubtree {
   paint_offset: Point<f32>,
 }
 
-/// Resolves what `positioned` paints, and where, or nothing for a box at zero opacity or an inline
-/// content box, which its scene paints as a box of the layout tree.
+/// What `positioned` paints and where, or nothing at zero opacity or for an inline content box.
 pub fn resolve_inline_box<'n>(
   positioned: &VisualInlineBox,
   item: &InlineBoxItem<'n>,
@@ -61,7 +60,7 @@ impl<'n> InlineBoxPaint<'n> {
   /// What `positioned` holds, and where it paints from relative to the container's border-box
   /// origin: a replaced box's border box, or a container's margin box, which
   /// [`InlineSubtree::border_box_origin`] moves to its border box.
-  pub fn of(
+  pub(crate) fn of(
     positioned: &VisualInlineBox,
     item: &InlineBoxItem<'n>,
     container: ComputedLayout,
