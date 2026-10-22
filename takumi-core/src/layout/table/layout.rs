@@ -1492,10 +1492,16 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         result.border,
       );
 
-      out_of_flow =
-        self
-          .tree
-          .lay_out_out_of_flow(self.node, claims, out_of_flow, containing_block, self.space);
+      out_of_flow = match self.defer_out_of_flow(claims, out_of_flow, containing_block) {
+        Ok(deferred) => deferred,
+        Err(out_of_flow) => self.tree.lay_out_out_of_flow(
+          self.node,
+          claims,
+          out_of_flow,
+          containing_block,
+          self.space,
+        ),
+      };
     }
 
     result.intrinsic_block_size = intrinsic_block_size;

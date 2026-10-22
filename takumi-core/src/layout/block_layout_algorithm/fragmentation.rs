@@ -2,10 +2,9 @@
 //! [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc)
 //! and the parts of
 //! [`fragmentation_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/fragmentation_utils.cc)
-//! that read the fragment builder, for pages alone. Approximate: floats, out-of-flow boxes, and
-//! flex and grid boxes do not break, a block-in-inline does not break inside its line, and
-//! `box-decoration-break: clone` sizes a box without the border and padding its earlier fragments
-//! repeat.
+//! that read the fragment builder, for pages alone. Approximate: floats and flex and grid boxes do
+//! not break, a block-in-inline does not break inside its line, and `box-decoration-break: clone`
+//! sizes a box without the border and padding its earlier fragments repeat.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -29,12 +28,14 @@ use crate::{
       setup_space_builder_for_fragmentation,
     },
     inline::inline_layout_algorithm::LineBoxFragment,
-    layout_result::{BreakInfo, LayoutResult, LayoutStatus},
+    layout_result::{BreakInfo, LayoutResult, LayoutStatus, OutOfFlowCandidate},
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
     margin_strut::MarginStrut,
+    out_of_flow::{ContainingBlock, ContainingBlockClaims},
   },
   layout_unit::LayoutUnit,
+  style::Overflow,
 };
 
 impl<'r> BlockLayoutAlgorithm<'_, 'r> {
@@ -119,6 +120,36 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       .add_break_before_child(child, BreakAppeal::Perfect, false);
     self.consume_remaining_fragmentainer_space(previous);
     Ok(true)
+  }
+
+  /// Blink's `LayoutCandidates` with `should_add_outer_fragmentainer_children_`: a box that lays
+  /// out with fragmentation leaves the out-of-flow boxes it contains, in its padding box
+  /// `containing_block`, to the fragmentation root. A box that clips overflow marks every one on
+  /// its way up.
+  pub(super) fn defer_out_of_flow_children(
+    &mut self,
+    claims: ContainingBlockClaims,
+    candidates: Vec<OutOfFlowCandidate>,
+    containing_block: ContainingBlock,
+  ) {
+    let clips_overflow = self.style.overflow.y != Overflow::Visible;
+    let fragmented_containing_block =
+      self
+        .builder
+        .fragmented_containing_block(self.node, self.fragment_index(), containing_block);
+    let mut deferred = self
+      .tree
+      .defer_out_of_flow(claims, candidates, fragmented_containing_block);
+
+    if clips_overflow {
+      for containing_block in deferred
+        .iter_mut()
+        .filter_map(|candidate| candidate.fragmented_containing_block.as_mut())
+      {
+        containing_block.is_inside_clipped_container = true;
+      }
+    }
+    self.out_of_flow = deferred;
   }
 
   /// Blink's `HasInflowChildBreakInside`: something in this flow broke, so no sibling follows.

@@ -20,6 +20,7 @@ use crate::{
 use crate::{
   layout::{
     block_break_token::BlockBreakToken, break_appeal::BreakAppeal, early_break::EarlyBreak,
+    out_of_flow::ContainingBlock,
   },
   style::BreakBetween,
 };
@@ -167,15 +168,56 @@ impl StaticPosition {
   }
 }
 
-/// Blink's `PhysicalOofNodeForFragmentation` without fragmentation: an out-of-flow box on its way
-/// up to its containing block, its static position in the border box of the box it reached.
+/// Blink's `PhysicalOofNodeForFragmentation`: an out-of-flow box on its way up to its containing
+/// block, its static position in the border box of the box it reached.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct OutOfFlowCandidate {
   pub(crate) node: NodeId,
   pub(crate) static_position: StaticPosition,
+  /// Blink's fragmentainer descendant: the containing block that left the box to the
+  /// fragmentation root, which lays it out across pages.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fragmented_containing_block: Option<FragmentedContainingBlock>,
+}
+
+/// A containing block that lays out with fragmentation, as an out-of-flow box it contains sees
+/// it: the fragment the box's static position is in.
+#[cfg(feature = "fragmentation")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct FragmentedContainingBlock {
+  pub(crate) node: NodeId,
+  pub(crate) fragment_index: usize,
+  /// The fragment's border box in the border box of the box the candidate reached.
+  pub(crate) offset: Point<LayoutUnit>,
+  /// The block size the containing block's earlier fragments took.
+  pub(crate) consumed_block_size: LayoutUnit,
+  /// Its padding box in its border box, the block size that of this fragment.
+  pub(crate) padding_box: ContainingBlock,
+  /// Blink's `IsFragmentedInsideClippedContainer`: a box from it up clips overflow, so the box
+  /// adds no pages past the last.
+  pub(crate) is_inside_clipped_container: bool,
 }
 
 impl OutOfFlowCandidate {
+  /// The candidate whose static position is `static_position`, on its way to its containing block.
+  pub(crate) fn new(node: NodeId, static_position: StaticPosition) -> Self {
+    Self {
+      node,
+      static_position,
+      #[cfg(feature = "fragmentation")]
+      fragmented_containing_block: None,
+    }
+  }
+
+  /// Whether a containing block that lays out with fragmentation left the box to the
+  /// fragmentation root.
+  pub(crate) fn is_deferred(&self) -> bool {
+    #[cfg(feature = "fragmentation")]
+    return self.fragmented_containing_block.is_some();
+    #[cfg(not(feature = "fragmentation"))]
+    return false;
+  }
+
   /// The candidate in the border box of a box that placed the one it came from at `offset`.
   pub(crate) fn moved_by(self, offset: Point<LayoutUnit>) -> Self {
     Self {
@@ -183,6 +225,13 @@ impl OutOfFlowCandidate {
         offset: self.static_position.offset + offset,
         ..self.static_position
       },
+      #[cfg(feature = "fragmentation")]
+      fragmented_containing_block: self.fragmented_containing_block.map(|containing_block| {
+        FragmentedContainingBlock {
+          offset: containing_block.offset + offset,
+          ..containing_block
+        }
+      }),
       ..self
     }
   }

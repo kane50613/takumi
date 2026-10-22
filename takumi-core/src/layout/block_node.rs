@@ -720,9 +720,9 @@ impl<'r> LayoutTree<'r> {
       let Some(position) = position.or(holds_every_line.then(Default::default)) else {
         continue;
       };
-      let candidate = OutOfFlowCandidate {
-        node: child,
-        static_position: StaticPosition {
+      let candidate = OutOfFlowCandidate::new(
+        child,
+        StaticPosition {
           offset: Point::new(
             LayoutUnit::from_float(content.x + position.point.x),
             LayoutUnit::from_float(content.y + position.point.y),
@@ -735,7 +735,7 @@ impl<'r> LayoutTree<'r> {
           vertical_edge: VerticalEdge::Top,
           ..StaticPosition::default()
         },
-      };
+      );
       let Some(container) = self.inline_container(child) else {
         candidates.push(candidate);
         continue;

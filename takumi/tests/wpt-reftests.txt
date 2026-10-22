@@ -910,6 +910,7 @@ css/css-break/box-decoration-break-clone-split-inline.html
 css/css-break/break-inside-avoid-multicol-iframe-crash-print.html
 css/css-break/break-nested-float-in-table-001-print.html
 css/css-break/contain-strict-with-opacity-and-oof.html
+css/css-break/firefox-bug-2026295-print.html
 css/css-break/flexbox/flex-container-fragmentation-008.html
 css/css-break/flexbox/flex-container-fragmentation-009.html
 css/css-break/flexbox/flex-fragmented-with-float-descendant-001.html
@@ -972,6 +973,8 @@ css/css-break/out-of-flow-in-multicolumn-116.html
 css/css-break/overflow-clip-004.html
 css/css-break/overflow-clip-013.html
 css/css-break/overflowed-abs-pos-with-percentage-height-print.html
+css/css-break/overflowing-block-002-print.html
+css/css-break/overflowing-block-print.html
 css/css-break/root-margin-001-print.html
 css/css-break/table/monolithic-overflow-001.tentative.html
 css/css-break/table/monolithic-overflow-002.tentative.html

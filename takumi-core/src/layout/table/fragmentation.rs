@@ -9,7 +9,8 @@ use crate::{
   layout::{
     constraint_space::ConstraintSpace,
     fragmentation_layout_input::ChildBreakToken,
-    layout_result::{LayoutResult, LayoutStatus},
+    layout_result::{LayoutResult, LayoutStatus, OutOfFlowCandidate},
+    out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::{TableLayoutAlgorithm, TableStructure, rows::Rows},
   },
   layout_unit::{BoxStrut, LayoutUnit},
@@ -356,6 +357,30 @@ impl TableLayoutAlgorithm<'_, '_> {
     algorithm.layout()
   }
 
+  /// The out-of-flow boxes the table contains, in its padding box `containing_block`, left to the
+  /// fragmentation root when the table lays out with fragmentation, else given back.
+  pub(super) fn defer_out_of_flow(
+    &self,
+    claims: ContainingBlockClaims,
+    candidates: Vec<OutOfFlowCandidate>,
+    containing_block: ContainingBlock,
+  ) -> Result<Vec<OutOfFlowCandidate>, Vec<OutOfFlowCandidate>> {
+    if !self.builder.involved_in_block_fragmentation() {
+      return Err(candidates);
+    }
+
+    let fragmented_containing_block =
+      self
+        .builder
+        .fragmented_containing_block(self.node, self.fragment_index(), containing_block);
+
+    Ok(
+      self
+        .tree
+        .defer_out_of_flow(claims, candidates, fragmented_containing_block),
+    )
+  }
+
   /// The monolithic overflow an earlier page pushed into this one.
   pub(super) fn monolithic_overflow(&self) -> LayoutUnit {
     self
@@ -697,6 +722,15 @@ impl TableLayoutAlgorithm<'_, '_> {
 
   pub(super) fn monolithic_overflow(&self) -> LayoutUnit {
     LayoutUnit::ZERO
+  }
+
+  pub(super) fn defer_out_of_flow(
+    &self,
+    _claims: ContainingBlockClaims,
+    candidates: Vec<OutOfFlowCandidate>,
+    _containing_block: ContainingBlock,
+  ) -> Result<Vec<OutOfFlowCandidate>, Vec<OutOfFlowCandidate>> {
+    Err(candidates)
   }
 
   pub(super) fn resumed_rows(&self) -> Option<(Rows, LayoutUnit)> {

@@ -583,3 +583,92 @@ fn a_short_table_footer_repeats_at_the_end_of_every_page() {
   );
   assert_eq!(boxes["f"].len(), 3);
 }
+
+/// The fragments of the first child of `root`'s first child, laid out on pages 300 wide and
+/// `page_height` tall: their containers' fragment indices, block offsets, and block sizes, with
+/// the page count.
+fn nested_fragments(root: &RenderNode, page_height: f32) -> (Vec<(usize, f32, f32)>, usize) {
+  let (results, page_count) = LayoutResults::compute_pages(
+    root,
+    Size {
+      width: 300.0,
+      height: page_height,
+    },
+  );
+  let parent = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
+  let child = results.box_children(parent).expect("children")[0].node_id;
+  let fragments = results
+    .fragments(child)
+    .expect("fragments")
+    .iter()
+    .map(|fragment| {
+      (
+        fragment.container_fragment_index,
+        fragment.layout.location.y,
+        fragment.layout.size.height,
+      )
+    })
+    .collect();
+
+  (fragments, page_count)
+}
+
+#[test]
+fn an_absolute_box_taller_than_a_page_breaks_across_pages() {
+  let container = Node::container([block("abs", "abs")]).with_class_name("block relative");
+  let tree = render(
+    root([container, block("a", "h300")]),
+    ".relative { position: relative } .abs { position: absolute; top: 0; height: 300px } \
+     .h300 { height: 300px }",
+  );
+  let (fragments, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  // Both fragments belong to the containing block's only fragment, the second a page further.
+  assert_eq!(fragments, [(0, 0.0, 200.0), (0, 200.0, 100.0)]);
+}
+
+#[test]
+fn an_absolute_box_past_the_last_page_adds_pages() {
+  let body = Node::container([block("abs", "abs")]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".abs { position: absolute; top: 0; height: 500px }",
+  );
+  let (fragments, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 3);
+  assert_eq!(fragments.len(), 3);
+}
+
+#[test]
+fn a_fixed_box_repeats_on_every_page() {
+  let body =
+    Node::container([block("fixed", "fixed"), block("a", "h500")]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".fixed { position: fixed; top: 10px; height: 20px } .h500 { height: 500px }",
+  );
+  let (fragments, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 3);
+  // Each page's root fragment holds one, at the same place on its page.
+  assert_eq!(
+    fragments,
+    [(0, 10.0, 20.0), (1, 10.0, 20.0), (2, 10.0, 20.0)]
+  );
+}
+
+#[test]
+fn an_absolute_box_inside_a_clipping_box_adds_no_pages() {
+  let clip = Node::container([block("tall", "tall")]).with_class_name("block clip");
+  let body = Node::container([clip]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".clip { position: absolute; overflow: clip; width: 10px; height: 10px } \
+     .tall { position: absolute; height: 700px }",
+  );
+  let (_, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 1);
+}

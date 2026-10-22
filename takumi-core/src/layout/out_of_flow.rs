@@ -8,6 +8,12 @@
 
 use std::{mem::take, rc::Rc};
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::{
+  block_break_token::BlockBreakToken, break_appeal::BreakAppeal,
+  constraint_space::BlockFragmentation, fragmentation_layout_input::FragmentationLayoutInput,
+  fragmentation_utils::fragment_index, layout_result::FragmentedContainingBlock,
+};
 use crate::{
   geometry::{NodeId, Point, Rect, Size},
   layout::{
@@ -23,6 +29,15 @@ use crate::{
   layout_unit::LayoutUnit,
   style::{AlignItems, Direction, Overflow, Position},
 };
+
+/// Blink's `LogicalOofNodeForFragmentation` at the fragmentation root: an out-of-flow box the
+/// pages left to the root, in the coordinates of the pages stacked in the block direction.
+#[cfg(feature = "fragmentation")]
+pub(crate) struct FragmentainerDescendant {
+  pub(crate) candidate: OutOfFlowCandidate,
+  /// The root fragment whose page holds the box's static position, with its border box's origin.
+  pub(crate) root_fragment: (usize, Point<LayoutUnit>),
+}
 
 /// Which out-of-flow boxes a box is the containing block for.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -374,13 +389,13 @@ impl<'r> LayoutTree<'r> {
 
     while !candidates.is_empty() {
       for candidate in take(&mut candidates) {
-        if !claims.claims(self.layout_style(candidate.node).position) {
+        if !claims.claims(self.layout_style(candidate.node).position) || candidate.is_deferred() {
           unclaimed.push(candidate);
           continue;
         }
 
         let containing_block = self.grid_area(container, candidate.node, containing_block);
-        let (offset, result) = self.lay_out_out_of_flow_box(candidate, containing_block, space);
+        let (offset, result, _) = self.lay_out_out_of_flow_box(candidate, containing_block, space);
 
         if space.cache_slot == CacheSlot::Layout {
           self.place_child(candidate.node, 0, 0, offset, &result);
@@ -400,14 +415,215 @@ impl<'r> LayoutTree<'r> {
     unclaimed
   }
 
-  /// Blink's `CalculateOffset` and `GenerateFragment` for one box: its layout and the offset of
-  /// its border box in the border box of the box laying it out.
+  /// Blink's `LayoutFragmentainerDescendants` for the pages `page_size` the root laid out, one
+  /// entry of `root_fragments` each: every out-of-flow box the pages left to the root, laid out
+  /// from the page its position is on and broken across the pages after it, which may add pages.
+  /// A box breaks no further than the last page inside a container that clips it, and a fixed box
+  /// no box contains repeats on every page. Returns the page count.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn lay_out_fragmentainer_descendants(
+    &mut self,
+    mut descendants: Vec<FragmentainerDescendant>,
+    page_size: Size<f32>,
+    root_fragments: &[Option<(usize, Point<LayoutUnit>)>],
+    mut page_count: usize,
+    space: &ConstraintSpace,
+  ) -> usize {
+    let page_block_size = LayoutUnit::from_float(page_size.height);
+    // The first page's area is the initial containing block.
+    let initial_containing_block = ContainingBlock {
+      origin: Point::default(),
+      size: Size {
+        width: LayoutUnit::from_float(page_size.width),
+        height: page_block_size,
+      },
+    };
+    let mut next = 0;
+
+    while let Some(descendant) = descendants.get(next) {
+      let FragmentainerDescendant {
+        candidate,
+        root_fragment,
+      } = *descendant;
+      let node = candidate.node;
+
+      next += 1;
+
+      let (containing_block, anchor, is_inside_clipped_container) =
+        match candidate.fragmented_containing_block {
+          Some(containing_block) => (
+            self.stitched_padding_box(containing_block),
+            (
+              containing_block.node,
+              containing_block.fragment_index,
+              containing_block.offset,
+            ),
+            containing_block.is_inside_clipped_container,
+          ),
+          None => (
+            initial_containing_block,
+            (NodeId::ROOT, root_fragment.0, root_fragment.1),
+            false,
+          ),
+        };
+      let (offset, result, generate_space) =
+        self.lay_out_out_of_flow_box(candidate, containing_block, space);
+
+      if candidate.fragmented_containing_block.is_none()
+        && self.layout_style(node).position == Position::Fixed
+      {
+        self.repeat_fixed_on_pages(node, offset, &result, page_block_size, root_fragments);
+        continue;
+      }
+
+      let mut page = (offset.y.to_float() / page_size.height).floor().max(0.0) as usize;
+      let mut block_offset = offset.y;
+      let mut break_token: Option<Rc<BlockBreakToken>> = None;
+
+      loop {
+        let mut fragment_space = generate_space.clone();
+
+        if !(is_inside_clipped_container && page + 1 >= page_count) {
+          fragment_space.block_fragmentation = Some(BlockFragmentation {
+            fragmentainer_block_size: page_block_size,
+            fragmentainer_offset: block_offset - page_block_size * page as i32,
+            requires_content_before_breaking: false,
+            should_propagate_child_break_values: false,
+            min_break_appeal: BreakAppeal::LastResort,
+            min_block_size_should_encompass_intrinsic_size: false,
+          });
+        }
+
+        let input = FragmentationLayoutInput {
+          break_token: break_token.clone(),
+          early_break: None,
+        };
+        let result = self.layout_fragment(node, &fragment_space, &input);
+        let origin = Point::new(offset.x, block_offset);
+
+        self.place_child(
+          node,
+          fragment_index(break_token.as_deref()),
+          anchor.1,
+          origin - anchor.2,
+          &result,
+        );
+        self.add_hoisted_child(anchor.0, node);
+        page_count = page_count.max(page + 1);
+        descendants.extend(
+          result
+            .out_of_flow
+            .iter()
+            .map(|nested| FragmentainerDescendant {
+              candidate: nested.moved_by(origin),
+              root_fragment,
+            }),
+        );
+        break_token = result.break_info.break_token.clone();
+        if break_token.is_none() {
+          break;
+        }
+        page += 1;
+        block_offset = page_block_size * page as i32;
+      }
+    }
+    page_count
+  }
+
+  /// The padding box of a containing block that laid out across pages, in the stacked pages'
+  /// coordinates: from where its first fragment starts, as tall as its fragments together.
+  #[cfg(feature = "fragmentation")]
+  fn stitched_padding_box(&self, containing_block: FragmentedContainingBlock) -> ContainingBlock {
+    let block_size = self
+      .node_state(containing_block.node)
+      .fragments
+      .iter()
+      .map(|fragment| LayoutUnit::from_float(fragment.layout.size.height))
+      .fold(LayoutUnit::ZERO, |total, size| total + size);
+    let border = self.layout_style(containing_block.node).border;
+    let border_block_start = LayoutUnit::from_float(border.top);
+    let start = containing_block.offset.y - containing_block.consumed_block_size;
+
+    ContainingBlock {
+      origin: Point::new(
+        containing_block.offset.x + containing_block.padding_box.origin.x,
+        start + border_block_start,
+      ),
+      size: Size {
+        width: containing_block.padding_box.size.width,
+        height: (block_size - border_block_start - LayoutUnit::from_float(border.bottom))
+          .clamp_negative_to_zero(),
+      },
+    }
+  }
+
+  /// Blink's repeated fixed box: the fixed `node` laid out once as `result` at `offset` in the
+  /// first page's area, then at the same place on every page the root reaches.
+  #[cfg(feature = "fragmentation")]
+  fn repeat_fixed_on_pages(
+    &mut self,
+    node: NodeId,
+    offset: Point<LayoutUnit>,
+    result: &LayoutResult,
+    page_block_size: LayoutUnit,
+    root_fragments: &[Option<(usize, Point<LayoutUnit>)>],
+  ) {
+    let pages = root_fragments
+      .iter()
+      .enumerate()
+      .filter_map(|(page, root_fragment)| root_fragment.map(|root_fragment| (page, root_fragment)));
+
+    for (repetition, (page, (root_fragment_index, root_origin))) in pages.enumerate() {
+      let page_offset = Point::new(LayoutUnit::ZERO, page_block_size * page as i32);
+
+      self.place_child(
+        node,
+        repetition,
+        root_fragment_index,
+        offset + page_offset - root_origin,
+        result,
+      );
+      if repetition > 0 {
+        self.repeat_fragments(node, 0, repetition);
+      }
+    }
+    self.add_hoisted_child(NodeId::ROOT, node);
+  }
+
+  /// Blink's `AddOutOfFlowFragmentainerDescendant` for each of `candidates` that
+  /// `containing_block` contains: a containing block that lays out with fragmentation leaves its
+  /// out-of-flow boxes to the fragmentation root, which lays them out across pages. Returns every
+  /// candidate, for the root to receive.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn defer_out_of_flow(
+    &self,
+    claims: ContainingBlockClaims,
+    candidates: Vec<OutOfFlowCandidate>,
+    containing_block: FragmentedContainingBlock,
+  ) -> Vec<OutOfFlowCandidate> {
+    candidates
+      .into_iter()
+      .map(|candidate| {
+        if candidate.is_deferred() || !claims.claims(self.layout_style(candidate.node).position) {
+          return candidate;
+        }
+
+        OutOfFlowCandidate {
+          fragmented_containing_block: Some(containing_block),
+          ..candidate
+        }
+      })
+      .collect()
+  }
+
+  /// Blink's `CalculateOffset` and `GenerateFragment` for one box: its layout, the offset of its
+  /// border box in the border box of the box laying it out, and the space it laid out in.
   pub(crate) fn lay_out_out_of_flow_box(
     &mut self,
     candidate: OutOfFlowCandidate,
     containing_block: ContainingBlock,
     container_space: &ConstraintSpace,
-  ) -> (Point<LayoutUnit>, Rc<LayoutResult>) {
+  ) -> (Point<LayoutUnit>, Rc<LayoutResult>, ConstraintSpace) {
     let node = candidate.node;
     let style = Rc::clone(self.layout_style_rc(node));
     let direction = style.direction;
@@ -651,22 +867,20 @@ impl<'r> LayoutTree<'r> {
     };
 
     // Blink's `GenerateFragment`, unless measuring the block size laid the box out already.
+    let generate_space = if is_replaced {
+      self.out_of_flow_child_space(&space, inline_size, block_size, block_auto_behavior, true)
+    } else {
+      self.out_of_flow_child_space(
+        &space,
+        inline_size,
+        imcb_size.block_size,
+        block_auto_behavior,
+        false,
+      )
+    };
     let result = match layout_result {
       Some(result) => result,
-      None if is_replaced => self.layout(
-        node,
-        &self.out_of_flow_child_space(&space, inline_size, block_size, block_auto_behavior, true),
-      ),
-      None => self.layout(
-        node,
-        &self.out_of_flow_child_space(
-          &space,
-          inline_size,
-          imcb_size.block_size,
-          block_auto_behavior,
-          false,
-        ),
-      ),
+      None => self.layout(node, &generate_space),
     };
 
     // The inset is from the containing block's edge on the box's inline-start side.
@@ -678,6 +892,7 @@ impl<'r> LayoutTree<'r> {
     (
       containing_block.origin + Point::new(x, inset_block_start),
       result,
+      generate_space,
     )
   }
 

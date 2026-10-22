@@ -584,39 +584,38 @@ impl SceneRequest<'_> {
           .hoisted_cb
           .and_then(|cb| contents.get(&cb))
           .map_or(visit.fragment_index, |container| container.fragment_index);
-        let Some(child_fragment_index) =
-          layout_results.fragment_in(child.node_id, container_fragment_index)
-        else {
-          continue;
-        };
-        let mut child_path = visit.path.clone();
-        child.extend_path(&mut child_path);
-        let (base, base_container) =
-          containing_blocks.base_for(child, child_base, child_container_size);
-        let clip = match child.hoisted_cb.and_then(|cb| contents.get(&cb)) {
-          Some(container) => {
-            properties.release_escaped_effects(node_properties.contents.effect, container);
-            container.clip
-          }
-          None => node_properties.contents.clip,
-        };
+        for child_fragment_index in
+          layout_results.fragments_in(child.node_id, container_fragment_index)
+        {
+          let mut child_path = visit.path.clone();
+          child.extend_path(&mut child_path);
+          let (base, base_container) =
+            containing_blocks.base_for(child, child_base, child_container_size);
+          let clip = match child.hoisted_cb.and_then(|cb| contents.get(&cb)) {
+            Some(container) => {
+              properties.release_escaped_effects(node_properties.contents.effect, container);
+              container.clip
+            }
+            None => node_properties.contents.clip,
+          };
 
-        visits.push(StackingContextBuildVisit {
-          path: child_path,
-          node_id: child.node_id,
-          fragment_index: child_fragment_index,
-          base,
-          container_size: base_container,
-          state: PropertyState {
-            clip,
-            effect: node_properties.contents.effect,
-          },
-          context_id,
-          stacking_id,
-          line_clamp_float_clip,
-          parent_display: Some(current.context.style.base_data.display),
-          is_root: false,
-        });
+          visits.push(StackingContextBuildVisit {
+            path: child_path,
+            node_id: child.node_id,
+            fragment_index: child_fragment_index,
+            base,
+            container_size: base_container,
+            state: PropertyState {
+              clip,
+              effect: node_properties.contents.effect,
+            },
+            context_id,
+            stacking_id,
+            line_clamp_float_clip,
+            parent_display: Some(current.context.style.base_data.display),
+            is_root: false,
+          });
+        }
       }
     }
 
