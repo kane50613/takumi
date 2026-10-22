@@ -3,8 +3,7 @@
 
 use super::inline_item_text_index::InlineItemTextIndex;
 
-/// The style a break token keeps, named by the inline item whose box has it rather than borrowed,
-/// so the token can outlive the layout that made it.
+/// The style a break token resumes with: the block's, or that of the inline item whose box has it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BreakTokenStyle {
   Block,

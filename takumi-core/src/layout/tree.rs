@@ -1000,6 +1000,11 @@ impl<'r> LayoutTree<'r> {
     if fragment_index < fragments.len() {
       fragments[fragment_index] = fragment;
     } else {
+      debug_assert_eq!(
+        fragment_index,
+        fragments.len(),
+        "a fragment follows the one before it"
+      );
       fragments.push(fragment);
     }
   }
