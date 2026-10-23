@@ -887,24 +887,22 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     let claims = self.tree.claims(self.node);
     let candidates = take(&mut self.out_of_flow);
-    let mut containing_block = ContainingBlock::padding_box(
+    let containing_block = ContainingBlock::padding_box(
       Size {
         width: size.inline_size,
         height: self.stitched_block_size(size.block_size),
       },
       self.style.border,
     );
-
     // The boxes resolve against this fragment and those before it stitched together.
-    containing_block.origin.y -= self.previously_consumed_block_size();
-
     #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
     let mut part = OutOfFlowLayoutPart::new(
       (self.node, self.fragment_index()),
       claims,
       containing_block,
       self.space,
-    );
+    )
+    .stitched(self.previously_consumed_block_size());
 
     // The boxes break across this box's fragments, as Blink's `FragmentedOofInCb` lays them out.
     #[cfg(feature = "fragmentation")]

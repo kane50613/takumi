@@ -16,13 +16,13 @@ pub(crate) use fragmentation::GridBreakTokenData;
 #[cfg(feature = "fragmentation")]
 use fragmentation::GridFragmentation;
 
+#[cfg(not(feature = "fragmentation"))]
+use crate::layout::layout_result::LayoutStatus;
 #[cfg(feature = "fragmentation")]
 use crate::layout::{
   box_fragment_builder::BoxFragmentBuilder,
   fragmentation_utils::setup_fragment_builder_for_fragmentation,
 };
-#[cfg(not(feature = "fragmentation"))]
-use crate::layout::{layout_result::LayoutStatus, out_of_flow::ContainingBlockClaims};
 
 use crate::{
   geometry::{NodeId, Point, Size},
@@ -611,12 +611,15 @@ fn logical_rect(
 
 impl<'r> LayoutTree<'r> {
   /// The grid area an out-of-flow `node` of the grid `container` resolves its insets against, or
-  /// `containing_block`, its padding box, when `container` is not a grid.
+  /// `containing_block`, its padding box, when `container` is not a grid. The grid's tracks lie in
+  /// its fragments stitched together, which `previously_consumed_block_size` of them precede this
+  /// fragment, where `containing_block` is.
   pub(crate) fn grid_area(
     &self,
     container: NodeId,
     node: NodeId,
     containing_block: ContainingBlock,
+    previously_consumed_block_size: LayoutUnit,
   ) -> ContainingBlock {
     let Some(geometry) = self.node_state(container).grid_geometry.as_deref() else {
       return containing_block;
@@ -646,7 +649,7 @@ impl<'r> LayoutTree<'r> {
       &placement_data,
       &geometry.layout_data,
       logical_rect(
-        containing_block.origin,
+        containing_block.origin + Point::new(LayoutUnit::ZERO, previously_consumed_block_size),
         containing_block.size,
         direction,
         inline_size,
@@ -659,7 +662,7 @@ impl<'r> LayoutTree<'r> {
     };
 
     ContainingBlock {
-      origin: Point::new(x, rect.offset.block_offset),
+      origin: Point::new(x, rect.offset.block_offset - previously_consumed_block_size),
       size: Size {
         width: rect.size.inline_size,
         height: rect.size.block_size,
@@ -1699,6 +1702,43 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     (candidates, held)
   }
 
+  /// Lays out the out-of-flow `candidates` this grid contains once its size is known, in its own
+  /// fragments as Blink's `FragmentedOofInCb` does for a block, and returns those left for an
+  /// ancestor. Blink's grid iterators cannot resume them after a break, so this goes beyond Blink.
+  fn lay_out_out_of_flow_children(
+    &mut self,
+    size: LogicalSize,
+    candidates: Vec<OutOfFlowCandidate>,
+  ) -> Vec<OutOfFlowCandidate> {
+    if candidates.is_empty() {
+      return candidates;
+    }
+
+    let claims = self.tree.claims(self.node);
+    let containing_block = ContainingBlock::padding_box(
+      Size {
+        width: size.inline_size,
+        height: self.stitched_block_size(size.block_size),
+      },
+      self.style.border,
+    );
+    // The boxes resolve against this fragment and those before it stitched together.
+    #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
+    let mut part = OutOfFlowLayoutPart::new(
+      (self.node, self.fragment_index()),
+      claims,
+      containing_block,
+      self.space,
+    )
+    .stitched(self.previously_consumed_block_size());
+
+    #[cfg(feature = "fragmentation")]
+    if self.breaks_out_of_flow_children() {
+      part = part.in_fragments(&mut self.builder);
+    }
+    self.tree.lay_out_out_of_flow(part, candidates)
+  }
+
   /// Blink's `Layout`.
   pub(crate) fn layout(mut self) -> LayoutResult {
     let (mut sizing_tree, out_of_flow_children, mut intrinsic_block_size) =
@@ -1734,16 +1774,15 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         return result;
       }
     };
-    let mut out_of_flow: Vec<OutOfFlowCandidate> = children
-      .iter()
-      .flat_map(|child| {
-        child
-          .result
-          .out_of_flow
-          .iter()
-          .map(|candidate| candidate.moved_by(child.location))
-      })
-      .collect();
+    let mut out_of_flow = self.resumed_out_of_flow();
+
+    out_of_flow.extend(children.iter().flat_map(|child| {
+      child
+        .result
+        .out_of_flow
+        .iter()
+        .map(|candidate| candidate.moved_by(child.location))
+    }));
     let (candidates, held_out_of_flow) =
       self.place_out_of_flow_items(&sizing_tree, block_size, out_of_flow_children);
 
@@ -1755,30 +1794,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     let size = LogicalSize::new(inline_size, fragment_block_size);
     let mut result = LayoutResult::of_box(size, &style, self.space);
 
-    if !out_of_flow.is_empty() {
-      let claims = self.tree.claims(self.node);
-      let containing_block = ContainingBlock::padding_box(
-        Size {
-          width: size.inline_size,
-          height: size.block_size,
-        },
-        style.border,
-      );
-
-      out_of_flow = if self.defers_out_of_flow() {
-        self.defer_out_of_flow(claims, out_of_flow, containing_block)
-      } else {
-        self.tree.lay_out_out_of_flow(
-          OutOfFlowLayoutPart::new(
-            (self.node, self.fragment_index()),
-            claims,
-            containing_block,
-            self.space,
-          ),
-          out_of_flow,
-        )
-      };
-    }
+    out_of_flow = self.lay_out_out_of_flow_children(size, out_of_flow);
 
     if self.space.cache_slot == CacheSlot::Layout {
       let fragment_index = self.fragment_index();
@@ -1931,17 +1947,12 @@ impl GridLayoutAlgorithm<'_, '_> {
   ) {
   }
 
-  fn defers_out_of_flow(&self) -> bool {
-    false
+  fn resumed_out_of_flow(&self) -> Vec<OutOfFlowCandidate> {
+    Vec::new()
   }
 
-  fn defer_out_of_flow(
-    &self,
-    _claims: ContainingBlockClaims,
-    candidates: Vec<OutOfFlowCandidate>,
-    _containing_block: ContainingBlock,
-  ) -> Vec<OutOfFlowCandidate> {
-    candidates
+  fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
+    block_size
   }
 
   fn finish_break_info(&mut self, _result: &mut LayoutResult) {}

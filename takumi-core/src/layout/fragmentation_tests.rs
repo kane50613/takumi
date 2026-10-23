@@ -1416,3 +1416,59 @@ fn a_flex_item_with_a_percentage_child_keeps_its_flexed_size_past_a_break() {
     ]
   );
 }
+
+const OUT_OF_FLOW_CSS: &str = ".relative { position: relative } \
+  .abs { position: absolute; top: 0; height: 300px } .h300 { height: 300px }";
+
+#[test]
+fn an_absolute_box_taller_than_a_page_breaks_across_the_pages_of_a_flex_container() {
+  let tree = render(
+    root([Node::container([block("abs", "abs"), block("a", "h300")])
+      .with_class_name("row relative")
+      .with_id("flex")]),
+    &format!("{FLEX_CSS} {OUT_OF_FLOW_CSS}"),
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(
+    boxes["flex"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+  assert_eq!(boxes["abs"], [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]);
+}
+
+#[test]
+fn an_absolute_box_taller_than_a_page_breaks_across_the_pages_of_a_grid() {
+  let tree = render(
+    root([Node::container([block("abs", "abs"), block("a", "h300")])
+      .with_class_name("grid relative")
+      .with_id("grid")]),
+    &format!("{GRID_CSS} {OUT_OF_FLOW_CSS}"),
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(
+    boxes["grid"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+  assert_eq!(boxes["abs"], [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]);
+}
+
+#[test]
+fn an_absolute_box_taller_than_a_page_breaks_across_the_pages_of_a_table() {
+  let cell = Node::container([block("abs", "abs"), block("a", "h300")]).with_class_name("block");
+  let tree = render(
+    root([table([("row", cell)]).with_class_name("table relative")]),
+    &format!("{TABLE_CSS} {OUT_OF_FLOW_CSS}"),
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(
+    boxes["table"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+  assert_eq!(boxes["abs"], [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]);
+}

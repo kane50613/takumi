@@ -120,22 +120,16 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     Ok(true)
   }
 
-  /// This box's block size from its first fragment to the end of this one, `block_size` tall:
-  /// what it knows of its stitched size without the fragments to come.
+  /// This box's block size from its first fragment to the end of this one, `block_size` tall.
   pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
-    if self.builder.involved_in_block_fragmentation() {
-      self.builder.fragments_total_block_size
-    } else {
-      block_size
-    }
+    self.builder.stitched_block_size(block_size)
   }
 
-  /// Whether the out-of-flow boxes this box lays out break across its fragments. A box that clips
-  /// its block overflow and ends in this fragment finishes them here, so they add no pages, as
-  /// Blink's `DisableFurtherFragmentation` keeps those of a clipped containing block from it.
+  /// Whether the out-of-flow boxes this box lays out break across its fragments.
   pub(super) fn breaks_out_of_flow_children(&self) -> bool {
-    self.builder.involved_in_block_fragmentation()
-      && (self.style.overflow.y == Overflow::Visible || self.builder.should_break())
+    self
+      .builder
+      .breaks_out_of_flow_children(self.style.overflow.y != Overflow::Visible)
   }
 
   /// A box that clips overflow marks the out-of-flow boxes deferred to the fragmentation root on
