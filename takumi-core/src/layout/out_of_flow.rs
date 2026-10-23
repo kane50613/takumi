@@ -4,9 +4,10 @@
 //! positioning, `position-try`, or scroll containers, and `justify-self: auto` takes no
 //! `justify-items`.
 //!
-//! A block containing block lays its boxes out in its own fragments, as Blink's `FragmentedOofInCb`
-//! does. A box resolves against the fragments so far stitched together, where Blink uses the
-//! current fragment alone. A box whose block position or size depends on the containing block's
+//! A block or inline containing block lays its boxes out in its block's fragments, as Blink's
+//! `FragmentedOofInCb` does. A block resolves a box against the fragments so far stitched together,
+//! where Blink uses the current fragment alone; an inline box uses this fragment's geometry, as
+//! Blink does. A box whose block position or size depends on a block containing block's
 //! final size waits for its last fragment. A containing block that clips its block overflow
 //! finishes its boxes in its last fragment, so they add no pages. Flex, grid and table containing
 //! blocks and the initial containing block leave their boxes to the fragmentation root.
@@ -112,6 +113,9 @@ pub(crate) struct OutOfFlowLayoutPart<'b> {
   /// as Blink's `FragmentedOofInCb` lays them out.
   #[cfg(feature = "fragmentation")]
   builder: Option<&'b mut BoxFragmentBuilder>,
+  /// Whether the containing block spans the container's fragments stitched together.
+  #[cfg(feature = "fragmentation")]
+  spans_fragments: bool,
 }
 
 impl<'b> OutOfFlowLayoutPart<'b> {
@@ -129,6 +133,8 @@ impl<'b> OutOfFlowLayoutPart<'b> {
       space,
       #[cfg(feature = "fragmentation")]
       builder: None,
+      #[cfg(feature = "fragmentation")]
+      spans_fragments: true,
     }
   }
 
@@ -137,6 +143,16 @@ impl<'b> OutOfFlowLayoutPart<'b> {
   pub(crate) fn in_fragments(self, builder: &'b mut BoxFragmentBuilder) -> Self {
     Self {
       builder: Some(builder),
+      ..self
+    }
+  }
+
+  /// Confines the containing block to this fragment, as an inline box's is. No box waits for a
+  /// later fragment, where a held box would resolve against the block containing block instead.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn confined_to_fragment(self) -> Self {
+    Self {
+      spans_fragments: false,
       ..self
     }
   }
@@ -501,6 +517,7 @@ impl<'r> LayoutTree<'r> {
 
         #[cfg(feature = "fragmentation")]
         if breaks_after
+          && part.spans_fragments
           && !candidate.is_resumed()
           && depends_on_containing_block_block_size(self.layout_style(candidate.node))
           && let Some(builder) = part.builder.as_deref_mut()
@@ -1117,12 +1134,13 @@ impl<'r> LayoutTree<'r> {
 
     let mut space = offset_info.space;
 
-    // A box that starts in an earlier fragment lays out whole, for the pages to paint it across.
+    // A box that starts in an earlier fragment of a stitched containing block lays out whole, for
+    // the pages to paint it across.
     // Blink passes the page's own size, which leaves cloned borders of the containing blocks out.
     // https://github.com/w3c/csswg-drafts/issues/10553
     #[cfg(feature = "fragmentation")]
     if part.builder.is_some()
-      && offset_info.offset.y >= LayoutUnit::ZERO
+      && (offset_info.offset.y >= LayoutUnit::ZERO || !part.spans_fragments)
       && let Some(fragmentation) = part.space.block_fragmentation
     {
       setup_space_for_fragmentation(

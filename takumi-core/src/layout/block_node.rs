@@ -7,7 +7,10 @@
 use std::{mem::take, rc::Rc};
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::{block_break_token::BlockBreakToken, fragmentation_utils::fragment_index};
+use crate::layout::{
+  block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder,
+  fragmentation_utils::fragment_index,
+};
 use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
   layout::{
@@ -685,13 +688,15 @@ impl<'r> LayoutTree<'r> {
   /// Places the inline content boxes of `node`, laid out as `result`, where its lines put them,
   /// then lays out the out-of-flow boxes of that content that an inline box contains and returns
   /// the rest for `node` and its ancestors. Blink lays the first out in the inline box's padding
-  /// box as `OutOfFlowLayoutPart` does for an inline containing block.
+  /// box as `OutOfFlowLayoutPart` does for an inline containing block, in `builder`'s fragments
+  /// when `node` breaks its out-of-flow boxes.
   pub(crate) fn finish_inline_content(
     &mut self,
     node: NodeId,
     (fragment_index, holds_every_line): (usize, bool),
     result: &LayoutResult,
     space: &ConstraintSpace,
+    #[cfg(feature = "fragmentation")] mut builder: Option<&mut BoxFragmentBuilder>,
   ) -> Vec<OutOfFlowCandidate> {
     let Some(inline_content) = self.inline_contents.remove(&node) else {
       return Vec::new();
@@ -795,10 +800,17 @@ impl<'r> LayoutTree<'r> {
         fixed: container.contains_fixed_as_inline(),
       };
 
-      candidates.extend(self.lay_out_out_of_flow(
-        OutOfFlowLayoutPart::new((node, fragment_index), claims, containing_block, space),
-        vec![candidate],
-      ));
+      let part = OutOfFlowLayoutPart::new((node, fragment_index), claims, containing_block, space);
+
+      // The box breaks across the block's fragments, which it joins as Blink's
+      // `FragmentedOofInCb` has the block container lay it out.
+      #[cfg(feature = "fragmentation")]
+      let part = match builder.as_deref_mut() {
+        Some(builder) => part.in_fragments(builder).confined_to_fragment(),
+        None => part,
+      };
+
+      candidates.extend(self.lay_out_out_of_flow(part, vec![candidate]));
     }
 
     candidates

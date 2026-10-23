@@ -769,6 +769,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         (self.fragment_index(), self.holds_every_line()),
         &result,
         space,
+        #[cfg(feature = "fragmentation")]
+        self
+          .breaks_out_of_flow_children()
+          .then_some(&mut self.builder),
       );
 
       self.out_of_flow.extend(candidates);

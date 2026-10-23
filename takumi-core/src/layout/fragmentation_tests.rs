@@ -484,6 +484,40 @@ fn an_absolute_box_among_lines_sits_on_the_page_of_its_line() {
   );
 }
 
+/// A paragraph of a line and a `position: relative` span that holds the absolute box `abs`.
+fn paragraph_with_inline_containing_block(abs: Node) -> Node {
+  let span = Node::container([Node::text("a"), abs]).with_class_name("inline rel");
+
+  root([Node::container([span]).with_tag_name("p").with_id("p")])
+}
+
+const INLINE_CONTAINING_BLOCK_CSS: &str = ".inline { display: inline } \
+  .rel { position: relative } .abs { position: absolute; width: 10px }";
+
+#[test]
+fn an_absolute_box_in_an_inline_box_taller_than_a_page_breaks_across_pages() {
+  let tree = render(
+    paragraph_with_inline_containing_block(block("abs", "abs")),
+    &format!("{INLINE_CONTAINING_BLOCK_CSS} .abs {{ top: 0; height: 300px }}"),
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["abs"], [placed(0, -1.0, 201.0), placed(1, 0.0, 99.0)]);
+}
+
+#[test]
+fn an_absolute_box_in_an_inline_box_below_the_page_moves_to_the_next_page() {
+  let tree = render(
+    paragraph_with_inline_containing_block(block("abs", "abs")),
+    &format!("{INLINE_CONTAINING_BLOCK_CSS} .abs {{ top: 250px; height: 50px }}"),
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["abs"], [placed(1, 49.0, 50.0)]);
+}
+
 /// A table of `rows`, each a row of one cell that holds `cell`.
 fn table(rows: impl IntoIterator<Item = (&'static str, Node)>) -> Node {
   Node::container(
