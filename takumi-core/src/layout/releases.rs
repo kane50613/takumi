@@ -10,6 +10,8 @@ use crate::geometry::NodeId;
 /// What layout has stopped reading.
 #[derive(Clone, Copy)]
 pub(crate) enum Finished {
+  /// The cached layouts of the box's fragments before `fragment`, which are never resumed again.
+  LayoutsBefore { node: NodeId, fragment: usize },
   /// The box has no fragments to come, so it keeps no layout or intrinsic size.
   Ended(NodeId),
   /// The fragment items of the box's fragment, which the page it sits on has painted.

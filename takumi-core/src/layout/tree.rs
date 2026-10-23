@@ -797,6 +797,9 @@ impl LayoutTree<'_> {
             .release(fragment);
         }
       }
+      Finished::LayoutsBefore { node, fragment } => {
+        self.nodes[usize::from(node)].cache.release_before(fragment);
+      }
       Finished::Ended(node) => {
         if self.nodes[usize::from(node)]
           .ended_by
@@ -806,6 +809,7 @@ impl LayoutTree<'_> {
           return;
         }
 
+        self.nodes[usize::from(node)].cache.release_all();
         self
           .inline_node_data
           .borrow_mut()
