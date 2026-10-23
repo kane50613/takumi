@@ -3,15 +3,23 @@ title: How Takumi works
 description: Learn how Takumi turns JSX, HTML, and CSS into images, PDFs, or paint trees, and where it behaves differently from a browser.
 ---
 
-Takumi is one Rust engine. Its text and inline layout port Chromium's Blink, and the same layout feeds three packages. This page follows a render from input to output, then lists where the result differs from a browser.
+Takumi is one Rust engine. Its text and inline layout port Chromium's Blink, and the same layout feeds three packages.
+
+<RenderPipeline />
 
 ## From input to output
 
+### Input
+
 A render starts with JSX, an HTML string, or a node tree. Every node in a tree is a `container`, `text`, or `image`. A node tree holds content and style only, so fonts, images, and output options are separate arguments to `render`. [Parsing templates](/docs/reference/helpers#parsing-templates) covers the input forms.
 
-Styles come from the `style` prop, a stylesheet, or Tailwind utilities. The `style` prop beats the tag default and every matching stylesheet rule of the same importance. A stylesheet reaches Takumi through `css` or a `<style>` tag. The `tw` prop runs a built-in Tailwind parser that needs no build step. [Styles](/docs/styles) says which declaration wins.
+### Styles
 
-Layout then covers Flexbox, Grid, block, float, tables, and inline layout from Blink. The same layout produces every output:
+Styles come from the `style` prop, a stylesheet, or Tailwind utilities. A stylesheet reaches Takumi through `css` or a `<style>` tag, and the `tw` prop runs a built-in Tailwind parser that needs no build step. The `style` prop beats the tag default and every matching stylesheet rule of the same importance. [Styles](/docs/styles) says which declaration wins.
+
+### Layout and output
+
+Layout covers Flexbox, Grid, block, float, tables, and inline layout from Blink. The same layout produces every output:
 
 | Package        | Output                                                                   |
 | :------------- | :----------------------------------------------------------------------- |
@@ -21,18 +29,34 @@ Layout then covers Flexbox, Grid, block, float, tables, and inline layout from B
 
 ## Where it differs from a browser
 
-Fonts come only from what you load. Takumi never reads system fonts, and its one built-in font is Geist, which covers Latin at weights 300 to 800. Load a font for every script your text uses. See [Fonts](/docs/fonts).
+### Fonts
 
-A render is one static frame. Interactive pseudo-classes such as `:hover` and `:focus` parse but never match. In `@media`, image renders are `screen` and PDF renders are `print`. Any feature the media query table does not list matches nothing, `prefers-color-scheme` included. See [Styles](/docs/styles).
+Takumi never reads system fonts, and its one built-in font is Geist, which covers Latin at weights 300 to 800. Load a font for every script your text uses. See [Fonts](/docs/fonts).
 
-Tailwind and units resolve in their own way. The built-in parser applies no Tailwind Preflight by default, so elements keep their default margins. In a tree without an `<html>` root, `rem` resolves against the viewport's font size, which is 16px. A full HTML document passed to `fromHtml` keeps its `<html>` element, so a font size there sets the `rem` basis. See [Styles](/docs/styles#preflight) and the [reference](/docs/reference).
+### One static frame
 
-Style objects are strict. A property name outside the supported list is dropped without an error. A listed name with an unparsable value fails the whole style object. Only `writing-mode: horizontal-tb` is laid out. See the [reference](/docs/reference).
+Interactive pseudo-classes such as `:hover` and `:focus` parse but never match. In `@media`, image renders are `screen` and PDF renders are `print`. Any feature the media query table does not list matches nothing, `prefers-color-scheme` included. See [Styles](/docs/styles).
+
+### Tailwind and `rem`
+
+The built-in parser applies no Tailwind Preflight by default, so elements keep their default margins. In a tree without an `<html>` root, `rem` resolves against the viewport's font size, which is 16px. A full HTML document passed to `fromHtml` keeps its `<html>` element, so a font size there sets the `rem` basis. See [Styles](/docs/styles#preflight) and the [reference](/docs/reference).
+
+### Strict style objects
+
+A property name outside the supported list is dropped without an error. A listed name with an unparsable value fails the whole style object. Only `writing-mode: horizontal-tb` is laid out. See the [reference](/docs/reference).
+
+### Tables
 
 Tables follow Chromium's table layout, with a few cases that drift, such as how a row baseline is measured and where page breaks fall. See [Tables](/docs/tables).
 
+### Remote images
+
 Remote images load only from an `<img>` `src` and from `background-image`, `mask-image`, and `list-style-image` in a node's `style` or `tw`. Takumi does not fetch URLs inside `css` or a `<style>` tag, so pass those images as pre-fetched images. See [Image loading & emoji](/docs/images#external-images).
+
+### PDF filters
 
 A PDF cannot draw `filter: blur()` or `drop-shadow()`. The renderer stops rather than ship a page that differs from the image output. See [Troubleshooting](/docs/troubleshooting).
 
-Coming from satori or `next/og`, the [migration guide](/docs/migration/satori) lists the differences between those renderers and Takumi.
+### Coming from satori
+
+The [migration guide](/docs/migration/satori) lists the differences between satori or `next/og` and Takumi.

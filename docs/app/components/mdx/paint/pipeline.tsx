@@ -37,7 +37,7 @@ export function Pipeline({ stages }: { stages: PipelineStage[] }) {
             type="button"
             aria-pressed={index === stage}
             onClick={() => setStage(index)}
-            className="group flex w-full flex-col items-stretch gap-2 text-left"
+            className="group flex w-full flex-col items-stretch gap-2 text-left transition-transform duration-150 ease-out active:scale-[0.97]"
           >
             <span
               className={cn(
