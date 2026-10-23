@@ -187,9 +187,9 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     fragmentation_layout_input_for_child(child, token.clone(), self.input.early_break.as_deref())
   }
 
-  /// The forced break check of Blink's `HandleFloat`: whether a break the content before forces
-  /// goes before the float `child`.
-  pub(super) fn breaks_before_float(&mut self, child: NodeId) -> bool {
+  /// The forced break check of Blink's `HandleFloat` and `HandleOutOfFlowPositioned`: whether a
+  /// break the content before forces goes before the float or out-of-flow box `child`.
+  pub(super) fn breaks_before_float_or_out_of_flow(&mut self, child: NodeId) -> bool {
     if !self.space.has_block_fragmentation() {
       return false;
     }
@@ -199,7 +199,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     if !is_forced_break_value(self.space, break_between) {
       return false;
     }
-    self.builder.add_break_before_float(child);
+    self.builder.add_break_before_float_or_out_of_flow(child);
     true
   }
 

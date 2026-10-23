@@ -176,9 +176,10 @@ impl BoxFragmentBuilder {
     self.add_break_before(child, appeal, is_forced_break);
   }
 
-  /// Blink's `AddBreakBeforeChild` for a float a forced break pushes, which is a parallel flow.
-  pub(crate) fn add_break_before_float(&mut self, float: NodeId) {
-    self.add_break_before(Some(float), BreakAppeal::Perfect, true);
+  /// Blink's `AddBreakBeforeChild` for a float or out-of-flow box a forced break pushes, which is a
+  /// parallel flow.
+  pub(crate) fn add_break_before_float_or_out_of_flow(&mut self, child: NodeId) {
+    self.add_break_before(Some(child), BreakAppeal::Perfect, true);
   }
 
   fn add_break_before(

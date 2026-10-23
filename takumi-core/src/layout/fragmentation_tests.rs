@@ -785,6 +785,20 @@ fn a_resumed_float_drops_its_block_start_margin() {
 }
 
 #[test]
+fn a_forced_break_before_an_absolute_box_moves_its_static_position_to_the_next_page() {
+  let wrap = Node::container([block("a", "h20 after"), block("abs", "abs")])
+    .with_class_name("block")
+    .with_id("wrap");
+  let tree = render(
+    root([wrap]),
+    &format!("{FLOAT_CSS} .abs {{ position: absolute; width: 10px; height: 10px }}"),
+  );
+  let (boxes, _) = pages(&tree, 200.0);
+
+  assert_eq!(boxes["abs"], [placed(1, 0.0, 10.0)]);
+}
+
+#[test]
 fn a_forced_break_before_a_float_leaves_the_container_unbroken_by_inflow_content() {
   let wrap = Node::container([block("a", "h20 after"), block("float", "float h20")])
     .with_class_name("block border")
