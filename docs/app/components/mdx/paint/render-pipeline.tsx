@@ -10,7 +10,7 @@ const OUTPUTS = [
   { pkg: "takumi-js", output: "Image" },
   { pkg: "takumi-pdf", output: "PDF" },
   { pkg: "takumi-paint", output: "Paint tree" },
-] as const;
+];
 
 function Nodes({ scene }: { scene: PaintScene }) {
   return (
