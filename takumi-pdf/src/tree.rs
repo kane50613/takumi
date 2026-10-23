@@ -14,8 +14,8 @@ use takumi_core::{
   resources::image::ImageSource,
   scene::{NodePaint, PaintItemKind, Scene},
   style::{
-    ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position, SizingContext,
-    Style, StyleDeclaration, StyleSheet, ZIndex,
+    ComputedStyle, Display, FontFamily, Lang, Length, Position, SizingContext, Style,
+    StyleDeclaration, StyleSheet, ZIndex,
   },
   viewport::Viewport,
 };
@@ -62,7 +62,7 @@ impl TreeInputs<'_> {
 
   pub(crate) fn prepare(&self, node: Node, viewport: Viewport) -> Result<PreparedTree, PdfError> {
     let node = fill_root(node, viewport);
-    let root = RenderNode::from_node(&self.context(viewport), node);
+    let root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
 
     PreparedTree::lay_out(root, viewport)
   }
@@ -98,7 +98,7 @@ impl TreeInputs<'_> {
     // A repeated box holding a counter lays out again per page, from the subtree
     // its preorder position names in the tree it was taken from.
     let source = has_page_counters(&node).then(|| node.clone());
-    let mut root = RenderNode::from_node(&self.context(viewport), node);
+    let mut root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
     let repeated = take_repeating_fixed(&mut root);
     let content = PreparedTree::lay_out(root, viewport)?;
     let page_context = self.context(frame.page_area);
@@ -223,11 +223,11 @@ impl PreparedTree {
   }
 }
 
-// The root fills the content box like a browser body.
+// The root fills the content box like a browser body, and keeps the margins of what it holds
+// inside it.
 fn fill_root(node: Node, viewport: Viewport) -> Node {
   let mut style = Style::default()
-    .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+    .with(StyleDeclaration::display(Display::FlowRoot))
     .with(StyleDeclaration::width(Length::Percentage(100.0)));
 
   if viewport.size.height.is_some() {

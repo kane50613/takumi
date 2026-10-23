@@ -4644,6 +4644,48 @@ fn measure_reports_content_width() {
   assert_eq!((at_viewport.width, at_viewport.height), (100.0, 100.0));
 }
 
+/// The node a render starts from is the document's root element, which CSS blockifies, so a
+/// container left `display: inline` still measures at its own width and height.
+#[test]
+fn measure_blockifies_the_root_node() {
+  let node = Node::container([text("Hello PDF", 16.0)]).with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(100.0))),
+  );
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((600, Some(300))))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("measure the inline root");
+
+  assert_eq!((size.width, size.height), (200.0, 100.0));
+}
+
+/// The root element's box establishes an independent formatting context, so a node holding only a
+/// float measures tall enough to enclose it.
+#[test]
+fn measure_encloses_a_float_in_the_root_node() {
+  let node = from_html(
+    r#"<div><div style="float: left; width: 50px; height: 80px"></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse node");
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((600, Some(300))))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("measure the floating content");
+
+  assert_eq!(size.height, 80.0);
+}
+
 /// Without a page, measurement uses the viewport; omitting both is an error.
 #[test]
 fn measure_viewport_and_missing_viewport() {

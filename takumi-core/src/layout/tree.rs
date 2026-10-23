@@ -542,6 +542,9 @@ pub struct RenderNode {
   pub(crate) force_inline_layout: bool,
   /// Blink's `IsBlockInInline`: the anonymous block holding block-level children of an inline box.
   pub(crate) is_block_in_inline: bool,
+  /// Whether it is the root element, whose box always establishes an independent formatting
+  /// context, as Blink's `CreatesNewFormattingContext` reads `IsDocumentElement`.
+  pub(crate) is_root_element: bool,
   /// The fragment items its inline content last laid out to.
   pub(crate) fragment_items: FragmentItemsCache,
   /// The shapes its inline items took when its inline content was last prepared.
@@ -1429,6 +1432,7 @@ impl RenderNode {
       anonymous_text_content: None,
       force_inline_layout: false,
       is_block_in_inline: false,
+      is_root_element: false,
       fragment_items: FragmentItemsCache::default(),
       item_shapes: ItemShapes::default(),
     }
@@ -1911,24 +1915,51 @@ impl RenderNode {
 
   /// Builds a render tree from a node under the given parent context.
   pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
+    Self::build(parent_context, node, false)
+  }
+
+  /// Builds a render tree from `initial_containing_block`, a box that stands in for the initial
+  /// containing block: each node it holds is a root element.
+  pub fn from_initial_containing_block(
+    parent_context: &RenderContext,
+    initial_containing_block: Node,
+  ) -> Self {
+    Self::build(parent_context, initial_containing_block, true)
+  }
+
+  fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
       parent_context.stylesheet(),
       parent_context.sizing.viewport,
     );
-    let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
+    let mut tree =
+      Self::from_node_iterative(parent_context, node, &matched_styles, blockifies_children);
 
-    if tree.is_inline_level() {
-      tree.context.blockify();
+    tree.make_root_element();
+    if blockifies_children {
+      for child in tree.children.iter_mut().flatten() {
+        child.make_root_element();
+      }
     }
-
     tree
+  }
+
+  /// [CSS Display §2.7](https://drafts.csswg.org/css-display/#transformations): the root element's
+  /// display type is always blockified, and its principal box always establishes an independent
+  /// formatting context.
+  fn make_root_element(&mut self) {
+    if self.is_inline_level() {
+      self.context.blockify();
+    }
+    self.is_root_element = true;
   }
 
   fn from_node_iterative(
     parent_context: &RenderContext,
     root: Node,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
+    root_blockifies_children: bool,
   ) -> Self {
     let mut source_cursor = 0;
     let mut root_counter = ListCounter::new(&root);
@@ -1943,6 +1974,7 @@ impl RenderNode {
     )];
 
     loop {
+      let at_root = stack.len() == 1;
       let Some(current) = stack.last_mut() else {
         return RenderNode::empty(parent_context);
       };
@@ -1955,12 +1987,13 @@ impl RenderNode {
           &mut source_cursor,
           &mut current.list_counter,
           current.inside_list,
-          current
-            .context
-            .style
-            .base_data
-            .display
-            .should_blockify_children(),
+          (root_blockifies_children && at_root)
+            || current
+              .context
+              .style
+              .base_data
+              .display
+              .should_blockify_children(),
         );
         stack.push(child_pending);
         continue;
