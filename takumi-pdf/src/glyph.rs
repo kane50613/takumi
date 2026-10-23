@@ -2,6 +2,8 @@
 
 use std::ops::Range;
 
+use indexmap::IndexSet;
+
 use takumi_core::{
   geometry::{PathCommand, Point},
   layout::inline::{PositionedInlineRun, ShapedRun},
@@ -102,7 +104,8 @@ pub(crate) struct Uncovered {
   policy: UncoveredText,
   /// The standard that forbids [`UncoveredText::Placeholder`], if one applies.
   forbidden_by: Option<&'static str>,
-  characters: String,
+  /// In the order the render met them.
+  characters: IndexSet<char>,
 }
 
 impl Uncovered {
@@ -110,7 +113,7 @@ impl Uncovered {
     Self {
       policy,
       forbidden_by,
-      characters: String::new(),
+      characters: IndexSet::new(),
     }
   }
 
@@ -119,9 +122,7 @@ impl Uncovered {
   }
 
   fn record(&mut self, character: char) {
-    if !self.characters.contains(character) {
-      self.characters.push(character);
-    }
+    self.characters.insert(character);
   }
 
   pub(crate) fn into_error(self) -> Option<PdfError> {
@@ -130,8 +131,8 @@ impl Uncovered {
     }
     let named = self
       .characters
-      .chars()
-      .map(|character| format!("{character} (U+{:04X})", character as u32))
+      .iter()
+      .map(|&character| format!("{character} (U+{:04X})", character as u32))
       .collect::<Vec<_>>()
       .join(", ");
 

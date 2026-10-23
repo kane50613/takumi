@@ -22,8 +22,8 @@ pub(crate) mod skrifa {
   use skrifa::prelude::Size;
   use skrifa::{FontRef, GlyphId, MetadataProvider};
   use takumi_core::resources::glyph::draw_outline;
+  use write_fonts::dump_table;
   use write_fonts::tables::glyf::SimpleGlyph;
-  use write_fonts::{FontWrite, TableWriter, dump_table};
 
   pub(crate) struct SkrifaInterjector<'a> {
     font_ref: FontRef<'a>,
@@ -97,8 +97,6 @@ pub(crate) mod skrifa {
         .max_contours
         .max(simple_glyph.contours.len() as u16);
 
-      let mut writer = TableWriter::default();
-      simple_glyph.write_into(&mut writer);
       let data = dump_table(&simple_glyph).ok()?;
 
       Some((advance, lsb, data))
