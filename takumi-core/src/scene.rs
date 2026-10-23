@@ -444,7 +444,7 @@ impl SceneRequest<'_> {
           };
 
           (visit.base, visit.container_size) =
-            containing_blocks.base_for(&child, visit.base, visit.container_size);
+            containing_blocks.base_for(child.hoisted_cb, visit.base, visit.container_size);
           properties.release_escaped_effects(visit.state.effect, container);
           visit.state.clip = container.clip;
           visits.push(visit);
@@ -658,7 +658,7 @@ impl SceneRequest<'_> {
           }
 
           let (base, base_container) =
-            containing_blocks.base_for(child, child_base, child_container_size);
+            containing_blocks.base_for(child.hoisted_cb, child_base, child_container_size);
           let clip = match child.hoisted_cb.and_then(|cb| contents.get(&cb)) {
             Some(container) => {
               properties.release_escaped_effects(node_properties.contents.effect, container);

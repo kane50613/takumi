@@ -3,21 +3,26 @@
 
 use std::rc::Rc;
 
+use rustc_hash::FxHashMap;
+
 use crate::{
   Error, Result,
+  context::BoxId,
   geometry::{AvailableSpace, NodeId, Point, Size},
   layout::{
     block_break_token::BlockBreakToken,
     break_appeal::BreakAppeal,
+    break_token::BreakToken,
     constraint_space::BlockFragmentation,
     fragmentation_layout_input::FragmentationLayoutInput,
     fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
+    layout_view::LayoutView,
     length_utils::margins_for,
     out_of_flow::PageAreas,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
-  style::Direction,
+  style::{Direction, Position},
 };
 
 /// One page [`PagedLayout::next_page`] laid out.
@@ -45,6 +50,11 @@ pub struct PagedLayout<'r> {
   /// attaches to.
   last_root_fragment: Option<(usize, Point<LayoutUnit>)>,
   is_finished: bool,
+  /// The absolute boxes the initial containing block positions that no page has laid out yet, with
+  /// their layout nodes once the tree has them.
+  pending_initial_boxes: FxHashMap<BoxId, Option<NodeId>>,
+  /// How many layout nodes [`Self::pending_initial_boxes`] has looked through.
+  scanned_nodes: usize,
 }
 
 impl<'r> PagedLayout<'r> {
@@ -61,6 +71,8 @@ impl<'r> PagedLayout<'r> {
       page_areas: PageAreas::default(),
       last_root_fragment: None,
       is_finished: false,
+      pending_initial_boxes: initial_containing_block_boxes(root),
+      scanned_nodes: 0,
     }
   }
 
@@ -156,11 +168,97 @@ impl<'r> PagedLayout<'r> {
     );
     self.page_count += 1;
     self.is_finished = self.break_token.is_none() && !self.page_areas.resumes();
+    self.find_initial_boxes();
 
     Ok(Some(LaidPage {
       index: page,
       root_fragment: laid_root.then_some(root_fragment.0),
     }))
+  }
+
+  /// The layout so far, which later pages add to.
+  pub fn view(&self) -> LayoutView<'_> {
+    self.tree.view()
+  }
+
+  /// How many of the first pages no later page can paint onto, so a consumer may paint them from
+  /// [`Self::view`]. A box a containing block holds back to its last fragment paints from where
+  /// that block started, so an unfinished block holds back the pages from its first. The initial
+  /// containing block is the first page's area, so an absolute box it positions paints there from
+  /// whichever page finds it, and until every such box is found no page is final. This leaves out a
+  /// held box that starts above its containing block.
+  pub fn finalized_pages(&self) -> usize {
+    if !self.pending_initial_boxes.is_empty() {
+      return 0;
+    }
+
+    let mut pinned = self.page_count;
+    let mut chain = vec![NodeId::ROOT];
+
+    if let Some(token) = &self.break_token {
+      self.pin_held_boxes(token, &mut chain, &mut pinned);
+    }
+    pinned
+  }
+
+  /// Lowers `pinned` to the page each box held in `token`'s box or the boxes under it
+  /// starts on, `chain` being the boxes down to it.
+  fn pin_held_boxes(&self, token: &BlockBreakToken, chain: &mut Vec<NodeId>, pinned: &mut usize) {
+    for child in &token.child_break_tokens {
+      let BreakToken::Block(child) = child else {
+        continue;
+      };
+
+      if child.held_static_position.is_some() {
+        *pinned = (*pinned).min(self.start_page(chain));
+      } else {
+        chain.push(child.node);
+        self.pin_held_boxes(child, chain, pinned);
+        chain.pop();
+      }
+    }
+  }
+
+  /// Drops the pending initial containing block boxes that pages laid out so far have laid out.
+  fn find_initial_boxes(&mut self) {
+    if self.pending_initial_boxes.is_empty() {
+      return;
+    }
+
+    for index in self.scanned_nodes..self.tree.node_count() {
+      let box_id = self.tree.render_node(index).context.box_id();
+
+      if let Some(node) = self.pending_initial_boxes.get_mut(&box_id) {
+        *node = Some(NodeId::new(index));
+      }
+    }
+    self.scanned_nodes = self.tree.node_count();
+
+    let view = self.tree.view();
+
+    self
+      .pending_initial_boxes
+      .retain(|_, node| !node.is_some_and(|node| view.is_laid_out(node)));
+  }
+
+  /// The page the last box of `chain`, a box under the root, starts on.
+  fn start_page(&self, chain: &[NodeId]) -> usize {
+    let view = self.tree.view();
+    let mut fragment_index = 0;
+
+    for &node in chain.iter().rev() {
+      match view.container_fragment_indices(node).nth(fragment_index) {
+        Some(container) => fragment_index = container,
+        None => return 0,
+      }
+    }
+    fragment_index
+  }
+
+  /// The tree being laid out.
+  #[cfg(test)]
+  pub(crate) fn tree(&self) -> &LayoutTree<'r> {
+    &self.tree
   }
 
   /// How many pages are laid out.
@@ -177,4 +275,32 @@ impl<'r> PagedLayout<'r> {
   pub fn into_results(self) -> LayoutResults {
     self.tree.into_results()
   }
+}
+
+/// The absolute boxes under `root` that no positioned box or box with a transform contains, which
+/// the initial containing block positions.
+fn initial_containing_block_boxes(root: &RenderNode) -> FxHashMap<BoxId, Option<NodeId>> {
+  let mut boxes = FxHashMap::default();
+  let mut stack = vec![(root, false)];
+
+  while let Some((node, is_contained)) = stack.pop() {
+    let style = &node.context.style;
+    let position = style.base_data.position;
+
+    if position == Position::Absolute && !is_contained {
+      boxes.insert(node.context.box_id(), None);
+    }
+
+    let is_contained =
+      is_contained || position.is_positioned() || style.contains_fixed_descendants();
+
+    stack.extend(
+      node
+        .children
+        .iter()
+        .flatten()
+        .map(|child| (child, is_contained)),
+    );
+  }
+  boxes
 }

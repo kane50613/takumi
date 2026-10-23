@@ -121,7 +121,10 @@ impl<'r> TextMask<'r> {
       .should_blockify_children();
 
     for child in self.results.box_children(node_id)? {
-      let Some(base) = self.containing_blocks.recorded_placement_for(child, origin) else {
+      let Some(base) = self
+        .containing_blocks
+        .recorded_placement_for(child.hoisted_cb, origin)
+      else {
         continue;
       };
       let mut path = Vec::new();

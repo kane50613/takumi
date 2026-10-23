@@ -1659,8 +1659,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
 
     if self
       .tree
-      .table_hidden
-      .get(&self.node)
+      .hidden_parts(self.node)
       .is_some_and(|hidden| hidden.collapsed_columns == collapsed_columns)
     {
       return;
@@ -1691,7 +1690,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         }
       }
     }
-    self.tree.table_hidden.insert(
+    self.tree.set_hidden_parts(
       self.node,
       HiddenParts {
         collapsed_columns,

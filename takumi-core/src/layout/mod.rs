@@ -41,6 +41,8 @@ pub mod inline_box;
 pub mod intercept;
 pub(crate) mod layout_result;
 pub(crate) mod layout_style;
+/// A layout read while it is made or after.
+pub mod layout_view;
 pub(crate) mod length_utils;
 pub(crate) mod line_clamp_data;
 /// Generated marker boxes for `display: list-item`.

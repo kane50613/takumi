@@ -164,7 +164,7 @@ impl MeasuredNode {
             let mut child_path = path.clone();
             child.extend_path(&mut child_path);
             let (base_transform, base_container) =
-              containing_blocks.base_for(child, local_transform, child_container_size);
+              containing_blocks.base_for(child.hoisted_cb, local_transform, child_container_size);
             visits.push(TraversalVisit::Enter(TraversalEnter {
               path: child_path,
               node_id: child.node_id,

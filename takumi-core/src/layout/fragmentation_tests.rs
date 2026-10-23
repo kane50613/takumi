@@ -1480,3 +1480,67 @@ fn an_absolute_box_taller_than_a_page_breaks_across_the_pages_of_a_table() {
   );
   assert_eq!(boxes["abs"], [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]);
 }
+
+/// How many pages are final after each page of `root` is laid out on pages 300 wide.
+fn finalized_after_each_page(root: &RenderNode, page_height: f32) -> Vec<usize> {
+  let page_size = Size {
+    width: 300.0,
+    height: page_height,
+  };
+  let mut layout = PagedLayout::new(root, page_size, usize::MAX);
+  let mut finalized = Vec::new();
+
+  while layout.next_page().expect("page lays out").is_some() {
+    finalized.push(layout.finalized_pages());
+  }
+  oracles::check(root, page_size);
+  finalized
+}
+
+/// A box a containing block holds back to its last fragment paints from where the block started,
+/// so the block's pages stay open until it ends.
+#[test]
+fn a_held_box_keeps_the_pages_from_its_containing_block_open() {
+  let tree = render(
+    root([
+      block("a", "h300"),
+      Node::container([block("held", "held")]).with_class_name("block rel"),
+    ]),
+    ".h300 { height: 300px } .rel { position: relative; height: 500px } \
+     .held { position: absolute; bottom: 0; height: 10px }",
+  );
+
+  // The block starts on the second page and ends on the fourth.
+  assert_eq!(finalized_after_each_page(&tree, 200.0), [1, 1, 1, 4]);
+}
+
+/// The initial containing block is the first page's area, so an absolute box a later page finds
+/// paints on the first page.
+#[test]
+fn an_absolute_box_found_on_a_later_page_keeps_every_page_open_until_then() {
+  let tree = render(
+    root([
+      block("a", "h300"),
+      Node::container([block("late", "late")]).with_class_name("block"),
+    ]),
+    ".h300 { height: 300px } .late { position: absolute; top: 0; left: 0; width: 10px; height: 10px }",
+  );
+  let (results, _) = LayoutResults::compute_pages(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+    usize::MAX,
+  )
+  .expect("pages lay out");
+  // The box is the last in the tree, found on the second page and placed a page above it.
+  let late = results
+    .fragments(NodeId::new(results.node_count() - 1))
+    .expect("fragments");
+
+  assert_eq!(late.len(), 1);
+  assert_eq!(late[0].container_fragment_index, 1);
+  assert_eq!(late[0].layout.location.y, -200.0);
+  assert_eq!(finalized_after_each_page(&tree, 200.0), [0, 2]);
+}

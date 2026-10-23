@@ -12,7 +12,6 @@ use smallvec::SmallVec;
 use crate::layout::{layout_result::LayoutResult, paged_layout::PagedLayout};
 
 use crate::{
-  Error,
   context::{BoxId, RenderContext},
   font_style::SizedFontStyle,
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
@@ -28,6 +27,7 @@ use crate::{
     },
     layout_result::{OutOfFlowCandidate, StaticPosition},
     layout_style::{LayoutLength, LayoutStyle},
+    layout_view::{HoistedBy, LayoutView, LiveLayout},
     length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
@@ -97,15 +97,15 @@ impl<P: Copy> ContainingBlocks<P> {
     self.content_boxes.insert(node_id, content_box);
   }
 
-  /// The placement and container size `child` resolves against: its containing block's when
-  /// hoisted, otherwise the parent's.
+  /// The placement and container size a child resolves against: its containing block's,
+  /// `hoisted_cb`, when hoisted, otherwise the parent's.
   pub fn base_for(
     &self,
-    child: &OrderedChild,
+    hoisted_cb: Option<NodeId>,
     parent_placement: P,
     parent_content_box: Size<Option<f32>>,
   ) -> (P, Size<Option<f32>>) {
-    match child.hoisted_cb {
+    match hoisted_cb {
       Some(cb) => (
         self
           .placements
@@ -122,14 +122,14 @@ impl<P: Copy> ContainingBlocks<P> {
     }
   }
 
-  /// The placement `child` resolves against, or `None` when it was hoisted to a containing block
-  /// none of the recorded nodes is.
+  /// The placement a child resolves against, or `None` when it was hoisted to the containing block
+  /// `hoisted_cb`, which none of the recorded nodes is.
   pub(crate) fn recorded_placement_for(
     &self,
-    child: &OrderedChild,
+    hoisted_cb: Option<NodeId>,
     parent_placement: P,
   ) -> Option<P> {
-    match child.hoisted_cb {
+    match hoisted_cb {
       Some(cb) => self.placements.get(&cb).copied(),
       None => Some(parent_placement),
     }
@@ -138,16 +138,16 @@ impl<P: Copy> ContainingBlocks<P> {
 
 /// Immutable per-node layout output after computing a tree.
 pub struct LayoutResults {
-  nodes: Vec<LayoutResultNode>,
+  pub(in crate::layout) nodes: Vec<LayoutResultNode>,
   /// Each laid-out table's paint data, by node.
-  tables: FxHashMap<usize, Vec<TableFragment>>,
+  pub(in crate::layout) tables: FxHashMap<usize, Vec<TableFragment>>,
   /// The cells and rows layout hid, which paint nothing.
-  hidden: rustc_hash::FxHashSet<usize>,
+  pub(in crate::layout) hidden: FxHashSet<usize>,
 }
 
-struct LayoutResultNode {
-  fragments: Fragments,
-  box_children: Box<[OrderedChild]>,
+pub(in crate::layout) struct LayoutResultNode {
+  pub(in crate::layout) fragments: Fragments,
+  pub(in crate::layout) box_children: Box<[OrderedChild]>,
 }
 
 impl LayoutResults {
@@ -193,9 +193,14 @@ impl LayoutResults {
     tree.into_results()
   }
 
+  /// The layout as a [`LayoutView`].
+  pub fn view(&self) -> LayoutView<'_> {
+    LayoutView::Final(self)
+  }
+
   /// Computed layout of a node.
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
-    self.fragment_layout(node_id, 0)
+    self.view().layout(node_id)
   }
 
   /// Computed layout of a node's fragment `fragment_index`.
@@ -204,22 +209,12 @@ impl LayoutResults {
     node_id: NodeId,
     fragment_index: usize,
   ) -> crate::Result<ComputedLayout> {
-    self
-      .node(node_id)?
-      .fragments
-      .get(fragment_index)
-      .map(|fragment| fragment.layout)
-      .ok_or(Error::InvalidLayoutNode(node_id.into()))
+    self.view().fragment_layout(node_id, fragment_index)
   }
 
   /// Whether the node's fragment `fragment_index` repeats an earlier one, as a table header does on each page.
   pub fn is_repeated_fragment(&self, node_id: NodeId, fragment_index: usize) -> bool {
-    self.node(node_id).is_ok_and(|node| {
-      node
-        .fragments
-        .get(fragment_index)
-        .is_some_and(|fragment| fragment.is_repeated)
-    })
+    self.view().is_repeated_fragment(node_id, fragment_index)
   }
 
   /// For each fragment of `node_id`, which of its parent's fragments holds it.
@@ -227,15 +222,7 @@ impl LayoutResults {
     &self,
     node_id: NodeId,
   ) -> impl Iterator<Item = usize> + '_ {
-    #[cfg(feature = "fragmentation")]
-    return self
-      .node(node_id)
-      .ok()
-      .into_iter()
-      .flat_map(|node| node.fragments.iter())
-      .map(|fragment| fragment.container_fragment_index);
-    #[cfg(not(feature = "fragmentation"))]
-    return self.node(node_id).ok().map(|_| 0).into_iter();
+    self.view().container_fragment_indices(node_id)
   }
 
   /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
@@ -245,7 +232,7 @@ impl LayoutResults {
     node_id: NodeId,
     container_fragment_index: usize,
   ) -> Option<usize> {
-    self.fragments_in(node_id, container_fragment_index).next()
+    self.view().fragment_in(node_id, container_fragment_index)
   }
 
   /// Every fragment of `node_id` the parent's fragment `container_fragment_index` holds: one,
@@ -255,21 +242,12 @@ impl LayoutResults {
     node_id: NodeId,
     container_fragment_index: usize,
   ) -> impl Iterator<Item = usize> + '_ {
-    #[cfg(feature = "fragmentation")]
-    return self
-      .node(node_id)
-      .ok()
-      .into_iter()
-      .flat_map(move |node| BoxFragment::held_by(&node.fragments, container_fragment_index));
-    #[cfg(not(feature = "fragmentation"))]
-    return (self.node(node_id).is_ok() && container_fragment_index == 0)
-      .then_some(0)
-      .into_iter();
+    self.view().fragments_in(node_id, container_fragment_index)
   }
 
   /// Paint-ordered children of a node.
   pub fn box_children(&self, node_id: NodeId) -> crate::Result<&[OrderedChild]> {
-    self.node(node_id).map(|node| node.box_children.as_ref())
+    self.view().box_children(node_id)
   }
 
   /// The run of `node_id`'s box children its fragment `fragment_index` holds, for children that
@@ -279,52 +257,24 @@ impl LayoutResults {
     node_id: NodeId,
     fragment_index: usize,
   ) -> crate::Result<&[OrderedChild]> {
-    let children = self.box_children(node_id)?;
-
-    #[cfg(feature = "fragmentation")]
-    {
-      let containers = |child: &OrderedChild| {
-        self.node(child.node_id).ok().and_then(|node| {
-          Some((
-            node.fragments.first()?.container_fragment_index,
-            node.fragments.last()?.container_fragment_index,
-          ))
-        })
-      };
-      let start = children
-        .partition_point(|child| containers(child).is_none_or(|(_, last)| last < fragment_index));
-      let len = children[start..].partition_point(|child| {
-        containers(child).is_none_or(|(first, _)| first <= fragment_index)
-      });
-
-      Ok(&children[start..start + len])
-    }
-    #[cfg(not(feature = "fragmentation"))]
-    {
-      let _ = fragment_index;
-
-      Ok(children)
-    }
+    self.view().ordered_children_in(node_id, fragment_index)
   }
 
   /// The paint data of the table `node_id`'s fragment `fragment_index`, when it is one.
   pub fn table_fragment(&self, node_id: NodeId, fragment_index: usize) -> Option<&TableFragment> {
-    self.tables.get(&usize::from(node_id))?.get(fragment_index)
+    self.view().table_fragment(node_id, fragment_index)
   }
 
   /// Whether layout hid the box `node_id`, as Blink's `IsHiddenForPaint`: a cell in collapsed
   /// columns or empty under `empty-cells: hide`, or a collapsed row.
   pub fn is_hidden_for_paint(&self, node_id: NodeId) -> bool {
-    self.hidden.contains(&usize::from(node_id))
+    self.view().is_hidden_for_paint(node_id)
   }
 
   /// Blink's `IsLineClampClippedFloat`: whether `node_id` is a float its line-clamp container
   /// clips to its content box's block end.
   pub fn is_line_clamp_clipped_float(&self, node_id: NodeId) -> bool {
-    self
-      .nodes
-      .get(usize::from(node_id))
-      .is_some_and(|node| node.fragments[0].is_line_clamp_clipped_float)
+    self.view().is_line_clamp_clipped_float(node_id)
   }
 
   /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.
@@ -352,14 +302,7 @@ impl LayoutResults {
   /// Each fragment of `node_id`, by fragment index.
   #[cfg(all(test, feature = "fragmentation"))]
   pub(crate) fn fragments(&self, node_id: NodeId) -> crate::Result<&[BoxFragment]> {
-    self.node(node_id).map(|node| node.fragments.as_slice())
-  }
-
-  fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
-    self
-      .nodes
-      .get(usize::from(node_id))
-      .ok_or(Error::InvalidLayoutNode(node_id.into()))
+    self.view().fragments(node_id)
   }
 }
 
@@ -380,7 +323,11 @@ pub struct LayoutTree<'r> {
   /// Each table's paint data from its last full layout, one per fragment.
   table_fragments: FxHashMap<usize, Vec<TableFragment>>,
   /// The cells and rows each table's layout hid, which every fragment of it shares.
-  pub(crate) table_hidden: FxHashMap<NodeId, HiddenParts>,
+  table_hidden: FxHashMap<NodeId, HiddenParts>,
+  /// Every cell and row some table's layout hid.
+  hidden: FxHashSet<usize>,
+  /// Which boxes positioned each out-of-flow box as their containing block.
+  pub(in crate::layout) hoisted_by: HoistedBy,
   /// The layout styles the latest table parts took, which an equal part's shares.
   table_part_styles: RecentStyles<LayoutStyle>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
@@ -506,6 +453,9 @@ pub(crate) struct BoxFragment {
   /// fragment's children says.
   #[cfg(feature = "fragmentation")]
   pub(crate) container_fragment_index: usize,
+  /// Whether layout placed or hid the box, as a box the layout has not reached is not.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) is_laid_out: bool,
   /// Whether the fragment repeats an earlier one, as a table header does on each page.
   pub(crate) is_repeated: bool,
 }
@@ -738,6 +688,8 @@ impl<'r> LayoutTree<'r> {
       table_columns: FxHashMap::default(),
       table_fragments: FxHashMap::default(),
       table_hidden: FxHashMap::default(),
+      hidden: FxHashSet::default(),
+      hoisted_by: HoistedBy::default(),
       table_part_styles: RecentStyles::default(),
       atomic_inlines: FxHashMap::default(),
       inline_contents: FxHashMap::default(),
@@ -1110,19 +1062,12 @@ impl<'r> LayoutTree<'r> {
   pub(crate) fn into_results(mut self) -> LayoutResults {
     // A box another node than its box-tree parent positioned resolves against that containing
     // block.
-    let mut containing_blocks: FxHashMap<usize, usize> = FxHashMap::default();
-
-    for (index, node) in self.nodes.iter().enumerate() {
-      for &child in &node.hoisted_children {
-        containing_blocks.insert(usize::from(child), index);
-      }
-    }
     for (index, node) in self.nodes.iter_mut().enumerate() {
       for child in node.box_children.iter_mut() {
-        child.hoisted_cb = containing_blocks
-          .get(&usize::from(child.node_id))
-          .filter(|&&cb| cb != index)
-          .map(|&cb| NodeId::new(cb));
+        child.hoisted_cb = self
+          .hoisted_by
+          .containing_block(child.node_id)
+          .filter(|&container| usize::from(container) != index);
       }
     }
 
@@ -1133,18 +1078,40 @@ impl<'r> LayoutTree<'r> {
       fragments: node.fragments,
       box_children: node.box_children,
     }));
-    let hidden = self
-      .table_hidden
-      .values()
-      .flat_map(|hidden| &hidden.nodes)
-      .map(|&node| usize::from(node))
-      .collect();
-
     LayoutResults {
       nodes,
       tables: self.table_fragments,
-      hidden,
+      hidden: self.hidden,
     }
+  }
+
+  /// The cells and rows the layout of the table `table` hid.
+  pub(in crate::layout) fn hidden_parts(&self, table: NodeId) -> Option<&HiddenParts> {
+    self.table_hidden.get(&table)
+  }
+
+  /// Keeps `parts` as the cells and rows the layout of the table `table` hid, in place of the ones
+  /// it hid before.
+  pub(in crate::layout) fn set_hidden_parts(&mut self, table: NodeId, parts: HiddenParts) {
+    let before = self.table_hidden.get(&table).map(|before| &before.nodes);
+
+    for &node in before.into_iter().flatten() {
+      self.hidden.remove(&usize::from(node));
+    }
+    self
+      .hidden
+      .extend(parts.nodes.iter().map(|&node| usize::from(node)));
+    self.table_hidden.insert(table, parts);
+  }
+
+  /// The layout so far, for reading while it lays out more pages.
+  pub fn view(&self) -> LayoutView<'_> {
+    LayoutView::Live(LiveLayout {
+      nodes: &self.nodes,
+      tables: &self.table_fragments,
+      hidden: &self.hidden,
+      hoisted_by: &self.hoisted_by,
+    })
   }
 
   pub(crate) fn node_state(&self, node: NodeId) -> &LayoutNodeState {
