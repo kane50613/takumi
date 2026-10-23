@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_cell_alignment</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: block;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        font-family: "Geist";
+        font-size: 16px;
+      }
+      table {
+        display: table;
+        border-spacing: 4px;
+        background: rgb(255, 255, 255);
+      }
+      tr {
+        display: table-row;
+        height: 96px;
+      }
+      td {
+        display: table-cell;
+        border: 1px solid rgb(148, 163, 184);
+        padding: 10px;
+        background: rgb(147, 197, 253);
+        background-clip: content-box;
+      }
+    </style>
+  </head>
+  <body style="width: 480px; height: 160px">
+    <div class="root">
+      <table>
+        <tr>
+          <td style="vertical-align: top">top</td>
+          <td style="vertical-align: middle">middle</td>
+          <td style="vertical-align: bottom">bottom</td>
+          <td style="vertical-align: baseline">baseline</td>
+          <td style="vertical-align: baseline; font-size: 32px">Big</td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

@@ -3,9 +3,7 @@
 //! which lays its sections out through their own algorithm, under the notice in LICENSE-CHROMIUM.
 //!
 //! Naive next to Blink: a cell's percentage-height descendants are not tracked, so a row's
-//! baseline is always the one measured before the rows grow, and alignment moves a cell's
-//! content by growing its padding, so a `content-box` background and the measured runs of the
-//! cell's own text start at the moved content.
+//! baseline is always the one measured before the rows grow.
 
 use std::rc::Rc;
 
@@ -1033,8 +1031,6 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     inline_size: LayoutUnit,
     percentage_inline_size: LayoutUnit,
   ) -> CellMeasure {
-    self.tree.set_table_cell_aligned_padding(cell.node, None);
-
     let space = ConstraintSpace::for_table_cell(
       self.tree.layout_style(cell.node).direction,
       inline_size,
