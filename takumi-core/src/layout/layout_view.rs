@@ -1,16 +1,18 @@
 //! A layout read through one interface whether it is finished or still laying out pages.
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
+#[cfg(feature = "fragmentation")]
+use rustc_hash::FxHashSet;
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::tree::BoxFragment;
+use crate::layout::tree::{BoxFragment, LayoutNodeState};
 use crate::{
   Error, Result,
   geometry::{ComputedLayout, NodeId},
   layout::{
     table::TableFragment,
-    tree::{Fragments, LayoutNodeState, LayoutResults, OrderedChild},
+    tree::{Fragments, LayoutResults, OrderedChild},
   },
 };
 
@@ -52,6 +54,7 @@ impl HoistedBy {
 }
 
 /// A tree that is still laying out pages, as [`LayoutView::Live`] reads it.
+#[cfg(feature = "fragmentation")]
 #[derive(Clone, Copy)]
 pub struct LiveLayout<'a> {
   pub(in crate::layout) nodes: &'a [LayoutNodeState],
@@ -68,6 +71,7 @@ pub enum LayoutView<'a> {
   /// A finished layout.
   Final(&'a LayoutResults),
   /// A layout that has laid out some pages.
+  #[cfg(feature = "fragmentation")]
   Live(LiveLayout<'a>),
 }
 
@@ -154,9 +158,14 @@ impl<'a> LayoutView<'a> {
   }
 
   /// The box that positioned `child`, a box child of `parent`, when that is not `parent`.
-  pub fn hoisted_cb(self, parent: NodeId, child: &OrderedChild) -> Option<NodeId> {
+  pub fn hoisted_cb(
+    self,
+    #[cfg_attr(not(feature = "fragmentation"), allow(unused_variables))] parent: NodeId,
+    child: &OrderedChild,
+  ) -> Option<NodeId> {
     match self {
       Self::Final(_) => child.hoisted_cb,
+      #[cfg(feature = "fragmentation")]
       Self::Live(live) => live
         .hoisted_by
         .containing_block(child.node_id)
@@ -219,6 +228,7 @@ impl<'a> LayoutView<'a> {
   pub fn table_fragment(self, node_id: NodeId, fragment_index: usize) -> Option<&'a TableFragment> {
     let tables = match self {
       Self::Final(results) => &results.tables,
+      #[cfg(feature = "fragmentation")]
       Self::Live(live) => live.tables,
     };
 
@@ -230,6 +240,7 @@ impl<'a> LayoutView<'a> {
   pub fn is_hidden_for_paint(self, node_id: NodeId) -> bool {
     let hidden = match self {
       Self::Final(results) => &results.hidden,
+      #[cfg(feature = "fragmentation")]
       Self::Live(live) => live.hidden,
     };
 
@@ -266,6 +277,7 @@ impl<'a> LayoutView<'a> {
         .nodes
         .get(usize::from(node_id))
         .map(|node| (&node.fragments, &*node.box_children)),
+      #[cfg(feature = "fragmentation")]
       Self::Live(live) => live
         .nodes
         .get(usize::from(node_id))

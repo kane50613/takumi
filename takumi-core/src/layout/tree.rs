@@ -9,7 +9,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::{layout_result::LayoutResult, paged_layout::PagedLayout};
+use crate::layout::{
+  layout_result::LayoutResult, layout_view::LiveLayout, paged_layout::PagedLayout,
+};
 
 use crate::{
   context::{BoxId, RenderContext},
@@ -27,7 +29,7 @@ use crate::{
     },
     layout_result::{OutOfFlowCandidate, StaticPosition},
     layout_style::{LayoutLength, LayoutStyle},
-    layout_view::{HoistedBy, LayoutView, LiveLayout},
+    layout_view::{HoistedBy, LayoutView},
     length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
@@ -1108,6 +1110,7 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// The layout so far, for reading while it lays out more pages.
+  #[cfg(feature = "fragmentation")]
   pub fn view(&self) -> LayoutView<'_> {
     LayoutView::Live(LiveLayout {
       nodes: &self.nodes,
