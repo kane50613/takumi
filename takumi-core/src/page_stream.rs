@@ -48,7 +48,7 @@ impl<'r> PageStream<'r> {
   /// Lays out the next page and returns the pages `settle` newly says are safe to paint.
   pub fn advance(&mut self, settle: Settle<'_>) -> Result<Settled> {
     let laid = self.layout.next_page()?;
-    let settled = settle(&self.layout);
+    let settled = settle(&self.layout).min(self.layout.page_count());
     let pages = self.handed_over..settled.max(self.handed_over);
 
     if !pages.is_empty() {
