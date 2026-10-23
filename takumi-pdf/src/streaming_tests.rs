@@ -278,7 +278,7 @@ fn a_link_to_a_later_page_lays_out_before_the_first_page_is_drawn() {
 }
 
 #[test]
-fn content_counters_lay_out_before_the_first_page_is_drawn() {
+fn content_counters_draw_their_first_page_before_the_last_layout_ends() {
   let source = sections(
     "",
     &[("a", 4), ("b", 4), ("c", 4)],
@@ -287,7 +287,41 @@ fn content_counters_lay_out_before_the_first_page_is_drawn() {
   let rendered =
     assert_draws_like_after_layout("content counters", |fonts| options(&source, fonts));
 
-  assert_eq!(rendered.laid_at_first_page, usize::MAX);
+  assert_eq!(rendered.pages, 3);
+  assert_eq!(rendered.layouts, 3, "two passes number, one draws");
+  assert!(rendered.laid_at_first_page < rendered.pages);
+}
+
+/// `lines` lines, then a tail whose width fits the page count in roman numerals only up to a
+/// point, so that numbering the page count can move it.
+fn numbered_tail(lines: usize, tail_width: usize) -> String {
+  let lines: String = (1..=lines)
+    .map(|line| format!("<div>line {line}</div>"))
+    .collect();
+
+  format!(
+    r#"<div style="width: 100%; font-size: 14px;">{lines}<div style="width: {tail_width}px;">Total <span class="totalPages lower-roman"></span></div></div>"#
+  )
+}
+
+#[test]
+fn counters_that_move_the_page_count_are_numbered_again_before_the_pages_draw() {
+  let source = numbered_tail(83, 40);
+  let rendered =
+    assert_draws_like_after_layout("counters that move", |fonts| options(&source, fonts));
+
+  assert_eq!(rendered.layouts, 4, "three passes number, one draws");
+  assert!(rendered.laid_at_first_page < rendered.pages);
+}
+
+#[test]
+fn counters_that_never_settle_lay_out_to_the_end() {
+  let source = numbered_tail(95, 46);
+  let rendered = assert_draws_like_after_layout("counters that never settle", |fonts| {
+    options(&source, fonts)
+  });
+
+  assert_eq!(rendered.layouts, 3, "the last layout never asks the hook");
 }
 
 #[test]

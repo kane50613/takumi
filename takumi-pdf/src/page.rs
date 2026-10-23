@@ -381,7 +381,7 @@ impl PageDrawing<'_, '_> {
   fn compose(
     &mut self,
     solved: Solved,
-    mut paginated: Box<Paginated>,
+    paginated: Box<Paginated>,
     selection: PageSelection,
     structural: bool,
   ) -> Result<PagePlan, PdfError> {
