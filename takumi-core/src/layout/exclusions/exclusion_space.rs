@@ -555,6 +555,34 @@ impl PartialEq for ExclusionSpace {
 }
 
 impl ExclusionSpace {
+  /// An exclusion space with no floats, one the render's spaces share as Blink's share a null
+  /// `exclusion_space_`.
+  pub(crate) fn empty() -> Rc<Self> {
+    thread_local! {
+      static EMPTY: Rc<ExclusionSpace> = Rc::default();
+    }
+
+    EMPTY.with(Rc::clone)
+  }
+
+  /// `self` behind an `Rc`, the shared [`Self::empty`] when it holds nothing.
+  pub(crate) fn into_rc(self) -> Rc<Self> {
+    #[cfg(feature = "fragmentation")]
+    let has_float_breaks = self.float_breaks != FloatBreaks::default();
+    #[cfg(not(feature = "fragmentation"))]
+    let has_float_breaks = false;
+
+    if self.exclusions.is_empty()
+      && self.left_clear_offset.is_none()
+      && self.right_clear_offset.is_none()
+      && self.last_float_block_start.is_none()
+      && !has_float_breaks
+    {
+      return Self::empty();
+    }
+    Rc::new(self)
+  }
+
   fn left_clear_offset(&self) -> LayoutUnit {
     self.left_clear_offset.unwrap_or(LayoutUnit::MIN)
   }

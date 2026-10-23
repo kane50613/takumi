@@ -31,7 +31,7 @@ use crate::{
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::TableLayoutAlgorithm,
-    tree::{BoxFragment, LayoutTree, NodeOrigin},
+    tree::{BoxFragment, LayoutTree, NodeOrigin, push_tight},
   },
   layout_unit::LayoutUnit,
   style::{Display, JustifyContent},
@@ -46,15 +46,6 @@ pub(crate) struct LayoutCache {
   layouts: Vec<(ConstraintSpace, ChildBreakToken, Rc<LayoutResult>)>,
   measures: Vec<(ConstraintSpace, Rc<LayoutResult>)>,
   min_max_sizes: Vec<((MinMaxKey, SizeType), MinMaxSizesResult)>,
-}
-
-/// Pushes `item`, allocating room for only it when `entries` is empty: most boxes cache one entry,
-/// where a first push would make room for four.
-fn push_tight<T>(entries: &mut Vec<T>, item: T) {
-  if entries.capacity() == 0 {
-    entries.reserve_exact(1);
-  }
-  entries.push(item);
 }
 
 /// What a box's intrinsic inline sizes depend on in the space it is sized in.

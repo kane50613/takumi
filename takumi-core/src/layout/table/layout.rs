@@ -129,23 +129,24 @@ impl<'r> LayoutTree<'r> {
   /// a table part has no border or padding of its own, a cell lays out with the border the table
   /// resolves for it and takes the size the table gives it, and a column does not lay out.
   pub(in crate::layout) fn prepare_tables(&mut self, start: usize) {
-    let mut inside_cell_flex_or_grid = vec![false; self.node_count()];
+    // By index from `start`: a subtree appended to the tree holds only its own nodes.
+    let mut inside_cell_flex_or_grid = vec![false; self.node_count() - start];
 
     for index in start..self.node_count() {
       let node = NodeId::new(index);
       let render_node = self.render_node(node);
       let display = render_node.context.style.base_data.display;
-      let denies_percentages = inside_cell_flex_or_grid[index]
+      let denies_percentages = inside_cell_flex_or_grid[index - start]
         || display == Display::TableCell
         || display.is_flex()
         || display.is_grid();
 
       for &child in self.child_nodes(node).iter() {
-        inside_cell_flex_or_grid[usize::from(child)] = denies_percentages;
+        inside_cell_flex_or_grid[usize::from(child) - start] = denies_percentages;
       }
 
       if display.is_table() {
-        let structure = self.table_structure_of(node, !inside_cell_flex_or_grid[index]);
+        let structure = self.table_structure_of(node, !inside_cell_flex_or_grid[index - start]);
 
         self.set_table_structure(node, structure);
       }

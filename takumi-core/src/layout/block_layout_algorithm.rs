@@ -780,7 +780,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let break_info = self.break_info();
 
     if !space.is_new_formatting_context {
-      result.exclusion_space = Rc::new(self.exclusion_space);
+      result.exclusion_space = self.exclusion_space.into_rc();
     }
 
     LayoutResult {
@@ -1336,7 +1336,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     if !is_new_fc {
       builder.margin_strut = child_data.margin_strut;
       builder.bfc_offset = child_data.bfc_offset_estimate;
-      builder.exclusion_space = Rc::new(self.exclusion_space.clone());
+      builder.exclusion_space = self.exclusion_space.clone().into_rc();
       if !has_bfc_block_offset {
         builder.adjoining_object_types = self.adjoining_object_types;
       }
