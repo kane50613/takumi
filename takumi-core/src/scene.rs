@@ -817,14 +817,14 @@ impl PagedScene {
   }
 
   /// The scene of page `index`, its boxes set up to paint their fragments on it.
-  pub fn page(&mut self, index: usize) -> &Scene {
+  pub fn page(&mut self, index: usize) -> &mut Scene {
     if index != self.current {
       self.swap_layers(self.current);
       self.swap_layers(index);
       self.current = index;
       set_paint_offsets(&mut self.scene.root, &self.pages[index].placements);
     }
-    &self.scene
+    &mut self.scene
   }
 
   /// Swaps page `index`'s stacking contexts with those `scene` holds.

@@ -96,6 +96,13 @@ pub struct SequentialScene<'g> {
 }
 
 impl RenderOptions<'_> {
+  /// The render context a node lays out under, taking these options' images.
+  pub fn take_render_context(&mut self) -> RenderContext {
+    let images = Rc::new(mem::take(&mut self.images));
+
+    self.render_context(self.fonts_snapshot(), images, self.time_ms)
+  }
+
   fn fonts_snapshot(&self) -> FontsSnapshot {
     self
       .fonts
@@ -129,8 +136,7 @@ impl RenderOptions<'_> {
 
 /// Measures the layout of a node.
 pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
-  let images = Rc::new(mem::take(&mut options.images));
-  let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
+  let render_context = options.take_render_context();
   let mut root = RenderNode::from_node(&render_context, options.node);
   let layout_results = LayoutResults::compute_document(&root, options.viewport.into());
 
@@ -139,10 +145,23 @@ pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
 
 /// Renders a node to an image.
 pub fn render<'g>(mut options: RenderOptions<'g>) -> Result<Bitmap> {
-  let images = Rc::new(mem::take(&mut options.images));
-  let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
+  let render_context = options.take_render_context();
 
   render_with_context(render_context, options.node, options.viewport)
+}
+
+/// Paints a laid-out scene to an image the size of `scene.size`.
+pub fn render_scene(scene: &mut Scene) -> Result<Bitmap> {
+  let size = scene.size.map(|length| length.round() as u32);
+
+  if size.width == 0 || size.height == 0 {
+    return Err(Error::InvalidViewport);
+  }
+
+  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
+
+  paint_scene(scene, &mut canvas)?;
+  canvas.into_inner()
 }
 
 /// Rasterizes `node` under an already-built [`RenderContext`]. The context
@@ -154,19 +173,8 @@ fn render_with_context(
   viewport: Viewport,
 ) -> Result<Bitmap> {
   let mut scene = Scene::lay_out(RenderNode::from_node(&render_context, node), viewport, true)?;
-  let size = scene.size.map(|length| length.round() as u32);
 
-  if size.width == 0 || size.height == 0 {
-    return Err(Error::InvalidViewport);
-  }
-
-  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
-
-  paint_scene(&mut scene, &mut canvas)?;
-
-  let image = canvas.into_inner()?;
-
-  Ok(image)
+  render_scene(&mut scene)
 }
 
 /// A scene with its per-frame-invariant render state precomputed: the font
