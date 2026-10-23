@@ -247,8 +247,11 @@ impl<'r> PagedLayout<'r> {
     let mut fragment_index = 0;
 
     for &node in chain.iter().rev() {
-      match view.container_fragment_indices(node).nth(fragment_index) {
-        Some(container) => fragment_index = container,
+      match view
+        .fragment_containers(node)
+        .find(|&(index, _)| index == fragment_index)
+      {
+        Some((_, container)) => fragment_index = container,
         None => return 0,
       }
     }

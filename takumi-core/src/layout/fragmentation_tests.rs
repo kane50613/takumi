@@ -1544,3 +1544,52 @@ fn an_absolute_box_found_on_a_later_page_keeps_every_page_open_until_then() {
   assert_eq!(late[0].layout.location.y, -200.0);
   assert_eq!(finalized_after_each_page(&tree, 200.0), [0, 2]);
 }
+
+/// A box painted far from its page by a transform or a relative offset belongs to the window of the
+/// pages it reaches.
+#[test]
+fn a_box_painted_pages_away_paints_in_their_windows() {
+  let tree = render(
+    root([
+      block("a", "h700"),
+      block("up", "up"),
+      block("b", "h700"),
+      block("down", "down"),
+    ]),
+    ".h700 { height: 700px } \
+     .up { height: 50px; width: 20px; background: red; transform: translateY(-1100px) } \
+     .down { height: 50px; width: 20px; background: red; position: relative; top: -900px }",
+  );
+
+  oracles::check_when_finished(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+  );
+}
+
+/// A box a containing block holds back, or pushes to a later page, belongs to the fragment of its
+/// containing block that lays it out, however far its parent is.
+#[test]
+fn a_box_hoisted_past_its_parent_paints_in_the_window_of_its_containing_block() {
+  let tree = render(
+    root([Node::container([
+      Node::container([block("held", "held"), block("late", "late")]).with_class_name("block"),
+      block("tail", "h700"),
+    ])
+    .with_class_name("block rel")]),
+    ".rel { position: relative } .h700 { height: 700px } \
+     .held { position: absolute; bottom: 0; width: 20px; height: 30px; background: red } \
+     .late { position: absolute; top: 450px; width: 20px; height: 30px; background: red }",
+  );
+
+  oracles::check_when_finished(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+  );
+}

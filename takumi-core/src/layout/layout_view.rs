@@ -97,20 +97,22 @@ impl<'a> LayoutView<'a> {
     })
   }
 
-  /// For each fragment of `node_id`, which of its parent's fragments holds it.
-  pub(crate) fn container_fragment_indices(
+  /// Each fragment of `node_id` the layout has placed, with which of its container's fragments
+  /// holds it.
+  pub(crate) fn fragment_containers(
     self,
     node_id: NodeId,
-  ) -> impl Iterator<Item = usize> + 'a {
+  ) -> impl Iterator<Item = (usize, usize)> + 'a {
     #[cfg(feature = "fragmentation")]
     return self
       .parts(node_id)
       .ok()
       .into_iter()
-      .flat_map(|(fragments, _)| fragments.iter())
-      .map(|fragment| fragment.container_fragment_index);
+      .flat_map(|(fragments, _)| fragments.iter().enumerate())
+      .filter(move |(_, fragment)| self.is_placed(fragment))
+      .map(|(index, fragment)| (index, fragment.container_fragment_index));
     #[cfg(not(feature = "fragmentation"))]
-    return self.parts(node_id).ok().map(|_| 0).into_iter();
+    return self.parts(node_id).ok().map(|_| (0, 0)).into_iter();
   }
 
   /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
@@ -162,6 +164,22 @@ impl<'a> LayoutView<'a> {
     }
   }
 
+  /// The boxes `node_id` positioned as their containing block, parent or not.
+  pub(crate) fn hoisted_children(self, node_id: NodeId) -> impl Iterator<Item = NodeId> + 'a {
+    let children: &[NodeId] = match self {
+      Self::Final(results) => results
+        .hoisted_children
+        .get(&node_id)
+        .map_or(&[], Vec::as_slice),
+      Self::Live(live) => live
+        .nodes
+        .get(usize::from(node_id))
+        .map_or(&[], |node| node.hoisted_children.as_slice()),
+    };
+
+    children.iter().copied()
+  }
+
   /// The run of `node_id`'s box children its fragment `fragment_index` holds, for children that
   /// break in order, as a table section's rows do.
   pub(crate) fn ordered_children_in(
@@ -174,13 +192,11 @@ impl<'a> LayoutView<'a> {
     #[cfg(feature = "fragmentation")]
     {
       let containers = |child: &OrderedChild| {
-        let fragments = self.parts(child.node_id).ok()?.0;
-        let (first, last) = (fragments.first()?, fragments.last()?);
+        let mut fragments = self.fragment_containers(child.node_id);
+        let (_, first) = fragments.next()?;
+        let last = fragments.last().map_or(first, |(_, last)| last);
 
-        self.is_placed(first).then_some((
-          first.container_fragment_index,
-          last.container_fragment_index,
-        ))
+        Some((first, last))
       };
       let start = children
         .partition_point(|child| containers(child).is_some_and(|(_, last)| last < fragment_index));
@@ -231,9 +247,7 @@ impl<'a> LayoutView<'a> {
   /// that has a fragment.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn is_laid_out(self, node_id: NodeId) -> bool {
-    self
-      .parts(node_id)
-      .is_ok_and(|(fragments, _)| self.is_placed(&fragments[0]))
+    self.fragment_containers(node_id).next().is_some()
   }
 
   /// Each fragment of `node_id`, by fragment index.
@@ -259,10 +273,29 @@ impl<'a> LayoutView<'a> {
     .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
-  /// Whether a live layout has placed the fragment: a finished layout has every fragment it keeps.
+  /// Whether the fragment is one the layout placed. A live layout still holds the fragment of a box
+  /// it has not reached, and one an earlier run of the container placed that a later run did not
+  /// place again.
   #[cfg(feature = "fragmentation")]
   fn is_placed(self, fragment: &BoxFragment) -> bool {
-    matches!(self, Self::Final(_)) || fragment.is_laid_out
+    match self {
+      Self::Final(_) => true,
+      Self::Live(live) => live.holds(fragment),
+    }
+  }
+}
+
+#[cfg(feature = "fragmentation")]
+impl LiveLayout<'_> {
+  /// Whether the run of the container that made the fragment it names placed `fragment`.
+  fn holds(&self, fragment: &BoxFragment) -> bool {
+    fragment.is_laid_out
+      && (fragment.placed_by.run == 0
+        || self
+          .nodes
+          .get(fragment.placed_by.node as usize)
+          .and_then(|container| container.fragments.get(fragment.container_fragment_index))
+          .is_some_and(|holder| holder.is_laid_out && holder.run == fragment.placed_by.run))
   }
 }
 

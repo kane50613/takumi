@@ -143,6 +143,8 @@ pub struct LayoutResults {
   pub(in crate::layout) tables: FxHashMap<usize, Vec<TableFragment>>,
   /// The cells and rows layout hid, which paint nothing.
   pub(in crate::layout) hidden: FxHashSet<usize>,
+  /// The boxes each box positioned as their containing block.
+  pub(in crate::layout) hoisted_children: FxHashMap<NodeId, Vec<NodeId>>,
 }
 
 pub(in crate::layout) struct LayoutResultNode {
@@ -217,14 +219,6 @@ impl LayoutResults {
     self.view().is_repeated_fragment(node_id, fragment_index)
   }
 
-  /// For each fragment of `node_id`, which of its parent's fragments holds it.
-  pub(crate) fn container_fragment_indices(
-    &self,
-    node_id: NodeId,
-  ) -> impl Iterator<Item = usize> + '_ {
-    self.view().container_fragment_indices(node_id)
-  }
-
   /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
   /// none when it holds none.
   pub(crate) fn fragment_in(
@@ -233,16 +227,6 @@ impl LayoutResults {
     container_fragment_index: usize,
   ) -> Option<usize> {
     self.view().fragment_in(node_id, container_fragment_index)
-  }
-
-  /// Every fragment of `node_id` the parent's fragment `container_fragment_index` holds: one,
-  /// unless the box is an out-of-flow box broken across the pages after its containing block's.
-  pub(crate) fn fragments_in(
-    &self,
-    node_id: NodeId,
-    container_fragment_index: usize,
-  ) -> impl Iterator<Item = usize> + '_ {
-    self.view().fragments_in(node_id, container_fragment_index)
   }
 
   /// Paint-ordered children of a node.
@@ -328,6 +312,12 @@ pub struct LayoutTree<'r> {
   hidden: FxHashSet<usize>,
   /// Which boxes positioned each out-of-flow box as their containing block.
   pub(in crate::layout) hoisted_by: HoistedBy,
+  /// How many algorithm runs have started.
+  #[cfg(feature = "fragmentation")]
+  runs: u32,
+  /// The algorithm runs under way, the innermost last.
+  #[cfg(feature = "fragmentation")]
+  running: Vec<PlacedBy>,
   /// The layout styles the latest table parts took, which an equal part's shares.
   table_part_styles: RecentStyles<LayoutStyle>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
@@ -456,8 +446,25 @@ pub(crate) struct BoxFragment {
   /// Whether layout placed or hid the box, as a box the layout has not reached is not.
   #[cfg(feature = "fragmentation")]
   pub(crate) is_laid_out: bool,
+  /// The run of the box's algorithm that made the layout this is the fragment of.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) run: u32,
+  /// The run of the container's algorithm that placed it. A later run of the container that
+  /// places the fragment `container_fragment_index` again replaces this one, so one left from an
+  /// earlier run, such as a measuring run, names a fragment that does not hold the box.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) placed_by: PlacedBy,
   /// Whether the fragment repeats an earlier one, as a table header does on each page.
   pub(crate) is_repeated: bool,
+}
+
+/// A run of a box's layout algorithm: the box and which of its runs, counting from one. Zero is no
+/// run, as when a page places the root.
+#[cfg(feature = "fragmentation")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PlacedBy {
+  pub(crate) node: u32,
+  pub(crate) run: u32,
 }
 
 #[cfg(feature = "fragmentation")]
@@ -690,6 +697,10 @@ impl<'r> LayoutTree<'r> {
       table_hidden: FxHashMap::default(),
       hidden: FxHashSet::default(),
       hoisted_by: HoistedBy::default(),
+      #[cfg(feature = "fragmentation")]
+      runs: 0,
+      #[cfg(feature = "fragmentation")]
+      running: Vec::new(),
       table_part_styles: RecentStyles::default(),
       atomic_inlines: FxHashMap::default(),
       inline_contents: FxHashMap::default(),
@@ -1071,6 +1082,14 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
+    let hoisted_children = self
+      .nodes
+      .iter()
+      .enumerate()
+      .filter(|(_, node)| !node.hoisted_children.is_empty())
+      .map(|(index, node)| (NodeId::new(index), node.hoisted_children.clone()))
+      .collect();
+
     // A fresh allocation: collecting in place keeps the node states' much larger one alive.
     let mut nodes = Vec::with_capacity(self.nodes.len());
 
@@ -1082,6 +1101,7 @@ impl<'r> LayoutTree<'r> {
       nodes,
       tables: self.table_fragments,
       hidden: self.hidden,
+      hoisted_children,
     }
   }
 
@@ -1112,6 +1132,29 @@ impl<'r> LayoutTree<'r> {
       hidden: &self.hidden,
       hoisted_by: &self.hoisted_by,
     })
+  }
+
+  /// Starts a run of `node`'s algorithm, and returns its number.
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) fn begin_run(&mut self, node: NodeId) -> u32 {
+    self.runs += 1;
+    self.running.push(PlacedBy {
+      node: usize::from(node) as u32,
+      run: self.runs,
+    });
+    self.runs
+  }
+
+  /// Ends the innermost run.
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) fn end_run(&mut self) {
+    self.running.pop();
+  }
+
+  /// The run placing a fragment now: the innermost one, none when a page places the root.
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) fn running(&self) -> PlacedBy {
+    self.running.last().copied().unwrap_or_default()
   }
 
   pub(crate) fn node_state(&self, node: NodeId) -> &LayoutNodeState {

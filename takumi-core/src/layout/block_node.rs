@@ -188,10 +188,16 @@ impl<'r> LayoutTree<'r> {
     }
 
     // Blink's `BoxFragmentBuilder` takes the flag from the space whatever algorithm runs.
+    #[cfg(feature = "fragmentation")]
+    let run = self.begin_run(node);
     let result = Rc::new(LayoutResult {
       is_line_clamp_clipped_float: space.is_line_clamp_clipped_float,
+      #[cfg(feature = "fragmentation")]
+      run,
       ..self.run_algorithm(node, space, input)
     });
+    #[cfg(feature = "fragmentation")]
+    self.end_run();
 
     if result.status == LayoutStatus::Success {
       self.node_state_mut(node).cache.store(space, input, &result);
@@ -536,6 +542,10 @@ impl<'r> LayoutTree<'r> {
         container_fragment_index,
         #[cfg(feature = "fragmentation")]
         is_laid_out: true,
+        #[cfg(feature = "fragmentation")]
+        run: result.run,
+        #[cfg(feature = "fragmentation")]
+        placed_by: self.running(),
         is_repeated: result.is_repeated(),
       },
     );
