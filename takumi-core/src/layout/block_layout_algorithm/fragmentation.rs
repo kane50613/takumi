@@ -27,13 +27,13 @@ use crate::{
       setup_space_builder_for_fragmentation,
     },
     inline::inline_layout_algorithm::LineBoxFragment,
-    layout_result::{BreakInfo, LayoutResult, LayoutStatus, OutOfFlowCandidate},
+    layout_result::{BreakInfo, LayoutResult, LayoutStatus, OutOfFlowCandidate, StaticPosition},
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
     margin_strut::MarginStrut,
   },
   layout_unit::LayoutUnit,
-  style::{BreakBetween, Overflow},
+  style::BreakBetween,
 };
 
 impl<'r> BlockLayoutAlgorithm<'_, 'r> {
@@ -120,22 +120,20 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     Ok(true)
   }
 
-  /// This box's block size from its first fragment to the end of this one, `block_size` tall.
-  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
-    self.builder.stitched_block_size(block_size)
+  /// The candidate for the out-of-flow `child`, which stays on its page when the content before must.
+  pub(super) fn out_of_flow_candidate(
+    &self,
+    child: NodeId,
+    static_position: StaticPosition,
+  ) -> OutOfFlowCandidate {
+    OutOfFlowCandidate {
+      requires_content_before_breaking: self.builder.requires_content_before_breaking,
+      ..OutOfFlowCandidate::new(child, static_position)
+    }
   }
 
-  /// Whether the out-of-flow boxes this box lays out break across its fragments.
-  pub(super) fn breaks_out_of_flow_children(&self) -> bool {
-    self
-      .builder
-      .breaks_out_of_flow_children(self.style.overflow.y != Overflow::Visible)
-  }
-
-  /// Blink's `HandleOutOfFlowPositioned` for an out-of-flow `child` an earlier page broke inside
-  /// or pushed here: whether it resumes at `token`, which holds its offset. A forced break before
-  /// the box leaves it to work its static position out again, as does a box held back for the
-  /// block size of this one.
+  /// Blink's `HandleOutOfFlowPositioned` for a `child` an earlier page broke inside or pushed here:
+  /// whether it resumes at `token`.
   pub(super) fn resumes_out_of_flow(&mut self, child: NodeId, token: &ChildBreakToken) -> bool {
     let Some(candidate) = token.as_ref().and_then(|token| {
       OutOfFlowCandidate::resuming(
@@ -195,8 +193,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     fragmentation_layout_input_for_child(child, token.clone(), self.input.early_break.as_deref())
   }
 
-  /// The forced break check of Blink's `HandleFloat` and `HandleOutOfFlowPositioned`: whether a
-  /// break the content before forces goes before the float or out-of-flow box `child`.
+  /// The forced break check of Blink's `HandleFloat` and `HandleOutOfFlowPositioned` for `child`.
   pub(super) fn breaks_before_float_or_out_of_flow(&mut self, child: NodeId) -> bool {
     if !self.space.has_block_fragmentation() {
       return false;

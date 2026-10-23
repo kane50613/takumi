@@ -9,8 +9,13 @@ use std::{
 };
 
 use takumi_core::{
-  Fonts, geometry::Size, layout::node::Node, resources::font::FontResource, scene::PagedScene,
-  style::StyleSheet, viewport::Viewport,
+  Fonts,
+  geometry::Size,
+  layout::node::Node,
+  resources::font::FontResource,
+  scene::{PagedScene, SceneRef},
+  style::StyleSheet,
+  viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
 
@@ -21,7 +26,6 @@ use crate::{
   stacking_context::ScenePaint,
 };
 
-/// The page of most documents here.
 const PAGE_SIZE: Size<f32> = Size {
   width: 200.0,
   height: 100.0,
@@ -66,11 +70,11 @@ fn whole_document(mut options: RenderOptions<'_>, page_size: Size<f32>) -> Resul
   let page_count = paged.page_count();
   let size = page_size.map(|length| length.round() as u32);
   let scene = paged.into_scene();
-  let mut paint = ScenePaint::of_scene(&scene, true);
+  let paint = ScenePaint::new(scene.view());
   let mut pages = Vec::new();
 
   for index in 0..page_count {
-    let origin = PagedScene::page_origin(page_size, index).map(|length| length.round() as i32);
+    let origin = SceneRef::page_origin(page_size, index).map(|length| length.round() as i32);
     let mut canvas = Canvas::try_new(size)
       .ok_or(Error::InvalidViewport)?
       .with_origin(origin);
@@ -99,7 +103,7 @@ fn next_page_laid(options: RenderOptions<'_>, page_size: Size<f32>) -> Result<Ve
     options,
     page_size,
     usize::MAX,
-    |layout| {
+    &|layout| {
       if layout.is_finished() {
         layout.page_count()
       } else {
@@ -172,7 +176,6 @@ fn assert_needs_more_than_the_next_page(name: &str, source: &str) {
   );
 }
 
-/// `count` empty blocks, one page tall each.
 fn pages_of_blocks(count: usize) -> String {
   "<div style=\"height: 100px\"></div>".repeat(count)
 }
@@ -403,7 +406,6 @@ fn container_relative_lengths_paint_in_a_paged_document() {
   assert_streams_like_whole("container relative text", &text("10cqw"), PAGE_SIZE);
 }
 
-/// The Web Platform Tests' checkout at `WPT_ROOT` or in `~/.cache/takumi-wpt`, when there is one.
 fn wpt_root() -> Option<PathBuf> {
   std::env::var_os("WPT_ROOT")
     .map(PathBuf::from)
@@ -440,7 +442,6 @@ fn print_documents(directory: &Path, found: &mut Vec<PathBuf>) {
   }
 }
 
-/// The text of each `<style>` block of `source`.
 fn style_blocks(source: &str) -> Vec<&str> {
   let mut blocks = Vec::new();
   let mut rest = source;
@@ -527,7 +528,7 @@ fn laid_when_first_page_goes(source: &str) -> (usize, usize) {
     options(&fonts, &node, &stylesheet, PAGE_SIZE),
     PAGE_SIZE,
     usize::MAX,
-    |layout| {
+    &|layout| {
       laid.set(layout.page_count());
       layout.settled_pages()
     },

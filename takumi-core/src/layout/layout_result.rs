@@ -179,11 +179,10 @@ pub(crate) struct OutOfFlowCandidate {
   pub(crate) node: NodeId,
   pub(crate) static_position: StaticPosition,
   /// Blink's `OofPositionedNode::BreakToken`: where the box resumes in a later fragment of its
-  /// containing block, which a page found it in before.
+  /// containing block.
   #[cfg(feature = "fragmentation")]
   pub(crate) break_token: Option<Rc<BlockBreakToken>>,
-  /// Blink's `RequiresContentBeforeBreaking` of the box that found the box: the box stays on the
-  /// page it starts on.
+  /// Blink's `RequiresContentBeforeBreaking` of the box that found the box.
   #[cfg(feature = "fragmentation")]
   pub(crate) requires_content_before_breaking: bool,
 }
@@ -201,26 +200,8 @@ impl OutOfFlowCandidate {
     }
   }
 
-  /// Blink's `AddOutOfFlowChildCandidate` for a box resumed at `break_token`, which its
-  /// containing block lays out where the token says.
-  #[cfg(feature = "fragmentation")]
-  pub(crate) fn resumed(
-    node: NodeId,
-    break_token: Rc<BlockBreakToken>,
-    requires_content_before_breaking: bool,
-  ) -> Self {
-    Self {
-      break_token: Some(break_token),
-      requires_content_before_breaking,
-      ..Self::new(node, StaticPosition::default())
-    }
-  }
-
-  /// Blink's `HandleOutOfFlowPositioned` for a box an earlier fragment broke inside or pushed
-  /// here: the candidate that resumes at `token`, none after a forced break, which works the
-  /// static position out again. A box held back for its containing block's block size lays out
-  /// from its held static position, in the fragments stitched together less
-  /// `previously_consumed_block_size`.
+  /// Blink's `HandleOutOfFlowPositioned` for a box an earlier fragment broke inside or pushed here,
+  /// none after a forced break.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn resuming(
     node: NodeId,
@@ -241,13 +222,15 @@ impl OutOfFlowCandidate {
           ..Self::new(node, static_position)
         }
       }
-      None => Self::resumed(node, Rc::clone(token), requires_content_before_breaking),
+      None => Self {
+        break_token: Some(Rc::clone(token)),
+        requires_content_before_breaking,
+        ..Self::new(node, StaticPosition::default())
+      },
     })
   }
 
-  /// Whether a page found the box before and it resumes at its break token: Blink's check that a
-  /// containing block holding the token contains the box. A forced break before the box may not
-  /// have reached its containing block.
+  /// Whether a page found the box before, so it resumes at its break token.
   pub(crate) fn is_resumed(&self) -> bool {
     #[cfg(feature = "fragmentation")]
     return self
@@ -258,7 +241,6 @@ impl OutOfFlowCandidate {
     return false;
   }
 
-  /// Where the box's layout resumes it.
   pub(crate) fn layout_input(&self) -> FragmentationLayoutInput {
     #[cfg(feature = "fragmentation")]
     return FragmentationLayoutInput {
@@ -388,6 +370,17 @@ impl Default for BreakInfo {
 }
 
 impl LayoutResult {
+  /// The out-of-flow boxes inside, in the border box of a box that placed this one at `offset`.
+  pub(crate) fn out_of_flow_moved_by(
+    &self,
+    offset: Point<LayoutUnit>,
+  ) -> impl Iterator<Item = OutOfFlowCandidate> + '_ {
+    self
+      .out_of_flow
+      .iter()
+      .map(move |candidate| candidate.moved_by(offset))
+  }
+
   /// Which fragment of its box the layout is.
   pub(crate) fn fragment_index(&self) -> usize {
     #[cfg(feature = "fragmentation")]

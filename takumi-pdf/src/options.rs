@@ -310,8 +310,7 @@ pub(crate) struct PageSelection {
 }
 
 impl PageSelection {
-  /// A selection of no pages yet, which [`Self::push_page`] adds the document's pages to in
-  /// order. No ranges keeps every page. A range that is not valid is an error.
+  /// A selection of no pages yet, which [`Self::push_page`] adds the document's pages to.
   pub(crate) fn new(ranges: Option<&[PageRange]>) -> Result<Self, PdfError> {
     for range in ranges.unwrap_or_default() {
       range.validate()?;

@@ -30,7 +30,7 @@ use takumi_core::{
     PendingOutline, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip,
     UNBOUNDED, paint_collapsed_borders,
   },
-  scene::NodePaint,
+  scene::{NodePaint, SceneView},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule as CoreFillRule,
@@ -71,7 +71,7 @@ use crate::{
   },
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
-  tree::{SceneView, draws},
+  tree::draws,
   window::Window,
 };
 #[cfg(feature = "images")]
@@ -139,6 +139,26 @@ impl<'a> DocumentState<'a> {
     let issues = self.issues.into_inner();
 
     issues.failure.or_else(|| issues.uncovered.into_error())
+  }
+}
+
+impl<'a> Emitter<'a> {
+  pub(crate) fn new(
+    scene: SceneView<'a>,
+    document: &'a DocumentState<'a>,
+    inline: Option<&'a InlineCache<'a>>,
+    chunks: Option<&'a SceneChunks<'a>>,
+    tagged: bool,
+  ) -> Self {
+    Self {
+      scene,
+      document,
+      inline,
+      chunks,
+      window: Window::default(),
+      tagged: tagged && document.tags.is_some(),
+      color_filter: None,
+    }
   }
 }
 
@@ -1515,13 +1535,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
 
         TextClip::of(scene.root, scene.results, chunk.node, &node.context)
           .and_then(|text_clip| {
-            let table = TableDecorations::of(
-              scene.root,
-              scene.results,
-              &chunk.node.path,
-              chunk.node.node_id,
-              chunk.node.fragment_index,
-            )?;
+            let table = TableDecorations::of(scene.root, scene.results, chunk.node)?;
 
             emitter.emit_decorations(node, frame, text_clip.as_ref(), table, surface);
             Ok(())
@@ -1537,9 +1551,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
 
         paint_collapsed_borders(
           emitter.scene.results,
-          chunk.node.node_id,
-          chunk.node.fragment_index,
-          chunk.node.paint_offset,
+          chunk.node,
           frame.translation(),
           visible,
           &mut emitter.device(surface, emitter.tagged),

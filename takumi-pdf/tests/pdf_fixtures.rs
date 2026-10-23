@@ -6337,8 +6337,8 @@ fn stream_document(head: &str, sections: &[(&str, &str, usize)], tail: &str) -> 
   )
 }
 
-/// A link on the first page names a section on the fourth, and the last section links back. A link
-/// to a missing id loses its annotation.
+/// A link on the first page names a section on the fourth, and a link to a missing id loses its
+/// annotation.
 #[test]
 fn stream_forward_link() {
   let source = stream_document(
@@ -6370,8 +6370,7 @@ fn stream_forward_link() {
   );
 }
 
-/// A header and a repeated fixed box both read the page count, and the header is taller than the
-/// default margin, so the band height and the page count settle together.
+/// A header and a repeated fixed box read the page count, and the header is taller than the margin.
 #[test]
 fn stream_total_pages_band() {
   let source = stream_document(
@@ -6403,8 +6402,7 @@ fn stream_total_pages_band() {
   assert!(page_count(&pdf) >= 3);
 }
 
-/// Page, total and target counters in the content, which read where boxes landed after a pass of
-/// layout.
+/// Page, total and target counters in the content, read after a pass of layout.
 #[test]
 fn stream_content_counters() {
   let source = stream_document(
@@ -6421,8 +6419,7 @@ fn stream_content_counters() {
   assert_eq!(page_count(&pdf), 4);
 }
 
-/// Pages 1, 3 and 5 of five are kept, so pages 2 and 4 are dropped between kept ones, while the
-/// outline still reads the headings on the dropped pages to nest the ones it keeps.
+/// Pages 1, 3 and 5 of five are kept, and the outline still reads the dropped pages' headings.
 #[test]
 fn stream_page_ranges_drop_middle_pages() {
   let source = stream_document(
@@ -6498,8 +6495,7 @@ fn stream_transform_paints_three_pages_back() {
   assert_eq!(page_count(&pdf), 4);
 }
 
-/// A `position: relative` root with a `bottom: 0` child, which the root holds back until its last
-/// fragment and lays out at a negative offset on the page before.
+/// A `position: relative` root with a `bottom: 0` child, held back to its last fragment.
 #[test]
 fn stream_relative_body_with_bottom_child() {
   let source = format!(

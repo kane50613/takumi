@@ -8,10 +8,10 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId},
   layout::tree::RenderNode,
   painter::{OwnContent, PaintedInline},
-  scene::NodePaint,
+  scene::{NodePaint, SceneView},
 };
 
-use crate::{options::PdfError, tree::SceneView};
+use crate::options::PdfError;
 
 /// A box and which of its fragments.
 type FragmentKey = (NodeId, usize);

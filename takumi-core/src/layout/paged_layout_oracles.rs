@@ -64,7 +64,6 @@ fn answers(view: LayoutView<'_>, node_count: usize, page_count: usize) -> Vec<St
     .collect()
 }
 
-/// Every node's fragments and box children, as text.
 fn snapshot(results: &LayoutResults) -> Vec<String> {
   (0..results.node_count())
     .map(NodeId::new)
@@ -78,15 +77,13 @@ fn snapshot(results: &LayoutResults) -> Vec<String> {
     .collect()
 }
 
-/// Lays `root` out a page at a time and a second time to the end, and checks they agree, that the
-/// live view of the first agrees with the finished results, and that each page paints from its
-/// window as soon as the layout and the windows say it may.
+/// Lays `root` out a page at a time and to the end, and checks that they agree and that each page
+/// paints from its window.
 pub(crate) fn check(root: &RenderNode, page_size: Size<f32>) {
   check_pages(root, page_size, true);
 }
 
-/// [`check`] for a document whose boxes paint farther from their pages than a window can tell
-/// before the layout is done, so each page paints from its window once every page is laid out.
+/// [`check`] for a document whose pages paint from their windows only once every page is laid out.
 pub(crate) fn check_when_finished(root: &RenderNode, page_size: Size<f32>) {
   check_pages(root, page_size, false);
 }
@@ -95,13 +92,9 @@ fn check_pages(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   let (expected, expected_pages) =
     LayoutResults::compute_pages(root, page_size, usize::MAX).expect("pages lay out");
   let mut layout = PagedLayout::new(root, page_size, usize::MAX);
-  let mut laid = Vec::new();
   let mut finalized = Vec::new();
 
-  while let Some(page) = layout.next_page().expect("page lays out") {
-    assert_eq!(page.index, laid.len(), "pages come in order");
-    laid.push(page);
-
+  while layout.next_page().expect("page lays out") {
     let finalized_pages = layout.finalized_pages();
 
     assert!(finalized_pages <= layout.page_count());
@@ -115,7 +108,6 @@ fn check_pages(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   }
 
   assert!(layout.is_finished());
-  assert_eq!(laid.len(), expected_pages);
   assert_eq!(layout.page_count(), expected_pages);
 
   assert_hoisting(&layout);
@@ -130,14 +122,6 @@ fn check_pages(root: &RenderNode, page_size: Size<f32>, streams: bool) {
     answers(results.view(), results.node_count(), expected_pages),
     "the live view and the finished results agree"
   );
-  for page in laid {
-    assert_eq!(
-      page.root_fragment,
-      results.view().fragment_in(NodeId::ROOT, page.index),
-      "the root's fragment on page {}",
-      page.index
-    );
-  }
   for (page, fragment) in finalized.into_iter().enumerate() {
     assert_eq!(fragment, results.view().fragment_in(NodeId::ROOT, page));
   }
@@ -170,7 +154,6 @@ fn assert_hoisting(layout: &PagedLayout<'_>) {
   }
 }
 
-/// The chunks of `contexts` that reach page `page`, in paint order, with each as text.
 fn page_chunks(
   contexts: &[StackingContextNode],
   page: usize,
@@ -231,9 +214,8 @@ fn entered(root: &RenderNode, paint: &NodePaint, placed: &HashSet<Vec<usize>>) -
   states
 }
 
-/// Paints each page from the window of a layout that has laid out the pages before it, as the
-/// pages become final, and checks every page's chunks and the boxes' states agree with the scene of
-/// every page at once.
+/// Paints each page from its window as the pages settle, and checks the chunks and the boxes'
+/// states agree with the scene of every page at once.
 fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   let whole = PagedScene::lay_out(root.clone(), page_size, usize::MAX, true)
     .expect("pages lay out")
@@ -247,7 +229,7 @@ fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   let mut emitted = 0;
 
   loop {
-    let stepped = layout.next_page().expect("page lays out").is_some();
+    let stepped = layout.next_page().expect("page lays out");
 
     windows
       .refresh(
@@ -261,7 +243,7 @@ fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
     let ready = if layout.is_finished() {
       layout.page_count()
     } else if streams {
-      layout.finalized_pages().min(windows.complete_pages())
+      layout.settled_pages()
     } else {
       0
     };
@@ -284,8 +266,8 @@ fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
         "the chunks of page {page} from the window of pages {pages:?}"
       );
       for (chunk, _) in &expected {
-        whole.enter(chunk.node).expect("whole scene enters");
-        window.enter(chunk.node).expect("window enters");
+        whole.view().enter(chunk.node).expect("whole scene enters");
+        window.view().enter(chunk.node).expect("window enters");
         assert_eq!(
           entered(root, chunk.node, &placed),
           entered(&whole.root, chunk.node, &placed),

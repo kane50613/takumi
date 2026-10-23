@@ -10,7 +10,9 @@ use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::{
-  layout_result::LayoutResult, layout_view::LiveLayout, paged_layout::PagedLayout,
+  layout_result::LayoutResult,
+  layout_view::{HoistedBy, LiveLayout},
+  paged_layout::PagedLayout,
 };
 
 use crate::{
@@ -29,7 +31,7 @@ use crate::{
     },
     layout_result::{OutOfFlowCandidate, StaticPosition},
     layout_style::{LayoutLength, LayoutStyle},
-    layout_view::{HoistedBy, LayoutView},
+    layout_view::LayoutView,
     length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
@@ -99,8 +101,8 @@ impl<P: Copy> ContainingBlocks<P> {
     self.content_boxes.insert(node_id, content_box);
   }
 
-  /// The placement and container size a child resolves against: its containing block's,
-  /// `hoisted_cb`, when hoisted, otherwise the parent's.
+  /// The placement and container size a child resolves against: its containing block's when
+  /// hoisted, else the parent's.
   pub fn base_for(
     &self,
     hoisted_cb: Option<NodeId>,
@@ -217,31 +219,9 @@ impl LayoutResults {
     self.view().fragment_layout(node_id, fragment_index)
   }
 
-  /// Whether the node's fragment `fragment_index` repeats an earlier one, as a table header does on each page.
-  pub fn is_repeated_fragment(&self, node_id: NodeId, fragment_index: usize) -> bool {
-    self.view().is_repeated_fragment(node_id, fragment_index)
-  }
-
   /// Paint-ordered children of a node.
   pub fn box_children(&self, node_id: NodeId) -> crate::Result<&[OrderedChild]> {
     self.view().box_children(node_id)
-  }
-
-  /// The paint data of the table `node_id`'s fragment `fragment_index`, when it is one.
-  pub fn table_fragment(&self, node_id: NodeId, fragment_index: usize) -> Option<&TableFragment> {
-    self.view().table_fragment(node_id, fragment_index)
-  }
-
-  /// Whether layout hid the box `node_id`, as Blink's `IsHiddenForPaint`: a cell in collapsed
-  /// columns or empty under `empty-cells: hide`, or a collapsed row.
-  pub fn is_hidden_for_paint(&self, node_id: NodeId) -> bool {
-    self.view().is_hidden_for_paint(node_id)
-  }
-
-  /// Blink's `IsLineClampClippedFloat`: whether `node_id` is a float its line-clamp container
-  /// clips to its content box's block end.
-  pub fn is_line_clamp_clipped_float(&self, node_id: NodeId) -> bool {
-    self.view().is_line_clamp_clipped_float(node_id)
   }
 
   /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.
@@ -253,20 +233,18 @@ impl LayoutResults {
   ) -> crate::Result<(Self, usize)> {
     let mut layout = PagedLayout::new(root, page_size, max_pages);
 
-    while layout.next_page()?.is_some() {}
+    while layout.next_page()? {}
 
     let page_count = layout.page_count();
 
     Ok((layout.into_results(), page_count))
   }
 
-  /// How many boxes were laid out.
   #[cfg(all(test, feature = "fragmentation"))]
   pub(crate) fn node_count(&self) -> usize {
     self.nodes.len()
   }
 
-  /// Each fragment of `node_id`, by fragment index.
   #[cfg(all(test, feature = "fragmentation"))]
   pub(crate) fn fragments(&self, node_id: NodeId) -> crate::Result<&[BoxFragment]> {
     self.view().fragments(node_id)
@@ -294,11 +272,10 @@ pub struct LayoutTree<'r> {
   /// Every cell and row some table's layout hid.
   hidden: FxHashSet<usize>,
   /// Which boxes positioned each out-of-flow box as their containing block.
+  #[cfg(feature = "fragmentation")]
   pub(in crate::layout) hoisted_by: HoistedBy,
-  /// How many algorithm runs have started.
   #[cfg(feature = "fragmentation")]
   runs: u32,
-  /// The algorithm runs under way, the innermost last.
   #[cfg(feature = "fragmentation")]
   running: Vec<PlacedBy>,
   /// The layout styles the latest table parts took, which an equal part's shares.
@@ -432,17 +409,15 @@ pub(crate) struct BoxFragment {
   /// The run of the box's algorithm that made the layout this is the fragment of.
   #[cfg(feature = "fragmentation")]
   pub(crate) run: u32,
-  /// The run of the container's algorithm that placed it. A later run of the container that
-  /// places the fragment `container_fragment_index` again replaces this one, so one left from an
-  /// earlier run, such as a measuring run, names a fragment that does not hold the box.
+  /// The run of the container's algorithm that placed it. A later run placing the same container
+  /// fragment replaces this one.
   #[cfg(feature = "fragmentation")]
   pub(crate) placed_by: PlacedBy,
   /// Whether the fragment repeats an earlier one, as a table header does on each page.
   pub(crate) is_repeated: bool,
 }
 
-/// A run of a box's layout algorithm: the box and which of its runs, counting from one. Zero is no
-/// run, as when a page places the root.
+/// A run of a box's layout algorithm: the box and which of its runs, counting from one.
 #[cfg(feature = "fragmentation")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PlacedBy {
@@ -679,6 +654,7 @@ impl<'r> LayoutTree<'r> {
       table_fragments: FxHashMap::default(),
       table_hidden: FxHashMap::default(),
       hidden: FxHashSet::default(),
+      #[cfg(feature = "fragmentation")]
       hoisted_by: HoistedBy::default(),
       #[cfg(feature = "fragmentation")]
       runs: 0,
@@ -825,9 +801,6 @@ impl<'r> LayoutTree<'r> {
       } else {
         PendingChildren::Render(render_node.children.as_deref().unwrap_or_default())
       };
-      let position = render_node.context.style.base_data.position;
-      let contains_fixed = render_node.context.style.contains_fixed_descendants();
-
       render_nodes.push(render_node);
 
       let (layout_style, container_independent) = {
@@ -847,10 +820,7 @@ impl<'r> LayoutTree<'r> {
         recent_styles.share(layout_style),
         container_independent,
         is_inline_children,
-        ContainingBlockClaims {
-          absolute: position.is_positioned() || contains_fixed,
-          fixed: contains_fixed,
-        },
+        ContainingBlockClaims::of(&render_node.context.style),
       ));
 
       let capacity = children.len();
@@ -945,13 +915,11 @@ impl<'r> LayoutTree<'r> {
         size: available_space.map(definite),
       };
 
-      let (location, result, _) = self.lay_out_out_of_flow_box(
+      self.lay_out_out_of_flow_box(
         &OutOfFlowCandidate::new(NodeId::ROOT, StaticPosition::default()),
         initial_containing_block,
         &space,
-      );
-
-      (location, result)
+      )
     } else {
       let margins = margins_for(
         self.layout_style(NodeId::ROOT),
@@ -1054,13 +1022,21 @@ impl<'r> LayoutTree<'r> {
 
   /// Consumes the tree into immutable per-node layout results.
   pub(crate) fn into_results(mut self) -> LayoutResults {
+    // The last box in layout order that positioned a box wins.
+    let mut containing_blocks = FxHashMap::default();
+
+    for (index, node) in self.nodes.iter().enumerate() {
+      for &child in &node.hoisted_children {
+        containing_blocks.insert(child, NodeId::new(index));
+      }
+    }
     // A box another node than its box-tree parent positioned resolves against that containing
     // block.
     for (index, node) in self.nodes.iter_mut().enumerate() {
       for child in node.box_children.iter_mut() {
-        child.hoisted_cb = self
-          .hoisted_by
-          .containing_block(child.node_id)
+        child.hoisted_cb = containing_blocks
+          .get(&child.node_id)
+          .copied()
           .filter(|&container| usize::from(container) != index);
       }
     }
@@ -1090,7 +1066,6 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// The cells and rows the layout of the table `table` hid.
   pub(in crate::layout) fn hidden_parts(&self, table: NodeId) -> Option<&HiddenParts> {
     self.table_hidden.get(&table)
   }
@@ -1120,7 +1095,6 @@ impl<'r> LayoutTree<'r> {
     })
   }
 
-  /// Starts a run of `node`'s algorithm, and returns its number.
   #[cfg(feature = "fragmentation")]
   pub(in crate::layout) fn begin_run(&mut self, node: NodeId) -> u32 {
     self.runs += 1;
@@ -1131,7 +1105,6 @@ impl<'r> LayoutTree<'r> {
     self.runs
   }
 
-  /// Ends the innermost run.
   #[cfg(feature = "fragmentation")]
   pub(in crate::layout) fn end_run(&mut self) {
     self.running.pop();

@@ -1,10 +1,11 @@
-//! One page: its resolved geometry, and the emit walk that draws it.
+//! The pages of a document: their geometry, and the walk that draws each.
 
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
-  layout::{node::Node, paged_layout::PagedLayout, tree::RenderNode},
-  scene::{PageWindows, SceneRef},
+  layout::{node::Node, tree::RenderNode},
+  page_stream::{PageStream, Settle, Settled},
+  scene::{SceneRef, SceneView},
   style::Color,
   viewport::{MediaTarget, Viewport},
 };
@@ -29,7 +30,7 @@ use crate::{
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
   pagination::{MAX_PAGES, PageSlice, PageStarts, Paginated},
   paint::paint_page_background,
-  tree::{SceneView, TreeInputs},
+  tree::TreeInputs,
   window::{ContentWindow, Window},
 };
 
@@ -96,7 +97,6 @@ impl PageFrame {
     })
   }
 
-  /// The size of a page's area, which the content paginates against.
   pub(crate) fn page_size(&self) -> Size<f32> {
     Size {
       width: self.content_width,
@@ -139,9 +139,6 @@ pub(crate) struct PageBands<'o> {
   pub(crate) page_ranges: Option<&'o [PageRange]>,
 }
 
-/// How many of the first pages of a layout to draw, as [`PagedLayout::settled_pages`] says.
-pub(crate) type Settle<'s> = &'s dyn Fn(&PagedLayout<'_>) -> usize;
-
 /// The paginated document once its pages are drawn: what the outline, the structure tree and the
 /// destinations read.
 pub(crate) struct PagePlan {
@@ -180,7 +177,6 @@ impl PagePlan {
   }
 }
 
-/// The frame and bands the pages are drawn in.
 struct Solved {
   frame: PageFrame,
   header: Option<Repeatable>,
@@ -195,7 +191,6 @@ enum Content {
   Laid(Box<Paginated>),
 }
 
-/// Where the pages of one document are drawn.
 pub(crate) struct PageDrawing<'d, 'g> {
   pub(crate) pdf: &'d mut Document,
   pub(crate) inputs: &'d TreeInputs<'g>,
@@ -204,11 +199,9 @@ pub(crate) struct PageDrawing<'d, 'g> {
 }
 
 impl PageDrawing<'_, '_> {
-  /// Lays the content out on pages and draws the ones `bands` keeps.
-  ///
-  /// A document whose bands, content and links do not read the page count or where a box landed
-  /// draws each page as soon as `settle` says no later page paints on it. Any other lays out to its
-  /// end in the passes that settle those, and draws from the last.
+  /// Lays the content out on pages and draws the ones `bands` keeps. A document that reads neither
+  /// the page count nor where a box landed draws each page as soon as `settle` says no later page
+  /// paints on it.
   pub(crate) fn render(
     &mut self,
     page: PageOptions,
@@ -317,8 +310,7 @@ impl PageDrawing<'_, '_> {
   }
 
   /// Lays `node` out a page at a time and draws each page, in order, once `settle` says it is
-  /// settled. A document with a link to an element inside it, or a counter, is never streamed,
-  /// so no destination or number here waits on a page not yet laid out.
+  /// settled. A document with a link to an element inside it, or a counter, is never streamed.
   fn stream(
     &mut self,
     solved: Solved,
@@ -337,64 +329,44 @@ impl PageDrawing<'_, '_> {
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let composer = PageComposer::new(self, &frame, &repeatables);
     let page_size = frame.page_size();
-    let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
-    let mut windows = PageWindows::new(page_size);
+    let mut stream = PageStream::new(&root, page_size, MAX_PAGES);
     let mut selection = PageSelection::new(ranges)?;
     let mut summary = PageSummary::new(false);
-    let mut drawn = 0;
 
     loop {
-      let laid = layout.next_page()?.is_some();
-      let settled = settle(&layout);
+      let Settled { pages, laid } = stream.advance(settle)?;
 
-      if settled > drawn {
-        windows.refresh(
-          &root,
-          layout.view(),
-          layout.page_count(),
-          layout.finalized_pages(),
-        )?;
-      }
-      for index in drawn..settled {
+      for index in pages {
         let kept = selection.push_page().is_some();
 
         if reads_summary {
           summary.absorb(PageSummary::of_page(
             &root,
-            layout.view(),
+            stream.view(),
             page_size,
-            &windows.pages_of(index),
+            &stream.pages_of(index),
             false,
           )?);
         }
         if kept {
-          let scene = SceneRef::window(
-            &root,
-            layout.view(),
-            page_size,
-            &windows.pages_reaching(index),
-            true,
-          )?;
-
           composer.compose(
             self.pdf,
             &PageSlice::of(index, frame.window_height),
             0,
-            SceneView::of_window(&scene),
+            stream.window(index)?.view(),
             |_| None,
           )?;
         }
       }
-      drawn = drawn.max(settled);
       if !laid {
         break;
       }
     }
 
-    let pages = layout.page_count();
+    let pages = stream.page_count();
     let window = frame.window_height;
 
-    drop(layout);
+    drop(stream);
     selection.finish()?;
     Ok(PagePlan {
       frame,
@@ -406,7 +378,6 @@ impl PageDrawing<'_, '_> {
     })
   }
 
-  /// Draws every kept page of a content laid out to its end.
   fn compose(
     &mut self,
     solved: Solved,
@@ -453,13 +424,9 @@ impl PageDrawing<'_, '_> {
         true,
       )?;
 
-      composer.compose(
-        self.pdf,
-        &slice,
-        pages,
-        SceneView::of_window(&scene),
-        |id| plan.anchor_destination(id),
-      )?;
+      composer.compose(self.pdf, &slice, pages, scene.view(), |id| {
+        plan.anchor_destination(id)
+      })?;
     }
     Ok(plan)
   }
@@ -531,7 +498,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       repeatable.emit(frame, self.state, &mut surface)?;
     }
     self.emit_content(
-      scene.emitter(self.state, Some(&inline), Some(&chunks), true),
+      Emitter::new(scene, self.state, Some(&inline), Some(&chunks), true),
       slice,
       &mut surface,
     )?;

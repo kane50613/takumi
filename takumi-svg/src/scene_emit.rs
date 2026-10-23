@@ -147,14 +147,8 @@ impl ChunkWriter<'_, '_, '_> {
           )
           .map_err(io::Error::other)?;
 
-          let table = TableDecorations::of(
-            &scene.root,
-            scene.results.view(),
-            &chunk.node.path,
-            chunk.node.node_id,
-            chunk.node.fragment_index,
-          )
-          .map_err(io::Error::other)?;
+          let table = TableDecorations::of(&scene.root, scene.results.view(), chunk.node)
+            .map_err(io::Error::other)?;
 
           placed.emit_decorations(text_clip.as_ref(), table, doc)?;
         }
@@ -165,9 +159,7 @@ impl ChunkWriter<'_, '_, '_> {
           DocumentDevice::paint(doc, |device| {
             result = paint_collapsed_borders(
               scene.results.view(),
-              chunk.node.node_id,
-              chunk.node.fragment_index,
-              chunk.node.paint_offset,
+              chunk.node,
               placed.frame.translation(),
               None,
               device,

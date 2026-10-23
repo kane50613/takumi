@@ -30,7 +30,7 @@ use crate::{
     },
     table::TableBreakTokenData,
   },
-  style::{BoxDecorationBreak, Overflow},
+  style::BoxDecorationBreak,
 };
 
 /// A child of the table's box the table lays out: its caption or section, by index in the
@@ -364,18 +364,6 @@ impl TableLayoutAlgorithm<'_, '_> {
   /// The out-of-flow children an earlier fragment broke inside or pushed here, as candidates.
   pub(super) fn resumed_out_of_flow(&self) -> Vec<OutOfFlowCandidate> {
     self.tree.resumed_out_of_flow(&self.builder)
-  }
-
-  /// This table's block size from its first fragment to the end of this one.
-  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
-    self.builder.stitched_block_size(block_size)
-  }
-
-  /// Whether the out-of-flow boxes this table lays out break across its fragments.
-  pub(super) fn breaks_out_of_flow_children(&self) -> bool {
-    self
-      .builder
-      .breaks_out_of_flow_children(self.style.overflow.y != Overflow::Visible)
   }
 
   /// The monolithic overflow an earlier page pushed into this one.
@@ -730,10 +718,6 @@ impl TableLayoutAlgorithm<'_, '_> {
 
   pub(super) fn resumed_out_of_flow(&self) -> Vec<OutOfFlowCandidate> {
     Vec::new()
-  }
-
-  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
-    block_size
   }
 
   pub(super) fn resumed_rows(&self) -> Option<(Rc<Rows>, LayoutUnit)> {

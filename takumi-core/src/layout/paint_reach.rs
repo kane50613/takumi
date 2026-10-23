@@ -6,7 +6,7 @@ use crate::{
   geometry::Size,
   layout::{
     layout_style::{LayoutLength, LayoutStyle},
-    out_of_flow::depends_on_containing_block_block_size,
+    out_of_flow::{ContainingBlockClaims, depends_on_containing_block_block_size},
     tree::RenderNode,
   },
   scene::{box_ink_reach, filter_reach, has_inline_paint_content, text_ink_reach},
@@ -17,29 +17,18 @@ use crate::{
 /// exceed to paint a line past it.
 const GLYPH_REACH_EMS: f32 = 4.0;
 
-/// The container size a probe resolves container-relative lengths against, which differs between
-/// the two probes so a length that depends on it shows.
+/// The container size a probe resolves container-relative lengths against, different between the
+/// two probes.
 const PROBE_SIZES: [f32; 2] = [0.0, 1024.0];
 
-/// What the styles of a render tree say, before any page is laid out, about how far its boxes
-/// paint from the page layout puts them on, and which boxes they leave to the layout.
+/// How far above its page a box can paint, and which boxes the styles leave to the layout.
 pub(crate) struct PaintReach {
-  /// An upper bound on how many px above the page layout puts it on a box not in
-  /// [`Self::unbounded`] can paint, or none when a negative margin that depends on the layout, or a
-  /// box that repeats on every page, leaves no bound.
-  ///
-  /// A fragment on page `p` paints no higher than `p` pages down less this bound. A box sits at or
-  /// below its page's top but for the negative margins before it and the offsets of the boxes around
-  /// it, and what it paints reaches past it by its shadow, outline, glyph overshoot and the filters
-  /// that spread it. The bound adds every negative margin of the tree, which pull the boxes after
-  /// them up, to the largest sum of offsets and filter reaches down a chain of boxes and the ink of
-  /// the box at its end, plus a px for bounds rounded outwards.
-  ///
-  /// Glyph ink is taken to reach at most [`GLYPH_REACH_EMS`] font sizes above its line, which is an
-  /// assumption about fonts and not a measurement.
+  /// An upper bound on how many px above its page a box not in [`Self::unbounded`] can paint, or
+  /// none when a negative margin that depends on the layout, or a repeated box, leaves no bound.
+  /// Glyph ink is taken to reach at most [`GLYPH_REACH_EMS`] font sizes above its line, an assumption
+  /// about fonts and not a measurement.
   pub(crate) back: Option<f32>,
-  /// The boxes, each by the block that lays out its inline content, whose paint no bound covers: a
-  /// transform, a percentage offset, or a length that depends on the size of its container. The
+  /// The boxes, each by the block laying out its inline content, whose paint no bound covers. The
   /// layout bounds them once it has laid them out.
   pub(crate) unbounded: Vec<BoxId>,
   /// The absolute boxes, and the fixed boxes a transformed or filtered box contains.
@@ -53,7 +42,6 @@ pub(crate) struct PositionedBox {
   pub(crate) containing_block: Option<BoxId>,
 }
 
-/// A box on the way down the tree, with what its ancestors decide for it.
 struct Frame<'n> {
   node: &'n RenderNode,
   /// The sum of offsets and filter reaches down to the parent.
@@ -69,7 +57,6 @@ struct Frame<'n> {
 }
 
 impl PaintReach {
-  /// Scans the tree under `root`.
   pub(crate) fn of(root: &RenderNode) -> Self {
     let mut margins = 0.0_f32;
     let mut chain = 0.0_f32;
@@ -138,7 +125,7 @@ impl PaintReach {
         chain = chain.max(offset + ink);
       }
 
-      let contains_fixed = style.contains_fixed_descendants();
+      let claims = ContainingBlockClaims::of(style);
 
       match position {
         Position::Absolute => positioned.push(PositionedBox {
@@ -156,12 +143,12 @@ impl PaintReach {
         Position::Static | Position::Relative => {}
       }
 
-      let absolute_container = if position.is_positioned() || contains_fixed {
+      let absolute_container = if claims.absolute {
         Some(block)
       } else {
         frame.absolute_container
       };
-      let fixed_container = if contains_fixed {
+      let fixed_container = if claims.fixed {
         Some(block)
       } else {
         frame.fixed_container
@@ -257,7 +244,6 @@ impl Probes {
   }
 }
 
-/// `value` when both probes resolve it alike.
 fn same(first: f32, second: f32) -> Option<f32> {
   (first == second).then_some(first)
 }
@@ -271,7 +257,6 @@ fn fixed(styles: &[LayoutStyle; 2], length: impl Fn(&LayoutStyle) -> LayoutLengt
   }
 }
 
-/// How far the box's margins that are negative pull the boxes after them up.
 fn negative_margins(styles: &[LayoutStyle; 2]) -> Option<f32> {
   let sides = [
     |style: &LayoutStyle| style.margin.top,
@@ -295,9 +280,8 @@ fn negative_margins(styles: &[LayoutStyle; 2]) -> Option<f32> {
   Some(pulled)
 }
 
-/// How far the box's own offset moves it up from where the flow puts it. An absolute box that
-/// depends on the block size of its containing block sits where [`held_displacement`] says, and a
-/// fixed one repeats on every page, so none bounds it.
+/// How far the box's own offset moves it up from where the flow puts it, none for an absolute box
+/// that depends on its containing block's block size, see [`held_displacement`], and for a fixed one.
 fn displacement(styles: &[LayoutStyle; 2]) -> Option<f32> {
   let style = &styles[0];
 
@@ -317,13 +301,9 @@ fn displacement(styles: &[LayoutStyle; 2]) -> Option<f32> {
   }
 }
 
-/// How far above the start of its containing block an absolute box that depends on the block size
-/// of its containing block can start, which the block's first page then holds back. A box anchored
-/// at its top starts at its offset. One anchored at its bottom starts its offset, size, margins,
-/// padding and border above the block's end, so no higher than that above the block's start.
-///
-/// A size that is auto or a percentage counts as zero, which takes the box to fit its containing
-/// block and so is approximate for a box taller than the block.
+/// How far above the start of its containing block an absolute box that depends on the block's
+/// block size can start. A size that is auto or a percentage counts as zero, so this is approximate
+/// for a box taller than the block.
 fn held_displacement(styles: &[LayoutStyle; 2]) -> f32 {
   let style = &styles[0];
   let px = |length: &dyn Fn(&LayoutStyle) -> LayoutLength| {
@@ -373,7 +353,6 @@ mod tests {
     viewport::Viewport,
   };
 
-  /// The reach of a block with a child styled by `css`, among blocks without any.
   fn reach_of(css: &str) -> PaintReach {
     let stylesheet = StyleSheet::parse(&format!(
       ".block {{ display: block; height: 50px }} .child {{ {css} }}"

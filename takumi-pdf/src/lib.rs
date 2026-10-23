@@ -103,6 +103,7 @@ mod subsetter;
 use takumi_core::{
   geometry::Point as CorePoint,
   layout::tree::RenderNode,
+  page_stream::{SETTLED_PAGES, Settle},
   style::{Color, Lang},
   viewport::MediaTarget,
 };
@@ -116,7 +117,7 @@ pub use crate::options::{
   PdfOptions, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
 };
 use crate::{
-  emitter::DocumentState,
+  emitter::{DocumentState, Emitter},
   glyph::Uncovered,
   inline::{InlineCache, TextBox},
   interactive::{Interactive, PageSummary, add_link_annotations, xyz_destination},
@@ -128,7 +129,7 @@ use crate::{
     page::PageSettings,
   },
   options::{PT_PER_PX, PageSelection},
-  page::{PageBands, PageDrawing, PagePlan, Settle, band_viewport},
+  page::{PageBands, PageDrawing, PagePlan, band_viewport},
   paint::paint_page_background,
   tree::{PreparedTree, TreeInputs},
 };
@@ -170,9 +171,7 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged
 /// when [`PdfOptions::page`] is set.
 pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
-  // The method itself does not satisfy the bound, as its layout lifetime is early-bound.
-  #[allow(clippy::redundant_closure_for_method_calls)]
-  render_settling(options, &|layout| layout.settled_pages())
+  render_settling(options, SETTLED_PAGES)
 }
 
 /// [`render`] with `settle`, given the layout, saying how many of the first pages of a document
@@ -372,7 +371,7 @@ impl SinglePage {
     surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
     paint_page_background(background, content.scene.size, &mut surface);
 
-    let mut emitter = content.emitter(state, Some(&inline), None, true);
+    let mut emitter = Emitter::new(content.view(), state, Some(&inline), None, true);
 
     emitter.emit(&mut surface)?;
     surface.pop();

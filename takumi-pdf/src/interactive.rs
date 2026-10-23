@@ -12,7 +12,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
   layout::{layout_view::LayoutView, node::Node, tree::RenderNode},
   painter::OwnContent,
-  scene::{NodePaint, PageWindows, SceneRef},
+  scene::{NodePaint, PageWindows, SceneRef, SceneView},
   style::{Affine, Position},
 };
 
@@ -28,7 +28,7 @@ use crate::{
   },
   options::{PT_PER_PX, PdfError},
   tags::{TagCollector, tag_id, text_content},
-  tree::{PreparedTree, SceneView},
+  tree::PreparedTree,
 };
 
 /// A hyperlink box in content coordinates.
@@ -48,8 +48,8 @@ pub(crate) struct Interactive {
 }
 
 /// The anchors, headings and box extents of the boxes a scene paints, which the outline, the
-/// links and the page counters read. The summaries of a paged document's pages, taken in page
-/// order, add up to the summary of its whole scene.
+/// links and the page counters read. The summaries of a document's pages add up to that of its
+/// whole scene.
 #[derive(Debug, PartialEq)]
 pub(crate) struct PageSummary {
   /// Element ids to the box they name, for `href="#id"`.
@@ -148,21 +148,11 @@ fn heading_level(tag: &str) -> Option<u8> {
 impl Interactive {
   /// Collects hyperlinks and headings from the prepared scene, in paint order.
   pub(crate) fn collect(tree: &PreparedTree) -> Self {
-    Self::collect_from(tree, false)
-  }
-
-  /// [`Self::collect`], with every box's extent, which page counters read.
-  #[cfg(test)]
-  pub(crate) fn collect_with_extents(tree: &PreparedTree) -> Self {
-    Self::collect_from(tree, true)
-  }
-
-  fn collect_from(tree: &PreparedTree, extents: bool) -> Self {
     let scene = tree.view();
 
     Self {
       links: collect_links(scene),
-      summary: PageSummary::collect(scene, extents).finished(),
+      summary: PageSummary::collect(scene, false).finished(),
     }
   }
 }
@@ -185,8 +175,7 @@ impl PageSummary {
     summary
   }
 
-  /// The summary of the root fragment of one page and the fragments `pages` names, which its scene
-  /// needs to paint it as the scene of every page would.
+  /// The summary of the root fragment of one page and the fragments `pages` names.
   pub(crate) fn of_page(
     root: &RenderNode,
     layout: LayoutView<'_>,
@@ -196,10 +185,10 @@ impl PageSummary {
   ) -> Result<Self, PdfError> {
     let scene = SceneRef::window(root, layout, page_size, pages, false)?;
 
-    Ok(Self::collect(SceneView::of_window(&scene), extents))
+    Ok(Self::collect(scene.view(), extents))
   }
 
-  /// The summary of a laid-out document of `pages` pages: those of its pages, in page order.
+  /// The summary of a laid-out document: those of its pages, in page order.
   pub(crate) fn of_pages(
     root: &RenderNode,
     layout: LayoutView<'_>,
@@ -248,7 +237,6 @@ impl PageSummary {
     }
   }
 
-  /// The summary with its headings in page order.
   pub(crate) fn finished(mut self) -> Self {
     self.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
     self
@@ -387,12 +375,10 @@ impl PageSummary {
   }
 }
 
-/// A node paint resolved against its scene.
 struct PaintedBox<'s> {
   node: &'s RenderNode,
   source: &'s Node,
   layout: Layout,
-  /// The box's border box in content coordinates.
   rect: KrillaRect,
   /// Whether a repeated fragment, such as a table header on a later page, paints it.
   repeated: bool,
@@ -418,7 +404,6 @@ impl<'s> PaintedBox<'s> {
   }
 }
 
-/// Every hyperlink box `scene` paints, in paint order.
 pub(crate) fn collect_links(scene: SceneView<'_>) -> Vec<LinkTarget> {
   let mut links = Vec::new();
 

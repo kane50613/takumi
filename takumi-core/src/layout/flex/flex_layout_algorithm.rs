@@ -19,7 +19,7 @@ use fragmentation::{FlexFragmentation, flex_fragment_builder};
 use crate::layout::box_fragment_builder::BoxFragmentBuilder;
 
 use crate::{
-  geometry::{NodeId, Point, Size},
+  geometry::{NodeId, Point},
   layout::{
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
     content_alignment::{ContentAlignment, ContentDistribution, ContentPosition},
@@ -40,7 +40,6 @@ use crate::{
     },
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
-    out_of_flow::{ContainingBlock, OutOfFlowLayoutPart},
     relative_utils::compute_relative_offset,
     tree::LayoutTree,
   },
@@ -1595,12 +1594,9 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     let location = self.physical_offset(offset, result.size.inline_size)
       + relative_offset.map(LayoutUnit::from_float);
 
-    self.out_of_flow.extend(
-      result
-        .out_of_flow
-        .iter()
-        .map(|candidate| candidate.moved_by(location)),
-    );
+    self
+      .out_of_flow
+      .extend(result.out_of_flow_moved_by(location));
     self.children.push(PlacedChild {
       node,
       location,
@@ -1729,40 +1725,6 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     held
   }
 
-  /// Lays out the out-of-flow boxes this container contains once its size is known, in its own
-  /// fragments as Blink's `FragmentedOofInCb` does for a block, keeping the rest for an ancestor.
-  /// Blink's flex item iterator cannot resume them after a break, so this goes beyond Blink.
-  fn lay_out_out_of_flow_children(&mut self, size: LogicalSize) {
-    if self.out_of_flow.is_empty() {
-      return;
-    }
-
-    let claims = self.tree.claims(self.node);
-    let candidates = take(&mut self.out_of_flow);
-    let containing_block = ContainingBlock::padding_box(
-      Size {
-        width: size.inline_size,
-        height: self.stitched_block_size(size.block_size),
-      },
-      self.style.border,
-    );
-    // The boxes resolve against this fragment and those before it stitched together.
-    #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
-    let mut part = OutOfFlowLayoutPart::new(
-      (self.node, self.fragment_index()),
-      claims,
-      containing_block,
-      self.space,
-    )
-    .stitched(self.previously_consumed_block_size());
-
-    #[cfg(feature = "fragmentation")]
-    if self.breaks_out_of_flow_children() {
-      part = part.in_fragments(&mut self.builder);
-    }
-    self.out_of_flow = self.tree.lay_out_out_of_flow(part, candidates);
-  }
-
   /// Blink's `Layout`: the container laid out, again when fragmentation asks for it.
   pub(crate) fn layout(mut self) -> LayoutResult {
     match self.layout_internal() {
@@ -1801,7 +1763,15 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     let size = LogicalSize::new(inline_size, block_size);
     let mut result = LayoutResult::of_box(size, &style, self.space);
 
-    self.lay_out_out_of_flow_children(size);
+    self.out_of_flow = self.tree.lay_out_container_out_of_flow(
+      (self.node, self.fragment_index()),
+      &self.style,
+      size,
+      self.space,
+      take(&mut self.out_of_flow),
+      #[cfg(feature = "fragmentation")]
+      &mut self.builder,
+    );
 
     if self.space.cache_slot == CacheSlot::Layout {
       let fragment_index = self.fragment_index();
@@ -2057,10 +2027,6 @@ impl FlexLayoutAlgorithm<'_, '_> {
 
   fn resumed_out_of_flow(&self) -> Vec<OutOfFlowCandidate> {
     Vec::new()
-  }
-
-  fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
-    block_size
   }
 
   fn finish_break_info(&mut self, _result: &mut LayoutResult) {}
