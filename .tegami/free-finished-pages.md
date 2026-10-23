@@ -4,6 +4,6 @@ packages:
   takumi-pdf: patch
 ---
 
-# Stop a long document's memory from growing with its page count
+# Free the layout data of a page once it is drawn
 
-`render_pages` and `render` free what each page held once they have painted it, so the memory a streamed document needs no longer grows with its page count. A document that lays out to its end before the first page is drawn is unchanged.
+`render_pages` and `render` free the layout data a page held, such as its text lines and cached layouts, once the page is drawn and no later page paints from it. The source tree and the tree of boxes stay in memory for the whole render, so peak memory still grows with the size of the document. A document that lays out to its end before the first page is drawn frees nothing early.
