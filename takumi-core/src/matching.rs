@@ -411,7 +411,8 @@ pub(crate) enum RuleId {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct MatchedDeclarationsView<'a> {
   normal: SmallVec<[MatchedBlock<'a>; 4]>,
-  important: SmallVec<[MatchedBlock<'a>; 4]>,
+  /// A `Vec`, as `!important` is rare and every node of the tree holds this.
+  important: Vec<MatchedBlock<'a>>,
   /// Where unlayered blocks begin in `normal`, after every named `@layer` and then the `tw` layer,
   /// which is declared last.
   unlayered_start: usize,
@@ -419,7 +420,7 @@ pub(crate) struct MatchedDeclarationsView<'a> {
   /// then every named `@layer`.
   layered_important_start: usize,
   /// The rule each block came from and whether it is the `!important` block, in cascade order.
-  rules: SmallVec<[(RuleId, bool); 8]>,
+  rules: SmallVec<[(RuleId, bool); 4]>,
 }
 
 impl<'a> MatchedDeclarationsView<'a> {
@@ -469,8 +470,9 @@ impl<'a> MatchedDeclarationsView<'a> {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeMatchedDeclarations<'a> {
   element: MatchedDeclarationsView<'a>,
-  before: Option<MatchedDeclarationsView<'a>>,
-  after: Option<MatchedDeclarationsView<'a>>,
+  /// Boxed, as few elements have one and every node of the tree holds this.
+  before: Option<Box<MatchedDeclarationsView<'a>>>,
+  after: Option<Box<MatchedDeclarationsView<'a>>>,
 }
 
 impl<'a> NodeMatchedDeclarations<'a> {
@@ -481,12 +483,12 @@ impl<'a> NodeMatchedDeclarations<'a> {
 
   /// Declarations matching the element's `::before`, if any rule targeted it.
   pub fn before(&self) -> Option<&MatchedDeclarationsView<'a>> {
-    self.before.as_ref()
+    self.before.as_deref()
   }
 
   /// Declarations matching the element's `::after`, if any rule targeted it.
   pub fn after(&self) -> Option<&MatchedDeclarationsView<'a>> {
-    self.after.as_ref()
+    self.after.as_deref()
   }
 }
 
@@ -789,8 +791,8 @@ pub(crate) fn match_stylesheets_view<'a>(
 
   for (matched, [element, before, after]) in per_node.iter_mut().zip(&mut matched_rules) {
     finalize_bucket(element, layers, &mut matched.element);
-    matched.before = take_pseudo_bucket(before, layers);
-    matched.after = take_pseudo_bucket(after, layers);
+    matched.before = take_pseudo_bucket(before, layers).map(Box::new);
+    matched.after = take_pseudo_bucket(after, layers).map(Box::new);
   }
 
   per_node
