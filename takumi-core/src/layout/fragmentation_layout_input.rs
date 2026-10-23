@@ -6,7 +6,9 @@ use std::rc::Rc;
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::{
-  block_break_token::BlockBreakToken, early_break::EarlyBreak, fragmentation_utils::is_break_inside,
+  block_break_token::BlockBreakToken,
+  early_break::EarlyBreak,
+  fragmentation_utils::{fragment_index, is_break_inside},
 };
 
 /// Where a child resumes, as Blink's `BlockChildIterator::Entry` gives it.
@@ -32,6 +34,38 @@ impl FragmentationLayoutInput {
     return is_break_inside(self.break_token.as_deref());
     #[cfg(not(feature = "fragmentation"))]
     return false;
+  }
+
+  /// The fragment of the box a cached layout of it stands in for, none when the layout has a
+  /// breakpoint to honor or repeats the box, as Blink's `CachedLayoutResult` declines both.
+  pub(crate) fn cached_fragment_index(&self) -> Option<usize> {
+    #[cfg(feature = "fragmentation")]
+    return (self.early_break.is_none()
+      && self
+        .break_token
+        .as_deref()
+        .is_none_or(|token| !token.is_repeated))
+    .then(|| fragment_index(self.break_token.as_deref()));
+    #[cfg(not(feature = "fragmentation"))]
+    return Some(0);
+  }
+
+  /// Where the layout resumes the box, which a cached layout must have resumed at too.
+  pub(crate) fn child_break_token(&self) -> ChildBreakToken {
+    #[cfg(feature = "fragmentation")]
+    return self.break_token.clone();
+  }
+
+  /// Whether the layout resumes the box at `break_token`.
+  pub(crate) fn resumes_at(&self, break_token: &ChildBreakToken) -> bool {
+    #[cfg(feature = "fragmentation")]
+    return self.break_token == *break_token;
+    #[cfg(not(feature = "fragmentation"))]
+    {
+      let () = break_token;
+
+      true
+    }
   }
 
   /// Whether the layout starts the box afresh with no breakpoint to honor, which a cached layout

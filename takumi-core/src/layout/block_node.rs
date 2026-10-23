@@ -14,7 +14,7 @@ use crate::{
     block_layout_algorithm::{BlockLayoutAlgorithm, block_min_max_sizes},
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
     flex::flex_layout_algorithm::FlexLayoutAlgorithm,
-    fragmentation_layout_input::FragmentationLayoutInput,
+    fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     grid::grid_layout_algorithm::GridLayoutAlgorithm,
     inline::{
       atomic_inline::BoxAtomicInline, inline_layout_algorithm::LineBoxFragment,
@@ -37,11 +37,13 @@ use crate::{
   style::{Display, JustifyContent},
 };
 
-/// The layouts a box keeps: Blink's layout result cache, one layout that placed its children and
-/// a few measures that did not.
+/// The layouts a box keeps: Blink's layout result cache, a layout of each fragment that placed its
+/// children and a few measures that did not.
 #[derive(Default)]
 pub(crate) struct LayoutCache {
-  layout: Option<(ConstraintSpace, Rc<LayoutResult>)>,
+  /// Blink's `layout_results_`: the last layout of each fragment, with the break token it resumed
+  /// at.
+  layouts: Vec<(ConstraintSpace, ChildBreakToken, Rc<LayoutResult>)>,
   measures: Vec<(ConstraintSpace, Rc<LayoutResult>)>,
   min_max_sizes: Vec<((MinMaxKey, SizeType), MinMaxSizesResult)>,
 }
@@ -69,14 +71,22 @@ impl MinMaxKey {
 impl LayoutCache {
   const MEASURES: usize = 8;
 
-  /// The layout for `space`: the last layout, which serves a measure too, or a measure.
-  fn get(&self, space: &ConstraintSpace) -> Option<Rc<LayoutResult>> {
-    if let Some((cached, result)) = &self.layout
+  /// The layout for `space` resumed as `input` says: the last layout of that fragment from the
+  /// same break token, which serves a measure too, or a measure of a fresh layout.
+  fn get(
+    &self,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> Option<Rc<LayoutResult>> {
+    let index = input.cached_fragment_index()?;
+
+    if let Some((cached, break_token, result)) = self.layouts.get(index)
+      && input.resumes_at(break_token)
       && cached.lays_out_like(space)
     {
       return Some(Rc::clone(result));
     }
-    if space.cache_slot == CacheSlot::Layout {
+    if space.cache_slot == CacheSlot::Layout || !input.is_fresh() {
       return None;
     }
 
@@ -87,9 +97,27 @@ impl LayoutCache {
       .map(|(_, result)| Rc::clone(result))
   }
 
-  fn store(&mut self, space: &ConstraintSpace, result: &Rc<LayoutResult>) {
+  fn store(
+    &mut self,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+    result: &Rc<LayoutResult>,
+  ) {
+    let Some(index) = input.cached_fragment_index() else {
+      return;
+    };
+
     if space.cache_slot == CacheSlot::Layout {
-      self.layout = Some((space.clone(), Rc::clone(result)));
+      // The later fragments resumed from an earlier layout of this one, and lay out anew.
+      self.layouts.truncate(index);
+      if self.layouts.len() == index {
+        self
+          .layouts
+          .push((space.clone(), input.child_break_token(), Rc::clone(result)));
+      }
+      return;
+    }
+    if !input.is_fresh() {
       return;
     }
 
@@ -128,8 +156,7 @@ impl<'r> LayoutTree<'r> {
     self.layout_fragment(node, space, &FragmentationLayoutInput::default())
   }
 
-  /// [`Self::layout`] resuming the box as `input` says. Approximate: only a fresh layout is cached,
-  /// where Blink keeps one per fragment.
+  /// [`Self::layout`] resuming the box as `input` says.
   pub(crate) fn layout_fragment(
     &mut self,
     node: NodeId,
@@ -144,9 +171,7 @@ impl<'r> LayoutTree<'r> {
       },
     );
 
-    if input.is_fresh()
-      && let Some(result) = self.node_state(node).cache.get(space)
-    {
+    if let Some(result) = self.node_state(node).cache.get(space, input) {
       return result;
     }
 
@@ -160,8 +185,8 @@ impl<'r> LayoutTree<'r> {
       ..self.run_algorithm(node, space, input)
     });
 
-    if result.status == LayoutStatus::Success && input.is_fresh() {
-      self.node_state_mut(node).cache.store(space, &result);
+    if result.status == LayoutStatus::Success {
+      self.node_state_mut(node).cache.store(space, input, &result);
     }
     result
   }
@@ -802,5 +827,59 @@ impl<'r> LayoutTree<'r> {
     space.is_new_formatting_context = true;
     space.cache_slot = CacheSlot::Layout;
     space
+  }
+}
+
+#[cfg(all(test, feature = "fragmentation"))]
+mod tests {
+  use std::rc::Rc;
+
+  use super::LayoutCache;
+  use crate::{
+    geometry::NodeId,
+    layout::{
+      block_break_token::BlockBreakToken, constraint_space::ConstraintSpace,
+      fragmentation_layout_input::FragmentationLayoutInput, layout_result::LayoutResult,
+      logical_rect::LogicalSize,
+    },
+    layout_unit::LayoutUnit,
+    style::Direction,
+  };
+
+  /// A layout resumed after the first fragment, which took `consumed_block_size`.
+  fn resumed_after(consumed_block_size: i32) -> FragmentationLayoutInput {
+    FragmentationLayoutInput {
+      break_token: Some(Rc::new(BlockBreakToken {
+        consumed_block_size: LayoutUnit::from_int(consumed_block_size),
+        is_break_before: false,
+        ..BlockBreakToken::break_before(NodeId::ROOT, false)
+      })),
+      early_break: None,
+    }
+  }
+
+  #[test]
+  fn a_fragment_layout_is_kept_for_the_break_token_it_resumed_at() {
+    let space = ConstraintSpace::new(Some(LayoutUnit::from_int(100)), Direction::Ltr);
+    let fresh = FragmentationLayoutInput::default();
+    let first = Rc::new(LayoutResult::new(LogicalSize::default()));
+    let second = Rc::new(LayoutResult::new(LogicalSize::default()));
+    let mut cache = LayoutCache::default();
+
+    cache.store(&space, &fresh, &first);
+    cache.store(&space, &resumed_after(200), &second);
+
+    assert!(
+      cache
+        .get(&space, &resumed_after(200))
+        .is_some_and(|result| Rc::ptr_eq(&result, &second))
+    );
+    // A fragment resumed elsewhere lays out anew.
+    assert!(cache.get(&space, &resumed_after(150)).is_none());
+
+    // A new layout of the first fragment leaves the second stale.
+    cache.store(&space, &fresh, &first);
+
+    assert!(cache.get(&space, &resumed_after(200)).is_none());
   }
 }
