@@ -31,7 +31,6 @@ use crate::{
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
     margin_strut::MarginStrut,
-    out_of_flow::{ContainingBlock, ContainingBlockClaims},
   },
   layout_unit::LayoutUnit,
   style::{BreakBetween, Overflow},
@@ -121,27 +120,63 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     Ok(true)
   }
 
-  /// Blink's `LayoutCandidates` with `should_add_outer_fragmentainer_children_`: a box that lays
-  /// out with fragmentation leaves the out-of-flow boxes it contains, in its padding box
-  /// `containing_block`, to the fragmentation root. A box that clips overflow marks every one on
-  /// its way up.
-  pub(super) fn defer_out_of_flow_children(
-    &mut self,
-    claims: ContainingBlockClaims,
-    candidates: Vec<OutOfFlowCandidate>,
-    containing_block: ContainingBlock,
-  ) {
-    let fragmented_containing_block =
-      self
-        .builder
-        .fragmented_containing_block(self.node, self.fragment_index(), containing_block);
+  /// This box's block size from its first fragment to the end of this one, `block_size` tall:
+  /// what it knows of its stitched size without the fragments to come.
+  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
+    if self.builder.involved_in_block_fragmentation() {
+      self.builder.fragments_total_block_size
+    } else {
+      block_size
+    }
+  }
 
-    self.out_of_flow = self.tree.defer_out_of_flow(
-      claims,
-      candidates,
-      fragmented_containing_block,
-      self.style.overflow.y != Overflow::Visible,
-    );
+  /// Whether the out-of-flow boxes this box lays out break across its fragments. A box that clips
+  /// its block overflow and ends in this fragment finishes them here, so they add no pages, as
+  /// Blink's `DisableFurtherFragmentation` keeps those of a clipped containing block from it.
+  pub(super) fn breaks_out_of_flow_children(&self) -> bool {
+    self.builder.involved_in_block_fragmentation()
+      && (self.style.overflow.y == Overflow::Visible || self.builder.should_break())
+  }
+
+  /// A box that clips overflow marks the out-of-flow boxes deferred to the fragmentation root on
+  /// their way up through it.
+  pub(super) fn mark_deferred_out_of_flow_inside_clipped_container(&mut self) {
+    if !self.builder.involved_in_block_fragmentation() || self.style.overflow.y == Overflow::Visible
+    {
+      return;
+    }
+    for candidate in &mut self.out_of_flow {
+      candidate.mark_inside_clipped_container();
+    }
+  }
+
+  /// Blink's `HandleOutOfFlowPositioned` for an out-of-flow `child` an earlier page broke inside
+  /// or pushed here: whether it resumes at `token`, which holds its offset. A forced break before
+  /// the box leaves it to work its static position out again, as does a box held back for the
+  /// block size of this one.
+  pub(super) fn resumes_out_of_flow(&mut self, child: NodeId, token: &ChildBreakToken) -> bool {
+    let Some(token) = token.as_ref().filter(|token| !token.is_forced_break) else {
+      return false;
+    };
+
+    let candidate = match token.held_static_position {
+      Some(mut static_position) => {
+        static_position.offset.y -= self.previously_consumed_block_size();
+
+        let mut candidate = OutOfFlowCandidate::new(child, static_position);
+
+        candidate.requires_content_before_breaking = self.builder.requires_content_before_breaking;
+        candidate
+      }
+      None => OutOfFlowCandidate::resumed(
+        child,
+        Rc::clone(token),
+        self.builder.requires_content_before_breaking,
+      ),
+    };
+
+    self.out_of_flow.push(candidate);
+    true
   }
 
   /// Blink's `HasInflowChildBreakInside`: something in this flow broke, so no sibling follows.
@@ -378,10 +413,18 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
   /// an earlier page. The lines take the break tokens in order: those of the blocks-in-inline in
   /// parallel flows, then where the lines broke.
   pub(super) fn resume_inline_child(&mut self, inline_child: &mut InlineChild<'_, 'r>) -> bool {
-    let Some(token) = self.input.break_token.as_deref() else {
+    let Some(token) = self.input.break_token.clone() else {
       return true;
     };
 
+    // The out-of-flow boxes come first, as Blink's `BlockChildIterator` gives them.
+    for child_token in &token.child_break_tokens {
+      if let BreakToken::Block(child_token) = child_token
+        && self.tree.layout_style(child_token.node).is_out_of_flow()
+      {
+        self.resumes_out_of_flow(child_token.node, &Some(Rc::clone(child_token)));
+      }
+    }
     inline_child.resumed_break_tokens = token
       .child_break_tokens
       .iter()

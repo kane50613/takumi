@@ -9,6 +9,7 @@ use crate::{
   layout::{
     constraint_space::{AdjoiningObjectTypes, ConstraintSpace},
     exclusions::exclusion_space::ExclusionSpace,
+    fragmentation_layout_input::FragmentationLayoutInput,
     layout_style::LayoutStyle,
     logical_rect::{LogicalOffset, LogicalSize},
     margin_strut::MarginStrut,
@@ -20,7 +21,7 @@ use crate::{
 use crate::{
   layout::{
     block_break_token::BlockBreakToken, break_appeal::BreakAppeal, early_break::EarlyBreak,
-    out_of_flow::ContainingBlock,
+    fragmentation_utils::fragment_index, out_of_flow::ContainingBlock,
   },
   style::BreakBetween,
 };
@@ -173,10 +174,18 @@ impl StaticPosition {
 
 /// Blink's `PhysicalOofNodeForFragmentation`: an out-of-flow box on its way up to its containing
 /// block, its static position in the border box of the box it reached.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct OutOfFlowCandidate {
   pub(crate) node: NodeId,
   pub(crate) static_position: StaticPosition,
+  /// Blink's `OofPositionedNode::BreakToken`: where the box resumes in a later fragment of its
+  /// containing block, which a page found it in before.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) break_token: Option<Rc<BlockBreakToken>>,
+  /// Blink's `RequiresContentBeforeBreaking` of the box that found the box: the box stays on the
+  /// page it starts on.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) requires_content_before_breaking: bool,
   /// Blink's fragmentainer descendant: the containing block that left the box to the
   /// fragmentation root, which lays it out across pages.
   #[cfg(feature = "fragmentation")]
@@ -208,7 +217,66 @@ impl OutOfFlowCandidate {
       node,
       static_position,
       #[cfg(feature = "fragmentation")]
+      break_token: None,
+      #[cfg(feature = "fragmentation")]
+      requires_content_before_breaking: false,
+      #[cfg(feature = "fragmentation")]
       fragmented_containing_block: None,
+    }
+  }
+
+  /// Blink's `AddOutOfFlowChildCandidate` for a box resumed at `break_token`, which its
+  /// containing block lays out where the token says.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn resumed(
+    node: NodeId,
+    break_token: Rc<BlockBreakToken>,
+    requires_content_before_breaking: bool,
+  ) -> Self {
+    Self {
+      break_token: Some(break_token),
+      requires_content_before_breaking,
+      ..Self::new(node, StaticPosition::default())
+    }
+  }
+
+  /// Whether a page found the box before and it resumes at its break token: Blink's check that a
+  /// containing block holding the token contains the box. A forced break before the box may not
+  /// have reached its containing block.
+  pub(crate) fn is_resumed(&self) -> bool {
+    #[cfg(feature = "fragmentation")]
+    return self
+      .break_token
+      .as_ref()
+      .is_some_and(|token| !token.is_forced_break);
+    #[cfg(not(feature = "fragmentation"))]
+    return false;
+  }
+
+  /// Where the box's layout resumes it.
+  pub(crate) fn layout_input(&self) -> FragmentationLayoutInput {
+    #[cfg(feature = "fragmentation")]
+    return FragmentationLayoutInput {
+      break_token: self.break_token.clone(),
+      ..FragmentationLayoutInput::default()
+    };
+    #[cfg(not(feature = "fragmentation"))]
+    return FragmentationLayoutInput::default();
+  }
+
+  /// Blink's `FragmentIndex` of the box's fragment its containing block lays out.
+  pub(crate) fn fragment_index(&self) -> usize {
+    #[cfg(feature = "fragmentation")]
+    return fragment_index(self.break_token.as_deref());
+    #[cfg(not(feature = "fragmentation"))]
+    return 0;
+  }
+
+  /// Marks a box deferred to the fragmentation root as inside a container that clips it.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn mark_inside_clipped_container(&mut self) {
+    if let Some(containing_block) = &mut self.fragmented_containing_block {
+      containing_block.is_inside_clipped_container = true;
     }
   }
 
@@ -222,7 +290,7 @@ impl OutOfFlowCandidate {
   }
 
   /// The candidate in the border box of a box that placed the one it came from at `offset`.
-  pub(crate) fn moved_by(self, offset: Point<LayoutUnit>) -> Self {
+  pub(crate) fn moved_by(&self, offset: Point<LayoutUnit>) -> Self {
     Self {
       static_position: StaticPosition {
         offset: self.static_position.offset + offset,
@@ -235,7 +303,7 @@ impl OutOfFlowCandidate {
           ..containing_block
         }
       }),
-      ..self
+      ..self.clone()
     }
   }
 }

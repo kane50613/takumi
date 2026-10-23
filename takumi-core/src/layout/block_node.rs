@@ -29,7 +29,7 @@ use crate::{
     },
     logical_rect::LogicalSize,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
-    out_of_flow::{ContainingBlock, ContainingBlockClaims},
+    out_of_flow::{ContainingBlock, ContainingBlockClaims, OutOfFlowLayoutPart},
     table::TableLayoutAlgorithm,
     tree::{BoxFragment, LayoutTree, NodeOrigin, push_tight},
   },
@@ -796,11 +796,8 @@ impl<'r> LayoutTree<'r> {
       };
 
       candidates.extend(self.lay_out_out_of_flow(
-        (node, fragment_index),
-        claims,
+        OutOfFlowLayoutPart::new((node, fragment_index), claims, containing_block, space),
         vec![candidate],
-        containing_block,
-        space,
       ));
     }
 

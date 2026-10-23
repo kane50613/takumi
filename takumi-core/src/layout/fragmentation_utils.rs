@@ -469,16 +469,40 @@ pub(crate) fn setup_space_builder_for_fragmentation(
     return;
   };
 
+  setup_space_for_fragmentation(
+    parent_space,
+    child_is_monolithic,
+    builder.fragmentainer_offset(true) + fragmentainer_offset_delta,
+    builder
+      .fragmentainer_capacity(true)
+      .unwrap_or(parent.fragmentainer_block_size),
+    builder.requires_content_before_breaking,
+    child_space,
+  );
+}
+
+/// Blink's `SetupSpaceBuilderForFragmentation` for a child of a box laid out in `parent_space`,
+/// `fragmentainer_offset` into a page `fragmentainer_block_size` tall.
+pub(crate) fn setup_space_for_fragmentation(
+  parent_space: &ConstraintSpace,
+  child_is_monolithic: bool,
+  fragmentainer_offset: LayoutUnit,
+  fragmentainer_block_size: LayoutUnit,
+  requires_content_before_breaking: bool,
+  child_space: &mut ConstraintSpace,
+) {
+  let Some(parent) = parent_space.block_fragmentation else {
+    return;
+  };
+
   if child_is_monolithic {
     return;
   }
 
   child_space.block_fragmentation = Some(BlockFragmentation {
-    fragmentainer_block_size: builder
-      .fragmentainer_capacity(true)
-      .unwrap_or(parent.fragmentainer_block_size),
-    fragmentainer_offset: builder.fragmentainer_offset(true) + fragmentainer_offset_delta,
-    requires_content_before_breaking: builder.requires_content_before_breaking,
+    fragmentainer_block_size,
+    fragmentainer_offset,
+    requires_content_before_breaking,
     should_propagate_child_break_values: true,
     min_break_appeal: parent.min_break_appeal,
     min_block_size_should_encompass_intrinsic_size: false,

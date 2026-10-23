@@ -719,8 +719,40 @@ fn an_absolute_box_taller_than_a_page_breaks_across_pages() {
   let (fragments, page_count) = nested_fragments(&tree, 200.0);
 
   assert_eq!(page_count, 2);
-  // Both fragments belong to the containing block's only fragment, the second a page further.
-  assert_eq!(fragments, [(0, 0.0, 200.0), (0, 200.0, 100.0)]);
+  // The box breaks the containing block, whose second fragment holds the box's second.
+  assert_eq!(fragments, [(0, 0.0, 200.0), (1, 0.0, 100.0)]);
+}
+
+#[test]
+fn an_absolute_box_at_the_bottom_waits_for_the_last_fragment_of_its_containing_block() {
+  let container =
+    Node::container([block("abs", "abs"), block("a", "h300")]).with_class_name("block relative");
+  let tree = render(
+    root([container]),
+    ".relative { position: relative } .abs { position: absolute; bottom: 0; height: 50px } \
+     .h300 { height: 300px }",
+  );
+  let (fragments, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  // The box ends at the bottom of the whole containing block, on its second page.
+  assert_eq!(fragments, [(1, 50.0, 50.0)]);
+}
+
+#[test]
+fn an_absolute_box_as_tall_as_its_containing_block_covers_all_its_pages() {
+  let container =
+    Node::container([block("abs", "abs"), block("a", "h300")]).with_class_name("block relative");
+  let tree = render(
+    root([container]),
+    ".relative { position: relative } .abs { position: absolute; top: 0; height: 100% } \
+     .h300 { height: 300px }",
+  );
+  let (fragments, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  // The box is one fragment, which the pages paint across both.
+  assert_eq!(fragments, [(1, -200.0, 300.0)]);
 }
 
 #[test]

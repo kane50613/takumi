@@ -49,7 +49,7 @@ use crate::{
       AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalRect, LogicalSize,
     },
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
-    out_of_flow::ContainingBlock,
+    out_of_flow::{ContainingBlock, OutOfFlowLayoutPart},
     relative_utils::compute_relative_offset,
     tree::LayoutTree,
   },
@@ -1769,11 +1769,13 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         self.defer_out_of_flow(claims, out_of_flow, containing_block)
       } else {
         self.tree.lay_out_out_of_flow(
-          (self.node, self.fragment_index()),
-          claims,
+          OutOfFlowLayoutPart::new(
+            (self.node, self.fragment_index()),
+            claims,
+            containing_block,
+            self.space,
+          ),
           out_of_flow,
-          containing_block,
-          self.space,
         )
       };
     }

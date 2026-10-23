@@ -24,9 +24,10 @@ use crate::{
   style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
 };
-#[cfg(feature = "fragmentation")]
-use std::collections::HashSet;
-use std::{collections::HashMap, rc::Rc};
+use std::{
+  collections::{HashMap, HashSet},
+  rc::Rc,
+};
 
 /// A node's resolved paint inputs.
 #[derive(Clone)]
@@ -383,6 +384,7 @@ impl SceneRequest<'_> {
     let mut properties = PropertyTrees::default();
     let mut contents: HashMap<NodeId, ContainerContents> = HashMap::new();
     let mut fragment_children: HashMap<NodeId, FragmentChildren> = HashMap::new();
+    let mut hoisted = HoistedFragments::default();
     // Each table with collapsed borders being visited: the context its boxes paint in, the
     // visits left once its subtree is done, and its paint.
     let mut collapsed_borders: Vec<(usize, usize, NodePaint)> = Vec::new();
@@ -428,6 +430,25 @@ impl SceneRequest<'_> {
           false,
         );
         source_order += 1;
+      }
+
+      // A containing block's fragment visits the hoisted fragments it holds that no parent did,
+      // once the last box inside it has been visited.
+      while let Some(deferred) = hoisted.finished(visits.len()) {
+        for (child, mut visit) in deferred.into_iter().rev() {
+          let Some(cb) = child.hoisted_cb else {
+            continue;
+          };
+          let Some(container) = contents.get(&cb) else {
+            continue;
+          };
+
+          (visit.base, visit.container_size) =
+            containing_blocks.base_for(&child, visit.base, visit.container_size);
+          properties.release_escaped_effects(visit.state.effect, container);
+          visit.state.clip = container.clip;
+          visits.push(visit);
+        }
       }
 
       let Some(visit) = visits.pop() else {
@@ -488,6 +509,7 @@ impl SceneRequest<'_> {
           fragment_index: visit.fragment_index,
         },
       );
+      hoisted.enter((visit.node_id, visit.fragment_index), visits.len());
 
       let node_paint = NodePaint {
         path: visit.path.clone(),
@@ -607,11 +629,34 @@ impl SceneRequest<'_> {
           .hoisted_cb
           .and_then(|cb| contents.get(&cb))
           .map_or(visit.fragment_index, |container| container.fragment_index);
+        let mut child_path = visit.path.clone();
+
+        child.extend_path(&mut child_path);
+
+        let child_visit = |fragment_index, base, container_size, clip| StackingContextBuildVisit {
+          path: child_path.clone(),
+          node_id: child.node_id,
+          fragment_index,
+          base,
+          container_size,
+          state: PropertyState {
+            clip,
+            effect: node_properties.contents.effect,
+          },
+          context_id,
+          stacking_id,
+          line_clamp_float_clip,
+          parent_display: Some(current.context.style.base_data.display),
+          is_root: false,
+        };
+
         for child_fragment_index in
           layout_results.fragments_in(child.node_id, container_fragment_index)
         {
-          let mut child_path = visit.path.clone();
-          child.extend_path(&mut child_path);
+          if child.hoisted_cb.is_some() && !hoisted.claim(child.node_id, child_fragment_index) {
+            continue;
+          }
+
           let (base, base_container) =
             containing_blocks.base_for(child, child_base, child_container_size);
           let clip = match child.hoisted_cb.and_then(|cb| contents.get(&cb)) {
@@ -622,22 +667,27 @@ impl SceneRequest<'_> {
             None => node_properties.contents.clip,
           };
 
-          visits.push(StackingContextBuildVisit {
-            path: child_path,
-            node_id: child.node_id,
-            fragment_index: child_fragment_index,
+          visits.push(child_visit(
+            child_fragment_index,
             base,
-            container_size: base_container,
-            state: PropertyState {
-              clip,
-              effect: node_properties.contents.effect,
-            },
-            context_id,
-            stacking_id,
-            line_clamp_float_clip,
-            parent_display: Some(current.context.style.base_data.display),
-            is_root: false,
-          });
+            base_container,
+            clip,
+          ));
+        }
+        if let Some(cb) = child.hoisted_cb
+          && contents.contains_key(&cb)
+        {
+          for (child_fragment_index, cb_fragment_index) in layout_results
+            .container_fragment_indices(child.node_id)
+            .enumerate()
+            .filter(|&(_, index)| index > container_fragment_index)
+          {
+            hoisted.defer(
+              (cb, cb_fragment_index),
+              child.clone(),
+              child_visit(child_fragment_index, child_base, child_container_size, None),
+            );
+          }
         }
       }
     }
@@ -776,6 +826,69 @@ impl Scene {
       fragments.enter(&self.root, paint, layout.location);
     }
     Ok(layout)
+  }
+}
+
+/// The fragments of hoisted boxes a scene visits once each. A box Blink's `FragmentedOofInCb`
+/// breaks or pushes past its parent's end lands in a fragment of its containing block that the
+/// parent may not reach: the parent defers it to that fragment, which visits it once its own
+/// boxes are done unless the parent reached it after all.
+#[derive(Default)]
+struct HoistedFragments {
+  /// By containing block fragment, the visits its hoisted fragments take there, of the parent's
+  /// state but for the containing block's placement and clip.
+  deferred: HashMap<(NodeId, usize), Vec<(OrderedChild, StackingContextBuildVisit)>>,
+  /// The hoisted fragments a visit holds.
+  claimed: HashSet<(NodeId, usize)>,
+  /// The containing block fragments with deferred visits being visited, with the visits left
+  /// once their boxes are done.
+  entered: Vec<((NodeId, usize), usize)>,
+}
+
+impl HoistedFragments {
+  /// Whether the fragment `fragment_index` of `node` is still to visit, which it then no longer is.
+  fn claim(&mut self, node: NodeId, fragment_index: usize) -> bool {
+    self.claimed.insert((node, fragment_index))
+  }
+
+  /// Defers `visit` of the hoisted `child` to its containing block's fragment `container`.
+  fn defer(
+    &mut self,
+    container: (NodeId, usize),
+    child: OrderedChild,
+    visit: StackingContextBuildVisit,
+  ) {
+    self
+      .deferred
+      .entry(container)
+      .or_default()
+      .push((child, visit));
+  }
+
+  /// Records that the fragment `container` is visited, `remaining` visits left before its boxes.
+  fn enter(&mut self, container: (NodeId, usize), remaining: usize) {
+    if self.deferred.contains_key(&container) {
+      self.entered.push((container, remaining));
+    }
+  }
+
+  /// The visits deferred to the containing block fragment whose boxes are done with `remaining`
+  /// visits left, that no parent claimed.
+  fn finished(
+    &mut self,
+    remaining: usize,
+  ) -> Option<Vec<(OrderedChild, StackingContextBuildVisit)>> {
+    let &(container, entered) = self.entered.last()?;
+
+    if remaining > entered {
+      return None;
+    }
+    self.entered.pop();
+
+    let mut deferred = self.deferred.remove(&container).unwrap_or_default();
+
+    deferred.retain(|(_, visit)| self.claimed.insert((visit.node_id, visit.fragment_index)));
+    Some(deferred)
   }
 }
 

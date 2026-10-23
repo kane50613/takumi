@@ -1,10 +1,10 @@
 //! The block fragmentation state of Blink's
 //! [`BoxFragmentBuilder`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/box_fragment_builder.h),
-//! for pages alone: no columns, column spanners, repeated content, or out-of-flow fragmentation.
+//! for pages alone: no columns, column spanners, or repeated content.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::rc::Rc;
+use std::{mem::take, rc::Rc};
 
 use crate::{
   geometry::{NodeId, Point},
@@ -20,7 +20,9 @@ use crate::{
       join_fragmentainer_break_values,
     },
     inline::inline_break_token::InlineBreakToken,
-    layout_result::{BreakInfo, FragmentedContainingBlock, LayoutResult, LayoutStatus},
+    layout_result::{
+      BreakInfo, FragmentedContainingBlock, LayoutResult, LayoutStatus, StaticPosition,
+    },
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
     out_of_flow::ContainingBlock,
@@ -41,6 +43,9 @@ pub(crate) struct BoxFragmentBuilder {
   /// Blink's `PreviousBreakToken`: where this fragment resumes the box.
   pub(crate) previous_break_token: Option<Rc<BlockBreakToken>>,
   child_break_tokens: Vec<BreakToken>,
+  /// The break tokens of the out-of-flow boxes this box lays out, which go before the others, as
+  /// Blink sorts them first: resuming an in-flow child that breaks again stops the layout.
+  out_of_flow_break_tokens: Vec<BreakToken>,
   /// The break token of the last line added, where the lines resume.
   last_inline_break_token: Option<InlineBreakToken>,
   /// Blink's `HasInflowChildBreakInside`.
@@ -103,6 +108,7 @@ impl BoxFragmentBuilder {
       border_padding,
       previous_break_token,
       child_break_tokens: Vec::new(),
+      out_of_flow_break_tokens: Vec::new(),
       last_inline_break_token: None,
       has_inflow_child_break_inside: false,
       did_break_self: false,
@@ -267,11 +273,15 @@ impl BoxFragmentBuilder {
     result: &LayoutResult,
     block_offset: LayoutUnit,
   ) {
-    self.propagate_break_info(
-      result,
-      block_offset,
-      child_style.is_floating() || child_style.is_out_of_flow(),
-    );
+    let flow = if child_style.is_out_of_flow() {
+      ChildFlow::OutOfFlow
+    } else if child_style.is_floating() {
+      ChildFlow::Float
+    } else {
+      ChildFlow::InFlow
+    };
+
+    self.propagate_break_info(result, block_offset, flow);
     if space.should_propagate_child_break_values() {
       self.propagate_child_break_values(result, child_style);
     }
@@ -306,7 +316,7 @@ impl BoxFragmentBuilder {
     &mut self,
     result: &LayoutResult,
     block_offset: LayoutUnit,
-    child_is_floating_or_out_of_flow: bool,
+    flow: ChildFlow,
   ) {
     let block_end_in_container = block_offset + block_size_for_fragmentation(result);
 
@@ -322,7 +332,7 @@ impl BoxFragmentBuilder {
 
     let token = result.break_info.break_token.as_deref();
     let child_is_in_same_flow =
-      token.is_none_or(|token| !token.is_at_block_end) && !child_is_floating_or_out_of_flow;
+      token.is_none_or(|token| !token.is_at_block_end) && flow == ChildFlow::InFlow;
 
     if child_is_in_same_flow {
       let fragmentainer_overflow =
@@ -337,12 +347,14 @@ impl BoxFragmentBuilder {
       if child_is_in_same_flow {
         self.has_inflow_child_break_inside = true;
       }
-      self.clamp_break_appeal(calculate_break_appeal_inside(result, None));
+      if flow != ChildFlow::OutOfFlow {
+        self.clamp_break_appeal(calculate_break_appeal_inside(result, None));
+      }
     }
     if result.break_info.has_forced_break {
       self.has_forced_break = true;
     }
-    if !child_is_floating_or_out_of_flow {
+    if flow == ChildFlow::InFlow {
       self.requires_content_before_breaking = false;
     }
   }
@@ -376,7 +388,70 @@ impl BoxFragmentBuilder {
 
   /// Blink's `HasInsertedChildBreak`.
   pub(crate) fn has_inserted_child_break(&self) -> bool {
-    !self.child_break_tokens.is_empty()
+    !self.child_break_tokens.is_empty() || !self.out_of_flow_break_tokens.is_empty()
+  }
+
+  /// Blink's check in `LayoutCandidates` that an out-of-flow `node` at `offset` starts past the
+  /// end of this fragment: it breaks before the box, which starts as far into the next, in a
+  /// parallel flow.
+  pub(crate) fn breaks_before_out_of_flow(
+    &mut self,
+    node: NodeId,
+    offset: Point<LayoutUnit>,
+  ) -> bool {
+    if !self.has_block_fragmentation() {
+      return false;
+    }
+
+    let block_overflow = offset.y - self.fragmentainer_space_left(true);
+
+    if block_overflow <= LayoutUnit::ZERO {
+      return false;
+    }
+    self
+      .out_of_flow_break_tokens
+      .push(BreakToken::Block(Rc::new(
+        BlockBreakToken::break_before_out_of_flow(node, Point::new(offset.x, block_overflow)),
+      )));
+    true
+  }
+
+  /// Holds the out-of-flow box `node` back to this box's last fragment with a break before it,
+  /// which keeps its `static_position` in the coordinates of the fragments stitched together.
+  pub(crate) fn holds_out_of_flow(&mut self, node: NodeId, mut static_position: StaticPosition) {
+    static_position.offset.y += self.previously_consumed_block_size();
+    self
+      .out_of_flow_break_tokens
+      .push(BreakToken::Block(Rc::new(
+        BlockBreakToken::break_before_held_out_of_flow(node, static_position),
+      )));
+  }
+
+  /// The block fragmentation part of Blink's `AddResult` for an out-of-flow box laid out as
+  /// `result` at `offset`, and the clamp `LayoutCandidates` makes after it.
+  pub(crate) fn add_out_of_flow_result(
+    &mut self,
+    result: &LayoutResult,
+    offset: Point<LayoutUnit>,
+  ) {
+    if self.has_block_fragmentation() {
+      // The next fragment cannot work out the inline offset again from a static position.
+      if let Some(token) = &result.break_info.break_token {
+        self
+          .out_of_flow_break_tokens
+          .push(BreakToken::Block(Rc::new(BlockBreakToken {
+            oof_start_offset: Point::new(offset.x, LayoutUnit::ZERO),
+            ..(**token).clone()
+          })));
+      }
+      self.propagate_break_info(result, offset.y, ChildFlow::OutOfFlow);
+    }
+    // The box overflows the page, but stays on it with a container whose block size fits.
+    if self.requires_content_before_breaking
+      && block_size_for_fragmentation(result) > self.fragmentainer_space_left(true)
+    {
+      self.is_block_size_for_fragmentation_clamped = true;
+    }
   }
 
   /// Blink's `ShouldBreakInsideForContent`.
@@ -476,8 +551,13 @@ impl BoxFragmentBuilder {
       is_at_block_end: self.is_at_block_end,
       has_seen_all_children: self.has_seen_all_children,
       has_unpositioned_list_marker: self.has_unpositioned_list_marker,
-      child_break_tokens: std::mem::take(&mut self.child_break_tokens),
+      child_break_tokens: take(&mut self.out_of_flow_break_tokens)
+        .into_iter()
+        .chain(take(&mut self.child_break_tokens))
+        .collect(),
       algorithm_data: self.break_token_data.take(),
+      oof_start_offset: Point::default(),
+      held_static_position: None,
     }
   }
 
@@ -618,4 +698,12 @@ impl BoxFragmentBuilder {
       avoids_break_inside: self.has_block_fragmentation() && self.break_inside.avoids_page_break(),
     }
   }
+}
+
+/// Which flow a child is in, as Blink's `PropagateBreakInfo` tells them apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChildFlow {
+  InFlow,
+  Float,
+  OutOfFlow,
 }

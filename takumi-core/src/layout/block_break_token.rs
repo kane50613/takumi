@@ -1,10 +1,12 @@
 //! Blink's [`BlockBreakToken`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_break_token.h),
-//! for pages alone: no column spanners, out-of-flow fragmentation, or list markers left
-//! unpositioned.
+//! for pages alone: no column spanners.
 
 use crate::{
-  geometry::NodeId,
-  layout::{break_token::BreakToken, break_token_algorithm_data::BreakTokenAlgorithmData},
+  geometry::{NodeId, Point},
+  layout::{
+    break_token::BreakToken, break_token_algorithm_data::BreakTokenAlgorithmData,
+    layout_result::StaticPosition,
+  },
   layout_unit::LayoutUnit,
 };
 
@@ -34,6 +36,13 @@ pub(crate) struct BlockBreakToken {
   pub(crate) child_break_tokens: Vec<BreakToken>,
   /// Blink's `TokenData`: what the box's algorithm resumes from.
   pub(crate) algorithm_data: Option<BreakTokenAlgorithmData>,
+  /// Blink's `OofInlineStartOffset` and `OofBlockStartOffset`, for an out-of-flow box laid out
+  /// in its containing block's fragments: where in the next fragment's border box it resumes. The
+  /// inline offset may come from a static position the next fragment cannot work out again.
+  pub(crate) oof_start_offset: Point<LayoutUnit>,
+  /// The static position of an out-of-flow box its containing block holds back until its last
+  /// fragment, in the containing block's stitched fragments. Takumi's own, Blink has no such token.
+  pub(crate) held_static_position: Option<StaticPosition>,
 }
 
 impl BlockBreakToken {
@@ -62,6 +71,32 @@ impl BlockBreakToken {
       has_unpositioned_list_marker: false,
       child_break_tokens: Vec::new(),
       algorithm_data: None,
+      oof_start_offset: Point::default(),
+      held_static_position: None,
+    }
+  }
+
+  /// A break before an out-of-flow box that its containing block holds back, which lays it out
+  /// from `static_position` once its block size is final.
+  pub(crate) fn break_before_held_out_of_flow(
+    node: NodeId,
+    static_position: StaticPosition,
+  ) -> Self {
+    Self {
+      held_static_position: Some(static_position),
+      ..Self::break_before(node, false)
+    }
+  }
+
+  /// Blink's `CreateBreakBefore` for an out-of-flow box pushed past the end of its containing
+  /// block's fragment: it starts at `oof_start_offset` in the next.
+  pub(crate) fn break_before_out_of_flow(
+    node: NodeId,
+    oof_start_offset: Point<LayoutUnit>,
+  ) -> Self {
+    Self {
+      oof_start_offset,
+      ..Self::break_before(node, false)
     }
   }
 }
