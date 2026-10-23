@@ -3,7 +3,7 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::rc::Rc;
+use std::{rc::Rc, vec::IntoIter};
 
 use crate::{
   geometry::NodeId,
@@ -336,58 +336,87 @@ pub(crate) fn setup_fragment_builder_for_fragmentation(
   leaves_block_start_out
 }
 
-/// Blink's `BlockChildIterator`: the `children` a fragment resuming at `break_token` resumes or
-/// starts, with the tokens they resume at.
-pub(crate) fn block_child_entries(
-  children: Vec<NodeId>,
-  break_token: Option<&BlockBreakToken>,
-) -> Vec<(NodeId, Option<Rc<BlockBreakToken>>)> {
-  let Some(container_break_token) = break_token else {
-    return children.into_iter().map(|child| (child, None)).collect();
-  };
-  let child_break_tokens: Vec<Rc<BlockBreakToken>> = container_break_token
-    .child_break_tokens
-    .iter()
-    .filter_map(|token| match token {
-      BreakToken::Block(token) => Some(Rc::clone(token)),
-      BreakToken::Inline(_) => None,
-    })
-    .collect();
-
-  if child_break_tokens.is_empty() && container_break_token.has_seen_all_children {
-    return Vec::new();
-  }
-
-  let next_unstarted_index = match child_break_tokens.last() {
-    Some(last) if !container_break_token.has_seen_all_children => children
-      .iter()
-      .position(|&child| child == last.node)
-      .map_or(children.len(), |index| index + 1),
-    Some(_) => children.len(),
-    None => 0,
-  };
-
-  child_break_tokens
-    .into_iter()
-    .map(|token| (token.node, Some(token)))
-    .chain(
-      children[next_unstarted_index..]
-        .iter()
-        .map(|&child| (child, None)),
-    )
-    .collect()
+/// Blink's `BlockChildIterator`: the children a fragment resuming at a break token resumes or
+/// starts, with the tokens they resume at. It goes on from where the break token left off, so a
+/// page visits only the children it reaches.
+pub(crate) struct BlockChildIterator {
+  tokens: IntoIter<Rc<BlockBreakToken>>,
+  children: Rc<[NodeId]>,
+  next: usize,
 }
 
-/// [`block_child_entries`] by index in `children`, in its entry order. Each entry is looked for
+impl BlockChildIterator {
+  pub(crate) fn new(children: Rc<[NodeId]>, break_token: Option<&BlockBreakToken>) -> Self {
+    let Some(container_break_token) = break_token else {
+      return Self {
+        tokens: Vec::new().into_iter(),
+        children,
+        next: 0,
+      };
+    };
+    let tokens: Vec<Rc<BlockBreakToken>> = container_break_token
+      .child_break_tokens
+      .iter()
+      .filter_map(|token| match token {
+        BreakToken::Block(token) => Some(Rc::clone(token)),
+        BreakToken::Inline(_) => None,
+      })
+      .collect();
+    let next = match tokens.last() {
+      _ if container_break_token.has_seen_all_children => children.len(),
+      Some(last) => child_index(&children, last.node).map_or(children.len(), |index| index + 1),
+      None => 0,
+    };
+
+    Self {
+      tokens: tokens.into_iter(),
+      children,
+      next,
+    }
+  }
+}
+
+impl Iterator for BlockChildIterator {
+  type Item = (NodeId, Option<Rc<BlockBreakToken>>);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if let Some(token) = self.tokens.next() {
+      return Some((token.node, Some(token)));
+    }
+
+    let child = *self.children.get(self.next)?;
+
+    self.next += 1;
+    Some((child, None))
+  }
+
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    let len = self.tokens.len() + self.children.len() - self.next;
+
+    (len, Some(len))
+  }
+}
+
+impl ExactSizeIterator for BlockChildIterator {}
+
+/// Where `node` sits among `children`. A block's children come in tree order, which their ids
+/// follow, so a binary search finds it unless an `order` sorted them otherwise.
+fn child_index(children: &[NodeId], node: NodeId) -> Option<usize> {
+  children
+    .binary_search_by_key(&usize::from(node), |&child| usize::from(child))
+    .ok()
+    .or_else(|| children.iter().position(|&child| child == node))
+}
+
+/// [`BlockChildIterator`] by index in `children`, in its entry order. Each entry is looked for
 /// from the one before, so entries in child order, as a table's rows and cells come, take one scan.
 pub(crate) fn indexed_block_child_entries(
-  children: &[NodeId],
+  children: &Rc<[NodeId]>,
   break_token: Option<&BlockBreakToken>,
 ) -> Vec<(usize, Option<Rc<BlockBreakToken>>)> {
   let mut next = 0;
 
-  block_child_entries(children.to_vec(), break_token)
-    .into_iter()
+  BlockChildIterator::new(Rc::clone(children), break_token)
     .filter_map(|(node, token)| {
       let index = children[next..]
         .iter()

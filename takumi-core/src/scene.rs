@@ -9,7 +9,7 @@ use crate::{
   layout::{
     decoration::OutlineGeometry,
     inline::InkBox,
-    tree::{ContainingBlocks, LayoutResults, RenderNode},
+    tree::{ContainingBlocks, LayoutResults, OrderedChild, RenderNode},
   },
   paint_chunk::PaintChunk,
   paint_property::{
@@ -379,6 +379,7 @@ impl SceneRequest<'_> {
     let mut containing_blocks = ContainingBlocks::default();
     let mut properties = PropertyTrees::default();
     let mut contents: HashMap<NodeId, ContainerContents> = HashMap::new();
+    let mut fragment_children: HashMap<NodeId, FragmentChildren> = HashMap::new();
     // Each table with collapsed borders being visited: the context its boxes paint in, the
     // visits left once its subtree is done, and its paint.
     let mut collapsed_borders: Vec<(usize, usize, NodePaint)> = Vec::new();
@@ -574,13 +575,30 @@ impl SceneRequest<'_> {
       }
 
       let layout_children = layout_results.box_children(visit.node_id)?;
+      // A box broken across pages visits only the children each of its fragments holds, as each
+      // of Blink's fragments holds its own.
+      let held = (layout_results
+        .container_fragment_indices(visit.node_id)
+        .nth(1)
+        .is_some())
+      .then(|| {
+        fragment_children
+          .entry(visit.node_id)
+          .or_insert_with(|| FragmentChildren::of(layout_results, layout_children))
+          .in_fragment(visit.fragment_index)
+      });
+      let positions: Box<dyn Iterator<Item = usize>> = match &held {
+        Some(positions) => Box::new(positions.iter().rev().copied()),
+        None => Box::new((0..layout_children.len()).rev()),
+      };
       let child_container_size = Size {
         width: Some(layout.content_box_width()),
         height: Some(layout.content_box_height()),
       };
       containing_blocks.record_content_box(visit.node_id, child_container_size);
 
-      for child in layout_children.iter().rev() {
+      for position in positions {
+        let child = &layout_children[position];
         // A hoisted box belongs to the fragment of its containing block that positioned it.
         let container_fragment_index = child
           .hoisted_cb
@@ -758,6 +776,51 @@ impl Scene {
       fragments.enter(&self.root, paint, layout.location);
     }
     Ok(layout)
+  }
+}
+
+/// A fragmented box's children by the fragment of it that holds them, as positions among its box
+/// children, and its hoisted children, which belong to the fragment of their containing block.
+struct FragmentChildren {
+  held: Vec<Vec<usize>>,
+  hoisted: Vec<usize>,
+}
+
+impl FragmentChildren {
+  fn of(results: &LayoutResults, children: &[OrderedChild]) -> Self {
+    let mut held: Vec<Vec<usize>> = Vec::new();
+    let mut hoisted = Vec::new();
+
+    for (position, child) in children.iter().enumerate() {
+      if child.hoisted_cb.is_some() {
+        hoisted.push(position);
+        continue;
+      }
+      for container in results.container_fragment_indices(child.node_id) {
+        if held.len() <= container {
+          held.resize_with(container + 1, Vec::new);
+        }
+        if held[container].last() != Some(&position) {
+          held[container].push(position);
+        }
+      }
+    }
+    Self { held, hoisted }
+  }
+
+  /// The positions the box's fragment `fragment_index` visits, in child order.
+  fn in_fragment(&self, fragment_index: usize) -> Vec<usize> {
+    let mut positions: Vec<usize> = self
+      .held
+      .get(fragment_index)
+      .into_iter()
+      .flatten()
+      .chain(&self.hoisted)
+      .copied()
+      .collect();
+
+    positions.sort_unstable();
+    positions
   }
 }
 

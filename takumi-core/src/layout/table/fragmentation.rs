@@ -24,7 +24,7 @@ use crate::{
     break_token_algorithm_data::BreakTokenAlgorithmData,
     fragmentation_layout_input::FragmentationLayoutInput,
     fragmentation_utils::{
-      FlexItemBreak, adjust_margins_for_fragmentation, block_child_entries, break_before_child,
+      BlockChildIterator, FlexItemBreak, adjust_margins_for_fragmentation, break_before_child,
       break_before_child_if_needed, finish_fragmentation, fragment_index,
       fragmentation_layout_input_for_child, is_avoid_break_inside_value, is_break_inside,
       is_early_break_target, move_past_breakpoint, setup_space_builder_for_fragmentation,
@@ -170,7 +170,7 @@ impl TableLayoutAlgorithm<'_, '_> {
   }
 
   fn resumed_child_entries(&self, children: Vec<NodeId>) -> Vec<(NodeId, ChildBreakToken)> {
-    block_child_entries(children, self.input.break_token.as_deref())
+    BlockChildIterator::new(children.into(), self.input.break_token.as_deref()).collect()
   }
 
   /// Blink's `FragmentIndex` of the table fragment this layout makes.
