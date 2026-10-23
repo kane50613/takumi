@@ -58,6 +58,7 @@ png = ["takumi-core/png"]
 gif = ["takumi-core/gif"]
 webp = ["takumi-core/webp"]
 rayon = ["dep:rayon", "takumi-core/rayon"]
+pages = ["takumi-core/fragmentation"]
 
 [dev-dependencies]
 serde_json.workspace = true

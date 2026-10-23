@@ -1,11 +1,16 @@
 use std::{collections::HashMap, mem, rc::Rc, sync::Arc};
 
 pub use takumi_core::layout::measure::{MeasuredNode, MeasuredTextRun};
+#[cfg(feature = "pages")]
+use takumi_core::{geometry::Size, scene::PagedScene};
 use takumi_core::{
   scene::Scene,
   style::{ComputedStyle, Lang},
 };
 use typed_builder::TypedBuilder;
+
+#[cfg(feature = "pages")]
+use crate::stacking_context::ScenePaint;
 
 use crate::{
   AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
@@ -158,13 +163,44 @@ pub fn render_scene(scene: &mut Scene) -> Result<Bitmap> {
     return Err(Error::InvalidViewport);
   }
 
-  let origin = scene.origin.map(|length| length.round() as i32);
-  let mut canvas = Canvas::try_new(size)
-    .ok_or(Error::InvalidViewport)?
-    .with_origin(origin);
+  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
 
   paint_scene(scene, &mut canvas)?;
   canvas.into_inner()
+}
+
+/// Renders a node across at most `max_pages` pages `page_size`, handing each page's image to
+/// `page` in order, so a long document holds one page's pixels at a time. The scene of every page
+/// resolves its paint chunks once, and each page paints only the chunks that reach it.
+#[cfg(feature = "pages")]
+pub fn render_pages<'g>(
+  mut options: RenderOptions<'g>,
+  page_size: Size<f32>,
+  max_pages: usize,
+  mut page: impl FnMut(Bitmap) -> Result<()>,
+) -> Result<()> {
+  let render_context = options.take_render_context();
+  let paged = PagedScene::lay_out(
+    RenderNode::from_node(&render_context, options.node),
+    page_size,
+    max_pages,
+    true,
+  )?;
+  let page_count = paged.page_count();
+  let size = page_size.map(|length| length.round() as u32);
+  let mut scene = paged.into_scene();
+  let mut paint = ScenePaint::new(&mut scene, true);
+
+  for index in 0..page_count {
+    let origin = PagedScene::page_origin(page_size, index).map(|length| length.round() as i32);
+    let mut canvas = Canvas::try_new(size)
+      .ok_or(Error::InvalidViewport)?
+      .with_origin(origin);
+
+    paint.paint(&mut canvas)?;
+    page(canvas.into_inner()?)?;
+  }
+  Ok(())
 }
 
 /// Rasterizes `node` under an already-built [`RenderContext`]. The context

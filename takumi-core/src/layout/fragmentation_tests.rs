@@ -237,7 +237,7 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
     ]),
     ".h140 { height: 140px }",
   );
-  let mut paged = PagedScene::lay_out(
+  let paged = PagedScene::lay_out(
     tree,
     Size {
       width: 300.0,
@@ -250,9 +250,8 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
 
   assert_eq!(paged.page_count(), 2);
 
-  let scene = paged.page(1);
+  let scene = &paged.into_scene();
 
-  assert_eq!(scene.origin, Point::new(0.0, 200.0));
   // The root paints once on each page.
   assert_eq!(
     scene.contexts[0]
@@ -377,7 +376,7 @@ fn lines_that_ended_stay_on_their_page_in_a_stretched_box() {
     .with_class_name("flex")]),
     ".h600 { height: 600px; width: 100px } .flex { display: flex }",
   );
-  let mut paged = PagedScene::lay_out(
+  let paged = PagedScene::lay_out(
     tree,
     Size {
       width: 300.0,
@@ -387,7 +386,7 @@ fn lines_that_ended_stay_on_their_page_in_a_stretched_box() {
     false,
   )
   .expect("pages lay out");
-  let scene = paged.page(0);
+  let scene = &paged.into_scene();
 
   assert_eq!(
     paints_of(scene, "p")

@@ -6,7 +6,7 @@
 
 use crate::{
   paint_property::{ClipId, ClipNode, EffectId, EffectNode, PropertyState, PropertyTrees},
-  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, StackingContextNode},
+  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, SceneBounds, StackingContextNode},
 };
 
 /// Which draws of a box a chunk holds.
@@ -291,13 +291,96 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
   }
 }
 
+/// The content height one index bucket covers, before a sparse scene widens it.
+const BUCKET_HEIGHT: usize = 1024;
+
+/// The most buckets one chunk enters. A taller one joins the chunks every
+/// window checks, which keeps the index linear in its chunks.
+const MAX_SPAN: usize = 16;
+
+/// Chunk indices by the content height their paint bounds reach.
+pub struct HeightIndex {
+  /// Per band of `bucket_height` content height, the chunks reaching it.
+  buckets: Vec<Vec<usize>>,
+  bucket_height: usize,
+  /// Chunks every window checks: those without bounds, and those too tall to bucket.
+  unindexed: Vec<usize>,
+}
+
+/// The bucket row of device-space `y`; the rows start at the canvas top, which also holds what
+/// lies above it, as [`HeightIndex::candidates`] clamps its queries there.
+fn row(y: i32) -> usize {
+  y.max(0) as usize
+}
+
+impl HeightIndex {
+  /// The index of chunks whose paint reaches `bounds`, one each in paint order.
+  pub fn new(bounds: &[Option<SceneBounds>]) -> Self {
+    let bottom = bounds
+      .iter()
+      .flatten()
+      .map(|bounds| row(bounds.bottom))
+      .max()
+      .unwrap_or_default();
+    // A sparse scene widens its buckets so their count stays within its chunk count.
+    let bucket_height = BUCKET_HEIGHT.max(bottom / (bounds.len() + 1) + 1);
+    let mut buckets = vec![Vec::new(); bottom / bucket_height + 1];
+    let mut unindexed = Vec::new();
+
+    for (index, bounds) in bounds.iter().enumerate() {
+      let span = bounds
+        .map(|bounds| row(bounds.top) / bucket_height..=row(bounds.bottom) / bucket_height)
+        .filter(|span| {
+          span
+            .end()
+            .checked_sub(*span.start())
+            .is_some_and(|reach| reach < MAX_SPAN)
+        });
+
+      match span {
+        Some(span) => {
+          for bucket in &mut buckets[span] {
+            bucket.push(index);
+          }
+        }
+        None => unindexed.push(index),
+      }
+    }
+
+    Self {
+      buckets,
+      bucket_height,
+      unindexed,
+    }
+  }
+
+  /// The chunks that may reach `[top, bottom)`, in paint order, with every unindexed one.
+  pub fn candidates(&self, top: f32, bottom: f32) -> Vec<usize> {
+    let bucket = |y: f32| (y.max(0.0) as usize / self.bucket_height).min(self.buckets.len() - 1);
+    let mut indices: Vec<usize> = self
+      .buckets
+      .get(bucket(top)..=bucket(bottom))
+      .unwrap_or_default()
+      .iter()
+      .flatten()
+      .chain(&self.unindexed)
+      .copied()
+      .collect();
+
+    indices.sort_unstable();
+    indices.dedup();
+    indices
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use super::{ConversionContext, PropertySink};
+  use super::{ConversionContext, HeightIndex, PropertySink};
   use crate::{
     geometry::Size,
     paint_property::{ClipId, ClipNode, EffectId, EffectNode, PropertyState, PropertyTrees},
     painter::FillShape,
+    scene::SceneBounds,
     style::Affine,
   };
 
@@ -444,5 +527,44 @@ mod tests {
         "end"
       ]
     );
+  }
+
+  fn bounds(top: i32, bottom: i32) -> Option<SceneBounds> {
+    Some(SceneBounds {
+      left: 0,
+      top,
+      right: 10,
+      bottom,
+    })
+  }
+
+  #[test]
+  fn a_window_finds_the_chunks_it_reaches() {
+    let index = HeightIndex::new(&[bounds(0, 10), bounds(5000, 5010), None, bounds(9000, 9010)]);
+
+    assert_eq!(index.candidates(4800.0, 5200.0), [1, 2]);
+  }
+
+  #[test]
+  fn an_inverted_window_finds_only_the_unindexed_chunks() {
+    let index = HeightIndex::new(&[bounds(0, 10), None, bounds(9000, 9010)]);
+
+    assert_eq!(index.candidates(9000.0, 100.0), [1]);
+  }
+
+  #[test]
+  fn tall_chunks_stay_out_of_the_buckets() {
+    let tall = vec![bounds(0, 1_000_000); 1000];
+    let index = HeightIndex::new(&tall);
+
+    assert_eq!(index.buckets.iter().map(Vec::len).sum::<usize>(), 0);
+    assert_eq!(index.unindexed.len(), 1000);
+  }
+
+  #[test]
+  fn inverted_bounds_stay_out_of_the_buckets() {
+    let index = HeightIndex::new(&[bounds(5000, 10)]);
+
+    assert_eq!(index.unindexed, [0]);
   }
 }
