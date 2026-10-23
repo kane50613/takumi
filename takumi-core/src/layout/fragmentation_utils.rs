@@ -378,8 +378,8 @@ pub(crate) fn block_child_entries(
     .collect()
 }
 
-/// [`block_child_entries`] by index in `children`. The entries come in child order, so each is
-/// looked for from the one before, which keeps a section's thousands of rows linear per page.
+/// [`block_child_entries`] by index in `children`, in its entry order. Each entry is looked for
+/// from the one before, so entries in child order, as a table's rows and cells come, take one scan.
 pub(crate) fn indexed_block_child_entries(
   children: &[NodeId],
   break_token: Option<&BlockBreakToken>,
