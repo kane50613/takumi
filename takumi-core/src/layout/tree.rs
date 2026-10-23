@@ -709,7 +709,7 @@ impl<'r> LayoutTree<'r> {
     children: Vec<(NodeId, SmallVec<[usize; 2]>)>,
   ) {
     let state = &mut self.nodes[usize::from(parent)];
-    let known: FxHashSet<NodeId> = state
+    let mut known: FxHashSet<NodeId> = state
       .box_children
       .iter()
       .map(|known| known.node_id)
@@ -721,7 +721,7 @@ impl<'r> LayoutTree<'r> {
         continue;
       };
 
-      if !known.contains(&child) {
+      if known.insert(child) {
         box_children.push(OrderedChild {
           render_index,
           inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
