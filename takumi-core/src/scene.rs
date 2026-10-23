@@ -707,7 +707,7 @@ pub struct SceneLayers {
 
 /// A render tree laid out, with the stacking contexts that paint it.
 pub struct Scene {
-  /// The tree, which a paged layout still laying out later pages shares.
+  /// The tree, behind an `Rc` so a layout borrowing it can share it with the scene.
   pub root: Rc<RenderNode>,
   /// Its layout.
   pub results: LayoutResults,
