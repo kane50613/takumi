@@ -1630,10 +1630,10 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
           &mut static_position,
         );
 
-        OutOfFlowCandidate {
-          node: child,
-          static_position: static_position.to_physical(self.direction(), inline_size),
-        }
+        OutOfFlowCandidate::new(
+          child,
+          static_position.to_physical(self.direction(), inline_size),
+        )
       })
       .collect()
   }

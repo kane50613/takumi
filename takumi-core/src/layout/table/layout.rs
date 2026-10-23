@@ -259,7 +259,7 @@ pub(crate) struct TableLayoutAlgorithm<'t, 'r> {
   pub(super) space: &'t ConstraintSpace,
   #[cfg_attr(not(feature = "fragmentation"), allow(dead_code))]
   pub(super) input: &'t FragmentationLayoutInput,
-  style: Rc<LayoutStyle>,
+  pub(super) style: Rc<LayoutStyle>,
   pub(super) structure: Rc<TableStructure>,
   border_padding: BoxStrut,
   /// The inline and block `border-spacing`, none when borders collapse.
@@ -1492,10 +1492,16 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         result.border,
       );
 
-      out_of_flow =
-        self
-          .tree
-          .lay_out_out_of_flow(self.node, claims, out_of_flow, containing_block, self.space);
+      out_of_flow = match self.defer_out_of_flow(claims, out_of_flow, containing_block) {
+        Ok(deferred) => deferred,
+        Err(out_of_flow) => self.tree.lay_out_out_of_flow(
+          self.node,
+          claims,
+          out_of_flow,
+          containing_block,
+          self.space,
+        ),
+      };
     }
 
     result.intrinsic_block_size = intrinsic_block_size;

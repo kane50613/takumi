@@ -1652,10 +1652,10 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
         }
       }
 
-      self.out_of_flow.push(OutOfFlowCandidate {
-        node: child,
-        static_position: static_position.to_physical(self.direction(), inline_size),
-      });
+      self.out_of_flow.push(OutOfFlowCandidate::new(
+        child,
+        static_position.to_physical(self.direction(), inline_size),
+      ));
     }
   }
 

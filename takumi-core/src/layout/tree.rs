@@ -14,6 +14,7 @@ use crate::layout::{
   fragmentation_layout_input::FragmentationLayoutInput,
   fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
   layout_result::LayoutResult,
+  out_of_flow::FragmentainerDescendant,
 };
 
 use crate::{
@@ -217,22 +218,35 @@ impl LayoutResults {
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
-  /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds, none when
-  /// it holds none.
+  /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
+  /// none when it holds none.
   pub(crate) fn fragment_in(
     &self,
     node_id: NodeId,
     container_fragment_index: usize,
   ) -> Option<usize> {
+    self.fragments_in(node_id, container_fragment_index).next()
+  }
+
+  /// Every fragment of `node_id` the parent's fragment `container_fragment_index` holds: one,
+  /// unless the box is an out-of-flow box broken across the pages after its containing block's.
+  pub(crate) fn fragments_in(
+    &self,
+    node_id: NodeId,
+    container_fragment_index: usize,
+  ) -> impl Iterator<Item = usize> + '_ {
     #[cfg(feature = "fragmentation")]
     return self
       .node(node_id)
-      .ok()?
-      .fragments
-      .iter()
-      .position(|fragment| fragment.container_fragment_index == container_fragment_index);
+      .ok()
+      .into_iter()
+      .flat_map(|node| node.fragments.iter().enumerate())
+      .filter(move |(_, fragment)| fragment.container_fragment_index == container_fragment_index)
+      .map(|(index, _)| index);
     #[cfg(not(feature = "fragmentation"))]
-    return (self.node(node_id).is_ok() && container_fragment_index == 0).then_some(0);
+    return (self.node(node_id).is_ok() && container_fragment_index == 0)
+      .then_some(0)
+      .into_iter();
   }
 
   /// Paint-ordered children of a node.
@@ -885,14 +899,15 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes or `@page`: the root laid out a page
-  /// `page_size` at a time, each page resuming where the one before broke, the page area its
-  /// container and the initial containing block. Approximate: a fixed box is not repeated on every
-  /// page. Returns the page count.
+  /// `page_size` at a time, each page resuming where the one before broke, then the out-of-flow
+  /// boxes the pages left to it across them. Returns the page count.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn compute_pages(&mut self, page_size: Size<f32>) -> usize {
     let page_block_size = LayoutUnit::from_float(page_size.height);
     let mut break_token: Option<Rc<BlockBreakToken>> = None;
     let mut page_count = 0;
+    let mut root_fragments = Vec::new();
+    let mut descendants = Vec::new();
 
     loop {
       let mut space = self.root_space(page_size.map(AvailableSpace::Definite));
@@ -928,6 +943,7 @@ impl<'r> LayoutTree<'r> {
             && is_break_inside(result.break_info.break_token.as_deref())))
       {
         break_token = Some(Rc::new(BlockBreakToken::break_before(NodeId::ROOT, false)));
+        root_fragments.push(None);
         page_count += 1;
         continue;
       }
@@ -940,33 +956,33 @@ impl<'r> LayoutTree<'r> {
         &result,
       );
 
-      // The page area is the initial containing block of the out-of-flow boxes no box contains.
-      if !result.out_of_flow.is_empty() {
-        let first_hoisted = self.node_state(NodeId::ROOT).hoisted_children.len();
+      // The pages stack in the block direction, which the out-of-flow boxes lay out across.
+      let root_origin = Point::new(
+        margins.inline_start,
+        page_block_size * page_count as i32 + margins.block_start,
+      );
 
-        self.lay_out_out_of_flow(
-          NodeId::ROOT,
-          ContainingBlockClaims::ALL,
-          result.out_of_flow.clone(),
-          ContainingBlock {
-            origin: Point::new(
-              LayoutUnit::ZERO - margins.inline_start,
-              LayoutUnit::ZERO - margins.block_start,
-            ),
-            size: Size {
-              width: LayoutUnit::from_float(page_size.width),
-              height: page_block_size,
-            },
-          },
-          &space,
-        );
-        self.hold_hoisted_children(NodeId::ROOT, fragment_index, first_hoisted);
-      }
+      root_fragments.push(Some((fragment_index, root_origin)));
+      descendants.extend(
+        result
+          .out_of_flow
+          .iter()
+          .map(|candidate| FragmentainerDescendant {
+            candidate: candidate.moved_by(root_origin),
+            root_fragment: (fragment_index, root_origin),
+          }),
+      );
       page_count += 1;
       break_token = result.break_info.break_token.clone();
 
       if break_token.is_none() {
-        return page_count;
+        return self.lay_out_fragmentainer_descendants(
+          descendants,
+          page_size,
+          &root_fragments,
+          page_count,
+          &space,
+        );
       }
     }
   }
@@ -987,14 +1003,13 @@ impl<'r> LayoutTree<'r> {
         size: available_space.map(definite),
       };
 
-      self.lay_out_out_of_flow_box(
-        OutOfFlowCandidate {
-          node: NodeId::ROOT,
-          static_position: StaticPosition::default(),
-        },
+      let (location, result, _) = self.lay_out_out_of_flow_box(
+        OutOfFlowCandidate::new(NodeId::ROOT, StaticPosition::default()),
         initial_containing_block,
         &space,
-      )
+      );
+
+      (location, result)
     } else {
       let margins = margins_for(
         self.layout_style(NodeId::ROOT),

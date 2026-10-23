@@ -812,6 +812,11 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     );
 
     #[cfg(feature = "fragmentation")]
+    if self.builder.involved_in_block_fragmentation() {
+      self.defer_out_of_flow_children(claims, candidates, containing_block);
+      return;
+    }
+    #[cfg(feature = "fragmentation")]
     let first_hoisted = self.tree.node_state(self.node).hoisted_children.len();
 
     self.out_of_flow =
@@ -961,10 +966,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
-    self.out_of_flow.push(OutOfFlowCandidate {
-      node: child,
-      static_position: static_position.to_physical(self.direction(), self.inline_size),
-    });
+    self.out_of_flow.push(OutOfFlowCandidate::new(
+      child,
+      static_position.to_physical(self.direction(), self.inline_size),
+    ));
   }
 
   /// Blink's `HandleFloat`.

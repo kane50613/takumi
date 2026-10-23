@@ -7,7 +7,7 @@
 use std::rc::Rc;
 
 use crate::{
-  geometry::NodeId,
+  geometry::{NodeId, Point},
   layout::{
     block_break_token::BlockBreakToken,
     break_appeal::BreakAppeal,
@@ -20,9 +20,10 @@ use crate::{
       join_fragmentainer_break_values,
     },
     inline::inline_break_token::InlineBreakToken,
-    layout_result::{BreakInfo, LayoutResult, LayoutStatus},
+    layout_result::{BreakInfo, FragmentedContainingBlock, LayoutResult, LayoutStatus},
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
+    out_of_flow::ContainingBlock,
   },
   layout_unit::LayoutUnit,
   style::{BoxDecorationBreak, BreakBetween, BreakInside},
@@ -188,6 +189,24 @@ impl BoxFragmentBuilder {
         child,
         is_forced_break,
       ))));
+  }
+
+  /// The fragment `fragment_index` of `node`, the box this builder builds with its padding box
+  /// `padding_box`, as the out-of-flow boxes it leaves to the fragmentation root see it.
+  pub(crate) fn fragmented_containing_block(
+    &self,
+    node: NodeId,
+    fragment_index: usize,
+    padding_box: ContainingBlock,
+  ) -> FragmentedContainingBlock {
+    FragmentedContainingBlock {
+      node,
+      fragment_index,
+      offset: Point::default(),
+      consumed_block_size: self.previously_consumed_block_size(),
+      padding_box,
+      is_inside_clipped_container: false,
+    }
   }
 
   /// Blink's `AddBreakToken`: a break before `node`, which the next fragment resumes at, with no
