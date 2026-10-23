@@ -14,7 +14,7 @@ use crate::{
   geometry::Rect,
   layout::{
     box_fragment_builder::BoxFragmentBuilder,
-    fragmentation_utils::setup_fragment_builder_for_fragmentation, logical_rect::LogicalBoxStrut,
+    fragmentation_utils::setup_fragment_builder_for_fragmentation,
   },
 };
 
@@ -27,7 +27,7 @@ use crate::{
     layout_result::{LayoutResult, OutOfFlowCandidate},
     layout_style::LayoutStyle,
     length_utils::{LengthResolver, inline_size_from_aspect_ratio},
-    logical_rect::LogicalSize,
+    logical_rect::{LogicalBoxStrut, LogicalSize},
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::ContainingBlock,
     table::{
@@ -762,8 +762,14 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
 
     if let Some(table_block_size) = self.css_block_size(grid_inline_size, captions_block_size) {
       minimal_grid_block_size = table_block_size;
-      let distributable = (table_block_size - self.border_padding.top - self.border_padding.bottom)
-        .clamp_negative_to_zero();
+      // The block size counts the cloned decorations of every fragment so far, as Blink's
+      // `ComputeRows` takes them off with the builder's `BorderPadding`.
+      let border_padding = self.border_padding_for_size(LogicalBoxStrut {
+        block_start: self.border_padding.top,
+        block_end: self.border_padding.bottom,
+        ..LogicalBoxStrut::default()
+      });
+      let distributable = (table_block_size - border_padding.block_sum()).clamp_negative_to_zero();
 
       if distributable > total_min_block_size {
         distribute_table_block_size_to_sections(
@@ -805,7 +811,10 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     }
 
     let style = &self.style;
-    let resolver = LengthResolver::new(space, style);
+    let mut resolver = LengthResolver::new(space, style);
+
+    resolver.border_padding = self.border_padding_for_size(resolver.border_padding);
+
     let min_length = style.min_size.height;
     // A definite intrinsic block size makes a resolvable `min-height` resolve.
     let intrinsic_block_size = (!min_length.is_auto()

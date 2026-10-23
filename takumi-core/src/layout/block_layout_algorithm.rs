@@ -665,7 +665,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
 
     let style = Rc::clone(&self.style);
-    let resolver = LengthResolver::new(space, &style);
+    let mut resolver = LengthResolver::new(space, &style);
+
+    resolver.border_padding = self.border_padding_for_size(resolver.border_padding);
+
     let stitched_intrinsic_block_size =
       self.previously_consumed_block_size() + self.intrinsic_block_size;
     let mut block_size = resolver
@@ -2161,6 +2164,10 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   fn is_resuming(&self) -> bool {
     false
+  }
+
+  fn border_padding_for_size(&self, border_padding: LogicalBoxStrut) -> LogicalBoxStrut {
+    border_padding
   }
 
   fn fragment_index(&self) -> usize {

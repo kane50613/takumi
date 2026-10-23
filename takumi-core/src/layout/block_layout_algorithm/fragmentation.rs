@@ -2,9 +2,7 @@
 //! [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc)
 //! and the parts of
 //! [`fragmentation_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/fragmentation_utils.cc)
-//! that read the fragment builder, for pages alone. Approximate: flex and grid boxes do not break,
-//! and `box-decoration-break: clone` sizes a box without the border and padding its earlier
-//! fragments repeat.
+//! that read the fragment builder, for pages alone. Approximate: flex and grid boxes do not break.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -596,6 +594,12 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     self
       .builder
       .should_include_block_end_border_padding(self.space.is_new_formatting_context)
+  }
+
+  /// Blink's `BorderPadding`: the box's `border_padding`, with the cloned decorations of every
+  /// fragment so far.
+  pub(super) fn border_padding_for_size(&self, border_padding: LogicalBoxStrut) -> LogicalBoxStrut {
+    self.builder.border_padding_for_size(border_padding)
   }
 
   /// Blink's `ConsumedBlockSize` of the incoming break token.

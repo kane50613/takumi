@@ -828,6 +828,18 @@ fn a_float_among_lines_that_avoids_breaking_moves_to_the_next_page_alone() {
 }
 
 #[test]
+fn a_box_that_clones_its_decorations_grows_by_those_of_each_fragment() {
+  let tree = render(
+    root([block("box", "clone")]),
+    ".clone { box-decoration-break: clone; box-sizing: content-box; padding: 20px 0; height: 300px }",
+  );
+  let (boxes, _) = pages(&tree, 200.0);
+
+  // The 300px content and the padding of both fragments make 380px.
+  assert_eq!(boxes["box"], [placed(0, 0.0, 200.0), placed(1, 0.0, 180.0)]);
+}
+
+#[test]
 fn a_fixed_box_repeats_on_the_pages_an_absolute_box_adds() {
   let body =
     Node::container([block("fixed", "fixed"), block("abs", "abs")]).with_class_name("block");
@@ -887,4 +899,26 @@ fn an_absolute_box_inside_a_clipping_table_adds_no_pages() {
   let (_, page_count) = nested_fragments(&tree, 200.0);
 
   assert_eq!(page_count, 1);
+}
+
+#[test]
+fn a_table_that_clones_its_decorations_leaves_them_out_of_its_rows() {
+  let tree = render(
+    root([table([("row", block("content", "h60"))]).with_class_name("table clone")]),
+    &format!(
+      "{TABLE_CSS} .clone {{ box-decoration-break: clone; box-sizing: content-box; padding: 20px 0; \
+       height: 300px }}"
+    ),
+  );
+  let (boxes, _) = pages(&tree, 200.0);
+
+  // The row takes the 300px content box alone, and each fragment repeats the 40px padding.
+  assert_eq!(
+    boxes["row"],
+    [placed(0, 20.0, 160.0), placed(1, 20.0, 140.0)]
+  );
+  assert_eq!(
+    boxes["table"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 180.0)]
+  );
 }
