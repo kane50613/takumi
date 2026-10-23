@@ -10,11 +10,10 @@ use crate::{
   geometry::NodeId,
   layout::{
     block_break_token::BlockBreakToken,
-    box_fragment_builder::BoxFragmentBuilder,
     break_appeal::BreakAppeal,
     constraint_space::BlockFragmentation,
     fragmentation_utils::{
-      FlexItemBreak, adjust_margins_for_fragmentation, is_break_inside, move_past_breakpoint,
+      adjust_margins_for_fragmentation, is_break_inside, move_past_breakpoint_without_builder,
     },
     inline::{inline_break_token::InlineBreakToken, inline_item_text_index::InlineItemTextIndex},
     layout_style::LayoutStyle,
@@ -491,9 +490,16 @@ fn position_fragmented_float<'c>(
         > fragmentation.fragmentainer_block_size
       && !is_break_inside(fragmentation.break_token.as_deref());
 
-    needs_break_before =
-      !move_past_float_breakpoint(fragmentation, &layout_result, fragmentainer_block_offset)
-        || overflows_page_end;
+    needs_break_before = !move_past_breakpoint_without_builder(
+      (
+        fragmentation.fragmentainer_block_size,
+        fragmentation.min_break_appeal,
+      ),
+      (fragmentation.node, &fragmentation.style),
+      &layout_result,
+      fragmentainer_block_offset,
+      BreakAppeal::Perfect,
+    ) || overflows_page_end;
   }
 
   let float_type = unpositioned_float.float_type();
@@ -540,41 +546,4 @@ fn position_fragmented_float<'c>(
       .then(|| Rc::new(BlockBreakToken::break_before(fragmentation.node, false))),
     layout_result,
   }
-}
-
-/// Blink's `MovePastBreakpoint` with no builder to update, for a float of `layout_result` at
-/// `fragmentainer_block_offset`.
-#[cfg(feature = "fragmentation")]
-fn move_past_float_breakpoint(
-  fragmentation: &FloatFragmentation,
-  layout_result: &LayoutResult,
-  fragmentainer_block_offset: LayoutUnit,
-) -> bool {
-  let mut space = ConstraintSpace::new(None, fragmentation.style.direction);
-
-  space.block_fragmentation = Some(BlockFragmentation {
-    fragmentainer_block_size: fragmentation.fragmentainer_block_size,
-    fragmentainer_offset: LayoutUnit::ZERO,
-    requires_content_before_breaking: false,
-    should_propagate_child_break_values: false,
-    min_break_appeal: fragmentation.min_break_appeal,
-    min_block_size_should_encompass_intrinsic_size: false,
-  });
-
-  let mut builder = BoxFragmentBuilder::new(
-    &space,
-    &fragmentation.style,
-    LogicalBoxStrut::default(),
-    None,
-  );
-
-  move_past_breakpoint(
-    &space,
-    &mut builder,
-    Some((fragmentation.node, &fragmentation.style)),
-    layout_result,
-    fragmentainer_block_offset,
-    BreakAppeal::Perfect,
-    &mut FlexItemBreak::default(),
-  )
 }

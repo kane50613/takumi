@@ -1,17 +1,34 @@
 //! Blink's [`GridLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_layout_algorithm.cc)
 //! and the [`grid_layout_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_layout_utils.cc)
-//! it runs, in a horizontal writing mode, without subgrid, `grid-lanes`, fragmentation, gap
-//! decorations, `reading-flow`, scrollbars, size containment, or `last baseline`. Every item lies
-//! parallel to its grid.
+//! it runs, in a horizontal writing mode, without subgrid, `grid-lanes`, gap decorations,
+//! `reading-flow`, scrollbars, size containment, or `last baseline`. Every item lies parallel to
+//! its grid.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
+#[cfg(feature = "fragmentation")]
+mod fragmentation;
+
 use std::rc::Rc;
+
+#[cfg(feature = "fragmentation")]
+pub(crate) use fragmentation::GridBreakTokenData;
+#[cfg(feature = "fragmentation")]
+use fragmentation::GridFragmentation;
+
+#[cfg(feature = "fragmentation")]
+use crate::layout::{
+  box_fragment_builder::BoxFragmentBuilder,
+  fragmentation_utils::setup_fragment_builder_for_fragmentation,
+};
+#[cfg(not(feature = "fragmentation"))]
+use crate::layout::{layout_result::LayoutStatus, out_of_flow::ContainingBlockClaims};
 
 use crate::{
   geometry::{NodeId, Point, Size},
   layout::{
     constraint_space::{CacheSlot, ConstraintSpace},
+    fragmentation_layout_input::FragmentationLayoutInput,
     grid::{
       grid_data::GridLayoutData,
       grid_item::{AxisEdge, GridItemData, GridItemIndices},
@@ -55,6 +72,7 @@ pub(crate) struct GridGeometry {
 }
 
 /// Blink's `GridSizingTree` for a grid without subgrids: its items and tracks.
+#[derive(Clone)]
 struct GridSizingTree {
   grid_items: Vec<GridItemData>,
   layout_data: GridLayoutData,
@@ -663,15 +681,22 @@ pub(crate) struct GridLayoutAlgorithm<'t, 'r> {
   grid_available_size: AvailableLogicalSize,
   grid_min_available_size: LogicalSize,
   grid_max_available_size: LogicalSize,
+  #[cfg(feature = "fragmentation")]
+  builder: BoxFragmentBuilder,
+  #[cfg(feature = "fragmentation")]
+  fragmentation: GridFragmentation,
 }
 
 impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
-  /// The algorithm for `node` in `space`, with an indefinite inline size when `is_intrinsic`.
+  /// The algorithm for `node` in `space`, resumed as `input` says, with an indefinite inline size
+  /// when `is_intrinsic`.
   pub(crate) fn new(
     tree: &'t mut LayoutTree<'r>,
     node: NodeId,
     space: &'t ConstraintSpace,
     is_intrinsic: bool,
+    #[cfg_attr(not(feature = "fragmentation"), expect(unused_variables))]
+    input: &FragmentationLayoutInput,
   ) -> Self {
     let style = Rc::clone(tree.layout_style_rc(node));
     let grid_style = style.grid.clone().unwrap_or_default();
@@ -729,6 +754,20 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       );
     }
 
+    #[cfg(feature = "fragmentation")]
+    let builder = {
+      let mut builder =
+        BoxFragmentBuilder::new(space, &style, border_padding, input.break_token.clone());
+
+      setup_fragment_builder_for_fragmentation(
+        space,
+        &style,
+        inline_size.unwrap_or_default(),
+        &mut builder,
+      );
+      builder
+    };
+
     Self {
       tree,
       node,
@@ -740,6 +779,10 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       grid_available_size,
       grid_min_available_size,
       grid_max_available_size,
+      #[cfg(feature = "fragmentation")]
+      builder,
+      #[cfg(feature = "fragmentation")]
+      fragmentation: GridFragmentation::new(input),
     }
   }
 
@@ -1477,6 +1520,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     let mut baseline_accumulator = GridBaselineAccumulator::default();
     let mut children = Vec::with_capacity(sizing_tree.grid_items.len());
 
+    self.reset_row_break_between(layout_data.rows.set_count());
     for item in &sizing_tree.grid_items {
       let (space, mut containing_grid_area) = self.space_for_layout(item, layout_data);
       let margins = margins_for(
@@ -1521,9 +1565,17 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         self.direction(),
         Some(containing_grid_area.size.inline_size.to_float()),
         Some(containing_grid_area.size.block_size.to_float()),
-      );
+      )
+      .map(LayoutUnit::from_float);
+
+      self.join_row_break_between(item, &result);
+      // A grid that breaks lays its items out on each page from where they sit here.
+      if self.keeps_placement(containing_grid_area.offset, relative_offset) {
+        continue;
+      }
+
       let location = self.physical_offset(containing_grid_area.offset, result.size.inline_size)
-        + relative_offset.map(LayoutUnit::from_float);
+        + relative_offset;
 
       baseline_accumulator.accumulate(item, &result, containing_grid_area.offset.block_offset);
       children.push(PlacedChild {
@@ -1557,13 +1609,19 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   }
 
   /// Blink's `PlaceOutOfFlowItems`: each out-of-flow child's static position, at the start,
-  /// center, or end of its grid area when the grid is its containing block.
+  /// center, or end of its grid area when the grid is its containing block, and the children a
+  /// later page places, past this one.
   fn place_out_of_flow_items(
     &self,
     sizing_tree: &GridSizingTree,
     block_size: LayoutUnit,
     out_of_flow_children: Vec<NodeId>,
-  ) -> Vec<OutOfFlowCandidate> {
+  ) -> (Vec<OutOfFlowCandidate>, Vec<NodeId>) {
+    let should_process_block_end = self.should_process_out_of_flow_block_end();
+    let previously_consumed_block_size = self.previously_consumed_block_size();
+    let capacity = self.fragmentainer_capacity_for_children();
+    let mut held = Vec::new();
+    let mut candidates = Vec::new();
     let inline_size = self.inline_size.unwrap_or_default();
     let claims = self.tree.claims(self.node);
     let border = LogicalBoxStrut::from_physical(
@@ -1592,61 +1650,90 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       row_start_offset: sizing_tree.row_start_offset,
     };
 
-    out_of_flow_children
-      .into_iter()
-      .map(|child| {
-        let mut item = GridItemData::new(
-          child,
-          Rc::clone(self.tree.layout_style_rc(child)),
-          &self.style,
-          self.tree.is_replaced(child),
-        );
-        let position = item.style.position;
-        let containing_block_rect = ((claims.absolute && position == Position::Absolute)
-          || (claims.fixed && position == Position::Fixed))
-          .then(|| {
-            compute_out_of_flow_item_containing_rect(
-              &placement_data,
-              &sizing_tree.layout_data,
-              padding_box_rect,
-              &mut item,
-            )
-          });
-        let mut static_position = LogicalStaticPosition {
-          offset: containing_block_rect.map_or(
-            LogicalOffset::new(
-              self.border_padding.inline_start,
-              self.border_padding.block_start,
-            ),
-            |rect| rect.offset,
+    for child in out_of_flow_children {
+      let mut item = GridItemData::new(
+        child,
+        Rc::clone(self.tree.layout_style_rc(child)),
+        &self.style,
+        self.tree.is_replaced(child),
+      );
+      let position = item.style.position;
+      let containing_block_rect = ((claims.absolute && position == Position::Absolute)
+        || (claims.fixed && position == Position::Fixed))
+        .then(|| {
+          compute_out_of_flow_item_containing_rect(
+            &placement_data,
+            &sizing_tree.layout_data,
+            padding_box_rect,
+            &mut item,
+          )
+        });
+      let mut static_position = LogicalStaticPosition {
+        offset: containing_block_rect.map_or(
+          LogicalOffset::new(
+            self.border_padding.inline_start,
+            self.border_padding.block_start,
           ),
-          ..LogicalStaticPosition::default()
-        };
+          |rect| rect.offset,
+        ),
+        ..LogicalStaticPosition::default()
+      };
 
-        alignment_offset_for_out_of_flow(
-          item.alignment(ForColumns),
-          item.alignment(ForRows),
-          containing_block_rect.map_or(default_containing_block_size, |rect| rect.size),
-          &mut static_position,
-        );
+      alignment_offset_for_out_of_flow(
+        item.alignment(ForColumns),
+        item.alignment(ForRows),
+        containing_block_rect.map_or(default_containing_block_size, |rect| rect.size),
+        &mut static_position,
+      );
+      static_position.offset.block_offset -= previously_consumed_block_size;
 
-        OutOfFlowCandidate::new(
-          child,
-          static_position.to_physical(self.direction(), inline_size),
-        )
-      })
-      .collect()
+      if !should_process_block_end && static_position.offset.block_offset > capacity {
+        held.push(child);
+        continue;
+      }
+      candidates.push(OutOfFlowCandidate::new(
+        child,
+        static_position.to_physical(self.direction(), inline_size),
+      ));
+    }
+    (candidates, held)
   }
 
   /// Blink's `Layout`.
   pub(crate) fn layout(mut self) -> LayoutResult {
-    let (sizing_tree, out_of_flow_children, intrinsic_block_size) = self.compute_grid_geometry();
-    let (children, baselines) = self.place_grid_items(&sizing_tree);
+    let (mut sizing_tree, out_of_flow_children, mut intrinsic_block_size) =
+      match self.resumed_sizing_tree() {
+        Some(resumed) => resumed,
+        None => self.compute_grid_geometry(),
+      };
+    let (children, baselines) = if self.is_resuming() {
+      (Vec::new(), GridBaselineAccumulator::default())
+    } else {
+      self.place_grid_items(&sizing_tree)
+    };
+    let (children, baselines) = self.place_grid_items_for_fragmentation(
+      &mut sizing_tree,
+      &mut intrinsic_block_size,
+      (children, baselines),
+    );
     let inline_size = self.inline_size.unwrap_or_default();
     let style = Rc::clone(&self.style);
-    let block_size = LengthResolver::new(self.space, &style)
+    let mut resolver = LengthResolver::new(self.space, &style);
+
+    resolver.border_padding = self.border_padding_for_size(resolver.border_padding);
+
+    let block_size = resolver
       .block_size_for_fragment(Some(intrinsic_block_size), Some(inline_size), None)
       .unwrap_or(intrinsic_block_size);
+    let fragment_block_size = match self.finish_fragmentation(block_size) {
+      Ok(fragment_block_size) => fragment_block_size,
+      Err(status) => {
+        let mut result = LayoutResult::new(LogicalSize::default());
+
+        result.status = status;
+        return result;
+      }
+    };
     let mut out_of_flow: Vec<OutOfFlowCandidate> = children
       .iter()
       .flat_map(|child| {
@@ -1657,17 +1744,15 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
           .map(|candidate| candidate.moved_by(child.location))
       })
       .collect();
+    let (candidates, held_out_of_flow) =
+      self.place_out_of_flow_items(&sizing_tree, block_size, out_of_flow_children);
 
-    out_of_flow.extend(self.place_out_of_flow_items(
-      &sizing_tree,
-      block_size,
-      out_of_flow_children,
-    ));
-
+    out_of_flow.extend(candidates);
     self.tree.node_state_mut(self.node).grid_geometry =
       Some(Rc::new(sizing_tree.geometry(self.direction(), inline_size)));
+    self.keep_break_token_data(sizing_tree, intrinsic_block_size, held_out_of_flow);
 
-    let size = LogicalSize::new(inline_size, block_size);
+    let size = LogicalSize::new(inline_size, fragment_block_size);
     let mut result = LayoutResult::of_box(size, &style, self.space);
 
     if !out_of_flow.is_empty() {
@@ -1680,26 +1765,36 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         style.border,
       );
 
-      out_of_flow =
+      out_of_flow = if self.defers_out_of_flow() {
+        self.defer_out_of_flow(claims, out_of_flow, containing_block)
+      } else {
         self
           .tree
-          .lay_out_out_of_flow(self.node, claims, out_of_flow, containing_block, self.space);
+          .lay_out_out_of_flow(self.node, claims, out_of_flow, containing_block, self.space)
+      };
     }
 
     if self.space.cache_slot == CacheSlot::Layout {
+      let fragment_index = self.fragment_index();
+
       for child in children {
-        self
-          .tree
-          .place_child(child.node, 0, 0, child.location, &child.result);
+        self.tree.place_child(
+          child.node,
+          child.result.fragment_index(),
+          fragment_index,
+          child.location,
+          &child.result,
+        );
       }
     }
 
-    result.intrinsic_block_size = intrinsic_block_size;
+    result.intrinsic_block_size = self.fragment_intrinsic_block_size(intrinsic_block_size);
     result.bfc_line_offset = self.space.bfc_offset.line_offset;
     result.bfc_block_offset = Some(self.space.bfc_offset.block_offset);
     result.first_baseline = baselines.first_baseline();
     result.last_baseline = baselines.last_baseline();
     result.out_of_flow = out_of_flow;
+    self.finish_break_info(&mut result);
     result
   }
 
@@ -1759,4 +1854,88 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       depends_on_block_constraints,
     )
   }
+}
+
+/// The block fragmentation hooks without the `fragmentation` feature, where nothing breaks.
+#[cfg(not(feature = "fragmentation"))]
+impl GridLayoutAlgorithm<'_, '_> {
+  fn is_resuming(&self) -> bool {
+    false
+  }
+
+  fn fragment_index(&self) -> usize {
+    0
+  }
+
+  fn border_padding_for_size(&self, border_padding: LogicalBoxStrut) -> LogicalBoxStrut {
+    border_padding
+  }
+
+  fn previously_consumed_block_size(&self) -> LayoutUnit {
+    LayoutUnit::ZERO
+  }
+
+  fn fragmentainer_capacity_for_children(&self) -> LayoutUnit {
+    LayoutUnit::MAX
+  }
+
+  fn should_process_out_of_flow_block_end(&self) -> bool {
+    true
+  }
+
+  fn resumed_sizing_tree(&mut self) -> Option<(GridSizingTree, Vec<NodeId>, LayoutUnit)> {
+    None
+  }
+
+  fn reset_row_break_between(&mut self, _set_count: usize) {}
+
+  fn join_row_break_between(&mut self, _item: &GridItemData, _result: &LayoutResult) {}
+
+  fn keeps_placement(
+    &mut self,
+    _offset: LogicalOffset,
+    _relative_offset: Point<LayoutUnit>,
+  ) -> bool {
+    false
+  }
+
+  fn place_grid_items_for_fragmentation(
+    &mut self,
+    _sizing_tree: &mut GridSizingTree,
+    _intrinsic_block_size: &mut LayoutUnit,
+    unfragmented: (Vec<PlacedChild>, GridBaselineAccumulator),
+  ) -> (Vec<PlacedChild>, GridBaselineAccumulator) {
+    unfragmented
+  }
+
+  fn finish_fragmentation(&mut self, block_size: LayoutUnit) -> Result<LayoutUnit, LayoutStatus> {
+    Ok(block_size)
+  }
+
+  fn fragment_intrinsic_block_size(&self, intrinsic_block_size: LayoutUnit) -> LayoutUnit {
+    intrinsic_block_size
+  }
+
+  fn keep_break_token_data(
+    &mut self,
+    _sizing_tree: GridSizingTree,
+    _intrinsic_block_size: LayoutUnit,
+    _out_of_flow_children: Vec<NodeId>,
+  ) {
+  }
+
+  fn defers_out_of_flow(&self) -> bool {
+    false
+  }
+
+  fn defer_out_of_flow(
+    &self,
+    _claims: ContainingBlockClaims,
+    candidates: Vec<OutOfFlowCandidate>,
+    _containing_block: ContainingBlock,
+  ) -> Vec<OutOfFlowCandidate> {
+    candidates
+  }
+
+  fn finish_break_info(&mut self, _result: &mut LayoutResult) {}
 }

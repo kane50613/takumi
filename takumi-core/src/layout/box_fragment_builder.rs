@@ -54,6 +54,9 @@ pub(crate) struct BoxFragmentBuilder {
   pub(crate) sequence_number: u32,
   pub(crate) is_at_block_end: bool,
   pub(crate) has_seen_all_children: bool,
+  /// Blink's `has_subsequent_children_`: a grid's items start on a later page, though it inserted
+  /// no break before them.
+  pub(crate) has_subsequent_children: bool,
   pub(crate) monolithic_overflow: LayoutUnit,
   pub(crate) is_known_to_fit_in_fragmentainer: bool,
   pub(crate) should_clone_box_end_decorations: bool,
@@ -109,6 +112,7 @@ impl BoxFragmentBuilder {
       sequence_number: 0,
       is_at_block_end: false,
       has_seen_all_children: false,
+      has_subsequent_children: false,
       monolithic_overflow: LayoutUnit::ZERO,
       is_known_to_fit_in_fragmentainer: false,
       should_clone_box_end_decorations: false,
@@ -380,6 +384,7 @@ impl BoxFragmentBuilder {
     self.has_inserted_child_break()
       || self.last_inline_break_token.is_some()
       || self.monolithic_overflow > LayoutUnit::ZERO
+      || self.has_subsequent_children
   }
 
   /// Blink's `ShouldBreak`.
