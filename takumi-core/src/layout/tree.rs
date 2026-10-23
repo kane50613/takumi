@@ -47,9 +47,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, LineHeight, ListStylePosition, MatchedStyleKey, Position,
-    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
-    StyleSheet, WhiteSpaceCollapse, apply_stylesheet_animations,
+    Direction, Display, Float, LineHeight, MatchedStyleKey, Position, Registrations, SizingContext,
+    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, WhiteSpaceCollapse,
+    apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -1685,19 +1685,12 @@ impl RenderNode {
     ))
   }
 
-  /// Blink positions an outside marker against the item's first line box, so the
-  /// marker goes on the box that establishes that line, however deep it sits. An
-  /// inside marker is the item's own content and stays on the item.
+  /// The marker is the item's first child, as Blink's `::marker` is. An outside marker beside
+  /// block content stays a child the item places against its first baseline, and an inside one
+  /// takes a line of its own.
   fn attach_marker(&mut self, marker: RenderNode) {
     if self.should_create_inline_layout() {
       self.insert_first_child(marker);
-      return;
-    }
-
-    if marker.context.style.inherited_data.list_style_position == ListStylePosition::Outside
-      && let Some(block) = self.marker_host_child()
-    {
-      block.attach_marker(marker);
       return;
     }
 
@@ -1714,7 +1707,12 @@ impl RenderNode {
       return;
     }
 
-    // Block-level content the marker may not join, so it gets a line of its own.
+    if marker.is_outside_list_marker() {
+      self.insert_first_child(marker);
+      return;
+    }
+
+    // Block-level content an inside marker may not join, so it gets a line of its own.
     let mut line = RenderNode::anonymous_block_container(&self.context, vec![marker]);
     line.force_inline_layout = true;
 
@@ -1742,34 +1740,6 @@ impl RenderNode {
     let children = self.children.as_deref().unwrap_or_default();
 
     &children[usize::from(self.marker().is_some())..]
-  }
-
-  /// The block box the marker travels into when this box has no line of its own.
-  fn marker_host_child(&mut self) -> Option<&mut RenderNode> {
-    let child = self
-      .children
-      .as_deref_mut()?
-      .iter_mut()
-      .find(|child| !child.is_out_of_flow())?;
-
-    child.hosts_marker_line().then_some(child)
-  }
-
-  fn hosts_marker_line(&self) -> bool {
-    self.context.style.base_data.display == Display::Block
-      && self.context.style.base_data.float == Float::None
-      && self.leads_to_a_line()
-  }
-
-  /// Whether this box, or the block chain below it, ends in a line the marker can share.
-  fn leads_to_a_line(&self) -> bool {
-    self.should_create_inline_layout()
-      || self.children.is_none()
-      || self
-        .children
-        .as_deref()
-        .and_then(|children| children.iter().find(|child| !child.is_out_of_flow()))
-        .is_some_and(RenderNode::hosts_marker_line)
   }
 
   fn is_anonymous_text_item(&self) -> bool {

@@ -719,7 +719,19 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   /// What the box's layout result tells its container about breaking.
   pub(super) fn break_info(&mut self) -> BreakInfo {
+    self.builder.has_unpositioned_list_marker = self.list_marker.is_some();
     self.builder.finish_break_info(self.node)
+  }
+
+  /// Whether the list item still has its outside marker to place: a fresh layout does, and a
+  /// resumed one when the page before broke before placing it.
+  pub(super) fn keeps_list_marker(&self) -> bool {
+    !self.is_resuming()
+      || self
+        .input
+        .break_token
+        .as_deref()
+        .is_some_and(|token| token.has_unpositioned_list_marker)
   }
 
   /// Blink's `HandleNonsuccessfulLayoutResult`: the layout again to break at the breakpoint it

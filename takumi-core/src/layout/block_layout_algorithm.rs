@@ -56,7 +56,7 @@ use crate::{
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
     out_of_flow::ContainingBlock,
     relative_utils::compute_relative_offset,
-    tree::LayoutTree,
+    tree::{LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
   style::{AlignItems, Direction, TextFitMode, TextFitTarget, TextWrapStyle},
@@ -298,6 +298,9 @@ pub(crate) struct BlockLayoutAlgorithm<'t, 'r> {
   last_baseline: Option<LayoutUnit>,
   children: Vec<PlacedChild>,
   out_of_flow: Vec<OutOfFlowCandidate>,
+  /// Blink's `UnpositionedListMarker` of a list item beside block content: its outside marker
+  /// child, yet to place beside the first child with a baseline.
+  list_marker: Option<NodeId>,
   /// Where this layout resumes the box, and where it has to break.
   input: FragmentationLayoutInput,
   #[cfg(feature = "fragmentation")]
@@ -360,6 +363,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       last_baseline: None,
       children: Vec::new(),
       out_of_flow: Vec::new(),
+      list_marker: None,
       input: input.clone(),
       #[cfg(feature = "fragmentation")]
       has_break_opportunity_before_next_child: false,
@@ -371,6 +375,14 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     #[cfg(feature = "fragmentation")]
     algorithm.setup_fragment_builder_for_fragmentation();
+    if !algorithm.tree.has_inline_children(node) && algorithm.keeps_list_marker() {
+      algorithm.list_marker = algorithm
+        .tree
+        .child_nodes(node)
+        .first()
+        .copied()
+        .filter(|&child| algorithm.tree.render_node(child).is_outside_list_marker());
+    }
     algorithm
   }
 
@@ -582,6 +594,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       let child_style = Rc::clone(self.tree.layout_style_rc(child));
 
       handled += 1;
+      // The item places its outside marker beside a child's baseline instead.
+      if self.tree.render_node(child).is_outside_list_marker() {
+        continue;
+      }
       if child_style.is_out_of_flow() {
         self.handle_out_of_flow_positioned(previous, child, &child_style);
       } else if child_style.is_floating() {
@@ -662,6 +678,13 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       end_margin_strut = MarginStrut::default();
     } else {
       self.intrinsic_block_size = self.intrinsic_block_size.max(previous.logical_block_offset);
+    }
+
+    // A marker with no baseline to sit beside goes at the top, unless a later page holds one.
+    if !self.has_inflow_child_break_inside()
+      && let Err(status) = self.position_list_marker_without_line_boxes(previous)
+    {
+      return self.abort(status);
     }
 
     let style = Rc::clone(&self.style);
@@ -1442,7 +1465,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       return Ok(());
     }
 
-    let offset = logical_from_bfc_offsets(
+    let mut offset = logical_from_bfc_offsets(
       child_bfc_offset,
       self.container_bfc_offset(),
       result.size.inline_size,
@@ -1450,6 +1473,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       self.direction(),
     );
 
+    self.position_list_marker_beside_child(&result, &mut offset, previous)?;
     self.propagate_baseline_from_block_child(child, &result, offset.block_offset);
     self.add_result(
       child,
@@ -1830,6 +1854,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     match (&mut child, line) {
       (InflowChild::Block(node, child_break_token), _) => {
+        self.position_list_marker_beside_child(&result, &mut offset, previous)?;
         self.propagate_baseline_from_block_child(*node, &result, offset.block_offset);
         self.add_result(
           *node,
@@ -1845,7 +1870,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
           child_bfc_block_offset.unwrap_or_else(|| self.bfc_block_offset_or_estimate());
 
         line.static_bfc_block_offset = line_box_bfc_block_offset;
-        self.position_or_propagate_list_marker(inline_child, &line, &mut offset.block_offset);
+        self.position_or_propagate_list_marker(inline_child, &mut line, &mut offset.block_offset);
         self.propagate_baseline_from_line_box(&line, offset.block_offset);
 
         // The line moves from the block formatting context into the content box.
@@ -2156,7 +2181,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   fn position_or_propagate_list_marker(
     &mut self,
     inline_child: &mut InlineChild<'_, 'r>,
-    line: &LineBoxFragment<'_, 'r>,
+    line: &mut LineBoxFragment<'_, 'r>,
     block_offset: &mut LayoutUnit,
   ) {
     if line.line_box_bfc_block_offset.is_none() {
@@ -2166,8 +2191,118 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let Some(marker) = inline_child.unpositioned_list_marker.take() else {
       return;
     };
+    let marker_block_offset = marker.add_to_box(line, block_offset, &mut self.box_atomic_inline());
 
-    marker.add_to_box(line, block_offset, &mut self.box_atomic_inline());
+    line.list_marker_intruded_float_offset =
+      self.list_marker_intruded_float_offset(marker.node, marker_block_offset);
+  }
+
+  /// Blink's `PositionOrPropagateListMarker` for a block child laid out as `result` at `offset`:
+  /// the item's outside marker goes beside the child's first baseline, and the child moves down
+  /// when the marker reaches higher.
+  fn position_list_marker_beside_child(
+    &mut self,
+    result: &LayoutResult,
+    offset: &mut LogicalOffset,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<(), LayoutStatus> {
+    let (Some(marker), Some(content_baseline)) = (self.list_marker, result.first_baseline) else {
+      return Ok(());
+    };
+
+    self.list_marker = None;
+    let mut atomic_inline = self.box_atomic_inline();
+    let marker_result = atomic_inline.lay_out_node(marker);
+    let line_result = atomic_inline.line_result(marker, &marker_result);
+
+    if self.bfc_block_offset.is_none() && !self.resolve_bfc_block_offset_here(previous) {
+      return Err(LayoutStatus::BfcBlockOffsetResolved);
+    }
+
+    let block_offset = UnpositionedListMarker::block_offset_beside(
+      &line_result,
+      content_baseline,
+      &mut offset.block_offset,
+    );
+    let render_node = self.tree.render_node(marker);
+    let inline_offset = UnpositionedListMarker { node: render_node }
+      .inline_offset(marker_result.size.inline_size)
+      + self.list_marker_intruded_float_offset(render_node, block_offset);
+
+    self.add_result(
+      marker,
+      marker_result,
+      LogicalOffset::new(inline_offset, block_offset),
+      0,
+    );
+    Ok(())
+  }
+
+  /// Blink's `PositionListMarkerWithoutLineBoxes`: an item without a baseline to align its outside
+  /// marker to takes it at its top, and grows to hold it.
+  fn position_list_marker_without_line_boxes(
+    &mut self,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<(), LayoutStatus> {
+    let Some(marker) = self.list_marker.take() else {
+      return Ok(());
+    };
+    let marker_result = self.box_atomic_inline().lay_out_node(marker);
+
+    if self.bfc_block_offset.is_none() && !self.resolve_bfc_block_offset_here(previous) {
+      return Err(LayoutStatus::BfcBlockOffsetResolved);
+    }
+
+    let marker_block_size = marker_result.size.block_size;
+    let inline_offset = UnpositionedListMarker {
+      node: self.tree.render_node(marker),
+    }
+    .inline_offset(marker_result.size.inline_size);
+
+    self.add_result(
+      marker,
+      marker_result,
+      LogicalOffset::new(inline_offset, LayoutUnit::ZERO),
+      0,
+    );
+    // Whether the marker grows the item is not well defined, but 3 out of 4 engines do,
+    // https://github.com/w3c/csswg-drafts/issues/2418.
+    if self.bfc_block_offset.is_some() {
+      self.intrinsic_block_size = self.intrinsic_block_size.max(marker_block_size);
+    }
+    Ok(())
+  }
+
+  /// Blink's `ComputeIntrudedFloatOffset`: how far the floats beside an outside marker at
+  /// `block_offset` push it in from the item's content edge.
+  fn list_marker_intruded_float_offset(
+    &self,
+    marker: &RenderNode,
+    block_offset: LayoutUnit,
+  ) -> LayoutUnit {
+    let Some(bfc_block_offset) = self.bfc_block_offset else {
+      return LayoutUnit::ZERO;
+    };
+    let origin = BfcOffset::new(
+      self.bfc_line_offset + self.border_padding.inline_start,
+      bfc_block_offset + block_offset,
+    );
+    let available_inline_size = self.child_available_inline_size();
+    let direction = marker.context.style.inherited_data.direction;
+    let opportunity = self.exclusion_space.find_layout_opportunity(
+      origin,
+      available_inline_size,
+      direction,
+      LayoutUnit::ZERO,
+    );
+
+    match direction {
+      Direction::Ltr => opportunity.rect.line_start_offset() - origin.line_offset,
+      Direction::Rtl => {
+        origin.line_offset + available_inline_size - opportunity.rect.line_end_offset()
+      }
+    }
+    .clamp_negative_to_zero()
   }
 
   /// Blink's `PropagateBaselineFromLineBox`.
@@ -2196,6 +2331,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 impl<'r> BlockLayoutAlgorithm<'_, 'r> {
   fn has_block_fragmentation(&self) -> bool {
     false
+  }
+
+  fn keeps_list_marker(&self) -> bool {
+    true
   }
 
   fn is_resuming(&self) -> bool {

@@ -1,10 +1,6 @@
 //! Blink's [`UnpositionedListMarker`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/list/unpositioned_list_marker.cc):
-//! an outside list marker, placed beside the first line box of the block whose inline content
-//! holds it. Approximate: Blink's list item places the marker from its own border box, while
-//! takumi's marker travels into the first block that holds a line, so a list item whose content
-//! sits in a nested block measures from that block instead and grows that block, not the item,
-//! to push the content down. It also skips `ComputeIntrudedFloatOffset` and
-//! `AddToBoxWithoutLineBoxes`, since takumi always gives the marker a line.
+//! an outside list marker, which its list item places beside the first line box of its inline
+//! content, or else the first child with a baseline.
 
 use super::{
   inline_item::InlineItemType,
@@ -45,7 +41,7 @@ impl<'c> UnpositionedListMarker<'c> {
   }
 
   /// Blink's `InlineOffset`: where the marker starts from its box's inline-start border edge.
-  fn inline_offset(self, marker_inline_size: LayoutUnit) -> LayoutUnit {
+  pub(crate) fn inline_offset(self, marker_inline_size: LayoutUnit) -> LayoutUnit {
     inline_margins_for_outside(&self.node.context, marker_inline_size).0
   }
 
@@ -60,23 +56,37 @@ impl<'c> UnpositionedListMarker<'c> {
       .find(|(_, line)| line.line_box_bfc_block_offset.is_some())
   }
 
-  /// Blink's `AddToBox` block offset: a marker whose ascent passes `line`'s pushes the line at
-  /// `block_offset`, and the content after it, down.
+  /// Blink's `AddToBox` block offset: where the marker laid out as `result` goes beside content
+  /// at `block_offset` whose baseline sits `content_baseline` below it. A marker whose ascent
+  /// passes the content's pushes the content, and what follows it, down.
+  pub(crate) fn block_offset_beside(
+    result: &LayoutResult,
+    content_baseline: LayoutUnit,
+    block_offset: &mut LayoutUnit,
+  ) -> LayoutUnit {
+    let marker_offset = *block_offset;
+    let baseline_adjust =
+      content_baseline - result.baseline_metrics(&LineBoxStrut::default()).ascent;
+
+    if baseline_adjust >= LayoutUnit::ZERO {
+      return marker_offset + baseline_adjust;
+    }
+    *block_offset -= baseline_adjust;
+    marker_offset
+  }
+
+  /// [`Self::block_offset_beside`] `line` at `block_offset`.
   pub(crate) fn add_to_box(
     self,
     line: &LineBoxFragment<'_, 'c>,
     block_offset: &mut LayoutUnit,
     atomic_inline: &mut dyn AtomicInlineLayout<'c>,
-  ) {
-    let marker_ascent = self
-      .layout(atomic_inline)
-      .baseline_metrics(&LineBoxStrut::default())
-      .ascent;
-    let baseline_adjust = line.metrics.ascent - marker_ascent;
-
-    if baseline_adjust < LayoutUnit::ZERO {
-      *block_offset -= baseline_adjust;
-    }
+  ) -> LayoutUnit {
+    Self::block_offset_beside(
+      &self.layout(atomic_inline),
+      line.metrics.ascent,
+      block_offset,
+    )
   }
 
   /// Blink's `AddToBox`: the marker's border box, laid out as `result`, beside `line` in the
@@ -90,7 +100,8 @@ impl<'c> UnpositionedListMarker<'c> {
   ) -> Point<f32> {
     let baseline = line.bfc_baseline().unwrap_or(LayoutUnit::ZERO);
     let marker_ascent = result.baseline_metrics(&LineBoxStrut::default()).ascent;
-    let inline_offset = self.inline_offset(result.inline_size).to_float();
+    let inline_offset =
+      (self.inline_offset(result.inline_size) + line.list_marker_intruded_float_offset).to_float();
     let border_box_x = match direction {
       Direction::Ltr => inline_offset,
       Direction::Rtl => layout.size.width - inline_offset - result.inline_size.to_float(),
