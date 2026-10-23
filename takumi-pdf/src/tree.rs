@@ -28,6 +28,7 @@ use crate::{
   inline::InlineCache,
   options::PdfError,
   page::PageFrame,
+  pagination::MAX_PAGES,
   window::Window,
 };
 
@@ -157,7 +158,7 @@ impl PreparedTree {
     root: RenderNode,
     page_size: Size<f32>,
   ) -> Result<(Self, usize), PdfError> {
-    let paged = PagedScene::lay_out(root, page_size, true)?;
+    let paged = PagedScene::lay_out(root, page_size, MAX_PAGES, true)?;
     let page_count = paged.page_count();
 
     Ok((

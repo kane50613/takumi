@@ -136,7 +136,10 @@ impl Error for PdfError {
 
 impl From<TakumiError> for PdfError {
   fn from(error: TakumiError) -> Self {
-    Self::Render(error)
+    match error {
+      TakumiError::TooManyPages(pages) => Self::TooManyPages(pages),
+      error => Self::Render(error),
+    }
   }
 }
 
@@ -1003,7 +1006,15 @@ pub struct MeasuredSize {
 
 #[cfg(test)]
 mod tests {
-  use super::PdfError;
+  use super::{PdfError, TakumiError};
+
+  #[test]
+  fn a_page_limit_from_layout_reads_as_too_many_pages() {
+    assert!(matches!(
+      PdfError::from(TakumiError::TooManyPages(20_000)),
+      PdfError::TooManyPages(20_000)
+    ));
+  }
 
   #[test]
   fn error_messages_read_as_sentences() {

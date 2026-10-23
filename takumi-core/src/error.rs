@@ -174,6 +174,10 @@ pub enum Error {
   #[error("Invalid layout node id: {0}")]
   InvalidLayoutNode(u64),
 
+  /// Paged layout needed more pages than the caller allows.
+  #[error("The content spans more than {0} pages")]
+  TooManyPages(usize),
+
   /// An invalid BCP-47 language tag was supplied to a node's `lang` attribute.
   #[error("Invalid language tag: {0}")]
   InvalidLanguageTag(String),

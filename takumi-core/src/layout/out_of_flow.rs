@@ -9,6 +9,8 @@
 use std::{mem::take, rc::Rc};
 
 #[cfg(feature = "fragmentation")]
+use crate::Error;
+#[cfg(feature = "fragmentation")]
 use crate::layout::{
   block_break_token::BlockBreakToken, break_appeal::BreakAppeal,
   constraint_space::BlockFragmentation, fragmentation_layout_input::FragmentationLayoutInput,
@@ -419,7 +421,7 @@ impl<'r> LayoutTree<'r> {
   /// entry of `root_fragments` each: every out-of-flow box the pages left to the root, laid out
   /// from the page its position is on and broken across the pages after it, which may add pages.
   /// A box breaks no further than the last page inside a container that clips it, and a fixed box
-  /// no box contains repeats on every page. Returns the page count.
+  /// no box contains repeats on every page. Returns the page count, at most `max_pages`.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn lay_out_fragmentainer_descendants(
     &mut self,
@@ -427,8 +429,9 @@ impl<'r> LayoutTree<'r> {
     page_size: Size<f32>,
     root_fragments: &[Option<(usize, Point<LayoutUnit>)>],
     mut page_count: usize,
+    max_pages: usize,
     space: &ConstraintSpace,
-  ) -> usize {
+  ) -> crate::Result<usize> {
     let page_block_size = LayoutUnit::from_float(page_size.height);
     // The first page's area is the initial containing block.
     let initial_containing_block = ContainingBlock {
@@ -491,6 +494,10 @@ impl<'r> LayoutTree<'r> {
       let mut break_token: Option<Rc<BlockBreakToken>> = None;
 
       loop {
+        if page >= max_pages {
+          return Err(Error::TooManyPages(max_pages));
+        }
+
         let mut fragment_space = generate_space.clone();
 
         if !(is_inside_clipped_container && page + 1 >= page_count) {
@@ -556,7 +563,7 @@ impl<'r> LayoutTree<'r> {
 
       self.repeat_fixed_on_pages(node, offset, &result, page_block_size, &pages);
     }
-    page_count
+    Ok(page_count)
   }
 
   /// The padding box of a containing block that laid out across pages, in the stacked pages'

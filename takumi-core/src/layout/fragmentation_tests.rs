@@ -3,6 +3,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
+  Error,
   context::RenderContext,
   fonts::shaping::testing::{GEIST, register},
   geometry::{NodeId, Point, Size},
@@ -117,7 +118,9 @@ fn pages(root: &RenderNode, page_height: f32) -> (BTreeMap<String, Vec<Placed>>,
       width: 300.0,
       height: page_height,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let containers: Vec<(usize, Point<f32>)> =
     (0..page_count).map(|page| (page, Point::ZERO)).collect();
   let mut boxes = BTreeMap::new();
@@ -240,6 +243,7 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
       width: 300.0,
       height: 200.0,
     },
+    usize::MAX,
     false,
   )
   .expect("pages lay out");
@@ -324,6 +328,42 @@ fn line_count(scene: &Scene, paint: &NodePaint) -> usize {
     .len()
 }
 
+/// Paged layout stops once the content needs more pages than its limit, in flow or out of it.
+#[test]
+fn paged_layout_stops_at_its_page_limit() {
+  let page = Size {
+    width: 300.0,
+    height: 200.0,
+  };
+  let breaks = render(
+    root([
+      block("a", "h100"),
+      block("b", "h100 page"),
+      block("c", "h100 page"),
+    ]),
+    ".h100 { height: 100px } .page { break-before: page }",
+  );
+  let far = render(
+    root([block("far", "far")]),
+    ".far { position: absolute; top: 1000px; height: 10px }",
+  );
+
+  assert_eq!(
+    LayoutResults::compute_pages(&breaks, page, 3)
+      .expect("three pages fit")
+      .1,
+    3
+  );
+  assert!(matches!(
+    LayoutResults::compute_pages(&breaks, page, 2),
+    Err(Error::TooManyPages(2))
+  ));
+  assert!(matches!(
+    LayoutResults::compute_pages(&far, page, 4),
+    Err(Error::TooManyPages(4))
+  ));
+}
+
 /// A flex item stretched past the page where its lines end lays out none on the later pages.
 #[test]
 fn lines_that_ended_stay_on_their_page_in_a_stretched_box() {
@@ -343,6 +383,7 @@ fn lines_that_ended_stay_on_their_page_in_a_stretched_box() {
       width: 300.0,
       height: 200.0,
     },
+    usize::MAX,
     false,
   )
   .expect("pages lay out");
@@ -369,7 +410,9 @@ fn a_sliced_box_leaves_its_border_out_where_it_breaks() {
       width: 300.0,
       height: 200.0,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let b = results.box_children(NodeId::ROOT).expect("children")[1].node_id;
   let fragments = results.fragments(b).expect("fragments");
 
@@ -410,7 +453,9 @@ fn a_later_page_keeps_the_out_of_flow_boxes_an_earlier_one_positioned() {
       width: 300.0,
       height: 192.0,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let body = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
   let abs = &results.box_children(body).expect("body children")[0];
 
@@ -643,7 +688,9 @@ fn nested_fragments(root: &RenderNode, page_height: f32) -> (Vec<(usize, f32, f3
       width: 300.0,
       height: page_height,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let parent = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
   let child = results.box_children(parent).expect("children")[0].node_id;
   let fragments = results
@@ -913,7 +960,9 @@ fn a_fixed_box_inside_a_repeated_fixed_box_repeats_too() {
       width: 300.0,
       height: 200.0,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let inner_fragments = (0..)
     .map_while(|index| results.fragments(NodeId::new(index)).ok())
     .find(|fragments| {

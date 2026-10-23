@@ -24,7 +24,7 @@ use crate::{
     surface::Surface,
   },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
-  pagination::{MAX_PAGES, PageSlice, Paginated},
+  pagination::{PageSlice, Paginated},
   paint::paint_page_background,
   tree::TreeInputs,
   window::{ContentWindow, Window},
@@ -223,9 +223,6 @@ impl PagePlan {
       }
     }
 
-    if paginated.starts.len() >= MAX_PAGES {
-      return Err(PdfError::TooManyPages(paginated.starts.len()));
-    }
     let selection = PageSelection::resolve(bands.page_ranges, paginated.starts.len())?;
     let repeatables = header
       .into_iter()

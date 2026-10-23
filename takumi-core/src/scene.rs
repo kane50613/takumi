@@ -866,10 +866,15 @@ pub struct PagedScene {
 
 #[cfg(feature = "fragmentation")]
 impl PagedScene {
-  /// Lays `root` out on pages `page_size` and builds the scene of them all.
-  pub fn lay_out(root: RenderNode, page_size: Size<f32>, paint_bounds: bool) -> Result<Self> {
+  /// Lays `root` out on at most `max_pages` pages `page_size` and builds the scene of them all.
+  pub fn lay_out(
+    root: RenderNode,
+    page_size: Size<f32>,
+    max_pages: usize,
+    paint_bounds: bool,
+  ) -> Result<Self> {
     root.clear_layout_caches();
-    let (results, page_count) = LayoutResults::compute_pages(&root, page_size);
+    let (results, page_count) = LayoutResults::compute_pages(&root, page_size, max_pages)?;
     // A page the root starts after holds none of it.
     let roots: Vec<(usize, Point<f32>)> = (0..page_count)
       .filter_map(|page| {
