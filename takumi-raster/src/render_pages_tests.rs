@@ -9,8 +9,13 @@ use std::{
 };
 
 use takumi_core::{
-  Fonts, geometry::Size, layout::node::Node, resources::font::FontResource, scene::PagedScene,
-  style::StyleSheet, viewport::Viewport,
+  Fonts,
+  geometry::Size,
+  layout::node::Node,
+  resources::font::FontResource,
+  scene::{PagedScene, SceneRef},
+  style::StyleSheet,
+  viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
 
@@ -66,11 +71,11 @@ fn whole_document(mut options: RenderOptions<'_>, page_size: Size<f32>) -> Resul
   let page_count = paged.page_count();
   let size = page_size.map(|length| length.round() as u32);
   let scene = paged.into_scene();
-  let mut paint = ScenePaint::of_scene(&scene, true);
+  let paint = ScenePaint::new(scene.view());
   let mut pages = Vec::new();
 
   for index in 0..page_count {
-    let origin = PagedScene::page_origin(page_size, index).map(|length| length.round() as i32);
+    let origin = SceneRef::page_origin(page_size, index).map(|length| length.round() as i32);
     let mut canvas = Canvas::try_new(size)
       .ok_or(Error::InvalidViewport)?
       .with_origin(origin);
@@ -99,7 +104,7 @@ fn next_page_laid(options: RenderOptions<'_>, page_size: Size<f32>) -> Result<Ve
     options,
     page_size,
     usize::MAX,
-    |layout| {
+    &|layout| {
       if layout.is_finished() {
         layout.page_count()
       } else {
@@ -527,7 +532,7 @@ fn laid_when_first_page_goes(source: &str) -> (usize, usize) {
     options(&fonts, &node, &stylesheet, PAGE_SIZE),
     PAGE_SIZE,
     usize::MAX,
-    |layout| {
+    &|layout| {
       laid.set(layout.page_count());
       layout.settled_pages()
     },

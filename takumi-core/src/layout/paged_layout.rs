@@ -26,16 +26,6 @@ use crate::{
   style::Direction,
 };
 
-/// One page [`PagedLayout::next_page`] laid out.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LaidPage {
-  /// The page's index.
-  pub index: usize,
-  /// The index of the root's fragment on the page, none when the root starts after the page's start
-  /// or ended on an earlier page.
-  pub root_fragment: Option<usize>,
-}
-
 /// A render tree laid out across pages `page_size` one page at a time: each page resumes where the
 /// one before broke, and its page area lays out the out-of-flow boxes the root left. The pages go
 /// on while the root or the page area has more to lay out.
@@ -82,11 +72,11 @@ impl<'r> PagedLayout<'r> {
     }
   }
 
-  /// Lays out the next page, or returns none when the last one has been laid out. Fails with
-  /// [`Error::TooManyPages`] when a page past `max_pages` is needed.
-  pub fn next_page(&mut self) -> Result<Option<LaidPage>> {
+  /// Lays out the next page and returns whether there was one, none being left once the last has
+  /// been laid out. Fails with [`Error::TooManyPages`] when a page past `max_pages` is needed.
+  pub fn next_page(&mut self) -> Result<bool> {
     if self.is_finished {
-      return Ok(None);
+      return Ok(false);
     }
     if self.page_count == self.max_pages {
       return Err(Error::TooManyPages(self.max_pages));
@@ -134,10 +124,7 @@ impl<'r> PagedLayout<'r> {
           self.break_token = Some(Rc::new(BlockBreakToken::break_before(NodeId::ROOT, false)));
           self.page_count += 1;
 
-          return Ok(Some(LaidPage {
-            index: page,
-            root_fragment: None,
-          }));
+          return Ok(true);
         }
 
         self.tree.place_child(
@@ -179,10 +166,7 @@ impl<'r> PagedLayout<'r> {
     self.is_finished = self.break_token.is_none() && !self.page_areas.resumes();
     self.update_pending();
 
-    Ok(Some(LaidPage {
-      index: page,
-      root_fragment: laid_root.then_some(root_fragment.0),
-    }))
+    Ok(true)
   }
 
   /// The layout so far, which later pages add to.

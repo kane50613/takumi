@@ -40,6 +40,9 @@ pub(crate) mod layout_unit;
 pub(crate) mod matching;
 /// Deterministic float math shared by the painting paths.
 pub mod math;
+/// A render tree laid out a page at a time, painted from the pages that settle.
+#[cfg(feature = "fragmentation")]
+pub mod page_stream;
 pub mod paint_chunk;
 pub mod paint_property;
 #[cfg(feature = "paint-tree")]

@@ -3,6 +3,8 @@
 //! independently.
 
 use rustc_hash::FxHashMap;
+#[cfg(feature = "fragmentation")]
+use rustc_hash::FxHashSet;
 
 use crate::{
   context::{BoxId, RenderContext},
@@ -27,10 +29,7 @@ use crate::{
 };
 #[cfg(feature = "fragmentation")]
 use std::collections::BTreeSet;
-use std::{
-  collections::{HashMap, HashSet},
-  rc::Rc,
-};
+use std::collections::HashMap;
 
 /// A node's resolved paint inputs.
 #[derive(Clone)]
@@ -369,25 +368,12 @@ pub struct SceneRequest<'a> {
 impl SceneRequest<'_> {
   /// Flattens the node tree into CSS-ordered stacking contexts for painting.
   pub fn build(self) -> Result<SceneLayers> {
-    self.build_fragments(&[(0, Point::ZERO)])
-  }
-
-  /// [`Self::build`] for each of the root's fragments `roots` names and the fragments they hold,
-  /// each at its paint offset. Each root fragment stacks its own content.
-  fn build_fragments(self, roots: &[(usize, Point<f32>)]) -> Result<SceneLayers> {
-    let SceneRequest {
-      root,
-      layout_results,
-      container_size,
-      paint_bounds,
-    } = self;
-
     build_layers(
-      root,
-      LayoutView::Final(layout_results),
-      container_size,
-      paint_bounds,
-      roots,
+      self.root,
+      self.layout_results.view(),
+      self.container_size,
+      self.paint_bounds,
+      &[(0, Point::ZERO)],
       #[cfg(feature = "fragmentation")]
       None,
     )
@@ -410,7 +396,7 @@ fn build_layers(
   root: &RenderNode,
   layout_results: LayoutView<'_>,
   container_size: Size<Option<f32>>,
-  with_bounds: bool,
+  paint_bounds: bool,
   roots: &[(usize, Point<f32>)],
   #[cfg(feature = "fragmentation")] mut trace: Option<&mut BuildTrace>,
 ) -> Result<SceneLayers> {
@@ -418,12 +404,11 @@ fn build_layers(
   let mut source_order = 0usize;
   let mut containing_blocks = ContainingBlocks::default();
   let mut properties = PropertyTrees::default();
-  let mut contents: HashMap<NodeId, ContainerContents> = HashMap::new();
-  let mut fragment_children: HashMap<NodeId, FragmentChildren> = HashMap::new();
+  let mut contents: FxHashMap<NodeId, ContainerContents> = FxHashMap::default();
+  let mut fragment_children: FxHashMap<NodeId, FragmentChildren> = FxHashMap::default();
   let mut hoisted = HoistedFragments::default();
-  // Each table with collapsed borders being visited: the context its boxes paint in, the
-  // visits left once its subtree is done, and its paint.
-  let mut collapsed_borders: Vec<(usize, usize, NodePaint)> = Vec::new();
+  // Each table with collapsed borders being visited: the context its boxes paint in, and its paint.
+  let mut collapsed_borders: AfterVisits<(usize, NodePaint)> = AfterVisits::default();
   // The first root fragment pops first, so its page paints first.
   let mut visits: Vec<StackingContextBuildVisit> = roots
     .iter()
@@ -450,14 +435,7 @@ fn build_layers(
 
   loop {
     // A table's collapsed borders follow every box inside it, once the last has been visited.
-    while collapsed_borders
-      .last()
-      .is_some_and(|(_, remaining, _)| visits.len() <= *remaining)
-    {
-      let Some((context_id, _, borders)) = collapsed_borders.pop() else {
-        break;
-      };
-
+    while let Some((context_id, borders)) = collapsed_borders.pop_done(visits.len()) {
       contexts[context_id].push_item(
         PaintBucket::InFlow,
         PaintItemKind::CollapsedBorders(borders),
@@ -561,7 +539,7 @@ fn build_layers(
       transform: current_transform,
       paint_offset: child_base.paint_offset,
       container_size: visit.container_size,
-      paint_bounds: with_bounds
+      paint_bounds: paint_bounds
         .then(|| {
           compute_node_paint_bounds(current, visit.fragment_index, layout, current_transform)
         })
@@ -639,7 +617,7 @@ fn build_layers(
     // out-of-flow boxes, atomic inlines, and floats inside that content, which paint as boxes
     // of their own.
     if let Some(borders) = table_borders {
-      collapsed_borders.push((context_id, visits.len(), borders));
+      collapsed_borders.push(visits.len(), (context_id, borders));
     }
 
     let layout_children = layout_results.box_children(visit.node_id)?;
@@ -672,20 +650,24 @@ fn build_layers(
       let container_fragment_index = hoisted_cb
         .and_then(|cb| contents.get(&cb))
         .map_or(visit.fragment_index, |container| container.fragment_index);
-      let mut child_path = visit.path.clone();
+      let child_path = || {
+        let mut path = visit.path.clone();
 
-      child.extend_path(&mut child_path);
+        child.extend_path(&mut path);
+        path
+      };
+
       #[cfg(feature = "fragmentation")]
       if let Some(trace) = trace.as_deref_mut()
         && root
-          .node_at_path(&child_path)
+          .node_at_path(&child_path())
           .is_some_and(|node| node.context.style.base_data.position.is_out_of_flow())
       {
         trace.out_of_flow.push((child.node_id, visit.node_id));
       }
 
       let child_visit = |fragment_index, base, container_size, clip| StackingContextBuildVisit {
-        path: child_path.clone(),
+        path: child_path(),
         node_id: child.node_id,
         fragment_index,
         base,
@@ -725,6 +707,7 @@ fn build_layers(
           clip,
         ));
       }
+      #[cfg(feature = "fragmentation")]
       if let Some(cb) = hoisted_cb
         && contents.contains_key(&cb)
       {
@@ -747,56 +730,15 @@ fn build_layers(
   }
   contexts.shrink_to_fit();
 
-  if !with_bounds {
-    return Ok(SceneLayers {
-      contexts,
-      properties,
-    });
-  }
-
-  // `None` means "unknown extent" and poisons the union; dropping it would
-  // under-report the context and clip or cull visible paint.
-  for context_id in (0..contexts.len()).rev() {
-    let mut paint_bounds = None;
-    let mut unknown = false;
-    for root in &contexts[context_id].roots {
-      match root.paint_bounds {
-        Some(bounds) => paint_bounds = merge_bounds(paint_bounds, Some(bounds)),
-        None => unknown = true,
-      }
-    }
-    for bucket in contexts[context_id].buckets.in_paint_order() {
-      for item in bucket {
-        let item_bounds = match &item.kind {
-          PaintItemKind::Node(node_paint) | PaintItemKind::CollapsedBorders(node_paint) => {
-            node_paint.paint_bounds
-          }
-          PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
-        };
-        match item_bounds {
-          Some(bounds) => paint_bounds = merge_bounds(paint_bounds, Some(bounds)),
-          None => unknown = true,
-        }
-      }
-    }
-    if let Some(root_paint) = contexts[context_id].roots.first()
-      && let Some(root_node) = root.node_at_path(&root_paint.path)
-    {
-      paint_bounds = outset_bounds(
-        paint_bounds,
-        filter_reach(&root_node.context),
-        root_paint.transform,
-      );
-    }
-    contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
-  }
-
-  set_effect_bounds(root, &contexts, &mut properties);
-
-  Ok(SceneLayers {
+  let mut layers = SceneLayers {
     contexts,
     properties,
-  })
+  };
+
+  if paint_bounds {
+    layers.set_bounds(root);
+  }
+  Ok(layers)
 }
 
 /// A scene's stacking contexts and the property trees their boxes paint under.
@@ -807,10 +749,56 @@ pub struct SceneLayers {
   pub properties: PropertyTrees,
 }
 
+impl SceneLayers {
+  /// Sets the bounds of every stacking context and effect, from those of the boxes under them.
+  fn set_bounds(&mut self, root: &RenderNode) {
+    // `None` means "unknown extent" and poisons the union; dropping it would
+    // under-report the context and clip or cull visible paint.
+    for context_id in (0..self.contexts.len()).rev() {
+      let mut paint_bounds = None;
+      let mut unknown = false;
+      for root in &self.contexts[context_id].roots {
+        match root.paint_bounds {
+          Some(bounds) => paint_bounds = merge_bounds(paint_bounds, Some(bounds)),
+          None => unknown = true,
+        }
+      }
+      for bucket in self.contexts[context_id].buckets.in_paint_order() {
+        for item in bucket {
+          let item_bounds = match &item.kind {
+            PaintItemKind::Node(node_paint) | PaintItemKind::CollapsedBorders(node_paint) => {
+              node_paint.paint_bounds
+            }
+            PaintItemKind::Context(child_context_id) => {
+              self.contexts[*child_context_id].paint_bounds
+            }
+          };
+          match item_bounds {
+            Some(bounds) => paint_bounds = merge_bounds(paint_bounds, Some(bounds)),
+            None => unknown = true,
+          }
+        }
+      }
+      if let Some(root_paint) = self.contexts[context_id].roots.first()
+        && let Some(root_node) = root.node_at_path(&root_paint.path)
+      {
+        paint_bounds = outset_bounds(
+          paint_bounds,
+          filter_reach(&root_node.context),
+          root_paint.transform,
+        );
+      }
+      self.contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
+    }
+
+    set_effect_bounds(root, &self.contexts, &mut self.properties);
+  }
+}
+
 /// A render tree laid out, with the stacking contexts that paint it.
 pub struct Scene {
-  /// The tree, behind an `Rc` so a layout borrowing it can share it with the scene.
-  pub root: Rc<RenderNode>,
+  /// The tree.
+  pub root: RenderNode,
   /// Its layout.
   pub results: LayoutResults,
   /// Its stacking contexts; the first is the synthetic root.
@@ -838,13 +826,13 @@ impl Scene {
     }
     .build()?;
 
-    Ok(Self::new(Rc::new(root), results, layers, size))
+    Ok(Self::new(root, results, layers, size))
   }
 
   /// The scene of `root` laid out as `results` and stacked as `layers`, its boxes' contexts set to
   /// their paint offsets.
   pub(crate) fn new(
-    root: Rc<RenderNode>,
+    root: RenderNode,
     results: LayoutResults,
     layers: SceneLayers,
     size: Size<f32>,
@@ -868,35 +856,107 @@ impl Scene {
 }
 
 impl Scene {
+  /// The scene as the painters read it.
+  pub fn view(&self) -> SceneView<'_> {
+    SceneView {
+      root: &self.root,
+      results: self.results.view(),
+      contexts: &self.contexts,
+      properties: &self.properties,
+      fragments: self.fragments.as_ref(),
+    }
+  }
+}
+
+/// A scene as the painters read it: the scene of a whole tree, or a window of a paged layout.
+#[derive(Clone, Copy)]
+pub struct SceneView<'a> {
+  /// The tree.
+  pub root: &'a RenderNode,
+  /// The layout.
+  pub results: LayoutView<'a>,
+  /// The stacking contexts; the first is the synthetic root.
+  pub contexts: &'a [StackingContextNode],
+  /// The clips and effects the boxes paint under.
+  pub properties: &'a PropertyTrees,
+  fragments: Option<&'a FragmentPlacements>,
+}
+
+impl SceneView<'_> {
   /// The layout of the fragment `paint` paints, with its box set to paint it.
   pub fn enter(&self, paint: &NodePaint) -> Result<ComputedLayout> {
     let layout = self
       .results
       .fragment_layout(paint.node_id, paint.fragment_index)?;
 
-    if let Some(fragments) = &self.fragments {
-      fragments.enter(&self.root, paint, layout.location);
+    if let Some(fragments) = self.fragments {
+      fragments.enter(self.root, paint, layout.location);
     }
     Ok(layout)
   }
+
+  /// Visits every node paint of the scene, in paint order.
+  pub fn for_each_paint(self, mut visit: impl FnMut(&NodePaint)) {
+    fn walk(view: SceneView<'_>, id: usize, visit: &mut impl FnMut(&NodePaint)) {
+      let Some(context) = view.contexts.get(id) else {
+        return;
+      };
+
+      for paint in context.roots() {
+        visit(paint);
+      }
+      for bucket in context.in_paint_order() {
+        for item in bucket {
+          match &item.kind {
+            PaintItemKind::Node(paint) => visit(paint),
+            PaintItemKind::Context(child) => walk(view, *child, visit),
+            PaintItemKind::CollapsedBorders(_) => {}
+          }
+        }
+      }
+    }
+
+    walk(self, 0, &mut visit);
+  }
 }
 
-/// The fragments of hoisted boxes a scene visits once each. A box Blink's `FragmentedOofInCb`
-/// breaks or pushes past its parent's end lands in a fragment of its containing block that the
-/// parent may not reach: the parent defers it to that fragment, which visits it once its own
-/// boxes are done unless the parent reached it after all.
+/// What to release once the visits left fall back to the count recorded with it.
+struct AfterVisits<T>(Vec<(usize, T)>);
+
+impl<T> AfterVisits<T> {
+  fn push(&mut self, visits_left: usize, item: T) {
+    self.0.push((visits_left, item));
+  }
+
+  /// The innermost item whose visits are done with `visits_len` visits left.
+  fn pop_done(&mut self, visits_len: usize) -> Option<T> {
+    if self.0.last()?.0 < visits_len {
+      return None;
+    }
+    self.0.pop().map(|(_, item)| item)
+  }
+}
+
+impl<T> Default for AfterVisits<T> {
+  fn default() -> Self {
+    Self(Vec::new())
+  }
+}
+
+/// The fragments of hoisted boxes a scene visits once each, as Blink's `FragmentedOofInCb` places
+/// them: one that lands in a fragment of its containing block that its parent does not reach is
+/// visited from that fragment instead.
+#[cfg(feature = "fragmentation")]
 #[derive(Default)]
 struct HoistedFragments {
-  /// By containing block fragment, the visits its hoisted fragments take there, of the parent's
-  /// state but for the containing block's placement and clip.
-  deferred: HashMap<(NodeId, usize), Vec<StackingContextBuildVisit>>,
-  /// The hoisted fragments a visit holds.
-  claimed: HashSet<(NodeId, usize)>,
-  /// The containing block fragments with deferred visits being visited, with the visits left
-  /// once their boxes are done.
-  entered: Vec<((NodeId, usize), usize)>,
+  /// By containing block fragment, the visits its hoisted fragments take there.
+  deferred: FxHashMap<(NodeId, usize), Vec<StackingContextBuildVisit>>,
+  claimed: FxHashSet<(NodeId, usize)>,
+  /// The containing block fragments with deferred visits being visited.
+  entered: AfterVisits<(NodeId, usize)>,
 }
 
+#[cfg(feature = "fragmentation")]
 impl HoistedFragments {
   /// Whether the fragment `fragment_index` of `node` is still to visit, which it then no longer is.
   fn claim(&mut self, node: NodeId, fragment_index: usize) -> bool {
@@ -908,27 +968,38 @@ impl HoistedFragments {
     self.deferred.entry(container).or_default().push(visit);
   }
 
-  /// Records that the fragment `container` is visited, `remaining` visits left before its boxes.
-  fn enter(&mut self, container: (NodeId, usize), remaining: usize) {
+  /// Records that the fragment `container` is visited, `visits_left` visits left before its boxes.
+  fn enter(&mut self, container: (NodeId, usize), visits_left: usize) {
     if self.deferred.contains_key(&container) {
-      self.entered.push((container, remaining));
+      self.entered.push(visits_left, container);
     }
   }
 
-  /// The containing block, and the visits deferred to its fragment whose boxes are done with
-  /// `remaining` visits left, that no parent claimed.
-  fn finished(&mut self, remaining: usize) -> Option<(NodeId, Vec<StackingContextBuildVisit>)> {
-    let &(container, entered) = self.entered.last()?;
-
-    if remaining > entered {
-      return None;
-    }
-    self.entered.pop();
-
+  /// The containing block whose boxes are done with `visits_len` visits left, and the visits
+  /// deferred to its fragment that no parent claimed.
+  fn finished(&mut self, visits_len: usize) -> Option<(NodeId, Vec<StackingContextBuildVisit>)> {
+    let container = self.entered.pop_done(visits_len)?;
     let mut deferred = self.deferred.remove(&container).unwrap_or_default();
 
     deferred.retain(|visit| self.claimed.insert((visit.node_id, visit.fragment_index)));
     Some((container.0, deferred))
+  }
+}
+
+#[cfg(not(feature = "fragmentation"))]
+#[derive(Default)]
+struct HoistedFragments;
+
+#[cfg(not(feature = "fragmentation"))]
+impl HoistedFragments {
+  fn claim(&mut self, _node: NodeId, _fragment_index: usize) -> bool {
+    true
+  }
+
+  fn enter(&mut self, _container: (NodeId, usize), _visits_left: usize) {}
+
+  fn finished(&mut self, _visits_len: usize) -> Option<(NodeId, Vec<StackingContextBuildVisit>)> {
+    None
   }
 }
 
@@ -1088,10 +1159,7 @@ impl SceneLayers {
   }
 }
 
-/// A render tree laid out across pages, as Blink's paginated root lays a document out: one scene
-/// of every page's fragments stacked in page order, which paints a page by painting its area of
-/// it. Content overflowing its page paints on the next or the one before, as Blink paints each
-/// page from every fragment that reaches into it.
+/// The scene of every page stacked, which the windows of [`SceneRef`] are checked against.
 #[cfg(feature = "fragmentation")]
 pub struct PagedScene {
   scene: Scene,
@@ -1115,28 +1183,20 @@ impl PagedScene {
       page_size,
       &(0..page_count).collect::<Vec<_>>(),
     );
-    let layers = SceneRequest {
-      root: &root,
-      layout_results: &results,
-      container_size: page_size.map(Some),
+    let layers = build_layers(
+      &root,
+      results.view(),
+      page_size.map(Some),
       paint_bounds,
-    }
-    .build_fragments(&roots)?;
+      &roots,
+      None,
+    )?;
     let fragments =
       FragmentPlacements::new(&root, results.view(), &layers.placements(results.view()));
-    let mut scene = Scene::new(Rc::new(root), results, layers, page_size);
+    let mut scene = Scene::new(root, results, layers, page_size);
 
     scene.fragments = Some(fragments);
     Ok(Self { scene, page_count })
-  }
-
-  /// Where page `page` starts in the scene of pages `page_size`: the pages stack in the block
-  /// direction.
-  pub fn page_origin(page_size: Size<f32>, page: usize) -> Point<f32> {
-    Point {
-      x: 0.0,
-      y: page_size.height * page as f32,
-    }
   }
 
   /// The number of pages.
@@ -1162,14 +1222,21 @@ pub struct SceneRef<'a> {
   pub contexts: Vec<StackingContextNode>,
   /// The clips and effects its boxes paint under.
   pub properties: PropertyTrees,
-  /// The size of a page.
-  pub size: Size<f32>,
   /// The boxes it paints more than one fragment of, set up before each paints.
-  pub fragments: FragmentPlacements,
+  fragments: FragmentPlacements,
 }
 
 #[cfg(feature = "fragmentation")]
 impl<'a> SceneRef<'a> {
+  /// Where page `page` starts in the scene of pages `page_size`: the pages stack in the block
+  /// direction.
+  pub fn page_origin(page_size: Size<f32>, page: usize) -> Point<f32> {
+    Point {
+      x: 0.0,
+      y: page_size.height * page as f32,
+    }
+  }
+
   /// The scene of the root's fragments on `pages`, in the order given, which stack as in
   /// [`PagedScene`]. A page the root has no fragment on adds nothing. Its chunks that reach a page
   /// are those [`PagedScene`]'s do, provided `pages` holds every page [`PageWindows`] names for it.
@@ -1210,19 +1277,19 @@ impl<'a> SceneRef<'a> {
       results: layout,
       contexts,
       properties,
-      size: page_size,
       fragments,
     })
   }
 
-  /// The layout of the fragment `paint` paints, with its box set to paint it.
-  pub fn enter(&self, paint: &NodePaint) -> Result<ComputedLayout> {
-    let layout = self
-      .results
-      .fragment_layout(paint.node_id, paint.fragment_index)?;
-
-    self.fragments.enter(self.root, paint, layout.location);
-    Ok(layout)
+  /// The scene as the painters read it.
+  pub fn view(&self) -> SceneView<'_> {
+    SceneView {
+      root: self.root,
+      results: self.results,
+      contexts: &self.contexts,
+      properties: &self.properties,
+      fragments: Some(&self.fragments),
+    }
   }
 }
 
@@ -1238,7 +1305,7 @@ fn page_roots(
     .filter_map(|&page| {
       layout
         .fragment_in(NodeId::ROOT, page)
-        .map(|fragment_index| (fragment_index, PagedScene::page_origin(page_size, page)))
+        .map(|fragment_index| (fragment_index, SceneRef::page_origin(page_size, page)))
     })
     .collect()
 }
@@ -1380,7 +1447,7 @@ impl PageWindows {
 
   /// Measures how far the next page's root fragment paints, from `layout`, which has laid out that
   /// page and every page before it.
-  pub fn add_page(&mut self, root: &RenderNode, layout: LayoutView<'_>) -> Result<()> {
+  fn add_page(&mut self, root: &RenderNode, layout: LayoutView<'_>) -> Result<()> {
     let page = self.reaches.len();
     let mut trace = BuildTrace::default();
     let layers = build_layers(
@@ -1416,7 +1483,7 @@ impl PageWindows {
     self.needs.push(needs);
 
     if !self.needs[page].is_empty() {
-      let pages = self.with_needs([page]);
+      let pages = self.pages_of(page);
 
       reach = reach.union(
         build_layers(
@@ -1432,26 +1499,6 @@ impl PageWindows {
     }
     self.reaches.push(reach);
     Ok(())
-  }
-
-  /// How many of the first pages have every root fragment that paints on them added, so far as the
-  /// pages added can tell: a page laid out later is taken to reach back no farther than the ones
-  /// before it did, and at least a pixel, so the last page added is never one of them. Pass them to
-  /// [`Self::pages_reaching`] once the layout also says they are final, or when it is finished.
-  pub fn complete_pages(&self) -> usize {
-    let reach_back = self
-      .reaches
-      .iter()
-      .enumerate()
-      .map(|(page, reach)| match reach {
-        PageReach::Empty => 0.0,
-        PageReach::Span { top, .. } => (self.page_size.height * page as f32 - *top as f32).max(0.0),
-        PageReach::Unbounded => f32::INFINITY,
-      })
-      .fold(1.0, f32::max);
-    let pages = self.reaches.len() as f32 - reach_back / self.page_size.height;
-
-    pages.floor().max(0.0) as usize
   }
 
   /// The pages, in order, whose root fragments a scene needs to paint page `page` as the scene of

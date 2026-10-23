@@ -87,7 +87,7 @@ fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
   let mut emitted = 0;
 
   loop {
-    let stepped = layout.next_page().expect("page lays out").is_some();
+    let stepped = layout.next_page().expect("page lays out");
 
     windows
       .refresh(
@@ -98,11 +98,7 @@ fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
       )
       .expect("pages refresh");
 
-    let ready = if layout.is_finished() {
-      layout.page_count()
-    } else {
-      layout.finalized_pages().min(windows.complete_pages())
-    };
+    let ready = layout.settled_pages();
 
     for page in emitted..ready {
       let pages = windows.pages_reaching(page);

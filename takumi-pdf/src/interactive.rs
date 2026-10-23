@@ -12,7 +12,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
   layout::{layout_view::LayoutView, node::Node, tree::RenderNode},
   painter::OwnContent,
-  scene::{NodePaint, PageWindows, SceneRef},
+  scene::{NodePaint, PageWindows, SceneRef, SceneView},
   style::{Affine, Position},
 };
 
@@ -28,7 +28,7 @@ use crate::{
   },
   options::{PT_PER_PX, PdfError},
   tags::{TagCollector, tag_id, text_content},
-  tree::{PreparedTree, SceneView},
+  tree::PreparedTree,
 };
 
 /// A hyperlink box in content coordinates.
@@ -196,7 +196,7 @@ impl PageSummary {
   ) -> Result<Self, PdfError> {
     let scene = SceneRef::window(root, layout, page_size, pages, false)?;
 
-    Ok(Self::collect(SceneView::of_window(&scene), extents))
+    Ok(Self::collect(scene.view(), extents))
   }
 
   /// The summary of a laid-out document of `pages` pages: those of its pages, in page order.

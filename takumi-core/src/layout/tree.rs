@@ -253,7 +253,7 @@ impl LayoutResults {
   ) -> crate::Result<(Self, usize)> {
     let mut layout = PagedLayout::new(root, page_size, max_pages);
 
-    while layout.next_page()?.is_some() {}
+    while layout.next_page()? {}
 
     let page_count = layout.page_count();
 

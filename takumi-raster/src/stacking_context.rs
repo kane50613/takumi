@@ -1,12 +1,9 @@
-#[cfg(feature = "pages")]
-use takumi_core::scene::SceneRef;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
-  layout::layout_view::LayoutView,
-  paint_chunk::{ChunkPart, ConversionContext, HeightIndex, PaintChunk, PropertySink},
-  paint_property::{ClipId, ClipNode, EffectId, EffectNode, PropertyTrees},
+  paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
+  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{TableDecorations, TextClip, paint_collapsed_borders},
-  scene::{FragmentPlacements, NodePaint, Scene, SceneBounds, StackingContextNode},
+  scene::{NodePaint, Scene, SceneBounds, SceneView},
 };
 use tiny_skia::PixmapMut;
 
@@ -22,91 +19,34 @@ use crate::{
 
 /// Paints `scene` onto `canvas` chunk by chunk, entering each chunk's clips and effects.
 pub(crate) fn paint_scene(scene: &Scene, canvas: &mut Canvas) -> Result<()> {
-  ScenePaint::of_scene(scene, false).paint(canvas)
+  ScenePaint::new(scene.view()).paint(canvas)
 }
 
-/// A scene's paint chunks in paint order and the boxes owning its effects, resolved once for every
-/// canvas painted from them. Each page of a paged scene paints only the chunks reaching it, as
-/// Blink paints a page through a cull rect.
+/// A scene's paint chunks in paint order and the boxes owning its effects.
 pub(crate) struct ScenePaint<'s> {
-  root: &'s RenderNode,
-  results: LayoutView<'s>,
-  fragments: Option<&'s FragmentPlacements>,
-  properties: &'s PropertyTrees,
+  scene: SceneView<'s>,
   chunks: Vec<PaintChunk<'s>>,
   owners: Vec<Option<&'s NodePaint>>,
-  index: Option<HeightIndex>,
 }
 
 impl<'s> ScenePaint<'s> {
-  /// The chunks of `scene`, indexed by the height they reach when many canvases paint parts of it.
-  pub(crate) fn of_scene(scene: &'s Scene, indexed: bool) -> Self {
-    Self::new(
-      &scene.root,
-      scene.results.view(),
-      scene.fragments.as_ref(),
-      &scene.contexts,
-      &scene.properties,
-      indexed,
-    )
-  }
-
-  /// The chunks of `scene`, a window of a paged layout.
-  #[cfg(feature = "pages")]
-  pub(crate) fn of_window(scene: &'s SceneRef<'s>, indexed: bool) -> Self {
-    Self::new(
-      scene.root,
-      scene.results,
-      Some(&scene.fragments),
-      &scene.contexts,
-      &scene.properties,
-      indexed,
-    )
-  }
-
-  fn new(
-    root: &'s RenderNode,
-    results: LayoutView<'s>,
-    fragments: Option<&'s FragmentPlacements>,
-    contexts: &'s [StackingContextNode],
-    properties: &'s PropertyTrees,
-    indexed: bool,
-  ) -> Self {
-    let chunks = PaintChunk::in_paint_order(contexts);
-    let owners = PaintChunk::effect_owners(&chunks, properties);
-    let index = indexed.then(|| {
-      HeightIndex::new(
-        &chunks
-          .iter()
-          .map(|chunk| chunk.node.paint_bounds)
-          .collect::<Vec<_>>(),
-      )
-    });
+  pub(crate) fn new(scene: SceneView<'s>) -> Self {
+    let chunks = PaintChunk::in_paint_order(scene.contexts);
+    let owners = PaintChunk::effect_owners(&chunks, scene.properties);
 
     Self {
-      root,
-      results,
-      fragments,
-      properties,
+      scene,
       chunks,
       owners,
-      index,
     }
   }
 
   /// Paints the chunks reaching `canvas`'s viewport.
-  pub(crate) fn paint(&mut self, canvas: &mut Canvas) -> Result<()> {
-    let viewport = canvas.viewport();
-    let indices = match &self.index {
-      Some(index) => index.candidates(viewport.origin.y as f32, viewport.bottom() as f32),
-      None => (0..self.chunks.len()).collect(),
-    };
+  pub(crate) fn paint(&self, canvas: &mut Canvas) -> Result<()> {
     let mut conversion = ConversionContext::new(
-      self.properties,
+      self.scene.properties,
       ScenePainter {
-        root: self.root,
-        results: self.results,
-        fragments: self.fragments,
+        scene: self.scene,
         canvas,
         owners: &self.owners,
         effects: Vec::new(),
@@ -114,9 +54,7 @@ impl<'s> ScenePaint<'s> {
       },
     );
 
-    for index in indices {
-      let chunk = &self.chunks[index];
-
+    for chunk in &self.chunks {
       conversion.switch_to(chunk.state());
       conversion.sink().paint(chunk);
     }
@@ -140,9 +78,7 @@ struct OpenEffect {
 
 /// Paints chunks and enters their clips and effects on one canvas.
 struct ScenePainter<'s, 'c> {
-  root: &'s RenderNode,
-  results: LayoutView<'s>,
-  fragments: Option<&'s FragmentPlacements>,
+  scene: SceneView<'s>,
   canvas: &'c mut Canvas,
   owners: &'c [Option<&'s NodePaint>],
   effects: Vec<OpenEffect>,
@@ -161,7 +97,7 @@ impl ScenePainter<'_, '_> {
       return;
     }
 
-    let result = placed(self.root, self.results, self.fragments, chunk.node)
+    let result = placed(self.scene, chunk.node)
       .and_then(|(node, layout, context)| self.paint_part(chunk, node, &context, layout));
 
     self.record(result);
@@ -175,15 +111,15 @@ impl ScenePainter<'_, '_> {
     context: &RenderContext,
     layout: Layout,
   ) -> Result<()> {
-    let root = self.root;
+    let SceneView { root, results, .. } = self.scene;
     let canvas = &mut *self.canvas;
 
     match chunk.part {
       ChunkPart::Decorations if node.paints_own_box() => {
-        let text_clip = TextClip::of(root, self.results, chunk.node, context)?;
+        let text_clip = TextClip::of(root, results, chunk.node, context)?;
         let table = TableDecorations::of(
           root,
-          self.results,
+          results,
           &chunk.node.path,
           chunk.node.node_id,
           chunk.node.fragment_index,
@@ -196,7 +132,7 @@ impl ScenePainter<'_, '_> {
 
         CanvasDevice::paint(canvas, context, |device| {
           result = paint_collapsed_borders(
-            self.results,
+            results,
             chunk.node.node_id,
             chunk.node.fragment_index,
             chunk.node.paint_offset,
@@ -225,7 +161,7 @@ impl ScenePainter<'_, '_> {
   /// `clip-path` and `mask-image` masks.
   fn open_effect(&mut self, paint: &NodePaint, effect: &EffectNode) -> Result<OpenEffect> {
     // The masks read the owner's paint offset, which differs between its fragments.
-    let (_, layout, context) = placed(self.root, self.results, self.fragments, paint)?;
+    let (_, layout, context) = placed(self.scene, paint)?;
     let canvas = &mut *self.canvas;
     let style = &context.style;
 
@@ -355,24 +291,16 @@ impl PropertySink for ScenePainter<'_, '_> {
   }
 }
 
-/// The box `paint` names in `root`, its layout, and its context set to paint where the scene
-/// placed it, after entering the fragment `paint` names. The tree stays as it was, as pages still
-/// to lay out read it.
+/// The box `paint` names in `scene`, its layout, and its context set to paint where the scene
+/// placed it. The tree stays as it was, as pages still to lay out read it.
 fn placed<'r>(
-  root: &'r RenderNode,
-  results: LayoutView<'_>,
-  fragments: Option<&FragmentPlacements>,
+  scene: SceneView<'r>,
   paint: &NodePaint,
 ) -> Result<(&'r RenderNode, Layout, RenderContext)> {
-  let Some(node) = root.node_at_path(&paint.path) else {
+  let Some(node) = scene.root.node_at_path(&paint.path) else {
     return Err(Error::InvalidLayoutNode(paint.node_id.into()));
   };
-  let layout = results.fragment_layout(paint.node_id, paint.fragment_index)?;
-
-  if let Some(fragments) = fragments {
-    fragments.enter(root, paint, layout.location);
-  }
-
+  let layout = scene.enter(paint)?;
   let mut context = node.context.clone();
 
   context

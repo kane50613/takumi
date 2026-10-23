@@ -318,7 +318,7 @@ fn paints_of(scene: &Scene, id: &str) -> Vec<NodePaint> {
 
 /// The number of lines in the fragment `paint` paints.
 fn line_count(scene: &Scene, paint: &NodePaint) -> usize {
-  let layout = scene.enter(paint).expect("fragment layout");
+  let layout = scene.view().enter(paint).expect("fragment layout");
 
   scene
     .root
@@ -366,8 +366,8 @@ fn paged_layout_stops_at_its_page_limit() {
 
   let mut stepped = PagedLayout::new(&breaks, page, 2);
 
-  assert!(stepped.next_page().expect("first page").is_some());
-  assert!(stepped.next_page().expect("second page").is_some());
+  assert!(stepped.next_page().expect("first page"));
+  assert!(stepped.next_page().expect("second page"));
   assert!(matches!(stepped.next_page(), Err(Error::TooManyPages(2))));
 }
 
@@ -1490,7 +1490,7 @@ fn finalized_after_each_page(root: &RenderNode, page_height: f32) -> Vec<usize> 
   let mut layout = PagedLayout::new(root, page_size, usize::MAX);
   let mut finalized = Vec::new();
 
-  while layout.next_page().expect("page lays out").is_some() {
+  while layout.next_page().expect("page lays out") {
     finalized.push(layout.finalized_pages());
   }
   oracles::check(root, page_size);

@@ -3,8 +3,9 @@
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
-  layout::{node::Node, paged_layout::PagedLayout, tree::RenderNode},
-  scene::{PageWindows, SceneRef},
+  layout::{node::Node, tree::RenderNode},
+  page_stream::{PageStream, Settle, Settled},
+  scene::{SceneRef, SceneView},
   style::Color,
   viewport::{MediaTarget, Viewport},
 };
@@ -29,7 +30,7 @@ use crate::{
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
   pagination::{MAX_PAGES, PageSlice, PageStarts, Paginated},
   paint::paint_page_background,
-  tree::{SceneView, TreeInputs},
+  tree::TreeInputs,
   window::{ContentWindow, Window},
 };
 
@@ -138,9 +139,6 @@ pub(crate) struct PageBands<'o> {
   pub(crate) footer: Option<PageBand>,
   pub(crate) page_ranges: Option<&'o [PageRange]>,
 }
-
-/// How many of the first pages of a layout to draw, as [`PagedLayout::settled_pages`] says.
-pub(crate) type Settle<'s> = &'s dyn Fn(&PagedLayout<'_>) -> usize;
 
 /// The paginated document once its pages are drawn: what the outline, the structure tree and the
 /// destinations read.
@@ -337,64 +335,44 @@ impl PageDrawing<'_, '_> {
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let composer = PageComposer::new(self, &frame, &repeatables);
     let page_size = frame.page_size();
-    let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
-    let mut windows = PageWindows::new(page_size);
+    let mut stream = PageStream::new(&root, page_size, MAX_PAGES);
     let mut selection = PageSelection::new(ranges)?;
     let mut summary = PageSummary::new(false);
-    let mut drawn = 0;
 
     loop {
-      let laid = layout.next_page()?.is_some();
-      let settled = settle(&layout);
+      let Settled { pages, laid } = stream.advance(settle)?;
 
-      if settled > drawn {
-        windows.refresh(
-          &root,
-          layout.view(),
-          layout.page_count(),
-          layout.finalized_pages(),
-        )?;
-      }
-      for index in drawn..settled {
+      for index in pages {
         let kept = selection.push_page().is_some();
 
         if reads_summary {
           summary.absorb(PageSummary::of_page(
             &root,
-            layout.view(),
+            stream.view(),
             page_size,
-            &windows.pages_of(index),
+            &stream.pages_of(index),
             false,
           )?);
         }
         if kept {
-          let scene = SceneRef::window(
-            &root,
-            layout.view(),
-            page_size,
-            &windows.pages_reaching(index),
-            true,
-          )?;
-
           composer.compose(
             self.pdf,
             &PageSlice::of(index, frame.window_height),
             0,
-            SceneView::of_window(&scene),
+            stream.window(index)?.view(),
             |_| None,
           )?;
         }
       }
-      drawn = drawn.max(settled);
       if !laid {
         break;
       }
     }
 
-    let pages = layout.page_count();
+    let pages = stream.page_count();
     let window = frame.window_height;
 
-    drop(layout);
+    drop(stream);
     selection.finish()?;
     Ok(PagePlan {
       frame,
@@ -453,13 +431,9 @@ impl PageDrawing<'_, '_> {
         true,
       )?;
 
-      composer.compose(
-        self.pdf,
-        &slice,
-        pages,
-        SceneView::of_window(&scene),
-        |id| plan.anchor_destination(id),
-      )?;
+      composer.compose(self.pdf, &slice, pages, scene.view(), |id| {
+        plan.anchor_destination(id)
+      })?;
     }
     Ok(plan)
   }
@@ -531,7 +505,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       repeatable.emit(frame, self.state, &mut surface)?;
     }
     self.emit_content(
-      scene.emitter(self.state, Some(&inline), Some(&chunks), true),
+      Emitter::new(scene, self.state, Some(&inline), Some(&chunks), true),
       slice,
       &mut surface,
     )?;
