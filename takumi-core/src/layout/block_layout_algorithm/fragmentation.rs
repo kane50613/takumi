@@ -155,24 +155,15 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
   /// the box leaves it to work its static position out again, as does a box held back for the
   /// block size of this one.
   pub(super) fn resumes_out_of_flow(&mut self, child: NodeId, token: &ChildBreakToken) -> bool {
-    let Some(token) = token.as_ref().filter(|token| !token.is_forced_break) else {
-      return false;
-    };
-
-    let candidate = match token.held_static_position {
-      Some(mut static_position) => {
-        static_position.offset.y -= self.previously_consumed_block_size();
-
-        let mut candidate = OutOfFlowCandidate::new(child, static_position);
-
-        candidate.requires_content_before_breaking = self.builder.requires_content_before_breaking;
-        candidate
-      }
-      None => OutOfFlowCandidate::resumed(
+    let Some(candidate) = token.as_ref().and_then(|token| {
+      OutOfFlowCandidate::resuming(
         child,
-        Rc::clone(token),
+        token,
+        self.previously_consumed_block_size(),
         self.builder.requires_content_before_breaking,
-      ),
+      )
+    }) else {
+      return false;
     };
 
     self.out_of_flow.push(candidate);

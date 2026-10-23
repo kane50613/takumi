@@ -1024,6 +1024,143 @@ fn a_fixed_box_repeats_on_the_pages_an_absolute_box_adds() {
   );
 }
 
+/// A body of the box `abs` laid out before `content`, on pages 300 wide and 200 tall.
+fn page_area_fragments(abs_css: &str, content: Node) -> (Vec<(usize, f32, f32)>, usize) {
+  let body = Node::container([block("abs", "abs"), content]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    &format!(
+      ".abs {{ position: absolute; {abs_css} }} .h20 {{ height: 20px }} .h300 {{ height: 300px }}"
+    ),
+  );
+
+  nested_fragments(&tree, 200.0)
+}
+
+#[test]
+fn an_initial_containing_block_box_below_the_page_moves_to_the_page_it_is_on() {
+  let (fragments, page_count) = page_area_fragments("top: 250px; height: 50px", block("a", "h300"));
+
+  assert_eq!(page_count, 2);
+  // The root's second fragment is the page's, and holds the box 50px down.
+  assert_eq!(fragments, [(1, 50.0, 50.0)]);
+}
+
+#[test]
+fn an_initial_containing_block_box_past_the_root_adds_pages() {
+  let (fragments, page_count) = page_area_fragments("top: 850px; height: 50px", block("a", "h20"));
+
+  assert_eq!(page_count, 5);
+  // The root's only fragment holds the box below it, where the last page paints it.
+  assert_eq!(fragments, [(0, 850.0, 50.0)]);
+}
+
+#[test]
+fn an_initial_containing_block_box_taller_than_a_page_breaks_across_pages() {
+  let (fragments, page_count) = page_area_fragments("top: 0; height: 450px", block("a", "h20"));
+
+  assert_eq!(page_count, 3);
+  assert_eq!(
+    fragments,
+    [(0, 0.0, 200.0), (0, 200.0, 200.0), (0, 400.0, 50.0)]
+  );
+}
+
+#[test]
+fn an_initial_containing_block_box_taller_than_a_page_resumes_in_the_root_fragment_of_its_page() {
+  let (fragments, page_count) =
+    page_area_fragments("top: 150px; height: 300px", block("a", "h300"));
+
+  assert_eq!(page_count, 3);
+  // The third page is past the root's second, whose fragment holds the box's last.
+  assert_eq!(
+    fragments,
+    [(0, 150.0, 50.0), (1, 0.0, 200.0), (1, 200.0, 50.0)]
+  );
+}
+
+#[test]
+fn a_box_at_the_bottom_of_the_initial_containing_block_sits_at_the_bottom_of_the_first_page() {
+  let (fragments, page_count) = page_area_fragments("bottom: 0; height: 50px", block("a", "h300"));
+
+  assert_eq!(page_count, 2);
+  assert_eq!(fragments, [(0, 150.0, 50.0)]);
+}
+
+#[test]
+fn a_fixed_box_repeats_from_the_root_fragment_of_each_page() {
+  let body =
+    Node::container([block("fixed", "fixed"), block("a", "h300")]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".fixed { position: fixed; top: 10px; height: 20px } .h300 { height: 300px } \
+     .abs { position: absolute; top: 450px; height: 100px }",
+  );
+  let (fragments, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(fragments, [(0, 10.0, 20.0), (1, 10.0, 20.0)]);
+}
+
+#[test]
+fn a_fixed_box_starting_on_a_later_page_repeats_from_that_page() {
+  let body =
+    Node::container([block("a", "h20 forced"), block("fixed", "fixed")]).with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".fixed { position: fixed; top: 10px; height: 20px } .h20 { height: 20px } \
+     .forced { break-after: page } .abs { position: absolute; top: 450px; height: 10px }",
+  );
+  let (results, page_count) = LayoutResults::compute_pages(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+    usize::MAX,
+  )
+  .expect("pages lay out");
+  let body = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
+  let fixed = results.box_children(body).expect("body children")[1].node_id;
+
+  assert_eq!(page_count, 2);
+  // Blink's page area of the first page never sees a box that starts on the second.
+  assert_eq!(
+    results
+      .fragments(fixed)
+      .expect("fragments")
+      .iter()
+      .map(|fragment| (
+        fragment.container_fragment_index,
+        fragment.layout.location.y
+      ))
+      .collect::<Vec<_>>(),
+    [(1, 10.0)]
+  );
+}
+
+#[test]
+fn a_fixed_box_repeats_on_the_pages_an_absolute_box_past_the_root_adds() {
+  let body = Node::container([
+    block("fixed", "fixed"),
+    block("a", "h300"),
+    block("abs", "abs"),
+  ])
+  .with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".fixed { position: fixed; top: 10px; height: 20px } .h300 { height: 300px } \
+     .abs { position: absolute; top: 450px; height: 100px }",
+  );
+  let (fragments, page_count) = nested_fragments(&tree, 200.0);
+
+  assert_eq!(page_count, 3);
+  assert_eq!(
+    fragments,
+    [(0, 10.0, 20.0), (1, 10.0, 20.0), (1, 210.0, 20.0)]
+  );
+}
+
 #[test]
 fn a_fixed_box_inside_a_repeated_fixed_box_repeats_too() {
   let outer = Node::container([block("inner", "inner")]).with_class_name("block fixed");
