@@ -4,14 +4,18 @@
 
 mod borders;
 mod columns;
+mod constraint_space_data;
 mod fragment;
 mod layout;
 mod parts;
+mod row_layout_algorithm;
 mod rows;
+mod section_layout_algorithm;
 
 pub(crate) use self::{
   borders::{TableBorders, style_rank},
   columns::ColumnConstraints,
+  constraint_space_data::TablePartSpace,
   layout::{TableLayoutAlgorithm, TableStructure},
 };
 pub use self::{fragment::TableFragment, parts::TableSectionKind};

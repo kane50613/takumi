@@ -301,6 +301,22 @@ impl Column {
   }
 }
 
+/// The inline size of the `colspan` columns from `column`, Blink's cell inline size in
+/// `SetupTableCellConstraintSpaceBuilder`.
+pub(super) fn span_inline_size(
+  locations: &[ColumnLocation],
+  column: usize,
+  colspan: usize,
+) -> LayoutUnit {
+  let Some(last) = locations.len().checked_sub(1) else {
+    return LayoutUnit::ZERO;
+  };
+  let start = column.min(last);
+  let end = (column + colspan - 1).min(last);
+
+  locations[end].offset + locations[end].size - locations[start].offset
+}
+
 /// Where a column lands, Blink's `TableColumnLocation`.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct ColumnLocation {
