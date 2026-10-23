@@ -158,7 +158,10 @@ pub fn render_scene(scene: &mut Scene) -> Result<Bitmap> {
     return Err(Error::InvalidViewport);
   }
 
-  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
+  let origin = scene.origin.map(|length| length.round() as i32);
+  let mut canvas = Canvas::try_new(size)
+    .ok_or(Error::InvalidViewport)?
+    .with_origin(origin);
 
   paint_scene(scene, &mut canvas)?;
   canvas.into_inner()

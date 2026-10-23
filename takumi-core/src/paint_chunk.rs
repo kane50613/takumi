@@ -74,17 +74,17 @@ fn push_context_chunks<'s>(
   let Some(context) = contexts.get(context_id) else {
     return;
   };
-  let root = context.root();
+  let roots = context.roots();
   let mut outlines = Vec::new();
   let chunk = |node, part| PaintChunk { node, part };
 
-  if let Some(root) = root {
-    chunks.push(chunk(root, ChunkPart::Decorations));
-  }
+  chunks.extend(roots.iter().map(|root| chunk(root, ChunkPart::Decorations)));
 
   for phase in context.paint_phases() {
     match phase {
-      PaintPhase::RootContent => chunks.extend(root.map(|root| chunk(root, ChunkPart::Content))),
+      PaintPhase::RootContent => {
+        chunks.extend(roots.iter().map(|root| chunk(root, ChunkPart::Content)));
+      }
       PaintPhase::Items(items, phase_part) => {
         for item in items {
           let Some(part) = item.part_in(phase_part) else {
@@ -112,7 +112,7 @@ fn push_context_chunks<'s>(
   }
 
   chunks.extend(outlines);
-  chunks.extend(root.map(|root| chunk(root, ChunkPart::Outline)));
+  chunks.extend(roots.iter().map(|root| chunk(root, ChunkPart::Outline)));
 }
 
 /// What a device does to enter and leave clips and effects.

@@ -164,6 +164,11 @@ impl Canvas {
     })
   }
 
+  /// The canvas painting the area of a scene that starts at `origin`.
+  pub(crate) fn with_origin(self, origin: Point<i32>) -> Self {
+    Self { origin, ..self }
+  }
+
   /// Test-only infallible constructor, falling back to 1x1 when `size` cannot be
   /// allocated. Production code uses [`Canvas::try_new`] and surfaces the error.
   #[cfg(test)]
