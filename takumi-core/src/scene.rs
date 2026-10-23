@@ -21,7 +21,9 @@ use crate::{
   style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+#[cfg(feature = "fragmentation")]
+use std::collections::HashSet;
 
 /// A node's resolved paint inputs.
 #[derive(Clone)]
@@ -759,10 +761,36 @@ impl Scene {
   }
 }
 
-/// The boxes a scene placed, by child path, for a scene that paints several fragments of a box.
-pub struct FragmentPlacements(HashSet<Vec<usize>>);
+/// For a scene that paints several fragments of a box: by each box's child path, the indices of
+/// its children that no paint of their own places.
+pub struct FragmentPlacements(HashMap<Vec<usize>, Vec<usize>>);
 
 impl FragmentPlacements {
+  /// The placements of `root`, whose boxes at the `placed` paths paint on their own.
+  #[cfg(feature = "fragmentation")]
+  fn new(root: &RenderNode, placed: &HashSet<Vec<usize>>) -> Self {
+    let mut unplaced = HashMap::new();
+    let mut stack = vec![(root, Vec::new())];
+
+    while let Some((node, path)) = stack.pop() {
+      let mut children = Vec::new();
+
+      for (index, child) in node.children.iter().flatten().enumerate() {
+        let mut child_path = path.clone();
+
+        child_path.push(index);
+        if !placed.contains(&child_path) {
+          children.push(index);
+        }
+        stack.push((child, child_path));
+      }
+      if !children.is_empty() {
+        unplaced.insert(path, children);
+      }
+    }
+    Self(unplaced)
+  }
+
   /// Sets the box `paint` paints, laid out at `location`, and the boxes of its content no other
   /// paint places, to paint the fragment `paint` names, as [`set_paint_offsets`] sets them for
   /// a scene with one fragment of each box.
@@ -780,18 +808,18 @@ impl FragmentPlacements {
       };
 
       node.context.enter_fragment(base, paint.fragment_index);
-      for (index, child) in node
-        .children
-        .iter()
-        .flat_map(|children| children.iter())
-        .enumerate()
-      {
+      for &index in self.0.get(&path).into_iter().flatten() {
+        let Some(child) = node
+          .children
+          .as_deref()
+          .and_then(|children| children.get(index))
+        else {
+          continue;
+        };
         let mut child_path = path.clone();
 
         child_path.push(index);
-        if !self.0.contains(&child_path) {
-          stack.push((child, child_path, own));
-        }
+        stack.push((child, child_path, own));
       }
     }
   }
@@ -858,9 +886,10 @@ impl PagedScene {
     }
     .build_fragments(&roots)?;
     let placed = layers.placements(&results).into_keys().collect();
+    let fragments = FragmentPlacements::new(&root, &placed);
     let mut scene = Scene::new(root, results, layers, page_size);
 
-    scene.fragments = Some(FragmentPlacements(placed));
+    scene.fragments = Some(fragments);
     Ok(Self { scene, page_count })
   }
 
