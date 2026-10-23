@@ -10,7 +10,9 @@ use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::{
-  layout_result::LayoutResult, layout_view::LiveLayout, paged_layout::PagedLayout,
+  layout_result::LayoutResult,
+  layout_view::{HoistedBy, LiveLayout},
+  paged_layout::PagedLayout,
 };
 
 use crate::{
@@ -29,7 +31,7 @@ use crate::{
     },
     layout_result::{OutOfFlowCandidate, StaticPosition},
     layout_style::{LayoutLength, LayoutStyle},
-    layout_view::{HoistedBy, LayoutView},
+    layout_view::LayoutView,
     length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
@@ -294,6 +296,7 @@ pub struct LayoutTree<'r> {
   /// Every cell and row some table's layout hid.
   hidden: FxHashSet<usize>,
   /// Which boxes positioned each out-of-flow box as their containing block.
+  #[cfg(feature = "fragmentation")]
   pub(in crate::layout) hoisted_by: HoistedBy,
   /// How many algorithm runs have started.
   #[cfg(feature = "fragmentation")]
@@ -679,6 +682,7 @@ impl<'r> LayoutTree<'r> {
       table_fragments: FxHashMap::default(),
       table_hidden: FxHashMap::default(),
       hidden: FxHashSet::default(),
+      #[cfg(feature = "fragmentation")]
       hoisted_by: HoistedBy::default(),
       #[cfg(feature = "fragmentation")]
       runs: 0,
@@ -1046,13 +1050,21 @@ impl<'r> LayoutTree<'r> {
 
   /// Consumes the tree into immutable per-node layout results.
   pub(crate) fn into_results(mut self) -> LayoutResults {
+    // The last box in layout order that positioned a box wins.
+    let mut containing_blocks = FxHashMap::default();
+
+    for (index, node) in self.nodes.iter().enumerate() {
+      for &child in &node.hoisted_children {
+        containing_blocks.insert(child, NodeId::new(index));
+      }
+    }
     // A box another node than its box-tree parent positioned resolves against that containing
     // block.
     for (index, node) in self.nodes.iter_mut().enumerate() {
       for child in node.box_children.iter_mut() {
-        child.hoisted_cb = self
-          .hoisted_by
-          .containing_block(child.node_id)
+        child.hoisted_cb = containing_blocks
+          .get(&child.node_id)
+          .copied()
           .filter(|&container| usize::from(container) != index);
       }
     }

@@ -650,19 +650,19 @@ impl<'r> LayoutTree<'r> {
 
     if !hoisted_children.contains(&node) {
       hoisted_children.push(node);
+      #[cfg(feature = "fragmentation")]
       self.hoisted_by.insert(container, node);
     }
   }
 
   /// Forgets the out-of-flow boxes `container` positioned as their containing block.
   pub(crate) fn clear_hoisted_children(&mut self, container: NodeId) {
-    let mut children = take(&mut self.node_state_mut(container).hoisted_children);
-
-    for &child in &children {
+    #[cfg(feature = "fragmentation")]
+    for child in take(&mut self.node_state_mut(container).hoisted_children) {
       self.hoisted_by.remove(container, child);
     }
-    children.clear();
-    self.node_state_mut(container).hoisted_children = children;
+    #[cfg(not(feature = "fragmentation"))]
+    self.node_state_mut(container).hoisted_children.clear();
   }
 
   /// Lays `node` and every box under it out empty, as `display: none` leaves them.

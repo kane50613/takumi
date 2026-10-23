@@ -1,8 +1,8 @@
 //! A layout read through one interface whether it is finished or still laying out pages.
 
-use rustc_hash::FxHashMap;
 #[cfg(feature = "fragmentation")]
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
+#[cfg(feature = "fragmentation")]
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
@@ -17,9 +17,11 @@ use crate::{
 };
 
 /// Which boxes each out-of-flow box was hoisted to, as the layout so far says.
+#[cfg(feature = "fragmentation")]
 #[derive(Default)]
 pub(crate) struct HoistedBy(FxHashMap<NodeId, SmallVec<[NodeId; 1]>>);
 
+#[cfg(feature = "fragmentation")]
 impl HoistedBy {
   /// Records that `container` positioned `child` as its containing block.
   pub(crate) fn insert(&mut self, container: NodeId, child: NodeId) {
@@ -312,7 +314,7 @@ impl LiveLayout<'_> {
   }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "fragmentation"))]
 mod tests {
   use super::HoistedBy;
   use crate::geometry::NodeId;
