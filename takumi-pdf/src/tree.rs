@@ -62,7 +62,7 @@ impl TreeInputs<'_> {
 
   pub(crate) fn prepare(&self, node: Node, viewport: Viewport) -> Result<PreparedTree, PdfError> {
     let node = fill_root(node, viewport);
-    let root = RenderNode::from_node(&self.context(viewport), node);
+    let root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
 
     PreparedTree::lay_out(root, viewport)
   }
@@ -98,7 +98,7 @@ impl TreeInputs<'_> {
     // A repeated box holding a counter lays out again per page, from the subtree
     // its preorder position names in the tree it was taken from.
     let source = has_page_counters(&node).then(|| node.clone());
-    let mut root = RenderNode::from_node(&self.context(viewport), node);
+    let mut root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
     let repeated = take_repeating_fixed(&mut root);
     let content = PreparedTree::lay_out(root, viewport)?;
     let page_context = self.context(frame.page_area);

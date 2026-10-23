@@ -1911,24 +1911,49 @@ impl RenderNode {
 
   /// Builds a render tree from a node under the given parent context.
   pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
+    Self::build(parent_context, node, false)
+  }
+
+  /// Builds a render tree from `initial_containing_block`, a box that stands in for the initial
+  /// containing block: each node it holds is a root element, which CSS blockifies.
+  pub fn from_initial_containing_block(
+    parent_context: &RenderContext,
+    initial_containing_block: Node,
+  ) -> Self {
+    Self::build(parent_context, initial_containing_block, true)
+  }
+
+  fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
       parent_context.stylesheet(),
       parent_context.sizing.viewport,
     );
-    let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
+    let mut tree =
+      Self::from_node_iterative(parent_context, node, &matched_styles, blockifies_children);
 
-    if tree.is_inline_level() {
-      tree.context.blockify();
+    tree.blockify_as_root();
+    if blockifies_children {
+      for child in tree.children.iter_mut().flatten() {
+        child.blockify_as_root();
+      }
     }
-
     tree
+  }
+
+  /// [CSS Display §2.7](https://drafts.csswg.org/css-display/#transformations): the root element's
+  /// display type is always blockified.
+  fn blockify_as_root(&mut self) {
+    if self.is_inline_level() {
+      self.context.blockify();
+    }
   }
 
   fn from_node_iterative(
     parent_context: &RenderContext,
     root: Node,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
+    root_blockifies_children: bool,
   ) -> Self {
     let mut source_cursor = 0;
     let mut root_counter = ListCounter::new(&root);
@@ -1943,6 +1968,7 @@ impl RenderNode {
     )];
 
     loop {
+      let at_root = stack.len() == 1;
       let Some(current) = stack.last_mut() else {
         return RenderNode::empty(parent_context);
       };
@@ -1955,12 +1981,13 @@ impl RenderNode {
           &mut source_cursor,
           &mut current.list_counter,
           current.inside_list,
-          current
-            .context
-            .style
-            .base_data
-            .display
-            .should_blockify_children(),
+          (root_blockifies_children && at_root)
+            || current
+              .context
+              .style
+              .base_data
+              .display
+              .should_blockify_children(),
         );
         stack.push(child_pending);
         continue;
