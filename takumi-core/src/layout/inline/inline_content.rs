@@ -13,7 +13,7 @@ use super::{
   inline_layout_algorithm::LineBoxFragment,
   inline_node::InlineNode,
   inline_node_data::InlineNodeData,
-  items::{InlineSpans, ProcessedInlineSpan},
+  items::InlineSpans,
   logical_line_item::LineFragment,
   unpositioned_list_marker::UnpositionedListMarker,
 };
@@ -109,11 +109,11 @@ impl RenderNode {
   }
 
   /// The spans `items`, this node's fragment items, paint with.
-  pub(crate) fn inline_spans(&self, items: &FragmentItems) -> Vec<ProcessedInlineSpan<'_>> {
+  pub(crate) fn inline_spans(&self, items: &FragmentItems) -> InlineSpans<'_> {
     let items_data = InlineNode::new(self).collect_inlines();
-    let mut spans = InlineSpans::of(self, &items_data).spans;
+    let mut spans = InlineSpans::of(self, &items_data);
 
-    items.size_box_spans(&mut spans);
+    items.size_box_spans(&mut spans.spans);
     spans
   }
 

@@ -9,14 +9,12 @@ pub(super) use builder::line_span_fragments;
 
 use std::{mem::take, ops::Range, rc::Rc};
 
-use rustc_hash::FxHashMap;
-
 use skrifa::FontRef;
 
 use super::{
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationPlacement,
-  items::ProcessedInlineSpan,
+  items::{InlineSpans, ProcessedInlineSpan},
   metrics::VisualInlineBox,
   outline::InlineOutlineRect,
   runs::{
@@ -485,7 +483,7 @@ impl FragmentItems {
       let span = face
         .brush
         .source_span_id
-        .and_then(|id| spans.get(id as usize));
+        .and_then(|id| spans.spans.get(id as usize));
       let text_range = match span {
         Some(ProcessedInlineSpan::Text { byte_range, .. })
           if item.text_range.start < self.generated_text_start =>
@@ -525,7 +523,7 @@ impl FragmentItems {
       .iter()
       .filter(|inline_box| {
         !matches!(
-          spans.get(inline_box.id as usize),
+          spans.spans.get(inline_box.id as usize),
           Some(ProcessedInlineSpan::Box(item)) if item.render_node.is_inline_content_box()
         )
       })
@@ -544,7 +542,7 @@ impl FragmentItems {
   /// outlines, the paint offset of the box they paint in, and the nodes of their spans.
   pub(crate) fn resolve_runs<'c>(
     &self,
-    spans: &[ProcessedInlineSpan<'c>],
+    spans: &InlineSpans<'c>,
     context: &RenderContext,
     layout: ComputedLayout,
   ) -> Result<InlineRunLayout<'c>, FontError> {
@@ -580,7 +578,7 @@ impl FragmentItems {
     let background_fragments = if self.backgrounds.is_empty() {
       Vec::new()
     } else {
-      let owners = span_owners(spans);
+      let owners = spans.owners();
 
       self
         .backgrounds
@@ -596,14 +594,4 @@ impl FragmentItems {
       background_fragments,
     })
   }
-}
-
-/// The node of every span `spans` open, by decoration id.
-fn span_owners<'c>(spans: &[ProcessedInlineSpan<'c>]) -> FxHashMap<usize, &'c RenderNode> {
-  spans
-    .iter()
-    .filter_map(ProcessedInlineSpan::chain)
-    .flat_map(|link| link.ancestors())
-    .map(|link| (link.decoration.id, link.decoration.owner))
-    .collect()
 }
