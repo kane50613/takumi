@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>empty_inline_boxes</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 16px;
+        background: white;
+        font-family: "Geist";
+        font-size: 16px;
+        line-height: 32px;
+        color: rgb(17, 24, 39);
+      }
+      .line {
+        display: block;
+      }
+      .padded {
+        padding: 0 10px;
+        background: rgb(252, 165, 165);
+      }
+      .bordered {
+        border: 3px solid rgb(37, 99, 235);
+        border-right: none;
+      }
+      .outlined {
+        outline: 2px solid rgb(22, 163, 74);
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body style="width: 320px; height: 140px">
+    <div class="root">
+      <div class="line">before <span class="padded"></span> after</div>
+      <div class="line">before <span class="bordered"></span> after</div>
+      <div class="line">before <span class="outlined"></span> after</div>
+    </div>
+  </body>
+</html>

@@ -133,18 +133,8 @@ fn resolve_fragment<'c>(
 
   border.radius = fitted_radii(sliced, width, height);
 
-  if !has_left {
-    border.width.left = 0.0;
-  }
-
-  if !has_right {
-    border.width.right = 0.0;
-  }
-
-  if width <= 0.0 || height <= 0.0 {
-    return;
-  }
-
+  // Blink's `OutlinePainter` keeps an empty rect for a normal outline, so an inline box with no
+  // content still draws one around where it sits.
   if let Some(outline) = decoration.outline {
     outlines.push(InlineOutlineRect {
       owner: id,
@@ -157,6 +147,18 @@ fn resolve_fragment<'c>(
       outline,
       opacity: decoration.opacity,
     });
+  }
+
+  if !has_left {
+    border.width.left = 0.0;
+  }
+
+  if !has_right {
+    border.width.right = 0.0;
+  }
+
+  if width <= 0.0 || height <= 0.0 {
+    return;
   }
 
   let style = &decoration.owner.context.style;

@@ -109,7 +109,11 @@ impl<'n> OwnContent<'n> {
     Some(
       items
         .resolve_runs(&spans, &node.context, layout)
-        .map(|runs| PaintedInline { spans, runs, items }),
+        .map(|runs| PaintedInline {
+          spans: spans.spans,
+          runs,
+          items,
+        }),
     )
   }
 }
