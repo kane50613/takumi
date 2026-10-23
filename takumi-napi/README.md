@@ -67,7 +67,7 @@ To render many images with the same fonts, register them once with `renderer.reg
 | `renderAnimation(opts)`  | `Promise<Buffer>`       | Animated WebP, APNG, or GIF              |
 | `measure(node, opts?)`   | `Promise<MeasuredNode>` | The layout, without drawing              |
 
-See the [node and style reference](https://takumi.kane.tw/docs/reference) and the [integration guides](https://takumi.kane.tw/docs/integration).
+See the [node and style reference](https://takumi.kane.tw/docs/reference) and the [integration guides](https://takumi.kane.tw/docs/frameworks).
 
 ## License
 

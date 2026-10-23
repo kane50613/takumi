@@ -36,7 +36,7 @@ const webp = await render(card, { width: 1200, height: 630, format: "webp", qual
 
 ### Raw frames
 
-`format: "raw"` skips encoding and returns the RGBA buffer. Feed it to ffmpeg or another encoder. The [keyframe animation](/docs/keyframe-animation) page streams raw frames into ffmpeg to make a video.
+`format: "raw"` skips encoding and returns the RGBA buffer. Feed it to ffmpeg or another encoder. The [keyframe animation](/docs/animation) page streams raw frames into ffmpeg to make a video.
 
 ## Device pixel ratio
 
@@ -78,7 +78,7 @@ const image = await render(<div tw="w-full h-full bg-linear-to-r from-slate-900 
 
 ## Animated output
 
-`renderAnimation()` encodes a sequence of scenes as WebP, APNG, or GIF. See [Keyframe Animation](/docs/keyframe-animation).
+`renderAnimation()` encodes a sequence of scenes as WebP, APNG, or GIF. See [Keyframe Animation](/docs/animation).
 
 ## Vector SVG
 

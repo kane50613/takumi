@@ -75,7 +75,7 @@ import { TargetPageNumber } from "takumi-pdf/primitives";
 </nav>;
 ```
 
-Each entry stays clickable, so the contents page works on screen as well as in print. Give the number a fixed width, or a two-digit page can rewrap the entry and renumber it. See [Table of contents](/docs/pdf/links-and-outline#table-of-contents).
+Each entry stays clickable, so the contents page works on screen as well as in print. Give the number a fixed width, or a two-digit page can rewrap the entry and renumber it. See [Table of contents](/docs/pdf/links#table-of-contents).
 
 ## Running bands
 
@@ -106,7 +106,7 @@ const pdf = await render(report, {
 });
 ```
 
-Bands draw in the margin, so a numeric margin has to fit them. Leave `margin` unset to fit them automatically, or see [Sizing the margin](/docs/pdf/headers-and-footers#sizing-the-margin).
+Bands draw in the margin, so a numeric margin has to fit them. Leave `margin` unset to fit them automatically, or see [Sizing the margin](/docs/pdf/headers#sizing-the-margin).
 
 ## Long tables
 
@@ -136,7 +136,7 @@ import "takumi-pdf";
 </table>;
 ```
 
-Tagged output maps the markup to `Table`, `TR`, `TH`, and `TD` structure elements, so screen readers navigate by row and column. See [Tables](/docs/tables) for layout coverage and [PDF/A and PDF/UA](/docs/pdf/pdf-a#tables) for the structure tree.
+Tagged output maps the markup to `Table`, `TR`, `TH`, and `TD` structure elements, so screen readers navigate by row and column. See [Tables](/docs/tables) for layout coverage and [PDF/A and PDF/UA](/docs/pdf/conformance#tables) for the structure tree.
 
 ## Batches
 
@@ -163,4 +163,4 @@ for (const account of accounts) {
 
 ## Accessibility
 
-Set `tagged: "ua1"` to validate against PDF/UA-1. Supply `lang` and `metadata.title`, then review heading order, tables, and chart descriptions yourself. See [PDF/A and PDF/UA](/docs/pdf/pdf-a#required-inputs).
+Set `tagged: "ua1"` to validate against PDF/UA-1. Supply `lang` and `metadata.title`, then review heading order, tables, and chart descriptions yourself. See [PDF/A and PDF/UA](/docs/pdf/conformance#required-inputs).

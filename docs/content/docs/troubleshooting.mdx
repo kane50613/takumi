@@ -41,7 +41,7 @@ await init({ module_or_path: wasmUrl });
 const renderer = new Renderer();
 ```
 
-`takumi-js/wasm/no-init` exports `init` by name, not as the default export. Its `Renderer` takes a node tree. Build one with [`fromJsx`](/docs/helpers#parsing-templates).
+`takumi-js/wasm/no-init` exports `init` by name, not as the default export. Its `Renderer` takes a node tree. Build one with [`fromJsx`](/docs/reference/helpers#parsing-templates).
 
 The cause is that your browser bundle resolved the entry made for Vite. That entry imports the binary with a `?url` suffix, which only Vite understands.
 
@@ -166,7 +166,7 @@ const pdf = await render(document, {
 });
 ```
 
-The PDF renderer stops on uncovered characters, because they would be missing from both the page and its text layer. To draw them as blanks or as the font's placeholder glyph instead, set [`uncoveredText`](/docs/pdf/fonts-and-images).
+The PDF renderer stops on uncovered characters, because they would be missing from both the page and its text layer. To draw them as blanks or as the font's placeholder glyph instead, set [`uncoveredText`](/docs/pdf/assets).
 
 ### A PDF cannot draw filter: blur(2px)
 
@@ -184,7 +184,7 @@ A PDF embeds those three formats as they are. Other formats, such as GIF, need d
 
 Shrink the viewport. 8192 × 8192 is the largest square that fits.
 
-A zero-sized viewport raises the same error. To go larger, render in tiles and stitch them. See [Render large canvases](/docs/performance-and-optimization#render-large-canvases).
+A zero-sized viewport raises the same error. To go larger, render in tiles and stitch them. See [Render large canvases](/docs/performance#render-large-canvases).
 
 ### The content spans more than 20000 pages
 

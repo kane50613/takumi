@@ -58,12 +58,12 @@ export function GET() {
 
 ## Other outputs
 
-| Function                                                              | Returns                                    |
-| :-------------------------------------------------------------------- | :----------------------------------------- |
-| [`render()`](https://takumi.kane.tw/docs/output-formats)              | PNG, JPEG, WebP, ICO, or raw RGBA bytes    |
-| [`renderSvg()`](https://takumi.kane.tw/docs/output-formats)           | An SVG document string                     |
-| [`renderAnimation()`](https://takumi.kane.tw/docs/keyframe-animation) | Animated WebP, APNG, or GIF bytes          |
-| [`measure()`](https://takumi.kane.tw/docs/measure-api)                | The laid-out node tree, without drawing it |
+| Function                                                     | Returns                                    |
+| :----------------------------------------------------------- | :----------------------------------------- |
+| [`render()`](https://takumi.kane.tw/docs/formats)            | PNG, JPEG, WebP, ICO, or raw RGBA bytes    |
+| [`renderSvg()`](https://takumi.kane.tw/docs/formats)         | An SVG document string                     |
+| [`renderAnimation()`](https://takumi.kane.tw/docs/animation) | Animated WebP, APNG, or GIF bytes          |
+| [`measure()`](https://takumi.kane.tw/docs/reference/measure) | The laid-out node tree, without drawing it |
 
 ## Runtimes
 
@@ -76,8 +76,8 @@ To use WebAssembly on Node.js, pass the binary as the `module` option. See [Trou
 
 ## Migrate from another renderer
 
-- **`satori`:** replace `satori()` with `renderSvg()`, or call `render()` for image bytes. See the [Satori comparison](https://takumi.kane.tw/docs/comparison-to-satori).
-- **`next/og`:** change the `ImageResponse` import. Keep explicit Flexbox styles, because a bare `<div>` defaults to block layout. See the [`next/og` migration guide](https://takumi.kane.tw/docs/comparison-to-satori#migrate-from-nextog).
+- **`satori`:** replace `satori()` with `renderSvg()`, or call `render()` for image bytes. See the [Satori comparison](https://takumi.kane.tw/docs/migration/satori).
+- **`next/og`:** change the `ImageResponse` import. Keep explicit Flexbox styles, because a bare `<div>` defaults to block layout. See the [`next/og` migration guide](https://takumi.kane.tw/docs/migration/satori#migrate-from-nextog).
 - **Puppeteer screenshots:** pass JSX or HTML to `render()`. Scripts do not run, and Takumi supports less CSS than Chrome.
 
 ## License

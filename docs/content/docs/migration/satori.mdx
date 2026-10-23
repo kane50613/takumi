@@ -35,14 +35,14 @@ satori changes quickly, so this table names versions. `next/og` in Next.js 16.4 
 | Tables                            | ❌                  | ❌ throws                                       | ✅ [Tables](/docs/tables)                                         |
 | `<style>`, selectors, `@media`    | ❌                  | ✅                                              | ✅                                                                |
 | `calc()`, `z-index`               | ❌                  | ✅                                              | ✅                                                                |
-| `@keyframes` and animated output  | ❌                  | ❌ `@keyframes` is ignored                      | ✅ [Keyframe animation](/docs/keyframe-animation)                 |
+| `@keyframes` and animated output  | ❌                  | ❌ `@keyframes` is ignored                      | ✅ [Keyframe animation](/docs/animation)                          |
 | React hooks (`useState`, `use()`) | ❌                  | ❌                                              | ✅ initial state, no effects                                      |
 | WOFF2                             | ❌                  | ✅                                              | ✅                                                                |
 | Right-to-left text                | ❌                  | Partial                                         | ✅                                                                |
 | Built-in font                     | Geist Regular       | None, `fonts` is required                       | Geist, Latin, weights 300 to 800                                  |
 | Output                            | PNG                 | SVG                                             | Raster, SVG, animation, PDF, paint tree                           |
 
-Takumi also takes HTML strings and node trees as input. See [Parsing templates](/docs/helpers#parsing-templates).
+Takumi also takes HTML strings and node trees as input. See [Parsing templates](/docs/reference/helpers#parsing-templates).
 
 ## Migrate from satori
 
@@ -73,7 +73,7 @@ const png = await render(<div tw="w-full h-full flex items-center justify-center
 
 ## Migrate from `next/og`
 
-[`ImageResponse`](/docs/image-response) follows the `next/og` API, including the `emoji` option. Swap the import.
+[`ImageResponse`](/docs/reference/image-response) follows the `next/og` API, including the `emoji` option. Swap the import.
 
 ```tsx title="Replace the next/og import"
 import { ImageResponse } from "next/og"; // [!code --]
@@ -91,13 +91,13 @@ export function GET() {
   `next/og` makes every element a flex container. In Takumi, a `<div>` is `display: block`, as in a browser. Add `display: flex` (or `tw="flex"`) to each container that needs Flexbox. Compare the output before you deploy.
 </Callout>
 
-The [Next.js guide](/docs/integration/nextjs) covers the route handler setup.
+The [Next.js guide](/docs/frameworks/nextjs) covers the route handler setup.
 
 ## Fonts
 
 satori throws without a `fonts` entry. Takumi ships Geist (Latin, weights 300 to 800) as a last-resort font, so Latin text renders with no setup.
 
-For other scripts, [`googleFonts`](/docs/helpers#fonts) loads families in one call. `fonts` also takes raw bytes, descriptors, or URL strings.
+For other scripts, [`googleFonts`](/docs/reference/helpers#fonts) loads families in one call. `fonts` also takes raw bytes, descriptors, or URL strings.
 
 ```tsx twoslash title="Load a CJK font"
 import { render } from "takumi-js";
@@ -115,11 +115,11 @@ const png = await render(
 );
 ```
 
-satori 0.63 draws a variable font at its default instance. Takumi applies `font-weight` and `font-variation-settings` along the font's axes. See [Fonts](/docs/typography-and-fonts).
+satori 0.63 draws a variable font at its default instance. Takumi applies `font-weight` and `font-variation-settings` along the font's axes. See [Fonts](/docs/fonts).
 
 ## Emoji
 
-`next/og` resolves emoji through satori's `loadAdditionalAsset` callback. Takumi's `ImageResponse` and `render` take the same `emoji` option: `twemoji` (the default), `blobmoji`, `noto`, `openmoji`, `fluent`, or `fluentFlat`. To draw emoji from a registered color font, set `emoji: "from-font"`. See [Emoji](/docs/load-images#emoji).
+`next/og` resolves emoji through satori's `loadAdditionalAsset` callback. Takumi's `ImageResponse` and `render` take the same `emoji` option: `twemoji` (the default), `blobmoji`, `noto`, `openmoji`, `fluent`, or `fluentFlat`. To draw emoji from a registered color font, set `emoji: "from-font"`. See [Emoji](/docs/images#emoji).
 
 ## Rendering on a server
 
@@ -130,7 +130,7 @@ satori builds the SVG on the calling thread. On Node.js, Takumi's native binding
 - **Images decode at their drawn size** where the format allows it. The decode cache reuses them across renders.
 - **Fonts load by coverage.** `googleFonts` returns each family as `unicode-range` subsets, and a render downloads only the subsets its text uses.
 
-Edge runtimes and browsers load Takumi as a WebAssembly binary. Count its download and compile time when you measure cold starts. See [Performance](/docs/performance-and-optimization) for tuning.
+Edge runtimes and browsers load Takumi as a WebAssembly binary. Count its download and compile time when you measure cold starts. See [Performance](/docs/performance) for tuning.
 
 ## Used in production
 

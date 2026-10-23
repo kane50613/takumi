@@ -1,0 +1,147 @@
+---
+title: Typography
+description: Style text and control how it wraps and overflows in Takumi.
+icon: Type
+---
+
+## Styling text
+
+### Color, stroke, and fill
+
+`color` takes modern CSS color spaces, such as `oklch()`, `lab()`, and `color(display-p3 ...)`, as well as `rgb()` and `hsl()`.
+
+Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`. The stroke uses `color` when you leave its color out.
+
+```tsx title="Color, stroke, and fill"
+<div
+  style={{
+    color: "oklch(0.7 0.15 200)",
+    WebkitTextStroke: "2px black",
+    WebkitTextFillColor: "white",
+  }}
+>
+  Outlined
+</div>
+```
+
+### Decoration & transform
+
+`text-decoration` draws `underline`, `line-through`, and `overline`. The shorthand also takes a style, color, and thickness, in any order. `text-transform` changes the case.
+
+```tsx title="Decoration & transform"
+<div
+  style={{
+    textDecoration: "underline overline 2px red",
+    textTransform: "uppercase",
+  }}
+>
+  Marked up
+</div>
+```
+
+### Shadow
+
+`text-shadow` takes offsets, a blur radius, and a color. Separate layers with commas.
+
+```tsx title="Shadow"
+<div style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.5), 0 0 8px blue" }}>Glow</div>
+```
+
+### Spacing & alignment
+
+`letter-spacing`, `word-spacing`, `line-height`, `text-indent`, and `text-align` work as in a browser, `justify` included.
+
+```tsx title="Spacing & alignment"
+<div
+  style={{
+    letterSpacing: "0.05em",
+    lineHeight: 1.4,
+    textAlign: "justify",
+    textIndent: "2em",
+  }}
+>
+  Body copy
+</div>
+```
+
+## Flowing text
+
+### Wrapping
+
+`text-wrap: balance` evens out line lengths. `text-wrap: pretty` keeps the last line from holding a single word.
+
+```tsx title="Wrapping"
+<div style={{ textWrap: "balance" }}>Super Long Text</div>
+```
+
+`word-break` and `overflow-wrap` decide where a long word splits. Use `word-break: keep-all` to keep CJK (Chinese, Japanese, Korean) words whole, and `break-all` or `overflow-wrap: anywhere` to split long URLs.
+
+### Truncation
+
+`line-clamp` cuts text after a number of lines and ends the last line with an ellipsis, as Chrome does. `line-clamp: 3 none` cuts without one. The legacy `-webkit-line-clamp` works only with `display: -webkit-box` and `-webkit-box-orient: vertical`, as in browsers.
+
+```tsx title="Truncation"
+<div
+  style={{
+    lineClamp: 3,
+  }}
+>
+  Super Long Text
+</div>
+```
+
+`text-overflow: ellipsis` works only on a box that clips its overflow, as in Chrome, so set `overflow: hidden` with it. It ends a line that is wider than the box, such as `white-space: nowrap` text or a word too long to break. Text cut off by the box's height gets no ellipsis; use `line-clamp` for that.
+
+### Fit to container
+
+`text-fit` scales text to fit its line box instead of wrapping or overflowing. The value starts with a mode: `grow`, `shrink`, or `none`. An optional target and a percentage cap follow.
+
+```tsx title="Fit to container"
+<div style={{ textFit: "shrink" }}>Headline that always fits</div>
+<div style={{ textFit: "grow per-line 150%" }}>Per-line scaled, capped at 150%</div>
+```
+
+The target decides which lines share a scale:
+
+| Target                 | Effect                            |
+| ---------------------- | --------------------------------- |
+| `consistent` (default) | One scale for the whole block.    |
+| `per-line`             | Scales each line except the last. |
+| `per-line-all`         | Scales every line.                |
+
+The percentage caps how far the scale can go.
+
+With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the cap holds back. The `line-clamp` count still applies.
+
+### RTL & bidirectional text
+
+Takumi runs the Unicode Bidirectional Algorithm, so Arabic and Hebrew text, mixed with left-to-right text, orders correctly. Set the base direction with the `dir` attribute or `direction: rtl`. `unicode-bidi` controls embedding, isolation, and overrides, as in a browser.
+
+```tsx title="Right-to-left paragraph"
+<p dir="rtl">مرحبا بالعالم, Hello</p>
+```
+
+### Language-aware text
+
+The `lang` attribute sets a node's BCP-47 language. Descendants inherit it, and a nested `lang` overrides it. Takumi uses it in three places:
+
+- **Shaping**: one code point can draw a different glyph for `zh-Hans`, `zh-Hant`, `ja`, or `ko` (Han unification).
+- **Case mapping**: `text-transform` follows Turkish, Azerbaijani, and Greek rules for those languages.
+- **Selectors**: `:lang()` matches it.
+
+```tsx title="Set each element’s language"
+<div>
+  <p lang="ja">日本語</p>
+  <p lang="zh-Hant">繁體中文</p>
+</div>
+```
+
+Pass `lang` to set a default for the whole render. A node's own `lang` still overrides it.
+
+```tsx title="Set the default language"
+const image = await render(node, { width: 1200, height: 630, fonts, lang: "ja" });
+```
+
+Glyphs change only when the font has per-language variants, such as a pan-CJK font. A font made for one region draws the same glyph for every language.
+
+Emoji have their own section: [Images & emoji](/docs/images#emoji).

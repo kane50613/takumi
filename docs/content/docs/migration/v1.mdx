@@ -3,7 +3,7 @@ title: Upgrade to v1
 description: Upgrade Takumi from v0 to v1 and update imports, image formats, layout defaults, and font handling.
 ---
 
-v1 is the first stable release. Releases within v1.x stay backward compatible under semver. To move on from v1, see [Upgrade to v2](/docs/upgrade/v2).
+v1 is the first stable release. Releases within v1.x stay backward compatible under semver. To move on from v1, see [Upgrade to v2](/docs/migration/v2).
 
 ## Install
 
@@ -61,7 +61,7 @@ import { ImageResponse } from "takumi-js/response"; // [!code ++]
 
 `takumi-js` adds an `emoji` option that selects the emoji provider, matching Next.js's `ImageResponse` API. It defaults to `twemoji`. To draw emoji from a font instead, set it to `from-font` and include an emoji font in `fonts`.
 
-See [Images & emoji](/docs/load-images).
+See [Images & emoji](/docs/images).
 
 ```tsx title="emoji option for dynamic emoji loading"
 import { ImageResponse } from "takumi-js/response";

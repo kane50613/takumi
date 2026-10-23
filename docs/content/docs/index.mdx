@@ -75,7 +75,7 @@ await writeFile("hello.png", png);
 
 ## Serve it over HTTP
 
-[`ImageResponse`](/docs/image-response) extends the web `Response`. Return it from any route handler that uses `Request` and `Response`. Its API matches `next/og`.
+[`ImageResponse`](/docs/reference/image-response) extends the web `Response`. Return it from any route handler that uses `Request` and `Response`. Its API matches `next/og`.
 
 ```tsx twoslash title="app/og/route.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -91,7 +91,7 @@ export function GET() {
 <Callout type="warning">
   Takumi never reads system fonts. The only built-in font is Geist, which covers Latin at weights
   300 to 800. Load fonts for other scripts through `fonts`, or their glyphs go missing. See
-  [Fonts](/docs/typography-and-fonts).
+  [Fonts](/docs/fonts).
 </Callout>
 
 ## Load a font
@@ -129,11 +129,11 @@ const png = await render(
 );
 ```
 
-`fonts` also takes a font URL, raw bytes, or a descriptor. To load fonts before the first request, [register them on a `Renderer`](/docs/typography-and-fonts#preloading-with-registerfont).
+`fonts` also takes a font URL, raw bytes, or a descriptor. To load fonts before the first request, [register them on a `Renderer`](/docs/fonts#preloading-with-registerfont).
 
 ## Coming from satori
 
-A bare `<div>` lays out as a block, as in a browser. Keep explicit Flexbox styles when you move a Satori template, and compare the output. `renderSvg()` returns SVG like `satori()` does. `render()` returns encoded image bytes. See the [Satori comparison and migration guide](/docs/comparison-to-satori).
+A bare `<div>` lays out as a block, as in a browser. Keep explicit Flexbox styles when you move a Satori template, and compare the output. `renderSvg()` returns SVG like `satori()` does. `render()` returns encoded image bytes. See the [Satori comparison and migration guide](/docs/migration/satori).
 
 ## Next steps
 
@@ -146,19 +146,19 @@ A bare `<div>` lays out as a block, as in a browser. Keep explicit Flexbox style
   />
   <Card
     title="Integration"
-    href="/docs/integration"
+    href="/docs/frameworks"
     description="Add Takumi to your framework"
     icon={<ToyBrick />}
   />
   <Card
     title="Styling"
-    href="/docs/styling"
+    href="/docs/styles"
     description="Inline styles, Tailwind, and full stylesheets"
     icon={<FileCode2 />}
   />
   <Card
     title="Fonts & text"
-    href="/docs/typography-and-fonts"
+    href="/docs/fonts"
     description="Load fonts, set fallbacks, and style multilingual text"
     icon={<Type />}
   />

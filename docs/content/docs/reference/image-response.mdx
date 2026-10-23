@@ -34,7 +34,7 @@ The first argument takes what `render()` takes: JSX, an HTML string, or a node t
       type: '"png" | "jpeg" | "webp" | "ico" | "raw"',
       default: '"png"',
       description: "Output encoder. Also sets the default content-type.",
-      typeDescriptionLink: "/docs/output-formats",
+      typeDescriptionLink: "/docs/formats",
     },
     quality: {
       type: "number",
@@ -43,23 +43,23 @@ The first argument takes what `render()` takes: JSX, an HTML string, or a node t
     fonts: {
       type: "FontLoader[] | Promise<FontLoader[]>",
       description: "Fonts for this response. Each file decodes once per renderer.",
-      typeDescriptionLink: "/docs/typography-and-fonts",
+      typeDescriptionLink: "/docs/fonts",
     },
     css: {
       type: "CssInput | CssInput[]",
       description: "Stylesheet text or rule objects.",
-      typeDescriptionLink: "/docs/styling#css",
+      typeDescriptionLink: "/docs/styles#css",
     },
     images: {
       type: "ImageLoader[] | { sources, fetchCache, cache, ...fetchOptions }",
       description: "Pre-fetched images keyed by src, and limits for the images Takumi fetches.",
-      typeDescriptionLink: "/docs/load-images",
+      typeDescriptionLink: "/docs/images",
     },
     emoji: {
       type: '"twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat" | "from-font"',
       default: '"twemoji"',
       description: "Where emoji glyphs come from.",
-      typeDescriptionLink: "/docs/load-images#emoji",
+      typeDescriptionLink: "/docs/images#emoji",
     },
     renderer: {
       type: "Renderer",
@@ -73,7 +73,7 @@ The first argument takes what `render()` takes: JSX, an HTML string, or a node t
     signal: {
       type: "AbortSignal",
       description: "Cancels the render while it loads fonts and images.",
-      typeDescriptionLink: "/docs/output-formats#cancellation",
+      typeDescriptionLink: "/docs/formats#cancellation",
     },
     headers: {
       type: "HeadersInit",
@@ -151,7 +151,7 @@ export function GET() {
 
 ## Bring your own renderer
 
-Without `renderer`, every response in the process shares one default renderer and its caches. Pass your own `Renderer` to configure it: set cache budgets, or [register fonts up front](/docs/typography-and-fonts#preloading-with-registerfont).
+Without `renderer`, every response in the process shares one default renderer and its caches. Pass your own `Renderer` to configure it: set cache budgets, or [register fonts up front](/docs/fonts#preloading-with-registerfont).
 
 ```tsx twoslash title="Reuse a native renderer"
 import { Renderer } from "takumi-js/node";
@@ -168,4 +168,4 @@ export function GET() {
 }
 ```
 
-`takumi-js/node` exports the native renderer. On WebAssembly runtimes, use the `Renderer` from `takumi-js/wasm` and call its `init` first, as in [the `measure()` example](/docs/measure-api).
+`takumi-js/node` exports the native renderer. On WebAssembly runtimes, use the `Renderer` from `takumi-js/wasm` and call its `init` first, as in [the `measure()` example](/docs/reference/measure).

@@ -11,7 +11,7 @@
     "react",
     "tailwind"
   ],
-  "homepage": "https://takumi.kane.tw/docs/helpers#parsing-templates",
+  "homepage": "https://takumi.kane.tw/docs/reference/helpers#parsing-templates",
   "bugs": {
     "url": "https://github.com/kane50613/takumi/issues"
   },

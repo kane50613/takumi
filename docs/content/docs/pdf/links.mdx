@@ -62,7 +62,7 @@ const pdf = await render(
 );
 ```
 
-The stretched span draws the dot leader. `format` takes any [counter style](/docs/pdf/headers-and-footers#counter-styles), so `format="upper-roman"` prints `IV` for page 4.
+The stretched span draws the dot leader. `format` takes any [counter style](/docs/pdf/headers#counter-styles), so `format="upper-roman"` prints `IV` for page 4.
 
 A fragment that names no element prints nothing, the same rule links follow.
 
@@ -126,4 +126,4 @@ const pdf = await render(report, {
 | `creationDate` | Creation date, UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS` |
 | `xmp`          | Custom XMP schemas, such as Factur-X's `fx:` block       |
 
-Every field is optional for plain PDF output. [PDF/A and PDF/UA](/docs/pdf/pdf-a#required-inputs) require some of them. Set a fixed `creationDate` for reproducible output.
+Every field is optional for plain PDF output. [PDF/A and PDF/UA](/docs/pdf/conformance#required-inputs) require some of them. Set a fixed `creationDate` for reproducible output.
