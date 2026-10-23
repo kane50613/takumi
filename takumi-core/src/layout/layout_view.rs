@@ -165,6 +165,7 @@ impl<'a> LayoutView<'a> {
   }
 
   /// The boxes `node_id` positioned as their containing block, parent or not.
+  #[cfg(feature = "fragmentation")]
   pub(crate) fn hoisted_children(self, node_id: NodeId) -> impl Iterator<Item = NodeId> + 'a {
     let children: &[NodeId] = match self {
       Self::Final(results) => results

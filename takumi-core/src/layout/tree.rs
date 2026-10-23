@@ -144,6 +144,7 @@ pub struct LayoutResults {
   /// The cells and rows layout hid, which paint nothing.
   pub(in crate::layout) hidden: FxHashSet<usize>,
   /// The boxes each box positioned as their containing block.
+  #[cfg(feature = "fragmentation")]
   pub(in crate::layout) hoisted_children: FxHashMap<NodeId, Vec<NodeId>>,
 }
 
@@ -1082,6 +1083,7 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
+    #[cfg(feature = "fragmentation")]
     let hoisted_children = self
       .nodes
       .iter()
@@ -1101,6 +1103,7 @@ impl<'r> LayoutTree<'r> {
       nodes,
       tables: self.table_fragments,
       hidden: self.hidden,
+      #[cfg(feature = "fragmentation")]
       hoisted_children,
     }
   }

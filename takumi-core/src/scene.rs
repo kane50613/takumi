@@ -388,6 +388,7 @@ impl SceneRequest<'_> {
       container_size,
       paint_bounds,
       roots,
+      #[cfg(feature = "fragmentation")]
       None,
     )
   }
@@ -395,6 +396,7 @@ impl SceneRequest<'_> {
 
 /// What a scene build saw of the out-of-flow boxes and their containing blocks, for deciding which
 /// root fragments a window needs.
+#[cfg(feature = "fragmentation")]
 #[derive(Default)]
 struct BuildTrace {
   /// The fragments visited of boxes that positioned out-of-flow boxes as their containing block.
@@ -410,7 +412,7 @@ fn build_layers(
   container_size: Size<Option<f32>>,
   with_bounds: bool,
   roots: &[(usize, Point<f32>)],
-  mut trace: Option<&mut BuildTrace>,
+  #[cfg(feature = "fragmentation")] mut trace: Option<&mut BuildTrace>,
 ) -> Result<SceneLayers> {
   let mut contexts = vec![StackingContextNode::with_root(None)];
   let mut source_order = 0usize;
@@ -540,6 +542,7 @@ fn build_layers(
       },
     );
     hoisted.enter((visit.node_id, visit.fragment_index), visits.len());
+    #[cfg(feature = "fragmentation")]
     if let Some(trace) = trace.as_deref_mut()
       && layout_results
         .hoisted_children(visit.node_id)
@@ -672,6 +675,7 @@ fn build_layers(
       let mut child_path = visit.path.clone();
 
       child.extend_path(&mut child_path);
+      #[cfg(feature = "fragmentation")]
       if let Some(trace) = trace.as_deref_mut()
         && root
           .node_at_path(&child_path)
