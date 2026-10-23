@@ -1225,7 +1225,7 @@ impl Emitter<'_> {
 
   /// The nearest list item holding the box at `owner_path`, whose `Lbl` holds its marker.
   fn marker_tag_target<'p>(&self, owner_path: &'p [usize]) -> &'p [usize] {
-    let mut current = &self.scene.root;
+    let mut current: &RenderNode = &self.scene.root;
     let mut length = owner_path.len();
 
     for (depth, index) in owner_path.iter().enumerate() {
