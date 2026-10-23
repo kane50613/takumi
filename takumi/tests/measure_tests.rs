@@ -2979,3 +2979,51 @@ fn test_measure_inline_block_reports_its_own_content() {
   assert_eq!(inline_block.runs.len(), 1);
   assert_eq!(inline_block.runs[0].text, "inner");
 }
+
+fn measure_html(html: &str) -> MeasuredNode {
+  measure(
+    Node::from_html(html, FromHtmlOptions::default()).expect("parse"),
+    create_test_viewport(),
+  )
+}
+
+/// A block inside an inline box collapses its margins through the anonymous block around it with
+/// the sibling before, as Blink lays a block-in-inline out in its line's constraint space.
+#[test]
+fn test_measure_block_in_inline_margins_collapse_with_the_block_before() {
+  let out = measure_html(
+    r#"<div style="width:300px; line-height:20px"><div style="height:10px; margin-bottom:25px"></div><span><div style="margin-top:20px"><div style="margin-top:30px; height:10px"></div></div></span></div>"#,
+  );
+
+  assert_close(out.children[1].transform[5], 40.0);
+  assert_close(out.height, 50.0);
+}
+
+/// A block-in-inline's own margins collapse through its parent's block start.
+#[test]
+fn test_measure_block_in_inline_margins_collapse_through_the_parent() {
+  let out = measure_html(
+    r#"<div style="width:300px; padding-top:1px; line-height:20px"><div style="margin-top:10px"><span><div style="margin-top:30px; height:10px"></div></span></div></div>"#,
+  );
+
+  assert_close(out.children[0].transform[5], 31.0);
+}
+
+/// The lines inside a block-in-inline go beside a float placed before it, and a formatting
+/// context root inside it narrows beside the float.
+#[test]
+fn test_measure_block_in_inline_content_goes_beside_a_float() {
+  let lines = measure_html(
+    r#"<div style="width:300px; line-height:20px"><div style="float:left; width:100px; height:100px"></div><span><div>inside</div></span></div>"#,
+  );
+
+  assert_close(lines.children[1].children[0].runs[0].x, 100.0);
+
+  let root = measure_html(
+    r#"<div style="width:300px; line-height:20px"><div style="float:left; width:100px; height:100px"></div><span><div style="overflow:hidden; height:20px"></div></span></div>"#,
+  );
+  let narrowed = &root.children[1].children[0];
+
+  assert_close(narrowed.transform[4], 100.0);
+  assert_close(narrowed.width, 200.0);
+}
