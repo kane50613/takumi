@@ -2,6 +2,8 @@
 //! from its captions, which cells and rows layout hid, the geometry of its columns and column
 //! groups, and its collapsed borders with the rows and columns they run along.
 
+use std::rc::Rc;
+
 use crate::{
   geometry::{NodeId, Point, Size},
   layout::{
@@ -43,7 +45,7 @@ pub struct TableFragment {
   /// `empty-cells: hide`.
   pub(crate) hidden: Vec<NodeId>,
   /// Each cell's first column.
-  pub(crate) cell_columns: Vec<(NodeId, usize)>,
+  pub(crate) cell_columns: Rc<[(NodeId, usize)]>,
   pub(crate) section_row_offsets: Vec<SectionRowOffsets>,
   /// The sections, in layout order.
   pub(crate) sections: Vec<NodeId>,
@@ -55,7 +57,7 @@ pub struct TableFragment {
   /// sections.
   pub(crate) column_edges: Vec<LayoutUnit>,
   /// The collapsed borders, when the table collapses them.
-  pub(crate) borders: Option<TableBorders>,
+  pub(crate) borders: Option<Rc<TableBorders>>,
   /// The widest collapsed border.
   pub(crate) max_border_width: LayoutUnit,
   pub(crate) rtl: bool,
@@ -128,7 +130,7 @@ impl TableFragment {
         .map(|index| structure.borders.border_width(index))
         .max()
         .unwrap_or(LayoutUnit::ZERO);
-      self.borders = Some(structure.borders.clone());
+      self.borders = Some(Rc::clone(&structure.borders));
     }
   }
 
