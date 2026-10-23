@@ -5,7 +5,7 @@
   "icon": "FileText",
   "pages": [
     "index",
-    "--- Guides ---",
+    "---[BookOpen]Guides---",
     "pagination",
     "headers",
     "links",
@@ -13,12 +13,12 @@
     "assets",
     "conformance",
     "attachments",
-    "--- Use cases ---",
+    "---[Briefcase]Use cases---",
     "invoices",
     "reports",
     "charts",
     "tickets",
-    "--- Migration ---",
+    "---[ArrowRightLeft]Migration---",
     "...migration",
     "comparison"
   ]
