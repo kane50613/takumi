@@ -26,8 +26,8 @@ use crate::{
     box_fragment_builder::BoxFragmentBuilder,
     break_token_algorithm_data::BreakTokenAlgorithmData,
     fragmentation_utils::{
-      finish_fragmentation, fragment_index, fragmentation_layout_input_for_child,
-      indexed_block_child_entries, is_break_inside, join_fragmentainer_break_values,
+      IndexedBlockChildIterator, finish_fragmentation, fragment_index,
+      fragmentation_layout_input_for_child, is_break_inside, join_fragmentainer_break_values,
       setup_fragment_builder_for_fragmentation, setup_space_builder_for_fragmentation,
     },
     logical_rect::LogicalBoxStrut,
@@ -262,14 +262,14 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
 #[cfg(feature = "fragmentation")]
 impl TableRowLayoutAlgorithm<'_, '_> {
   /// Blink's `BlockChildIterator` over the row's cells, by index in the row.
-  fn cell_entries(&self) -> Vec<(usize, ChildBreakToken)> {
+  fn cell_entries(&self) -> IndexedBlockChildIterator {
     let cells: Rc<[NodeId]> = self.data.structure.sections[self.section].rows[self.row]
       .cells
       .iter()
       .map(|cell| cell.node)
       .collect();
 
-    indexed_block_child_entries(&cells, self.input.break_token.as_deref())
+    IndexedBlockChildIterator::new(cells, self.input.break_token.as_deref())
   }
 
   /// A cell's block size in this fragment: what the row gives it, less what its earlier fragments
@@ -426,12 +426,11 @@ impl TableRowLayoutAlgorithm<'_, '_> {
 /// The fragmentation hooks without the `fragmentation` feature, where nothing breaks.
 #[cfg(not(feature = "fragmentation"))]
 impl TableRowLayoutAlgorithm<'_, '_> {
-  fn cell_entries(&self) -> Vec<(usize, ChildBreakToken)> {
+  fn cell_entries(&self) -> impl Iterator<Item = (usize, ChildBreakToken)> + use<> {
     (0..self.data.structure.sections[self.section].rows[self.row]
       .cells
       .len())
       .map(|index| (index, ()))
-      .collect()
   }
 
   fn resumed_cell_block_size(

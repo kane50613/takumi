@@ -70,6 +70,9 @@ pub(crate) struct RowPart {
 pub(crate) struct SectionPart {
   pub(crate) node: NodeId,
   pub(crate) rows: Vec<RowPart>,
+  /// Each row's node, in row order, which a page resuming the section searches.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) row_nodes: Rc<[NodeId]>,
   pub(crate) is_tbody: bool,
 }
 
@@ -193,6 +196,8 @@ impl<'r> LayoutTree<'r> {
 
       sections.push(SectionPart {
         node: section,
+        #[cfg(feature = "fragmentation")]
+        row_nodes: rows.iter().map(|row| row.node).collect(),
         rows,
         is_tbody,
       });
@@ -793,7 +798,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
 
     let row_count = rows.rows.len();
 
-    if rows.rows.iter().any(|row| row.is_collapsed) {
+    if rows.has_collapsed_rows {
       let rows = Rc::make_mut(&mut rows);
 
       for row in rows.rows.iter_mut().filter(|row| row.is_collapsed) {
@@ -881,6 +886,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         total_row_percent += *percent;
       }
       section_block_size += row_constraint.block_size;
+      rows.has_collapsed_rows |= row_constraint.is_collapsed;
       rows.rows.push(row_constraint);
     }
 

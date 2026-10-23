@@ -15,6 +15,8 @@ pub(super) struct Rows {
   pub(super) sections: Vec<Section>,
   pub(super) cells: Vec<CellBlockConstraint>,
   pub(super) measures: Vec<CellMeasure>,
+  /// Whether any row is collapsed, so a fragment need not look through every row to know.
+  pub(super) has_collapsed_rows: bool,
 }
 
 /// One cell's measure-pass size and baseline.

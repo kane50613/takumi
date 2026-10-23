@@ -65,8 +65,6 @@ pub struct TableFragment {
   pub(crate) column_edges: Vec<LayoutUnit>,
   /// The collapsed borders, when the table collapses them.
   pub(crate) borders: Option<Rc<TableBorders>>,
-  /// The widest collapsed border.
-  pub(crate) max_border_width: LayoutUnit,
   pub(crate) rtl: bool,
 }
 
@@ -133,10 +131,6 @@ impl TableFragment {
         .map(|location| location.offset)
         .chain(column_locations.last().map(|last| last.offset + last.size))
         .collect();
-      self.max_border_width = (0..structure.borders.edges.len())
-        .map(|index| structure.borders.border_width(index))
-        .max()
-        .unwrap_or(LayoutUnit::ZERO);
       self.borders = Some(Rc::clone(&structure.borders));
     }
   }

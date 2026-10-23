@@ -170,6 +170,8 @@ pub(crate) struct TableBorders {
   pub(crate) is_collapsed: bool,
   /// Whether the table runs right to left, so its columns' inline-start edges are their right ones.
   rtl: bool,
+  /// The widest collapsed border, how far an edge's paint reaches past its row line.
+  pub(crate) max_border_width: LayoutUnit,
 }
 
 impl TableBorders {
@@ -187,6 +189,7 @@ impl TableBorders {
       last_column_index: usize::MAX,
       is_collapsed,
       rtl: table.context.style.inherited_data.direction == Direction::Rtl,
+      max_border_width: LayoutUnit::ZERO,
     };
 
     if !is_collapsed {
@@ -345,6 +348,10 @@ impl TableBorders {
       None,
     );
     borders.update_table_border(table_row_count, table_column_count);
+    borders.max_border_width = (0..borders.edges.len())
+      .map(|index| borders.border_width(index))
+      .max()
+      .unwrap_or(LayoutUnit::ZERO);
 
     borders
   }
