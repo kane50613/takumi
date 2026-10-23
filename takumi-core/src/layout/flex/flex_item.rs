@@ -1,7 +1,8 @@
 //! Blink's [`FlexItem`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/flex/flex_item.h)
-//! and [`FlexLine`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/flex/flex_line.h),
-//! without fragmentation.
+//! and [`FlexLine`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/flex/flex_line.h).
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::logical_rect::LogicalOffset;
 use crate::{
   geometry::NodeId,
   layout::{
@@ -119,8 +120,26 @@ impl FlexItem {
   }
 }
 
+/// Blink's `FlexItemData`: what a container that breaks across pages keeps of an item placed in a
+/// line, to lay it out on each page.
+#[cfg(feature = "fragmentation")]
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct FlexItemData {
+  pub(crate) node: NodeId,
+  pub(crate) item_index: usize,
+  /// The border box's offset in the container laid out in one piece.
+  pub(crate) offset: LogicalOffset,
+  pub(crate) alignment: ItemPosition,
+  pub(crate) main_axis_final_size: LayoutUnit,
+  pub(crate) margin_block_end: LayoutUnit,
+  /// The block size the item has yet to lay out on later pages.
+  pub(crate) total_remaining_block_size: LayoutUnit,
+  pub(crate) is_initial_block_size_indefinite: bool,
+  pub(crate) is_used_flex_basis_indefinite: bool,
+}
+
 /// Blink's `FlexLine`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct FlexLine {
   pub(crate) item_indices: Vec<usize>,
   pub(crate) main_axis_free_space: LayoutUnit,
@@ -129,4 +148,19 @@ pub(crate) struct FlexLine {
   pub(crate) minor_baseline: LayoutUnit,
   pub(crate) main_axis_auto_margin_count: u32,
   pub(crate) cross_axis_offset: LayoutUnit,
+  /// How far breaks on earlier pages moved the line's items.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) item_offset_adjustment: LayoutUnit,
+  #[cfg(feature = "fragmentation")]
+  pub(crate) has_seen_all_children: bool,
+  #[cfg(feature = "fragmentation")]
+  pub(crate) line_items_data: Vec<FlexItemData>,
+}
+
+#[cfg(feature = "fragmentation")]
+impl FlexLine {
+  /// Blink's `LineCrossEnd`.
+  pub(crate) fn line_cross_end(&self) -> LayoutUnit {
+    self.line_cross_size + self.cross_axis_offset + self.item_offset_adjustment
+  }
 }

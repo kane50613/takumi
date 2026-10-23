@@ -24,6 +24,45 @@ use crate::{
   style::{BoxDecorationBreak, BreakBetween, BreakInside},
 };
 
+/// Blink's `FlexColumnBreakInfo`: the break state of one column of a multi-line column flex
+/// container, which breaks on its own.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct FlexColumnBreakInfo {
+  pub(crate) column_intrinsic_block_size: LayoutUnit,
+  pub(crate) early_break: Option<Rc<EarlyBreak>>,
+  pub(crate) break_after: BreakBetween,
+}
+
+/// How a flex item takes part in Blink's breakpoint checks: an item of a row leaves forced breaks
+/// and the early break before it to the row, and an item of a column keeps its column's early
+/// break apart.
+#[derive(Debug, Default)]
+pub(crate) struct FlexItemBreak<'f> {
+  pub(crate) is_row_item: bool,
+  pub(crate) column: Option<&'f mut FlexColumnBreakInfo>,
+}
+
+impl FlexItemBreak<'_> {
+  /// The appeal of the early break the breakpoint competes with: its column's, or the builder's.
+  fn early_break_appeal(&self, builder: &BoxFragmentBuilder) -> Option<BreakAppeal> {
+    match &self.column {
+      Some(column) => column
+        .early_break
+        .as_ref()
+        .map(|early_break| early_break.break_appeal),
+      None => builder.early_break_appeal(),
+    }
+  }
+
+  /// Keeps `early_break` as the column's, or the builder's.
+  fn set_early_break(&mut self, builder: &mut BoxFragmentBuilder, early_break: EarlyBreak) {
+    match &mut self.column {
+      Some(column) => column.early_break = Some(Rc::new(early_break)),
+      None => builder.early_break = Some(Rc::new(early_break)),
+    }
+  }
+}
+
 /// Blink's `FragmentainerBreakPrecedence`.
 fn fragmentainer_break_precedence(value: BreakBetween) -> u8 {
   match value {
@@ -217,7 +256,8 @@ pub(crate) fn is_early_break_target(
   child: Option<NodeId>,
 ) -> bool {
   match (&early_break.target, child) {
-    (EarlyBreakTarget::Line(line_number), None) => *line_number == builder.line_count,
+    // A line, or a row of a flex container.
+    (EarlyBreakTarget::Line(line_number), _) => *line_number == builder.line_count,
     (EarlyBreakTarget::Block { node, .. }, Some(child)) => {
       early_break.is_break_before() && *node == child
     }
@@ -381,7 +421,7 @@ pub(crate) fn setup_space_builder_for_fragmentation(
 }
 
 /// Blink's `BreakBeforeChildIfNeeded` for a block-level `child` laid out as `result` at
-/// `fragmentainer_block_offset`: whether the layout broke before it.
+/// `fragmentainer_block_offset`, a flex item as `flex` says: whether the layout broke before it.
 pub(crate) fn break_before_child_if_needed(
   space: &ConstraintSpace,
   builder: &mut BoxFragmentBuilder,
@@ -389,8 +429,9 @@ pub(crate) fn break_before_child_if_needed(
   result: &LayoutResult,
   fragmentainer_block_offset: LayoutUnit,
   has_container_separation: bool,
+  mut flex: FlexItemBreak<'_>,
 ) -> Result<bool, LayoutStatus> {
-  if has_container_separation {
+  if has_container_separation && !flex.is_row_item {
     let break_between = calculate_break_between_value(Some(child.1), result, builder);
 
     if is_forced_break_value(space, break_between) {
@@ -398,7 +439,7 @@ pub(crate) fn break_before_child_if_needed(
         space,
         builder,
         Some(child),
-        result,
+        Some(result),
         BreakAppeal::Perfect,
         true,
       );
@@ -421,27 +462,37 @@ pub(crate) fn break_before_child_if_needed(
     result,
     fragmentainer_block_offset,
     appeal_before,
+    &mut flex,
   ) {
     return Ok(false);
   }
-  if !attempt_soft_break(space, builder, Some(child), result, appeal_before) {
+  if !attempt_soft_break(
+    space,
+    builder,
+    Some(child),
+    Some(result),
+    appeal_before,
+    &flex,
+  ) {
     return Err(LayoutStatus::NeedsEarlierBreak);
   }
   Ok(true)
 }
 
-/// Blink's `BreakBeforeChild`, for a block child or, as `None`, the next line.
+/// Blink's `BreakBeforeChild`, for a block child or, as `None`, the next line, laid out as
+/// `result`, none for a flex row.
 pub(crate) fn break_before_child(
   space: &ConstraintSpace,
   builder: &mut BoxFragmentBuilder,
   child: Option<(NodeId, &LayoutStyle)>,
-  result: &LayoutResult,
+  result: Option<&LayoutResult>,
   appeal: BreakAppeal,
   is_forced_break: bool,
 ) {
   if space.should_propagate_child_break_values()
     && !is_forced_break
     && let Some((_, child_style)) = child
+    && let Some(result) = result
   {
     builder.propagate_child_break_values(result, child_style);
   }
@@ -458,6 +509,7 @@ pub(crate) fn move_past_breakpoint(
   result: &LayoutResult,
   fragmentainer_block_offset: LayoutUnit,
   appeal_before: BreakAppeal,
+  flex: &mut FlexItemBreak<'_>,
 ) -> bool {
   if result.status != LayoutStatus::Success {
     return false;
@@ -496,8 +548,8 @@ pub(crate) fn move_past_breakpoint(
       if is_break_inside(break_token) || appeal_inside < BreakAppeal::Perfect {
         // Breaking inside is better than before only where it is as good.
         if appeal_inside >= appeal_before
-          && builder
-            .early_break_appeal()
+          && flex
+            .early_break_appeal(builder)
             .is_none_or(|early_appeal| appeal_inside >= early_appeal)
         {
           move_past = true;
@@ -511,8 +563,11 @@ pub(crate) fn move_past_breakpoint(
     }
   }
 
-  if move_past && let Some(child) = child {
-    update_early_break_at_block_child(space, builder, child, result, appeal_before);
+  if move_past
+    && !flex.is_row_item
+    && let Some(child) = child
+  {
+    update_early_break_at_block_child(space, builder, child, result, appeal_before, flex);
   }
   move_past
 }
@@ -525,6 +580,7 @@ fn update_early_break_at_block_child(
   (child, child_style): (NodeId, &LayoutStyle),
   result: &LayoutResult,
   appeal_before: BreakAppeal,
+  flex: &mut FlexItemBreak<'_>,
 ) {
   let mut appeal_inside = BreakAppeal::LastResort;
 
@@ -537,27 +593,26 @@ fn update_early_break_at_block_child(
         child_style.breaks.break_inside,
       )),
     );
-    if builder
-      .early_break_appeal()
+    if flex
+      .early_break_appeal(builder)
       .is_none_or(|early_appeal| early_appeal <= breakpoint.break_appeal)
     {
-      builder.early_break = Some(Rc::new(EarlyBreak::block(
-        child,
-        appeal_inside,
-        Some(Rc::clone(breakpoint)),
-      )));
+      flex.set_early_break(
+        builder,
+        EarlyBreak::block(child, appeal_inside, Some(Rc::clone(breakpoint))),
+      );
     }
   }
   if appeal_before <= appeal_inside {
     return;
   }
-  if builder
-    .early_break_appeal()
+  if flex
+    .early_break_appeal(builder)
     .is_some_and(|early_appeal| early_appeal > appeal_before)
   {
     return;
   }
-  builder.early_break = Some(Rc::new(EarlyBreak::block(child, appeal_before, None)));
+  flex.set_early_break(builder, EarlyBreak::block(child, appeal_before, None));
 }
 
 /// Blink's `AttemptSoftBreak`: breaks before a block child, or the next line as `None`, unless a
@@ -566,11 +621,12 @@ pub(crate) fn attempt_soft_break(
   space: &ConstraintSpace,
   builder: &mut BoxFragmentBuilder,
   child: Option<(NodeId, &LayoutStyle)>,
-  result: &LayoutResult,
+  result: Option<&LayoutResult>,
   appeal_before: BreakAppeal,
+  flex: &FlexItemBreak<'_>,
 ) -> bool {
-  if builder
-    .early_break_appeal()
+  if flex
+    .early_break_appeal(builder)
     .is_some_and(|early_appeal| early_appeal > appeal_before)
   {
     return false;

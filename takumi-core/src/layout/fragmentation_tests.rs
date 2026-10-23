@@ -922,3 +922,80 @@ fn a_table_that_clones_its_decorations_leaves_them_out_of_its_rows() {
     [placed(0, 0.0, 200.0), placed(1, 0.0, 180.0)]
   );
 }
+
+const FLEX_CSS: &str = ".column { display: flex; flex-direction: column } \
+  .row { display: flex; flex-wrap: wrap } .full { width: 100% } .h120 { height: 120px } \
+  .h150 { height: 150px } .h300 { height: 300px } .avoid { break-inside: avoid } \
+  .before { break-before: page }";
+
+fn flex(class: &str, items: impl IntoIterator<Item = Node>) -> Node {
+  Node::container(items.into_iter().collect::<Vec<_>>())
+    .with_class_name(class)
+    .with_id("flex")
+}
+
+#[test]
+fn a_column_flex_item_breaks_across_pages() {
+  let tree = render(
+    root([flex("column", [block("a", "h150"), block("b", "h150")])]),
+    FLEX_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["a"], [placed(0, 0.0, 150.0)]);
+  assert_eq!(boxes["b"], [placed(0, 150.0, 50.0), placed(1, 0.0, 100.0)]);
+  assert_eq!(
+    boxes["flex"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+}
+
+#[test]
+fn a_column_flex_item_after_a_forced_break_starts_the_next_page() {
+  let tree = render(
+    root([flex(
+      "column",
+      [block("a", "h120"), block("b", "h120 before")],
+    )]),
+    FLEX_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["b"], [placed(1, 0.0, 120.0)]);
+}
+
+#[test]
+fn a_flex_row_item_breaks_inside_where_the_page_ends() {
+  let tree = render(
+    root([flex(
+      "row",
+      [block("a", "full h120"), block("b", "full h120")],
+    )]),
+    FLEX_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["b"], [placed(0, 120.0, 80.0), placed(1, 0.0, 40.0)]);
+}
+
+#[test]
+fn a_flex_row_that_avoids_breaking_inside_moves_to_the_next_page() {
+  let tree = render(
+    root([flex(
+      "row",
+      [block("a", "full h120"), block("b", "full h120 avoid")],
+    )]),
+    FLEX_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["b"], [placed(1, 0.0, 120.0)]);
+  assert_eq!(
+    boxes["flex"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 120.0)]
+  );
+}

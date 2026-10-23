@@ -487,6 +487,30 @@ impl BoxFragmentBuilder {
     border_padding
   }
 
+  /// Blink's `LastChildBreakToken`: the break token of the last child that broke.
+  pub(crate) fn last_child_break_token(&self) -> Option<&BlockBreakToken> {
+    match self.child_break_tokens.last()? {
+      BreakToken::Block(token) => Some(token),
+      BreakToken::Inline(_) => None,
+    }
+  }
+
+  /// Blink's `ClonedBlockStartDecoration`: the block-start border and padding a resumed fragment
+  /// repeats when its decorations clone.
+  pub(crate) fn cloned_block_start_decoration(&self) -> LayoutUnit {
+    let is_cloned = self.box_decoration_break == BoxDecorationBreak::Clone
+      && self
+        .previous_break_token
+        .as_deref()
+        .is_some_and(|token| is_break_inside(Some(token)) && !token.is_at_block_end);
+
+    if is_cloned {
+      self.border_padding.block_start
+    } else {
+      LayoutUnit::ZERO
+    }
+  }
+
   /// Blink's `ShouldCloneBlockStartBorderPadding`.
   pub(crate) fn should_clone_block_start_border_padding(&self) -> bool {
     if self.box_decoration_break != BoxDecorationBreak::Clone {

@@ -8,8 +8,8 @@ use crate::layout::{
   box_fragment_builder::BoxFragmentBuilder,
   break_appeal::BreakAppeal,
   fragmentation_utils::{
-    block_child_entries, break_before_child_if_needed, finish_fragmentation, fragment_index,
-    fragmentation_layout_input_for_child, is_early_break_target,
+    FlexItemBreak, block_child_entries, break_before_child_if_needed, finish_fragmentation,
+    fragment_index, fragmentation_layout_input_for_child, is_early_break_target,
     setup_fragment_builder_for_fragmentation, setup_space_builder_for_fragmentation,
   },
   logical_rect::LogicalBoxStrut,
@@ -274,6 +274,7 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
       result,
       fragmentainer_block_offset,
       has_container_separation,
+      FlexItemBreak::default(),
     )
   }
 

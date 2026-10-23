@@ -4,11 +4,15 @@
 
 use std::{fmt, rc::Rc};
 
-use crate::{layout::table::TableBreakTokenData, layout_unit::LayoutUnit};
+use crate::{
+  layout::{flex::flex_layout_algorithm::FlexBreakTokenData, table::TableBreakTokenData},
+  layout_unit::LayoutUnit,
+};
 
 /// The data an algorithm resumes a box from.
 #[derive(Clone)]
 pub(crate) enum BreakTokenAlgorithmData {
+  Flex(Rc<FlexBreakTokenData>),
   Table(Rc<TableBreakTokenData>),
   /// Blink's `TableRowBreakTokenData`: the block size the row's earlier fragments took.
   TableRow {
@@ -19,6 +23,7 @@ pub(crate) enum BreakTokenAlgorithmData {
 impl PartialEq for BreakTokenAlgorithmData {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
+      (Self::Flex(data), Self::Flex(other)) => data == other,
       (Self::Table(data), Self::Table(other)) => Rc::ptr_eq(data, other),
       (
         Self::TableRow {
@@ -36,6 +41,7 @@ impl PartialEq for BreakTokenAlgorithmData {
 impl fmt::Debug for BreakTokenAlgorithmData {
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
+      Self::Flex(_) => formatter.write_str("Flex"),
       Self::Table(_) => formatter.write_str("Table"),
       Self::TableRow {
         previous_consumed_row_block_size,
