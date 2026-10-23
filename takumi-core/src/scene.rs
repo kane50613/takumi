@@ -2,7 +2,10 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
+use rustc_hash::FxHashMap;
+
 use crate::{
+  context::BoxId,
   error::{Error, Result},
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
@@ -823,13 +826,13 @@ impl FragmentChildren {
 
 /// For a scene that paints several fragments of a box: by each box's child path, the indices of
 /// its children that no paint of their own places.
-pub struct FragmentPlacements(HashMap<Vec<usize>, Vec<usize>>);
+pub struct FragmentPlacements(FxHashMap<BoxId, Vec<usize>>);
 
 impl FragmentPlacements {
   /// The placements of `root`, whose boxes at the `placed` paths paint on their own.
   #[cfg(feature = "fragmentation")]
   fn new(root: &RenderNode, placed: &HashSet<Vec<usize>>) -> Self {
-    let mut unplaced = HashMap::new();
+    let mut unplaced = FxHashMap::default();
     let mut stack = vec![(root, Vec::new())];
 
     while let Some((node, path)) = stack.pop() {
@@ -845,7 +848,7 @@ impl FragmentPlacements {
         stack.push((child, child_path));
       }
       if !children.is_empty() {
-        unplaced.insert(path, children);
+        unplaced.insert(node.context.box_id(), children);
       }
     }
     Self(unplaced)
@@ -858,30 +861,30 @@ impl FragmentPlacements {
     let Some(node) = root.node_at_path(&paint.path) else {
       return;
     };
-    let mut stack = vec![(node, paint.path.clone(), paint.paint_offset - location)];
 
-    while let Some((node, path, base)) = stack.pop() {
-      let own = if path == paint.path {
-        paint.paint_offset
-      } else {
-        base
-      };
+    node
+      .context
+      .enter_fragment(paint.paint_offset - location, paint.fragment_index);
 
+    let mut stack: Vec<_> = self
+      .unplaced_children(node)
+      .map(|child| (child, paint.paint_offset))
+      .collect();
+
+    while let Some((node, base)) = stack.pop() {
       node.context.enter_fragment(base, paint.fragment_index);
-      for &index in self.0.get(&path).into_iter().flatten() {
-        let Some(child) = node
-          .children
-          .as_deref()
-          .and_then(|children| children.get(index))
-        else {
-          continue;
-        };
-        let mut child_path = path.clone();
-
-        child_path.push(index);
-        stack.push((child, child_path, own));
-      }
+      stack.extend(self.unplaced_children(node).map(|child| (child, base)));
     }
+  }
+
+  /// The children of `node` no paint of their own places.
+  fn unplaced_children<'n>(&'n self, node: &'n RenderNode) -> impl Iterator<Item = &'n RenderNode> {
+    self
+      .0
+      .get(&node.context.box_id())
+      .into_iter()
+      .flatten()
+      .filter_map(|&index| node.children.as_deref()?.get(index))
   }
 }
 
