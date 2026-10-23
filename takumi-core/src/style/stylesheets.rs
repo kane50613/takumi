@@ -1842,6 +1842,19 @@ define_style! {
       target.push(StyleDeclaration::grid_row_start(value.start));
       target.push(StyleDeclaration::grid_row_end(value.end));
     },
+    grid_template: GridTemplate => [GridTemplateRows, GridTemplateColumns, GridTemplateAreas] |value, target| {
+      target.push(StyleDeclaration::grid_template_rows(value.rows));
+      target.push(StyleDeclaration::grid_template_columns(value.columns));
+      target.push(StyleDeclaration::grid_template_areas(value.areas));
+    },
+    grid: Grid => [GridTemplateRows, GridTemplateColumns, GridTemplateAreas, GridAutoFlow, GridAutoRows, GridAutoColumns] |value, target| {
+      target.push(StyleDeclaration::grid_template_rows(value.template.rows));
+      target.push(StyleDeclaration::grid_template_columns(value.template.columns));
+      target.push(StyleDeclaration::grid_template_areas(value.template.areas));
+      target.push(StyleDeclaration::grid_auto_flow(value.auto_flow));
+      target.push(StyleDeclaration::grid_auto_rows(value.auto_rows));
+      target.push(StyleDeclaration::grid_auto_columns(value.auto_columns));
+    },
     grid_area: GridArea => [GridRowStart, GridColumnStart, GridRowEnd, GridColumnEnd] |value, target| {
       target.push(StyleDeclaration::grid_row_start(value.row_start));
       target.push(StyleDeclaration::grid_column_start(value.column_start));
