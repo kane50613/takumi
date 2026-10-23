@@ -107,7 +107,17 @@ Set `premultiplied` when the bytes already have premultiplied alpha. Takumi then
 
 ### Dynamic fetching
 
-Set `emoji` to choose the set. The options match satori: `twemoji` (default), `blobmoji`, `noto`, `openmoji`, `fluent`, and `fluentFlat`. `render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take it.
+Set `emoji` to choose the set. `render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take it, and the CDN values match satori's. Each emoji's SVG comes from jsDelivr, at the version the table lists:
+
+| Value               | Emoji set                         | Fetched from                                                                                |
+| :------------------ | :-------------------------------- | :------------------------------------------------------------------------------------------ |
+| `twemoji` (default) | Twemoji                           | [jdecked/twemoji](https://github.com/jdecked/twemoji) 17.0.2                                |
+| `blobmoji`          | Blobmoji                          | [`@svgmoji/blob`](https://www.npmjs.com/package/@svgmoji/blob) 2.0.0                        |
+| `noto`              | Noto Emoji                        | [googlefonts/noto-emoji](https://github.com/googlefonts/noto-emoji) v2.051                  |
+| `openmoji`          | OpenMoji                          | [`@svgmoji/openmoji`](https://www.npmjs.com/package/@svgmoji/openmoji) 2.0.0                |
+| `fluent`            | Fluent Emoji, color               | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode), latest |
+| `fluentFlat`        | Fluent Emoji, flat                | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode), latest |
+| `from-font`         | Glyphs from a color font you load | No fetch. See [COLR / bitmap fonts](#colr--bitmap-fonts)                                    |
 
 ```tsx twoslash title="Fetch emoji images"
 import { ImageResponse } from "takumi-js/response";

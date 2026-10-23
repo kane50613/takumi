@@ -82,14 +82,7 @@ satori 0.63 draws a variable font at its default instance. Takumi applies `font-
 
 ## Emoji
 
-`next/og` resolves emoji through satori's `loadAdditionalAsset` callback. Takumi's `ImageResponse` and `render` take the same `emoji` option, which accepts these values:
-
-- `twemoji` (the default)
-- `blobmoji`
-- `noto`
-- `openmoji`
-- `fluent`
-- `fluentFlat`
+`next/og` resolves emoji through satori's `loadAdditionalAsset` callback. Takumi's `ImageResponse` and `render` take the same `emoji` option with the same values, and [Image loading & emoji](/docs/images#dynamic-fetching) lists each set and where it comes from.
 
 To draw emoji from a registered color font, set `emoji: "from-font"`. See [Emoji](/docs/images#emoji).
 
