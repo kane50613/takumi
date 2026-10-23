@@ -151,7 +151,7 @@ fn axis_edge_from_item_position(
 }
 
 /// Blink's `GridItemData`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct GridItemData {
   pub(crate) node: NodeId,
   pub(crate) style: Rc<LayoutStyle>,

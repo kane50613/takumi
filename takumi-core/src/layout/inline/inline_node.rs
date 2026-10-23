@@ -1,6 +1,6 @@
 //! Blink's [`InlineNode`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_node.cc).
 
-use std::{cell::RefCell, ptr, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use icu_properties::props::Script;
 
@@ -639,7 +639,7 @@ fn should_break_shaping_before_text(
     .map(|object| &object.node().context);
 
   if let Some(context) = context
-    && !start_context.is_some_and(|start_context| ptr::eq(context, start_context))
+    && !start_context.is_some_and(|start_context| context.box_id() == start_context.box_id())
   {
     let font = fonts.get(context);
 

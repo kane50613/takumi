@@ -28,8 +28,8 @@ impl PartialEq for BreakTokenAlgorithmData {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (Self::Flex(data), Self::Flex(other)) => data == other,
-      (Self::Grid(data), Self::Grid(other)) => Rc::ptr_eq(data, other),
-      (Self::Table(data), Self::Table(other)) => Rc::ptr_eq(data, other),
+      (Self::Grid(data), Self::Grid(other)) => data == other,
+      (Self::Table(data), Self::Table(other)) => data == other,
       (
         Self::TableRow {
           previous_consumed_row_block_size,

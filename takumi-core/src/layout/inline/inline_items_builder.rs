@@ -1,7 +1,5 @@
 //! Blink's [`InlineItemsBuilder`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_items_builder.cc).
 
-use std::ptr;
-
 use super::outline::InlineOutline;
 use super::{
   inline_item::{
@@ -826,7 +824,7 @@ impl<'c> InlineItemsBuilder<'c> {
   /// Blink's `Exit`: closes the contexts `node` opened.
   fn exit(&mut self, node: Option<&'c RenderNode>) {
     while let Some(context) = self.bidi_context.last()
-      && context.node.map(ptr::from_ref) == node.map(ptr::from_ref)
+      && context.node.map(|node| node.context.box_id()) == node.map(|node| node.context.box_id())
     {
       let (layout_object, exit) = (context.layout_object, context.exit);
 

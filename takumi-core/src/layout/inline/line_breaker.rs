@@ -1929,7 +1929,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     if line_info
       .results
       .last()
-      .is_none_or(|result| !std::ptr::eq(result.item, item))
+      .is_none_or(|result| result.item_index != item_index)
     {
       self.add_empty_item(item_index, line_info);
     }
@@ -2791,17 +2791,11 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
     // A leading float is handed out again.
     if item_result.item_index < self.leading_floats.handled_index
-      && let Some(index) = self.leading_floats.floats.iter().position(|leading_float| {
-        item_result
-          .positioned_float
-          .as_ref()
-          .is_some_and(|positioned_float| {
-            Rc::ptr_eq(
-              &leading_float.positioned_float.layout_result,
-              &positioned_float.layout_result,
-            )
-          })
-      })
+      && let Some(index) = self
+        .leading_floats
+        .floats
+        .iter()
+        .position(|leading_float| leading_float.item_index == item_result.item_index)
     {
       self.leading_floats_index = index;
     }
@@ -3461,7 +3455,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   fn set_current_style(&mut self, style: &'c RenderContext) {
     if self
       .current_style
-      .is_some_and(|current_style| std::ptr::eq(current_style, style))
+      .is_some_and(|current_style| current_style.box_id() == style.box_id())
     {
       return;
     }

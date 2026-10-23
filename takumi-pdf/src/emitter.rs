@@ -1,6 +1,6 @@
 //! The scene walker that emits boxes, text and images onto a krilla surface.
 
-use std::{cell::RefCell, collections::HashMap, ptr, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[cfg(all(feature = "images", feature = "svg"))]
 use takumi_core::resources::image::ImageSource;
@@ -1220,15 +1220,7 @@ impl Emitter<'_> {
   /// Opens the region for a node the paint list never visited, so its content
   /// still reaches the structure tree.
   fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
-    self.start_node_region(node, self.path_of(node).as_deref(), surface);
-  }
-
-  /// The path of `node` on this emitter's tree, when it lies there.
-  fn path_of(&self, node: &RenderNode) -> Option<Vec<usize>> {
-    self
-      .scene
-      .root
-      .path_where(|candidate| ptr::eq(candidate, node))
+    self.start_node_region(node, self.scene.root.path_to(node).as_deref(), surface);
   }
 
   /// The nearest list item holding the box at `owner_path`, whose `Lbl` holds its marker.

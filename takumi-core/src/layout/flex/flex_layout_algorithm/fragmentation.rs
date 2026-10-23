@@ -1118,7 +1118,7 @@ impl FlexLayoutAlgorithm<'_, '_> {
     {
       return Err(LayoutStatus::NeedsRelayoutWithRowCrossSizeChanges);
     }
-    if !self.builder.has_inflow_child_break_inside()
+    if !self.builder.has_inflow_child_break_inside
       && item_iterator
         .next_item(flex_lines, broke_before_row)
         .is_none()

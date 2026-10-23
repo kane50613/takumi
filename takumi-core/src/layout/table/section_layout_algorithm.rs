@@ -307,7 +307,7 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
   }
 
   fn has_inflow_child_break_inside(&self) -> bool {
-    self.space.has_block_fragmentation() && self.builder.has_inflow_child_break_inside()
+    self.space.has_block_fragmentation() && self.builder.has_inflow_child_break_inside
   }
 
   fn set_has_seen_all_children(&mut self) {

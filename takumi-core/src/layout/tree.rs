@@ -1,5 +1,5 @@
 use std::{
-  borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, ptr, rc::Rc, slice, sync::Arc,
+  borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, rc::Rc, slice, sync::Arc,
   vec::IntoIter,
 };
 
@@ -19,7 +19,7 @@ use crate::layout::{
 
 use crate::{
   Error,
-  context::RenderContext,
+  context::{BoxId, RenderContext},
   font_style::SizedFontStyle,
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
@@ -329,7 +329,7 @@ pub struct LayoutTree<'r> {
   table_fragments: FxHashMap<usize, Vec<TableFragment>>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
   /// context lays out as, made the first time its line lays it out.
-  atomic_inlines: FxHashMap<*const RenderNode, NodeId>,
+  atomic_inlines: FxHashMap<BoxId, NodeId>,
   /// Each inline formatting context's lines from its block layout, until it finishes.
   pub(crate) inline_contents: FxHashMap<NodeId, InlineContent<'r>>,
   /// The first layout of each repeated table header and footer, which every repetition reuses,
@@ -427,21 +427,14 @@ pub(crate) struct LayoutNodeState {
   /// Its children in layout order, or for an inline formatting context the out-of-flow boxes in
   /// its inline content.
   pub(crate) children: Box<[NodeId]>,
-  box_children: Box<[OrderedChild]>,
+  /// Its children in paint order, the boxes of its inline content among them.
+  pub(crate) box_children: Box<[OrderedChild]>,
   /// The out-of-flow boxes this node positioned as their containing block, from its last layout.
   pub(crate) hoisted_children: Vec<NodeId>,
   /// The grid this node last laid out, which places its out-of-flow children in their areas.
   pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
   /// The out-of-flow boxes this node is the containing block for.
   pub(crate) claims: ContainingBlockClaims,
-}
-
-impl LayoutNodeState {
-  /// Its children in paint order, the boxes of its inline content among them.
-  #[cfg(feature = "fragmentation")]
-  pub(crate) fn box_children(&self) -> &[OrderedChild] {
-    &self.box_children
-  }
 }
 
 /// A box's fragments, one unless it fragmented.
@@ -722,7 +715,7 @@ impl<'r> LayoutTree<'r> {
   /// The node the box `render_node` of an inline formatting context lays out as, its subtree
   /// appended to the tree the first time.
   pub(crate) fn atomic_inline_node(&mut self, render_node: &'r RenderNode) -> NodeId {
-    if let Some(&node) = self.atomic_inlines.get(&ptr::from_ref(render_node)) {
+    if let Some(&node) = self.atomic_inlines.get(&render_node.context.box_id()) {
       return node;
     }
 
@@ -732,7 +725,9 @@ impl<'r> LayoutTree<'r> {
     self.push_subtree(render_node);
     self.nodes[start].is_atomic_inline = true;
     self.prepare_tables(start);
-    self.atomic_inlines.insert(ptr::from_ref(render_node), node);
+    self
+      .atomic_inlines
+      .insert(render_node.context.box_id(), node);
     node
   }
 
@@ -1261,7 +1256,9 @@ impl<'r> LayoutTree<'r> {
 
     for &child in boxes {
       if let Some(container) = self.inline_container(child)
-        && !containers.iter().any(|known| ptr::eq(*known, container))
+        && !containers
+          .iter()
+          .any(|known| known.context.box_id() == container.context.box_id())
       {
         containers.push(container);
       }
@@ -2130,6 +2127,11 @@ impl RenderNode {
       left: style.box_data.padding_left,
     }
     .map(|length| length.to_px(&self.context.sizing, containing_block_width))
+  }
+
+  /// The child-index path to `node` in this tree, `self` included.
+  pub fn path_to(&self, node: &RenderNode) -> Option<Vec<usize>> {
+    self.path_where(|candidate| candidate.context.box_id() == node.context.box_id())
   }
 
   /// The child-index path to the first node in preorder, `self` included, that `matches` accepts.

@@ -72,7 +72,7 @@ pub(crate) struct GridGeometry {
 }
 
 /// Blink's `GridSizingTree` for a grid without subgrids: its items and tracks.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct GridSizingTree {
   grid_items: Vec<GridItemData>,
   layout_data: GridLayoutData,
