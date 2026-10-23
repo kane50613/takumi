@@ -141,9 +141,8 @@ pub struct LayoutResults {
 }
 
 struct LayoutResultNode {
-  layout: ComputedLayout,
+  fragments: Fragments,
   box_children: Box<[OrderedChild]>,
-  is_line_clamp_clipped_float: bool,
 }
 
 impl LayoutResults {
@@ -153,7 +152,7 @@ impl LayoutResults {
     let mut results = Self::lay_out(root, available_space, false);
 
     if let Some(root) = results.nodes.first_mut() {
-      root.layout.location = Point::new(0.0, 0.0);
+      root.fragments[0].layout.location = Point::new(0.0, 0.0);
     }
     results
   }
@@ -164,7 +163,7 @@ impl LayoutResults {
     let mut results = Self::lay_out(root, available_space, true);
 
     if let Some(root) = results.nodes.first_mut() {
-      root.layout.location = Point::new(0.0, 0.0);
+      root.fragments[0].layout.location = Point::new(0.0, 0.0);
     }
     results
   }
@@ -191,7 +190,7 @@ impl LayoutResults {
 
   /// Computed layout of a node.
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
-    self.node(node_id).map(|node| node.layout)
+    self.node(node_id).map(|node| node.fragments[0].layout)
   }
 
   /// Paint-ordered children of a node.
@@ -216,7 +215,7 @@ impl LayoutResults {
     self
       .nodes
       .get(usize::from(node_id))
-      .is_some_and(|node| node.is_line_clamp_clipped_float)
+      .is_some_and(|node| node.fragments[0].is_line_clamp_clipped_float)
   }
 
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
@@ -336,7 +335,8 @@ pub(crate) struct LayoutNodeState {
   /// layouts can reuse them.
   container_independent: bool,
   pub(crate) cache: LayoutCache,
-  pub(crate) layout: ComputedLayout,
+  /// Blink's `LayoutBox::layout_results_`: where each of its fragments went, by fragment index.
+  pub(crate) fragments: Fragments,
   pub(crate) is_inline_children: bool,
   /// Whether its inline formatting context lays it out as an atomic inline, float, list marker,
   /// or block-in-inline.
@@ -353,6 +353,15 @@ pub(crate) struct LayoutNodeState {
   pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
   /// The out-of-flow boxes this node is the containing block for.
   pub(crate) claims: ContainingBlockClaims,
+}
+
+/// A box's fragments, one unless it fragmented.
+pub(crate) type Fragments = SmallVec<[BoxFragment; 1]>;
+
+/// Blink's `PhysicalBoxFragment` as takumi keeps it: where its parent placed one fragment of a box.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct BoxFragment {
+  pub(crate) layout: ComputedLayout,
   /// Blink's `IsLineClampClippedFloat` of the layout that placed it.
   pub(crate) is_line_clamp_clipped_float: bool,
 }
@@ -397,7 +406,7 @@ impl LayoutNodeState {
       layout_style,
       container_independent,
       cache: LayoutCache::default(),
-      layout: ComputedLayout::default(),
+      fragments: SmallVec::from_buf([BoxFragment::default()]),
       is_inline_children,
       is_atomic_inline: false,
       table_box: TableBoxStyle::default(),
@@ -406,7 +415,6 @@ impl LayoutNodeState {
       hoisted_children: Vec::new(),
       grid_geometry: None,
       claims,
-      is_line_clamp_clipped_float: false,
     }
   }
 }
@@ -929,9 +937,8 @@ impl<'r> LayoutTree<'r> {
     let mut nodes = Vec::with_capacity(self.nodes.len());
 
     nodes.extend(self.nodes.into_iter().map(|node| LayoutResultNode {
-      layout: node.layout,
+      fragments: node.fragments,
       box_children: node.box_children,
-      is_line_clamp_clipped_float: node.is_line_clamp_clipped_float,
     }));
     let hidden = self
       .table_fragments
@@ -980,8 +987,26 @@ impl<'r> LayoutTree<'r> {
     state.layout_style = Rc::new(layout_style);
   }
 
-  pub(crate) fn set_layout(&mut self, node: NodeId, layout: ComputedLayout) {
-    self.nodes[usize::from(node)].layout = layout;
+  /// Blink's `LayoutBox::SetLayoutResult`: keeps `fragment` as `node`'s fragment
+  /// `fragment_index`.
+  pub(crate) fn set_fragment(
+    &mut self,
+    node: NodeId,
+    fragment_index: usize,
+    fragment: BoxFragment,
+  ) {
+    let fragments = &mut self.nodes[usize::from(node)].fragments;
+
+    if fragment_index < fragments.len() {
+      fragments[fragment_index] = fragment;
+    } else {
+      debug_assert_eq!(
+        fragment_index,
+        fragments.len(),
+        "a fragment follows the one before it"
+      );
+      fragments.push(fragment);
+    }
   }
 
   /// The number of nodes in the tree.
@@ -1096,7 +1121,7 @@ impl<'r> LayoutTree<'r> {
 
   /// `node`'s layout so far.
   pub(in crate::layout) fn computed_layout(&self, node: NodeId) -> ComputedLayout {
-    self.nodes[usize::from(node)].layout
+    self.nodes[usize::from(node)].fragments[0].layout
   }
 }
 

@@ -35,7 +35,7 @@ use crate::{
         distribute_section_fixed_block_size_to_rows, distribute_table_block_size_to_sections,
       },
     },
-    tree::{LayoutTree, RenderNode, TableBoxStyle},
+    tree::{BoxFragment, LayoutTree, RenderNode, TableBoxStyle},
   },
   layout_unit::{BoxStrut, LayoutUnit},
   style::{
@@ -1359,17 +1359,21 @@ impl LayoutTree<'_> {
   /// Places the table section or row `node`, which lays out with no border or padding, at
   /// `location` with `size`.
   fn place_table_part(&mut self, node: NodeId, location: Point<LayoutUnit>, size: LogicalSize) {
-    self.set_layout(
+    self.set_fragment(
       node,
-      ComputedLayout::new(
-        location.map(LayoutUnit::to_float),
-        Size {
-          width: size.inline_size.to_float(),
-          height: size.block_size.to_float(),
-        },
-        Rect::default(),
-        Rect::default(),
-      ),
+      0,
+      BoxFragment {
+        layout: ComputedLayout::new(
+          location.map(LayoutUnit::to_float),
+          Size {
+            width: size.inline_size.to_float(),
+            height: size.block_size.to_float(),
+          },
+          Rect::default(),
+          Rect::default(),
+        ),
+        ..BoxFragment::default()
+      },
     );
   }
 

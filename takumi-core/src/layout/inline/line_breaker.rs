@@ -367,7 +367,7 @@ pub(crate) struct LineBreaker<'a, 'b, 'c> {
   is_forced_break: bool,
   previous_line_had_forced_break: bool,
   end_item_index: usize,
-  break_token: Option<InlineBreakToken<'c>>,
+  break_token: Option<InlineBreakToken>,
   current_style: Option<&'c RenderContext>,
   break_iterator: Rc<LineBreakIterator<'a>>,
   shaper: Rc<HarfBuzzShaper<'a>>,
@@ -393,7 +393,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     constraint_space: ConstraintSpace,
     line_opportunity: LineLayoutOpportunity,
     leading_floats: &'b LeadingFloats,
-    break_token: Option<InlineBreakToken<'c>>,
+    break_token: Option<InlineBreakToken>,
     atomic_inline: &'b mut dyn AtomicInlineLayout<'c>,
     exclusion_space: &'b mut ExclusionSpace,
   ) -> Self {
@@ -454,7 +454,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     {
       line_breaker.current = break_token.start;
       line_breaker.is_forced_break = break_token.is_forced_break;
-      line_breaker.set_current_style(style);
+      line_breaker.set_current_style(items_data.break_token_context(style, &node.block.context));
     }
 
     line_breaker
@@ -3375,7 +3375,11 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     self
       .break_token
       .and_then(|break_token| break_token.style)
-      .unwrap_or(line_info.line_style)
+      .map_or(line_info.line_style, |style| {
+        self
+          .items_data
+          .break_token_context(style, self.block_context())
+      })
   }
 
   /// Blink's `SetCurrentStyle`.
@@ -3791,13 +3795,17 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   }
 
   /// Blink's `CreateBreakToken`: where the next line starts, none at the end.
-  fn create_break_token(&self, line_info: &LineInfo<'a, 'c>) -> Option<InlineBreakToken<'c>> {
+  fn create_break_token(&self, line_info: &LineInfo<'a, 'c>) -> Option<InlineBreakToken> {
     if self.is_at_end() {
       return None;
     }
 
     Some(InlineBreakToken {
-      style: self.current_style,
+      style: self.current_style.map(|context| {
+        self
+          .items_data
+          .break_token_style(context, self.block_context())
+      }),
       start: self.current,
       is_forced_break: self.is_forced_break,
       has_cloned_box_decorations: self.cloned_box_decorations_count != 0,

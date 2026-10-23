@@ -94,7 +94,7 @@ pub(crate) struct ScoreLineBreaker<'s, 'a, 'c> {
   node: InlineNode<'c>,
   items_data: &'a InlineNodeData<'c>,
   space: &'s ConstraintSpace,
-  break_token: Option<InlineBreakToken<'c>>,
+  break_token: Option<InlineBreakToken>,
   exclusion_space: &'s mut ExclusionSpace,
   atomic_inline: &'s mut dyn AtomicInlineLayout<'c>,
   parameters: ScoreParameters,
@@ -118,7 +118,7 @@ impl<'s, 'a, 'c> ScoreLineBreaker<'s, 'a, 'c> {
     items_data: &'a InlineNodeData<'c>,
     space: &'s ConstraintSpace,
     line_widths: LineWidths,
-    break_token: Option<InlineBreakToken<'c>>,
+    break_token: Option<InlineBreakToken>,
     exclusion_space: &'s mut ExclusionSpace,
     atomic_inline: &'s mut dyn AtomicInlineLayout<'c>,
   ) -> Self {

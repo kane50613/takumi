@@ -46,7 +46,7 @@ pub(crate) struct LineInfo<'a, 'c> {
   pub(crate) results: InlineItemResults<'a, 'c>,
   /// Blink's `BfcOffset`: the line-left and block offsets of the line opportunity.
   pub(crate) bfc_offset: BfcOffset,
-  pub(crate) break_token: Option<InlineBreakToken<'c>>,
+  pub(crate) break_token: Option<InlineBreakToken>,
   available_width: LayoutUnit,
   width: LayoutUnit,
   hang_width: LayoutUnit,
