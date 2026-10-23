@@ -71,7 +71,11 @@ impl<'a> SceneEmitter<'a> {
   /// beyond a translation.
   fn place(&self, paint: &NodePaint, current: Affine) -> Option<(PlacedBox<'a>, Affine)> {
     let node = self.scene.root.node_at_path(&paint.path)?;
-    let layout = self.scene.results.layout(paint.node_id).ok()?;
+    let layout = self
+      .scene
+      .results
+      .fragment_layout(paint.node_id, paint.fragment_index)
+      .ok()?;
     let relative = current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
     let (origin, group_transform) = if relative.only_translation() {
       (

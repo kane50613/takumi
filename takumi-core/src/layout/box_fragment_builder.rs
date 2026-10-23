@@ -1,0 +1,399 @@
+//! The block fragmentation state of Blink's
+//! [`BoxFragmentBuilder`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/box_fragment_builder.h),
+//! for pages alone: no columns, column spanners, repeated content, or out-of-flow fragmentation.
+//!
+//! Follows Blink under the notice in LICENSE-CHROMIUM.
+
+use std::rc::Rc;
+
+use crate::{
+  geometry::NodeId,
+  layout::{
+    block_break_token::BlockBreakToken,
+    break_appeal::BreakAppeal,
+    break_token::BreakToken,
+    constraint_space::{BlockFragmentation, ConstraintSpace},
+    early_break::EarlyBreak,
+    fragmentation_utils::{
+      block_size_for_fragmentation, calculate_break_appeal_inside, is_break_inside,
+      join_fragmentainer_break_values,
+    },
+    inline::inline_break_token::InlineBreakToken,
+    layout_result::{BreakInfo, LayoutResult, LayoutStatus},
+    layout_style::LayoutStyle,
+    logical_rect::LogicalBoxStrut,
+  },
+  layout_unit::LayoutUnit,
+  style::{BoxDecorationBreak, BreakBetween, BreakInside},
+};
+
+/// Blink's `BoxFragmentBuilder` as block fragmentation reads and writes it.
+#[derive(Debug, Clone)]
+pub(crate) struct BoxFragmentBuilder {
+  /// The space's fragmentation fields.
+  pub(crate) block_fragmentation: Option<BlockFragmentation>,
+  pub(crate) box_decoration_break: BoxDecorationBreak,
+  pub(crate) break_inside: BreakInside,
+  /// Blink's `BorderScrollbarPadding`, which a resumed or broken fragment clears.
+  pub(crate) border_padding: LogicalBoxStrut,
+  /// Blink's `PreviousBreakToken`: where this fragment resumes the box.
+  pub(crate) previous_break_token: Option<Rc<BlockBreakToken>>,
+  child_break_tokens: Vec<BreakToken>,
+  /// The break token of the last line added, where the lines resume.
+  last_inline_break_token: Option<InlineBreakToken>,
+  has_inflow_child_break_inside: bool,
+  pub(crate) did_break_self: bool,
+  pub(crate) has_forced_break: bool,
+  pub(crate) break_appeal: BreakAppeal,
+  pub(crate) early_break: Option<Rc<EarlyBreak>>,
+  pub(crate) initial_break_before: Option<BreakBetween>,
+  pub(crate) previous_break_after: BreakBetween,
+  pub(crate) consumed_block_size: LayoutUnit,
+  pub(crate) sequence_number: u32,
+  pub(crate) is_at_block_end: bool,
+  pub(crate) has_seen_all_children: bool,
+  pub(crate) monolithic_overflow: LayoutUnit,
+  pub(crate) is_known_to_fit_in_fragmentainer: bool,
+  pub(crate) should_clone_box_end_decorations: bool,
+  pub(crate) should_prevent_break_before_block_end_decorations: bool,
+  pub(crate) requires_content_before_breaking: bool,
+  /// Blink's `FragmentsTotalBlockSize`: the box's block size as if it did not fragment.
+  pub(crate) fragments_total_block_size: LayoutUnit,
+  /// Blink's `FragmentBlockSize`: this fragment's block size.
+  pub(crate) fragment_block_size: LayoutUnit,
+  pub(crate) intrinsic_block_size: LayoutUnit,
+  pub(crate) block_size_for_fragmentation: LayoutUnit,
+  pub(crate) is_block_size_for_fragmentation_clamped: bool,
+  /// Blink's `LineCount`: the non-empty lines added.
+  pub(crate) line_count: usize,
+  pub(crate) is_first_for_node: bool,
+  /// Blink's `SidesToInclude` on the block start and end.
+  pub(crate) includes_block_start: bool,
+  pub(crate) includes_block_end: bool,
+}
+
+impl BoxFragmentBuilder {
+  /// A builder for `style`'s box laid out in `space`, resuming at `previous_break_token`.
+  pub(crate) fn new(
+    space: &ConstraintSpace,
+    style: &LayoutStyle,
+    border_padding: LogicalBoxStrut,
+    previous_break_token: Option<Rc<BlockBreakToken>>,
+  ) -> Self {
+    Self {
+      block_fragmentation: space.block_fragmentation,
+      box_decoration_break: style.breaks.box_decoration_break,
+      break_inside: style.breaks.break_inside,
+      border_padding,
+      previous_break_token,
+      child_break_tokens: Vec::new(),
+      last_inline_break_token: None,
+      has_inflow_child_break_inside: false,
+      did_break_self: false,
+      has_forced_break: false,
+      break_appeal: BreakAppeal::Perfect,
+      early_break: None,
+      initial_break_before: None,
+      previous_break_after: BreakBetween::Auto,
+      consumed_block_size: LayoutUnit::ZERO,
+      sequence_number: 0,
+      is_at_block_end: false,
+      has_seen_all_children: false,
+      monolithic_overflow: LayoutUnit::ZERO,
+      is_known_to_fit_in_fragmentainer: false,
+      should_clone_box_end_decorations: false,
+      should_prevent_break_before_block_end_decorations: false,
+      requires_content_before_breaking: space.requires_content_before_breaking(),
+      fragments_total_block_size: LayoutUnit::ZERO,
+      fragment_block_size: LayoutUnit::ZERO,
+      intrinsic_block_size: LayoutUnit::ZERO,
+      block_size_for_fragmentation: LayoutUnit::ZERO,
+      is_block_size_for_fragmentation_clamped: false,
+      line_count: 0,
+      is_first_for_node: true,
+      includes_block_start: true,
+      includes_block_end: true,
+    }
+  }
+
+  /// Blink's `HasBlockFragmentation` of the builder's space.
+  pub(crate) fn has_block_fragmentation(&self) -> bool {
+    self.block_fragmentation.is_some()
+  }
+
+  /// Blink's `InvolvedInBlockFragmentation`.
+  pub(crate) fn involved_in_block_fragmentation(&self) -> bool {
+    self.has_block_fragmentation() || self.previous_break_token.is_some()
+  }
+
+  /// Blink's `ClampBreakAppeal`.
+  pub(crate) fn clamp_break_appeal(&mut self, appeal: BreakAppeal) {
+    self.break_appeal = self.break_appeal.min(appeal);
+  }
+
+  /// Blink's `HasEarlyBreak`, with its appeal.
+  pub(crate) fn early_break_appeal(&self) -> Option<BreakAppeal> {
+    self
+      .early_break
+      .as_ref()
+      .map(|early_break| early_break.break_appeal)
+  }
+
+  /// Blink's `JoinedBreakBetweenValue`.
+  pub(crate) fn joined_break_between_value(&self, break_before: BreakBetween) -> BreakBetween {
+    join_fragmentainer_break_values(self.previous_break_after, break_before)
+  }
+
+  /// Blink's `HasInflowChildBreakInside`.
+  pub(crate) fn has_inflow_child_break_inside(&self) -> bool {
+    self.has_inflow_child_break_inside
+  }
+
+  /// Blink's `AddBreakBeforeChild`, for a block child or, as `None`, the inline content.
+  pub(crate) fn add_break_before_child(
+    &mut self,
+    child: Option<NodeId>,
+    appeal: BreakAppeal,
+    is_forced_break: bool,
+  ) {
+    if is_forced_break {
+      self.has_forced_break = true;
+    } else {
+      self.clamp_break_appeal(appeal);
+    }
+    self.has_inflow_child_break_inside = true;
+
+    let Some(child) = child else {
+      // The lines resume where the last one added broke, or where this fragment resumed them.
+      if self.last_inline_break_token.is_none() {
+        self.last_inline_break_token = self
+          .previous_break_token
+          .as_ref()
+          .and_then(|token| match token.child_break_tokens.last() {
+            Some(BreakToken::Inline(inline_break_token)) => Some(*inline_break_token),
+            _ => None,
+          })
+          .or(Some(InlineBreakToken::default()));
+      }
+      return;
+    };
+
+    self
+      .child_break_tokens
+      .push(BreakToken::Block(Rc::new(BlockBreakToken::break_before(
+        child,
+        is_forced_break,
+      ))));
+  }
+
+  /// Blink's `FragmentBuilder::PropagateFromFragment` collecting a block child's break token.
+  pub(crate) fn add_child_break_token(&mut self, result: &LayoutResult) {
+    if let Some(token) = &result.break_info.break_token {
+      self
+        .child_break_tokens
+        .push(BreakToken::Block(Rc::clone(token)));
+    }
+  }
+
+  /// Blink's `FragmentBuilder::PropagateFromFragment` collecting a line's break token: the lines
+  /// resume after `break_token`, none after the last line.
+  pub(crate) fn add_line(&mut self, break_token: Option<InlineBreakToken>, is_empty: bool) {
+    self.last_inline_break_token = break_token;
+
+    if !is_empty {
+      self.line_count += 1;
+    }
+  }
+
+  /// Blink's `PropagateBreakInfo` for a child `result` at `block_offset`.
+  pub(crate) fn propagate_break_info(
+    &mut self,
+    result: &LayoutResult,
+    block_offset: LayoutUnit,
+    child_is_floating_or_out_of_flow: bool,
+  ) {
+    let block_end_in_container = block_offset + block_size_for_fragmentation(result);
+
+    self.block_size_for_fragmentation = self
+      .block_size_for_fragmentation
+      .max(block_end_in_container);
+
+    if self.space_requires_content_before_breaking()
+      && result.break_info.is_block_size_for_fragmentation_clamped
+    {
+      self.is_block_size_for_fragmentation_clamped = true;
+    }
+
+    let token = result.break_info.break_token.as_deref();
+    let child_is_in_same_flow =
+      token.is_none_or(|token| !token.is_at_block_end) && !child_is_floating_or_out_of_flow;
+
+    if child_is_in_same_flow {
+      let fragmentainer_overflow =
+        block_offset + result.size.block_size - self.fragmentainer_space_left(false);
+
+      if fragmentainer_overflow > LayoutUnit::ZERO {
+        self.reserve_space_for_monolithic_overflow(fragmentainer_overflow);
+      }
+    }
+
+    if is_break_inside(token) {
+      if child_is_in_same_flow {
+        self.has_inflow_child_break_inside = true;
+      }
+      self.clamp_break_appeal(calculate_break_appeal_inside(result, None));
+    }
+    if result.break_info.has_forced_break {
+      self.has_forced_break = true;
+    }
+    if !child_is_floating_or_out_of_flow {
+      self.requires_content_before_breaking = false;
+    }
+  }
+
+  /// Blink's `PropagateChildBreakValues` for a block child of `style` laid out as `result`.
+  pub(crate) fn propagate_child_break_values(
+    &mut self,
+    result: &LayoutResult,
+    style: &LayoutStyle,
+  ) {
+    if result.status != LayoutStatus::Success || style.is_floating() || style.is_out_of_flow() {
+      return;
+    }
+
+    let break_before = join_fragmentainer_break_values(
+      result.break_info.initial_break_before.unwrap_or_default(),
+      style.breaks.break_before,
+    );
+
+    self.initial_break_before.get_or_insert(break_before);
+    self.previous_break_after = join_fragmentainer_break_values(
+      result.break_info.final_break_after.unwrap_or_default(),
+      style.breaks.break_after,
+    );
+  }
+
+  /// Blink's `ReserveSpaceForMonolithicOverflow`.
+  pub(crate) fn reserve_space_for_monolithic_overflow(&mut self, overflow: LayoutUnit) {
+    self.monolithic_overflow = self.monolithic_overflow.max(overflow);
+  }
+
+  /// Blink's `HasInsertedChildBreak`.
+  pub(crate) fn has_inserted_child_break(&self) -> bool {
+    !self.child_break_tokens.is_empty()
+  }
+
+  /// Blink's `ShouldBreakInsideForContent`.
+  pub(crate) fn should_break_inside_for_content(&self) -> bool {
+    self.has_inserted_child_break()
+      || self.last_inline_break_token.is_some()
+      || self.monolithic_overflow > LayoutUnit::ZERO
+  }
+
+  /// Blink's `ShouldBreak`.
+  pub(crate) fn should_break(&self) -> bool {
+    self.did_break_self || self.should_break_inside_for_content()
+  }
+
+  /// Blink's `RequiresContentBeforeBreaking` of the space, which the builder's starts out as.
+  fn space_requires_content_before_breaking(&self) -> bool {
+    self
+      .block_fragmentation
+      .is_some_and(|fragmentation| fragmentation.requires_content_before_breaking)
+  }
+
+  /// Blink's `FragmentainerCapacity`.
+  pub(crate) fn fragmentainer_capacity(&self, is_for_children: bool) -> Option<LayoutUnit> {
+    let mut size = self.block_fragmentation?.fragmentainer_block_size;
+
+    if self.box_decoration_break == BoxDecorationBreak::Clone && is_for_children {
+      size -= self.border_padding.block_start;
+      if self.should_clone_box_end_decorations {
+        size -= self.border_padding.block_end;
+      }
+    }
+
+    Some(self.clamped_to_valid_fragmentainer_capacity(size, is_for_children))
+  }
+
+  /// Blink's `ClampedToValidFragmentainerCapacity`: css-break-3 §4.4 makes a page take at least
+  /// one pixel of content.
+  fn clamped_to_valid_fragmentainer_capacity(
+    &self,
+    length: LayoutUnit,
+    is_for_children: bool,
+  ) -> LayoutUnit {
+    let mut minimum = LayoutUnit::from_int(1);
+
+    if self.should_clone_box_end_decorations && !is_for_children {
+      minimum += self.border_padding.block_start + self.border_padding.block_end;
+    }
+    length.max(minimum)
+  }
+
+  /// Blink's `FragmentainerOffset`.
+  pub(crate) fn fragmentainer_offset(&self, is_for_children: bool) -> LayoutUnit {
+    let Some(fragmentation) = self.block_fragmentation else {
+      return LayoutUnit::ZERO;
+    };
+    let mut offset = fragmentation.fragmentainer_offset;
+
+    // A child at the content edge of a cloned box starts the page, as far as breaking goes.
+    if self.box_decoration_break == BoxDecorationBreak::Clone
+      && is_for_children
+      && self
+        .previous_break_token
+        .as_ref()
+        .is_none_or(|token| !token.is_at_block_end)
+    {
+      offset -= self.border_padding.block_start;
+    }
+    offset
+  }
+
+  /// Blink's `FragmentainerSpaceLeft`, the page's block size outside a fragmentation context.
+  pub(crate) fn fragmentainer_space_left(&self, is_for_children: bool) -> LayoutUnit {
+    self
+      .fragmentainer_capacity(is_for_children)
+      .map_or(LayoutUnit::MAX, |capacity| {
+        (capacity - self.fragmentainer_offset(is_for_children)).clamp_negative_to_zero()
+      })
+  }
+
+  /// Blink's `BlockBreakToken::Create`: where `node` resumes, once [`Self::should_break`].
+  pub(crate) fn create_break_token(&mut self, node: NodeId) -> BlockBreakToken {
+    if let Some(inline_break_token) = self.last_inline_break_token.take() {
+      self
+        .child_break_tokens
+        .push(BreakToken::Inline(inline_break_token));
+    }
+
+    BlockBreakToken {
+      node,
+      consumed_block_size: self.consumed_block_size,
+      sequence_number: self.sequence_number,
+      monolithic_overflow: self.monolithic_overflow,
+      is_break_before: false,
+      is_forced_break: false,
+      is_at_block_end: self.is_at_block_end,
+      has_seen_all_children: self.has_seen_all_children,
+      child_break_tokens: std::mem::take(&mut self.child_break_tokens),
+    }
+  }
+
+  /// What the box's layout result tells its container about breaking, with its `break_token`.
+  pub(crate) fn break_info(&self, break_token: Option<Rc<BlockBreakToken>>) -> BreakInfo {
+    BreakInfo {
+      break_token,
+      break_appeal: self.break_appeal,
+      has_forced_break: self.has_forced_break,
+      initial_break_before: self.initial_break_before,
+      final_break_after: Some(self.previous_break_after),
+      early_break: self.early_break.clone(),
+      block_size_for_fragmentation: Some(self.block_size_for_fragmentation),
+      is_block_size_for_fragmentation_clamped: self.is_block_size_for_fragmentation_clamped,
+      is_first_for_node: self.is_first_for_node,
+      avoids_break_inside: self.has_block_fragmentation() && self.break_inside.avoids_page_break(),
+    }
+  }
+}

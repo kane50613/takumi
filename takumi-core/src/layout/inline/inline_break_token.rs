@@ -11,7 +11,7 @@ pub(crate) enum BreakTokenStyle {
 }
 
 /// Where the next line starts, and the state it starts in.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub(crate) struct InlineBreakToken {
   /// The style at the break, where the next line's items start.
   pub(crate) style: Option<BreakTokenStyle>,

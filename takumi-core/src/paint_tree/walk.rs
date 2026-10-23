@@ -771,7 +771,9 @@ pub(super) fn recorded<'s>(
   let Some(node) = scene.root.node_at_path(&paint.path) else {
     return Ok(None);
   };
-  let layout = scene.results.layout(paint.node_id)?;
+  let layout = scene
+    .results
+    .fragment_layout(paint.node_id, paint.fragment_index)?;
 
   Ok(
     (!node.context.style.is_invisible() && paint.transform.is_invertible())

@@ -1690,7 +1690,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       for child in children {
         self
           .tree
-          .place_child(child.node, child.location, &child.result);
+          .place_child(child.node, 0, child.location, &child.result);
       }
     }
 

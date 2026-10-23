@@ -6,6 +6,15 @@ use std::{
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::{
+  block_break_token::BlockBreakToken,
+  break_appeal::BreakAppeal,
+  constraint_space::BlockFragmentation,
+  fragmentation_layout_input::FragmentationLayoutInput,
+  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index},
+};
+
 use crate::{
   Error,
   context::RenderContext,
@@ -190,7 +199,39 @@ impl LayoutResults {
 
   /// Computed layout of a node.
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
-    self.node(node_id).map(|node| node.fragments[0].layout)
+    self.fragment_layout(node_id, 0)
+  }
+
+  /// Computed layout of a node's fragment `fragment_index`.
+  pub fn fragment_layout(
+    &self,
+    node_id: NodeId,
+    fragment_index: usize,
+  ) -> crate::Result<ComputedLayout> {
+    self
+      .node(node_id)?
+      .fragments
+      .get(fragment_index)
+      .map(|fragment| fragment.layout)
+      .ok_or(Error::InvalidLayoutNode(node_id.into()))
+  }
+
+  /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds, none when
+  /// it holds none.
+  pub(crate) fn fragment_in(
+    &self,
+    node_id: NodeId,
+    container_fragment_index: usize,
+  ) -> Option<usize> {
+    #[cfg(feature = "fragmentation")]
+    return self
+      .node(node_id)
+      .ok()?
+      .fragments
+      .iter()
+      .position(|fragment| fragment.container_fragment_index == container_fragment_index);
+    #[cfg(not(feature = "fragmentation"))]
+    return (self.node(node_id).is_ok() && container_fragment_index == 0).then_some(0);
   }
 
   /// Paint-ordered children of a node.
@@ -216,6 +257,21 @@ impl LayoutResults {
       .nodes
       .get(usize::from(node_id))
       .is_some_and(|node| node.fragments[0].is_line_clamp_clipped_float)
+  }
+
+  /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn compute_pages(root: &RenderNode, page_size: Size<f32>) -> (Self, usize) {
+    let mut tree = LayoutTree::from_render_node(root);
+    let page_count = tree.compute_pages(page_size);
+
+    (tree.into_results(), page_count)
+  }
+
+  /// Each fragment of `node_id`, by fragment index.
+  #[cfg(all(test, feature = "fragmentation"))]
+  pub(crate) fn fragments(&self, node_id: NodeId) -> crate::Result<&[BoxFragment]> {
+    self.node(node_id).map(|node| node.fragments.as_slice())
   }
 
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
@@ -364,6 +420,10 @@ pub(crate) struct BoxFragment {
   pub(crate) layout: ComputedLayout,
   /// Blink's `IsLineClampClippedFloat` of the layout that placed it.
   pub(crate) is_line_clamp_clipped_float: bool,
+  /// Which of the parent's fragments holds it, as Blink's `PhysicalFragmentLink` in that
+  /// fragment's children says.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) container_fragment_index: usize,
 }
 
 /// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as
@@ -476,14 +536,20 @@ impl Drop for RenderNode {
   }
 }
 
-/// The fragment items a node's inline content last laid out to. They belong to that node, so a
-/// clone, which may change its style or content, starts without them.
+/// The fragment items a node's inline content last laid out to, by fragment index. They belong to
+/// that node, so a clone, which may change its style or content, starts without them.
 #[derive(Default)]
-pub(crate) struct FragmentItemsCache(RefCell<Option<Rc<FragmentItems>>>);
+pub(crate) struct FragmentItemsCache(RefCell<SmallVec<[Option<Rc<FragmentItems>>; 1]>>);
 
 impl FragmentItemsCache {
-  pub(crate) fn keep(&self, items: Rc<FragmentItems>) {
-    self.0.replace(Some(items));
+  /// Keeps `items` as fragment `fragment_index`'s.
+  pub(crate) fn keep(&self, fragment_index: usize, items: Rc<FragmentItems>) {
+    let mut fragments = self.0.borrow_mut();
+
+    if fragments.len() <= fragment_index {
+      fragments.resize(fragment_index + 1, None);
+    }
+    fragments[fragment_index] = Some(items);
   }
 }
 
@@ -791,6 +857,56 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
+  /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes, `@page`, or out-of-flow boxes the
+  /// initial containing block holds: the root laid out a page `page_size` at a time, each page
+  /// resuming where the one before broke. Returns the page count.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn compute_pages(&mut self, page_size: Size<f32>) -> usize {
+    let page_block_size = LayoutUnit::from_float(page_size.height);
+    let mut break_token: Option<Rc<BlockBreakToken>> = None;
+    let mut page_count = 0;
+
+    loop {
+      let mut space = self.root_space(page_size.map(AvailableSpace::Definite));
+      let mut margins = margins_for(
+        self.layout_style(NodeId::ROOT),
+        space.percentage_resolution_inline_size,
+        Direction::Ltr,
+      );
+
+      adjust_margins_for_fragmentation(break_token.as_deref(), false, &mut margins);
+      space.block_fragmentation = Some(BlockFragmentation {
+        fragmentainer_block_size: page_block_size,
+        fragmentainer_offset: margins.block_start,
+        requires_content_before_breaking: false,
+        should_propagate_child_break_values: true,
+        min_break_appeal: BreakAppeal::LastResort,
+      });
+
+      let input = FragmentationLayoutInput {
+        break_token: break_token.clone(),
+        early_break: None,
+      };
+      let result = self.layout_fragment(NodeId::ROOT, &space, &input);
+      let fragment_index = fragment_index(break_token.as_deref());
+
+      self.place_child(
+        NodeId::ROOT,
+        fragment_index,
+        Point::new(margins.inline_start, margins.block_start),
+        &result,
+      );
+      self.node_state_mut(NodeId::ROOT).fragments[fragment_index].container_fragment_index =
+        page_count;
+      page_count += 1;
+      break_token = result.break_info.break_token.clone();
+
+      if break_token.is_none() {
+        return page_count;
+      }
+    }
+  }
+
   /// Computes the layout for the whole tree: the root at its margin edge's offset in
   /// `available_space`, which is the initial containing block of the out-of-flow boxes no other
   /// box contains.
@@ -828,7 +944,7 @@ impl<'r> LayoutTree<'r> {
       )
     };
 
-    self.place_child(NodeId::ROOT, location, &result);
+    self.place_child(NodeId::ROOT, 0, location, &result);
 
     if result.out_of_flow.is_empty() {
       return;
@@ -1210,13 +1326,24 @@ impl RenderNode {
     count
   }
 
-  /// The fragment items its inline content laid out to in the content box of `layout`, if it
-  /// laid out there last.
+  /// The fragment items the fragment its scene paints laid out to in the content box of `layout`,
+  /// if that fragment laid out there last.
   pub(crate) fn fragment_items_in(&self, layout: ComputedLayout) -> Option<Rc<FragmentItems>> {
+    self.fragment_items_of(self.context.fragment_index, layout)
+  }
+
+  /// The fragment items fragment `fragment_index` laid out to in the content box of `layout`, if
+  /// that fragment laid out there last.
+  pub(crate) fn fragment_items_of(
+    &self,
+    fragment_index: usize,
+    layout: ComputedLayout,
+  ) -> Option<Rc<FragmentItems>> {
     self
       .fragment_items
       .0
       .borrow()
+      .get(fragment_index)?
       .as_ref()
       .filter(|items| items.content_box == ContentBox::of(layout))
       .map(Rc::clone)
@@ -1228,7 +1355,7 @@ impl RenderNode {
     let mut stack = vec![self];
 
     while let Some(node) = stack.pop() {
-      node.fragment_items.0.take();
+      node.fragment_items.0.borrow_mut().clear();
       node.item_shapes.clear();
       stack.extend(node.children.iter().flatten());
     }

@@ -2,6 +2,9 @@
 
 use std::rc::Rc;
 
+#[cfg(feature = "fragmentation")]
+use crate::style::{BoxDecorationBreak, BreakBetween, BreakInside};
+
 use crate::{
   geometry::{Point, Rect, Size},
   layout::{
@@ -156,6 +159,18 @@ pub(crate) struct LayoutStyle {
   pub(crate) grid_column_end: GridPosition,
   /// A grid container's grid.
   pub(crate) grid: Option<Rc<GridStyle>>,
+  #[cfg(feature = "fragmentation")]
+  pub(crate) breaks: BreakStyle,
+}
+
+/// The properties Blink's block fragmentation reads off a box.
+#[cfg(feature = "fragmentation")]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct BreakStyle {
+  pub(crate) break_before: BreakBetween,
+  pub(crate) break_after: BreakBetween,
+  pub(crate) break_inside: BreakInside,
+  pub(crate) box_decoration_break: BoxDecorationBreak,
 }
 
 impl Default for LayoutStyle {
@@ -198,6 +213,8 @@ impl Default for LayoutStyle {
       grid_column_start: GridPosition::Auto,
       grid_column_end: GridPosition::Auto,
       grid: None,
+      #[cfg(feature = "fragmentation")]
+      breaks: BreakStyle::default(),
     }
   }
 }
@@ -296,6 +313,13 @@ impl LayoutStyle {
         .display
         .is_grid()
         .then(|| Rc::new(GridStyle::of(style, sizing))),
+      #[cfg(feature = "fragmentation")]
+      breaks: BreakStyle {
+        break_before: style.misc_data.break_before,
+        break_after: style.misc_data.break_after,
+        break_inside: style.misc_data.break_inside,
+        box_decoration_break: box_data.box_decoration_break,
+      },
     }
   }
 

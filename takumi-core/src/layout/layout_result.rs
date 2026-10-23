@@ -1,5 +1,5 @@
 //! Blink's [`LayoutResult`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/layout_result.h):
-//! what laying out a block-level box gives its container, without fragmentation, line clamp, or
+//! what laying out a block-level box gives its container, without columns, line clamp, or
 //! `text-box-trim`.
 
 use std::rc::Rc;
@@ -16,6 +16,13 @@ use crate::{
   layout_unit::LayoutUnit,
   style::{BaselineSource, Direction},
 };
+#[cfg(feature = "fragmentation")]
+use crate::{
+  layout::{
+    block_break_token::BlockBreakToken, break_appeal::BreakAppeal, early_break::EarlyBreak,
+  },
+  style::BreakBetween,
+};
 
 /// Blink's `LayoutResult::EStatus`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -24,6 +31,10 @@ pub(crate) enum LayoutStatus {
   Success,
   /// The layout stopped once it resolved its block offset, which moved the floats before it.
   BfcBlockOffsetResolved,
+  /// The layout ran out of space where a breakpoint seen earlier is better, so it lays out again
+  /// to break there.
+  #[cfg(feature = "fragmentation")]
+  NeedsEarlierBreak,
 }
 
 /// Blink's `LogicalStaticPosition::InlineEdge`.
@@ -212,6 +223,54 @@ pub(crate) struct LayoutResult {
   pub(crate) is_line_clamp_clipped_float: bool,
   /// The out-of-flow boxes inside that their containing block has yet to place.
   pub(crate) out_of_flow: Vec<OutOfFlowCandidate>,
+  #[cfg(feature = "fragmentation")]
+  pub(crate) break_info: BreakInfo,
+}
+
+/// What Blink's `LayoutResult` and its fragment tell the container about breaking.
+#[cfg(feature = "fragmentation")]
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct BreakInfo {
+  /// Blink's `PhysicalBoxFragment::GetBreakToken`: where the box resumes, none once it ended.
+  pub(crate) break_token: Option<Rc<BlockBreakToken>>,
+  /// Blink's `GetBreakAppeal`: how good the break inside is.
+  pub(crate) break_appeal: BreakAppeal,
+  /// Blink's `HasForcedBreak`.
+  pub(crate) has_forced_break: bool,
+  /// Blink's `InitialBreakBefore`: the joined `break-before` of the first children.
+  pub(crate) initial_break_before: Option<BreakBetween>,
+  /// Blink's `FinalBreakAfter`: the joined `break-after` of the last children.
+  pub(crate) final_break_after: Option<BreakBetween>,
+  /// Blink's `GetEarlyBreak`: the best breakpoint inside to go back to.
+  pub(crate) early_break: Option<Rc<EarlyBreak>>,
+  /// Blink's `BlockSizeForFragmentation`, none to take the border box.
+  pub(crate) block_size_for_fragmentation: Option<LayoutUnit>,
+  /// Blink's `IsBlockSizeForFragmentationClamped`.
+  pub(crate) is_block_size_for_fragmentation_clamped: bool,
+  /// Blink's `IsFirstForNode`: the box's first fragment.
+  pub(crate) is_first_for_node: bool,
+  /// Whether the box's `break-inside` avoids a page break, which Blink reads off the fragment's
+  /// style.
+  pub(crate) avoids_break_inside: bool,
+}
+
+#[cfg(feature = "fragmentation")]
+impl Default for BreakInfo {
+  /// A layout that did not break: a perfect break appeal, the box's first fragment.
+  fn default() -> Self {
+    Self {
+      break_token: None,
+      break_appeal: BreakAppeal::Perfect,
+      has_forced_break: false,
+      initial_break_before: None,
+      final_break_after: None,
+      early_break: None,
+      block_size_for_fragmentation: None,
+      is_block_size_for_fragmentation_clamped: false,
+      is_first_for_node: true,
+      avoids_break_inside: false,
+    }
+  }
 }
 
 impl LayoutResult {
@@ -238,6 +297,8 @@ impl LayoutResult {
       use_last_baseline_for_inline_baseline: false,
       is_line_clamp_clipped_float: false,
       out_of_flow: Vec::new(),
+      #[cfg(feature = "fragmentation")]
+      break_info: BreakInfo::default(),
     }
   }
 

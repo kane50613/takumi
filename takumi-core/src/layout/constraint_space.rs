@@ -1,11 +1,12 @@
 //! Blink's [`ConstraintSpace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/constraint_space.h):
-//! the constraints a box lays out under, without writing modes, fragmentation, or line clamp
-//! relayout.
+//! the constraints a box lays out under, without writing modes, columns, or line clamp relayout.
 
 use std::rc::Rc;
 
 use bitflags::bitflags;
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::break_appeal::BreakAppeal;
 use crate::{
   layout::{
     bfc_rect::BfcOffset, exclusions::exclusion_space::ExclusionSpace,
@@ -98,6 +99,26 @@ pub(crate) struct ConstraintSpace {
   pub(crate) cache_slot: CacheSlot,
   /// Blink's `IgnoreMarginsForStretch` on the block start and end.
   pub(crate) ignore_block_margins_for_stretch: (bool, bool),
+  /// Blink's block fragmentation fields, none outside a fragmentation context.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) block_fragmentation: Option<BlockFragmentation>,
+}
+
+/// The fields Blink's `ConstraintSpace` keeps for block fragmentation, for pages alone: a space
+/// that has them is Blink's `kFragmentPage`.
+#[cfg(feature = "fragmentation")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct BlockFragmentation {
+  /// Blink's `FragmentainerBlockSize`.
+  pub(crate) fragmentainer_block_size: LayoutUnit,
+  /// Blink's `FragmentainerOffset`: the border box's block offset from the page's block start.
+  pub(crate) fragmentainer_offset: LayoutUnit,
+  /// Blink's `RequiresContentBeforeBreaking`.
+  pub(crate) requires_content_before_breaking: bool,
+  /// Blink's `ShouldPropagateChildBreakValues`.
+  pub(crate) should_propagate_child_break_values: bool,
+  /// Blink's `MinBreakAppeal`.
+  pub(crate) min_break_appeal: BreakAppeal,
 }
 
 impl ConstraintSpace {
@@ -131,6 +152,17 @@ impl ConstraintSpace {
       baseline_algorithm: BaselineAlgorithmType::Default,
       cache_slot: CacheSlot::Layout,
       ignore_block_margins_for_stretch: (false, false),
+      #[cfg(feature = "fragmentation")]
+      block_fragmentation: None,
+    }
+  }
+
+  /// Blink's `CloneWithoutFragmentation`: the space with no pages to break across.
+  pub(crate) fn without_fragmentation(&self) -> Self {
+    Self {
+      #[cfg(feature = "fragmentation")]
+      block_fragmentation: None,
+      ..self.clone()
     }
   }
 
@@ -183,5 +215,36 @@ impl ConstraintSpace {
 
   pub(crate) fn is_block_auto_behavior_stretch(&self) -> bool {
     self.block_auto_behavior != AutoSizeBehavior::FitContent
+  }
+}
+
+#[cfg(feature = "fragmentation")]
+impl ConstraintSpace {
+  /// Blink's `HasBlockFragmentation`, which for pages is `HasKnownFragmentainerBlockSize` too.
+  pub(crate) fn has_block_fragmentation(&self) -> bool {
+    self.block_fragmentation.is_some()
+  }
+
+  /// Blink's `RequiresContentBeforeBreaking`.
+  pub(crate) fn requires_content_before_breaking(&self) -> bool {
+    self
+      .block_fragmentation
+      .is_some_and(|fragmentation| fragmentation.requires_content_before_breaking)
+  }
+
+  /// Blink's `MinBreakAppeal`.
+  pub(crate) fn min_break_appeal(&self) -> BreakAppeal {
+    self
+      .block_fragmentation
+      .map_or(BreakAppeal::LastResort, |fragmentation| {
+        fragmentation.min_break_appeal
+      })
+  }
+
+  /// Blink's `ShouldPropagateChildBreakValues`.
+  pub(crate) fn should_propagate_child_break_values(&self) -> bool {
+    self
+      .block_fragmentation
+      .is_some_and(|fragmentation| fragmentation.should_propagate_child_break_values)
   }
 }

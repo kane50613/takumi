@@ -1698,7 +1698,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
       for child in take(&mut self.children) {
         self
           .tree
-          .place_child(child.node, child.location, &child.result);
+          .place_child(child.node, 0, child.location, &child.result);
       }
     }
 

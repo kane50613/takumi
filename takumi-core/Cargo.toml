@@ -135,6 +135,9 @@ woff = ["dep:wuff", "wuff/z"]
 rayon = ["dep:rayon"]
 # The paint tree: what the backends paint, as data. Off by default; `takumi-paint` turns it on.
 paint-tree = []
+# Blink's block fragmentation, which lays content out across pages. Off by default; `takumi-pdf`
+# turns it on.
+fragmentation = []
 
 [dev-dependencies]
 serde_json.workspace = true

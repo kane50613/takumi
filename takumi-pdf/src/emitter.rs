@@ -1499,7 +1499,10 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
   ) -> Option<(&'a RenderNode, BoxFrame, usize)> {
     let scene = self.emitter.scene;
     let node = node?;
-    let layout = scene.results.layout(paint.node_id).ok()?;
+    let layout = scene
+      .results
+      .fragment_layout(paint.node_id, paint.fragment_index)
+      .ok()?;
     let relative = self.current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
 
     if relative.only_translation() {

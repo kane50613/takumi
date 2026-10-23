@@ -280,7 +280,7 @@ fn placed<'r>(
   let Some(node) = root.node_at_path_mut(&paint.path) else {
     return Err(Error::InvalidLayoutNode(paint.node_id.into()));
   };
-  let layout = results.layout(paint.node_id)?;
+  let layout = results.fragment_layout(paint.node_id, paint.fragment_index)?;
 
   node
     .context
