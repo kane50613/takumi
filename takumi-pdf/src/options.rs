@@ -325,13 +325,16 @@ impl PageSelection {
   /// Resolves the ranges against the page count. Ranges that keep no page are an
   /// error, like Chromium's "Page range exceeds page count".
   pub(crate) fn resolve(ranges: Option<&[PageRange]>, pages: usize) -> Result<Self, PdfError> {
-    let mut selection = Self::new(ranges)?;
+    Self::new(ranges)?.with_pages(pages)
+  }
 
+  /// Adds `pages` pages to the selection and checks the ranges keep one.
+  pub(crate) fn with_pages(mut self, pages: usize) -> Result<Self, PdfError> {
     for _ in 0..pages {
-      selection.push_page();
+      self.push_page();
     }
-    selection.finish()?;
-    Ok(selection)
+    self.finish()?;
+    Ok(self)
   }
 
   /// Adds the next page of the document, and returns its index in the output when it is kept.
@@ -864,6 +867,11 @@ impl PageMargins {
       bottom: PageMargin::Px(value),
       left: PageMargin::Px(value),
     }
+  }
+
+  /// Whether a band's height can move a margin, which is when an `auto` margin sits under one.
+  pub(crate) fn follow_bands(self) -> bool {
+    matches!(self.top, PageMargin::Auto) || matches!(self.bottom, PageMargin::Auto)
   }
 
   /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.

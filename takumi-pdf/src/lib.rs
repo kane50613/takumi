@@ -62,6 +62,8 @@ mod filter;
 mod glyph;
 mod inline;
 mod interactive;
+#[cfg(test)]
+mod memory_tests;
 mod options;
 mod page;
 mod pagination;

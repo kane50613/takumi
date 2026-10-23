@@ -1,14 +1,21 @@
 //! The content laid out across pages, which takumi-core's block fragmentation breaks, and the
 //! page counters filled in from where it put each box.
 
-use takumi_core::{layout::node::Node, scene::PageWindows};
+use std::collections::HashMap;
+
+use takumi_core::{
+  geometry::Size,
+  layout::{node::Node, tree::RenderNode},
+  page_stream::{PageStream, Settle, Settled},
+  scene::PageWindows,
+};
 
 use crate::{
   bands::Repeatable,
   counters::{
     BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
-  interactive::PageSummary,
+  interactive::{AnchorTarget, PageSummary, has_internal_links, has_summary_targets},
   options::PdfError,
   page::PageFrame,
   tree::{PagedContent, TreeInputs},
@@ -25,6 +32,243 @@ pub(crate) const MAX_PAGES: usize = 20_000;
 /// numbers.
 const COUNTER_PASSES: usize = 3;
 
+/// Whether laying a tree out reads numbers the layout itself produces: a page counter, or the page
+/// a link or counter names.
+pub(crate) fn reads_layout(node: &Node) -> bool {
+  has_page_counters(node) || has_target_counters(node) || has_internal_links(node)
+}
+
+/// Lays `root` out a page at a time and calls `visit` with the stream and each page once `settle`
+/// says it is settled. Returns how many pages the layout came to.
+pub(crate) fn walk_pages(
+  root: &RenderNode,
+  page_size: Size<f32>,
+  settle: Settle<'_>,
+  mut visit: impl FnMut(&PageStream<'_>, usize) -> Result<(), PdfError>,
+) -> Result<usize, PdfError> {
+  let mut stream = PageStream::new(root, page_size, MAX_PAGES);
+
+  loop {
+    let Settled { pages, laid } = stream.advance(settle)?;
+
+    for index in pages {
+      visit(&stream, index)?;
+    }
+    if !laid {
+      return Ok(stream.page_count());
+    }
+  }
+}
+
+/// The content tree of a frame, which lays out across pages as many times as the document needs.
+pub(crate) struct Prepared {
+  pub(crate) root: RenderNode,
+  /// The `fixed` boxes taken out of the root, which repeat on every page.
+  pub(crate) repeated: Vec<Repeatable>,
+  /// Whether the tree holds an anchor or a heading, which its pages are summarized for.
+  pub(crate) reads_summary: bool,
+}
+
+impl Prepared {
+  pub(crate) fn new(
+    node: Node,
+    inputs: &TreeInputs<'_>,
+    frame: &PageFrame,
+  ) -> Result<Self, PdfError> {
+    let reads_summary = has_summary_targets(&node);
+    let (root, repeated) = inputs.prepare_root(node, frame)?;
+
+    Ok(Self {
+      root,
+      repeated,
+      reads_summary,
+    })
+  }
+}
+
+/// What the passes that count a document leave for drawing it.
+pub(crate) struct Counts {
+  pub(crate) starts: PageStarts,
+  /// Where the elements with an `id` are, when a link to one reads them.
+  pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
+}
+
+/// The content once the passes that count its pages are done.
+pub(crate) enum Counted {
+  /// Laid out a page at a time by passes that freed each page as they went, and laid out once
+  /// more from the tree the last pass built as the pages are drawn.
+  Pages {
+    content: Box<Prepared>,
+    counts: Counts,
+  },
+  /// Laid out to its end, because the numbers it holds kept moving.
+  Laid(Box<Paginated>),
+}
+
+impl Counted {
+  /// Counts the pages `node` lays out on in `frame`, refilling the page counters it holds until
+  /// the numbers stop moving, and finds the elements its links name. Each pass frees the pages
+  /// `settle` says are settled. A counter inside a repeated box is left to that box, which lays
+  /// out again per page with its own numbers.
+  pub(crate) fn settle(
+    mut node: Node,
+    inputs: &TreeInputs<'_>,
+    frame: &PageFrame,
+    settle: Settle<'_>,
+  ) -> Result<Self, PdfError> {
+    let links = has_internal_links(&node);
+    let collect = Collect::of(&node, links);
+
+    let numbered = collect == Collect::Extents || has_target_counters(&node);
+
+    if !numbered {
+      return Ok(CountingPass::run(node, inputs, frame, settle, collect)?.into_counted(links));
+    }
+
+    let mut previous: Vec<String> = Vec::new();
+
+    for _ in 0..COUNTER_PASSES {
+      let pass = CountingPass::run(node.clone(), inputs, frame, settle, collect)?;
+      let mut written = Vec::new();
+
+      pass.substitute_counters(&mut node, &mut written);
+      if written == previous {
+        // The pass was laid out with the numbers it wrote.
+        return Ok(pass.into_counted(links));
+      }
+      previous = written;
+    }
+    // The numbers are still moving, and this was the last pass allowed. They are laid out once
+    // more so the page shows the numbers it was laid out with.
+    Ok(Self::Laid(Box::new(Paginated::lay_out(
+      node, inputs, frame,
+    )?)))
+  }
+
+  pub(crate) fn pages(&self) -> usize {
+    match self {
+      Self::Pages { counts, .. } => counts.starts.len(),
+      Self::Laid(paginated) => paginated.starts.len(),
+    }
+  }
+}
+
+/// What a counting pass keeps of the boxes it lays out, beyond the page count.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Collect {
+  Nothing,
+  /// The elements with an `id`, which a link or a target counter names.
+  Anchors,
+  /// Also where every box landed, which a page counter reads.
+  Extents,
+}
+
+impl Collect {
+  fn of(node: &Node, links: bool) -> Self {
+    if has_page_counters(node) {
+      Self::Extents
+    } else if links || has_target_counters(node) {
+      Self::Anchors
+    } else {
+      Self::Nothing
+    }
+  }
+}
+
+/// A layout run a page at a time that draws nothing, and keeps the pages and the boxes' extents
+/// the counters are filled from.
+struct CountingPass {
+  content: Prepared,
+  starts: PageStarts,
+  /// Absent when nothing reads the boxes.
+  summary: Option<PageSummary>,
+}
+
+impl CountingPass {
+  fn run(
+    node: Node,
+    inputs: &TreeInputs<'_>,
+    frame: &PageFrame,
+    settle: Settle<'_>,
+    collect: Collect,
+  ) -> Result<Self, PdfError> {
+    let content = Prepared::new(node, inputs, frame)?;
+    let page_size = frame.page_size();
+    let extents = collect == Collect::Extents;
+    let mut summary = (collect != Collect::Nothing).then(|| PageSummary::new(extents));
+    let pages = walk_pages(&content.root, page_size, settle, |stream, index| {
+      if let Some(summary) = &mut summary {
+        summary.absorb(PageSummary::of_page(
+          &content.root,
+          stream.view(),
+          page_size,
+          &stream.pages_of(index),
+          extents,
+        )?);
+      }
+      Ok(())
+    })?;
+
+    Ok(Self {
+      content,
+      starts: PageStarts::new(pages, frame.window_height),
+      summary: summary.map(PageSummary::finished),
+    })
+  }
+
+  /// What drawing the pages needs, with the anchors only when a link reads them.
+  fn into_counted(self, links: bool) -> Counted {
+    Counted::Pages {
+      content: Box::new(self.content),
+      counts: Counts {
+        starts: self.starts,
+        anchors: self
+          .summary
+          .filter(|_| links)
+          .map(|summary| summary.anchors)
+          .unwrap_or_default(),
+      },
+    }
+  }
+
+  /// Fills both kinds of counter from this pass, collecting what it wrote so the caller can see
+  /// whether the numbers moved.
+  fn substitute_counters(&self, node: &mut Node, written: &mut Vec<String>) {
+    let Some(summary) = &self.summary else {
+      return;
+    };
+    let pages = self.starts.len();
+    let page_at = |top: &f32| self.starts.index_of(*top) + 1;
+    let page_of = summary
+      .extents
+      .iter()
+      .flatten()
+      .filter_map(|(order, extent)| {
+        let pages = BoxPages {
+          start: page_at(&extent.top),
+          next: extent.flow_bottom.as_ref().map(page_at),
+        };
+
+        // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
+        Some((order.checked_sub(1)?, pages))
+      })
+      .collect();
+    let repeated: Vec<_> = self
+      .content
+      .repeated
+      .iter()
+      .filter_map(Repeatable::source_orders)
+      .map(|orders| orders.start.saturating_sub(1)..orders.end.saturating_sub(1))
+      .collect();
+
+    FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
+
+    let target_page = |id: &str| summary.anchors.get(id).map(|anchor| page_at(&anchor.top));
+
+    substitute_target_counters(node, None, &target_page, written);
+  }
+}
+
 /// The content laid out across pages, with the `fixed` boxes that repeat on every page and the
 /// interactive targets the pages draw from. The pages stack in the content's coordinates, each the
 /// page area tall.
@@ -34,8 +278,6 @@ pub(crate) struct Paginated {
   pub(crate) windows: PageWindows,
   pub(crate) repeated: Vec<Repeatable>,
   pub(crate) starts: PageStarts,
-  /// Present when page counters read it.
-  summary: Option<PageSummary>,
 }
 
 /// One page's window into the content.
@@ -96,40 +338,6 @@ impl PageStarts {
 }
 
 impl Paginated {
-  /// Lays the content out on pages, refilling the counters it
-  /// holds until the numbers stop moving. A counter inside a repeated box is
-  /// left to that box, which lays out again per page with its own numbers.
-  pub(crate) fn build(
-    mut node: Node,
-    inputs: &TreeInputs<'_>,
-    frame: &PageFrame,
-  ) -> Result<Self, PdfError> {
-    if !has_page_counters(&node) && !has_target_counters(&node) {
-      return Self::lay_out(node, inputs, frame);
-    }
-    let mut previous: Vec<String> = Vec::new();
-    let mut passes = 0;
-
-    loop {
-      let mut paginated = Self::lay_out(node.clone(), inputs, frame)?;
-      let summary = paginated.summarize(true)?;
-      let mut written = Vec::new();
-
-      passes += 1;
-      paginated.substitute_counters(&summary, &mut node, &mut written);
-      if written == previous {
-        paginated.summary = Some(summary);
-        return Ok(paginated);
-      }
-      previous = written;
-      // The numbers are still moving, and this was the last pass allowed. They
-      // are laid out once more so the page shows the numbers it was laid out with.
-      if passes == COUNTER_PASSES {
-        return Self::lay_out(node, inputs, frame);
-      }
-    }
-  }
-
   fn lay_out(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
     let (content, repeated) = inputs.prepare_paged(node, frame)?;
     let starts = PageStarts::new(content.page_count, frame.window_height);
@@ -147,7 +355,6 @@ impl Paginated {
       windows,
       repeated,
       starts,
-      summary: None,
     })
   }
 
@@ -163,44 +370,8 @@ impl Paginated {
     )
   }
 
-  pub(crate) fn summary(&mut self) -> Result<PageSummary, PdfError> {
-    match self.summary.take() {
-      Some(summary) => Ok(summary),
-      None => self.summarize(false),
-    }
-  }
-
-  /// Fills both kinds of counter from this laid-out pass, collecting what it
-  /// wrote so the caller can see whether the numbers moved.
-  fn substitute_counters(&self, summary: &PageSummary, node: &mut Node, written: &mut Vec<String>) {
-    let pages = self.starts.len();
-    let page_at = |top: &f32| self.starts.index_of(*top) + 1;
-    // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
-    let page_of = summary
-      .extents
-      .iter()
-      .flatten()
-      .filter_map(|(order, extent)| {
-        let pages = BoxPages {
-          start: page_at(&extent.top),
-          next: extent.flow_bottom.as_ref().map(page_at),
-        };
-
-        Some((order.checked_sub(1)?, pages))
-      })
-      .collect();
-    let repeated: Vec<_> = self
-      .repeated
-      .iter()
-      .filter_map(Repeatable::source_orders)
-      .map(|orders| orders.start.saturating_sub(1)..orders.end.saturating_sub(1))
-      .collect();
-
-    FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
-
-    let target_page = |id: &str| summary.anchors.get(id).map(|anchor| page_at(&anchor.top));
-
-    substitute_target_counters(node, None, &target_page, written);
+  pub(crate) fn summary(&self) -> Result<PageSummary, PdfError> {
+    self.summarize(false)
   }
 }
 
