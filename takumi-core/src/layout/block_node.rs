@@ -184,14 +184,20 @@ impl<'r> LayoutTree<'r> {
     }
 
     if space.cache_slot == CacheSlot::Layout && !input.resumes_box() {
-      self.node_state_mut(node).hoisted_children.clear();
+      self.clear_hoisted_children(node);
     }
 
     // Blink's `BoxFragmentBuilder` takes the flag from the space whatever algorithm runs.
+    #[cfg(feature = "fragmentation")]
+    let run = self.begin_run(node);
     let result = Rc::new(LayoutResult {
       is_line_clamp_clipped_float: space.is_line_clamp_clipped_float,
+      #[cfg(feature = "fragmentation")]
+      run,
       ..self.run_algorithm(node, space, input)
     });
+    #[cfg(feature = "fragmentation")]
+    self.end_run();
 
     if result.status == LayoutStatus::Success {
       self.node_state_mut(node).cache.store(space, input, &result);
@@ -534,6 +540,12 @@ impl<'r> LayoutTree<'r> {
         is_line_clamp_clipped_float: result.is_line_clamp_clipped_float,
         #[cfg(feature = "fragmentation")]
         container_fragment_index,
+        #[cfg(feature = "fragmentation")]
+        is_laid_out: true,
+        #[cfg(feature = "fragmentation")]
+        run: result.run,
+        #[cfg(feature = "fragmentation")]
+        placed_by: self.running(),
         is_repeated: result.is_repeated(),
       },
     );
@@ -638,7 +650,19 @@ impl<'r> LayoutTree<'r> {
 
     if !hoisted_children.contains(&node) {
       hoisted_children.push(node);
+      self.hoisted_by.insert(container, node);
     }
+  }
+
+  /// Forgets the out-of-flow boxes `container` positioned as their containing block.
+  pub(crate) fn clear_hoisted_children(&mut self, container: NodeId) {
+    let mut children = take(&mut self.node_state_mut(container).hoisted_children);
+
+    for &child in &children {
+      self.hoisted_by.remove(container, child);
+    }
+    children.clear();
+    self.node_state_mut(container).hoisted_children = children;
   }
 
   /// Lays `node` and every box under it out empty, as `display: none` leaves them.
@@ -649,8 +673,12 @@ impl<'r> LayoutTree<'r> {
       let state = self.node_state_mut(node);
 
       state.fragments[0].layout = ComputedLayout::default();
-      state.hoisted_children.clear();
+      #[cfg(feature = "fragmentation")]
+      {
+        state.fragments[0].is_laid_out = true;
+      }
       stack.extend(state.children.iter().copied());
+      self.clear_hoisted_children(node);
     }
   }
 

@@ -329,6 +329,9 @@ pub(crate) struct LayoutResult {
   pub(crate) table_section_row_offsets: Option<(usize, Vec<LayoutUnit>)>,
   #[cfg(feature = "fragmentation")]
   pub(crate) break_info: BreakInfo,
+  /// The run of the box's algorithm that made the layout, which the fragments it placed name.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) run: u32,
 }
 
 /// What Blink's `LayoutResult` and its fragment tell the container about breaking.
@@ -427,6 +430,8 @@ impl LayoutResult {
       table_section_row_offsets: None,
       #[cfg(feature = "fragmentation")]
       break_info: BreakInfo::default(),
+      #[cfg(feature = "fragmentation")]
+      run: 0,
     }
   }
 

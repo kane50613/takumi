@@ -9,6 +9,8 @@ use crate::{
   geometry::{NodeId, Point, Size},
   layout::{
     node::Node,
+    paged_layout::PagedLayout,
+    paged_layout_oracles as oracles,
     tree::{LayoutResults, RenderNode},
   },
   resources::font::Fonts,
@@ -112,15 +114,15 @@ fn pages(root: &RenderNode, page_height: f32) -> (BTreeMap<String, Vec<Placed>>,
     }
   }
 
-  let (results, page_count) = LayoutResults::compute_pages(
-    root,
-    Size {
-      width: 300.0,
-      height: page_height,
-    },
-    usize::MAX,
-  )
-  .expect("pages lay out");
+  let page_size = Size {
+    width: 300.0,
+    height: page_height,
+  };
+
+  oracles::check(root, page_size);
+
+  let (results, page_count) =
+    LayoutResults::compute_pages(root, page_size, usize::MAX).expect("pages lay out");
   let containers: Vec<(usize, Point<f32>)> =
     (0..page_count).map(|page| (page, Point::ZERO)).collect();
   let mut boxes = BTreeMap::new();
@@ -361,6 +363,12 @@ fn paged_layout_stops_at_its_page_limit() {
     LayoutResults::compute_pages(&far, page, 4),
     Err(Error::TooManyPages(4))
   ));
+
+  let mut stepped = PagedLayout::new(&breaks, page, 2);
+
+  assert!(stepped.next_page().expect("first page").is_some());
+  assert!(stepped.next_page().expect("second page").is_some());
+  assert!(matches!(stepped.next_page(), Err(Error::TooManyPages(2))));
 }
 
 /// A flex item stretched past the page where its lines end lays out none on the later pages.
@@ -1471,4 +1479,117 @@ fn an_absolute_box_taller_than_a_page_breaks_across_the_pages_of_a_table() {
     [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
   );
   assert_eq!(boxes["abs"], [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]);
+}
+
+/// How many pages are final after each page of `root` is laid out on pages 300 wide.
+fn finalized_after_each_page(root: &RenderNode, page_height: f32) -> Vec<usize> {
+  let page_size = Size {
+    width: 300.0,
+    height: page_height,
+  };
+  let mut layout = PagedLayout::new(root, page_size, usize::MAX);
+  let mut finalized = Vec::new();
+
+  while layout.next_page().expect("page lays out").is_some() {
+    finalized.push(layout.finalized_pages());
+  }
+  oracles::check(root, page_size);
+  finalized
+}
+
+/// A box a containing block holds back to its last fragment paints from where the block started,
+/// so the block's pages stay open until it ends.
+#[test]
+fn a_held_box_keeps_the_pages_from_its_containing_block_open() {
+  let tree = render(
+    root([
+      block("a", "h300"),
+      Node::container([block("held", "held")]).with_class_name("block rel"),
+    ]),
+    ".h300 { height: 300px } .rel { position: relative; height: 500px } \
+     .held { position: absolute; bottom: 0; height: 10px }",
+  );
+
+  // The block starts on the second page and ends on the fourth.
+  assert_eq!(finalized_after_each_page(&tree, 200.0), [1, 1, 1, 4]);
+}
+
+/// The initial containing block is the first page's area, so an absolute box a later page finds
+/// paints on the first page.
+#[test]
+fn an_absolute_box_found_on_a_later_page_keeps_every_page_open_until_then() {
+  let tree = render(
+    root([
+      block("a", "h300"),
+      Node::container([block("late", "late")]).with_class_name("block"),
+    ]),
+    ".h300 { height: 300px } .late { position: absolute; top: 0; left: 0; width: 10px; height: 10px }",
+  );
+  let (results, _) = LayoutResults::compute_pages(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+    usize::MAX,
+  )
+  .expect("pages lay out");
+  // The box is the last in the tree, found on the second page and placed a page above it.
+  let late = results
+    .fragments(NodeId::new(results.node_count() - 1))
+    .expect("fragments");
+
+  assert_eq!(late.len(), 1);
+  assert_eq!(late[0].container_fragment_index, 1);
+  assert_eq!(late[0].layout.location.y, -200.0);
+  assert_eq!(finalized_after_each_page(&tree, 200.0), [0, 2]);
+}
+
+/// A box painted far from its page by a transform or a relative offset belongs to the window of the
+/// pages it reaches.
+#[test]
+fn a_box_painted_pages_away_paints_in_their_windows() {
+  let tree = render(
+    root([
+      block("a", "h700"),
+      block("up", "up"),
+      block("b", "h700"),
+      block("down", "down"),
+    ]),
+    ".h700 { height: 700px } \
+     .up { height: 50px; width: 20px; background: red; transform: translateY(-1100px) } \
+     .down { height: 50px; width: 20px; background: red; position: relative; top: -900px }",
+  );
+
+  oracles::check_when_finished(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+  );
+}
+
+/// A box a containing block holds back, or pushes to a later page, belongs to the fragment of its
+/// containing block that lays it out, however far its parent is.
+#[test]
+fn a_box_hoisted_past_its_parent_paints_in_the_window_of_its_containing_block() {
+  let tree = render(
+    root([Node::container([
+      Node::container([block("held", "held"), block("late", "late")]).with_class_name("block"),
+      block("tail", "h700"),
+    ])
+    .with_class_name("block rel")]),
+    ".rel { position: relative } .h700 { height: 700px } \
+     .held { position: absolute; bottom: 0; width: 20px; height: 30px; background: red } \
+     .late { position: absolute; top: 450px; width: 20px; height: 30px; background: red }",
+  );
+
+  oracles::check_when_finished(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+  );
 }

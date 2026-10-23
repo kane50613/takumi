@@ -41,6 +41,8 @@ pub mod inline_box;
 pub mod intercept;
 pub(crate) mod layout_result;
 pub(crate) mod layout_style;
+/// A layout read while it is made or after.
+pub mod layout_view;
 pub(crate) mod length_utils;
 pub(crate) mod line_clamp_data;
 /// Generated marker boxes for `display: list-item`.
@@ -52,6 +54,11 @@ pub(crate) mod min_max_sizes;
 /// Node Tree
 pub mod node;
 pub(crate) mod out_of_flow;
+/// A render tree laid out across pages, one page at a time.
+#[cfg(feature = "fragmentation")]
+pub mod paged_layout;
+#[cfg(all(test, feature = "fragmentation"))]
+mod paged_layout_oracles;
 pub(crate) mod relative_utils;
 /// Where replaced content sits inside its content box.
 pub mod replaced;
