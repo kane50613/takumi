@@ -11,8 +11,9 @@ use crate::{
   geometry::{ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     border::BorderSide,
+    layout_view::LayoutView,
     table::{TableBorders, TableFragment, style_rank},
-    tree::{LayoutResults, RenderNode},
+    tree::RenderNode,
   },
   layout_unit::LayoutUnit,
   style::{Affine, BorderStyle, Display},
@@ -115,7 +116,7 @@ impl TableDecorations {
   /// decorations.
   pub fn of(
     root: &RenderNode,
-    results: &LayoutResults,
+    results: LayoutView<'_>,
     path: &[usize],
     node_id: NodeId,
     fragment_index: usize,
@@ -263,7 +264,7 @@ fn child(node: &RenderNode, index: usize) -> Option<&RenderNode> {
 #[allow(clippy::too_many_arguments)]
 fn collect_cells(
   row: &RenderNode,
-  results: &LayoutResults,
+  results: LayoutView<'_>,
   row_id: NodeId,
   row_fragment_index: usize,
   offset: Point<f32>,
@@ -311,7 +312,7 @@ fn column_backgrounds(
   table: &RenderNode,
   table_id: NodeId,
   table_fragment_index: usize,
-  results: &LayoutResults,
+  results: LayoutView<'_>,
   fragment: &TableFragment,
 ) -> Result<Vec<ColumnBackground>> {
   let mut backgrounds = Vec::new();
@@ -684,7 +685,7 @@ impl EdgeJoints {
 /// `paint_offset` in the space paint snaps to pixels in. With `visible`, a block range of the
 /// table's border box, only the rows near it paint, as Blink paints one table fragment per page.
 pub fn paint_collapsed_borders(
-  results: &LayoutResults,
+  results: LayoutView<'_>,
   node_id: NodeId,
   fragment_index: usize,
   paint_offset: Point<f32>,

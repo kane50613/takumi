@@ -753,7 +753,7 @@ impl GlyphDevice for CanvasDevice<'_> {
     clip: &FillShape,
     transform: Affine,
   ) {
-    let context = &background.node.context;
+    let context = background.context;
     // The strip rasterizes on the device pixel grid, so its layers land where they snapped.
     let origin = background.strip.origin;
     let fraction = Point {

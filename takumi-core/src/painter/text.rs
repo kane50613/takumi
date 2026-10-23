@@ -10,6 +10,7 @@ use super::{
   background::{BackgroundClipArea, BoxBackground},
 };
 use crate::{
+  context::RenderContext,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
@@ -78,6 +79,8 @@ pub trait GlyphDevice: PaintDevice {
 pub struct StripBackground<'a> {
   /// The span or box.
   pub node: &'a RenderNode,
+  /// The context it paints under, which holds the sizing and transform the box paints with.
+  pub context: &'a RenderContext,
   /// Unique among the backgrounds one device paints.
   pub id: usize,
   /// Its background.
@@ -368,6 +371,7 @@ impl<'c> FragmentBackground<'c> {
   ) -> StripBackground<'c> {
     StripBackground {
       node: self.node,
+      context: &self.node.context,
       id: fragment.span,
       background: BoxBackground::new(
         &self.node.context,

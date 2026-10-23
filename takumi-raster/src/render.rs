@@ -156,7 +156,7 @@ pub fn render<'g>(mut options: RenderOptions<'g>) -> Result<Bitmap> {
 }
 
 /// Paints a laid-out scene to an image the size of `scene.size`.
-pub fn render_scene(scene: &mut Scene) -> Result<Bitmap> {
+pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
   let size = scene.size.map(|length| length.round() as u32);
 
   if size.width == 0 || size.height == 0 {
@@ -188,8 +188,8 @@ pub fn render_pages<'g>(
   )?;
   let page_count = paged.page_count();
   let size = page_size.map(|length| length.round() as u32);
-  let mut scene = paged.into_scene();
-  let mut paint = ScenePaint::new(&mut scene, true)?;
+  let scene = paged.into_scene();
+  let mut paint = ScenePaint::of_scene(&scene, true);
 
   for index in 0..page_count {
     let origin = PagedScene::page_origin(page_size, index).map(|length| length.round() as i32);
@@ -211,9 +211,9 @@ fn render_with_context(
   node: Node,
   viewport: Viewport,
 ) -> Result<Bitmap> {
-  let mut scene = Scene::lay_out(RenderNode::from_node(&render_context, node), viewport, true)?;
+  let scene = Scene::lay_out(RenderNode::from_node(&render_context, node), viewport, true)?;
 
-  render_scene(&mut scene)
+  render_scene(&scene)
 }
 
 /// A scene with its per-frame-invariant render state precomputed: the font

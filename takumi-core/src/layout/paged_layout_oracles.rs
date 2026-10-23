@@ -133,13 +133,13 @@ fn check_pages(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   for page in laid {
     assert_eq!(
       page.root_fragment,
-      results.fragment_in(NodeId::ROOT, page.index),
+      results.view().fragment_in(NodeId::ROOT, page.index),
       "the root's fragment on page {}",
       page.index
     );
   }
   for (page, fragment) in finalized.into_iter().enumerate() {
-    assert_eq!(fragment, results.fragment_in(NodeId::ROOT, page));
+    assert_eq!(fragment, results.view().fragment_in(NodeId::ROOT, page));
   }
 }
 
