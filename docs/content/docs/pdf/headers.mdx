@@ -1,7 +1,6 @@
 ---
 title: Headers & footers
-description: Add repeating PDF headers, footers, and page numbers, and measure the margins they need.
-icon: PanelTop
+description: Repeat headers, footers, and page numbers on every PDF page, and size the margins they need.
 ---
 
 Pass JSX, an HTML string, or a node tree to `header` or `footer`. The band repeats in the top or bottom margin of every page, and automatic margins grow to fit it.
@@ -62,9 +61,7 @@ Automatic margins fit the tallest band on every page, so a taller last-page foot
 
 ## Sizing the margin
 
-`margin` defaults to `"auto"`. The renderer measures the header and footer at full page width. Each automatic top or bottom margin is the band height plus a 20px inset, and at least 37.8px. Left and right margins are 37.8px.
-
-A numeric margin overrides that side. Sides left out of the object stay automatic:
+`margin` defaults to `"auto"`. The renderer measures the header and footer at full page width. Each automatic top or bottom margin is the band height plus a 20px inset, and at least 37.8px. Left and right margins are 37.8px. A numeric margin overrides that side, and sides left out of the object stay automatic:
 
 ```ts title="Override the top margin"
 const margin = { top: 96 };
@@ -72,7 +69,7 @@ const margin = { top: 96 };
 
 <Callout type="warn">A numeric margin that is too small lets the band overlap the body.</Callout>
 
-To compute one, call `measure()` with the same page size and fonts as the render. It lays the band out at full page width with three-digit page counters. Add the 20px inset to the returned height.
+To compute a safe margin, call `measure()` with the same page size and fonts as the render. It lays the band out at full page width with three-digit page counters. Add the 20px inset to the returned height.
 
 ```tsx twoslash title="Measure a footer margin"
 declare const report: import("react").ReactNode;
@@ -101,7 +98,7 @@ Passing `viewport` instead of a page size measures the tree as-is. Counter hooks
 
 ## Page counters
 
-`<PageNumber />` is the current page, counting from 1. `<TotalPages />` is the number of pages in the document. Both take a `format` prop for a [counter style](#counter-styles), and pass `className`, `style`, and `tw` through.
+`<PageNumber />` is the current page, counting from 1, and `<TotalPages />` is the number of pages in the document. Both take a `format` prop for a [counter style](#counter-styles), and pass `className`, `style`, and `tw` through.
 
 Each primitive renders a `<span>` with a class hook. A node with the `pageNumber` or `totalPages` class receives the counter text in place of its children, so an empty `<span />` is enough. Chromium's print templates use the same two class names. In HTML input, write the classes directly:
 
@@ -113,7 +110,7 @@ A node with both classes gets the page number.
 
 ## Counters outside a band
 
-Counters also work in document content. A `position: fixed` box repeats on every page, and a `<PageNumber />` inside it shows each page's number:
+Counters also work in document content. A `position: fixed` box repeats on every page, so a `<PageNumber />` inside it shows each page's number:
 
 ```tsx title="Page counters in a fixed box"
 <div style={{ position: "fixed", bottom: 24, left: 24, right: 24 }}>

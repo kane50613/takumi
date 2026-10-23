@@ -39,7 +39,13 @@ import { baseOptions, SITE_NAME, SITE_URL } from "./app/layout-config";
 import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
 import { SearchDialog } from "./app/components/search/dialog";
-import { LocalSpace, PaintPipeline, StepReplay, TextRuns } from "./app/components/mdx/paint";
+import {
+  LocalSpace,
+  PaintPipeline,
+  RenderPipeline,
+  StepReplay,
+  TextRuns,
+} from "./app/components/mdx/paint";
 import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
 
@@ -167,6 +173,7 @@ export default defineConfig({
           Type,
           Mermaid,
           PaintPipeline,
+          RenderPipeline,
           StepReplay,
           LocalSpace,
           TextRuns,

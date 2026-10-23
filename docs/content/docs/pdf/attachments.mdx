@@ -1,10 +1,9 @@
 ---
 title: Attachments
-description: Embed files in PDF documents and configure PDF/A-3 attachments for electronic invoices.
-icon: Paperclip
+description: Embed files such as invoice XML in a PDF, and set the fields PDF/A-3 requires on each attachment.
 ---
 
-Pass files through `attachments` to embed source data, supporting documents, or invoice XML. Viewers with an attachment panel list them there:
+Pass files through `attachments` to embed source data, supporting documents, or invoice XML. Viewers with an attachment panel list them there. This example embeds a Factur-X XML file:
 
 ```tsx twoslash title="Attachments"
 import type { ReactNode } from "react";
@@ -33,10 +32,10 @@ const pdf = await render(invoice, {
 | `data`             | A `Uint8Array`, or a string written as UTF-8                                      |
 | `mimeType`         | IANA media type, such as `"application/xml"`                                      |
 | `description`      | Human-readable description                                                        |
-| `relationship`     | The file's role, written as `AFRelationship`. See the next table.                 |
+| `relationship`     | The file's role, written as `AFRelationship`. The next table lists the values.    |
 | `modificationDate` | UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. Falls back to `metadata.creationDate`. |
 
-`relationship` takes one of these values:
+`relationship` takes one of these values.
 
 | Value           | Meaning                                          |
 | --------------- | ------------------------------------------------ |
@@ -48,7 +47,7 @@ const pdf = await render(invoice, {
 
 ## Electronic invoices
 
-For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML:
+For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. [Invoices](/docs/pdf/invoices#electronic-invoices) covers the rest of the setup.
 
 ```tsx twoslash title="Electronic invoices"
 import type { ReactNode } from "react";
@@ -88,9 +87,10 @@ TypeScript enforces `mimeType` and `description` under these levels. A missing d
 | unset                         | Allowed                                                         |
 | `"3b"`, `"3u"`, `"3a"`        | Allowed, with the three fields above                            |
 | `"4f"`                        | Allowed, with `mimeType` and `description`. The PDF 2.0 option. |
-| `"2b"`, `"2u"`, `"2a"`, `"4"` | Not allowed: a TypeScript type error                            |
+| `"2b"`, `"2u"`, `"2a"`, `"4"` | Not allowed, and a TypeScript type error                        |
 
 <Callout type="warn">
   Attaching the XML does not validate it or its profile. Add the profile's XMP metadata and validate
-  the result as described in [Invoices](/docs/pdf/invoices#electronic-invoices).
+  the result as described in [Invoices](/docs/pdf/invoices#electronic-invoices). See also [PDF/A and
+  PDF/UA](/docs/pdf/conformance) for the levels.
 </Callout>

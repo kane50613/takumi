@@ -1,6 +1,7 @@
 /** Paint explainers for MDX. Each paints its example with takumi-paint while the site builds. */
 import { type LocalSpaceFrame, LocalSpaceView } from "./local-space";
 import { PaintPipelineView } from "./paint-pipeline";
+import { RenderPipelineView } from "./render-pipeline";
 import { type PaintScene, paintScene } from "./scene";
 import { StepReplayView } from "./step-replay";
 import { TextRunsView } from "./text-runs";
@@ -12,6 +13,10 @@ const cardScene = paintScene(card);
 
 export function PaintPipeline() {
   return <PaintPipelineView scene={cardScene} />;
+}
+
+export function RenderPipeline() {
+  return <RenderPipelineView scene={cardScene} />;
 }
 
 export function StepReplay() {

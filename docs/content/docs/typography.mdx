@@ -1,16 +1,15 @@
 ---
 title: Typography
-description: Style text and control how it wraps and overflows in Takumi.
-icon: Type
+description: Style text, control how it wraps, truncates, and fits, and set its direction and language in Takumi.
 ---
+
+Style text with color, stroke, decoration, shadow, and spacing, then control how it wraps, truncates, and fits its container. This page also covers right-to-left text and language-aware shaping. Takumi draws text with the fonts you load, so [load your fonts](/docs/fonts) first.
 
 ## Styling text
 
 ### Color, stroke, and fill
 
-`color` takes modern CSS color spaces, such as `oklch()`, `lab()`, and `color(display-p3 ...)`, as well as `rgb()` and `hsl()`.
-
-Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`. The stroke uses `color` when you leave its color out.
+`color` takes modern CSS color spaces, such as `oklch()`, `lab()`, and `color(display-p3 ...)`, as well as `rgb()` and `hsl()`. Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`. The stroke uses `color` when you leave its color out.
 
 ```tsx title="Color, stroke, and fill"
 <div
@@ -90,7 +89,7 @@ Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-tex
 </div>
 ```
 
-`text-overflow: ellipsis` works only on a box that clips its overflow, as in Chrome, so set `overflow: hidden` with it. It ends a line that is wider than the box, such as `white-space: nowrap` text or a word too long to break. Text cut off by the box's height gets no ellipsis; use `line-clamp` for that.
+`text-overflow: ellipsis` works only on a box that clips its overflow, as in Chrome, so set `overflow: hidden` with it. It ends a line that is wider than the box, such as `white-space: nowrap` text or a word too long to break. Text cut off by the box's height gets no ellipsis, so use `line-clamp` for that.
 
 ### Fit to container
 
@@ -109,9 +108,7 @@ The target decides which lines share a scale:
 | `per-line`             | Scales each line except the last. |
 | `per-line-all`         | Scales every line.                |
 
-The percentage caps how far the scale can go.
-
-With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the cap holds back. The `line-clamp` count still applies.
+The percentage caps how far the scale can go. With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the cap holds back. The `line-clamp` count still applies.
 
 ### RTL & bidirectional text
 
@@ -123,11 +120,11 @@ Takumi runs the Unicode Bidirectional Algorithm, so Arabic and Hebrew text, mixe
 
 ### Language-aware text
 
-The `lang` attribute sets a node's BCP-47 language. Descendants inherit it, and a nested `lang` overrides it. Takumi uses it in three places:
+The `lang` attribute sets a node's BCP-47 language. Descendants inherit it, and a nested `lang` overrides it. Takumi uses it in three places.
 
-- **Shaping**: one code point can draw a different glyph for `zh-Hans`, `zh-Hant`, `ja`, or `ko` (Han unification).
-- **Case mapping**: `text-transform` follows Turkish, Azerbaijani, and Greek rules for those languages.
-- **Selectors**: `:lang()` matches it.
+- Shaping, where one code point can draw a different glyph for `zh-Hans`, `zh-Hant`, `ja`, or `ko` (Han unification).
+- Case mapping, where `text-transform` follows Turkish, Azerbaijani, and Greek rules for those languages.
+- Selectors, where `:lang()` matches it.
 
 ```tsx title="Set each element’s language"
 <div>
@@ -142,6 +139,4 @@ Pass `lang` to set a default for the whole render. A node's own `lang` still ove
 const image = await render(node, { width: 1200, height: 630, fonts, lang: "ja" });
 ```
 
-Glyphs change only when the font has per-language variants, such as a pan-CJK font. A font made for one region draws the same glyph for every language.
-
-Emoji have their own section: [Images & emoji](/docs/images#emoji).
+Glyphs change only when the font has per-language variants, such as a pan-CJK font. A font made for one region draws the same glyph for every language. Emoji have their own section in [Image loading & emoji](/docs/images#emoji).

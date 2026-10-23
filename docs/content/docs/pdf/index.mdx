@@ -1,13 +1,14 @@
 ---
 title: Generate PDFs
-description: Render invoices, reports, and other paged documents from JSX, HTML, and CSS with takumi-pdf, without a headless browser.
+description: Install takumi-pdf, render your first PDF from JSX or HTML, and find the guide for your document.
 index: true
-icon: BookOpen
 ---
 
-`takumi-pdf` is takumi's PDF output, for invoices, reports, and other paged documents. It shares one layout engine, a port of Chromium's layout, with [image output](/docs) and the [paint tree](/docs/paint). A template lays out the same way in each.
+`takumi-pdf` is takumi's PDF output, for invoices, reports, and other paged documents. Pass JSX, an HTML string, or a node tree, and style it with CSS or Tailwind. The renderer runs in WebAssembly and does not launch a browser.
 
-Pass JSX, an HTML string, or a node tree, and style it with CSS or Tailwind. The renderer runs in WebAssembly and does not launch a browser.
+It shares one layout engine, a port of Chromium's layout, with [image output](/docs) and the [paint tree](/docs/paint). Each output applies the same layout rules to a template.
+
+## Install
 
 ```npm
 npm i takumi-pdf @takumi-rs/helpers
@@ -43,7 +44,7 @@ const pdf = await render(
 await writeFile("invoice.pdf", pdf);
 ```
 
-`render()` returns a `Uint8Array`. By default:
+`render()` returns a `Uint8Array`. By default, these hold:
 
 - Content flows across A4 pages with automatic margins.
 - Text stays selectable, and fonts are embedded as subsets.
@@ -62,6 +63,21 @@ const pdf = await render(`
 ```
 
 Headers, footers, and `measure()` take the same inputs.
+
+## Find your guide
+
+| Task                                           | Guide                                                                                                                                          |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Control page breaks and repeated table headers | [Pagination](/docs/pdf/pagination)                                                                                                             |
+| Add page numbers, headers, and footers         | [Headers & footers](/docs/pdf/headers)                                                                                                         |
+| Load fonts, logos, and photos                  | [Fonts & images](/docs/pdf/assets)                                                                                                             |
+| Add links, a table of contents, or bookmarks   | [Links, outline & metadata](/docs/pdf/links)                                                                                                   |
+| Create a receipt, certificate, or label        | [Single-page PDFs](/docs/pdf/viewport)                                                                                                         |
+| Generate archival or accessible output         | [PDF/A & PDF/UA](/docs/pdf/conformance)                                                                                                        |
+| Embed invoice XML or another file              | [Attachments](/docs/pdf/attachments)                                                                                                           |
+| Build a complete document                      | [Invoices](/docs/pdf/invoices), [Reports & statements](/docs/pdf/reports), [Charts](/docs/pdf/charts), [Tickets & receipts](/docs/pdf/tickets) |
+| Move from Puppeteer or react-pdf               | [From Puppeteer](/docs/pdf/migration/puppeteer), [From react-pdf](/docs/pdf/migration/react-pdf)                                               |
+| Compare takumi-pdf with other tools            | [Comparison](/docs/pdf/comparison)                                                                                                             |
 
 ## Page setup
 
@@ -85,8 +101,6 @@ const pdf = await render(report, {
 | `landscape`       | `boolean`                                                 | `false`  | Swaps page width and height, including explicit sizes.                                 |
 | `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | Margin in CSS px. A side left out of the object is `"auto"`.                           |
 | `backgroundColor` | CSS color                                                 | unset    | Fills the whole page, margins included, under everything. Viewers show unset as white. |
-
-Set page geometry with these options.
 
 <Callout type="warn">CSS `@page` rules are not parsed.</Callout>
 
@@ -162,7 +176,7 @@ import wasmUrl from "takumi-pdf/wasm-url";
 await init({ module_or_path: wasmUrl });
 ```
 
-`takumi-pdf/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`. Vite, webpack, and Turbopack rewrite that call to the asset they emit. The module has no top-level `await`, so it also works in a worker bundled as an IIFE.
+`takumi-pdf/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`, and Vite, webpack, and Turbopack rewrite that call to the asset they emit. The module has no top-level `await`, so it also works in a worker bundled as an IIFE.
 
 <Callout type="warn">
   Keep the default entry in server code. A Vite SSR build leaves the URL pointing at the server
@@ -170,17 +184,3 @@ await init({ module_or_path: wasmUrl });
 </Callout>
 
 On Turbopack, remove any `turbopack.rules` entry that maps `*.wasm` to `type: "wasm"`. That rule makes Turbopack instantiate the binary and look for wasm-bindgen glue the package does not ship.
-
-## Choose the next guide
-
-| Task                                           | Guide                                           |
-| ---------------------------------------------- | ----------------------------------------------- |
-| Control page breaks and repeated table headers | [Pagination](/docs/pdf/pagination)              |
-| Add page numbers                               | [Headers and footers](/docs/pdf/headers)        |
-| Load fonts, logos, and photos                  | [Fonts and images](/docs/pdf/assets)            |
-| Add links or a table of contents               | [Links, outline, and metadata](/docs/pdf/links) |
-| Create a receipt or label                      | [Single-page viewport](/docs/pdf/viewport)      |
-| Generate archival or accessible output         | [PDF/A and PDF/UA](/docs/pdf/conformance)       |
-| Embed invoice XML or another file              | [Attachments](/docs/pdf/attachments)            |
-
-For complete document patterns, see [Invoices](/docs/pdf/invoices), [Reports](/docs/pdf/reports), and [Charts](/docs/pdf/charts).

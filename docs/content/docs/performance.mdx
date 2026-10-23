@@ -1,8 +1,9 @@
 ---
-title: Performance & Optimization
-description: Reuse Takumi renderers, tune image and glyph caches, and measure cold and repeated renders.
-icon: Zap
+title: Performance
+description: Reuse renderers, size the image and glyph caches, and keep memory and render time down on a server.
 ---
+
+Reuse the renderer, size the caches, and measure before you change a budget. Each section below covers one of these steps and the limits that go with it.
 
 ## Reuse the renderer
 
@@ -15,9 +16,11 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 });
 ```
 
-`render` and `ImageResponse` reuse one managed renderer, so they need no cache setup. If you create a `Renderer` yourself, create it outside the request handler. Its registered fonts and decoded resources then survive between renders.
+`render` and `ImageResponse` reuse one managed renderer, so they need no cache setup. If you create a `Renderer` yourself, create it outside the request handler so its registered fonts and decoded resources survive between renders.
 
 ## Know what is cached
+
+The table lists each kind of cached work, how long it lives, and how to configure it.
 
 | Work                                            | Lifetime              | Configuration                                                      |
 | :---------------------------------------------- | :-------------------- | :----------------------------------------------------------------- |
@@ -32,9 +35,7 @@ Cache budgets count retained entries, not total process memory. Fonts, active re
 
 ## Measure cold and repeated renders
 
-Measure the first render separately from repeated renders. Font downloads and decoding slow the first one. Layout, painting, and encoding still run on a warm renderer.
-
-Use representative text, images, output formats, and concurrent requests. Compare latency and memory before you change a budget. A larger cache helps only when later renders reuse what it keeps.
+Measure the first render separately from repeated renders, because font downloads and decoding slow the first one. Layout, painting, and encoding still run on a warm renderer. Use representative text, images, output formats, and concurrent requests. Compare latency and memory before you change a budget. A larger cache helps only when later renders reuse what it keeps.
 
 ### Resource cache
 
@@ -55,10 +56,11 @@ setGlyphCacheMaxBytes(64 * 1024 * 1024); // [!code highlight]
 ```
 
 <Callout type="warn">
-  Call it before the first render. A later call does not resize a cache already in use.
+  Call `setGlyphCacheMaxBytes` before the first render. A later call does not resize a cache already
+  in use.
 </Callout>
 
-Every renderer in the same backend module shares this budget. Large glyph sets, such as CJK text, can need more space. Benchmark your content first.
+Every renderer in the same backend module shares this budget. Large glyph sets, such as CJK text, can need more space, so benchmark your content first.
 
 ## Keep memory flat on Linux servers
 
@@ -76,13 +78,11 @@ glibc raises its mmap threshold after a large block is freed, so later canvases 
 | `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` | 114–130 MB             | 5–7% slower                      |
 | `MALLOC_ARENA_MAX=2`                                | 165–211 MB             | 7% slower with 4 renders at once |
 
-These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862): the `node:24-bookworm-slim` image on Linux arm64, rendering 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first. Alpine and other musl images use a different allocator.
+These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862). It used the `node:24-bookworm-slim` image on Linux arm64 and rendered 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first. Alpine and other musl images use a different allocator.
 
 ## Keep network requests out of repeated work
 
-Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression. TTF files skip that step. A reused renderer decodes a registered file once. See [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders).
-
-For repeated remote images, use a bounded [fetch cache](/docs/images#external-images). The renderer's decode cache does not replace a download cache.
+Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A reused renderer decodes a registered file once (see [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders)). For repeated remote images, use a bounded [fetch cache](/docs/images#external-images), since the renderer's decode cache does not replace a download cache.
 
 ## Reduce painting work
 
@@ -90,7 +90,7 @@ Each filtered node needs an offscreen layer. Put filters on one node when they s
 
 ## Render large canvases
 
-A canvas holds at most 64 megapixels: 8192 × 8192, or 4096 × 16384.
+A canvas holds at most 64 megapixels, such as 8192 × 8192 or 4096 × 16384.
 
 ```tsx twoslash title="A 4K render"
 import { render } from "takumi-js";

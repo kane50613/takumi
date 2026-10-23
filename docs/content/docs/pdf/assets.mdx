@@ -1,7 +1,6 @@
 ---
 title: Fonts & images
-description: Load fonts and image bytes for PDF rendering, including SVG charts and offline assets.
-icon: Type
+description: Load fonts and images into a PDF render, and choose what happens to characters no font covers.
 ---
 
 Pass fonts through `fonts` and image bytes through `images`. The renderer fetches neither on its own. Font URL loaders and `googleFonts()` make their own requests, and you fetch document images before rendering.
@@ -30,9 +29,7 @@ For offline renders, [bundle font files](/docs/fonts#fonts-in-ci-and-offline-ren
 
 ### Coverage
 
-The renderer does not read system fonts. Its only built-in font is Geist, a last-resort face for Latin text. By default, a character that no registered font covers fails the render, and the error names the character and its codepoint.
-
-Register fonts for every script you use. Google Fonts can split accented letters between its `latin` and `latin-ext` subsets.
+The renderer does not read system fonts. Its only built-in font is Geist, a last-resort face for Latin text. By default, a character that no registered font covers fails the render, and the error names the character and its codepoint. Register fonts for every script you use. Google Fonts can split accented letters between its `latin` and `latin-ext` subsets.
 
 ### Family names
 
@@ -52,7 +49,7 @@ Register fonts for every script you use. Google Fonts can split accented letters
 | `"placeholder"`     | Draws the font's glyph 0, which the font may leave empty.  |
 | `"blank"`           | Draws nothing.                                             |
 
-**Neither `"placeholder"` nor `"blank"` reflows the line.** The character keeps the width it had during layout.
+Neither `"placeholder"` nor `"blank"` reflows the line. The character keeps the width it had during layout.
 
 ```tsx twoslash title="Render with uncovered characters"
 import type { ReactNode } from "react";
@@ -65,11 +62,11 @@ const pdf = await render(doc, { uncoveredText: "placeholder" });
 
 ### Standards forbid the placeholder
 
-Every PDF/A level and both PDF/UA levels forbid glyph 0. **`"placeholder"` fails the render with any `pdfa` level, `tagged: "ua1"`, or `tagged: "ua2"`.** The error names the uncovered characters and the standard. Use `"blank"` there. See [PDF/A and PDF/UA](/docs/pdf/conformance).
+Every PDF/A level and both PDF/UA levels forbid glyph 0, so `"placeholder"` fails the render with any `pdfa` level, `tagged: "ua1"`, or `tagged: "ua2"`. The error names the uncovered characters and the standard, and `"blank"` is the value to use there. See [PDF/A & PDF/UA](/docs/pdf/conformance).
 
 ### What copied text keeps
 
-Whether an uncovered character survives in copied text depends on its shaping cluster. This holds for `"placeholder"` and `"blank"` alike.
+Whether an uncovered character survives in copied text depends on its shaping cluster, for `"placeholder"` and `"blank"` alike.
 
 | Uncovered character                  | Copied text                                            |
 | ------------------------------------ | ------------------------------------------------------ |
@@ -107,12 +104,10 @@ To fetch every remote image in a tree at once, use [`prepareImages()`](/docs/pdf
 | PNG    | Embedded as an image                                                                                                               |
 | JPEG   | Embedded as the bytes you passed, keeping their compression                                                                        |
 | WebP   | Embedded as an image                                                                                                               |
-| GIF    | Rejected: the PDF build ships no GIF decoder                                                                                       |
+| GIF    | Rejected, since the PDF build ships no GIF decoder                                                                                 |
 
 Identical raster images are embedded once.
 
 ### Filters
 
-A CSS color filter on an image needs decoded pixels, and the PDF build decodes only PNG. A filtered JPEG or WebP image fails the render.
-
-PDF output also rejects `filter: blur()` and `drop-shadow()`, naming the function in the error. Bake those effects into a raster image before rendering.
+A CSS color filter on an image needs decoded pixels, and the PDF build decodes only PNG. A filtered JPEG or WebP image fails the render. PDF output also rejects `filter: blur()` and `drop-shadow()`, naming the function in the error. Bake those effects into a raster image before rendering.

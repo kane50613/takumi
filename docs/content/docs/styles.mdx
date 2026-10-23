@@ -1,10 +1,9 @@
 ---
-title: Styling
-description: Style Takumi templates with inline CSS, stylesheets, Tailwind utilities, and design tokens.
-icon: Palette
+title: Styles
+description: Choose among inline styles, stylesheets, Tailwind, and design tokens to style a Takumi template.
 ---
 
-Pick the approach that matches what you have:
+Takumi accepts styles in several ways, and the one to use depends on what you already have. The table maps each starting point to a section of this page.
 
 | You have                                   | Use                                             |
 | ------------------------------------------ | ----------------------------------------------- |
@@ -14,7 +13,7 @@ Pick the approach that matches what you have:
 | Design tokens to theme with                | [a `:root` rule](#design-tokens)                |
 | One-off styles on one node                 | [the `style` prop](#inline-styles)              |
 
-You can mix them. The sections below say which declaration wins.
+You can mix them. Each section below says which declaration wins.
 
 ## Inline styles
 
@@ -51,9 +50,9 @@ A `<style>` tag in the JSX or HTML feeds the same stylesheet. Takumi pulls it ou
 
 The stylesheet supports:
 
-- **Selectors**: type, class, id, attribute, and combinators. Structural pseudo-classes such as `:first-child` and `:nth-child()`, plus `:is()`, `:where()`, `:not()`, `:root`, and `:lang()`. The `::before` and `::after` pseudo-elements.
-- **At-rules**: `@media`, `@supports`, `@layer`, and `@keyframes`.
-- **Values**: custom properties with `var()`, `calc()`, and shorthands.
+- Selectors cover type, class, id, attribute, and combinators. They also cover structural pseudo-classes such as `:first-child` and `:nth-child()`, plus `:is()`, `:where()`, `:not()`, `:root`, and `:lang()`, and the `::before` and `::after` pseudo-elements.
+- At-rules cover `@media`, `@supports`, `@layer`, and `@keyframes`.
+- Values cover custom properties with `var()`, `calc()`, and shorthands.
 
 <Callout type="info">
   A render is one static frame. Interactive pseudo-classes such as `:hover` and `:focus` parse but
@@ -83,13 +82,13 @@ The stylesheet supports:
 
 A `css` entry can be an object instead of text. Use objects to keep application data out of CSS strings.
 
-| Entry                        | Writes                                                    |
-| ---------------------------- | --------------------------------------------------------- |
-| `{ selector, style, rules }` | a style rule; `rules` nests child rules                   |
-| `{ keyframes, steps }`       | a [`@keyframes` rule](/docs/animation)                    |
-| `{ media, rules }`           | a `@media` group holding entries of its own               |
-| `{ supports, rules }`        | a `@supports` group                                       |
-| `{ layer, rules }`           | a `@layer` block; without `rules` it declares order alone |
+| Entry                        | Writes                                                       |
+| ---------------------------- | ------------------------------------------------------------ |
+| `{ selector, style, rules }` | a style rule, where `rules` nests child rules                |
+| `{ keyframes, steps }`       | a [`@keyframes` rule](/docs/animation)                       |
+| `{ media, rules }`           | a `@media` group holding entries of its own                  |
+| `{ supports, rules }`        | a `@supports` group                                          |
+| `{ layer, rules }`           | a `@layer` block, which declares order alone without `rules` |
 
 ```tsx twoslash title="Build CSS rule objects"
 import { render } from "takumi-js";
@@ -154,7 +153,7 @@ const image = await render(
 );
 ```
 
-Arbitrary values work. The parser does not cover every Tailwind feature. The [utility table](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/utility.rs) lists every supported class. Check it when you migrate `next/og` templates.
+Arbitrary values work, but the parser does not cover every Tailwind feature. The [utility table](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/utility.rs) lists every supported class. Check it when you migrate `next/og` templates.
 
 `tw` is a plain string prop, so you can build it at runtime:
 
@@ -197,7 +196,7 @@ As in Tailwind, the box exists without `content-*`, so `before:` utilities alone
 
 ### Preflight
 
-The built-in parser applies no Tailwind Preflight by default. Elements keep their default margins: an `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
+The built-in parser applies no Tailwind Preflight by default. Elements keep their default margins, so an `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
 
 <Callout type="warn">
   Without Preflight, a border style utility draws on every side. `border-dashed` sets `border-style`
@@ -266,7 +265,7 @@ A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500
 
 ### Declaring tokens
 
-Declare tokens in a stylesheet or in a rule object. Both feed every `var()`: in stylesheets, in `<style>` tags, and in utilities.
+Declare tokens in a stylesheet or in a rule object. Both feed every `var()`, whether it sits in a stylesheet, a `<style>` tag, or a utility.
 
 A `:root` rule, or a [Tailwind `@theme` block](#tailwind-at-rules) pasted as-is:
 

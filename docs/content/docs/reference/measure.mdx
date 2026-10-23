@@ -1,7 +1,6 @@
 ---
-title: The measure() API
-description: Measure node dimensions and text runs with measure() without painting.
-icon: Ruler
+title: measure()
+description: Measure the size, position, and text runs of laid-out nodes with measure() without painting.
 ---
 
 `measure()` lays out a tree and returns each box's size and position without painting it. Use it to fit a headline into a fixed width, or to place a badge next to a measured box.
@@ -40,6 +39,8 @@ const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
 //      ^?
 ```
+
+Use `measure()` for sizes and positions. To draw the laid-out boxes and text yourself, use [`takumi-paint`](/docs/paint), which returns the shapes, text runs, and images to draw, in order, with every CSS value resolved.
 
 ## Returned fields
 
@@ -106,6 +107,6 @@ A node that lays out text reports one `MeasuredTextRun` per shaped run.
 
 ## Coordinates
 
-`transform` is absolute: it places the box in the image. Every node has one, including the boxes Takumi generates to lay out inline content.
+`transform` is absolute and places the box in the image. Every node has one, including the boxes Takumi generates to lay out inline content.
 
 A run's `x` and `y` are not absolute. They start at the content box of the node that owns the run. To place a run in the image, add that node's `padding` and `border` to the run's `x` and `y`, then apply the node's `transform`.

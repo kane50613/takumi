@@ -1,10 +1,9 @@
 ---
-title: PDF/A and PDF/UA
-description: Configure PDF/A archival output, tagged PDF structure, and PDF/UA-1 or PDF/UA-2 validation with takumi-pdf.
-icon: Archive
+title: PDF/A & PDF/UA
+description: Choose a PDF/A level and PDF/UA validation for archival and accessible PDFs, and see which inputs and options each one requires.
 ---
 
-`pdfa` selects a PDF/A archival level. `tagged` controls the structure tree and PDF/UA accessibility validation. The level you pick decides which other options are allowed.
+`pdfa` selects a PDF/A archival level, and `tagged` controls the structure tree and PDF/UA accessibility validation. The level you pick decides which other options are allowed.
 
 ```tsx twoslash title="PDF/A-3b"
 import type { ReactNode } from "react";
@@ -19,7 +18,7 @@ const pdf = await render(invoice, {
 });
 ```
 
-Conforming output carries an sRGB output intent and XMP metadata. Fonts are embedded and subset with or without `pdfa`.
+Conforming output carries an sRGB output intent and XMP metadata. Fonts are embedded and subset whether or not you set `pdfa`.
 
 ## Levels
 
@@ -34,7 +33,9 @@ Conforming output carries an sRGB output intent and XMP metadata. Fonts are embe
 | `"4"`  | PDF 2.0     | The PDF 2.0 revision of the standard. |
 | `"4f"` | PDF 2.0     | `4` plus arbitrary file attachments.  |
 
-- The `u` levels cost nothing extra. Takumi always writes Unicode mappings for text.
+Three notes apply to the levels:
+
+- The `u` levels cost nothing extra, because Takumi always writes Unicode mappings for text.
 - PDF/A-3 and PDF/A-4f allow file attachments. ZUGFeRD and Factur-X electronic invoices expect `"3b"`. See [Attachments](/docs/pdf/attachments).
 - PDF/A-1 is not offered, because it prohibits transparency.
 
@@ -49,20 +50,20 @@ verapdf --flavour 3b --format text invoice.pdf
 verapdf --flavour ua1 --format text invoice.pdf
 ```
 
-Neither check reviews reading order, alternative text quality, or the meaning of your content.
+Neither the renderer's check nor veraPDF reviews reading order, alternative text quality, or the meaning of your content.
 
 ## Required inputs
 
-Validators require some inputs the renderer cannot infer:
+Validators require some inputs the renderer cannot infer.
 
-| Input                   | Required by                                                                   |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| `lang`                  | `"2a"`, `"3a"`, and `tagged: "ua2"`. PDF/UA-1 only recommends it.             |
-| `metadata.title`        | `tagged: "ua1"` and `tagged: "ua2"`                                           |
-| `metadata.creationDate` | Every `pdfa` level, when `metadata` is set, or `lang` is set on tagged output |
-| `alt` on every `<img>`  | `"2a"`, `"3a"`, and both PDF/UA levels                                        |
+| Input                   | Required by                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `lang`                  | `"2a"`, `"3a"`, and `tagged: "ua2"`. PDF/UA-1 only recommends it.            |
+| `metadata.title`        | `tagged: "ua1"` and `tagged: "ua2"`                                          |
+| `metadata.creationDate` | Every `pdfa` level, when `metadata` is set or when tagged output sets `lang` |
+| `alt` on every `<img>`  | `"2a"`, `"3a"`, and both PDF/UA levels                                       |
 
-A missing input fails the render. A few more rules:
+A missing input fails the render. Four more rules apply:
 
 - Write `creationDate` as UTC `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`. A fixed date keeps the output byte-identical across runs.
 - Mark a decorative image with `alt=""`.

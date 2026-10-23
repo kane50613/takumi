@@ -1,7 +1,6 @@
 ---
 title: From react-pdf
-description: Migrate @react-pdf/renderer templates to takumi-pdf using HTML elements, CSS, and page options.
-icon: Atom
+description: Move a @react-pdf/renderer template to takumi-pdf by mapping each component and option, converting units, and registering fonts and images.
 ---
 
 To migrate, replace react-pdf's primitives with HTML elements, move page settings into `render()` options, and convert lengths from pt to CSS px. The resulting JSX also renders as an image with [`takumi-js`](/docs).
@@ -51,7 +50,7 @@ const pdf = await render(
 
 | `@react-pdf/renderer`                   | `takumi-pdf`                                     |
 | --------------------------------------- | ------------------------------------------------ |
-| `<Document>`                            | none: `render()` takes the tree                  |
+| `<Document>`                            | none, since `render()` takes the tree            |
 | `<Page size="A4">`                      | the `size` option                                |
 | `<View>`                                | `<div>`                                          |
 | `<Text>`                                | `<span>`, `<p>`, or bare text                    |
@@ -110,14 +109,16 @@ const pdf = await render(report, {
 
 The counter is a class on an element, not a `render` callback. See [Headers & footers](/docs/pdf/headers) for counter styles and for sizing the margin to the band.
 
-## Features to adapt
+## Assets load differently
 
-Takumi has no equivalent for `minPresenceAhead`, hyphenation callbacks, or react-pdf's preview and download components. Render a `Uint8Array` and deliver it from your application. In a browser bundle, use the [manual initialization entry](/docs/pdf#in-the-browser).
-
-`widows` and `orphans` work as CSS properties. See [Pagination](/docs/pdf/pagination#widows-and-orphans).
+The component map above shows where `Font.register`, `<Image>`, and `Font.registerEmojiSource` go.
 
 <Callout type="warn">
   Takumi does not use the 14 standard PDF fonts. Register every font your template uses.
 </Callout>
 
-For archival output and accessibility validation, see [PDF/A and PDF/UA](/docs/pdf/conformance).
+See [Fonts & images](/docs/pdf/assets) for the loaders.
+
+## Known gaps
+
+Takumi has no equivalent for `minPresenceAhead`, hyphenation callbacks, or react-pdf's preview and download components. Render a `Uint8Array` and deliver it from your application. In a browser bundle, use the [manual initialization entry](/docs/pdf#in-the-browser). `widows` and `orphans` do work, as CSS properties, and [Pagination](/docs/pdf/pagination#widows-and-orphans) covers them. For archival output and accessibility validation, see [PDF/A & PDF/UA](/docs/pdf/conformance).

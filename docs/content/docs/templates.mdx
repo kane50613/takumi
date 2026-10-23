@@ -1,16 +1,15 @@
 ---
 title: Templates
-description: Add Open Graph image templates to your project with the shadcn CLI and the Takumi registry.
-icon: LayoutTemplate
+description: Add an Open Graph card template to your project with the shadcn CLI and serve it from a Next.js route.
 ---
 
-Copy an Open Graph card into your project, then edit its content and styles. The [shadcn CLI](https://ui.shadcn.com/docs/cli) adds the card and installs `takumi-js`.
+Copy an Open Graph card into your project, then edit its content and styles. The [shadcn CLI](https://ui.shadcn.com/docs/cli) adds the card and installs `takumi-js`. Every item lives under `image/`, and cards land in `components/takumi/image/`.
 
 ```npm
 npx shadcn@latest add https://takumi.kane.tw/r/image/blog-post.json
 ```
 
-To add items by name, register the namespace in `components.json`:
+To add items by name, register the namespace in `components.json`.
 
 ```json title="components.json"
 {
@@ -23,8 +22,6 @@ To add items by name, register the namespace in `components.json`:
 ```npm
 npx shadcn@latest add @takumi/image/blog-post
 ```
-
-Every item lives under `image/`. Cards land in `components/takumi/image/`.
 
 ## A route that answers with an image
 
@@ -54,7 +51,7 @@ export function GET(request: Request) {
 }
 ```
 
-Point a page's Open Graph image at the route:
+Point a page's Open Graph image at the route.
 
 ```tsx title="app/blog/[slug]/page.tsx"
 import type { Metadata } from "next";
@@ -78,9 +75,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export const metadata = { metadataBase: new URL("https://example.com") };
 ```
 
-The CLI rewrites the `@/` import to the alias in your `components.json`. A project on `~/` gets `~/components/takumi/image/blog-post`.
-
-The route is for the Next.js App Router. The shadcn CLI skips it when it cannot detect the framework, and moves it to another folder in Pages Router, React Router, and Laravel projects, where it does not work as a route.
+The CLI rewrites the `@/` import to the alias in your `components.json`. A project on `~/` gets `~/components/takumi/image/blog-post`. The route is for the Next.js App Router. The shadcn CLI skips it when it cannot detect the framework. In Pages Router, React Router, and Laravel projects it moves the route to another folder, where it does not work as a route.
 
 ## Blog Post Template
 

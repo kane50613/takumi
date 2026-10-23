@@ -1,7 +1,6 @@
 ---
-title: Reference
-description: Look up Takumi node fields, CSS properties, units, and supported values.
-icon: BookMarked
+title: Node & CSS reference
+description: Look up the fields a Takumi node accepts, how units resolve, and which CSS properties and values Takumi supports.
 ---
 
 ## Node Types
@@ -31,7 +30,7 @@ All nodes accept these fields:
     preset: {
       type: "Style",
       description:
-        "Default HTML element styles (lowest priority); fromHtml and fromJsx fill it from tagName",
+        "Default HTML element styles (lowest priority). fromHtml and fromJsx fill it from tagName",
       typeDescriptionLink: "#style-properties",
     },
     tw: {
@@ -45,11 +44,11 @@ All nodes accept these fields:
     },
     lang: {
       type: "string",
-      description: "BCP-47 language tag; inherited by descendants, drives locale-aware shaping",
+      description: "BCP-47 language tag, inherited by descendants, drives locale-aware shaping",
     },
     dir: {
       type: '"ltr" | "rtl"',
-      description: "Text direction; inherited by descendants",
+      description: "Text direction, inherited by descendants",
     },
   }}
 />
@@ -105,17 +104,13 @@ Displays a rasterized image or SVG. Adds:
 
 ## Units
 
-Font-relative units resolve the way they do in a browser. `em` and `lh` follow the element's own font size and line height, except on `fontSize` itself, where `em` follows the parent.
-
-`rem` and `rlh` follow the root, and a node tree has no `<html>` element to be one. They resolve against the viewport's font size, which is 16px. In Rust, `Viewport::with_font_size` changes it; the JS render options do not expose it yet.
-
-A `fontSize` on the outermost node does not rescale the `rem` and `rlh` lengths below it, so `text-2xl` on a root container leaves the Tailwind spacing scale where it is. Descendants still inherit that font size, and their `em` and `lh` lengths follow it.
+Font-relative units resolve the way they do in a browser. `em` and `lh` follow the element's own font size and line height, except on `fontSize` itself, where `em` follows the parent. `rem` and `rlh` follow the root, and a node tree has no `<html>` element to be one. They resolve against the viewport's font size, which is 16px. In Rust, `Viewport::with_font_size` changes it. The JS render options do not expose it yet. A `fontSize` on the outermost node does not rescale the `rem` and `rlh` lengths below it, so `text-2xl` on a root container leaves the Tailwind spacing scale where it is. Descendants still inherit that font size, and their `em` and `lh` lengths follow it.
 
 The exception is a tree whose outermost node is an `<html>` element, which CSS does make the root. `fromHtml` keeps that element when the source is a full document, so `<html style="font-size: 62.5%">` sets the `rem` basis for everything under it.
 
 ## Style Properties
 
-Properties use their camelCase names. Longhands are listed in parentheses. `Supported` means the property follows its CSS spec; a value cell instead lists the accepted keywords.
+Properties use their camelCase names. Longhands are listed in parentheses. `Supported` means the property follows its CSS spec. Any other value cell lists the accepted values.
 
 | Declaration                     | Result                             |
 | :------------------------------ | :--------------------------------- |
@@ -205,23 +200,29 @@ pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 
 ### Flexbox
 
-| Property                                                 | Values                                                                                                                                                                            |
-| :------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `flex` (`flexBasis`, `flexGrow`, `flexShrink`)           | Supported                                                                                                                                                                         |
-| `flexBasis`                                              | `content`, plus every `width` value                                                                                                                                               |
-| `flexDirection`                                          | Supported                                                                                                                                                                         |
-| `flexFlow`                                               | Supported                                                                                                                                                                         |
-| `flexWrap`                                               | `nowrap`, `wrap`, `wrap-reverse`, `balance`, `wrap balance`, `wrap-reverse balance`; pairs also accept the reverse order                                                          |
-| `flexLineCount`                                          | `<integer>` of 1 or more (minimum line count); values above 65535 are clamped to 65535                                                                                            |
-| `justifyContent`, `alignContent`                         | `normal`, `stretch`, `space-between`, `space-around`, `space-evenly`; `start`, `end`, `flex-start`, `flex-end`, `center` optionally prefixed with `safe` or `unsafe` <sup>1</sup> |
-| `justifyItems`, `justifySelf`, `alignItems`, `alignSelf` | `normal`, `baseline`, `stretch`; `start`, `end`, `flex-start`, `flex-end`, `self-start`, `self-end`, `center` optionally prefixed with `safe` or `unsafe` <sup>1</sup>            |
-| `placeContent`, `placeItems`, `placeSelf`                | Supported                                                                                                                                                                         |
-| `WebkitBoxOrient`                                        | The axis of a `display: -webkit-box`, which ignores `flexDirection`                                                                                                               |
-| `WebkitBoxPack`, `WebkitBoxAlign`                        | Legacy aliases for `justifyContent`, `alignItems`                                                                                                                                 |
+| Property                                                 | Values                                                                                                                                |
+| :------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ |
+| `flex` (`flexBasis`, `flexGrow`, `flexShrink`)           | Supported                                                                                                                             |
+| `flexBasis`                                              | `content`, plus every `width` value                                                                                                   |
+| `flexDirection`                                          | Supported                                                                                                                             |
+| `flexFlow`                                               | Supported                                                                                                                             |
+| `flexWrap`                                               | `nowrap`, `wrap`, `wrap-reverse`, `balance`, `wrap balance`, `wrap-reverse balance` <sup>1</sup>                                      |
+| `flexLineCount`                                          | `<integer>` of 1 or more <sup>2</sup>                                                                                                 |
+| `justifyContent`, `alignContent`                         | `normal`, `stretch`, `space-between`, `space-around`, `space-evenly`, `start`, `end`, `flex-start`, `flex-end`, `center` <sup>3</sup> |
+| `justifyItems`, `justifySelf`, `alignItems`, `alignSelf` | `normal`, `baseline`, `stretch`, `start`, `end`, `flex-start`, `flex-end`, `self-start`, `self-end`, `center` <sup>3</sup>            |
+| `placeContent`, `placeItems`, `placeSelf`                | Supported                                                                                                                             |
+| `WebkitBoxOrient`                                        | The axis of a `display: -webkit-box`, which ignores `flexDirection`                                                                   |
+| `WebkitBoxPack`, `WebkitBoxAlign`                        | Legacy aliases for `justifyContent`, `alignItems`                                                                                     |
 
-<sup>1</sup> `unsafe` also parses before the other listed alignment values, such as `normal`. `safe`
-only works with the positional values listed after the semicolon. `alignSelf` and `justifySelf`
-reject `auto`. `justifyContent` and `alignContent` reject `self-start` and `self-end`.
+<sup>1</sup> Pairs also accept the reverse order.
+
+<sup>2</sup> `flexLineCount` is the minimum line count. Values above 65535 are clamped to 65535.
+
+<sup>3</sup> The positional values (`start`, `end`, `flex-start`, `flex-end`, `self-start`,
+`self-end`, and `center`) accept an optional `safe` or `unsafe` prefix. `unsafe` also parses before
+the other listed alignment values, such as `normal`. `safe` only works with the positional values.
+`alignSelf` and `justifySelf` reject `auto`. `justifyContent` and `alignContent` reject `self-start`
+and `self-end`.
 
 ### Grid
 
@@ -244,31 +245,44 @@ reject `auto`. `justifyContent` and `alignContent` reject `self-start` and `self
 | `backgroundColor`                                                                                                                                     | Supported                                                                                                                                                         |
 | `backgroundPosition`, `backgroundSize`, `backgroundRepeat`                                                                                            | Supported                                                                                                                                                         |
 | `backgroundClip`, `backgroundBlendMode`                                                                                                               | Supported                                                                                                                                                         |
-| `backgroundAttachment`                                                                                                                                | Accepted in `background`; `fixed` and `local` paint like `scroll`                                                                                                 |
+| `backgroundAttachment`                                                                                                                                | Accepted in `background` <sup>1</sup>                                                                                                                             |
 | `backgroundOrigin`                                                                                                                                    | `border-box`, `padding-box`, `content-box`                                                                                                                        |
 | `mask` (`maskImage`, `maskSize`, `maskPosition`, `maskRepeat`)                                                                                        | Supported                                                                                                                                                         |
 
+<sup>1</sup> `fixed` and `local` paint like `scroll`.
+
 ### Effects & transform
 
-| Property                                    | Values                                                                                                                        |
-| :------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------- |
-| `boxShadow`                                 | Supported                                                                                                                     |
-| `opacity`                                   | Supported                                                                                                                     |
-| `filter`, `backdropFilter`                  | `<filter-function>`, `url()`                                                                                                  |
-| `mixBlendMode`                              | Supported                                                                                                                     |
-| `isolation`                                 | Supported                                                                                                                     |
-| `transform`, `rotate`, `scale`, `translate` | 2D only; `transform` accepts functions like `translateX()`, `scaleX()`                                                        |
-| `transformOrigin`                           | Supported                                                                                                                     |
-| `clipPath`                                  | `<basic-shape>`                                                                                                               |
-| `clipRule`                                  | Supported                                                                                                                     |
-| `offsetPath`                                | `ray()`, `<basic-shape>` (`path()`, `circle()`, `ellipse()`, `polygon()`, `inset()`), `<coord-box>`; `url()` is not supported |
-| `offsetDistance`                            | `<length-percentage>` (percentage of the path length)                                                                         |
-| `offsetRotate`                              | `auto`, `reverse`, `<angle>`, `auto <angle>`                                                                                  |
-| `offsetAnchor`                              | `auto` (transform-origin) or `<position>`                                                                                     |
-| `offsetPosition`                            | `normal`, `auto`, `<position>`                                                                                                |
-| `offset`                                    | Shorthand for the five `offset-*` longhands                                                                                   |
-| `imageRendering`                            | `auto`, `smooth`, `pixelated`                                                                                                 |
-| `strokeLinejoin`                            | `miter`, `round`, `bevel`                                                                                                     |
+| Property                                    | Values                                                                                                           |
+| :------------------------------------------ | :--------------------------------------------------------------------------------------------------------------- |
+| `boxShadow`                                 | Supported                                                                                                        |
+| `opacity`                                   | Supported                                                                                                        |
+| `filter`, `backdropFilter`                  | `<filter-function>`, `url()`                                                                                     |
+| `mixBlendMode`                              | Supported                                                                                                        |
+| `isolation`                                 | Supported                                                                                                        |
+| `transform`, `rotate`, `scale`, `translate` | Supported <sup>1</sup>                                                                                           |
+| `transformOrigin`                           | Supported                                                                                                        |
+| `clipPath`                                  | `<basic-shape>`                                                                                                  |
+| `clipRule`                                  | Supported                                                                                                        |
+| `offsetPath`                                | `ray()`, `<basic-shape>` (`path()`, `circle()`, `ellipse()`, `polygon()`, `inset()`), `<coord-box>` <sup>2</sup> |
+| `offsetDistance`                            | `<length-percentage>` <sup>3</sup>                                                                               |
+| `offsetRotate`                              | `auto`, `reverse`, `<angle>`, `auto <angle>`                                                                     |
+| `offsetAnchor`                              | `auto`, `<position>` <sup>4</sup>                                                                                |
+| `offsetPosition`                            | `normal`, `auto`, `<position>`                                                                                   |
+| `offset`                                    | Supported <sup>5</sup>                                                                                           |
+| `imageRendering`                            | `auto`, `smooth`, `pixelated`                                                                                    |
+| `strokeLinejoin`                            | `miter`, `round`, `bevel`                                                                                        |
+
+<sup>1</sup> `transform`, `rotate`, `scale`, and `translate` are 2D only. `transform` accepts
+functions like `translateX()` and `scaleX()`.
+
+<sup>2</sup> `offsetPath` does not support `url()`.
+
+<sup>3</sup> A percentage is relative to the path length.
+
+<sup>4</sup> `auto` uses transform-origin.
+
+<sup>5</sup> `offset` is a shorthand for the five `offset-*` longhands.
 
 ### Animation
 
@@ -290,58 +304,66 @@ Consumed by [paged PDF output](/docs/pdf/pagination). Other backends ignore them
 
 ### Typography
 
-| Property                                                                                                                       | Values                                                                                       |
-| :----------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------- |
-| `color`                                                                                                                        | Supported                                                                                    |
-| `font`                                                                                                                         | Supported, except system font keywords                                                       |
-| `fontFamily`                                                                                                                   | Font fallback supported                                                                      |
-| `fontSize`                                                                                                                     | Supported                                                                                    |
-| `fontWeight`                                                                                                                   | Supported                                                                                    |
-| `fontStyle`                                                                                                                    | Supported                                                                                    |
-| `fontStretch`                                                                                                                  | Supported                                                                                    |
-| `fontVariationSettings`                                                                                                        | Supported                                                                                    |
-| `fontOpticalSizing`                                                                                                            | `auto`, `none`                                                                               |
-| `fontFeatureSettings`                                                                                                          | Supported                                                                                    |
-| `fontLanguageOverride`                                                                                                         | `normal`, a language system tag string such as `"TRK"`                                       |
-| `fontVariant` (`fontVariantLigatures`, `fontVariantNumeric`, `fontVariantEastAsian`, `fontVariantCaps`, `fontVariantPosition`) | Supported <sup>1</sup>                                                                       |
-| `fontKerning`                                                                                                                  | `auto`, `normal`, `none` <sup>1</sup>                                                        |
-| `fontSynthesis`                                                                                                                | `none`, `weight`, `style`, `small-caps`                                                      |
-| `fontSynthesisWeight`                                                                                                          | `auto`, `none`                                                                               |
-| `fontSynthesisStyle`                                                                                                           | `auto`, `none`                                                                               |
-| `fontSynthesisSmallCaps`                                                                                                       | `auto`, `none`                                                                               |
-| `lineHeight`                                                                                                                   | Supported                                                                                    |
-| `letterSpacing`                                                                                                                | Supported                                                                                    |
-| `wordSpacing`                                                                                                                  | Supported                                                                                    |
-| `textIndent`                                                                                                                   | Supported                                                                                    |
-| `textAlign`                                                                                                                    | Supported                                                                                    |
-| `textAlignLast`                                                                                                                | `auto`, `start`, `end`, `left`, `right`, `center`, `justify`                                 |
-| `textJustify`                                                                                                                  | `auto`, `none`, `inter-word`, `inter-character`                                              |
-| `verticalAlign`                                                                                                                | Supported                                                                                    |
-| `textTransform`                                                                                                                | `none`, `uppercase`, `lowercase`, `capitalize`, `full-width`, `full-size-kana`               |
-| `textShadow`                                                                                                                   | Supported                                                                                    |
-| `textOverflow`                                                                                                                 | `ellipsis`, `clip`, custom character                                                         |
-| `lineClamp`                                                                                                                    | `none`, `<integer>`, `<integer> <block-ellipsis>`                                            |
-| `maxLines`                                                                                                                     | `none`, `<integer>`                                                                          |
-| `blockEllipsis`                                                                                                                | `none`, `auto`, `<string>`                                                                   |
-| `continue`                                                                                                                     | `normal`, `collapse`                                                                         |
-| `overflowWrap`                                                                                                                 | Supported                                                                                    |
-| `lineBreak`                                                                                                                    | `auto`, `loose`, `normal`, `strict`, `anywhere`                                              |
-| `wordBreak`                                                                                                                    | `normal`, `break-all`, `keep-all`, `break-word`                                              |
-| `hyphens`                                                                                                                      | `none`, `manual`, `auto` (breaks only at soft hyphens; no hyphenation dictionaries)          |
-| `hyphenateCharacter`                                                                                                           | `auto`, `<string>`                                                                           |
-| `whiteSpace`                                                                                                                   | `normal`, `nowrap`, `pre`, `pre-wrap`, `pre-line`, `<text-wrap-mode> <white-space-collapse>` |
-| `whiteSpaceCollapse`                                                                                                           | `preserve`, `collapse`, `preserve-spaces`, `preserve-breaks`                                 |
-| `tabSize`                                                                                                                      | `<number>` (preserved tabs expand to that many spaces; no `<length>`, no tab stops)          |
-| `textWrap` (`textWrapMode`, `textWrapStyle`)                                                                                   | `wrap`, `nowrap`; `auto`, `balance`, `pretty`                                                |
-| `textFit`                                                                                                                      | [Supported](https://drafts.csswg.org/css-text-4/#text-fit-property)                          |
-| `textDecoration` (`textDecorationLine`, `textDecorationStyle`, `textDecorationColor`, `textDecorationThickness`)               | `underline`, `line-through`, `overline`; `solid`, `double`, `dotted`, `dashed`, `wavy`       |
-| `textDecorationSkipInk`                                                                                                        | `auto`, `none`                                                                               |
-| `textUnderlineOffset`                                                                                                          | `auto`, `<length-percentage>`                                                                |
-| `textUnderlinePosition`                                                                                                        | `auto`, `from-font`, `under`                                                                 |
-| `WebkitTextStroke` (`WebkitTextStrokeWidth`, `WebkitTextStrokeColor`, `WebkitTextFillColor`)                                   | Supported                                                                                    |
+| Property                                                                                                                       | Values                                                                                                                                        |
+| :----------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
+| `color`                                                                                                                        | Supported                                                                                                                                     |
+| `font`                                                                                                                         | Supported <sup>1</sup>                                                                                                                        |
+| `fontFamily`                                                                                                                   | Supported <sup>2</sup>                                                                                                                        |
+| `fontSize`                                                                                                                     | Supported                                                                                                                                     |
+| `fontWeight`                                                                                                                   | Supported                                                                                                                                     |
+| `fontStyle`                                                                                                                    | Supported                                                                                                                                     |
+| `fontStretch`                                                                                                                  | Supported                                                                                                                                     |
+| `fontVariationSettings`                                                                                                        | Supported                                                                                                                                     |
+| `fontOpticalSizing`                                                                                                            | `auto`, `none`                                                                                                                                |
+| `fontFeatureSettings`                                                                                                          | Supported                                                                                                                                     |
+| `fontLanguageOverride`                                                                                                         | `normal`, a language system tag string such as `"TRK"`                                                                                        |
+| `fontVariant` (`fontVariantLigatures`, `fontVariantNumeric`, `fontVariantEastAsian`, `fontVariantCaps`, `fontVariantPosition`) | Supported <sup>3</sup>                                                                                                                        |
+| `fontKerning`                                                                                                                  | `auto`, `normal`, `none` <sup>3</sup>                                                                                                         |
+| `fontSynthesis`                                                                                                                | `none`, `weight`, `style`, `small-caps`                                                                                                       |
+| `fontSynthesisWeight`                                                                                                          | `auto`, `none`                                                                                                                                |
+| `fontSynthesisStyle`                                                                                                           | `auto`, `none`                                                                                                                                |
+| `fontSynthesisSmallCaps`                                                                                                       | `auto`, `none`                                                                                                                                |
+| `lineHeight`                                                                                                                   | Supported                                                                                                                                     |
+| `letterSpacing`                                                                                                                | Supported                                                                                                                                     |
+| `wordSpacing`                                                                                                                  | Supported                                                                                                                                     |
+| `textIndent`                                                                                                                   | Supported                                                                                                                                     |
+| `textAlign`                                                                                                                    | Supported                                                                                                                                     |
+| `textAlignLast`                                                                                                                | `auto`, `start`, `end`, `left`, `right`, `center`, `justify`                                                                                  |
+| `textJustify`                                                                                                                  | `auto`, `none`, `inter-word`, `inter-character`                                                                                               |
+| `verticalAlign`                                                                                                                | Supported                                                                                                                                     |
+| `textTransform`                                                                                                                | `none`, `uppercase`, `lowercase`, `capitalize`, `full-width`, `full-size-kana`                                                                |
+| `textShadow`                                                                                                                   | Supported                                                                                                                                     |
+| `textOverflow`                                                                                                                 | `ellipsis`, `clip`, custom character                                                                                                          |
+| `lineClamp`                                                                                                                    | `none`, `<integer>`, `<integer> <block-ellipsis>`                                                                                             |
+| `maxLines`                                                                                                                     | `none`, `<integer>`                                                                                                                           |
+| `blockEllipsis`                                                                                                                | `none`, `auto`, `<string>`                                                                                                                    |
+| `continue`                                                                                                                     | `normal`, `collapse`                                                                                                                          |
+| `overflowWrap`                                                                                                                 | Supported                                                                                                                                     |
+| `lineBreak`                                                                                                                    | `auto`, `loose`, `normal`, `strict`, `anywhere`                                                                                               |
+| `wordBreak`                                                                                                                    | `normal`, `break-all`, `keep-all`, `break-word`                                                                                               |
+| `hyphens`                                                                                                                      | `none`, `manual`, `auto` <sup>4</sup>                                                                                                         |
+| `hyphenateCharacter`                                                                                                           | `auto`, `<string>`                                                                                                                            |
+| `whiteSpace`                                                                                                                   | `normal`, `nowrap`, `pre`, `pre-wrap`, `pre-line`, `<text-wrap-mode> <white-space-collapse>`                                                  |
+| `whiteSpaceCollapse`                                                                                                           | `preserve`, `collapse`, `preserve-spaces`, `preserve-breaks`                                                                                  |
+| `tabSize`                                                                                                                      | `<number>` <sup>5</sup>                                                                                                                       |
+| `textWrap` (`textWrapMode`, `textWrapStyle`)                                                                                   | `wrap`, `nowrap` for `textWrapMode`, and `auto`, `balance`, `pretty` for `textWrapStyle`                                                      |
+| `textFit`                                                                                                                      | [Supported](https://drafts.csswg.org/css-text-4/#text-fit-property)                                                                           |
+| `textDecoration` (`textDecorationLine`, `textDecorationStyle`, `textDecorationColor`, `textDecorationThickness`)               | `underline`, `line-through`, `overline` for `textDecorationLine`, and `solid`, `double`, `dotted`, `dashed`, `wavy` for `textDecorationStyle` |
+| `textDecorationSkipInk`                                                                                                        | `auto`, `none`                                                                                                                                |
+| `textUnderlineOffset`                                                                                                          | `auto`, `<length-percentage>`                                                                                                                 |
+| `textUnderlinePosition`                                                                                                        | `auto`, `from-font`, `under`                                                                                                                  |
+| `WebkitTextStroke` (`WebkitTextStrokeWidth`, `WebkitTextStrokeColor`, `WebkitTextFillColor`)                                   | Supported                                                                                                                                     |
 
-<sup>1</sup> `fontVariant*` and `fontKerning` map to OpenType features applied before
+<sup>1</sup> `font` does not support system font keywords.
+
+<sup>2</sup> `fontFamily` supports font fallback.
+
+<sup>3</sup> `fontVariant*` and `fontKerning` map to OpenType features applied before
 `fontFeatureSettings`, so an explicit setting wins on a tag conflict. `alternates` and `emoji` are
-not supported. Features apply only when the font ships them. The one exception is `fontVariantCaps`:
-when the primary font lacks the caps feature, small capitals are synthesized from capitals at 70%
+not supported. Features apply only when the font ships them. The one exception is `fontVariantCaps`.
+When the primary font lacks the caps feature, small capitals are synthesized from capitals at 70%
 size, as browsers do. `fontSynthesisSmallCaps: none` turns this off.
+
+<sup>4</sup> `hyphens: auto` breaks only at soft hyphens. Takumi has no hyphenation dictionaries.
+
+<sup>5</sup> Preserved tabs expand to that many spaces. `tabSize` takes no `<length>` and has no tab stops.

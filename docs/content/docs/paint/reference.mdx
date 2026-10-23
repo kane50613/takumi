@@ -1,7 +1,6 @@
 ---
-title: Reference
-description: Paint options, tree methods, and node, run, and drawable fields.
-icon: BookMarked
+title: Paint reference
+description: Look up paint options, tree methods, and the fields of nodes, runs, and drawables.
 ---
 
 ## Entry points
@@ -57,11 +56,11 @@ Every node has these fields.
 | `parent`          | The enclosing `BoxNode`                                          |
 | `drawables`       | What the node draws, in local space                              |
 
-| Node        | Extra fields                                                        |
-| ----------- | ------------------------------------------------------------------- |
-| `BoxNode`   | `contentBox`, `outline`, `effects`, `overflowClip`, `children`      |
-| `TextNode`  | `textAlign` with `start` and `end` resolved, `runs` in visual order |
-| `ImageNode` | `image`: the decoded image's `src`, `width`, and `height`           |
+| Node        | Extra fields                                                          |
+| ----------- | --------------------------------------------------------------------- |
+| `BoxNode`   | `contentBox`, `outline`, `effects`, `overflowClip`, `children`        |
+| `TextNode`  | `textAlign` with `start` and `end` resolved, `runs` in visual order   |
+| `ImageNode` | `image`, which holds the decoded image's `src`, `width`, and `height` |
 
 ## TextRun
 

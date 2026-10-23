@@ -1,7 +1,6 @@
 ---
 title: Links, outline & metadata
-description: Add clickable PDF links, a table of contents, heading bookmarks, and document metadata.
-icon: Link
+description: Add clickable links, a table of contents, heading bookmarks, and document properties to a PDF.
 ---
 
 Add links with `<a href>`, bookmarks with `outline`, and document properties with `metadata`.
@@ -21,7 +20,7 @@ const pdf = await render(
 );
 ```
 
-An inline link is clickable on each line it wraps across. A block-level link covers its whole box.
+An inline link is clickable on each line it wraps across, while a block-level link covers its whole box.
 
 `http`, `https`, `mailto`, and `tel` links open outside the document. An `href` that starts with `#` jumps to the element with that `id`:
 
@@ -122,8 +121,8 @@ const pdf = await render(report, {
 | `description`  | Subject                                                  |
 | `authors`      | Author                                                   |
 | `keywords`     | Keywords                                                 |
-| `creator`      | Creator: the tool that made the source                   |
+| `creator`      | The tool that made the source                            |
 | `creationDate` | Creation date, UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS` |
 | `xmp`          | Custom XMP schemas, such as Factur-X's `fx:` block       |
 
-Every field is optional for plain PDF output. [PDF/A and PDF/UA](/docs/pdf/conformance#required-inputs) require some of them. Set a fixed `creationDate` for reproducible output.
+Every field is optional for plain PDF output. [PDF/A & PDF/UA](/docs/pdf/conformance#required-inputs) require some of them. Set a fixed `creationDate` for reproducible output.

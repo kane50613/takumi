@@ -1,7 +1,14 @@
 {
   "title": "Paint",
-  "description": "Boxes, images, and text runs with takumi-paint",
+  "description": "Draw the laid-out boxes, text, and images yourself",
   "root": true,
   "icon": "Brush",
-  "pages": ["index", "--- Guides ---", "drawing", "text", "--- Reference ---", "reference"]
+  "pages": [
+    "index",
+    "---[BookOpen]Guides---",
+    "drawing",
+    "text",
+    "---[Library]Reference---",
+    "reference"
+  ]
 }

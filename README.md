@@ -180,7 +180,7 @@ const image = await render(
 );
 ```
 
-`render()` registers only the font subsets the content uses. To preload fonts outside the request path, register them on a `Renderer` and pass it as `renderer`. See [Typography & Fonts](https://takumi.kane.tw/docs/fonts#preloading-with-registerfont).
+`render()` registers only the font subsets the content uses. To preload fonts outside the request path, register them on a `Renderer` and pass it as `renderer`. See [Fonts](https://takumi.kane.tw/docs/fonts#preloading-with-registerfont).
 
 ### API route (`next/og`-compatible)
 

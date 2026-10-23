@@ -143,6 +143,24 @@ export function Canvas({
   );
 }
 
+/** Every node's rectangle on the canvas, outlined in paint order. */
+export function Boxes({ scene }: { scene: PaintScene }) {
+  return (
+    <Canvas scene={scene} label="Every node's rectangle on the canvas">
+      {scene.nodes.map((node, index) => (
+        <polygon
+          key={index}
+          points={node.quad.map(({ x, y }) => `${x},${y}`).join(" ")}
+          className="paint-in fill-fd-primary/5 stroke-fd-primary"
+          style={{ animationDelay: `${index * 80}ms` }}
+          strokeWidth={1}
+          strokeDasharray={node.kind === "text" ? "3 3" : undefined}
+        />
+      ))}
+    </Canvas>
+  );
+}
+
 /** A side panel beside the stage; it stacks under it on narrow screens. */
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("border-t p-4 md:border-t-0 md:border-l", className)}>{children}</div>;

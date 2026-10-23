@@ -1,14 +1,13 @@
 ---
 title: Troubleshooting
-description: Fix Takumi import, bundler, font, image, and layout errors using their messages and runtime-specific solutions.
-icon: Bug
+description: Search an error message from your build or server logs and apply the fix for your runtime and bundler.
 ---
 
-Search this page for the error message from your build or server logs. If the failure depends on your runtime, start with the import table.
+Search this page for the error message from your build or server logs. If the failure depends on your runtime, start with the import table in the next section.
 
 ## Pick the right entry
 
-Check that your import matches the runtime and bundler.
+Check that your import matches the runtime and bundler. The table lists the import for each target.
 
 | Target                                 | Import                                             |
 | -------------------------------------- | -------------------------------------------------- |
@@ -59,9 +58,7 @@ The package holds a native `.node` addon, which no bundler can inline. `takumi-p
 
 ### Cannot find module '@takumi-rs/core-42dc295dcb05a7ef'
 
-Add the `serverExternalPackages` entry above. Then delete `.next` and start again.
-
-This is the same native addon in dev mode. Turbopack rewrote the specifier to an internal id, which Node.js cannot resolve at runtime.
+Add the `serverExternalPackages` entry above, then delete `.next` and start again. This is the same native addon in dev mode, where Turbopack rewrote the specifier to an internal id, which Node.js cannot resolve at runtime.
 
 ### Cannot find native binding
 
@@ -170,21 +167,15 @@ The PDF renderer stops on uncovered characters, because they would be missing fr
 
 ### A PDF cannot draw filter: blur(2px)
 
-Remove the filter, or rasterize that subtree yourself and place it as an `<img>`.
-
-PDF has no blur operator, so `filter: blur()` and `drop-shadow()` cannot be drawn. The renderer stops rather than ship a page that differs from the image output.
+Remove the filter, or rasterize that subtree yourself and place it as an `<img>`. PDF has no blur operator, so `filter: blur()` and `drop-shadow()` cannot be drawn. The renderer stops rather than ship a page that differs from the image output.
 
 ### An error occurred while decoding the image data
 
-In PDF output, re-encode the image as PNG, JPEG, or WebP. The message may start with `Image could not be decoded`.
-
-A PDF embeds those three formats as they are. Other formats, such as GIF, need decoding, and the PDF build decodes only PNG. An image under a CSS `filter` needs its pixels too, so a JPEG or WebP under a filter raises this error.
+In PDF output, re-encode the image as PNG, JPEG, or WebP. The message may start with `Image could not be decoded`. A PDF embeds those three formats as they are. Other formats, such as GIF, need decoding, and the PDF build decodes only PNG. An image under a CSS `filter` needs its pixels too, so a JPEG or WebP under a filter raises this error.
 
 ### Invalid viewport dimensions: a canvas holds 1 to 64 megapixels
 
-Shrink the viewport. 8192 × 8192 is the largest square that fits.
-
-A zero-sized viewport raises the same error. To go larger, render in tiles and stitch them. See [Render large canvases](/docs/performance#render-large-canvases).
+Shrink the viewport. 8192 × 8192 is the largest square that fits. A zero-sized viewport raises the same error. To go larger, render in tiles and stitch them. See [Render large canvases](/docs/performance#render-large-canvases).
 
 ### The content spans more than 20000 pages
 
@@ -194,9 +185,7 @@ Give the tree a height that resolves. A percentage height in a paged render has 
 
 ### TypeError: fetch failed
 
-Pass the image as a base64 data URL, which skips the fetch.
-
-Node.js's fetch, through [undici](https://github.com/nodejs/undici), can drop the socket while loading a remote `img` URL ([#349](https://github.com/kane50613/takumi/issues/349)).
+Pass the image as a base64 data URL, which skips the fetch. Node.js's fetch, through [undici](https://github.com/nodejs/undici), can drop the socket while loading a remote `img` URL ([#349](https://github.com/kane50613/takumi/issues/349)).
 
 ## Layout
 
