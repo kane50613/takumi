@@ -752,8 +752,8 @@ impl FragmentPlacements {
   /// Sets the box `paint` paints, laid out at `location`, and the boxes of its content no other
   /// paint places, to paint the fragment `paint` names, as [`set_paint_offsets`] sets them for
   /// a scene with one fragment of each box.
-  pub fn enter(&self, root: &mut RenderNode, paint: &NodePaint, location: Point<f32>) {
-    let Some(node) = root.node_at_path_mut(&paint.path) else {
+  pub fn enter(&self, root: &RenderNode, paint: &NodePaint, location: Point<f32>) {
+    let Some(node) = root.node_at_path(&paint.path) else {
       return;
     };
     let mut stack = vec![(node, paint.path.clone(), paint.paint_offset - location)];
@@ -765,12 +765,11 @@ impl FragmentPlacements {
         base
       };
 
-      node.context.paint_offset = base;
-      node.context.fragment_index = paint.fragment_index;
+      node.context.enter_fragment(base, paint.fragment_index);
       for (index, child) in node
         .children
-        .iter_mut()
-        .flat_map(|children| children.iter_mut())
+        .iter()
+        .flat_map(|children| children.iter())
         .enumerate()
       {
         let mut child_path = path.clone();
@@ -907,8 +906,7 @@ fn set_paint_offsets(root: &mut RenderNode, offsets: &HashMap<Vec<usize>, SceneP
     };
     let depth = path.len();
 
-    node.context.paint_offset = base;
-    node.context.fragment_index = fragment_index;
+    node.context.enter_fragment(base, fragment_index);
     for (index, child) in node
       .children
       .iter_mut()
@@ -1153,7 +1151,7 @@ mod tests {
     let item = &scene.root.children.as_deref().expect("children")[0];
     let marker = item.marker().expect("marker");
 
-    assert_eq!(marker.context.paint_offset, Point { x: 10.5, y: 10.5 });
+    assert_eq!(marker.context.paint_offset(), Point { x: 10.5, y: 10.5 });
   }
 
   #[test]

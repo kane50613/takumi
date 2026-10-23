@@ -1480,7 +1480,7 @@ impl RenderNode {
   /// The fragment items the fragment its scene paints laid out to in the content box of `layout`,
   /// if that fragment laid out there last.
   pub(crate) fn fragment_items_in(&self, layout: ComputedLayout) -> Option<Rc<FragmentItems>> {
-    self.fragment_items_of(self.context.fragment_index, layout)
+    self.fragment_items_of(self.context.fragment_index(), layout)
   }
 
   /// The fragment items fragment `fragment_index` laid out to in the content box of `layout`, if
