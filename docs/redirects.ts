@@ -61,4 +61,6 @@ if (existsSync(config)) {
 
   output.routes = [...redirects.map(route), ...output.routes];
   writeFileSync(config, JSON.stringify(output, null, 2));
+} else if (process.env.VERCEL) {
+  throw new Error(`${config} is missing, so the docs redirects would not deploy`);
 }
