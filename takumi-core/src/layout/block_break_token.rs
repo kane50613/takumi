@@ -1,5 +1,5 @@
 //! Blink's [`BlockBreakToken`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_break_token.h),
-//! for pages alone: no column spanners or list markers left unpositioned.
+//! for pages alone: no column spanners.
 
 use crate::{
   geometry::{NodeId, Point},

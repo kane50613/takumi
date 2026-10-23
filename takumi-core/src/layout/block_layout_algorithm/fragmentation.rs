@@ -419,7 +419,9 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
     // The out-of-flow boxes come first, as Blink's `BlockChildIterator` gives them.
     for child_token in &token.child_break_tokens {
-      if let BreakToken::Block(child_token) = child_token {
+      if let BreakToken::Block(child_token) = child_token
+        && self.tree.layout_style(child_token.node).is_out_of_flow()
+      {
         self.resumes_out_of_flow(child_token.node, &Some(Rc::clone(child_token)));
       }
     }
