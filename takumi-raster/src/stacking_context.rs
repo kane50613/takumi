@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
   paint_chunk::{ChunkPart, ConversionContext, HeightIndex, PaintChunk, PropertySink},
@@ -19,7 +21,7 @@ use crate::{
 
 /// Paints `scene` onto `canvas` chunk by chunk, entering each chunk's clips and effects.
 pub(crate) fn paint_scene(scene: &mut Scene, canvas: &mut Canvas) -> Result<()> {
-  ScenePaint::new(scene, false).paint(canvas)
+  ScenePaint::new(scene, false)?.paint(canvas)
 }
 
 /// A scene's paint chunks in paint order and the boxes owning its effects, resolved once for every
@@ -37,7 +39,8 @@ pub(crate) struct ScenePaint<'s> {
 
 impl<'s> ScenePaint<'s> {
   /// The chunks of `scene`, indexed by the height they reach when many canvases paint parts of it.
-  pub(crate) fn new(scene: &'s mut Scene, indexed: bool) -> Self {
+  /// Painting sets each box's sizing on the tree, which nothing else may share then.
+  pub(crate) fn new(scene: &'s mut Scene, indexed: bool) -> Result<Self> {
     let Scene {
       root,
       results,
@@ -46,6 +49,8 @@ impl<'s> ScenePaint<'s> {
       fragments,
       ..
     } = scene;
+    let root = Rc::get_mut(root)
+      .ok_or_else(|| Error::Layout("a scene painted while its tree is shared".to_owned()))?;
     let chunks = PaintChunk::in_paint_order(contexts);
     let owners = PaintChunk::effect_owners(&chunks, properties);
     let index = indexed.then(|| {
@@ -57,7 +62,7 @@ impl<'s> ScenePaint<'s> {
       )
     });
 
-    Self {
+    Ok(Self {
       root,
       results,
       fragments: fragments.as_ref(),
@@ -65,7 +70,7 @@ impl<'s> ScenePaint<'s> {
       chunks,
       owners,
       index,
-    }
+    })
   }
 
   /// Paints the chunks reaching `canvas`'s viewport.

@@ -189,7 +189,7 @@ pub fn render_pages<'g>(
   let page_count = paged.page_count();
   let size = page_size.map(|length| length.round() as u32);
   let mut scene = paged.into_scene();
-  let mut paint = ScenePaint::new(&mut scene, true);
+  let mut paint = ScenePaint::new(&mut scene, true)?;
 
   for index in 0..page_count {
     let origin = PagedScene::page_origin(page_size, index).map(|length| length.round() as i32);

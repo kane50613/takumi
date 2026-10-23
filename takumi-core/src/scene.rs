@@ -24,9 +24,9 @@ use crate::{
   style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
 };
-use std::collections::HashMap;
 #[cfg(feature = "fragmentation")]
 use std::collections::HashSet;
+use std::{collections::HashMap, rc::Rc};
 
 /// A node's resolved paint inputs.
 #[derive(Clone)]
@@ -707,8 +707,8 @@ pub struct SceneLayers {
 
 /// A render tree laid out, with the stacking contexts that paint it.
 pub struct Scene {
-  /// The tree.
-  pub root: RenderNode,
+  /// The tree, which a paged layout still laying out later pages shares.
+  pub root: Rc<RenderNode>,
   /// Its layout.
   pub results: LayoutResults,
   /// Its stacking contexts; the first is the synthetic root.
@@ -736,18 +736,18 @@ impl Scene {
     }
     .build()?;
 
-    Ok(Self::new(root, results, layers, size))
+    Ok(Self::new(Rc::new(root), results, layers, size))
   }
 
   /// The scene of `root` laid out as `results` and stacked as `layers`, its boxes' contexts set to
   /// their paint offsets.
   pub(crate) fn new(
-    mut root: RenderNode,
+    root: Rc<RenderNode>,
     results: LayoutResults,
     layers: SceneLayers,
     size: Size<f32>,
   ) -> Self {
-    set_paint_offsets(&mut root, &layers.placements(&results));
+    set_paint_offsets(&root, &layers.placements(&results));
 
     let SceneLayers {
       contexts,
@@ -955,7 +955,7 @@ impl PagedScene {
     .build_fragments(&roots)?;
     let placed = layers.placements(&results).into_keys().collect();
     let fragments = FragmentPlacements::new(&root, &placed);
-    let mut scene = Scene::new(root, results, layers, page_size);
+    let mut scene = Scene::new(Rc::new(root), results, layers, page_size);
 
     scene.fragments = Some(fragments);
     Ok(Self { scene, page_count })
@@ -994,7 +994,7 @@ struct ScenePlacement {
 /// Sets the context of each box under `root` to the paint offset its layout location adds to and
 /// the fragment it paints: from `offsets`, keyed by child path, for a box the scene placed, else
 /// those of the box whose inline content it paints in.
-fn set_paint_offsets(root: &mut RenderNode, offsets: &HashMap<Vec<usize>, ScenePlacement>) {
+fn set_paint_offsets(root: &RenderNode, offsets: &HashMap<Vec<usize>, ScenePlacement>) {
   let mut path = Vec::new();
   let mut stack = vec![(root, OffsetSlot::Root, Point::ZERO, 0)];
 
@@ -1018,12 +1018,7 @@ fn set_paint_offsets(root: &mut RenderNode, offsets: &HashMap<Vec<usize>, SceneP
     let depth = path.len();
 
     node.context.enter_fragment(base, fragment_index);
-    for (index, child) in node
-      .children
-      .iter_mut()
-      .flat_map(|children| children.iter_mut())
-      .enumerate()
-    {
+    for (index, child) in node.children.iter().flatten().enumerate() {
       stack.push((
         child,
         OffsetSlot::Child { depth, index },
