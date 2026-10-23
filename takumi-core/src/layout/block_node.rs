@@ -452,6 +452,7 @@ impl<'r> LayoutTree<'r> {
     let style = &state.layout_style;
 
     state.table_box.is_table
+      || self.render_node(node).is_root_element
       || style.is_replaced
       || style.is_floating()
       || style.is_out_of_flow()

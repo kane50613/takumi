@@ -542,6 +542,9 @@ pub struct RenderNode {
   pub(crate) force_inline_layout: bool,
   /// Blink's `IsBlockInInline`: the anonymous block holding block-level children of an inline box.
   pub(crate) is_block_in_inline: bool,
+  /// Whether it is the root element, whose box always establishes an independent formatting
+  /// context, as Blink's `CreatesNewFormattingContext` reads `IsDocumentElement`.
+  pub(crate) is_root_element: bool,
   /// The fragment items its inline content last laid out to.
   pub(crate) fragment_items: FragmentItemsCache,
   /// The shapes its inline items took when its inline content was last prepared.
@@ -1429,6 +1432,7 @@ impl RenderNode {
       anonymous_text_content: None,
       force_inline_layout: false,
       is_block_in_inline: false,
+      is_root_element: false,
       fragment_items: FragmentItemsCache::default(),
       item_shapes: ItemShapes::default(),
     }
@@ -1915,7 +1919,7 @@ impl RenderNode {
   }
 
   /// Builds a render tree from `initial_containing_block`, a box that stands in for the initial
-  /// containing block: each node it holds is a root element, which CSS blockifies.
+  /// containing block: each node it holds is a root element.
   pub fn from_initial_containing_block(
     parent_context: &RenderContext,
     initial_containing_block: Node,
@@ -1932,21 +1936,23 @@ impl RenderNode {
     let mut tree =
       Self::from_node_iterative(parent_context, node, &matched_styles, blockifies_children);
 
-    tree.blockify_as_root();
+    tree.make_root_element();
     if blockifies_children {
       for child in tree.children.iter_mut().flatten() {
-        child.blockify_as_root();
+        child.make_root_element();
       }
     }
     tree
   }
 
   /// [CSS Display §2.7](https://drafts.csswg.org/css-display/#transformations): the root element's
-  /// display type is always blockified.
-  fn blockify_as_root(&mut self) {
+  /// display type is always blockified, and its principal box always establishes an independent
+  /// formatting context.
+  fn make_root_element(&mut self) {
     if self.is_inline_level() {
       self.context.blockify();
     }
+    self.is_root_element = true;
   }
 
   fn from_node_iterative(
