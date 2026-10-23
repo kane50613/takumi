@@ -408,27 +408,40 @@ fn child_index(children: &[NodeId], node: NodeId) -> Option<usize> {
     .or_else(|| children.iter().position(|&child| child == node))
 }
 
-/// [`BlockChildIterator`] by index in `children`, in its entry order. Each entry is looked for
-/// from the one before, so entries in child order, as a table's rows and cells come, take one scan.
-pub(crate) fn indexed_block_child_entries(
-  children: &Rc<[NodeId]>,
-  break_token: Option<&BlockBreakToken>,
-) -> Vec<(usize, Option<Rc<BlockBreakToken>>)> {
-  let mut next = 0;
+/// [`BlockChildIterator`] by index in its children rather than by node.
+pub(crate) struct IndexedBlockChildIterator(BlockChildIterator);
 
-  BlockChildIterator::new(Rc::clone(children), break_token)
-    .filter_map(|(node, token)| {
-      let index = children[next..]
-        .iter()
-        .position(|&child| child == node)
-        .map(|index| next + index)
-        .or_else(|| children.iter().position(|&child| child == node))?;
-
-      next = index + 1;
-      Some((index, token))
-    })
-    .collect()
+impl IndexedBlockChildIterator {
+  pub(crate) fn new(children: Rc<[NodeId]>, break_token: Option<&BlockBreakToken>) -> Self {
+    Self(BlockChildIterator::new(children, break_token))
+  }
 }
+
+impl Iterator for IndexedBlockChildIterator {
+  type Item = (usize, Option<Rc<BlockBreakToken>>);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    let iterator = &mut self.0;
+
+    for token in iterator.tokens.by_ref() {
+      if let Some(index) = child_index(&iterator.children, token.node) {
+        return Some((index, Some(token)));
+      }
+    }
+
+    let index = iterator.next;
+
+    iterator.children.get(index)?;
+    iterator.next += 1;
+    Some((index, None))
+  }
+
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    self.0.size_hint()
+  }
+}
+
+impl ExactSizeIterator for IndexedBlockChildIterator {}
 
 /// Blink's `GetFragmentationLayoutInputForChild`: `child` resumed at `token`, with the breakpoint
 /// inside it that `early_break` names.

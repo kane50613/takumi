@@ -1,3 +1,5 @@
+#[cfg(feature = "fragmentation")]
+use std::ops::Range;
 use std::{
   borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, rc::Rc, slice, sync::Arc,
   vec::IntoIter,
@@ -266,9 +268,7 @@ impl LayoutResults {
       .node(node_id)
       .ok()
       .into_iter()
-      .flat_map(|node| node.fragments.iter().enumerate())
-      .filter(move |(_, fragment)| fragment.container_fragment_index == container_fragment_index)
-      .map(|(index, _)| index);
+      .flat_map(move |node| BoxFragment::held_by(&node.fragments, container_fragment_index));
     #[cfg(not(feature = "fragmentation"))]
     return (self.node(node_id).is_ok() && container_fragment_index == 0)
       .then_some(0)
@@ -278,6 +278,41 @@ impl LayoutResults {
   /// Paint-ordered children of a node.
   pub fn box_children(&self, node_id: NodeId) -> crate::Result<&[OrderedChild]> {
     self.node(node_id).map(|node| node.box_children.as_ref())
+  }
+
+  /// The run of `node_id`'s box children its fragment `fragment_index` holds, for children that
+  /// break in order, as a table section's rows do.
+  pub(crate) fn ordered_children_in(
+    &self,
+    node_id: NodeId,
+    fragment_index: usize,
+  ) -> crate::Result<&[OrderedChild]> {
+    let children = self.box_children(node_id)?;
+
+    #[cfg(feature = "fragmentation")]
+    {
+      let containers = |child: &OrderedChild| {
+        self.node(child.node_id).ok().and_then(|node| {
+          Some((
+            node.fragments.first()?.container_fragment_index,
+            node.fragments.last()?.container_fragment_index,
+          ))
+        })
+      };
+      let start = children
+        .partition_point(|child| containers(child).is_none_or(|(_, last)| last < fragment_index));
+      let len = children[start..].partition_point(|child| {
+        containers(child).is_none_or(|(first, _)| first <= fragment_index)
+      });
+
+      Ok(&children[start..start + len])
+    }
+    #[cfg(not(feature = "fragmentation"))]
+    {
+      let _ = fragment_index;
+
+      Ok(children)
+    }
   }
 
   /// The paint data of the table `node_id`'s fragment `fragment_index`, when it is one.
@@ -470,6 +505,19 @@ pub(crate) struct BoxFragment {
   pub(crate) container_fragment_index: usize,
   /// Whether the fragment repeats an earlier one, as a table header does on each page.
   pub(crate) is_repeated: bool,
+}
+
+#[cfg(feature = "fragmentation")]
+impl BoxFragment {
+  /// Where in `fragments`, a box's fragments in layout order, are the ones its parent's fragment
+  /// `container` holds. Layout places a box's fragments in its parent's fragments in order.
+  pub(crate) fn held_by(fragments: &[Self], container: usize) -> Range<usize> {
+    let start = fragments.partition_point(|fragment| fragment.container_fragment_index < container);
+    let len =
+      fragments[start..].partition_point(|fragment| fragment.container_fragment_index == container);
+
+    start..start + len
+  }
 }
 
 /// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as

@@ -164,7 +164,7 @@ impl TableDecorations {
       Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup => {
         let mut cells = Vec::new();
 
-        for row in results.box_children(node_id)? {
+        for row in results.ordered_children_in(node_id, fragment_index)? {
           let Some(row_fragment) = results.fragment_in(row.node_id, fragment_index) else {
             continue;
           };
@@ -362,7 +362,7 @@ fn column_backgrounds(
       };
       let section_layout = results.fragment_layout(section.node_id, section_fragment)?;
 
-      for row in results.box_children(section.node_id)? {
+      for row in results.ordered_children_in(section.node_id, section_fragment)? {
         let Some(row_node) = child(section_node, row.render_index) else {
           continue;
         };
@@ -718,7 +718,7 @@ pub fn paint_collapsed_borders(
     let section_layout = results.fragment_layout(section, section_fragment)?;
     let section_width = LayoutUnit::from_float(section_layout.size.width);
     let rows = visible.map_or(0..row_offsets.len(), |(top, bottom)| {
-      let reach = fragment.max_border_width;
+      let reach = borders.max_border_width;
       let section_top = LayoutUnit::from_float(section_layout.location.y);
       let top = LayoutUnit::from_float(top) - section_top - reach;
       let bottom = LayoutUnit::from_float(bottom) - section_top + reach;

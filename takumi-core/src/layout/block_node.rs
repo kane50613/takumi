@@ -626,16 +626,11 @@ impl<'r> LayoutTree<'r> {
 
     for child in children {
       let fragments = &self.node_state(child).fragments;
-      let Some(child_source) = fragments
-        .iter()
-        .position(|fragment| fragment.container_fragment_index == source)
-      else {
+      let Some(child_source) = BoxFragment::held_by(fragments, source).next() else {
         continue;
       };
       // A layout of the same page again replaces the copy it made before.
-      let existing = fragments
-        .iter()
-        .position(|fragment| fragment.container_fragment_index == target);
+      let existing = BoxFragment::held_by(fragments, target).next();
       let child_target = existing.unwrap_or(fragments.len());
       let fragment = BoxFragment {
         container_fragment_index: target,

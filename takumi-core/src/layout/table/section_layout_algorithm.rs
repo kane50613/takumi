@@ -8,8 +8,8 @@ use crate::layout::{
   box_fragment_builder::BoxFragmentBuilder,
   break_appeal::BreakAppeal,
   fragmentation_utils::{
-    FlexItemBreak, break_before_child_if_needed, finish_fragmentation, fragment_index,
-    fragmentation_layout_input_for_child, indexed_block_child_entries, is_early_break_target,
+    FlexItemBreak, IndexedBlockChildIterator, break_before_child_if_needed, finish_fragmentation,
+    fragment_index, fragmentation_layout_input_for_child, is_early_break_target,
     setup_fragment_builder_for_fragmentation, setup_space_builder_for_fragmentation,
   },
   logical_rect::LogicalBoxStrut,
@@ -95,19 +95,18 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
     let mut row_offsets = vec![LayoutUnit::ZERO];
     let mut actual_start_row = start_row;
     let mut out_of_flow = Vec::new();
-    let entries = self.row_entries();
-    let entry_count = entries.len();
-    let mut handled = 0;
+    let mut entries = self.row_entries();
+    let mut breaks_before_row = false;
 
-    for (index, token) in entries {
+    for (index, token) in entries.by_ref() {
       let row = &section.rows[index];
       let row_index = start_row + index;
       let is_row_collapsed = data.rows.rows[row_index].is_collapsed;
 
       if self.breaks_before_early_break_target(row.node) {
+        breaks_before_row = true;
         break;
       }
-      handled += 1;
       if !is_first_non_collapsed_row && !is_row_collapsed {
         offset += data.spacing.1;
       }
@@ -155,7 +154,7 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
         break;
       }
     }
-    if handled == entry_count {
+    if !breaks_before_row && entries.len() == 0 {
       self.set_has_seen_all_children();
     }
 
@@ -212,14 +211,11 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
 #[cfg(feature = "fragmentation")]
 impl TableSectionLayoutAlgorithm<'_, '_> {
   /// Blink's `BlockChildIterator` over the section's rows, by index in the section.
-  fn row_entries(&self) -> Vec<(usize, ChildBreakToken)> {
-    let rows: Rc<[NodeId]> = self.data.structure.sections[self.section]
-      .rows
-      .iter()
-      .map(|row| row.node)
-      .collect();
-
-    indexed_block_child_entries(&rows, self.input.break_token.as_deref())
+  fn row_entries(&self) -> IndexedBlockChildIterator {
+    IndexedBlockChildIterator::new(
+      Rc::clone(&self.data.structure.sections[self.section].row_nodes),
+      self.input.break_token.as_deref(),
+    )
   }
 
   fn breaks_before_early_break_target(&mut self, row: NodeId) -> bool {
@@ -369,10 +365,8 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
 /// The fragmentation hooks without the `fragmentation` feature, where nothing breaks.
 #[cfg(not(feature = "fragmentation"))]
 impl TableSectionLayoutAlgorithm<'_, '_> {
-  fn row_entries(&self) -> Vec<(usize, ChildBreakToken)> {
-    (0..self.data.structure.sections[self.section].rows.len())
-      .map(|index| (index, ()))
-      .collect()
+  fn row_entries(&self) -> impl ExactSizeIterator<Item = (usize, ChildBreakToken)> + use<> {
+    (0..self.data.structure.sections[self.section].rows.len()).map(|index| (index, ()))
   }
 
   fn breaks_before_early_break_target(&mut self, _row: NodeId) -> bool {
