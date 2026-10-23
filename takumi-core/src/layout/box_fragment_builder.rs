@@ -190,6 +190,16 @@ impl BoxFragmentBuilder {
       ))));
   }
 
+  /// Blink's `AddBreakToken`: a break before `node`, which the next fragment resumes at, with no
+  /// break of its own here.
+  pub(crate) fn add_break_token_before(&mut self, node: NodeId) {
+    self
+      .child_break_tokens
+      .push(BreakToken::Block(Rc::new(BlockBreakToken::break_before(
+        node, false,
+      ))));
+  }
+
   /// The block fragmentation part of Blink's `AddResult` for a child of `child_style` laid out as
   /// `result` at `block_offset`, in a box laid out in `space`.
   pub(crate) fn add_result(
@@ -399,6 +409,7 @@ impl BoxFragmentBuilder {
       monolithic_overflow: self.monolithic_overflow,
       is_break_before: false,
       is_forced_break: false,
+      is_repeated: false,
       is_at_block_end: self.is_at_block_end,
       has_seen_all_children: self.has_seen_all_children,
       child_break_tokens: std::mem::take(&mut self.child_break_tokens),

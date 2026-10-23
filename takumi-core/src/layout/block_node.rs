@@ -1,11 +1,13 @@
 //! Blink's [`BlockNode`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_node.cc):
 //! the algorithm that lays a box out, the layouts and intrinsic sizes it keeps, and where its
-//! layout puts its box. Without fragmentation, `contain: size`, or scrollbars.
+//! layout puts its box. Without `contain: size` or scrollbars.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
 use std::{mem::take, ptr, rc::Rc};
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::{block_break_token::BlockBreakToken, fragmentation_utils::fragment_index};
 use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
   layout::{
@@ -507,6 +509,95 @@ impl<'r> LayoutTree<'r> {
 
     for child in hoisted_children {
       self.node_state_mut(child).fragments[0].container_fragment_index = fragment_index;
+    }
+  }
+
+  /// Blink's `LayoutRepeatableRoot`: a repeated table header or footer laid out once, then the
+  /// same layout for each later repetition after `token`, which leaves out the out-of-flow boxes
+  /// an ancestor positions.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn lay_out_repeatable_root(
+    &mut self,
+    node: NodeId,
+    space: &ConstraintSpace,
+    token: Option<&BlockBreakToken>,
+  ) -> Rc<LayoutResult> {
+    let is_first = token.is_none_or(|token| !token.is_repeated);
+    let first = if is_first {
+      None
+    } else {
+      self.repeated_roots.get(&node).cloned()
+    };
+    let mut result = match first {
+      Some(first) => {
+        let mut result = (*first).clone();
+
+        result.break_info.is_first_for_node = false;
+        result.out_of_flow.clear();
+        result
+      }
+      None => {
+        let result = self.layout(node, space);
+
+        self.repeated_roots.insert(node, Rc::clone(&result));
+        (*result).clone()
+      }
+    };
+
+    result.break_info.break_token = space.should_repeat.then(|| {
+      Rc::new(BlockBreakToken::repeated(
+        node,
+        fragment_index(token) as u32,
+      ))
+    });
+    Rc::new(result)
+  }
+
+  /// Gives every box under `node`'s fragment `source` a copy of its fragment there for `node`'s
+  /// fragment `target`, as Blink's `FragmentRepeater` deep-clones a repeated root. An out-of-flow
+  /// box repeats with its containing block alone.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn repeat_fragments(&mut self, node: NodeId, source: usize, target: usize) {
+    let state = self.node_state(node);
+    let children: Vec<NodeId> = state
+      .box_children()
+      .iter()
+      .map(|child| child.node_id)
+      .filter(|&child| !self.layout_style(child).is_out_of_flow())
+      .chain(state.hoisted_children.iter().copied())
+      .collect();
+
+    for child in children {
+      let fragments = &self.node_state(child).fragments;
+      let Some(child_source) = fragments
+        .iter()
+        .position(|fragment| fragment.container_fragment_index == source)
+      else {
+        continue;
+      };
+      // A layout of the same page again replaces the copy it made before.
+      let existing = fragments
+        .iter()
+        .position(|fragment| fragment.container_fragment_index == target);
+      let child_target = existing.unwrap_or(fragments.len());
+      let fragment = BoxFragment {
+        container_fragment_index: target,
+        ..fragments[child_source]
+      };
+      let fragments = &mut self.node_state_mut(child).fragments;
+
+      match existing {
+        Some(index) => fragments[index] = fragment,
+        None => fragments.push(fragment),
+      }
+      self
+        .render_node(child)
+        .fragment_items
+        .repeat(child_source, child_target);
+      if self.is_table(child) {
+        self.repeat_table_fragment(child, child_source, child_target);
+      }
+      self.repeat_fragments(child, child_source, child_target);
     }
   }
 

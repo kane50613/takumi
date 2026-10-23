@@ -88,6 +88,18 @@ pub(crate) struct TableStructure {
   pub(crate) allows_intrinsic_column_percentages: bool,
 }
 
+impl TableStructure {
+  /// The index of the header group among the sections, which lead with it.
+  pub(super) fn header_section(&self) -> Option<usize> {
+    self.grouped.header.map(|_| 0)
+  }
+
+  /// The index of the footer group among the sections, which close with it.
+  pub(super) fn footer_section(&self) -> Option<usize> {
+    self.grouped.footer.map(|_| self.sections.len() - 1)
+  }
+}
+
 /// Blink's `TableTypes::Caption`: the widest a caption is at its narrowest.
 #[derive(Clone, Copy, Default)]
 struct CaptionConstraint {
@@ -256,6 +268,9 @@ pub(crate) struct TableLayoutAlgorithm<'t, 'r> {
   rtl: bool,
   #[cfg(feature = "fragmentation")]
   pub(super) builder: BoxFragmentBuilder,
+  /// Blink's `is_known_to_be_last_table_box_`: the table box ends in this fragment.
+  #[cfg(feature = "fragmentation")]
+  pub(super) is_known_to_be_last_table_box: bool,
 }
 
 impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
@@ -313,6 +328,8 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       spacing,
       #[cfg(feature = "fragmentation")]
       builder,
+      #[cfg(feature = "fragmentation")]
+      is_known_to_be_last_table_box: false,
     })
   }
 
@@ -332,12 +349,20 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       self.table_inline_size(&columns, undistributable, caption_constraint)
     };
     #[cfg(feature = "fragmentation")]
-    setup_fragment_builder_for_fragmentation(
-      self.space,
-      &self.style,
-      table_inline_size,
-      &mut self.builder,
-    );
+    {
+      setup_fragment_builder_for_fragmentation(
+        self.space,
+        &self.style,
+        table_inline_size,
+        &mut self.builder,
+      );
+      if self.is_known_to_be_last_table_box {
+        self.builder.should_clone_box_end_decorations = false;
+        self
+          .builder
+          .should_prevent_break_before_block_end_decorations = true;
+      }
+    }
 
     let assignable = self.assignable_inline_size(&columns, undistributable, caption_constraint);
     let column_sizes = columns.sizes(assignable, self.is_fixed_layout);
@@ -1096,19 +1121,45 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     }
 
     let entries = self.child_entries();
-    let entry_count = entries.len();
-    let mut handled = 0;
+    let repeated = self.repeated_sections(
+      &entries,
+      &rows,
+      spacing.1
+        + if structure.borders.is_collapsed {
+          border_padding.bottom
+        } else {
+          LayoutUnit::ZERO
+        },
+      resumed.is_some_and(|resumed| resumed.has_entered_table_box),
+    );
+    let repeated_footer_block_size = repeated.footer.unwrap_or(LayoutUnit::ZERO);
+    let mut has_pending_repeated_footer = repeated.footer.is_some();
+    let monolithic_overflow = self.monolithic_overflow();
+    // Only content past a non-repeated section overflows a page monolithically.
+    let mut has_entered_non_repeated_section = monolithic_overflow > LayoutUnit::ZERO;
+    let mut repeated_header_block_size = LayoutUnit::ZERO;
+    let mut next_entry = 0;
 
-    for (child, token) in entries {
+    while let Some((child, token)) = entries.get(next_entry).cloned() {
       let node = child.node(&structure);
 
+      next_entry += 1;
       if self.breaks_before_early_break_target(node) {
         broke_inside = true;
+        if Some(node)
+          == structure
+            .footer_section()
+            .map(|index| structure.sections[index].node)
+        {
+          has_pending_repeated_footer = false;
+        }
         break;
       }
-      handled += 1;
 
       let mut new_table_box = None;
+      let mut is_repeated_section = false;
+      let mut offset_before_repeated_header = None;
+      let mut has_overlapping_repeated_header = false;
       let mut margins = BoxStrut::default();
       let result;
       let inline_offset;
@@ -1153,13 +1204,49 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
             spacing_before_first_section
           };
           let offset_for_childless_section = offset;
+          let mut may_repeat_again = false;
 
+          if Some(index) == structure.header_section() && repeated.header {
+            is_repeated_section = true;
+            // A header repeats again unless this fragment is known to end the table box.
+            may_repeat_again = !self.is_known_to_be_last_table_box();
+            offset_before_repeated_header = Some(offset);
+            if monolithic_overflow > LayoutUnit::ZERO {
+              // The header goes at the page start, over the monolithic content an earlier page
+              // pushed down.
+              offset = -monolithic_overflow;
+              has_overlapping_repeated_header = true;
+            }
+            // A repeated header draws the collapsed border it shares with the table's start.
+            if structure.borders.is_collapsed && !includes_block_start {
+              offset += border_padding.top;
+            }
+          } else if Some(index) == structure.footer_section() && has_pending_repeated_footer {
+            is_repeated_section = true;
+            has_pending_repeated_footer = false;
+            may_repeat_again = !self.is_known_to_be_last_table_box() && repeated.header;
+          }
           offset += collapsible_spacing;
 
           let mut space = data.space(TablePart::Section(index), self.space.cache_slot);
 
-          self.setup_child_space_for_fragmentation(&mut space, node, offset);
-          result = self.lay_out_child(node, &space, &token);
+          if is_repeated_section {
+            self.setup_repeated_section_space(&mut space, may_repeat_again);
+            result = self.lay_out_repeated_section(node, &space, &token);
+          } else {
+            // A repeated header takes no part in breaking, so the content after it starts the page
+            // as far as breaking goes.
+            self.setup_child_space_for_fragmentation(
+              &mut space,
+              node,
+              offset - repeated_header_block_size,
+            );
+            Self::reserve_space_in_fragmentainer(
+              &mut space,
+              repeated_header_block_size + repeated_footer_block_size,
+            );
+            result = self.lay_out_child(node, &space, &token);
+          }
           inline_offset = section_inline_offset;
           spacing_after_last_section = spacing.1;
           if structure.sections[index].rows.is_empty() {
@@ -1171,18 +1258,20 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         }
       }
 
-      match self.break_before_child_if_needed(
-        node,
-        &result,
-        margins.top + offset,
-        has_container_separation,
-      ) {
-        Ok(true) => {
-          broke_inside = true;
-          break;
+      if !(is_repeated_section && Self::is_repeated(&token)) {
+        match self.break_before_child_if_needed(
+          node,
+          &result,
+          margins.top + offset - repeated_header_block_size,
+          has_container_separation,
+        ) {
+          Ok(true) => {
+            broke_inside = true;
+            break;
+          }
+          Ok(false) => {}
+          Err(status) => return self.relayout_and_break_earlier(status),
         }
-        Ok(false) => {}
-        Err(status) => return self.relayout_and_break_earlier(status),
       }
 
       if let TableChild::Section(_) = child
@@ -1197,6 +1286,9 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
 
       if perform {
         self.place_table_child(node, &token, location, &result);
+        if is_repeated_section {
+          self.repeat_section_fragments(node, &token);
+        }
       }
       out_of_flow.extend(
         result
@@ -1208,6 +1300,15 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
 
       match child {
         TableChild::Section(_) => {
+          if !is_repeated_section {
+            has_entered_non_repeated_section = true;
+          }
+          if let Some(before) = offset_before_repeated_header {
+            repeated_header_block_size = offset - before + spacing.1;
+            if has_overlapping_repeated_header {
+              offset = offset.max(before);
+            }
+          }
           if table_box.is_none() {
             table_box = new_table_box;
           }
@@ -1224,7 +1325,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         TableChild::Caption(_) => {}
       }
       if self.space.has_block_fragmentation() {
-        has_container_separation = true;
+        has_container_separation |= !is_repeated_section;
         if self.has_inflow_child_break_inside() {
           broke_inside = true;
           break;
@@ -1238,7 +1339,18 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         block_start_border_padding(includes_block_start),
       ));
     }
-    if handled == entry_count {
+    if has_pending_repeated_footer && table_box.is_some() {
+      next_entry = self.add_pending_repeated_footer(
+        &data,
+        &entries,
+        next_entry,
+        Point::new(section_inline_offset, offset),
+        repeated_footer_block_size,
+        has_entered_non_repeated_section,
+        perform,
+      );
+    }
+    if next_entry == entries.len() {
       self.set_has_seen_all_children();
     }
     if let Some(extent) = table_box.as_mut()
@@ -1315,11 +1427,22 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       extent.end = extent.end.min(block_size);
     }
 
+    let table_box_will_continue = table_box.is_some() && !is_past_table_box && broke_inside;
     let grid_block_size = table_box.map_or(LayoutUnit::ZERO, |extent| extent.end - extent.start);
     let consumed_table_box_block_size =
       resumed.unwrap_or_default().consumed_table_box_block_size + grid_block_size;
     let has_entered_table_box =
       resumed.is_some_and(|resumed| resumed.has_entered_table_box) || table_box.is_some();
+
+    // The table box ends here, which the layout could not know up front: a header laid out to
+    // repeat, or block-end decorations cloned for a later page, have to lay out again without.
+    if (repeated.header || self.should_clone_box_end_decorations())
+      && has_entered_table_box
+      && !table_box_will_continue
+      && !self.is_known_to_be_last_table_box()
+    {
+      return self.relayout_as_last_table_box();
+    }
 
     self.keep_break_token_data(
       rows,
@@ -1382,6 +1505,61 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     result.out_of_flow = out_of_flow;
     self.finish_break_info(&mut result);
     result
+  }
+
+  /// Blink's repeated footer of a fragment the table broke in: break tokens for the sections from
+  /// `next_entry` the fragment did not reach, then the footer at `location` or the page end, or a
+  /// break before it. Returns the entry past the footer.
+  #[allow(clippy::too_many_arguments)]
+  fn add_pending_repeated_footer(
+    &mut self,
+    data: &Rc<TableConstraintSpaceData>,
+    entries: &[(TableChild, ChildBreakToken)],
+    mut next_entry: usize,
+    location: Point<LayoutUnit>,
+    footer_block_size: LayoutUnit,
+    has_entered_non_repeated_section: bool,
+    perform: bool,
+  ) -> usize {
+    let structure = Rc::clone(&self.structure);
+    let footer = structure.footer_section();
+
+    while let Some((child, token)) = entries.get(next_entry).cloned() {
+      let node = child.node(&structure);
+
+      next_entry += 1;
+
+      let index = match child {
+        TableChild::Section(index) if Some(index) == footer => index,
+        _ => {
+          self.add_break_token_before(node);
+          continue;
+        }
+      };
+      let mut block_offset = location.y;
+
+      // Monolithic content may overflow the page, and the footer still goes at its end.
+      if has_entered_non_repeated_section
+        && let Some(end_of_page) = self.footer_offset_at_end_of_page(footer_block_size)
+      {
+        block_offset = block_offset.min(end_of_page);
+      }
+
+      let mut space = data.space(TablePart::Section(index), self.space.cache_slot);
+
+      self.setup_repeated_section_space(&mut space, true);
+
+      let result = self.lay_out_repeated_section(node, &space, &token);
+
+      if !self.fits_repeated_footer(node, &token, &result, block_offset) {
+        self.break_before_repeated_footer(node, &result);
+      } else if perform {
+        self.place_table_child(node, &token, Point::new(location.x, block_offset), &result);
+        self.repeat_section_fragments(node, &token);
+      }
+      break;
+    }
+    next_entry
   }
 
   /// Places a caption laid out to size the grid at `offset`, past its margins.

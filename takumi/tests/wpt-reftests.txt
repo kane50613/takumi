@@ -983,8 +983,10 @@ css/css-break/table/table-cell-expansion-006.html
 css/css-break/table/table-collapsed-borders-paint-htb-ltr.html
 css/css-break/table/table-fragmentation-001a-print.html
 css/css-break/table/table-fragmentation-001b-print.html
+css/css-break/table/table-fragmentation-001c-print.html
 css/css-break/table/table-fragmentation-002a-print.html
 css/css-break/table/table-fragmentation-002b-print.html
+css/css-break/table/table-fragmentation-002c-print.html
 css/css-break/table/table-grid-paint-htb-ltr.html
 css/css-break/table/table-grid-paint-vlr-rtl.html
 css/css-break/table/table-grid-paint-vrl-rtl.html

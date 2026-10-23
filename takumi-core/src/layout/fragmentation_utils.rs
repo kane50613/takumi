@@ -64,9 +64,10 @@ pub(crate) fn is_avoid_break_inside_value(space: &ConstraintSpace, value: BreakI
   space.has_block_fragmentation() && value.avoids_page_break()
 }
 
-/// Blink's `IsBreakInside`: the token resumes a box that made a fragment.
+/// Blink's `IsBreakInside`: the token resumes a box that made a fragment, rather than repeating
+/// it.
 pub(crate) fn is_break_inside(token: Option<&BlockBreakToken>) -> bool {
-  token.is_some_and(|token| !token.is_break_before)
+  token.is_some_and(|token| !token.is_break_before && !token.is_repeated)
 }
 
 /// Blink's `FragmentIndex`: which of the box's fragments a layout resuming at `token` makes.
