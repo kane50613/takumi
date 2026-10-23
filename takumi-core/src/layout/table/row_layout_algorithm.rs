@@ -25,8 +25,8 @@ use crate::{
     box_fragment_builder::BoxFragmentBuilder,
     break_token_algorithm_data::BreakTokenAlgorithmData,
     fragmentation_utils::{
-      block_child_entries, finish_fragmentation, fragment_index,
-      fragmentation_layout_input_for_child, is_break_inside, join_fragmentainer_break_values,
+      finish_fragmentation, fragment_index, fragmentation_layout_input_for_child,
+      indexed_block_child_entries, is_break_inside, join_fragmentainer_break_values,
       setup_fragment_builder_for_fragmentation, setup_space_builder_for_fragmentation,
     },
     logical_rect::LogicalBoxStrut,
@@ -247,20 +247,13 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
 impl TableRowLayoutAlgorithm<'_, '_> {
   /// Blink's `BlockChildIterator` over the row's cells, by index in the row.
   fn cell_entries(&self) -> Vec<(usize, ChildBreakToken)> {
-    let cells = &self.data.structure.sections[self.section].rows[self.row].cells;
+    let cells: Vec<NodeId> = self.data.structure.sections[self.section].rows[self.row]
+      .cells
+      .iter()
+      .map(|cell| cell.node)
+      .collect();
 
-    block_child_entries(
-      cells.iter().map(|cell| cell.node).collect(),
-      self.input.break_token.as_deref(),
-    )
-    .into_iter()
-    .filter_map(|(node, token)| {
-      cells
-        .iter()
-        .position(|cell| cell.node == node)
-        .map(|index| (index, token))
-    })
-    .collect()
+    indexed_block_child_entries(&cells, self.input.break_token.as_deref())
   }
 
   /// A cell's block size in this fragment: what the row gives it, less what its earlier fragments

@@ -8,8 +8,8 @@ use crate::layout::{
   box_fragment_builder::BoxFragmentBuilder,
   break_appeal::BreakAppeal,
   fragmentation_utils::{
-    FlexItemBreak, block_child_entries, break_before_child_if_needed, finish_fragmentation,
-    fragment_index, fragmentation_layout_input_for_child, is_early_break_target,
+    FlexItemBreak, break_before_child_if_needed, finish_fragmentation, fragment_index,
+    fragmentation_layout_input_for_child, indexed_block_child_entries, is_early_break_target,
     setup_fragment_builder_for_fragmentation, setup_space_builder_for_fragmentation,
   },
   logical_rect::LogicalBoxStrut,
@@ -207,20 +207,13 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
 impl TableSectionLayoutAlgorithm<'_, '_> {
   /// Blink's `BlockChildIterator` over the section's rows, by index in the section.
   fn row_entries(&self) -> Vec<(usize, ChildBreakToken)> {
-    let rows = &self.data.structure.sections[self.section].rows;
+    let rows: Vec<NodeId> = self.data.structure.sections[self.section]
+      .rows
+      .iter()
+      .map(|row| row.node)
+      .collect();
 
-    block_child_entries(
-      rows.iter().map(|row| row.node).collect(),
-      self.input.break_token.as_deref(),
-    )
-    .into_iter()
-    .filter_map(|(node, token)| {
-      rows
-        .iter()
-        .position(|row| row.node == node)
-        .map(|index| (index, token))
-    })
-    .collect()
+    indexed_block_child_entries(&rows, self.input.break_token.as_deref())
   }
 
   fn breaks_before_early_break_target(&mut self, row: NodeId) -> bool {

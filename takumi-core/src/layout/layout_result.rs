@@ -307,6 +307,8 @@ pub(crate) struct BreakInfo {
   /// Blink's `FragmentIndex` of the break token the layout resumed at: which fragment of the box
   /// this is.
   pub(crate) fragment_index: usize,
+  /// Whether the layout repeats the box's first, as a table header's does on each later page.
+  pub(crate) is_repeated: bool,
   /// Whether the box's `break-inside` avoids a page break, which Blink reads off the fragment's
   /// style.
   pub(crate) avoids_break_inside: bool,
@@ -327,6 +329,7 @@ impl Default for BreakInfo {
       is_block_size_for_fragmentation_clamped: false,
       is_first_for_node: true,
       fragment_index: 0,
+      is_repeated: false,
       avoids_break_inside: false,
     }
   }
@@ -339,6 +342,14 @@ impl LayoutResult {
     return self.break_info.fragment_index;
     #[cfg(not(feature = "fragmentation"))]
     return 0;
+  }
+
+  /// Whether the layout repeats its box's first, as a table header's does on each later page.
+  pub(crate) fn is_repeated(&self) -> bool {
+    #[cfg(feature = "fragmentation")]
+    return self.break_info.is_repeated;
+    #[cfg(not(feature = "fragmentation"))]
+    return false;
   }
 
   /// A successful layout of a border box `size`.

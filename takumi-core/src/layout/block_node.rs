@@ -527,6 +527,7 @@ impl<'r> LayoutTree<'r> {
         is_line_clamp_clipped_float: result.is_line_clamp_clipped_float,
         #[cfg(feature = "fragmentation")]
         container_fragment_index,
+        is_repeated: result.is_repeated(),
       },
     );
     #[cfg(feature = "fragmentation")]
@@ -575,6 +576,7 @@ impl<'r> LayoutTree<'r> {
         let mut result = (*first).clone();
 
         result.break_info.is_first_for_node = false;
+        result.break_info.is_repeated = true;
         result.out_of_flow.clear();
         result
       }
@@ -624,6 +626,7 @@ impl<'r> LayoutTree<'r> {
       let child_target = existing.unwrap_or(fragments.len());
       let fragment = BoxFragment {
         container_fragment_index: target,
+        is_repeated: true,
         ..fragments[child_source]
       };
       let fragments = &mut self.node_state_mut(child).fragments;

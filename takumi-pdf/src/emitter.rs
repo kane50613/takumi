@@ -33,8 +33,8 @@ use takumi_core::{
   scene::{NodePaint, Scene},
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display,
-    FillRule as CoreFillRule, Filter, Isolation, Lang, ResolvedGradientStop,
+    Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule as CoreFillRule,
+    Filter, Isolation, Lang, ResolvedGradientStop,
   },
 };
 
@@ -227,37 +227,6 @@ impl Emitter<'_> {
     }
 
     conversion.finish().error.map_or(Ok(()), Err)
-  }
-
-  /// `box-decoration-break: clone`: the fragment of the box on this page
-  /// paints its own complete decorations (paint-only; cloned padding does not
-  /// reserve layout space). `slice` needs nothing: the page window slices the
-  /// full-box decorations, which is exactly the sliced rendering.
-  fn decoration_frame(&self, style: &ComputedStyle, frame: BoxFrame) -> BoxFrame {
-    let BoxFrame {
-      layout,
-      origin: CorePoint { x, y },
-    } = frame;
-
-    if style.box_data.box_decoration_break == BoxDecorationBreak::Clone
-      && let Some((window_top, window_bottom)) = self.window.y
-    {
-      let top = y.max(window_top);
-      let bottom = (y + layout.size.height).min(window_bottom);
-
-      return BoxFrame::new(
-        Layout {
-          size: Size {
-            width: layout.size.width,
-            height: (bottom - top).max(0.0),
-          },
-          ..layout
-        },
-        CorePoint { x, y: top },
-      );
-    }
-
-    frame
   }
 
   /// Pushes the box's mask and `clip-path`, returning how many states went on.
@@ -457,13 +426,29 @@ impl Emitter<'_> {
     frame: BoxFrame,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let tagged = self.tagged && draws(content);
+    // A repeated table header is an artifact: the occurrence where the table begins carries the
+    // tags, and a second marked one would double the reading order.
+    let is_repeated = self
+      .scene
+      .results
+      .is_repeated_fragment(paint.node_id, paint.fragment_index);
+    let tagged = self.tagged && draws(content) && !is_repeated;
+    let artifact = self.tagged && is_repeated;
 
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
+    } else if artifact {
+      surface.start_tagged(ARTIFACT);
     }
-    self.emit_own_content(node, content, paint.node_id, frame, surface)?;
-    if tagged {
+    // Nothing inside the artifact is tagged, the replaced boxes on its lines included.
+    let tagging = self.tagged;
+
+    self.tagged = tagging && !is_repeated;
+    let emitted = self.emit_own_content(node, content, paint.node_id, frame, surface);
+
+    self.tagged = tagging;
+    emitted?;
+    if tagged || artifact {
       surface.end_tagged();
     }
 
@@ -1498,16 +1483,8 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
     node: Option<&'a RenderNode>,
     paint: &NodePaint,
   ) -> Option<(&'a RenderNode, BoxFrame, usize)> {
-    let scene = self.emitter.scene;
     let node = node?;
-    let layout = scene
-      .results
-      .fragment_layout(paint.node_id, paint.fragment_index)
-      .ok()?;
-
-    if let Some(fragments) = &scene.fragments {
-      fragments.enter(&scene.root, paint, layout.location);
-    }
+    let layout = self.emitter.scene.enter(paint).ok()?;
     let relative = self.current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
 
     if relative.only_translation() {
@@ -1540,7 +1517,6 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
     };
     let emitter = &mut *self.emitter;
     let surface = &mut *self.surface;
-    let decoration_frame = emitter.decoration_frame(&node.context.style, frame);
     let result = match chunk.part {
       ChunkPart::Decorations => {
         let scene = emitter.scene;
@@ -1555,7 +1531,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
               chunk.node.fragment_index,
             )?;
 
-            emitter.emit_decorations(node, decoration_frame, text_clip.as_ref(), table, surface);
+            emitter.emit_decorations(node, frame, text_clip.as_ref(), table, surface);
             Ok(())
           })
           .map_err(PdfError::from)
@@ -1583,8 +1559,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
         emitter.emit_tagged_content(node, &resolved.content, chunk.node, frame, surface)
       }
       ChunkPart::Outline => {
-        let outline = BoxPainter::new(&node.context, decoration_frame.layout)
-          .pending_outline(decoration_frame.origin);
+        let outline = BoxPainter::new(&node.context, frame.layout).pending_outline(frame.origin);
 
         emitter.paint_outline(outline.as_ref(), surface);
         Ok(())

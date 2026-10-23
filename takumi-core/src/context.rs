@@ -138,7 +138,7 @@ impl RenderContext {
   }
 
   /// Which of the box's fragments the painter entered.
-  pub(crate) fn fragment_index(&self) -> usize {
+  pub fn fragment_index(&self) -> usize {
     self.fragment_index.get()
   }
 

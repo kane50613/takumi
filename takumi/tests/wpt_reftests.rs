@@ -1020,8 +1020,13 @@ fn render_pages(
     width: size.0 as f32,
     height: size.1 as f32,
   };
-  let mut paged = PagedScene::lay_out(RenderNode::from_node(&context, node), page_size, true)
-    .map_err(|error| format!("layout: {error}"))?;
+  let mut paged = PagedScene::lay_out(
+    RenderNode::from_node(&context, node),
+    page_size,
+    usize::MAX,
+    true,
+  )
+  .map_err(|error| format!("layout: {error}"))?;
 
   (0..paged.page_count())
     .map(|index| render_scene(paged.page(index)).map_err(|error| format!("render: {error}")))

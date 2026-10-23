@@ -3,6 +3,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
+  Error,
   context::RenderContext,
   fonts::shaping::testing::{GEIST, register},
   geometry::{NodeId, Point, Size},
@@ -11,7 +12,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   resources::font::Fonts,
-  scene::{NodePaint, PagedScene, PaintItemKind},
+  scene::{NodePaint, PagedScene, PaintItemKind, Scene},
   style::{SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -117,7 +118,9 @@ fn pages(root: &RenderNode, page_height: f32) -> (BTreeMap<String, Vec<Placed>>,
       width: 300.0,
       height: page_height,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let containers: Vec<(usize, Point<f32>)> =
     (0..page_count).map(|page| (page, Point::ZERO)).collect();
   let mut boxes = BTreeMap::new();
@@ -240,6 +243,7 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
       width: 300.0,
       height: 200.0,
     },
+    usize::MAX,
     false,
   )
   .expect("pages lay out");
@@ -259,24 +263,7 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
     [0, 1]
   );
 
-  let paints: Vec<NodePaint> = scene
-    .contexts
-    .iter()
-    .flat_map(|context| context.in_paint_order().into_iter().flatten())
-    .filter_map(|item| match &item.kind {
-      PaintItemKind::Node(paint)
-        if scene
-          .root
-          .node_at_path(&paint.path)
-          .and_then(|node| node.node.as_ref())
-          .and_then(|node| node.id())
-          == Some("p") =>
-      {
-        Some(paint.clone())
-      }
-      _ => None,
-    })
-    .collect();
+  let paints = paints_of(scene, "p");
 
   // One scene paints both fragments, the second where the second page starts.
   assert_eq!(
@@ -287,34 +274,128 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
     [(0, 140.0), (1, 200.0)]
   );
 
-  for (paint, line_count) in paints.iter().zip([3, 5]) {
-    let layout = scene
-      .results
-      .fragment_layout(paint.node_id, paint.fragment_index)
-      .expect("fragment layout");
-    let fragments = scene
-      .fragments
-      .as_ref()
-      .expect("a paged scene places fragments");
+  assert_eq!(
+    paints
+      .iter()
+      .map(|paint| line_count(scene, paint))
+      .collect::<Vec<_>>(),
+    [3, 5]
+  );
+}
 
-    fragments.enter(&scene.root, paint, layout.location);
+/// The paints of each fragment of the box with `id`, in paint order.
+fn paints_of(scene: &Scene, id: &str) -> Vec<NodePaint> {
+  scene
+    .contexts
+    .iter()
+    .flat_map(|context| {
+      context
+        .roots()
+        .iter()
+        .chain(
+          context
+            .in_paint_order()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| match &item.kind {
+              PaintItemKind::Node(paint) => Some(paint),
+              _ => None,
+            }),
+        )
+    })
+    .filter(|paint| {
+      scene
+        .root
+        .node_at_path(&paint.path)
+        .and_then(|node| node.node.as_ref())
+        .and_then(|node| node.id())
+        == Some(id)
+    })
+    .cloned()
+    .collect()
+}
 
-    let node = scene
-      .root
-      .node_at_path(&paint.path)
-      .expect("paragraph node");
+/// The number of lines in the fragment `paint` paints.
+fn line_count(scene: &Scene, paint: &NodePaint) -> usize {
+  let layout = scene.enter(paint).expect("fragment layout");
 
-    assert_eq!(
-      node
-        .fragment_items_in(layout)
-        .expect("the fragment's lines")
-        .line_boxes()
-        .len(),
-      line_count,
-      "fragment {}",
-      paint.fragment_index
-    );
-  }
+  scene
+    .root
+    .node_at_path(&paint.path)
+    .and_then(|node| node.fragment_items_in(layout))
+    .expect("the fragment's lines")
+    .line_boxes()
+    .len()
+}
+
+/// Paged layout stops once the content needs more pages than its limit, in flow or out of it.
+#[test]
+fn paged_layout_stops_at_its_page_limit() {
+  let page = Size {
+    width: 300.0,
+    height: 200.0,
+  };
+  let breaks = render(
+    root([
+      block("a", "h100"),
+      block("b", "h100 page"),
+      block("c", "h100 page"),
+    ]),
+    ".h100 { height: 100px } .page { break-before: page }",
+  );
+  let far = render(
+    root([block("far", "far")]),
+    ".far { position: absolute; top: 1000px; height: 10px }",
+  );
+
+  assert_eq!(
+    LayoutResults::compute_pages(&breaks, page, 3)
+      .expect("three pages fit")
+      .1,
+    3
+  );
+  assert!(matches!(
+    LayoutResults::compute_pages(&breaks, page, 2),
+    Err(Error::TooManyPages(2))
+  ));
+  assert!(matches!(
+    LayoutResults::compute_pages(&far, page, 4),
+    Err(Error::TooManyPages(4))
+  ));
+}
+
+/// A flex item stretched past the page where its lines end lays out none on the later pages.
+#[test]
+fn lines_that_ended_stay_on_their_page_in_a_stretched_box() {
+  let tree = render(
+    root([Node::container([
+      block("tall", "h600"),
+      Node::container([Node::text("Beside")])
+        .with_tag_name("p")
+        .with_id("p"),
+    ])
+    .with_class_name("flex")]),
+    ".h600 { height: 600px; width: 100px } .flex { display: flex }",
+  );
+  let mut paged = PagedScene::lay_out(
+    tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+    usize::MAX,
+    false,
+  )
+  .expect("pages lay out");
+  let scene = paged.page(0);
+
+  assert_eq!(
+    paints_of(scene, "p")
+      .iter()
+      .map(|paint| line_count(scene, paint))
+      .collect::<Vec<_>>(),
+    [1, 0, 0]
+  );
 }
 
 #[test]
@@ -329,7 +410,9 @@ fn a_sliced_box_leaves_its_border_out_where_it_breaks() {
       width: 300.0,
       height: 200.0,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let b = results.box_children(NodeId::ROOT).expect("children")[1].node_id;
   let fragments = results.fragments(b).expect("fragments");
 
@@ -370,7 +453,9 @@ fn a_later_page_keeps_the_out_of_flow_boxes_an_earlier_one_positioned() {
       width: 300.0,
       height: 192.0,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let body = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
   let abs = &results.box_children(body).expect("body children")[0];
 
@@ -603,7 +688,9 @@ fn nested_fragments(root: &RenderNode, page_height: f32) -> (Vec<(usize, f32, f3
       width: 300.0,
       height: page_height,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let parent = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
   let child = results.box_children(parent).expect("children")[0].node_id;
   let fragments = results
@@ -873,7 +960,9 @@ fn a_fixed_box_inside_a_repeated_fixed_box_repeats_too() {
       width: 300.0,
       height: 200.0,
     },
-  );
+    usize::MAX,
+  )
+  .expect("pages lay out");
   let inner_fragments = (0..)
     .map_while(|index| results.fragments(NodeId::new(index)).ok())
     .find(|fragments| {

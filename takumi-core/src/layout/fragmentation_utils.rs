@@ -378,6 +378,29 @@ pub(crate) fn block_child_entries(
     .collect()
 }
 
+/// [`block_child_entries`] by index in `children`, in its entry order. Each entry is looked for
+/// from the one before, so entries in child order, as a table's rows and cells come, take one scan.
+pub(crate) fn indexed_block_child_entries(
+  children: &[NodeId],
+  break_token: Option<&BlockBreakToken>,
+) -> Vec<(usize, Option<Rc<BlockBreakToken>>)> {
+  let mut next = 0;
+
+  block_child_entries(children.to_vec(), break_token)
+    .into_iter()
+    .filter_map(|(node, token)| {
+      let index = children[next..]
+        .iter()
+        .position(|&child| child == node)
+        .map(|index| next + index)
+        .or_else(|| children.iter().position(|&child| child == node))?;
+
+      next = index + 1;
+      Some((index, token))
+    })
+    .collect()
+}
+
 /// Blink's `GetFragmentationLayoutInputForChild`: `child` resumed at `token`, with the breakpoint
 /// inside it that `early_break` names.
 pub(crate) fn fragmentation_layout_input_for_child(

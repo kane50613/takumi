@@ -221,6 +221,16 @@ impl LayoutResults {
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
+  /// Whether the node's fragment `fragment_index` repeats an earlier one, as a table header does on each page.
+  pub fn is_repeated_fragment(&self, node_id: NodeId, fragment_index: usize) -> bool {
+    self.node(node_id).is_ok_and(|node| {
+      node
+        .fragments
+        .get(fragment_index)
+        .is_some_and(|fragment| fragment.is_repeated)
+    })
+  }
+
   /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
   /// none when it holds none.
   pub(crate) fn fragment_in(
@@ -279,11 +289,15 @@ impl LayoutResults {
 
   /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.
   #[cfg(feature = "fragmentation")]
-  pub(crate) fn compute_pages(root: &RenderNode, page_size: Size<f32>) -> (Self, usize) {
+  pub(crate) fn compute_pages(
+    root: &RenderNode,
+    page_size: Size<f32>,
+    max_pages: usize,
+  ) -> crate::Result<(Self, usize)> {
     let mut tree = LayoutTree::from_render_node(root);
-    let page_count = tree.compute_pages(page_size);
+    let page_count = tree.compute_pages(page_size, max_pages)?;
 
-    (tree.into_results(), page_count)
+    Ok((tree.into_results(), page_count))
   }
 
   /// Each fragment of `node_id`, by fragment index.
@@ -454,6 +468,8 @@ pub(crate) struct BoxFragment {
   /// fragment's children says.
   #[cfg(feature = "fragmentation")]
   pub(crate) container_fragment_index: usize,
+  /// Whether the fragment repeats an earlier one, as a table header does on each page.
+  pub(crate) is_repeated: bool,
 }
 
 /// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as
@@ -906,9 +922,13 @@ impl<'r> LayoutTree<'r> {
 
   /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes or `@page`: the root laid out a page
   /// `page_size` at a time, each page resuming where the one before broke, then the out-of-flow
-  /// boxes the pages left to it across them. Returns the page count.
+  /// boxes the pages left to it across them. Returns the page count, at most `max_pages`.
   #[cfg(feature = "fragmentation")]
-  pub(crate) fn compute_pages(&mut self, page_size: Size<f32>) -> usize {
+  pub(crate) fn compute_pages(
+    &mut self,
+    page_size: Size<f32>,
+    max_pages: usize,
+  ) -> crate::Result<usize> {
     let page_block_size = LayoutUnit::from_float(page_size.height);
     let mut break_token: Option<Rc<BlockBreakToken>> = None;
     let mut page_count = 0;
@@ -916,6 +936,10 @@ impl<'r> LayoutTree<'r> {
     let mut descendants = Vec::new();
 
     loop {
+      if page_count == max_pages {
+        return Err(Error::TooManyPages(max_pages));
+      }
+
       let mut space = self.root_space(page_size.map(AvailableSpace::Definite));
       let mut margins = margins_for(
         self.layout_style(NodeId::ROOT),
@@ -987,6 +1011,7 @@ impl<'r> LayoutTree<'r> {
           page_size,
           &root_fragments,
           page_count,
+          max_pages,
           &space,
         );
       }

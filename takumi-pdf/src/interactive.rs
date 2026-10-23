@@ -28,7 +28,6 @@ use crate::{
   options::PT_PER_PX,
   tags::{TagCollector, tag_id, text_content},
   tree::PreparedTree,
-  window::Window,
 };
 
 /// A hyperlink box in content coordinates.
@@ -37,6 +36,8 @@ pub(crate) struct LinkTarget {
   rect: KrillaRect,
   /// Source-node path, so the annotation can join that node's `Link` element.
   path: Vec<usize>,
+  /// Whether a repeated fragment, such as a table header on a later page, paints this link.
+  repeated: bool,
 }
 
 /// Link, heading and anchor targets collected from one tree.
@@ -200,7 +201,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   let Some(node) = tree.scene.root.node_at_path(&paint.path) else {
     return;
   };
-  let Ok(layout) = tree.scene.results.layout(paint.node_id) else {
+  let Ok(layout) = tree.scene.enter(paint) else {
     return;
   };
   let Some(source) = node.node.as_ref() else {
@@ -210,7 +211,13 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     return;
   };
 
-  if let Some(index) = node.source_order() {
+  let repeated = tree
+    .scene
+    .results
+    .is_repeated_fragment(paint.node_id, paint.fragment_index);
+
+  // A repeated fragment, such as a table header on a later page, leaves no flow of its own.
+  if let Some(index) = node.source_order().filter(|_| !repeated) {
     // `transform` moves where a box paints without moving the flow it left
     // behind, so the flow edge is measured with the box's own transform undone.
     let in_flow = !matches!(
@@ -229,10 +236,21 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
       .and_then(|undo| transformed_rect(paint.transform * undo, CorePoint::ZERO, layout.size))
       .map(|flow| flow.bottom());
 
-    collected.extents.entry(index).or_insert(BoxExtent {
-      top: rect.top(),
-      flow_bottom,
-    });
+    // A box broken across pages starts where its first fragment does, and its flow goes on where
+    // its last one ends.
+    collected
+      .extents
+      .entry(index)
+      .and_modify(|extent| {
+        extent.flow_bottom = match (extent.flow_bottom, flow_bottom) {
+          (Some(bottom), Some(next)) => Some(bottom.max(next)),
+          (bottom, next) => bottom.or(next),
+        };
+      })
+      .or_insert(BoxExtent {
+        top: rect.top(),
+        flow_bottom,
+      });
   }
 
   if let Some(id) = source.id() {
@@ -250,6 +268,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
       uri: uri.to_string(),
       rect,
       path: paint.path.clone(),
+      repeated,
     }),
     None if node.should_create_inline_layout() => {
       collect_inline_links(
@@ -257,6 +276,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
         layout,
         paint.transform,
         &paint.path,
+        repeated,
         &mut collected.links,
       );
     }
@@ -357,6 +377,7 @@ fn collect_inline_links(
   layout: Layout,
   transform: Affine,
   path: &[usize],
+  repeated: bool,
   links: &mut Vec<LinkTarget>,
 ) {
   let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
@@ -384,37 +405,32 @@ fn collect_inline_links(
       uri: uri.to_string(),
       rect,
       path: path.to_vec(),
+      repeated,
     });
   }
 }
 
-/// Adds this page's slice of every link as annotations. `window` is the page's
-/// content window in content coordinates, narrowed horizontally for a
-/// replayed table header; `offset` maps content to page coordinates.
+/// Adds this page's slice of every link as annotations. `(y0, y1)` is the page's span in content
+/// coordinates; `offset` maps content to page coordinates.
 pub(crate) fn add_link_annotations<'l>(
   page: &mut Page,
   links: impl IntoIterator<Item = &'l LinkTarget>,
-  window: Window,
+  (y0, y1): (f32, f32),
   offset: CorePoint<f32>,
   tags: Option<&RefCell<TagCollector>>,
   anchor: impl Fn(&str) -> Option<XyzDestination>,
 ) {
-  let (y0, y1) = window.y.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
-  let (x0, x1) = window.x.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
-
   for link in links {
     let top = link.rect.top().max(y0);
     let bottom = link.rect.bottom().min(y1);
-    let left = link.rect.left().max(x0);
-    let right = link.rect.right().min(x1);
 
-    if bottom <= top || right <= left {
+    if bottom <= top {
       continue;
     }
     let Some(rect) = KrillaRect::from_ltrb(
-      (left + offset.x) * PT_PER_PX,
+      (link.rect.left() + offset.x) * PT_PER_PX,
       (top - y0 + offset.y) * PT_PER_PX,
-      (right + offset.x) * PT_PER_PX,
+      (link.rect.right() + offset.x) * PT_PER_PX,
       (bottom - y0 + offset.y) * PT_PER_PX,
     ) else {
       continue;
@@ -429,6 +445,8 @@ pub(crate) fn add_link_annotations<'l>(
       },
       None => Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
     };
+    // A repeated fragment is an artifact, and its paths do not join the tag tree.
+    let tags = tags.filter(|_| !link.repeated);
     let annotation = Annotation::new_link(
       LinkAnnotation::new(rect, target),
       // Tagged output requires alt text on link annotations; the target URI

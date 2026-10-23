@@ -988,6 +988,56 @@ fn a_repeated_table_header_replays_as_an_artifact() {
   );
 }
 
+/// An image on a repeated header's line stays inside the artifact: only the page where the table
+/// begins marks it as the header's `Figure`.
+#[test]
+fn an_image_in_a_repeated_table_header_is_tagged_once() {
+  let rows: String = (1..=30)
+    .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+    .collect();
+  let html = format!(
+    r#"<table style="width: 100%; font-size: 12px; color: #141414">
+      <thead><tr><th>Name <img src="pixel" alt="logo" style="width: 8px; height: 8px" /></th><th>Qty</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"#
+  );
+  let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render tagged table");
+
+  // An image drawn after a `BDC` sits in tagged content, after a `BMC` in the artifact.
+  let (tagged_images, _) = content_lines(&pdf).fold((0, false), |(count, in_tagged), line| {
+    let in_tagged = if find(&line, b"BDC").is_some() {
+      true
+    } else {
+      in_tagged && find(&line, b"BMC").is_none()
+    };
+
+    (
+      count + usize::from(in_tagged && line.ends_with(b" Do")),
+      in_tagged,
+    )
+  });
+
+  assert!(page_count(&pdf) > 1, "the table did not paginate");
+  assert_eq!(tagged_images, 1, "a repeated header tagged its image again");
+}
+
 /// A footer narrow enough that three-digit counters wrap it to a second line.
 /// The band re-measures with the real page count, so the `auto` margin
 /// reserves one line, not a wrapped stand-in's two.
@@ -1247,28 +1297,34 @@ fn a_forced_break_on_a_node_that_opens_a_page_adds_no_empty_page() {
     "the second keep opens page 2 on its own"
   );
 
-  for (spacer, list, first, second) in [
-    (235, "gap: 16px;", "", "break-before: page;"),
-    (235, "", "", "margin-top: 16px; break-before: page;"),
-    (245, "padding-top: 16px;", "break-before: page;", ""),
+  for (list, second) in [
+    ("gap: 16px;", "break-before: page;"),
+    ("", "margin-top: 16px; break-before: page;"),
   ] {
-    let forced = render_with(&document(spacer, list, first, second));
+    let forced = render_with(&document(235, list, "", second));
 
     assert_eq!(
       page_count(&forced),
       2,
-      "a forced break at the top of page 2 opened an empty page ({list} {first} {second})"
+      "a forced break at the top of page 2 opened an empty page ({list} {second})"
     );
   }
+  // Blink's column flex counts the list's padding as separation from its first item, so the
+  // forced break before that item leaves the padding alone on page 2.
   assert_eq!(
-    render_with(&document(235, "gap: 16px;", "", "break-before: page;")),
-    plain,
-    "a forced break at the top of page 2 changed the document"
+    page_count(&render_with(&document(
+      245,
+      "padding-top: 16px;",
+      "break-before: page;",
+      ""
+    ))),
+    3,
+    "a forced break after the list's padding did not break"
   );
 }
 
 #[test]
-fn forced_breaks_beside_spacing_alone_open_no_page() {
+fn forced_breaks_beside_spacing_break_as_blink_separates_them() {
   let fonts = fonts();
   let render_with = |source: &str| render(a4_options(source, &fonts)).expect("render the doc");
   let leading = render_with(
@@ -1288,10 +1344,12 @@ fn forced_breaks_beside_spacing_alone_open_no_page() {
     </div>"#,
   );
 
+  // The item's margin separates it from the start of its column flex container, so Blink honors
+  // the break and leaves the margin alone on page 1.
   assert_eq!(
     page_count(&leading),
-    1,
-    "a leading break opened an empty page"
+    2,
+    "a break after the item's margin did not break"
   );
   assert_eq!(
     page_count(&trailing),
@@ -1305,8 +1363,10 @@ fn forced_breaks_beside_spacing_alone_open_no_page() {
   );
 }
 
+/// The block-end padding is unbreakable, so padding that does not fit the page goes to the next,
+/// as Blink's `FinishFragmentation` breaks before it.
 #[test]
-fn trailing_spacing_opens_no_page() {
+fn trailing_padding_past_the_page_end_goes_to_the_next_page() {
   let fonts = fonts();
   let page = PageOptions {
     width: 400.0,
@@ -1330,7 +1390,7 @@ fn trailing_spacing_opens_no_page() {
   )
   .expect("render the doc");
 
-  assert_eq!(page_count(&pdf), 1, "trailing padding opened an empty page");
+  assert_eq!(page_count(&pdf), 2, "the trailing padding stayed on page 1");
 }
 
 /// A table of contents whose entries carry `targetPageNumber` hooks. Each
@@ -1529,6 +1589,36 @@ fn an_inline_page_counter_follows_the_flow_that_precedes_it() {
   assert_eq!(
     pdf, expected,
     "a transformed block moved the page the counter after it names"
+  );
+}
+
+/// A header that repeats down a table leaves the flow where its first occurrence ends, so a
+/// counter in the first row names the table's first page.
+#[test]
+fn a_repeated_table_header_does_not_move_the_counters_after_it() {
+  let document = |page: &str| {
+    let rows: String = (2..=60)
+      .map(|i| format!("<tr><td>Item {i}</td></tr>"))
+      .collect();
+
+    format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead><tr><th>Name</th></tr></thead>
+        <tbody><tr><td>Page <span>{page}</span></td></tr>{rows}</tbody>
+      </table>"#
+    )
+  };
+  let pdf = render(a4_options(
+    &document(r#"<span class="pageNumber"></span>"#),
+    &fonts(),
+  ))
+  .expect("render the hooked table");
+  let expected = render(a4_options(&document("1"), &fonts())).expect("render the numbered table");
+
+  assert!(page_count(&pdf) > 1, "the table did not paginate");
+  assert_eq!(
+    pdf, expected,
+    "the counter took the page the header last repeats on"
   );
 }
 
@@ -2792,10 +2882,10 @@ fn paged_clone_decorations() {
   });
 }
 
-/// Transformed subtrees become unsplittable atoms: the rotated card near a cut
-/// moves whole to the next page; the skewed divider stays intact.
+/// A transformed box breaks across pages like any other, each fragment transformed about its own
+/// border box as Blink's `ComputeReferenceBox` takes it: the rotated card splits at the page end.
 #[test]
-fn paged_transform_atoms() {
+fn paged_transforms() {
   run_pdf_fixture("paged-transforms", |fonts| {
     let source = r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 10px;">
       <div style="height: 150px; background-color: #dbeafe;"></div>
@@ -3854,12 +3944,12 @@ fn a_programmatic_list_item_reads_its_marker_first() {
   );
 }
 
-/// A float's band is one atom: a page cut may not slice through it, so a
-/// float crossing the would-be cut pushes the cut past its bottom edge.
+/// A float breaks across pages as Blink's floats do: one that fits stays whole on its page, and a
+/// taller one goes on where the page ends.
 #[test]
-fn a_page_cut_does_not_slice_a_float() {
+fn a_float_breaks_only_when_it_does_not_fit_its_page() {
   let fonts = fonts();
-  let window = |height: u32| {
+  let float_heights = |height: u32| {
     let doc = format!(
       r#"<p style="font-size:16px;line-height:20px;margin:0;"><span style="float:right;width:40px;height:{height}px;background:#f00;"></span>one<br>two<br>three<br>four<br>five<br>six</p>"#
     );
@@ -3877,44 +3967,26 @@ fn a_page_cut_does_not_slice_a_float() {
     )
     .expect("render float doc");
 
-    first_page_window(&pdf)
+    page_fill_heights(&pdf)
   };
-  // 65px in page units; a float this tall spans the cut a short one permits.
-  let float_bottom = 65.0 * 0.75;
 
-  assert!(
-    window(10) < float_bottom,
-    "the short-float cut no longer lands where a tall float would sit"
-  );
-  assert!(
-    window(65) >= float_bottom,
-    "the page cut sliced through the float"
-  );
+  assert_eq!(float_heights(65), [65.0]);
+  assert_eq!(float_heights(120), [75.0, 45.0]);
 }
 
-/// The height of the first page's window clip: how much of the document the
-/// first page shows, i.e. where the first page cut landed.
-fn first_page_window(pdf: &[u8]) -> f32 {
-  let lines: Vec<Vec<u8>> = content_lines(pdf).collect();
-
-  for pair in lines.windows(2) {
-    if !pair[0].ends_with(b" re") || !pair[1].starts_with(b"W") {
-      continue;
-    }
-    // The clip line reads `x y width height re`: the height sits second from
-    // the end.
-    let text = String::from_utf8_lossy(&pair[0]);
-    let height = text
-      .split_whitespace()
-      .rev()
-      .nth(1)
-      .and_then(|token| token.parse::<f32>().ok());
-
-    if let Some(height) = height {
-      return height.abs();
-    }
-  }
-  panic!("no page window clip found");
+/// The height of the first rectangle inside the page clip on each page that draws one, in CSS
+/// pixels.
+fn page_fill_heights(pdf: &[u8]) -> Vec<f32> {
+  content_streams(pdf)
+    .iter()
+    .filter_map(|stream| {
+      stream
+        .split(|byte| *byte == b'\n')
+        .filter_map(|line| operands(line, "re"))
+        .skip(1)
+        .find_map(|operands| operands.get(3).map(|height| height.abs()))
+    })
+    .collect()
 }
 
 /// The report renders tagged under PDF/UA-1 and PDF/A-2a: heading structure,

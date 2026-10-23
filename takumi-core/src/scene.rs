@@ -21,7 +21,9 @@ use crate::{
   style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+#[cfg(feature = "fragmentation")]
+use std::collections::HashSet;
 
 /// A node's resolved paint inputs.
 #[derive(Clone)]
@@ -745,10 +747,50 @@ impl Scene {
   }
 }
 
-/// The boxes a scene placed, by child path, for a scene that paints several fragments of a box.
-pub struct FragmentPlacements(HashSet<Vec<usize>>);
+impl Scene {
+  /// The layout of the fragment `paint` paints, with its box set to paint it.
+  pub fn enter(&self, paint: &NodePaint) -> Result<ComputedLayout> {
+    let layout = self
+      .results
+      .fragment_layout(paint.node_id, paint.fragment_index)?;
+
+    if let Some(fragments) = &self.fragments {
+      fragments.enter(&self.root, paint, layout.location);
+    }
+    Ok(layout)
+  }
+}
+
+/// For a scene that paints several fragments of a box: by each box's child path, the indices of
+/// its children that no paint of their own places.
+pub struct FragmentPlacements(HashMap<Vec<usize>, Vec<usize>>);
 
 impl FragmentPlacements {
+  /// The placements of `root`, whose boxes at the `placed` paths paint on their own.
+  #[cfg(feature = "fragmentation")]
+  fn new(root: &RenderNode, placed: &HashSet<Vec<usize>>) -> Self {
+    let mut unplaced = HashMap::new();
+    let mut stack = vec![(root, Vec::new())];
+
+    while let Some((node, path)) = stack.pop() {
+      let mut children = Vec::new();
+
+      for (index, child) in node.children.iter().flatten().enumerate() {
+        let mut child_path = path.clone();
+
+        child_path.push(index);
+        if !placed.contains(&child_path) {
+          children.push(index);
+        }
+        stack.push((child, child_path));
+      }
+      if !children.is_empty() {
+        unplaced.insert(path, children);
+      }
+    }
+    Self(unplaced)
+  }
+
   /// Sets the box `paint` paints, laid out at `location`, and the boxes of its content no other
   /// paint places, to paint the fragment `paint` names, as [`set_paint_offsets`] sets them for
   /// a scene with one fragment of each box.
@@ -766,18 +808,18 @@ impl FragmentPlacements {
       };
 
       node.context.enter_fragment(base, paint.fragment_index);
-      for (index, child) in node
-        .children
-        .iter()
-        .flat_map(|children| children.iter())
-        .enumerate()
-      {
+      for &index in self.0.get(&path).into_iter().flatten() {
+        let Some(child) = node
+          .children
+          .as_deref()
+          .and_then(|children| children.get(index))
+        else {
+          continue;
+        };
         let mut child_path = path.clone();
 
         child_path.push(index);
-        if !self.0.contains(&child_path) {
-          stack.push((child, child_path, own));
-        }
+        stack.push((child, child_path, own));
       }
     }
   }
@@ -824,10 +866,15 @@ pub struct PagedScene {
 
 #[cfg(feature = "fragmentation")]
 impl PagedScene {
-  /// Lays `root` out on pages `page_size` and builds the scene of them all.
-  pub fn lay_out(root: RenderNode, page_size: Size<f32>, paint_bounds: bool) -> Result<Self> {
+  /// Lays `root` out on at most `max_pages` pages `page_size` and builds the scene of them all.
+  pub fn lay_out(
+    root: RenderNode,
+    page_size: Size<f32>,
+    max_pages: usize,
+    paint_bounds: bool,
+  ) -> Result<Self> {
     root.clear_layout_caches();
-    let (results, page_count) = LayoutResults::compute_pages(&root, page_size);
+    let (results, page_count) = LayoutResults::compute_pages(&root, page_size, max_pages)?;
     // A page the root starts after holds none of it.
     let roots: Vec<(usize, Point<f32>)> = (0..page_count)
       .filter_map(|page| {
@@ -844,9 +891,10 @@ impl PagedScene {
     }
     .build_fragments(&roots)?;
     let placed = layers.placements(&results).into_keys().collect();
+    let fragments = FragmentPlacements::new(&root, &placed);
     let mut scene = Scene::new(root, results, layers, page_size);
 
-    scene.fragments = Some(FragmentPlacements(placed));
+    scene.fragments = Some(fragments);
     Ok(Self { scene, page_count })
   }
 
@@ -861,6 +909,11 @@ impl PagedScene {
   /// The number of pages.
   pub fn page_count(&self) -> usize {
     self.page_count
+  }
+
+  /// The scene of every page stacked, page `index` from `index` times the page height down.
+  pub fn into_scene(self) -> Scene {
+    self.scene
   }
 
   /// The scene set to paint page `index`.

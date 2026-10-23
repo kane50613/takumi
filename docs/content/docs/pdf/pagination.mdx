@@ -34,7 +34,7 @@ const pdf = await render(
 
 `break-inside: avoid` applies only when the box fits on a page. A taller box still splits.
 
-A text line, an image, or a transformed subtree never splits unless it is taller than a page.
+Boxes, floats, flex and grid items, and table rows break across pages, as Chromium prints them. A text line or an image never splits. It moves to the next page, and runs on over the pages after it when it is taller than one.
 
 ## Full-page boxes
 

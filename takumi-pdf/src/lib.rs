@@ -11,10 +11,11 @@
 //!
 //! # Pagination
 //!
-//! With [`PdfOptions::page`] set, content lays out at the page's content width with unbounded
-//! height, then slices into pages. Text lines, images, and transformed subtrees move the cut
-//! point up so no page cuts them in half. One taller than a page runs on over the next pages.
-//! Each page walks the scene again through a vertical window (clip and translate).
+//! With [`PdfOptions::page`] set, content lays out on pages through takumi-core's block
+//! fragmentation, as Chromium lays out a printed document. Boxes, lines, flex and grid items,
+//! and table rows break across pages. Content that cannot break, such as an image, moves to the
+//! next page, and runs on over the pages after it when it is taller than one. Each page paints
+//! its area of one scene that stacks every page's fragments.
 //!
 //! Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and the
 //! `widows` and `orphans` minimums, which default to 2 as in Chromium. A table header or footer
@@ -51,7 +52,6 @@
 
 use std::{mem::take, rc::Rc};
 
-mod atoms;
 mod bands;
 mod chunks;
 mod counters;
@@ -127,7 +127,6 @@ use crate::{
   page::{PageBands, PagePlan, band_viewport},
   paint::paint_page_background,
   tree::{PreparedTree, TreeInputs},
-  window::Window,
 };
 
 /// Lays out a node tree without rendering and returns its size.
@@ -368,10 +367,7 @@ impl SinglePage {
     add_link_annotations(
       &mut page,
       &rendered.interactive.links,
-      Window {
-        y: Some((0.0, rendered.content.scene.size.height)),
-        ..Window::default()
-      },
+      (0.0, rendered.content.scene.size.height),
       CorePoint::ZERO,
       state.tags.as_ref(),
       |id| {
@@ -401,21 +397,7 @@ mod tests {
   use takumi_core::{geometry::Size, units::ONE_IN_PX};
 
   use super::*;
-  use crate::{
-    atoms::Atoms,
-    options::BAND_EDGE_PADDING,
-    pagination::{Atom, MAX_PAGES, Paragraph},
-  };
-
-  fn atoms(extents: &[Atom], forced: &[f32], paragraphs: Vec<Paragraph>) -> Atoms {
-    Atoms {
-      extents: extents.to_vec(),
-      forced: forced.to_vec(),
-      paragraphs,
-      content: vec![(0.0, f32::INFINITY)],
-      ..Atoms::default()
-    }
-  }
+  use crate::options::BAND_EDGE_PADDING;
 
   const A4: Size<f32> = PageOptions::A4.size();
 
@@ -473,178 +455,6 @@ mod tests {
       ),
       Err(PdfError::PageRangesOutOfBounds(5))
     ));
-  }
-
-  #[test]
-  fn content_taller_than_a_render_allows_stops_counting() {
-    let starts = atoms(&[], &[], Vec::new()).page_starts(&[], 2_000_000.0, 10.0);
-
-    assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
-  }
-
-  #[test]
-  fn page_starts_without_atoms_cuts_at_window() {
-    assert_eq!(
-      atoms(&[], &[], Vec::new()).page_starts(&[], 250.0, 100.0),
-      vec![0.0, 100.0, 200.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_pushes_straddling_atom_to_next_page() {
-    assert_eq!(
-      atoms(&[(90.0, 110.0)], &[], Vec::new()).page_starts(&[], 250.0, 100.0),
-      vec![0.0, 90.0, 190.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_hard_cuts_atom_taller_than_window() {
-    assert_eq!(
-      atoms(&[(0.0, 300.0)], &[], Vec::new()).page_starts(&[], 300.0, 100.0),
-      vec![0.0, 100.0, 200.0]
-    );
-  }
-
-  /// Six 10pt lines from y=50: the window cut at 100 would leave a lone line
-  /// on the next page, so the solver moves it up to keep two.
-  #[test]
-  fn page_starts_keeps_widows_together() {
-    let lines: Vec<Atom> = (0..6)
-      .map(|i| (50.0 + i as f32 * 10.0, 60.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 2,
-      after: 2,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
-      vec![0.0, 90.0],
-      "the cut moves from 100 to 90 so two lines reach the next page"
-    );
-  }
-
-  /// The cut at 100 would strand one line at the bottom of the page, so the
-  /// whole paragraph moves over.
-  #[test]
-  fn page_starts_keeps_orphans_together() {
-    let lines: Vec<Atom> = (0..4)
-      .map(|i| (90.0 + i as f32 * 10.0, 100.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 2,
-      after: 2,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 140.0, 100.0),
-      vec![0.0, 90.0],
-      "one line before the cut violates orphans, so the paragraph starts the next page"
-    );
-  }
-
-  /// Three lines with 2/2 minimums cannot satisfy both sides. Blink keeps the
-  /// orphans and accepts the widow violation, and so does the solver.
-  #[test]
-  fn page_starts_prefers_orphans_over_widows() {
-    let lines: Vec<Atom> = (0..3)
-      .map(|i| (80.0 + i as f32 * 10.0, 90.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 2,
-      after: 2,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
-      vec![0.0, 100.0],
-      "backing up past the orphans floor is worse than a lone widow"
-    );
-  }
-
-  /// Minimums that cannot fit the current page are dropped rather than looping.
-  #[test]
-  fn page_starts_drops_unsatisfiable_minimums() {
-    let lines: Vec<Atom> = (0..30)
-      .map(|i| (i as f32 * 10.0, 10.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 20,
-      after: 20,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 300.0, 100.0),
-      vec![0.0, 100.0, 200.0],
-      "a paragraph that can never satisfy 20/20 still paginates at the window"
-    );
-  }
-
-  /// `widows` past the paragraph's line count resolves to the orphans floor,
-  /// like any other unsatisfiable widows value, instead of underflowing.
-  #[test]
-  fn page_starts_floors_widows_past_the_line_count() {
-    let lines: Vec<Atom> = (0..3)
-      .map(|i| (80.0 + i as f32 * 10.0, 90.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 1,
-      after: 5,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
-      vec![0.0, 90.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_honors_forced_cuts() {
-    assert_eq!(
-      atoms(&[], &[40.0, 150.0], Vec::new()).page_starts(&[], 250.0, 100.0),
-      vec![0.0, 40.0, 140.0, 150.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_drops_forced_cuts_beside_spacing_alone() {
-    let atoms = Atoms {
-      forced: vec![40.0, 110.0],
-      content: vec![(0.0, 20.0), (60.0, 80.0)],
-      ..Atoms::default()
-    };
-
-    assert_eq!(atoms.page_starts(&[], 120.0, 30.0), vec![0.0, 30.0, 60.0]);
-  }
-
-  #[test]
-  fn page_starts_keeps_forced_cuts_under_content() {
-    let atoms = Atoms {
-      forced: vec![40.0],
-      content: vec![(0.0, 20.0), (30.0, 35.0), (60.0, 80.0)],
-      ..Atoms::default()
-    };
-
-    assert_eq!(
-      atoms.page_starts(&[], 120.0, 30.0),
-      vec![0.0, 30.0, 40.0, 70.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_ends_at_the_last_content_box() {
-    let atoms = Atoms {
-      content: vec![(0.0, 90.0)],
-      ..Atoms::default()
-    };
-
-    assert_eq!(atoms.page_starts(&[], 250.0, 100.0), vec![0.0]);
   }
 
   #[test]
