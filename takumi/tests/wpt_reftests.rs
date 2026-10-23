@@ -38,12 +38,10 @@ use takumi::{
     ImageSource, Node, OutputFormat, RenderOptions, StyleSheet, Viewport,
   },
   render,
-  unstable::raster::render_scene,
+  unstable::raster::render_pages,
   write_image,
 };
-use takumi_core::{
-  geometry::Size, layout::tree::RenderNode, resources::image::ResourceCache, scene::PagedScene,
-};
+use takumi_core::{geometry::Size, resources::image::ResourceCache};
 use test_utils::{CONTEXT, matches_fragments};
 
 /// The WPT harness's viewport.
@@ -997,7 +995,19 @@ impl Runner {
       .stylesheet(stylesheet.into())
       .build();
     let bitmaps = if print {
-      render_pages(options, node, size)?
+      let page_size = Size {
+        width: size.0 as f32,
+        height: size.1 as f32,
+      };
+
+      let mut pages = Vec::new();
+
+      render_pages(options, page_size, usize::MAX, |page| {
+        pages.push(page);
+        Ok(())
+      })
+      .map_err(|error| format!("render: {error}"))?;
+      pages
     } else {
       vec![render(options).map_err(|error| format!("render: {error}"))?]
     };
@@ -1007,30 +1017,6 @@ impl Runner {
       pages: bitmaps.iter().map(over_white).collect(),
     })
   }
-}
-
-/// `node` laid out across pages `size` under `options`, one image per page.
-fn render_pages(
-  mut options: RenderOptions,
-  node: Node,
-  size: (u32, u32),
-) -> Result<Vec<Bitmap>, String> {
-  let context = options.take_render_context();
-  let page_size = Size {
-    width: size.0 as f32,
-    height: size.1 as f32,
-  };
-  let mut paged = PagedScene::lay_out(
-    RenderNode::from_node(&context, node),
-    page_size,
-    usize::MAX,
-    true,
-  )
-  .map_err(|error| format!("layout: {error}"))?;
-
-  (0..paged.page_count())
-    .map(|index| render_scene(paged.page(index)).map_err(|error| format!("render: {error}")))
-    .collect()
 }
 
 /// A document rendered onto white: one page, or one per print page.

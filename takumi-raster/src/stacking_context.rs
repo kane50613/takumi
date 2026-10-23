@@ -1,7 +1,7 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
-  paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
-  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
+  paint_chunk::{ChunkPart, ConversionContext, HeightIndex, PaintChunk, PropertySink},
+  paint_property::{ClipId, ClipNode, EffectId, EffectNode, PropertyTrees},
   painter::{TableDecorations, TextClip, paint_collapsed_borders},
   scene::{FragmentPlacements, NodePaint, Scene, SceneBounds},
 };
@@ -19,35 +19,84 @@ use crate::{
 
 /// Paints `scene` onto `canvas` chunk by chunk, entering each chunk's clips and effects.
 pub(crate) fn paint_scene(scene: &mut Scene, canvas: &mut Canvas) -> Result<()> {
-  let Scene {
-    root,
-    results,
-    contexts,
-    properties,
-    fragments,
-    ..
-  } = scene;
-  let chunks = PaintChunk::in_paint_order(contexts);
-  let owners = PaintChunk::effect_owners(&chunks, properties);
-  let mut conversion = ConversionContext::new(
-    properties,
-    ScenePainter {
+  ScenePaint::new(scene, false).paint(canvas)
+}
+
+/// A scene's paint chunks in paint order and the boxes owning its effects, resolved once for every
+/// canvas painted from them. Each page of a paged scene paints only the chunks reaching it, as
+/// Blink paints a page through a cull rect.
+pub(crate) struct ScenePaint<'s> {
+  root: &'s mut RenderNode,
+  results: &'s LayoutResults,
+  fragments: Option<&'s FragmentPlacements>,
+  properties: &'s PropertyTrees,
+  chunks: Vec<PaintChunk<'s>>,
+  owners: Vec<Option<&'s NodePaint>>,
+  index: Option<HeightIndex>,
+}
+
+impl<'s> ScenePaint<'s> {
+  /// The chunks of `scene`, indexed by the height they reach when many canvases paint parts of it.
+  pub(crate) fn new(scene: &'s mut Scene, indexed: bool) -> Self {
+    let Scene {
+      root,
+      results,
+      contexts,
+      properties,
+      fragments,
+      ..
+    } = scene;
+    let chunks = PaintChunk::in_paint_order(contexts);
+    let owners = PaintChunk::effect_owners(&chunks, properties);
+    let index = indexed.then(|| {
+      HeightIndex::new(
+        &chunks
+          .iter()
+          .map(|chunk| chunk.node.paint_bounds)
+          .collect::<Vec<_>>(),
+      )
+    });
+
+    Self {
       root,
       results,
       fragments: fragments.as_ref(),
-      canvas,
+      properties,
+      chunks,
       owners,
-      effects: Vec::new(),
-      error: None,
-    },
-  );
-
-  for chunk in &chunks {
-    conversion.switch_to(chunk.state());
-    conversion.sink().paint(chunk);
+      index,
+    }
   }
 
-  conversion.finish().error.map_or(Ok(()), Err)
+  /// Paints the chunks reaching `canvas`'s viewport.
+  pub(crate) fn paint(&mut self, canvas: &mut Canvas) -> Result<()> {
+    let viewport = canvas.viewport();
+    let indices = match &self.index {
+      Some(index) => index.candidates(viewport.origin.y as f32, viewport.bottom() as f32),
+      None => (0..self.chunks.len()).collect(),
+    };
+    let mut conversion = ConversionContext::new(
+      self.properties,
+      ScenePainter {
+        root: self.root,
+        results: self.results,
+        fragments: self.fragments,
+        canvas,
+        owners: &self.owners,
+        effects: Vec::new(),
+        error: None,
+      },
+    );
+
+    for index in indices {
+      let chunk = &self.chunks[index];
+
+      conversion.switch_to(chunk.state());
+      conversion.sink().paint(chunk);
+    }
+
+    conversion.finish().error.map_or(Ok(()), Err)
+  }
 }
 
 /// An effect group open on the canvas.
@@ -68,7 +117,7 @@ struct ScenePainter<'s, 'c> {
   results: &'s LayoutResults,
   fragments: Option<&'s FragmentPlacements>,
   canvas: &'c mut Canvas,
-  owners: Vec<Option<&'s NodePaint>>,
+  owners: &'c [Option<&'s NodePaint>],
   effects: Vec<OpenEffect>,
   error: Option<Error>,
 }

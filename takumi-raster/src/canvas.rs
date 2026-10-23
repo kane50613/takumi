@@ -165,6 +165,7 @@ impl Canvas {
   }
 
   /// The canvas painting the area of a scene that starts at `origin`.
+  #[cfg(feature = "pages")]
   pub(crate) fn with_origin(self, origin: Point<i32>) -> Self {
     Self { origin, ..self }
   }

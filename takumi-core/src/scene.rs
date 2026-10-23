@@ -714,8 +714,6 @@ pub struct Scene {
   pub properties: PropertyTrees,
   /// The size it paints at: the viewport on a definite axis, the root's border box otherwise.
   pub size: Size<f32>,
-  /// Where the area it paints starts: the page a paged scene paints, the origin otherwise.
-  pub origin: Point<f32>,
   /// The boxes it paints more than one fragment of, set up before each paints.
   pub fragments: Option<FragmentPlacements>,
 }
@@ -759,7 +757,6 @@ impl Scene {
       contexts,
       properties,
       size,
-      origin: Point::ZERO,
       fragments: None,
     }
   }
@@ -961,8 +958,9 @@ impl PagedScene {
     Ok(Self { scene, page_count })
   }
 
-  /// Where page `page` starts in the scene: the pages stack in the block direction.
-  fn page_origin(page_size: Size<f32>, page: usize) -> Point<f32> {
+  /// Where page `page` starts in the scene of pages `page_size`: the pages stack in the block
+  /// direction.
+  pub fn page_origin(page_size: Size<f32>, page: usize) -> Point<f32> {
     Point {
       x: 0.0,
       y: page_size.height * page as f32,
@@ -977,12 +975,6 @@ impl PagedScene {
   /// The scene of every page stacked, page `index` from `index` times the page height down.
   pub fn into_scene(self) -> Scene {
     self.scene
-  }
-
-  /// The scene set to paint page `index`.
-  pub fn page(&mut self, index: usize) -> &mut Scene {
-    self.scene.origin = Self::page_origin(self.scene.size, index);
-    &mut self.scene
   }
 }
 

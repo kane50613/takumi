@@ -52,6 +52,8 @@ jpeg = ["takumi-core/jpeg"]
 webp = ["takumi-core/webp", "takumi-raster?/webp"]
 gif = ["takumi-core/gif", "takumi-raster?/gif"]
 rayon = ["takumi-raster?/rayon"]
+# Raster rendering across pages, through takumi-core's block fragmentation.
+pages = ["takumi-raster?/pages"]
 from-html = ["dep:takumi-html"]
 
 [dev-dependencies]
@@ -68,7 +70,7 @@ zune-jpeg.workspace = true
 
 [dev-dependencies.takumi]
 path = "."
-features = ["from-html", "svg-backend", "unstable"]
+features = ["from-html", "svg-backend", "unstable", "pages"]
 
 [dev-dependencies.takumi-core]
 path = "../takumi-core"
