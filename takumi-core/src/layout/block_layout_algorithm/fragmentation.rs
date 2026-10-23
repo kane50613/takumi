@@ -132,18 +132,6 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       .breaks_out_of_flow_children(self.style.overflow.y != Overflow::Visible)
   }
 
-  /// A box that clips overflow marks the out-of-flow boxes deferred to the fragmentation root on
-  /// their way up through it.
-  pub(super) fn mark_deferred_out_of_flow_inside_clipped_container(&mut self) {
-    if !self.builder.involved_in_block_fragmentation() || self.style.overflow.y == Overflow::Visible
-    {
-      return;
-    }
-    for candidate in &mut self.out_of_flow {
-      candidate.mark_inside_clipped_container();
-    }
-  }
-
   /// Blink's `HandleOutOfFlowPositioned` for an out-of-flow `child` an earlier page broke inside
   /// or pushed here: whether it resumes at `token`, which holds its offset. A forced break before
   /// the box leaves it to work its static position out again, as does a box held back for the

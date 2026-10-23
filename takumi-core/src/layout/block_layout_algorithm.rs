@@ -910,8 +910,6 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       part = part.in_fragments(&mut self.builder);
     }
     self.out_of_flow = self.tree.lay_out_out_of_flow(part, candidates);
-    #[cfg(feature = "fragmentation")]
-    self.mark_deferred_out_of_flow_inside_clipped_container();
   }
 
   /// Writes each placed child's geometry once the layout stands, which only a layout that places

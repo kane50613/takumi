@@ -984,8 +984,8 @@ impl<'r> LayoutTree<'r> {
 
   /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes or `@page`: the root laid out a page
   /// `page_size` at a time, each page resuming where the one before broke, with the page area
-  /// laying out the out-of-flow boxes the root left, then those a flex, grid or table left to the
-  /// root across the pages. The pages go on while the root or the page area has more to lay out.
+  /// laying out the out-of-flow boxes the root left. The pages go on while the root or the page
+  /// area has more to lay out.
   /// Returns the page count, at most `max_pages`.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn compute_pages(
@@ -996,7 +996,6 @@ impl<'r> LayoutTree<'r> {
     let page_block_size = LayoutUnit::from_float(page_size.height);
     let mut break_token: Option<Rc<BlockBreakToken>> = None;
     let mut page_count = 0;
-    let mut root_fragments = Vec::new();
     let mut page_areas = PageAreas::default();
     // The root's last fragment, which the page area of a page past the root's end attaches to.
     let mut last_root_fragment = None;
@@ -1042,7 +1041,6 @@ impl<'r> LayoutTree<'r> {
                 && is_break_inside(result.break_info.break_token.as_deref())))
           {
             break_token = Some(Rc::new(BlockBreakToken::break_before(NodeId::ROOT, false)));
-            root_fragments.push(None);
             page_count += 1;
             continue;
           }
@@ -1067,7 +1065,6 @@ impl<'r> LayoutTree<'r> {
       };
 
       last_root_fragment = Some(root_fragment);
-      root_fragments.push(Some(root_fragment));
       self.lay_out_page_area(
         &mut page_areas,
         page_count,
@@ -1079,14 +1076,7 @@ impl<'r> LayoutTree<'r> {
       page_count += 1;
 
       if break_token.is_none() && !page_areas.resumes() {
-        return self.lay_out_fragmentainer_descendants(
-          take(&mut page_areas.deferred),
-          page_size,
-          &root_fragments,
-          page_count,
-          max_pages,
-          &space,
-        );
+        return Ok(page_count);
       }
     }
   }
