@@ -12,7 +12,7 @@ use takumi_core::{
   },
   painter::OwnContent,
   resources::image::ImageSource,
-  scene::{NodePaint, PaintItemKind, Scene},
+  scene::{NodePaint, PagedScene, PaintItemKind, Scene},
   style::{
     ComputedStyle, Display, FontFamily, Lang, Length, Position, SizingContext, Style,
     StyleDeclaration, StyleSheet, ZIndex,
@@ -21,7 +21,6 @@ use takumi_core::{
 };
 
 use crate::{
-  atoms::AtomCollector,
   bands::{FixedTemplate, Repeatable},
   chunks::SceneChunks,
   counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
@@ -85,14 +84,14 @@ impl TreeInputs<'_> {
     self.prepare(node, viewport)
   }
 
-  /// The content column, plus the `fixed` subtrees attached to the initial
-  /// containing block. Those repeat on every page, so they lay out against the
-  /// page area instead of the column.
+  /// The content laid out across pages, how many, and the `fixed` subtrees attached to the
+  /// initial containing block. Those repeat on every page, so they lay out against the page area
+  /// on their own.
   pub(crate) fn prepare_paged(
     &self,
     node: Node,
     frame: &PageFrame,
-  ) -> Result<(PreparedTree, Vec<Repeatable>), PdfError> {
+  ) -> Result<(PreparedTree, Vec<Repeatable>, usize), PdfError> {
     let viewport = frame.column();
     let node = fill_root(node, viewport);
     // A repeated box holding a counter lays out again per page, from the subtree
@@ -100,7 +99,13 @@ impl TreeInputs<'_> {
     let source = has_page_counters(&node).then(|| node.clone());
     let mut root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
     let repeated = take_repeating_fixed(&mut root);
-    let content = PreparedTree::lay_out(root, viewport)?;
+    let (content, page_count) = PreparedTree::lay_out_pages(
+      root,
+      Size {
+        width: frame.content_width,
+        height: frame.window_height,
+      },
+    )?;
     let page_context = self.context(frame.page_area);
     let repeated = repeated
       .into_iter()
@@ -121,7 +126,7 @@ impl TreeInputs<'_> {
       })
       .collect::<Result<Vec<_>, PdfError>>()?;
 
-    Ok((content, repeated))
+    Ok((content, repeated, page_count))
   }
 }
 
@@ -145,6 +150,22 @@ impl PreparedTree {
     Ok(Self {
       scene: Scene::lay_out(root, viewport, true)?,
     })
+  }
+
+  /// `root` laid out on pages `page_size`, the pages stacked in one scene, and how many there are.
+  pub(crate) fn lay_out_pages(
+    root: RenderNode,
+    page_size: Size<f32>,
+  ) -> Result<(Self, usize), PdfError> {
+    let paged = PagedScene::lay_out(root, page_size, true)?;
+    let page_count = paged.page_count();
+
+    Ok((
+      Self {
+        scene: paged.into_scene(),
+      },
+      page_count,
+    ))
   }
 
   /// The size the caller's own node laid out at, which is what `measure`
@@ -173,11 +194,6 @@ impl PreparedTree {
       .is_some_and(
         |child| matches!(child.context.style.box_data.z_index, ZIndex::Integer(index) if index < 0),
       )
-  }
-
-  /// The scene's atom collector, for pagination.
-  pub(crate) fn atom_collector(&self) -> AtomCollector<'_> {
-    AtomCollector { scene: &self.scene }
   }
 
   /// Visits every node paint of the scene, in paint order.

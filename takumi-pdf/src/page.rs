@@ -128,7 +128,7 @@ pub(crate) struct PageBands<'o> {
   pub(crate) page_ranges: Option<&'o [PageRange]>,
 }
 
-/// The paginated document: its geometry, its cut content, and which pages
+/// The paginated document: its geometry, its content laid out on pages, and which pages
 /// the render keeps.
 pub(crate) struct PagePlan {
   pub(crate) frame: PageFrame,
@@ -148,7 +148,7 @@ impl PagePlan {
     let index = self.paginated.page_index(top);
     let emitted = self.selection.emitted(index)?;
     let start = self.paginated.starts[index];
-    let y = self.frame.margin.top + self.paginated.reserved_at(start) + (top - start).max(0.0);
+    let y = self.frame.margin.top + (top - start).max(0.0);
 
     Some(xyz_destination(
       emitted,
@@ -158,8 +158,8 @@ impl PagePlan {
     ))
   }
 
-  /// Lays the bands out, resolves the page frame around them, and cuts the
-  /// content into pages.
+  /// Lays the bands out, resolves the page frame around them, and lays the
+  /// content out on pages.
   pub(crate) fn solve(
     inputs: &TreeInputs<'_>,
     page: PageOptions,
@@ -193,10 +193,10 @@ impl PagePlan {
     };
     let (mut header, mut footer) = measure_bands(1)?;
     let mut frame = resolve(header.as_ref(), footer.as_ref())?;
-    // A band with a counter and the cut list depend on each other: an `auto`
+    // A band with a counter and the page count depend on each other: an `auto`
     // margin takes the band's height, the band lays out with the real page
-    // numbers, and the page count is only known once the content is cut. The
-    // band is re-measured with the count each cut produced until its height
+    // numbers, and the page count is only known once the content is laid out.
+    // The band is re-measured with the count each layout produced until its height
     // stops moving, like the content counters in `Paginated::build`.
     let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
       || footer.as_ref().is_some_and(Repeatable::dynamic);
@@ -338,13 +338,10 @@ impl PageComposer<'_, '_> {
     add_link_annotations(
       &mut pdf_page,
       &paginated.interactive.links,
-      Window {
-        y: Some((slice.start, slice.start + slice.paint_height)),
-        ..Window::default()
-      },
+      (slice.start, slice.end),
       CorePoint {
         x: frame.margin.left,
-        y: frame.margin.top + slice.reserved,
+        y: frame.margin.top,
       },
       self.state.tags.as_ref(),
       anchor,
@@ -356,10 +353,7 @@ impl PageComposer<'_, '_> {
     add_link_annotations(
       &mut pdf_page,
       resolved.iter().flat_map(RepeatablePage::links),
-      Window {
-        y: Some((0.0, frame.window_height)),
-        ..Window::default()
-      },
+      (0.0, frame.window_height),
       CorePoint {
         x: frame.margin.left,
         y: frame.margin.top,
@@ -367,94 +361,39 @@ impl PageComposer<'_, '_> {
       None,
       anchor,
     );
-    // A replayed table header or footer is an artifact like a repeated box,
-    // so its links annotate per page and stay out of the structure.
-    for (offset, index) in slice.section_replays() {
-      add_link_annotations(
-        &mut pdf_page,
-        &paginated.interactive.links,
-        paginated.sections[index].window(),
-        CorePoint {
-          x: frame.margin.left,
-          y: frame.margin.top + offset,
-        },
-        None,
-        anchor,
-      );
-    }
     pdf_page.finish();
     Ok(())
   }
 
-  /// Emits the content column through this page's window: clipped to the paint
-  /// height and translated so the slice lands at the content origin, below any
-  /// repeated table headers.
+  /// Emits the content through this page's window: clipped to the page area and translated so
+  /// the page lands at the content origin.
   fn emit_content(&self, slice: &PageSlice, surface: &mut Surface) -> Result<(), PdfError> {
     let frame = &self.plan.frame;
-    let paginated = &self.plan.paginated;
 
-    // Paint stops at the next cut: the region between a raised cut and the
-    // page's full height belongs to the next page and stays blank, exactly
-    // like browser print fragmentation.
     ContentWindow {
       clip: (
         frame.margin.left,
-        frame.margin.top + slice.reserved,
+        frame.margin.top,
         frame.content_width,
-        slice.paint_height,
+        frame.window_height,
       ),
       translate: CorePoint {
         x: frame.margin.left,
-        y: frame.margin.top + slice.reserved - slice.start,
+        y: frame.margin.top - slice.start,
       },
       window: Window {
-        y: Some((slice.start, slice.start + slice.paint_height)),
-        x: None,
-        lines: Some((
-          if slice.index == 0 {
-            f32::NEG_INFINITY
-          } else {
-            slice.start
-          },
-          slice.end,
-        )),
+        y: Some((slice.start, slice.end)),
+        lines: Some((slice.start, slice.end)),
       },
       artifact: false,
     }
     .emit(
-      paginated
+      self
+        .plan
+        .paginated
         .content
         .emitter(self.state, Some(self.inline), Some(self.chunks), true),
       surface,
-    )?;
-    // Each repeated table header replays at the top of the window and each
-    // repeated footer below the content. The first occurrence carried the
-    // tags, so a replay is an artifact. Clipping to the table keeps content
-    // beside it out of the replay.
-    for (offset, index) in slice.section_replays() {
-      let section = &paginated.sections[index];
-
-      ContentWindow {
-        clip: (
-          frame.margin.left + section.left,
-          frame.margin.top + offset,
-          section.right - section.left,
-          section.height(),
-        ),
-        translate: CorePoint {
-          x: frame.margin.left,
-          y: frame.margin.top + offset - section.top,
-        },
-        window: section.replay_window(),
-        artifact: true,
-      }
-      .emit(
-        paginated
-          .content
-          .emitter(self.state, Some(self.inline), Some(self.chunks), false),
-        surface,
-      )?;
-    }
-    Ok(())
+    )
   }
 }

@@ -49,7 +49,7 @@ pub enum PdfError {
   /// An XMP schema carries a prefix, property name or namespace URI that
   /// cannot be written into XML.
   InvalidXmpSchema(String),
-  /// The content would cut into more pages than one render may produce.
+  /// The content would lay out on more pages than one render may produce.
   TooManyPages(usize),
   /// A `filter` function a PDF cannot express, named as a stylesheet writes
   /// it. It would silently drop the effect, so the render stops instead.
