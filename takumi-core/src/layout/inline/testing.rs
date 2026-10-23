@@ -54,11 +54,12 @@ impl<'c> AtomicInlineLayout<'c> for TestAtomicInline {
     &mut self,
     node: &'c RenderNode,
     space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
   ) -> Rc<BoxLayoutResult> {
     let mut tree = LayoutTree::from_render_node(node);
 
     BoxAtomicInline::new(&mut tree, Size::all(AvailableSpace::MaxContent))
-      .layout_block_in_inline(node, space)
+      .layout_block_in_inline(node, space, input)
   }
 
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {

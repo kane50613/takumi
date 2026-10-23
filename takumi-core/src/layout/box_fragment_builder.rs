@@ -16,7 +16,7 @@ use crate::{
     constraint_space::{BlockFragmentation, ConstraintSpace},
     early_break::EarlyBreak,
     fragmentation_utils::{
-      block_size_for_fragmentation, calculate_break_appeal_inside, is_break_inside,
+      block_size_for_fragmentation, calculate_break_appeal_inside, fragment_index, is_break_inside,
       join_fragmentainer_break_values,
     },
     inline::inline_break_token::InlineBreakToken,
@@ -193,7 +193,7 @@ impl BoxFragmentBuilder {
           .previous_break_token
           .as_ref()
           .and_then(|token| match token.child_break_tokens.last() {
-            Some(BreakToken::Inline(inline_break_token)) => Some(*inline_break_token),
+            Some(BreakToken::Inline(inline_break_token)) => Some(inline_break_token.clone()),
             _ => None,
           })
           .or(Some(InlineBreakToken::default()));
@@ -247,6 +247,18 @@ impl BoxFragmentBuilder {
     block_offset: LayoutUnit,
   ) {
     self.add_child_break_token(result);
+    self.propagate_result(space, child_style, result, block_offset);
+  }
+
+  /// The break data Blink's `AddResult` propagates from a child of `child_style` laid out as
+  /// `result` at `block_offset`.
+  pub(crate) fn propagate_result(
+    &mut self,
+    space: &ConstraintSpace,
+    child_style: &LayoutStyle,
+    result: &LayoutResult,
+    block_offset: LayoutUnit,
+  ) {
     self.propagate_break_info(
       result,
       block_offset,
@@ -255,6 +267,11 @@ impl BoxFragmentBuilder {
     if space.should_propagate_child_break_values() {
       self.propagate_child_break_values(result, child_style);
     }
+  }
+
+  /// Blink's `AddBreakToken` for a line's block-in-inline that resumes in a parallel flow.
+  pub(crate) fn add_parallel_flow_break_token(&mut self, token: InlineBreakToken) {
+    self.child_break_tokens.push(BreakToken::Inline(token));
   }
 
   /// Blink's `FragmentBuilder::PropagateFromFragment` collecting a block child's break token.
@@ -526,6 +543,7 @@ impl BoxFragmentBuilder {
     if !self.has_block_fragmentation() {
       return BreakInfo {
         is_first_for_node: self.is_first_for_node,
+        fragment_index: fragment_index(self.previous_break_token.as_deref()),
         ..BreakInfo::default()
       };
     }
@@ -549,6 +567,7 @@ impl BoxFragmentBuilder {
       block_size_for_fragmentation: Some(self.block_size_for_fragmentation),
       is_block_size_for_fragmentation_clamped: self.is_block_size_for_fragmentation_clamped,
       is_first_for_node: self.is_first_for_node,
+      fragment_index: fragment_index(self.previous_break_token.as_deref()),
       avoids_break_inside: self.has_block_fragmentation() && self.break_inside.avoids_page_break(),
     }
   }

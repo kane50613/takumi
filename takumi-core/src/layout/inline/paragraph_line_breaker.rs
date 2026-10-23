@@ -75,7 +75,7 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
     &mut self,
     available_width: LayoutUnit,
     mut max_lines: usize,
-    stop_at: Option<InlineBreakToken>,
+    stop_at: Option<&InlineBreakToken>,
   ) -> Status {
     debug_assert!(self.line_widths.is_empty());
 
@@ -92,7 +92,7 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
         self.space.clone(),
         line_opportunity,
         &leading_floats,
-        self.break_token,
+        self.break_token.clone(),
         &mut *self.atomic_inline,
         &mut exclusion_space,
       );
@@ -106,10 +106,10 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
         return Status::NotApplicable;
       }
 
-      self.break_token = line_info.break_token;
       self.line_widths.push(line_info.width());
+      self.break_token = line_info.break_token;
 
-      let Some(break_token) = self.break_token else {
+      let Some(break_token) = &self.break_token else {
         return Status::Finished;
       };
 
@@ -132,7 +132,7 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
     min_available_width: LayoutUnit,
     epsilon: LayoutUnit,
     num_lines: usize,
-    stop_at: Option<InlineBreakToken>,
+    stop_at: Option<&InlineBreakToken>,
   ) -> LayoutUnit {
     debug_assert!(epsilon > LayoutUnit::ZERO);
     debug_assert!(num_lines > 0);
@@ -232,7 +232,7 @@ impl<'c> InlineNode<'c> {
     // From the average line width, less a fifth for edge cases.
     let avg_line_width = normal_lines.line_width_sum() / num_lines as i32;
     let min_available_width = LayoutUnit::from_float_round(avg_line_width.to_float() * 0.8);
-    let stop_at = normal_lines.break_token;
+    let stop_at = normal_lines.break_token.clone();
 
     drop(normal_lines);
 
@@ -242,7 +242,7 @@ impl<'c> InlineNode<'c> {
         min_available_width,
         epsilon,
         num_lines,
-        stop_at,
+        stop_at.as_ref(),
       ),
     )
   }

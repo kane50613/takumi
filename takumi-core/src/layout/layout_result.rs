@@ -301,6 +301,9 @@ pub(crate) struct BreakInfo {
   pub(crate) is_block_size_for_fragmentation_clamped: bool,
   /// Blink's `IsFirstForNode`: the box's first fragment.
   pub(crate) is_first_for_node: bool,
+  /// Blink's `FragmentIndex` of the break token the layout resumed at: which fragment of the box
+  /// this is.
+  pub(crate) fragment_index: usize,
   /// Whether the box's `break-inside` avoids a page break, which Blink reads off the fragment's
   /// style.
   pub(crate) avoids_break_inside: bool,
@@ -320,12 +323,21 @@ impl Default for BreakInfo {
       block_size_for_fragmentation: None,
       is_block_size_for_fragmentation_clamped: false,
       is_first_for_node: true,
+      fragment_index: 0,
       avoids_break_inside: false,
     }
   }
 }
 
 impl LayoutResult {
+  /// Which fragment of its box the layout is.
+  pub(crate) fn fragment_index(&self) -> usize {
+    #[cfg(feature = "fragmentation")]
+    return self.break_info.fragment_index;
+    #[cfg(not(feature = "fragmentation"))]
+    return 0;
+  }
+
   /// A successful layout of a border box `size`.
   pub(crate) fn new(size: LogicalSize) -> Self {
     Self {

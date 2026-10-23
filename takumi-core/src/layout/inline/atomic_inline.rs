@@ -14,6 +14,7 @@ use crate::{
   geometry::{AvailableSpace, NodeId, Size},
   layout::{
     constraint_space::{AutoSizeBehavior, BaselineAlgorithmType, CacheSlot, ConstraintSpace},
+    fragmentation_layout_input::FragmentationLayoutInput,
     layout_result::LayoutResult as BoxLayoutResult,
     margin_strut::MarginStrut,
     tree::{LayoutTree, RenderNode},
@@ -119,12 +120,13 @@ impl<'r> AtomicInlineLayout<'r> for BoxAtomicInline<'_, 'r> {
     &mut self,
     render_node: &'r RenderNode,
     space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
   ) -> Rc<BoxLayoutResult> {
     let node = self.tree.atomic_inline_node(render_node);
     let mut space = space.clone();
 
     space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
-    self.tree.layout(node, &space)
+    self.tree.layout_fragment(node, &space, input)
   }
 
   fn min_max_sizes(&mut self, render_node: &'r RenderNode) -> (LayoutUnit, LayoutUnit) {

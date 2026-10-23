@@ -701,7 +701,13 @@ impl<'r> LayoutTree<'r> {
         );
         let tree = &mut *atomic_inline.tree;
 
-        tree.place_child(child, 0, fragment_index, location, &child_result);
+        tree.place_child(
+          child,
+          child_result.fragment_index(),
+          fragment_index,
+          location,
+          &child_result,
+        );
         if let Some(path) = render_node.inline_child_path(child_render_node) {
           tree.add_inline_box_child(node, child, &path);
         }

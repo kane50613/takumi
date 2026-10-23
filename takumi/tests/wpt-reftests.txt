@@ -892,6 +892,7 @@ css/css-break/block-001-wm-vrl-print.html
 css/css-break/block-002-wm-vlr-print.html
 css/css-break/block-002-wm-vrl-print.html
 css/css-break/block-in-inline-008.html
+css/css-break/block-in-inline-015-print.html
 css/css-break/block-max-height-001.html
 css/css-break/block-max-height-001b.html
 css/css-break/block-max-height-002.html

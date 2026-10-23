@@ -90,13 +90,22 @@ fn pages(root: &RenderNode, page_height: f32) -> (BTreeMap<String, Vec<Placed>>,
       .collect();
 
     for child in results.box_children(node_id).expect("children") {
-      if let Some(render) = node
+      // A box inside inline boxes sits at its path through them.
+      let render = node
         .children
         .as_deref()
-        .unwrap_or_default()
-        .get(child.render_index)
-        && child.inline_path.is_none()
-      {
+        .and_then(|children| children.get(child.render_index))
+        .and_then(|render| {
+          child
+            .inline_path
+            .iter()
+            .flatten()
+            .try_fold(render, |render, &index| {
+              render.children.as_deref()?.get(index)
+            })
+        });
+
+      if let Some(render) = render {
         collect(render, child.node_id, &containers, results, boxes);
       }
     }
@@ -740,6 +749,54 @@ fn a_block_that_clears_a_broken_float_follows_it_to_the_next_page() {
   let (boxes, _) = pages(&tree, 200.0);
 
   assert_eq!(boxes["c"], [placed(1, 100.0, 20.0)]);
+}
+
+const BLOCK_IN_INLINE_CSS: &str = ".inline { display: inline } .h50 { height: 50px } \
+  .h300 { height: 300px }";
+
+fn paragraph_with_block_in_inline(block_in_inline: Node) -> Node {
+  let span =
+    Node::container([Node::text("a"), block_in_inline, Node::text("z")]).with_class_name("inline");
+
+  root([Node::container([span]).with_tag_name("p").with_id("p")])
+}
+
+#[test]
+fn a_block_in_inline_breaks_inside_its_line() {
+  let tree = render(
+    paragraph_with_block_in_inline(block("block", "h300")),
+    BLOCK_IN_INLINE_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(
+    boxes["block"],
+    [placed(0, 20.0, 180.0), placed(1, 0.0, 120.0)]
+  );
+  // The line after the block follows it to the next page.
+  assert_eq!(boxes["p"], [placed(0, 0.0, 200.0), placed(1, 0.0, 140.0)]);
+}
+
+#[test]
+fn a_block_in_inline_whose_content_overflows_resumes_in_a_parallel_flow() {
+  let block_in_inline = Node::container([block("tall", "h300")])
+    .with_class_name("block h50")
+    .with_id("block");
+  let tree = render(
+    paragraph_with_block_in_inline(block_in_inline),
+    BLOCK_IN_INLINE_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["block"], [placed(0, 20.0, 50.0), placed(1, 0.0, 0.0)]);
+  assert_eq!(
+    boxes["tall"],
+    [placed(0, 20.0, 180.0), placed(1, 0.0, 120.0)]
+  );
+  // The line after the block stays on the first page.
+  assert_eq!(boxes["p"][0], placed(0, 0.0, 90.0));
 }
 
 #[test]

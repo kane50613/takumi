@@ -1,5 +1,5 @@
 //! Blink's [`LineInfo`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/line_info.cc),
-//! without ruby, initial letters, or block fragmentation.
+//! without ruby or initial letters.
 
 use std::rc::Rc;
 
@@ -47,6 +47,9 @@ pub(crate) struct LineInfo<'a, 'c> {
   /// Blink's `BfcOffset`: the line-left and block offsets of the line opportunity.
   pub(crate) bfc_offset: BfcOffset,
   pub(crate) break_token: Option<InlineBreakToken>,
+  /// Blink's `ParallelFlowBreakTokens`: where the blocks-in-inline that overflowed resume.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) parallel_flow_break_tokens: Vec<InlineBreakToken>,
   available_width: LayoutUnit,
   width: LayoutUnit,
   hang_width: LayoutUnit,
@@ -80,6 +83,8 @@ impl<'a, 'c> LineInfo<'a, 'c> {
       results: InlineItemResults::new(),
       bfc_offset: BfcOffset::default(),
       break_token: None,
+      #[cfg(feature = "fragmentation")]
+      parallel_flow_break_tokens: Vec::new(),
       available_width: LayoutUnit::ZERO,
       width: LayoutUnit::ZERO,
       hang_width: LayoutUnit::ZERO,
