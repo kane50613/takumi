@@ -34,7 +34,7 @@ use crate::{
         TABLE_MAX_INLINE_SIZE, TableLength, span_inline_size,
       },
       constraint_space_data::{TableConstraintSpaceData, TablePart},
-      fragment::TableFragment,
+      fragment::{HiddenParts, TableFragment},
       fragmentation::{ResumedTableBox, TableBoxExtent, TableChild},
       parts::TableGroupedChildren,
       rows::{
@@ -1487,6 +1487,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         ..TableFragment::default()
       };
 
+      self.record_hidden(&data);
       self.record_parts(&data, &placed_sections, &mut fragment);
       for &column in &structure.columns {
         self.tree.hide(column);
@@ -1624,14 +1625,26 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     *offset += caption.result.size.block_size + caption.margins.bottom;
   }
 
-  /// Records which rows and cells layout hid, the column each cell starts at, and the rows each
-  /// placed section's collapsed borders run along.
-  fn record_parts(
-    &self,
-    data: &TableConstraintSpaceData,
-    placed_sections: &[PlacedSection],
-    fragment: &mut TableFragment,
-  ) {
+  /// Records which rows and cells layout hid, unless a layout with the same collapsed columns
+  /// already did.
+  fn record_hidden(&mut self, data: &TableConstraintSpaceData) {
+    let collapsed_columns: Vec<bool> = data
+      .column_locations
+      .iter()
+      .map(|location| location.is_collapsed)
+      .collect();
+
+    if self
+      .tree
+      .table_hidden
+      .get(&self.node)
+      .is_some_and(|hidden| hidden.collapsed_columns == collapsed_columns)
+    {
+      return;
+    }
+
+    let mut nodes = Vec::new();
+
     for (section_index, section) in data.structure.sections.iter().enumerate() {
       let start_row = data.rows.sections[section_index].start_row;
 
@@ -1647,14 +1660,31 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
               && render_node.context.style.inherited_data.empty_cells == EmptyCells::Hide
               && !render_node.has_table_cell_content())
           {
-            fragment.hidden.push(cell.node);
+            nodes.push(cell.node);
           }
         }
         if is_collapsed {
-          fragment.hidden.push(row.node);
+          nodes.push(row.node);
         }
       }
     }
+    self.tree.table_hidden.insert(
+      self.node,
+      HiddenParts {
+        collapsed_columns,
+        nodes,
+      },
+    );
+  }
+
+  /// Records the column each cell starts at and the rows each placed section's collapsed borders
+  /// run along.
+  fn record_parts(
+    &self,
+    data: &TableConstraintSpaceData,
+    placed_sections: &[PlacedSection],
+    fragment: &mut TableFragment,
+  ) {
     fragment.cell_columns = Rc::clone(&data.structure.cell_columns);
 
     for (placed_index, section) in placed_sections.iter().enumerate() {
