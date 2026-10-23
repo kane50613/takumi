@@ -1,8 +1,10 @@
 //! Blink's [`ExclusionSpace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/exclusions/exclusion_space.cc),
-//! without `shape-outside`, initial letters, block fragmentation, or the sharing of exclusions
-//! between copies.
+//! without `shape-outside` or initial letters.
 
-use std::cell::RefCell;
+use std::{
+  cell::{Ref, RefCell},
+  rc::Rc,
+};
 
 use super::{exclusion_area::ExclusionArea, layout_opportunity::LayoutOpportunity};
 use crate::{
@@ -447,12 +449,55 @@ impl DerivedGeometry {
   }
 }
 
+/// The exclusions one copy of an exclusion space sees: the first `len` of an array its copies
+/// share, which a copy holding the array's end adds to in place, as Blink's
+/// `ExclusionSpaceInternal` shares `exclusions_`. No array while there are none.
+#[derive(Debug, Clone, Default)]
+struct Exclusions {
+  /// In ascending block start order.
+  shared: Option<Rc<RefCell<Vec<ExclusionArea>>>>,
+  len: usize,
+}
+
+impl Exclusions {
+  fn is_empty(&self) -> bool {
+    self.len == 0
+  }
+
+  fn get(&self) -> Option<Ref<'_, [ExclusionArea]>> {
+    let shared = self.shared.as_ref()?;
+
+    Some(Ref::map(shared.borrow(), |areas| &areas[..self.len]))
+  }
+
+  /// Blink's `ExclusionSpaceInternal::Add` of `exclusion` to the array: in place at its end, as the
+  /// one an earlier layout pass added there, or else onto a copy of what this one sees.
+  fn push(&mut self, exclusion: ExclusionArea) {
+    let Some(shared) = &self.shared else {
+      self.shared = Some(Rc::new(RefCell::new(vec![exclusion])));
+      self.len = 1;
+      return;
+    };
+    let mut areas = shared.borrow_mut();
+
+    if areas.len() == self.len {
+      areas.push(exclusion);
+    } else if areas[self.len] != exclusion {
+      let mut copy = areas[..self.len].to_vec();
+
+      copy.push(exclusion);
+      drop(areas);
+      self.shared = Some(Rc::new(RefCell::new(copy)));
+    }
+    self.len += 1;
+  }
+}
+
 /// Blink's `ExclusionSpace`: the floats of a block formatting context, queried for the space
 /// they leave.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub(crate) struct ExclusionSpace {
-  /// In ascending block start order.
-  exclusions: Vec<ExclusionArea>,
+  exclusions: Exclusions,
   /// The lowest block end of the left and right floats, for clearance.
   left_clear_offset: Option<LayoutUnit>,
   right_clear_offset: Option<LayoutUnit>,
@@ -475,13 +520,37 @@ struct FloatBreaks {
   inside_right: bool,
 }
 
+/// Blink's copy constructor, which moves the derived geometry to the copy, where it is more likely
+/// to be used next.
+impl Clone for ExclusionSpace {
+  fn clone(&self) -> Self {
+    Self {
+      exclusions: self.exclusions.clone(),
+      left_clear_offset: self.left_clear_offset,
+      right_clear_offset: self.right_clear_offset,
+      last_float_block_start: self.last_float_block_start,
+      #[cfg(feature = "fragmentation")]
+      float_breaks: self.float_breaks,
+      derived_geometry: RefCell::new(self.derived_geometry.take()),
+    }
+  }
+}
+
+/// Blink's `operator==`: copies of the same exclusions, compared by the array they share.
 impl PartialEq for ExclusionSpace {
   fn eq(&self, other: &Self) -> bool {
+    if self.exclusions.is_empty() && other.exclusions.is_empty() {
+      return true;
+    }
     #[cfg(feature = "fragmentation")]
     if self.float_breaks != other.float_breaks {
       return false;
     }
-    self.exclusions == other.exclusions
+    self.exclusions.len == other.exclusions.len
+      && match (&self.exclusions.shared, &other.exclusions.shared) {
+        (Some(shared), Some(other_shared)) => Rc::ptr_eq(shared, other_shared),
+        _ => false,
+      }
   }
 }
 
@@ -658,11 +727,10 @@ impl ExclusionSpace {
     }
 
     let geometry = derived_geometry.get_or_insert_with(|| {
-      debug_assert!(!self.exclusions.is_empty());
-
+      let shared = self.exclusions.get();
+      let exclusions = shared.as_deref().unwrap_or_default();
       // The first exclusion starting at or after the limit.
-      let mut index = self
-        .exclusions
+      let mut index = exclusions
         .partition_point(|exclusion| exclusion.rect.block_start_offset() < block_offset_limit);
       let limit = if index == 0 {
         LayoutUnit::MIN
@@ -671,18 +739,18 @@ impl ExclusionSpace {
         loop {
           index -= 1;
 
-          if index == 0 || self.exclusions[index].is_past_other_exclusions {
+          if index == 0 || exclusions[index].is_past_other_exclusions {
             break;
           }
         }
 
-        debug_assert!(self.exclusions[index].rect.block_start_offset() <= block_offset_limit);
+        debug_assert!(exclusions[index].rect.block_start_offset() <= block_offset_limit);
 
-        self.exclusions[index].rect.block_start_offset()
+        exclusions[index].rect.block_start_offset()
       };
       let mut geometry = DerivedGeometry::new(limit);
 
-      for exclusion in &self.exclusions[index..] {
+      for exclusion in &exclusions[index..] {
         geometry.add(exclusion);
       }
 
