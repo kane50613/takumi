@@ -214,7 +214,7 @@ impl<'r> LayoutTree<'r> {
         TableLayoutAlgorithm::layout,
       ),
       Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, false, input).layout(),
-      Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, false).layout(),
+      Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, false, input).layout(),
       Algorithm::Replaced => self.lay_out_replaced(node, space),
       Algorithm::Block => BlockLayoutAlgorithm::new(self, node, space, input).layout(),
     }
@@ -333,7 +333,14 @@ impl<'r> LayoutTree<'r> {
         &FragmentationLayoutInput::default(),
       )
       .compute_min_max_sizes(),
-      Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, true).compute_min_max_sizes(),
+      Algorithm::Grid => GridLayoutAlgorithm::new(
+        self,
+        node,
+        space,
+        true,
+        &FragmentationLayoutInput::default(),
+      )
+      .compute_min_max_sizes(),
       Algorithm::Table => {
         TableLayoutAlgorithm::new(self, node, space, &FragmentationLayoutInput::default())
           .map_or_else(

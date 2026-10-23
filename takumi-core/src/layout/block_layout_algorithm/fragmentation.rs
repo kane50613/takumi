@@ -2,7 +2,7 @@
 //! [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc)
 //! and the parts of
 //! [`fragmentation_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/fragmentation_utils.cc)
-//! that read the fragment builder, for pages alone. Approximate: grid boxes do not break.
+//! that read the fragment builder, for pages alone.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 

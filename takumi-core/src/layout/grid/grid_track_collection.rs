@@ -503,6 +503,14 @@ impl GridTrackCollection {
     self.sets_geometry[set_index].offset
   }
 
+  /// Blink's `AdjustSetOffsets`: the sets from `set_index` on move by `delta`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn adjust_set_offsets(&mut self, set_index: usize, delta: LayoutUnit) {
+    for geometry in self.sets_geometry.iter_mut().skip(set_index) {
+      geometry.offset += delta;
+    }
+  }
+
   pub(crate) fn set_track_count(&self, set_index: usize) -> usize {
     self.sets_geometry[set_index + 1].track_count
   }

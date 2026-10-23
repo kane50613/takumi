@@ -572,6 +572,39 @@ pub(crate) fn move_past_breakpoint(
   move_past
 }
 
+/// Blink's `MovePastBreakpoint` with no builder to update, for `child` laid out as `result` at
+/// `fragmentainer_block_offset` on a page `fragmentainer_block_size` tall with `min_break_appeal`.
+pub(crate) fn move_past_breakpoint_without_builder(
+  (fragmentainer_block_size, min_break_appeal): (LayoutUnit, BreakAppeal),
+  (child, child_style): (NodeId, &LayoutStyle),
+  result: &LayoutResult,
+  fragmentainer_block_offset: LayoutUnit,
+  appeal_before: BreakAppeal,
+) -> bool {
+  let mut space = ConstraintSpace::new(None, child_style.direction);
+
+  space.block_fragmentation = Some(BlockFragmentation {
+    fragmentainer_block_size,
+    fragmentainer_offset: LayoutUnit::ZERO,
+    requires_content_before_breaking: false,
+    should_propagate_child_break_values: false,
+    min_break_appeal,
+    min_block_size_should_encompass_intrinsic_size: false,
+  });
+
+  let mut builder = BoxFragmentBuilder::new(&space, child_style, LogicalBoxStrut::default(), None);
+
+  move_past_breakpoint(
+    &space,
+    &mut builder,
+    Some((child, child_style)),
+    result,
+    fragmentainer_block_offset,
+    appeal_before,
+    &mut FlexItemBreak::default(),
+  )
+}
+
 /// Blink's `UpdateEarlyBreakAtBlockChild`: the breakpoint before or inside `child` the layout may
 /// come back to.
 fn update_early_break_at_block_child(

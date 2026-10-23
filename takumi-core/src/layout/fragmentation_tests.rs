@@ -999,3 +999,53 @@ fn a_flex_row_that_avoids_breaking_inside_moves_to_the_next_page() {
     [placed(0, 0.0, 200.0), placed(1, 0.0, 120.0)]
   );
 }
+
+const GRID_CSS: &str = ".grid { display: grid } .h150 { height: 150px } \
+  .avoid { break-inside: avoid } .before { break-before: page }";
+
+fn grid(items: impl IntoIterator<Item = Node>) -> Node {
+  Node::container(items.into_iter().collect::<Vec<_>>())
+    .with_class_name("grid")
+    .with_id("grid")
+}
+
+#[test]
+fn a_grid_item_breaks_across_pages() {
+  let tree = render(
+    root([grid([block("a", "h150"), block("b", "h150")])]),
+    GRID_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["a"], [placed(0, 0.0, 150.0)]);
+  assert_eq!(boxes["b"], [placed(0, 150.0, 50.0), placed(1, 0.0, 100.0)]);
+  assert_eq!(
+    boxes["grid"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+}
+
+#[test]
+fn a_grid_row_that_avoids_breaking_inside_moves_to_the_next_page() {
+  let tree = render(
+    root([grid([block("a", "h150"), block("b", "h150 avoid")])]),
+    GRID_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["b"], [placed(1, 0.0, 150.0)]);
+}
+
+#[test]
+fn a_grid_row_after_a_forced_break_starts_the_next_page() {
+  let tree = render(
+    root([grid([block("a", "h150"), block("b", "h150 before")])]),
+    GRID_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["b"], [placed(1, 0.0, 150.0)]);
+}
