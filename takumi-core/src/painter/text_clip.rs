@@ -133,7 +133,7 @@ impl<'r> TextMask<'r> {
     for child in self.results.box_children(node_id)? {
       let Some(base) = self
         .containing_blocks
-        .recorded_placement_for(child.hoisted_cb, origin)
+        .recorded_placement_for(self.results.hoisted_cb(node_id, child), origin)
       else {
         continue;
       };

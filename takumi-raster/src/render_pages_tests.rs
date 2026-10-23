@@ -582,3 +582,21 @@ fn a_box_with_a_transform_holds_pages_only_until_it_is_laid_out() {
   assert!(laid < pages, "{laid} of {pages} pages were laid out");
   assert_streams_like_whole("rotated box on the first page", &source, PAGE_SIZE);
 }
+
+/// A `background-clip: text` box that holds an absolute box whose containing block is an ancestor,
+/// followed by `pages_of_blocks`.
+fn text_clip_holding_a_hoisted_box() -> String {
+  format!(
+    "<div style=\"position: relative; font-size: 30px\"><div style=\"background-image: linear-gradient(90deg, #e00, #e00); background-clip: text; color: transparent\"><div>Clip</div><div style=\"position: absolute; top: 10px; left: 50px; color: #06c\">Held</div></div>{}</div>",
+    pages_of_blocks(7)
+  )
+}
+
+#[test]
+fn a_text_clip_places_the_boxes_hoisted_out_of_it_while_later_pages_lay_out() {
+  let source = text_clip_holding_a_hoisted_box();
+  let (laid, pages) = laid_when_first_page_goes(&source);
+
+  assert!(laid < pages, "{laid} of {pages} pages were laid out");
+  assert_streams_like_whole("text clip with a hoisted box", &source, PAGE_SIZE);
+}

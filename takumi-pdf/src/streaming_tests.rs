@@ -310,4 +310,3 @@ fn an_invalid_page_range_fails_before_any_page_is_laid_out() {
     assert_eq!(asked.get(), 0);
   }
 }
-
