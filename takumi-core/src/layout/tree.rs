@@ -427,21 +427,14 @@ pub(crate) struct LayoutNodeState {
   /// Its children in layout order, or for an inline formatting context the out-of-flow boxes in
   /// its inline content.
   pub(crate) children: Box<[NodeId]>,
-  box_children: Box<[OrderedChild]>,
+  /// Its children in paint order, the boxes of its inline content among them.
+  pub(crate) box_children: Box<[OrderedChild]>,
   /// The out-of-flow boxes this node positioned as their containing block, from its last layout.
   pub(crate) hoisted_children: Vec<NodeId>,
   /// The grid this node last laid out, which places its out-of-flow children in their areas.
   pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
   /// The out-of-flow boxes this node is the containing block for.
   pub(crate) claims: ContainingBlockClaims,
-}
-
-impl LayoutNodeState {
-  /// Its children in paint order, the boxes of its inline content among them.
-  #[cfg(feature = "fragmentation")]
-  pub(crate) fn box_children(&self) -> &[OrderedChild] {
-    &self.box_children
-  }
 }
 
 /// A box's fragments, one unless it fragmented.

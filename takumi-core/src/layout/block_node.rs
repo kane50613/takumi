@@ -604,7 +604,7 @@ impl<'r> LayoutTree<'r> {
   pub(crate) fn repeat_fragments(&mut self, node: NodeId, source: usize, target: usize) {
     let state = self.node_state(node);
     let children: Vec<NodeId> = state
-      .box_children()
+      .box_children
       .iter()
       .map(|child| child.node_id)
       .filter(|&child| !self.layout_style(child).is_out_of_flow())

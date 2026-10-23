@@ -146,7 +146,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   /// Blink's `HasInflowChildBreakInside`: something in this flow broke, so no sibling follows.
   pub(super) fn has_inflow_child_break_inside(&self) -> bool {
-    self.space.has_block_fragmentation() && self.builder.has_inflow_child_break_inside()
+    self.space.has_block_fragmentation() && self.builder.has_inflow_child_break_inside
   }
 
   /// Blink's `SetHasSeenAllChildren`.
@@ -638,7 +638,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       && self.input.early_break.is_none()
       && self.space.has_block_fragmentation()
     {
-      if self.builder.has_inflow_child_break_inside() || self.first_overflowing_line != 0 {
+      if self.builder.has_inflow_child_break_inside || self.first_overflowing_line != 0 {
         let line_count = self.builder.line_count;
 
         if self.first_overflowing_line != 0 && self.first_overflowing_line < line_count {

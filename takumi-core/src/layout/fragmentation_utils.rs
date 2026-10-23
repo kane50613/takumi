@@ -768,7 +768,7 @@ pub(crate) fn finish_fragmentation(builder: &mut BoxFragmentBuilder) -> Result<(
     return Ok(());
   }
 
-  let was_broken_by_child = builder.has_inflow_child_break_inside() || builder.has_float_break;
+  let was_broken_by_child = builder.has_inflow_child_break_inside || builder.has_float_break;
 
   if final_block_size == LayoutUnit::ZERO
     && let Some(token) = previous_break_token

@@ -560,7 +560,7 @@ impl TableLayoutAlgorithm<'_, '_> {
   }
 
   pub(super) fn has_inflow_child_break_inside(&self) -> bool {
-    self.space.has_block_fragmentation() && self.builder.has_inflow_child_break_inside()
+    self.space.has_block_fragmentation() && self.builder.has_inflow_child_break_inside
   }
 
   pub(super) fn set_has_seen_all_children(&mut self) {

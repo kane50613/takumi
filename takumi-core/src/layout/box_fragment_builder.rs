@@ -43,7 +43,8 @@ pub(crate) struct BoxFragmentBuilder {
   child_break_tokens: Vec<BreakToken>,
   /// The break token of the last line added, where the lines resume.
   last_inline_break_token: Option<InlineBreakToken>,
-  has_inflow_child_break_inside: bool,
+  /// Blink's `HasInflowChildBreakInside`.
+  pub(crate) has_inflow_child_break_inside: bool,
   pub(crate) did_break_self: bool,
   pub(crate) has_forced_break: bool,
   pub(crate) break_appeal: BreakAppeal,
@@ -159,11 +160,6 @@ impl BoxFragmentBuilder {
   /// Blink's `JoinedBreakBetweenValue`.
   pub(crate) fn joined_break_between_value(&self, break_before: BreakBetween) -> BreakBetween {
     join_fragmentainer_break_values(self.previous_break_after, break_before)
-  }
-
-  /// Blink's `HasInflowChildBreakInside`.
-  pub(crate) fn has_inflow_child_break_inside(&self) -> bool {
-    self.has_inflow_child_break_inside
   }
 
   /// Blink's `AddBreakBeforeChild`, for an inflow block child or, as `None`, the inline content.
@@ -566,7 +562,7 @@ impl BoxFragmentBuilder {
     if is_new_formatting_context {
       return false;
     }
-    !self.has_inflow_child_break_inside()
+    !self.has_inflow_child_break_inside
   }
 
   /// Blink's `SidesToInclude`: a fragment's border and padding on the side a break cut, which
