@@ -1570,7 +1570,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
 
       self.join_row_break_between(item, &result);
       // A grid that breaks lays its items out on each page from where they sit here.
-      if self.keeps_placement(containing_grid_area.offset, relative_offset) {
+      if self.keeps_placement(item, containing_grid_area.offset, relative_offset) {
         continue;
       }
 
@@ -1893,6 +1893,7 @@ impl GridLayoutAlgorithm<'_, '_> {
 
   fn keeps_placement(
     &mut self,
+    _item: &GridItemData,
     _offset: LogicalOffset,
     _relative_offset: Point<LayoutUnit>,
   ) -> bool {

@@ -136,6 +136,7 @@ pub(crate) struct FlexItemData {
   pub(crate) total_remaining_block_size: LayoutUnit,
   pub(crate) is_initial_block_size_indefinite: bool,
   pub(crate) is_used_flex_basis_indefinite: bool,
+  pub(crate) has_descendant_that_depends_on_percentage_block_size: bool,
 }
 
 /// Blink's `FlexLine`.

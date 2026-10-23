@@ -1,9 +1,7 @@
 //! Blink's block fragmentation in
 //! [`FlexLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/flex/flex_layout_algorithm.cc)
 //! and its [`FlexBreakTokenData`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/flex/flex_break_token_data.h),
-//! for pages alone, without gap decorations. Approximate: an item's descendants that resolve a
-//! percentage block size against it are not tracked, so a row grows to fit its items on a page as
-//! if none did.
+//! for pages alone, without gap decorations.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -215,6 +213,7 @@ impl FlexLayoutAlgorithm<'_, '_> {
   /// Keeps what the item at `offset` laid out as `result` needs to lay out on each page, as Blink's
   /// `GiveItemsFinalPositionAndSize` does when it fragments.
   pub(super) fn keep_item_for_fragmentation(
+    &self,
     flex_line: &mut FlexLine,
     item: &FlexItem,
     item_index: usize,
@@ -232,6 +231,10 @@ impl FlexLayoutAlgorithm<'_, '_> {
       total_remaining_block_size: result.size.block_size,
       is_initial_block_size_indefinite: item.is_initial_block_size_indefinite,
       is_used_flex_basis_indefinite: item.is_used_flex_basis_indefinite,
+      has_descendant_that_depends_on_percentage_block_size: self
+        .tree
+        .render_node(item.node)
+        .has_descendant_that_depends_on_percentage_block_size(),
     });
   }
 
@@ -573,7 +576,9 @@ impl FlexLayoutAlgorithm<'_, '_> {
   /// Blink's `MinBlockSizeShouldEncompassIntrinsicSize`: whether the item grows past its block
   /// size when a break pushes its content down.
   fn min_block_size_should_encompass_intrinsic_size(&self, item: &FlexItemData) -> bool {
-    if self.tree.is_monolithic(item.node) {
+    if item.has_descendant_that_depends_on_percentage_block_size
+      || self.tree.is_monolithic(item.node)
+    {
       return false;
     }
 
@@ -1019,7 +1024,9 @@ impl FlexLayoutAlgorithm<'_, '_> {
 
           line.item_offset_adjustment += expansion;
         }
-      } else if self.fragmentation.cross_size_adjustments.is_none() {
+      } else if self.fragmentation.cross_size_adjustments.is_none()
+        && !item.has_descendant_that_depends_on_percentage_block_size
+      {
         let line_block_end = flex_lines[line_index].line_cross_end() - offset_in_stitched_container
           + self.builder.cloned_block_start_decoration();
 

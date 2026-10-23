@@ -7,14 +7,17 @@ use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::{
-  block_break_token::BlockBreakToken,
-  break_appeal::BreakAppeal,
-  constraint_space::BlockFragmentation,
-  fragmentation_layout_input::FragmentationLayoutInput,
-  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
-  layout_result::LayoutResult,
-  out_of_flow::FragmentainerDescendant,
+use crate::{
+  layout::{
+    block_break_token::BlockBreakToken,
+    break_appeal::BreakAppeal,
+    constraint_space::BlockFragmentation,
+    fragmentation_layout_input::FragmentationLayoutInput,
+    fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
+    layout_result::LayoutResult,
+    out_of_flow::FragmentainerDescendant,
+  },
+  style::Position,
 };
 
 use crate::{
@@ -1360,6 +1363,37 @@ fn sort_children_by_order(children: &mut [NodeId], mut child_order: impl FnMut(N
     return;
   }
   sort_by_key(children, |&child_id| child_order(child_id));
+}
+
+#[cfg(feature = "fragmentation")]
+impl RenderNode {
+  /// Blink's `HasDescendantThatDependsOnPercentageBlockSize` of the box's layout: an in-flow box
+  /// inside it whose block size resolves a percentage, through anonymous and inline boxes, or a
+  /// relatively positioned one whose block insets do.
+  pub(crate) fn has_descendant_that_depends_on_percentage_block_size(&self) -> bool {
+    self.children.iter().flatten().any(|child| {
+      let style = child.layout_box_style(&child.context.sizing);
+
+      !style.is_out_of_flow()
+        && (child.depends_on_percentage_block_size(&style)
+          || (style.position == Position::Relative
+            && (style.inset.top.has_percent() || style.inset.bottom.has_percent())))
+    })
+  }
+
+  /// Blink's `DependsOnPercentageBlockSize` of the box's fragment laid out with `style`: its block
+  /// size resolves a percentage, or the content of an inline or anonymous box does.
+  fn depends_on_percentage_block_size(&self, style: &LayoutStyle) -> bool {
+    if self.is_inline_span() {
+      return self.has_descendant_that_depends_on_percentage_block_size();
+    }
+
+    style.size.height.may_have_percent_dependence()
+      || style.min_size.height.may_have_percent_dependence()
+      || style.max_size.height.may_have_percent_dependence()
+      || (self.origin == NodeOrigin::Anonymous
+        && self.has_descendant_that_depends_on_percentage_block_size())
+  }
 }
 
 impl RenderNode {
