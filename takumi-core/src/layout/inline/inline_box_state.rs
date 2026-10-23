@@ -1,7 +1,7 @@
 //! Blink's [`InlineBoxState`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_box_state.cc),
 //! without ruby, SVG text, `text-box-trim`, `text-emphasis`, or quirks mode.
 
-use std::{mem, ptr, rc::Rc};
+use std::{mem, rc::Rc};
 
 use super::{
   inline_item::{InlineItem, InlineItemType},
@@ -450,7 +450,7 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     let text_fit = line_style.style.misc_inherited1_data.text_fit;
 
     if is_first_line
-      || !ptr::eq(line_box_state.style, line_style)
+      || line_box_state.style.box_id() != line_style.box_id()
       || line_height_mode == LineHeightMode::LineClampDisplacedEllipsis
       || (text_fit.mode != TextFitMode::None && text_fit.target != TextFitTarget::Consistent)
     {

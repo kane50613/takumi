@@ -4,7 +4,7 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::{mem::take, ptr, rc::Rc};
+use std::{mem::take, rc::Rc};
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::{block_break_token::BlockBreakToken, fragmentation_utils::fragment_index};
@@ -793,7 +793,7 @@ impl<'r> LayoutTree<'r> {
       };
       let padding_box = containers
         .iter()
-        .position(|known| ptr::eq(*known, container))
+        .position(|known| known.context.box_id() == container.context.box_id())
         .map(|index| geometry.containing_block(index, layout));
       let Some(padding_box) = padding_box else {
         candidates.push(candidate);

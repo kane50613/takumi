@@ -5,7 +5,6 @@ use std::{
   cell::{Cell, OnceCell, RefCell},
   fmt::{self, Debug, Formatter},
   ops::Range,
-  ptr,
   rc::Rc,
 };
 
@@ -17,6 +16,7 @@ use super::{
   inline_item_segment::InlineItemSegments,
 };
 use crate::{
+  context::BoxId,
   context::RenderContext,
   font_style::SizedFontStyle,
   fonts::{font::Font, font_description::FontDescription},
@@ -55,7 +55,7 @@ pub(crate) struct InlineNodeData<'c> {
   /// available space.
   pub(crate) min_max_sizes: Cell<Option<MinMaxSizes>>,
   /// The first item each inline box's style belongs to, which names it in a break token.
-  pub(crate) break_token_styles: OnceCell<FxHashMap<*const RenderContext, usize>>,
+  pub(crate) break_token_styles: OnceCell<FxHashMap<BoxId, usize>>,
 }
 
 impl<'c> InlineNodeData<'c> {
@@ -129,7 +129,7 @@ impl<'c> InlineNodeData<'c> {
     context: &RenderContext,
     block: &RenderContext,
   ) -> BreakTokenStyle {
-    if ptr::eq(context, block) {
+    if context.box_id() == block.box_id() {
       return BreakTokenStyle::Block;
     }
 
@@ -139,7 +139,7 @@ impl<'c> InlineNodeData<'c> {
       for (index, item) in self.items.iter().enumerate() {
         if let Some(layout_object) = item.layout_object {
           styles
-            .entry(ptr::from_ref(layout_object.context()))
+            .entry(layout_object.context().box_id())
             .or_insert(index);
         }
       }
@@ -147,7 +147,7 @@ impl<'c> InlineNodeData<'c> {
     });
 
     styles
-      .get(&ptr::from_ref(context))
+      .get(&context.box_id())
       .map_or(BreakTokenStyle::Block, |&index| {
         BreakTokenStyle::Item(index)
       })
@@ -210,13 +210,13 @@ impl<'c> InlineNodeData<'c> {
 /// The font of each style the context shapes with: Blink's `ComputedStyle::GetFont`.
 #[derive(Default)]
 pub(crate) struct StyleFonts {
-  fonts: RefCell<FxHashMap<*const RenderContext, Rc<Font>>>,
+  fonts: RefCell<FxHashMap<BoxId, Rc<Font>>>,
 }
 
 impl StyleFonts {
   pub(crate) fn get(&self, context: &RenderContext) -> Rc<Font> {
     let mut fonts = self.fonts.borrow_mut();
-    let font = fonts.entry(ptr::from_ref(context)).or_insert_with(|| {
+    let font = fonts.entry(context.box_id()).or_insert_with(|| {
       let description = FontDescription::new(&SizedFontStyle::from_style(&context.style, context));
 
       Rc::new(context.font(description))

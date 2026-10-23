@@ -1069,6 +1069,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         );
 
         leading_floats.floats.push(LeadingFloat {
+          item_index: index,
           #[cfg(feature = "fragmentation")]
           parallel_flow_break_token: positioned_float
             .parallel_flow_break_token(InlineItemTextIndex::new(index, item.start_offset())),

@@ -1,5 +1,5 @@
 use std::{
-  borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, ptr, rc::Rc, slice, sync::Arc,
+  borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, rc::Rc, slice, sync::Arc,
   vec::IntoIter,
 };
 
@@ -19,7 +19,7 @@ use crate::layout::{
 
 use crate::{
   Error,
-  context::RenderContext,
+  context::{BoxId, RenderContext},
   font_style::SizedFontStyle,
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
@@ -328,9 +328,8 @@ pub struct LayoutTree<'r> {
   /// Each table's paint data from its last full layout, one per fragment.
   table_fragments: FxHashMap<usize, Vec<TableFragment>>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
-  /// context lays out as, made the first time its line lays it out. Keyed by address, which names
-  /// one box while `'r` borrows the tree, as Blink names a box by its `LayoutObject`.
-  atomic_inlines: FxHashMap<*const RenderNode, NodeId>,
+  /// context lays out as, made the first time its line lays it out.
+  atomic_inlines: FxHashMap<BoxId, NodeId>,
   /// Each inline formatting context's lines from its block layout, until it finishes.
   pub(crate) inline_contents: FxHashMap<NodeId, InlineContent<'r>>,
   /// The first layout of each repeated table header and footer, which every repetition reuses,
@@ -723,7 +722,7 @@ impl<'r> LayoutTree<'r> {
   /// The node the box `render_node` of an inline formatting context lays out as, its subtree
   /// appended to the tree the first time.
   pub(crate) fn atomic_inline_node(&mut self, render_node: &'r RenderNode) -> NodeId {
-    if let Some(&node) = self.atomic_inlines.get(&ptr::from_ref(render_node)) {
+    if let Some(&node) = self.atomic_inlines.get(&render_node.context.box_id()) {
       return node;
     }
 
@@ -733,7 +732,9 @@ impl<'r> LayoutTree<'r> {
     self.push_subtree(render_node);
     self.nodes[start].is_atomic_inline = true;
     self.prepare_tables(start);
-    self.atomic_inlines.insert(ptr::from_ref(render_node), node);
+    self
+      .atomic_inlines
+      .insert(render_node.context.box_id(), node);
     node
   }
 
@@ -1262,7 +1263,9 @@ impl<'r> LayoutTree<'r> {
 
     for &child in boxes {
       if let Some(container) = self.inline_container(child)
-        && !containers.iter().any(|known| ptr::eq(*known, container))
+        && !containers
+          .iter()
+          .any(|known| known.context.box_id() == container.context.box_id())
       {
         containers.push(container);
       }
@@ -2131,6 +2134,11 @@ impl RenderNode {
       left: style.box_data.padding_left,
     }
     .map(|length| length.to_px(&self.context.sizing, containing_block_width))
+  }
+
+  /// The child-index path to `node` in this tree, `self` included.
+  pub fn path_to(&self, node: &RenderNode) -> Option<Vec<usize>> {
+    self.path_where(|candidate| candidate.context.box_id() == node.context.box_id())
   }
 
   /// The child-index path to the first node in preorder, `self` included, that `matches` accepts.

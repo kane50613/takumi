@@ -7,6 +7,8 @@ use crate::layout::floats_utils::PositionedFloat;
 /// Blink's `LeadingFloat`: a float ahead of a line's content, and where it resumes on a later page.
 #[derive(Debug, Clone)]
 pub(crate) struct LeadingFloat {
+  /// The index of its item.
+  pub(crate) item_index: usize,
   pub(crate) positioned_float: PositionedFloat,
   /// Blink's `parallel_flow_break_token`: where the float the page broke resumes.
   #[cfg(feature = "fragmentation")]

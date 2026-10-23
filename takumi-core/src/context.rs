@@ -1,4 +1,12 @@
-use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{
+  cell::Cell,
+  collections::HashMap,
+  rc::Rc,
+  sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+  },
+};
 
 use typed_builder::TypedBuilder;
 
@@ -93,7 +101,31 @@ impl From<RenderContextInit> for RenderContext {
       style: init.style,
       text_decorations: AppliedTextDecorations::default(),
       collapsed_borders: init.collapsed_borders,
+      identity: BoxIdentity::new(),
     }
+  }
+}
+
+/// Which box a context belongs to, compared where Blink compares `LayoutObject` or
+/// `ComputedStyle` pointers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct BoxId(u64);
+
+/// The [`BoxId`] a context holds. A clone is another box's context, so it takes a new id, as a
+/// copy at another address would compare unequal by pointer.
+struct BoxIdentity(BoxId);
+
+impl BoxIdentity {
+  fn new() -> Self {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    Self(BoxId(NEXT.fetch_add(1, Ordering::Relaxed)))
+  }
+}
+
+impl Clone for BoxIdentity {
+  fn clone(&self) -> Self {
+    Self::new()
   }
 }
 
@@ -120,6 +152,7 @@ pub struct RenderContext {
   pub(crate) text_decorations: AppliedTextDecorations,
   /// Whether this box is a cell of a table that collapses its borders.
   pub(crate) collapsed_borders: bool,
+  identity: BoxIdentity,
 }
 
 /// A [`RenderContextBuilder`] with nothing set yet.
@@ -130,6 +163,11 @@ impl RenderContext {
   /// Starts a root context; `fonts` and `sizing` are required.
   pub fn builder() -> UnsetRenderContextBuilder {
     RenderContextInit::builder()
+  }
+
+  /// The box this context belongs to.
+  pub(crate) fn box_id(&self) -> BoxId {
+    self.identity.0
   }
 
   /// Blink's paint offset of the space the box's layout location is measured in.
@@ -228,6 +266,7 @@ impl RenderContext {
       style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
+      identity: BoxIdentity::new(),
     }
   }
 
@@ -254,6 +293,7 @@ impl RenderContext {
       current_color,
       style,
       collapsed_borders: false,
+      identity: BoxIdentity::new(),
     }
   }
 

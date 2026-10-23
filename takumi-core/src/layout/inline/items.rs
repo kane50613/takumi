@@ -1,6 +1,6 @@
 //! Inline items flattened from a render subtree: text, spacers and boxes.
 
-use std::{borrow::Cow, iter::successors, ops::Range, ptr, rc::Rc, sync::Arc};
+use std::{borrow::Cow, iter::successors, ops::Range, rc::Rc, sync::Arc};
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -10,6 +10,7 @@ use super::{
   metrics::InlineBoxKind, outline::InlineOutline,
 };
 use crate::{
+  context::BoxId,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, node::Node, tree::RenderNode},
@@ -126,7 +127,7 @@ impl RenderNode {
   /// spans holding it.
   pub(crate) fn inline_child_path(&self, target: &RenderNode) -> Option<SmallVec<[usize; 2]>> {
     for (index, child) in self.children.iter().flatten().enumerate() {
-      if ptr::eq(child, target) {
+      if child.context.box_id() == target.context.box_id() {
         return Some(SmallVec::from_elem(index, 1));
       }
       if child.is_inline_span()
@@ -376,9 +377,9 @@ pub(crate) struct InlineSpans<'c> {
   pub(crate) item_spans: Vec<Option<usize>>,
   /// The first span of each node, for a fragment an item no longer holds, such as an ellipsis or
   /// a laid out atomic inline.
-  node_spans: FxHashMap<*const RenderNode, usize>,
+  node_spans: FxHashMap<BoxId, usize>,
   /// The decoration each inline box opens, by its node.
-  node_decorations: FxHashMap<*const RenderNode, Rc<DecorationLink<'c>>>,
+  node_decorations: FxHashMap<BoxId, Rc<DecorationLink<'c>>>,
 }
 
 impl<'c> InlineSpans<'c> {
@@ -391,7 +392,7 @@ impl<'c> InlineSpans<'c> {
     let mut links: Vec<Option<Arc<str>>> = vec![link_of(block)];
     let mut elements: Vec<Option<usize>> = vec![None];
     let mut next_span = 0;
-    let mut last_text: Option<(*const RenderNode, usize)> = None;
+    let mut last_text: Option<(BoxId, usize)> = None;
     let mut node_spans = FxHashMap::default();
     let mut node_decorations = FxHashMap::default();
 
@@ -417,7 +418,7 @@ impl<'c> InlineSpans<'c> {
             });
 
           if let Some(decoration) = &decoration {
-            node_decorations.insert(ptr::from_ref(node), Rc::clone(decoration));
+            node_decorations.insert(node.context.box_id(), Rc::clone(decoration));
           }
 
           chains.push(decoration.or(chain));
@@ -437,7 +438,7 @@ impl<'c> InlineSpans<'c> {
         InlineItemType::Text | InlineItemType::Control => {
           let range = item.start_offset()..item.end_offset();
           let span_index = match last_text {
-            Some((last_node, index)) if ptr::eq(last_node, node) => {
+            Some((last_node, index)) if last_node == node.context.box_id() => {
               if let Some(ProcessedInlineSpan::Text {
                 byte_range, text, ..
               }) = spans.get_mut(index)
@@ -464,13 +465,13 @@ impl<'c> InlineSpans<'c> {
                   .or_else(|| elements.last().copied().flatten()),
               });
               node_spans
-                .entry(ptr::from_ref(node))
+                .entry(node.context.box_id())
                 .or_insert(spans.len() - 1);
               spans.len() - 1
             }
           };
 
-          last_text = Some((ptr::from_ref(node), span_index));
+          last_text = Some((node.context.box_id(), span_index));
           Some(span_index)
         }
         InlineItemType::AtomicInline
@@ -489,7 +490,7 @@ impl<'c> InlineSpans<'c> {
             baseline_offset: None,
           }));
           node_spans
-            .entry(ptr::from_ref(node))
+            .entry(node.context.box_id())
             .or_insert(spans.len() - 1);
           Some(spans.len() - 1)
         }
@@ -509,12 +510,12 @@ impl<'c> InlineSpans<'c> {
 
   /// The decoration the inline box `node` opens.
   pub(crate) fn decoration_of(&self, node: &RenderNode) -> Option<&Rc<DecorationLink<'c>>> {
-    self.node_decorations.get(&ptr::from_ref(node))
+    self.node_decorations.get(&node.context.box_id())
   }
 
   /// The first span of `node`.
   pub(crate) fn span_of(&self, node: &RenderNode) -> Option<usize> {
-    self.node_spans.get(&ptr::from_ref(node)).copied()
+    self.node_spans.get(&node.context.box_id()).copied()
   }
 }
 

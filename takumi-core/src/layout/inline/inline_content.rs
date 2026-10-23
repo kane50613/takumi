@@ -1,7 +1,7 @@
 //! What an inline formatting context's lines place: the boxes they hold, the static positions of
 //! their out-of-flow boxes, and the fragment items that paint them.
 
-use std::{ptr, rc::Rc};
+use std::rc::Rc;
 
 use rustc_hash::FxHashMap;
 
@@ -18,6 +18,7 @@ use super::{
   unpositioned_list_marker::UnpositionedListMarker,
 };
 use crate::{
+  context::BoxId,
   geometry::{AvailableSpace, ComputedLayout, Point, Size},
   layout::{
     layout_result::LayoutResult as BoxLayoutResult, logical_rect::LogicalOffset, tree::RenderNode,
@@ -125,7 +126,7 @@ impl RenderNode {
     containers: &[&RenderNode],
     atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> InlineGeometry<'c> {
-    let mut placed: FxHashMap<*const RenderNode, StaticPosition> = FxHashMap::default();
+    let mut placed: FxHashMap<BoxId, StaticPosition> = FxHashMap::default();
     let mut inline_content_boxes = Vec::new();
 
     for line in lines {
@@ -135,7 +136,7 @@ impl RenderNode {
       let line_left = line.bfc_line_offset;
       let mut place = |node: &RenderNode, offset: LogicalOffset, direction: Direction| {
         placed.insert(
-          ptr::from_ref(node),
+          node.context.box_id(),
           StaticPosition {
             point: Point {
               x: (line_left + offset.inline_offset).to_float(),
@@ -225,10 +226,13 @@ impl RenderNode {
     let positions = self
       .inline_out_of_flow()
       .iter()
-      .map(|out_of_flow| placed.get(&ptr::from_ref(out_of_flow.node)).copied())
+      .map(|out_of_flow| placed.get(&out_of_flow.node.context.box_id()).copied())
       .collect();
 
-    let spans = if containers.iter().all(|container| ptr::eq(*container, self)) {
+    let spans = if containers
+      .iter()
+      .all(|container| container.context.box_id() == self.context.box_id())
+    {
       Vec::new()
     } else {
       let spans = InlineSpans::of(self, items_data);
@@ -241,7 +245,7 @@ impl RenderNode {
       .map(|container| {
         spans
           .iter()
-          .find(|span| ptr::eq(span.owner, *container))
+          .find(|span| span.owner.context.box_id() == container.context.box_id())
           .map(|span| span.padding_box)
       })
       .collect();
