@@ -787,11 +787,18 @@ impl LayoutTree<'_> {
   /// Logs that `node`'s cached layouts are finished with, once the boxes that lay their children
   /// out again as they continue have ended.
   pub(crate) fn log_cache_finished(&mut self, node: NodeId, finished: Finished) {
-    let holder = self
-      .running
-      .iter()
-      .map(|run| NodeId::new(run.node as usize))
-      .find(|&running| running != node && self.relays_out_ended_children(running));
+    let running = |index: usize| {
+      self
+        .running
+        .get(index)
+        .map(|run| NodeId::new(run.node as usize))
+    };
+    let holder = (0..self.running.len())
+      .filter_map(|index| Some((running(index)?, running(index + 1).unwrap_or(node))))
+      .find(|&(container, child)| {
+        container != node && self.relays_out_ended_child(container, child)
+      })
+      .map(|(container, _)| container);
 
     if let Some(releases) = &mut self.releases {
       match holder {
