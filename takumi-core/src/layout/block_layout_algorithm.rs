@@ -985,6 +985,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     child: NodeId,
     child_style: &LayoutStyle,
   ) {
+    // A break the content before forces goes before the box, which takes its static position on
+    // the next page.
+    if self.breaks_before_float_or_out_of_flow(child) {
+      return;
+    }
+
     let mut static_position = LogicalStaticPosition {
       offset: LogicalOffset::new(
         self.border_padding.inline_start,
@@ -1055,7 +1061,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     child: NodeId,
     child_break_token: &ChildBreakToken,
   ) {
-    if self.breaks_before_float(child) {
+    if self.breaks_before_float_or_out_of_flow(child) {
       return;
     }
 
@@ -2398,7 +2404,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     FragmentationLayoutInput::default()
   }
 
-  fn breaks_before_float(&mut self, _child: NodeId) -> bool {
+  fn breaks_before_float_or_out_of_flow(&mut self, _child: NodeId) -> bool {
     false
   }
 
