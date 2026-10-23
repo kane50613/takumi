@@ -55,6 +55,8 @@ pub(crate) struct BoxFragmentBuilder {
   pub(crate) sequence_number: u32,
   pub(crate) is_at_block_end: bool,
   pub(crate) has_seen_all_children: bool,
+  /// Whether a list item breaks with its outside marker yet to place beside a baseline.
+  pub(crate) has_unpositioned_list_marker: bool,
   /// Blink's `has_subsequent_children_`: a grid's items start on a later page, though it inserted
   /// no break before them.
   pub(crate) has_subsequent_children: bool,
@@ -113,6 +115,7 @@ impl BoxFragmentBuilder {
       sequence_number: 0,
       is_at_block_end: false,
       has_seen_all_children: false,
+      has_unpositioned_list_marker: false,
       has_subsequent_children: false,
       monolithic_overflow: LayoutUnit::ZERO,
       is_known_to_fit_in_fragmentainer: false,
@@ -471,6 +474,7 @@ impl BoxFragmentBuilder {
       is_repeated: false,
       is_at_block_end: self.is_at_block_end,
       has_seen_all_children: self.has_seen_all_children,
+      has_unpositioned_list_marker: self.has_unpositioned_list_marker,
       child_break_tokens: std::mem::take(&mut self.child_break_tokens),
       algorithm_data: self.break_token_data.take(),
     }

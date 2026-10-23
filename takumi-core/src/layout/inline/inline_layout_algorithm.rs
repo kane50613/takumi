@@ -92,6 +92,9 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   /// flow.
   #[cfg(feature = "fragmentation")]
   pub(crate) is_line_for_parallel_flow: bool,
+  /// Blink's `ComputeIntrudedFloatOffset`: how far the floats beside this line push in the
+  /// outside list marker it holds.
+  pub(crate) list_marker_intruded_float_offset: LayoutUnit,
 }
 
 impl<'c> LineBoxFragment<'_, 'c> {
@@ -120,6 +123,7 @@ impl<'c> LineBoxFragment<'_, 'c> {
       is_pushed_by_floats: false,
       #[cfg(feature = "fragmentation")]
       is_line_for_parallel_flow: false,
+      list_marker_intruded_float_offset: LayoutUnit::ZERO,
     }
   }
 

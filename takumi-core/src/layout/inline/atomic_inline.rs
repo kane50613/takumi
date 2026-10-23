@@ -50,9 +50,26 @@ impl<'t, 'r> BoxAtomicInline<'t, 'r> {
     render_node: &'r RenderNode,
   ) -> (NodeId, Rc<BoxLayoutResult>) {
     let node = self.tree.atomic_inline_node(render_node);
+
+    (node, self.lay_out_node(node))
+  }
+
+  /// The box `node` of the layout tree laid out as an atomic inline, as Blink's
+  /// `LayoutAtomicInline` lays out an outside list marker beside block content.
+  pub(crate) fn lay_out_node(&mut self, node: NodeId) -> Rc<BoxLayoutResult> {
     let space = self.atomic_inline_space(node);
 
-    (node, self.tree.layout(node, &space))
+    self.tree.layout(node, &space)
+  }
+
+  /// `result`, the box `node` laid out, as an atomic inline of a line.
+  pub(crate) fn line_result(&self, node: NodeId, result: &BoxLayoutResult) -> LayoutResult {
+    LayoutResult {
+      inline_size: result.size.inline_size,
+      block_size: result.size.block_size,
+      baseline: result.inline_baseline(self.tree.layout_style(node)),
+      collapsed_margins: None,
+    }
   }
 
   /// The inline content box `render_node` laid out as its line lays it out, a block-in-inline
@@ -101,12 +118,7 @@ impl<'r> AtomicInlineLayout<'r> for BoxAtomicInline<'_, 'r> {
   fn layout(&mut self, render_node: &'r RenderNode) -> LayoutResult {
     let (node, result) = self.lay_out_atomic_inline(render_node);
 
-    LayoutResult {
-      inline_size: result.size.inline_size,
-      block_size: result.size.block_size,
-      baseline: result.inline_baseline(self.tree.layout_style(node)),
-      collapsed_margins: None,
-    }
+    self.line_result(node, &result)
   }
 
   fn layout_float(

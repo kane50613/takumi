@@ -714,7 +714,7 @@ impl RenderNode {
   }
 
   /// Blink's `IsLayoutOutsideListMarker`.
-  fn is_outside_list_marker(&self) -> bool {
+  pub(crate) fn is_outside_list_marker(&self) -> bool {
     self.origin == NodeOrigin::Marker
       && self.context.style.inherited_data.list_style_position == ListStylePosition::Outside
   }

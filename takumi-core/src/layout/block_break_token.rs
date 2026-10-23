@@ -28,6 +28,8 @@ pub(crate) struct BlockBreakToken {
   pub(crate) is_at_block_end: bool,
   /// Blink's `HasSeenAllChildren`: every child finished or has a break token.
   pub(crate) has_seen_all_children: bool,
+  /// Blink's `HasUnpositionedListMarker`: the list item's outside marker waits for a later page.
+  pub(crate) has_unpositioned_list_marker: bool,
   /// Blink's `ChildBreakTokens`: where each child laid out so far resumes.
   pub(crate) child_break_tokens: Vec<BreakToken>,
   /// Blink's `TokenData`: what the box's algorithm resumes from.
@@ -57,6 +59,7 @@ impl BlockBreakToken {
       is_repeated: false,
       is_at_block_end: false,
       has_seen_all_children: false,
+      has_unpositioned_list_marker: false,
       child_break_tokens: Vec::new(),
       algorithm_data: None,
     }
