@@ -655,7 +655,6 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Forgets the out-of-flow boxes `container` positioned as their containing block.
   pub(crate) fn clear_hoisted_children(&mut self, container: NodeId) {
     #[cfg(feature = "fragmentation")]
     for child in take(&mut self.node_state_mut(container).hoisted_children) {
@@ -714,10 +713,8 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Places the inline content boxes of `node`, laid out as `result`, where its lines put them,
-  /// then lays out the out-of-flow boxes of that content that an inline box contains and returns
-  /// the rest for `node` and its ancestors. Blink lays the first out in the inline box's padding
-  /// box as `OutOfFlowLayoutPart` does for an inline containing block, in `builder`'s fragments
-  /// when `node` breaks its out-of-flow boxes.
+  /// then lays out the out-of-flow boxes an inline box contains, as `OutOfFlowLayoutPart` does for
+  /// an inline containing block, and returns the rest.
   pub(crate) fn finish_inline_content(
     &mut self,
     node: NodeId,
@@ -825,8 +822,7 @@ impl<'r> LayoutTree<'r> {
 
       let part = OutOfFlowLayoutPart::new((node, fragment_index), claims, containing_block, space);
 
-      // The box breaks across the block's fragments, which it joins as Blink's
-      // `FragmentedOofInCb` has the block container lay it out.
+      // The box joins the block's fragments, as Blink's `FragmentedOofInCb` lays it out.
       #[cfg(feature = "fragmentation")]
       let part = match builder.as_deref_mut() {
         Some(builder) => part.in_fragments(builder).confined_to_fragment(),

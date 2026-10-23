@@ -120,8 +120,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     Ok(true)
   }
 
-  /// The candidate for the out-of-flow `child` at `static_position`, which stays on the page it
-  /// starts on when the content before it must.
+  /// The candidate for the out-of-flow `child`, which stays on its page when the content before must.
   pub(super) fn out_of_flow_candidate(
     &self,
     child: NodeId,
@@ -133,10 +132,8 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     }
   }
 
-  /// Blink's `HandleOutOfFlowPositioned` for an out-of-flow `child` an earlier page broke inside
-  /// or pushed here: whether it resumes at `token`, which holds its offset. A forced break before
-  /// the box leaves it to work its static position out again, as does a box held back for the
-  /// block size of this one.
+  /// Blink's `HandleOutOfFlowPositioned` for a `child` an earlier page broke inside or pushed here:
+  /// whether it resumes at `token`.
   pub(super) fn resumes_out_of_flow(&mut self, child: NodeId, token: &ChildBreakToken) -> bool {
     let Some(candidate) = token.as_ref().and_then(|token| {
       OutOfFlowCandidate::resuming(
@@ -196,8 +193,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     fragmentation_layout_input_for_child(child, token.clone(), self.input.early_break.as_deref())
   }
 
-  /// The forced break check of Blink's `HandleFloat` and `HandleOutOfFlowPositioned`: whether a
-  /// break the content before forces goes before the float or out-of-flow box `child`.
+  /// The forced break check of Blink's `HandleFloat` and `HandleOutOfFlowPositioned` for `child`.
   pub(super) fn breaks_before_float_or_out_of_flow(&mut self, child: NodeId) -> bool {
     if !self.space.has_block_fragmentation() {
       return false;

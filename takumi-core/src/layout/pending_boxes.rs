@@ -17,11 +17,10 @@ struct PendingPositioned {
 
 /// What a paged layout has yet to reach, as [`PaintReach`] lists it before any page is laid out.
 pub(crate) struct PendingBoxes {
-  /// The boxes no bound covers, until they and what they hold are laid out. Their paint is known
-  /// then, and a box that repeats on every page is not listed.
+  /// The boxes no bound covers, until they and what they hold are laid out.
   unbounded: FxHashMap<BoxId, Option<NodeId>>,
-  /// The out-of-flow boxes no page has laid out. Each paints from its containing block's first
-  /// page, or from the first page for the initial containing block, whichever page lays it out.
+  /// The out-of-flow boxes no page has laid out, each painting from its containing block's first
+  /// page.
   positioned: FxHashMap<BoxId, PendingPositioned>,
   /// The blocks that contain a box of [`Self::positioned`].
   containing_blocks: FxHashSet<BoxId>,
@@ -57,24 +56,21 @@ impl PendingBoxes {
     pending
   }
 
-  /// Whether a pending box can paint on the first page, so no page is final.
   pub(crate) fn pins_every_page(&self) -> bool {
     self.pins_every_page
   }
 
-  /// Whether the block `id` contains a pending out-of-flow box, which it lays out in a fragment
-  /// that places it above the block's first.
+  /// Whether the block `id` contains a pending out-of-flow box.
   pub(crate) fn is_containing_block(&self, id: BoxId) -> bool {
     self.containing_blocks.contains(&id)
   }
 
-  /// Whether a box has an unknown reach and is not laid out.
   pub(crate) fn has_unbounded(&self) -> bool {
     !self.unbounded.is_empty()
   }
 
-  /// Drops the boxes `tree` has laid out. An unbounded box is dropped once it is laid out and not
-  /// in `open`, the boxes with fragments still to come. None means any box may still get more.
+  /// Drops the boxes `tree` has laid out, an unbounded one once it is not in `open`, the boxes with
+  /// fragments still to come.
   pub(crate) fn update(&mut self, tree: &LayoutTree<'_>, open: Option<&FxHashSet<NodeId>>) {
     if self.unbounded.is_empty() && self.positioned.is_empty() {
       return;

@@ -23,7 +23,6 @@ pub(crate) struct HoistedBy(FxHashMap<NodeId, SmallVec<[NodeId; 1]>>);
 
 #[cfg(feature = "fragmentation")]
 impl HoistedBy {
-  /// Records that `container` positioned `child` as its containing block.
   pub(crate) fn insert(&mut self, container: NodeId, child: NodeId) {
     let containers = self.0.entry(child).or_default();
 
@@ -32,7 +31,6 @@ impl HoistedBy {
     }
   }
 
-  /// Forgets that `container` positioned `child`.
   pub(crate) fn remove(&mut self, container: NodeId, child: NodeId) {
     let Some(containers) = self.0.get_mut(&child) else {
       return;
@@ -65,9 +63,8 @@ pub struct LiveLayout<'a> {
   pub(in crate::layout) hoisted_by: &'a HoistedBy,
 }
 
-/// The methods of [`LayoutResults`] that painting reads, answered for a finished layout or for one
-/// still laying out pages. A box the live layout has not placed yet reads as past the end of its
-/// parent's children, where the finished layout holds only boxes it placed or hid.
+/// The methods of [`LayoutResults`] that painting reads, for a finished layout or one still laying
+/// out pages.
 #[derive(Clone, Copy)]
 pub enum LayoutView<'a> {
   /// A finished layout.
@@ -83,7 +80,7 @@ impl<'a> LayoutView<'a> {
     self.fragment_layout(node_id, 0)
   }
 
-  /// Computed layout of a node's fragment `fragment_index`.
+  /// Computed layout of a node's fragment.
   pub fn fragment_layout(self, node_id: NodeId, fragment_index: usize) -> Result<ComputedLayout> {
     self
       .parts(node_id)?
@@ -93,8 +90,7 @@ impl<'a> LayoutView<'a> {
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
-  /// Whether the node's fragment `fragment_index` repeats an earlier one, as a table header does on
-  /// each page.
+  /// Whether the fragment repeats an earlier one, as a table header does on each page.
   pub fn is_repeated_fragment(self, node_id: NodeId, fragment_index: usize) -> bool {
     self.parts(node_id).is_ok_and(|(fragments, _)| {
       fragments
@@ -103,8 +99,7 @@ impl<'a> LayoutView<'a> {
     })
   }
 
-  /// Each fragment of `node_id` the layout has placed, with which of its container's fragments
-  /// holds it.
+  /// Each fragment of `node_id` the layout has placed, with the container fragment holding it.
   pub(crate) fn fragment_containers(
     self,
     node_id: NodeId,
@@ -121,8 +116,7 @@ impl<'a> LayoutView<'a> {
     return self.parts(node_id).ok().map(|_| (0, 0)).into_iter();
   }
 
-  /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
-  /// none when it holds none.
+  /// The first fragment of `node_id` the parent's fragment `container_fragment_index` holds.
   pub(crate) fn fragment_in(
     self,
     node_id: NodeId,
@@ -131,8 +125,8 @@ impl<'a> LayoutView<'a> {
     self.fragments_in(node_id, container_fragment_index).next()
   }
 
-  /// Every fragment of `node_id` the parent's fragment `container_fragment_index` holds: one,
-  /// unless the box is an out-of-flow box broken across the pages after its containing block's.
+  /// Every fragment of `node_id` the parent's fragment holds: more than one for an out-of-flow box
+  /// broken across the pages after its containing block's.
   pub(crate) fn fragments_in(
     self,
     node_id: NodeId,
@@ -192,8 +186,7 @@ impl<'a> LayoutView<'a> {
     children.iter().copied()
   }
 
-  /// The run of `node_id`'s box children its fragment `fragment_index` holds, for children that
-  /// break in order, as a table section's rows do.
+  /// The run of `node_id`'s box children its fragment holds, for children that break in order.
   pub(crate) fn ordered_children_in(
     self,
     node_id: NodeId,
@@ -226,7 +219,7 @@ impl<'a> LayoutView<'a> {
     }
   }
 
-  /// The paint data of the table `node_id`'s fragment `fragment_index`, when it is one.
+  /// The paint data of a table's fragment.
   pub fn table_fragment(self, node_id: NodeId, fragment_index: usize) -> Option<&'a TableFragment> {
     let tables = match self {
       Self::Final(results) => &results.tables,
@@ -237,8 +230,7 @@ impl<'a> LayoutView<'a> {
     tables.get(&usize::from(node_id))?.get(fragment_index)
   }
 
-  /// Whether layout hid the box `node_id`, as Blink's `IsHiddenForPaint`: a cell in collapsed
-  /// columns or empty under `empty-cells: hide`, or a collapsed row.
+  /// Blink's `IsHiddenForPaint`: whether layout hid the box `node_id`.
   pub fn is_hidden_for_paint(self, node_id: NodeId) -> bool {
     let hidden = match self {
       Self::Final(results) => &results.hidden,
@@ -249,22 +241,19 @@ impl<'a> LayoutView<'a> {
     hidden.contains(&usize::from(node_id))
   }
 
-  /// Blink's `IsLineClampClippedFloat`: whether `node_id` is a float its line-clamp container
-  /// clips to its content box's block end.
+  /// Blink's `IsLineClampClippedFloat` for `node_id`.
   pub fn is_line_clamp_clipped_float(self, node_id: NodeId) -> bool {
     self
       .parts(node_id)
       .is_ok_and(|(fragments, _)| fragments[0].is_line_clamp_clipped_float)
   }
 
-  /// Whether layout placed or hid the box `node_id`, which a finished layout has done to every box
-  /// that has a fragment.
+  /// Whether layout placed or hid the box `node_id`.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn is_laid_out(self, node_id: NodeId) -> bool {
     self.fragment_containers(node_id).next().is_some()
   }
 
-  /// Each fragment of `node_id`, by fragment index.
   #[cfg(all(test, feature = "fragmentation"))]
   pub(crate) fn fragments(self, node_id: NodeId) -> Result<&'a [BoxFragment]> {
     self
@@ -272,7 +261,6 @@ impl<'a> LayoutView<'a> {
       .map(|(fragments, _)| fragments.as_slice())
   }
 
-  /// A box's fragments and box children.
   fn parts(self, node_id: NodeId) -> Result<(&'a Fragments, &'a [OrderedChild])> {
     match self {
       Self::Final(results) => results
@@ -288,9 +276,8 @@ impl<'a> LayoutView<'a> {
     .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
-  /// Whether the fragment is one the layout placed. A live layout still holds the fragment of a box
-  /// it has not reached, and one an earlier run of the container placed that a later run did not
-  /// place again.
+  /// Whether the fragment is one the layout placed, not one of a box it has not reached or of an
+  /// earlier run.
   #[cfg(feature = "fragmentation")]
   fn is_placed(self, fragment: &BoxFragment) -> bool {
     match self {

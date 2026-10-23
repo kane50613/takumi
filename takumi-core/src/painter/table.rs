@@ -680,10 +680,9 @@ impl EdgeJoints {
   }
 }
 
-/// Blink's `TablePainter::PaintCollapsedBorders`: every collapsed edge of the table `paint` paints,
-/// as a box side under `transform`, the table's border-box top-left at the origin and at its paint
-/// offset in the space paint snaps to pixels in. With `visible`, a block range of the table's
-/// border box, only the rows near it paint, as Blink paints one table fragment per page.
+/// Blink's `TablePainter::PaintCollapsedBorders` for the table `paint` paints, under `transform`.
+/// With `visible`, a block range of the table's border box, only the rows near it paint, as Blink
+/// paints one table fragment per page.
 pub fn paint_collapsed_borders(
   results: LayoutView<'_>,
   paint: &NodePaint,

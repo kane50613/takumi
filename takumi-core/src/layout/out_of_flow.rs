@@ -1,11 +1,9 @@
 //! Blink's [`OutOfFlowLayoutPart`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/out_of_flow_layout_part.cc)
 //! and [`absolute_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/absolute_utils.cc):
 //! absolutely and fixed positioned boxes laid out in their containing block, in its fragments as
-//! `FragmentedOofInCb` does. A block resolves a box against the fragments so far stitched together,
-//! where Blink uses the current fragment alone. Flex, grid and table containers go beyond Blink,
-//! whose iterators cannot resume an out-of-flow break token, and lay their boxes out like a block.
-//! Without anchor positioning, `position-try`, or scroll containers, and `justify-self: auto`
-//! takes no `justify-items`.
+//! `FragmentedOofInCb` does. Flex, grid and table containers go beyond Blink, whose iterators
+//! cannot resume an out-of-flow break token. Without anchor positioning, `position-try`, or scroll
+//! containers.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -91,33 +89,28 @@ impl ContainingBlock {
   }
 }
 
-/// How a containing block's block size across the container's fragments settles.
 #[cfg(feature = "fragmentation")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StitchedSize {
   /// The fragments so far stitched together, which a later fragment adds to.
   Growing,
-  /// A block size no later fragment changes, as the first page's area has for the initial
-  /// containing block.
+  /// A block size no later fragment changes.
   Final,
   /// This fragment alone, as an inline box's is.
   ConfinedToFragment,
 }
 
-/// Blink's `OutOfFlowLayoutPart`: the fragment `fragment_index` of the box `container`, laid out
-/// in `space`, laying out the out-of-flow boxes it `claims` in `containing_block`.
+/// Blink's `OutOfFlowLayoutPart` for the fragment `fragment_index` of the box `container`.
 pub(crate) struct OutOfFlowLayoutPart<'b> {
   container: NodeId,
   fragment_index: usize,
   claims: ContainingBlockClaims,
   containing_block: ContainingBlock,
   space: &'b ConstraintSpace,
-  /// The block size of the container's earlier fragments, which a stitched containing block starts
-  /// above this fragment.
+  /// The block size of the container's earlier fragments.
   #[cfg(feature = "fragmentation")]
   previously_consumed_block_size: LayoutUnit,
-  /// The container's fragment builder when it lays out in fragments, which the boxes break across
-  /// as Blink's `FragmentedOofInCb` lays them out.
+  /// The container's fragment builder when its boxes break across its fragments.
   #[cfg(feature = "fragmentation")]
   builder: Option<&'b mut BoxFragmentBuilder>,
   #[cfg(feature = "fragmentation")]
@@ -146,7 +139,6 @@ impl<'b> OutOfFlowLayoutPart<'b> {
     }
   }
 
-  /// The part of a container that lays out in fragments with `builder`.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn in_fragments(self, builder: &'b mut BoxFragmentBuilder) -> Self {
     Self {
@@ -155,8 +147,7 @@ impl<'b> OutOfFlowLayoutPart<'b> {
     }
   }
 
-  /// Moves the containing block, given in the fragments stitched together, up past the
-  /// `previously_consumed_block_size` of the container's earlier fragments to this fragment.
+  /// Moves the containing block up past the container's earlier fragments to this one.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn stitched(mut self, previously_consumed_block_size: LayoutUnit) -> Self {
     self.containing_block.origin.y -= previously_consumed_block_size;
@@ -173,7 +164,6 @@ impl<'b> OutOfFlowLayoutPart<'b> {
     }
   }
 
-  /// Gives the containing block a block size no later fragment changes.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn with_final_block_size(self) -> Self {
     Self {
@@ -193,9 +183,7 @@ impl<'b> OutOfFlowLayoutPart<'b> {
     self.previously_consumed_block_size
   }
 
-  /// Where a resumed `candidate` starts in the container: it keeps its inline offset, and starts
-  /// its fragment past the monolithic overflow an earlier page pushed into this one, where the
-  /// token counts from the top of the page.
+  /// Where a resumed `candidate` starts, its token counting from the top of the page.
   #[cfg(feature = "fragmentation")]
   fn resumed_offset(&self, candidate: &OutOfFlowCandidate) -> Option<Point<LayoutUnit>> {
     let token = candidate.break_token.as_ref()?;
@@ -215,8 +203,7 @@ impl<'b> OutOfFlowLayoutPart<'b> {
     ))
   }
 
-  /// Whether `candidate` lays out again after measuring its block size: it resumes, or breaks
-  /// across the container's fragments.
+  /// Whether `candidate` lays out again after measuring its block size.
   fn lays_out_again(&self, candidate: &OutOfFlowCandidate) -> bool {
     #[cfg(feature = "fragmentation")]
     if self.builder.is_some() && self.space.has_block_fragmentation() {
@@ -237,8 +224,7 @@ impl OutOfFlowLayoutPart<'_> {
   }
 }
 
-/// Blink's `OffsetInfo`: where an out-of-flow box goes in the border box of the box laying it
-/// out, and the space it lays out in there.
+/// Blink's `OffsetInfo`.
 struct OutOfFlowOffset {
   offset: Point<LayoutUnit>,
   space: ConstraintSpace,
@@ -509,8 +495,7 @@ fn insets_axis(
   (imcb_start + margin_start, imcb_end + margin_end)
 }
 
-/// Whether an out-of-flow box's block position or size depends on the block size of its
-/// containing block: it sets `bottom`, or a percentage or `stretch` inset, size, or limit.
+/// Whether an out-of-flow box's block position or size depends on its containing block's.
 #[cfg(feature = "fragmentation")]
 pub(crate) fn depends_on_containing_block_block_size(style: &LayoutStyle) -> bool {
   !style.inset.bottom.is_auto()
@@ -550,8 +535,7 @@ fn can_compute_block_size_without_layout(
 }
 
 impl<'r> LayoutTree<'r> {
-  /// Blink's `OutOfFlowLayoutPart::Run`: lays out the `candidates` the `part`'s container claims,
-  /// places them in its fragment, and returns the rest for an ancestor.
+  /// Blink's `OutOfFlowLayoutPart::Run`: returns the candidates the part's container does not claim.
   #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
   pub(crate) fn lay_out_out_of_flow(
     &mut self,
@@ -559,7 +543,6 @@ impl<'r> LayoutTree<'r> {
     mut candidates: Vec<OutOfFlowCandidate>,
   ) -> Vec<OutOfFlowCandidate> {
     let mut unclaimed = Vec::new();
-    // Whether the container has a fragment after this one, as far as its content so far says.
     #[cfg(feature = "fragmentation")]
     let breaks_after = part
       .builder
@@ -630,10 +613,7 @@ impl<'r> LayoutTree<'r> {
     unclaimed
   }
 
-  /// Blink's `HandleOofsAndSpecialDescendants`: lays out the `candidates` the box `node` claims,
-  /// its fragment `fragment_index` of `size` styled `style` and laid out in `space`, in the
-  /// fragments `builder` makes when its out-of-flow boxes break across them. Returns the rest for
-  /// an ancestor.
+  /// Blink's `HandleOofsAndSpecialDescendants`: returns the candidates the box `node` does not claim.
   pub(crate) fn lay_out_container_out_of_flow(
     &mut self,
     (node, fragment_index): (NodeId, usize),
@@ -678,10 +658,8 @@ impl<'r> LayoutTree<'r> {
     self.lay_out_out_of_flow(part, candidates)
   }
 
-  /// Blink's `HandleOutOfFlowPositioned` for the out-of-flow children of the box `builder` builds
-  /// that an earlier fragment broke inside or pushed here: a candidate for each, resuming at its
-  /// break token. Flex, grid and table iterators cannot consume these tokens, which Blink's do
-  /// not, so they skip them through [`Self::without_out_of_flow_tokens`].
+  /// Blink's `HandleOutOfFlowPositioned` for the out-of-flow children an earlier fragment broke
+  /// inside or pushed here, resuming at their break tokens.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn resumed_out_of_flow(
     &self,
@@ -705,8 +683,8 @@ impl<'r> LayoutTree<'r> {
       .collect()
   }
 
-  /// `token` without the break tokens of its out-of-flow children, which the item, row and section
-  /// iterators of a flex, grid or table container would take for those of an in-flow child.
+  /// `token` without the break tokens of its out-of-flow children, which flex, grid and table
+  /// iterators would take for in-flow ones.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn without_out_of_flow_tokens(
     &self,
@@ -730,9 +708,7 @@ impl<'r> LayoutTree<'r> {
     }))
   }
 
-  /// Blink's `CalculateOffset` and `GenerateFragment` for a box in `containing_block` of a box laid
-  /// out in `space` without fragments: the offset of its border box in the border box of that box,
-  /// and its layout.
+  /// Blink's `CalculateOffset` and `GenerateFragment` for a box laid out without fragments.
   pub(crate) fn lay_out_out_of_flow_box(
     &mut self,
     candidate: &OutOfFlowCandidate,
@@ -1035,8 +1011,7 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Blink's `GenerateFragment` for `candidate` at `offset_info`, unless measuring its block size
-  /// laid it out already: in a container that lays out in fragments, it breaks across them.
+  /// Blink's `GenerateFragment` for `candidate`, unless measuring its block size laid it out.
   fn generate_out_of_flow_fragment(
     &mut self,
     candidate: &OutOfFlowCandidate,
@@ -1052,9 +1027,7 @@ impl<'r> LayoutTree<'r> {
     self.layout_fragment(candidate.node, &space, &candidate.layout_input())
   }
 
-  /// `space` for `candidate` at `offset`, set up to break in the container's fragments. A box that
-  /// starts in an earlier fragment of a stitched containing block lays out whole, for the pages to
-  /// paint it across.
+  /// `space` for `candidate` at `offset`, set up to break in the container's fragments.
   // Blink passes the page's own size, which leaves cloned borders of the containing blocks out.
   // https://github.com/w3c/csswg-drafts/issues/10553
   #[cfg(feature = "fragmentation")]

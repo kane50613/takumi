@@ -22,7 +22,6 @@ pub(crate) fn paint_scene(scene: &Scene, canvas: &mut Canvas) -> Result<()> {
   ScenePaint::new(scene.view()).paint(canvas)
 }
 
-/// A scene's paint chunks in paint order and the boxes owning its effects.
 pub(crate) struct ScenePaint<'s> {
   scene: SceneView<'s>,
   chunks: Vec<PaintChunk<'s>>,

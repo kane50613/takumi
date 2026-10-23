@@ -97,7 +97,6 @@ impl PageFrame {
     })
   }
 
-  /// The size of a page's area, which the content paginates against.
   pub(crate) fn page_size(&self) -> Size<f32> {
     Size {
       width: self.content_width,
@@ -178,7 +177,6 @@ impl PagePlan {
   }
 }
 
-/// The frame and bands the pages are drawn in.
 struct Solved {
   frame: PageFrame,
   header: Option<Repeatable>,
@@ -193,7 +191,6 @@ enum Content {
   Laid(Box<Paginated>),
 }
 
-/// Where the pages of one document are drawn.
 pub(crate) struct PageDrawing<'d, 'g> {
   pub(crate) pdf: &'d mut Document,
   pub(crate) inputs: &'d TreeInputs<'g>,
@@ -202,11 +199,9 @@ pub(crate) struct PageDrawing<'d, 'g> {
 }
 
 impl PageDrawing<'_, '_> {
-  /// Lays the content out on pages and draws the ones `bands` keeps.
-  ///
-  /// A document whose bands, content and links do not read the page count or where a box landed
-  /// draws each page as soon as `settle` says no later page paints on it. Any other lays out to its
-  /// end in the passes that settle those, and draws from the last.
+  /// Lays the content out on pages and draws the ones `bands` keeps. A document that reads neither
+  /// the page count nor where a box landed draws each page as soon as `settle` says no later page
+  /// paints on it.
   pub(crate) fn render(
     &mut self,
     page: PageOptions,
@@ -315,8 +310,7 @@ impl PageDrawing<'_, '_> {
   }
 
   /// Lays `node` out a page at a time and draws each page, in order, once `settle` says it is
-  /// settled. A document with a link to an element inside it, or a counter, is never streamed,
-  /// so no destination or number here waits on a page not yet laid out.
+  /// settled. A document with a link to an element inside it, or a counter, is never streamed.
   fn stream(
     &mut self,
     solved: Solved,
@@ -384,7 +378,6 @@ impl PageDrawing<'_, '_> {
     })
   }
 
-  /// Draws every kept page of a content laid out to its end.
   fn compose(
     &mut self,
     solved: Solved,

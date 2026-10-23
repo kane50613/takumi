@@ -176,14 +176,10 @@ pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
 /// Renders a node across at most `max_pages` pages `page_size`, handing each page's image to
 /// `page` in order, so a long document holds one page's pixels and scene at a time.
 ///
-/// A page is handed over as soon as no page still to lay out can paint onto it. A document whose
-/// negative margins, offsets, shadows and glyph ink reach less than a page hands over a page once
-/// the next is laid out. A box that the tree does not bound, such as one with a transform, a
-/// percentage offset or a held box, holds the pages back until the layout has laid it out. A box
-/// that repeats on every page and is not bound holds back every page.
-///
-/// Layout runs while the pages go out, so [`Error::TooManyPages`] and any other layout error can
-/// follow pages `page` has already received.
+/// A page is handed over as soon as no page still to lay out can paint onto it, which a box the
+/// tree does not bound, such as one with a transform, delays until it is laid out. Layout runs
+/// while the pages go out, so [`Error::TooManyPages`] and any other layout error can follow pages
+/// `page` has already received.
 #[cfg(feature = "pages")]
 pub fn render_pages<'g>(
   options: RenderOptions<'g>,

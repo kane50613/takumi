@@ -36,12 +36,11 @@ pub(crate) struct BlockBreakToken {
   pub(crate) child_break_tokens: Vec<BreakToken>,
   /// Blink's `TokenData`: what the box's algorithm resumes from.
   pub(crate) algorithm_data: Option<BreakTokenAlgorithmData>,
-  /// Blink's `OofInlineStartOffset` and `OofBlockStartOffset`, for an out-of-flow box laid out
-  /// in its containing block's fragments: where in the next fragment's border box it resumes. The
-  /// inline offset may come from a static position the next fragment cannot work out again.
+  /// Blink's `OofInlineStartOffset` and `OofBlockStartOffset`: where in the next fragment's border
+  /// box an out-of-flow box resumes.
   pub(crate) oof_start_offset: Point<LayoutUnit>,
   /// The static position of an out-of-flow box its containing block holds back until its last
-  /// fragment, in the containing block's stitched fragments. Takumi's own, Blink has no such token.
+  /// fragment. Takumi's own, Blink has no such token.
   pub(crate) held_static_position: Option<StaticPosition>,
 }
 
@@ -76,8 +75,8 @@ impl BlockBreakToken {
     }
   }
 
-  /// A break before an out-of-flow box that its containing block holds back, which lays it out
-  /// from `static_position` once its block size is final.
+  /// A break before an out-of-flow box its containing block holds back, laid out from
+  /// `static_position`.
   pub(crate) fn break_before_held_out_of_flow(
     node: NodeId,
     static_position: StaticPosition,
@@ -88,8 +87,7 @@ impl BlockBreakToken {
     }
   }
 
-  /// Blink's `CreateBreakBefore` for an out-of-flow box pushed past the end of its containing
-  /// block's fragment: it starts at `oof_start_offset` in the next.
+  /// Blink's `CreateBreakBefore` for an out-of-flow box pushed past its containing block's fragment.
   pub(crate) fn break_before_out_of_flow(
     node: NodeId,
     oof_start_offset: Point<LayoutUnit>,

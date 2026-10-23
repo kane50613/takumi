@@ -20,8 +20,7 @@ use crate::{
 /// Blink's page areas of the pages laid out so far, and what each leaves the next.
 #[derive(Default)]
 pub(crate) struct PageAreas {
-  /// Where the next page's area resumes: the out-of-flow boxes this one pushed to the next page or
-  /// broke into it.
+  /// Where the next page's area resumes.
   break_token: Option<Rc<BlockBreakToken>>,
   fixed: Vec<FixedBox>,
 }
@@ -30,7 +29,6 @@ pub(crate) struct PageAreas {
 /// from the one it is found on.
 struct FixedBox {
   node: NodeId,
-  /// The box's border box in its page.
   offset: Point<LayoutUnit>,
   result: Rc<LayoutResult>,
   /// The page whose area found the box, the first it repeats on.
@@ -45,8 +43,7 @@ impl PageAreas {
   }
 
   /// Lays out the page area of page `page`, attached to the root's fragment `fragment_index` at
-  /// `origin`: the out-of-flow boxes the root left as `root_candidates` and those the page before
-  /// left, as `FragmentedOofInCb` does, then repeats the fixed boxes.
+  /// `origin`, then repeats the fixed boxes.
   pub(crate) fn lay_out(
     &mut self,
     tree: &mut LayoutTree<'_>,
@@ -127,8 +124,7 @@ impl PageAreas {
 }
 
 impl FixedBox {
-  /// Blink's repeated fixed box: places its repetition on page `page`, whose area starts at
-  /// `page_start` in the stacked pages, in the root's fragment given.
+  /// Blink's repeated fixed box: places its repetition on page `page`.
   fn place_repetition(
     &self,
     tree: &mut LayoutTree<'_>,

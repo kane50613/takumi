@@ -52,7 +52,6 @@ fn document(name: &str, page_size: Size<f32>) -> RenderNode {
   RenderNode::from_initial_containing_block(&context, root)
 }
 
-/// The chunks of `contexts` that reach page `page`, in paint order, as text.
 fn page_chunks(contexts: &[StackingContextNode], page: usize, page_height: f32) -> Vec<String> {
   let (top, bottom) = (page as f32 * page_height, (page + 1) as f32 * page_height);
   let reaches = |bounds: Option<SceneBounds>| {
@@ -75,8 +74,7 @@ fn page_chunks(contexts: &[StackingContextNode], page: usize, page_height: f32) 
     .collect()
 }
 
-/// Paints every page of `name` on pages `page_size` from its window as the layout and the windows
-/// allow, and returns how many pages it has.
+/// Paints every page of `name` from its window as the layout and the windows allow.
 fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
   let root = document(name, page_size);
   let whole = PagedScene::lay_out(root.clone(), page_size, 1000, true)

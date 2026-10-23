@@ -1,6 +1,5 @@
 //! Backend-agnostic paint scene: the stacking-context tree that decides paint order, grouping, and
-//! bounds. Raster and SVG backends consume this instead of each walking the node tree
-//! independently.
+//! bounds.
 
 use rustc_hash::FxHashMap;
 #[cfg(feature = "fragmentation")]
@@ -380,8 +379,7 @@ impl SceneRequest<'_> {
   }
 }
 
-/// What a scene build saw of the out-of-flow boxes and their containing blocks, for deciding which
-/// root fragments a window needs.
+/// What a scene build saw of the out-of-flow boxes and their containing blocks.
 #[cfg(feature = "fragmentation")]
 #[derive(Default)]
 struct BuildTrace {
@@ -621,8 +619,7 @@ fn build_layers(
     }
 
     let layout_children = layout_results.box_children(visit.node_id)?;
-    // A box broken across pages visits only the children each of its fragments holds, as each
-    // of Blink's fragments holds its own.
+    // A box broken across pages visits only the children each of its fragments holds.
     let held = (layout_results
       .fragment_containers(visit.node_id)
       .nth(1)
@@ -750,7 +747,6 @@ pub struct SceneLayers {
 }
 
 impl SceneLayers {
-  /// Sets the bounds of every stacking context and effect, from those of the boxes under them.
   fn set_bounds(&mut self, root: &RenderNode) {
     // `None` means "unknown extent" and poisons the union; dropping it would
     // under-report the context and clip or cull visible paint.
@@ -928,7 +924,6 @@ impl<T> AfterVisits<T> {
     self.0.push((visits_left, item));
   }
 
-  /// The innermost item whose visits are done with `visits_len` visits left.
   fn pop_done(&mut self, visits_len: usize) -> Option<T> {
     if self.0.last()?.0 < visits_len {
       return None;
@@ -944,8 +939,7 @@ impl<T> Default for AfterVisits<T> {
 }
 
 /// The fragments of hoisted boxes a scene visits once each, as Blink's `FragmentedOofInCb` places
-/// them: one that lands in a fragment of its containing block that its parent does not reach is
-/// visited from that fragment instead.
+/// them.
 #[cfg(feature = "fragmentation")]
 #[derive(Default)]
 struct HoistedFragments {
@@ -963,12 +957,10 @@ impl HoistedFragments {
     self.claimed.insert((node, fragment_index))
   }
 
-  /// Defers `visit` of a hoisted box to its containing block's fragment `container`.
   fn defer(&mut self, container: (NodeId, usize), visit: StackingContextBuildVisit) {
     self.deferred.entry(container).or_default().push(visit);
   }
 
-  /// Records that the fragment `container` is visited, `visits_left` visits left before its boxes.
   fn enter(&mut self, container: (NodeId, usize), visits_left: usize) {
     if self.deferred.contains_key(&container) {
       self.entered.push(visits_left, container);
@@ -1204,7 +1196,7 @@ impl PagedScene {
     self.page_count
   }
 
-  /// The scene of every page stacked, page `index` from `index` times the page height down.
+  /// The scene of every page stacked.
   pub fn into_scene(self) -> Scene {
     self.scene
   }
@@ -1237,9 +1229,8 @@ impl<'a> SceneRef<'a> {
     }
   }
 
-  /// The scene of the root's fragments on `pages`, in the order given, which stack as in
-  /// [`PagedScene`]. A page the root has no fragment on adds nothing. Its chunks that reach a page
-  /// are those [`PagedScene`]'s do, provided `pages` holds every page [`PageWindows`] names for it.
+  /// The scene of the root's fragments on `pages`, which stack as in [`PagedScene`], provided
+  /// `pages` holds every page [`PageWindows`] names for it.
   pub fn window(
     root: &'a RenderNode,
     layout: LayoutView<'a>,
@@ -1293,7 +1284,6 @@ impl<'a> SceneRef<'a> {
   }
 }
 
-/// The root's fragment on each of `pages` that has one, with where its page starts.
 #[cfg(feature = "fragmentation")]
 fn page_roots(
   layout: LayoutView<'_>,
@@ -1310,14 +1300,15 @@ fn page_roots(
     .collect()
 }
 
-/// How far down the stacked pages a root fragment paints.
 #[cfg(feature = "fragmentation")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PageReach {
-  /// It paints nothing.
   Empty,
   /// It paints between two heights.
-  Span { top: i32, bottom: i32 },
+  Span {
+    top: i32,
+    bottom: i32,
+  },
   /// A chunk's bounds are unknown, so it may paint on any page.
   Unbounded,
 }
@@ -1341,7 +1332,6 @@ impl PageReach {
     }
   }
 
-  /// Whether it paints between the heights `top` and `bottom`.
   fn intersects(self, top: f32, bottom: f32) -> bool {
     match self {
       Self::Empty => false,
@@ -1388,8 +1378,7 @@ impl SceneLayers {
   }
 }
 
-/// Which root fragments paint on each page of a paged layout, so a page's scene can be built from
-/// those alone. Add each page once it is laid out, then ask for the pages a finalized page needs.
+/// Which root fragments paint on each page of a paged layout, kept up to date by [`Self::refresh`].
 #[cfg(feature = "fragmentation")]
 pub struct PageWindows {
   page_size: Size<f32>,
@@ -1416,8 +1405,8 @@ impl PageWindows {
     }
   }
 
-  /// Brings the pages up to `laid` from `layout`, measuring again those that were added before
-  /// their fragments could no longer change, which the first `final_pages` of `layout` now are.
+  /// Brings the pages up to `laid` from `layout`, measuring again those added before their fragments
+  /// were final.
   pub fn refresh(
     &mut self,
     root: &RenderNode,
@@ -1445,8 +1434,7 @@ impl PageWindows {
     self.reaches.len()
   }
 
-  /// Measures how far the next page's root fragment paints, from `layout`, which has laid out that
-  /// page and every page before it.
+  /// Measures how far the next page's root fragment paints.
   fn add_page(&mut self, root: &RenderNode, layout: LayoutView<'_>) -> Result<()> {
     let page = self.reaches.len();
     let mut trace = BuildTrace::default();
@@ -1516,8 +1504,7 @@ impl PageWindows {
     self.with_needs(reaching)
   }
 
-  /// The pages, in order, whose root fragments a scene needs to paint the root fragment of `page`
-  /// and what hoisted boxes belong to it.
+  /// The pages whose root fragments a scene needs to paint the root fragment of `page`.
   pub fn pages_of(&self, page: usize) -> Vec<usize> {
     self.with_needs([page])
   }

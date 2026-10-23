@@ -48,8 +48,8 @@ pub(crate) struct Interactive {
 }
 
 /// The anchors, headings and box extents of the boxes a scene paints, which the outline, the
-/// links and the page counters read. The summaries of a paged document's pages, taken in page
-/// order, add up to the summary of its whole scene.
+/// links and the page counters read. The summaries of a document's pages add up to that of its
+/// whole scene.
 #[derive(Debug, PartialEq)]
 pub(crate) struct PageSummary {
   /// Element ids to the box they name, for `href="#id"`.
@@ -175,8 +175,7 @@ impl PageSummary {
     summary
   }
 
-  /// The summary of the root fragment of one page and the fragments `pages` names, which its scene
-  /// needs to paint it as the scene of every page would.
+  /// The summary of the root fragment of one page and the fragments `pages` names.
   pub(crate) fn of_page(
     root: &RenderNode,
     layout: LayoutView<'_>,
@@ -238,7 +237,6 @@ impl PageSummary {
     }
   }
 
-  /// The summary with its headings in page order.
   pub(crate) fn finished(mut self) -> Self {
     self.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
     self
@@ -377,12 +375,10 @@ impl PageSummary {
   }
 }
 
-/// A node paint resolved against its scene.
 struct PaintedBox<'s> {
   node: &'s RenderNode,
   source: &'s Node,
   layout: Layout,
-  /// The box's border box in content coordinates.
   rect: KrillaRect,
   /// Whether a repeated fragment, such as a table header on a later page, paints it.
   repeated: bool,
@@ -408,7 +404,6 @@ impl<'s> PaintedBox<'s> {
   }
 }
 
-/// Every hyperlink box `scene` paints, in paint order.
 pub(crate) fn collect_links(scene: SceneView<'_>) -> Vec<LinkTarget> {
   let mut links = Vec::new();
 

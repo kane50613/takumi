@@ -1,4 +1,4 @@
-//! A render tree laid out a page at a time, handing out the windows of the pages no later page can paint on.
+//! A render tree laid out a page at a time, with the pages no later page can paint on handed out.
 
 use std::ops::Range;
 
@@ -9,11 +9,10 @@ use crate::{
   scene::{PageWindows, SceneRef},
 };
 
-/// How many of the first pages of a layout are safe to paint, as [`PagedLayout::settled_pages`] says.
+/// How many of the first pages are safe to paint, as [`PagedLayout::settled_pages`] says.
 pub type Settle<'s> = &'s dyn Fn(&PagedLayout<'_>) -> usize;
 
-/// [`PagedLayout::settled_pages`], which the method itself does not satisfy as a `Settle` because its
-/// layout lifetime is early-bound.
+/// [`PagedLayout::settled_pages`], as a closure because the method's layout lifetime is early-bound.
 #[allow(clippy::redundant_closure_for_method_calls)]
 pub const SETTLED_PAGES: Settle<'static> = &|layout| layout.settled_pages();
 
@@ -74,8 +73,7 @@ impl<'r> PageStream<'r> {
     self.layout.page_count()
   }
 
-  /// The pages whose root fragments a scene needs to paint the root fragment of `page` and what
-  /// hoisted boxes belong to it.
+  /// The pages whose root fragments a scene needs to paint the root fragment of `page`.
   pub fn pages_of(&self, page: usize) -> Vec<usize> {
     self.windows.pages_of(page)
   }

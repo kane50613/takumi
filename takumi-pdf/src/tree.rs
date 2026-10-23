@@ -188,7 +188,6 @@ impl PreparedTree {
   }
 }
 
-/// A tree laid out on pages, which the scene of each page is built from.
 pub(crate) struct PagedContent {
   pub(crate) root: RenderNode,
   results: LayoutResults,
@@ -197,7 +196,6 @@ pub(crate) struct PagedContent {
 }
 
 impl PagedContent {
-  /// `root` laid out on pages `page_size`.
   pub(crate) fn lay_out(root: RenderNode, page_size: Size<f32>) -> Result<Self, PdfError> {
     let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
 
@@ -218,7 +216,6 @@ impl PagedContent {
     self.results.view()
   }
 
-  /// The tree and its layout, apart.
   pub(crate) fn into_parts(self) -> (RenderNode, LayoutResults) {
     (self.root, self.results)
   }

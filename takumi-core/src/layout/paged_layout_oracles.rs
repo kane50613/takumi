@@ -64,7 +64,6 @@ fn answers(view: LayoutView<'_>, node_count: usize, page_count: usize) -> Vec<St
     .collect()
 }
 
-/// Every node's fragments and box children, as text.
 fn snapshot(results: &LayoutResults) -> Vec<String> {
   (0..results.node_count())
     .map(NodeId::new)
@@ -78,15 +77,13 @@ fn snapshot(results: &LayoutResults) -> Vec<String> {
     .collect()
 }
 
-/// Lays `root` out a page at a time and a second time to the end, and checks they agree, that the
-/// live view of the first agrees with the finished results, and that each page paints from its
-/// window as soon as the layout and the windows say it may.
+/// Lays `root` out a page at a time and to the end, and checks that they agree and that each page
+/// paints from its window.
 pub(crate) fn check(root: &RenderNode, page_size: Size<f32>) {
   check_pages(root, page_size, true);
 }
 
-/// [`check`] for a document whose boxes paint farther from their pages than a window can tell
-/// before the layout is done, so each page paints from its window once every page is laid out.
+/// [`check`] for a document whose pages paint from their windows only once every page is laid out.
 pub(crate) fn check_when_finished(root: &RenderNode, page_size: Size<f32>) {
   check_pages(root, page_size, false);
 }
@@ -157,7 +154,6 @@ fn assert_hoisting(layout: &PagedLayout<'_>) {
   }
 }
 
-/// The chunks of `contexts` that reach page `page`, in paint order, with each as text.
 fn page_chunks(
   contexts: &[StackingContextNode],
   page: usize,
@@ -218,9 +214,8 @@ fn entered(root: &RenderNode, paint: &NodePaint, placed: &HashSet<Vec<usize>>) -
   states
 }
 
-/// Paints each page from the window of a layout that has laid out the pages before it, as the
-/// pages become final, and checks every page's chunks and the boxes' states agree with the scene of
-/// every page at once.
+/// Paints each page from its window as the pages settle, and checks the chunks and the boxes'
+/// states agree with the scene of every page at once.
 fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   let whole = PagedScene::lay_out(root.clone(), page_size, usize::MAX, true)
     .expect("pages lay out")

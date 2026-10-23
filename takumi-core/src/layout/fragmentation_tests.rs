@@ -1497,8 +1497,7 @@ fn finalized_after_each_page(root: &RenderNode, page_height: f32) -> Vec<usize> 
   finalized
 }
 
-/// A box a containing block holds back to its last fragment paints from where the block started,
-/// so the block's pages stay open until it ends.
+/// A box a containing block holds back keeps the block's pages open until it ends.
 #[test]
 fn a_held_box_keeps_the_pages_from_its_containing_block_open() {
   let tree = render(
@@ -1514,8 +1513,7 @@ fn a_held_box_keeps_the_pages_from_its_containing_block_open() {
   assert_eq!(finalized_after_each_page(&tree, 200.0), [1, 1, 1, 4]);
 }
 
-/// An absolute box is laid out in the fragment that holds its static position, and placed from the
-/// start of its containing block, so the block's first pages stay open until a page lays it out.
+/// An absolute box found on a later page keeps its containing block's first pages open.
 #[test]
 fn an_absolute_box_found_on_a_later_page_keeps_its_containing_blocks_pages_open() {
   let tree = render(
@@ -1542,8 +1540,7 @@ fn a_box_with_a_transform_keeps_every_page_open_until_it_is_laid_out() {
   assert_eq!(finalized_after_each_page(&tree, 200.0), [0, 0, 3, 4, 5, 6]);
 }
 
-/// The initial containing block is the first page's area, so an absolute box a later page finds
-/// paints on the first page.
+/// An absolute box a later page finds paints on the first page, the initial containing block's.
 #[test]
 fn an_absolute_box_found_on_a_later_page_keeps_every_page_open_until_then() {
   let tree = render(
@@ -1573,8 +1570,7 @@ fn an_absolute_box_found_on_a_later_page_keeps_every_page_open_until_then() {
   assert_eq!(finalized_after_each_page(&tree, 200.0), [0, 2]);
 }
 
-/// A box painted far from its page by a transform or a relative offset belongs to the window of the
-/// pages it reaches.
+/// A box painted far from its page belongs to the window of the pages it reaches.
 #[test]
 fn a_box_painted_pages_away_paints_in_their_windows() {
   let tree = render(
@@ -1598,8 +1594,8 @@ fn a_box_painted_pages_away_paints_in_their_windows() {
   );
 }
 
-/// A box a containing block holds back, or pushes to a later page, belongs to the fragment of its
-/// containing block that lays it out, however far its parent is.
+/// A box a containing block holds back belongs to the fragment of its containing block that lays
+/// it out.
 #[test]
 fn a_box_hoisted_past_its_parent_paints_in_the_window_of_its_containing_block() {
   let tree = render(
@@ -1622,8 +1618,7 @@ fn a_box_hoisted_past_its_parent_paints_in_the_window_of_its_containing_block() 
   );
 }
 
-/// The root's last fragment holds the page areas that go on after it, so it paints more with each
-/// and stays open until they end.
+/// The root's last fragment stays open while page areas go on after it.
 #[test]
 fn the_roots_last_fragment_stays_open_while_page_areas_go_on() {
   let tree = render(

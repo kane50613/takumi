@@ -611,9 +611,8 @@ fn logical_rect(
 
 impl<'r> LayoutTree<'r> {
   /// The grid area an out-of-flow `node` of the grid `container` resolves its insets against, or
-  /// `containing_block`, its padding box, when `container` is not a grid. The grid's tracks lie in
-  /// its fragments stitched together, which `previously_consumed_block_size` of them precede this
-  /// fragment, where `containing_block` is.
+  /// `containing_block` when `container` is not a grid. The tracks lie in the fragments stitched
+  /// together, `previously_consumed_block_size` above this one.
   pub(crate) fn grid_area(
     &self,
     container: NodeId,

@@ -101,8 +101,8 @@ impl<P: Copy> ContainingBlocks<P> {
     self.content_boxes.insert(node_id, content_box);
   }
 
-  /// The placement and container size a child resolves against: its containing block's,
-  /// `hoisted_cb`, when hoisted, otherwise the parent's.
+  /// The placement and container size a child resolves against: its containing block's when
+  /// hoisted, else the parent's.
   pub fn base_for(
     &self,
     hoisted_cb: Option<NodeId>,
@@ -240,13 +240,11 @@ impl LayoutResults {
     Ok((layout.into_results(), page_count))
   }
 
-  /// How many boxes were laid out.
   #[cfg(all(test, feature = "fragmentation"))]
   pub(crate) fn node_count(&self) -> usize {
     self.nodes.len()
   }
 
-  /// Each fragment of `node_id`, by fragment index.
   #[cfg(all(test, feature = "fragmentation"))]
   pub(crate) fn fragments(&self, node_id: NodeId) -> crate::Result<&[BoxFragment]> {
     self.view().fragments(node_id)
@@ -276,10 +274,8 @@ pub struct LayoutTree<'r> {
   /// Which boxes positioned each out-of-flow box as their containing block.
   #[cfg(feature = "fragmentation")]
   pub(in crate::layout) hoisted_by: HoistedBy,
-  /// How many algorithm runs have started.
   #[cfg(feature = "fragmentation")]
   runs: u32,
-  /// The algorithm runs under way, the innermost last.
   #[cfg(feature = "fragmentation")]
   running: Vec<PlacedBy>,
   /// The layout styles the latest table parts took, which an equal part's shares.
@@ -413,17 +409,15 @@ pub(crate) struct BoxFragment {
   /// The run of the box's algorithm that made the layout this is the fragment of.
   #[cfg(feature = "fragmentation")]
   pub(crate) run: u32,
-  /// The run of the container's algorithm that placed it. A later run of the container that
-  /// places the fragment `container_fragment_index` again replaces this one, so one left from an
-  /// earlier run, such as a measuring run, names a fragment that does not hold the box.
+  /// The run of the container's algorithm that placed it. A later run placing the same container
+  /// fragment replaces this one.
   #[cfg(feature = "fragmentation")]
   pub(crate) placed_by: PlacedBy,
   /// Whether the fragment repeats an earlier one, as a table header does on each page.
   pub(crate) is_repeated: bool,
 }
 
-/// A run of a box's layout algorithm: the box and which of its runs, counting from one. Zero is no
-/// run, as when a page places the root.
+/// A run of a box's layout algorithm: the box and which of its runs, counting from one.
 #[cfg(feature = "fragmentation")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PlacedBy {
@@ -1072,7 +1066,6 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// The cells and rows the layout of the table `table` hid.
   pub(in crate::layout) fn hidden_parts(&self, table: NodeId) -> Option<&HiddenParts> {
     self.table_hidden.get(&table)
   }
@@ -1102,7 +1095,6 @@ impl<'r> LayoutTree<'r> {
     })
   }
 
-  /// Starts a run of `node`'s algorithm, and returns its number.
   #[cfg(feature = "fragmentation")]
   pub(in crate::layout) fn begin_run(&mut self, node: NodeId) -> u32 {
     self.runs += 1;
@@ -1113,7 +1105,6 @@ impl<'r> LayoutTree<'r> {
     self.runs
   }
 
-  /// Ends the innermost run.
   #[cfg(feature = "fragmentation")]
   pub(in crate::layout) fn end_run(&mut self) {
     self.running.pop();

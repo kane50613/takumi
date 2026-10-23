@@ -48,7 +48,6 @@ pub(crate) struct PageSlice {
 }
 
 impl PageSlice {
-  /// The window of page `index` when each page is `window` tall.
   pub(crate) fn of(index: usize, window: f32) -> Self {
     let start = index as f32 * window;
 
@@ -60,7 +59,6 @@ impl PageSlice {
   }
 }
 
-/// Where each page of the content begins.
 pub(crate) struct PageStarts {
   starts: Vec<f32>,
   window: f32,
@@ -132,7 +130,6 @@ impl Paginated {
     }
   }
 
-  /// One layout of `node`.
   fn lay_out(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
     let (content, repeated) = inputs.prepare_paged(node, frame)?;
     let starts = PageStarts::new(content.page_count, frame.window_height);
@@ -154,7 +151,6 @@ impl Paginated {
     })
   }
 
-  /// What the pages' interactive targets and, when `extents` says so, box extents sum up to.
   fn summarize(&self, extents: bool) -> Result<PageSummary, PdfError> {
     let content = &self.content;
 
@@ -167,7 +163,6 @@ impl Paginated {
     )
   }
 
-  /// The summary of the pages, taken from the pass that counted them or made now.
   pub(crate) fn summary(&mut self) -> Result<PageSummary, PdfError> {
     match self.summary.take() {
       Some(summary) => Ok(summary),

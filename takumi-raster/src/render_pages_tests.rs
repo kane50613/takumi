@@ -26,7 +26,6 @@ use crate::{
   stacking_context::ScenePaint,
 };
 
-/// The page of most documents here.
 const PAGE_SIZE: Size<f32> = Size {
   width: 200.0,
   height: 100.0,
@@ -177,7 +176,6 @@ fn assert_needs_more_than_the_next_page(name: &str, source: &str) {
   );
 }
 
-/// `count` empty blocks, one page tall each.
 fn pages_of_blocks(count: usize) -> String {
   "<div style=\"height: 100px\"></div>".repeat(count)
 }
@@ -408,7 +406,6 @@ fn container_relative_lengths_paint_in_a_paged_document() {
   assert_streams_like_whole("container relative text", &text("10cqw"), PAGE_SIZE);
 }
 
-/// The Web Platform Tests' checkout at `WPT_ROOT` or in `~/.cache/takumi-wpt`, when there is one.
 fn wpt_root() -> Option<PathBuf> {
   std::env::var_os("WPT_ROOT")
     .map(PathBuf::from)
@@ -445,7 +442,6 @@ fn print_documents(directory: &Path, found: &mut Vec<PathBuf>) {
   }
 }
 
-/// The text of each `<style>` block of `source`.
 fn style_blocks(source: &str) -> Vec<&str> {
   let mut blocks = Vec::new();
   let mut rest = source;
