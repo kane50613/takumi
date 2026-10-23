@@ -5,7 +5,6 @@ use takumi_core::{
   layout::node::Node,
   layout::table::TableSectionKind,
   scene::NodePaint,
-  style::BreakInside,
 };
 
 use crate::{
@@ -218,10 +217,14 @@ impl RepeatedSection {
       };
 
       // Blink repeats a header or footer only when it avoids breaking inside (`IsAvoidBreakValue`).
-      if rendered
-        .get(index)
-        .is_none_or(|section| section.context.style.misc_data.break_inside != BreakInside::Avoid)
-      {
+      if rendered.get(index).is_none_or(|section| {
+        !section
+          .context
+          .style
+          .misc_data
+          .break_inside
+          .avoids_page_break()
+      }) {
         continue;
       }
       let Some((top, bottom)) = extent(index) else {

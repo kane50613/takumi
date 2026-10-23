@@ -10,41 +10,94 @@ use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, lerp,
 };
 
-/// A forced-break value for `break-before` / `break-after`. Pagination has no
-/// left and right pages, so the legacy `left` and `right` become a plain page
-/// break.
+/// A `break-before` / `break-after` value, Blink's `EBreakBetween`. The legacy
+/// `always` of `page-break-before` and `page-break-after` is `page`.
+/// A sided break forces a page break, and like Blink adds no blank page to
+/// start on the side it names.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum BreakBetween {
-  /// No forced break.
+  /// No forced break, and none avoided.
   #[default]
   Auto,
-  /// Force a page break on this edge of the box.
+  /// Avoid a break in any fragmentation context.
+  Avoid,
+  /// Avoid a page break.
+  AvoidPage,
+  /// Avoid a column break.
+  AvoidColumn,
+  /// Force a column break.
+  Column,
+  /// Force a page break.
   Page,
+  /// Force a page break to a left page.
+  Left,
+  /// Force a page break to a right page.
+  Right,
+  /// Force a page break to a recto page.
+  Recto,
+  /// Force a page break to a verso page.
+  Verso,
 }
 
 impl_css_enum!(
   BreakBetween,
   "auto" => BreakBetween::Auto,
-  "page" | "always" | "left" | "right" => BreakBetween::Page
+  "avoid" => BreakBetween::Avoid,
+  "avoid-page" => BreakBetween::AvoidPage,
+  "avoid-column" => BreakBetween::AvoidColumn,
+  "column" => BreakBetween::Column,
+  "page" | "always" => BreakBetween::Page,
+  "left" => BreakBetween::Left,
+  "right" => BreakBetween::Right,
+  "recto" => BreakBetween::Recto,
+  "verso" => BreakBetween::Verso
 );
 
-/// A `break-inside` value.
+impl BreakBetween {
+  /// Whether the value forces a page break, as Blink's `IsForcedBreakValue` decides when paginated.
+  pub fn forces_page_break(self) -> bool {
+    matches!(
+      self,
+      Self::Page | Self::Left | Self::Right | Self::Recto | Self::Verso
+    )
+  }
+
+  /// Whether the value avoids a page break, as Blink's `IsAvoidBreakValue` decides when paginated.
+  pub fn avoids_page_break(self) -> bool {
+    matches!(self, Self::Avoid | Self::AvoidPage)
+  }
+}
+
+/// A `break-inside` value, Blink's `EBreakInside`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum BreakInside {
   /// The box may be split across pages.
   #[default]
   Auto,
-  /// Keep the whole box on one page.
+  /// Avoid a break inside the box in any fragmentation context.
   Avoid,
+  /// Avoid a page break inside the box.
+  AvoidPage,
+  /// Avoid a column break inside the box.
+  AvoidColumn,
 }
 
 impl_css_enum!(
   BreakInside,
   "auto" => BreakInside::Auto,
-  "avoid" => BreakInside::Avoid
+  "avoid" => BreakInside::Avoid,
+  "avoid-page" => BreakInside::AvoidPage,
+  "avoid-column" => BreakInside::AvoidColumn
 );
+
+impl BreakInside {
+  /// Whether the value avoids a page break, as Blink's `IsAvoidBreakValue` decides when paginated.
+  pub fn avoids_page_break(self) -> bool {
+    matches!(self, Self::Avoid | Self::AvoidPage)
+  }
+}
 
 /// A `widows` / `orphans` value: the fewest lines of a block a page break may
 /// leave on either side, per CSS 2 §13.3.2.
@@ -129,22 +182,49 @@ impl_css_enum!(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::properties::traits::FromCssStr;
+  use crate::style::{ToCss, properties::traits::FromCssStr};
 
   #[test]
-  fn parses_break_between() {
-    assert_eq!(BreakBetween::from_css_str("auto"), Ok(BreakBetween::Auto));
-    assert_eq!(BreakBetween::from_css_str("page"), Ok(BreakBetween::Page));
-    assert!(BreakBetween::from_css_str("column").is_err());
+  fn break_between_round_trips() {
+    for (css, expected) in [
+      ("auto", BreakBetween::Auto),
+      ("avoid", BreakBetween::Avoid),
+      ("avoid-page", BreakBetween::AvoidPage),
+      ("avoid-column", BreakBetween::AvoidColumn),
+      ("column", BreakBetween::Column),
+      ("page", BreakBetween::Page),
+      ("left", BreakBetween::Left),
+      ("right", BreakBetween::Right),
+      ("recto", BreakBetween::Recto),
+      ("verso", BreakBetween::Verso),
+    ] {
+      let parsed = BreakBetween::from_css_str(css).unwrap();
+
+      assert_eq!(parsed, expected, "{css}");
+      assert_eq!(parsed.to_css_string(), css);
+    }
   }
 
   #[test]
-  fn the_legacy_forced_break_keywords_reach_a_page_break() {
-    for keyword in ["always", "left", "right"] {
-      assert_eq!(BreakBetween::from_css_str(keyword), Ok(BreakBetween::Page));
+  fn the_legacy_always_is_a_page_break() {
+    assert_eq!(BreakBetween::from_css_str("always"), Ok(BreakBetween::Page));
+  }
+
+  #[test]
+  fn sided_breaks_force_a_page_break() {
+    for value in [
+      BreakBetween::Page,
+      BreakBetween::Left,
+      BreakBetween::Right,
+      BreakBetween::Recto,
+      BreakBetween::Verso,
+    ] {
+      assert!(value.forces_page_break(), "{value:?}");
     }
 
-    assert!(BreakBetween::from_css_str("avoid").is_err());
+    assert!(!BreakBetween::Column.forces_page_break());
+    assert!(!BreakBetween::AvoidColumn.avoids_page_break());
+    assert!(BreakBetween::AvoidPage.avoids_page_break());
   }
 
   #[test]
@@ -180,6 +260,14 @@ mod tests {
   fn parses_break_inside() {
     assert_eq!(BreakInside::from_css_str("auto"), Ok(BreakInside::Auto));
     assert_eq!(BreakInside::from_css_str("avoid"), Ok(BreakInside::Avoid));
-    assert!(BreakInside::from_css_str("avoid-page").is_err());
+    assert_eq!(
+      BreakInside::from_css_str("avoid-page"),
+      Ok(BreakInside::AvoidPage)
+    );
+    assert_eq!(
+      BreakInside::from_css_str("avoid-column"),
+      Ok(BreakInside::AvoidColumn)
+    );
+    assert!(!BreakInside::AvoidColumn.avoids_page_break());
   }
 }

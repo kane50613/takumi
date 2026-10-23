@@ -97,7 +97,6 @@ css/
 !css/CSS2/borders/border-width-011.xht
 !css/CSS2/borders/border-width-012.xht
 !css/CSS2/borders/shand-border-001.xht
-!css/CSS2/floats/float-in-inline-anonymous-block-with-overflow-hidden.html
 !css/CSS2/floats/float-nowrap-7.html
 !css/CSS2/floats/float-nowrap-8.html
 !css/CSS2/floats/float-nowrap-9.html
@@ -129,10 +128,6 @@ css/
 !css/CSS2/floats/floats-wrap-bfc-with-margin-007.tentative.html
 !css/CSS2/floats/floats-wrap-bfc-with-margin-008.tentative.html
 !css/CSS2/floats/floats-wrap-bfc-with-margin-009.tentative.html
-!css/CSS2/floats/floats-wrap-top-below-bfc-001l.xht
-!css/CSS2/floats/floats-wrap-top-below-bfc-001r.xht
-!css/CSS2/floats/floats-wrap-top-below-inline-003l.xht
-!css/CSS2/floats/floats-wrap-top-below-inline-003r.xht
 !css/CSS2/floats/overflow-scroll-float-paint-order.html
 !css/CSS2/generated-content/after-content-display-001.xht
 !css/CSS2/generated-content/after-content-display-003.xht
@@ -242,9 +237,7 @@ css/
 !css/CSS2/linebox/border-padding-bleed-003.xht
 !css/CSS2/linebox/empty-inline-002.xht
 !css/CSS2/linebox/inline-formatting-context-001.xht
-!css/CSS2/linebox/inline-formatting-context-009.xht
 !css/CSS2/linebox/inline-formatting-context-013.xht
-!css/CSS2/linebox/inline-formatting-context-015.xht
 !css/CSS2/linebox/inline-formatting-context-023.xht
 !css/CSS2/linebox/line-height-079.xht
 !css/CSS2/linebox/line-height-080.xht
@@ -311,6 +304,7 @@ css/CSS2/lists/list-style-position-applies-to-013.xht
 css/CSS2/lists/list-style-position-applies-to-014.xht
 css/CSS2/lists/list-style-position-applies-to-015.xht
 css/CSS2/lists/list-style-position-applies-to-016.html
+css/CSS2/lists/list-style-position-applies-to-017.html
 css/CSS2/lists/list-style-type-applies-to-001.xht
 css/CSS2/lists/list-style-type-applies-to-002.xht
 css/CSS2/lists/list-style-type-applies-to-003.xht
@@ -366,13 +360,10 @@ css/CSS2/lists/list-style-type-applies-to-016.html
 !css/CSS2/normal-flow/block-in-inline-empty-002.xht
 !css/CSS2/normal-flow/block-in-inline-empty-003.xht
 !css/CSS2/normal-flow/block-in-inline-empty-004.xht
-!css/CSS2/normal-flow/block-in-inline-float-between-001.xht
 !css/CSS2/normal-flow/block-in-inline-float-in-layer-001.html
 !css/CSS2/normal-flow/block-in-inline-insert-012.xht
 !css/CSS2/normal-flow/block-in-inline-insert-015.xht
 !css/CSS2/normal-flow/block-in-inline-insert-017.xht
-!css/CSS2/normal-flow/block-in-inline-margins-001b.xht
-!css/CSS2/normal-flow/block-in-inline-margins-002b.xht
 !css/CSS2/normal-flow/block-in-inline-nested-002.xht
 !css/CSS2/normal-flow/block-in-inline-whitespace-001a.xht
 !css/CSS2/normal-flow/block-replaced-height-002.xht
@@ -680,7 +671,6 @@ css/CSS2/lists/list-style-type-applies-to-016.html
 !css/CSS2/visuren/emptyspan-2.html
 !css/CSS2/visuren/emptyspan-3.html
 !css/CSS2/visuren/emptyspan-4.html
-!css/CSS2/visuren/float-inside-inline-between-blocks-1.html
 !css/CSS2/visuren/inline-formatting-context-001.xht
 !css/CSS2/visuren/split-inner-inline-2.html
 !css/CSS2/visuren/whitespace-present-1a.html
@@ -979,6 +969,7 @@ css/css-display/display-contents-line-height.html
 css/css-display/display-contents-root-background.html
 css/css-display/display-contents-table-003.html
 css/css-display/display-contents-text-inherit.html
+css/css-display/display-flow-root-001.html
 css/css-display/display-flow-root-002.html
 css/css-display/run-in/font-style-applies-to-004.xht
 css/css-display/run-in/font-variant-applies-to-004.xht
@@ -1061,7 +1052,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/flexbox-align-self-baseline-horiz-007.xhtml
 !css/css-flexbox/flexbox-align-self-baseline-horiz-008.xhtml
 !css/css-flexbox/flexbox-align-self-horiz-002.xhtml
-!css/css-flexbox/flexbox-align-self-vert-004.xhtml
 !css/css-flexbox/flexbox-align-self-vert-rtl-002.xhtml
 !css/css-flexbox/flexbox-align-self-vert-rtl-004.xhtml
 !css/css-flexbox/flexbox-align-self-vert-rtl-005.xhtml
@@ -1956,6 +1946,7 @@ css/css-overflow/line-clamp/line-clamp-auto-008.html
 css/css-overflow/line-clamp/line-clamp-auto-010.html
 css/css-overflow/line-clamp/line-clamp-auto-012.html
 css/css-overflow/line-clamp/line-clamp-balance-001.html
+css/css-overflow/line-clamp/line-clamp-bfc.html
 css/css-overflow/line-clamp/line-clamp-with-abspos-001.html
 css/css-overflow/line-clamp/line-clamp-with-abspos-003.html
 css/css-overflow/line-clamp/line-clamp-with-abspos-005.html
@@ -2124,9 +2115,18 @@ css/css-overflow/text-overflow-string-in-textarea-not-inherited.html
 !css/css-position/position-relative-table-tr-top-absolute-child.html
 !css/css-position/position-relative-table-tr-top.html
 !css/css-position/static-position/
+css/css-position/static-position/inline-level-absolute-in-block-level-context-001.html
+css/css-position/static-position/inline-level-absolute-in-block-level-context-002.html
+css/css-position/static-position/inline-level-absolute-in-block-level-context-003.html
 css/css-position/static-position/inline-level-absolute-in-block-level-context-004.html
+css/css-position/static-position/inline-level-absolute-in-block-level-context-005.html
+css/css-position/static-position/inline-level-absolute-in-block-level-context-006.html
+css/css-position/static-position/inline-level-absolute-in-block-level-context-007.html
+css/css-position/static-position/inline-level-absolute-in-block-level-context-008.html
 css/css-position/static-position/inline-level-absolute-in-block-level-context-009.html
 css/css-position/static-position/inline-level-absolute-in-block-level-context-010.html
+css/css-position/static-position/inline-level-absolute-in-block-level-context-011.html
+css/css-position/static-position/inline-level-absolute-in-block-level-context-012.html
 css/css-position/static-position/inline-level-absolute-in-block-level-context-013.html
 css/css-position/static-position/inline-level-absolute-in-block-level-context-014.html
 !css/css-position/sticky/
@@ -2543,7 +2543,6 @@ css/css-text/text-autospace/text-autospace-vertical-upright-001.html
 !css/css-text/text-indent/below-float3.html
 !css/css-text/text-indent/text-indent-length-002.html
 !css/css-text/text-indent/text-indent-percentage-001.xht
-!css/css-text/text-indent/text-indent-with-absolute-pos-child.html
 !css/css-text/text-justify/text-justify-001.html
 !css/css-text/text-justify/text-justify-word-separators.html
 !css/css-text/text-spacing-trim/
@@ -2579,13 +2578,11 @@ css/css-text/text-spacing-trim/text-spacing-trim-start-001.html
 !css/css-text/white-space/pre-wrap-align-left-003.html
 !css/css-text/white-space/pre-wrap-align-right-003.html
 !css/css-text/white-space/pre-wrap-align-start-003.html
-!css/css-text/white-space/pre-wrap-float-001.html
 !css/css-text/white-space/text-wrap-balance-004.html
 !css/css-text/white-space/text-wrap-balance-before-after-002.html
 !css/css-text/white-space/text-wrap-balance-float-003.html
 !css/css-text/white-space/text-wrap-balance-float-004.html
 !css/css-text/white-space/text-wrap-balance-float-005.html
-!css/css-text/white-space/text-wrap-balance-float-006.html
 !css/css-text/white-space/text-wrap-balance-line-clamp-002.html
 !css/css-text/white-space/text-wrap-balance-line-clamp-003.html
 !css/css-text/white-space/text-wrap-balance-line-clamp-004.html
