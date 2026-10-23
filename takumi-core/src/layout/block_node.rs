@@ -234,6 +234,16 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
+  /// Whether laying `node` out resumes the layouts of its children that ended, which flex, grid,
+  /// and table layouts take to size their items again.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn relays_out_ended_children(&self, node: NodeId) -> bool {
+    matches!(
+      self.algorithm(node),
+      Algorithm::Table | Algorithm::Flex | Algorithm::Grid
+    )
+  }
+
   fn algorithm(&self, node: NodeId) -> Algorithm {
     let state = self.node_state(node);
 

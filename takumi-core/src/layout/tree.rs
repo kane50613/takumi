@@ -294,6 +294,9 @@ pub struct LayoutTree<'r> {
   /// end.
   #[cfg(feature = "fragmentation")]
   releases: Option<Releases>,
+  /// The inline formatting contexts whose prepared items were released.
+  #[cfg(all(feature = "fragmentation", debug_assertions))]
+  released_inline_node_data: RefCell<FxHashSet<usize>>,
 }
 
 /// What a box's part in a table changes in the styles it is laid out with.
@@ -714,6 +717,23 @@ impl LayoutTree<'_> {
     }
   }
 
+  /// Logs that `node`'s cached layouts are finished with, once the boxes that lay their children
+  /// out again as they continue have ended.
+  pub(crate) fn log_cache_finished(&mut self, node: NodeId, finished: Finished) {
+    let holder = self
+      .running
+      .iter()
+      .map(|run| NodeId::new(run.node as usize))
+      .find(|&running| running != node && self.relays_out_ended_children(running));
+
+    if let Some(releases) = &mut self.releases {
+      match holder {
+        Some(holder) => releases.push_until_ended(holder, finished),
+        None => releases.push(finished),
+      }
+    }
+  }
+
   /// Logs that the items of `node`'s fragment are placed, which its page frees once drawn.
   pub(crate) fn log_items(&mut self, node: NodeId, fragment: usize) {
     let holder = self.repeating_table();
@@ -739,13 +759,13 @@ impl LayoutTree<'_> {
 
   /// Notes whether the last fragment of `node` placed ends the box.
   pub(crate) fn note_end(&mut self, node: NodeId, ends: bool) {
-    let Some(releases) = &mut self.releases else {
+    let Some(releases) = &self.releases else {
       return;
     };
 
     self.nodes[usize::from(node)].ended_by = NonZeroUsize::new(releases.laid()).filter(|_| ends);
     if ends {
-      releases.push(Finished::Ended(node));
+      self.log_cache_finished(node, Finished::Ended(node));
     }
   }
 
@@ -786,6 +806,15 @@ impl LayoutTree<'_> {
           return;
         }
 
+        self
+          .inline_node_data
+          .borrow_mut()
+          .remove(&usize::from(node));
+        #[cfg(debug_assertions)]
+        self
+          .released_inline_node_data
+          .borrow_mut()
+          .insert(usize::from(node));
         for (laid, held) in releases.take_held(node) {
           self.release_finished(releases, laid, held);
         }
@@ -821,6 +850,8 @@ impl<'r> LayoutTree<'r> {
       repeated_roots: FxHashMap::default(),
       #[cfg(feature = "fragmentation")]
       releases: None,
+      #[cfg(all(feature = "fragmentation", debug_assertions))]
+      released_inline_node_data: RefCell::default(),
     };
 
     tree.push_subtree(render_root);
@@ -890,6 +921,12 @@ impl<'r> LayoutTree<'r> {
 
   /// The prepared items of the inline formatting context the node at `index` establishes.
   pub(crate) fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    assert!(
+      !self.released_inline_node_data.borrow().contains(&index),
+      "the inline items of box {index} were read after they were released"
+    );
+
     Rc::clone(
       self
         .inline_node_data
