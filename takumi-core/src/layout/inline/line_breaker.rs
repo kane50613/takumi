@@ -2532,7 +2532,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       // The block sees the floats the line placed so far.
       let mut child_space = self.constraint_space.clone();
 
-      child_space.exclusion_space = Rc::new(self.exclusion_space.clone());
+      child_space.exclusion_space = self.exclusion_space.clone().into_rc();
 
       let result = self
         .atomic_inline

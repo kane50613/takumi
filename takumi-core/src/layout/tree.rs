@@ -1390,7 +1390,7 @@ impl<'r> LayoutTree<'r> {
     let fragments = self.table_fragments.entry(usize::from(table)).or_default();
 
     fragments.truncate(fragment_index);
-    fragments.push(fragment);
+    push_tight(fragments, fragment);
   }
 
   /// Changes what `node`'s part in a table changes in its styles.
@@ -1415,6 +1415,15 @@ impl<'r> LayoutTree<'r> {
   ) -> ComputedLayout {
     self.nodes[usize::from(node)].fragments[fragment_index].layout
   }
+}
+
+/// Pushes `item`, allocating room for only it when `entries` is empty: most boxes keep one entry
+/// per kind, where a first push would make room for four.
+pub(crate) fn push_tight<T>(entries: &mut Vec<T>, item: T) {
+  if entries.capacity() == 0 {
+    entries.reserve_exact(1);
+  }
+  entries.push(item);
 }
 
 /// Stable-sorts flex/grid children by `order`, keeping source order for ties.

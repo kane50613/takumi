@@ -366,7 +366,7 @@ impl LayoutResult {
       clearance_after_line: LayoutUnit::ZERO,
       lines_until_clamp: None,
       end_margin_strut: MarginStrut::default(),
-      exclusion_space: Rc::default(),
+      exclusion_space: ExclusionSpace::empty(),
       adjoining_object_types: AdjoiningObjectTypes::empty(),
       is_self_collapsing: false,
       is_pushed_by_floats: false,

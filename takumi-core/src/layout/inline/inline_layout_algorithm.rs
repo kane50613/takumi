@@ -213,7 +213,7 @@ impl<'c> LineBoxFragment<'_, 'c> {
       clearance_after_line: self.clearance_after_line,
       lines_until_clamp: self.lines_until_clamp,
       end_margin_strut: self.end_margin_strut,
-      exclusion_space: Rc::new(self.exclusion_space.clone()),
+      exclusion_space: self.exclusion_space.clone().into_rc(),
       adjoining_object_types: self.adjoining_object_types,
       is_self_collapsing: self.is_empty_line_box,
       is_pushed_by_floats: self.is_pushed_by_floats,

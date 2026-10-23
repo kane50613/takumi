@@ -154,7 +154,7 @@ impl ConstraintSpace {
       is_new_formatting_context: false,
       is_table_cell: false,
       table_cell_alignment_baseline: None,
-      exclusion_space: Rc::default(),
+      exclusion_space: ExclusionSpace::empty(),
       margin_strut: MarginStrut::default(),
       clearance_offset: LayoutUnit::MIN,
       forced_bfc_block_offset: None,
