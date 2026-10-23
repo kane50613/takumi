@@ -25,7 +25,7 @@ use crate::{
     logical_rect::{LogicalBoxStrut, LogicalOffset},
   },
   layout_unit::LayoutUnit,
-  style::{BoxDecorationBreak, BreakBetween, Overflow},
+  style::{BoxDecorationBreak, BreakBetween},
 };
 
 /// Blink's `GridItemPlacementData`: where an item sits in the grid laid out in one piece.
@@ -662,18 +662,6 @@ impl GridLayoutAlgorithm<'_, '_> {
   /// The out-of-flow children an earlier fragment broke inside or pushed here, as candidates.
   pub(super) fn resumed_out_of_flow(&self) -> Vec<OutOfFlowCandidate> {
     self.tree.resumed_out_of_flow(&self.builder)
-  }
-
-  /// This grid's block size from its first fragment to the end of this one.
-  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
-    self.builder.stitched_block_size(block_size)
-  }
-
-  /// Whether the out-of-flow boxes this grid lays out break across its fragments.
-  pub(super) fn breaks_out_of_flow_children(&self) -> bool {
-    self
-      .builder
-      .breaks_out_of_flow_children(self.style.overflow.y != Overflow::Visible)
   }
 
   /// What the grid's layout result tells its container about breaking.

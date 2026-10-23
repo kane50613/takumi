@@ -27,13 +27,13 @@ use crate::{
       setup_space_builder_for_fragmentation,
     },
     inline::inline_layout_algorithm::LineBoxFragment,
-    layout_result::{BreakInfo, LayoutResult, LayoutStatus, OutOfFlowCandidate},
+    layout_result::{BreakInfo, LayoutResult, LayoutStatus, OutOfFlowCandidate, StaticPosition},
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
     margin_strut::MarginStrut,
   },
   layout_unit::LayoutUnit,
-  style::{BreakBetween, Overflow},
+  style::BreakBetween,
 };
 
 impl<'r> BlockLayoutAlgorithm<'_, 'r> {
@@ -120,16 +120,17 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     Ok(true)
   }
 
-  /// This box's block size from its first fragment to the end of this one, `block_size` tall.
-  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
-    self.builder.stitched_block_size(block_size)
-  }
-
-  /// Whether the out-of-flow boxes this box lays out break across its fragments.
-  pub(super) fn breaks_out_of_flow_children(&self) -> bool {
-    self
-      .builder
-      .breaks_out_of_flow_children(self.style.overflow.y != Overflow::Visible)
+  /// The candidate for the out-of-flow `child` at `static_position`, which stays on the page it
+  /// starts on when the content before it must.
+  pub(super) fn out_of_flow_candidate(
+    &self,
+    child: NodeId,
+    static_position: StaticPosition,
+  ) -> OutOfFlowCandidate {
+    OutOfFlowCandidate {
+      requires_content_before_breaking: self.builder.requires_content_before_breaking,
+      ..OutOfFlowCandidate::new(child, static_position)
+    }
   }
 
   /// Blink's `HandleOutOfFlowPositioned` for an out-of-flow `child` an earlier page broke inside

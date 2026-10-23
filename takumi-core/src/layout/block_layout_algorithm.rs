@@ -16,7 +16,7 @@ use std::{mem::take, rc::Rc};
 #[cfg(feature = "fragmentation")]
 use crate::layout::box_fragment_builder::BoxFragmentBuilder;
 #[cfg(not(feature = "fragmentation"))]
-use crate::layout::floats_utils::PositionedFloat;
+use crate::layout::{floats_utils::PositionedFloat, layout_result::StaticPosition};
 
 use crate::{
   context::RenderContext,
@@ -54,7 +54,6 @@ use crate::{
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
     margin_strut::MarginStrut,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
-    out_of_flow::{ContainingBlock, OutOfFlowLayoutPart},
     relative_utils::compute_relative_offset,
     tree::{LayoutTree, RenderNode},
   },
@@ -771,13 +770,22 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         space,
         #[cfg(feature = "fragmentation")]
         self
-          .breaks_out_of_flow_children()
+          .builder
+          .breaks_out_of_flow_children(&self.style)
           .then_some(&mut self.builder),
       );
 
       self.out_of_flow.extend(candidates);
     }
-    self.lay_out_out_of_flow_children(size);
+    self.out_of_flow = self.tree.lay_out_container_out_of_flow(
+      (self.node, self.fragment_index()),
+      &self.style,
+      size,
+      self.space,
+      take(&mut self.out_of_flow),
+      #[cfg(feature = "fragmentation")]
+      &mut self.builder,
+    );
     self.commit_children();
 
     #[cfg(feature = "fragmentation")]
@@ -876,40 +884,6 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       (Some(row), Some(cell)) => row - cell,
       _ => LayoutUnit::ZERO,
     }
-  }
-
-  /// Lays out the out-of-flow boxes this box contains once its size is known, as Blink's
-  /// `HandleOofsAndSpecialDescendants`, keeping the rest for an ancestor.
-  fn lay_out_out_of_flow_children(&mut self, size: LogicalSize) {
-    if self.out_of_flow.is_empty() {
-      return;
-    }
-
-    let claims = self.tree.claims(self.node);
-    let candidates = take(&mut self.out_of_flow);
-    let containing_block = ContainingBlock::padding_box(
-      Size {
-        width: size.inline_size,
-        height: self.stitched_block_size(size.block_size),
-      },
-      self.style.border,
-    );
-    // The boxes resolve against this fragment and those before it stitched together.
-    #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
-    let mut part = OutOfFlowLayoutPart::new(
-      (self.node, self.fragment_index()),
-      claims,
-      containing_block,
-      self.space,
-    )
-    .stitched(self.previously_consumed_block_size());
-
-    // The boxes break across this box's fragments, as Blink's `FragmentedOofInCb` lays them out.
-    #[cfg(feature = "fragmentation")]
-    if self.breaks_out_of_flow_children() {
-      part = part.in_fragments(&mut self.builder);
-    }
-    self.out_of_flow = self.tree.lay_out_out_of_flow(part, candidates);
   }
 
   /// Writes each placed child's geometry once the layout stands, which only a layout that places
@@ -1055,16 +1029,11 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
-    #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
-    let mut candidate = OutOfFlowCandidate::new(
+    let candidate = self.out_of_flow_candidate(
       child,
       static_position.to_physical(self.direction(), self.inline_size),
     );
 
-    #[cfg(feature = "fragmentation")]
-    {
-      candidate.requires_content_before_breaking = self.builder.requires_content_before_breaking;
-    }
     self.out_of_flow.push(candidate);
   }
 
@@ -2423,8 +2392,12 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     false
   }
 
-  fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
-    block_size
+  fn out_of_flow_candidate(
+    &self,
+    child: NodeId,
+    static_position: StaticPosition,
+  ) -> OutOfFlowCandidate {
+    OutOfFlowCandidate::new(child, static_position)
   }
 
   fn breaks_before_float_or_out_of_flow(&mut self, _child: NodeId) -> bool {

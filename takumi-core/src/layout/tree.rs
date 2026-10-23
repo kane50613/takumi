@@ -825,9 +825,6 @@ impl<'r> LayoutTree<'r> {
       } else {
         PendingChildren::Render(render_node.children.as_deref().unwrap_or_default())
       };
-      let position = render_node.context.style.base_data.position;
-      let contains_fixed = render_node.context.style.contains_fixed_descendants();
-
       render_nodes.push(render_node);
 
       let (layout_style, container_independent) = {
@@ -847,10 +844,7 @@ impl<'r> LayoutTree<'r> {
         recent_styles.share(layout_style),
         container_independent,
         is_inline_children,
-        ContainingBlockClaims {
-          absolute: position.is_positioned() || contains_fixed,
-          fixed: contains_fixed,
-        },
+        ContainingBlockClaims::of(&render_node.context.style),
       ));
 
       let capacity = children.len();

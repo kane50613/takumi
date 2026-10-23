@@ -6,7 +6,7 @@ use crate::{
   geometry::Size,
   layout::{
     layout_style::{LayoutLength, LayoutStyle},
-    out_of_flow::depends_on_containing_block_block_size,
+    out_of_flow::{ContainingBlockClaims, depends_on_containing_block_block_size},
     tree::RenderNode,
   },
   scene::{box_ink_reach, filter_reach, has_inline_paint_content, text_ink_reach},
@@ -138,7 +138,7 @@ impl PaintReach {
         chain = chain.max(offset + ink);
       }
 
-      let contains_fixed = style.contains_fixed_descendants();
+      let claims = ContainingBlockClaims::of(style);
 
       match position {
         Position::Absolute => positioned.push(PositionedBox {
@@ -156,12 +156,12 @@ impl PaintReach {
         Position::Static | Position::Relative => {}
       }
 
-      let absolute_container = if position.is_positioned() || contains_fixed {
+      let absolute_container = if claims.absolute {
         Some(block)
       } else {
         frame.absolute_container
       };
-      let fixed_container = if contains_fixed {
+      let fixed_container = if claims.fixed {
         Some(block)
       } else {
         frame.fixed_container

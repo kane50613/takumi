@@ -25,7 +25,7 @@ use crate::{
     logical_rect::LogicalBoxStrut,
   },
   layout_unit::LayoutUnit,
-  style::{BoxDecorationBreak, BreakBetween, BreakInside},
+  style::{BoxDecorationBreak, BreakBetween, BreakInside, Overflow},
 };
 
 /// Blink's `BoxFragmentBuilder` as block fragmentation reads and writes it.
@@ -88,6 +88,26 @@ pub(crate) struct BoxFragmentBuilder {
   /// Blink's `HasFragmentainerBreak` of a new formatting context's exclusion space: a float in it
   /// broke before or inside.
   pub(crate) has_float_break: bool,
+}
+
+/// Which flow a child is in, as Blink's `PropagateBreakInfo` tells them apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChildFlow {
+  InFlow,
+  Float,
+  OutOfFlow,
+}
+
+impl ChildFlow {
+  fn of(style: &LayoutStyle) -> Self {
+    if style.is_out_of_flow() {
+      Self::OutOfFlow
+    } else if style.is_floating() {
+      Self::Float
+    } else {
+      Self::InFlow
+    }
+  }
 }
 
 impl BoxFragmentBuilder {
@@ -230,12 +250,12 @@ impl BoxFragmentBuilder {
     }
   }
 
-  /// Whether the out-of-flow boxes a box lays out break across its fragments. A box that clips its
-  /// block overflow (`clips_block_overflow`) and ends in this fragment finishes them here, so they
-  /// add no pages, as Blink's `DisableFurtherFragmentation` keeps those of a clipped containing
-  /// block from it.
-  pub(crate) fn breaks_out_of_flow_children(&self, clips_block_overflow: bool) -> bool {
-    self.involved_in_block_fragmentation() && (!clips_block_overflow || self.should_break())
+  /// Whether the out-of-flow boxes of a box styled `style` break across its fragments. A box that
+  /// clips its block overflow and ends in this fragment finishes them here, so they add no pages, as
+  /// Blink's `DisableFurtherFragmentation` keeps those of a clipped containing block from it.
+  pub(crate) fn breaks_out_of_flow_children(&self, style: &LayoutStyle) -> bool {
+    self.involved_in_block_fragmentation()
+      && (style.overflow.y == Overflow::Visible || self.should_break())
   }
 
   /// Blink's `AddBreakToken`: a break before `node`, which the next fragment resumes at, with no
@@ -270,15 +290,7 @@ impl BoxFragmentBuilder {
     result: &LayoutResult,
     block_offset: LayoutUnit,
   ) {
-    let flow = if child_style.is_out_of_flow() {
-      ChildFlow::OutOfFlow
-    } else if child_style.is_floating() {
-      ChildFlow::Float
-    } else {
-      ChildFlow::InFlow
-    };
-
-    self.propagate_break_info(result, block_offset, flow);
+    self.propagate_break_info(result, block_offset, ChildFlow::of(child_style));
     if space.should_propagate_child_break_values() {
       self.propagate_child_break_values(result, child_style);
     }
@@ -695,12 +707,4 @@ impl BoxFragmentBuilder {
       avoids_break_inside: self.has_block_fragmentation() && self.break_inside.avoids_page_break(),
     }
   }
-}
-
-/// Which flow a child is in, as Blink's `PropagateBreakInfo` tells them apart.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ChildFlow {
-  InFlow,
-  Float,
-  OutOfFlow,
 }
