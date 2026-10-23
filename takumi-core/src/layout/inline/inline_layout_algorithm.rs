@@ -4,6 +4,8 @@
 
 use std::rc::Rc;
 
+#[cfg(feature = "fragmentation")]
+use super::inline_item_text_index::InlineItemTextIndex;
 use super::{
   inline_break_token::InlineBreakToken,
   inline_child_layout_context::InlineChildLayoutContext,
@@ -12,7 +14,7 @@ use super::{
   inline_node::InlineNode,
   inline_node_data::InlineNodeData,
   justification_utils::apply_justification,
-  leading_floats::LeadingFloats,
+  leading_floats::{LeadingFloat, LeadingFloats},
   line_breaker::{AtomicInlineLayout, LineBreaker, LineBreakerMode},
   line_info::LineInfo,
   line_truncator::LineTruncator,
@@ -34,6 +36,7 @@ use crate::{
     floats_utils::{
       Clear, Float, PositionedFloat, UnpositionedFloat, adjust_to_clearance, position_float,
     },
+    fragmentation_layout_input::FragmentationLayoutInput,
     layout_result::{LayoutResult as BoxLayoutResult, LayoutStatus},
     logical_rect::{LogicalOffset, LogicalSize},
     margin_strut::MarginStrut,
@@ -915,7 +918,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     &mut self,
     line_box_metrics: &FontHeight,
     opportunity: &LineLayoutOpportunity,
-    line_info: &LineInfo<'a, 'c>,
+    line_info: &mut LineInfo<'a, 'c>,
     line_box: &mut LogicalLineItems<'a, 'c>,
   ) {
     debug_assert!(line_info.is_empty_line || !line_box_metrics.is_empty());
@@ -937,7 +940,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
     for child in &mut line_box.children {
       // An empty line placed its floats as leading ones.
-      if let Some(node) = child.unpositioned_float.take() {
+      if let Some((node, start)) = child.unpositioned_float.take() {
         let positioned_float = Self::position_float(
           space,
           origin_bfc_block_offset,
@@ -946,11 +949,16 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
           &mut *self.atomic_inline,
         );
 
-        child.bfc_offset = positioned_float.bfc_offset;
-        child.layout_result = Some(LineFragment::Float {
-          node,
-          positioned_float,
-        });
+        line_info.propagate_float_break(&positioned_float, start);
+
+        // A float the page pushed to the next one is not on this line.
+        if !positioned_float.is_pushed_to_next_page() {
+          child.bfc_offset = positioned_float.bfc_offset;
+          child.layout_result = Some(LineFragment::Float {
+            node,
+            positioned_float,
+          });
+        }
       }
 
       if !child.is_floating() {
@@ -1015,6 +1023,16 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     exclusion_space: &mut ExclusionSpace,
     leading_floats: &mut LeadingFloats,
   ) {
+    // The line breaker resumes a float in a parallel flow.
+    #[cfg(feature = "fragmentation")]
+    if self
+      .break_token
+      .as_ref()
+      .is_some_and(|break_token| break_token.is_in_parallel_block_flow)
+    {
+      return;
+    }
+
     let items = &self.items_data.items;
     let mut index = self
       .break_token
@@ -1042,13 +1060,20 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         };
 
         // An empty line's block offset is the expected one.
-        leading_floats.floats.push(Self::position_float(
+        let positioned_float = Self::position_float(
           self.constraint_space,
           self.constraint_space.expected_bfc_block_offset(),
           object.node(),
           exclusion_space,
           &mut *self.atomic_inline,
-        ));
+        );
+
+        leading_floats.floats.push(LeadingFloat {
+          #[cfg(feature = "fragmentation")]
+          parallel_flow_break_token: positioned_float
+            .parallel_flow_break_token(InlineItemTextIndex::new(index, item.start_offset())),
+          positioned_float,
+        });
       }
 
       index += 1;
@@ -1065,18 +1090,14 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     exclusion_space: &mut ExclusionSpace,
     atomic_inline: &mut dyn AtomicInlineLayout<'c>,
   ) -> PositionedFloat {
-    let mut unpositioned_float = UnpositionedFloat::new(
-      node,
-      space.available_and_percentage_sizes(),
-      BfcOffset::new(space.bfc_offset.line_offset, origin_bfc_block_offset),
-      space,
-      space.line_clamp_data.float_state(),
-    );
+    let input = FragmentationLayoutInput::default();
+    let mut unpositioned_float =
+      UnpositionedFloat::in_line(node, space, origin_bfc_block_offset, &input, atomic_inline);
 
     position_float(
       &mut unpositioned_float,
       exclusion_space,
-      &mut |node, space| atomic_inline.layout_float(node, space),
+      &mut |node, space| atomic_inline.layout_float(node, space, &input),
     )
   }
 }

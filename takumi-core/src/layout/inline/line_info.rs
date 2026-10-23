@@ -13,7 +13,10 @@ use super::{
 use crate::{
   context::RenderContext,
   fonts::shaping::shape_result_run::AdjustMidCluster,
-  layout::{bfc_rect::BfcOffset, layout_result::LayoutResult as BoxLayoutResult},
+  layout::{
+    bfc_rect::BfcOffset, floats_utils::PositionedFloat,
+    layout_result::LayoutResult as BoxLayoutResult,
+  },
   layout_unit::LayoutUnit,
   style::{ComputedStyle, Direction as TextDirection, TextAlign, WhiteSpaceCollapse},
   text::character::{LINE_FEED, is_other_space_separator},
@@ -47,7 +50,7 @@ pub(crate) struct LineInfo<'a, 'c> {
   /// Blink's `BfcOffset`: the line-left and block offsets of the line opportunity.
   pub(crate) bfc_offset: BfcOffset,
   pub(crate) break_token: Option<InlineBreakToken>,
-  /// Blink's `ParallelFlowBreakTokens`: where the blocks-in-inline that overflowed resume.
+  /// Blink's `ParallelFlowBreakTokens`: where the floats and blocks-in-inline a page broke resume.
   #[cfg(feature = "fragmentation")]
   pub(crate) parallel_flow_break_tokens: Vec<InlineBreakToken>,
   available_width: LayoutUnit,
@@ -107,6 +110,27 @@ impl<'a, 'c> LineInfo<'a, 'c> {
       needs_accurate_end_position: false,
       allow_hang_for_alignment: false,
     }
+  }
+
+  /// Blink's `PropagateParallelFlowBreakToken` for a float the page broke, whose item starts at
+  /// `start`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn propagate_float_break(
+    &mut self,
+    positioned_float: &PositionedFloat,
+    start: InlineItemTextIndex,
+  ) {
+    self
+      .parallel_flow_break_tokens
+      .extend(positioned_float.parallel_flow_break_token(start));
+  }
+
+  #[cfg(not(feature = "fragmentation"))]
+  pub(crate) fn propagate_float_break(
+    &mut self,
+    _positioned_float: &PositionedFloat,
+    _start: InlineItemTextIndex,
+  ) {
   }
 
   /// Blink's `Reset`.

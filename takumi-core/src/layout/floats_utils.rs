@@ -16,6 +16,7 @@ use crate::{
     fragmentation_utils::{
       adjust_margins_for_fragmentation, is_break_inside, move_past_breakpoint,
     },
+    inline::{inline_break_token::InlineBreakToken, inline_item_text_index::InlineItemTextIndex},
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
   },
@@ -29,7 +30,8 @@ use crate::{
       exclusion_area::ExclusionArea, exclusion_space::ExclusionSpace,
       layout_opportunity::LayoutOpportunity,
     },
-    inline::inline_item_result::LineBoxStrut,
+    fragmentation_layout_input::FragmentationLayoutInput,
+    inline::{inline_item_result::LineBoxStrut, line_breaker::AtomicInlineLayout},
     layout_result::LayoutResult,
     line_clamp_data::LineClampFloatState,
     logical_rect::AvailableLogicalSize,
@@ -103,6 +105,27 @@ pub(crate) struct FloatFragmentation {
 }
 
 impl<'c> UnpositionedFloat<'c> {
+  /// A float `node` of a line laid out in `space`, from `origin_bfc_block_offset`, resumed as
+  /// `input` says.
+  pub(crate) fn in_line(
+    node: &'c RenderNode,
+    space: &ConstraintSpace,
+    origin_bfc_block_offset: LayoutUnit,
+    input: &FragmentationLayoutInput,
+    atomic_inline: &mut dyn AtomicInlineLayout<'c>,
+  ) -> Self {
+    let mut unpositioned_float = Self::new(
+      node,
+      space.available_and_percentage_sizes(),
+      BfcOffset::new(space.bfc_offset.line_offset, origin_bfc_block_offset),
+      space,
+      space.line_clamp_data.float_state(),
+    );
+
+    atomic_inline.setup_float_for_fragmentation(&mut unpositioned_float, space, input);
+    unpositioned_float
+  }
+
   pub(crate) fn new(
     node: &'c RenderNode,
     (available_size, percentage_size): (AvailableLogicalSize, AvailableLogicalSize),
@@ -194,6 +217,37 @@ pub(crate) struct PositionedFloat {
   /// The break before the float that pushes it to the next page.
   #[cfg(feature = "fragmentation")]
   pub(crate) break_before_token: Option<Rc<BlockBreakToken>>,
+}
+
+impl PositionedFloat {
+  /// Whether the page pushed the float to the next one whole, which leaves it out of this page.
+  pub(crate) fn is_pushed_to_next_page(&self) -> bool {
+    #[cfg(feature = "fragmentation")]
+    return self.break_before_token.is_some();
+    #[cfg(not(feature = "fragmentation"))]
+    return false;
+  }
+
+  /// Blink's `BreakToken`: where the float resumes on a later page, none once it ended.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn break_token(&self) -> Option<&Rc<BlockBreakToken>> {
+    self
+      .break_before_token
+      .as_ref()
+      .or(self.layout_result.break_info.break_token.as_ref())
+  }
+
+  /// Blink's `CreateForParallelBlockFlow` for a float of inline content whose item starts at
+  /// `start`: where the float the page broke resumes, beside the lines after it.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn parallel_flow_break_token(
+    &self,
+    start: InlineItemTextIndex,
+  ) -> Option<InlineBreakToken> {
+    self
+      .break_token()
+      .map(|token| InlineBreakToken::for_parallel_block_flow(start, Rc::clone(token)))
+  }
 }
 
 /// Blink's `AdjustToClearance`.

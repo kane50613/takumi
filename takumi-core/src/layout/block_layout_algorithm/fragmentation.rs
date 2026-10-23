@@ -3,8 +3,8 @@
 //! and the parts of
 //! [`fragmentation_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/fragmentation_utils.cc)
 //! that read the fragment builder, for pages alone. Approximate: flex and grid boxes do not break,
-//! nor do floats among lines, and `box-decoration-break: clone` sizes a box without the border and
-//! padding its earlier fragments repeat.
+//! and `box-decoration-break: clone` sizes a box without the border and padding its earlier
+//! fragments repeat.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
