@@ -112,12 +112,7 @@ The counter is a class on an element, not a `render` callback. See [Headers & fo
 
 ## Assets load differently
 
-The asset APIs map as follows.
-
-- `Font.register` becomes the `fonts` option.
-- `<Image src>` becomes `<img src>` plus the `images` option.
-- An SVG goes through `<svg>` or the `images` option.
-- `Font.registerEmojiSource` becomes `extractEmojis`, then `prepareImages`.
+The component map above shows where `Font.register`, `<Image>`, and `Font.registerEmojiSource` go.
 
 <Callout type="warn">
   Takumi does not use the 14 standard PDF fonts. Register every font your template uses.
