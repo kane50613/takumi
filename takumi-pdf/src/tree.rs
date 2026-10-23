@@ -9,14 +9,13 @@ use takumi_core::{
   layout::{
     layout_view::LayoutView,
     node::{Node, NodeKind},
-    tree::RenderNode,
+    paged_layout::PagedLayout,
+    tree::{LayoutResults, RenderNode},
   },
   paint_property::PropertyTrees,
   painter::OwnContent,
   resources::image::ImageSource,
-  scene::{
-    FragmentPlacements, NodePaint, PagedScene, PaintItemKind, Scene, SceneRef, StackingContextNode,
-  },
+  scene::{FragmentPlacements, NodePaint, PaintItemKind, Scene, SceneRef, StackingContextNode},
   style::{
     ComputedStyle, Display, FontFamily, Lang, Length, Position, SizingContext, Style,
     StyleDeclaration, StyleSheet, ZIndex,
@@ -89,14 +88,25 @@ impl TreeInputs<'_> {
     self.prepare(node, viewport)
   }
 
-  /// The content laid out across pages, how many, and the `fixed` subtrees attached to the
-  /// initial containing block. Those repeat on every page, so they lay out against the page area
-  /// on their own.
+  /// The content laid out across pages, and the `fixed` subtrees attached to the initial
+  /// containing block.
   pub(crate) fn prepare_paged(
     &self,
     node: Node,
     frame: &PageFrame,
-  ) -> Result<(PreparedTree, Vec<Repeatable>, usize), PdfError> {
+  ) -> Result<(PagedContent, Vec<Repeatable>), PdfError> {
+    let (root, repeated) = self.prepare_root(node, frame)?;
+
+    Ok((PagedContent::lay_out(root, frame.page_size())?, repeated))
+  }
+
+  /// The content tree to lay out across pages, and the `fixed` subtrees taken out of it. Those
+  /// repeat on every page, so they lay out against the page area on their own.
+  pub(crate) fn prepare_root(
+    &self,
+    node: Node,
+    frame: &PageFrame,
+  ) -> Result<(RenderNode, Vec<Repeatable>), PdfError> {
     let viewport = frame.column();
     let node = fill_root(node, viewport);
     // A repeated box holding a counter lays out again per page, from the subtree
@@ -104,13 +114,6 @@ impl TreeInputs<'_> {
     let source = has_page_counters(&node).then(|| node.clone());
     let mut root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
     let repeated = take_repeating_fixed(&mut root);
-    let (content, page_count) = PreparedTree::lay_out_pages(
-      root,
-      Size {
-        width: frame.content_width,
-        height: frame.window_height,
-      },
-    )?;
     let page_context = self.context(frame.page_area);
     let repeated = repeated
       .into_iter()
@@ -131,7 +134,7 @@ impl TreeInputs<'_> {
       })
       .collect::<Result<Vec<_>, PdfError>>()?;
 
-    Ok((content, repeated, page_count))
+    Ok((root, repeated))
   }
 }
 
@@ -155,22 +158,6 @@ impl PreparedTree {
     Ok(Self {
       scene: Scene::lay_out(root, viewport, true)?,
     })
-  }
-
-  /// `root` laid out on pages `page_size`, the pages stacked in one scene, and how many there are.
-  pub(crate) fn lay_out_pages(
-    root: RenderNode,
-    page_size: Size<f32>,
-  ) -> Result<(Self, usize), PdfError> {
-    let paged = PagedScene::lay_out(root, page_size, MAX_PAGES, true)?;
-    let page_count = paged.page_count();
-
-    Ok((
-      Self {
-        scene: paged.into_scene(),
-      },
-      page_count,
-    ))
   }
 
   /// The size the caller's own node laid out at, which is what `measure`
@@ -213,6 +200,37 @@ impl PreparedTree {
     tagged: bool,
   ) -> Emitter<'a> {
     self.view().emitter(state, inline, chunks, tagged)
+  }
+}
+
+/// A tree laid out on pages, which the scene of each page is built from.
+pub(crate) struct PagedContent {
+  pub(crate) root: RenderNode,
+  results: LayoutResults,
+  pub(crate) page_size: Size<f32>,
+  pub(crate) page_count: usize,
+}
+
+impl PagedContent {
+  /// `root` laid out on pages `page_size`.
+  pub(crate) fn lay_out(root: RenderNode, page_size: Size<f32>) -> Result<Self, PdfError> {
+    let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
+
+    while layout.next_page()?.is_some() {}
+
+    let page_count = layout.page_count();
+    let results = layout.into_results();
+
+    Ok(Self {
+      root,
+      results,
+      page_size,
+      page_count,
+    })
+  }
+
+  pub(crate) fn layout(&self) -> LayoutView<'_> {
+    self.results.view()
   }
 }
 

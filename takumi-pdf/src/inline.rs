@@ -1,8 +1,7 @@
 //! Text boxes' inline layout, read from the fragment items layout left on each
-//! box: page emission keeps a box's resolved runs while consecutive pages show
-//! it.
+//! box, resolved once for the page that shows it.
 
-use std::{cell::RefCell, collections::HashMap, mem::replace, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use takumi_core::{
   font_style::SizedFontStyle,
@@ -27,8 +26,7 @@ struct PreparedInline<'c> {
 /// goes by without using them.
 pub(crate) struct InlineCache<'c> {
   boxes: HashMap<FragmentKey, &'c TextBox<'c>>,
-  /// Each built layout, and whether the page being emitted used it.
-  built: RefCell<HashMap<FragmentKey, (Rc<PreparedInline<'c>>, bool)>>,
+  built: RefCell<HashMap<FragmentKey, Rc<PreparedInline<'c>>>>,
 }
 
 /// A text-bearing box's fragment in a prepared tree, with the resolved font style its inline layout
@@ -79,8 +77,7 @@ impl<'c> InlineCache<'c> {
 
   /// The layout of the fragment `key` names of a text box, built now if no page kept it.
   fn get(&self, key: FragmentKey) -> Result<Option<Rc<PreparedInline<'c>>>, PdfError> {
-    if let Some((prepared, used)) = self.built.borrow_mut().get_mut(&key) {
-      *used = true;
+    if let Some(prepared) = self.built.borrow().get(&key) {
       return Ok(Some(Rc::clone(prepared)));
     }
     let Some(text_box) = self.boxes.get(&key) else {
@@ -96,19 +93,8 @@ impl<'c> InlineCache<'c> {
       font_style: &text_box.font_style,
     });
 
-    self
-      .built
-      .borrow_mut()
-      .insert(key, (Rc::clone(&prepared), true));
+    self.built.borrow_mut().insert(key, Rc::clone(&prepared));
     Ok(Some(prepared))
-  }
-
-  /// Drops the layouts the page just emitted did not use.
-  pub(crate) fn end_page(&self) {
-    self
-      .built
-      .borrow_mut()
-      .retain(|_, (_, used)| replace(used, false));
   }
 }
 

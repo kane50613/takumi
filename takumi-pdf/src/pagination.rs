@@ -1,17 +1,17 @@
 //! The content laid out across pages, which takumi-core's block fragmentation breaks, and the
 //! page counters filled in from where it put each box.
 
-use takumi_core::{geometry::Size, layout::node::Node};
+use takumi_core::{layout::node::Node, scene::PageWindows};
 
 use crate::{
   bands::Repeatable,
   counters::{
     BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
-  interactive::{LinkTarget, PageSummary, collect_links},
+  interactive::PageSummary,
   options::PdfError,
   page::PageFrame,
-  tree::{PreparedTree, TreeInputs},
+  tree::{PagedContent, TreeInputs},
 };
 
 /// How many pages one render may lay its content out on. A document tall enough to pass this is
@@ -29,10 +29,11 @@ const COUNTER_PASSES: usize = 3;
 /// interactive targets the pages draw from. The pages stack in the content's coordinates, each the
 /// page area tall.
 pub(crate) struct Paginated {
-  pub(crate) content: PreparedTree,
+  pub(crate) content: PagedContent,
+  /// Which of the content's root fragments paint on each page.
+  pub(crate) windows: PageWindows,
   pub(crate) repeated: Vec<Repeatable>,
   pub(crate) starts: Vec<f32>,
-  pub(crate) links: Vec<LinkTarget>,
   pub(crate) summary: PageSummary,
   window: f32,
 }
@@ -86,23 +87,31 @@ impl Paginated {
     frame: &PageFrame,
     counts: bool,
   ) -> Result<Self, PdfError> {
-    let (content, repeated, page_count) = inputs.prepare_paged(node, frame)?;
+    let (content, repeated) = inputs.prepare_paged(node, frame)?;
     let window = frame.window_height;
-    let starts = (0..page_count).map(|page| page as f32 * window).collect();
+    let starts = (0..content.page_count)
+      .map(|page| page as f32 * window)
+      .collect();
+    let mut windows = PageWindows::new(content.page_size);
+
+    windows.refresh(
+      &content.root,
+      content.layout(),
+      content.page_count,
+      content.page_count,
+    )?;
+
     let summary = PageSummary::of_pages(
-      &content.scene.root,
-      content.scene.results.view(),
-      Size {
-        width: frame.content_width,
-        height: window,
-      },
-      page_count,
+      &content.root,
+      content.layout(),
+      content.page_size,
+      &windows,
       counts,
     )?;
 
     Ok(Self {
-      links: collect_links(content.view()),
       content,
+      windows,
       repeated,
       starts,
       summary,
@@ -170,7 +179,7 @@ impl Paginated {
 mod tests {
   use std::{fs, path::Path, rc::Rc};
 
-  use takumi_core::{Fonts, resources::font::FontResource};
+  use takumi_core::{Fonts, resources::font::FontResource, scene::PagedScene};
   use takumi_html::{FromHtmlOptions, from_html};
 
   use super::*;
@@ -178,6 +187,7 @@ mod tests {
     interactive::Interactive,
     options::{PageMargins, PageOptions},
     page::{PageFrame, band_viewport},
+    tree::PreparedTree,
   };
 
   fn fonts() -> Fonts {
@@ -282,6 +292,18 @@ mod tests {
     ]
   }
 
+  /// The summary of the scene of every page of `node`, which the pages' summaries replace.
+  fn whole_scene_summary(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> PageSummary {
+    let (root, _) = inputs.prepare_root(node, frame).expect("the tree prepares");
+    let paged =
+      PagedScene::lay_out(root, frame.page_size(), MAX_PAGES, true).expect("the pages lay out");
+
+    Interactive::collect_with_extents(&PreparedTree {
+      scene: paged.into_scene(),
+    })
+    .summary
+  }
+
   /// A paged document's page summaries add up to the summary a scene of every page gives.
   #[test]
   fn page_summaries_add_up_to_the_summary_of_the_whole_scene() {
@@ -324,7 +346,7 @@ mod tests {
           .expect("the page has an area");
         let paginated = Paginated::build_once(node.clone(), &inputs, &frame, true)
           .unwrap_or_else(|_| panic!("{name} lays out on {width}x{height}"));
-        let whole = Interactive::collect_with_extents(&paginated.content).summary;
+        let whole = whole_scene_summary(node.clone(), &inputs, &frame);
 
         assert_eq!(
           paginated.summary,

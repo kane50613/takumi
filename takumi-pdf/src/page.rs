@@ -4,6 +4,7 @@ use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
   layout::node::Node,
+  scene::SceneRef,
   style::Color,
   viewport::{MediaTarget, Viewport},
 };
@@ -13,9 +14,9 @@ use std::mem::take;
 use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
   chunks::SceneChunks,
-  emitter::DocumentState,
+  emitter::{DocumentState, Emitter},
   inline::{InlineCache, TextBox},
-  interactive::{add_link_annotations, xyz_destination},
+  interactive::{add_link_annotations, collect_links, xyz_destination},
   krilla::{
     Document,
     destination::XyzDestination,
@@ -26,7 +27,7 @@ use crate::{
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
   pagination::{PageSlice, Paginated},
   paint::paint_page_background,
-  tree::TreeInputs,
+  tree::{SceneView, TreeInputs},
   window::{ContentWindow, Window},
 };
 
@@ -91,6 +92,14 @@ impl PageFrame {
         },
       ),
     })
+  }
+
+  /// The size of a page's area, which the content paginates against.
+  pub(crate) fn page_size(&self) -> Size<f32> {
+    Size {
+      width: self.content_width,
+      height: self.window_height,
+    }
   }
 
   /// The content column: content width, unbounded height. Viewport units
@@ -247,25 +256,18 @@ impl PagePlan {
     state: &DocumentState<'_>,
     background: Option<Color>,
   ) -> Result<(), PdfError> {
-    let text_boxes = TextBox::collect(self.paginated.content.view());
-    let inline = InlineCache::new(&text_boxes);
-    let chunks = SceneChunks::new(self.paginated.content.view());
     let composer = PageComposer {
       plan: self,
       inputs,
       page_context: inputs.context(self.frame.page_area),
-      inline: &inline,
-      chunks: &chunks,
       state,
       background,
     };
 
     for slice in self.paginated.pages() {
-      if !self.selection.keeps(slice.index) {
-        continue;
+      if self.selection.keeps(slice.index) {
+        composer.compose(pdf, &self.repeatables, &slice)?;
       }
-      composer.compose(pdf, &self.repeatables, &slice)?;
-      inline.end_page();
     }
     Ok(())
   }
@@ -286,8 +288,6 @@ pub(crate) struct PageComposer<'c, 'g> {
   pub(crate) plan: &'c PagePlan,
   pub(crate) inputs: &'c TreeInputs<'g>,
   pub(crate) page_context: RenderContext,
-  pub(crate) inline: &'c InlineCache<'c>,
-  pub(crate) chunks: &'c SceneChunks<'c>,
   pub(crate) state: &'c DocumentState<'c>,
   pub(crate) background: Option<Color>,
 }
@@ -316,6 +316,19 @@ impl PageComposer<'_, '_> {
         )
       })
       .collect::<Result<Vec<_>, _>>()?;
+    let content = &paginated.content;
+    let scene = SceneRef::window(
+      &content.root,
+      content.layout(),
+      content.page_size,
+      &paginated.windows.pages_reaching(slice.index),
+      true,
+    )?;
+    let scene = SceneView::of_window(&scene);
+    let links = collect_links(scene);
+    let text_boxes = TextBox::collect(scene);
+    let inline = InlineCache::new(&text_boxes);
+    let chunks = SceneChunks::new(scene);
     let mut pdf_page = pdf.start_page_with(PageSettings::new(frame.page_size));
     let mut surface = pdf_page.surface();
 
@@ -324,7 +337,11 @@ impl PageComposer<'_, '_> {
     for repeatable in resolved.iter().filter(|page| page.draws_before_content()) {
       repeatable.emit(frame, self.state, &mut surface)?;
     }
-    self.emit_content(slice, &mut surface)?;
+    self.emit_content(
+      scene.emitter(self.state, Some(&inline), Some(&chunks), true),
+      slice,
+      &mut surface,
+    )?;
     for repeatable in resolved.iter().filter(|page| !page.draws_before_content()) {
       repeatable.emit(frame, self.state, &mut surface)?;
     }
@@ -334,7 +351,7 @@ impl PageComposer<'_, '_> {
 
     add_link_annotations(
       &mut pdf_page,
-      &paginated.links,
+      &links,
       (slice.start, slice.end),
       CorePoint {
         x: frame.margin.left,
@@ -364,7 +381,12 @@ impl PageComposer<'_, '_> {
 
   /// Emits the content through this page's window: clipped to the page area and translated so
   /// the page lands at the content origin.
-  fn emit_content(&self, slice: &PageSlice, surface: &mut Surface) -> Result<(), PdfError> {
+  fn emit_content(
+    &self,
+    emitter: Emitter<'_>,
+    slice: &PageSlice,
+    surface: &mut Surface,
+  ) -> Result<(), PdfError> {
     let frame = &self.plan.frame;
 
     ContentWindow {
@@ -384,13 +406,6 @@ impl PageComposer<'_, '_> {
       },
       artifact: false,
     }
-    .emit(
-      self
-        .plan
-        .paginated
-        .content
-        .emitter(self.state, Some(self.inline), Some(self.chunks), true),
-      surface,
-    )
+    .emit(emitter, surface)
   }
 }

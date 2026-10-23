@@ -313,7 +313,7 @@ struct SinglePage {
 impl Rendered {
   fn root(&self) -> &RenderNode {
     match self {
-      Self::Paged(plan) => &plan.paginated.content.scene.root,
+      Self::Paged(plan) => &plan.paginated.content.root,
       Self::Single(page) => &page.content.scene.root,
     }
   }

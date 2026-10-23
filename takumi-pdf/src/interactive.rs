@@ -202,14 +202,12 @@ impl PageSummary {
     root: &RenderNode,
     layout: LayoutView<'_>,
     page_size: Size<f32>,
-    pages: usize,
+    windows: &PageWindows,
     extents: bool,
   ) -> Result<Self, PdfError> {
-    let mut windows = PageWindows::new(page_size);
     let mut summary = Self::new(extents);
 
-    windows.refresh(root, layout, pages, pages)?;
-    for page in 0..pages {
+    for page in 0..windows.page_count() {
       summary.absorb(Self::of_page(
         root,
         layout,
