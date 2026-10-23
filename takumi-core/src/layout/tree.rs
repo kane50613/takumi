@@ -221,6 +221,16 @@ impl LayoutResults {
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
+  /// Whether the node's fragment `fragment_index` repeats an earlier one, as a table header does on each page.
+  pub fn is_repeated_fragment(&self, node_id: NodeId, fragment_index: usize) -> bool {
+    self.node(node_id).is_ok_and(|node| {
+      node
+        .fragments
+        .get(fragment_index)
+        .is_some_and(|fragment| fragment.is_repeated)
+    })
+  }
+
   /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
   /// none when it holds none.
   pub(crate) fn fragment_in(
@@ -454,6 +464,8 @@ pub(crate) struct BoxFragment {
   /// fragment's children says.
   #[cfg(feature = "fragmentation")]
   pub(crate) container_fragment_index: usize,
+  /// Whether the fragment repeats an earlier one, as a table header does on each page.
+  pub(crate) is_repeated: bool,
 }
 
 /// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as

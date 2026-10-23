@@ -613,6 +613,7 @@ impl BoxFragmentBuilder {
       is_block_size_for_fragmentation_clamped: self.is_block_size_for_fragmentation_clamped,
       is_first_for_node: self.is_first_for_node,
       fragment_index: fragment_index(self.previous_break_token.as_deref()),
+      is_repeated: false,
       avoids_break_inside: self.has_block_fragmentation() && self.break_inside.avoids_page_break(),
     }
   }
