@@ -324,6 +324,39 @@ fn line_count(scene: &Scene, paint: &NodePaint) -> usize {
     .len()
 }
 
+/// A flex item stretched past the page where its lines end lays out none on the later pages.
+#[test]
+fn lines_that_ended_stay_on_their_page_in_a_stretched_box() {
+  let tree = render(
+    root([Node::container([
+      block("tall", "h600"),
+      Node::container([Node::text("Beside")])
+        .with_tag_name("p")
+        .with_id("p"),
+    ])
+    .with_class_name("flex")]),
+    ".h600 { height: 600px; width: 100px } .flex { display: flex }",
+  );
+  let mut paged = PagedScene::lay_out(
+    tree,
+    Size {
+      width: 300.0,
+      height: 200.0,
+    },
+    false,
+  )
+  .expect("pages lay out");
+  let scene = paged.page(0);
+
+  assert_eq!(
+    paints_of(scene, "p")
+      .iter()
+      .map(|paint| line_count(scene, paint))
+      .collect::<Vec<_>>(),
+    [1, 0, 0]
+  );
+}
+
 #[test]
 fn a_sliced_box_leaves_its_border_out_where_it_breaks() {
   let tree = render(

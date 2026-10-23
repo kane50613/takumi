@@ -2094,6 +2094,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let style = Rc::clone(&self.style);
 
     if !self.resume_inline_child(inline_child) {
+      self.set_has_seen_all_children();
       return Ok(());
     }
 
