@@ -1,14 +1,14 @@
 ---
 title: Charts
-description: Embed SVG charts in PDF documents with vector output, chart fonts, and accessible descriptions.
+description: Embed an SVG chart in a PDF as vector graphics, register fonts for its labels, and describe its data for screen readers.
 icon: ChartColumn
 ---
 
-Embed a chart as SVG to keep its lines and shapes as vectors. Generate the SVG before rendering the document. For a complete ECharts example, see [Charts](/docs/charts#render-an-echarts-chart).
+A chart in a PDF needs vector lines and shapes, fonts that cover its labels, and a description of its data. Embed the chart as SVG to keep its lines and shapes as vectors, and generate the SVG before rendering the document. For a complete ECharts example, see [Charts](/docs/charts#render-an-echarts-chart).
 
 ## Add a chart
 
-Pass the SVG string to `src` and set its size in CSS px:
+Pass the SVG string to `src` and set its size in CSS px.
 
 ```tsx twoslash title="Add a chart"
 declare const svg: string;
@@ -29,7 +29,7 @@ const pdf = await render(
 );
 ```
 
-Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart and caption on one page when they fit. Pick a size that fits inside the page margins.
+Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart and caption on one page when they fit. Pick a size that fits inside the page margins. [Pagination](/docs/pdf/pagination) lists every break property.
 
 ## Fonts for chart labels
 
@@ -39,7 +39,7 @@ Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart 
   fonts ahead of time.
 </Callout>
 
-Fonts from `registerFont()` stay loaded for every render:
+Fonts from `registerFont()` stay loaded for every render. [Fonts & images](/docs/pdf/assets) covers font loading in full.
 
 ```tsx twoslash title="Register chart label fonts"
 declare const svg: string;
@@ -69,6 +69,4 @@ SVG labels are drawn as outlines. They stay visible, but readers cannot select, 
 
 ## Describe the data
 
-Give the chart a meaningful `alt`. Tagged output uses it as the figure description. A label such as "Bar chart" names the image but says nothing about its data.
-
-For a detailed chart, add a table of the underlying values. See [Reports and statements](/docs/pdf/reports#long-tables) for a table that continues across pages.
+Give the chart a meaningful `alt`. Tagged output uses it as the figure description. A label such as "Bar chart" names the image but says nothing about its data. [PDF/A & PDF/UA](/docs/pdf/conformance#tagged-output) describes how `alt` maps to the structure tree. For a detailed chart, add a table of the underlying values. See [Reports & statements](/docs/pdf/reports#long-tables) for a table that continues across pages.

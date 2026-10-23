@@ -1,6 +1,6 @@
 ---
 title: Fonts
-description: Load local or Google Fonts, choose fallbacks for multilingual text, and control typography in Takumi.
+description: Load local or Google Fonts, choose fallbacks for multilingual text, and control variable axes and synthetic styles in Takumi.
 icon: Type
 ---
 
@@ -24,9 +24,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 | Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                     |
 | Descriptor | `{ name, data, weight, style, generic }`. The fields override what the file reports. |
 
-`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`.
-
-The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
@@ -88,7 +86,7 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
 });
 ```
 
-`googleFonts` makes one CSS request for all the families. Font files download only when the text needs them; see [subsetting](#subsetting). Use the family name in `fontFamily`.
+`googleFonts` makes one CSS request for all the families. Font files download only when the text needs them, as [subsetting](#subsetting) describes. Use the family name in `fontFamily`.
 
 Pass an object instead of a name to set a family's weight, style, or variable axes:
 
@@ -139,7 +137,7 @@ const fonts = await googleFonts({
 | `cache`    | a `Map`                | Replaces the default cache of CSS responses.              |
 | `baseUrl`  | a css2 endpoint        | Point at a mirror such as `https://fonts.bunny.net/css2`. |
 
-`googleFonts` also takes the [fetch options](/docs/images#fetch-limits): `timeout`, `signal`, `maxBytes`, `allowUrl`, and `fetch`. The timeout covers each request on its own: the CSS request, then each font file. It does not cover the whole render.
+`googleFonts` also takes the [fetch options](/docs/images#fetch-limits): `timeout`, `signal`, `maxBytes`, `allowUrl`, and `fetch`. The timeout covers each request on its own, first the CSS request and then each font file. It does not cover the whole render.
 
 The default CSS cache is bounded and shares concurrent requests for the same URL. A request with `signal` or `allowUrl` skips the cache, so cancellation and URL checks stay with the caller. `maxBytes` applies to cache hits too.
 
@@ -158,9 +156,7 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello</div>, {
 });
 ```
 
-Retries recover a brief outage. They do not help when the host is down or the CI network blocks it. Run unit tests against local files or an injected `fetch`, and test the live service separately.
-
-An outer test or route timeout can end the render before the font timeout does. Set `timeout` below that outer limit, and leave time for layout and encoding.
+Retries recover a brief outage. They do not help when the host is down or the CI network blocks it. Run unit tests against local files or an injected `fetch`, and test the live service separately. An outer test or route timeout can end the render before the font timeout does. Set `timeout` below that outer limit, and leave time for layout and encoding.
 
 CJK families can have many coverage subsets. Takumi downloads only the subsets your text uses. Matching subsets from several families or weights still download together, so request only the families and weights you use. A timeout during `await googleFonts(...)` comes from the CSS request, before any font file downloads.
 
@@ -207,9 +203,7 @@ renderer.unregisterFont({ name: "Inter" }); // every face and subset of Inter
 renderer.clearFonts(); // back to the built-in Geist
 ```
 
-A later render that lists a released font loads it again.
-
-To release fonts automatically, cap the decoded bytes that `fonts` lists may keep:
+A later render that lists a released font loads it again. To release fonts automatically, cap the decoded bytes that `fonts` lists may keep:
 
 ```ts
 const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 });
@@ -239,7 +233,7 @@ A missing glyph walks the chain until a family covers it. `googleFonts` register
 
 ### Variable axes & OpenType features
 
-Set font axes with `font-variation-settings` and OpenType features with `font-feature-settings`. In a variable font, `font-weight` drives the `wght` axis and `font-stretch` drives `wdth`. Kerning is on by default; `font-kerning: none` turns it off.
+Set font axes with `font-variation-settings` and OpenType features with `font-feature-settings`. In a variable font, `font-weight` drives the `wght` axis and `font-stretch` drives `wdth`. Kerning is on by default, and `font-kerning: none` turns it off.
 
 ```tsx title="Set axes and OpenType features"
 <div
@@ -260,7 +254,7 @@ Register a variable font once, with no `weight`, to keep its axes live:
 await renderer.registerFont({ name: "Fraunces", data: variableWoff2 });
 ```
 
-`googleFonts` does this for you: a weight range or an `axes` entry fetches the variable file and leaves its axes free.
+`googleFonts` does this for you. A weight range or an `axes` entry fetches the variable file and leaves its axes free.
 
 <Callout>
   Which axes a file exposes depends on the build. Google Fonts fixes the axes you did not request at

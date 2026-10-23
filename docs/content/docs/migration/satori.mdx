@@ -1,48 +1,12 @@
 ---
-title: Takumi vs. Satori
-description: Compare Takumi with satori and next/og, including layout, CSS, fonts, output formats, and migration steps.
+title: From satori & next/og
+description: Switch from satori or next/og to Takumi, or compare the three on layout, CSS, fonts, and output formats.
 icon: Scale
 ---
 
-[satori](https://github.com/vercel/satori) turns JSX into an SVG string. `next/og` pairs an older satori with [resvg](https://github.com/yisibl/resvg-js) to return a PNG.
+[satori](https://github.com/vercel/satori) turns JSX into an SVG string. `next/og` pairs an older satori with [resvg](https://github.com/yisibl/resvg-js) to return a PNG. Takumi renders the same JSX to images, SVG, and more.
 
-Takumi is one Rust engine. Its text and inline layout port Chromium's Blink, and the same layout feeds three packages:
-
-| Package        | Output                                                                   |
-| :------------- | :----------------------------------------------------------------------- |
-| `takumi-js`    | PNG, JPEG, WebP, ICO, raw pixels, SVG, and animated WebP, APNG, or GIF   |
-| `takumi-pdf`   | Paged [PDF](/docs/pdf) with selectable text                              |
-| `takumi-paint` | A [paint tree](/docs/paint) to draw with Canvas, slides, or a native API |
-
-```mermaid
-flowchart LR
-    J1[JSX] --> S[satori] --> V[SVG string] --> R[resvg / sharp] --> P1[PNG]
-    J2[JSX / HTML] --> T[Takumi layout] --> I["takumi-js: images, SVG, animations"]
-    T --> D["takumi-pdf: PDF"]
-    T --> G["takumi-paint: paint tree"]
-```
-
-Compare rendered output across renderers at [image-bench.kane.tw](https://image-bench.kane.tw).
-
-## Features
-
-satori changes quickly, so this table names versions. `next/og` in Next.js 16.4 bundles `@vercel/og` 1.0.1, which uses satori 0.29. The satori column follows the satori 0.63 README.
-
-| Feature                           | `next/og`           | satori 0.63                                     | Takumi                                                            |
-| :-------------------------------- | :------------------ | :---------------------------------------------- | :---------------------------------------------------------------- |
-| Layout                            | Flexbox only (Yoga) | Flexbox, Grid, block (Taffy), own inline layout | Flexbox, Grid, block, float, tables, and inline layout from Blink |
-| `display` of a bare `<div>`       | `flex`              | `block`                                         | `block`                                                           |
-| Tables                            | ❌                  | ❌ throws                                       | ✅ [Tables](/docs/tables)                                         |
-| `<style>`, selectors, `@media`    | ❌                  | ✅                                              | ✅                                                                |
-| `calc()`, `z-index`               | ❌                  | ✅                                              | ✅                                                                |
-| `@keyframes` and animated output  | ❌                  | ❌ `@keyframes` is ignored                      | ✅ [Keyframe animation](/docs/animation)                          |
-| React hooks (`useState`, `use()`) | ❌                  | ❌                                              | ✅ initial state, no effects                                      |
-| WOFF2                             | ❌                  | ✅                                              | ✅                                                                |
-| Right-to-left text                | ❌                  | Partial                                         | ✅                                                                |
-| Built-in font                     | Geist Regular       | None, `fonts` is required                       | Geist, Latin, weights 300 to 800                                  |
-| Output                            | PNG                 | SVG                                             | Raster, SVG, animation, PDF, paint tree                           |
-
-Takumi also takes HTML strings and node trees as input. See [Parsing templates](/docs/reference/helpers#parsing-templates).
+To switch, follow [Migrate from satori](#migrate-from-satori) or [Migrate from `next/og`](#migrate-from-nextog). To compare first, read [How Takumi differs](#how-takumi-differs) and [Features](#features).
 
 ## Migrate from satori
 
@@ -88,7 +52,7 @@ export function GET() {
 ```
 
 <Callout type="warn">
-  `next/og` makes every element a flex container. In Takumi, a `<div>` is `display: block`, as in a browser. Add `display: flex` (or `tw="flex"`) to each container that needs Flexbox. Compare the output before you deploy.
+  `next/og` makes every element a flex container. In Takumi, a `<div>` is `display: block`, as in a browser. Add `display: flex` or `tw="flex"` to each container that needs Flexbox. Compare the output before you deploy.
 </Callout>
 
 The [Next.js guide](/docs/frameworks/nextjs) covers the route handler setup.
@@ -119,16 +83,65 @@ satori 0.63 draws a variable font at its default instance. Takumi applies `font-
 
 ## Emoji
 
-`next/og` resolves emoji through satori's `loadAdditionalAsset` callback. Takumi's `ImageResponse` and `render` take the same `emoji` option: `twemoji` (the default), `blobmoji`, `noto`, `openmoji`, `fluent`, or `fluentFlat`. To draw emoji from a registered color font, set `emoji: "from-font"`. See [Emoji](/docs/images#emoji).
+`next/og` resolves emoji through satori's `loadAdditionalAsset` callback. Takumi's `ImageResponse` and `render` take the same `emoji` option, which accepts these values:
+
+- `twemoji` (the default)
+- `blobmoji`
+- `noto`
+- `openmoji`
+- `fluent`
+- `fluentFlat`
+
+To draw emoji from a registered color font, set `emoji: "from-font"`. See [Emoji](/docs/images#emoji).
+
+## How Takumi differs
+
+Takumi is one Rust engine. Its text and inline layout port Chromium's Blink, and the same layout feeds three packages.
+
+| Package        | Output                                                                   |
+| :------------- | :----------------------------------------------------------------------- |
+| `takumi-js`    | PNG, JPEG, WebP, ICO, raw pixels, SVG, and animated WebP, APNG, or GIF   |
+| `takumi-pdf`   | Paged [PDF](/docs/pdf) with selectable text                              |
+| `takumi-paint` | A [paint tree](/docs/paint) to draw with Canvas, slides, or a native API |
+
+```mermaid
+flowchart LR
+    J1[JSX] --> S[satori] --> V[SVG string] --> R[resvg / sharp] --> P1[PNG]
+    J2[JSX / HTML] --> T[Takumi layout] --> I["takumi-js: images, SVG, animations"]
+    T --> D["takumi-pdf: PDF"]
+    T --> G["takumi-paint: paint tree"]
+```
+
+Compare rendered output across renderers at [image-bench.kane.tw](https://image-bench.kane.tw).
+
+## Features
+
+satori changes quickly, so this table names versions. `next/og` in Next.js 16.4 bundles `@vercel/og` 1.0.1, which uses satori 0.29. The satori column follows the satori 0.63 README.
+
+| Feature                           | `next/og`           | satori 0.63                                     | Takumi                                                            |
+| :-------------------------------- | :------------------ | :---------------------------------------------- | :---------------------------------------------------------------- |
+| Layout                            | Flexbox only (Yoga) | Flexbox, Grid, block (Taffy), own inline layout | Flexbox, Grid, block, float, tables, and inline layout from Blink |
+| `display` of a bare `<div>`       | `flex`              | `block`                                         | `block`                                                           |
+| Tables                            | ❌                  | ❌ throws                                       | ✅ [Tables](/docs/tables)                                         |
+| `<style>`, selectors, `@media`    | ❌                  | ✅                                              | ✅                                                                |
+| `calc()`, `z-index`               | ❌                  | ✅                                              | ✅                                                                |
+| `@keyframes` and animated output  | ❌                  | ❌ `@keyframes` is ignored                      | ✅ [Keyframe animation](/docs/animation)                          |
+| React hooks (`useState`, `use()`) | ❌                  | ❌                                              | ✅ initial state, no effects                                      |
+| WOFF2                             | ❌                  | ✅                                              | ✅                                                                |
+| Right-to-left text                | ❌                  | Partial                                         | ✅                                                                |
+| Built-in font                     | Geist Regular       | None, `fonts` is required                       | Geist, Latin, weights 300 to 800                                  |
+| Output                            | PNG                 | SVG                                             | Raster, SVG, animation, PDF, paint tree                           |
+
+Takumi also takes HTML strings and node trees as input. See [Parsing templates](/docs/reference/helpers#parsing-templates).
 
 ## Rendering on a server
 
-satori builds the SVG on the calling thread. On Node.js, Takumi's native binding runs each render as a background task:
+satori builds the SVG on the calling thread. On Node.js, Takumi's native binding runs each render as a background task, which has these effects:
 
-- **Renders leave the event loop free.** Concurrent renders share the loaded fonts.
-- **Animation frames render in parallel** and stream into the encoder, so it does not hold every raw frame.
-- **Images decode at their drawn size** where the format allows it. The decode cache reuses them across renders.
-- **Fonts load by coverage.** `googleFonts` returns each family as `unicode-range` subsets, and a render downloads only the subsets its text uses.
+- Renders leave the event loop free, and concurrent renders share the loaded fonts.
+- Animation frames render in parallel and stream into the encoder, so it does not hold every raw frame.
+- Images decode at their drawn size where the format allows it, and the decode cache reuses them across renders.
+- Fonts load by coverage. `googleFonts` returns each family as `unicode-range` subsets, and a render downloads only the subsets its text uses.
 
 Edge runtimes and browsers load Takumi as a WebAssembly binary. Count its download and compile time when you measure cold starts. See [Performance](/docs/performance) for tuning.
 

@@ -1,6 +1,6 @@
 ---
 title: Comparison
-description: Compare takumi-pdf, react-pdf, and Puppeteer using recorded invoice benchmarks and rendering tradeoffs.
+description: Compare takumi-pdf, react-pdf, and Puppeteer on recorded invoice benchmarks, bundle size, and tradeoffs to pick a renderer.
 icon: Scale
 ---
 
@@ -70,8 +70,10 @@ These figures exclude application code. Measure the complete bundle for your own
 
 ## Choose a renderer
 
-- **Puppeteer** uses browser layout and runs page scripts.
-- **react-pdf** uses its own document components.
-- **takumi-pdf** takes HTML, JSX, and node trees with its supported CSS.
+The three renderers differ in what they accept as input.
+
+- Puppeteer uses browser layout and runs page scripts.
+- react-pdf uses its own document components.
+- takumi-pdf takes HTML, JSX, and node trees with its supported CSS.
 
 Run your own documents through the benchmark before you use these timings to plan capacity.

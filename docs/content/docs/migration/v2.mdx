@@ -1,6 +1,6 @@
 ---
 title: Upgrade to v2
-description: Upgrade Takumi from v1 to v2 and migrate JavaScript APIs, Rust imports, resources, and CSS defaults.
+description: Upgrade your code from Takumi v1 to v2 by checking each breaking change in the JavaScript, CSS and rendering, and Rust sections.
 ---
 
 v2 makes fonts and images per-render resources and changes several CSS defaults. This guide covers migration from v1, including behavior that later v2 releases restored. For individual versions, see the [release notes](https://github.com/kane50613/takumi/releases).
@@ -13,7 +13,7 @@ Update the packages your project imports. For the high-level JavaScript API:
 npm install takumi-js
 ```
 
-If you use `@takumi-rs/core` or `@takumi-rs/wasm` directly, update those packages too. Work through the JavaScript or Rust sections below, then run your type checker and compare rendered output against v1.
+If you use `@takumi-rs/core` or `@takumi-rs/wasm` directly, update those packages too. The JavaScript section applies to code that calls `takumi-js`, `@takumi-rs/core`, or `@takumi-rs/wasm`. The CSS & rendering section applies to every project, because defaults changed. The Rust section applies to code that uses the `takumi` crate. When you finish, run your type checker and compare rendered output against v1.
 
 ## JavaScript
 
@@ -26,7 +26,7 @@ const image = render(node, options); // [!code --]
 const image = await render(node, options); // [!code ++]
 ```
 
-`measure` is a `Renderer` method, not a top-level export. `encodeFrames` is removed; use `renderAnimation` (or `render` per frame for raw output).
+`measure` is a `Renderer` method, not a top-level export. `encodeFrames` is removed. Use `renderAnimation`, or `render` per frame for raw output.
 
 ### The `Renderer` constructor takes no arguments
 
@@ -67,12 +67,12 @@ const image = await renderer.render(node, {
 
 ### Renamed and changed options
 
-| v1                 | v2                                | Note                                                                               |
-| ------------------ | --------------------------------- | ---------------------------------------------------------------------------------- |
-| `fetchedResources` | `images`                          | Pre-fetched images, keyed by `src`.                                                |
-| `resourcesOptions` | `images.fetch` / `images.timeout` | Fetch implementation and timeout for remote images.                                |
-| —                  | `images.fetchCache`               | Byte cache shared across renders (a `Map`-like store); dedupes concurrent fetches. |
-| —                  | `fonts` on `renderAnimation`      | Animation calls now accept `fonts` and `fontFamilies`, matching `render`.          |
+| v1                 | v2                                | Note                                                                                       |
+| ------------------ | --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `fetchedResources` | `images`                          | Pre-fetched images, keyed by `src`.                                                        |
+| `resourcesOptions` | `images.fetch` / `images.timeout` | Fetch implementation and timeout for remote images.                                        |
+| None               | `images.fetchCache`               | Byte cache shared across renders. It is a `Map`-like store and dedupes concurrent fetches. |
+| None               | `fonts` on `renderAnimation`      | Animation calls now accept `fonts` and `fontFamilies`, matching `render`.                  |
 
 ```tsx title="Renamed and changed options"
 const image = await renderer.render(node, {
@@ -162,21 +162,19 @@ Animations with high frame rates could stall or play incorrectly. In v2, `render
   pages visually.
 </Callout>
 
-| Property                               | v1              | v2               | Action                                                                                |
-| -------------------------------------- | --------------- | ---------------- | ------------------------------------------------------------------------------------- |
-| `position`                             | `relative`      | `static`         | Set `position: relative` where you relied on the default containing block or insets.  |
-| `border-width` / `outline-width`       | `0`             | `medium` (3px)   | `border: solid red` now draws a 3px line; was invisible.                              |
-| `scale` (negative)                     | collapses to 0  | reflects         | `scale: -1`, `scaleX(-1)` etc. now mirror the element.                                |
-| `line-clamp`                           | single property | shorthand        | Expands to `max-lines`, `block-ellipsis`, `continue`; only `block-ellipsis` inherits. |
-| `transform-origin` / `object-position` | top-left        | center (50% 50%) | Set the origin or anchor explicitly where you relied on the top-left default.         |
+| Property                               | v1              | v2               | Action                                                                                    |
+| -------------------------------------- | --------------- | ---------------- | ----------------------------------------------------------------------------------------- |
+| `position`                             | `relative`      | `static`         | Set `position: relative` where you relied on the default containing block or insets.      |
+| `border-width` / `outline-width`       | `0`             | `medium` (3px)   | `border: solid red` now draws a 3px line. It was invisible.                               |
+| `scale` (negative)                     | collapses to 0  | reflects         | `scale: -1`, `scaleX(-1)` etc. now mirror the element.                                    |
+| `line-clamp`                           | single property | shorthand        | Expands to `max-lines`, `block-ellipsis`, and `continue`. Only `block-ellipsis` inherits. |
+| `transform-origin` / `object-position` | top-left        | center (50% 50%) | Set the origin or anchor explicitly where you relied on the top-left default.             |
 
 The sections below cover the subtler cases.
 
-### v2.0–v2.5: `currentColor` in SVG images ignores the host color
+### Before v2.6, `currentColor` in SVG images ignores the host color [#v20v25-currentcolor-in-svg-images-ignores-the-host-color]
 
-In v2.0 through v2.5, SVG image content uses its own `color` instead of inheriting the host element's color.
-
-Since v2.6, the host color is the fallback again. `currentColor` resolves to an explicit `color` inside the SVG first, then the host color, then black.
+In v2.0 through v2.5, SVG image content uses its own `color` instead of inheriting the host element's color. Since v2.6, the host color is the fallback again, so `currentColor` resolves to an explicit `color` inside the SVG first, then the host color, then black.
 
 <Callout type="info">
   If you upgrade straight to v2.6 or later, keep icons that use `currentColor` as they are.
@@ -209,14 +207,14 @@ An omitted width in `border` / `outline` now resolves to `medium` (3px), the CSS
 
 ### `line-clamp`
 
-`line-clamp` is now a shorthand for the `max-lines`, `block-ellipsis`, and `continue` longhands (CSS Overflow 4). `block-ellipsis` inherits; `max-lines` and `continue` do not, so a clamped ancestor no longer forces its line limit onto descendants. `-webkit-line-clamp` still works and expands to the same longhands.
+`line-clamp` is now a shorthand for the `max-lines`, `block-ellipsis`, and `continue` longhands (CSS Overflow 4). `block-ellipsis` inherits, but `max-lines` and `continue` do not, so a clamped ancestor no longer forces its line limit onto descendants. `-webkit-line-clamp` still works and expands to the same longhands.
 
 ### Wider default element styles
 
 v2 ships a user-agent stylesheet that matches Chromium's. Two changes affect existing markup:
 
-- **Relative keywords resolve.** v1 ignored `font-weight: bolder` / `lighter` and `font-size: larger` / `smaller`. v2 applies them.
-- **More elements have default styles:** lists, `sub`, `sup`, `ins`, `del`, form controls, `details`, `summary`, and `search`. They render differently than in v1. Override the defaults where you need the old look.
+- Relative keywords resolve. v1 ignored `font-weight: bolder` / `lighter` and `font-size: larger` / `smaller`, and v2 applies them.
+- More elements have default styles, including lists, `sub`, `sup`, `ins`, `del`, form controls, `details`, `summary`, and `search`. They render differently than in v1, so override the defaults where you need the old look.
 
 ### `background` shorthand drops `background-blend-mode`
 
@@ -337,9 +335,9 @@ let origin: PositionValue = PositionValue::center(); // [!code ++]
 
 Several public enums in `takumi-core` gained `#[non_exhaustive]`:
 
-- **Core**: `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, `ColorInput`
-- **Style**: `PropertyId`, `StyleDeclaration`
-- **Spec-tracking CSS values**: `BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`, `WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, `Position`
+- `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, and `ColorInput` in core
+- `PropertyId` and `StyleDeclaration` in style
+- `BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`, `WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, and `Position`, which track CSS specifications
 
 Outside the crate, you can no longer build these variants with a struct literal, and a `match` on them needs a wildcard arm.
 

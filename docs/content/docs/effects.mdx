@@ -1,15 +1,15 @@
 ---
-title: Visual Effects
-description: Create CSS image effects with Takumi, including gradient text, masks, halftone, and dithering.
+title: Visual effects
+description: Build image effects such as gradient text, masks, halftone, and dithering from CSS gradients, shadows, and SVG filters.
 icon: Wand
 ---
 
-Build these effects with CSS gradients, shadows, masks, and SVG filters. Each preview is Takumi test output. The full markup of every scene is in
+Each effect below uses CSS gradients, shadows, masks, or SVG filters, and each preview is Takumi test output. The full markup of every scene is in
 [`takumi/tests/fixtures-html`](https://github.com/kane50613/takumi/tree/master/takumi/tests/fixtures-html).
 
 ## Aurora and film grain
 
-Stack soft radial ellipses that fade out at 68% for the mesh. A blurred conic layer on top adds color drift.
+The mesh is a stack of soft radial ellipses that fade out at 68%. A blurred conic layer on top adds color drift.
 
 ```css title="Aurora and film grain"
 background-color: #05010f;
@@ -19,7 +19,7 @@ background-image:
   radial-gradient(ellipse 60% 50% at 60% 65%, rgba(45, 212, 191, 0.4), transparent 68%);
 ```
 
-The grain is a `feTurbulence` filter graph on an empty layer, blended with `overlay`. The title crosses the whole hue wheel with two stops, through `in oklch longer hue`:
+The grain is a `feTurbulence` filter graph on an empty layer, blended with `overlay`. The title crosses the whole hue wheel with two stops, through `in oklch longer hue`.
 
 ```css title="Aurora and film grain"
 .grain {
@@ -37,9 +37,11 @@ The grain is a `feTurbulence` filter graph on an empty layer, blended with `over
 
 ## Neon CRT
 
-- **Neon**: stacked `text-shadow`s that widen in the brand color
-- **Chromatic aberration**: two hard shadows in opposite directions
-- **Scanlines and vignette**: gradient overlays
+This scene combines three techniques:
+
+- Neon uses stacked `text-shadow`s that widen in the brand color.
+- Chromatic aberration uses two hard shadows in opposite directions.
+- Scanlines and the vignette are gradient overlays.
 
 ```css title="Neon CRT"
 .neon {
@@ -73,7 +75,7 @@ The grain is a `feTurbulence` filter graph on an empty layer, blended with `over
 
 ## Chrome type
 
-Clip a gradient with hard color stops to the glyphs for a metallic finish. `feSpecularLighting` adds the bevel rim. The starburst behind is one `repeating-conic-gradient`:
+A gradient with hard color stops, clipped to the glyphs, gives the metallic finish. `feSpecularLighting` adds the bevel rim. The starburst behind is one `repeating-conic-gradient`.
 
 ```css title="Chrome type"
 .chrome {
@@ -123,9 +125,9 @@ Clip a gradient with hard color stops to the glyphs for a metallic finish. `feSp
 
 Build a dot screen in three steps:
 
-- Multiply a tiled radial gradient with a tone ramp.
-- Crush it with `contrast()`.
-- Re-ink the black dots with a `lighten` layer. Set `isolation: isolate` on the parent.
+1. Multiply a tiled radial gradient with a tone ramp.
+2. Crush it with `contrast()`.
+3. Re-ink the black dots with a `lighten` layer. Set `isolation: isolate` on the parent.
 
 ```css title="Halftone"
 .dots {
@@ -148,7 +150,7 @@ Build a dot screen in three steps:
 
 ## Grid hero
 
-A hairline grid faded by `mask-image`, corner glows, and a card with a hard offset shadow:
+This scene has a hairline grid faded by `mask-image`, corner glows, and a card with a hard offset shadow.
 
 ```css title="Grid hero"
 .grid {
@@ -256,10 +258,8 @@ Posterize snaps each channel to fixed levels:
 
 For ordered dithering, tile a Bayer matrix with `feImage` and `feTile`, and add it as noise before the quantize step. For duotone, map a 1-bit luma threshold to a two-color table. The full graphs are in
 [`style_filter_reference_dither.html`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures-html/style_filter_reference_dither.html) and
-[`style_filter_reference_duotone.html`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures-html/style_filter_reference_duotone.html).
+[`style_filter_reference_duotone.html`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures-html/style_filter_reference_duotone.html). To remove banding from smooth gradients, set the `dithering` render option, which dithers gradient fills as they paint. See [Dithering](/docs/formats#dithering).
 
 ![Ordered dithering](/images/effects/style_filter_reference_dither.webp)
 
 ![Duotone](/images/effects/style_filter_reference_duotone.webp)
-
-To remove banding from smooth gradients, set the `dithering` render option. It dithers gradient fills as they paint. See [Dithering](/docs/formats#dithering).

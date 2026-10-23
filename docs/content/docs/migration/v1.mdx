@@ -1,9 +1,9 @@
 ---
 title: Upgrade to v1
-description: Upgrade Takumi from v0 to v1 and update imports, image formats, layout defaults, and font handling.
+description: Upgrade your code from Takumi v0 to v1 by working through the breaking changes that affect templates, JavaScript, or Rust.
 ---
 
-v1 is the first stable release. Releases within v1.x stay backward compatible under semver. To move on from v1, see [Upgrade to v2](/docs/migration/v2).
+v1 is the first stable release, and releases within v1.x stay backward compatible under semver. This guide covers the move from v0. To move on from v1, see [Upgrade to v2](/docs/migration/v2).
 
 ## Install
 
@@ -12,6 +12,8 @@ npm i takumi-js@1
 ```
 
 ## Breaking changes at a glance
+
+The table lists every change with the package it affects. Read the section for the code you have, either templates, JavaScript or TypeScript, or Rust.
 
 | Change                                     | Package           | Migration                                   |
 | ------------------------------------------ | ----------------- | ------------------------------------------- |
@@ -61,7 +63,7 @@ import { ImageResponse } from "takumi-js/response"; // [!code ++]
 
 `takumi-js` adds an `emoji` option that selects the emoji provider, matching Next.js's `ImageResponse` API. It defaults to `twemoji`. To draw emoji from a font instead, set it to `from-font` and include an emoji font in `fonts`.
 
-See [Images & emoji](/docs/images).
+See [Image loading & emoji](/docs/images).
 
 ```tsx title="emoji option for dynamic emoji loading"
 import { ImageResponse } from "takumi-js/response";
@@ -108,7 +110,7 @@ await renderer.putPersistentImage({ src: "foo.png", data }); // [!code ++]
 
 ### Deprecated exports removed
 
-v1 removes all previously deprecated exports from `@takumi-rs/core`.
+v1 removes all previously deprecated exports from `@takumi-rs/core`. Switch to the non-deprecated APIs.
 
 ## Rust
 
@@ -138,7 +140,7 @@ let viewport = Viewport::new((800, 600)); // [!code ++]
 | `FetchTaskCollection`           | `Node::resource_urls` / `Style::resource_urls`, then feed URLs back to the renderer |
 | `SpacePair::from_reversed_pair` | Construct `SpacePair` with values in order                                          |
 | `TakumiError` re-export         | `takumi::prelude::Error` (or `takumi_core::error::Error`)                           |
-| `detailed_css_error` feature    | Detailed CSS errors always on; no feature flag                                      |
+| `detailed_css_error` feature    | Detailed CSS errors are always on, so no feature flag exists                        |
 
 ```rust title="Removed Rust APIs"
 use takumi::TakumiError; // [!code --]

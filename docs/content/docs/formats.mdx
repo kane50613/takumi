@@ -1,10 +1,10 @@
 ---
-title: Output Formats
-description: Choose PNG, JPEG, WebP, ICO, raw pixels, or SVG output and configure image quality and resolution.
+title: Output formats
+description: Choose PNG, JPEG, WebP, ICO, raw pixels, or SVG output and set its quality, resolution, and cancellation.
 icon: FileImage
 ---
 
-Set `format` to choose the encoder for `render()`. It returns the encoded bytes.
+`render()` returns encoded bytes, and the `format` option chooses the encoder.
 
 ## Picking a format
 
@@ -27,7 +27,7 @@ const webp = await render(card, { width: 1200, height: 630, format: "webp", qual
 | `ico`           | Yes   | No        | No         | Favicon file. At most 256 × 256 pixels.                            |
 | `raw`           | Yes   | No        | No         | Uncompressed RGBA bytes, `width × height × 4`.                     |
 
-`quality` runs from `0` to `100` and defaults to `75`. Formats marked No ignore it.
+`quality` runs from `0` to `100` and defaults to `75`. Formats marked No in the `quality` column ignore it.
 
 <Callout type="info">
   On the WebAssembly backend, WebP is always lossless. `quality` and `lossless` are accepted but
@@ -36,7 +36,7 @@ const webp = await render(card, { width: 1200, height: 630, format: "webp", qual
 
 ### Raw frames
 
-`format: "raw"` skips encoding and returns the RGBA buffer. Feed it to ffmpeg or another encoder. The [keyframe animation](/docs/animation) page streams raw frames into ffmpeg to make a video.
+`format: "raw"` skips encoding and returns the RGBA buffer, which you can feed to ffmpeg or another encoder. The [Animation](/docs/animation) page streams raw frames into ffmpeg to make a video.
 
 ## Device pixel ratio
 
@@ -61,7 +61,7 @@ The result is a 2400 × 1260 image. Every CSS length draws twice as large, so th
 
 ## Dithering
 
-`dithering` adds ordered Bayer noise to gradient fills before they drop to 8-bit color. This removes visible banding. It applies to `render()`, including `raw` output.
+`dithering` adds ordered Bayer noise to gradient fills before they drop to 8-bit color, which removes visible banding. It applies to `render()`, including `raw` output. It accepts these values:
 
 - `none` (default)
 - `ordered-bayer`
@@ -78,7 +78,7 @@ const image = await render(<div tw="w-full h-full bg-linear-to-r from-slate-900 
 
 ## Animated output
 
-`renderAnimation()` encodes a sequence of scenes as WebP, APNG, or GIF. See [Keyframe Animation](/docs/animation).
+`renderAnimation()` encodes a sequence of scenes as WebP, APNG, or GIF. See [Animation](/docs/animation).
 
 ## Vector SVG
 
@@ -93,11 +93,18 @@ const png = await render(card, { width: 1200, height: 630 });
 const svg = await renderSvg(card, { width: 1200, height: 630 }); // [!code highlight]
 ```
 
-SVG is a vector format, so the raster options do not apply: `format`, `quality`, `lossless`, `dithering`, `drawDebugBorder`, and `devicePixelRatio`.
+SVG is a vector format, so these raster options do not apply to it:
+
+- `format`
+- `quality`
+- `lossless`
+- `dithering`
+- `drawDebugBorder`
+- `devicePixelRatio`
 
 ## Cancellation
 
-Pass an `AbortSignal` as `signal` to cancel a render. Takumi checks it before work starts and again after fonts and images load. An aborted signal stops the render with the signal's reason.
+Pass an `AbortSignal` as `signal` to cancel a render. Takumi checks it before work starts and again after fonts and images load. An aborted signal stops the render with the signal's reason, and it also cancels image fetches that are still running.
 
 ```tsx twoslash title="Cancel with the request"
 import { ImageResponse } from "takumi-js/response";
@@ -110,5 +117,3 @@ export function GET(request: Request) {
   });
 }
 ```
-
-The signal also cancels image fetches that are still running.

@@ -1,10 +1,10 @@
 ---
-title: Keyframe Animation
-description: Render CSS keyframe animations as GIF, animated WebP, APNG, or raw frames for ffmpeg.
+title: Animation
+description: Render CSS keyframe animations as animated WebP, APNG, GIF, a single frame, or raw frames for ffmpeg.
 icon: Play
 ---
 
-Takumi samples CSS animations at a point in time. Pick the call by the output you need:
+Takumi samples CSS animations at a point in time. The output you need decides which call to use.
 
 | Output                      | Call                                         |
 | :-------------------------- | :------------------------------------------- |
@@ -12,7 +12,7 @@ Takumi samples CSS animations at a point in time. Pick the call by the output yo
 | One frame at a given time   | `render()` with `timeMs`                     |
 | Video through ffmpeg        | `render()` with `timeMs` and `format: "raw"` |
 
-This video was rendered frame by frame and encoded with ffmpeg. Its code is highlighted with shiki.
+This video was rendered frame by frame and encoded with ffmpeg, and its code is highlighted with shiki.
 
 <Video
   src="https://raw.githubusercontent.com/kane50613/takumi/master/example/ffmpeg-keyframe-animation/output/animation.mp4"
@@ -52,7 +52,7 @@ The next examples render this `Scene`.
 
 ### As an object
 
-When the values come from application data, pass the animation as a `css` entry. Takumi checks every value before parsing, so nothing is concatenated into a CSS string.
+When the values come from application data, pass the animation as a `css` entry. Takumi checks every value before parsing, so no value is concatenated into a CSS string.
 
 ```tsx twoslash title="render.tsx"
 // @noErrors
@@ -73,13 +73,13 @@ const frame = await render(<div tw="animate-[move_1s_ease-in-out_infinite_altern
 });
 ```
 
-Each step takes an `offset`:
+Each step takes an `offset` with one of these values.
 
-| Offset   | Position                          |
-| -------- | --------------------------------- |
-| `from`   | Start of the animation            |
-| `to`     | End of the animation              |
-| `"<n>%"` | A percentage offset, e.g. `"50%"` |
+| Offset   | Position                             |
+| -------- | ------------------------------------ |
+| `from`   | Start of the animation               |
+| `to`     | End of the animation                 |
+| `"<n>%"` | A percentage offset, such as `"50%"` |
 
 <Callout type="info">
   The `keyframes` render option takes the same animation as a nested record. It is deprecated and
@@ -88,7 +88,7 @@ Each step takes an `offset`:
 
 ### With Tailwind utilities
 
-Takumi supports these Tailwind presets:
+Takumi supports these Tailwind presets.
 
 | Preset           | Effect                                |
 | ---------------- | ------------------------------------- |
@@ -98,7 +98,7 @@ Takumi supports these Tailwind presets:
 | `animate-pulse`  | Fade opacity in and out               |
 | `animate-bounce` | Bounce up and down                    |
 
-An arbitrary value turns each `_` into a space. `animate-[move_1s_ease-in-out_infinite_alternate]` becomes:
+An arbitrary value turns each `_` into a space, so `animate-[move_1s_ease-in-out_infinite_alternate]` becomes this declaration:
 
 ```css title="Generated declaration"
 animation: move 1s ease-in-out infinite alternate;

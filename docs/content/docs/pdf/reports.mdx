@@ -1,14 +1,14 @@
 ---
 title: Reports & statements
-description: Generate PDF reports and statements with chapters, bookmarks, tables of contents, and repeating headers.
+description: Build a PDF report or statement run with chapters, bookmarks, a table of contents, repeating headers, and long tables.
 icon: FileSpreadsheet
 ---
 
-Use page breaks for chapters, repeating headers for context, and bookmarks or a table of contents for navigation.
+A report needs chapters that start on fresh pages, bookmarks or a table of contents for navigation, headers that give context on every page, and tables that continue across pages. A statement run adds one more need, which is many documents from one template. Each section below covers one of these, and links to the guide that owns the feature.
 
 ## Chapters
 
-`break-before: page` starts a section on a fresh page. `break-inside: avoid` keeps a figure with its caption:
+`break-before: page` starts a section on a fresh page, and `break-inside: avoid` keeps a figure with its caption. [Pagination](/docs/pdf/pagination) lists every break property.
 
 ```tsx twoslash title="Start chapters on new pages"
 declare const chartSvg: string;
@@ -36,11 +36,9 @@ const pdf = await render(
   `break-inside: avoid` box.
 </Callout>
 
-See [Pagination](/docs/pdf/pagination) for every break property.
-
 ## Bookmarks
 
-`outline: true` turns `h1`–`h6` into PDF bookmarks, nested by heading depth. Readers jump between chapters from the viewer's sidebar:
+`outline: true` turns `h1`–`h6` into PDF bookmarks, nested by heading depth. Readers jump between chapters from the viewer's sidebar. [Links, outline & metadata](/docs/pdf/links) covers the outline and metadata options.
 
 ```tsx twoslash title="Generate chapter bookmarks"
 import type { ReactNode } from "react";
@@ -79,7 +77,7 @@ Each entry stays clickable, so the contents page works on screen as well as in p
 
 ## Running bands
 
-A report header usually names the document and the period, and the footer carries the page counter:
+A report header usually names the document and the period, and the footer carries the page counter.
 
 ```tsx twoslash title="Repeat a report header"
 import type { ReactNode } from "react";
@@ -136,7 +134,7 @@ import "takumi-pdf";
 </table>;
 ```
 
-Tagged output maps the markup to `Table`, `TR`, `TH`, and `TD` structure elements, so screen readers navigate by row and column. See [Tables](/docs/tables) for layout coverage and [PDF/A and PDF/UA](/docs/pdf/conformance#tables) for the structure tree.
+Tagged output maps the markup to `Table`, `TR`, `TH`, and `TD` structure elements, so screen readers navigate by row and column. See [Tables](/docs/tables) for layout coverage and [PDF/A & PDF/UA](/docs/pdf/conformance#tables) for the structure tree.
 
 ## Batches
 
@@ -163,4 +161,4 @@ for (const account of accounts) {
 
 ## Accessibility
 
-Set `tagged: "ua1"` to validate against PDF/UA-1. Supply `lang` and `metadata.title`, then review heading order, tables, and chart descriptions yourself. See [PDF/A and PDF/UA](/docs/pdf/conformance#required-inputs).
+Set `tagged: "ua1"` to validate against PDF/UA-1. Supply `lang` and `metadata.title`, then review heading order, tables, and chart descriptions yourself. See [PDF/A & PDF/UA](/docs/pdf/conformance#required-inputs).

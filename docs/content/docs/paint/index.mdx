@@ -1,13 +1,13 @@
 ---
 title: Paint
-description: Lay out JSX or HTML and get the shapes, text runs, and images to draw.
+description: Lay out JSX or HTML with takumi-paint and get the shapes, text runs, and images to draw with your own renderer.
 index: true
 icon: BookOpen
 ---
 
-`takumi-paint` is takumi's paint tree output, for drawing a layout with your own API. It shares one layout engine, a port of Chromium's layout, with [image output](/docs) and [PDF output](/docs/pdf). Where those produce pixels or pages, it returns the **paint tree**: what to draw, where, and in which order, with every CSS value resolved.
+Use `takumi-paint` when you want the laid-out boxes, text runs, and images and plan to draw them with your own renderer. You can draw the tree on Canvas, write it into editable slides such as PPTX, or pass it to a native drawing API.
 
-Draw the tree on Canvas, write it into editable slides such as PPTX, or pass it to a native drawing API.
+`takumi-paint` shares one layout engine, a port of Chromium's layout, with [image output](/docs) and [PDF output](/docs/pdf). Those produce pixels or pages. `takumi-paint` returns a paint tree that says what to draw, where, and in which order, with every CSS value resolved.
 
 <PaintPipeline />
 
@@ -62,11 +62,11 @@ for (const node of tree.nodes) {
 
 ## Choose a guide
 
-| Need                           | Read                               |
-| ------------------------------ | ---------------------------------- |
-| Draw nodes in order            | [Drawing](/docs/paint/drawing)     |
-| Place text or lay it out again | [Text](/docs/paint/text)           |
-| Check options and field types  | [Reference](/docs/paint/reference) |
+| Need                           | Read                                     |
+| ------------------------------ | ---------------------------------------- |
+| Draw nodes in order            | [Drawing](/docs/paint/drawing)           |
+| Place text or lay it out again | [Text runs](/docs/paint/text)            |
+| Check options and field types  | [Paint reference](/docs/paint/reference) |
 
 ## Reuse a painter
 

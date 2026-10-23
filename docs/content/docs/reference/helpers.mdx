@@ -1,8 +1,10 @@
 ---
 title: Helpers
-description: Convert JSX and HTML to Takumi node trees, prepare images, and load fonts with reusable helpers.
+description: Look up the helpers that build node trees, convert JSX and HTML, prepare images, and load fonts.
 icon: Wrench
 ---
+
+`takumi-js/helpers` builds node trees and prepares fonts and images for `render`.
 
 ```ts twoslash title="Build a node tree"
 import { container, text } from "takumi-js/helpers";
@@ -13,13 +15,13 @@ const node = container({
 });
 ```
 
-`takumi-js/helpers` re-exports `@takumi-rs/helpers`. Use it to build node trees or prepare fonts and images yourself. For JSX or HTML input, `render` and `ImageResponse` already convert the input and load its resources.
+`takumi-js/helpers` re-exports `@takumi-rs/helpers`. Use it when you want to build node trees or prepare fonts and images yourself. For JSX or HTML input, `render` and `ImageResponse` already convert the input and load its resources.
 
 ## Fonts
 
 | Helper                           | Use                                                                                                                            |
 | :------------------------------- | :----------------------------------------------------------------------------------------------------------------------------- |
-| `googleFonts(options)`           | Load Google Fonts families in one request; `render` keeps the subsets used. See [Fonts & text](/docs/fonts#from-google-fonts). |
+| `googleFonts(options)`           | Load Google Fonts families in one request. `render` keeps the subsets used. See [Fonts & text](/docs/fonts#from-google-fonts). |
 | `fontFromUrl(url, options?)`     | Turn a font URL into a lazy `fonts` entry. `options` takes the [fetch limits](/docs/images#fetch-limits).                      |
 | `subsetFonts({ fonts, source })` | Keep the font subsets that cover the codepoints in `source`. `render` does this for you.                                       |
 
@@ -34,9 +36,7 @@ const node = container({
 | `image(props)`                       | An image node.                |
 | `style(css)`                         | The same style object, typed. |
 
-The `props` argument holds the node's own fields. [Node types](/docs/reference#node-types) lists them.
-
-Styles, presets, and stylesheet rules share the `Declarations` type. Custom properties such as `"--accent": "red"` accept strings or numbers, including in React's `style` prop.
+The `props` argument holds the node's own fields. [Node types](/docs/reference#node-types) lists them. Styles, presets, and stylesheet rules share the `Declarations` type. Custom properties such as `"--accent": "red"` accept strings or numbers, including in React's `style` prop.
 
 Length and color shorthands return CSS strings. `vw` and `vh` are viewport units, `em` and `rem` are font-relative, and `fr` is a grid fraction. See the [MDN CSS values reference](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Values_and_Units).
 
@@ -64,9 +64,9 @@ Length and color shorthands return CSS strings. `vw` and `vh` are viewport units
 
 ## Images & emoji
 
-| Helper                           | Import                    | Use                                                                                          |
-| :------------------------------- | :------------------------ | :------------------------------------------------------------------------------------------- |
-| `prepareImages(options)`         | `takumi-js/helpers`       | Fetch a node tree's remote images into `images` entries. See [Images & emoji](/docs/images). |
-| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/images#emoji).                       |
+| Helper                           | Import                    | Use                                                                                                 |
+| :------------------------------- | :------------------------ | :-------------------------------------------------------------------------------------------------- |
+| `prepareImages(options)`         | `takumi-js/helpers`       | Fetch a node tree's remote images into `images` entries. See [Image loading & emoji](/docs/images). |
+| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/images#emoji).                              |
 
 `emojiType` selects the CDN provider: `twemoji`, `blobmoji`, `noto`, `openmoji`, `fluent`, or `fluentFlat`.

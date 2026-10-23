@@ -1,6 +1,6 @@
 ---
-title: Text
-description: Draw shaped runs or collect values for a text exporter.
+title: Text runs
+description: Draw shaped text runs as glyph outlines or collect their values to rebuild text boxes in an exporter.
 icon: Type
 ---
 
@@ -24,9 +24,7 @@ Hover a run to see its fields. The dot marks `run.x` and `run.y`, where the base
 | `line`              | Index of the line, from `0`                         |
 | `element`           | The inline element the run came from, such as `<b>` |
 
-In `tree.nodes`, the text node comes before the inline boxes in its paragraph. Its runs can sit on both sides of those boxes.
-
-`run.transform` is set when `text-fit` scales the line. Apply it before placing the run at `x`, `y`.
+In `tree.nodes`, the text node comes before the inline boxes in its paragraph, and its runs can sit on both sides of those boxes. `run.transform` is set when `text-fit` scales the line. Apply it before placing the run at `x`, `y`.
 
 ## Draw glyphs
 

@@ -1,14 +1,14 @@
 ---
 title: Charts
-description: Render ECharts and other SVG charts as PNG images or PDF documents with Takumi.
+description: Render an ECharts or other SVG chart to a PNG image with Takumi, with fonts that cover every label.
 icon: ChartColumn
 ---
 
-Generate the chart as an SVG string, then pass it to an `<img>`. Takumi draws the SVG, so the chart library never runs in a browser. The library must be able to output SVG in your runtime.
+To render a chart, generate it as an SVG string and pass that string to an `<img>`. Takumi draws the SVG, so the chart library never runs in a browser. The library must be able to output SVG in your runtime.
 
 ## Render an ECharts chart
 
-Install ECharts alongside `takumi-js`:
+Install ECharts alongside `takumi-js`.
 
 ```npm
 npm i echarts takumi-js react
@@ -58,9 +58,7 @@ const png = await render(
 await writeFile("revenue.png", png);
 ```
 
-Keep `animation: false` for static output. With animation on, the SVG can capture an empty or half-drawn chart. Dispose of the ECharts instance once you have the SVG.
-
-The SVG string goes straight into `src`, so it needs no `images` entry. In an HTML string, put the SVG markup inside the document.
+Keep `animation: false` for static output. With animation on, the SVG can capture an empty or half-drawn chart. Dispose of the ECharts instance once you have the SVG. The SVG string goes straight into `src`, so it needs no `images` entry. In an HTML string, put the SVG markup inside the document.
 
 For PDF output, see [Charts in PDF](/docs/pdf/charts).
 
@@ -73,9 +71,7 @@ Register fonts that cover every label, tick, and legend entry. Set the chart's f
   image does not count, so chart labels can lose their font.
 </Callout>
 
-Fonts registered with `registerFont`, as above, stay on the renderer for every render.
-
-For a large family, keep only the subsets the chart text needs. Include generated numeric ticks and punctuation as well as your data labels:
+Fonts registered with `registerFont`, as above, stay on the renderer for every render. For a large family, keep only the subsets the chart text needs. Include generated numeric ticks and punctuation as well as your data labels:
 
 ```tsx twoslash title="Load chart label fonts"
 import { googleFonts, subsetFonts } from "takumi-js/helpers";
@@ -91,7 +87,7 @@ const fonts = subsetFonts({
 await Promise.all(fonts.map((font) => renderer.registerFont(font)));
 ```
 
-Set ECharts `textStyle.fontFamily` to `"Noto Sans TC"` and pass `renderer` to `render()`. For offline output, load bundled font bytes instead. See [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders).
+Then set ECharts `textStyle.fontFamily` to `"Noto Sans TC"` and pass `renderer` to `render()`. For offline output, load bundled font bytes instead. See [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders).
 
 ## Use another chart library
 
