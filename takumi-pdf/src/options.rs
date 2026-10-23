@@ -311,19 +311,22 @@ pub(crate) struct PageSelection {
 
 impl PageSelection {
   /// A selection of no pages yet, which [`Self::push_page`] adds the document's pages to in
-  /// order. No ranges keeps every page.
-  pub(crate) fn new(ranges: Option<&[PageRange]>) -> Self {
-    Self {
+  /// order. No ranges keeps every page. A range that is not valid is an error.
+  pub(crate) fn new(ranges: Option<&[PageRange]>) -> Result<Self, PdfError> {
+    for range in ranges.unwrap_or_default() {
+      range.validate()?;
+    }
+    Ok(Self {
       ranges: ranges.map(<[PageRange]>::to_vec),
       emitted: Vec::new(),
       kept: 0,
-    }
+    })
   }
 
   /// Resolves the ranges against the page count. Ranges that keep no page are an
   /// error, like Chromium's "Page range exceeds page count".
   pub(crate) fn resolve(ranges: Option<&[PageRange]>, pages: usize) -> Result<Self, PdfError> {
-    let mut selection = Self::new(ranges);
+    let mut selection = Self::new(ranges)?;
 
     for _ in 0..pages {
       selection.push_page();
@@ -346,16 +349,9 @@ impl PageSelection {
     emitted
   }
 
-  /// Checks the ranges once every page is added.
+  /// Checks the ranges keep a page once every page is added.
   pub(crate) fn finish(&self) -> Result<(), PdfError> {
-    let Some(ranges) = &self.ranges else {
-      return Ok(());
-    };
-
-    for range in ranges {
-      range.validate()?;
-    }
-    if self.kept == 0 {
+    if self.ranges.is_some() && self.kept == 0 {
       return Err(PdfError::PageRangesOutOfBounds(self.emitted.len()));
     }
     Ok(())

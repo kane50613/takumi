@@ -7,7 +7,7 @@ use takumi_core::{Fonts, layout::paged_layout::PagedLayout};
 use takumi_html::{FromHtmlOptions, from_html};
 
 use crate::{
-  PageMargins, PageOptions, PageRange, PdfOptions, Tagging, render, render_settling,
+  PageMargins, PageOptions, PageRange, PdfError, PdfOptions, Tagging, render, render_settling,
   test_support::fonts,
 };
 
@@ -280,3 +280,34 @@ fn an_absolute_box_found_on_a_later_page_holds_the_pages_of_its_containing_block
   );
   assert!(rendered.laid_at_first_page > 3);
 }
+
+#[test]
+fn an_invalid_page_range_fails_before_any_page_is_laid_out() {
+  let source = plain_document();
+  let fonts = fonts();
+
+  for range in [
+    PageRange::single(0),
+    PageRange {
+      from: Some(3),
+      to: Some(2),
+    },
+  ] {
+    let asked = Cell::new(0);
+    let mut options = options(&source, &fonts);
+
+    options.page_ranges = Some(vec![range]);
+
+    let result = render_settling(options, &|layout| {
+      asked.set(asked.get() + 1);
+      layout.settled_pages()
+    });
+
+    assert!(
+      matches!(result, Err(PdfError::InvalidPageRange(_))),
+      "{result:?}"
+    );
+    assert_eq!(asked.get(), 0);
+  }
+}
+

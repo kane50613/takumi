@@ -339,7 +339,7 @@ impl PageDrawing<'_, '_> {
     let page_size = frame.page_size();
     let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
     let mut windows = PageWindows::new(page_size);
-    let mut selection = PageSelection::new(ranges);
+    let mut selection = PageSelection::new(ranges)?;
     let mut summary = PageSummary::new(false);
     let mut drawn = 0;
 
