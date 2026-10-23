@@ -4,6 +4,8 @@
 
 use std::rc::Rc;
 
+use rustc_hash::FxHashMap;
+
 use crate::{
   geometry::{NodeId, Point, Size},
   layout::{
@@ -45,7 +47,7 @@ pub struct TableFragment {
   /// `empty-cells: hide`.
   pub(crate) hidden: Vec<NodeId>,
   /// Each cell's first column.
-  pub(crate) cell_columns: Rc<[(NodeId, usize)]>,
+  pub(crate) cell_columns: Rc<FxHashMap<NodeId, usize>>,
   pub(crate) section_row_offsets: Vec<SectionRowOffsets>,
   /// The sections, in layout order.
   pub(crate) sections: Vec<NodeId>,
@@ -141,11 +143,7 @@ impl TableFragment {
 
   /// The first column of the cell `node`.
   pub(crate) fn cell_column(&self, node: NodeId) -> Option<usize> {
-    self
-      .cell_columns
-      .iter()
-      .find(|(cell, _)| *cell == node)
-      .map(|&(_, column)| column)
+    self.cell_columns.get(&node).copied()
   }
 }
 

@@ -4,6 +4,8 @@
 
 use std::rc::Rc;
 
+use rustc_hash::FxHashMap;
+
 #[cfg(feature = "fragmentation")]
 use crate::{
   geometry::Rect,
@@ -76,8 +78,8 @@ pub(crate) struct TableStructure {
   pub(crate) grouped: TableGroupedChildren,
   pub(crate) borders: Rc<TableBorders>,
   pub(crate) sections: Vec<SectionPart>,
-  /// Each cell's first column, in section, row, and cell order.
-  pub(crate) cell_columns: Rc<[(NodeId, usize)]>,
+  /// Each cell's first column, by cell.
+  pub(crate) cell_columns: Rc<FxHashMap<NodeId, usize>>,
   pub(crate) captions: Vec<NodeId>,
   pub(crate) columns: Vec<NodeId>,
   /// Whether a column percentage widens the table's max-content width, which Blink's
@@ -239,7 +241,8 @@ impl<'r> LayoutTree<'r> {
       .flat_map(|section| &section.rows)
       .flat_map(|row| &row.cells)
       .map(|cell| (cell.node, cell.column))
-      .collect();
+      .collect::<FxHashMap<_, _>>()
+      .into();
 
     TableStructure {
       captions: grouped
