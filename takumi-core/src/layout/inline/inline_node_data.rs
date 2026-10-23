@@ -56,6 +56,8 @@ pub(crate) struct InlineNodeData<'c> {
   pub(crate) min_max_sizes: Cell<Option<MinMaxSizes>>,
   /// The first item each inline box's style belongs to, which names it in a break token.
   pub(crate) break_token_styles: OnceCell<FxHashMap<BoxId, usize>>,
+  /// The open tag of the box enclosing each close tag's box, absent for the block's own children.
+  pub(crate) close_tag_parents: OnceCell<FxHashMap<usize, usize>>,
 }
 
 impl<'c> InlineNodeData<'c> {
@@ -170,23 +172,29 @@ impl<'c> InlineNodeData<'c> {
   /// The style an item after the close tag at `index` takes: the box enclosing that tag's box,
   /// else `block`, as Blink reads `LayoutObject::Parent`.
   pub(crate) fn parent_context(&self, index: usize, block: &'c RenderContext) -> &'c RenderContext {
-    let mut depth = 0_isize;
+    let parents = self.close_tag_parents.get_or_init(|| {
+      let mut open_tags = Vec::new();
+      let mut parents = FxHashMap::default();
 
-    for item in self.items[..=index].iter().rev() {
-      match item.item_type {
-        InlineItemType::CloseTag => depth += 1,
-        InlineItemType::OpenTag => {
-          depth -= 1;
-
-          if depth < 0 {
-            return item.layout_object.map_or(block, LayoutObject::context);
+      for (index, item) in self.items.iter().enumerate() {
+        match item.item_type {
+          InlineItemType::OpenTag => open_tags.push(index),
+          InlineItemType::CloseTag => {
+            open_tags.pop();
+            if let Some(&parent) = open_tags.last() {
+              parents.insert(index, parent);
+            }
           }
+          _ => {}
         }
-        _ => {}
       }
-    }
+      parents
+    });
 
-    block
+    parents
+      .get(&index)
+      .and_then(|&parent| self.items[parent].layout_object)
+      .map_or(block, LayoutObject::context)
   }
 
   /// Blink's `GetOpenTagItems`: the tags `items[range]` leaves open.

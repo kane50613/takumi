@@ -747,7 +747,10 @@ impl<'r> LayoutTree<'r> {
     // containing blocks around this one.
     let mut candidates = Vec::new();
 
-    if space.cache_slot == CacheSlot::Layout {
+    if space.cache_slot == CacheSlot::Layout && !geometry.inline_content_boxes.is_empty() {
+      let paths = render_node.inline_child_paths();
+      let mut placed = Vec::with_capacity(geometry.inline_content_boxes.len());
+
       for inline_content_box in take(&mut geometry.inline_content_boxes) {
         let child_render_node = inline_content_box.node;
         let offset = inline_content_box.offset;
@@ -766,8 +769,8 @@ impl<'r> LayoutTree<'r> {
           location,
           &child_result,
         );
-        if let Some(path) = render_node.inline_child_path(child_render_node) {
-          tree.add_inline_box_child(node, child, &path);
+        if let Some(path) = paths.get(&child_render_node.context.box_id()) {
+          placed.push((child, path.clone()));
         }
         candidates.extend(
           child_result
@@ -776,6 +779,7 @@ impl<'r> LayoutTree<'r> {
             .map(|candidate| candidate.moved_by(location)),
         );
       }
+      atomic_inline.tree.add_inline_box_children(node, placed);
     }
 
     for (&child, &position) in boxes.iter().zip(&geometry.out_of_flow) {
