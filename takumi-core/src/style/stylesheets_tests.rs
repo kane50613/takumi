@@ -166,6 +166,23 @@ fn inline_important_marks_the_declaration() -> Result<(), serde_json::Error> {
   Ok(())
 }
 
+#[test]
+fn grid_shorthands_end_before_important() -> Result<(), serde_json::Error> {
+  assert_eq!(
+    importance_split(json!({ "grid": "10px / auto-flow 20px !important" }))?,
+    (0, 6)
+  );
+  assert_eq!(
+    importance_split(json!({ "gridTemplate": "\"a\" 10px / 20px !important" }))?,
+    (0, 3)
+  );
+  assert_eq!(
+    importance_split(json!({ "gridTemplateAreas": "\"a\" !important" }))?,
+    (0, 1)
+  );
+  Ok(())
+}
+
 /// The bang is a token, so one inside a string belongs to the value.
 #[test]
 fn inline_important_reads_as_a_token() -> Result<(), serde_json::Error> {
