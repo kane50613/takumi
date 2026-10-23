@@ -12,7 +12,7 @@ mod fragmentation;
 use std::{mem::take, rc::Rc};
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::{block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder};
+use crate::layout::box_fragment_builder::BoxFragmentBuilder;
 
 use crate::{
   context::RenderContext,
@@ -25,7 +25,7 @@ use crate::{
     content_alignment::BlockContentAlignment,
     exclusions::exclusion_space::ExclusionSpace,
     floats_utils::{Clear, Float, UnpositionedFloat, adjust_to_clearance, position_float},
-    fragmentation_layout_input::FragmentationLayoutInput,
+    fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     inline::{
       atomic_inline::BoxAtomicInline,
       inline_break_token::InlineBreakToken,
@@ -256,12 +256,6 @@ struct PlacedChild {
   location: Point<LayoutUnit>,
   result: Rc<LayoutResult>,
 }
-
-/// Where a block child resumes, as Blink's `BlockChildIterator::Entry` gives it.
-#[cfg(feature = "fragmentation")]
-type ChildBreakToken = Option<Rc<BlockBreakToken>>;
-#[cfg(not(feature = "fragmentation"))]
-type ChildBreakToken = ();
 
 /// Blink's `BlockLayoutAlgorithm` with its `BoxFragmentBuilder`.
 pub(crate) struct BlockLayoutAlgorithm<'t, 'r> {
@@ -837,21 +831,16 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       return;
     }
 
-    #[cfg(feature = "fragmentation")]
     let container_fragment_index = self.fragment_index();
 
     for child in take(&mut self.children) {
       self.tree.place_child(
         child.node,
         child.fragment_index,
+        container_fragment_index,
         child.location,
         &child.result,
       );
-      #[cfg(feature = "fragmentation")]
-      {
-        self.tree.node_state_mut(child.node).fragments[child.fragment_index]
-          .container_fragment_index = container_fragment_index;
-      }
     }
   }
 

@@ -147,6 +147,7 @@ impl ChunkWriter<'_, '_, '_> {
             &scene.results,
             &chunk.node.path,
             chunk.node.node_id,
+            chunk.node.fragment_index,
           )
           .map_err(io::Error::other)?;
 
@@ -160,6 +161,7 @@ impl ChunkWriter<'_, '_, '_> {
             result = paint_collapsed_borders(
               &scene.results,
               chunk.node.node_id,
+              chunk.node.fragment_index,
               chunk.node.paint_offset,
               placed.frame.translation(),
               None,

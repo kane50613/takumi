@@ -223,6 +223,9 @@ pub(crate) struct LayoutResult {
   pub(crate) is_line_clamp_clipped_float: bool,
   /// The out-of-flow boxes inside that their containing block has yet to place.
   pub(crate) out_of_flow: Vec<OutOfFlowCandidate>,
+  /// Blink's `TableSectionCollapsedBordersGeometry`: the table row a section fragment's rows start
+  /// at, then each row's block-start edge and the last row's block-end edge.
+  pub(crate) table_section_row_offsets: Option<(usize, Vec<LayoutUnit>)>,
   #[cfg(feature = "fragmentation")]
   pub(crate) break_info: BreakInfo,
 }
@@ -297,6 +300,7 @@ impl LayoutResult {
       use_last_baseline_for_inline_baseline: false,
       is_line_clamp_clipped_float: false,
       out_of_flow: Vec::new(),
+      table_section_row_offsets: None,
       #[cfg(feature = "fragmentation")]
       break_info: BreakInfo::default(),
     }

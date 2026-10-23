@@ -172,7 +172,7 @@ impl<'r> LayoutTree<'r> {
     input: &FragmentationLayoutInput,
   ) -> LayoutResult {
     if let Some(table_part) = &space.table_part {
-      return table_part.lay_out(self, space);
+      return table_part.lay_out(self, space, input);
     }
 
     match self.algorithm(node) {
@@ -182,7 +182,7 @@ impl<'r> LayoutTree<'r> {
         }
         LayoutResult::new(LogicalSize::default())
       }
-      Algorithm::Table => TableLayoutAlgorithm::new(self, node, space).map_or_else(
+      Algorithm::Table => TableLayoutAlgorithm::new(self, node, space, input).map_or_else(
         || LayoutResult::new(LogicalSize::default()),
         TableLayoutAlgorithm::layout,
       ),
@@ -300,10 +300,13 @@ impl<'r> LayoutTree<'r> {
     let mut result = match algorithm {
       Algorithm::Flex => FlexLayoutAlgorithm::new(self, node, space, true).compute_min_max_sizes(),
       Algorithm::Grid => GridLayoutAlgorithm::new(self, node, space, true).compute_min_max_sizes(),
-      Algorithm::Table => TableLayoutAlgorithm::new(self, node, space).map_or_else(
-        MinMaxSizesResult::default,
-        TableLayoutAlgorithm::compute_min_max_sizes,
-      ),
+      Algorithm::Table => {
+        TableLayoutAlgorithm::new(self, node, space, &FragmentationLayoutInput::default())
+          .map_or_else(
+            MinMaxSizesResult::default,
+            TableLayoutAlgorithm::compute_min_max_sizes,
+          )
+      }
       _ if self.has_inline_children(node) => {
         let render_node = self.render_node(node);
         let items_data = self.inline_node_data(usize::from(node));
@@ -460,12 +463,15 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Places `node`'s fragment `fragment_index`, laid out as `result`, with its border box at
-  /// `location` in its parent's. A fragment that does not break ends the box, so the fragments an
-  /// earlier layout left after it go, as Blink's `LayoutBox::SetLayoutResult` drops them.
+  /// `location` in its parent's fragment `container_fragment_index`. A fragment that does not
+  /// break ends the box, so the fragments an earlier layout left after it go, as Blink's
+  /// `LayoutBox::SetLayoutResult` drops them.
   pub(crate) fn place_child(
     &mut self,
     node: NodeId,
     fragment_index: usize,
+    #[cfg_attr(not(feature = "fragmentation"), allow(unused_variables))]
+    container_fragment_index: usize,
     location: Point<LayoutUnit>,
     result: &LayoutResult,
   ) {
@@ -476,7 +482,7 @@ impl<'r> LayoutTree<'r> {
         layout: result.computed_layout(location),
         is_line_clamp_clipped_float: result.is_line_clamp_clipped_float,
         #[cfg(feature = "fragmentation")]
-        container_fragment_index: 0,
+        container_fragment_index,
       },
     );
     #[cfg(feature = "fragmentation")]
@@ -604,11 +610,7 @@ impl<'r> LayoutTree<'r> {
         );
         let tree = &mut *atomic_inline.tree;
 
-        tree.place_child(child, 0, location, &child_result);
-        #[cfg(feature = "fragmentation")]
-        {
-          tree.node_state_mut(child).fragments[0].container_fragment_index = fragment_index;
-        }
+        tree.place_child(child, 0, fragment_index, location, &child_result);
         if let Some(path) = render_node.inline_child_path(child_render_node) {
           tree.add_inline_box_child(node, child, &path);
         }

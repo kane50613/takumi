@@ -8,7 +8,7 @@ use crate::{
     table::{
       borders::TableBorders,
       columns::{ColumnLocation, ColumnVisitor, visit_columns},
-      layout::TableStructure,
+      layout::{PlacedSection, TableStructure},
     },
     tree::{LayoutTree, RenderNode},
   },
@@ -62,27 +62,24 @@ pub struct TableFragment {
 }
 
 impl TableFragment {
-  /// Gathers the column geometry and collapsed-border grid of a table laid out with
-  /// `column_locations`.
-  pub(crate) fn finish(
+  /// Gathers the column geometry and collapsed-border grid of a table fragment laid out with
+  /// `column_locations` and holding `sections`.
+  pub(super) fn finish(
     &mut self,
     tree: &LayoutTree<'_>,
     table: &RenderNode,
     structure: &TableStructure,
+    sections: &[PlacedSection],
     column_locations: &[ColumnLocation],
     rtl: bool,
   ) {
     self.rtl = rtl;
-    self.sections = structure
-      .sections
-      .iter()
-      .map(|section| section.node)
-      .collect();
+    self.sections = sections.iter().map(|section| section.node).collect();
 
     let mut union: Option<(Point<f32>, Size<f32>)> = None;
 
-    for section in &structure.sections {
-      let layout = tree.computed_layout(section.node);
+    for section in sections {
+      let layout = tree.computed_layout(section.node, section.fragment_index);
       let origin = layout.location;
       let size = layout.size;
 

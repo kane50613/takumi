@@ -12,6 +12,7 @@ use crate::{
     block_break_token::BlockBreakToken,
     break_appeal::BreakAppeal,
     break_token::BreakToken,
+    break_token_algorithm_data::BreakTokenAlgorithmData,
     constraint_space::{BlockFragmentation, ConstraintSpace},
     early_break::EarlyBreak,
     fragmentation_utils::{
@@ -70,6 +71,8 @@ pub(crate) struct BoxFragmentBuilder {
   /// Blink's `SidesToInclude` on the block start and end.
   pub(crate) includes_block_start: bool,
   pub(crate) includes_block_end: bool,
+  /// Blink's `SetBreakTokenData`: what the algorithm resumes from in the next fragment.
+  pub(crate) break_token_data: Option<BreakTokenAlgorithmData>,
 }
 
 impl BoxFragmentBuilder {
@@ -113,6 +116,7 @@ impl BoxFragmentBuilder {
       is_first_for_node: true,
       includes_block_start: true,
       includes_block_end: true,
+      break_token_data: None,
     }
   }
 
@@ -186,8 +190,28 @@ impl BoxFragmentBuilder {
       ))));
   }
 
+  /// The block fragmentation part of Blink's `AddResult` for a child of `child_style` laid out as
+  /// `result` at `block_offset`, in a box laid out in `space`.
+  pub(crate) fn add_result(
+    &mut self,
+    space: &ConstraintSpace,
+    child_style: &LayoutStyle,
+    result: &LayoutResult,
+    block_offset: LayoutUnit,
+  ) {
+    self.add_child_break_token(result);
+    self.propagate_break_info(
+      result,
+      block_offset,
+      child_style.is_floating() || child_style.is_out_of_flow(),
+    );
+    if space.should_propagate_child_break_values() {
+      self.propagate_child_break_values(result, child_style);
+    }
+  }
+
   /// Blink's `FragmentBuilder::PropagateFromFragment` collecting a block child's break token.
-  pub(crate) fn add_child_break_token(&mut self, result: &LayoutResult) {
+  fn add_child_break_token(&mut self, result: &LayoutResult) {
     if let Some(token) = &result.break_info.break_token {
       self
         .child_break_tokens
@@ -206,7 +230,7 @@ impl BoxFragmentBuilder {
   }
 
   /// Blink's `PropagateBreakInfo` for a child `result` at `block_offset`.
-  pub(crate) fn propagate_break_info(
+  fn propagate_break_info(
     &mut self,
     result: &LayoutResult,
     block_offset: LayoutUnit,
@@ -378,6 +402,7 @@ impl BoxFragmentBuilder {
       is_at_block_end: self.is_at_block_end,
       has_seen_all_children: self.has_seen_all_children,
       child_break_tokens: std::mem::take(&mut self.child_break_tokens),
+      algorithm_data: self.break_token_data.take(),
     }
   }
 

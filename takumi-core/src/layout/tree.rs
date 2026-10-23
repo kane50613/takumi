@@ -144,7 +144,7 @@ impl<P: Copy> ContainingBlocks<P> {
 pub struct LayoutResults {
   nodes: Vec<LayoutResultNode>,
   /// Each laid-out table's paint data, by node.
-  tables: FxHashMap<usize, TableFragment>,
+  tables: FxHashMap<usize, Vec<TableFragment>>,
   /// The cells and rows layout hid, which paint nothing.
   hidden: rustc_hash::FxHashSet<usize>,
 }
@@ -239,9 +239,9 @@ impl LayoutResults {
     self.node(node_id).map(|node| node.box_children.as_ref())
   }
 
-  /// The paint data of the table `node_id`, when it is one.
-  pub fn table_fragment(&self, node_id: NodeId) -> Option<&TableFragment> {
-    self.tables.get(&usize::from(node_id))
+  /// The paint data of the table `node_id`'s fragment `fragment_index`, when it is one.
+  pub fn table_fragment(&self, node_id: NodeId, fragment_index: usize) -> Option<&TableFragment> {
+    self.tables.get(&usize::from(node_id))?.get(fragment_index)
   }
 
   /// Whether layout hid the box `node_id`, as Blink's `IsHiddenForPaint`: a cell in collapsed
@@ -296,8 +296,8 @@ pub struct LayoutTree<'r> {
   tables: FxHashMap<usize, Rc<TableStructure>>,
   /// Each table's column constraints, measured on its first layout.
   table_columns: FxHashMap<usize, Rc<ColumnConstraints>>,
-  /// Each table's paint data from its last full layout.
-  table_fragments: FxHashMap<usize, TableFragment>,
+  /// Each table's paint data from its last full layout, one per fragment.
+  table_fragments: FxHashMap<usize, Vec<TableFragment>>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
   /// context lays out as, made the first time its line lays it out.
   atomic_inlines: FxHashMap<*const RenderNode, NodeId>,
@@ -882,6 +882,7 @@ impl<'r> LayoutTree<'r> {
         requires_content_before_breaking: false,
         should_propagate_child_break_values: true,
         min_break_appeal: BreakAppeal::LastResort,
+        min_block_size_should_encompass_intrinsic_size: false,
       });
 
       let input = FragmentationLayoutInput {
@@ -907,11 +908,10 @@ impl<'r> LayoutTree<'r> {
       self.place_child(
         NodeId::ROOT,
         fragment_index,
+        page_count,
         Point::new(margins.inline_start, margins.block_start),
         &result,
       );
-      self.node_state_mut(NodeId::ROOT).fragments[fragment_index].container_fragment_index =
-        page_count;
 
       // The page area is the initial containing block of the out-of-flow boxes no box contains.
       if !result.out_of_flow.is_empty() {
@@ -981,7 +981,7 @@ impl<'r> LayoutTree<'r> {
       )
     };
 
-    self.place_child(NodeId::ROOT, 0, location, &result);
+    self.place_child(NodeId::ROOT, 0, 0, location, &result);
 
     if result.out_of_flow.is_empty() {
       return;
@@ -1096,6 +1096,7 @@ impl<'r> LayoutTree<'r> {
     let hidden = self
       .table_fragments
       .values()
+      .flatten()
       .flat_map(|fragment| &fragment.hidden)
       .map(|&node| usize::from(node))
       .collect();
@@ -1234,8 +1235,16 @@ impl<'r> LayoutTree<'r> {
     self.table_columns.insert(usize::from(table), columns);
   }
 
-  pub(in crate::layout) fn set_table_fragment(&mut self, table: NodeId, fragment: TableFragment) {
-    self.table_fragments.insert(usize::from(table), fragment);
+  pub(in crate::layout) fn set_table_fragment(
+    &mut self,
+    table: NodeId,
+    fragment_index: usize,
+    fragment: TableFragment,
+  ) {
+    let fragments = self.table_fragments.entry(usize::from(table)).or_default();
+
+    fragments.truncate(fragment_index);
+    fragments.push(fragment);
   }
 
   /// Changes what `node`'s part in a table changes in its styles.
@@ -1273,8 +1282,12 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// `node`'s layout so far.
-  pub(in crate::layout) fn computed_layout(&self, node: NodeId) -> ComputedLayout {
-    self.nodes[usize::from(node)].fragments[0].layout
+  pub(in crate::layout) fn computed_layout(
+    &self,
+    node: NodeId,
+    fragment_index: usize,
+  ) -> ComputedLayout {
+    self.nodes[usize::from(node)].fragments[fragment_index].layout
   }
 }
 

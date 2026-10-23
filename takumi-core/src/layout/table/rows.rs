@@ -9,7 +9,7 @@ use crate::{layout::content_alignment::BlockContentAlignment, layout_unit::Layou
 
 /// The rows, sections, and cells of one table layout, Blink's `TableTypes::Rows`, `Sections`, and
 /// `CellBlockConstraints`, with each cell's measure.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct Rows {
   pub(super) rows: Vec<Row>,
   pub(super) sections: Vec<Section>,

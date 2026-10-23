@@ -361,3 +361,99 @@ fn an_absolute_box_among_lines_sits_on_the_page_of_its_line() {
     [1]
   );
 }
+
+/// A table of `rows`, each a row of one cell that holds `cell`.
+fn table(rows: impl IntoIterator<Item = (&'static str, Node)>) -> Node {
+  Node::container(
+    rows
+      .into_iter()
+      .map(|(id, cell)| {
+        Node::container([Node::container([cell]).with_class_name("td")])
+          .with_class_name("tr")
+          .with_id(id)
+      })
+      .collect::<Vec<_>>(),
+  )
+  .with_class_name("table")
+  .with_id("table")
+}
+
+const TABLE_CSS: &str = ".table { display: table; border-spacing: 0 } .tr { display: table-row } \
+  .td { display: table-cell; padding: 0 } .h60 { height: 60px } .h300 { height: 300px } \
+  .caption { display: table-caption; height: 40px }";
+
+#[test]
+fn a_table_row_breaks_inside_unless_it_avoids_it() {
+  let rows = || ["r0", "r1", "r2", "r3", "r4"].map(|id| (id, block(&format!("{id}-cell"), "h60")));
+  let (boxes, page_count) = pages(&render(root([table(rows())]), TABLE_CSS), 200.0);
+
+  // The fourth row's cell content breaks, and the row with it.
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["r3"], [placed(0, 180.0, 20.0), placed(1, 0.0, 40.0)]);
+  assert_eq!(
+    boxes["table"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+
+  let (boxes, _) = pages(
+    &render(
+      root([table(rows())]),
+      &format!("{TABLE_CSS} .tr {{ break-inside: avoid }}"),
+    ),
+    200.0,
+  );
+
+  assert_eq!(boxes["r2"], [placed(0, 120.0, 60.0)]);
+  assert_eq!(boxes["r3"], [placed(1, 0.0, 60.0)]);
+  assert_eq!(boxes["r4"], [placed(1, 60.0, 60.0)]);
+  assert_eq!(
+    boxes["table"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 120.0)]
+  );
+}
+
+#[test]
+fn a_tall_cell_breaks_its_row_across_pages() {
+  let tree = render(
+    root([table([("row", block("content", "h300"))])]),
+    TABLE_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["row"], [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]);
+  assert_eq!(
+    boxes["content"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+}
+
+#[test]
+fn a_top_caption_comes_before_the_rows_it_breaks_with() {
+  let caption = Node::container(Vec::<Node>::new())
+    .with_class_name("caption")
+    .with_id("caption");
+  let rows = Node::container(
+    ["r0", "r1", "r2"]
+      .map(|id| {
+        Node::container([
+          Node::container([block(&format!("{id}-cell"), "h60")]).with_class_name("td")
+        ])
+        .with_class_name("tr")
+        .with_id(id)
+      })
+      .to_vec(),
+  )
+  .with_class_name("tbody");
+  let tree = render(
+    root([Node::container([caption, rows])
+      .with_class_name("table")
+      .with_id("table")]),
+    &format!("{TABLE_CSS} .tbody {{ display: table-row-group }}"),
+  );
+  let (boxes, _) = pages(&tree, 150.0);
+
+  assert_eq!(boxes["caption"], [placed(0, 0.0, 40.0)]);
+  assert_eq!(boxes["r0"], [placed(0, 40.0, 60.0)]);
+  assert_eq!(boxes["r1"], [placed(0, 100.0, 50.0), placed(1, 0.0, 10.0)]);
+}

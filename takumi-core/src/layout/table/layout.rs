@@ -7,13 +7,23 @@
 //! content by growing its padding, so a `content-box` background and the measured runs of the
 //! cell's own text start at the moved content.
 
-use std::{iter, rc::Rc};
+use std::rc::Rc;
+
+#[cfg(feature = "fragmentation")]
+use crate::{
+  geometry::Rect,
+  layout::{
+    box_fragment_builder::BoxFragmentBuilder,
+    fragmentation_utils::setup_fragment_builder_for_fragmentation, logical_rect::LogicalBoxStrut,
+  },
+};
 
 use crate::{
   geometry::{NodeId, Point, Size},
   layout::{
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
     content_alignment::BlockContentAlignment,
+    fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     layout_result::{LayoutResult, OutOfFlowCandidate},
     layout_style::LayoutStyle,
     length_utils::{LengthResolver, inline_size_from_aspect_ratio},
@@ -28,6 +38,7 @@ use crate::{
       },
       constraint_space_data::{TableConstraintSpaceData, TablePart},
       fragment::TableFragment,
+      fragmentation::{ResumedTableBox, TableBoxExtent, TableChild},
       parts::TableGroupedChildren,
       rows::{
         CellBlockConstraint, CellMeasure, ColspanCellTabulator, Row, RowBaselineTabulator, Rows,
@@ -84,6 +95,14 @@ struct CaptionConstraint {
 }
 
 /// A caption laid out at the table's inline size, Blink's `CaptionResult`.
+/// A section the table placed in its fragment.
+pub(super) struct PlacedSection {
+  pub(super) node: NodeId,
+  pub(super) fragment_index: usize,
+  /// The table row its rows start at, then their block-start edges and the last one's block end.
+  row_offsets: Option<(usize, Vec<LayoutUnit>)>,
+}
+
 struct CaptionResult {
   node: NodeId,
   result: Rc<LayoutResult>,
@@ -223,25 +242,30 @@ impl<'r> LayoutTree<'r> {
 
 /// Blink's `TableLayoutAlgorithm`, with the `TableNode` methods it calls.
 pub(crate) struct TableLayoutAlgorithm<'t, 'r> {
-  tree: &'t mut LayoutTree<'r>,
-  node: NodeId,
-  space: &'t ConstraintSpace,
+  pub(super) tree: &'t mut LayoutTree<'r>,
+  pub(super) node: NodeId,
+  pub(super) space: &'t ConstraintSpace,
+  #[cfg_attr(not(feature = "fragmentation"), allow(dead_code))]
+  pub(super) input: &'t FragmentationLayoutInput,
   style: Rc<LayoutStyle>,
-  structure: Rc<TableStructure>,
+  pub(super) structure: Rc<TableStructure>,
   border_padding: BoxStrut,
   /// The inline and block `border-spacing`, none when borders collapse.
   spacing: (LayoutUnit, LayoutUnit),
   is_fixed_layout: bool,
   rtl: bool,
+  #[cfg(feature = "fragmentation")]
+  pub(super) builder: BoxFragmentBuilder,
 }
 
 impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
-  /// The algorithm for the table `node` in `space`, none for a box the tree gathered no table
-  /// parts for.
+  /// The algorithm for the table `node` in `space`, resumed as `input` says, none for a box the
+  /// tree gathered no table parts for.
   pub(crate) fn new(
     tree: &'t mut LayoutTree<'r>,
     node: NodeId,
     space: &'t ConstraintSpace,
+    input: &'t FragmentationLayoutInput,
   ) -> Option<Self> {
     let structure = tree.table_structure(node)?;
     let style = Rc::clone(tree.layout_style_rc(node));
@@ -260,6 +284,21 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       )
     };
     let border_padding = tree.border_padding(node, space.percentage_resolution_inline_size);
+    #[cfg(feature = "fragmentation")]
+    let builder = BoxFragmentBuilder::new(
+      space,
+      &style,
+      LogicalBoxStrut::from_physical(
+        Rect {
+          left: border_padding.left,
+          right: border_padding.right,
+          top: border_padding.top,
+          bottom: border_padding.bottom,
+        },
+        style.direction,
+      ),
+      input.break_token.clone(),
+    );
 
     Some(Self {
       is_fixed_layout: render_node.is_fixed_table_layout(),
@@ -267,10 +306,13 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       tree,
       node,
       space,
+      input,
       style,
       structure,
       border_padding,
       spacing,
+      #[cfg(feature = "fragmentation")]
+      builder,
     })
   }
 
@@ -289,6 +331,14 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     } else {
       self.table_inline_size(&columns, undistributable, caption_constraint)
     };
+    #[cfg(feature = "fragmentation")]
+    setup_fragment_builder_for_fragmentation(
+      self.space,
+      &self.style,
+      table_inline_size,
+      &mut self.builder,
+    );
+
     let assignable = self.assignable_inline_size(&columns, undistributable, caption_constraint);
     let column_sizes = columns.sizes(assignable, self.is_fixed_layout);
     let (mut column_locations, has_collapsed_columns) =
@@ -305,13 +355,8 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       .map(|caption| caption.result.size.block_size + caption.margins.top + caption.margins.bottom)
       .fold(LayoutUnit::ZERO, |total, size| total + size);
     let grid_inline_size = table_inline_size_before_collapse - self.inline_border_padding();
-    let mut rows = Rows::default();
-    let minimal_grid_block_size = self.compute_rows(
-      grid_inline_size,
-      &column_locations,
-      captions_block_size,
-      &mut rows,
-    );
+    let (rows, minimal_grid_block_size, total_table_min_block_size) =
+      self.compute_rows(grid_inline_size, &column_locations, captions_block_size);
 
     if has_collapsed_columns {
       column_locations = columns.locations(&column_sizes, self.spacing.0, true).0;
@@ -326,8 +371,9 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     self.generate(
       table_inline_size,
       minimal_grid_block_size,
+      total_table_min_block_size,
       &column_locations,
-      rows,
+      Rc::new(rows),
       &captions,
       spacing,
     )
@@ -596,74 +642,96 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
 
   /// Lays every caption out at the table's inline size, Blink's `ComputeCaptionFragments`.
   fn lay_out_captions(&mut self, table_inline_size: LayoutUnit) -> Vec<CaptionResult> {
-    let structure = Rc::clone(&self.structure);
-
-    structure
-      .captions
-      .iter()
-      .map(|&caption| {
-        let caption_style = Rc::clone(self.tree.layout_style_rc(caption));
-        let mut margins = self.tree.margins(caption, Some(table_inline_size));
-        // Blink's `CreateCaptionConstraintSpace`.
-        let mut space = ConstraintSpace::new(Some(table_inline_size), caption_style.direction);
-
-        space.is_new_formatting_context = true;
-        space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
-        space.cache_slot = self.space.cache_slot;
-
-        let result = self.tree.layout(caption, &space);
-        // Blink's `ResolveInlineAutoMargins`.
-        let free = table_inline_size - result.size.inline_size - margins.left - margins.right;
-
-        match (
-          caption_style.margin.left.is_auto(),
-          caption_style.margin.right.is_auto(),
-        ) {
-          (true, true) => {
-            margins.left = (free / 2).clamp_negative_to_zero();
-            margins.right = (free - margins.left).clamp_negative_to_zero();
-          }
-          (true, false) => margins.left = free.clamp_negative_to_zero(),
-          (false, true) => margins.right = free.clamp_negative_to_zero(),
-          (false, false) => {}
-        }
-
-        CaptionResult {
-          node: caption,
-          result,
-          margins,
-          is_bottom: self
-            .tree
-            .render_node(caption)
-            .context
-            .style
-            .inherited_data
-            .caption_side
-            == CaptionSide::Bottom,
-        }
+    (0..self.structure.captions.len())
+      .map(|index| {
+        self.lay_out_caption(index, table_inline_size, &ChildBreakToken::default(), None)
       })
       .collect()
   }
 
-  /// Blink's `TableLayoutAlgorithm::ComputeRows`, returning the minimal block size of the table
-  /// grid.
+  /// Blink's `LayoutCaption` for the caption `index` resumed at `token`, laid out where a page
+  /// may break it when `block_offset` places its margin box.
+  fn lay_out_caption(
+    &mut self,
+    index: usize,
+    table_inline_size: LayoutUnit,
+    token: &ChildBreakToken,
+    block_offset: Option<LayoutUnit>,
+  ) -> CaptionResult {
+    let caption = self.structure.captions[index];
+    let caption_style = Rc::clone(self.tree.layout_style_rc(caption));
+    let mut margins = self.tree.margins(caption, Some(table_inline_size));
+
+    self.adjust_caption_margins_for_fragmentation(token, &mut margins);
+
+    // Blink's `CreateCaptionConstraintSpace`.
+    let mut space = ConstraintSpace::new(Some(table_inline_size), caption_style.direction);
+
+    space.is_new_formatting_context = true;
+    space.inline_auto_behavior = AutoSizeBehavior::StretchImplicit;
+    space.cache_slot = self.space.cache_slot;
+    if let Some(block_offset) = block_offset {
+      self.setup_child_space_for_fragmentation(&mut space, caption, block_offset + margins.top);
+    }
+
+    let result = self.lay_out_child(caption, &space, token);
+    // Blink's `ResolveInlineAutoMargins`.
+    let free = table_inline_size - result.size.inline_size - margins.left - margins.right;
+
+    match (
+      caption_style.margin.left.is_auto(),
+      caption_style.margin.right.is_auto(),
+    ) {
+      (true, true) => {
+        margins.left = (free / 2).clamp_negative_to_zero();
+        margins.right = (free - margins.left).clamp_negative_to_zero();
+      }
+      (true, false) => margins.left = free.clamp_negative_to_zero(),
+      (false, true) => margins.right = free.clamp_negative_to_zero(),
+      (false, false) => {}
+    }
+
+    CaptionResult {
+      node: caption,
+      result,
+      margins,
+      is_bottom: self
+        .tree
+        .render_node(caption)
+        .context
+        .style
+        .inherited_data
+        .caption_side
+        == CaptionSide::Bottom,
+    }
+  }
+
+  /// Blink's `TableLayoutAlgorithm::ComputeRows`: the rows, the minimal block size of the table
+  /// grid, and the sections' block size before the table's own grew them. A resumed table reuses
+  /// the rows its first fragment computed.
   fn compute_rows(
     &mut self,
     grid_inline_size: LayoutUnit,
     column_locations: &[ColumnLocation],
     captions_block_size: LayoutUnit,
-    rows: &mut Rows,
-  ) -> LayoutUnit {
-    let structure = Rc::clone(&self.structure);
-    let mut total_min_block_size = LayoutUnit::ZERO;
+  ) -> (Rows, LayoutUnit, LayoutUnit) {
+    let (mut rows, total_min_block_size) = match self.resumed_rows() {
+      Some(resumed) => resumed,
+      None => {
+        let structure = Rc::clone(&self.structure);
+        let mut rows = Rows::default();
+        let mut total_min_block_size = LayoutUnit::ZERO;
 
-    for section in &structure.sections {
-      self.compute_section_rows(section, grid_inline_size, column_locations, rows);
-      total_min_block_size += rows
-        .sections
-        .last()
-        .map_or(LayoutUnit::ZERO, |section| section.block_size);
-    }
+        for section in &structure.sections {
+          self.compute_section_rows(section, grid_inline_size, column_locations, &mut rows);
+          total_min_block_size += rows
+            .sections
+            .last()
+            .map_or(LayoutUnit::ZERO, |section| section.block_size);
+        }
+        (rows, total_min_block_size)
+      }
+    };
 
     let mut minimal_grid_block_size = LayoutUnit::ZERO;
 
@@ -695,7 +763,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       row.block_size = LayoutUnit::ZERO;
     }
 
-    minimal_grid_block_size
+    (rows, minimal_grid_block_size, total_min_block_size)
   }
 
   /// The table's block size to share among its sections, Blink's `css_table_block_size`: none
@@ -949,87 +1017,186 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     }
   }
 
-  /// Blink's `TableLayoutAlgorithm::GenerateFragment`, with each section and row placed as
-  /// Blink's section and row algorithms place them.
+  /// Blink's `TableLayoutAlgorithm::GenerateFragment`: the table's captions and sections stacked
+  /// in this fragment, resumed where the last one broke.
+  #[allow(clippy::too_many_arguments)]
   fn generate(
-    &mut self,
+    mut self,
     table_inline_size: LayoutUnit,
-    minimal_grid_block_size: LayoutUnit,
+    mut minimal_grid_block_size: LayoutUnit,
+    total_table_min_block_size: LayoutUnit,
     column_locations: &[ColumnLocation],
-    rows: Rows,
+    rows: Rc<Rows>,
     captions: &[CaptionResult],
     spacing: (LayoutUnit, LayoutUnit),
   ) -> LayoutResult {
     let structure = Rc::clone(&self.structure);
     let perform = self.space.cache_slot == CacheSlot::Layout;
     let is_table_block_size_specified = !self.style.size.height.is_auto();
-    let mut offset = LayoutUnit::ZERO;
-    let mut out_of_flow = Vec::new();
-    let mut first_baseline = None;
-    let mut fragment = TableFragment::default();
-    let add_caption = |tree: &mut LayoutTree<'r>,
-                       caption: &CaptionResult,
-                       offset: &mut LayoutUnit,
-                       out_of_flow: &mut Vec<OutOfFlowCandidate>| {
-      *offset += caption.margins.top;
+    let fragmentainer_space_at_start = self.fragmentainer_space_at_start();
+    let previously_consumed_block_size = self.previously_consumed_block_size();
+    let resumed = self.resumed_table_box();
+    let mut includes_block_start = true;
+    let mut includes_block_end = true;
+    let mut spacing_before_first_section = spacing.1;
+    let mut is_past_table_box = false;
 
-      let location = Point::new(caption.margins.left, *offset);
-
-      if perform {
-        tree.place_child(caption.node, 0, location, &caption.result);
+    if let Some(resumed) = resumed {
+      minimal_grid_block_size -= resumed.consumed_table_box_block_size;
+      is_past_table_box = resumed.is_past_table_box;
+      if resumed.has_entered_table_box {
+        // The block-start border is in an earlier fragment, unless a cloned box repeats it.
+        if !self.should_clone_box_decorations() || is_past_table_box {
+          includes_block_start = false;
+        }
+        spacing_before_first_section = LayoutUnit::ZERO;
       }
-      out_of_flow.extend(
-        caption
-          .result
-          .out_of_flow
-          .iter()
-          .map(|candidate| candidate.moved_by(location)),
-      );
-      *offset += caption.result.size.block_size + caption.margins.bottom;
-    };
-
-    for caption in captions.iter().filter(|caption| !caption.is_bottom) {
-      add_caption(self.tree, caption, &mut offset, &mut out_of_flow);
+      if is_past_table_box {
+        includes_block_end = false;
+      }
     }
 
-    // The table box starts at the first section, or wherever the last top caption ends.
+    let border_padding = self.border_padding;
+    let block_start_border_padding = |includes_block_start: bool| {
+      if includes_block_start {
+        border_padding.top
+      } else {
+        LayoutUnit::ZERO
+      }
+    };
     let section_inline_size =
       (table_inline_size - self.inline_border_padding() - spacing.0 * 2).clamp_negative_to_zero();
-    let section_inline_offset = self.border_padding.left + spacing.0;
-    let table_box_start = offset;
-
-    offset += self.border_padding.top;
-    let mut table_box_end = offset;
-    let mut spacing_after_last_section = LayoutUnit::ZERO;
-    let mut entered_section = false;
-
+    let section_inline_offset = border_padding.left + spacing.0;
     let data = Rc::new(TableConstraintSpaceData::new(
       Rc::clone(&structure),
-      rows,
+      Rc::clone(&rows),
       column_locations.to_vec(),
       section_inline_size,
       spacing,
       is_table_block_size_specified,
       self.rtl,
     ));
+    // The captions laid out to size the grid serve, unless pages break them.
+    let relayout_captions = self.involved_in_block_fragmentation();
+    let mut offset = LayoutUnit::ZERO;
+    let mut out_of_flow = Vec::new();
+    let mut first_baseline = None;
+    let mut spacing_after_last_section = LayoutUnit::ZERO;
+    let mut has_container_separation = false;
+    let mut table_box: Option<TableBoxExtent> = None;
+    let mut grid_block_size_inflation = LayoutUnit::ZERO;
+    let mut broke_inside = false;
+    let mut has_ended_table_box_layout = false;
+    let mut placed_sections = Vec::new();
 
-    for (section_index, section) in structure.sections.iter().enumerate() {
-      let before_section = offset;
+    if !relayout_captions {
+      for caption in captions.iter().filter(|caption| !caption.is_bottom) {
+        self.add_caption(caption, &mut offset, &mut out_of_flow, perform);
+      }
+    }
 
-      offset += spacing.1;
-      let space = data.space(TablePart::Section(section_index), self.space.cache_slot);
-      let result = self.tree.layout(section.node, &space);
+    let entries = self.child_entries();
+    let entry_count = entries.len();
+    let mut handled = 0;
 
-      spacing_after_last_section = spacing.1;
-      if section.rows.is_empty() {
-        // An empty section takes no border spacing before it.
-        offset = before_section;
+    for (child, token) in entries {
+      let node = child.node(&structure);
+
+      if self.breaks_before_early_break_target(node) {
+        broke_inside = true;
+        break;
+      }
+      handled += 1;
+
+      let mut new_table_box = None;
+      let mut margins = BoxStrut::default();
+      let result;
+      let inline_offset;
+
+      match child {
+        TableChild::Caption(index) => {
+          if !relayout_captions {
+            continue;
+          }
+          if captions[index].is_bottom && !is_past_table_box {
+            // The first bottom caption ends the sections, so the grid's size places it.
+            let extent = table_box.get_or_insert_with(|| {
+              TableBoxExtent::begin(offset, block_start_border_padding(includes_block_start))
+            });
+
+            (offset, grid_block_size_inflation) = extent.end_layout(
+              border_padding.bottom,
+              spacing_after_last_section,
+              minimal_grid_block_size,
+            );
+            has_ended_table_box_layout = true;
+            is_past_table_box =
+              fragmentainer_space_at_start.is_none_or(|space_left| extent.end <= space_left);
+          }
+
+          let caption = self.lay_out_caption(index, table_inline_size, &token, Some(offset));
+
+          margins = caption.margins;
+          inline_offset = caption.margins.left;
+          result = caption.result;
+        }
+        TableChild::Section(index) => {
+          let collapsible_spacing = if table_box.is_some() {
+            spacing.1
+          } else {
+            // The table box starts at its first section in this fragment.
+            new_table_box = Some(TableBoxExtent::begin(
+              offset,
+              block_start_border_padding(includes_block_start),
+            ));
+            offset += block_start_border_padding(includes_block_start);
+            spacing_before_first_section
+          };
+          let offset_for_childless_section = offset;
+
+          offset += collapsible_spacing;
+
+          let mut space = data.space(TablePart::Section(index), self.space.cache_slot);
+
+          self.setup_child_space_for_fragmentation(&mut space, node, offset);
+          result = self.lay_out_child(node, &space, &token);
+          inline_offset = section_inline_offset;
+          spacing_after_last_section = spacing.1;
+          if structure.sections[index].rows.is_empty() {
+            // An empty section takes no border spacing before it.
+            offset = offset_for_childless_section;
+          } else if Self::resumes_past_block_end(&token) {
+            spacing_after_last_section = LayoutUnit::ZERO;
+          }
+        }
       }
 
-      let location = Point::new(section_inline_offset, offset);
+      match self.break_before_child_if_needed(
+        node,
+        &result,
+        margins.top + offset,
+        has_container_separation,
+      ) {
+        Ok(true) => {
+          broke_inside = true;
+          break;
+        }
+        Ok(false) => {}
+        Err(status) => return self.relayout_and_break_earlier(status),
+      }
+
+      if let TableChild::Section(_) = child
+        && first_baseline.is_none()
+        && let Some(baseline) = result.first_baseline
+      {
+        first_baseline = Some(offset + baseline);
+      }
+      offset += margins.top;
+
+      let location = Point::new(inline_offset, offset);
 
       if perform {
-        self.tree.place_child(section.node, 0, location, &result);
+        self.place_table_child(node, &token, location, &result);
       }
       out_of_flow.extend(
         result
@@ -1037,42 +1204,142 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
           .iter()
           .map(|candidate| candidate.moved_by(location)),
       );
-      if first_baseline.is_none()
-        && let Some(baseline) = result.first_baseline
-      {
-        first_baseline = Some(offset + baseline);
+      offset += result.size.block_size + margins.bottom;
+
+      match child {
+        TableChild::Section(_) => {
+          if table_box.is_none() {
+            table_box = new_table_box;
+          }
+          if let Some(extent) = table_box.as_mut() {
+            extent.end = offset;
+          }
+          placed_sections.push(PlacedSection {
+            node,
+            fragment_index: Self::child_fragment_index(&token),
+            row_offsets: result.table_section_row_offsets.clone(),
+          });
+        }
+        TableChild::Caption(index) if captions[index].is_bottom => is_past_table_box = true,
+        TableChild::Caption(_) => {}
       }
-      offset += result.size.block_size;
-      table_box_end = offset;
-      entered_section = true;
+      if self.space.has_block_fragmentation() {
+        has_container_separation = true;
+        if self.has_inflow_child_break_inside() {
+          broke_inside = true;
+          break;
+        }
+      }
     }
 
-    if !entered_section {
-      table_box_end = offset;
+    if table_box.is_none() && !is_past_table_box && !broke_inside {
+      table_box = Some(TableBoxExtent::begin(
+        offset,
+        block_start_border_padding(includes_block_start),
+      ));
+    }
+    if handled == entry_count {
+      self.set_has_seen_all_children();
+    }
+    if let Some(extent) = table_box.as_mut()
+      && !is_past_table_box
+    {
+      if broke_inside {
+        // A break inside fills the page, and the border spacing after the sections goes.
+        if let Some(space_left) = fragmentainer_space_at_start {
+          extent.end = extent.end.max(space_left);
+        }
+        spacing_after_last_section = LayoutUnit::ZERO;
+      } else if let Some(space_left) = fragmentainer_space_at_start {
+        // The border spacing after the sections stops at the page end.
+        spacing_after_last_section = spacing_after_last_section
+          .min(space_left - offset - border_padding.bottom)
+          .clamp_negative_to_zero();
+      }
+      if !has_ended_table_box_layout {
+        (offset, grid_block_size_inflation) = extent.end_layout(
+          border_padding.bottom,
+          spacing_after_last_section,
+          minimal_grid_block_size,
+        );
+        has_ended_table_box_layout = true;
+        if !broke_inside {
+          is_past_table_box =
+            fragmentainer_space_at_start.is_none_or(|space_left| extent.end <= space_left);
+        }
+      }
+    }
+    if table_box.is_none() {
+      includes_block_start = false;
+    }
+    if !is_past_table_box && (!self.should_clone_box_end_decorations() || table_box.is_none()) {
+      includes_block_end = false;
+    }
+    if !relayout_captions {
+      for caption in captions.iter().filter(|caption| caption.is_bottom) {
+        self.add_caption(caption, &mut offset, &mut out_of_flow, perform);
+      }
     }
 
-    // Blink's `EndTableBoxLayout`.
-    table_box_end += spacing_after_last_section + self.border_padding.bottom;
-    let sections_total_size = table_box_end - table_box_start;
-    let grid_block_size = sections_total_size.max(minimal_grid_block_size);
-    let grid_block_size_inflation = grid_block_size - sections_total_size;
+    let mut block_size = offset.clamp_negative_to_zero();
+    let mut intrinsic_block_size = block_size - grid_block_size_inflation;
 
-    offset = table_box_start + grid_block_size;
-    fragment.grid_rect = (table_box_start.to_float(), grid_block_size.to_float());
+    if !has_ended_table_box_layout && !is_past_table_box {
+      // The block-end border, padding, and spacing count, so finishing decides whether they fit.
+      let block_end = border_padding.bottom + spacing_after_last_section;
 
-    for caption in captions.iter().filter(|caption| caption.is_bottom) {
-      add_caption(self.tree, caption, &mut offset, &mut out_of_flow);
+      intrinsic_block_size += block_end;
+      block_size += block_end;
+    }
+    block_size += previously_consumed_block_size;
+    if self.space.is_fixed_block_size {
+      block_size = self.space.available_block_size.unwrap_or_default();
+      if self.space.min_block_size_should_encompass_intrinsic_size() {
+        block_size = block_size.max(previously_consumed_block_size + intrinsic_block_size);
+      }
     }
 
-    let intrinsic_block_size = offset.clamp_negative_to_zero() - grid_block_size_inflation;
-    let block_size = if self.space.is_fixed_block_size {
-      self.space.available_block_size.unwrap_or_default()
-    } else {
-      offset.clamp_negative_to_zero()
+    let (block_size, intrinsic_block_size) = match self.finish_fragmentation(
+      block_size,
+      intrinsic_block_size,
+      (includes_block_start, includes_block_end),
+    ) {
+      Ok(sizes) => sizes,
+      Err(status) => return self.relayout_and_break_earlier(status),
     };
 
+    if self.involved_in_block_fragmentation()
+      && let Some(extent) = table_box.as_mut()
+    {
+      // Finishing may have shrunk the fragment, and the grid with it.
+      extent.end = extent.end.min(block_size);
+    }
+
+    let grid_block_size = table_box.map_or(LayoutUnit::ZERO, |extent| extent.end - extent.start);
+    let consumed_table_box_block_size =
+      resumed.unwrap_or_default().consumed_table_box_block_size + grid_block_size;
+    let has_entered_table_box =
+      resumed.is_some_and(|resumed| resumed.has_entered_table_box) || table_box.is_some();
+
+    self.keep_break_token_data(
+      rows,
+      total_table_min_block_size,
+      ResumedTableBox {
+        consumed_table_box_block_size,
+        has_entered_table_box,
+        is_past_table_box,
+      },
+    );
+
     if perform {
-      self.record_parts(&data, &mut fragment);
+      let mut fragment = TableFragment {
+        grid_rect: table_box.map_or((0.0, 0.0), |extent| {
+          (extent.start.to_float(), grid_block_size.to_float())
+        }),
+        ..TableFragment::default()
+      };
+
+      self.record_parts(&data, &placed_sections, &mut fragment);
       for &column in &structure.columns {
         self.tree.hide(column);
       }
@@ -1080,10 +1347,13 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         self.tree,
         self.tree.render_node(self.node),
         &structure,
+        &placed_sections,
         column_locations,
         self.rtl,
       );
-      self.tree.set_table_fragment(self.node, fragment);
+      self
+        .tree
+        .set_table_fragment(self.node, self.fragment_index(), fragment);
     }
 
     let size = LogicalSize::new(table_inline_size, block_size);
@@ -1110,12 +1380,49 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     result.bfc_block_offset = Some(self.space.bfc_offset.block_offset);
     result.first_baseline = first_baseline;
     result.out_of_flow = out_of_flow;
+    self.finish_break_info(&mut result);
     result
   }
 
+  /// Places a caption laid out to size the grid at `offset`, past its margins.
+  fn add_caption(
+    &mut self,
+    caption: &CaptionResult,
+    offset: &mut LayoutUnit,
+    out_of_flow: &mut Vec<OutOfFlowCandidate>,
+    perform: bool,
+  ) {
+    *offset += caption.margins.top;
+
+    let location = Point::new(caption.margins.left, *offset);
+
+    if perform {
+      self.tree.place_child(
+        caption.node,
+        0,
+        self.fragment_index(),
+        location,
+        &caption.result,
+      );
+    }
+    out_of_flow.extend(
+      caption
+        .result
+        .out_of_flow
+        .iter()
+        .map(|candidate| candidate.moved_by(location)),
+    );
+    *offset += caption.result.size.block_size + caption.margins.bottom;
+  }
+
   /// Records which rows and cells layout hid, the column each cell starts at, and the rows each
-  /// section's collapsed borders run along.
-  fn record_parts(&self, data: &TableConstraintSpaceData, fragment: &mut TableFragment) {
+  /// placed section's collapsed borders run along.
+  fn record_parts(
+    &self,
+    data: &TableConstraintSpaceData,
+    placed_sections: &[PlacedSection],
+    fragment: &mut TableFragment,
+  ) {
     for (section_index, section) in data.structure.sections.iter().enumerate() {
       let start_row = data.rows.sections[section_index].start_row;
 
@@ -1139,19 +1446,12 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
           fragment.hidden.push(row.node);
         }
       }
-      if self.structure.borders.is_collapsed && !section.rows.is_empty() {
-        let row_offsets = iter::once(LayoutUnit::ZERO)
-          .chain(
-            data
-              .row_extents(section_index)
-              .into_iter()
-              .map(|(_, end)| end),
-          )
-          .collect();
-
+    }
+    for (placed_index, section) in placed_sections.iter().enumerate() {
+      if let Some((start_row, row_offsets)) = &section.row_offsets {
         fragment
           .section_row_offsets
-          .push((section_index, start_row, row_offsets));
+          .push((placed_index, *start_row, row_offsets.clone()));
       }
     }
   }

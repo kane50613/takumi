@@ -383,7 +383,7 @@ impl<'r> LayoutTree<'r> {
         let (offset, result) = self.lay_out_out_of_flow_box(candidate, containing_block, space);
 
         if space.cache_slot == CacheSlot::Layout {
-          self.place_child(candidate.node, 0, offset, &result);
+          self.place_child(candidate.node, 0, 0, offset, &result);
           self.add_hoisted_child(container, candidate.node);
         }
 
