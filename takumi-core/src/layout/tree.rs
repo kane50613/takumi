@@ -219,31 +219,9 @@ impl LayoutResults {
     self.view().fragment_layout(node_id, fragment_index)
   }
 
-  /// Whether the node's fragment `fragment_index` repeats an earlier one, as a table header does on each page.
-  pub fn is_repeated_fragment(&self, node_id: NodeId, fragment_index: usize) -> bool {
-    self.view().is_repeated_fragment(node_id, fragment_index)
-  }
-
   /// Paint-ordered children of a node.
   pub fn box_children(&self, node_id: NodeId) -> crate::Result<&[OrderedChild]> {
     self.view().box_children(node_id)
-  }
-
-  /// The paint data of the table `node_id`'s fragment `fragment_index`, when it is one.
-  pub fn table_fragment(&self, node_id: NodeId, fragment_index: usize) -> Option<&TableFragment> {
-    self.view().table_fragment(node_id, fragment_index)
-  }
-
-  /// Whether layout hid the box `node_id`, as Blink's `IsHiddenForPaint`: a cell in collapsed
-  /// columns or empty under `empty-cells: hide`, or a collapsed row.
-  pub fn is_hidden_for_paint(&self, node_id: NodeId) -> bool {
-    self.view().is_hidden_for_paint(node_id)
-  }
-
-  /// Blink's `IsLineClampClippedFloat`: whether `node_id` is a float its line-clamp container
-  /// clips to its content box's block end.
-  pub fn is_line_clamp_clipped_float(&self, node_id: NodeId) -> bool {
-    self.view().is_line_clamp_clipped_float(node_id)
   }
 
   /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.

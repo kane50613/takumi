@@ -74,7 +74,7 @@ fn boxes(root: &RenderNode, width: f32) -> BTreeMap<String, Placed> {
         Placed {
           origin: at,
           layout,
-          hidden: results.is_hidden_for_paint(node_id),
+          hidden: results.view().is_hidden_for_paint(node_id),
         },
       );
     }

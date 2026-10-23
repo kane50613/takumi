@@ -1,6 +1,7 @@
 ---
 packages:
   takumi-core: patch
+  takumi-pdf: patch
 ---
 
 # Repeat a fixed box from the page it starts on

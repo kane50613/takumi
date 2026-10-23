@@ -1,6 +1,7 @@
 ---
 packages:
   takumi-core: patch
+  takumi-pdf: patch
 ---
 
 # Break boxes inside a positioned inline box across pages
