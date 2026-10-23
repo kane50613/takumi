@@ -5,7 +5,7 @@
 use rustc_hash::FxHashMap;
 
 use crate::{
-  context::BoxId,
+  context::{BoxId, RenderContext},
   error::{Error, Result},
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
@@ -782,7 +782,11 @@ fn build_layers(
     if let Some(root_paint) = contexts[context_id].roots.first()
       && let Some(root_node) = root.node_at_path(&root_paint.path)
     {
-      paint_bounds = outset_bounds(paint_bounds, filter_reach(root_node), root_paint.transform);
+      paint_bounds = outset_bounds(
+        paint_bounds,
+        filter_reach(&root_node.context),
+        root_paint.transform,
+      );
     }
     contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
   }
@@ -1285,19 +1289,31 @@ impl PageReach {
 
 #[cfg(feature = "fragmentation")]
 impl SceneLayers {
-  /// How far down the scene paints.
+  /// How far down the scene paints. A chunk under a filter paints as far as the filter spreads it,
+  /// which the bounds of the effects around it hold.
   fn reach(&self) -> PageReach {
     let mut reach = PageReach::Empty;
 
     for chunk in PaintChunk::in_paint_order(&self.contexts) {
-      match chunk.node.paint_bounds {
-        None => return PageReach::Unbounded,
-        Some(bounds) if bounds.is_empty() => {}
-        Some(bounds) => {
-          reach = reach.union(PageReach::Span {
-            top: bounds.top,
-            bottom: bounds.bottom,
-          });
+      let mut effect = chunk.state().effect;
+      let mut bounds = vec![chunk.node.paint_bounds];
+
+      while let Some(id) = effect {
+        let node = self.properties.effect(id);
+
+        bounds.push(node.bounds);
+        effect = node.parent;
+      }
+      for bounds in bounds {
+        match bounds {
+          None => return PageReach::Unbounded,
+          Some(bounds) if bounds.is_empty() => {}
+          Some(bounds) => {
+            reach = reach.union(PageReach::Span {
+              top: bounds.top,
+              bottom: bounds.bottom,
+            });
+          }
         }
       }
     }
@@ -1316,6 +1332,8 @@ pub struct PageWindows {
   needs: Vec<Vec<usize>>,
   /// By out-of-flow box, the parents whose fragments pages visited, with those pages.
   parents: FxHashMap<NodeId, Vec<(NodeId, usize)>>,
+  /// How many of the first pages were added once their fragments could no longer change.
+  stable: usize,
 }
 
 #[cfg(feature = "fragmentation")]
@@ -1327,7 +1345,32 @@ impl PageWindows {
       reaches: Vec::new(),
       needs: Vec::new(),
       parents: FxHashMap::default(),
+      stable: 0,
     }
+  }
+
+  /// Brings the pages up to `laid` from `layout`, measuring again those that were added before
+  /// their fragments could no longer change, which the first `final_pages` of `layout` now are.
+  pub fn refresh(
+    &mut self,
+    root: &RenderNode,
+    layout: LayoutView<'_>,
+    laid: usize,
+    final_pages: usize,
+  ) -> Result<()> {
+    let stable = self.stable.min(self.reaches.len());
+
+    self.reaches.truncate(stable);
+    self.needs.truncate(stable);
+    self.parents.retain(|_, parents| {
+      parents.retain(|&(_, page)| page < stable);
+      !parents.is_empty()
+    });
+    while self.reaches.len() < laid {
+      self.add_page(root, layout)?;
+    }
+    self.stable = final_pages.min(laid);
+    Ok(())
   }
 
   /// How many pages are added.
@@ -1529,7 +1572,7 @@ fn set_effect_bounds(
     let (union, unknown) = bounds[id.index()];
     let grown =
       match owners[id.index()].and_then(|owner| Some((owner, root.node_at_path(&owner.path)?))) {
-        Some((owner, node)) => outset_bounds(union, filter_reach(node), owner.transform),
+        Some((owner, node)) => outset_bounds(union, filter_reach(&node.context), owner.transform),
         None => union,
       };
 
@@ -1552,11 +1595,10 @@ fn shadow_reach(shadow: &SizedShadow) -> f32 {
 }
 
 /// How far the node's filters spread its layer, in local px.
-fn filter_reach(node: &RenderNode) -> f32 {
-  let sizing = &node.context.sizing;
+pub(crate) fn filter_reach(context: &RenderContext) -> f32 {
+  let sizing = &context.sizing;
 
-  node
-    .context
+  context
     .style
     .misc1_data
     .filter
@@ -1566,8 +1608,7 @@ fn filter_reach(node: &RenderNode) -> f32 {
 }
 
 /// How far box shadows and the outline reach past the border box, in local px.
-fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
-  let context = &node.context;
+pub(crate) fn box_ink_reach(context: &RenderContext, size: Size<f32>) -> f32 {
   let shadows = context.style.misc1_data.box_shadow.iter().flatten();
   let shadow_reach = shadows
     .filter(|shadow| !shadow.inset)
@@ -1625,7 +1666,7 @@ fn compute_node_paint_bounds(
 ) -> Option<SceneBounds> {
   let mut bounds = outset_bounds(
     SceneBounds::of_rect(layout.size, transform),
-    box_ink_reach(node, layout.size),
+    box_ink_reach(&node.context, layout.size),
     transform,
   );
   if !has_inline_paint_content(node) {
@@ -1659,7 +1700,7 @@ fn compute_node_paint_bounds(
   )
 }
 
-fn has_inline_paint_content(node: &RenderNode) -> bool {
+pub(crate) fn has_inline_paint_content(node: &RenderNode) -> bool {
   matches!(OwnContent::of(node), OwnContent::Inline(_))
 }
 

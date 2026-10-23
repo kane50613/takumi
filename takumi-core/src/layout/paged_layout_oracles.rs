@@ -249,9 +249,14 @@ fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   loop {
     let stepped = layout.next_page().expect("page lays out").is_some();
 
-    while windows.page_count() < layout.page_count() {
-      windows.add_page(root, layout.view()).expect("page adds");
-    }
+    windows
+      .refresh(
+        root,
+        layout.view(),
+        layout.page_count(),
+        layout.finalized_pages(),
+      )
+      .expect("pages refresh");
 
     let ready = if layout.is_finished() {
       layout.page_count()

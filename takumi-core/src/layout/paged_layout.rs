@@ -49,6 +49,8 @@ pub struct PagedLayout<'r> {
   /// The root's last fragment and its origin, which the page area of a page past the root's end
   /// attaches to.
   last_root_fragment: Option<(usize, Point<LayoutUnit>)>,
+  /// The page of [`Self::last_root_fragment`].
+  last_root_page: usize,
   is_finished: bool,
   /// The absolute boxes the initial containing block positions that no page has laid out yet, with
   /// their layout nodes once the tree has them.
@@ -70,6 +72,7 @@ impl<'r> PagedLayout<'r> {
       page_count: 0,
       page_areas: PageAreas::default(),
       last_root_fragment: None,
+      last_root_page: 0,
       is_finished: false,
       pending_initial_boxes: initial_containing_block_boxes(root),
       scanned_nodes: 0,
@@ -158,6 +161,9 @@ impl<'r> PagedLayout<'r> {
     };
 
     self.last_root_fragment = Some(root_fragment);
+    if laid_root {
+      self.last_root_page = page;
+    }
     self.tree.lay_out_page_area(
       &mut self.page_areas,
       page,
@@ -185,9 +191,13 @@ impl<'r> PagedLayout<'r> {
   /// [`Self::view`]. A box a containing block holds back to its last fragment paints from where
   /// that block started, so an unfinished block holds back the pages from its first. The initial
   /// containing block is the first page's area, so an absolute box it positions paints there from
-  /// whichever page finds it, and until every such box is found no page is final. This leaves out a
+  /// whichever page finds it, and until every such box is found no page is final. The root's last
+  /// fragment holds the page areas that go on after it, so its page is not final until they end. This leaves out a
   /// held box that starts above its containing block.
   pub fn finalized_pages(&self) -> usize {
+    if self.is_finished {
+      return self.page_count;
+    }
     if !self.pending_initial_boxes.is_empty() {
       return 0;
     }
@@ -195,10 +205,39 @@ impl<'r> PagedLayout<'r> {
     let mut pinned = self.page_count;
     let mut chain = vec![NodeId::ROOT];
 
+    // The page areas after the root's last fragment attach to it, so it paints more with each.
+    if self.break_token.is_none() && self.page_areas.resumes() {
+      pinned = self.last_root_page;
+    }
+
     if let Some(token) = &self.break_token {
       self.pin_held_boxes(token, &mut chain, &mut pinned);
     }
     pinned
+  }
+
+  /// How many of the first pages a consumer may paint from [`Self::view`] when no box of the tree
+  /// paints more than `reach_back` px above its page, as [`reach_back`](crate::layout::paint_reach::reach_back) bounds it: those that
+  /// [`Self::finalized_pages`] holds final, and that no page still to lay out can reach. None
+  /// means the tree has a box that may paint any number of pages back, so only a finished layout
+  /// settles its pages.
+  pub fn settled_pages(&self, reach_back: Option<f32>) -> usize {
+    if self.is_finished {
+      return self.page_count;
+    }
+
+    let Some(reach_back) = reach_back else {
+      return 0;
+    };
+    // A page not laid out starts at or below the page after the last one laid out.
+    let pages_back = (reach_back / self.page_size.height).ceil();
+
+    if pages_back.is_nan() || pages_back >= self.page_count as f32 {
+      return 0;
+    }
+    self
+      .finalized_pages()
+      .min(self.page_count - pages_back as usize)
   }
 
   /// Lowers `pinned` to the page each box held in `token`'s box or the boxes under it

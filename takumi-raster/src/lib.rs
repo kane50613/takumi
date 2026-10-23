@@ -30,6 +30,8 @@ mod palette;
 mod path;
 /// Main image renderer and viewport management
 mod render;
+#[cfg(all(test, feature = "pages"))]
+mod render_pages_tests;
 mod scanline;
 mod simd;
 mod stacking_context;

@@ -496,7 +496,7 @@ fn insets_axis(
 /// Whether an out-of-flow box's block position or size depends on the block size of its
 /// containing block: it sets `bottom`, or a percentage or `stretch` inset, size, or limit.
 #[cfg(feature = "fragmentation")]
-fn depends_on_containing_block_block_size(style: &LayoutStyle) -> bool {
+pub(crate) fn depends_on_containing_block_block_size(style: &LayoutStyle) -> bool {
   !style.inset.bottom.is_auto()
     || style.inset.top.has_percent()
     || [

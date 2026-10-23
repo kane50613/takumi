@@ -1593,3 +1593,18 @@ fn a_box_hoisted_past_its_parent_paints_in_the_window_of_its_containing_block() 
     },
   );
 }
+
+/// The root's last fragment holds the page areas that go on after it, so it paints more with each
+/// and stays open until they end.
+#[test]
+fn the_roots_last_fragment_stays_open_while_page_areas_go_on() {
+  let tree = render(
+    root([block("a", "h50"), block("tall", "tall")]),
+    ".h50 { height: 50px } .tall { position: absolute; top: 500px; height: 1000px; width: 10px }",
+  );
+
+  assert_eq!(
+    finalized_after_each_page(&tree, 200.0),
+    [0, 0, 0, 0, 0, 0, 0, 8]
+  );
+}

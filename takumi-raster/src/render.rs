@@ -2,7 +2,11 @@ use std::{collections::HashMap, mem, rc::Rc, sync::Arc};
 
 pub use takumi_core::layout::measure::{MeasuredNode, MeasuredTextRun};
 #[cfg(feature = "pages")]
-use takumi_core::{geometry::Size, scene::PagedScene};
+use takumi_core::{
+  geometry::Size,
+  layout::{paged_layout::PagedLayout, paint_reach::reach_back},
+  scene::{PageWindows, PagedScene, SceneRef},
+};
 use takumi_core::{
   scene::Scene,
   style::{ComputedStyle, Lang},
@@ -170,37 +174,81 @@ pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
 }
 
 /// Renders a node across at most `max_pages` pages `page_size`, handing each page's image to
-/// `page` in order, so a long document holds one page's pixels at a time. The scene of every page
-/// resolves its paint chunks once, and each page paints only the chunks that reach it.
+/// `page` in order, so a long document holds one page's pixels and scene at a time.
+///
+/// A page is handed over as soon as no page still to lay out can paint onto it, which the tree
+/// decides before any layout: a document with no transform, percentage offset or held box, and
+/// whose negative margins, offsets, shadows and glyph ink reach less than a page, hands over a
+/// page once the next is laid out. Any other document is laid out to its end first.
+///
+/// Layout runs while the pages go out, so [`Error::TooManyPages`] and any other layout error can
+/// follow pages `page` has already received.
 #[cfg(feature = "pages")]
 pub fn render_pages<'g>(
+  options: RenderOptions<'g>,
+  page_size: Size<f32>,
+  max_pages: usize,
+  page: impl FnMut(Bitmap) -> Result<()>,
+) -> Result<()> {
+  // The method itself does not satisfy the bound, as its layout lifetime is early-bound.
+  #[allow(clippy::redundant_closure_for_method_calls)]
+  let settle = |layout: &PagedLayout<'_>, reach| layout.settled_pages(reach);
+
+  render_pages_settling(options, page_size, max_pages, settle, page)
+}
+
+/// [`render_pages`] with `settle`, given the layout and the tree's reach back, saying how many of
+/// the first pages are safe to hand over.
+#[cfg(feature = "pages")]
+pub(crate) fn render_pages_settling<'g>(
   mut options: RenderOptions<'g>,
   page_size: Size<f32>,
   max_pages: usize,
+  settle: impl Fn(&PagedLayout<'_>, Option<f32>) -> usize,
   mut page: impl FnMut(Bitmap) -> Result<()>,
 ) -> Result<()> {
   let render_context = options.take_render_context();
-  let paged = PagedScene::lay_out(
-    RenderNode::from_node(&render_context, options.node),
-    page_size,
-    max_pages,
-    true,
-  )?;
-  let page_count = paged.page_count();
+  let root = RenderNode::from_node(&render_context, options.node);
+  let reach = reach_back(&root);
+  let mut layout = PagedLayout::new(&root, page_size, max_pages);
+  let mut windows = PageWindows::new(page_size);
   let size = page_size.map(|length| length.round() as u32);
-  let scene = paged.into_scene();
-  let mut paint = ScenePaint::of_scene(&scene, true);
+  let mut handed_over = 0;
 
-  for index in 0..page_count {
-    let origin = PagedScene::page_origin(page_size, index).map(|length| length.round() as i32);
-    let mut canvas = Canvas::try_new(size)
-      .ok_or(Error::InvalidViewport)?
-      .with_origin(origin);
+  loop {
+    let laid = layout.next_page()?.is_some();
+    let settled = settle(&layout, reach);
 
-    paint.paint(&mut canvas)?;
-    page(canvas.into_inner()?)?;
+    if settled > handed_over {
+      windows.refresh(
+        &root,
+        layout.view(),
+        layout.page_count(),
+        layout.finalized_pages(),
+      )?;
+    }
+    for index in handed_over..settled {
+      let scene = SceneRef::window(
+        &root,
+        layout.view(),
+        page_size,
+        &windows.pages_reaching(index),
+        true,
+      )?;
+      let origin = PagedScene::page_origin(page_size, index).map(|length| length.round() as i32);
+      let mut canvas = Canvas::try_new(size)
+        .ok_or(Error::InvalidViewport)?
+        .with_origin(origin);
+
+      ScenePaint::of_window(&scene, false).paint(&mut canvas)?;
+      page(canvas.into_inner()?)?;
+    }
+    handed_over = handed_over.max(settled);
+
+    if !laid {
+      return Ok(());
+    }
   }
-  Ok(())
 }
 
 /// Rasterizes `node` under an already-built [`RenderContext`]. The context

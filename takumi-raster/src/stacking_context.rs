@@ -1,3 +1,5 @@
+#[cfg(feature = "pages")]
+use takumi_core::scene::SceneRef;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
   layout::layout_view::LayoutView,
@@ -43,6 +45,19 @@ impl<'s> ScenePaint<'s> {
       &scene.root,
       scene.results.view(),
       scene.fragments.as_ref(),
+      &scene.contexts,
+      &scene.properties,
+      indexed,
+    )
+  }
+
+  /// The chunks of `scene`, a window of a paged layout.
+  #[cfg(feature = "pages")]
+  pub(crate) fn of_window(scene: &'s SceneRef<'s>, indexed: bool) -> Self {
+    Self::new(
+      scene.root,
+      scene.results,
+      Some(&scene.fragments),
       &scene.contexts,
       &scene.properties,
       indexed,

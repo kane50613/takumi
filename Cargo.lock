@@ -1836,6 +1836,7 @@ dependencies = [
  "skrifa",
  "smallvec",
  "takumi-core",
+ "takumi-html",
  "tiny-skia",
  "typed-builder",
  "xxhash-rust",
