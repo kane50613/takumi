@@ -85,6 +85,9 @@ pub(crate) struct ConstraintSpace {
   pub(crate) is_new_formatting_context: bool,
   /// Blink's `IsTableCell`.
   pub(crate) is_table_cell: bool,
+  /// Blink's `TableCellAlignmentBaseline`: the baseline of the row a baseline-aligned cell
+  /// aligns its own to.
+  pub(crate) table_cell_alignment_baseline: Option<LayoutUnit>,
   /// The floats placed so far in the block formatting context.
   pub(crate) exclusion_space: Rc<ExclusionSpace>,
   /// The margins adjoining the box's block start.
@@ -150,6 +153,7 @@ impl ConstraintSpace {
       is_initial_block_size_indefinite: false,
       is_new_formatting_context: false,
       is_table_cell: false,
+      table_cell_alignment_baseline: None,
       exclusion_space: Rc::default(),
       margin_strut: MarginStrut::default(),
       clearance_offset: LayoutUnit::MIN,

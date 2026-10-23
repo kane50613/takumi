@@ -7,17 +7,14 @@ use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
-use crate::{
-  layout::{
-    block_break_token::BlockBreakToken,
-    break_appeal::BreakAppeal,
-    constraint_space::BlockFragmentation,
-    fragmentation_layout_input::FragmentationLayoutInput,
-    fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
-    layout_result::LayoutResult,
-    out_of_flow::FragmentainerDescendant,
-  },
-  style::Position,
+use crate::layout::{
+  block_break_token::BlockBreakToken,
+  break_appeal::BreakAppeal,
+  constraint_space::BlockFragmentation,
+  fragmentation_layout_input::FragmentationLayoutInput,
+  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
+  layout_result::LayoutResult,
+  out_of_flow::FragmentainerDescendant,
 };
 
 use crate::{
@@ -50,9 +47,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, LineHeight, ListStylePosition, MatchedStyleKey, Registrations,
-    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
-    WhiteSpaceCollapse, apply_stylesheet_animations,
+    Direction, Display, Float, LineHeight, ListStylePosition, MatchedStyleKey, Position,
+    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
+    StyleSheet, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -355,9 +352,6 @@ pub(crate) struct TableBoxStyle {
   pub(crate) hidden: bool,
   /// Whether it is a table, which a block container shrinks to fit rather than stretching.
   pub(crate) is_table: bool,
-  /// The top and bottom padding a cell lays out with to move its content down to align in its
-  /// row.
-  pub(crate) aligned_padding: Option<(f32, f32)>,
 }
 
 impl TableBoxStyle {
@@ -367,7 +361,6 @@ impl TableBoxStyle {
     sized_by_table: false,
     hidden: false,
     is_table: true,
-    aligned_padding: None,
   };
   pub(crate) const PART: Self = Self {
     border: Some(BoxStrut::ZERO),
@@ -411,10 +404,6 @@ impl TableBoxStyle {
       layout_style.min_size = Size::all(LayoutLength::Auto);
       layout_style.max_size = Size::all(LayoutLength::Auto);
       layout_style.margin = Rect::all(LayoutLength::Fixed(0.0));
-    }
-    if let Some((top, bottom)) = self.aligned_padding {
-      layout_style.padding.top = LayoutLength::Fixed(top);
-      layout_style.padding.bottom = LayoutLength::Fixed(bottom);
     }
   }
 }
@@ -1355,26 +1344,6 @@ impl<'r> LayoutTree<'r> {
     state.cache.clear();
   }
 
-  /// Lays a cell out with `padding` above and below its content to align it in its row, or with
-  /// its own padding.
-  pub(in crate::layout) fn set_table_cell_aligned_padding(
-    &mut self,
-    cell: NodeId,
-    padding: Option<(f32, f32)>,
-  ) {
-    let table_box = self.nodes[usize::from(cell)].table_box;
-
-    if table_box.aligned_padding != padding {
-      self.set_table_box_style(
-        cell,
-        TableBoxStyle {
-          aligned_padding: padding,
-          ..table_box
-        },
-      );
-    }
-  }
-
   /// `node`'s layout so far.
   pub(in crate::layout) fn computed_layout(
     &self,
@@ -1393,7 +1362,6 @@ fn sort_children_by_order(children: &mut [NodeId], mut child_order: impl FnMut(N
   sort_by_key(children, |&child_id| child_order(child_id));
 }
 
-#[cfg(feature = "fragmentation")]
 impl RenderNode {
   /// Blink's `HasDescendantThatDependsOnPercentageBlockSize` of the box's layout: an in-flow box
   /// inside it whose block size resolves a percentage, through anonymous and inline boxes, or a

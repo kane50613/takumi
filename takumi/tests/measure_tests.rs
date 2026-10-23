@@ -2615,21 +2615,33 @@ fn run_tops(node: &MeasuredNode) -> Vec<(String, f32)> {
 }
 
 /// Blink moves each baseline-aligned cell's content down to the deepest first baseline in its row,
-/// whether a cell's padding or a border it collapsed to pushed that baseline down.
+/// whether a cell's padding or a border it collapsed to pushed that baseline down. A run starts at
+/// its cell's content box, which sits `content_tops` below the cell's border box: the padding, or
+/// the half of a collapsed border inside the cell.
 #[test]
 fn test_table_baseline_cells_share_their_rows_baseline() {
-  for table in [
-    r#"<table style="border-spacing:0"><tr style="vertical-align:baseline"><td style="padding:10px 0 0">padded</td><td style="padding:0">flush</td></tr></table>"#,
-    r#"<table style="border-collapse:collapse"><tr style="vertical-align:baseline"><td style="padding:0; border-top:6px solid black">heavy</td><td style="padding:0; border-top:1px solid black">light</td></tr></table>"#,
+  for (table, content_tops) in [
+    (
+      r#"<table style="border-spacing:0"><tr style="vertical-align:baseline"><td style="padding:10px 0 0">padded</td><td style="padding:0">flush</td></tr></table>"#,
+      [10.0, 0.0],
+    ),
+    (
+      r#"<table style="border-collapse:collapse"><tr style="vertical-align:baseline"><td style="padding:0; border-top:6px solid black">heavy</td><td style="padding:0; border-top:1px solid black">light</td></tr></table>"#,
+      [3.0, 0.5],
+    ),
   ] {
     let out = measure(
       Node::from_html(table, FromHtmlOptions::default()).expect("parse"),
       create_test_viewport(),
     );
-    let tops = run_tops(&out);
+    let tops: Vec<f32> = run_tops(&out)
+      .into_iter()
+      .zip(content_tops)
+      .map(|((_, top), content_top)| top + content_top)
+      .collect();
 
     assert_eq!(tops.len(), 2, "{tops:?}");
-    assert_within(tops[0].1, tops[1].1, 0.01);
+    assert_within(tops[0], tops[1], 0.01);
   }
 }
 

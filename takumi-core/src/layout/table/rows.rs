@@ -31,6 +31,7 @@ pub(crate) struct CellBlockConstraint {
   pub(crate) effective_rowspan: usize,
   /// Whether the cell has a fixed `height`.
   pub(crate) is_constrained: bool,
+  pub(crate) has_descendant_that_depends_on_percentage_block_size: bool,
 }
 
 /// A cell spanning several rows, Blink's `TableTypes::RowspanCell`.
@@ -554,24 +555,33 @@ pub(super) struct RowBaselineTabulator {
   max_cell_ascent: Option<LayoutUnit>,
   max_cell_descent: Option<LayoutUnit>,
   fallback_cell_descent: Option<LayoutUnit>,
+  max_cell_baseline_depends_on_percentage_block_descendant: bool,
+  fallback_cell_depends_on_percentage_block_descendant: bool,
 }
 
 impl RowBaselineTabulator {
-  /// A cell `block_size` tall with its `first_baseline`, aligned as `alignment`; its block-end
-  /// border and padding stand in for a baseline it lacks.
+  /// A cell laid out as `cell`, aligned as `alignment`; its block-end border and padding stand in
+  /// for a baseline it lacks. `depends_on_percentage` says whether a descendant resolves a
+  /// percentage block size against it.
   pub(super) fn process_cell(
     &mut self,
-    block_size: LayoutUnit,
-    first_baseline: Option<LayoutUnit>,
+    cell: CellMeasure,
     block_end_border_padding: LayoutUnit,
     alignment: BlockContentAlignment,
     has_descendants: bool,
     is_rowspanned: bool,
+    depends_on_percentage: bool,
   ) {
+    let CellMeasure {
+      block_size,
+      first_baseline,
+    } = cell;
+
     if alignment == BlockContentAlignment::Baseline
       && has_descendants
       && let Some(baseline) = first_baseline
     {
+      self.max_cell_baseline_depends_on_percentage_block_descendant |= depends_on_percentage;
       self.max_cell_ascent = Some(
         self
           .max_cell_ascent
@@ -591,6 +601,7 @@ impl RowBaselineTabulator {
     // css-tables-3 §row-layout: without a line box, the baseline is the bottom of the cell's
     // content edge.
     if self.max_cell_ascent.is_none() {
+      self.fallback_cell_depends_on_percentage_block_descendant |= depends_on_percentage;
       self.fallback_cell_descent = Some(
         self
           .fallback_cell_descent
@@ -613,6 +624,17 @@ impl RowBaselineTabulator {
       (None, Some(descent)) => (row_block_size - descent).clamp_negative_to_zero(),
       // An empty row's baseline is its top.
       (None, None) => LayoutUnit::ZERO,
+    }
+  }
+
+  /// Blink's `BaselineDependsOnPercentageBlockDescendant`: whether the cell the baseline comes
+  /// from has a descendant whose percentage block size may move it once the rows grow.
+  pub(super) fn baseline_depends_on_percentage_block_descendant(&self) -> bool {
+    if self.max_cell_ascent.is_some() {
+      self.max_cell_baseline_depends_on_percentage_block_descendant
+    } else {
+      self.fallback_cell_descent.is_some()
+        && self.fallback_cell_depends_on_percentage_block_descendant
     }
   }
 }

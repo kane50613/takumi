@@ -779,20 +779,19 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
   }
 
-  /// Blink's `AlignBlockContent`: how far `align-content` moves the content of a box `block_size`
-  /// tall down, its children, out-of-flow boxes, and baselines moved with it.
+  /// Blink's `AlignBlockContent`, or `FinalizeTableCellLayout` for a cell: how far alignment
+  /// moves the content of a box `block_size` tall down, its children, out-of-flow boxes, and
+  /// baselines moved with it.
   fn align_block_content(&mut self, block_size: LayoutUnit) -> LayoutUnit {
-    // Blink's `FinalizeTableCellLayout` aligns a cell by `vertical-align` instead, and a fragment
-    // after the first or before the block end aligns nothing.
-    if self.space.is_table_cell
-      || self.is_resuming()
-      || !self.should_include_block_end_border_padding()
-    {
-      return LayoutUnit::ZERO;
-    }
-
-    let offset = BlockContentAlignment::for_block(self.style.align_content)
-      .offset(block_size - self.intrinsic_block_size);
+    let offset = if self.space.is_table_cell {
+      self.table_cell_content_offset(block_size)
+    } else if self.is_resuming() || !self.should_include_block_end_border_padding() {
+      // A fragment after the first or before the block end aligns nothing.
+      LayoutUnit::ZERO
+    } else {
+      BlockContentAlignment::for_block(self.style.align_content)
+        .offset(block_size - self.intrinsic_block_size)
+    };
 
     if offset == LayoutUnit::ZERO {
       return offset;
@@ -814,6 +813,42 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
 
     offset
+  }
+
+  /// The alignment part of Blink's `FinalizeTableCellLayout`: how far a cell's `vertical-align`
+  /// or `align-content` moves its content in a cell `block_size` tall. A baseline-aligned cell
+  /// without a baseline takes the end of its content box as one.
+  fn table_cell_content_offset(&mut self, block_size: LayoutUnit) -> LayoutUnit {
+    // A cell resumed after a break starts at the top of the page.
+    if self.is_resuming() {
+      return LayoutUnit::ZERO;
+    }
+
+    let render_node = self.tree.render_node(self.node);
+    let alignment = BlockContentAlignment::for_table_cell(&render_node.context.style);
+    let free_space = block_size - self.intrinsic_block_size;
+
+    if alignment != BlockContentAlignment::Baseline {
+      return alignment.offset(free_space);
+    }
+    if self.first_baseline.is_none() || self.style.applies_layout_containment() {
+      let content_end = self.intrinsic_block_size - self.border_padding.block_end;
+
+      self.first_baseline = Some(content_end);
+      self.last_baseline = Some(content_end);
+    }
+    // Only in-flow content aligns: a cell holding out-of-flow boxes alone keeps them in place.
+    if !render_node.has_table_cell_content() {
+      return LayoutUnit::ZERO;
+    }
+
+    match (
+      self.space.table_cell_alignment_baseline,
+      self.first_baseline,
+    ) {
+      (Some(row), Some(cell)) => row - cell,
+      _ => LayoutUnit::ZERO,
+    }
   }
 
   /// Lays out the out-of-flow boxes this box contains once its size is known, as Blink's

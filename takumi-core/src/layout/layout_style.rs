@@ -74,7 +74,6 @@ impl LayoutLength {
   }
 
   /// Blink's `MayHavePercentDependence`: a percentage, or a `calc()` that may hold one.
-  #[cfg(feature = "fragmentation")]
   pub(crate) fn may_have_percent_dependence(self) -> bool {
     matches!(self, Self::Percent(_) | Self::Calc { .. })
   }

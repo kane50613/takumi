@@ -12,8 +12,9 @@ use crate::{
     layout_result::LayoutResult,
     logical_rect::LogicalSize,
     table::{
-      columns::span_inline_size, constraint_space_data::TableConstraintSpaceData,
-      rows::cell_block_size,
+      columns::span_inline_size,
+      constraint_space_data::TableConstraintSpaceData,
+      rows::{CellMeasure, RowBaselineTabulator, cell_block_size},
     },
     tree::LayoutTree,
   },
@@ -51,6 +52,8 @@ struct PlacedCells {
   max_cell_block_size: LayoutUnit,
   /// Whether a cell spanning only this row broke inside.
   has_inflow_break_inside: bool,
+  /// The cells' baselines, which give the row's.
+  baselines: RowBaselineTabulator,
   #[cfg(feature = "fragmentation")]
   break_before: BreakBetween,
   #[cfg(feature = "fragmentation")]
@@ -112,15 +115,29 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
 
   /// Blink's `Layout`.
   pub(super) fn layout(mut self) -> LayoutResult {
-    let given_block_size = self.data.rows.rows[self.row_index()].block_size;
-    let mut placed = self.place_cells(given_block_size);
+    let row = &self.data.rows.rows[self.row_index()];
+    let given_block_size = row.block_size;
+    // A baseline a percentage block size moves comes from the cells laid out at the row's size.
+    // Blink aligns no baselines under block fragmentation, as the alignment baseline may end up
+    // on another page.
+    let row_baseline = match row.baseline {
+      _ if self.space.has_block_fragmentation() => None,
+      Some(baseline) => Some(baseline),
+      None => Some(
+        self
+          .place_cells(given_block_size, None)
+          .baselines
+          .baseline(given_block_size),
+      ),
+    };
+    let mut placed = self.place_cells(given_block_size, row_baseline);
     let previously_consumed_row_block_size = self.previously_consumed_row_block_size();
     let row_block_size =
       (placed.max_cell_block_size + previously_consumed_row_block_size).max(given_block_size);
 
     // A cell that a break pushed down grows the row, and its other cells with it.
     if self.space.has_block_fragmentation() && row_block_size != given_block_size {
-      placed = self.place_cells(row_block_size);
+      placed = self.place_cells(row_block_size, None);
     }
 
     let mut out_of_flow = Vec::new();
@@ -139,15 +156,23 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
     let block_size =
       self.finish_fragmentation(&placed, row_block_size, previously_consumed_row_block_size);
     let mut result = LayoutResult::new(LogicalSize::new(self.data.inline_size, block_size));
+    let baseline = placed.baselines.baseline(block_size);
 
+    // Blink's `SetBaselines` from the cells as this layout placed them.
+    result.first_baseline = Some(baseline);
+    result.last_baseline = Some(baseline);
     result.out_of_flow = out_of_flow;
     self.finish_break_info(&mut result);
     result
   }
 
   /// Blink's `PlaceCells`: each cell laid out at the block size of the rows it spans, the row
-  /// `row_block_size` tall.
-  fn place_cells(&mut self, row_block_size: LayoutUnit) -> PlacedCells {
+  /// `row_block_size` tall, a baseline-aligned one aligned to `row_baseline`.
+  fn place_cells(
+    &mut self,
+    row_block_size: LayoutUnit,
+    row_baseline: Option<LayoutUnit>,
+  ) -> PlacedCells {
     let data = Rc::clone(self.data);
     let rows = &data.rows;
     let row_index = self.row_index();
@@ -159,7 +184,6 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
       let cell = &row.cells[index];
       let cell_index = row_data.start_cell_index + index;
       let constraint = &rows.cells[cell_index];
-      let measure = rows.measures[cell_index];
       let (rowspan_block_size, is_initial_block_size_indefinite) = cell_block_size(
         constraint,
         &rows.rows,
@@ -178,30 +202,6 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
         !has_rowspan || rowspan_block_size == row_data.block_size,
       );
       let inline_size = span_inline_size(&data.column_locations, cell.column, cell.colspan);
-      let render_node = self.tree.render_node(cell.node);
-      let alignment = BlockContentAlignment::for_table_cell(&render_node.context.style);
-      let shift = match (alignment, row_data.baseline, measure.first_baseline) {
-        (BlockContentAlignment::Baseline, Some(row), Some(cell)) => row - cell,
-        _ => alignment.offset(block_size - measure.block_size),
-      };
-      // The content lays out moved down, in a content box the size it measured at unless the
-      // cell's block size is definite.
-      let below = if is_initial_block_size_indefinite {
-        (block_size - measure.block_size - shift).clamp_negative_to_zero()
-      } else {
-        LayoutUnit::ZERO
-      };
-      let padding = self.tree.padding(cell.node, Some(data.inline_size));
-
-      self.tree.set_table_cell_aligned_padding(
-        cell.node,
-        Some((
-          (padding.top + shift).to_float(),
-          (padding.bottom + below).to_float(),
-        )),
-      );
-
-      #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
       let mut space = ConstraintSpace::for_table_cell(
         self.tree.layout_style(cell.node).direction,
         inline_size,
@@ -211,9 +211,25 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
         CacheSlot::Layout,
       );
 
+      space.table_cell_alignment_baseline = row_baseline;
       self.setup_cell_space_for_fragmentation(&mut space, cell.node, encompasses_intrinsic_size);
 
       let result = self.lay_out_cell(cell.node, &space, &token);
+      let render_node = self.tree.render_node(cell.node);
+      let padding = self.tree.padding(cell.node, Some(data.inline_size));
+
+      placed.baselines.process_cell(
+        CellMeasure {
+          block_size: result.size.block_size,
+          first_baseline: result.first_baseline,
+        },
+        cell.borders.bottom + padding.bottom,
+        BlockContentAlignment::for_table_cell(&render_node.context.style),
+        render_node.has_table_cell_content(),
+        has_rowspan,
+        constraint.has_descendant_that_depends_on_percentage_block_size,
+      );
+
       let start = data
         .column_locations
         .get(cell.column)

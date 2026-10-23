@@ -78,7 +78,9 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
 
   /// Blink's `Layout`, which lays the rows out only when the layout places them.
   pub(super) fn layout(mut self) -> LayoutResult {
-    if self.space.cache_slot != CacheSlot::Layout {
+    // A first row whose baseline a percentage block size moves finds it only by laying its cells
+    // out, so the measure lays the rows out too, as Blink's always does.
+    if self.space.cache_slot != CacheSlot::Layout && self.first_row_baseline_is_known() {
       return self.measure();
     }
 
@@ -128,12 +130,7 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
         Err(status) => return self.relayout_and_break_earlier(status),
       }
       if first_baseline.is_none() {
-        first_baseline = Some(
-          offset
-            + data.rows.rows[row_index]
-              .baseline
-              .unwrap_or(LayoutUnit::ZERO),
-        );
+        first_baseline = result.first_baseline.map(|baseline| offset + baseline);
       }
 
       let location = Point::new(LayoutUnit::ZERO, offset);
@@ -180,6 +177,15 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
     }
     self.finish_break_info(&mut result);
     result
+  }
+
+  fn first_row_baseline_is_known(&self) -> bool {
+    let rows = &self.data.rows;
+
+    rows
+      .rows
+      .get(rows.sections[self.section].start_row)
+      .is_none_or(|row| row.baseline.is_some())
   }
 
   /// The section's block size and baseline from the rows its table measured, as a measure that
