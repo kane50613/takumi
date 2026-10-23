@@ -988,6 +988,56 @@ fn a_repeated_table_header_replays_as_an_artifact() {
   );
 }
 
+/// An image on a repeated header's line stays inside the artifact: only the page where the table
+/// begins marks it as the header's `Figure`.
+#[test]
+fn an_image_in_a_repeated_table_header_is_tagged_once() {
+  let rows: String = (1..=30)
+    .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+    .collect();
+  let html = format!(
+    r#"<table style="width: 100%; font-size: 12px; color: #141414">
+      <thead><tr><th>Name <img src="pixel" alt="logo" style="width: 8px; height: 8px" /></th><th>Qty</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"#
+  );
+  let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render tagged table");
+
+  // An image drawn after a `BDC` sits in tagged content, after a `BMC` in the artifact.
+  let (tagged_images, _) = content_lines(&pdf).fold((0, false), |(count, in_tagged), line| {
+    let in_tagged = if find(&line, b"BDC").is_some() {
+      true
+    } else {
+      in_tagged && find(&line, b"BMC").is_none()
+    };
+
+    (
+      count + usize::from(in_tagged && line.ends_with(b" Do")),
+      in_tagged,
+    )
+  });
+
+  assert!(page_count(&pdf) > 1, "the table did not paginate");
+  assert_eq!(tagged_images, 1, "a repeated header tagged its image again");
+}
+
 /// A footer narrow enough that three-digit counters wrap it to a second line.
 /// The band re-measures with the real page count, so the `auto` margin
 /// reserves one line, not a wrapped stand-in's two.
@@ -1539,6 +1589,36 @@ fn an_inline_page_counter_follows_the_flow_that_precedes_it() {
   assert_eq!(
     pdf, expected,
     "a transformed block moved the page the counter after it names"
+  );
+}
+
+/// A header that repeats down a table leaves the flow where its first occurrence ends, so a
+/// counter in the first row names the table's first page.
+#[test]
+fn a_repeated_table_header_does_not_move_the_counters_after_it() {
+  let document = |page: &str| {
+    let rows: String = (2..=60)
+      .map(|i| format!("<tr><td>Item {i}</td></tr>"))
+      .collect();
+
+    format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead><tr><th>Name</th></tr></thead>
+        <tbody><tr><td>Page <span>{page}</span></td></tr>{rows}</tbody>
+      </table>"#
+    )
+  };
+  let pdf = render(a4_options(
+    &document(r#"<span class="pageNumber"></span>"#),
+    &fonts(),
+  ))
+  .expect("render the hooked table");
+  let expected = render(a4_options(&document("1"), &fonts())).expect("render the numbered table");
+
+  assert!(page_count(&pdf) > 1, "the table did not paginate");
+  assert_eq!(
+    pdf, expected,
+    "the counter took the page the header last repeats on"
   );
 }
 

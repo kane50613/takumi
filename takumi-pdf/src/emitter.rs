@@ -440,7 +440,14 @@ impl Emitter<'_> {
     } else if artifact {
       surface.start_tagged(ARTIFACT);
     }
-    self.emit_own_content(node, content, paint.node_id, frame, surface)?;
+    // Nothing inside the artifact is tagged, the replaced boxes on its lines included.
+    let tagging = self.tagged;
+
+    self.tagged = tagging && !is_repeated;
+    let emitted = self.emit_own_content(node, content, paint.node_id, frame, surface);
+
+    self.tagged = tagging;
+    emitted?;
     if tagged || artifact {
       surface.end_tagged();
     }

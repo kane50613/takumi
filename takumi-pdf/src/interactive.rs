@@ -211,7 +211,13 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     return;
   };
 
-  if let Some(index) = node.source_order() {
+  let repeated = tree
+    .scene
+    .results
+    .is_repeated_fragment(paint.node_id, paint.fragment_index);
+
+  // A repeated fragment, such as a table header on a later page, leaves no flow of its own.
+  if let Some(index) = node.source_order().filter(|_| !repeated) {
     // `transform` moves where a box paints without moving the flow it left
     // behind, so the flow edge is measured with the box's own transform undone.
     let in_flow = !matches!(
@@ -255,11 +261,6 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
       path: paint.path.clone(),
     });
   }
-
-  let repeated = tree
-    .scene
-    .results
-    .is_repeated_fragment(paint.node_id, paint.fragment_index);
 
   match source.href().filter(|uri| allowed_link_uri(uri)) {
     // The whole box is one link; per-run collection would double-annotate it.
