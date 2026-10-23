@@ -1535,13 +1535,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
 
         TextClip::of(scene.root, scene.results, chunk.node, &node.context)
           .and_then(|text_clip| {
-            let table = TableDecorations::of(
-              scene.root,
-              scene.results,
-              &chunk.node.path,
-              chunk.node.node_id,
-              chunk.node.fragment_index,
-            )?;
+            let table = TableDecorations::of(scene.root, scene.results, chunk.node)?;
 
             emitter.emit_decorations(node, frame, text_clip.as_ref(), table, surface);
             Ok(())
@@ -1557,9 +1551,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
 
         paint_collapsed_borders(
           emitter.scene.results,
-          chunk.node.node_id,
-          chunk.node.fragment_index,
-          chunk.node.paint_offset,
+          chunk.node,
           frame.translation(),
           visible,
           &mut emitter.device(surface, emitter.tagged),

@@ -117,13 +117,7 @@ impl ScenePainter<'_, '_> {
     match chunk.part {
       ChunkPart::Decorations if node.paints_own_box() => {
         let text_clip = TextClip::of(root, results, chunk.node, context)?;
-        let table = TableDecorations::of(
-          root,
-          results,
-          &chunk.node.path,
-          chunk.node.node_id,
-          chunk.node.fragment_index,
-        )?;
+        let table = TableDecorations::of(root, results, chunk.node)?;
 
         draw_table_box_shell(context, canvas, layout, text_clip.as_ref(), table)
       }
@@ -131,15 +125,7 @@ impl ScenePainter<'_, '_> {
         let mut result = Ok(());
 
         CanvasDevice::paint(canvas, context, |device| {
-          result = paint_collapsed_borders(
-            results,
-            chunk.node.node_id,
-            chunk.node.fragment_index,
-            chunk.node.paint_offset,
-            Affine::IDENTITY,
-            None,
-            device,
-          );
+          result = paint_collapsed_borders(results, chunk.node, Affine::IDENTITY, None, device);
         })?;
         result
       }

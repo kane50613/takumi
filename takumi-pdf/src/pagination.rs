@@ -218,11 +218,9 @@ mod tests {
 
   use super::*;
   use crate::{
-    interactive::Interactive,
     options::{PageMargins, PageOptions},
     page::{PageFrame, band_viewport},
     test_support::{fixture, fonts},
-    tree::PreparedTree,
   };
 
   /// Documents with the targets a summary reads in the places a page's root fragment shares with
@@ -307,10 +305,9 @@ mod tests {
     let paged =
       PagedScene::lay_out(root, frame.page_size(), MAX_PAGES, true).expect("the pages lay out");
 
-    Interactive::collect_with_extents(&PreparedTree {
-      scene: paged.into_scene(),
-    })
-    .summary
+    let scene = paged.into_scene();
+
+    PageSummary::collect(scene.view(), true).finished()
   }
 
   /// A paged document's page summaries add up to the summary a scene of every page gives.

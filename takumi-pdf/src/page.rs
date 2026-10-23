@@ -1,4 +1,4 @@
-//! One page: its resolved geometry, and the emit walk that draws it.
+//! The pages of a document: their geometry, and the walk that draws each.
 
 use takumi_core::{
   context::RenderContext,

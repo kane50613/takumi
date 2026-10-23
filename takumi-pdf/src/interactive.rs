@@ -148,21 +148,11 @@ fn heading_level(tag: &str) -> Option<u8> {
 impl Interactive {
   /// Collects hyperlinks and headings from the prepared scene, in paint order.
   pub(crate) fn collect(tree: &PreparedTree) -> Self {
-    Self::collect_from(tree, false)
-  }
-
-  /// [`Self::collect`], with every box's extent, which page counters read.
-  #[cfg(test)]
-  pub(crate) fn collect_with_extents(tree: &PreparedTree) -> Self {
-    Self::collect_from(tree, true)
-  }
-
-  fn collect_from(tree: &PreparedTree, extents: bool) -> Self {
     let scene = tree.view();
 
     Self {
       links: collect_links(scene),
-      summary: PageSummary::collect(scene, extents).finished(),
+      summary: PageSummary::collect(scene, false).finished(),
     }
   }
 }
@@ -199,7 +189,7 @@ impl PageSummary {
     Ok(Self::collect(scene.view(), extents))
   }
 
-  /// The summary of a laid-out document of `pages` pages: those of its pages, in page order.
+  /// The summary of a laid-out document: those of its pages, in page order.
   pub(crate) fn of_pages(
     root: &RenderNode,
     layout: LayoutView<'_>,

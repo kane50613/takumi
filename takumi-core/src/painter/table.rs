@@ -16,6 +16,7 @@ use crate::{
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
+  scene::NodePaint,
   style::{Affine, BorderStyle, Display},
 };
 
@@ -112,15 +113,14 @@ pub enum TableDecorations {
 }
 
 impl TableDecorations {
-  /// How the fragment `fragment_index` of the box at `path` with `node_id` paints its
-  /// decorations.
-  pub fn of(
-    root: &RenderNode,
-    results: LayoutView<'_>,
-    path: &[usize],
-    node_id: NodeId,
-    fragment_index: usize,
-  ) -> Result<Self> {
+  /// How the box `paint` paints its decorations.
+  pub fn of(root: &RenderNode, results: LayoutView<'_>, paint: &NodePaint) -> Result<Self> {
+    let NodePaint {
+      node_id,
+      fragment_index,
+      ref path,
+      ..
+    } = *paint;
     let Some(node) = root.node_at_path(path) else {
       return Ok(Self::None);
     };
@@ -680,19 +680,23 @@ impl EdgeJoints {
   }
 }
 
-/// Blink's `TablePainter::PaintCollapsedBorders`: every collapsed edge of the table `node_id`'s
-/// fragment `fragment_index`, as a box side under `transform`, the table's border-box top-left at the origin and at
-/// `paint_offset` in the space paint snaps to pixels in. With `visible`, a block range of the
-/// table's border box, only the rows near it paint, as Blink paints one table fragment per page.
+/// Blink's `TablePainter::PaintCollapsedBorders`: every collapsed edge of the table `paint` paints,
+/// as a box side under `transform`, the table's border-box top-left at the origin and at its paint
+/// offset in the space paint snaps to pixels in. With `visible`, a block range of the table's
+/// border box, only the rows near it paint, as Blink paints one table fragment per page.
 pub fn paint_collapsed_borders(
   results: LayoutView<'_>,
-  node_id: NodeId,
-  fragment_index: usize,
-  paint_offset: Point<f32>,
+  paint: &NodePaint,
   transform: Affine,
   visible: Option<(f32, f32)>,
   device: &mut dyn PaintDevice,
 ) -> Result<()> {
+  let NodePaint {
+    node_id,
+    fragment_index,
+    paint_offset,
+    ..
+  } = *paint;
   let Some(fragment) = results.table_fragment(node_id, fragment_index) else {
     return Ok(());
   };
