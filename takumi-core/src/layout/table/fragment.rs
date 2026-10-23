@@ -37,15 +37,20 @@ pub struct ColumnGeometry {
 /// table row it starts at, and each row's block-start edge then the last row's block-end edge.
 pub(crate) type SectionRowOffsets = (usize, usize, Vec<LayoutUnit>);
 
+/// The cells and rows a table's layout hid: collapsed, in collapsed columns, or empty with
+/// `empty-cells: hide`.
+pub(crate) struct HiddenParts {
+  /// Which columns were collapsed, the only input that can differ between the table's layouts.
+  pub(crate) collapsed_columns: Vec<bool>,
+  pub(crate) nodes: Vec<NodeId>,
+}
+
 /// A laid-out table's paint data.
 #[derive(Clone, Default, Debug)]
 pub struct TableFragment {
   /// The block offset and size of the table box in the table's border box: everything but its
   /// captions, Blink's `TableGridRect`.
   pub(crate) grid_rect: (f32, f32),
-  /// The cells and rows layout hid: collapsed, in collapsed columns, or empty with
-  /// `empty-cells: hide`.
-  pub(crate) hidden: Vec<NodeId>,
   /// Each cell's first column.
   pub(crate) cell_columns: Rc<FxHashMap<NodeId, usize>>,
   pub(crate) section_row_offsets: Vec<SectionRowOffsets>,
@@ -134,11 +139,6 @@ impl TableFragment {
         .unwrap_or(LayoutUnit::ZERO);
       self.borders = Some(Rc::clone(&structure.borders));
     }
-  }
-
-  /// Whether layout hid the cell or row `node`, which then paints nothing.
-  pub fn hides(&self, node: NodeId) -> bool {
-    self.hidden.contains(&node)
   }
 
   /// The first column of the cell `node`.

@@ -38,7 +38,7 @@ use crate::{
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
-    table::{ColumnConstraints, TableFragment, TableStructure},
+    table::{ColumnConstraints, HiddenParts, TableFragment, TableStructure},
   },
   layout_unit::{BoxStrut, LayoutUnit},
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
@@ -343,6 +343,8 @@ pub struct LayoutTree<'r> {
   table_columns: FxHashMap<usize, Rc<ColumnConstraints>>,
   /// Each table's paint data from its last full layout, one per fragment.
   table_fragments: FxHashMap<usize, Vec<TableFragment>>,
+  /// The cells and rows each table's layout hid, which every fragment of it shares.
+  pub(crate) table_hidden: FxHashMap<NodeId, HiddenParts>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
   /// context lays out as, made the first time its line lays it out.
   atomic_inlines: FxHashMap<BoxId, NodeId>,
@@ -684,6 +686,7 @@ impl<'r> LayoutTree<'r> {
       tables: FxHashMap::default(),
       table_columns: FxHashMap::default(),
       table_fragments: FxHashMap::default(),
+      table_hidden: FxHashMap::default(),
       atomic_inlines: FxHashMap::default(),
       inline_contents: FxHashMap::default(),
       #[cfg(feature = "fragmentation")]
@@ -1167,10 +1170,9 @@ impl<'r> LayoutTree<'r> {
       box_children: node.box_children,
     }));
     let hidden = self
-      .table_fragments
+      .table_hidden
       .values()
-      .flatten()
-      .flat_map(|fragment| &fragment.hidden)
+      .flat_map(|hidden| &hidden.nodes)
       .map(|&node| usize::from(node))
       .collect();
 
