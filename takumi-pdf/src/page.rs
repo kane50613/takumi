@@ -214,7 +214,7 @@ struct Solved {
 /// What the passes that solved the frame left of the content.
 enum Content {
   /// No pass was needed, so its pages draw as they lay out.
-  Stream(Prepared),
+  Stream(Box<Prepared>),
   /// The passes that settled the frame and the counters.
   Counted(Counted),
 }
@@ -307,7 +307,7 @@ impl PageDrawing<'_, '_> {
           header,
           footer,
         },
-        Content::Stream(content),
+        Content::Stream(Box::new(content)),
       ));
     }
 
@@ -362,7 +362,7 @@ impl PageDrawing<'_, '_> {
   fn stream(
     &mut self,
     solved: Solved,
-    content: Prepared,
+    content: Box<Prepared>,
     counts: Option<Counts>,
     mut selection: PageSelection,
     structural: bool,
@@ -377,7 +377,7 @@ impl PageDrawing<'_, '_> {
       root,
       repeated,
       reads_summary,
-    } = content;
+    } = *content;
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let composer = PageComposer::new(self, &frame, &repeatables);
     let page_size = frame.page_size();

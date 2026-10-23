@@ -97,7 +97,10 @@ pub(crate) struct Counts {
 pub(crate) enum Counted {
   /// Laid out a page at a time by passes that freed each page as they went, and laid out once
   /// more from the tree the last pass built as the pages are drawn.
-  Pages { content: Prepared, counts: Counts },
+  Pages {
+    content: Box<Prepared>,
+    counts: Counts,
+  },
   /// Laid out to its end, because the numbers it holds kept moving.
   Laid(Box<Paginated>),
 }
@@ -216,7 +219,7 @@ impl CountingPass {
   /// What drawing the pages needs, with the anchors only when a link reads them.
   fn into_counted(self, links: bool) -> Counted {
     Counted::Pages {
-      content: self.content,
+      content: Box::new(self.content),
       counts: Counts {
         starts: self.starts,
         anchors: self
