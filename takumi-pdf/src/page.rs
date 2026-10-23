@@ -1,5 +1,7 @@
 //! The pages of a document: their geometry, and the walk that draws each.
 
+use std::collections::HashMap;
+
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
@@ -16,7 +18,8 @@ use crate::{
   emitter::{DocumentState, Emitter},
   inline::{InlineCache, TextBox},
   interactive::{
-    PageSummary, add_link_annotations, collect_links, has_summary_targets, xyz_destination,
+    AnchorTarget, PageSummary, add_link_annotations, collect_links, has_summary_targets,
+    xyz_destination,
   },
   krilla::{
     Document,
@@ -26,7 +29,7 @@ use crate::{
     surface::Surface,
   },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
-  pagination::{Counted, PageSlice, PageStarts, Paginated, reads_layout, walk_pages},
+  pagination::{Counted, Counts, PageSlice, PageStarts, Paginated, reads_layout, walk_pages},
   paint::paint_page_background,
   tree::TreeInputs,
   window::{ContentWindow, Window},
@@ -150,10 +153,40 @@ pub(crate) struct PagePlan {
 }
 
 impl PagePlan {
-  /// The destination a link or outline entry jumps to: the page `top` falls
-  /// on, at its position inside that page. `None` when the page is dropped by
-  /// [`crate::PdfOptions::page_ranges`].
+  fn destinations(&self) -> Destinations<'_> {
+    Destinations {
+      frame: &self.frame,
+      selection: &self.selection,
+      starts: &self.starts,
+      structural: self.structural,
+    }
+  }
+
+  /// The destination a link or outline entry jumps to, as [`Destinations::destination`] says.
   pub(crate) fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
+    self.destinations().destination(top, path)
+  }
+
+  /// Where `href="#id"` lands, or `None` when nothing carries that id or its
+  /// page is dropped.
+  pub(crate) fn anchor_destination(&self, id: &str) -> Option<XyzDestination> {
+    self.destinations().anchor(&self.summary.anchors, id)
+  }
+}
+
+/// Where a position in the content lands in the output, once the pages are counted and the ones
+/// kept are known.
+struct Destinations<'p> {
+  frame: &'p PageFrame,
+  selection: &'p PageSelection,
+  starts: &'p PageStarts,
+  structural: bool,
+}
+
+impl Destinations<'_> {
+  /// The page `top` falls on, at its position inside that page. `None` when the page is dropped
+  /// by [`crate::PdfOptions::page_ranges`].
+  fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
     let index = self.starts.index_of(top);
     let emitted = self.selection.emitted(index)?;
     let y = self.frame.margin.top + (top - self.starts.start(index)).max(0.0);
@@ -166,10 +199,8 @@ impl PagePlan {
     ))
   }
 
-  /// Where `href="#id"` lands, or `None` when nothing carries that id or its
-  /// page is dropped.
-  pub(crate) fn anchor_destination(&self, id: &str) -> Option<XyzDestination> {
-    let anchor = self.summary.anchors.get(id)?;
+  fn anchor(&self, anchors: &HashMap<Box<str>, AnchorTarget>, id: &str) -> Option<XyzDestination> {
+    let anchor = anchors.get(id)?;
 
     self.destination(anchor.top, &anchor.path)
   }
@@ -213,8 +244,8 @@ impl PageDrawing<'_, '_> {
 
     match content {
       Content::Stream(node) => self.stream(solved, node, None, selection, structural, settle),
-      Content::Counted(Counted::Pages { node, pages }) => {
-        self.stream(solved, node, Some(pages), selection, structural, settle)
+      Content::Counted(Counted::Pages { node, counts }) => {
+        self.stream(solved, node, Some(counts), selection, structural, settle)
       }
       Content::Counted(Counted::Laid(paginated)) => {
         let selection = selection.with_pages(paginated.starts.len())?;
@@ -312,13 +343,12 @@ impl PageDrawing<'_, '_> {
   }
 
   /// Lays `node` out a page at a time and draws each page, in order, once `settle` says it is
-  /// settled. `pages` is how many pages a pass counted, when one did. A document with a link to
-  /// an element inside it, or a counter that did not settle, is never streamed.
+  /// settled. `counts` is what the passes that counted the pages left, when any ran.
   fn stream(
     &mut self,
     solved: Solved,
     node: Node,
-    pages: Option<usize>,
+    counts: Option<Counts>,
     mut selection: PageSelection,
     structural: bool,
     settle: Settle<'_>,
@@ -334,13 +364,14 @@ impl PageDrawing<'_, '_> {
     let composer = PageComposer::new(self, &frame, &repeatables);
     let page_size = frame.page_size();
     let mut summary = PageSummary::new(false);
+    let counted_pages = counts.as_ref().map(|counts| counts.starts.len());
 
-    if let Some(pages) = pages {
+    if let Some(pages) = counted_pages {
       selection = selection.with_pages(pages)?;
     }
 
     let pages = walk_pages(&root, page_size, settle, |stream, index| {
-      let kept = match pages {
+      let kept = match counted_pages {
         Some(_) => selection.keeps(index),
         None => selection.push_page().is_some(),
       };
@@ -358,9 +389,19 @@ impl PageDrawing<'_, '_> {
         composer.compose(
           self.pdf,
           &PageSlice::of(index, frame.window_height),
-          pages.unwrap_or_default(),
+          counted_pages.unwrap_or_default(),
           stream.window(index)?.view(),
-          |_| None,
+          |id| {
+            let counts = counts.as_ref()?;
+
+            Destinations {
+              frame: &frame,
+              selection: &selection,
+              starts: &counts.starts,
+              structural,
+            }
+            .anchor(&counts.anchors, id)
+          },
         )?;
       }
       Ok(())

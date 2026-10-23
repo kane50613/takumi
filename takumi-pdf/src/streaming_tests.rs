@@ -265,16 +265,108 @@ fn a_band_that_grows_with_the_page_count_settles_before_the_pages_draw() {
   assert!(rendered.laid_at_first_page < rendered.pages);
 }
 
+const ALL_SECTIONS: [(&str, usize); 6] =
+  [("a", 4), ("b", 4), ("c", 4), ("d", 4), ("e", 4), ("f", 4)];
+
 #[test]
-fn a_link_to_a_later_page_lays_out_before_the_first_page_is_drawn() {
+fn a_link_to_a_later_page_draws_its_first_page_before_layout_ends() {
   let source = sections(
-    r##"<a href="#f" style="display: flex;">To the end</a>"##,
-    &[("a", 4), ("b", 4), ("c", 4), ("d", 4), ("e", 4), ("f", 4)],
+    r##"<a href="#f" style="display: flex;">To the end</a><a href="#missing" style="display: flex;">Nowhere</a>"##,
+    &ALL_SECTIONS,
     "",
   );
   let rendered = assert_draws_like_after_layout("a forward link", |fonts| options(&source, fonts));
 
-  assert_eq!(rendered.laid_at_first_page, usize::MAX);
+  assert_eq!(rendered.layouts, 2, "one pass finds the anchors, one draws");
+  assert!(rendered.laid_at_first_page < rendered.pages);
+}
+
+#[test]
+fn a_link_to_an_earlier_page_draws_its_first_page_before_layout_ends() {
+  let source = sections(
+    "",
+    &ALL_SECTIONS,
+    r##"<a href="#a" style="display: flex;">Back to the start</a>"##,
+  );
+  let rendered = assert_draws_like_after_layout("a backward link", |fonts| options(&source, fonts));
+
+  assert_eq!(rendered.layouts, 2);
+  assert!(rendered.laid_at_first_page < rendered.pages);
+}
+
+#[test]
+fn a_link_to_a_dropped_page_loses_its_annotation() {
+  let source = sections(
+    r##"<a href="#f" style="display: flex;">To the end</a><a href="#a" style="display: flex;">To the start</a>"##,
+    &ALL_SECTIONS,
+    "",
+  );
+  let rendered = assert_draws_like_after_layout("a link to a dropped page", |fonts| {
+    let mut options = options(&source, fonts);
+
+    options.page_ranges = Some(vec![
+      PageRange {
+        from: None,
+        to: Some(3),
+      },
+      PageRange::single(5),
+    ]);
+    options
+  });
+
+  assert_eq!(rendered.pages, 4);
+  assert_eq!(
+    String::from_utf8_lossy(&rendered.pdf)
+      .matches("/Subtype/Link")
+      .count(),
+    1,
+    "only the link to the start keeps its annotation"
+  );
+  assert!(rendered.laid_at_first_page < 6);
+}
+
+#[test]
+fn a_tagged_document_with_an_outline_and_links_draws_before_layout_ends() {
+  let source = sections(
+    r##"<h1 id="top" style="font-size: 22px; margin: 0;">Report</h1><a href="#e" style="display: flex;">To the fifth section</a><a href="https://example.com/report" style="display: flex;">Online</a>"##,
+    &ALL_SECTIONS,
+    r##"<a href="#top" style="display: flex;">Back to the top</a>"##,
+  );
+  let rendered = assert_draws_like_after_layout("a tagged document with links", |fonts| {
+    let mut options = options(&source, fonts);
+
+    options.outline = true;
+    options.tagged = Tagging::On;
+    options
+  });
+
+  assert_eq!(rendered.layouts, 2);
+  assert!(rendered.laid_at_first_page < rendered.pages);
+  assert!(String::from_utf8_lossy(&rendered.pdf).contains("/StructTreeRoot"));
+}
+
+#[test]
+fn a_link_beside_a_total_pages_band_and_target_counters_draws_before_layout_ends() {
+  let source = sections(
+    r##"<a href="#d" style="display: flex; column-gap: 4px;">Section d on page <span class="targetPageNumber"></span></a>"##,
+    &ALL_SECTIONS,
+    r#"<div>Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+  );
+  let rendered = assert_draws_like_after_layout("links and counters", |fonts| {
+    let mut options = options(&source, fonts);
+
+    options.footer = Some(
+      from_html(
+        r#"<div>Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+        FromHtmlOptions::default(),
+      )
+      .expect("parse the footer"),
+    );
+    options
+  });
+
+  assert_eq!(rendered.layouts, 3, "two passes number, one draws");
+  assert!(rendered.laid_at_first_page < rendered.pages);
 }
 
 #[test]
