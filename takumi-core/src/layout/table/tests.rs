@@ -210,6 +210,21 @@ fn a_middle_cell_centers_its_content() {
   assert_close(boxes["short"].origin.y, 20.0);
 }
 
+/// A percentage-height child moves its baseline-aligned cell's synthesized baseline once the row
+/// grows, so the row finds its baseline from the cell laid out at the row's size and leaves the
+/// child at the top of the content box.
+#[test]
+fn a_percentage_height_child_fills_its_baseline_cell() {
+  let tree = render(
+    table([row([part("td padded", [block("child", "fill")])])]),
+    ".table { height: 100px } .padded { padding: 5px 0 10px } .fill { height: 100% }",
+  );
+  let boxes = boxes(&tree, 400.0);
+
+  assert_close(boxes["child"].origin.y, 5.0);
+  assert_close(boxes["child"].layout.size.height, 85.0);
+}
+
 #[test]
 fn align_content_outranks_vertical_align() {
   let tree = render(

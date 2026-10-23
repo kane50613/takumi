@@ -7,17 +7,14 @@ use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
-use crate::{
-  layout::{
-    block_break_token::BlockBreakToken,
-    break_appeal::BreakAppeal,
-    constraint_space::BlockFragmentation,
-    fragmentation_layout_input::FragmentationLayoutInput,
-    fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
-    layout_result::LayoutResult,
-    out_of_flow::FragmentainerDescendant,
-  },
-  style::Position,
+use crate::layout::{
+  block_break_token::BlockBreakToken,
+  break_appeal::BreakAppeal,
+  constraint_space::BlockFragmentation,
+  fragmentation_layout_input::FragmentationLayoutInput,
+  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
+  layout_result::LayoutResult,
+  out_of_flow::FragmentainerDescendant,
 };
 
 use crate::{
@@ -50,9 +47,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, LineHeight, ListStylePosition, MatchedStyleKey, Registrations,
-    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
-    WhiteSpaceCollapse, apply_stylesheet_animations,
+    Direction, Display, Float, LineHeight, ListStylePosition, MatchedStyleKey, Position,
+    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
+    StyleSheet, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -1365,7 +1362,6 @@ fn sort_children_by_order(children: &mut [NodeId], mut child_order: impl FnMut(N
   sort_by_key(children, |&child_id| child_order(child_id));
 }
 
-#[cfg(feature = "fragmentation")]
 impl RenderNode {
   /// Blink's `HasDescendantThatDependsOnPercentageBlockSize` of the box's layout: an in-flow box
   /// inside it whose block size resolves a percentage, through anonymous and inline boxes, or a

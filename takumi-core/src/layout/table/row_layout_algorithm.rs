@@ -7,12 +7,14 @@ use crate::{
   geometry::{NodeId, Point},
   layout::{
     constraint_space::{CacheSlot, ConstraintSpace},
+    content_alignment::BlockContentAlignment,
     fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     layout_result::LayoutResult,
     logical_rect::LogicalSize,
     table::{
-      columns::span_inline_size, constraint_space_data::TableConstraintSpaceData,
-      rows::cell_block_size,
+      columns::span_inline_size,
+      constraint_space_data::TableConstraintSpaceData,
+      rows::{CellMeasure, RowBaselineTabulator, cell_block_size},
     },
     tree::LayoutTree,
   },
@@ -50,6 +52,8 @@ struct PlacedCells {
   max_cell_block_size: LayoutUnit,
   /// Whether a cell spanning only this row broke inside.
   has_inflow_break_inside: bool,
+  /// The cells' baselines, which give the row's.
+  baselines: RowBaselineTabulator,
   #[cfg(feature = "fragmentation")]
   break_before: BreakBetween,
   #[cfg(feature = "fragmentation")]
@@ -113,11 +117,19 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
   pub(super) fn layout(mut self) -> LayoutResult {
     let row = &self.data.rows.rows[self.row_index()];
     let given_block_size = row.block_size;
+    // A baseline a percentage block size moves comes from the cells laid out at the row's size.
     // Blink aligns no baselines under block fragmentation, as the alignment baseline may end up
     // on another page.
-    let row_baseline = row
-      .baseline
-      .filter(|_| !self.space.has_block_fragmentation());
+    let row_baseline = match row.baseline {
+      _ if self.space.has_block_fragmentation() => None,
+      Some(baseline) => Some(baseline),
+      None => Some(
+        self
+          .place_cells(given_block_size, None)
+          .baselines
+          .baseline(given_block_size),
+      ),
+    };
     let mut placed = self.place_cells(given_block_size, row_baseline);
     let previously_consumed_row_block_size = self.previously_consumed_row_block_size();
     let row_block_size =
@@ -199,6 +211,21 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
       self.setup_cell_space_for_fragmentation(&mut space, cell.node, encompasses_intrinsic_size);
 
       let result = self.lay_out_cell(cell.node, &space, &token);
+      let render_node = self.tree.render_node(cell.node);
+      let padding = self.tree.padding(cell.node, Some(data.inline_size));
+
+      placed.baselines.process_cell(
+        CellMeasure {
+          block_size: result.size.block_size,
+          first_baseline: result.first_baseline,
+        },
+        cell.borders.bottom + padding.bottom,
+        BlockContentAlignment::for_table_cell(&render_node.context.style),
+        render_node.has_table_cell_content(),
+        has_rowspan,
+        constraint.has_descendant_that_depends_on_percentage_block_size,
+      );
+
       let start = data
         .column_locations
         .get(cell.column)

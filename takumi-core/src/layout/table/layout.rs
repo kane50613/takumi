@@ -1,9 +1,6 @@
 //! Blink's
 //! [`TableLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/table/table_layout_algorithm.cc),
 //! which lays its sections out through their own algorithm, under the notice in LICENSE-CHROMIUM.
-//!
-//! Naive next to Blink: a cell's percentage-height descendants are not tracked, so a row's
-//! baseline is always the one measured before the rows grow.
 
 use std::rc::Rc;
 
@@ -942,16 +939,18 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         min_block_size: measure.block_size,
         effective_rowspan,
         is_constrained: height.fixed().is_some(),
+        has_descendant_that_depends_on_percentage_block_size: render_node
+          .has_descendant_that_depends_on_percentage_block_size(),
       };
 
       is_constrained |= constraint.is_constrained && !has_effective_rowspan;
       tabulator.process_cell(
-        measure.block_size,
-        measure.first_baseline,
+        measure,
         cell.borders.bottom + padding.bottom,
         alignment,
-        self.tree.render_node(cell.node).has_table_cell_content(),
+        render_node.has_table_cell_content(),
         has_effective_rowspan,
+        constraint.has_descendant_that_depends_on_percentage_block_size,
       );
       rows.cells.push(constraint);
       rows.measures.push(measure);
@@ -1015,7 +1014,9 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     Row {
       block_size,
       start_cell_index,
-      baseline: Some(tabulator.baseline(block_size)),
+      // A baseline a percentage block size may move is found again as the row lays out.
+      baseline: (!tabulator.baseline_depends_on_percentage_block_descendant())
+        .then(|| tabulator.baseline(block_size)),
       percent: row_percent,
       is_constrained,
       has_rowspan_start,
