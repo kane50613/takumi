@@ -9,7 +9,7 @@ use crate::{layout::content_alignment::BlockContentAlignment, layout_unit::Layou
 
 /// The rows, sections, and cells of one table layout, Blink's `TableTypes::Rows`, `Sections`, and
 /// `CellBlockConstraints`, with each cell's measure.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub(super) struct Rows {
   pub(super) rows: Vec<Row>,
   pub(super) sections: Vec<Section>,
@@ -18,14 +18,14 @@ pub(super) struct Rows {
 }
 
 /// One cell's measure-pass size and baseline.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(super) struct CellMeasure {
   pub(super) block_size: LayoutUnit,
   pub(super) first_baseline: Option<LayoutUnit>,
 }
 
 /// What one cell asks of its rows, Blink's `TableTypes::CellBlockConstraint`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CellBlockConstraint {
   pub(crate) min_block_size: LayoutUnit,
   pub(crate) effective_rowspan: usize,
@@ -64,7 +64,7 @@ impl RowspanCell {
 }
 
 /// One row, Blink's `TableTypes::Row`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Row {
   pub(crate) block_size: LayoutUnit,
   pub(crate) start_cell_index: usize,
@@ -78,7 +78,7 @@ pub(crate) struct Row {
 }
 
 /// One row group, Blink's `TableTypes::Section`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Section {
   pub(crate) start_row: usize,
   pub(crate) row_count: usize,

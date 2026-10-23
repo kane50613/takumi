@@ -40,7 +40,7 @@ pub(super) struct GridItemPlacementData {
 
 /// Blink's `GridBreakTokenData`: the grid laid out in one piece, which each page lays its items out
 /// from.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct GridBreakTokenData {
   sizing_tree: GridSizingTree,
   out_of_flow_children: Vec<NodeId>,

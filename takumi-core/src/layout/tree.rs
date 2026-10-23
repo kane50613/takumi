@@ -328,7 +328,8 @@ pub struct LayoutTree<'r> {
   /// Each table's paint data from its last full layout, one per fragment.
   table_fragments: FxHashMap<usize, Vec<TableFragment>>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
-  /// context lays out as, made the first time its line lays it out.
+  /// context lays out as, made the first time its line lays it out. Keyed by address, which names
+  /// one box while `'r` borrows the tree, as Blink names a box by its `LayoutObject`.
   atomic_inlines: FxHashMap<*const RenderNode, NodeId>,
   /// Each inline formatting context's lines from its block layout, until it finishes.
   pub(crate) inline_contents: FxHashMap<NodeId, InlineContent<'r>>,

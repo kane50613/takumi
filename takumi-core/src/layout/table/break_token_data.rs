@@ -6,6 +6,7 @@ use std::rc::Rc;
 use crate::{layout::table::rows::Rows, layout_unit::LayoutUnit};
 
 /// What a table resumes from: the rows it computed once, and how far its table box got.
+#[derive(PartialEq)]
 pub(crate) struct TableBreakTokenData {
   pub(super) rows: Rc<Rows>,
   /// The sections' block size before the table's own block size grew them.
