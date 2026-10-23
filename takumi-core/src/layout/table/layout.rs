@@ -1528,7 +1528,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       out_of_flow = match self.defer_out_of_flow(claims, out_of_flow, containing_block) {
         Ok(deferred) => deferred,
         Err(out_of_flow) => self.tree.lay_out_out_of_flow(
-          self.node,
+          (self.node, self.fragment_index()),
           claims,
           out_of_flow,
           containing_block,

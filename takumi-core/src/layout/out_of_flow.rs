@@ -377,11 +377,12 @@ fn can_compute_block_size_without_layout(
 }
 
 impl<'r> LayoutTree<'r> {
-  /// Blink's `OutOfFlowLayoutPart::Run` for the box `container`: lays out the `candidates` it
-  /// claims in `containing_block`, places them, and returns the rest for an ancestor.
+  /// Blink's `OutOfFlowLayoutPart::Run` for the box `container`'s fragment
+  /// `container_fragment_index`: lays out the `candidates` it claims in `containing_block`, places
+  /// them in that fragment, and returns the rest for an ancestor.
   pub(crate) fn lay_out_out_of_flow(
     &mut self,
-    container: NodeId,
+    (container, container_fragment_index): (NodeId, usize),
     claims: ContainingBlockClaims,
     mut candidates: Vec<OutOfFlowCandidate>,
     containing_block: ContainingBlock,
@@ -400,7 +401,7 @@ impl<'r> LayoutTree<'r> {
         let (offset, result, _) = self.lay_out_out_of_flow_box(candidate, containing_block, space);
 
         if space.cache_slot == CacheSlot::Layout {
-          self.place_child(candidate.node, 0, 0, offset, &result);
+          self.place_child(candidate.node, 0, container_fragment_index, offset, &result);
           self.add_hoisted_child(container, candidate.node);
         }
 

@@ -1148,7 +1148,7 @@ impl<'r> LayoutTree<'r> {
     );
 
     self.lay_out_out_of_flow(
-      NodeId::ROOT,
+      (NodeId::ROOT, 0),
       ContainingBlockClaims::ALL,
       result.out_of_flow.clone(),
       ContainingBlock {
