@@ -48,6 +48,15 @@ pub(crate) struct LayoutCache {
   min_max_sizes: Vec<((MinMaxKey, SizeType), MinMaxSizesResult)>,
 }
 
+/// Pushes `item`, allocating room for only it when `entries` is empty: most boxes cache one entry,
+/// where a first push would make room for four.
+fn push_tight<T>(entries: &mut Vec<T>, item: T) {
+  if entries.capacity() == 0 {
+    entries.reserve_exact(1);
+  }
+  entries.push(item);
+}
+
 /// What a box's intrinsic inline sizes depend on in the space it is sized in.
 #[derive(Clone, Copy, PartialEq)]
 struct MinMaxKey {
@@ -111,9 +120,10 @@ impl LayoutCache {
       // The later fragments resumed from an earlier layout of this one, and lay out anew.
       self.layouts.truncate(index);
       if self.layouts.len() == index {
-        self
-          .layouts
-          .push((space.clone(), input.child_break_token(), Rc::clone(result)));
+        push_tight(
+          &mut self.layouts,
+          (space.clone(), input.child_break_token(), Rc::clone(result)),
+        );
       }
       return;
     }
@@ -124,7 +134,11 @@ impl LayoutCache {
     if self.measures.len() == Self::MEASURES {
       self.measures.remove(0);
     }
-    self.measures.push((space.clone(), Rc::clone(result)));
+    push_tight(&mut self.measures, (space.clone(), Rc::clone(result)));
+  }
+
+  fn store_min_max_sizes(&mut self, key: (MinMaxKey, SizeType), sizes: MinMaxSizesResult) {
+    push_tight(&mut self.min_max_sizes, (key, sizes));
   }
 
   fn min_max_sizes(&self, key: (MinMaxKey, SizeType)) -> Option<MinMaxSizesResult> {
@@ -264,8 +278,7 @@ impl<'r> LayoutTree<'r> {
     self
       .node_state_mut(node)
       .cache
-      .min_max_sizes
-      .push((key, sizes));
+      .store_min_max_sizes(key, sizes);
     sizes
   }
 
