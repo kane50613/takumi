@@ -739,7 +739,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     let children = self.tree.child_nodes(self.node);
     let mut shown = Vec::with_capacity(children.len());
 
-    for child in children {
+    for &child in children.iter() {
       if self.tree.layout_style(child).display == Display::None {
         if phase == Phase::Layout && self.space.cache_slot == CacheSlot::Layout {
           self.tree.hide(child);

@@ -841,7 +841,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     let mut out_of_flow_children = Vec::new();
 
     // Blink's `GridNode::ConstructGridItems`.
-    for child in self.tree.child_nodes(self.node) {
+    for &child in self.tree.child_nodes(self.node).iter() {
       let child_style = Rc::clone(self.tree.layout_style_rc(child));
 
       if child_style.display == Display::None {

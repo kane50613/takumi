@@ -45,11 +45,11 @@ impl<'n> OwnContent<'n> {
     if node.should_create_inline_layout() {
       return Self::Inline(node);
     }
-    if node.has_anonymous_text_item_child() {
-      return Self::None;
-    }
 
     match node.node.as_ref().map(|input| &input.kind) {
+      Some(NodeKind::Text(_) | NodeKind::Image(_)) if node.has_anonymous_text_item_child() => {
+        Self::None
+      }
       Some(NodeKind::Text(_)) => Self::Inline(node),
       Some(NodeKind::Image(image)) if node.context.style.is_visible() => Self::Image(image),
       _ => Self::None,

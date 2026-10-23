@@ -213,7 +213,7 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
 impl TableSectionLayoutAlgorithm<'_, '_> {
   /// Blink's `BlockChildIterator` over the section's rows, by index in the section.
   fn row_entries(&self) -> Vec<(usize, ChildBreakToken)> {
-    let rows: Vec<NodeId> = self.data.structure.sections[self.section]
+    let rows: Rc<[NodeId]> = self.data.structure.sections[self.section]
       .rows
       .iter()
       .map(|row| row.node)

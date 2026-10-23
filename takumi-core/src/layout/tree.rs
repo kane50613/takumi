@@ -228,6 +228,22 @@ impl LayoutResults {
     })
   }
 
+  /// For each fragment of `node_id`, which of its parent's fragments holds it.
+  pub(crate) fn container_fragment_indices(
+    &self,
+    node_id: NodeId,
+  ) -> impl Iterator<Item = usize> + '_ {
+    #[cfg(feature = "fragmentation")]
+    return self
+      .node(node_id)
+      .ok()
+      .into_iter()
+      .flat_map(|node| node.fragments.iter())
+      .map(|fragment| fragment.container_fragment_index);
+    #[cfg(not(feature = "fragmentation"))]
+    return self.node(node_id).ok().map(|_| 0).into_iter();
+  }
+
   /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
   /// none when it holds none.
   pub(crate) fn fragment_in(
@@ -426,7 +442,7 @@ pub(crate) struct LayoutNodeState {
   pub(crate) table_box: TableBoxStyle,
   /// Its children in layout order, or for an inline formatting context the out-of-flow boxes in
   /// its inline content.
-  pub(crate) children: Box<[NodeId]>,
+  pub(crate) children: Rc<[NodeId]>,
   /// Its children in paint order, the boxes of its inline content among them.
   pub(crate) box_children: Box<[OrderedChild]>,
   /// The out-of-flow boxes this node positioned as their containing block, from its last layout.
@@ -498,7 +514,7 @@ impl LayoutNodeState {
       is_inline_children,
       is_atomic_inline: false,
       table_box: TableBoxStyle::default(),
-      children: Box::new([]),
+      children: Rc::new([]),
       box_children: Box::new([]),
       hoisted_children: Vec::new(),
       grid_geometry: None,
@@ -883,7 +899,7 @@ impl<'r> LayoutTree<'r> {
             .map_or(0, |child| child.context.style.misc3_data.order.0)
         });
       }
-      nodes[index].children = child_ids.into_boxed_slice();
+      nodes[index].children = child_ids.into();
       nodes[index].box_children = finished.box_children.into_boxed_slice();
 
       if let Some(parent) = stack.last_mut() {
@@ -1231,8 +1247,8 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// The children `node` lays out, in layout order.
-  pub(crate) fn child_nodes(&self, node: NodeId) -> Vec<NodeId> {
-    self.node_state(node).children.to_vec()
+  pub(crate) fn child_nodes(&self, node: NodeId) -> Rc<[NodeId]> {
+    Rc::clone(&self.node_state(node).children)
   }
 
   /// The style `node` lays out with.
@@ -1864,12 +1880,13 @@ impl RenderNode {
           | Display::TableCell
           | Display::TableCaption
       ) && self.children.as_ref().is_some_and(|children| {
+        // `all` first: it stops at a block child, so a block container answers at once.
         children
           .iter()
-          .any(RenderNode::participates_in_inflow_inline_formatting_context)
+          .all(RenderNode::participates_in_inline_formatting_context)
           && children
             .iter()
-            .all(RenderNode::participates_in_inline_formatting_context)
+            .any(RenderNode::participates_in_inflow_inline_formatting_context)
       }))
   }
 

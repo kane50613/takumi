@@ -133,7 +133,7 @@ impl<'r> LayoutTree<'r> {
         || display.is_flex()
         || display.is_grid();
 
-      for child in self.child_nodes(node) {
+      for &child in self.child_nodes(node).iter() {
         inside_cell_flex_or_grid[usize::from(child)] = denies_percentages;
       }
 
@@ -158,11 +158,11 @@ impl<'r> LayoutTree<'r> {
       let mut tabulator = ColspanCellTabulator::default();
       let mut rows = Vec::new();
 
-      for row in self.child_nodes(section) {
+      for &row in self.child_nodes(section).iter() {
         let mut cells = Vec::new();
 
         tabulator.start_row();
-        for cell in self.child_nodes(row) {
+        for &cell in self.child_nodes(row).iter() {
           let cell_node = self.render_node(cell);
           let colspan = cell_node.table_cell_colspan();
           let rowspan = cell_node.table_cell_rowspan();
@@ -227,7 +227,7 @@ impl<'r> LayoutTree<'r> {
 
     for &column in &columns {
       self.set_table_box_style(column, TableBoxStyle::HIDDEN);
-      for col in self.child_nodes(column) {
+      for &col in self.child_nodes(column).iter() {
         self.set_table_box_style(col, TableBoxStyle::HIDDEN);
       }
     }

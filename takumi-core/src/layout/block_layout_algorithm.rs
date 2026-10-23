@@ -2355,13 +2355,12 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   fn start_fragment(&mut self, _previous: &mut PreviousInflowPosition) {}
 
-  fn block_child_entries(&self) -> Vec<(NodeId, ChildBreakToken)> {
-    self
-      .tree
-      .child_nodes(self.node)
-      .into_iter()
-      .map(|child| (child, ()))
-      .collect()
+  fn block_child_entries(
+    &self,
+  ) -> impl ExactSizeIterator<Item = (NodeId, ChildBreakToken)> + use<> {
+    let children = self.tree.child_nodes(self.node);
+
+    (0..children.len()).map(move |index| (children[index], ()))
   }
 
   fn break_before_early_break_target(
@@ -2627,7 +2626,7 @@ pub(crate) fn block_min_max_sizes(
   let mut float_left_inline_size = LayoutUnit::ZERO;
   let mut float_right_inline_size = LayoutUnit::ZERO;
 
-  for child in children {
+  for &child in children.iter() {
     let child_style = Rc::clone(tree.layout_style_rc(child));
 
     if child_style.is_out_of_flow() {

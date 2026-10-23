@@ -19,10 +19,10 @@ use crate::{
     floats_utils::{FloatFragmentation, PositionedFloat, UnpositionedFloat},
     fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     fragmentation_utils::{
-      FlexItemBreak, adjust_margins_for_fragmentation, adjusted_margin_after_final_child_fragment,
-      attempt_soft_break, block_child_entries, break_before_child, calculate_break_appeal_before,
-      calculate_break_between_value, finish_fragmentation, fragment_index,
-      fragmentation_layout_input_for_child, is_break_inside, is_early_break_target,
+      BlockChildIterator, FlexItemBreak, adjust_margins_for_fragmentation,
+      adjusted_margin_after_final_child_fragment, attempt_soft_break, break_before_child,
+      calculate_break_appeal_before, calculate_break_between_value, finish_fragmentation,
+      fragment_index, fragmentation_layout_input_for_child, is_break_inside, is_early_break_target,
       is_forced_break_value, move_past_breakpoint, setup_fragment_builder_for_fragmentation,
       setup_space_builder_for_fragmentation,
     },
@@ -88,8 +88,8 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   /// Blink's `BlockChildIterator`: the children this fragment resumes or starts, with the tokens
   /// they resume at.
-  pub(super) fn block_child_entries(&self) -> Vec<(NodeId, ChildBreakToken)> {
-    block_child_entries(
+  pub(super) fn block_child_entries(&self) -> BlockChildIterator {
+    BlockChildIterator::new(
       self.tree.child_nodes(self.node),
       self.input.break_token.as_deref(),
     )

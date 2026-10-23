@@ -765,7 +765,7 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
-    for (child, &position) in boxes.into_iter().zip(&geometry.out_of_flow) {
+    for (&child, &position) in boxes.iter().zip(&geometry.out_of_flow) {
       // A box on the lines of another fragment is that fragment's to place; one on no line goes
       // where the content starts.
       let Some(position) = position.or(holds_every_line.then(Default::default)) else {

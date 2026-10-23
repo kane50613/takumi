@@ -263,7 +263,7 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
 impl TableRowLayoutAlgorithm<'_, '_> {
   /// Blink's `BlockChildIterator` over the row's cells, by index in the row.
   fn cell_entries(&self) -> Vec<(usize, ChildBreakToken)> {
-    let cells: Vec<NodeId> = self.data.structure.sections[self.section].rows[self.row]
+    let cells: Rc<[NodeId]> = self.data.structure.sections[self.section].rows[self.row]
       .cells
       .iter()
       .map(|cell| cell.node)
