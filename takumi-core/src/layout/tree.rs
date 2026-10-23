@@ -9,15 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::{
-  block_break_token::BlockBreakToken,
-  break_appeal::BreakAppeal,
-  constraint_space::BlockFragmentation,
-  fragmentation_layout_input::FragmentationLayoutInput,
-  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
-  layout_result::LayoutResult,
-  out_of_flow::PageAreas,
-};
+use crate::layout::{layout_result::LayoutResult, paged_layout::PagedLayout};
 
 use crate::{
   Error,
@@ -342,10 +334,19 @@ impl LayoutResults {
     page_size: Size<f32>,
     max_pages: usize,
   ) -> crate::Result<(Self, usize)> {
-    let mut tree = LayoutTree::from_render_node(root);
-    let page_count = tree.compute_pages(page_size, max_pages)?;
+    let mut layout = PagedLayout::new(root, page_size, max_pages);
 
-    Ok((tree.into_results(), page_count))
+    while layout.next_page()?.is_some() {}
+
+    let page_count = layout.page_count();
+
+    Ok((layout.into_results(), page_count))
+  }
+
+  /// How many boxes were laid out.
+  #[cfg(all(test, feature = "fragmentation"))]
+  pub(crate) fn node_count(&self) -> usize {
+    self.nodes.len()
   }
 
   /// Each fragment of `node_id`, by fragment index.
@@ -978,105 +979,6 @@ impl<'r> LayoutTree<'r> {
           node_id: finished.node_id,
           hoisted_cb: None,
         });
-      }
-    }
-  }
-
-  /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes or `@page`: the root laid out a page
-  /// `page_size` at a time, each page resuming where the one before broke, with the page area
-  /// laying out the out-of-flow boxes the root left. The pages go on while the root or the page
-  /// area has more to lay out.
-  /// Returns the page count, at most `max_pages`.
-  #[cfg(feature = "fragmentation")]
-  pub(crate) fn compute_pages(
-    &mut self,
-    page_size: Size<f32>,
-    max_pages: usize,
-  ) -> crate::Result<usize> {
-    let page_block_size = LayoutUnit::from_float(page_size.height);
-    let mut break_token: Option<Rc<BlockBreakToken>> = None;
-    let mut page_count = 0;
-    let mut page_areas = PageAreas::default();
-    // The root's last fragment, which the page area of a page past the root's end attaches to.
-    let mut last_root_fragment = None;
-
-    loop {
-      if page_count == max_pages {
-        return Err(Error::TooManyPages(max_pages));
-      }
-
-      let mut space = self.root_space(page_size.map(AvailableSpace::Definite));
-      let mut margins = margins_for(
-        self.layout_style(NodeId::ROOT),
-        space.percentage_resolution_inline_size,
-        Direction::Ltr,
-      );
-
-      adjust_margins_for_fragmentation(break_token.as_deref(), false, &mut margins);
-      space.block_fragmentation = Some(BlockFragmentation {
-        fragmentainer_block_size: page_block_size,
-        fragmentainer_offset: margins.block_start,
-        requires_content_before_breaking: false,
-        should_propagate_child_break_values: true,
-        min_break_appeal: BreakAppeal::LastResort,
-        min_block_size_should_encompass_intrinsic_size: false,
-      });
-
-      let (root_fragment, candidates) = match last_root_fragment {
-        Some(root_fragment) if break_token.is_none() => (root_fragment, Vec::new()),
-        _ => {
-          let input = FragmentationLayoutInput {
-            break_token: break_token.clone(),
-            early_break: None,
-          };
-          let result = self.layout_fragment(NodeId::ROOT, &space, &input);
-          let fragment_index = fragment_index(break_token.as_deref());
-          let space_left = page_block_size - margins.block_start;
-
-          // Blink's page area breaks before a root that starts past the page end, leaving the page
-          // blank, as `MovePastBreakpoint` must break before such a child.
-          if break_token.is_none()
-            && (space_left < LayoutUnit::ZERO
-              || (space_left == LayoutUnit::ZERO
-                && is_break_inside(result.break_info.break_token.as_deref())))
-          {
-            break_token = Some(Rc::new(BlockBreakToken::break_before(NodeId::ROOT, false)));
-            page_count += 1;
-            continue;
-          }
-
-          self.place_child(
-            NodeId::ROOT,
-            fragment_index,
-            page_count,
-            Point::new(margins.inline_start, margins.block_start),
-            &result,
-          );
-
-          // The pages stack in the block direction, which the out-of-flow boxes lay out across.
-          let root_origin = Point::new(
-            margins.inline_start,
-            page_block_size * page_count as i32 + margins.block_start,
-          );
-
-          break_token = result.break_info.break_token.clone();
-          ((fragment_index, root_origin), result.out_of_flow.clone())
-        }
-      };
-
-      last_root_fragment = Some(root_fragment);
-      self.lay_out_page_area(
-        &mut page_areas,
-        page_count,
-        root_fragment,
-        candidates,
-        page_size,
-        &space,
-      );
-      page_count += 1;
-
-      if break_token.is_none() && !page_areas.resumes() {
-        return Ok(page_count);
       }
     }
   }

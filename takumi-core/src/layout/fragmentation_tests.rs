@@ -9,6 +9,8 @@ use crate::{
   geometry::{NodeId, Point, Size},
   layout::{
     node::Node,
+    paged_layout::PagedLayout,
+    paged_layout_oracles as oracles,
     tree::{LayoutResults, RenderNode},
   },
   resources::font::Fonts,
@@ -112,15 +114,15 @@ fn pages(root: &RenderNode, page_height: f32) -> (BTreeMap<String, Vec<Placed>>,
     }
   }
 
-  let (results, page_count) = LayoutResults::compute_pages(
-    root,
-    Size {
-      width: 300.0,
-      height: page_height,
-    },
-    usize::MAX,
-  )
-  .expect("pages lay out");
+  let page_size = Size {
+    width: 300.0,
+    height: page_height,
+  };
+
+  oracles::check(root, page_size);
+
+  let (results, page_count) =
+    LayoutResults::compute_pages(root, page_size, usize::MAX).expect("pages lay out");
   let containers: Vec<(usize, Point<f32>)> =
     (0..page_count).map(|page| (page, Point::ZERO)).collect();
   let mut boxes = BTreeMap::new();
@@ -361,6 +363,12 @@ fn paged_layout_stops_at_its_page_limit() {
     LayoutResults::compute_pages(&far, page, 4),
     Err(Error::TooManyPages(4))
   ));
+
+  let mut stepped = PagedLayout::new(&breaks, page, 2);
+
+  assert!(stepped.next_page().expect("first page").is_some());
+  assert!(stepped.next_page().expect("second page").is_some());
+  assert!(matches!(stepped.next_page(), Err(Error::TooManyPages(2))));
 }
 
 /// A flex item stretched past the page where its lines end lays out none on the later pages.

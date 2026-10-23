@@ -52,6 +52,11 @@ pub(crate) mod min_max_sizes;
 /// Node Tree
 pub mod node;
 pub(crate) mod out_of_flow;
+/// A render tree laid out across pages, one page at a time.
+#[cfg(feature = "fragmentation")]
+pub mod paged_layout;
+#[cfg(all(test, feature = "fragmentation"))]
+mod paged_layout_oracles;
 pub(crate) mod relative_utils;
 /// Where replaced content sits inside its content box.
 pub mod replaced;
