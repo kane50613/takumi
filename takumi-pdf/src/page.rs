@@ -4,7 +4,7 @@ use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
   layout::{node::Node, tree::RenderNode},
-  page_stream::{PageStream, Settle, Settled},
+  page_stream::Settle,
   scene::{SceneRef, SceneView},
   style::Color,
   viewport::{MediaTarget, Viewport},
@@ -13,12 +13,10 @@ use takumi_core::{
 use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
   chunks::SceneChunks,
-  counters::{has_page_counters, has_target_counters},
   emitter::{DocumentState, Emitter},
   inline::{InlineCache, TextBox},
   interactive::{
-    PageSummary, add_link_annotations, collect_links, has_internal_links, has_summary_targets,
-    xyz_destination,
+    PageSummary, add_link_annotations, collect_links, has_summary_targets, xyz_destination,
   },
   krilla::{
     Document,
@@ -28,7 +26,7 @@ use crate::{
     surface::Surface,
   },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
-  pagination::{MAX_PAGES, PageSlice, PageStarts, Paginated},
+  pagination::{Counted, PageSlice, PageStarts, Paginated, reads_layout, walk_pages},
   paint::paint_page_background,
   tree::TreeInputs,
   window::{ContentWindow, Window},
@@ -187,8 +185,8 @@ struct Solved {
 enum Content {
   /// Nothing is laid out: no pass was needed, so its pages draw as they lay out.
   Stream(Node),
-  /// The pass that settled the frame and the counters, laid out to its end.
-  Laid(Box<Paginated>),
+  /// The passes that settled the frame and the counters.
+  Counted(Counted),
 }
 
 pub(crate) struct PageDrawing<'d, 'g> {
@@ -210,12 +208,19 @@ impl PageDrawing<'_, '_> {
     structural: bool,
     settle: Settle<'_>,
   ) -> Result<PagePlan, PdfError> {
-    let ranges = bands.page_ranges;
-    let (solved, content) = Self::solve(self.inputs, page, &bands, node)?;
+    let selection = PageSelection::new(bands.page_ranges)?;
+    let (solved, content) = Self::solve(self.inputs, page, &bands, node, settle)?;
 
     match content {
-      Content::Stream(node) => self.stream(solved, node, ranges, structural, settle),
-      Content::Laid(paginated) => self.compose(solved, paginated, ranges, structural),
+      Content::Stream(node) => self.stream(solved, node, None, selection, structural, settle),
+      Content::Counted(Counted::Pages { node, pages }) => {
+        self.stream(solved, node, Some(pages), selection, structural, settle)
+      }
+      Content::Counted(Counted::Laid(paginated)) => {
+        let selection = selection.with_pages(paginated.starts.len())?;
+
+        self.compose(solved, paginated, selection, structural)
+      }
     }
   }
 
@@ -226,6 +231,7 @@ impl PageDrawing<'_, '_> {
     page: PageOptions,
     bands: &PageBands<'_>,
     node: Node,
+    settle: Settle<'_>,
   ) -> Result<(Solved, Content), PdfError> {
     // Bands lay out at full page width and draw inside the margin areas,
     // like Chromium's print header and footer templates.
@@ -261,11 +267,7 @@ impl PageDrawing<'_, '_> {
     let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
       || footer.as_ref().is_some_and(Repeatable::dynamic);
 
-    if !dynamic
-      && !has_page_counters(&node)
-      && !has_target_counters(&node)
-      && !has_internal_links(&node)
-    {
+    if !dynamic && !reads_layout(&node) {
       return Ok((
         Solved {
           frame,
@@ -277,13 +279,13 @@ impl PageDrawing<'_, '_> {
     }
 
     let source = dynamic.then(|| node.clone());
-    let mut paginated = Paginated::build(node, inputs, &frame)?;
+    let mut counted = Counted::settle(node, inputs, &frame, settle)?;
 
     if let Some(source) = source {
       const BAND_PASSES: usize = 3;
 
       for _ in 0..BAND_PASSES {
-        let (next_header, next_footer) = measure_bands(paginated.starts.len())?;
+        let (next_header, next_footer) = measure_bands(counted.pages())?;
         let stable = next_header.as_ref().map(Repeatable::height)
           == header.as_ref().map(Repeatable::height)
           && next_footer.as_ref().map(Repeatable::height)
@@ -295,7 +297,7 @@ impl PageDrawing<'_, '_> {
           break;
         }
         frame = resolve(header.as_ref(), footer.as_ref())?;
-        paginated = Paginated::build(source.clone(), inputs, &frame)?;
+        counted = Counted::settle(source.clone(), inputs, &frame, settle)?;
       }
     }
 
@@ -305,17 +307,19 @@ impl PageDrawing<'_, '_> {
         header,
         footer,
       },
-      Content::Laid(Box::new(paginated)),
+      Content::Counted(counted),
     ))
   }
 
   /// Lays `node` out a page at a time and draws each page, in order, once `settle` says it is
-  /// settled. A document with a link to an element inside it, or a counter, is never streamed.
+  /// settled. `pages` is how many pages a pass counted, when one did. A document with a link to
+  /// an element inside it, or a counter that did not settle, is never streamed.
   fn stream(
     &mut self,
     solved: Solved,
     node: Node,
-    ranges: Option<&[PageRange]>,
+    pages: Option<usize>,
+    mut selection: PageSelection,
     structural: bool,
     settle: Settle<'_>,
   ) -> Result<PagePlan, PdfError> {
@@ -329,44 +333,40 @@ impl PageDrawing<'_, '_> {
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let composer = PageComposer::new(self, &frame, &repeatables);
     let page_size = frame.page_size();
-    let mut stream = PageStream::new(&root, page_size, MAX_PAGES);
-    let mut selection = PageSelection::new(ranges)?;
     let mut summary = PageSummary::new(false);
 
-    loop {
-      let Settled { pages, laid } = stream.advance(settle)?;
-
-      for index in pages {
-        let kept = selection.push_page().is_some();
-
-        if reads_summary {
-          summary.absorb(PageSummary::of_page(
-            &root,
-            stream.view(),
-            page_size,
-            &stream.pages_of(index),
-            false,
-          )?);
-        }
-        if kept {
-          composer.compose(
-            self.pdf,
-            &PageSlice::of(index, frame.window_height),
-            0,
-            stream.window(index)?.view(),
-            |_| None,
-          )?;
-        }
-      }
-      if !laid {
-        break;
-      }
+    if let Some(pages) = pages {
+      selection = selection.with_pages(pages)?;
     }
 
-    let pages = stream.page_count();
+    let pages = walk_pages(&root, page_size, settle, |stream, index| {
+      let kept = match pages {
+        Some(_) => selection.keeps(index),
+        None => selection.push_page().is_some(),
+      };
+
+      if reads_summary {
+        summary.absorb(PageSummary::of_page(
+          &root,
+          stream.view(),
+          page_size,
+          &stream.pages_of(index),
+          false,
+        )?);
+      }
+      if kept {
+        composer.compose(
+          self.pdf,
+          &PageSlice::of(index, frame.window_height),
+          pages.unwrap_or_default(),
+          stream.window(index)?.view(),
+          |_| None,
+        )?;
+      }
+      Ok(())
+    })?;
     let window = frame.window_height;
 
-    drop(stream);
     selection.finish()?;
     Ok(PagePlan {
       frame,
@@ -382,7 +382,7 @@ impl PageDrawing<'_, '_> {
     &mut self,
     solved: Solved,
     mut paginated: Box<Paginated>,
-    ranges: Option<&[PageRange]>,
+    selection: PageSelection,
     structural: bool,
   ) -> Result<PagePlan, PdfError> {
     let Solved {
@@ -398,7 +398,6 @@ impl PageDrawing<'_, '_> {
       starts,
       ..
     } = *paginated;
-    let selection = PageSelection::resolve(ranges, content.page_count)?;
     let (page_size, pages) = (content.page_size, content.page_count);
     let (root, results) = content.into_parts();
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();

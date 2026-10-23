@@ -1,14 +1,19 @@
 //! The content laid out across pages, which takumi-core's block fragmentation breaks, and the
 //! page counters filled in from where it put each box.
 
-use takumi_core::{layout::node::Node, scene::PageWindows};
+use takumi_core::{
+  geometry::Size,
+  layout::{node::Node, tree::RenderNode},
+  page_stream::{PageStream, Settle, Settled},
+  scene::PageWindows,
+};
 
 use crate::{
   bands::Repeatable,
   counters::{
     BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
-  interactive::PageSummary,
+  interactive::{PageSummary, has_internal_links},
   options::PdfError,
   page::PageFrame,
   tree::{PagedContent, TreeInputs},
@@ -24,6 +29,68 @@ pub(crate) const MAX_PAGES: usize = 20_000;
 /// did not move, and a document still moving after that keeps the last pass's
 /// numbers.
 const COUNTER_PASSES: usize = 3;
+
+/// Whether laying a tree out reads numbers the layout itself produces: a page counter, or the page
+/// a link or counter names.
+pub(crate) fn reads_layout(node: &Node) -> bool {
+  has_page_counters(node) || has_target_counters(node) || has_internal_links(node)
+}
+
+/// Lays `root` out a page at a time and calls `visit` with the stream and each page once `settle`
+/// says it is settled. Returns how many pages the layout came to.
+pub(crate) fn walk_pages(
+  root: &RenderNode,
+  page_size: Size<f32>,
+  settle: Settle<'_>,
+  mut visit: impl FnMut(&PageStream<'_>, usize) -> Result<(), PdfError>,
+) -> Result<usize, PdfError> {
+  let mut stream = PageStream::new(root, page_size, MAX_PAGES);
+
+  loop {
+    let Settled { pages, laid } = stream.advance(settle)?;
+
+    for index in pages {
+      visit(&stream, index)?;
+    }
+    if !laid {
+      return Ok(stream.page_count());
+    }
+  }
+}
+
+/// The content once the passes that count its pages are done.
+pub(crate) enum Counted {
+  /// Laid out a page at a time by passes that freed each page as they went, so the pages are
+  /// laid out once more as they are drawn.
+  Pages { node: Node, pages: usize },
+  /// Laid out to its end, because the numbers it holds kept moving.
+  Laid(Box<Paginated>),
+}
+
+impl Counted {
+  /// Counts the pages `node` lays out on in `frame`, freeing the pages `settle` says are settled.
+  pub(crate) fn settle(
+    node: Node,
+    inputs: &TreeInputs<'_>,
+    frame: &PageFrame,
+    settle: Settle<'_>,
+  ) -> Result<Self, PdfError> {
+    if reads_layout(&node) {
+      return Ok(Self::Laid(Box::new(Paginated::build(node, inputs, frame)?)));
+    }
+    let (root, _) = inputs.prepare_root(node.clone(), frame)?;
+    let pages = walk_pages(&root, frame.page_size(), settle, |_, _| Ok(()))?;
+
+    Ok(Self::Pages { node, pages })
+  }
+
+  pub(crate) fn pages(&self) -> usize {
+    match self {
+      Self::Pages { pages, .. } => *pages,
+      Self::Laid(paginated) => paginated.starts.len(),
+    }
+  }
+}
 
 /// The content laid out across pages, with the `fixed` boxes that repeat on every page and the
 /// interactive targets the pages draw from. The pages stack in the content's coordinates, each the

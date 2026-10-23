@@ -7,8 +7,8 @@ use takumi_core::{Fonts, layout::paged_layout::PagedLayout};
 use takumi_html::{FromHtmlOptions, from_html};
 
 use crate::{
-  PageMargins, PageOptions, PageRange, PdfError, PdfOptions, Tagging, render, render_settling,
-  test_support::fonts,
+  PageMargin, PageMargins, PageOptions, PageRange, PdfError, PdfOptions, Tagging, render,
+  render_settling, test_support::fonts,
 };
 
 const PAGE: PageOptions = PageOptions {
@@ -58,18 +58,26 @@ fn page_count(pdf: &[u8]) -> usize {
     .expect("a page count")
 }
 
-/// How the document renders, with the pages the layout had laid out when the first was drawn.
+/// How the document renders, with the pages the last layout had laid out when the first was
+/// drawn.
 struct Rendered {
   pdf: Vec<u8>,
   pages: usize,
+  /// How many times the content was laid out, the last being the one that draws.
+  layouts: usize,
   laid_at_first_page: usize,
 }
 
 fn render_drawing_as_settled(options: PdfOptions<'_>) -> Rendered {
   let laid_at_first_page = Cell::new(usize::MAX);
+  let layouts = Cell::new(0);
   let pdf = render_settling(options, &|layout| {
     let settled = layout.settled_pages();
 
+    if layout.page_count() == 1 {
+      layouts.set(layouts.get() + 1);
+      laid_at_first_page.set(usize::MAX);
+    }
     if settled > 0 {
       laid_at_first_page.set(laid_at_first_page.get().min(layout.page_count()));
     }
@@ -80,7 +88,7 @@ fn render_drawing_as_settled(options: PdfOptions<'_>) -> Rendered {
   Rendered {
     pages: page_count(&pdf),
     pdf,
-    // A document that lays out first never asks the hook.
+    layouts: layouts.get(),
     laid_at_first_page: laid_at_first_page.get(),
   }
 }
@@ -181,7 +189,7 @@ fn dropped_pages_draw_nothing_and_still_count() {
 }
 
 #[test]
-fn a_total_pages_band_lays_out_before_the_first_page_is_drawn() {
+fn a_total_pages_band_draws_its_first_page_before_the_second_pass_ends() {
   let source = plain_document();
   let rendered = assert_draws_like_after_layout("a total pages band", |fonts| {
     let mut options = options(&source, fonts);
@@ -196,7 +204,65 @@ fn a_total_pages_band_lays_out_before_the_first_page_is_drawn() {
     options
   });
 
-  assert_eq!(rendered.laid_at_first_page, usize::MAX);
+  assert_eq!(rendered.pages, 6);
+  assert_eq!(rendered.layouts, 2, "one pass counts, one draws");
+  assert!(
+    rendered.laid_at_first_page < rendered.pages,
+    "{} of {} pages were laid out",
+    rendered.laid_at_first_page,
+    rendered.pages
+  );
+}
+
+#[test]
+fn a_page_number_band_draws_its_first_page_before_layout_ends() {
+  let source = plain_document();
+  let rendered = assert_draws_like_after_layout("a page number band", |fonts| {
+    let mut options = options(&source, fonts);
+
+    options.footer = Some(
+      from_html(
+        r#"<div style="text-align: right;">Page <span class="pageNumber"></span></div>"#,
+        FromHtmlOptions::default(),
+      )
+      .expect("parse the footer"),
+    );
+    options
+  });
+
+  assert_eq!(rendered.layouts, 2);
+  assert!(rendered.laid_at_first_page < rendered.pages);
+}
+
+#[test]
+fn a_band_that_grows_with_the_page_count_settles_before_the_pages_draw() {
+  let lines: String = (0..110)
+    .map(|line| format!("<div>line {line}</div>"))
+    .collect();
+  let source = format!(r#"<div style="font-size: 14px">{lines}</div>"#);
+  let rendered = assert_draws_like_after_layout("a band that wraps at ten pages", |fonts| {
+    let mut options = options(&source, fonts);
+
+    options.page = Some(PageOptions {
+      margin: PageMargins {
+        bottom: PageMargin::Auto,
+        ..PageMargins::uniform(24.0)
+      },
+      ..PAGE
+    });
+    options.footer = Some(
+      from_html(
+        r#"<div style="width: 80px; font-size: 14px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+        FromHtmlOptions::default(),
+      )
+      .expect("parse the footer"),
+    );
+    options
+  });
+
+  assert!(rendered.pages >= 10, "{} pages", rendered.pages);
+  assert_eq!(rendered.layouts, 3, "two passes count, one draws");
+  assert!(rendered.laid_at_first_page < rendered.pages);
 }
 
 #[test]
@@ -250,7 +316,7 @@ fn a_child_held_to_the_bottom_of_a_relative_root_holds_every_page_until_layout_e
 
 #[test]
 fn a_long_document_of_every_kind_of_box_draws_like_after_layout() {
-  let rows: String = (0..60)
+  let rows: String = (0..110)
     .map(|row| format!("<tr><td>row {row}</td><td>cell</td></tr>"))
     .collect();
   let blocks: String = (0..120)
