@@ -458,11 +458,29 @@ pub(crate) struct ExclusionSpace {
   right_clear_offset: Option<LayoutUnit>,
   /// For the top edge alignment rule; floats may sit at negative offsets.
   last_float_block_start: Option<LayoutUnit>,
+  /// Blink's `has_break_before_*_float_` and `has_break_inside_*_float_`: the left and right
+  /// floats a page broke before or inside.
+  #[cfg(feature = "fragmentation")]
+  float_breaks: FloatBreaks,
   derived_geometry: RefCell<Option<DerivedGeometry>>,
+}
+
+/// The left and right floats a page broke before or inside.
+#[cfg(feature = "fragmentation")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct FloatBreaks {
+  before_left: bool,
+  before_right: bool,
+  inside_left: bool,
+  inside_right: bool,
 }
 
 impl PartialEq for ExclusionSpace {
   fn eq(&self, other: &Self) -> bool {
+    #[cfg(feature = "fragmentation")]
+    if self.float_breaks != other.float_breaks {
+      return false;
+    }
     self.exclusions == other.exclusions
   }
 }
@@ -564,6 +582,57 @@ impl ExclusionSpace {
       Clear::Right => self.right_clear_offset(),
       Clear::Both => self.left_clear_offset().max(self.right_clear_offset()),
     }
+  }
+
+  /// Blink's `SetHasBreakBeforeFloat`: a page broke before a float of `float_type`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn set_has_break_before_float(&mut self, float_type: Float) {
+    match float_type {
+      Float::Left => self.float_breaks.before_left = true,
+      Float::Right => self.float_breaks.before_right = true,
+      Float::None => {}
+    }
+  }
+
+  /// Blink's `SetHasBreakInsideFloat`: a page broke inside a float of `float_type`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn set_has_break_inside_float(&mut self, float_type: Float) {
+    match float_type {
+      Float::Left => self.float_breaks.inside_left = true,
+      Float::Right => self.float_breaks.inside_right = true,
+      Float::None => {}
+    }
+  }
+
+  /// Blink's `NeedsClearancePastFragmentainer`: whether a box that clears `clear_type` clears a
+  /// float that continues on the next page, so it has to go there too.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn needs_clearance_past_fragmentainer(&self, clear_type: Clear) -> bool {
+    let breaks = self.float_breaks;
+    let left = breaks.inside_left || breaks.before_left;
+    let right = breaks.inside_right || breaks.before_right;
+
+    match clear_type {
+      Clear::None => false,
+      Clear::Left => left,
+      Clear::Right => right,
+      Clear::Both => left || right,
+    }
+  }
+
+  /// Blink's `NeedsBreakBeforeFloat`: a float cannot start above an earlier one, so once a page
+  /// pushed a float to the next, every later float follows.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn needs_break_before_float(&self, clear_type: Clear) -> bool {
+    self.float_breaks.before_left
+      || self.float_breaks.before_right
+      || self.needs_clearance_past_fragmentainer(clear_type)
+  }
+
+  /// Blink's `HasFragmentainerBreak`: a float broke before or inside on this page.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn has_fragmentainer_break(&self) -> bool {
+    self.needs_clearance_past_fragmentainer(Clear::Both)
   }
 
   /// Blink's `LastFloatBlockStart`.

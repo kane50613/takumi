@@ -22,7 +22,8 @@ use crate::{
   geometry::Rect,
   layout::{
     exclusions::exclusion_space::ExclusionSpace, floats_utils::PositionedFloat,
-    layout_result::LayoutResult as BoxLayoutResult, margin_strut::MarginStrut,
+    layout_result::LayoutResult as BoxLayoutResult, logical_rect::LogicalBoxStrut,
+    margin_strut::MarginStrut,
   },
   layout_unit::LayoutUnit,
   style::{Direction as TextDirection, HyphenateCharacter},
@@ -63,6 +64,18 @@ impl LineBoxStrut {
   /// Blink's `InlineSum`.
   pub(crate) fn inline_sum(&self) -> LayoutUnit {
     self.inline_start + self.inline_end
+  }
+}
+
+/// Blink's `LineBoxStrut(BoxStrut, is_flipped_lines)` for horizontal, unflipped lines.
+impl From<LogicalBoxStrut> for LineBoxStrut {
+  fn from(strut: LogicalBoxStrut) -> Self {
+    Self {
+      inline_start: strut.inline_start,
+      inline_end: strut.inline_end,
+      line_over: strut.block_start,
+      line_under: strut.block_end,
+    }
   }
 }
 

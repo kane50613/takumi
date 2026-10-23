@@ -2,9 +2,9 @@
 //! [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc)
 //! and the parts of
 //! [`fragmentation_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/fragmentation_utils.cc)
-//! that read the fragment builder, for pages alone. Approximate: floats and flex and grid boxes do
-//! not break, a block-in-inline does not break inside its line, and `box-decoration-break: clone`
-//! sizes a box without the border and padding its earlier fragments repeat.
+//! that read the fragment builder, for pages alone. Approximate: flex and grid boxes do not break,
+//! a block-in-inline does not break inside its line, and `box-decoration-break: clone` sizes a box
+//! without the border and padding its earlier fragments repeat.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -18,6 +18,7 @@ use crate::{
     break_token::BreakToken,
     constraint_space::ConstraintSpace,
     early_break::EarlyBreak,
+    floats_utils::{FloatFragmentation, PositionedFloat, UnpositionedFloat},
     fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     fragmentation_utils::{
       adjust_margins_for_fragmentation, adjusted_margin_after_final_child_fragment,
@@ -35,7 +36,7 @@ use crate::{
     out_of_flow::{ContainingBlock, ContainingBlockClaims},
   },
   layout_unit::LayoutUnit,
-  style::Overflow,
+  style::{BreakBetween, Overflow},
 };
 
 impl<'r> BlockLayoutAlgorithm<'_, 'r> {
@@ -173,10 +174,105 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     space: &ConstraintSpace,
     token: &ChildBreakToken,
   ) -> Rc<LayoutResult> {
-    let input =
-      fragmentation_layout_input_for_child(child, token.clone(), self.input.early_break.as_deref());
+    let input = self.child_layout_input(child, token);
 
     self.tree.layout_fragment(child, space, &input)
+  }
+
+  /// Blink's `GetFragmentationLayoutInputForChild`: `child` resumed at `token`, with the
+  /// breakpoint this layout has to break at inside it.
+  pub(super) fn child_layout_input(
+    &self,
+    child: NodeId,
+    token: &ChildBreakToken,
+  ) -> FragmentationLayoutInput {
+    fragmentation_layout_input_for_child(child, token.clone(), self.input.early_break.as_deref())
+  }
+
+  /// The forced break check of Blink's `HandleFloat`: whether a break the content before forces
+  /// goes before the float `child`.
+  pub(super) fn breaks_before_float(&mut self, child: NodeId) -> bool {
+    if !self.space.has_block_fragmentation() {
+      return false;
+    }
+
+    let break_between = self.builder.joined_break_between_value(BreakBetween::Auto);
+
+    if !is_forced_break_value(self.space, break_between) {
+      return false;
+    }
+    self.builder.add_break_before_float(child);
+    true
+  }
+
+  /// The monolithic overflow inside a float resumed at `token` that an earlier page pushed into
+  /// this one, less this container's own, as floats establish a parallel flow.
+  pub(super) fn float_monolithic_overflow(&self, token: &ChildBreakToken) -> LayoutUnit {
+    let Some(token) = token.as_deref() else {
+      return LayoutUnit::ZERO;
+    };
+
+    token.monolithic_overflow
+      - self
+        .input
+        .break_token
+        .as_deref()
+        .map_or(LayoutUnit::ZERO, |container| container.monolithic_overflow)
+  }
+
+  /// Gives a float in a fragmentation context the pages it breaks across.
+  pub(super) fn setup_float_for_fragmentation(
+    &self,
+    unpositioned_float: &mut UnpositionedFloat<'_>,
+    child: NodeId,
+    token: &ChildBreakToken,
+  ) {
+    if !self.space.has_block_fragmentation() {
+      return;
+    }
+
+    unpositioned_float.fragmentation = Some(FloatFragmentation {
+      node: child,
+      style: Rc::clone(self.tree.layout_style_rc(child)),
+      break_token: token.clone(),
+      fragmentainer_block_size: self
+        .builder
+        .fragmentainer_capacity(true)
+        .unwrap_or(LayoutUnit::MAX),
+      fragmentainer_offset_at_bfc: self.fragmentainer_offset_at_bfc(),
+      min_break_appeal: self.space.min_break_appeal(),
+      is_monolithic: self.tree.is_monolithic(child),
+    });
+  }
+
+  /// The break before a float the page pushed to the next one, after which the layout goes on
+  /// with this container, as the float establishes a parallel flow.
+  pub(super) fn breaks_before_positioned_float(
+    &mut self,
+    child: NodeId,
+    positioned: &PositionedFloat,
+  ) -> bool {
+    if positioned.break_before_token.is_none() {
+      return false;
+    }
+    self.builder.add_break_token_before(child);
+    true
+  }
+
+  /// Blink's clearance check in `MovePastBreakpoint`: a child that clears a float a page broke
+  /// before or inside goes to the next page too.
+  fn needs_clearance_past_fragmentainer(
+    &self,
+    child: Option<(NodeId, &LayoutStyle)>,
+    result: &LayoutResult,
+  ) -> bool {
+    child.is_some_and(|(_, style)| {
+      result.status == LayoutStatus::Success
+        && result.break_info.is_first_for_node
+        && self
+          .exclusion_space
+          .needs_clearance_past_fragmentainer(style.clear)
+    })
   }
 
   /// The fragmentation part of Blink's `ComputeChildData`.
@@ -379,14 +475,16 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       has_container_separation,
     );
 
-    if move_past_breakpoint(
-      self.space,
-      &mut self.builder,
-      child,
-      result,
-      fragmentainer_block_offset,
-      appeal_before,
-    ) {
+    if !self.needs_clearance_past_fragmentainer(child, result)
+      && move_past_breakpoint(
+        self.space,
+        &mut self.builder,
+        child,
+        result,
+        fragmentainer_block_offset,
+        appeal_before,
+      )
+    {
       return Ok(false);
     }
 
@@ -510,6 +608,10 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       }
     }
 
+    // A float in this formatting context that broke takes its content past the page, as a
+    // child breaking inside would.
+    self.builder.has_float_break =
+      self.space.is_new_formatting_context && self.exclusion_space.has_fragmentainer_break();
     finish_fragmentation(&mut self.builder)?;
     self.intrinsic_block_size = self.builder.intrinsic_block_size;
     Ok(self.builder.fragment_block_size)

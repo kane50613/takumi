@@ -13,6 +13,8 @@ use std::{mem::take, rc::Rc};
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::box_fragment_builder::BoxFragmentBuilder;
+#[cfg(not(feature = "fragmentation"))]
+use crate::layout::floats_utils::PositionedFloat;
 
 use crate::{
   context::RenderContext,
@@ -566,7 +568,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       if child_style.is_out_of_flow() {
         self.handle_out_of_flow_positioned(previous, child, &child_style);
       } else if child_style.is_floating() {
-        self.handle_float(previous, child);
+        self.handle_float(previous, child, &child_break_token);
       } else {
         if self.break_before_early_break_target(Some(child), previous)? {
           break;
@@ -973,9 +975,18 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   }
 
   /// Blink's `HandleFloat`.
-  fn handle_float(&mut self, previous: &PreviousInflowPosition, child: NodeId) {
+  fn handle_float(
+    &mut self,
+    previous: &PreviousInflowPosition,
+    child: NodeId,
+    child_break_token: &ChildBreakToken,
+  ) {
+    if self.breaks_before_float(child) {
+      return;
+    }
+
     let space = self.space;
-    let origin_bfc_offset = BfcOffset::new(
+    let mut origin_bfc_offset = BfcOffset::new(
       space.bfc_offset.line_offset + self.border_padding.line_left(space.direction),
       if self.bfc_block_offset.is_some() {
         self.next_border_edge(previous)
@@ -983,6 +994,9 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         space.expected_bfc_block_offset()
       },
     );
+
+    origin_bfc_offset.block_offset += self.float_monolithic_overflow(child_break_token);
+
     let render_node = self.tree.render_node(child);
     let mut unpositioned_float = UnpositionedFloat::new(
       render_node,
@@ -991,6 +1005,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       space,
       self.line_clamp_data.data.float_state(),
     );
+
+    self.setup_float_for_fragmentation(&mut unpositioned_float, child, child_break_token);
 
     if self.bfc_block_offset.is_none() {
       self.adjoining_object_types |= if unpositioned_float.float_type() == Float::Left {
@@ -1004,12 +1020,17 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
+    let input = self.child_layout_input(child, child_break_token);
     let tree = &mut *self.tree;
     let positioned = position_float(
       &mut unpositioned_float,
       &mut self.exclusion_space,
-      &mut |_, float_space| tree.layout(child, float_space),
+      &mut |_, float_space| tree.layout_fragment(child, float_space, &input),
     );
+
+    if self.breaks_before_positioned_float(child, &positioned) {
+      return;
+    }
     let result = positioned.layout_result;
     let bfc_offset = BfcOffset::new(
       space.bfc_offset.line_offset,
@@ -1025,7 +1046,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       space.direction,
     );
 
-    self.add_result(child, result, offset, 0);
+    self.add_result(
+      child,
+      result,
+      offset,
+      Self::child_fragment_index(child_break_token),
+    );
   }
 
   /// Blink's `CalculateMargins`: the child's margins, and how far `justify-self` or `auto` margins
@@ -2162,6 +2188,38 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     _token: &ChildBreakToken,
   ) -> Rc<LayoutResult> {
     self.tree.layout(child, space)
+  }
+
+  fn child_layout_input(
+    &self,
+    _child: NodeId,
+    _token: &ChildBreakToken,
+  ) -> FragmentationLayoutInput {
+    FragmentationLayoutInput::default()
+  }
+
+  fn breaks_before_float(&mut self, _child: NodeId) -> bool {
+    false
+  }
+
+  fn float_monolithic_overflow(&self, _token: &ChildBreakToken) -> LayoutUnit {
+    LayoutUnit::ZERO
+  }
+
+  fn setup_float_for_fragmentation(
+    &self,
+    _unpositioned_float: &mut UnpositionedFloat<'_>,
+    _child: NodeId,
+    _token: &ChildBreakToken,
+  ) {
+  }
+
+  fn breaks_before_positioned_float(
+    &mut self,
+    _child: NodeId,
+    _positioned: &PositionedFloat,
+  ) -> bool {
+    false
   }
 
   fn adjust_child_data_for_fragmentation(

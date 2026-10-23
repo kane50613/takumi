@@ -943,6 +943,7 @@ css/css-break/flexbox/single-line-row-flex-fragmentation-038.html
 css/css-break/flexbox/single-line-row-flex-fragmentation-049.html
 css/css-break/flexbox/single-line-row-flex-fragmentation-050.html
 css/css-break/float-009.html
+css/css-break/float-with-large-margin-bottom-cross-page-002-print.html
 css/css-break/form-control.html
 css/css-break/grid/grid-container-fragmentation-013.html
 css/css-break/grid/grid-item-fragmentation-028.html

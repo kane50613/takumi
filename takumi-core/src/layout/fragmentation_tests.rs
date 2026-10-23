@@ -673,6 +673,75 @@ fn an_absolute_box_inside_a_clipping_box_adds_no_pages() {
   assert_eq!(page_count, 1);
 }
 
+const FLOAT_CSS: &str = ".float { float: left; width: 50px } .h20 { height: 20px } \
+  .h80 { height: 80px } .h150 { height: 150px } .h300 { height: 300px } \
+  .avoid { break-inside: avoid } .clear { clear: both } .m30 { margin-top: 30px } \
+  .after { break-after: page } .border { border-bottom: 10px solid }";
+
+#[test]
+fn a_resumed_float_drops_its_block_start_margin() {
+  let tree = render(root([block("float", "float h300 m30")]), FLOAT_CSS);
+  let (boxes, _) = pages(&tree, 200.0);
+
+  assert_eq!(
+    boxes["float"],
+    [placed(0, 30.0, 170.0), placed(1, 0.0, 130.0)]
+  );
+}
+
+#[test]
+fn a_forced_break_before_a_float_leaves_the_container_unbroken_by_inflow_content() {
+  let wrap = Node::container([block("a", "h20 after"), block("float", "float h20")])
+    .with_class_name("block border")
+    .with_id("wrap");
+  let tree = render(root([wrap]), FLOAT_CSS);
+  let (boxes, _) = pages(&tree, 200.0);
+
+  assert_eq!(boxes["float"], [placed(1, 0.0, 20.0)]);
+  // The float breaks in a parallel flow, so the first fragment keeps its block-end border.
+  assert_eq!(boxes["wrap"][0], placed(0, 0.0, 30.0));
+}
+
+#[test]
+fn a_float_taller_than_a_page_breaks_across_pages() {
+  let tree = render(root([block("float", "float h300")]), FLOAT_CSS);
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(
+    boxes["float"],
+    [placed(0, 0.0, 200.0), placed(1, 0.0, 100.0)]
+  );
+}
+
+#[test]
+fn a_float_that_avoids_breaking_moves_to_the_next_page_alone() {
+  let tree = render(
+    root([
+      block("a", "h150"),
+      block("float", "float h80 avoid"),
+      block("b", "h20"),
+    ]),
+    FLOAT_CSS,
+  );
+  let (boxes, _) = pages(&tree, 200.0);
+
+  assert_eq!(boxes["float"], [placed(1, 0.0, 80.0)]);
+  // The float flows in parallel, so the block after it stays on the first page.
+  assert_eq!(boxes["b"], [placed(0, 150.0, 20.0)]);
+}
+
+#[test]
+fn a_block_that_clears_a_broken_float_follows_it_to_the_next_page() {
+  let tree = render(
+    root([block("float", "float h300"), block("c", "h20 clear")]),
+    FLOAT_CSS,
+  );
+  let (boxes, _) = pages(&tree, 200.0);
+
+  assert_eq!(boxes["c"], [placed(1, 100.0, 20.0)]);
+}
+
 #[test]
 fn a_fixed_box_repeats_on_the_pages_an_absolute_box_adds() {
   let body =
