@@ -11,7 +11,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   resources::font::Fonts,
-  scene::{NodePaint, PagedScene, PaintItemKind},
+  scene::{NodePaint, PagedScene, PaintItemKind, Scene},
   style::{SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -259,24 +259,7 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
     [0, 1]
   );
 
-  let paints: Vec<NodePaint> = scene
-    .contexts
-    .iter()
-    .flat_map(|context| context.in_paint_order().into_iter().flatten())
-    .filter_map(|item| match &item.kind {
-      PaintItemKind::Node(paint)
-        if scene
-          .root
-          .node_at_path(&paint.path)
-          .and_then(|node| node.node.as_ref())
-          .and_then(|node| node.id())
-          == Some("p") =>
-      {
-        Some(paint.clone())
-      }
-      _ => None,
-    })
-    .collect();
+  let paints = paints_of(scene, "p");
 
   // One scene paints both fragments, the second where the second page starts.
   assert_eq!(
@@ -287,34 +270,58 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
     [(0, 140.0), (1, 200.0)]
   );
 
-  for (paint, line_count) in paints.iter().zip([3, 5]) {
-    let layout = scene
-      .results
-      .fragment_layout(paint.node_id, paint.fragment_index)
-      .expect("fragment layout");
-    let fragments = scene
-      .fragments
-      .as_ref()
-      .expect("a paged scene places fragments");
+  assert_eq!(
+    paints
+      .iter()
+      .map(|paint| line_count(scene, paint))
+      .collect::<Vec<_>>(),
+    [3, 5]
+  );
+}
 
-    fragments.enter(&scene.root, paint, layout.location);
+/// The paints of each fragment of the box with `id`, in paint order.
+fn paints_of(scene: &Scene, id: &str) -> Vec<NodePaint> {
+  scene
+    .contexts
+    .iter()
+    .flat_map(|context| {
+      context
+        .roots()
+        .iter()
+        .chain(
+          context
+            .in_paint_order()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| match &item.kind {
+              PaintItemKind::Node(paint) => Some(paint),
+              _ => None,
+            }),
+        )
+    })
+    .filter(|paint| {
+      scene
+        .root
+        .node_at_path(&paint.path)
+        .and_then(|node| node.node.as_ref())
+        .and_then(|node| node.id())
+        == Some(id)
+    })
+    .cloned()
+    .collect()
+}
 
-    let node = scene
-      .root
-      .node_at_path(&paint.path)
-      .expect("paragraph node");
+/// The number of lines in the fragment `paint` paints.
+fn line_count(scene: &Scene, paint: &NodePaint) -> usize {
+  let layout = scene.enter(paint).expect("fragment layout");
 
-    assert_eq!(
-      node
-        .fragment_items_in(layout)
-        .expect("the fragment's lines")
-        .line_boxes()
-        .len(),
-      line_count,
-      "fragment {}",
-      paint.fragment_index
-    );
-  }
+  scene
+    .root
+    .node_at_path(&paint.path)
+    .and_then(|node| node.fragment_items_in(layout))
+    .expect("the fragment's lines")
+    .line_boxes()
+    .len()
 }
 
 #[test]

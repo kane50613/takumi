@@ -745,6 +745,20 @@ impl Scene {
   }
 }
 
+impl Scene {
+  /// The layout of the fragment `paint` paints, with its box set to paint it.
+  pub fn enter(&self, paint: &NodePaint) -> Result<ComputedLayout> {
+    let layout = self
+      .results
+      .fragment_layout(paint.node_id, paint.fragment_index)?;
+
+    if let Some(fragments) = &self.fragments {
+      fragments.enter(&self.root, paint, layout.location);
+    }
+    Ok(layout)
+  }
+}
+
 /// The boxes a scene placed, by child path, for a scene that paints several fragments of a box.
 pub struct FragmentPlacements(HashSet<Vec<usize>>);
 
@@ -861,6 +875,11 @@ impl PagedScene {
   /// The number of pages.
   pub fn page_count(&self) -> usize {
     self.page_count
+  }
+
+  /// The scene of every page stacked, page `index` from `index` times the page height down.
+  pub fn into_scene(self) -> Scene {
+    self.scene
   }
 
   /// The scene set to paint page `index`.
