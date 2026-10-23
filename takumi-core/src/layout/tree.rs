@@ -945,13 +945,11 @@ impl<'r> LayoutTree<'r> {
         size: available_space.map(definite),
       };
 
-      let (location, result, _) = self.lay_out_out_of_flow_box(
+      self.lay_out_out_of_flow_box(
         &OutOfFlowCandidate::new(NodeId::ROOT, StaticPosition::default()),
         initial_containing_block,
         &space,
-      );
-
-      (location, result)
+      )
     } else {
       let margins = margins_for(
         self.layout_style(NodeId::ROOT),

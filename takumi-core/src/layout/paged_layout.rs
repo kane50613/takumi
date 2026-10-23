@@ -17,7 +17,7 @@ use crate::{
     fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
     layout_view::LayoutView,
     length_utils::margins_for,
-    out_of_flow::PageAreas,
+    page_area::PageAreas,
     paint_reach::PaintReach,
     pending_boxes::PendingBoxes,
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -167,8 +167,8 @@ impl<'r> PagedLayout<'r> {
     if laid_root {
       self.last_root_page = page;
     }
-    self.tree.lay_out_page_area(
-      &mut self.page_areas,
+    self.page_areas.lay_out(
+      &mut self.tree,
       page,
       root_fragment,
       candidates,

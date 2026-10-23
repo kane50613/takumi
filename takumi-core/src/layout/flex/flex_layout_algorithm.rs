@@ -1595,12 +1595,9 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     let location = self.physical_offset(offset, result.size.inline_size)
       + relative_offset.map(LayoutUnit::from_float);
 
-    self.out_of_flow.extend(
-      result
-        .out_of_flow
-        .iter()
-        .map(|candidate| candidate.moved_by(location)),
-    );
+    self
+      .out_of_flow
+      .extend(result.out_of_flow_moved_by(location));
     self.children.push(PlacedChild {
       node,
       location,

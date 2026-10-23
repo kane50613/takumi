@@ -144,13 +144,7 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
 
     for cell in &placed.cells {
       self.place_cell(cell);
-      out_of_flow.extend(
-        cell
-          .result
-          .out_of_flow
-          .iter()
-          .map(|candidate| candidate.moved_by(cell.location)),
-      );
+      out_of_flow.extend(cell.result.out_of_flow_moved_by(cell.location));
     }
 
     let block_size =

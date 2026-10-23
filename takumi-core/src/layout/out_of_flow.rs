@@ -1,18 +1,11 @@
 //! Blink's [`OutOfFlowLayoutPart`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/out_of_flow_layout_part.cc)
 //! and [`absolute_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/absolute_utils.cc):
-//! absolutely and fixed positioned boxes laid out in their containing block. Without anchor
-//! positioning, `position-try`, or scroll containers, and `justify-self: auto` takes no
-//! `justify-items`.
-//!
-//! Every containing block lays its boxes out in its own fragments, as Blink's `FragmentedOofInCb`
-//! does. A block resolves a box against the fragments so far stitched together, where Blink uses
-//! the current fragment alone; an inline box uses this fragment's geometry, as Blink does. A box
-//! whose block position or size depends on a block containing block's final size waits for its
-//! last fragment. A containing block that clips its block overflow finishes its boxes in its last
-//! fragment, so they add no pages. The initial containing block lays its boxes out in the page
-//! areas, page by page. Flex, grid and table containing blocks go beyond Blink, whose item, row
-//! and section iterators cannot resume an out-of-flow break token: they skip those tokens and
-//! lay the boxes out like a block does.
+//! absolutely and fixed positioned boxes laid out in their containing block, in its fragments as
+//! `FragmentedOofInCb` does. A block resolves a box against the fragments so far stitched together,
+//! where Blink uses the current fragment alone. Flex, grid and table containers go beyond Blink,
+//! whose iterators cannot resume an out-of-flow break token, and lay their boxes out like a block.
+//! Without anchor positioning, `position-try`, or scroll containers, and `justify-self: auto`
+//! takes no `justify-items`.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -24,7 +17,6 @@ use crate::layout::{
   box_fragment_builder::BoxFragmentBuilder,
   break_token::BreakToken,
   fragmentation_utils::{is_break_inside, setup_space_for_fragmentation},
-  logical_rect::LogicalBoxStrut,
 };
 use crate::{
   geometry::{NodeId, Point, Rect, Size},
@@ -41,37 +33,6 @@ use crate::{
   layout_unit::LayoutUnit,
   style::{AlignItems, Direction, Overflow, Position},
 };
-
-/// Blink's page areas of the pages laid out so far, and what each leaves the next.
-#[cfg(feature = "fragmentation")]
-#[derive(Default)]
-pub(crate) struct PageAreas {
-  /// Where the next page's area resumes: the out-of-flow boxes this one pushed to the next page or
-  /// broke into it.
-  break_token: Option<Rc<BlockBreakToken>>,
-  fixed: Vec<FixedBox>,
-}
-
-#[cfg(feature = "fragmentation")]
-impl PageAreas {
-  /// Whether the next page has out-of-flow boxes to lay out, as Blink's `HasInsertedChildBreak`
-  /// of the page area says.
-  pub(crate) fn resumes(&self) -> bool {
-    self.break_token.is_some()
-  }
-}
-
-/// A fixed box no box contains, which Blink's `LayoutRepeatableRoot` lays out once for every page
-/// from the one it is found on.
-#[cfg(feature = "fragmentation")]
-struct FixedBox {
-  node: NodeId,
-  /// The box's border box in its page.
-  offset: Point<LayoutUnit>,
-  result: Rc<LayoutResult>,
-  /// The page whose area found the box, the first it repeats on.
-  first_page: usize,
-}
 
 /// Which out-of-flow boxes a box is the containing block for.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -607,133 +568,11 @@ impl<'r> LayoutTree<'r> {
         }
 
         // The box's own out-of-flow descendants it does not contain come back to this one.
-        candidates.extend(
-          result
-            .out_of_flow
-            .iter()
-            .map(|nested| nested.moved_by(offset)),
-        );
+        candidates.extend(result.out_of_flow_moved_by(offset));
       }
     }
 
     unclaimed
-  }
-
-  /// Blink's page area of page `page`, attached to the root's fragment `fragment_index` at
-  /// `origin`: it lays out the out-of-flow boxes the root left as `root_candidates` and those the page
-  /// before left, as `FragmentedOofInCb` does, and repeats the fixed boxes.
-  #[cfg(feature = "fragmentation")]
-  pub(crate) fn lay_out_page_area(
-    &mut self,
-    areas: &mut PageAreas,
-    page: usize,
-    (fragment_index, origin): (usize, Point<LayoutUnit>),
-    root_candidates: Vec<OutOfFlowCandidate>,
-    page_size: Size<f32>,
-    space: &ConstraintSpace,
-  ) {
-    let page_block_size = LayoutUnit::from_float(page_size.height);
-    let page_start = Point::new(LayoutUnit::ZERO, page_block_size * page as i32);
-    let size = Size {
-      width: LayoutUnit::from_float(page_size.width),
-      height: page_block_size,
-    };
-    // The initial containing block is the first page's area, which a later page's sees above it.
-    let initial_containing_block = ContainingBlock {
-      origin: Point::new(-origin.x, -origin.y),
-      size,
-    };
-    let page_containing_block = ContainingBlock {
-      origin: page_start - origin,
-      size,
-    };
-    let mut space = space.clone();
-
-    if let Some(fragmentation) = &mut space.block_fragmentation {
-      fragmentation.fragmentainer_offset = origin.y - page_start.y;
-    }
-
-    let mut builder = BoxFragmentBuilder::new(
-      &space,
-      self.layout_style(NodeId::ROOT),
-      LogicalBoxStrut::default(),
-      areas.break_token.take(),
-    );
-    let mut candidates = self.resumed_out_of_flow(&builder);
-
-    candidates.extend(root_candidates);
-    // A fixed box is laid out against the page it is found on instead.
-    let claims = ContainingBlockClaims {
-      fixed: false,
-      ..ContainingBlockClaims::ALL
-    };
-
-    while !candidates.is_empty() {
-      let part = OutOfFlowLayoutPart::new(
-        (NodeId::ROOT, fragment_index),
-        claims,
-        initial_containing_block,
-        &space,
-      )
-      .with_final_block_size()
-      .in_fragments(&mut builder);
-
-      for candidate in self.lay_out_out_of_flow(part, take(&mut candidates)) {
-        let (offset, result, _) =
-          self.lay_out_out_of_flow_box(&candidate, page_containing_block, &space);
-
-        candidates.extend(
-          result
-            .out_of_flow
-            .iter()
-            .map(|nested| nested.moved_by(offset)),
-        );
-        areas.fixed.push(FixedBox {
-          node: candidate.node,
-          offset: offset + origin - page_start,
-          result,
-          first_page: page,
-        });
-      }
-    }
-
-    areas.break_token = builder
-      .has_inserted_child_break()
-      .then(|| Rc::new(builder.create_break_token(NodeId::ROOT)));
-
-    for fixed in &areas.fixed {
-      self.place_fixed_repetition(
-        fixed.node,
-        page - fixed.first_page,
-        fixed.offset + page_start,
-        &fixed.result,
-        (fragment_index, origin),
-      );
-    }
-  }
-
-  /// Blink's repeated fixed box: repetition `repetition` of the fixed `node` laid out as `result`,
-  /// its border box at `offset` in the stacked pages, in the root's fragment given.
-  #[cfg(feature = "fragmentation")]
-  fn place_fixed_repetition(
-    &mut self,
-    node: NodeId,
-    repetition: usize,
-    offset: Point<LayoutUnit>,
-    result: &LayoutResult,
-    (root_fragment_index, root_origin): (usize, Point<LayoutUnit>),
-  ) {
-    self.place_child(
-      node,
-      repetition,
-      root_fragment_index,
-      offset - root_origin,
-      result,
-    );
-    if repetition > 0 {
-      self.repeat_fragments(node, 0, repetition);
-    }
-    self.add_hoisted_child(NodeId::ROOT, node);
   }
 
   /// Blink's `HandleOutOfFlowPositioned` for the out-of-flow children of the box `builder` builds
@@ -789,14 +628,14 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Blink's `CalculateOffset` and `GenerateFragment` for a box in `containing_block` of a box laid
-  /// out in `space` without fragments: its layout, the offset of its border box in the border box
-  /// of that box, and the space it laid out in.
+  /// out in `space` without fragments: the offset of its border box in the border box of that box,
+  /// and its layout.
   pub(crate) fn lay_out_out_of_flow_box(
     &mut self,
     candidate: &OutOfFlowCandidate,
     containing_block: ContainingBlock,
     space: &ConstraintSpace,
-  ) -> (Point<LayoutUnit>, Rc<LayoutResult>, ConstraintSpace) {
+  ) -> (Point<LayoutUnit>, Rc<LayoutResult>) {
     let part = OutOfFlowLayoutPart::new(
       (NodeId::ROOT, 0),
       ContainingBlockClaims::ALL,
@@ -804,12 +643,11 @@ impl<'r> LayoutTree<'r> {
       space,
     );
     let offset_info = self.calculate_out_of_flow_offset(candidate, containing_block, &part);
-    let (offset, space) = (offset_info.offset, offset_info.space.clone());
+    let offset = offset_info.offset;
 
     (
       offset,
       self.generate_out_of_flow_fragment(candidate, offset_info, &part),
-      space,
     )
   }
 

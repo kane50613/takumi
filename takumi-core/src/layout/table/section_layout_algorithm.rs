@@ -135,12 +135,7 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
       let location = Point::new(LayoutUnit::ZERO, offset);
 
       self.place_row(row.node, &token, location, &result);
-      out_of_flow.extend(
-        result
-          .out_of_flow
-          .iter()
-          .map(|candidate| candidate.moved_by(location)),
-      );
+      out_of_flow.extend(result.out_of_flow_moved_by(location));
       offset += result.size.block_size;
       is_first_non_collapsed_row &= is_row_collapsed;
       if has_collapsed_borders && !Self::resumes_past_block_end(&token) {

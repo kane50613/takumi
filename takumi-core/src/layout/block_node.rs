@@ -775,12 +775,7 @@ impl<'r> LayoutTree<'r> {
         if let Some(path) = paths.get(&child_render_node.context.box_id()) {
           placed.push((child, path.clone()));
         }
-        candidates.extend(
-          child_result
-            .out_of_flow
-            .iter()
-            .map(|candidate| candidate.moved_by(location)),
-        );
+        candidates.extend(child_result.out_of_flow_moved_by(location));
       }
       atomic_inline.tree.add_inline_box_children(node, placed);
     }

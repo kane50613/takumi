@@ -1319,12 +1319,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
           self.repeat_section_fragments(node, &token);
         }
       }
-      out_of_flow.extend(
-        result
-          .out_of_flow
-          .iter()
-          .map(|candidate| candidate.moved_by(location)),
-      );
+      out_of_flow.extend(result.out_of_flow_moved_by(location));
       offset += result.size.block_size + margins.bottom;
 
       match child {
@@ -1638,13 +1633,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         &caption.result,
       );
     }
-    out_of_flow.extend(
-      caption
-        .result
-        .out_of_flow
-        .iter()
-        .map(|candidate| candidate.moved_by(location)),
-    );
+    out_of_flow.extend(caption.result.out_of_flow_moved_by(location));
     *offset += caption.result.size.block_size + caption.margins.bottom;
   }
 

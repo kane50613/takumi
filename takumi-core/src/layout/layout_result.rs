@@ -201,26 +201,9 @@ impl OutOfFlowCandidate {
     }
   }
 
-  /// Blink's `AddOutOfFlowChildCandidate` for a box resumed at `break_token`, which its
-  /// containing block lays out where the token says.
-  #[cfg(feature = "fragmentation")]
-  pub(crate) fn resumed(
-    node: NodeId,
-    break_token: Rc<BlockBreakToken>,
-    requires_content_before_breaking: bool,
-  ) -> Self {
-    Self {
-      break_token: Some(break_token),
-      requires_content_before_breaking,
-      ..Self::new(node, StaticPosition::default())
-    }
-  }
-
-  /// Blink's `HandleOutOfFlowPositioned` for a box an earlier fragment broke inside or pushed
-  /// here: the candidate that resumes at `token`, none after a forced break, which works the
-  /// static position out again. A box held back for its containing block's block size lays out
-  /// from its held static position, in the fragments stitched together less
-  /// `previously_consumed_block_size`.
+  /// Blink's `HandleOutOfFlowPositioned` for a box an earlier fragment broke inside or pushed here:
+  /// the candidate resuming at `token`, none after a forced break, or from its held static
+  /// position when it waited for its containing block's block size.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn resuming(
     node: NodeId,
@@ -241,7 +224,11 @@ impl OutOfFlowCandidate {
           ..Self::new(node, static_position)
         }
       }
-      None => Self::resumed(node, Rc::clone(token), requires_content_before_breaking),
+      None => Self {
+        break_token: Some(Rc::clone(token)),
+        requires_content_before_breaking,
+        ..Self::new(node, StaticPosition::default())
+      },
     })
   }
 
@@ -388,6 +375,17 @@ impl Default for BreakInfo {
 }
 
 impl LayoutResult {
+  /// The out-of-flow boxes inside, in the border box of a box that placed this one at `offset`.
+  pub(crate) fn out_of_flow_moved_by(
+    &self,
+    offset: Point<LayoutUnit>,
+  ) -> impl Iterator<Item = OutOfFlowCandidate> + '_ {
+    self
+      .out_of_flow
+      .iter()
+      .map(move |candidate| candidate.moved_by(offset))
+  }
+
   /// Which fragment of its box the layout is.
   pub(crate) fn fragment_index(&self) -> usize {
     #[cfg(feature = "fragmentation")]

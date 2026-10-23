@@ -1776,13 +1776,11 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     };
     let mut out_of_flow = self.resumed_out_of_flow();
 
-    out_of_flow.extend(children.iter().flat_map(|child| {
-      child
-        .result
-        .out_of_flow
+    out_of_flow.extend(
+      children
         .iter()
-        .map(|candidate| candidate.moved_by(child.location))
-    }));
+        .flat_map(|child| child.result.out_of_flow_moved_by(child.location)),
+    );
     let (candidates, held_out_of_flow) =
       self.place_out_of_flow_items(&sizing_tree, block_size, out_of_flow_children);
 

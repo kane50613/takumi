@@ -54,6 +54,8 @@ pub(crate) mod min_max_sizes;
 /// Node Tree
 pub mod node;
 pub(crate) mod out_of_flow;
+#[cfg(feature = "fragmentation")]
+pub(crate) mod page_area;
 /// A render tree laid out across pages, one page at a time.
 #[cfg(feature = "fragmentation")]
 pub mod paged_layout;
