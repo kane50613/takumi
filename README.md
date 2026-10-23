@@ -134,7 +134,7 @@ for (const node of tree.nodes) {
 - **Text** stays selectable and searchable. Fonts embed as subsets.
 - **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.
 - **Attachments** embed files, including Factur-X e-invoice XML.
-- **Tagged PDF** is on by default. See the [PDF/A and PDF/UA guide](https://takumi.kane.tw/docs/pdf/pdf-a) for conformance options and validation.
+- **Tagged PDF** is on by default. See the [PDF/A and PDF/UA guide](https://takumi.kane.tw/docs/pdf/conformance) for conformance options and validation.
 - **Multilingual text** supports Arabic shaping, bidirectional layout, CJK, and emoji when the loaded fonts cover them.
 
 ### Runtimes
@@ -145,13 +145,13 @@ for (const node of tree.nodes) {
 
 ## Coming From Something Else
 
-| You are using                    | What changes                                                                                                                                                                                              |
-| :------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `satori`                         | Replace `satori()` with `renderSvg()`, or call `render()` for encoded image bytes. [Compare the renderers](https://takumi.kane.tw/docs/comparison-to-satori).                                             |
-| `next/og`                        | Swap the `ImageResponse` import. Keep explicit Flexbox styles and compare the rendered output. [Read the migration guide](https://takumi.kane.tw/docs/comparison-to-satori#migrate-from-nextog).          |
-| Puppeteer or Playwright for PDFs | Replace `page.pdf()` with `render()`. You must preload remote assets, and Takumi supports less CSS than Chrome. [Read the migration guide](https://takumi.kane.tw/docs/pdf/from-puppeteer).               |
-| `@react-pdf/renderer`            | Replace `Document`, `View`, and `Text` with HTML elements and CSS. Browser viewers and some text controls have no equivalent. [Read the migration guide](https://takumi.kane.tw/docs/pdf/from-react-pdf). |
-| `pdfkit`                         | Use JSX or HTML instead of positioning each line. Keep `pdfkit` when you need low-level drawing control.                                                                                                  |
+| You are using                    | What changes                                                                                                                                                                                                   |
+| :------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `satori`                         | Replace `satori()` with `renderSvg()`, or call `render()` for encoded image bytes. [Compare the renderers](https://takumi.kane.tw/docs/migration/satori).                                                      |
+| `next/og`                        | Swap the `ImageResponse` import. Keep explicit Flexbox styles and compare the rendered output. [Read the migration guide](https://takumi.kane.tw/docs/migration/satori#migrate-from-nextog).                   |
+| Puppeteer or Playwright for PDFs | Replace `page.pdf()` with `render()`. You must preload remote assets, and Takumi supports less CSS than Chrome. [Read the migration guide](https://takumi.kane.tw/docs/pdf/migration/puppeteer).               |
+| `@react-pdf/renderer`            | Replace `Document`, `View`, and `Text` with HTML elements and CSS. Browser viewers and some text controls have no equivalent. [Read the migration guide](https://takumi.kane.tw/docs/pdf/migration/react-pdf). |
+| `pdfkit`                         | Use JSX or HTML instead of positioning each line. Keep `pdfkit` when you need low-level drawing control.                                                                                                       |
 
 ## Fonts and Output Formats
 
@@ -180,7 +180,7 @@ const image = await render(
 );
 ```
 
-`render()` registers only the font subsets the content uses. To preload fonts outside the request path, register them on a `Renderer` and pass it as `renderer`. See [Typography & Fonts](https://takumi.kane.tw/docs/typography-and-fonts#preloading-with-registerfont).
+`render()` registers only the font subsets the content uses. To preload fonts outside the request path, register them on a `Renderer` and pass it as `renderer`. See [Typography & Fonts](https://takumi.kane.tw/docs/fonts#preloading-with-registerfont).
 
 ### API route (`next/og`-compatible)
 
@@ -249,7 +249,7 @@ Start from the [Rust example](./example/rust) or the [crate docs](https://docs.r
 
 ## Comparison
 
-Compare [Takumi and Satori](https://takumi.kane.tw/docs/comparison-to-satori) for image formats, CSS support, runtime requirements, and migration examples. For PDFs, the [renderer comparison](https://takumi.kane.tw/docs/pdf/comparison) records invoice benchmarks against `@react-pdf/renderer` and Puppeteer, with package versions and hardware.
+Compare [Takumi and Satori](https://takumi.kane.tw/docs/migration/satori) for image formats, CSS support, runtime requirements, and migration examples. For PDFs, the [renderer comparison](https://takumi.kane.tw/docs/pdf/comparison) records invoice benchmarks against `@react-pdf/renderer` and Puppeteer, with package versions and hardware.
 
 Takumi supports a subset of browser CSS. PDF output keeps only color `filter` functions. It rejects `blur()` and `drop-shadow()`, and it does not draw `backdrop-filter`. Keep Puppeteer when your output depends on page scripts or browser layout. Test your templates before switching renderers.
 

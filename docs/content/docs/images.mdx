@@ -272,7 +272,7 @@ const image = await renderer.render(node, {
 
 Takumi draws emoji from color fonts: COLR fonts such as `Twemoji-COLR`, and bitmap fonts such as `Noto Color Emoji`. A COLR file is much smaller than a bitmap font. The glyphs come from the loaded font, so no emoji request goes out.
 
-- Register the font through [`fonts`](/docs/typography-and-fonts#the-fonts-option).
+- Register the font through [`fonts`](/docs/fonts#the-fonts-option).
 - Set `emoji: "from-font"`.
 
 Variation selectors take priority over font order. A code point followed by `U+FE0F` renders as a color emoji, even when a text font comes first in the stack. A code point followed by `U+FE0E` renders as a monochrome glyph, even when a color font comes first. Bare code points follow stack order, as in browsers.

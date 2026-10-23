@@ -101,7 +101,7 @@ const pdf = await render(node, { images, css }); // [!code highlight]
 - It reads inline styles and `tw` classes. URLs inside `<style>` rules are not collected, so pass those images through `images` yourself.
 - It takes `timeout`, `maxBytes`, an `allowUrl` predicate, and a `fetchCache` that reuses bytes across renders.
 
-Fonts come from the `fonts` option, not from CSS `@font-face` rules. See [Fonts & images](/docs/pdf/fonts-and-images). Font URL loaders and `googleFonts()` make their own requests, so give them their own fetch limits.
+Fonts come from the `fonts` option, not from CSS `@font-face` rules. See [Fonts & images](/docs/pdf/assets). Font URL loaders and `googleFonts()` make their own requests, so give them their own fetch limits.
 
 ## Check browser-dependent features
 

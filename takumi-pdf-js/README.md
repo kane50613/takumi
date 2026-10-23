@@ -57,17 +57,17 @@ await writeFile("invoice.pdf", pdf);
 
 ## Choose the next guide
 
-| Task                                                | Guide                                                                                                                               |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Set page size, margins, and runtime imports         | [PDF getting started](https://takumi.kane.tw/docs/pdf)                                                                              |
-| Control page breaks and keep content together       | [Pagination](https://takumi.kane.tw/docs/pdf/pagination)                                                                            |
-| Reserve space for repeated headers and page numbers | [Headers and footers](https://takumi.kane.tw/docs/pdf/headers-and-footers)                                                          |
-| Create a certificate, ticket, or receipt            | [Single-page output](https://takumi.kane.tw/docs/pdf/single-page)                                                                   |
-| Load fonts and remote image bytes                   | [Fonts and images](https://takumi.kane.tw/docs/pdf/fonts-and-images)                                                                |
-| Add hyperlinks, bookmarks, and a table of contents  | [Links and metadata](https://takumi.kane.tw/docs/pdf/links-and-outline)                                                             |
-| Configure archival or accessible output             | [PDF/A and PDF/UA](https://takumi.kane.tw/docs/pdf/pdf-a)                                                                           |
-| Embed invoice XML or another file                   | [Attachments](https://takumi.kane.tw/docs/pdf/attachments)                                                                          |
-| Replace a browser or document renderer              | [From Puppeteer](https://takumi.kane.tw/docs/pdf/from-puppeteer) · [From react-pdf](https://takumi.kane.tw/docs/pdf/from-react-pdf) |
+| Task                                                | Guide                                                                                                                                         |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Set page size, margins, and runtime imports         | [PDF getting started](https://takumi.kane.tw/docs/pdf)                                                                                        |
+| Control page breaks and keep content together       | [Pagination](https://takumi.kane.tw/docs/pdf/pagination)                                                                                      |
+| Reserve space for repeated headers and page numbers | [Headers and footers](https://takumi.kane.tw/docs/pdf/headers)                                                                                |
+| Create a certificate, ticket, or receipt            | [Single-page output](https://takumi.kane.tw/docs/pdf/viewport)                                                                                |
+| Load fonts and remote image bytes                   | [Fonts and images](https://takumi.kane.tw/docs/pdf/assets)                                                                                    |
+| Add hyperlinks, bookmarks, and a table of contents  | [Links and metadata](https://takumi.kane.tw/docs/pdf/links)                                                                                   |
+| Configure archival or accessible output             | [PDF/A and PDF/UA](https://takumi.kane.tw/docs/pdf/conformance)                                                                               |
+| Embed invoice XML or another file                   | [Attachments](https://takumi.kane.tw/docs/pdf/attachments)                                                                                    |
+| Replace a browser or document renderer              | [From Puppeteer](https://takumi.kane.tw/docs/pdf/migration/puppeteer) · [From react-pdf](https://takumi.kane.tw/docs/pdf/migration/react-pdf) |
 
 ## Before using an existing template
 

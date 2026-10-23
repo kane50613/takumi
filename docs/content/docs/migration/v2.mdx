@@ -98,7 +98,7 @@ const image = await render(node, {
 
 ### The persistent image store and `GlobalContext` are gone
 
-v1 kept a mutable image store and a `GlobalContext` on the renderer, so an image registered once stayed available for later renders. v2 removes both. Pass every image the render needs through `images`, keyed by `src`. See [Load Images](/docs/load-images).
+v1 kept a mutable image store and a `GlobalContext` on the renderer, so an image registered once stayed available for later renders. v2 removes both. Pass every image the render needs through `images`, keyed by `src`. See [Load Images](/docs/images).
 
 ### `createImageResponse` is removed
 
