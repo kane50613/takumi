@@ -55,13 +55,13 @@ impl Paginated {
     frame: &PageFrame,
   ) -> Result<Self, PdfError> {
     if !has_page_counters(&node) && !has_target_counters(&node) {
-      return Self::build_once(node, inputs, frame);
+      return Self::build_once(node, inputs, frame, false);
     }
     let mut previous: Vec<String> = Vec::new();
     let mut passes = 0;
 
     loop {
-      let paginated = Self::build_once(node.clone(), inputs, frame)?;
+      let paginated = Self::build_once(node.clone(), inputs, frame, true)?;
       let mut written = Vec::new();
 
       passes += 1;
@@ -73,16 +73,26 @@ impl Paginated {
       // The numbers are still moving, and this was the last pass allowed. They
       // are laid out once more so the page shows the numbers it was laid out with.
       if passes == COUNTER_PASSES {
-        return Self::build_once(node, inputs, frame);
+        return Self::build_once(node, inputs, frame, false);
       }
     }
   }
 
-  fn build_once(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
+  /// One layout of `node`, with every box's extent when `counts` says page counters will read them.
+  fn build_once(
+    node: Node,
+    inputs: &TreeInputs<'_>,
+    frame: &PageFrame,
+    counts: bool,
+  ) -> Result<Self, PdfError> {
     let (content, repeated, page_count) = inputs.prepare_paged(node, frame)?;
     let window = frame.window_height;
     let starts = (0..page_count).map(|page| page as f32 * window).collect();
-    let interactive = Interactive::collect(&content);
+    let interactive = if counts {
+      Interactive::collect_with_extents(&content)
+    } else {
+      Interactive::collect(&content)
+    };
 
     Ok(Self {
       content,
@@ -103,6 +113,7 @@ impl Paginated {
       .interactive
       .extents
       .iter()
+      .flatten()
       .filter_map(|(order, extent)| {
         let pages = BoxPages {
           start: page_at(&extent.top),

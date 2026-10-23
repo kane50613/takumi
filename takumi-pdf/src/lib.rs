@@ -233,6 +233,8 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       &rendered.interactive().destination_targets(),
     ));
   }
+  // The layout and scene are done with; serializing the fonts and objects needs neither.
+  drop(rendered);
   if let Some(error) = state.into_error() {
     return Err(error);
   }

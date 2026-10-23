@@ -47,9 +47,10 @@ pub(crate) struct Interactive {
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
   /// Where every box layout gave a position sits, by the source order of its
-  /// node. A node laid out inline has no box of its own, so it has no entry
-  /// here and takes its page from the boxes around it.
-  pub(crate) extents: HashMap<usize, BoxExtent>,
+  /// node, when the caller asked for them. A node laid out inline has no box
+  /// of its own, so it has no entry here and takes its page from the boxes
+  /// around it.
+  pub(crate) extents: Option<HashMap<usize, BoxExtent>>,
 }
 
 /// A laid-out box's vertical extent in content coordinates.
@@ -125,11 +126,20 @@ fn heading_level(tag: &str) -> Option<u8> {
 impl Interactive {
   /// Collects hyperlinks and headings from the prepared scene, in paint order.
   pub(crate) fn collect(tree: &PreparedTree) -> Self {
+    Self::collect_from(tree, None)
+  }
+
+  /// [`Self::collect`], with every box's extent, which page counters read.
+  pub(crate) fn collect_with_extents(tree: &PreparedTree) -> Self {
+    Self::collect_from(tree, Some(HashMap::new()))
+  }
+
+  fn collect_from(tree: &PreparedTree, extents: Option<HashMap<usize, BoxExtent>>) -> Self {
     let mut collected = Self {
       links: Vec::new(),
       headings: Vec::new(),
       anchors: HashMap::new(),
-      extents: HashMap::new(),
+      extents,
     };
 
     tree.for_each_paint(|paint| collect_interactive_paint(tree, paint, &mut collected));
@@ -217,7 +227,9 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     .is_repeated_fragment(paint.node_id, paint.fragment_index);
 
   // A repeated fragment, such as a table header on a later page, leaves no flow of its own.
-  if let Some(index) = node.source_order().filter(|_| !repeated) {
+  if let Some(extents) = collected.extents.as_mut()
+    && let Some(index) = node.source_order().filter(|_| !repeated)
+  {
     // `transform` moves where a box paints without moving the flow it left
     // behind, so the flow edge is measured with the box's own transform undone.
     let in_flow = !matches!(
@@ -238,8 +250,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
 
     // A box broken across pages starts where its first fragment does, and its flow goes on where
     // its last one ends.
-    collected
-      .extents
+    extents
       .entry(index)
       .and_modify(|extent| {
         extent.flow_bottom = match (extent.flow_bottom, flow_bottom) {

@@ -2325,11 +2325,11 @@ impl GlyphDevice for TextDevice<'_, '_, '_, '_> {
     frame: BoxFrame,
   ) {
     let (fills, with_paint) = match (fill, &self.through) {
-      (GlyphFill::Mask, Some(through)) => (through.clone(), false),
-      (GlyphFill::Text | GlyphFill::Mask, _) => (Rc::from([]), true),
+      (GlyphFill::Mask, Some(through)) => (Some(Rc::clone(through)), false),
+      (GlyphFill::Text | GlyphFill::Mask, _) => (None, true),
     };
 
-    self.paint_glyph_run(run, frame, &fills, with_paint);
+    self.paint_glyph_run(run, frame, fills.as_deref().unwrap_or_default(), with_paint);
   }
 
   /// Approximate: PDF viewers disagree on where the patterns inside a soft-mask group land, so each
