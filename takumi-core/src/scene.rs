@@ -1504,6 +1504,35 @@ impl PageWindows {
     self.with_needs(reaching)
   }
 
+  /// How many of the first `drawn` pages no scene of a later page paints from, counting from the
+  /// `released` pages already known to be free. A scene paints from the pages reaching down to its
+  /// page and from the parents of the out-of-flow boxes it paints, until `is_complete` says a
+  /// box is laid out for good.
+  pub fn releasable_pages(
+    &mut self,
+    released: usize,
+    drawn: usize,
+    is_complete: impl Fn(NodeId) -> bool,
+  ) -> usize {
+    self.parents.retain(|&child, _| !is_complete(child));
+
+    let below = self.page_size.height * drawn as f32;
+    // [`Self::refresh`] measures the pages from `stable` on again.
+    let drawn = drawn.min(self.stable).min(self.reaches.len());
+    let reaches = self.reaches.get(released..drawn).unwrap_or_default();
+    let reaching = reaches
+      .iter()
+      .enumerate()
+      .filter(|(_, reach)| reach.intersects(below, f32::INFINITY))
+      .map(|(page, _)| released + page);
+    let parents = self.parents.values().flatten().map(|&(_, page)| page);
+
+    self
+      .with_needs(reaching.chain(parents))
+      .first()
+      .map_or(drawn, |&first| first.min(drawn))
+  }
+
   /// The pages whose root fragments a scene needs to paint the root fragment of `page`.
   pub fn pages_of(&self, page: usize) -> Vec<usize> {
     self.with_needs([page])

@@ -550,11 +550,19 @@ impl<'r> LayoutTree<'r> {
       },
     );
     #[cfg(feature = "fragmentation")]
-    if result.break_info.break_token.is_none() {
-      self
-        .node_state_mut(node)
-        .fragments
-        .truncate(fragment_index + 1);
+    {
+      let ends = result.break_info.break_token.is_none();
+
+      if ends {
+        self
+          .node_state_mut(node)
+          .fragments
+          .truncate(fragment_index + 1);
+      }
+      self.note_end(node, ends);
+      if self.render_node(node).fragment_items.has(fragment_index) {
+        self.log_items(node, fragment_index);
+      }
     }
   }
 
@@ -637,6 +645,7 @@ impl<'r> LayoutTree<'r> {
         .render_node(child)
         .fragment_items
         .repeat(child_source, child_target);
+      self.log_items(child, child_target);
       if self.is_table(child) {
         self.repeat_table_fragment(child, child_source, child_target);
       }

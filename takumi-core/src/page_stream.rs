@@ -31,6 +31,7 @@ pub struct PageStream<'r> {
   windows: PageWindows,
   page_size: Size<f32>,
   handed_over: usize,
+  released: usize,
 }
 
 impl<'r> PageStream<'r> {
@@ -38,15 +39,19 @@ impl<'r> PageStream<'r> {
   pub fn new(root: &'r RenderNode, page_size: Size<f32>, max_pages: usize) -> Self {
     Self {
       root,
-      layout: PagedLayout::new(root, page_size, max_pages),
+      layout: PagedLayout::new(root, page_size, max_pages).with_release(),
       windows: PageWindows::new(page_size),
       page_size,
       handed_over: 0,
+      released: 0,
     }
   }
 
-  /// Lays out the next page and returns the pages `settle` newly says are safe to paint.
+  /// Lays out the next page and returns the pages `settle` newly says are safe to paint. The caller
+  /// has painted the pages an earlier call returned by now, so this one frees what they held.
   pub fn advance(&mut self, settle: Settle<'_>) -> Result<Settled> {
+    self.release();
+
     let laid = self.layout.next_page()?;
     let settled = settle(&self.layout).min(self.layout.page_count());
     let pages = self.handed_over..settled.max(self.handed_over);
@@ -61,6 +66,19 @@ impl<'r> PageStream<'r> {
     }
     self.handed_over = pages.end;
     Ok(Settled { pages, laid })
+  }
+
+  fn release(&mut self) {
+    let layout = &self.layout;
+    let handed_over = self.handed_over;
+    let pages = self
+      .windows
+      .releasable_pages(self.released, handed_over, |node| {
+        layout.has_ended_by(node, handed_over)
+      });
+
+    self.layout.release(pages);
+    self.released = self.released.max(pages);
   }
 
   /// The layout so far.
