@@ -67,8 +67,8 @@ struct Rendered {
 
 fn render_drawing_as_settled(options: PdfOptions<'_>) -> Rendered {
   let laid_at_first_page = Cell::new(usize::MAX);
-  let pdf = render_settling(options, &|layout, reach| {
-    let settled = layout.settled_pages(reach);
+  let pdf = render_settling(options, &|layout| {
+    let settled = layout.settled_pages();
 
     if settled > 0 {
       laid_at_first_page.set(laid_at_first_page.get().min(layout.page_count()));
@@ -87,7 +87,7 @@ fn render_drawing_as_settled(options: PdfOptions<'_>) -> Rendered {
 
 /// The document with the layout run to its end before the first page is drawn.
 fn render_after_layout(options: PdfOptions<'_>) -> Vec<u8> {
-  render_settling(options, &|layout: &PagedLayout<'_>, _| {
+  render_settling(options, &|layout: &PagedLayout<'_>| {
     if layout.is_finished() {
       layout.page_count()
     } else {
@@ -246,4 +246,37 @@ fn a_child_held_to_the_bottom_of_a_relative_root_holds_every_page_until_layout_e
   let rendered = assert_draws_like_after_layout("a held child", |fonts| options(&source, fonts));
 
   assert_eq!(rendered.laid_at_first_page, rendered.pages);
+}
+
+#[test]
+fn an_absolute_box_found_on_a_later_page_holds_the_pages_of_its_containing_block_until_then() {
+  let lines = |range: std::ops::RangeInclusive<usize>| -> String {
+    range
+      .map(|line| format!("<div>Line {line}</div>"))
+      .collect()
+  };
+  let source = format!(
+    r#"<div style="position: relative; width: 100%; font-size: 14px;">{}<div style="position: absolute; top: 10px; left: 0; width: 60px; height: 20px; background-color: rgb(200, 40, 40);"></div>{}</div>"#,
+    lines(1..=40),
+    lines(41..=50)
+  );
+  let rendered = assert_draws_like_after_layout("an absolute box of a long block", |fonts| {
+    options(&source, fonts)
+  });
+  let fonts = fonts();
+  let next_page_laid = render_settling(options(&source, &fonts), &|layout| {
+    if layout.is_finished() {
+      layout.page_count()
+    } else {
+      layout.page_count() - 1
+    }
+  })
+  .expect("the document renders");
+
+  assert!(rendered.pages > 3);
+  assert_ne!(
+    next_page_laid, rendered.pdf,
+    "the box paints on a page before the one that lays it out"
+  );
+  assert!(rendered.laid_at_first_page > 3);
 }

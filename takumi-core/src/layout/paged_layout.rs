@@ -3,11 +3,10 @@
 
 use std::rc::Rc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 
 use crate::{
   Error, Result,
-  context::BoxId,
   geometry::{AvailableSpace, NodeId, Point, Size},
   layout::{
     block_break_token::BlockBreakToken,
@@ -19,10 +18,12 @@ use crate::{
     layout_view::LayoutView,
     length_utils::margins_for,
     out_of_flow::PageAreas,
+    paint_reach::PaintReach,
+    pending_boxes::PendingBoxes,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
-  style::{Direction, Position},
+  style::Direction,
 };
 
 /// One page [`PagedLayout::next_page`] laid out.
@@ -52,17 +53,19 @@ pub struct PagedLayout<'r> {
   /// The page of [`Self::last_root_fragment`].
   last_root_page: usize,
   is_finished: bool,
-  /// The absolute boxes the initial containing block positions that no page has laid out yet, with
-  /// their layout nodes once the tree has them.
-  pending_initial_boxes: FxHashMap<BoxId, Option<NodeId>>,
-  /// How many layout nodes [`Self::pending_initial_boxes`] has looked through.
-  scanned_nodes: usize,
+  /// The bound on how far the boxes of the tree paint above their pages, as
+  /// `PaintReach::back` says.
+  reach_back: Option<f32>,
+  /// The boxes no page has laid out yet that can paint on an earlier page.
+  pending: PendingBoxes,
 }
 
 impl<'r> PagedLayout<'r> {
   /// Starts laying `root` out on pages `page_size`, at most `max_pages` of them.
   pub fn new(root: &'r RenderNode, page_size: Size<f32>, max_pages: usize) -> Self {
     root.clear_layout_caches();
+
+    let reach = PaintReach::of(root);
 
     Self {
       tree: LayoutTree::from_render_node(root),
@@ -74,8 +77,8 @@ impl<'r> PagedLayout<'r> {
       last_root_fragment: None,
       last_root_page: 0,
       is_finished: false,
-      pending_initial_boxes: initial_containing_block_boxes(root),
-      scanned_nodes: 0,
+      reach_back: reach.back,
+      pending: PendingBoxes::new(&reach),
     }
   }
 
@@ -174,7 +177,7 @@ impl<'r> PagedLayout<'r> {
     );
     self.page_count += 1;
     self.is_finished = self.break_token.is_none() && !self.page_areas.resumes();
-    self.find_initial_boxes();
+    self.update_pending();
 
     Ok(Some(LaidPage {
       index: page,
@@ -188,17 +191,25 @@ impl<'r> PagedLayout<'r> {
   }
 
   /// How many of the first pages no later page can paint onto, so a consumer may paint them from
-  /// [`Self::view`]. A box a containing block holds back to its last fragment paints from where
-  /// that block started, so an unfinished block holds back the pages from its first. The initial
-  /// containing block is the first page's area, so an absolute box it positions paints there from
-  /// whichever page finds it, and until every such box is found no page is final. The root's last
-  /// fragment holds the page areas that go on after it, so its page is not final until they end. This leaves out a
-  /// held box that starts above its containing block.
+  /// [`Self::view`].
+  ///
+  /// A box a containing block holds back to its last fragment, and an absolute box whose static
+  /// position is on a later page than its containing block's first, are laid out in a later
+  /// fragment and placed from the block's start, so an unfinished block that has such a box
+  /// pending holds back the pages from its first. The initial containing block is the first page's
+  /// area, so a box it positions paints there from whichever page finds it. A box whose reach the
+  /// styles do not bound, such as one with a transform, can paint on any page until it and what it
+  /// holds are laid out. Until then no page is final, and neither is one with a box that repeats
+  /// on every page. The root's last fragment holds the page areas that go on after it, so its page
+  /// is not final until they end.
+  ///
+  /// This takes a box held back, or placed by its containing block, to start no higher than the
+  /// block, and leaves out one that does.
   pub fn finalized_pages(&self) -> usize {
     if self.is_finished {
       return self.page_count;
     }
-    if !self.pending_initial_boxes.is_empty() {
+    if self.pending.pins_every_page() {
       return 0;
     }
 
@@ -211,38 +222,52 @@ impl<'r> PagedLayout<'r> {
     }
 
     if let Some(token) = &self.break_token {
-      self.pin_held_boxes(token, &mut chain, &mut pinned);
+      self.pin_pending_boxes(token, &mut chain, &mut pinned);
     }
     pinned
   }
 
-  /// How many of the first pages a consumer may paint from [`Self::view`] when no box of the tree
-  /// paints more than `reach_back` px above its page, as [`reach_back`](crate::layout::paint_reach::reach_back) bounds it: those that
-  /// [`Self::finalized_pages`] holds final, and that no page still to lay out can reach. None
-  /// means the tree has a box that may paint any number of pages back, so only a finished layout
-  /// settles its pages.
-  pub fn settled_pages(&self, reach_back: Option<f32>) -> usize {
+  /// How many of the first pages a consumer may paint from [`Self::view`]: those that
+  /// [`Self::finalized_pages`] holds final, less the pages the boxes of the tree paint above their
+  /// own, as `PaintReach::back` bounds it, and that no page still to lay out can reach. None of
+  /// the pages are settled when that bound is none, until the layout is finished.
+  pub fn settled_pages(&self) -> usize {
     if self.is_finished {
       return self.page_count;
     }
 
-    let Some(reach_back) = reach_back else {
+    let Some(reach_back) = self.reach_back else {
       return 0;
     };
     // A page not laid out starts at or below the page after the last one laid out.
     let pages_back = (reach_back / self.page_size.height).ceil();
+    let finalized = self.finalized_pages();
 
-    if pages_back.is_nan() || pages_back >= self.page_count as f32 {
+    if pages_back.is_nan() || pages_back >= finalized as f32 {
       return 0;
     }
-    self
-      .finalized_pages()
-      .min(self.page_count - pages_back as usize)
+    finalized - pages_back as usize
   }
 
-  /// Lowers `pinned` to the page each box held in `token`'s box or the boxes under it
-  /// starts on, `chain` being the boxes down to it.
-  fn pin_held_boxes(&self, token: &BlockBreakToken, chain: &mut Vec<NodeId>, pinned: &mut usize) {
+  /// Lowers `pinned` to the page each box in `token`'s box or the boxes under it starts on, that
+  /// holds back a box or has one pending, `chain` being the boxes down to `token`'s.
+  fn pin_pending_boxes(
+    &self,
+    token: &BlockBreakToken,
+    chain: &mut Vec<NodeId>,
+    pinned: &mut usize,
+  ) {
+    // A box that made no fragment yet starts on a page not laid out.
+    if token.is_break_before {
+      return;
+    }
+    if self
+      .pending
+      .is_containing_block(self.tree.render_node(token.node).context.box_id())
+    {
+      *pinned = (*pinned).min(self.start_page(chain));
+    }
+
     for child in &token.child_break_tokens {
       let BreakToken::Block(child) = child else {
         continue;
@@ -252,32 +277,19 @@ impl<'r> PagedLayout<'r> {
         *pinned = (*pinned).min(self.start_page(chain));
       } else {
         chain.push(child.node);
-        self.pin_held_boxes(child, chain, pinned);
+        self.pin_pending_boxes(child, chain, pinned);
         chain.pop();
       }
     }
   }
 
-  /// Drops the pending initial containing block boxes that pages laid out so far have laid out.
-  fn find_initial_boxes(&mut self) {
-    if self.pending_initial_boxes.is_empty() {
-      return;
-    }
+  /// Drops the pending boxes that the pages laid out so far have laid out.
+  fn update_pending(&mut self) {
+    // A page area that goes on lays out its boxes in more fragments than the root's tokens show.
+    let open = (!self.page_areas.resumes() && self.pending.has_unbounded())
+      .then(|| open_nodes(self.break_token.as_deref()));
 
-    for index in self.scanned_nodes..self.tree.node_count() {
-      let box_id = self.tree.render_node(index).context.box_id();
-
-      if let Some(node) = self.pending_initial_boxes.get_mut(&box_id) {
-        *node = Some(NodeId::new(index));
-      }
-    }
-    self.scanned_nodes = self.tree.node_count();
-
-    let view = self.tree.view();
-
-    self
-      .pending_initial_boxes
-      .retain(|_, node| !node.is_some_and(|node| view.is_laid_out(node)));
+    self.pending.update(&self.tree, open.as_ref());
   }
 
   /// The page the last box of `chain`, a box under the root, starts on.
@@ -319,30 +331,22 @@ impl<'r> PagedLayout<'r> {
   }
 }
 
-/// The absolute boxes under `root` that no positioned box or box with a transform contains, which
-/// the initial containing block positions.
-fn initial_containing_block_boxes(root: &RenderNode) -> FxHashMap<BoxId, Option<NodeId>> {
-  let mut boxes = FxHashMap::default();
-  let mut stack = vec![(root, false)];
+/// The boxes `root_token`'s box and the boxes under it have fragments still to come for.
+fn open_nodes(root_token: Option<&BlockBreakToken>) -> FxHashSet<NodeId> {
+  let mut open = FxHashSet::default();
+  let mut stack: Vec<&BlockBreakToken> = root_token.into_iter().collect();
 
-  while let Some((node, is_contained)) = stack.pop() {
-    let style = &node.context.style;
-    let position = style.base_data.position;
-
-    if position == Position::Absolute && !is_contained {
-      boxes.insert(node.context.box_id(), None);
-    }
-
-    let is_contained =
-      is_contained || position.is_positioned() || style.contains_fixed_descendants();
-
+  while let Some(token) = stack.pop() {
+    open.insert(token.node);
     stack.extend(
-      node
-        .children
+      token
+        .child_break_tokens
         .iter()
-        .flatten()
-        .map(|child| (child, is_contained)),
+        .filter_map(|child| match child {
+          BreakToken::Block(child) => Some(&**child),
+          BreakToken::Inline(_) => None,
+        }),
     );
   }
-  boxes
+  open
 }

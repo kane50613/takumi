@@ -172,11 +172,11 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
 pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   // The method itself does not satisfy the bound, as its layout lifetime is early-bound.
   #[allow(clippy::redundant_closure_for_method_calls)]
-  render_settling(options, &|layout, reach| layout.settled_pages(reach))
+  render_settling(options, &|layout| layout.settled_pages())
 }
 
-/// [`render`] with `settle`, given the layout and the tree's reach back, saying how many of the
-/// first pages of a document that streams are safe to draw.
+/// [`render`] with `settle`, given the layout, saying how many of the first pages of a document
+/// that streams are safe to draw.
 fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Vec<u8>, PdfError> {
   let attachments = take(&mut options.attachments);
   let mut pdf = open_document(&options, attachments)?;

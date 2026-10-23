@@ -4,7 +4,7 @@ pub use takumi_core::layout::measure::{MeasuredNode, MeasuredTextRun};
 #[cfg(feature = "pages")]
 use takumi_core::{
   geometry::Size,
-  layout::{paged_layout::PagedLayout, paint_reach::reach_back},
+  layout::paged_layout::PagedLayout,
   scene::{PageWindows, PagedScene, SceneRef},
 };
 use takumi_core::{
@@ -176,10 +176,11 @@ pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
 /// Renders a node across at most `max_pages` pages `page_size`, handing each page's image to
 /// `page` in order, so a long document holds one page's pixels and scene at a time.
 ///
-/// A page is handed over as soon as no page still to lay out can paint onto it, which the tree
-/// decides before any layout: a document with no transform, percentage offset or held box, and
-/// whose negative margins, offsets, shadows and glyph ink reach less than a page, hands over a
-/// page once the next is laid out. Any other document is laid out to its end first.
+/// A page is handed over as soon as no page still to lay out can paint onto it. A document whose
+/// negative margins, offsets, shadows and glyph ink reach less than a page hands over a page once
+/// the next is laid out. A box that the tree does not bound, such as one with a transform, a
+/// percentage offset or a held box, holds the pages back until the layout has laid it out. A box
+/// that repeats on every page and is not bound holds back every page.
 ///
 /// Layout runs while the pages go out, so [`Error::TooManyPages`] and any other layout error can
 /// follow pages `page` has already received.
@@ -192,24 +193,23 @@ pub fn render_pages<'g>(
 ) -> Result<()> {
   // The method itself does not satisfy the bound, as its layout lifetime is early-bound.
   #[allow(clippy::redundant_closure_for_method_calls)]
-  let settle = |layout: &PagedLayout<'_>, reach| layout.settled_pages(reach);
+  let settle = |layout: &PagedLayout<'_>| layout.settled_pages();
 
   render_pages_settling(options, page_size, max_pages, settle, page)
 }
 
-/// [`render_pages`] with `settle`, given the layout and the tree's reach back, saying how many of
-/// the first pages are safe to hand over.
+/// [`render_pages`] with `settle`, given the layout, saying how many of the first pages are safe to
+/// hand over.
 #[cfg(feature = "pages")]
 pub(crate) fn render_pages_settling<'g>(
   mut options: RenderOptions<'g>,
   page_size: Size<f32>,
   max_pages: usize,
-  settle: impl Fn(&PagedLayout<'_>, Option<f32>) -> usize,
+  settle: impl Fn(&PagedLayout<'_>) -> usize,
   mut page: impl FnMut(Bitmap) -> Result<()>,
 ) -> Result<()> {
   let render_context = options.take_render_context();
   let root = RenderNode::from_node(&render_context, options.node);
-  let reach = reach_back(&root);
   let mut layout = PagedLayout::new(&root, page_size, max_pages);
   let mut windows = PageWindows::new(page_size);
   let size = page_size.map(|length| length.round() as u32);
@@ -217,7 +217,7 @@ pub(crate) fn render_pages_settling<'g>(
 
   loop {
     let laid = layout.next_page()?.is_some();
-    let settled = settle(&layout, reach);
+    let settled = settle(&layout);
 
     if settled > handed_over {
       windows.refresh(

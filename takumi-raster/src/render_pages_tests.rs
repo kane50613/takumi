@@ -99,7 +99,7 @@ fn next_page_laid(options: RenderOptions<'_>, page_size: Size<f32>) -> Result<Ve
     options,
     page_size,
     usize::MAX,
-    |layout, _| {
+    |layout| {
       if layout.is_finished() {
         layout.page_count()
       } else {
@@ -527,9 +527,9 @@ fn laid_when_first_page_goes(source: &str) -> (usize, usize) {
     options(&fonts, &node, &stylesheet, PAGE_SIZE),
     PAGE_SIZE,
     usize::MAX,
-    |layout, reach| {
+    |layout| {
       laid.set(layout.page_count());
-      layout.settled_pages(reach)
+      layout.settled_pages()
     },
     |_| {
       first.get_or_insert(laid.get());
@@ -557,4 +557,28 @@ fn a_box_that_may_paint_any_pages_back_holds_every_page_until_the_layout_ends() 
   ));
 
   assert_eq!(laid, pages);
+}
+
+#[test]
+fn an_absolute_box_found_on_a_late_page_paints_on_the_first_page_of_its_containing_block() {
+  assert_needs_more_than_the_next_page(
+    "absolute box of a long block",
+    &format!(
+      "<div><div style=\"position: relative\">{}<div style=\"position: absolute; top: 10px; left: 0; width: 60px; height: 30px; background: #0a0\"></div>{}</div></div>",
+      pages_of_blocks(5),
+      pages_of_blocks(2)
+    ),
+  );
+}
+
+#[test]
+fn a_box_with_a_transform_holds_pages_only_until_it_is_laid_out() {
+  let source = format!(
+    "<div><div style=\"width: 20px; height: 20px; background: #e00; transform: rotate(2deg)\"></div>{}</div>",
+    pages_of_blocks(8)
+  );
+  let (laid, pages) = laid_when_first_page_goes(&source);
+
+  assert!(laid < pages, "{laid} of {pages} pages were laid out");
+  assert_streams_like_whole("rotated box on the first page", &source, PAGE_SIZE);
 }

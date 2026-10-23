@@ -3,7 +3,7 @@
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
-  layout::{node::Node, paged_layout::PagedLayout, paint_reach::reach_back, tree::RenderNode},
+  layout::{node::Node, paged_layout::PagedLayout, tree::RenderNode},
   scene::{PageWindows, SceneRef},
   style::Color,
   viewport::{MediaTarget, Viewport},
@@ -139,9 +139,8 @@ pub(crate) struct PageBands<'o> {
   pub(crate) page_ranges: Option<&'o [PageRange]>,
 }
 
-/// How many of the first pages of a layout to draw, given how far a box of the tree paints above
-/// its page, as [`PagedLayout::settled_pages`] says.
-pub(crate) type Settle<'s> = &'s dyn Fn(&PagedLayout<'_>, Option<f32>) -> usize;
+/// How many of the first pages of a layout to draw, as [`PagedLayout::settled_pages`] says.
+pub(crate) type Settle<'s> = &'s dyn Fn(&PagedLayout<'_>) -> usize;
 
 /// The paginated document once its pages are drawn: what the outline, the structure tree and the
 /// destinations read.
@@ -338,7 +337,6 @@ impl PageDrawing<'_, '_> {
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let composer = PageComposer::new(self, &frame, &repeatables);
     let page_size = frame.page_size();
-    let reach = reach_back(&root);
     let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
     let mut windows = PageWindows::new(page_size);
     let mut selection = PageSelection::new(ranges);
@@ -347,7 +345,7 @@ impl PageDrawing<'_, '_> {
 
     loop {
       let laid = layout.next_page()?.is_some();
-      let settled = settle(&layout, reach);
+      let settled = settle(&layout);
 
       if settled > drawn {
         windows.refresh(
