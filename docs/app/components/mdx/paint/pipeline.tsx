@@ -74,14 +74,32 @@ export function Pipeline({ stages }: { stages: PipelineStage[] }) {
           </button>
         ))}
       </div>
-      <Stage className="min-h-80">
-        <div key={stage} className="paint-in flex w-full justify-center">
-          {stages[stage]?.view}
-        </div>
+      <Stage className="grid grid-cols-1">
+        {stages.map((item, index) => (
+          <Layer key={`${index}-${index === stage}`} active={index === stage}>
+            <div className="flex w-full justify-center">{item.view}</div>
+          </Layer>
+        ))}
       </Stage>
-      <figcaption className="border-t px-4 py-3 text-xs text-fd-muted-foreground">
-        {stages[stage]?.caption}
+      <figcaption className="grid border-t px-4 py-3 text-xs text-fd-muted-foreground">
+        {stages.map((item, index) => (
+          <Layer key={item.title} active={index === stage}>
+            {item.caption}
+          </Layer>
+        ))}
       </figcaption>
     </Surface>
+  );
+}
+
+/** One of several children stacked in the same grid cell, so the tallest sets the height. */
+function Layer({ active, children }: { active: boolean; children: ReactNode }) {
+  return (
+    <div
+      inert={!active}
+      className={cn("col-start-1 row-start-1 self-center", active ? "paint-in" : "invisible")}
+    >
+      {children}
+    </div>
   );
 }

@@ -50,9 +50,9 @@ function Output({
       <Canvas scene={scene} label={`The card as ${output.toLowerCase()} output`}>
         {sceneSteps(scene, scene.steps.length, ids)}
       </Canvas>
-      <figcaption className="font-mono text-xs">
+      <figcaption className="flex flex-col items-center font-mono text-xs">
         <span className="text-fd-primary">{pkg}</span>
-        <span className="text-fd-muted-foreground"> · {output}</span>
+        <span className="text-fd-muted-foreground">{output}</span>
       </figcaption>
     </figure>
   );
@@ -79,7 +79,7 @@ export function RenderPipelineView({ scene }: { scene: PaintScene }) {
           title: "Output",
           caption: "The same layout becomes an image, a PDF, or a paint tree.",
           view: (
-            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid w-full grid-cols-3 gap-3 sm:gap-4">
               {OUTPUTS.map((item, index) => (
                 <Output
                   key={item.pkg}
