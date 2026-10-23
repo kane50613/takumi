@@ -407,10 +407,10 @@ impl TableLayoutAlgorithm<'_, '_> {
 
   /// The rows an earlier fragment computed, with the sections' block size before the table's own
   /// grew them.
-  pub(super) fn resumed_rows(&self) -> Option<(Rows, LayoutUnit)> {
+  pub(super) fn resumed_rows(&self) -> Option<(Rc<Rows>, LayoutUnit)> {
     self
       .table_break_data()
-      .map(|data| ((*data.rows).clone(), data.total_table_min_block_size))
+      .map(|data| (Rc::clone(&data.rows), data.total_table_min_block_size))
   }
 
   pub(super) fn resumed_table_box(&self) -> Option<ResumedTableBox> {
@@ -742,7 +742,7 @@ impl TableLayoutAlgorithm<'_, '_> {
     Err(candidates)
   }
 
-  pub(super) fn resumed_rows(&self) -> Option<(Rows, LayoutUnit)> {
+  pub(super) fn resumed_rows(&self) -> Option<(Rc<Rows>, LayoutUnit)> {
     None
   }
 

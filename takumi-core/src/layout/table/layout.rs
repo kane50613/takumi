@@ -74,8 +74,10 @@ pub(crate) struct SectionPart {
 /// A table's parts as layout reads them, gathered once per layout tree.
 pub(crate) struct TableStructure {
   pub(crate) grouped: TableGroupedChildren,
-  pub(crate) borders: TableBorders,
+  pub(crate) borders: Rc<TableBorders>,
   pub(crate) sections: Vec<SectionPart>,
+  /// Each cell's first column, in section, row, and cell order.
+  pub(crate) cell_columns: Rc<[(NodeId, usize)]>,
   pub(crate) captions: Vec<NodeId>,
   pub(crate) columns: Vec<NodeId>,
   /// Whether a column percentage widens the table's max-content width, which Blink's
@@ -232,6 +234,13 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
+    let cell_columns = sections
+      .iter()
+      .flat_map(|section| &section.rows)
+      .flat_map(|row| &row.cells)
+      .map(|cell| (cell.node, cell.column))
+      .collect();
+
     TableStructure {
       captions: grouped
         .captions
@@ -240,8 +249,9 @@ impl<'r> LayoutTree<'r> {
         .collect(),
       columns,
       grouped,
-      borders,
+      borders: Rc::new(borders),
       sections,
+      cell_columns,
       allows_intrinsic_column_percentages: allows_percentages,
     }
   }
@@ -393,7 +403,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       minimal_grid_block_size,
       total_table_min_block_size,
       &column_locations,
-      Rc::new(rows),
+      rows,
       &captions,
       spacing,
     )
@@ -734,7 +744,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     grid_inline_size: LayoutUnit,
     column_locations: &[ColumnLocation],
     captions_block_size: LayoutUnit,
-  ) -> (Rows, LayoutUnit, LayoutUnit) {
+  ) -> (Rc<Rows>, LayoutUnit, LayoutUnit) {
     let (mut rows, total_min_block_size) = match self.resumed_rows() {
       Some(resumed) => resumed,
       None => {
@@ -749,7 +759,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
             .last()
             .map_or(LayoutUnit::ZERO, |section| section.block_size);
         }
-        (rows, total_min_block_size)
+        (Rc::new(rows), total_min_block_size)
       }
     };
 
@@ -767,6 +777,8 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       let distributable = (table_block_size - border_padding.block_sum()).clamp_negative_to_zero();
 
       if distributable > total_min_block_size {
+        let rows = Rc::make_mut(&mut rows);
+
         distribute_table_block_size_to_sections(
           self.spacing.1,
           distributable,
@@ -778,15 +790,19 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
 
     let row_count = rows.rows.len();
 
-    for row in rows.rows.iter_mut().filter(|row| row.is_collapsed) {
-      // Collapsed rows take no block size and shrink the table's minimum.
-      if minimal_grid_block_size != LayoutUnit::ZERO {
-        minimal_grid_block_size -= row.block_size;
-        if row_count > 1 {
-          minimal_grid_block_size -= self.spacing.1;
+    if rows.rows.iter().any(|row| row.is_collapsed) {
+      let rows = Rc::make_mut(&mut rows);
+
+      for row in rows.rows.iter_mut().filter(|row| row.is_collapsed) {
+        // Collapsed rows take no block size and shrink the table's minimum.
+        if minimal_grid_block_size != LayoutUnit::ZERO {
+          minimal_grid_block_size -= row.block_size;
+          if row_count > 1 {
+            minimal_grid_block_size -= self.spacing.1;
+          }
         }
+        row.block_size = LayoutUnit::ZERO;
       }
-      row.block_size = LayoutUnit::ZERO;
     }
 
     (rows, minimal_grid_block_size, total_min_block_size)
@@ -1630,13 +1646,14 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
           {
             fragment.hidden.push(cell.node);
           }
-          fragment.cell_columns.push((cell.node, cell.column));
         }
         if is_collapsed {
           fragment.hidden.push(row.node);
         }
       }
     }
+    fragment.cell_columns = Rc::clone(&data.structure.cell_columns);
+
     for (placed_index, section) in placed_sections.iter().enumerate() {
       if let Some((start_row, row_offsets)) = &section.row_offsets {
         fragment
