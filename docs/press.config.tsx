@@ -108,6 +108,7 @@ export default defineConfig({
     root() {
       return (
         <>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta name="twitter:card" content="summary_large_image" />
           <meta name="twitter:image:width" content="1200" />
           <meta name="twitter:image:height" content="630" />
