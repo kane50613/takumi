@@ -20,7 +20,9 @@ use crate::{
       join_fragmentainer_break_values,
     },
     inline::inline_break_token::InlineBreakToken,
-    layout_result::{BreakInfo, FragmentedContainingBlock, LayoutResult, LayoutStatus},
+    layout_result::{
+      BreakInfo, FragmentedContainingBlock, LayoutResult, LayoutStatus, StaticPosition,
+    },
     layout_style::LayoutStyle,
     logical_rect::LogicalBoxStrut,
     out_of_flow::ContainingBlock,
@@ -414,6 +416,17 @@ impl BoxFragmentBuilder {
     true
   }
 
+  /// Holds the out-of-flow box `node` back to this box's last fragment with a break before it,
+  /// which keeps its `static_position` in the coordinates of the fragments stitched together.
+  pub(crate) fn holds_out_of_flow(&mut self, node: NodeId, mut static_position: StaticPosition) {
+    static_position.offset.y += self.previously_consumed_block_size();
+    self
+      .out_of_flow_break_tokens
+      .push(BreakToken::Block(Rc::new(
+        BlockBreakToken::break_before_held_out_of_flow(node, static_position),
+      )));
+  }
+
   /// The block fragmentation part of Blink's `AddResult` for an out-of-flow box laid out as
   /// `result` at `offset`, and the clamp `LayoutCandidates` makes after it.
   pub(crate) fn add_out_of_flow_result(
@@ -544,6 +557,7 @@ impl BoxFragmentBuilder {
         .collect(),
       algorithm_data: self.break_token_data.take(),
       oof_start_offset: Point::default(),
+      held_static_position: None,
     }
   }
 

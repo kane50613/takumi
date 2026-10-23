@@ -599,7 +599,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         continue;
       }
       if child_style.is_out_of_flow() {
-        self.handle_out_of_flow_positioned(previous, child, &child_style);
+        self.handle_out_of_flow_positioned(previous, child, &child_style, &child_break_token);
       } else if child_style.is_floating() {
         self.handle_float(previous, child, &child_break_token);
       } else {
@@ -883,28 +883,33 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     let claims = self.tree.claims(self.node);
     let candidates = take(&mut self.out_of_flow);
-    let containing_block = ContainingBlock::padding_box(
+    let mut containing_block = ContainingBlock::padding_box(
       Size {
         width: size.inline_size,
-        height: size.block_size,
+        height: self.stitched_block_size(size.block_size),
       },
       self.style.border,
     );
 
-    #[cfg(feature = "fragmentation")]
-    if self.builder.involved_in_block_fragmentation() {
-      self.defer_out_of_flow_children(claims, candidates, containing_block);
-      return;
-    }
-    self.out_of_flow = self.tree.lay_out_out_of_flow(
-      OutOfFlowLayoutPart::new(
-        (self.node, self.fragment_index()),
-        claims,
-        containing_block,
-        self.space,
-      ),
-      candidates,
+    // The boxes resolve against this fragment and those before it stitched together.
+    containing_block.origin.y -= self.previously_consumed_block_size();
+
+    #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
+    let mut part = OutOfFlowLayoutPart::new(
+      (self.node, self.fragment_index()),
+      claims,
+      containing_block,
+      self.space,
     );
+
+    // The boxes break across this box's fragments, as Blink's `FragmentedOofInCb` lays them out.
+    #[cfg(feature = "fragmentation")]
+    if self.breaks_out_of_flow_children() {
+      part = part.in_fragments(&mut self.builder);
+    }
+    self.out_of_flow = self.tree.lay_out_out_of_flow(part, candidates);
+    #[cfg(feature = "fragmentation")]
+    self.mark_deferred_out_of_flow_inside_clipped_container();
   }
 
   /// Writes each placed child's geometry once the layout stands, which only a layout that places
@@ -986,10 +991,13 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     previous: &PreviousInflowPosition,
     child: NodeId,
     child_style: &LayoutStyle,
+    child_break_token: &ChildBreakToken,
   ) {
     // A break the content before forces goes before the box, which takes its static position on
     // the next page.
-    if self.breaks_before_float_or_out_of_flow(child) {
+    if self.breaks_before_float_or_out_of_flow(child)
+      || self.resumes_out_of_flow(child, child_break_token)
+    {
       return;
     }
 
@@ -1050,10 +1058,17 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
-    self.out_of_flow.push(OutOfFlowCandidate::new(
+    #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
+    let mut candidate = OutOfFlowCandidate::new(
       child,
       static_position.to_physical(self.direction(), self.inline_size),
-    ));
+    );
+
+    #[cfg(feature = "fragmentation")]
+    {
+      candidate.requires_content_before_breaking = self.builder.requires_content_before_breaking;
+    }
+    self.out_of_flow.push(candidate);
   }
 
   /// Blink's `HandleFloat`.
@@ -1748,8 +1763,9 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         apply_clearance(&child_space, &mut offset);
         child_bfc_block_offset = Some(offset);
 
+        // Out-of-flow boxes inside break by their fragmentainer offset.
         if offset != child_space.expected_bfc_block_offset()
-          && !result.adjoining_object_types.is_empty()
+          && (!result.adjoining_object_types.is_empty() || self.has_block_fragmentation())
         {
           self_collapsing_child_needs_relayout = true;
         }
@@ -2404,6 +2420,14 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     _token: &ChildBreakToken,
   ) -> FragmentationLayoutInput {
     FragmentationLayoutInput::default()
+  }
+
+  fn resumes_out_of_flow(&mut self, _child: NodeId, _token: &ChildBreakToken) -> bool {
+    false
+  }
+
+  fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
+    block_size
   }
 
   fn breaks_before_float_or_out_of_flow(&mut self, _child: NodeId) -> bool {

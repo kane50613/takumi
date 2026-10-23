@@ -255,11 +255,13 @@ impl OutOfFlowCandidate {
 
   /// Where the box's layout resumes it.
   pub(crate) fn layout_input(&self) -> FragmentationLayoutInput {
-    FragmentationLayoutInput {
-      #[cfg(feature = "fragmentation")]
+    #[cfg(feature = "fragmentation")]
+    return FragmentationLayoutInput {
       break_token: self.break_token.clone(),
       ..FragmentationLayoutInput::default()
-    }
+    };
+    #[cfg(not(feature = "fragmentation"))]
+    return FragmentationLayoutInput::default();
   }
 
   /// Blink's `FragmentIndex` of the box's fragment its containing block lays out.
@@ -268,6 +270,14 @@ impl OutOfFlowCandidate {
     return fragment_index(self.break_token.as_deref());
     #[cfg(not(feature = "fragmentation"))]
     return 0;
+  }
+
+  /// Marks a box deferred to the fragmentation root as inside a container that clips it.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn mark_inside_clipped_container(&mut self) {
+    if let Some(containing_block) = &mut self.fragmented_containing_block {
+      containing_block.is_inside_clipped_container = true;
+    }
   }
 
   /// Whether a containing block that lays out with fragmentation left the box to the

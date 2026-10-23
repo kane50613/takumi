@@ -3,7 +3,10 @@
 
 use crate::{
   geometry::{NodeId, Point},
-  layout::{break_token::BreakToken, break_token_algorithm_data::BreakTokenAlgorithmData},
+  layout::{
+    break_token::BreakToken, break_token_algorithm_data::BreakTokenAlgorithmData,
+    layout_result::StaticPosition,
+  },
   layout_unit::LayoutUnit,
 };
 
@@ -37,6 +40,9 @@ pub(crate) struct BlockBreakToken {
   /// in its containing block's fragments: where in the next fragment's border box it resumes. The
   /// inline offset may come from a static position the next fragment cannot work out again.
   pub(crate) oof_start_offset: Point<LayoutUnit>,
+  /// The static position of an out-of-flow box its containing block holds back until its last
+  /// fragment, in the containing block's stitched fragments. Takumi's own, Blink has no such token.
+  pub(crate) held_static_position: Option<StaticPosition>,
 }
 
 impl BlockBreakToken {
@@ -66,6 +72,19 @@ impl BlockBreakToken {
       child_break_tokens: Vec::new(),
       algorithm_data: None,
       oof_start_offset: Point::default(),
+      held_static_position: None,
+    }
+  }
+
+  /// A break before an out-of-flow box that its containing block holds back, which lays it out
+  /// from `static_position` once its block size is final.
+  pub(crate) fn break_before_held_out_of_flow(
+    node: NodeId,
+    static_position: StaticPosition,
+  ) -> Self {
+    Self {
+      held_static_position: Some(static_position),
+      ..Self::break_before(node, false)
     }
   }
 

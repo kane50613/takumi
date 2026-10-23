@@ -1,8 +1,15 @@
 //! Blink's [`OutOfFlowLayoutPart`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/out_of_flow_layout_part.cc)
 //! and [`absolute_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/absolute_utils.cc):
 //! absolutely and fixed positioned boxes laid out in their containing block. Without anchor
-//! positioning, `position-try`, fragmentation, or scroll containers, and `justify-self: auto` takes
-//! no `justify-items`.
+//! positioning, `position-try`, or scroll containers, and `justify-self: auto` takes no
+//! `justify-items`.
+//!
+//! A block containing block lays its boxes out in its own fragments, as Blink's `FragmentedOofInCb`
+//! does. A box resolves against the fragments so far stitched together, where Blink uses the
+//! current fragment alone. A box whose block position or size depends on the containing block's
+//! final size waits for its last fragment. A containing block that clips its block overflow
+//! finishes its boxes in its last fragment, so they add no pages. Flex, grid and table containing
+//! blocks and the initial containing block leave their boxes to the fragmentation root.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -138,17 +145,6 @@ impl<'b> OutOfFlowLayoutPart<'b> {
   #[cfg(feature = "fragmentation")]
   fn container_break_token(&self) -> Option<&BlockBreakToken> {
     self.builder.as_deref()?.previous_break_token.as_deref()
-  }
-
-  /// The block size the container's earlier fragments took, which the insets resolve past: they
-  /// resolve in the fragments stitched together.
-  fn previously_consumed_block_size(&self) -> LayoutUnit {
-    #[cfg(feature = "fragmentation")]
-    return self
-      .container_break_token()
-      .map_or(LayoutUnit::ZERO, |token| token.consumed_block_size);
-    #[cfg(not(feature = "fragmentation"))]
-    return LayoutUnit::ZERO;
   }
 
   /// Whether `candidate` lays out again after measuring its block size: it resumes, or breaks
@@ -434,6 +430,21 @@ fn insets_axis(
   (imcb_start + margin_start, imcb_end + margin_end)
 }
 
+/// Whether an out-of-flow box's block position or size depends on the block size of its
+/// containing block: it sets `bottom`, or a percentage or `stretch` inset, size, or limit.
+#[cfg(feature = "fragmentation")]
+fn depends_on_containing_block_block_size(style: &LayoutStyle) -> bool {
+  !style.inset.bottom.is_auto()
+    || style.inset.top.has_percent()
+    || [
+      style.size.height,
+      style.min_size.height,
+      style.max_size.height,
+    ]
+    .into_iter()
+    .any(LayoutLength::has_percent_or_stretch)
+}
+
 /// Blink's `CanComputeBlockSizeWithoutLayout`.
 fn can_compute_block_size_without_layout(
   style: &LayoutStyle,
@@ -469,6 +480,12 @@ impl<'r> LayoutTree<'r> {
     mut candidates: Vec<OutOfFlowCandidate>,
   ) -> Vec<OutOfFlowCandidate> {
     let mut unclaimed = Vec::new();
+    // Whether the container has a fragment after this one, as far as its content so far says.
+    #[cfg(feature = "fragmentation")]
+    let breaks_after = part
+      .builder
+      .as_deref()
+      .is_some_and(BoxFragmentBuilder::should_break);
 
     while !candidates.is_empty() {
       for candidate in take(&mut candidates) {
@@ -479,6 +496,16 @@ impl<'r> LayoutTree<'r> {
             || candidate.is_deferred())
         {
           unclaimed.push(candidate);
+          continue;
+        }
+
+        #[cfg(feature = "fragmentation")]
+        if breaks_after
+          && !candidate.is_resumed()
+          && depends_on_containing_block_block_size(self.layout_style(candidate.node))
+          && let Some(builder) = part.builder.as_deref_mut()
+        {
+          builder.holds_out_of_flow(candidate.node, candidate.static_position);
           continue;
         }
 
@@ -748,9 +775,8 @@ impl<'r> LayoutTree<'r> {
         if !candidate.is_deferred() && claims.claims(self.layout_style(candidate.node).position) {
           candidate.fragmented_containing_block = Some(containing_block);
         }
-        if clips_overflow && let Some(containing_block) = &mut candidate.fragmented_containing_block
-        {
-          containing_block.is_inside_clipped_container = true;
+        if clips_overflow {
+          candidate.mark_inside_clipped_container();
         }
         candidate
       })
@@ -803,13 +829,10 @@ impl<'r> LayoutTree<'r> {
     space.is_new_formatting_context = true;
     space.cache_slot = part.space.cache_slot;
 
-    // The static position, relative to the containing block's fragments stitched together in the
-    // box's own direction.
-    let previously_consumed_block_size = part.previously_consumed_block_size();
+    // The static position, relative to the containing block in the box's own direction.
     let mut static_position = candidate.static_position;
 
-    static_position.offset = static_position.offset - containing_block.origin
-      + Point::new(LayoutUnit::ZERO, previously_consumed_block_size);
+    static_position.offset = static_position.offset - containing_block.origin;
     let static_position = static_position.to_logical(direction, available_size.inline_size);
 
     let inset = |length: LayoutLength, size: LayoutUnit| {
@@ -1056,8 +1079,7 @@ impl<'r> LayoutTree<'r> {
       Direction::Rtl => available_size.inline_size - inset_inline_start - inline_size,
     };
     #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
-    let mut offset =
-      containing_block.origin + Point::new(x, inset_block_start - previously_consumed_block_size);
+    let mut offset = containing_block.origin + Point::new(x, inset_block_start);
 
     // A resumed box keeps its inline offset, and starts its fragment past the monolithic overflow
     // an earlier page pushed into this one.
@@ -1095,10 +1117,12 @@ impl<'r> LayoutTree<'r> {
 
     let mut space = offset_info.space;
 
+    // A box that starts in an earlier fragment lays out whole, for the pages to paint it across.
     // Blink passes the page's own size, which leaves cloned borders of the containing blocks out.
     // https://github.com/w3c/csswg-drafts/issues/10553
     #[cfg(feature = "fragmentation")]
     if part.builder.is_some()
+      && offset_info.offset.y >= LayoutUnit::ZERO
       && let Some(fragmentation) = part.space.block_fragmentation
     {
       setup_space_for_fragmentation(
