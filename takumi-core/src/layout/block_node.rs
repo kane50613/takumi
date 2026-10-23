@@ -47,7 +47,8 @@ pub(crate) struct LayoutCache {
   /// Blink's `layout_results_`: the last layout of each fragment, with the break token it resumed
   /// at, from fragment `released` on.
   layouts: Vec<(ConstraintSpace, ChildBreakToken, Rc<LayoutResult>)>,
-  /// How many of the first fragments' layouts were released.
+  /// How many of the first fragments' layouts were released, [`Self::ALL_RELEASED`] once the box
+  /// ended.
   #[cfg(feature = "fragmentation")]
   released: usize,
   measures: Vec<(ConstraintSpace, Rc<LayoutResult>)>,
@@ -76,6 +77,8 @@ impl MinMaxKey {
 
 impl LayoutCache {
   const MEASURES: usize = 8;
+  #[cfg(feature = "fragmentation")]
+  const ALL_RELEASED: usize = usize::MAX;
 
   /// The layout for `space` resumed as `input` says: the last layout of that fragment from the
   /// same break token, which serves a measure too, or a measure of a fresh layout.
@@ -143,6 +146,12 @@ impl LayoutCache {
   }
 
   fn min_max_sizes(&self, key: (MinMaxKey, SizeType)) -> Option<MinMaxSizesResult> {
+    #[cfg(feature = "fragmentation")]
+    debug_assert!(
+      self.released != Self::ALL_RELEASED,
+      "the intrinsic sizes of a box were read after it ended and they were released"
+    );
+
     self
       .min_max_sizes
       .iter()
@@ -190,11 +199,12 @@ impl LayoutCache {
     self.released += count;
   }
 
-  /// Drops every layout and measure, for a box with no fragment to come.
+  /// Drops every layout, measure, and intrinsic size, for a box with no fragment to come.
   pub(crate) fn release_all(&mut self) {
-    self.released += self.layouts.len();
+    self.released = Self::ALL_RELEASED;
     self.layouts = Vec::new();
     self.measures = Vec::new();
+    self.min_max_sizes = Vec::new();
   }
 }
 

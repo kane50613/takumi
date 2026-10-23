@@ -294,9 +294,9 @@ pub struct LayoutTree<'r> {
   /// end.
   #[cfg(feature = "fragmentation")]
   releases: Option<Releases>,
-  /// The inline formatting contexts whose prepared items were released.
+  /// The boxes that ended and were released, whose inline items and table parts nothing may read.
   #[cfg(all(feature = "fragmentation", debug_assertions))]
-  released_inline_node_data: RefCell<FxHashSet<usize>>,
+  released_boxes: RefCell<FxHashSet<usize>>,
 }
 
 /// What a box's part in a table changes in the styles it is laid out with.
@@ -814,11 +814,11 @@ impl LayoutTree<'_> {
           .inline_node_data
           .borrow_mut()
           .remove(&usize::from(node));
+        self.tables.remove(&usize::from(node));
+        self.table_columns.remove(&usize::from(node));
+        self.repeated_roots.remove(&node);
         #[cfg(debug_assertions)]
-        self
-          .released_inline_node_data
-          .borrow_mut()
-          .insert(usize::from(node));
+        self.released_boxes.borrow_mut().insert(usize::from(node));
         for (laid, held) in releases.take_held(node) {
           self.release_finished(releases, laid, held);
         }
@@ -855,7 +855,7 @@ impl<'r> LayoutTree<'r> {
       #[cfg(feature = "fragmentation")]
       releases: None,
       #[cfg(all(feature = "fragmentation", debug_assertions))]
-      released_inline_node_data: RefCell::default(),
+      released_boxes: RefCell::default(),
     };
 
     tree.push_subtree(render_root);
@@ -923,13 +923,22 @@ impl<'r> LayoutTree<'r> {
     node
   }
 
-  /// The prepared items of the inline formatting context the node at `index` establishes.
-  pub(crate) fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
+  /// Fails loudly in debug builds when `what` of the box at `index` is read after it was released.
+  #[cfg_attr(
+    not(all(feature = "fragmentation", debug_assertions)),
+    allow(unused_variables)
+  )]
+  fn assert_not_released(&self, index: usize, what: &str) {
     #[cfg(all(feature = "fragmentation", debug_assertions))]
     assert!(
-      !self.released_inline_node_data.borrow().contains(&index),
-      "the inline items of box {index} were read after they were released"
+      !self.released_boxes.borrow().contains(&index),
+      "the {what} of box {index} were read after they were released"
     );
+  }
+
+  /// The prepared items of the inline formatting context the node at `index` establishes.
+  pub(crate) fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
+    self.assert_not_released(index, "inline items");
 
     Rc::clone(
       self
@@ -1416,6 +1425,7 @@ impl<'r> LayoutTree<'r> {
   }
 
   pub(in crate::layout) fn table_structure(&self, table: NodeId) -> Option<Rc<TableStructure>> {
+    self.assert_not_released(table.into(), "table structure");
     self.tables.get(&usize::from(table)).cloned()
   }
 
@@ -1431,6 +1441,7 @@ impl<'r> LayoutTree<'r> {
     &self,
     table: NodeId,
   ) -> Option<Rc<ColumnConstraints>> {
+    self.assert_not_released(table.into(), "column constraints");
     self.table_columns.get(&usize::from(table)).cloned()
   }
 
