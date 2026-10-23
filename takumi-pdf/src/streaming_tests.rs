@@ -126,12 +126,11 @@ fn assert_draws_like_after_layout(
   rendered
 }
 
+const ALL_SECTIONS: [(&str, usize); 6] =
+  [("a", 4), ("b", 4), ("c", 4), ("d", 4), ("e", 4), ("f", 4)];
+
 fn plain_document() -> String {
-  sections(
-    "",
-    &[("a", 4), ("b", 4), ("c", 4), ("d", 4), ("e", 4), ("f", 4)],
-    "",
-  )
+  sections("", &ALL_SECTIONS, "")
 }
 
 #[test]
@@ -265,8 +264,36 @@ fn a_band_that_grows_with_the_page_count_settles_before_the_pages_draw() {
   assert!(rendered.laid_at_first_page < rendered.pages);
 }
 
-const ALL_SECTIONS: [(&str, usize); 6] =
-  [("a", 4), ("b", 4), ("c", 4), ("d", 4), ("e", 4), ("f", 4)];
+#[test]
+fn a_band_that_grows_under_a_fixed_margin_does_not_count_the_pages_again() {
+  let lines: String = (0..110)
+    .map(|line| format!("<div>line {line}</div>"))
+    .collect();
+  let source = format!(r#"<div style="font-size: 14px">{lines}</div>"#);
+  let rendered = assert_draws_like_after_layout(
+    "a band that wraps under a fixed margin",
+    |fonts| {
+      let mut options = options(&source, fonts);
+
+      options.page = Some(PageOptions {
+        margin: PageMargins::uniform(24.0),
+        ..PAGE
+      });
+      options.footer = Some(
+      from_html(
+        r#"<div style="width: 80px; font-size: 14px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+        FromHtmlOptions::default(),
+      )
+      .expect("parse the footer"),
+    );
+      options
+    },
+  );
+
+  assert!(rendered.pages >= 10, "{} pages", rendered.pages);
+  assert_eq!(rendered.layouts, 2, "one pass counts, one draws");
+  assert!(rendered.laid_at_first_page < rendered.pages);
+}
 
 #[test]
 fn a_link_to_a_later_page_draws_its_first_page_before_layout_ends() {

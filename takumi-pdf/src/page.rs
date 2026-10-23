@@ -17,10 +17,7 @@ use crate::{
   chunks::SceneChunks,
   emitter::{DocumentState, Emitter},
   inline::{InlineCache, TextBox},
-  interactive::{
-    AnchorTarget, PageSummary, add_link_annotations, collect_links, has_summary_targets,
-    xyz_destination,
-  },
+  interactive::{AnchorTarget, PageSummary, add_link_annotations, collect_links, xyz_destination},
   krilla::{
     Document,
     destination::XyzDestination,
@@ -29,7 +26,9 @@ use crate::{
     surface::Surface,
   },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
-  pagination::{Counted, Counts, PageSlice, PageStarts, Paginated, reads_layout, walk_pages},
+  pagination::{
+    Counted, Counts, PageSlice, PageStarts, Paginated, Prepared, reads_layout, walk_pages,
+  },
   paint::paint_page_background,
   tree::TreeInputs,
   window::{ContentWindow, Window},
@@ -214,8 +213,8 @@ struct Solved {
 
 /// What the passes that solved the frame left of the content.
 enum Content {
-  /// Nothing is laid out: no pass was needed, so its pages draw as they lay out.
-  Stream(Node),
+  /// No pass was needed, so its pages draw as they lay out.
+  Stream(Prepared),
   /// The passes that settled the frame and the counters.
   Counted(Counted),
 }
@@ -228,9 +227,10 @@ pub(crate) struct PageDrawing<'d, 'g> {
 }
 
 impl PageDrawing<'_, '_> {
-  /// Lays the content out on pages and draws the ones `bands` keeps. A document that reads neither
-  /// the page count nor where a box landed draws each page as soon as `settle` says no later page
-  /// paints on it.
+  /// Lays the content out on pages and draws the ones `bands` keeps, each as soon as `settle` says
+  /// no later page paints on it. A document that reads the page count, where a box landed or where
+  /// an element sits is first laid out by passes that only count, so only a counter that never
+  /// settles makes it lay out to its end before the first page is drawn.
   pub(crate) fn render(
     &mut self,
     page: PageOptions,
@@ -243,9 +243,9 @@ impl PageDrawing<'_, '_> {
     let (solved, content) = Self::solve(self.inputs, page, &bands, node, settle)?;
 
     match content {
-      Content::Stream(node) => self.stream(solved, node, None, selection, structural, settle),
-      Content::Counted(Counted::Pages { node, counts }) => {
-        self.stream(solved, node, Some(counts), selection, structural, settle)
+      Content::Stream(content) => self.stream(solved, content, None, selection, structural, settle),
+      Content::Counted(Counted::Pages { content, counts }) => {
+        self.stream(solved, content, Some(counts), selection, structural, settle)
       }
       Content::Counted(Counted::Laid(paginated)) => {
         let selection = selection.with_pages(paginated.starts.len())?;
@@ -294,25 +294,29 @@ impl PageDrawing<'_, '_> {
     // margin takes the band's height, the band lays out with the real page
     // numbers, and the page count is only known once the content is laid out.
     // The band is re-measured with the count each layout produced until its height
-    // stops moving, like the content counters in `Paginated::build`.
+    // stops moving, like the content counters in `Counted::settle`.
     let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
       || footer.as_ref().is_some_and(Repeatable::dynamic);
 
     if !dynamic && !reads_layout(&node) {
+      let content = Prepared::new(node, inputs, &frame)?;
+
       return Ok((
         Solved {
           frame,
           header,
           footer,
         },
-        Content::Stream(node),
+        Content::Stream(content),
       ));
     }
 
-    let source = dynamic.then(|| node.clone());
+    // Only a margin that follows a band can move the frame, which is when the content lays out
+    // again from the source.
+    let source = (dynamic && page.margin.follow_bands()).then(|| node.clone());
     let mut counted = Counted::settle(node, inputs, &frame, settle)?;
 
-    if let Some(source) = source {
+    if dynamic {
       const BAND_PASSES: usize = 3;
 
       for _ in 0..BAND_PASSES {
@@ -327,7 +331,18 @@ impl PageDrawing<'_, '_> {
         if stable {
           break;
         }
-        frame = resolve(header.as_ref(), footer.as_ref())?;
+
+        let next_frame = resolve(header.as_ref(), footer.as_ref())?;
+
+        // The content lays out the same in a frame whose margins did not move.
+        if next_frame.margin == frame.margin {
+          break;
+        }
+        let Some(source) = &source else {
+          break;
+        };
+
+        frame = next_frame;
         counted = Counted::settle(source.clone(), inputs, &frame, settle)?;
       }
     }
@@ -342,12 +357,12 @@ impl PageDrawing<'_, '_> {
     ))
   }
 
-  /// Lays `node` out a page at a time and draws each page, in order, once `settle` says it is
+  /// Lays `content` out a page at a time and draws each page, in order, once `settle` says it is
   /// settled. `counts` is what the passes that counted the pages left, when any ran.
   fn stream(
     &mut self,
     solved: Solved,
-    node: Node,
+    content: Prepared,
     counts: Option<Counts>,
     mut selection: PageSelection,
     structural: bool,
@@ -358,8 +373,11 @@ impl PageDrawing<'_, '_> {
       header,
       footer,
     } = solved;
-    let reads_summary = has_summary_targets(&node);
-    let (root, repeated) = self.inputs.prepare_root(node, &frame)?;
+    let Prepared {
+      root,
+      repeated,
+      reads_summary,
+    } = content;
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let composer = PageComposer::new(self, &frame, &repeatables);
     let page_size = frame.page_size();

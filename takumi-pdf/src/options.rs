@@ -869,6 +869,11 @@ impl PageMargins {
     }
   }
 
+  /// Whether a band's height can move a margin, which is when an `auto` margin sits under one.
+  pub(crate) fn follow_bands(self) -> bool {
+    matches!(self.top, PageMargin::Auto) || matches!(self.bottom, PageMargin::Auto)
+  }
+
   /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.
   pub(crate) fn resolve(
     self,

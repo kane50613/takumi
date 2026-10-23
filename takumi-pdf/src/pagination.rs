@@ -1,7 +1,7 @@
 //! The content laid out across pages, which takumi-core's block fragmentation breaks, and the
 //! page counters filled in from where it put each box.
 
-use std::{collections::HashMap, ops::Range};
+use std::collections::HashMap;
 
 use takumi_core::{
   geometry::Size,
@@ -15,7 +15,7 @@ use crate::{
   counters::{
     BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
-  interactive::{AnchorTarget, PageSummary, has_internal_links},
+  interactive::{AnchorTarget, PageSummary, has_internal_links, has_summary_targets},
   options::PdfError,
   page::PageFrame,
   tree::{PagedContent, TreeInputs},
@@ -60,6 +60,32 @@ pub(crate) fn walk_pages(
   }
 }
 
+/// The content tree of a frame, which lays out across pages as many times as the document needs.
+pub(crate) struct Prepared {
+  pub(crate) root: RenderNode,
+  /// The `fixed` boxes taken out of the root, which repeat on every page.
+  pub(crate) repeated: Vec<Repeatable>,
+  /// Whether the tree holds an anchor or a heading, which its pages are summarized for.
+  pub(crate) reads_summary: bool,
+}
+
+impl Prepared {
+  pub(crate) fn new(
+    node: Node,
+    inputs: &TreeInputs<'_>,
+    frame: &PageFrame,
+  ) -> Result<Self, PdfError> {
+    let reads_summary = has_summary_targets(&node);
+    let (root, repeated) = inputs.prepare_root(node, frame)?;
+
+    Ok(Self {
+      root,
+      repeated,
+      reads_summary,
+    })
+  }
+}
+
 /// What the passes that count a document leave for drawing it.
 pub(crate) struct Counts {
   pub(crate) starts: PageStarts,
@@ -69,9 +95,9 @@ pub(crate) struct Counts {
 
 /// The content once the passes that count its pages are done.
 pub(crate) enum Counted {
-  /// Laid out a page at a time by passes that freed each page as they went, so the pages are
-  /// laid out once more as they are drawn.
-  Pages { node: Node, counts: Counts },
+  /// Laid out a page at a time by passes that freed each page as they went, and laid out once
+  /// more from the tree the last pass built as the pages are drawn.
+  Pages { content: Prepared, counts: Counts },
   /// Laid out to its end, because the numbers it holds kept moving.
   Laid(Box<Paginated>),
 }
@@ -89,6 +115,13 @@ impl Counted {
   ) -> Result<Self, PdfError> {
     let links = has_internal_links(&node);
     let collect = Collect::of(&node, links);
+
+    let numbered = collect == Collect::Extents || has_target_counters(&node);
+
+    if !numbered {
+      return Ok(CountingPass::run(node, inputs, frame, settle, collect)?.into_counted(links));
+    }
+
     let mut previous: Vec<String> = Vec::new();
 
     for _ in 0..COUNTER_PASSES {
@@ -98,10 +131,7 @@ impl Counted {
       pass.substitute_counters(&mut node, &mut written);
       if written == previous {
         // The pass was laid out with the numbers it wrote.
-        return Ok(Self::Pages {
-          node,
-          counts: pass.into_counts(links),
-        });
+        return Ok(pass.into_counted(links));
       }
       previous = written;
     }
@@ -145,11 +175,10 @@ impl Collect {
 /// A layout run a page at a time that draws nothing, and keeps the pages and the boxes' extents
 /// the counters are filled from.
 struct CountingPass {
+  content: Prepared,
   starts: PageStarts,
   /// Absent when nothing reads the boxes.
   summary: Option<PageSummary>,
-  /// The source orders of the repeated boxes, which number themselves.
-  repeated: Vec<Range<usize>>,
 }
 
 impl CountingPass {
@@ -160,14 +189,14 @@ impl CountingPass {
     settle: Settle<'_>,
     collect: Collect,
   ) -> Result<Self, PdfError> {
-    let (root, repeated) = inputs.prepare_root(node, frame)?;
+    let content = Prepared::new(node, inputs, frame)?;
     let page_size = frame.page_size();
     let extents = collect == Collect::Extents;
     let mut summary = (collect != Collect::Nothing).then(|| PageSummary::new(extents));
-    let pages = walk_pages(&root, page_size, settle, |stream, index| {
+    let pages = walk_pages(&content.root, page_size, settle, |stream, index| {
       if let Some(summary) = &mut summary {
         summary.absorb(PageSummary::of_page(
-          &root,
+          &content.root,
           stream.view(),
           page_size,
           &stream.pages_of(index),
@@ -178,26 +207,24 @@ impl CountingPass {
     })?;
 
     Ok(Self {
+      content,
       starts: PageStarts::new(pages, frame.window_height),
       summary: summary.map(PageSummary::finished),
-      // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
-      repeated: repeated
-        .iter()
-        .filter_map(Repeatable::source_orders)
-        .map(|orders| orders.start.saturating_sub(1)..orders.end.saturating_sub(1))
-        .collect(),
     })
   }
 
   /// What drawing the pages needs, with the anchors only when a link reads them.
-  fn into_counts(self, links: bool) -> Counts {
-    Counts {
-      starts: self.starts,
-      anchors: self
-        .summary
-        .filter(|_| links)
-        .map(|summary| summary.anchors)
-        .unwrap_or_default(),
+  fn into_counted(self, links: bool) -> Counted {
+    Counted::Pages {
+      content: self.content,
+      counts: Counts {
+        starts: self.starts,
+        anchors: self
+          .summary
+          .filter(|_| links)
+          .map(|summary| summary.anchors)
+          .unwrap_or_default(),
+      },
     }
   }
 
@@ -219,11 +246,19 @@ impl CountingPass {
           next: extent.flow_bottom.as_ref().map(page_at),
         };
 
+        // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
         Some((order.checked_sub(1)?, pages))
       })
       .collect();
+    let repeated: Vec<_> = self
+      .content
+      .repeated
+      .iter()
+      .filter_map(Repeatable::source_orders)
+      .map(|orders| orders.start.saturating_sub(1)..orders.end.saturating_sub(1))
+      .collect();
 
-    FlowCounters::new(&page_of, pages, &self.repeated).substitute(node, None, written);
+    FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
 
     let target_page = |id: &str| summary.anchors.get(id).map(|anchor| page_at(&anchor.top));
 
