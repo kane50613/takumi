@@ -12,6 +12,7 @@ use takumi_core::{
   Fonts,
   geometry::Size,
   layout::node::Node,
+  page_stream::{PageStream, SETTLED_PAGES, Settled},
   resources::font::FontResource,
   scene::{PagedScene, SceneRef},
   style::StyleSheet,
@@ -442,6 +443,31 @@ fn a_long_document_with_a_fixed_box_streams_like_the_whole_document() {
   let pages = assert_streams_like_whole("long document with a fixed box", &source, LONG_PAGE_SIZE);
 
   assert!(pages > 20, "the document has {pages} pages");
+}
+
+#[test]
+fn a_released_page_cannot_be_painted_again() {
+  let fonts = fonts();
+  let node = parse(&format!("<div>{}</div>", pages_of_blocks(6)));
+  let stylesheet = Arc::new(StyleSheet::default());
+  let mut options = options(&fonts, &node, &stylesheet, PAGE_SIZE);
+  let render_context = options.take_render_context();
+  let root = RenderNode::from_node(&render_context, options.node);
+  let mut stream = PageStream::new(&root, PAGE_SIZE, usize::MAX);
+  let mut drawn = 0;
+
+  while drawn < 3 {
+    let Settled { pages, .. } = stream.advance(SETTLED_PAGES).expect("a page lays out");
+
+    for index in pages {
+      stream.window(index).expect("a settled page paints");
+      drawn += 1;
+    }
+  }
+  stream.advance(SETTLED_PAGES).expect("a page lays out");
+
+  assert!(matches!(stream.window(0), Err(Error::PageReleased(0))));
+  assert!(stream.window(drawn).is_ok());
 }
 
 fn wpt_root() -> Option<PathBuf> {

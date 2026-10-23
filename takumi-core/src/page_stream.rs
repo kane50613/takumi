@@ -3,7 +3,7 @@
 use std::ops::Range;
 
 use crate::{
-  Result,
+  Error, Result,
   geometry::Size,
   layout::{layout_view::LayoutView, paged_layout::PagedLayout, tree::RenderNode},
   scene::{PageWindows, SceneRef},
@@ -96,14 +96,15 @@ impl<'r> PageStream<'r> {
     self.windows.pages_of(page)
   }
 
-  /// The scene that paints the settled page `page`.
+  /// The scene that paints the settled page `page`. Fails with [`Error::PageReleased`] when it
+  /// needs a page that was released.
   pub fn window(&self, page: usize) -> Result<SceneRef<'_>> {
-    SceneRef::window(
-      self.root,
-      self.layout.view(),
-      self.page_size,
-      &self.windows.pages_reaching(page),
-      true,
-    )
+    let pages = self.windows.pages_reaching(page);
+
+    if let Some(&released) = pages.iter().find(|&&reached| reached < self.released) {
+      return Err(Error::PageReleased(released));
+    }
+
+    SceneRef::window(self.root, self.layout.view(), self.page_size, &pages, true)
   }
 }
