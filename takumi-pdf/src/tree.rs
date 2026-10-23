@@ -14,8 +14,8 @@ use takumi_core::{
   resources::image::ImageSource,
   scene::{NodePaint, PaintItemKind, Scene},
   style::{
-    ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position, SizingContext,
-    Style, StyleDeclaration, StyleSheet, ZIndex,
+    ComputedStyle, Display, FontFamily, Lang, Length, Position, SizingContext, Style,
+    StyleDeclaration, StyleSheet, ZIndex,
   },
   viewport::Viewport,
 };
@@ -223,11 +223,11 @@ impl PreparedTree {
   }
 }
 
-// The root fills the content box like a browser body.
+// The root fills the content box like a browser body, and keeps the margins of what it holds
+// inside it.
 fn fill_root(node: Node, viewport: Viewport) -> Node {
   let mut style = Style::default()
-    .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+    .with(StyleDeclaration::display(Display::FlowRoot))
     .with(StyleDeclaration::width(Length::Percentage(100.0)));
 
   if viewport.size.height.is_some() {
