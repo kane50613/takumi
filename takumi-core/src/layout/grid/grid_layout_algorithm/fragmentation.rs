@@ -1,9 +1,7 @@
 //! Blink's block fragmentation in
 //! [`GridLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_layout_algorithm.cc)
 //! and its [`GridBreakTokenData`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_break_token_data.h),
-//! for pages alone, without gap decorations. Approximate: an item's descendants that resolve a
-//! percentage block size against it are not tracked, so a row grows to fit its items on a page as
-//! if none did.
+//! for pages alone, without gap decorations.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -37,6 +35,7 @@ pub(super) struct GridItemPlacementData {
   /// The border box's offset after alignment.
   offset: LogicalOffset,
   relative_offset: Point<LayoutUnit>,
+  has_descendant_that_depends_on_percentage_block_size: bool,
 }
 
 /// Blink's `GridBreakTokenData`: the grid laid out in one piece, which each page lays its items out
@@ -197,6 +196,7 @@ impl GridLayoutAlgorithm<'_, '_> {
   /// out from: whether the grid breaks, and so does not place it now.
   pub(super) fn keeps_placement(
     &mut self,
+    item: &GridItemData,
     offset: LogicalOffset,
     relative_offset: Point<LayoutUnit>,
   ) -> bool {
@@ -204,12 +204,18 @@ impl GridLayoutAlgorithm<'_, '_> {
       return false;
     }
 
+    let has_descendant_that_depends_on_percentage_block_size = self
+      .tree
+      .render_node(item.node)
+      .has_descendant_that_depends_on_percentage_block_size();
+
     self
       .fragmentation
       .placement_data
       .push(GridItemPlacementData {
         offset,
         relative_offset,
+        has_descendant_that_depends_on_percentage_block_size,
       });
     true
   }
@@ -353,8 +359,9 @@ impl GridLayoutAlgorithm<'_, '_> {
         placement.offset.block_offset - offset_in_stitched_container + cloned_block_start_decoration
       };
       let fragmentainer_block_offset = self.builder.fragmentainer_offset(true) + child_block_offset;
-      let min_block_size_should_encompass_intrinsic_size =
-        self.min_block_size_should_encompass_intrinsic_size(item);
+      let min_block_size_should_encompass_intrinsic_size = !placement
+        .has_descendant_that_depends_on_percentage_block_size
+        && self.min_block_size_should_encompass_intrinsic_size(item);
       let unavailable_block_size = match token.as_deref() {
         Some(token) if self.is_resuming() && is_break_inside(Some(token)) => {
           self.fragmentation.previous_offset_in_stitched_container

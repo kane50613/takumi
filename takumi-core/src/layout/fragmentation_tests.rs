@@ -1049,3 +1049,65 @@ fn a_grid_row_after_a_forced_break_starts_the_next_page() {
   assert_eq!(page_count, 2);
   assert_eq!(boxes["b"], [placed(1, 0.0, 150.0)]);
 }
+
+#[test]
+fn a_box_knows_whether_a_descendant_resolves_a_percentage_block_size_against_it() {
+  let depends = |child: Node, css: &str| {
+    render(root([child]), css).has_descendant_that_depends_on_percentage_block_size()
+  };
+  let css = ".half { height: 50% } .fixed { height: 20px } .abs { position: absolute } \
+    .rel { position: relative; top: 10% } .inline { display: inline }";
+
+  assert!(depends(block("a", "half"), css));
+  assert!(!depends(block("a", "fixed"), css));
+  // An out-of-flow box resolves its percentages against the final size.
+  assert!(!depends(block("a", "half abs"), css));
+  // A relatively positioned box moves by a percentage of the block size.
+  assert!(depends(block("a", "fixed rel"), css));
+  // An inline box passes on its content's dependence.
+  assert!(depends(
+    Node::container([block("a", "half")]).with_class_name("inline"),
+    css
+  ));
+  // A box of a fixed size keeps its children's percentages to itself.
+  assert!(!depends(
+    Node::container([block("b", "half")]).with_class_name("block fixed"),
+    css
+  ));
+}
+
+#[test]
+fn a_flex_item_with_a_percentage_child_keeps_its_flexed_size_past_a_break() {
+  let item = |first: &str| {
+    Node::container([block("first", first), block("second", "h180 before")])
+      .with_class_name("block grow")
+      .with_id("item")
+  };
+  let css = ".column { display: flex; flex-direction: column; height: 200px } \
+    .grow { flex: 1 1 0 } .h50 { height: 50px } .quarter { height: 25% } .h180 { height: 180px } \
+    .before { break-before: page }";
+  let fragments = |first: &str| {
+    let tree = render(root([flex("column", [item(first)])]), css);
+
+    pages(&tree, 100.0).0["item"].clone()
+  };
+
+  // The item grows to hold the content a forced break pushed down.
+  assert_eq!(
+    fragments("h50"),
+    [
+      placed(0, 0.0, 100.0),
+      placed(1, 0.0, 100.0),
+      placed(2, 0.0, 80.0)
+    ]
+  );
+  // A child that resolves a percentage against it would change with it, so it keeps its size.
+  assert_eq!(
+    fragments("quarter"),
+    [
+      placed(0, 0.0, 100.0),
+      placed(1, 0.0, 100.0),
+      placed(2, 0.0, 0.0)
+    ]
+  );
+}

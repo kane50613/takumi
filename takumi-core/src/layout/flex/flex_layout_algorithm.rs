@@ -1541,7 +1541,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
 
         // A container that breaks lays its items out on each page from where they sit here.
         if self.is_involved_in_block_fragmentation() {
-          Self::keep_item_for_fragmentation(
+          self.keep_item_for_fragmentation(
             flex_line,
             &item,
             item_index,
@@ -2010,6 +2010,7 @@ impl FlexLayoutAlgorithm<'_, '_> {
   }
 
   fn keep_item_for_fragmentation(
+    &self,
     _flex_line: &mut FlexLine,
     _item: &FlexItem,
     _item_index: usize,
