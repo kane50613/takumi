@@ -205,8 +205,6 @@ fn sections(count: usize) -> String {
     .collect()
 }
 
-/// A streamed document frees what each page it painted held, so its live bytes stop growing with the
-/// page count.
 #[test]
 fn a_streamed_document_keeps_live_bytes_flat_across_pages() {
   const EARLY_PAGE: usize = 50;

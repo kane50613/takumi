@@ -1,5 +1,5 @@
-//! What a streamed layout is done with once the pages it sat on are drawn, so a long document's
-//! memory stops growing with its page count.
+//! The layout data a streamed layout frees once the pages it sat on are drawn. The source tree and
+//! the tree of boxes stay for the whole render.
 
 use std::collections::VecDeque;
 
