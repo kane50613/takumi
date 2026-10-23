@@ -5,14 +5,18 @@ use std::{collections::HashMap, rc::Rc, sync::Arc};
 use takumi_core::{
   Fonts,
   context::RenderContext,
-  geometry::{NodeId, Size},
+  geometry::{ComputedLayout, NodeId, Size},
   layout::{
+    layout_view::LayoutView,
     node::{Node, NodeKind},
     tree::RenderNode,
   },
+  paint_property::PropertyTrees,
   painter::OwnContent,
   resources::image::ImageSource,
-  scene::{NodePaint, PagedScene, PaintItemKind, Scene},
+  scene::{
+    FragmentPlacements, NodePaint, PagedScene, PaintItemKind, Scene, SceneRef, StackingContextNode,
+  },
   style::{
     ComputedStyle, Display, FontFamily, Lang, Length, Position, SizingContext, Style,
     StyleDeclaration, StyleSheet, ZIndex,
@@ -197,28 +201,8 @@ impl PreparedTree {
       )
   }
 
-  /// Visits every node paint of the scene, in paint order.
-  pub(crate) fn for_each_paint(&self, mut visit: impl FnMut(&NodePaint)) {
-    fn walk(tree: &PreparedTree, id: usize, visit: &mut impl FnMut(&NodePaint)) {
-      let Some(context) = tree.scene.contexts.get(id) else {
-        return;
-      };
-
-      if let Some(paint) = context.root() {
-        visit(paint);
-      }
-      for bucket in context.in_paint_order() {
-        for item in bucket {
-          match &item.kind {
-            PaintItemKind::Node(paint) => visit(paint),
-            PaintItemKind::Context(child) => walk(tree, *child, visit),
-            PaintItemKind::CollapsedBorders(_) => {}
-          }
-        }
-      }
-    }
-
-    walk(self, 0, &mut visit);
+  pub(crate) fn view(&self) -> SceneView<'_> {
+    SceneView::of_scene(&self.scene)
   }
 
   pub(crate) fn emitter<'a>(
@@ -228,8 +212,88 @@ impl PreparedTree {
     chunks: Option<&'a SceneChunks<'a>>,
     tagged: bool,
   ) -> Emitter<'a> {
+    self.view().emitter(state, inline, chunks, tagged)
+  }
+}
+
+/// A scene as the emitter and the collectors read it: the scene of a whole tree, or a window of a
+/// paged layout.
+#[derive(Clone, Copy)]
+pub(crate) struct SceneView<'a> {
+  pub(crate) root: &'a RenderNode,
+  pub(crate) results: LayoutView<'a>,
+  pub(crate) contexts: &'a [StackingContextNode],
+  pub(crate) properties: &'a PropertyTrees,
+  /// The boxes it paints more than one fragment of, none for a scene of one fragment of each.
+  fragments: Option<&'a FragmentPlacements>,
+}
+
+impl<'a> SceneView<'a> {
+  pub(crate) fn of_scene(scene: &'a Scene) -> Self {
+    Self {
+      root: &scene.root,
+      results: scene.results.view(),
+      contexts: &scene.contexts,
+      properties: &scene.properties,
+      fragments: scene.fragments.as_ref(),
+    }
+  }
+
+  pub(crate) fn of_window(scene: &'a SceneRef<'_>) -> Self {
+    Self {
+      root: scene.root,
+      results: scene.results,
+      contexts: &scene.contexts,
+      properties: &scene.properties,
+      fragments: Some(&scene.fragments),
+    }
+  }
+
+  /// The layout of the fragment `paint` paints, with its box set to paint it.
+  pub(crate) fn enter(&self, paint: &NodePaint) -> takumi_core::Result<ComputedLayout> {
+    let layout = self
+      .results
+      .fragment_layout(paint.node_id, paint.fragment_index)?;
+
+    if let Some(fragments) = self.fragments {
+      fragments.enter(self.root, paint, layout.location);
+    }
+    Ok(layout)
+  }
+
+  /// Visits every node paint of the scene, in paint order.
+  pub(crate) fn for_each_paint(self, mut visit: impl FnMut(&NodePaint)) {
+    fn walk(view: SceneView<'_>, id: usize, visit: &mut impl FnMut(&NodePaint)) {
+      let Some(context) = view.contexts.get(id) else {
+        return;
+      };
+
+      for paint in context.roots() {
+        visit(paint);
+      }
+      for bucket in context.in_paint_order() {
+        for item in bucket {
+          match &item.kind {
+            PaintItemKind::Node(paint) => visit(paint),
+            PaintItemKind::Context(child) => walk(view, *child, visit),
+            PaintItemKind::CollapsedBorders(_) => {}
+          }
+        }
+      }
+    }
+
+    walk(self, 0, &mut visit);
+  }
+
+  pub(crate) fn emitter(
+    self,
+    state: &'a DocumentState<'a>,
+    inline: Option<&'a InlineCache<'a>>,
+    chunks: Option<&'a SceneChunks<'a>>,
+    tagged: bool,
+  ) -> Emitter<'a> {
     Emitter {
-      scene: &self.scene,
+      scene: self,
       document: state,
       inline,
       chunks,

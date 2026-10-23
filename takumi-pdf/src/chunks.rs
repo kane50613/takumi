@@ -6,10 +6,10 @@ use takumi_core::{
   layout::tree::RenderNode,
   paint_chunk::{HeightIndex, PaintChunk},
   painter::OwnContent,
-  scene::{NodePaint, Scene},
+  scene::NodePaint,
 };
 
-use crate::window::Window;
+use crate::{tree::SceneView, window::Window};
 
 /// One chunk with the box it paints and what that box paints inside itself.
 pub(crate) struct ResolvedChunk<'s> {
@@ -26,9 +26,9 @@ pub(crate) struct SceneChunks<'s> {
 }
 
 impl<'s> SceneChunks<'s> {
-  pub(crate) fn new(scene: &'s Scene) -> Self {
-    let chunks = PaintChunk::in_paint_order(&scene.contexts);
-    let owners = PaintChunk::effect_owners(&chunks, &scene.properties);
+  pub(crate) fn new(scene: SceneView<'s>) -> Self {
+    let chunks = PaintChunk::in_paint_order(scene.contexts);
+    let owners = PaintChunk::effect_owners(&chunks, scene.properties);
     let chunks = chunks
       .into_iter()
       .map(|chunk| {

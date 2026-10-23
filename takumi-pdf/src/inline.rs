@@ -12,7 +12,7 @@ use takumi_core::{
   scene::NodePaint,
 };
 
-use crate::{options::PdfError, tree::PreparedTree};
+use crate::{options::PdfError, tree::SceneView};
 
 /// A box and which of its fragments.
 type FragmentKey = (NodeId, usize);
@@ -41,18 +41,18 @@ pub(crate) struct TextBox<'t> {
 }
 
 impl<'t> TextBox<'t> {
-  pub(crate) fn collect(tree: &'t PreparedTree) -> Vec<Self> {
+  pub(crate) fn collect(scene: SceneView<'t>) -> Vec<Self> {
     let mut boxes = Vec::new();
 
-    tree.for_each_paint(|paint| Self::collect_paint(tree, paint, &mut boxes));
+    scene.for_each_paint(|paint| Self::collect_paint(scene, paint, &mut boxes));
     boxes
   }
 
-  fn collect_paint(tree: &'t PreparedTree, paint: &NodePaint, boxes: &mut Vec<Self>) {
-    let Some(node) = tree.scene.root.node_at_path(&paint.path) else {
+  fn collect_paint(scene: SceneView<'t>, paint: &NodePaint, boxes: &mut Vec<Self>) {
+    let Some(node) = scene.root.node_at_path(&paint.path) else {
       return;
     };
-    let Ok(layout) = tree.scene.enter(paint) else {
+    let Ok(layout) = scene.enter(paint) else {
       return;
     };
     if matches!(OwnContent::of(node), OwnContent::Inline(_)) {

@@ -1,14 +1,14 @@
 //! The content laid out across pages, which takumi-core's block fragmentation breaks, and the
 //! page counters filled in from where it put each box.
 
-use takumi_core::layout::node::Node;
+use takumi_core::{geometry::Size, layout::node::Node};
 
 use crate::{
   bands::Repeatable,
   counters::{
     BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
-  interactive::Interactive,
+  interactive::{LinkTarget, PageSummary, collect_links},
   options::PdfError,
   page::PageFrame,
   tree::{PreparedTree, TreeInputs},
@@ -32,7 +32,8 @@ pub(crate) struct Paginated {
   pub(crate) content: PreparedTree,
   pub(crate) repeated: Vec<Repeatable>,
   pub(crate) starts: Vec<f32>,
-  pub(crate) interactive: Interactive,
+  pub(crate) links: Vec<LinkTarget>,
+  pub(crate) summary: PageSummary,
   window: f32,
 }
 
@@ -88,17 +89,23 @@ impl Paginated {
     let (content, repeated, page_count) = inputs.prepare_paged(node, frame)?;
     let window = frame.window_height;
     let starts = (0..page_count).map(|page| page as f32 * window).collect();
-    let interactive = if counts {
-      Interactive::collect_with_extents(&content)
-    } else {
-      Interactive::collect(&content)
-    };
+    let summary = PageSummary::of_pages(
+      &content.scene.root,
+      content.scene.results.view(),
+      Size {
+        width: frame.content_width,
+        height: window,
+      },
+      page_count,
+      counts,
+    )?;
 
     Ok(Self {
+      links: collect_links(content.view()),
       content,
       repeated,
       starts,
-      interactive,
+      summary,
       window,
     })
   }
@@ -110,7 +117,7 @@ impl Paginated {
     let page_at = |top: &f32| self.page_index(*top) + 1;
     // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
     let page_of = self
-      .interactive
+      .summary
       .extents
       .iter()
       .flatten()
@@ -132,7 +139,7 @@ impl Paginated {
 
     FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
 
-    let anchors = &self.interactive.anchors;
+    let anchors = &self.summary.anchors;
     let target_page = |id: &str| anchors.get(id).map(|anchor| page_at(&anchor.top));
 
     substitute_target_counters(node, None, &target_page, written);
@@ -156,5 +163,186 @@ impl Paginated {
         start,
         end: start + self.window,
       })
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{fs, path::Path, rc::Rc};
+
+  use takumi_core::{Fonts, resources::font::FontResource};
+  use takumi_html::{FromHtmlOptions, from_html};
+
+  use super::*;
+  use crate::{
+    interactive::Interactive,
+    options::{PageMargins, PageOptions},
+    page::{PageFrame, band_viewport},
+  };
+
+  fn fonts() -> Fonts {
+    let mut fonts = Fonts::default();
+
+    for path in [
+      "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+      "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+    ] {
+      let data =
+        fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+
+      fonts
+        .register(FontResource::new(data))
+        .expect("load test font");
+    }
+    fonts
+  }
+
+  fn fixture(name: &str) -> String {
+    fs::read_to_string(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures")
+        .join(name),
+    )
+    .expect("read html fixture")
+  }
+
+  /// Documents with the targets a summary reads in the places a page's root fragment shares with
+  /// the pages around it.
+  fn synthetic_documents() -> Vec<(&'static str, String)> {
+    let rows = |count: usize| {
+      (1..=count)
+        .map(|row| format!("<tr><td id=\"row-{row}\">Row {row}</td><td>x</td></tr>"))
+        .collect::<String>()
+    };
+    let lines = |count: usize| {
+      (1..=count)
+        .map(|line| format!("<div>Line {line}</div>"))
+        .collect::<String>()
+    };
+
+    vec![
+      (
+        "headings and ids",
+        format!(
+          r#"<div style="display: flex; flex-direction: column; font-size: 14px;">
+            <h1 id="top">Top <span>nested</span></h1>{}
+            <h2 id="two">Two</h2>{}
+            <h3><b>Bold</b> three</h3>{}
+            <h2 id="two">A second element with the same id</h2>{}
+          </div>"#,
+          lines(12),
+          lines(12),
+          lines(12),
+          lines(12),
+        ),
+      ),
+      (
+        "a table with a repeated header",
+        format!(
+          r#"<table style="width: 100%; font-size: 14px;"><thead><tr><th id="head">Name</th><th>Value</th></tr></thead><tbody>{}</tbody></table>"#,
+          rows(60)
+        ),
+      ),
+      (
+        "positioned boxes",
+        format!(
+          r#"<div style="position: relative; display: flex; flex-direction: column; font-size: 14px;">
+            {}
+            <div id="held" style="position: absolute; bottom: 0; left: 0; height: 30px;">Held</div>
+            <div id="shifted" style="position: relative; top: 30px;"><h2>Shifted</h2></div>
+            {}
+          </div>"#,
+          lines(30),
+          lines(30),
+        ),
+      ),
+      (
+        "a positioned box in a flex container",
+        format!(
+          r#"<div style="display: flex; flex-direction: column; font-size: 14px;">
+            <div style="position: relative; display: flex; flex-direction: column;">
+              {}
+              <div id="oof" style="position: absolute; top: 20px; left: 0;"><h2>Out of flow</h2>{}</div>
+            </div>
+            {}
+          </div>"#,
+          lines(25),
+          lines(25),
+          lines(10),
+        ),
+      ),
+      (
+        "a transform",
+        format!(
+          r#"<div style="font-size: 14px;">{}<h2 id="moved" style="transform: translateY(-300px);">Moved</h2>{}</div>"#,
+          lines(20),
+          lines(20),
+        ),
+      ),
+    ]
+  }
+
+  /// A paged document's page summaries add up to the summary a scene of every page gives.
+  #[test]
+  fn page_summaries_add_up_to_the_summary_of_the_whole_scene() {
+    let fonts = fonts();
+    let inputs = TreeInputs {
+      fonts: &fonts,
+      stylesheet: Default::default(),
+      images: Rc::default(),
+      font_families: None,
+      lang: None,
+    };
+    let mut documents = synthetic_documents();
+
+    for name in [
+      "certificate.html",
+      "invoice-footer.html",
+      "invoice.html",
+      "report.html",
+    ] {
+      documents.push((name, fixture(name)));
+    }
+
+    let mut with_targets_across_pages = 0;
+
+    for (name, source) in documents {
+      let node = from_html(&source, FromHtmlOptions::default()).expect("parse the document");
+
+      for (width, height) in [
+        (523.0, 770.0),
+        (400.0, 300.0),
+        (300.0, 120.0),
+        (250.0, 90.0),
+      ] {
+        let page = PageOptions {
+          width,
+          height,
+          margin: PageMargins::uniform(12.0),
+        };
+        let frame = PageFrame::resolve(&page, band_viewport(&page), None, None)
+          .expect("the page has an area");
+        let paginated = Paginated::build_once(node.clone(), &inputs, &frame, true)
+          .unwrap_or_else(|_| panic!("{name} lays out on {width}x{height}"));
+        let whole = Interactive::collect_with_extents(&paginated.content).summary;
+
+        assert_eq!(
+          paginated.summary,
+          whole,
+          "{name} on {width}x{height} pages ({} pages)",
+          paginated.starts.len()
+        );
+        if paginated.starts.len() > 1
+          && !paginated.summary.anchors.is_empty()
+          && !paginated.summary.headings.is_empty()
+        {
+          with_targets_across_pages += 1;
+        }
+      }
+    }
+    assert!(
+      with_targets_across_pages >= 12,
+      "only {with_targets_across_pages} layouts had targets on several pages"
+    );
   }
 }

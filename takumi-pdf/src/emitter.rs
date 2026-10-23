@@ -30,7 +30,7 @@ use takumi_core::{
     PendingOutline, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip,
     UNBOUNDED, paint_collapsed_borders,
   },
-  scene::{NodePaint, Scene},
+  scene::NodePaint,
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule as CoreFillRule,
@@ -71,7 +71,7 @@ use crate::{
   },
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
-  tree::draws,
+  tree::{SceneView, draws},
   window::Window,
 };
 #[cfg(feature = "images")]
@@ -84,7 +84,7 @@ type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 type FontMap = HashMap<FontKey, Font>;
 
 pub(crate) struct Emitter<'a> {
-  pub(crate) scene: &'a Scene,
+  pub(crate) scene: SceneView<'a>,
   pub(crate) document: &'a DocumentState<'a>,
   /// The content tree's inline layouts; band trees build theirs on the fly.
   pub(crate) inline: Option<&'a InlineCache<'a>>,
@@ -1225,7 +1225,7 @@ impl Emitter<'_> {
 
   /// The nearest list item holding the box at `owner_path`, whose `Lbl` holds its marker.
   fn marker_tag_target<'p>(&self, owner_path: &'p [usize]) -> &'p [usize] {
-    let mut current: &RenderNode = &self.scene.root;
+    let mut current: &RenderNode = self.scene.root;
     let mut length = owner_path.len();
 
     for (depth, index) in owner_path.iter().enumerate() {
@@ -1513,11 +1513,11 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
       ChunkPart::Decorations => {
         let scene = emitter.scene;
 
-        TextClip::of(&scene.root, scene.results.view(), chunk.node, &node.context)
+        TextClip::of(scene.root, scene.results, chunk.node, &node.context)
           .and_then(|text_clip| {
             let table = TableDecorations::of(
-              &scene.root,
-              scene.results.view(),
+              scene.root,
+              scene.results,
               &chunk.node.path,
               chunk.node.node_id,
               chunk.node.fragment_index,
@@ -1536,7 +1536,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
           .map(|(top, bottom)| (top - frame.origin.y, bottom - frame.origin.y));
 
         paint_collapsed_borders(
-          emitter.scene.results.view(),
+          emitter.scene.results,
           chunk.node.node_id,
           chunk.node.fragment_index,
           chunk.node.paint_offset,

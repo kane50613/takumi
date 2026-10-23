@@ -1469,6 +1469,12 @@ impl PageWindows {
     self.with_needs(reaching)
   }
 
+  /// The pages, in order, whose root fragments a scene needs to paint the root fragment of `page`
+  /// and what hoisted boxes belong to it.
+  pub fn pages_of(&self, page: usize) -> Vec<usize> {
+    self.with_needs([page])
+  }
+
   /// `pages` and every page their scenes need, in order.
   fn with_needs(&self, pages: impl IntoIterator<Item = usize>) -> Vec<usize> {
     let mut included = BTreeSet::new();

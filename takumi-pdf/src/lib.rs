@@ -115,7 +115,7 @@ use crate::{
   emitter::DocumentState,
   glyph::Uncovered,
   inline::{InlineCache, TextBox},
-  interactive::{Interactive, add_link_annotations, xyz_destination},
+  interactive::{Interactive, PageSummary, add_link_annotations, xyz_destination},
   krilla::{
     Document, SerializeSettings,
     configure::ConfigurationBuilder,
@@ -218,11 +218,11 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   };
 
   if (options.outline || options.tagged.requires_outline())
-    && !rendered.interactive().headings.is_empty()
+    && !rendered.summary().headings.is_empty()
   {
     pdf.set_outline(
       rendered
-        .interactive()
+        .summary()
         .outline(|heading| rendered.destination(heading.top, &heading.path)),
     );
   }
@@ -230,7 +230,7 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     pdf.set_tag_tree(collector.borrow_mut().build_tree(
       rendered.root(),
       state.lang,
-      &rendered.interactive().destination_targets(),
+      &rendered.summary().destination_targets(),
     ));
   }
   // The layout and scene are done with; serializing the fonts and objects needs neither.
@@ -318,10 +318,10 @@ impl Rendered {
     }
   }
 
-  fn interactive(&self) -> &Interactive {
+  fn summary(&self) -> &PageSummary {
     match self {
-      Self::Paged(plan) => &plan.paginated.interactive,
-      Self::Single(page) => &page.interactive,
+      Self::Paged(plan) => &plan.paginated.summary,
+      Self::Single(page) => &page.interactive.summary,
     }
   }
 
@@ -347,7 +347,7 @@ impl SinglePage {
       content.scene.size.height * PT_PER_PX,
     )
     .ok_or(PdfError::InvalidPageSize)?;
-    let text_boxes = TextBox::collect(&content);
+    let text_boxes = TextBox::collect(content.view());
     let inline = InlineCache::new(&text_boxes);
     let mut page = pdf.start_page_with(PageSettings::new(page_size));
     let mut surface = page.surface();
@@ -375,6 +375,7 @@ impl SinglePage {
       |id| {
         rendered
           .interactive
+          .summary
           .anchors
           .get(id)
           .map(|anchor| rendered.destination(anchor.top, &anchor.path))

@@ -247,9 +247,9 @@ impl PagePlan {
     state: &DocumentState<'_>,
     background: Option<Color>,
   ) -> Result<(), PdfError> {
-    let text_boxes = TextBox::collect(&self.paginated.content);
+    let text_boxes = TextBox::collect(self.paginated.content.view());
     let inline = InlineCache::new(&text_boxes);
-    let chunks = SceneChunks::new(&self.paginated.content.scene);
+    let chunks = SceneChunks::new(self.paginated.content.view());
     let composer = PageComposer {
       plan: self,
       inputs,
@@ -273,7 +273,7 @@ impl PagePlan {
   /// Where `href="#id"` lands, or `None` when nothing carries that id or its
   /// page is dropped.
   pub(crate) fn anchor_destination(&self, id: &str) -> Option<XyzDestination> {
-    let anchor = self.paginated.interactive.anchors.get(id)?;
+    let anchor = self.paginated.summary.anchors.get(id)?;
 
     self.destination(anchor.top, &anchor.path)
   }
@@ -334,7 +334,7 @@ impl PageComposer<'_, '_> {
 
     add_link_annotations(
       &mut pdf_page,
-      &paginated.interactive.links,
+      &paginated.links,
       (slice.start, slice.end),
       CorePoint {
         x: frame.margin.left,
