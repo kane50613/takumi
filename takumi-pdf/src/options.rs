@@ -303,38 +303,62 @@ impl Display for PageRange {
 
 /// Which of the document's pages the render keeps, each mapped to its index in
 /// the output.
-pub(crate) struct PageSelection(Vec<Option<usize>>);
+pub(crate) struct PageSelection {
+  ranges: Option<Vec<PageRange>>,
+  emitted: Vec<Option<usize>>,
+  kept: usize,
+}
 
 impl PageSelection {
-  /// Resolves the ranges against the page count. No ranges keeps every page;
-  /// ranges that keep none are an error, like Chromium's "Page range exceeds
-  /// page count".
+  /// A selection of no pages yet, which [`Self::push_page`] adds the document's pages to in
+  /// order. No ranges keeps every page.
+  pub(crate) fn new(ranges: Option<&[PageRange]>) -> Self {
+    Self {
+      ranges: ranges.map(<[PageRange]>::to_vec),
+      emitted: Vec::new(),
+      kept: 0,
+    }
+  }
+
+  /// Resolves the ranges against the page count. Ranges that keep no page are an
+  /// error, like Chromium's "Page range exceeds page count".
   pub(crate) fn resolve(ranges: Option<&[PageRange]>, pages: usize) -> Result<Self, PdfError> {
-    let Some(ranges) = ranges else {
-      return Ok(Self((0..pages).map(Some).collect()));
+    let mut selection = Self::new(ranges);
+
+    for _ in 0..pages {
+      selection.push_page();
+    }
+    selection.finish()?;
+    Ok(selection)
+  }
+
+  /// Adds the next page of the document, and returns its index in the output when it is kept.
+  pub(crate) fn push_page(&mut self) -> Option<usize> {
+    let page = self.emitted.len() + 1;
+    let keeps = self
+      .ranges
+      .as_ref()
+      .is_none_or(|ranges| ranges.iter().any(|range| range.contains(page)));
+    let emitted = keeps.then_some(self.kept);
+
+    self.kept += usize::from(keeps);
+    self.emitted.push(emitted);
+    emitted
+  }
+
+  /// Checks the ranges once every page is added.
+  pub(crate) fn finish(&self) -> Result<(), PdfError> {
+    let Some(ranges) = &self.ranges else {
+      return Ok(());
     };
 
     for range in ranges {
       range.validate()?;
     }
-    let mut kept = 0;
-    let map = (0..pages)
-      .map(|index| {
-        ranges
-          .iter()
-          .any(|range| range.contains(index + 1))
-          .then(|| {
-            kept += 1;
-
-            kept - 1
-          })
-      })
-      .collect();
-
-    if kept == 0 {
-      return Err(PdfError::PageRangesOutOfBounds(pages));
+    if self.kept == 0 {
+      return Err(PdfError::PageRangesOutOfBounds(self.emitted.len()));
     }
-    Ok(Self(map))
+    Ok(())
   }
 
   pub(crate) fn keeps(&self, index: usize) -> bool {
@@ -343,7 +367,7 @@ impl PageSelection {
 
   /// The output index of source page `index`, or `None` when it is dropped.
   pub(crate) fn emitted(&self, index: usize) -> Option<usize> {
-    self.0.get(index).copied().flatten()
+    self.emitted.get(index).copied().flatten()
   }
 }
 

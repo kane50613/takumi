@@ -232,6 +232,11 @@ impl PagedContent {
   pub(crate) fn layout(&self) -> LayoutView<'_> {
     self.results.view()
   }
+
+  /// The tree and its layout, apart.
+  pub(crate) fn into_parts(self) -> (RenderNode, LayoutResults) {
+    (self.root, self.results)
+  }
 }
 
 /// A scene as the emitter and the collectors read it: the scene of a whole tree, or a window of a

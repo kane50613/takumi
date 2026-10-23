@@ -33,9 +33,9 @@ pub(crate) struct Paginated {
   /// Which of the content's root fragments paint on each page.
   pub(crate) windows: PageWindows,
   pub(crate) repeated: Vec<Repeatable>,
-  pub(crate) starts: Vec<f32>,
-  pub(crate) summary: PageSummary,
-  window: f32,
+  pub(crate) starts: PageStarts,
+  /// Present when page counters read it.
+  summary: Option<PageSummary>,
 }
 
 /// One page's window into the content.
@@ -45,6 +45,56 @@ pub(crate) struct PageSlice {
   pub(crate) start: f32,
   /// Where the next page begins.
   pub(crate) end: f32,
+}
+
+impl PageSlice {
+  /// The window of page `index` when each page is `window` tall.
+  pub(crate) fn of(index: usize, window: f32) -> Self {
+    let start = index as f32 * window;
+
+    Self {
+      index,
+      start,
+      end: start + window,
+    }
+  }
+}
+
+/// Where each page of the content begins.
+pub(crate) struct PageStarts {
+  starts: Vec<f32>,
+  window: f32,
+}
+
+impl PageStarts {
+  pub(crate) fn new(pages: usize, window: f32) -> Self {
+    Self {
+      starts: (0..pages)
+        .map(|page| PageSlice::of(page, window).start)
+        .collect(),
+      window,
+    }
+  }
+
+  pub(crate) fn len(&self) -> usize {
+    self.starts.len()
+  }
+
+  pub(crate) fn start(&self, index: usize) -> f32 {
+    self.starts[index]
+  }
+
+  /// 0-based index of the page `top` falls on.
+  pub(crate) fn index_of(&self, top: f32) -> usize {
+    self
+      .starts
+      .partition_point(|start| *start <= top)
+      .saturating_sub(1)
+  }
+
+  pub(crate) fn slices(&self) -> impl Iterator<Item = PageSlice> {
+    (0..self.starts.len()).map(|index| PageSlice::of(index, self.window))
+  }
 }
 
 impl Paginated {
@@ -57,41 +107,35 @@ impl Paginated {
     frame: &PageFrame,
   ) -> Result<Self, PdfError> {
     if !has_page_counters(&node) && !has_target_counters(&node) {
-      return Self::build_once(node, inputs, frame, false);
+      return Self::lay_out(node, inputs, frame);
     }
     let mut previous: Vec<String> = Vec::new();
     let mut passes = 0;
 
     loop {
-      let paginated = Self::build_once(node.clone(), inputs, frame, true)?;
+      let mut paginated = Self::lay_out(node.clone(), inputs, frame)?;
+      let summary = paginated.summarize(true)?;
       let mut written = Vec::new();
 
       passes += 1;
-      paginated.substitute_counters(&mut node, &mut written);
+      paginated.substitute_counters(&summary, &mut node, &mut written);
       if written == previous {
+        paginated.summary = Some(summary);
         return Ok(paginated);
       }
       previous = written;
       // The numbers are still moving, and this was the last pass allowed. They
       // are laid out once more so the page shows the numbers it was laid out with.
       if passes == COUNTER_PASSES {
-        return Self::build_once(node, inputs, frame, false);
+        return Self::lay_out(node, inputs, frame);
       }
     }
   }
 
-  /// One layout of `node`, with every box's extent when `counts` says page counters will read them.
-  fn build_once(
-    node: Node,
-    inputs: &TreeInputs<'_>,
-    frame: &PageFrame,
-    counts: bool,
-  ) -> Result<Self, PdfError> {
+  /// One layout of `node`.
+  fn lay_out(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
     let (content, repeated) = inputs.prepare_paged(node, frame)?;
-    let window = frame.window_height;
-    let starts = (0..content.page_count)
-      .map(|page| page as f32 * window)
-      .collect();
+    let starts = PageStarts::new(content.page_count, frame.window_height);
     let mut windows = PageWindows::new(content.page_size);
 
     windows.refresh(
@@ -101,32 +145,43 @@ impl Paginated {
       content.page_count,
     )?;
 
-    let summary = PageSummary::of_pages(
-      &content.root,
-      content.layout(),
-      content.page_size,
-      &windows,
-      counts,
-    )?;
-
     Ok(Self {
       content,
       windows,
       repeated,
       starts,
-      summary,
-      window,
+      summary: None,
     })
+  }
+
+  /// What the pages' interactive targets and, when `extents` says so, box extents sum up to.
+  fn summarize(&self, extents: bool) -> Result<PageSummary, PdfError> {
+    let content = &self.content;
+
+    PageSummary::of_pages(
+      &content.root,
+      content.layout(),
+      content.page_size,
+      &self.windows,
+      extents,
+    )
+  }
+
+  /// The summary of the pages, taken from the pass that counted them or made now.
+  pub(crate) fn summary(&mut self) -> Result<PageSummary, PdfError> {
+    match self.summary.take() {
+      Some(summary) => Ok(summary),
+      None => self.summarize(false),
+    }
   }
 
   /// Fills both kinds of counter from this laid-out pass, collecting what it
   /// wrote so the caller can see whether the numbers moved.
-  fn substitute_counters(&self, node: &mut Node, written: &mut Vec<String>) {
+  fn substitute_counters(&self, summary: &PageSummary, node: &mut Node, written: &mut Vec<String>) {
     let pages = self.starts.len();
-    let page_at = |top: &f32| self.page_index(*top) + 1;
+    let page_at = |top: &f32| self.starts.index_of(*top) + 1;
     // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
-    let page_of = self
-      .summary
+    let page_of = summary
       .extents
       .iter()
       .flatten()
@@ -148,38 +203,17 @@ impl Paginated {
 
     FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
 
-    let anchors = &self.summary.anchors;
-    let target_page = |id: &str| anchors.get(id).map(|anchor| page_at(&anchor.top));
+    let target_page = |id: &str| summary.anchors.get(id).map(|anchor| page_at(&anchor.top));
 
     substitute_target_counters(node, None, &target_page, written);
-  }
-
-  /// 0-based index of the page `top` falls on.
-  pub(crate) fn page_index(&self, top: f32) -> usize {
-    self
-      .starts
-      .partition_point(|start| *start <= top)
-      .saturating_sub(1)
-  }
-
-  pub(crate) fn pages(&self) -> impl Iterator<Item = PageSlice> + '_ {
-    self
-      .starts
-      .iter()
-      .enumerate()
-      .map(|(index, &start)| PageSlice {
-        index,
-        start,
-        end: start + self.window,
-      })
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::{fs, path::Path, rc::Rc};
+  use std::rc::Rc;
 
-  use takumi_core::{Fonts, resources::font::FontResource, scene::PagedScene};
+  use takumi_core::scene::PagedScene;
   use takumi_html::{FromHtmlOptions, from_html};
 
   use super::*;
@@ -187,34 +221,9 @@ mod tests {
     interactive::Interactive,
     options::{PageMargins, PageOptions},
     page::{PageFrame, band_viewport},
+    test_support::{fixture, fonts},
     tree::PreparedTree,
   };
-
-  fn fonts() -> Fonts {
-    let mut fonts = Fonts::default();
-
-    for path in [
-      "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
-      "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
-    ] {
-      let data =
-        fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
-
-      fonts
-        .register(FontResource::new(data))
-        .expect("load test font");
-    }
-    fonts
-  }
-
-  fn fixture(name: &str) -> String {
-    fs::read_to_string(
-      Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name),
-    )
-    .expect("read html fixture")
-  }
 
   /// Documents with the targets a summary reads in the places a page's root fragment shares with
   /// the pages around it.
@@ -344,19 +353,18 @@ mod tests {
         };
         let frame = PageFrame::resolve(&page, band_viewport(&page), None, None)
           .expect("the page has an area");
-        let paginated = Paginated::build_once(node.clone(), &inputs, &frame, true)
+        let paginated = Paginated::lay_out(node.clone(), &inputs, &frame)
           .unwrap_or_else(|_| panic!("{name} lays out on {width}x{height}"));
+        let summary = paginated.summarize(true).expect("the pages summarize");
         let whole = whole_scene_summary(node.clone(), &inputs, &frame);
 
         assert_eq!(
-          paginated.summary,
+          summary,
           whole,
           "{name} on {width}x{height} pages ({} pages)",
           paginated.starts.len()
         );
-        if paginated.starts.len() > 1
-          && !paginated.summary.anchors.is_empty()
-          && !paginated.summary.headings.is_empty()
+        if paginated.starts.len() > 1 && !summary.anchors.is_empty() && !summary.headings.is_empty()
         {
           with_targets_across_pages += 1;
         }

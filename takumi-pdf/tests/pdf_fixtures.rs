@@ -6421,13 +6421,12 @@ fn stream_content_counters() {
   assert_eq!(page_count(&pdf), 4);
 }
 
-/// Pages 1, 3 and 5 of five are kept, so page 2 and 4 are dropped between kept ones, while the
-/// outline and links still read the whole document.
+/// Pages 1, 3 and 5 of five are kept, so pages 2 and 4 are dropped between kept ones, while the
+/// outline still reads the headings on the dropped pages to nest the ones it keeps.
 #[test]
 fn stream_page_ranges_drop_middle_pages() {
   let source = stream_document(
-    r##"<a href="#e" style="display: flex;">To the end</a>
-      <a href="#b" style="display: flex;">To a dropped page</a>"##,
+    r#"<h1 id="top" style="font-size: 22px; margin: 0;">Report</h1>"#,
     &[
       ("b", "Beta", 4),
       ("c", "Gamma", 4),
@@ -6452,13 +6451,13 @@ fn stream_page_ranges_drop_middle_pages() {
   assert_eq!(page_count(&pdf), 3);
 }
 
-/// A tagged document with an outline and links over several pages.
+/// A tagged document with an outline and links out of the document over several pages.
 #[test]
 fn stream_tagged_outline() {
   let source = stream_document(
     r##"<h1 style="font-size: 22px; margin: 0;">Report</h1>
       <a href="https://example.com/report" style="display: flex;">Online</a>
-      <a href="#two" style="display: flex;">Skip to two</a>"##,
+      <a href="mailto:report@example.com" style="display: flex;">Write to us</a>"##,
     &[("one", "One", 6), ("two", "Two", 6), ("three", "Three", 6)],
     r#"<a href="https://example.com/end" style="display: flex;">The end</a>"#,
   );

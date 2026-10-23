@@ -15,7 +15,7 @@
 //! fragmentation, as Chromium lays out a printed document. Boxes, lines, flex and grid items,
 //! and table rows break across pages. Content that cannot break, such as an image, moves to the
 //! next page, and runs on over the pages after it when it is taller than one. Each page paints
-//! its area of one scene that stacks every page's fragments.
+//! from the scene of the pages that reach it, as soon as no page still to lay out can.
 //!
 //! Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and the
 //! `widows` and `orphans` minimums, which default to 2 as in Chromium. A table header or footer
@@ -69,9 +69,13 @@ mod paint;
 #[cfg(feature = "images")]
 mod raster;
 mod shadow;
+#[cfg(test)]
+mod streaming_tests;
 #[cfg(all(feature = "svg", feature = "images"))]
 mod svg;
 mod tags;
+#[cfg(test)]
+mod test_support;
 mod tree;
 mod window;
 
@@ -124,7 +128,7 @@ use crate::{
     page::PageSettings,
   },
   options::{PT_PER_PX, PageSelection},
-  page::{PageBands, PagePlan, band_viewport},
+  page::{PageBands, PageDrawing, PagePlan, Settle, band_viewport},
   paint::paint_page_background,
   tree::{PreparedTree, TreeInputs},
 };
@@ -165,7 +169,15 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
 
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged
 /// when [`PdfOptions::page`] is set.
-pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
+pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
+  // The method itself does not satisfy the bound, as its layout lifetime is early-bound.
+  #[allow(clippy::redundant_closure_for_method_calls)]
+  render_settling(options, &|layout, reach| layout.settled_pages(reach))
+}
+
+/// [`render`] with `settle`, given the layout and the tree's reach back, saying how many of the
+/// first pages of a document that streams are safe to draw.
+fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Vec<u8>, PdfError> {
   let attachments = take(&mut options.attachments);
   let mut pdf = open_document(&options, attachments)?;
   let tagged = options.writes_structure();
@@ -192,9 +204,14 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         footer: options.pages.footer_band(options.footer.as_ref()),
         page_ranges: options.page_ranges.as_deref(),
       };
-      let plan = PagePlan::solve(&inputs, page, bands, options.node, structural)?;
+      let plan = PageDrawing {
+        pdf: &mut pdf,
+        inputs: &inputs,
+        state: &state,
+        background: options.background_color,
+      }
+      .render(page, bands, options.node, structural, settle)?;
 
-      plan.compose(&mut pdf, &inputs, &state, options.background_color)?;
       Rendered::Paged(Box::new(plan))
     }
     None => {
@@ -313,14 +330,14 @@ struct SinglePage {
 impl Rendered {
   fn root(&self) -> &RenderNode {
     match self {
-      Self::Paged(plan) => &plan.paginated.content.root,
+      Self::Paged(plan) => &plan.root,
       Self::Single(page) => &page.content.scene.root,
     }
   }
 
   fn summary(&self) -> &PageSummary {
     match self {
-      Self::Paged(plan) => &plan.paginated.summary,
+      Self::Paged(plan) => &plan.summary,
       Self::Single(page) => &page.interactive.summary,
     }
   }

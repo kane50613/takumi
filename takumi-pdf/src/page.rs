@@ -3,20 +3,22 @@
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
-  layout::node::Node,
-  scene::SceneRef,
+  layout::{node::Node, paged_layout::PagedLayout, paint_reach::reach_back, tree::RenderNode},
+  scene::{PageWindows, SceneRef},
   style::Color,
   viewport::{MediaTarget, Viewport},
 };
 
-use std::mem::take;
-
 use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
   chunks::SceneChunks,
+  counters::{has_page_counters, has_target_counters},
   emitter::{DocumentState, Emitter},
   inline::{InlineCache, TextBox},
-  interactive::{add_link_annotations, collect_links, xyz_destination},
+  interactive::{
+    PageSummary, add_link_annotations, collect_links, has_internal_links, has_summary_targets,
+    xyz_destination,
+  },
   krilla::{
     Document,
     destination::XyzDestination,
@@ -25,7 +27,7 @@ use crate::{
     surface::Surface,
   },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
-  pagination::{PageSlice, Paginated},
+  pagination::{MAX_PAGES, PageSlice, PageStarts, Paginated},
   paint::paint_page_background,
   tree::{SceneView, TreeInputs},
   window::{ContentWindow, Window},
@@ -137,16 +139,20 @@ pub(crate) struct PageBands<'o> {
   pub(crate) page_ranges: Option<&'o [PageRange]>,
 }
 
-/// The paginated document: its geometry, its content laid out on pages, and which pages
-/// the render keeps.
+/// How many of the first pages of a layout to draw, given how far a box of the tree paints above
+/// its page, as [`PagedLayout::settled_pages`] says.
+pub(crate) type Settle<'s> = &'s dyn Fn(&PagedLayout<'_>, Option<f32>) -> usize;
+
+/// The paginated document once its pages are drawn: what the outline, the structure tree and the
+/// destinations read.
 pub(crate) struct PagePlan {
   pub(crate) frame: PageFrame,
-  pub(crate) paginated: Paginated,
   pub(crate) selection: PageSelection,
   /// Whether destinations name tag-tree structure elements.
   pub(crate) structural: bool,
-  /// In draw order: the header band, the repeated boxes, the footer band.
-  pub(crate) repeatables: Vec<Repeatable>,
+  pub(crate) root: RenderNode,
+  pub(crate) summary: PageSummary,
+  pub(crate) starts: PageStarts,
 }
 
 impl PagePlan {
@@ -154,10 +160,9 @@ impl PagePlan {
   /// on, at its position inside that page. `None` when the page is dropped by
   /// [`crate::PdfOptions::page_ranges`].
   pub(crate) fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
-    let index = self.paginated.page_index(top);
+    let index = self.starts.index_of(top);
     let emitted = self.selection.emitted(index)?;
-    let start = self.paginated.starts[index];
-    let y = self.frame.margin.top + (top - start).max(0.0);
+    let y = self.frame.margin.top + (top - self.starts.start(index)).max(0.0);
 
     Some(xyz_destination(
       emitted,
@@ -167,15 +172,69 @@ impl PagePlan {
     ))
   }
 
-  /// Lays the bands out, resolves the page frame around them, and lays the
-  /// content out on pages.
-  pub(crate) fn solve(
-    inputs: &TreeInputs<'_>,
+  /// Where `href="#id"` lands, or `None` when nothing carries that id or its
+  /// page is dropped.
+  pub(crate) fn anchor_destination(&self, id: &str) -> Option<XyzDestination> {
+    let anchor = self.summary.anchors.get(id)?;
+
+    self.destination(anchor.top, &anchor.path)
+  }
+}
+
+/// The frame and bands the pages are drawn in.
+struct Solved {
+  frame: PageFrame,
+  header: Option<Repeatable>,
+  footer: Option<Repeatable>,
+}
+
+/// What the passes that solved the frame left of the content.
+enum Content {
+  /// Nothing is laid out: no pass was needed, so its pages draw as they lay out.
+  Stream(Node),
+  /// The pass that settled the frame and the counters, laid out to its end.
+  Laid(Box<Paginated>),
+}
+
+/// Where the pages of one document are drawn.
+pub(crate) struct PageDrawing<'d, 'g> {
+  pub(crate) pdf: &'d mut Document,
+  pub(crate) inputs: &'d TreeInputs<'g>,
+  pub(crate) state: &'d DocumentState<'d>,
+  pub(crate) background: Option<Color>,
+}
+
+impl PageDrawing<'_, '_> {
+  /// Lays the content out on pages and draws the ones `bands` keeps.
+  ///
+  /// A document whose bands, content and links do not read the page count or where a box landed
+  /// draws each page as soon as `settle` says no later page paints on it. Any other lays out to its
+  /// end in the passes that settle those, and draws from the last.
+  pub(crate) fn render(
+    &mut self,
     page: PageOptions,
     bands: PageBands<'_>,
     node: Node,
     structural: bool,
-  ) -> Result<Self, PdfError> {
+    settle: Settle<'_>,
+  ) -> Result<PagePlan, PdfError> {
+    let ranges = bands.page_ranges;
+    let (solved, content) = Self::solve(self.inputs, page, &bands, node)?;
+
+    match content {
+      Content::Stream(node) => self.stream(solved, node, ranges, structural, settle),
+      Content::Laid(paginated) => self.compose(solved, paginated, ranges, structural),
+    }
+  }
+
+  /// Lays the bands out, resolves the page frame around them, and, when the page count or
+  /// the boxes' pages are needed first, lays the content out on pages.
+  fn solve(
+    inputs: &TreeInputs<'_>,
+    page: PageOptions,
+    bands: &PageBands<'_>,
+    node: Node,
+  ) -> Result<(Solved, Content), PdfError> {
     // Bands lay out at full page width and draw inside the margin areas,
     // like Chromium's print header and footer templates.
     let band_viewport = band_viewport(&page);
@@ -209,6 +268,22 @@ impl PagePlan {
     // stops moving, like the content counters in `Paginated::build`.
     let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
       || footer.as_ref().is_some_and(Repeatable::dynamic);
+
+    if !dynamic
+      && !has_page_counters(&node)
+      && !has_target_counters(&node)
+      && !has_internal_links(&node)
+    {
+      return Ok((
+        Solved {
+          frame,
+          header,
+          footer,
+        },
+        Content::Stream(node),
+      ));
+    }
+
     let source = dynamic.then(|| node.clone());
     let mut paginated = Paginated::build(node, inputs, &frame)?;
 
@@ -232,79 +307,208 @@ impl PagePlan {
       }
     }
 
-    let selection = PageSelection::resolve(bands.page_ranges, paginated.starts.len())?;
-    let repeatables = header
-      .into_iter()
-      .chain(take(&mut paginated.repeated))
-      .chain(footer)
-      .collect();
+    Ok((
+      Solved {
+        frame,
+        header,
+        footer,
+      },
+      Content::Laid(Box::new(paginated)),
+    ))
+  }
 
-    Ok(Self {
+  /// Lays `node` out a page at a time and draws each page, in order, once `settle` says it is
+  /// settled. A document with a link to an element inside it, or a counter, is never streamed,
+  /// so no destination or number here waits on a page not yet laid out.
+  fn stream(
+    &mut self,
+    solved: Solved,
+    node: Node,
+    ranges: Option<&[PageRange]>,
+    structural: bool,
+    settle: Settle<'_>,
+  ) -> Result<PagePlan, PdfError> {
+    let Solved {
       frame,
-      paginated,
+      header,
+      footer,
+    } = solved;
+    let reads_summary = has_summary_targets(&node);
+    let (root, repeated) = self.inputs.prepare_root(node, &frame)?;
+    let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
+    let composer = PageComposer::new(self, &frame, &repeatables);
+    let page_size = frame.page_size();
+    let reach = reach_back(&root);
+    let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
+    let mut windows = PageWindows::new(page_size);
+    let mut selection = PageSelection::new(ranges);
+    let mut summary = PageSummary::new(false);
+    let mut drawn = 0;
+
+    loop {
+      let laid = layout.next_page()?.is_some();
+      let settled = settle(&layout, reach);
+
+      if settled > drawn {
+        windows.refresh(
+          &root,
+          layout.view(),
+          layout.page_count(),
+          layout.finalized_pages(),
+        )?;
+      }
+      for index in drawn..settled {
+        let kept = selection.push_page().is_some();
+
+        if reads_summary {
+          summary.absorb(PageSummary::of_page(
+            &root,
+            layout.view(),
+            page_size,
+            &windows.pages_of(index),
+            false,
+          )?);
+        }
+        if kept {
+          let scene = SceneRef::window(
+            &root,
+            layout.view(),
+            page_size,
+            &windows.pages_reaching(index),
+            true,
+          )?;
+
+          composer.compose(
+            self.pdf,
+            &PageSlice::of(index, frame.window_height),
+            0,
+            SceneView::of_window(&scene),
+            |_| None,
+          )?;
+        }
+      }
+      drawn = drawn.max(settled);
+      if !laid {
+        break;
+      }
+    }
+
+    let pages = layout.page_count();
+    let window = frame.window_height;
+
+    drop(layout);
+    selection.finish()?;
+    Ok(PagePlan {
+      frame,
       selection,
       structural,
-      repeatables,
+      root,
+      summary: summary.finished(),
+      starts: PageStarts::new(pages, window),
     })
   }
 
-  /// Draws every kept page.
-  pub(crate) fn compose(
-    &self,
-    pdf: &mut Document,
-    inputs: &TreeInputs<'_>,
-    state: &DocumentState<'_>,
-    background: Option<Color>,
-  ) -> Result<(), PdfError> {
-    let composer = PageComposer {
-      plan: self,
-      inputs,
-      page_context: inputs.context(self.frame.page_area),
-      state,
-      background,
+  /// Draws every kept page of a content laid out to its end.
+  fn compose(
+    &mut self,
+    solved: Solved,
+    mut paginated: Box<Paginated>,
+    ranges: Option<&[PageRange]>,
+    structural: bool,
+  ) -> Result<PagePlan, PdfError> {
+    let Solved {
+      frame,
+      header,
+      footer,
+    } = solved;
+    let summary = paginated.summary()?;
+    let Paginated {
+      content,
+      windows,
+      repeated,
+      starts,
+      ..
+    } = *paginated;
+    let selection = PageSelection::resolve(ranges, content.page_count)?;
+    let (page_size, pages) = (content.page_size, content.page_count);
+    let (root, results) = content.into_parts();
+    let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
+    let plan = PagePlan {
+      frame,
+      selection,
+      structural,
+      root,
+      summary,
+      starts,
     };
+    let composer = PageComposer::new(self, &plan.frame, &repeatables);
 
-    for slice in self.paginated.pages() {
-      if self.selection.keeps(slice.index) {
-        composer.compose(pdf, &self.repeatables, &slice)?;
+    for slice in plan.starts.slices() {
+      if !plan.selection.keeps(slice.index) {
+        continue;
       }
+      let scene = SceneRef::window(
+        &plan.root,
+        results.view(),
+        page_size,
+        &windows.pages_reaching(slice.index),
+        true,
+      )?;
+
+      composer.compose(
+        self.pdf,
+        &slice,
+        pages,
+        SceneView::of_window(&scene),
+        |id| plan.anchor_destination(id),
+      )?;
     }
-    Ok(())
-  }
-
-  /// Where `href="#id"` lands, or `None` when nothing carries that id or its
-  /// page is dropped.
-  pub(crate) fn anchor_destination(&self, id: &str) -> Option<XyzDestination> {
-    let anchor = self.paginated.summary.anchors.get(id)?;
-
-    self.destination(anchor.top, &anchor.path)
+    Ok(plan)
   }
 }
 
 /// Draws the paginated content one page at a time: background, the repeatables
 /// under the content, the content window, the repeatables over it, then the
 /// link annotations.
-pub(crate) struct PageComposer<'c, 'g> {
-  pub(crate) plan: &'c PagePlan,
-  pub(crate) inputs: &'c TreeInputs<'g>,
-  pub(crate) page_context: RenderContext,
-  pub(crate) state: &'c DocumentState<'c>,
-  pub(crate) background: Option<Color>,
+struct PageComposer<'c, 'g> {
+  frame: &'c PageFrame,
+  /// In draw order: the header band, the repeated boxes, the footer band.
+  repeatables: &'c [Repeatable],
+  inputs: &'c TreeInputs<'g>,
+  page_context: RenderContext,
+  state: &'c DocumentState<'c>,
+  background: Option<Color>,
 }
 
-impl PageComposer<'_, '_> {
-  /// Draws one page. `repeatables` are in draw order: the header band, the
-  /// repeated boxes, the footer band.
-  pub(crate) fn compose(
+impl<'c, 'g> PageComposer<'c, 'g> {
+  fn new(
+    drawing: &PageDrawing<'c, 'g>,
+    frame: &'c PageFrame,
+    repeatables: &'c [Repeatable],
+  ) -> Self {
+    Self {
+      frame,
+      repeatables,
+      inputs: drawing.inputs,
+      page_context: drawing.inputs.context(frame.page_area),
+      state: drawing.state,
+      background: drawing.background,
+    }
+  }
+
+  /// Draws one page of `pages`, the content it shows being `scene`. `anchor` says where
+  /// `href="#id"` lands.
+  fn compose(
     &self,
     pdf: &mut Document,
-    repeatables: &[Repeatable],
     slice: &PageSlice,
+    pages: usize,
+    scene: SceneView<'_>,
+    anchor: impl Fn(&str) -> Option<XyzDestination>,
   ) -> Result<(), PdfError> {
-    let frame = &self.plan.frame;
-    let paginated = &self.plan.paginated;
-    let pages = paginated.starts.len();
-    let resolved = repeatables
+    let frame = self.frame;
+    let resolved = self
+      .repeatables
       .iter()
       .map(|repeatable| {
         repeatable.for_page(
@@ -316,15 +520,6 @@ impl PageComposer<'_, '_> {
         )
       })
       .collect::<Result<Vec<_>, _>>()?;
-    let content = &paginated.content;
-    let scene = SceneRef::window(
-      &content.root,
-      content.layout(),
-      content.page_size,
-      &paginated.windows.pages_reaching(slice.index),
-      true,
-    )?;
-    let scene = SceneView::of_window(&scene);
     let links = collect_links(scene);
     let text_boxes = TextBox::collect(scene);
     let inline = InlineCache::new(&text_boxes);
@@ -347,8 +542,6 @@ impl PageComposer<'_, '_> {
     }
     surface.pop();
     surface.finish();
-    let anchor = |id: &str| self.plan.anchor_destination(id);
-
     add_link_annotations(
       &mut pdf_page,
       &links,
@@ -358,7 +551,7 @@ impl PageComposer<'_, '_> {
         y: frame.margin.top,
       },
       self.state.tags.as_ref(),
-      anchor,
+      &anchor,
     );
     // A repeated box sits at the same place on every page, so its links are
     // added per page against the page area rather than the content window.
@@ -373,7 +566,7 @@ impl PageComposer<'_, '_> {
         y: frame.margin.top,
       },
       None,
-      anchor,
+      &anchor,
     );
     pdf_page.finish();
     Ok(())
@@ -387,7 +580,7 @@ impl PageComposer<'_, '_> {
     slice: &PageSlice,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let frame = &self.plan.frame;
+    let frame = self.frame;
 
     ContentWindow {
       clip: (

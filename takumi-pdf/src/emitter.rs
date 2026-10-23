@@ -210,7 +210,7 @@ impl Emitter<'_> {
     };
     let visible = chunks.visible(self.window);
     let mut conversion = ConversionContext::new(
-      &scene.properties,
+      scene.properties,
       ChunkWriter {
         emitter: self,
         surface,

@@ -17,6 +17,7 @@ use takumi_core::{
 };
 
 use crate::{
+  counters::any_node,
   krilla::{
     action::{Action, LinkAction},
     annotation::{Annotation, LinkAnnotation, Target},
@@ -167,7 +168,8 @@ impl Interactive {
 }
 
 impl PageSummary {
-  fn new(extents: bool) -> Self {
+  /// A summary of no page, which pages are added to with [`Self::absorb`].
+  pub(crate) fn new(extents: bool) -> Self {
     Self {
       anchors: HashMap::new(),
       headings: Vec::new(),
@@ -467,6 +469,20 @@ fn heading_ancestor<'s>(
     }
   }
   None
+}
+
+/// Whether a tree links to an element inside the document, whose page the link needs to know.
+pub(crate) fn has_internal_links(node: &Node) -> bool {
+  any_node(node, &|node| {
+    node.href().is_some_and(|href| href.starts_with('#'))
+  })
+}
+
+/// Whether a tree holds an element a [`PageSummary`] collects: one with an `id`, or a heading.
+pub(crate) fn has_summary_targets(node: &Node) -> bool {
+  any_node(node, &|node| {
+    node.id().is_some() || node.tag_name().and_then(heading_level).is_some()
+  })
 }
 
 /// Decodes the percent escapes an `id` fragment carries in a URL, so
