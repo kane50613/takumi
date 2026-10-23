@@ -12,7 +12,7 @@ pub(crate) type GridTrackSizes = Vec<GridTrackSize>;
 impl<'i> FromCss<'i> for GridTrackSizes {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut components: Vec<GridTrackSize> = Vec::new();
-    while let Ok(size) = GridTrackSize::from_css(input) {
+    while let Ok(size) = input.try_parse(GridTrackSize::from_css) {
       components.push(size);
     }
 

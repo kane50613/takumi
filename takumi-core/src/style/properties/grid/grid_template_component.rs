@@ -116,7 +116,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
 impl<'i> FromCss<'i> for GridTemplateComponents {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut components = Vec::new();
-    while let Ok(component) = GridTemplateComponent::from_css(input) {
+    while let Ok(component) = input.try_parse(GridTemplateComponent::from_css) {
       components.push(component);
     }
     Ok(components)

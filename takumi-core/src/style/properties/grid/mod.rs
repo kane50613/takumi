@@ -24,7 +24,22 @@ pub use grid_track_size::*;
 
 use std::fmt;
 
+use cssparser::{Parser, Token};
+
 use crate::style::ToCss;
+
+/// Whether `input` is at the end of a declaration's value, before any `!important`.
+pub(crate) fn at_value_end(input: &mut Parser<'_>) -> bool {
+  if input.is_exhausted() {
+    return true;
+  }
+
+  let state = input.state();
+  let is_bang = matches!(input.next(), Ok(Token::Delim('!')));
+
+  input.reset(&state);
+  is_bang
+}
 
 pub(crate) fn write_space_separated<W: fmt::Write, T: ToCss>(
   dest: &mut W,
