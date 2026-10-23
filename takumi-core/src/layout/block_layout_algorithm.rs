@@ -54,7 +54,7 @@ use crate::{
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
     margin_strut::MarginStrut,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
-    out_of_flow::ContainingBlock,
+    out_of_flow::{ContainingBlock, OutOfFlowLayoutPart},
     relative_utils::compute_relative_offset,
     tree::{LayoutTree, RenderNode},
   },
@@ -897,11 +897,13 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       return;
     }
     self.out_of_flow = self.tree.lay_out_out_of_flow(
-      (self.node, self.fragment_index()),
-      claims,
+      OutOfFlowLayoutPart::new(
+        (self.node, self.fragment_index()),
+        claims,
+        containing_block,
+        self.space,
+      ),
       candidates,
-      containing_block,
-      self.space,
     );
   }
 

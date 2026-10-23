@@ -39,7 +39,7 @@ use crate::{
     length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
-    out_of_flow::{ContainingBlock, ContainingBlockClaims},
+    out_of_flow::{ContainingBlock, ContainingBlockClaims, OutOfFlowLayoutPart},
     table::{ColumnConstraints, HiddenParts, TableFragment, TableStructure},
   },
   layout_unit::{BoxStrut, LayoutUnit},
@@ -1097,7 +1097,7 @@ impl<'r> LayoutTree<'r> {
       };
 
       let (location, result, _) = self.lay_out_out_of_flow_box(
-        OutOfFlowCandidate::new(NodeId::ROOT, StaticPosition::default()),
+        &OutOfFlowCandidate::new(NodeId::ROOT, StaticPosition::default()),
         initial_containing_block,
         &space,
       );
@@ -1148,14 +1148,16 @@ impl<'r> LayoutTree<'r> {
     );
 
     self.lay_out_out_of_flow(
-      (NodeId::ROOT, 0),
-      ContainingBlockClaims::ALL,
+      OutOfFlowLayoutPart::new(
+        (NodeId::ROOT, 0),
+        ContainingBlockClaims::ALL,
+        ContainingBlock {
+          origin: Point::new(x, y),
+          size: Size { width, height },
+        },
+        &space,
+      ),
       result.out_of_flow.clone(),
-      ContainingBlock {
-        origin: Point::new(x, y),
-        size: Size { width, height },
-      },
-      &space,
     );
   }
 

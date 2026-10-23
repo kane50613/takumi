@@ -42,7 +42,7 @@ use crate::{
     },
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
-    out_of_flow::ContainingBlock,
+    out_of_flow::{ContainingBlock, OutOfFlowLayoutPart},
     relative_utils::compute_relative_offset,
     tree::LayoutTree,
   },
@@ -1783,11 +1783,13 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
         let candidates = take(&mut self.out_of_flow);
 
         self.out_of_flow = self.tree.lay_out_out_of_flow(
-          (self.node, self.fragment_index()),
-          claims,
+          OutOfFlowLayoutPart::new(
+            (self.node, self.fragment_index()),
+            claims,
+            containing_block,
+            self.space,
+          ),
           candidates,
-          containing_block,
-          self.space,
         );
       }
     }

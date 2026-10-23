@@ -26,7 +26,7 @@ use crate::{
     length_utils::{LengthResolver, inline_size_from_aspect_ratio},
     logical_rect::{LogicalBoxStrut, LogicalSize},
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
-    out_of_flow::ContainingBlock,
+    out_of_flow::{ContainingBlock, OutOfFlowLayoutPart},
     table::{
       borders::TableBorders,
       columns::{
@@ -1528,11 +1528,13 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       out_of_flow = match self.defer_out_of_flow(claims, out_of_flow, containing_block) {
         Ok(deferred) => deferred,
         Err(out_of_flow) => self.tree.lay_out_out_of_flow(
-          (self.node, self.fragment_index()),
-          claims,
+          OutOfFlowLayoutPart::new(
+            (self.node, self.fragment_index()),
+            claims,
+            containing_block,
+            self.space,
+          ),
           out_of_flow,
-          containing_block,
-          self.space,
         ),
       };
     }
