@@ -8,7 +8,7 @@ An invoice needs line items that flow across pages, totals that stay in one piec
 
 ## A plain invoice
 
-Here, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. Line items flow across pages, and the footer carries the page counter. [`measure()`](/docs/reference/measure) returns the footer's height, so you can reserve enough bottom margin. [Headers & footers](/docs/pdf/headers) covers the footer in full.
+Here, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. Line items flow across pages, and the footer carries the page counter. `measure()` returns the footer's height, so you can reserve enough bottom margin. [Headers & footers](/docs/pdf/headers) covers the footer in full.
 
 ```tsx twoslash title="Reserve space for an invoice footer"
 import type { ReactNode } from "react";

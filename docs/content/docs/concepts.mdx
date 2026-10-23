@@ -26,7 +26,7 @@ Fonts come only from what you load. Takumi never reads system fonts, and its one
 
 A render is one static frame. Interactive pseudo-classes such as `:hover` and `:focus` parse but never match. In `@media`, image renders are `screen` and PDF renders are `print`. Any feature the media query table does not list matches nothing, `prefers-color-scheme` included. See [Styles](/docs/styles).
 
-Tailwind and units resolve in their own way. The built-in parser applies no Tailwind Preflight by default, so elements keep their default margins. A node tree has no `<html>` element, so `rem` resolves against the viewport's font size, which is 16px. See [Styles](/docs/styles#preflight) and the [reference](/docs/reference).
+Tailwind and units resolve in their own way. The built-in parser applies no Tailwind Preflight by default, so elements keep their default margins. In a tree without an `<html>` root, `rem` resolves against the viewport's font size, which is 16px. A full HTML document passed to `fromHtml` keeps its `<html>` element, so a font size there sets the `rem` basis. See [Styles](/docs/styles#preflight) and the [reference](/docs/reference).
 
 Style objects are strict. A property name outside the supported list is dropped without an error. A listed name with an unparsable value fails the whole style object. Only `writing-mode: horizontal-tb` is laid out. See the [reference](/docs/reference).
 
