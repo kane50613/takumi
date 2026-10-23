@@ -148,7 +148,7 @@ impl<'r> LayoutTree<'r> {
       return result;
     }
 
-    if space.cache_slot == CacheSlot::Layout {
+    if space.cache_slot == CacheSlot::Layout && !input.resumes_box() {
       self.node_state_mut(node).hoisted_children.clear();
     }
 
@@ -484,9 +484,29 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
+  /// Makes the out-of-flow boxes `container` positioned from its hoisted child `first` on belong
+  /// to its fragment `fragment_index`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn hold_hoisted_children(
+    &mut self,
+    container: NodeId,
+    fragment_index: usize,
+    first: usize,
+  ) {
+    let hoisted_children = self.node_state(container).hoisted_children[first..].to_vec();
+
+    for child in hoisted_children {
+      self.node_state_mut(child).fragments[0].container_fragment_index = fragment_index;
+    }
+  }
+
   /// Records that `container` laid out the out-of-flow `node` as its containing block.
   pub(crate) fn add_hoisted_child(&mut self, container: NodeId, node: NodeId) {
-    self.node_state_mut(container).hoisted_children.push(node);
+    let hoisted_children = &mut self.node_state_mut(container).hoisted_children;
+
+    if !hoisted_children.contains(&node) {
+      hoisted_children.push(node);
+    }
   }
 
   /// Lays `node` and every box under it out empty, as `display: none` leaves them.
@@ -540,7 +560,7 @@ impl<'r> LayoutTree<'r> {
   pub(crate) fn finish_inline_content(
     &mut self,
     node: NodeId,
-    fragment_index: usize,
+    (fragment_index, holds_every_line): (usize, bool),
     result: &LayoutResult,
     space: &ConstraintSpace,
   ) -> Vec<OutOfFlowCandidate> {
@@ -598,6 +618,11 @@ impl<'r> LayoutTree<'r> {
     }
 
     for (child, &position) in boxes.into_iter().zip(&geometry.out_of_flow) {
+      // A box on the lines of another fragment is that fragment's to place; one on no line goes
+      // where the content starts.
+      let Some(position) = position.or(holds_every_line.then(Default::default)) else {
+        continue;
+      };
       let candidate = OutOfFlowCandidate {
         node: child,
         static_position: StaticPosition {

@@ -178,6 +178,8 @@ pub(crate) struct ContainerContents {
   pub(crate) clip: Option<ClipId>,
   /// Child-index path from the root to the containing block.
   pub(crate) path: Vec<usize>,
+  /// The containing block's fragment the scene paints, which holds the boxes hoisted to it.
+  pub(crate) fragment_index: usize,
 }
 
 /// The clip and effect trees of a scene.

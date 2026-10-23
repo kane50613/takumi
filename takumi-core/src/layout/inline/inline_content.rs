@@ -28,8 +28,9 @@ use crate::{
 
 /// Where an inline formatting context's lines put the boxes it does not paint itself.
 pub(crate) struct InlineGeometry<'c> {
-  /// The static position of each out-of-flow box of its inline content, in tree order.
-  pub(crate) out_of_flow: Vec<StaticPosition>,
+  /// The static position of each out-of-flow box of its inline content, in tree order, none for
+  /// one on no line laid out.
+  pub(crate) out_of_flow: Vec<Option<StaticPosition>>,
   /// Each containing block's padding box, `None` for the node's own.
   pub(crate) containing_blocks: Vec<Option<PaddingBox>>,
   pub(crate) inline_content_boxes: Vec<InlineContentBox<'c>>,
@@ -224,15 +225,7 @@ impl RenderNode {
     let positions = self
       .inline_out_of_flow()
       .iter()
-      .map(|out_of_flow| {
-        placed
-          .get(&ptr::from_ref(out_of_flow.node))
-          .copied()
-          .unwrap_or(StaticPosition {
-            point: Point::ZERO,
-            from_end: false,
-          })
-      })
+      .map(|out_of_flow| placed.get(&ptr::from_ref(out_of_flow.node)).copied())
       .collect();
 
     let spans = if containers.iter().all(|container| ptr::eq(*container, self)) {

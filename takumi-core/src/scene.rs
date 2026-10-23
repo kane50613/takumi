@@ -468,6 +468,7 @@ impl SceneRequest<'_> {
         ContainerContents {
           clip: node_properties.contents.clip,
           path: visit.path.clone(),
+          fragment_index: visit.fragment_index,
         },
       );
 
@@ -567,8 +568,13 @@ impl SceneRequest<'_> {
       containing_blocks.record_content_box(visit.node_id, child_container_size);
 
       for child in layout_children.iter().rev() {
+        // A hoisted box belongs to the fragment of its containing block that positioned it.
+        let container_fragment_index = child
+          .hoisted_cb
+          .and_then(|cb| contents.get(&cb))
+          .map_or(visit.fragment_index, |container| container.fragment_index);
         let Some(child_fragment_index) =
-          layout_results.fragment_in(child.node_id, visit.fragment_index)
+          layout_results.fragment_in(child.node_id, container_fragment_index)
         else {
           continue;
         };
@@ -779,16 +785,20 @@ impl PagedScene {
     let mut pages = Vec::with_capacity(page_count);
 
     for page in 0..page_count {
-      let root_fragment_index = results
-        .fragment_in(NodeId::ROOT, page)
-        .ok_or(Error::InvalidLayoutNode(NodeId::ROOT.into()))?;
-      let layers = SceneRequest {
-        root: &root,
-        layout_results: &results,
-        container_size: page_size.map(Some),
-        paint_bounds,
-      }
-      .build_fragment(root_fragment_index)?;
+      // A page the root starts after holds none of it.
+      let layers = match results.fragment_in(NodeId::ROOT, page) {
+        Some(root_fragment_index) => SceneRequest {
+          root: &root,
+          layout_results: &results,
+          container_size: page_size.map(Some),
+          paint_bounds,
+        }
+        .build_fragment(root_fragment_index)?,
+        None => SceneLayers {
+          contexts: vec![StackingContextNode::with_root(None)],
+          properties: PropertyTrees::default(),
+        },
+      };
       let placements = layers.placements(&results);
 
       pages.push(ScenePage { layers, placements });

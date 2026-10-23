@@ -725,10 +725,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     self.exclude_broken_sides(&mut result);
 
     if self.tree.has_inline_children(self.node) {
-      let candidates =
-        self
-          .tree
-          .finish_inline_content(self.node, self.fragment_index(), &result, space);
+      let candidates = self.tree.finish_inline_content(
+        self.node,
+        (self.fragment_index(), self.holds_every_line()),
+        &result,
+        space,
+      );
 
       self.out_of_flow.extend(candidates);
     }
@@ -815,10 +817,17 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       self.style.border,
     );
 
+    #[cfg(feature = "fragmentation")]
+    let first_hoisted = self.tree.node_state(self.node).hoisted_children.len();
+
     self.out_of_flow =
       self
         .tree
         .lay_out_out_of_flow(self.node, claims, candidates, containing_block, self.space);
+    #[cfg(feature = "fragmentation")]
+    self
+      .tree
+      .hold_hoisted_children(self.node, self.fragment_index(), first_hoisted);
   }
 
   /// Writes each placed child's geometry once the layout stands, which only a layout that places
@@ -2113,6 +2122,10 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   fn fragment_index(&self) -> usize {
     0
+  }
+
+  fn holds_every_line(&self) -> bool {
+    true
   }
 
   fn start_fragment(&mut self, _previous: &mut PreviousInflowPosition) {}

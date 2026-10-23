@@ -313,3 +313,51 @@ fn a_sliced_box_leaves_its_border_out_where_it_breaks() {
   );
   assert_eq!(fragments[1].layout.padding.top, 0.0);
 }
+
+#[test]
+fn a_later_page_keeps_the_out_of_flow_boxes_an_earlier_one_positioned() {
+  let body = Node::container([
+    block("abs", "h20 abs"),
+    block("a", "h20"),
+    block("b", "h20 forced"),
+  ])
+  .with_class_name("block");
+  let tree = render(
+    root([body]),
+    ".h20 { height: 20px } .abs { position: absolute; top: 96px } .forced { break-before: page }",
+  );
+  let (results, page_count) = LayoutResults::compute_pages(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 192.0,
+    },
+  );
+  let body = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
+  let abs = &results.box_children(body).expect("body children")[0];
+
+  assert_eq!(page_count, 2);
+  // The page area positioned it, which the second page's layout does not forget.
+  assert_eq!(abs.hoisted_cb, Some(NodeId::ROOT));
+}
+
+#[test]
+fn an_absolute_box_among_lines_sits_on_the_page_of_its_line() {
+  let paragraph = Node::container([Node::text("1\n2\n3\n4\n5"), block("abs", "abs")])
+    .with_tag_name("p")
+    .with_class_name("rel")
+    .with_id("p");
+  let tree = render(
+    root([paragraph]),
+    ".rel { position: relative } .abs { position: absolute; width: 10px; height: 10px }",
+  );
+  let (boxes, _) = pages(&tree, 60.0);
+
+  assert_eq!(
+    boxes["abs"]
+      .iter()
+      .map(|placed| placed.page)
+      .collect::<Vec<_>>(),
+    [1]
+  );
+}

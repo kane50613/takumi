@@ -12,7 +12,7 @@ use crate::layout::{
   break_appeal::BreakAppeal,
   constraint_space::BlockFragmentation,
   fragmentation_layout_input::FragmentationLayoutInput,
-  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index},
+  fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
 };
 
 use crate::{
@@ -857,9 +857,10 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes, `@page`, or out-of-flow boxes the
-  /// initial containing block holds: the root laid out a page `page_size` at a time, each page
-  /// resuming where the one before broke. Returns the page count.
+  /// Blink's `PaginatedRootLayoutAlgorithm` without page boxes or `@page`: the root laid out a page
+  /// `page_size` at a time, each page resuming where the one before broke, the page area its
+  /// container and the initial containing block. Approximate: a fixed box is not repeated on every
+  /// page. Returns the page count.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn compute_pages(&mut self, page_size: Size<f32>) -> usize {
     let page_block_size = LayoutUnit::from_float(page_size.height);
@@ -889,6 +890,19 @@ impl<'r> LayoutTree<'r> {
       };
       let result = self.layout_fragment(NodeId::ROOT, &space, &input);
       let fragment_index = fragment_index(break_token.as_deref());
+      let space_left = page_block_size - margins.block_start;
+
+      // Blink's page area breaks before a root that starts past the page end, leaving the page
+      // blank, as `MovePastBreakpoint` must break before such a child.
+      if break_token.is_none()
+        && (space_left < LayoutUnit::ZERO
+          || (space_left == LayoutUnit::ZERO
+            && is_break_inside(result.break_info.break_token.as_deref())))
+      {
+        break_token = Some(Rc::new(BlockBreakToken::break_before(NodeId::ROOT, false)));
+        page_count += 1;
+        continue;
+      }
 
       self.place_child(
         NodeId::ROOT,
@@ -898,6 +912,29 @@ impl<'r> LayoutTree<'r> {
       );
       self.node_state_mut(NodeId::ROOT).fragments[fragment_index].container_fragment_index =
         page_count;
+
+      // The page area is the initial containing block of the out-of-flow boxes no box contains.
+      if !result.out_of_flow.is_empty() {
+        let first_hoisted = self.node_state(NodeId::ROOT).hoisted_children.len();
+
+        self.lay_out_out_of_flow(
+          NodeId::ROOT,
+          ContainingBlockClaims::ALL,
+          result.out_of_flow.clone(),
+          ContainingBlock {
+            origin: Point::new(
+              LayoutUnit::ZERO - margins.inline_start,
+              LayoutUnit::ZERO - margins.block_start,
+            ),
+            size: Size {
+              width: LayoutUnit::from_float(page_size.width),
+              height: page_block_size,
+            },
+          },
+          &space,
+        );
+        self.hold_hoisted_children(NodeId::ROOT, fragment_index, first_hoisted);
+      }
       page_count += 1;
       break_token = result.break_info.break_token.clone();
 
