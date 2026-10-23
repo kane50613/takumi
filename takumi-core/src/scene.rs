@@ -980,7 +980,7 @@ impl HoistedFragments {
 
 #[cfg(not(feature = "fragmentation"))]
 #[derive(Default)]
-struct HoistedFragments;
+struct HoistedFragments {}
 
 #[cfg(not(feature = "fragmentation"))]
 impl HoistedFragments {
