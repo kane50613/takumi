@@ -156,7 +156,11 @@ impl<'t, 'r> TableRowLayoutAlgorithm<'t, 'r> {
     let block_size =
       self.finish_fragmentation(&placed, row_block_size, previously_consumed_row_block_size);
     let mut result = LayoutResult::new(LogicalSize::new(self.data.inline_size, block_size));
+    let baseline = placed.baselines.baseline(block_size);
 
+    // Blink's `SetBaselines` from the cells as this layout placed them.
+    result.first_baseline = Some(baseline);
+    result.last_baseline = Some(baseline);
     result.out_of_flow = out_of_flow;
     self.finish_break_info(&mut result);
     result

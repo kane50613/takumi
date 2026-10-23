@@ -225,6 +225,31 @@ fn a_percentage_height_child_fills_its_baseline_cell() {
   assert_close(boxes["child"].layout.size.height, 85.0);
 }
 
+/// The row publishes the baseline it found again for a percentage-height child, which gives the
+/// table its first baseline: the end of the cell's content box, not the top of the row.
+#[test]
+fn a_table_takes_its_baseline_from_a_recomputed_row_baseline() {
+  let tree = render(
+    Node::container([
+      table([row([part("td padded", [block("child", "fill")])])]).with_id("table"),
+      Node::container([Node::text("b")])
+        .with_class_name("block")
+        .with_id("b"),
+    ])
+    .with_class_name("flex baseline"),
+    ".table { height: 100px } .padded { padding: 5px 0 10px } .fill { height: 100% } \
+     .baseline { align-items: baseline }",
+  );
+  let boxes = boxes(&tree, 400.0);
+
+  assert_close(boxes["table"].origin.y, 0.0);
+  assert!(
+    boxes["b"].origin.y > 60.0,
+    "b sits at {}",
+    boxes["b"].origin.y
+  );
+}
+
 #[test]
 fn align_content_outranks_vertical_align() {
   let tree = render(
