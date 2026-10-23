@@ -16,8 +16,12 @@ use std::{
 use takumi::{
   prelude::{Length::*, *},
   render,
+  unstable::raster::render_pages,
 };
-use takumi_core::resources::{image::ResourceCache, image_buffer::ImageBuffer};
+use takumi_core::{
+  geometry::Size,
+  resources::{image::ResourceCache, image_buffer::ImageBuffer},
+};
 use test_utils::{CONTEXT, create_test_viewport};
 
 struct CountingAllocator;
@@ -187,5 +191,50 @@ fn unique_text_renders_stay_near_glyph_cache_budget() {
   assert!(
     settled <= baseline + SLACK_BYTES,
     "live bytes grew from {baseline} to {settled} over {MEASURED_RENDERS} unique-text renders"
+  );
+}
+
+/// Sections of text, an absolute badge, and a table with a header, which lay out across many pages.
+fn sections(count: usize) -> String {
+  (0..count)
+    .map(|index| {
+      format!(
+        "<section><h2>Section {index}</h2><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p><div style=\"position: relative; height: 24px\"><span style=\"position: absolute; right: 0; top: 0\">badge {index}</span></div><table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table></section>"
+      )
+    })
+    .collect()
+}
+
+#[test]
+fn a_streamed_document_keeps_live_bytes_flat_across_pages() {
+  const EARLY_PAGE: usize = 50;
+  const LATE_PAGE: usize = 200;
+  const PAGE_SIZE: Size<f32> = Size::new(400.0, 300.0);
+
+  let _guard = MEASURE_LOCK.lock().unwrap();
+
+  let html = format!("<body style=\"font-size: 12px\">{}</body>", sections(2000));
+  let options = RenderOptions::builder()
+    .viewport(Viewport::new((400, 300)))
+    .node(Node::from_html(&html, FromHtmlOptions::default()).unwrap())
+    .fonts(&CONTEXT)
+    .build();
+  let (mut pages, mut early, mut late) = (0, 0, 0);
+
+  render_pages(options, PAGE_SIZE, usize::MAX, |_| {
+    pages += 1;
+    match pages {
+      EARLY_PAGE => early = LIVE_BYTES.load(Ordering::Relaxed),
+      LATE_PAGE => late = LIVE_BYTES.load(Ordering::Relaxed),
+      _ => {}
+    }
+    Ok(())
+  })
+  .unwrap();
+
+  assert!(pages > LATE_PAGE, "the document has {pages} pages");
+  assert!(
+    late <= early + early / 20,
+    "live bytes grew from {early} after page {EARLY_PAGE} to {late} after page {LATE_PAGE}"
   );
 }

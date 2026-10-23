@@ -1,9 +1,9 @@
-#[cfg(feature = "fragmentation")]
-use std::ops::Range;
 use std::{
   borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, rc::Rc, slice, sync::Arc,
   vec::IntoIter,
 };
+#[cfg(feature = "fragmentation")]
+use std::{num::NonZeroUsize, ops::Range};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
@@ -13,6 +13,7 @@ use crate::layout::{
   layout_result::LayoutResult,
   layout_view::{HoistedBy, LiveLayout},
   paged_layout::PagedLayout,
+  releases::{Finished, Releases},
 };
 
 use crate::{
@@ -289,6 +290,13 @@ pub struct LayoutTree<'r> {
   /// as Blink reads a repeated root's first layout result.
   #[cfg(feature = "fragmentation")]
   pub(crate) repeated_roots: FxHashMap<NodeId, Rc<LayoutResult>>,
+  /// What a streamed layout frees once its pages are drawn, none for a layout that runs to the
+  /// end.
+  #[cfg(feature = "fragmentation")]
+  releases: Option<Releases>,
+  /// The boxes that ended and were released, whose inline items and table parts nothing may read.
+  #[cfg(all(feature = "fragmentation", debug_assertions))]
+  released_boxes: RefCell<FxHashSet<usize>>,
 }
 
 /// What a box's part in a table changes in the styles it is laid out with.
@@ -388,6 +396,10 @@ pub(crate) struct LayoutNodeState {
   pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
   /// The out-of-flow boxes this node is the containing block for.
   pub(crate) claims: ContainingBlockClaims,
+  /// The pages laid out when its last fragment was placed, none while it has fragments to come
+  /// or when the layout does not release.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) ended_by: Option<NonZeroUsize>,
 }
 
 /// A box's fragments, one unless it fragmented.
@@ -487,6 +499,8 @@ impl LayoutNodeState {
       hoisted_children: Vec::new(),
       grid_geometry: None,
       claims,
+      #[cfg(feature = "fragmentation")]
+      ended_by: None,
     }
   }
 }
@@ -554,29 +568,78 @@ impl Drop for RenderNode {
 /// The fragment items a node's inline content last laid out to, by fragment index. They belong to
 /// that node, so a clone, which may change its style or content, starts without them.
 #[derive(Default)]
-pub(crate) struct FragmentItemsCache(RefCell<SmallVec<[Option<Rc<FragmentItems>>; 1]>>);
+pub(crate) struct FragmentItemsCache {
+  fragments: RefCell<SmallVec<[Option<Rc<FragmentItems>>; 1]>>,
+  /// The fragments whose items were released, which nothing may read.
+  #[cfg(all(feature = "fragmentation", debug_assertions))]
+  released: RefCell<FxHashSet<usize>>,
+}
 
 impl FragmentItemsCache {
+  /// Whether it kept items for fragment `fragment_index`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn has(&self, fragment_index: usize) -> bool {
+    self
+      .fragments
+      .borrow()
+      .get(fragment_index)
+      .is_some_and(Option::is_some)
+  }
+
   /// Keeps `items` as fragment `fragment_index`'s.
   pub(crate) fn keep(&self, fragment_index: usize, items: Rc<FragmentItems>) {
-    let mut fragments = self.0.borrow_mut();
+    let mut fragments = self.fragments.borrow_mut();
 
     if fragments.len() <= fragment_index {
       fragments.resize(fragment_index + 1, None);
     }
     fragments[fragment_index] = Some(items);
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    self.released.borrow_mut().remove(&fragment_index);
+  }
+
+  /// Fragment `fragment_index`'s items, if it kept any.
+  fn get(&self, fragment_index: usize) -> Option<Rc<FragmentItems>> {
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    assert!(
+      !self.released.borrow().contains(&fragment_index),
+      "the fragment items of fragment {fragment_index} were read after they were released"
+    );
+
+    self
+      .fragments
+      .borrow()
+      .get(fragment_index)
+      .cloned()
+      .flatten()
+  }
+
+  /// Forgets what it kept.
+  pub(crate) fn clear(&self) {
+    self.fragments.borrow_mut().clear();
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    self.released.borrow_mut().clear();
   }
 }
 
+#[cfg(feature = "fragmentation")]
 impl FragmentItemsCache {
   /// Keeps fragment `source`'s items as fragment `target`'s too.
-  #[cfg(feature = "fragmentation")]
   pub(crate) fn repeat(&self, source: usize, target: usize) {
-    let items = self.0.borrow().get(source).cloned().flatten();
+    let items = self.get(source);
 
     if let Some(items) = items {
       self.keep(target, items);
     }
+  }
+
+  /// Drops fragment `fragment_index`'s items.
+  fn release(&self, fragment_index: usize) {
+    if let Some(items) = self.fragments.borrow_mut().get_mut(fragment_index) {
+      *items = None;
+    }
+    #[cfg(debug_assertions)]
+    self.released.borrow_mut().insert(fragment_index);
   }
 }
 
@@ -640,6 +703,130 @@ fn active_registrations(stylesheets: &[StyleSheet], viewport: Viewport) -> Regis
   )
 }
 
+#[cfg(feature = "fragmentation")]
+impl LayoutTree<'_> {
+  /// Starts logging what the layout finishes with, for [`Self::release`] to free.
+  pub(crate) fn start_releases(&mut self) {
+    self.releases = Some(Releases::default());
+  }
+
+  /// Stamps what the page being laid out logs with `laid`, the pages laid out once it is.
+  pub(crate) fn begin_page(&mut self, laid: usize) {
+    if let Some(releases) = &mut self.releases {
+      releases.begin_page(laid);
+    }
+  }
+
+  /// Logs that `node`'s cached layouts are finished with, once the boxes that lay their children
+  /// out again as they continue have ended.
+  pub(crate) fn log_cache_finished(&mut self, node: NodeId, finished: Finished) {
+    let holder = self
+      .running
+      .iter()
+      .map(|run| NodeId::new(run.node as usize))
+      .find(|&running| running != node && self.relays_out_ended_children(running));
+
+    if let Some(releases) = &mut self.releases {
+      match holder {
+        Some(holder) => releases.push_until_ended(holder, finished),
+        None => releases.push(finished),
+      }
+    }
+  }
+
+  /// Logs that the items of `node`'s fragment are placed, which its page frees once drawn.
+  pub(crate) fn log_items(&mut self, node: NodeId, fragment: usize) {
+    let holder = self.repeating_table();
+
+    if let Some(releases) = &mut self.releases {
+      releases.push_items(node, fragment, holder);
+    }
+  }
+
+  /// The table laying out a header or footer group now, whose content its later fragments copy.
+  fn repeating_table(&self) -> Option<NodeId> {
+    self
+      .running
+      .windows(2)
+      .find(|run| {
+        matches!(
+          self.layout_style(NodeId::new(run[1].node as usize)).display,
+          Display::TableHeaderGroup | Display::TableFooterGroup
+        )
+      })
+      .map(|run| NodeId::new(run[0].node as usize))
+  }
+
+  /// Notes whether the last fragment of `node` placed ends the box.
+  pub(crate) fn note_end(&mut self, node: NodeId, ends: bool) {
+    let Some(releases) = &self.releases else {
+      return;
+    };
+
+    self.nodes[usize::from(node)].ended_by = NonZeroUsize::new(releases.laid()).filter(|_| ends);
+    if ends {
+      self.log_cache_finished(node, Finished::Ended(node));
+    }
+  }
+
+  /// Whether the box `node` ended in the first `pages` pages.
+  pub(crate) fn ended_by(&self, node: NodeId, pages: usize) -> bool {
+    self.nodes[usize::from(node)]
+      .ended_by
+      .is_some_and(|ended| ended.get() <= pages)
+  }
+
+  /// Frees what the layout finished with in the first `pages` pages.
+  pub(crate) fn release(&mut self, pages: usize) {
+    let Some(mut releases) = self.releases.take() else {
+      return;
+    };
+
+    while let Some((laid, finished)) = releases.pop_up_to(pages) {
+      self.release_finished(&mut releases, laid, finished);
+    }
+    self.releases = Some(releases);
+  }
+
+  fn release_finished(&mut self, releases: &mut Releases, laid: usize, finished: Finished) {
+    match finished {
+      Finished::Items { node, fragment } => {
+        if releases.take_placed_items(node, fragment, laid) {
+          self.render_nodes[usize::from(node)]
+            .fragment_items
+            .release(fragment);
+        }
+      }
+      Finished::LayoutsBefore { node, fragment } => {
+        self.nodes[usize::from(node)].cache.release_before(fragment);
+      }
+      Finished::Ended(node) => {
+        if self.nodes[usize::from(node)]
+          .ended_by
+          .map(NonZeroUsize::get)
+          != Some(laid)
+        {
+          return;
+        }
+
+        self.nodes[usize::from(node)].cache.release_all();
+        self
+          .inline_node_data
+          .borrow_mut()
+          .remove(&usize::from(node));
+        self.tables.remove(&usize::from(node));
+        self.table_columns.remove(&usize::from(node));
+        self.repeated_roots.remove(&node);
+        #[cfg(debug_assertions)]
+        self.released_boxes.borrow_mut().insert(usize::from(node));
+        for (laid, held) in releases.take_held(node) {
+          self.release_finished(releases, laid, held);
+        }
+      }
+    }
+  }
+}
+
 impl<'r> LayoutTree<'r> {
   /// Builds a layout tree from a render-node root.
   pub fn from_render_node(render_root: &'r RenderNode) -> Self {
@@ -665,6 +852,10 @@ impl<'r> LayoutTree<'r> {
       inline_contents: FxHashMap::default(),
       #[cfg(feature = "fragmentation")]
       repeated_roots: FxHashMap::default(),
+      #[cfg(feature = "fragmentation")]
+      releases: None,
+      #[cfg(all(feature = "fragmentation", debug_assertions))]
+      released_boxes: RefCell::default(),
     };
 
     tree.push_subtree(render_root);
@@ -732,8 +923,23 @@ impl<'r> LayoutTree<'r> {
     node
   }
 
+  /// Fails loudly in debug builds when `what` of the box at `index` is read after it was released.
+  #[cfg_attr(
+    not(all(feature = "fragmentation", debug_assertions)),
+    allow(unused_variables)
+  )]
+  fn assert_not_released(&self, index: usize, what: &str) {
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    assert!(
+      !self.released_boxes.borrow().contains(&index),
+      "the {what} of box {index} were read after they were released"
+    );
+  }
+
   /// The prepared items of the inline formatting context the node at `index` establishes.
   pub(crate) fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
+    self.assert_not_released(index, "inline items");
+
     Rc::clone(
       self
         .inline_node_data
@@ -1219,6 +1425,7 @@ impl<'r> LayoutTree<'r> {
   }
 
   pub(in crate::layout) fn table_structure(&self, table: NodeId) -> Option<Rc<TableStructure>> {
+    self.assert_not_released(table.into(), "table structure");
     self.tables.get(&usize::from(table)).cloned()
   }
 
@@ -1234,6 +1441,7 @@ impl<'r> LayoutTree<'r> {
     &self,
     table: NodeId,
   ) -> Option<Rc<ColumnConstraints>> {
+    self.assert_not_released(table.into(), "column constraints");
     self.table_columns.get(&usize::from(table)).cloned()
   }
 
@@ -1442,12 +1650,8 @@ impl RenderNode {
   ) -> Option<Rc<FragmentItems>> {
     self
       .fragment_items
-      .0
-      .borrow()
-      .get(fragment_index)?
-      .as_ref()
+      .get(fragment_index)
       .filter(|items| items.content_box == ContentBox::of(layout))
-      .map(Rc::clone)
   }
 
   /// Forgets the fragment items and item shapes it and the boxes under it took, which no longer
@@ -1456,7 +1660,7 @@ impl RenderNode {
     let mut stack = vec![self];
 
     while let Some(node) = stack.pop() {
-      node.fragment_items.0.borrow_mut().clear();
+      node.fragment_items.clear();
       node.item_shapes.clear();
       stack.extend(node.children.iter().flatten());
     }

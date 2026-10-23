@@ -249,6 +249,53 @@ fn a_child_held_to_the_bottom_of_a_relative_root_holds_every_page_until_layout_e
 }
 
 #[test]
+fn a_long_document_of_every_kind_of_box_draws_like_after_layout() {
+  let rows: String = (0..60)
+    .map(|row| format!("<tr><td>row {row}</td><td>cell</td></tr>"))
+    .collect();
+  let blocks: String = (0..120)
+    .map(|index| {
+      format!(
+        r#"<section><h2 style="margin: 0">Section {index}</h2><p style="margin: 0">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor</p><div style="position: relative; height: 20px"><span style="position: absolute; right: 0; top: 0">badge {index}</span></div><div style="display: flex"><div>left {index}</div><div>right</div></div><div style="float: left; width: 40px">float</div><span style="display: inline-block; width: 60px">inline {index}</span></section>"#
+      )
+    })
+    .collect();
+  let source = format!(
+    r#"<div style="font-size: 14px"><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tfoot><tr><td>Sum</td><td>0</td></tr></tfoot><tbody>{rows}</tbody></table>{blocks}<p>The end</p></div>"#
+  );
+  let rendered = assert_draws_like_after_layout("a long document", |fonts| options(&source, fonts));
+
+  assert!(
+    rendered.pages > 60,
+    "the document has {} pages",
+    rendered.pages
+  );
+  assert!(
+    rendered.laid_at_first_page < rendered.pages,
+    "{} of {} pages were laid out",
+    rendered.laid_at_first_page,
+    rendered.pages
+  );
+}
+
+#[test]
+fn a_long_document_with_a_fixed_box_draws_like_after_layout() {
+  let lines: String = (0..200)
+    .map(|line| format!("<div>line {line}</div>"))
+    .collect();
+  let source = format!(
+    r#"<div style="font-size: 14px"><div style="position: fixed; top: 0; left: 0"><div>Running head</div></div>{lines}</div>"#
+  );
+  let rendered = assert_draws_like_after_layout("a fixed box", |fonts| options(&source, fonts));
+
+  assert!(
+    rendered.pages > 10,
+    "the document has {} pages",
+    rendered.pages
+  );
+}
+
+#[test]
 fn an_absolute_box_found_on_a_later_page_holds_the_pages_of_its_containing_block_until_then() {
   let lines = |range: std::ops::RangeInclusive<usize>| -> String {
     range

@@ -12,6 +12,7 @@ use takumi_core::{
   Fonts,
   geometry::Size,
   layout::node::Node,
+  page_stream::{PageStream, SETTLED_PAGES, Settled},
   resources::font::FontResource,
   scene::{PagedScene, SceneRef},
   style::StyleSheet,
@@ -29,6 +30,11 @@ use crate::{
 const PAGE_SIZE: Size<f32> = Size {
   width: 200.0,
   height: 100.0,
+};
+
+const LONG_PAGE_SIZE: Size<f32> = Size {
+  width: 300.0,
+  height: 200.0,
 };
 
 fn fonts() -> Fonts {
@@ -404,6 +410,64 @@ fn container_relative_lengths_paint_in_a_paged_document() {
   );
   assert_streams_like_whole("container relative radius", &rounded("30cqw"), PAGE_SIZE);
   assert_streams_like_whole("container relative text", &text("10cqw"), PAGE_SIZE);
+}
+
+#[test]
+fn a_long_document_streams_like_the_whole_document() {
+  let rows: String = (0..120)
+    .map(|row| format!("<tr><td>row {row}</td><td>cell</td></tr>"))
+    .collect();
+  let sections: String = (0..100)
+    .map(|index| {
+      format!(
+        "<section><h2 style=\"margin: 0\">Section {index}</h2><p style=\"margin: 0\">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor</p><div style=\"position: relative; height: 20px\"><span style=\"position: absolute; right: 0; top: 0\">badge {index}</span></div><div style=\"display: flex\"><div>left {index}</div><div>right</div></div></section>"
+      )
+    })
+    .collect();
+  let source = format!(
+    "<div style=\"font-size: 12px\"><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tfoot><tr><td>Sum</td><td>0</td></tr></tfoot><tbody>{rows}</tbody></table>{sections}<p>The end</p></div>"
+  );
+  let pages = assert_streams_like_whole("long document", &source, LONG_PAGE_SIZE);
+
+  assert!(pages > 50, "the document has {pages} pages");
+}
+
+#[test]
+fn a_long_document_with_a_fixed_box_streams_like_the_whole_document() {
+  let lines: String = (0..300)
+    .map(|line| format!("<div>line {line}</div>"))
+    .collect();
+  let source = format!(
+    "<div style=\"font-size: 12px\"><div style=\"position: fixed; top: 0; left: 0\"><div>Running head</div></div>{lines}</div>"
+  );
+  let pages = assert_streams_like_whole("long document with a fixed box", &source, LONG_PAGE_SIZE);
+
+  assert!(pages > 20, "the document has {pages} pages");
+}
+
+#[test]
+fn a_released_page_cannot_be_painted_again() {
+  let fonts = fonts();
+  let node = parse(&format!("<div>{}</div>", pages_of_blocks(6)));
+  let stylesheet = Arc::new(StyleSheet::default());
+  let mut options = options(&fonts, &node, &stylesheet, PAGE_SIZE);
+  let render_context = options.take_render_context();
+  let root = RenderNode::from_node(&render_context, options.node);
+  let mut stream = PageStream::new(&root, PAGE_SIZE, usize::MAX);
+  let mut drawn = 0;
+
+  while drawn < 3 {
+    let Settled { pages, .. } = stream.advance(SETTLED_PAGES).expect("a page lays out");
+
+    for index in pages {
+      stream.window(index).expect("a settled page paints");
+      drawn += 1;
+    }
+  }
+  stream.advance(SETTLED_PAGES).expect("a page lays out");
+
+  assert!(matches!(stream.window(0), Err(Error::PageReleased(0))));
+  assert!(stream.window(drawn).is_ok());
 }
 
 fn wpt_root() -> Option<PathBuf> {

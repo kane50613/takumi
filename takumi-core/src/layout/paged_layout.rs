@@ -67,6 +67,12 @@ impl<'r> PagedLayout<'r> {
     }
   }
 
+  /// Has the layout log what it finishes with, so that [`Self::release`] can free it.
+  pub fn with_release(mut self) -> Self {
+    self.tree.start_releases();
+    self
+  }
+
   /// Lays out the next page and returns whether there was one. Fails with [`Error::TooManyPages`]
   /// when a page past `max_pages` is needed.
   pub fn next_page(&mut self) -> Result<bool> {
@@ -79,6 +85,8 @@ impl<'r> PagedLayout<'r> {
 
     let page_block_size = LayoutUnit::from_float(self.page_size.height);
     let page = self.page_count;
+
+    self.tree.begin_page(page + 1);
     let mut space = self
       .tree
       .root_space(self.page_size.map(AvailableSpace::Definite));
@@ -162,6 +170,18 @@ impl<'r> PagedLayout<'r> {
     self.update_pending();
 
     Ok(true)
+  }
+
+  /// Frees what the layout finished with while laying out the first `pages` pages, which no page
+  /// still to be laid out, painted, or summarized reads. Does nothing unless the layout is made
+  /// [`Self::with_release`].
+  pub fn release(&mut self, pages: usize) {
+    self.tree.release(pages);
+  }
+
+  /// Whether the box `node` had no fragment to come once the first `pages` pages were laid out.
+  pub fn has_ended_by(&self, node: NodeId, pages: usize) -> bool {
+    self.tree.ended_by(node, pages)
   }
 
   /// The layout so far.

@@ -9,7 +9,7 @@ use std::{mem::take, rc::Rc};
 #[cfg(feature = "fragmentation")]
 use crate::layout::{
   block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder,
-  fragmentation_utils::fragment_index,
+  fragmentation_utils::fragment_index, releases::Finished,
 };
 use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
@@ -45,8 +45,12 @@ use crate::{
 #[derive(Default)]
 pub(crate) struct LayoutCache {
   /// Blink's `layout_results_`: the last layout of each fragment, with the break token it resumed
-  /// at.
+  /// at, from fragment `released` on.
   layouts: Vec<(ConstraintSpace, ChildBreakToken, Rc<LayoutResult>)>,
+  /// How many of the first fragments' layouts were released, [`Self::ALL_RELEASED`] once the box
+  /// ended.
+  #[cfg(feature = "fragmentation")]
+  released: usize,
   measures: Vec<(ConstraintSpace, Rc<LayoutResult>)>,
   min_max_sizes: Vec<((MinMaxKey, SizeType), MinMaxSizesResult)>,
 }
@@ -73,6 +77,8 @@ impl MinMaxKey {
 
 impl LayoutCache {
   const MEASURES: usize = 8;
+  #[cfg(feature = "fragmentation")]
+  const ALL_RELEASED: usize = usize::MAX;
 
   /// The layout for `space` resumed as `input` says: the last layout of that fragment from the
   /// same break token, which serves a measure too, or a measure of a fresh layout.
@@ -83,7 +89,7 @@ impl LayoutCache {
   ) -> Option<Rc<LayoutResult>> {
     let index = input.cached_fragment_index()?;
 
-    if let Some((cached, break_token, result)) = self.layouts.get(index)
+    if let Some((cached, break_token, result)) = self.layout_of(index)
       && input.resumes_at(break_token)
       && cached.lays_out_like(space)
     {
@@ -111,9 +117,13 @@ impl LayoutCache {
     };
 
     if space.cache_slot == CacheSlot::Layout {
+      let Some(slot) = self.slot(index) else {
+        return;
+      };
+
       // The later fragments resumed from an earlier layout of this one, and lay out anew.
-      self.layouts.truncate(index);
-      if self.layouts.len() == index {
+      self.layouts.truncate(slot);
+      if self.layouts.len() == slot {
         push_tight(
           &mut self.layouts,
           (space.clone(), input.child_break_token(), Rc::clone(result)),
@@ -136,6 +146,12 @@ impl LayoutCache {
   }
 
   fn min_max_sizes(&self, key: (MinMaxKey, SizeType)) -> Option<MinMaxSizesResult> {
+    #[cfg(feature = "fragmentation")]
+    debug_assert!(
+      self.released != Self::ALL_RELEASED,
+      "the intrinsic sizes of a box were read after it ended and they were released"
+    );
+
     self
       .min_max_sizes
       .iter()
@@ -145,6 +161,50 @@ impl LayoutCache {
 
   pub(crate) fn clear(&mut self) {
     *self = Self::default();
+  }
+
+  /// Where in `layouts` fragment `index`'s layout is, none when it was released.
+  fn slot(&self, index: usize) -> Option<usize> {
+    #[cfg(feature = "fragmentation")]
+    {
+      let slot = index.checked_sub(self.released);
+
+      debug_assert!(
+        slot.is_some(),
+        "the layout of fragment {index} was used after it was released"
+      );
+      slot
+    }
+    #[cfg(not(feature = "fragmentation"))]
+    return Some(index);
+  }
+
+  fn layout_of(
+    &self,
+    index: usize,
+  ) -> Option<&(ConstraintSpace, ChildBreakToken, Rc<LayoutResult>)> {
+    self.layouts.get(self.slot(index)?)
+  }
+}
+
+#[cfg(feature = "fragmentation")]
+impl LayoutCache {
+  /// Drops the layouts of the fragments before `fragment`, which are not resumed again.
+  pub(crate) fn release_before(&mut self, fragment: usize) {
+    let count = fragment
+      .saturating_sub(self.released)
+      .min(self.layouts.len());
+
+    self.layouts.drain(..count);
+    self.released += count;
+  }
+
+  /// Drops every layout, measure, and intrinsic size, for a box with no fragment to come.
+  pub(crate) fn release_all(&mut self) {
+    self.released = Self::ALL_RELEASED;
+    self.layouts = Vec::new();
+    self.measures = Vec::new();
+    self.min_max_sizes = Vec::new();
   }
 }
 
@@ -201,6 +261,13 @@ impl<'r> LayoutTree<'r> {
 
     if result.status == LayoutStatus::Success {
       self.node_state_mut(node).cache.store(space, input, &result);
+      #[cfg(feature = "fragmentation")]
+      if space.cache_slot == CacheSlot::Layout
+        && let Some(fragment) = input.cached_fragment_index()
+        && fragment > 0
+      {
+        self.log_cache_finished(node, Finished::LayoutsBefore { node, fragment });
+      }
     }
     result
   }
@@ -232,6 +299,16 @@ impl<'r> LayoutTree<'r> {
       Algorithm::Replaced => self.lay_out_replaced(node, space),
       Algorithm::Block => BlockLayoutAlgorithm::new(self, node, space, input).layout(),
     }
+  }
+
+  /// Whether laying `node` out resumes the layouts of its children that ended, which flex, grid,
+  /// and table layouts take to size their items again.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn relays_out_ended_children(&self, node: NodeId) -> bool {
+    matches!(
+      self.algorithm(node),
+      Algorithm::Table | Algorithm::Flex | Algorithm::Grid
+    )
   }
 
   fn algorithm(&self, node: NodeId) -> Algorithm {
@@ -550,11 +627,19 @@ impl<'r> LayoutTree<'r> {
       },
     );
     #[cfg(feature = "fragmentation")]
-    if result.break_info.break_token.is_none() {
-      self
-        .node_state_mut(node)
-        .fragments
-        .truncate(fragment_index + 1);
+    {
+      let ends = result.break_info.break_token.is_none();
+
+      if ends {
+        self
+          .node_state_mut(node)
+          .fragments
+          .truncate(fragment_index + 1);
+      }
+      self.note_end(node, ends);
+      if self.render_node(node).fragment_items.has(fragment_index) {
+        self.log_items(node, fragment_index);
+      }
     }
   }
 
@@ -637,6 +722,7 @@ impl<'r> LayoutTree<'r> {
         .render_node(child)
         .fragment_items
         .repeat(child_source, child_target);
+      self.log_items(child, child_target);
       if self.is_table(child) {
         self.repeat_table_fragment(child, child_source, child_target);
       }
