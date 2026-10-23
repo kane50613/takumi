@@ -373,7 +373,7 @@ impl<'c> FragmentBackground<'c> {
         &self.node.context,
         self.strip,
         fragment.border,
-        self.node.context.paint_offset + self.strip_origin,
+        self.node.context.paint_offset() + self.strip_origin,
       ),
       strip: BoxFrame::new(self.strip, frame.origin + self.strip_origin),
     }
@@ -601,7 +601,7 @@ impl InlineBackgroundFragment<'_> {
   /// The fragment's border box pixel-snapped where its span paints.
   fn snapped_box(&self) -> SnappedBox {
     SnappedBox::new(
-      self.owner.context.paint_offset
+      self.owner.context.paint_offset()
         + Point {
           x: self.x,
           y: self.y,

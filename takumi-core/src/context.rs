@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
 
 use typed_builder::TypedBuilder;
 
@@ -87,8 +87,8 @@ impl From<RenderContextInit> for RenderContext {
       }),
       sizing: init.sizing,
       transform: init.transform,
-      paint_offset: Point::ZERO,
-      fragment_index: 0,
+      paint_offset: Cell::new(Point::ZERO),
+      fragment_index: Cell::new(0),
       current_color: init.current_color,
       style: init.style,
       text_decorations: AppliedTextDecorations::default(),
@@ -107,11 +107,11 @@ pub struct RenderContext {
   /// The scale factor for the image renderer.
   pub transform: Affine,
   /// Blink's paint offset of the space the box's layout location is measured in: where that space
-  /// sits in the space Blink snaps paint to pixels in.
-  pub paint_offset: Point<f32>,
-  /// Which of the box's fragments the scene last set up paints, as [`Self::paint_offset`] is
-  /// that scene's.
-  pub(crate) fragment_index: usize,
+  /// sits in the space Blink snaps paint to pixels in. A painter sets it for each fragment it
+  /// enters, through a scene it shares.
+  paint_offset: Cell<Point<f32>>,
+  /// Which of the box's fragments the painter entered, as [`Self::paint_offset`] is.
+  fragment_index: Cell<usize>,
   /// What the `currentColor` value is resolved to.
   pub current_color: Color,
   /// The style after inheritance.
@@ -132,9 +132,26 @@ impl RenderContext {
     RenderContextInit::builder()
   }
 
+  /// Blink's paint offset of the space the box's layout location is measured in.
+  pub fn paint_offset(&self) -> Point<f32> {
+    self.paint_offset.get()
+  }
+
+  /// Which of the box's fragments the painter entered.
+  pub(crate) fn fragment_index(&self) -> usize {
+    self.fragment_index.get()
+  }
+
+  /// Sets the box to paint its fragment `fragment_index`, its layout location measured from
+  /// `paint_offset`.
+  pub(crate) fn enter_fragment(&self, paint_offset: Point<f32>, fragment_index: usize) {
+    self.paint_offset.set(paint_offset);
+    self.fragment_index.set(fragment_index);
+  }
+
   /// Blink's paint offset of the border box at `layout`, the box this context styles.
   pub fn box_paint_offset(&self, layout: ComputedLayout) -> Point<f32> {
-    self.paint_offset + layout.location
+    self.paint_offset() + layout.location
   }
 
   /// The font snapshot this render draws with.
@@ -205,8 +222,8 @@ impl RenderContext {
       shared: parent.shared.clone(),
       sizing: parent.sizing.clone(),
       transform: parent.transform,
-      paint_offset: parent.paint_offset,
-      fragment_index: parent.fragment_index,
+      paint_offset: parent.paint_offset.clone(),
+      fragment_index: parent.fragment_index.clone(),
       current_color: parent.current_color,
       style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
@@ -232,8 +249,8 @@ impl RenderContext {
       ),
       sizing,
       transform: parent.transform,
-      paint_offset: parent.paint_offset,
-      fragment_index: parent.fragment_index,
+      paint_offset: parent.paint_offset.clone(),
+      fragment_index: parent.fragment_index.clone(),
       current_color,
       style,
       collapsed_borders: false,

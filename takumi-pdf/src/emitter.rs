@@ -1491,7 +1491,8 @@ struct ChunkWriter<'w, 'a, 's> {
 
 impl<'a> ChunkWriter<'_, 'a, '_> {
   /// The box `paint` names and where it sits relative to the pushed transforms, pushing a
-  /// transform when it needs more than a translation. Returns how many states went on.
+  /// transform when it needs more than a translation, with the box set to paint the fragment
+  /// `paint` names. Returns how many states went on.
   fn place(
     &mut self,
     node: Option<&'a RenderNode>,
@@ -1503,6 +1504,10 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
       .results
       .fragment_layout(paint.node_id, paint.fragment_index)
       .ok()?;
+
+    if let Some(fragments) = &scene.fragments {
+      fragments.enter(&scene.root, paint, layout.location);
+    }
     let relative = self.current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
 
     if relative.only_translation() {

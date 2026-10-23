@@ -297,7 +297,7 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
       .as_ref()
       .expect("a paged scene places fragments");
 
-    fragments.enter(&mut scene.root, paint, layout.location);
+    fragments.enter(&scene.root, paint, layout.location);
 
     let node = scene
       .root

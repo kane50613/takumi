@@ -388,9 +388,9 @@ fn column_backgrounds(
       }
     }
 
-    let mut context = column.context.clone();
+    let context = column.context.clone();
 
-    context.paint_offset = table.context.paint_offset;
+    context.enter_fragment(table.context.paint_offset(), context.fragment_index());
     backgrounds.push(ColumnBackground {
       path: geometry
         .path
