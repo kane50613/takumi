@@ -225,6 +225,8 @@ impl BoxFragmentBuilder {
 
   /// The fragment `fragment_index` of `node`, the box this builder builds with its padding box
   /// `padding_box`, as the out-of-flow boxes it leaves to the fragmentation root see it.
+  // The next layer removes the old fragmentainer-descendant path this serves.
+  #[allow(dead_code)]
   pub(crate) fn fragmented_containing_block(
     &self,
     node: NodeId,
@@ -239,6 +241,24 @@ impl BoxFragmentBuilder {
       padding_box,
       is_inside_clipped_container: false,
     }
+  }
+
+  /// The box's block size from its first fragment to the end of this one, `block_size` tall: what
+  /// it knows of its stitched size without the fragments to come.
+  pub(crate) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
+    if self.involved_in_block_fragmentation() {
+      self.fragments_total_block_size
+    } else {
+      block_size
+    }
+  }
+
+  /// Whether the out-of-flow boxes a box lays out break across its fragments. A box that clips its
+  /// block overflow (`clips_block_overflow`) and ends in this fragment finishes them here, so they
+  /// add no pages, as Blink's `DisableFurtherFragmentation` keeps those of a clipped containing
+  /// block from it.
+  pub(crate) fn breaks_out_of_flow_children(&self, clips_block_overflow: bool) -> bool {
+    self.involved_in_block_fragmentation() && (!clips_block_overflow || self.should_break())
   }
 
   /// Blink's `AddBreakToken`: a break before `node`, which the next fragment resumes at, with no

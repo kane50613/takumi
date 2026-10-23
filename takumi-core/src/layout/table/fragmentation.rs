@@ -11,7 +11,6 @@ use crate::{
     fragmentation_layout_input::ChildBreakToken,
     layout_result::{LayoutResult, LayoutStatus, OutOfFlowCandidate},
     logical_rect::LogicalBoxStrut,
-    out_of_flow::{ContainingBlock, ContainingBlockClaims},
     table::{TableLayoutAlgorithm, TableStructure, rows::Rows},
   },
   layout_unit::{BoxStrut, LayoutUnit},
@@ -170,7 +169,11 @@ impl TableLayoutAlgorithm<'_, '_> {
   }
 
   fn resumed_child_entries(&self, children: Vec<NodeId>) -> Vec<(NodeId, ChildBreakToken)> {
-    BlockChildIterator::new(children.into(), self.input.break_token.as_deref()).collect()
+    let break_token = self
+      .tree
+      .without_out_of_flow_tokens(self.input.break_token.as_ref());
+
+    BlockChildIterator::new(children.into(), break_token.as_deref()).collect()
   }
 
   /// Blink's `FragmentIndex` of the table fragment this layout makes.
@@ -358,29 +361,21 @@ impl TableLayoutAlgorithm<'_, '_> {
     algorithm.layout()
   }
 
-  /// The out-of-flow boxes the table contains, in its padding box `containing_block`, left to the
-  /// fragmentation root when the table lays out with fragmentation, else given back.
-  pub(super) fn defer_out_of_flow(
-    &self,
-    claims: ContainingBlockClaims,
-    candidates: Vec<OutOfFlowCandidate>,
-    containing_block: ContainingBlock,
-  ) -> Result<Vec<OutOfFlowCandidate>, Vec<OutOfFlowCandidate>> {
-    if !self.builder.involved_in_block_fragmentation() {
-      return Err(candidates);
-    }
+  /// The out-of-flow children an earlier fragment broke inside or pushed here, as candidates.
+  pub(super) fn resumed_out_of_flow(&self) -> Vec<OutOfFlowCandidate> {
+    self.tree.resumed_out_of_flow(&self.builder)
+  }
 
-    let fragmented_containing_block =
-      self
-        .builder
-        .fragmented_containing_block(self.node, self.fragment_index(), containing_block);
+  /// This table's block size from its first fragment to the end of this one.
+  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
+    self.builder.stitched_block_size(block_size)
+  }
 
-    Ok(self.tree.defer_out_of_flow(
-      claims,
-      candidates,
-      fragmented_containing_block,
-      self.style.overflow.y != Overflow::Visible,
-    ))
+  /// Whether the out-of-flow boxes this table lays out break across its fragments.
+  pub(super) fn breaks_out_of_flow_children(&self) -> bool {
+    self
+      .builder
+      .breaks_out_of_flow_children(self.style.overflow.y != Overflow::Visible)
   }
 
   /// The monolithic overflow an earlier page pushed into this one.
@@ -733,13 +728,12 @@ impl TableLayoutAlgorithm<'_, '_> {
     LayoutUnit::ZERO
   }
 
-  pub(super) fn defer_out_of_flow(
-    &self,
-    _claims: ContainingBlockClaims,
-    candidates: Vec<OutOfFlowCandidate>,
-    _containing_block: ContainingBlock,
-  ) -> Result<Vec<OutOfFlowCandidate>, Vec<OutOfFlowCandidate>> {
-    Err(candidates)
+  pub(super) fn resumed_out_of_flow(&self) -> Vec<OutOfFlowCandidate> {
+    Vec::new()
+  }
+
+  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
+    block_size
   }
 
   pub(super) fn resumed_rows(&self) -> Option<(Rc<Rows>, LayoutUnit)> {

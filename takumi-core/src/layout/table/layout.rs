@@ -7,16 +7,13 @@ use std::rc::Rc;
 use rustc_hash::FxHashMap;
 
 #[cfg(feature = "fragmentation")]
-use crate::{
-  geometry::Rect,
-  layout::{
-    box_fragment_builder::BoxFragmentBuilder,
-    fragmentation_utils::setup_fragment_builder_for_fragmentation,
-  },
+use crate::layout::{
+  box_fragment_builder::BoxFragmentBuilder,
+  fragmentation_utils::setup_fragment_builder_for_fragmentation,
 };
 
 use crate::{
-  geometry::{NodeId, Point, Size},
+  geometry::{NodeId, Point, Rect, Size},
   layout::{
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
     content_alignment::BlockContentAlignment,
@@ -1136,7 +1133,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     // The captions laid out to size the grid serve, unless pages break them.
     let relayout_captions = self.involved_in_block_fragmentation();
     let mut offset = LayoutUnit::ZERO;
-    let mut out_of_flow = Vec::new();
+    let mut out_of_flow = self.resumed_out_of_flow();
     let mut first_baseline = None;
     let mut spacing_after_last_section = LayoutUnit::ZERO;
     let mut has_container_separation = false;
@@ -1515,29 +1512,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     let size = LogicalSize::new(table_inline_size, block_size);
     let mut result = LayoutResult::of_box(size, &self.style, self.space);
 
-    if !out_of_flow.is_empty() {
-      let claims = self.tree.claims(self.node);
-      let containing_block = ContainingBlock::padding_box(
-        Size {
-          width: size.inline_size,
-          height: size.block_size,
-        },
-        result.border,
-      );
-
-      out_of_flow = match self.defer_out_of_flow(claims, out_of_flow, containing_block) {
-        Ok(deferred) => deferred,
-        Err(out_of_flow) => self.tree.lay_out_out_of_flow(
-          OutOfFlowLayoutPart::new(
-            (self.node, self.fragment_index()),
-            claims,
-            containing_block,
-            self.space,
-          ),
-          out_of_flow,
-        ),
-      };
-    }
+    out_of_flow = self.lay_out_out_of_flow_children(size, result.border, out_of_flow);
 
     result.intrinsic_block_size = intrinsic_block_size;
     result.bfc_line_offset = self.space.bfc_offset.line_offset;
@@ -1546,6 +1521,45 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     result.out_of_flow = out_of_flow;
     self.finish_break_info(&mut result);
     result
+  }
+
+  /// Lays out the out-of-flow `candidates` this table contains once its size is known, in its own
+  /// fragments as Blink's `FragmentedOofInCb` does for a block, and returns those left for an
+  /// ancestor. Blink's table child iterator cannot resume them after a break, so this goes beyond
+  /// Blink.
+  fn lay_out_out_of_flow_children(
+    &mut self,
+    size: LogicalSize,
+    border: Rect<f32>,
+    candidates: Vec<OutOfFlowCandidate>,
+  ) -> Vec<OutOfFlowCandidate> {
+    if candidates.is_empty() {
+      return candidates;
+    }
+
+    let claims = self.tree.claims(self.node);
+    let containing_block = ContainingBlock::padding_box(
+      Size {
+        width: size.inline_size,
+        height: self.stitched_block_size(size.block_size),
+      },
+      border,
+    );
+    // The boxes resolve against this fragment and those before it stitched together.
+    #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
+    let mut part = OutOfFlowLayoutPart::new(
+      (self.node, self.fragment_index()),
+      claims,
+      containing_block,
+      self.space,
+    )
+    .stitched(self.previously_consumed_block_size());
+
+    #[cfg(feature = "fragmentation")]
+    if self.breaks_out_of_flow_children() {
+      part = part.in_fragments(&mut self.builder);
+    }
+    self.tree.lay_out_out_of_flow(part, candidates)
   }
 
   /// Blink's repeated footer of a fragment the table broke in: break tokens for the sections from

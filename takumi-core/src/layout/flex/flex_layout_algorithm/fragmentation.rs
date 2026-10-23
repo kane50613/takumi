@@ -5,7 +5,7 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::{collections::BTreeMap, mem::take, rc::Rc};
+use std::{collections::BTreeMap, rc::Rc};
 
 use super::{BaselineAccumulator, FlexLayoutAlgorithm, ItemPosition};
 use crate::{
@@ -29,11 +29,10 @@ use crate::{
       join_fragmentainer_break_values, setup_fragment_builder_for_fragmentation,
       setup_space_builder_for_fragmentation,
     },
-    layout_result::{LayoutResult, LayoutStatus},
+    layout_result::{LayoutResult, LayoutStatus, OutOfFlowCandidate},
     layout_style::LayoutStyle,
     length_utils::LengthResolver,
     logical_rect::{LogicalBoxStrut, LogicalOffset},
-    out_of_flow::{ContainingBlock, ContainingBlockClaims},
   },
   layout_unit::LayoutUnit,
   style::{BoxDecorationBreak, BreakBetween, Overflow},
@@ -355,30 +354,21 @@ impl FlexLayoutAlgorithm<'_, '_> {
     )
   }
 
-  /// Whether the out-of-flow boxes go to the fragmentation root, which lays them out across pages.
-  pub(super) fn defers_out_of_flow(&self) -> bool {
-    self.is_involved_in_block_fragmentation()
+  /// The out-of-flow children an earlier fragment broke inside or pushed here, as candidates.
+  pub(super) fn resumed_out_of_flow(&self) -> Vec<OutOfFlowCandidate> {
+    self.tree.resumed_out_of_flow(&self.builder)
   }
 
-  /// Leaves the out-of-flow boxes the container holds, in its padding box `containing_block`, to the
-  /// fragmentation root.
-  pub(super) fn defer_out_of_flow_children(
-    &mut self,
-    claims: ContainingBlockClaims,
-    containing_block: ContainingBlock,
-  ) {
-    let candidates = take(&mut self.out_of_flow);
-    let fragmented_containing_block =
-      self
-        .builder
-        .fragmented_containing_block(self.node, self.fragment_index(), containing_block);
+  /// This container's block size from its first fragment to the end of this one.
+  pub(super) fn stitched_block_size(&self, block_size: LayoutUnit) -> LayoutUnit {
+    self.builder.stitched_block_size(block_size)
+  }
 
-    self.out_of_flow = self.tree.defer_out_of_flow(
-      claims,
-      candidates,
-      fragmented_containing_block,
-      self.style.overflow.y != Overflow::Visible,
-    );
+  /// Whether the out-of-flow boxes this container lays out break across its fragments.
+  pub(super) fn breaks_out_of_flow_children(&self) -> bool {
+    self
+      .builder
+      .breaks_out_of_flow_children(self.style.overflow.y != Overflow::Visible)
   }
 
   /// What the container's layout result tells its container about breaking.
@@ -638,7 +628,11 @@ impl FlexLayoutAlgorithm<'_, '_> {
     total_intrinsic_block_size: &mut LayoutUnit,
   ) -> Result<(), LayoutStatus> {
     let break_token = self.fragmentation.input.break_token.clone();
-    let mut item_iterator = FlexItemIterator::new(flex_lines, break_token.clone(), self.is_column);
+    let mut item_iterator = FlexItemIterator::new(
+      flex_lines,
+      self.tree.without_out_of_flow_tokens(break_token.as_ref()),
+      self.is_column,
+    );
     let mut has_inflow_child_break_inside_line = vec![false; flex_lines.len()];
     let mut needs_earlier_break_in_column = false;
     let fragmentainer_space = self.builder.fragmentainer_space_left(true);
