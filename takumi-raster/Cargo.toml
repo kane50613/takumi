@@ -63,6 +63,9 @@ pages = ["takumi-core/fragmentation"]
 [dev-dependencies]
 serde_json.workspace = true
 
+[dev-dependencies.takumi-html]
+path = "../takumi-html"
+
 [lints]
 workspace = true
 

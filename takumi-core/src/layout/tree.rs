@@ -9,7 +9,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::{layout_result::LayoutResult, paged_layout::PagedLayout};
+use crate::layout::{
+  layout_result::LayoutResult, layout_view::LiveLayout, paged_layout::PagedLayout,
+};
 
 use crate::{
   context::{BoxId, RenderContext},
@@ -27,7 +29,7 @@ use crate::{
     },
     layout_result::{OutOfFlowCandidate, StaticPosition},
     layout_style::{LayoutLength, LayoutStyle},
-    layout_view::{HoistedBy, LayoutView, LiveLayout},
+    layout_view::{HoistedBy, LayoutView},
     length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
@@ -220,29 +222,9 @@ impl LayoutResults {
     self.view().is_repeated_fragment(node_id, fragment_index)
   }
 
-  /// Which fragment of `node_id` the parent's fragment `container_fragment_index` holds first,
-  /// none when it holds none.
-  pub(crate) fn fragment_in(
-    &self,
-    node_id: NodeId,
-    container_fragment_index: usize,
-  ) -> Option<usize> {
-    self.view().fragment_in(node_id, container_fragment_index)
-  }
-
   /// Paint-ordered children of a node.
   pub fn box_children(&self, node_id: NodeId) -> crate::Result<&[OrderedChild]> {
     self.view().box_children(node_id)
-  }
-
-  /// The run of `node_id`'s box children its fragment `fragment_index` holds, for children that
-  /// break in order, as a table section's rows do.
-  pub(crate) fn ordered_children_in(
-    &self,
-    node_id: NodeId,
-    fragment_index: usize,
-  ) -> crate::Result<&[OrderedChild]> {
-    self.view().ordered_children_in(node_id, fragment_index)
   }
 
   /// The paint data of the table `node_id`'s fragment `fragment_index`, when it is one.
@@ -1128,6 +1110,7 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// The layout so far, for reading while it lays out more pages.
+  #[cfg(feature = "fragmentation")]
   pub fn view(&self) -> LayoutView<'_> {
     LayoutView::Live(LiveLayout {
       nodes: &self.nodes,

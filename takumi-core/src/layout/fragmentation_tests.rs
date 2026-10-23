@@ -1514,6 +1514,34 @@ fn a_held_box_keeps_the_pages_from_its_containing_block_open() {
   assert_eq!(finalized_after_each_page(&tree, 200.0), [1, 1, 1, 4]);
 }
 
+/// An absolute box is laid out in the fragment that holds its static position, and placed from the
+/// start of its containing block, so the block's first pages stay open until a page lays it out.
+#[test]
+fn an_absolute_box_found_on_a_later_page_keeps_its_containing_blocks_pages_open() {
+  let tree = render(
+    root([
+      block("before", "h100"),
+      Node::container([block("a", "h500"), block("late", "late")]).with_class_name("block rel"),
+    ]),
+    ".h100 { height: 100px } .h500 { height: 500px } .rel { position: relative } \
+     .late { position: absolute; top: 10px; left: 0; width: 10px; height: 10px }",
+  );
+
+  // The box is found on the third page and placed from the block's start on the first.
+  assert_eq!(finalized_after_each_page(&tree, 200.0), [0, 0, 3]);
+}
+
+/// A box the styles do not bound can paint on any page until the layout has laid it out.
+#[test]
+fn a_box_with_a_transform_keeps_every_page_open_until_it_is_laid_out() {
+  let tree = render(
+    root([block("a", "h500"), block("up", "up"), block("b", "h500")]),
+    ".h500 { height: 500px } .up { height: 10px; transform: translateY(-300px) }",
+  );
+
+  assert_eq!(finalized_after_each_page(&tree, 200.0), [0, 0, 3, 4, 5, 6]);
+}
+
 /// The initial containing block is the first page's area, so an absolute box a later page finds
 /// paints on the first page.
 #[test]
@@ -1591,5 +1619,20 @@ fn a_box_hoisted_past_its_parent_paints_in_the_window_of_its_containing_block() 
       width: 300.0,
       height: 200.0,
     },
+  );
+}
+
+/// The root's last fragment holds the page areas that go on after it, so it paints more with each
+/// and stays open until they end.
+#[test]
+fn the_roots_last_fragment_stays_open_while_page_areas_go_on() {
+  let tree = render(
+    root([block("a", "h50"), block("tall", "tall")]),
+    ".h50 { height: 50px } .tall { position: absolute; top: 500px; height: 1000px; width: 10px }",
+  );
+
+  assert_eq!(
+    finalized_after_each_page(&tree, 200.0),
+    [0, 0, 0, 0, 0, 0, 0, 8]
   );
 }

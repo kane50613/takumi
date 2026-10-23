@@ -139,12 +139,17 @@ impl ChunkWriter<'_, '_, '_> {
       match chunk.part {
         ChunkPart::Decorations => {
           let scene = self.emitter.scene;
-          let text_clip =
-            TextClip::of(&scene.root, &scene.results, chunk.node).map_err(io::Error::other)?;
+          let text_clip = TextClip::of(
+            &scene.root,
+            scene.results.view(),
+            chunk.node,
+            &placed.node.context,
+          )
+          .map_err(io::Error::other)?;
 
           let table = TableDecorations::of(
             &scene.root,
-            &scene.results,
+            scene.results.view(),
             &chunk.node.path,
             chunk.node.node_id,
             chunk.node.fragment_index,
@@ -159,7 +164,7 @@ impl ChunkWriter<'_, '_, '_> {
 
           DocumentDevice::paint(doc, |device| {
             result = paint_collapsed_borders(
-              &scene.results,
+              scene.results.view(),
               chunk.node.node_id,
               chunk.node.fragment_index,
               chunk.node.paint_offset,

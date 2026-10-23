@@ -6299,3 +6299,219 @@ fn synthesized_italic_leans_right_about_the_baseline() {
 
   assert_eq!(sheared, 2, "expected one sheared run per paragraph");
 }
+
+/// 320x240 pages with 24px margins, so a few lines fill one.
+const STREAM_PAGE: PageOptions = PageOptions {
+  width: 320.0,
+  height: 240.0,
+  margin: PageMargins::uniform(24.0),
+};
+
+fn stream_options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+  PdfOptions::builder()
+    .node(from_html(source, FromHtmlOptions::default()).expect("parse the streaming fixture"))
+    .page(STREAM_PAGE)
+    .fonts(fonts)
+    .build()
+}
+
+/// A section on a page of its own, with a heading and a few lines.
+fn stream_section(id: &str, title: &str, lines: usize) -> String {
+  let body: String = (1..=lines)
+    .map(|line| format!("<div>{title}, line {line}</div>"))
+    .collect();
+
+  format!(
+    r#"<div id="{id}" style="display: flex; flex-direction: column; break-before: page;"><h2 style="font-size: 18px; margin: 0;">{title}</h2>{body}</div>"#
+  )
+}
+
+fn stream_document(head: &str, sections: &[(&str, &str, usize)], tail: &str) -> String {
+  let sections: String = sections
+    .iter()
+    .map(|&(id, title, lines)| stream_section(id, title, lines))
+    .collect();
+
+  format!(
+    r#"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">{head}{sections}{tail}</div>"#
+  )
+}
+
+/// A link on the first page names a section on the fourth, and the last section links back. A link
+/// to a missing id loses its annotation.
+#[test]
+fn stream_forward_link() {
+  let source = stream_document(
+    r##"<a href="#last" style="display: flex;">Jump to the last section</a>
+      <a href="#missing" style="display: flex;">Nowhere</a>
+      <h1 id="first" style="font-size: 22px; margin: 0;">First</h1>"##,
+    &[
+      ("middle", "Middle", 4),
+      ("later", "Later", 4),
+      ("last", "Last", 4),
+    ],
+    r##"<a href="#first" style="display: flex;">Back to the top</a>"##,
+  );
+
+  let pdf = run_pdf_fixture("stream-forward-link", |fonts| {
+    let mut options = stream_options(&source, fonts);
+
+    options.outline = true;
+    options
+  });
+
+  assert_eq!(page_count(&pdf), 4);
+  assert_eq!(
+    String::from_utf8_lossy(&pdf)
+      .matches("/Subtype/Link")
+      .count(),
+    2,
+    "the link to a missing id is dropped"
+  );
+}
+
+/// A header and a repeated fixed box both read the page count, and the header is taller than the
+/// default margin, so the band height and the page count settle together.
+#[test]
+fn stream_total_pages_band() {
+  let source = stream_document(
+    r#"<div class="fixed-count" style="position: fixed; right: 4px; bottom: 4px; font-size: 10px;">of <span class="totalPages"></span></div>"#,
+    &[("a", "Alpha", 6), ("b", "Beta", 6), ("c", "Gamma", 6)],
+    "",
+  );
+
+  let pdf = run_pdf_fixture("stream-total-pages-band", |fonts| {
+    let mut options = stream_options(&source, fonts);
+
+    options.page = Some(PageOptions {
+      margin: PageMargins {
+        top: PageMargin::Auto,
+        ..PageMargins::uniform(24.0)
+      },
+      ..STREAM_PAGE
+    });
+    options.header = Some(
+      from_html(
+        r#"<div style="font-size: 30px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+        FromHtmlOptions::default(),
+      )
+      .expect("parse the header"),
+    );
+    options
+  });
+
+  assert!(page_count(&pdf) >= 3);
+}
+
+/// Page, total and target counters in the content, which read where boxes landed after a pass of
+/// layout.
+#[test]
+fn stream_content_counters() {
+  let source = stream_document(
+    r##"<a href="#c" style="display: flex; column-gap: 4px;">Chapter <span class="targetPageNumber"></span></a>
+      <div>This report has <span class="totalPages"></span> pages, and this is page <span class="pageNumber"></span>.</div>"##,
+    &[("a", "Alpha", 5), ("b", "Beta", 5), ("c", "Gamma", 5)],
+    r#"<div>End of page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+  );
+
+  let pdf = run_pdf_fixture("stream-content-counters", |fonts| {
+    stream_options(&source, fonts)
+  });
+
+  assert_eq!(page_count(&pdf), 4);
+}
+
+/// Pages 1, 3 and 5 of five are kept, so pages 2 and 4 are dropped between kept ones, while the
+/// outline still reads the headings on the dropped pages to nest the ones it keeps.
+#[test]
+fn stream_page_ranges_drop_middle_pages() {
+  let source = stream_document(
+    r#"<h1 id="top" style="font-size: 22px; margin: 0;">Report</h1>"#,
+    &[
+      ("b", "Beta", 4),
+      ("c", "Gamma", 4),
+      ("d", "Delta", 4),
+      ("e", "Epsilon", 4),
+    ],
+    "",
+  );
+
+  let pdf = run_pdf_fixture("stream-page-ranges-middle", |fonts| {
+    let mut options = stream_options(&source, fonts);
+
+    options.outline = true;
+    options.page_ranges = Some(vec![
+      PageRange::single(1),
+      PageRange::single(3),
+      PageRange::single(5),
+    ]);
+    options
+  });
+
+  assert_eq!(page_count(&pdf), 3);
+}
+
+/// A tagged document with an outline and links out of the document over several pages.
+#[test]
+fn stream_tagged_outline() {
+  let source = stream_document(
+    r##"<h1 style="font-size: 22px; margin: 0;">Report</h1>
+      <a href="https://example.com/report" style="display: flex;">Online</a>
+      <a href="mailto:report@example.com" style="display: flex;">Write to us</a>"##,
+    &[("one", "One", 6), ("two", "Two", 6), ("three", "Three", 6)],
+    r#"<a href="https://example.com/end" style="display: flex;">The end</a>"#,
+  );
+
+  let pdf = run_pdf_fixture("stream-tagged-outline", |fonts| {
+    let mut options = stream_options(&source, fonts);
+
+    options.outline = true;
+    options.tagged = Tagging::On;
+    options
+  });
+
+  assert!(String::from_utf8_lossy(&pdf).contains("/StructTreeRoot"));
+}
+
+/// A box on the fourth page with a transform paints on the first, three pages back.
+#[test]
+fn stream_transform_paints_three_pages_back() {
+  let source = stream_document(
+    "",
+    &[
+      ("a", "Alpha", 3),
+      ("b", "Beta", 3),
+      ("c", "Gamma", 3),
+      ("d", "Delta", 3),
+    ],
+    "",
+  )
+  .replace(
+    "Delta, line 3</div>",
+    r#"Delta, line 3</div><div style="width: 120px; height: 30px; background-color: rgb(200, 40, 40); transform: translateY(-576px);"></div>"#,
+  );
+
+  let pdf = run_pdf_fixture("stream-transform-three-pages-back", |fonts| {
+    stream_options(&source, fonts)
+  });
+
+  assert_eq!(page_count(&pdf), 4);
+}
+
+/// A `position: relative` root with a `bottom: 0` child, which the root holds back until its last
+/// fragment and lays out at a negative offset on the page before.
+#[test]
+fn stream_relative_body_with_bottom_child() {
+  let source = format!(
+    r#"<div style="position: relative; display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">{}<div style="position: absolute; bottom: 0; left: 0; height: 24px; width: 160px; background-color: rgb(40, 120, 200);">Watermark</div></div>"#,
+    (1..=40)
+      .map(|line| format!("<div>Line {line}</div>"))
+      .collect::<String>()
+  );
+
+  let pdf = run_pdf_fixture("stream-relative-body-bottom", |fonts| {
+    stream_options(&source, fonts)
+  });
+
+  assert!(page_count(&pdf) >= 3);
+}

@@ -5,14 +5,17 @@ use std::{collections::HashMap, rc::Rc, sync::Arc};
 use takumi_core::{
   Fonts,
   context::RenderContext,
-  geometry::{NodeId, Size},
+  geometry::{ComputedLayout, NodeId, Size},
   layout::{
+    layout_view::LayoutView,
     node::{Node, NodeKind},
-    tree::RenderNode,
+    paged_layout::PagedLayout,
+    tree::{LayoutResults, RenderNode},
   },
+  paint_property::PropertyTrees,
   painter::OwnContent,
   resources::image::ImageSource,
-  scene::{NodePaint, PagedScene, PaintItemKind, Scene},
+  scene::{FragmentPlacements, NodePaint, PaintItemKind, Scene, SceneRef, StackingContextNode},
   style::{
     ComputedStyle, Display, FontFamily, Lang, Length, Position, SizingContext, Style,
     StyleDeclaration, StyleSheet, ZIndex,
@@ -85,14 +88,25 @@ impl TreeInputs<'_> {
     self.prepare(node, viewport)
   }
 
-  /// The content laid out across pages, how many, and the `fixed` subtrees attached to the
-  /// initial containing block. Those repeat on every page, so they lay out against the page area
-  /// on their own.
+  /// The content laid out across pages, and the `fixed` subtrees attached to the initial
+  /// containing block.
   pub(crate) fn prepare_paged(
     &self,
     node: Node,
     frame: &PageFrame,
-  ) -> Result<(PreparedTree, Vec<Repeatable>, usize), PdfError> {
+  ) -> Result<(PagedContent, Vec<Repeatable>), PdfError> {
+    let (root, repeated) = self.prepare_root(node, frame)?;
+
+    Ok((PagedContent::lay_out(root, frame.page_size())?, repeated))
+  }
+
+  /// The content tree to lay out across pages, and the `fixed` subtrees taken out of it. Those
+  /// repeat on every page, so they lay out against the page area on their own.
+  pub(crate) fn prepare_root(
+    &self,
+    node: Node,
+    frame: &PageFrame,
+  ) -> Result<(RenderNode, Vec<Repeatable>), PdfError> {
     let viewport = frame.column();
     let node = fill_root(node, viewport);
     // A repeated box holding a counter lays out again per page, from the subtree
@@ -100,13 +114,6 @@ impl TreeInputs<'_> {
     let source = has_page_counters(&node).then(|| node.clone());
     let mut root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
     let repeated = take_repeating_fixed(&mut root);
-    let (content, page_count) = PreparedTree::lay_out_pages(
-      root,
-      Size {
-        width: frame.content_width,
-        height: frame.window_height,
-      },
-    )?;
     let page_context = self.context(frame.page_area);
     let repeated = repeated
       .into_iter()
@@ -127,7 +134,7 @@ impl TreeInputs<'_> {
       })
       .collect::<Result<Vec<_>, PdfError>>()?;
 
-    Ok((content, repeated, page_count))
+    Ok((root, repeated))
   }
 }
 
@@ -151,22 +158,6 @@ impl PreparedTree {
     Ok(Self {
       scene: Scene::lay_out(root, viewport, true)?,
     })
-  }
-
-  /// `root` laid out on pages `page_size`, the pages stacked in one scene, and how many there are.
-  pub(crate) fn lay_out_pages(
-    root: RenderNode,
-    page_size: Size<f32>,
-  ) -> Result<(Self, usize), PdfError> {
-    let paged = PagedScene::lay_out(root, page_size, MAX_PAGES, true)?;
-    let page_count = paged.page_count();
-
-    Ok((
-      Self {
-        scene: paged.into_scene(),
-      },
-      page_count,
-    ))
   }
 
   /// The size the caller's own node laid out at, which is what `measure`
@@ -197,28 +188,8 @@ impl PreparedTree {
       )
   }
 
-  /// Visits every node paint of the scene, in paint order.
-  pub(crate) fn for_each_paint(&self, mut visit: impl FnMut(&NodePaint)) {
-    fn walk(tree: &PreparedTree, id: usize, visit: &mut impl FnMut(&NodePaint)) {
-      let Some(context) = tree.scene.contexts.get(id) else {
-        return;
-      };
-
-      if let Some(paint) = context.root() {
-        visit(paint);
-      }
-      for bucket in context.in_paint_order() {
-        for item in bucket {
-          match &item.kind {
-            PaintItemKind::Node(paint) => visit(paint),
-            PaintItemKind::Context(child) => walk(tree, *child, visit),
-            PaintItemKind::CollapsedBorders(_) => {}
-          }
-        }
-      }
-    }
-
-    walk(self, 0, &mut visit);
+  pub(crate) fn view(&self) -> SceneView<'_> {
+    SceneView::of_scene(&self.scene)
   }
 
   pub(crate) fn emitter<'a>(
@@ -228,8 +199,124 @@ impl PreparedTree {
     chunks: Option<&'a SceneChunks<'a>>,
     tagged: bool,
   ) -> Emitter<'a> {
+    self.view().emitter(state, inline, chunks, tagged)
+  }
+}
+
+/// A tree laid out on pages, which the scene of each page is built from.
+pub(crate) struct PagedContent {
+  pub(crate) root: RenderNode,
+  results: LayoutResults,
+  pub(crate) page_size: Size<f32>,
+  pub(crate) page_count: usize,
+}
+
+impl PagedContent {
+  /// `root` laid out on pages `page_size`.
+  pub(crate) fn lay_out(root: RenderNode, page_size: Size<f32>) -> Result<Self, PdfError> {
+    let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
+
+    while layout.next_page()?.is_some() {}
+
+    let page_count = layout.page_count();
+    let results = layout.into_results();
+
+    Ok(Self {
+      root,
+      results,
+      page_size,
+      page_count,
+    })
+  }
+
+  pub(crate) fn layout(&self) -> LayoutView<'_> {
+    self.results.view()
+  }
+
+  /// The tree and its layout, apart.
+  pub(crate) fn into_parts(self) -> (RenderNode, LayoutResults) {
+    (self.root, self.results)
+  }
+}
+
+/// A scene as the emitter and the collectors read it: the scene of a whole tree, or a window of a
+/// paged layout.
+#[derive(Clone, Copy)]
+pub(crate) struct SceneView<'a> {
+  pub(crate) root: &'a RenderNode,
+  pub(crate) results: LayoutView<'a>,
+  pub(crate) contexts: &'a [StackingContextNode],
+  pub(crate) properties: &'a PropertyTrees,
+  /// The boxes it paints more than one fragment of, none for a scene of one fragment of each.
+  fragments: Option<&'a FragmentPlacements>,
+}
+
+impl<'a> SceneView<'a> {
+  pub(crate) fn of_scene(scene: &'a Scene) -> Self {
+    Self {
+      root: &scene.root,
+      results: scene.results.view(),
+      contexts: &scene.contexts,
+      properties: &scene.properties,
+      fragments: scene.fragments.as_ref(),
+    }
+  }
+
+  pub(crate) fn of_window(scene: &'a SceneRef<'_>) -> Self {
+    Self {
+      root: scene.root,
+      results: scene.results,
+      contexts: &scene.contexts,
+      properties: &scene.properties,
+      fragments: Some(&scene.fragments),
+    }
+  }
+
+  /// The layout of the fragment `paint` paints, with its box set to paint it.
+  pub(crate) fn enter(&self, paint: &NodePaint) -> takumi_core::Result<ComputedLayout> {
+    let layout = self
+      .results
+      .fragment_layout(paint.node_id, paint.fragment_index)?;
+
+    if let Some(fragments) = self.fragments {
+      fragments.enter(self.root, paint, layout.location);
+    }
+    Ok(layout)
+  }
+
+  /// Visits every node paint of the scene, in paint order.
+  pub(crate) fn for_each_paint(self, mut visit: impl FnMut(&NodePaint)) {
+    fn walk(view: SceneView<'_>, id: usize, visit: &mut impl FnMut(&NodePaint)) {
+      let Some(context) = view.contexts.get(id) else {
+        return;
+      };
+
+      for paint in context.roots() {
+        visit(paint);
+      }
+      for bucket in context.in_paint_order() {
+        for item in bucket {
+          match &item.kind {
+            PaintItemKind::Node(paint) => visit(paint),
+            PaintItemKind::Context(child) => walk(view, *child, visit),
+            PaintItemKind::CollapsedBorders(_) => {}
+          }
+        }
+      }
+    }
+
+    walk(self, 0, &mut visit);
+  }
+
+  pub(crate) fn emitter(
+    self,
+    state: &'a DocumentState<'a>,
+    inline: Option<&'a InlineCache<'a>>,
+    chunks: Option<&'a SceneChunks<'a>>,
+    tagged: bool,
+  ) -> Emitter<'a> {
     Emitter {
-      scene: &self.scene,
+      scene: self,
       document: state,
       inline,
       chunks,

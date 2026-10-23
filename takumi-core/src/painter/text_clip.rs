@@ -5,10 +5,14 @@ use super::{
   BoxFrame, BoxPainter, FillShape, GlyphDevice, OwnContent, PaintedInline, StripBackground,
 };
 use crate::{
+  context::RenderContext,
   error::{Error, Result},
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, NodeId, Point},
-  layout::tree::{ContainingBlocks, LayoutResults, RenderNode},
+  layout::{
+    layout_view::LayoutView,
+    tree::{ContainingBlocks, RenderNode},
+  },
   scene::NodePaint,
   style::{Affine, BackgroundClip, Display},
 };
@@ -16,18 +20,20 @@ use crate::{
 /// A box whose background shows only through the text inside it, and that text.
 pub struct TextClip<'s> {
   node: &'s RenderNode,
+  context: &'s RenderContext,
   node_id: NodeId,
   layout: ComputedLayout,
-  results: &'s LayoutResults,
+  results: LayoutView<'s>,
 }
 
 impl<'s> TextClip<'s> {
-  /// The text clip of the box `owner` paints in `root`, laid out in `results`, when its
-  /// `background-clip` is `text`.
+  /// The text clip of the box `owner` paints in `root` under `context`, laid out in `results`,
+  /// when its `background-clip` is `text`.
   pub fn of(
     root: &'s RenderNode,
-    results: &'s LayoutResults,
+    results: LayoutView<'s>,
     owner: &NodePaint,
+    context: &'s RenderContext,
   ) -> Result<Option<Self>> {
     let Some(node) = root.node_at_path(&owner.path) else {
       return Ok(None);
@@ -41,6 +47,7 @@ impl<'s> TextClip<'s> {
 
     Ok(Some(Self {
       node,
+      context,
       node_id: owner.node_id,
       layout: results.layout(owner.node_id)?,
       results,
@@ -50,12 +57,13 @@ impl<'s> TextClip<'s> {
   /// Fills the box's border box, at `origin`, with its background through the glyphs and
   /// decorations of its text.
   pub fn paint_background(&self, origin: Point<f32>, device: &mut dyn GlyphDevice) -> Result<()> {
-    let context = &self.node.context;
+    let context = self.context;
     let background = BoxPainter::new(context, self.layout).background();
     let at = origin + background.offset;
     let clip = FillShape::Rect(background.size);
     let background = StripBackground {
       node: self.node,
+      context,
       id: usize::MAX,
       background,
       strip: BoxFrame::new(self.layout, origin),
@@ -68,7 +76,8 @@ impl<'s> TextClip<'s> {
       Affine::translation(at.x, at.y),
       &mut |mask| {
         if result.is_ok() {
-          result = TextMask::new(self.results).paint(self.node, self.node_id, origin, mask);
+          result =
+            TextMask::new(self.results).paint(self.node, self.context, self.node_id, origin, mask);
         }
       },
     );
@@ -82,28 +91,29 @@ impl<'s> TextClip<'s> {
 /// one of them laying out no inline content. Each sits where layout alone puts it, without its
 /// transform or effects.
 struct TextMask<'r> {
-  results: &'r LayoutResults,
+  results: LayoutView<'r>,
   containing_blocks: ContainingBlocks<Point<f32>>,
 }
 
 impl<'r> TextMask<'r> {
-  fn new(results: &'r LayoutResults) -> Self {
+  fn new(results: LayoutView<'r>) -> Self {
     Self {
       results,
       containing_blocks: ContainingBlocks::default(),
     }
   }
 
-  /// Paints the text of `node`, laid out as `node_id` with its border box at `origin`, and of the
-  /// boxes inside it, in black.
+  /// Paints the text of `node` under `context`, laid out as `node_id` with its border box at
+  /// `origin`, and of the boxes inside it, in black.
   fn paint(
     &mut self,
     node: &RenderNode,
+    context: &RenderContext,
     node_id: NodeId,
     origin: Point<f32>,
     device: &mut dyn GlyphDevice,
   ) -> Result<()> {
-    self.paint_inline_content(node, node_id, origin, device)?;
+    self.paint_inline_content(node, context, node_id, origin, device)?;
 
     if node.children.is_none() {
       return Ok(());
@@ -123,7 +133,7 @@ impl<'r> TextMask<'r> {
     for child in self.results.box_children(node_id)? {
       let Some(base) = self
         .containing_blocks
-        .recorded_placement_for(child.hoisted_cb, origin)
+        .recorded_placement_for(self.results.hoisted_cb(node_id, child), origin)
       else {
         continue;
       };
@@ -153,6 +163,7 @@ impl<'r> TextMask<'r> {
 
       self.paint(
         child_node,
+        child_context,
         child.node_id,
         base + child_layout.location,
         device,
@@ -166,11 +177,11 @@ impl<'r> TextMask<'r> {
   fn paint_inline_content(
     &self,
     node: &RenderNode,
+    context: &RenderContext,
     node_id: NodeId,
     origin: Point<f32>,
     device: &mut dyn GlyphDevice,
   ) -> Result<()> {
-    let context = &node.context;
     let layout = self.results.layout(node_id)?;
     let font_style = SizedFontStyle::from_style(&context.style, context);
     let Some(painted) = OwnContent::of(node).lay_out_inline(&font_style, layout) else {

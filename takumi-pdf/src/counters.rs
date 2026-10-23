@@ -368,7 +368,7 @@ pub(crate) fn has_page_counters(node: &Node) -> bool {
 }
 
 /// Whether `matches` holds for a node of the tree, the root included.
-fn any_node(node: &Node, matches: &impl Fn(&Node) -> bool) -> bool {
+pub(crate) fn any_node(node: &Node, matches: &impl Fn(&Node) -> bool) -> bool {
   if matches(node) {
     return true;
   }

@@ -616,10 +616,10 @@ impl StepWriter<'_, '_> {
         let Some((node, layout)) = recorded else {
           return Ok(None);
         };
-        let text_clip = TextClip::of(&scene.root, &scene.results, paint)?;
+        let text_clip = TextClip::of(&scene.root, scene.results.view(), paint, &node.context)?;
         let table = TableDecorations::of(
           &scene.root,
-          &scene.results,
+          scene.results.view(),
           &paint.path,
           paint.node_id,
           paint.fragment_index,
@@ -693,7 +693,7 @@ impl StepWriter<'_, '_> {
         }
         let mut recorder = Recorder::new(chunk.node.transform);
         let result = paint_collapsed_borders(
-          &self.scene.results,
+          self.scene.results.view(),
           chunk.node.node_id,
           chunk.node.fragment_index,
           chunk.node.paint_offset,

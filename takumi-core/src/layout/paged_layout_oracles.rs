@@ -133,13 +133,13 @@ fn check_pages(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   for page in laid {
     assert_eq!(
       page.root_fragment,
-      results.fragment_in(NodeId::ROOT, page.index),
+      results.view().fragment_in(NodeId::ROOT, page.index),
       "the root's fragment on page {}",
       page.index
     );
   }
   for (page, fragment) in finalized.into_iter().enumerate() {
-    assert_eq!(fragment, results.fragment_in(NodeId::ROOT, page));
+    assert_eq!(fragment, results.view().fragment_in(NodeId::ROOT, page));
   }
 }
 
@@ -249,9 +249,14 @@ fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   loop {
     let stepped = layout.next_page().expect("page lays out").is_some();
 
-    while windows.page_count() < layout.page_count() {
-      windows.add_page(root, layout.view()).expect("page adds");
-    }
+    windows
+      .refresh(
+        root,
+        layout.view(),
+        layout.page_count(),
+        layout.finalized_pages(),
+      )
+      .expect("pages refresh");
 
     let ready = if layout.is_finished() {
       layout.page_count()

@@ -59,6 +59,11 @@ pub(crate) mod out_of_flow;
 pub mod paged_layout;
 #[cfg(all(test, feature = "fragmentation"))]
 mod paged_layout_oracles;
+/// How far above its page a box can paint.
+#[cfg(feature = "fragmentation")]
+pub(crate) mod paint_reach;
+#[cfg(feature = "fragmentation")]
+mod pending_boxes;
 pub(crate) mod relative_utils;
 /// Where replaced content sits inside its content box.
 pub mod replaced;
