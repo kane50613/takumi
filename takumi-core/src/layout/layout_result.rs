@@ -240,6 +240,35 @@ impl OutOfFlowCandidate {
     }
   }
 
+  /// Blink's `HandleOutOfFlowPositioned` for a box an earlier fragment broke inside or pushed
+  /// here: the candidate that resumes at `token`, none after a forced break, which works the
+  /// static position out again. A box held back for its containing block's block size lays out
+  /// from its held static position, in the fragments stitched together less
+  /// `previously_consumed_block_size`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn resuming(
+    node: NodeId,
+    token: &Rc<BlockBreakToken>,
+    previously_consumed_block_size: LayoutUnit,
+    requires_content_before_breaking: bool,
+  ) -> Option<Self> {
+    if token.is_forced_break {
+      return None;
+    }
+
+    Some(match token.held_static_position {
+      Some(mut static_position) => {
+        static_position.offset.y -= previously_consumed_block_size;
+
+        Self {
+          requires_content_before_breaking,
+          ..Self::new(node, static_position)
+        }
+      }
+      None => Self::resumed(node, Rc::clone(token), requires_content_before_breaking),
+    })
+  }
+
   /// Whether a page found the box before and it resumes at its break token: Blink's check that a
   /// containing block holding the token contains the box. A forced break before the box may not
   /// have reached its containing block.
