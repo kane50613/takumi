@@ -30,6 +30,8 @@ pub enum GridTrackSize {
   MinMax(GridMinMaxSize),
   /// A fixed track size
   Fixed(GridLength),
+  /// A `fit-content()` track size: its content's size, at most the length.
+  FitContent(Length),
 }
 
 impl GridTrackSize {}
@@ -52,17 +54,28 @@ impl<'i> FromCss<'i> for GridTrackSize {
     {
       return input.parse_nested_block(|input| {
         let min = GridLength::from_css(input)?;
+
+        if matches!(min, GridLength::Fr(_)) {
+          return Err(input.new_error_for_next_token());
+        }
         input.expect_comma()?;
         let max = GridLength::from_css(input)?;
         Ok(GridTrackSize::MinMax(GridMinMaxSize { min, max }))
       });
+    }
+    if input
+      .try_parse(|input| input.expect_function_matching("fit-content"))
+      .is_ok()
+    {
+      return input
+        .parse_nested_block(|input| Ok(GridTrackSize::FitContent(Length::from_css(input)?)));
     }
 
     let length = GridLength::from_css(input)?;
     Ok(GridTrackSize::Fixed(length))
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["<minmax()>", "<length>"];
+  const VALID_TOKENS: &'static [&'static str] = &["<minmax()>", "<fit-content()>", "<length>"];
 }
 
 impl MakeComputed for GridTrackSize {
@@ -70,6 +83,7 @@ impl MakeComputed for GridTrackSize {
     match self {
       GridTrackSize::MinMax(min_max) => min_max.make_computed(sizing),
       GridTrackSize::Fixed(length) => length.make_computed(sizing),
+      GridTrackSize::FitContent(length) => length.make_computed(sizing),
     }
   }
 }
@@ -79,6 +93,11 @@ impl ToCss for GridTrackSize {
     match self {
       Self::MinMax(mm) => mm.to_css(dest),
       Self::Fixed(gl) => gl.to_css(dest),
+      Self::FitContent(length) => {
+        dest.write_str("fit-content(")?;
+        length.to_css(dest)?;
+        dest.write_str(")")
+      }
     }
   }
 }
@@ -102,5 +121,21 @@ mod tests {
       GridTrackSize::from_css_str("2fr"),
       Ok(GridTrackSize::Fixed(GridLength::Fr(2.0)))
     );
+  }
+
+  #[test]
+  fn parses_intrinsic_track_sizes() {
+    assert_eq!(
+      GridTrackSize::from_css_str("minmax(0px, min-content)"),
+      Ok(GridTrackSize::MinMax(GridMinMaxSize {
+        min: GridLength::Unit(Length::Px(0.0)),
+        max: GridLength::MinContent
+      }))
+    );
+    assert_eq!(
+      GridTrackSize::from_css_str("fit-content(100px)"),
+      Ok(GridTrackSize::FitContent(Length::Px(100.0)))
+    );
+    assert!(GridTrackSize::from_css_str("minmax(1fr, 10px)").is_err());
   }
 }

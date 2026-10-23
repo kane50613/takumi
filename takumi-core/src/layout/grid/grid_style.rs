@@ -128,6 +128,16 @@ impl GridTrackSize {
     }
   }
 
+  /// A `fit-content()` track: auto breadths, its content capped at `breadth`.
+  pub(crate) const fn fit_content(breadth: LayoutLength) -> Self {
+    Self {
+      min_track_breadth: TrackBreadth::AUTO,
+      max_track_breadth: TrackBreadth::AUTO,
+      fit_content_track_breadth: breadth,
+      kind: GridTrackSizeType::FitContent,
+    }
+  }
+
   pub(crate) const fn min_max(min: TrackBreadth, max: TrackBreadth) -> Self {
     Self {
       min_track_breadth: min,
@@ -224,11 +234,14 @@ impl GridTrackSize {
     let breadth = |length: GridLength| match length {
       GridLength::Fr(flex) => TrackBreadth::Flex(flex),
       GridLength::Unit(length) => TrackBreadth::Length(length.to_layout_length(sizing)),
+      GridLength::MinContent => TrackBreadth::Length(LayoutLength::MinContent),
+      GridLength::MaxContent => TrackBreadth::Length(LayoutLength::MaxContent),
     };
 
     match size {
       StyleTrackSize::Fixed(length) => Self::length(breadth(length)),
       StyleTrackSize::MinMax(min_max) => Self::min_max(breadth(min_max.min), breadth(min_max.max)),
+      StyleTrackSize::FitContent(length) => Self::fit_content(length.to_layout_length(sizing)),
     }
   }
 }
