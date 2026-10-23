@@ -718,6 +718,7 @@ impl<'r> LayoutTree<'r> {
         Some(index) => fragments[index] = fragment,
         None => fragments.push(fragment),
       }
+      self.link_child(child, target);
       self
         .render_node(child)
         .fragment_items
@@ -737,7 +738,10 @@ impl<'r> LayoutTree<'r> {
     if !hoisted_children.contains(&node) {
       hoisted_children.push(node);
       #[cfg(feature = "fragmentation")]
-      self.hoisted_by.insert(container, node);
+      {
+        self.hoisted_by.insert(container, node);
+        self.link_hoisted_child(node);
+      }
     }
   }
 
@@ -758,11 +762,15 @@ impl<'r> LayoutTree<'r> {
       let state = self.node_state_mut(node);
 
       state.fragments[0].layout = ComputedLayout::default();
+      stack.extend(state.children.iter().copied());
       #[cfg(feature = "fragmentation")]
       {
         state.fragments[0].is_laid_out = true;
+
+        let container_fragment_index = state.fragments[0].container_fragment_index;
+
+        self.link_child(node, container_fragment_index);
       }
-      stack.extend(state.children.iter().copied());
       self.clear_hoisted_children(node);
     }
   }

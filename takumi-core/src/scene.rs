@@ -625,6 +625,10 @@ fn build_layers(
       .nth(1)
       .is_some())
     .then(|| {
+      #[cfg(feature = "fragmentation")]
+      if let Some(linked) = layout_results.linked_children(visit.node_id, visit.fragment_index) {
+        return linked;
+      }
       fragment_children
         .entry(visit.node_id)
         .or_insert_with(|| FragmentChildren::of(layout_results, visit.node_id, layout_children))
