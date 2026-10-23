@@ -5,7 +5,7 @@ use std::{
   vec::IntoIter,
 };
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
@@ -751,28 +751,36 @@ impl<'r> LayoutTree<'r> {
 
   /// Adds the atomic inline `child` its inline content placed to the boxes `parent` paints, at
   /// `path` among `parent`'s render children, keeping them in tree order.
-  pub(crate) fn add_inline_box_child(&mut self, parent: NodeId, child: NodeId, path: &[usize]) {
-    let Some((&render_index, inline_path)) = path.split_first() else {
-      return;
-    };
+  pub(crate) fn add_inline_box_children(
+    &mut self,
+    parent: NodeId,
+    children: Vec<(NodeId, SmallVec<[usize; 2]>)>,
+  ) {
     let state = &mut self.nodes[usize::from(parent)];
-
-    if state
+    let mut known: FxHashSet<NodeId> = state
       .box_children
       .iter()
-      .any(|known| known.node_id == child)
-    {
-      return;
-    }
-
+      .map(|known| known.node_id)
+      .collect();
     let mut box_children = state.box_children.to_vec();
 
-    box_children.push(OrderedChild {
-      render_index,
-      inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
-      node_id: child,
-      hoisted_cb: None,
-    });
+    for (child, path) in children {
+      let Some((&render_index, inline_path)) = path.split_first() else {
+        continue;
+      };
+
+      if known.insert(child) {
+        box_children.push(OrderedChild {
+          render_index,
+          inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
+          node_id: child,
+          hoisted_cb: None,
+        });
+      }
+    }
+    if box_children.len() == state.box_children.len() {
+      return;
+    }
     box_children.sort_by(|a, b| {
       (a.render_index, a.inline_path.as_deref()).cmp(&(b.render_index, b.inline_path.as_deref()))
     });

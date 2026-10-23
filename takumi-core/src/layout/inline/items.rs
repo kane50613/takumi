@@ -123,22 +123,29 @@ impl RenderNode {
     self.participates_as_inline_box() || self.is_block_in_inline
   }
 
-  /// The child-index path from this node to `target` among its inline content, through the inline
+  /// The child-index path from this node to each box among its inline content, through the inline
   /// spans holding it.
-  pub(crate) fn inline_child_path(&self, target: &RenderNode) -> Option<SmallVec<[usize; 2]>> {
-    for (index, child) in self.children.iter().flatten().enumerate() {
-      if child.context.box_id() == target.context.box_id() {
-        return Some(SmallVec::from_elem(index, 1));
-      }
-      if child.is_inline_span()
-        && let Some(mut path) = child.inline_child_path(target)
-      {
-        path.insert(0, index);
-        return Some(path);
-      }
-    }
+  pub(crate) fn inline_child_paths(&self) -> FxHashMap<BoxId, SmallVec<[usize; 2]>> {
+    let mut paths = FxHashMap::default();
 
-    None
+    self.collect_inline_child_paths(&mut SmallVec::new(), &mut paths);
+    paths
+  }
+
+  fn collect_inline_child_paths(
+    &self,
+    path: &mut SmallVec<[usize; 2]>,
+    paths: &mut FxHashMap<BoxId, SmallVec<[usize; 2]>>,
+  ) {
+    for (index, child) in self.children.iter().flatten().enumerate() {
+      path.push(index);
+      if child.is_inline_span() {
+        child.collect_inline_child_paths(path, paths);
+      } else {
+        paths.insert(child.context.box_id(), path.clone());
+      }
+      path.pop();
+    }
   }
 
   /// Whether the node is an inline box whose content joins its parent's lines rather than an
