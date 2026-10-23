@@ -1783,7 +1783,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
         let candidates = take(&mut self.out_of_flow);
 
         self.out_of_flow = self.tree.lay_out_out_of_flow(
-          self.node,
+          (self.node, self.fragment_index()),
           claims,
           candidates,
           containing_block,

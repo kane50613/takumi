@@ -543,22 +543,6 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Makes the out-of-flow boxes `container` positioned from its hoisted child `first` on belong
-  /// to its fragment `fragment_index`.
-  #[cfg(feature = "fragmentation")]
-  pub(crate) fn hold_hoisted_children(
-    &mut self,
-    container: NodeId,
-    fragment_index: usize,
-    first: usize,
-  ) {
-    let hoisted_children = self.node_state(container).hoisted_children[first..].to_vec();
-
-    for child in hoisted_children {
-      self.node_state_mut(child).fragments[0].container_fragment_index = fragment_index;
-    }
-  }
-
   /// Blink's `LayoutRepeatableRoot`: a repeated table header or footer laid out once, then the
   /// same layout for each later repetition after `token`, which leaves out the out-of-flow boxes
   /// an ancestor positions.
@@ -812,7 +796,7 @@ impl<'r> LayoutTree<'r> {
       };
 
       candidates.extend(self.lay_out_out_of_flow(
-        node,
+        (node, fragment_index),
         claims,
         vec![candidate],
         containing_block,
