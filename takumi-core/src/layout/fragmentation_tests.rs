@@ -11,7 +11,7 @@ use crate::{
     node::Node,
     paged_layout::PagedLayout,
     paged_layout_oracles as oracles,
-    tree::{LayoutResults, RenderNode},
+    tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::font::Fonts,
   scene::{NodePaint, PagedScene, PaintItemKind, Scene},
@@ -574,6 +574,45 @@ fn a_table_row_breaks_inside_unless_it_avoids_it() {
     boxes["table"],
     [placed(0, 0.0, 200.0), placed(1, 0.0, 120.0)]
   );
+}
+
+/// A table of ten rows 60 tall, `r0` to `r9`, each cell holding a block `r0-cell` to `r9-cell`.
+fn ten_row_table() -> RenderNode {
+  let rows = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"]
+    .map(|id| (id, block(&format!("{id}-cell"), "h60")));
+
+  render(root([table(rows)]), TABLE_CSS)
+}
+
+/// The box of the element with the id `id`.
+fn node_with_id(tree: &LayoutTree<'_>, id: &str) -> NodeId {
+  (0..tree.node_count())
+    .map(NodeId::new)
+    .find(|&node| tree.render_node(node).node.as_ref().and_then(Node::id) == Some(id))
+    .expect("a box with the id")
+}
+
+/// A table's rows free what they kept once their page is drawn, while the table goes on.
+#[test]
+fn a_tables_finished_rows_free_their_layouts_before_the_table_ends() {
+  let tree = ten_row_table();
+  let page_size = Size {
+    width: 300.0,
+    height: 200.0,
+  };
+  let mut layout = PagedLayout::new(&tree, page_size, usize::MAX).with_release();
+
+  assert!(layout.next_page().expect("page lays out"));
+  assert!(layout.next_page().expect("page lays out"));
+  layout.release(1);
+
+  let tree = layout.tree();
+  let is_released = |id: &str| tree.node_state(node_with_id(tree, id)).cache.is_released();
+
+  assert!(!is_released("table"));
+  assert!(is_released("r0"));
+  assert!(is_released("r0-cell"));
+  assert!(!is_released("r9"));
 }
 
 #[test]

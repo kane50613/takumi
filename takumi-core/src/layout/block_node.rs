@@ -199,6 +199,12 @@ impl LayoutCache {
     self.released += count;
   }
 
+  /// Whether the box ended and dropped everything it kept.
+  #[cfg(test)]
+  pub(crate) fn is_released(&self) -> bool {
+    self.released == Self::ALL_RELEASED
+  }
+
   /// Drops every layout, measure, and intrinsic size, for a box with no fragment to come.
   pub(crate) fn release_all(&mut self) {
     self.released = Self::ALL_RELEASED;
