@@ -147,8 +147,8 @@ impl<'b> OutOfFlowLayoutPart<'b> {
     }
   }
 
-  /// Confines the containing block to this fragment, as an inline box's is. No box waits for a
-  /// later fragment, where a held box would resolve against the block containing block instead.
+  /// Confines the containing block to this fragment, as an inline box's is, so no box is held
+  /// for the last fragment.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn confined_to_fragment(self) -> Self {
     Self {
