@@ -33,6 +33,7 @@ pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
 // under `selector::` for the renderer's `layout::matching`; only the stylesheet
 // entry point and `@property` rule type are part of the public surface.
 pub use selector::{MediaQueryList, PropertyRule, StyleSheet};
+pub(crate) use sizing::FontUnits;
 pub use sizing::SizingContext;
 pub use stylesheets::*;
 pub use tw::*;

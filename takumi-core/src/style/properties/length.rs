@@ -31,6 +31,7 @@ pub(crate) fn length_from_dimension_unit(unit: &str, value: f32) -> Option<Lengt
     "lh" => Length::Lh(value),
     "rlh" => Length::Rlh(value),
     "ch" => Length::Ch(value),
+    "ex" => Length::Ex(value),
     "vw" => Length::Vw(value),
     "dvw" => Length::Vw(value),
     "svw" => Length::Vw(value),
@@ -113,6 +114,8 @@ pub enum Length {
   Rlh(f32),
   /// Ch value relative to the advance of the element's `0` glyph
   Ch(f32),
+  /// Ex value relative to the x-height of the element's font
+  Ex(f32),
   /// Vh value relative to the viewport height (0-100)
   Vh(f32),
   /// Vw value relative to the viewport width (0-100)
@@ -217,6 +220,7 @@ impl ToCss for Length {
       Self::Lh(v) => write!(dest, "{v}lh"),
       Self::Rlh(v) => write!(dest, "{v}rlh"),
       Self::Ch(v) => write!(dest, "{v}ch"),
+      Self::Ex(v) => write!(dest, "{v}ex"),
       Self::Vh(v) => write!(dest, "{v}vh"),
       Self::Vw(v) => write!(dest, "{v}vw"),
       Self::CqH(v) => write!(dest, "{v}cqh"),
@@ -294,6 +298,7 @@ impl Length {
       | Self::Lh(value)
       | Self::Rlh(value)
       | Self::Ch(value)
+      | Self::Ex(value)
       | Self::Vh(value)
       | Self::Vw(value)
       | Self::CqH(value)
@@ -323,6 +328,7 @@ impl Length {
       Length::Lh(v) => Length::Lh(-v),
       Length::Rlh(v) => Length::Rlh(-v),
       Length::Ch(v) => Length::Ch(-v),
+      Length::Ex(v) => Length::Ex(-v),
       Length::Vh(v) => Length::Vh(-v),
       Length::Vw(v) => Length::Vw(-v),
       Length::CqH(v) => Length::CqH(-v),
@@ -420,6 +426,7 @@ impl Length {
       Length::Lh(value) => value * sizing.line_height,
       Length::Rlh(value) => value * sizing.root_line_height_basis(),
       Length::Ch(value) => value * sizing.ch,
+      Length::Ex(value) => value * sizing.ex,
       Length::Vh(value) => value * sizing.viewport.unit_height() / 100.0,
       Length::Vw(value) => value * sizing.viewport.unit_width() / 100.0,
       Length::CqH(value) => value * sizing.query_container_height() / 100.0,
@@ -475,6 +482,7 @@ impl Length {
       | Length::Lh(_)
       | Length::Rlh(_)
       | Length::Ch(_)
+      | Length::Ex(_)
       | Length::Vh(_)
       | Length::Vw(_)
       | Length::CqH(_)
@@ -571,6 +579,11 @@ impl MakeComputed for Length {
       return;
     }
 
+    if let Self::Ex(ex) = *self {
+      *self = Self::Px(ex * sizing.to_css(sizing.ex));
+      return;
+    }
+
     if let Self::Calc(formula) = *self {
       let linear = formula.resolve(sizing);
 
@@ -656,12 +669,24 @@ mod tests {
       line_height: 30.0,
       root_line_height: Some(40.0),
       ch: 7.0,
+      ex: 7.0,
     }
   }
 
   fn assert_near(lhs: f32, rhs: f32) {
     let diff = (lhs - rhs).abs();
     assert!(diff < 0.0001, "lhs={lhs}, rhs={rhs}, diff={diff}");
+  }
+
+  #[test]
+  fn ex_is_the_x_height_of_the_font() {
+    assert_eq!(Length::from_css_str("4ex"), Ok(Length::Ex(4.0)));
+
+    let mut sizing = sizing();
+
+    sizing.ex = 6.0;
+
+    assert_near(Length::Ex(2.0).to_px(&sizing, 0.0), 12.0);
   }
 
   #[test]

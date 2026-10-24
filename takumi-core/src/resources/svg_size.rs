@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::{
   geometry::Size,
   path_data::Scanner,
-  style::{IntrinsicSizing, Length, SizingContext},
+  style::{FontUnits, IntrinsicSizing, Length, SizingContext},
   viewport::Viewport,
 };
 
@@ -91,7 +91,16 @@ impl SvgSize {
     let sizing = length("font-size").map_or(sizing.clone(), |size| {
       let font_size = size.to_px(&sizing, FONT_SIZE);
 
-      sizing.with_font_metrics(font_size, None, font_size, None, font_size / 2.0)
+      sizing.with_font_metrics(
+        font_size,
+        None,
+        font_size,
+        None,
+        FontUnits {
+          ch: font_size / 2.0,
+          ex: font_size / 2.0,
+        },
+      )
     });
     let view_box = root
       .attribute("viewBox")
