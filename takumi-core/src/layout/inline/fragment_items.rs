@@ -9,7 +9,9 @@ pub(super) use builder::line_span_fragments;
 
 use std::{mem::take, ops::Range, rc::Rc};
 
+use rustc_hash::FxHashMap;
 use skrifa::FontRef;
+use smallvec::SmallVec;
 
 use super::{
   background::{FragmentBackground, InlineBackgroundFragment},
@@ -18,8 +20,8 @@ use super::{
   metrics::VisualInlineBox,
   outline::InlineOutlineRect,
   runs::{
-    InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
-    ShapedRun, slice_text_at_char_boundaries,
+    FaceKey, InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph,
+    PositionedInlineRun, ShapedRun, slice_text_at_char_boundaries,
   },
   text_fit::LineScaleState,
 };
@@ -54,6 +56,8 @@ pub struct FragmentItems {
   /// The runs' fonts, metrics and brushes, which every run one span shapes in one face shares:
   /// each a run holding no glyphs at no place.
   faces: Vec<Rc<ShapedRun>>,
+  /// The indices in [`Self::faces`], in order, of the faces sharing each key.
+  face_indices: FxHashMap<FaceKey, SmallVec<[u32; 1]>>,
   /// The outlines of the glyphs each of [`Self::faces`] draws, resolved once for ink and paint.
   face_glyphs: Vec<ResolvedGlyphs>,
   glyphs: GlyphStore,
@@ -410,10 +414,14 @@ impl FragmentItems {
     placement: RunPlacement,
     ink: impl FnOnce(&ShapedRun, &ResolvedGlyphs),
   ) {
-    let existing = self
-      .faces
-      .iter()
-      .rposition(|existing| existing.same_face(&run));
+    let key = run.face_key();
+    let existing = self.face_indices.get(&key).and_then(|indices| {
+      indices
+        .iter()
+        .rev()
+        .map(|&index| index as usize)
+        .find(|&index| self.faces[index].same_face(&run))
+    });
     let face = existing.unwrap_or_else(|| {
       self.face_glyphs.push(ResolvedGlyphs::default());
       self.face_glyphs.len() - 1
@@ -438,6 +446,7 @@ impl FragmentItems {
     let text_range = take(&mut shaped_face.text_range);
 
     if existing.is_none() {
+      self.face_indices.entry(key).or_default().push(face as u32);
       self
         .faces
         .push(context.inline_cache().share_face(shaped_face));
@@ -593,5 +602,48 @@ impl FragmentItems {
       outline_rects: self.outline_rects.clone(),
       background_fragments,
     })
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::{
+    geometry::{AvailableSpace, NodeId, Size},
+    layout::{
+      inline::testing::{render_tree, span},
+      tree::LayoutResults,
+    },
+  };
+
+  #[test]
+  fn spans_share_a_face_only_when_their_runs_draw_alike() {
+    let mut spans: Vec<_> = (0..40).map(|_| span("a ")).collect();
+
+    spans.push(span("aa bb cc dd ee ff"));
+
+    let block = render_tree(spans, ".container { width: 60px }");
+    let results = LayoutResults::compute_document(
+      &block,
+      Size {
+        width: AvailableSpace::Definite(60.0),
+        height: AvailableSpace::MaxContent,
+      },
+    );
+    let layout = results.layout(NodeId::ROOT).expect("the root's layout");
+    let items = block.fragment_items_in(layout).expect("the root's lines");
+
+    assert_eq!(items.faces.len(), 41);
+    assert!(items.text_items.len() > 41);
+    assert_eq!(items.faces.len(), items.face_glyphs.len());
+    for (index, face) in items.faces.iter().enumerate() {
+      assert!(
+        items.faces[..index]
+          .iter()
+          .all(|other| !other.same_face(face))
+      );
+    }
+    for item in &items.text_items {
+      assert!((item.face as usize) < items.faces.len());
+    }
   }
 }
