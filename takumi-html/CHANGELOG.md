@@ -1,3 +1,13 @@
+## takumi-html@0.7.0
+
+### Lay out tables with Chromium's table algorithm
+
+Tables now follow Chromium's table layout instead of a grid approximation, so column widths, row heights, and collapsed borders match Chromium. `<col>` and `<colgroup>` size their columns and paint their backgrounds, and `visibility: collapse`, `empty-cells: hide`, and `display: inline-table` work. A `rowspan` now stops at the end of its row group.
+
+### Size images by percentage `width` and `height` attributes
+
+`<img width="50%">` and `<svg width="100%" height="2em">` now take those sizes, as Chrome maps the attributes to style. A plain number of pixels sizes an image as before.
+
 ## takumi-html@0.6.0
 
 ### Parse a document that starts with a byte order mark as a document
