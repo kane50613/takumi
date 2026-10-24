@@ -353,8 +353,7 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Whether laying `node` out again reads what its child `child` kept after `child` ended: flex and
-  /// grid layouts size every item again, and a table measures its captions for each fragment.
+  /// Whether laying `node` out again rereads its ended `child`, a flex or grid item or caption.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn relays_out_ended_child(&self, node: NodeId, child: NodeId) -> bool {
     match self.algorithm(node) {
