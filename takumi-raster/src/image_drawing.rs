@@ -3,13 +3,13 @@ use takumi_core::{
   layout::{decoration::ClipBox, replaced::ReplacedPlacement},
   painter::{FillShape, PaintDevice},
 };
+use tiny_skia::PixmapRef;
 
 #[cfg(feature = "svg")]
 use crate::resources::image::SvgRaster;
 use crate::{
   BorderProperties, Canvas, CanvasDevice, PaintSource, RenderContext, Result, SamplingOptions,
   painter::BoxPainter,
-  pixmap_ref_from_buffer,
   resources::image::{ImageSource, RenderedImage},
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
@@ -146,7 +146,7 @@ pub(crate) fn draw_image(
 
   match prepared.image {
     RenderedImage::Rasterized(rendered) => {
-      let Some(pixmap) = pixmap_ref_from_buffer(rendered.as_ref()) else {
+      let Ok(pixmap) = PixmapRef::try_from(rendered.as_ref()) else {
         return Ok(());
       };
 
@@ -178,7 +178,7 @@ pub(crate) fn draw_image(
       algorithm,
       source_scale,
     } => {
-      let Some(pixmap) = pixmap_ref_from_buffer(source.as_ref()) else {
+      let Ok(pixmap) = PixmapRef::try_from(source.as_ref()) else {
         return Ok(());
       };
       let logical_to_source =

@@ -60,12 +60,14 @@ pub enum BlendMode {
   PlusDarker,
 }
 
-impl BlendMode {
-  /// The tiny-skia mode, or `None` for the dodge, burn, and plus-darker modes the canvas blends.
-  pub fn to_tiny_skia(self) -> Option<TinyBlendMode> {
+/// The tiny-skia mode, or the unchanged mode for the dodge, burn, and plus-darker modes the canvas blends.
+impl TryFrom<BlendMode> for TinyBlendMode {
+  type Error = BlendMode;
+
+  fn try_from(mode: BlendMode) -> Result<Self, Self::Error> {
     use TinyBlendMode as T;
 
-    Some(match self {
+    Ok(match mode {
       BlendMode::Normal => T::SourceOver,
       BlendMode::Multiply => T::Multiply,
       BlendMode::Screen => T::Screen,
@@ -81,7 +83,7 @@ impl BlendMode {
       BlendMode::Color => T::Color,
       BlendMode::Luminosity => T::Luminosity,
       BlendMode::PlusLighter => T::Plus,
-      _ => return None,
+      _ => return Err(mode),
     })
   }
 }
@@ -123,8 +125,8 @@ mod tests {
 
   #[test]
   fn color_dodge_and_color_burn_stay_off_the_approximate_reciprocal() {
-    assert!(BlendMode::ColorDodge.to_tiny_skia().is_none());
-    assert!(BlendMode::ColorBurn.to_tiny_skia().is_none());
+    assert!(TinyBlendMode::try_from(BlendMode::ColorDodge).is_err());
+    assert!(TinyBlendMode::try_from(BlendMode::ColorBurn).is_err());
   }
 
   #[test]

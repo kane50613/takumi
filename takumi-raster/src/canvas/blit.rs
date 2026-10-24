@@ -708,7 +708,7 @@ mod tests {
 
   use super::*;
   use crate::{
-    BorderProperties, Canvas, PaintSource, PlacedMask, Result, pixmap_from_buffer,
+    BorderProperties, Canvas, PaintSource, PlacedMask, Result,
     resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
   };
 
@@ -927,11 +927,10 @@ mod tests {
         [0, 0, 255, 255]
       }
     });
-    let source_pixmap =
+    let source_buffer =
       ImageBuffer::from_rgba_bytes(source.as_raw().to_vec(), source.width(), source.height())
-        .as_ref()
-        .and_then(pixmap_from_buffer)
-        .expect("fixture pixmap conversion");
+        .expect("fixture image buffer");
+    let source_pixmap = Pixmap::try_from(&source_buffer).expect("fixture pixmap conversion");
 
     let mut direct = Canvas::new(Size {
       width: 8,

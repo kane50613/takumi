@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::{FilterQuality, Pixmap, PixmapPaint};
+use tiny_skia::{FilterQuality, Pixmap, PixmapPaint, PixmapRef};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
-  alpha_mask, checked_area, cull_bounds, pixmap_ref_from_buffer, render_mask,
+  alpha_mask, checked_area, cull_bounds, render_mask,
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph},
     glyph_cache::glyph_mask,
@@ -202,7 +202,7 @@ pub(crate) fn draw_glyph(
 
   match glyph {
     ResolvedGlyph::Bitmap(bitmap) => {
-      let Some(source) = pixmap_ref_from_buffer(&bitmap.image) else {
+      let Ok(source) = PixmapRef::try_from(&bitmap.image) else {
         return Ok(());
       };
       transform *= bitmap.image_transform();
@@ -286,7 +286,7 @@ pub(crate) fn bitmap_coverage(
   transform: Affine,
   cull: CanvasViewport,
 ) -> Option<(Vec<u8>, Placement)> {
-  let source = pixmap_ref_from_buffer(&bitmap.image)?;
+  let source = PixmapRef::try_from(&bitmap.image).ok()?;
   let transform = transform * bitmap.image_transform();
   let (width, height) = (source.width() as f32, source.height() as f32);
   let (mut min_x, mut min_y) = (f32::INFINITY, f32::INFINITY);

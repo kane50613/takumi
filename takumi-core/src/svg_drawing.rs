@@ -276,7 +276,7 @@ impl SvgDrawing {
           target.pixmap.stroke_path(
             &path,
             paint,
-            &tiny_stroke(stroke),
+            &Stroke::from(stroke),
             target.transform,
             target.clip.as_ref(),
           );
@@ -354,7 +354,7 @@ impl SvgDrawing {
           (start.x, start.y).into(),
           (end.x, end.y).into(),
           gradient_stops(gradient, opacity),
-          spread_mode(gradient.spread),
+          gradient.spread.into(),
           Transform::from(gradient.transform),
         ) else {
           return;
@@ -375,7 +375,7 @@ impl SvgDrawing {
           (center.x, center.y).into(),
           *radius,
           gradient_stops(gradient, opacity),
-          spread_mode(gradient.spread),
+          gradient.spread.into(),
           Transform::from(gradient.transform),
         ) else {
           return;
@@ -488,24 +488,26 @@ fn tiny_path(commands: &[PathCommand]) -> Option<Path> {
   builder.finish()
 }
 
-fn tiny_stroke(stroke: &SvgStrokeStyle) -> Stroke {
-  Stroke {
-    width: stroke.width,
-    miter_limit: stroke.miter_limit,
-    line_cap: match stroke.cap {
-      SvgLineCap::Butt => LineCap::Butt,
-      SvgLineCap::Round => LineCap::Round,
-      SvgLineCap::Square => LineCap::Square,
-    },
-    line_join: match stroke.join {
-      SvgLineJoin::Miter => LineJoin::Miter,
-      SvgLineJoin::Round => LineJoin::Round,
-      SvgLineJoin::Bevel => LineJoin::Bevel,
-    },
-    dash: stroke
-      .dash
-      .as_ref()
-      .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
+impl From<&SvgStrokeStyle> for Stroke {
+  fn from(stroke: &SvgStrokeStyle) -> Self {
+    Self {
+      width: stroke.width,
+      miter_limit: stroke.miter_limit,
+      line_cap: match stroke.cap {
+        SvgLineCap::Butt => LineCap::Butt,
+        SvgLineCap::Round => LineCap::Round,
+        SvgLineCap::Square => LineCap::Square,
+      },
+      line_join: match stroke.join {
+        SvgLineJoin::Miter => LineJoin::Miter,
+        SvgLineJoin::Round => LineJoin::Round,
+        SvgLineJoin::Bevel => LineJoin::Bevel,
+      },
+      dash: stroke
+        .dash
+        .as_ref()
+        .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
+    }
   }
 }
 
@@ -527,11 +529,13 @@ fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {
     .collect()
 }
 
-const fn spread_mode(spread: SvgSpreadMethod) -> SpreadMode {
-  match spread {
-    SvgSpreadMethod::Pad => SpreadMode::Pad,
-    SvgSpreadMethod::Reflect => SpreadMode::Reflect,
-    SvgSpreadMethod::Repeat => SpreadMode::Repeat,
+impl From<SvgSpreadMethod> for SpreadMode {
+  fn from(spread: SvgSpreadMethod) -> Self {
+    match spread {
+      SvgSpreadMethod::Pad => Self::Pad,
+      SvgSpreadMethod::Reflect => Self::Reflect,
+      SvgSpreadMethod::Repeat => Self::Repeat,
+    }
   }
 }
 
@@ -544,7 +548,7 @@ pub(crate) fn tiny_blend_mode(blend: BlendMode) -> TinyBlendMode {
   match blend {
     BlendMode::ColorDodge => TinyBlendMode::ColorDodge,
     BlendMode::ColorBurn => TinyBlendMode::ColorBurn,
-    _ => blend.to_tiny_skia().unwrap_or(TinyBlendMode::SourceOver),
+    _ => TinyBlendMode::try_from(blend).unwrap_or(TinyBlendMode::SourceOver),
   }
 }
 
