@@ -55,7 +55,8 @@ impl<'a> SvgPainter<'a> {
         SvgOp::PushBlend(blend) => surface.push_blend_mode(krilla_blend(blend)),
         SvgOp::PushOpacity(opacity) => surface.push_opacity(normalized(opacity)),
         SvgOp::PushMask { ops, luminance } => {
-          let stream = draw_stream(surface, |mask| self.draw_ops(mask, ops));
+          // CSS filters the element after masking, so the mask's own colors stay as drawn.
+          let stream = draw_stream(surface, |mask| SvgPainter::new(None).draw_ops(mask, ops));
           let kind = if luminance {
             MaskType::Luminosity
           } else {
@@ -96,12 +97,15 @@ impl<'a> SvgPainter<'a> {
     }
   }
 
-  /// An encoded bitmap embeds as it came unless the filter recolors it.
+  /// An encoded bitmap embeds as it came, unless the filter recolors it or it does not embed.
   fn image(&self, data: &SvgImageData) -> Option<KrillaImage> {
-    match (data, self.filter) {
-      (SvgImageData::Encoded(bytes), None) => embedded_image(bytes),
-      (data, filter) => Some(bitmap_image(&data.decode()?, filter)),
+    if let (SvgImageData::Encoded(bytes), None) = (data, self.filter)
+      && let Some(image) = embedded_image(bytes)
+    {
+      return Some(image);
     }
+
+    Some(bitmap_image(&data.decode()?, self.filter))
   }
 
   fn fill(&self, fill: SvgFill, surface: &mut Surface) -> Fill {

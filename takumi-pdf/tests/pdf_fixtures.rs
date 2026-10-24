@@ -1984,12 +1984,38 @@ fn svg_with_color_filter() {
       .fonts(fonts)
       .build()
   });
-  let text = String::from_utf8_lossy(&pdf);
+  let text = inflated_text(&pdf);
 
   assert!(text.contains("/Shading"), "gradient lost its shading");
   assert!(
-    !text.contains("0.882 0.114 0.282"),
+    !text.contains("0.8824 0.1137 0.2824 rg"),
     "the filtered fill kept its original color"
+  );
+}
+
+/// A CSS `filter` on an SVG image leaves the SVG's mask content as drawn.
+#[test]
+fn svg_color_filter_leaves_masks_alone() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs><mask id="m"><rect width="24" height="24" fill="#ffffff"/></mask></defs>
+  <rect width="24" height="24" fill="#e11d48" mask="url(#m)"/>
+</svg>"##;
+  let html = format!(
+    r##"<img src="{}" style="width: 48px; height: 48px; filter: invert(1);">"##,
+    data_url("image/svg+xml", svg.as_bytes()),
+  );
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse svg mask fixture"))
+      .viewport(Viewport::new((64, 64)))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render svg mask fixture");
+
+  assert!(
+    inflated_text(&pdf).contains("1 1 1 rg"),
+    "the filter inverted the mask"
   );
 }
 
