@@ -24,6 +24,10 @@ use thiserror::Error;
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(feature = "svg-raster")]
+use crate::geometry::Point;
+#[cfg(feature = "svg")]
+use crate::geometry::Size;
 #[cfg(feature = "svg")]
 use crate::layout::node::Node;
 #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
@@ -185,8 +189,9 @@ impl SvgSource {
     self.document.node_count() * size_of::<Node>()
   }
 
-  /// The SVG's drawing ops in SVG canvas coordinates, drawn in the box `host` styles.
-  pub fn vector_ops(&self, host: &RenderContext) -> Vec<SvgOp> {
+  /// The SVG's drawing ops laid out at `viewport`, the size it is drawn at in CSS pixels, in the
+  /// box `host` styles.
+  pub fn vector_ops(&self, host: &RenderContext, viewport: Size<f32>) -> Vec<SvgOp> {
     let host = if self.inline {
       SvgHost::Inline(host)
     } else {
@@ -196,7 +201,7 @@ impl SvgSource {
       }
     };
 
-    self.document.ops(host).unwrap_or_default()
+    self.document.ops(host, viewport).unwrap_or_default()
   }
 
   /// An inline `svg` element of an HTML document and its subtree, every attribute kept in the
@@ -240,23 +245,28 @@ impl SvgSource {
   #[cfg(feature = "svg-raster")]
   fn rasterize(
     &self,
-    width: u32,
-    height: u32,
+    raster: SvgRaster,
     host: &RenderContext,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
-    if !within_raster_pixel_budget(width, height) {
+    let SvgRaster {
+      viewport,
+      origin,
+      size,
+      width,
+      height,
+    } = raster;
+
+    if !within_raster_pixel_budget(width, height) || size.width <= 0.0 || size.height <= 0.0 {
       return Err(ImageError::InvalidPixmapSize);
     }
 
     let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
-
-    let (original_width, original_height) = self.dimensions();
-    let sx = width as f32 / original_width;
-    let sy = height as f32 / original_height;
+    let sx = width as f32 / size.width;
+    let sy = height as f32 / size.height;
 
     SvgDrawing.draw(
-      &self.vector_ops(host),
-      Transform::from_scale(sx, sy),
+      &self.vector_ops(host, viewport),
+      Transform::from_row(sx, 0.0, 0.0, sy, -origin.x * sx, -origin.y * sy),
       &mut pixmap.as_mut(),
     );
 
@@ -265,14 +275,19 @@ impl SvgSource {
       .ok_or(ImageError::InvalidPixmapSize)
   }
 
+  /// The pixels of `raster`, from the cache when an image drew them before.
   #[cfg(feature = "svg-raster")]
-  fn rasterize_cached(
+  pub fn rasterize_cached(
     &self,
-    width: u32,
-    height: u32,
+    raster: SvgRaster,
     image_rendering: ImageScalingAlgorithm,
     host: &RenderContext,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
+    // An inline `svg` draws in the style of its box, which the key cannot hold.
+    if self.inline {
+      return self.rasterize(raster, host);
+    }
+
     let mut hash = if self.uses_current_color {
       self.hash ^ xxh3_64(&host.current_color.0)
     } else {
@@ -284,14 +299,72 @@ impl SvgSource {
       hash ^= xxh3_64(&host.fonts().revision().to_le_bytes());
     }
 
-    // An inline `svg` draws in the style of its box, which the key cannot hold.
-    if self.inline {
-      return self.rasterize(width, height, host);
+    hash ^= raster.hash();
+
+    let key = ResourceCacheKey::sized(hash, raster.width, raster.height, image_rendering);
+
+    cached_sized(&self.cache, key, || self.rasterize(raster, host))
+  }
+}
+
+/// The part of an SVG laid out at `viewport` that a `width` by `height` bitmap covers: `size` from
+/// `origin`, both in the viewport's CSS pixels.
+#[cfg(feature = "svg-raster")]
+#[derive(Debug, Clone, Copy)]
+pub struct SvgRaster {
+  viewport: Size<f32>,
+  origin: Point<f32>,
+  size: Size<f32>,
+  width: u32,
+  height: u32,
+}
+
+#[cfg(feature = "svg-raster")]
+impl SvgRaster {
+  /// The whole SVG laid out at `viewport`, Blink's container size, over a `width` by `height`
+  /// bitmap.
+  pub fn whole(viewport: Size<f32>, width: u32, height: u32) -> Self {
+    Self {
+      viewport,
+      origin: Point::ZERO,
+      size: viewport,
+      width,
+      height,
     }
+  }
 
-    let key = ResourceCacheKey::sized(hash, width, height, image_rendering);
+  /// The `size` from `origin` of the SVG laid out at `viewport`, over a `width` by `height` bitmap.
+  pub fn cropped(
+    viewport: Size<f32>,
+    origin: Point<f32>,
+    size: Size<f32>,
+    width: u32,
+    height: u32,
+  ) -> Self {
+    Self {
+      viewport,
+      origin,
+      size,
+      width,
+      height,
+    }
+  }
 
-    cached_sized(&self.cache, key, || self.rasterize(width, height, host))
+  /// What sets it apart from another raster of the same bitmap size.
+  fn hash(self) -> u64 {
+    xxh3_64(
+      &[
+        self.viewport.width,
+        self.viewport.height,
+        self.origin.x,
+        self.origin.y,
+        self.size.width,
+        self.size.height,
+      ]
+      .map(f32::to_bits)
+      .map(u32::to_le_bytes)
+      .concat(),
+    )
   }
 }
 
@@ -574,8 +647,14 @@ impl ImageSource {
       }
       #[cfg(feature = "svg-raster")]
       ImageSource::Svg(svg) => Ok(RenderedImage::Rasterized(svg.rasterize_cached(
-        width,
-        height,
+        SvgRaster::whole(
+          Size {
+            width: width as f32,
+            height: height as f32,
+          },
+          width,
+          height,
+        ),
         image_rendering,
         host,
       )?)),
@@ -1263,8 +1342,6 @@ mod resource_cache_tests {
 mod tests {
   use std::assert_matches;
 
-  #[cfg(feature = "svg")]
-  use crate::geometry::Size;
   #[cfg(feature = "png")]
   use crate::resources::animated::AnimatedFormat;
   #[cfg(any(feature = "png", feature = "webp"))]
@@ -2371,7 +2448,17 @@ mod tests {
     );
     let source = svg.parse::<SvgSource>().unwrap();
     let rasterized = source
-      .rasterize(8, 8, &RenderContext::with_current_color(Color::black()))
+      .rasterize(
+        SvgRaster::whole(
+          Size {
+            width: 8.0,
+            height: 8.0,
+          },
+          8,
+          8,
+        ),
+        &RenderContext::with_current_color(Color::black()),
+      )
       .unwrap();
 
     std::fs::remove_file(&path).ok();

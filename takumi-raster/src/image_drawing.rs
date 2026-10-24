@@ -4,6 +4,8 @@ use takumi_core::{
   painter::{FillShape, PaintDevice},
 };
 
+#[cfg(feature = "svg")]
+use crate::resources::image::SvgRaster;
 use crate::{
   BorderProperties, Canvas, CanvasDevice, PaintSource, RenderContext, Result, SamplingOptions,
   painter::BoxPainter,
@@ -19,11 +21,12 @@ struct PreparedImage {
 }
 
 /// Renders the part of an image at `placement`, relative to the content box, that lands inside
-/// the `crop` rectangle at `crop_origin` from the content box.
+/// the `crop` rectangle at `crop_origin` from the content box. An SVG lays out at `container`.
 fn process_image_for_object_fit(
   image: &ImageSource,
   context: &RenderContext,
   placement: ReplacedPlacement,
+  #[cfg_attr(not(feature = "svg"), allow(unused_variables))] container: Size<f32>,
   crop_origin: Point<f32>,
   crop: Size<f32>,
 ) -> Result<Option<PreparedImage>> {
@@ -52,6 +55,40 @@ fn process_image_for_object_fit(
 
   if !image.is_drawable_at(width, height) {
     return Ok(None);
+  }
+
+  // An SVG lays out at the size it is drawn at, Blink's container size, so only the crop draws.
+  #[cfg(feature = "svg")]
+  if let ImageSource::Svg(svg) = image {
+    // The placement snapped to pixels, while the SVG lays out at the size before snapping.
+    let scale = |point: Point<f32>| Point {
+      x: point.x * container.width / placement.size.width,
+      y: point.y * container.height / placement.size.height,
+    };
+    let size = scale(Point {
+      x: clipped.size.width,
+      y: clipped.size.height,
+    });
+    let raster = SvgRaster::cropped(
+      container,
+      scale(clipped.crop),
+      Size {
+        width: size.x,
+        height: size.y,
+      },
+      width,
+      height,
+    );
+
+    return Ok(Some(PreparedImage {
+      image: RenderedImage::Rasterized(svg.rasterize_cached(
+        raster,
+        context.style.misc_inherited_data.image_rendering,
+        context,
+      )?),
+      logical_to_source: Affine::IDENTITY,
+      offset: crop_origin + clipped.origin,
+    }));
   }
 
   let rendered = image.render_for_layout(
@@ -92,8 +129,14 @@ pub(crate) fn draw_image(
     Some(clip) => (clip.offset - content_offset, clip.size),
     None => (replaced.placement.offset, replaced.placement.size),
   };
-  let Some(prepared) =
-    process_image_for_object_fit(image, context, replaced.placement, crop_origin, crop)?
+  let Some(prepared) = process_image_for_object_fit(
+    image,
+    context,
+    replaced.placement,
+    replaced.container,
+    crop_origin,
+    crop,
+  )?
   else {
     return Ok(());
   };

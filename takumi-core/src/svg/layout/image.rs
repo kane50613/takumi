@@ -251,7 +251,12 @@ impl SvgLayout<'_> {
       current_color: self.styles.root_context().current_color,
       fonts: self.fonts,
     };
-    let mut layout = SvgLayout::nested(&document, host, self.image_depth + 1);
+    let mut layout = SvgLayout::nested(
+      &document,
+      host,
+      document.declared_size(),
+      self.image_depth + 1,
+    );
 
     layout.budget = mem::take(&mut self.budget);
 

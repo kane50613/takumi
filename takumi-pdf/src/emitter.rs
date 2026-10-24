@@ -554,7 +554,7 @@ impl Emitter<'_> {
       self.background_layer(
         image,
         node,
-        tiling.tile,
+        tiling,
         origin + CorePoint { x: *x, y: *y },
         surface,
         Transform::identity(),
@@ -566,7 +566,7 @@ impl Emitter<'_> {
     }
 
     let stream = draw_stream(surface, |tile| {
-      self.background_layer(image, node, tiling.tile, CorePoint::ZERO, tile, tile_space);
+      self.background_layer(image, node, tiling, CorePoint::ZERO, tile, tile_space);
     });
     let step = tiling.step();
 
@@ -588,11 +588,12 @@ impl Emitter<'_> {
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
-    size: Size<f32>,
+    tiling: &ImageTiling,
     at: CorePoint<f32>,
     surface: &mut Surface,
     pattern_space: Transform,
   ) {
+    let size = tiling.tile;
     let (w, h) = (size.width, size.height);
 
     #[cfg(feature = "images")]
@@ -602,7 +603,7 @@ impl Emitter<'_> {
       };
       #[cfg(feature = "svg")]
       if let ImageSource::Svg(svg) = &source {
-        self.draw_svg(svg, &node.context, at, size, surface);
+        self.draw_svg(svg, &node.context, at, tiling.image_size, size, surface);
         return;
       }
       let Some(krilla_image) = self.drawable(
@@ -991,14 +992,17 @@ impl Emitter<'_> {
     }
     #[cfg(feature = "svg")]
     if let Some(svg) = svg {
+      let size = Size {
+        width: dw,
+        height: dh,
+      };
+
       self.draw_svg(
         svg,
         context,
         CorePoint { x: ix, y: iy },
-        Size {
-          width: dw,
-          height: dh,
-        },
+        size,
+        size,
         surface,
       );
     }
@@ -1013,28 +1017,29 @@ impl Emitter<'_> {
   }
 
   #[cfg(all(feature = "svg", feature = "images"))]
-  /// Draws `svg` stretched over `size` at `at`, clipped to its canvas.
+  /// Draws `svg` laid out at `viewport`, Blink's container size, stretched over `size` at `at` and
+  /// clipped to its canvas.
   fn draw_svg(
     &self,
     svg: &SvgSource,
     context: &RenderContext,
     at: CorePoint<f32>,
+    viewport: Size<f32>,
     size: Size<f32>,
     surface: &mut Surface,
   ) {
-    let (svg_width, svg_height) = svg.dimensions();
-
-    if svg_width <= 0.0 || svg_height <= 0.0 {
+    if viewport.width <= 0.0 || viewport.height <= 0.0 {
       return;
     }
-    let ops = svg.vector_ops(context);
-    let canvas = KrillaRect::from_xywh(0.0, 0.0, svg_width, svg_height).and_then(rect_path);
+    let ops = svg.vector_ops(context, viewport);
+    let canvas =
+      KrillaRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
 
     surface.push_transform(&Transform::from_row(
-      size.width / svg_width,
+      size.width / viewport.width,
       0.0,
       0.0,
-      size.height / svg_height,
+      size.height / viewport.height,
       at.x,
       at.y,
     ));
@@ -1312,7 +1317,7 @@ impl Emitter<'_> {
       self.background_layer(
         image,
         node,
-        tiling.tile,
+        tiling,
         CorePoint::ZERO,
         inner,
         Transform::from_scale(PT_PER_PX, PT_PER_PX),

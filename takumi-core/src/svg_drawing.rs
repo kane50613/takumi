@@ -557,6 +557,7 @@ mod tests {
   use super::Target;
   use crate::{
     context::RenderContext,
+    geometry::Size,
     resources::{
       image::{ImageSource, RenderedImage, SvgSource, to_data_url},
       image_buffer::ImageBuffer,
@@ -649,7 +650,13 @@ mod tests {
     )
     .parse()
     .unwrap();
-    let ops = source.vector_ops(&RenderContext::with_current_color(Color::black()));
+    let ops = source.vector_ops(
+      &RenderContext::with_current_color(Color::black()),
+      Size {
+        width: 10.0,
+        height: 10.0,
+      },
+    );
     let Some(SvgOp::PushFilter(filters)) = ops.iter().find(|op| matches!(op, SvgOp::PushFilter(_)))
     else {
       panic!("expected a filter op");

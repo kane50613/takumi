@@ -138,7 +138,8 @@ impl SvgDocument {
       size,
     };
 
-    document.canvas = layout::SvgLayout::new(&document, SvgHost::BLACK).canvas_size();
+    document.canvas =
+      layout::SvgLayout::new(&document, SvgHost::BLACK, document.declared_size()).canvas_size();
 
     Ok(document)
   }
@@ -197,12 +198,18 @@ impl SvgDocument {
   /// The filter the element `id` names, laid out for content of `width` by `height`.
   #[cfg(feature = "svg-raster")]
   pub(crate) fn filter(&self, id: &str, width: f32, height: f32) -> Option<Arc<SvgFilter>> {
-    layout::SvgLayout::new(self, SvgHost::BLACK).filter_by_id(id, width, height)
+    layout::SvgLayout::new(self, SvgHost::BLACK, self.declared_size())
+      .filter_by_id(id, width, height)
   }
 
-  /// The drawing ops of the document in canvas coordinates, drawn in `host`.
-  pub(crate) fn ops(&self, host: SvgHost<'_>) -> Option<Vec<SvgOp>> {
-    layout::SvgLayout::new(self, host).layout()
+  /// The drawing ops of the document drawn in `host` at `viewport`, in its coordinates.
+  pub(crate) fn ops(&self, host: SvgHost<'_>, viewport: Size<f32>) -> Option<Vec<SvgOp>> {
+    layout::SvgLayout::new(self, host, viewport).layout()
+  }
+
+  /// The size the root's `width`, `height`, and `viewBox` give, without a container.
+  fn declared_size(&self) -> Size<f32> {
+    Size::new(self.size.width, self.size.height)
   }
 }
 
