@@ -429,13 +429,32 @@ impl<'i> FromCss<'i> for PaintOrder {
   const VALID_TOKENS: &'static [&'static str] = &["normal", "fill", "stroke", "markers"];
 }
 
+impl PaintOrder {
+  /// How many phases Blink's `PaintOrderArray::CanonicalLength` writes: the rest follow in natural
+  /// order.
+  fn canonical_length(self) -> usize {
+    match self {
+      Self::Normal
+      | Self::FillStrokeMarkers
+      | Self::StrokeFillMarkers
+      | Self::MarkersFillStroke => 1,
+      Self::FillMarkersStroke | Self::StrokeMarkersFill | Self::MarkersStrokeFill => 2,
+    }
+  }
+}
+
 impl ToCss for PaintOrder {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     if matches!(self, Self::Normal) {
       return dest.write_str("normal");
     }
 
-    for (index, phase) in self.phases().into_iter().enumerate() {
+    for (index, phase) in self
+      .phases()
+      .into_iter()
+      .take(self.canonical_length())
+      .enumerate()
+    {
       if index > 0 {
         dest.write_char(' ')?;
       }
@@ -717,8 +736,8 @@ impl ToCss for BaselineShift {
   }
 }
 
-/// Blink's `StylePath`: the outline `d` sets.
-#[derive(Debug, Clone, PartialEq)]
+/// Blink's `StylePath`: the outline `d` sets, none when it has no commands.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct SvgPath(Arc<[PathCommand]>);
 
 impl SvgPath {
@@ -730,6 +749,11 @@ impl SvgPath {
   /// The absolute commands of the outline.
   pub fn commands(&self) -> &[PathCommand] {
     &self.0
+  }
+
+  /// Whether the outline has no commands, which is `d: none`.
+  pub fn is_empty(&self) -> bool {
+    self.0.is_empty()
   }
 
   /// Interpolates the commands when both paths have the same shape.
@@ -795,8 +819,13 @@ impl Animatable for SvgPath {
 }
 
 impl<'i> FromCss<'i> for SvgPath {
-  /// Blink's `ConsumePathStringArg`: the string must be complete path data with a segment.
+  /// Blink's `ConsumePathOrNone`: `none`, or a `path()` of complete path data, where an empty
+  /// string is `none`.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if accepts_keyword(input, "none") {
+      return Ok(Self::default());
+    }
+
     let token = input.next()?.clone();
 
     let Token::Function(function) = &token else {
@@ -810,7 +839,7 @@ impl<'i> FromCss<'i> for SvgPath {
     input.parse_nested_block(|input| {
       let (commands, complete) = PathData::parse(input.expect_string()?);
 
-      if !complete || commands.is_empty() {
+      if !complete {
         return Err(ValueError::invalid("expected complete path data"));
       }
 
@@ -818,11 +847,15 @@ impl<'i> FromCss<'i> for SvgPath {
     })
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["<path()>"];
+  const VALID_TOKENS: &'static [&'static str] = &["none", "<path()>"];
 }
 
 impl ToCss for SvgPath {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.is_empty() {
+      return dest.write_str("none");
+    }
+
     dest.write_str("path(\"")?;
 
     for (index, command) in self.0.iter().enumerate() {

@@ -1894,7 +1894,7 @@ fn svg_properties_start_at_their_initial_values() {
   );
   assert_eq!(style.svg_stroke_data.stroke_linecap, LineCap::Butt);
   assert_eq!(style.svg_geometry_data.rx, Length::Auto);
-  assert_eq!(style.svg_geometry_data.d, None);
+  assert!(style.svg_geometry_data.d.is_empty());
   assert_eq!(
     style.svg_inherited_data.color_interpolation_filters,
     ColorInterpolation::LinearRgb
@@ -1985,9 +1985,15 @@ fn paint_order_completes_the_phases_it_names() {
     PaintOrder::MarkersFillStroke
   );
   assert!(parse_declarations_is_err("paint-order", "fill fill"));
+  assert_eq!(PaintOrder::StrokeFillMarkers.to_css_string(), "stroke");
+  assert_eq!(PaintOrder::MarkersFillStroke.to_css_string(), "markers");
   assert_eq!(
-    PaintOrder::StrokeFillMarkers.to_css_string(),
-    "stroke fill markers"
+    PaintOrder::FillMarkersStroke.to_css_string(),
+    "fill markers"
+  );
+  assert_eq!(
+    PaintOrder::StrokeMarkersFill.to_css_string(),
+    "stroke markers"
   );
   assert_eq!(
     PaintOrder::MarkersFillStroke.phases(),
@@ -1999,16 +2005,10 @@ fn paint_order_completes_the_phases_it_names() {
 fn d_takes_complete_path_data_only() {
   let style = svg_style("d", "path(\"M0 0 L 10 10\")");
 
-  assert_eq!(
-    style
-      .svg_geometry_data
-      .d
-      .as_ref()
-      .map(|path| path.commands().len()),
-    Some(2)
-  );
+  assert_eq!(style.svg_geometry_data.d.commands().len(), 2);
   assert!(parse_declarations_is_err("d", "path(\"M0 0 X\")"));
-  assert_eq!(svg_style("d", "none").svg_geometry_data.d, None);
+  assert!(svg_style("d", "none").svg_geometry_data.d.is_empty());
+  assert!(svg_style("d", "path(\"\")").svg_geometry_data.d.is_empty());
   assert_eq!(
     SvgPath::from_css_str("path(\"M0 0 L 10 10 Z\")").map(|path| path.to_css_string()),
     Ok("path(\"M 0 0 L 10 10 Z\")".to_owned())

@@ -557,6 +557,7 @@ impl<'a> Scanner<'a> {
     };
 
     self.position += 1;
+    self.skip_spaces();
     self.skip_comma();
     self.skip_spaces();
 
@@ -691,12 +692,14 @@ impl Normalizer {
   /// Appends the segment, or drops it and returns false when a coordinate overflows `f32`.
   fn push(&mut self, absolute: bool, segment: Segment) -> bool {
     let appended_from = self.commands.len();
+    let replaced = self.commands.last().copied();
 
     self.append(absolute, segment);
 
     let mut finite = true;
 
-    for command in &self.commands[appended_from..] {
+    // A moveto after a moveto replaces it in place, so the last old command is checked too.
+    for command in &self.commands[appended_from.saturating_sub(1)..] {
       command.map_points(|point| {
         finite &= point.x.is_finite() && point.y.is_finite();
         point
@@ -705,6 +708,10 @@ impl Normalizer {
 
     if !finite {
       self.commands.truncate(appended_from);
+
+      if let (Some(replaced), Some(last)) = (replaced, appended_from.checked_sub(1)) {
+        self.commands[last] = replaced;
+      }
     }
 
     finite
@@ -1318,5 +1325,12 @@ mod tests {
     );
     assert!(!PathData::parse("M 0 0 L 1e39 0").1);
     assert!(!PathData::parse("M 3e38 0 l 3e38 0").1);
+    assert!(!PathData::parse("M 3e38 0 m 3e38 0").1);
+  }
+
+  #[test]
+  fn an_arc_flag_takes_spaces_before_its_comma() {
+    assert!(PathData::parse("M 0 0 A 5 5 0 1 ,0 10 10").1);
+    assert!(PathData::parse("M 0 0 A 5 5 0 1 , 0 10 10").1);
   }
 }

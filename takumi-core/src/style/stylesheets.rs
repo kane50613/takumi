@@ -1529,7 +1529,7 @@ define_style! {
       r: Length where non_negative = true = Length::zero(),
       rx: Length where non_negative = true = Length::Auto,
       ry: Length where non_negative = true = Length::Auto,
-      d: Option<SvgPath>,
+      d: SvgPath,
     }
     /// Blink's `svg->stop` field group.
     svg_stop_data: StyleSvgStopData {
