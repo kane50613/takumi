@@ -1,6 +1,9 @@
 //! Compact SVG path `d` data, as SVG output and the paint document write it.
 
-use std::fmt::{self, Write as _};
+use std::{
+  f64::consts::{FRAC_PI_2, TAU},
+  fmt::{self, Write as _},
+};
 
 use crate::{
   geometry::{PathCommand, Point, Rect},
@@ -24,6 +27,33 @@ pub struct PathData {
 }
 
 impl PathData {
+  /// Path data commands up to the first error, and whether the whole text parsed, after Blink's
+  /// `SVGPathParser` and `SVGPathNormalizer`: absolute commands, `H`/`V` as lines, smooth curves
+  /// expanded, arcs as cubics.
+  ///
+  /// A coordinate that overflows `f32` ends the data as an error.
+  pub fn parse(text: &str) -> (Vec<PathCommand>, bool) {
+    let mut scanner = Scanner::new(text);
+    let mut normalizer = Normalizer::default();
+    let mut previous_command = None;
+
+    loop {
+      scanner.skip_spaces();
+
+      if scanner.at_end() {
+        return (normalizer.commands, true);
+      }
+
+      let Some((absolute, segment)) = scanner.segment(&mut previous_command) else {
+        return (normalizer.commands, false);
+      };
+
+      if !normalizer.push(absolute, segment) {
+        return (normalizer.commands, false);
+      }
+    }
+  }
+
   /// An empty path with room for `capacity` bytes.
   pub fn with_capacity(capacity: usize) -> Self {
     Self {
@@ -389,6 +419,549 @@ impl fmt::Display for Num {
   }
 }
 
+/// Reads path data text byte by byte, after svgtypes' `Stream`.
+struct Scanner<'a> {
+  bytes: &'a [u8],
+  position: usize,
+}
+
+/// One path data segment as authored, before it is made absolute.
+enum Segment {
+  MoveTo(f64, f64),
+  LineTo(f64, f64),
+  Horizontal(f64),
+  Vertical(f64),
+  Cubic([f64; 6]),
+  SmoothCubic([f64; 4]),
+  Quadratic([f64; 4]),
+  SmoothQuadratic(f64, f64),
+  Arc(ArcSegment),
+  Close,
+}
+
+struct ArcSegment {
+  radii: (f64, f64),
+  rotation: f64,
+  large_arc: bool,
+  sweep: bool,
+  to: (f64, f64),
+}
+
+impl<'a> Scanner<'a> {
+  fn new(text: &'a str) -> Self {
+    Self {
+      bytes: text.as_bytes(),
+      position: 0,
+    }
+  }
+
+  fn at_end(&self) -> bool {
+    self.position >= self.bytes.len()
+  }
+
+  fn peek(&self) -> Option<u8> {
+    self.bytes.get(self.position).copied()
+  }
+
+  fn skip_spaces(&mut self) {
+    while self
+      .peek()
+      .is_some_and(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
+    {
+      self.position += 1;
+    }
+  }
+
+  fn skip_digits(&mut self) {
+    while self.peek().is_some_and(|byte| byte.is_ascii_digit()) {
+      self.position += 1;
+    }
+  }
+
+  /// A number, where `e` not followed by `m` or `x` starts an exponent.
+  fn number(&mut self) -> Option<f64> {
+    self.skip_spaces();
+
+    let start = self.position;
+    let mut byte = self.peek()?;
+
+    if matches!(byte, b'+' | b'-') {
+      self.position += 1;
+      byte = self.peek()?;
+    }
+
+    match byte {
+      b'0'..=b'9' => self.skip_digits(),
+      b'.' => {}
+      _ => return None,
+    }
+
+    if self.peek() == Some(b'.') {
+      self.position += 1;
+      self.skip_digits();
+    }
+
+    if matches!(self.peek(), Some(b'e' | b'E')) {
+      let next = *self.bytes.get(self.position + 1)?;
+
+      if next != b'm' && next != b'x' {
+        self.position += 1;
+
+        match self.peek()? {
+          b'+' | b'-' => {
+            self.position += 1;
+            self.skip_digits();
+          }
+          b'0'..=b'9' => self.skip_digits(),
+          _ => return None,
+        }
+      }
+    }
+
+    let number = str::from_utf8(self.bytes.get(start..self.position)?)
+      .ok()?
+      .parse::<f64>()
+      .ok()?;
+
+    (number as f32).is_finite().then_some(number)
+  }
+
+  /// A number followed by its optional comma separator.
+  fn list_number(&mut self) -> Option<f64> {
+    if self.at_end() {
+      return None;
+    }
+
+    let number = self.number()?;
+
+    self.skip_spaces();
+    self.skip_comma();
+
+    Some(number)
+  }
+
+  fn skip_comma(&mut self) {
+    if self.peek() == Some(b',') {
+      self.position += 1;
+    }
+  }
+
+  /// An arc flag, which may sit directly against the next one without a separator.
+  fn flag(&mut self) -> Option<bool> {
+    self.skip_spaces();
+
+    let flag = match self.peek()? {
+      b'0' => false,
+      b'1' => true,
+      _ => return None,
+    };
+
+    self.position += 1;
+    self.skip_spaces();
+    self.skip_comma();
+    self.skip_spaces();
+
+    Some(flag)
+  }
+
+  fn pair(&mut self) -> Option<(f64, f64)> {
+    Some((self.list_number()?, self.list_number()?))
+  }
+
+  /// The next segment and whether its coordinates are absolute. `previous_command` is the last
+  /// command letter, which a number with no letter repeats (a moveto repeats as a lineto).
+  fn segment(&mut self, previous_command: &mut Option<u8>) -> Option<(bool, Segment)> {
+    let first = self.peek()?;
+
+    if previous_command.is_none() && !matches!(first, b'M' | b'm') {
+      return None;
+    }
+
+    let (command, implicit_moveto) = if is_command(first) {
+      self.position += 1;
+
+      (first, false)
+    } else if matches!(first, b'0'..=b'9' | b'.' | b'-' | b'+') {
+      match (*previous_command)? {
+        b'Z' | b'z' => return None,
+        b'M' => (b'L', true),
+        b'm' => (b'l', true),
+        repeated => (repeated, false),
+      }
+    } else {
+      return None;
+    };
+
+    let absolute = command.is_ascii_uppercase();
+    let segment = match command.to_ascii_lowercase() {
+      b'm' => {
+        let (x, y) = self.pair()?;
+
+        Segment::MoveTo(x, y)
+      }
+      b'l' => {
+        let (x, y) = self.pair()?;
+
+        Segment::LineTo(x, y)
+      }
+      b'h' => Segment::Horizontal(self.list_number()?),
+      b'v' => Segment::Vertical(self.list_number()?),
+      b'c' => Segment::Cubic([
+        self.list_number()?,
+        self.list_number()?,
+        self.list_number()?,
+        self.list_number()?,
+        self.list_number()?,
+        self.list_number()?,
+      ]),
+      b's' => Segment::SmoothCubic([
+        self.list_number()?,
+        self.list_number()?,
+        self.list_number()?,
+        self.list_number()?,
+      ]),
+      b'q' => Segment::Quadratic([
+        self.list_number()?,
+        self.list_number()?,
+        self.list_number()?,
+        self.list_number()?,
+      ]),
+      b't' => {
+        let (x, y) = self.pair()?;
+
+        Segment::SmoothQuadratic(x, y)
+      }
+      b'a' => Segment::Arc(ArcSegment {
+        radii: self.pair()?,
+        rotation: self.list_number()?,
+        large_arc: self.flag()?,
+        sweep: self.flag()?,
+        to: self.pair()?,
+      }),
+      _ => Segment::Close,
+    };
+
+    *previous_command = Some(match (implicit_moveto, absolute) {
+      (true, true) => b'M',
+      (true, false) => b'm',
+      (false, _) => command,
+    });
+
+    Some((absolute, segment))
+  }
+}
+
+fn is_command(byte: u8) -> bool {
+  matches!(
+    byte.to_ascii_lowercase(),
+    b'm' | b'z' | b'l' | b'h' | b'v' | b'c' | b's' | b'q' | b't' | b'a'
+  )
+}
+
+/// What the last segment leaves a smooth curve to reflect.
+#[derive(Clone, Copy, Default)]
+enum Reflection {
+  #[default]
+  None,
+  Cubic {
+    control: (f64, f64),
+    end: (f64, f64),
+  },
+  Quadratic {
+    control: (f64, f64),
+    end: (f64, f64),
+  },
+  SmoothQuadratic {
+    end: (f64, f64),
+  },
+}
+
+/// Makes segments absolute and appends them as [`PathCommand`]s, after svgtypes'
+/// `SimplifyingPathParser`.
+#[derive(Default)]
+struct Normalizer {
+  commands: Vec<PathCommand>,
+  current: (f64, f64),
+  subpath_start: (f64, f64),
+  reflection: Reflection,
+  smooth_quadratic_control: (f64, f64),
+  closed: bool,
+}
+
+impl Normalizer {
+  /// Appends the segment, or drops it and returns false when a coordinate overflows `f32`.
+  fn push(&mut self, absolute: bool, segment: Segment) -> bool {
+    let appended_from = self.commands.len();
+    let replaced = self.commands.last().copied();
+
+    self.append(absolute, segment);
+
+    let mut finite = true;
+
+    // A moveto after a moveto replaces it in place, so the last old command is checked too.
+    for command in &self.commands[appended_from.saturating_sub(1)..] {
+      command.map_points(|point| {
+        finite &= point.x.is_finite() && point.y.is_finite();
+        point
+      });
+    }
+
+    if !finite {
+      self.commands.truncate(appended_from);
+
+      if let (Some(replaced), Some(last)) = (replaced, appended_from.checked_sub(1)) {
+        self.commands[last] = replaced;
+      }
+    }
+
+    finite
+  }
+
+  fn append(&mut self, absolute: bool, segment: Segment) {
+    if self.closed && !matches!(segment, Segment::MoveTo(..) | Segment::Close) {
+      self.move_to(self.subpath_start);
+    }
+
+    let (origin_x, origin_y) = if absolute { (0.0, 0.0) } else { self.current };
+    let (current_x, current_y) = self.current;
+
+    match segment {
+      Segment::MoveTo(x, y) => {
+        let (origin_x, origin_y) = match (absolute, self.closed) {
+          (true, _) => (0.0, 0.0),
+          (false, true) => self.subpath_start,
+          (false, false) => self.current,
+        };
+
+        self.move_to((x + origin_x, y + origin_y));
+        self.reflection = Reflection::None;
+      }
+      Segment::LineTo(x, y) => {
+        self.line_to((x + origin_x, y + origin_y));
+        self.reflection = Reflection::None;
+      }
+      Segment::Horizontal(x) => {
+        self.line_to((x + origin_x, current_y));
+        self.reflection = Reflection::None;
+      }
+      Segment::Vertical(y) => {
+        self.line_to((current_x, y + origin_y));
+        self.reflection = Reflection::None;
+      }
+      Segment::Cubic([x1, y1, x2, y2, x, y]) => {
+        let control = (x2 + origin_x, y2 + origin_y);
+        let end = (x + origin_x, y + origin_y);
+
+        self.cubic_to((x1 + origin_x, y1 + origin_y), control, end);
+        self.reflection = Reflection::Cubic { control, end };
+      }
+      Segment::SmoothCubic([x2, y2, x, y]) => {
+        let first = match self.reflection {
+          Reflection::Cubic { control, end } => (end.0 * 2.0 - control.0, end.1 * 2.0 - control.1),
+          _ => self.current,
+        };
+        let control = (x2 + origin_x, y2 + origin_y);
+        let end = (x + origin_x, y + origin_y);
+
+        self.cubic_to(first, control, end);
+        self.reflection = Reflection::Cubic { control, end };
+      }
+      Segment::Quadratic([x1, y1, x, y]) => {
+        let control = (x1 + origin_x, y1 + origin_y);
+        let end = (x + origin_x, y + origin_y);
+
+        self.quadratic_to(control, end);
+        self.reflection = Reflection::Quadratic { control, end };
+      }
+      Segment::SmoothQuadratic(x, y) => {
+        let control = match self.reflection {
+          Reflection::Quadratic { control, end } => {
+            (end.0 * 2.0 - control.0, end.1 * 2.0 - control.1)
+          }
+          Reflection::SmoothQuadratic { end } => (
+            end.0 * 2.0 - self.smooth_quadratic_control.0,
+            end.1 * 2.0 - self.smooth_quadratic_control.1,
+          ),
+          _ => self.current,
+        };
+        let end = (x + origin_x, y + origin_y);
+
+        self.smooth_quadratic_control = control;
+        self.quadratic_to(control, end);
+        self.reflection = Reflection::SmoothQuadratic { end };
+      }
+      Segment::Arc(arc) => {
+        let end = (arc.to.0 + origin_x, arc.to.1 + origin_y);
+
+        self.arc_to(&arc, end);
+        self.reflection = Reflection::None;
+      }
+      Segment::Close => {
+        if !self.closed {
+          self.commands.push(PathCommand::Close);
+        }
+
+        self.current = self.subpath_start;
+        self.closed = true;
+        self.reflection = Reflection::None;
+
+        return;
+      }
+    }
+
+    self.closed = false;
+  }
+
+  /// A moveto right after a moveto replaces it, as tiny-skia's `PathBuilder::move_to`.
+  fn move_to(&mut self, point: (f64, f64)) {
+    let command = PathCommand::MoveTo(single(point));
+
+    if let Some(last @ PathCommand::MoveTo(_)) = self.commands.last_mut() {
+      *last = command;
+    } else {
+      self.commands.push(command);
+    }
+
+    self.current = point;
+    self.subpath_start = point;
+  }
+
+  fn line_to(&mut self, point: (f64, f64)) {
+    self.commands.push(PathCommand::LineTo(single(point)));
+    self.current = point;
+  }
+
+  fn quadratic_to(&mut self, control: (f64, f64), end: (f64, f64)) {
+    self
+      .commands
+      .push(PathCommand::QuadTo(single(control), single(end)));
+    self.current = end;
+  }
+
+  fn cubic_to(&mut self, first: (f64, f64), second: (f64, f64), end: (f64, f64)) {
+    self.commands.push(PathCommand::CubicTo(
+      single(first),
+      single(second),
+      single(end),
+    ));
+    self.current = end;
+  }
+
+  fn arc_to(&mut self, arc: &ArcSegment, end: (f64, f64)) {
+    match arc.cubics(self.current, end) {
+      Some(cubics) => {
+        for [first, second, to] in cubics {
+          self.cubic_to(first, second, to);
+        }
+      }
+      None => self.line_to(end),
+    }
+  }
+}
+
+impl ArcSegment {
+  /// The arc from `from` to `to` as at most four cubics, or none where it is a straight line.
+  /// Blink's `SVGPathNormalizer::DecomposeArcToCubic` (core/svg/svg_path_parser.cc).
+  fn cubics(&self, from: (f64, f64), to: (f64, f64)) -> Option<Vec<[(f64, f64); 3]>> {
+    let angle = self.rotation.to_radians();
+    let (mut rx, mut ry) = (self.radii.0.abs(), self.radii.1.abs());
+
+    if rx == 0.0 || ry == 0.0 || from == to {
+      return None;
+    }
+
+    let mid = ((from.0 - to.0) * 0.5, (from.1 - to.1) * 0.5);
+    let mid = rotated(mid, -angle);
+    let radii_scale = mid.0 * mid.0 / (rx * rx) + mid.1 * mid.1 / (ry * ry);
+
+    if radii_scale > 1.0 {
+      rx *= radii_scale.sqrt();
+      ry *= radii_scale.sqrt();
+    }
+
+    let to_unit_circle = |point| {
+      let (x, y) = rotated(point, -angle);
+
+      (x / rx, y / ry)
+    };
+    let point1 = to_unit_circle(from);
+    let point2 = to_unit_circle(to);
+    let delta = (point2.0 - point1.0, point2.1 - point1.1);
+    let mut scale_factor = (1.0 / (delta.0 * delta.0 + delta.1 * delta.1) - 0.25)
+      .max(0.0)
+      .sqrt()
+      .min(f64::from(f32::MAX));
+
+    if self.sweep == self.large_arc {
+      scale_factor = -scale_factor;
+    }
+
+    let center = (
+      (point1.0 + point2.0) * 0.5 - delta.1 * scale_factor,
+      (point1.1 + point2.1) * 0.5 + delta.0 * scale_factor,
+    );
+    let theta1 = (point1.1 - center.1).atan2(point1.0 - center.0);
+    let theta2 = (point2.1 - center.1).atan2(point2.0 - center.0);
+    let mut sweep = theta2 - theta1;
+
+    if sweep < 0.0 && self.sweep {
+      sweep += TAU;
+    } else if sweep > 0.0 && !self.sweep {
+      sweep -= TAU;
+    }
+
+    if !sweep.is_finite() {
+      return None;
+    }
+
+    // The extra 0.001 keeps a quarter turn that atan2 rounds a little over from becoming two cubics.
+    let segments = (sweep / (FRAC_PI_2 + 0.001)).abs().ceil() as usize;
+    let to_user_space = |(x, y): (f64, f64)| rotated((x * rx, y * ry), angle);
+    let mut cubics = Vec::with_capacity(segments);
+
+    for index in 0..segments {
+      let start = theta1 + index as f64 * sweep / segments as f64;
+      let end = theta1 + (index + 1) as f64 * sweep / segments as f64;
+      let tangent = (8.0 / 6.0) * (0.25 * (end - start)).tan();
+
+      if !tangent.is_finite() {
+        return None;
+      }
+
+      let (sin_start, cos_start) = start.sin_cos();
+      let (sin_end, cos_end) = end.sin_cos();
+      let first = (
+        cos_start - tangent * sin_start + center.0,
+        sin_start + tangent * cos_start + center.1,
+      );
+      let end_point = (cos_end + center.0, sin_end + center.1);
+      let second = (
+        end_point.0 + tangent * sin_end,
+        end_point.1 - tangent * cos_end,
+      );
+
+      cubics.push([
+        to_user_space(first),
+        to_user_space(second),
+        to_user_space(end_point),
+      ]);
+    }
+
+    Some(cubics)
+  }
+}
+
+/// `point` turned by `angle` radians.
+fn rotated((x, y): (f64, f64), angle: f64) -> (f64, f64) {
+  let (sin, cos) = angle.sin_cos();
+
+  (x * cos - y * sin, x * sin + y * cos)
+}
+
+fn single((x, y): (f64, f64)) -> Point<f32> {
+  Point::new(x as f32, y as f32)
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -567,5 +1140,197 @@ mod tests {
       p.pair(1.0, 1.0);
     });
     assert_eq!(path, "M0 0ZM1 1");
+  }
+
+  fn p(x: f32, y: f32) -> Point<f32> {
+    Point::new(x, y)
+  }
+
+  fn parsed(text: &str) -> Vec<PathCommand> {
+    PathData::parse(text).0
+  }
+
+  #[test]
+  fn a_moveto_followed_by_pairs_continues_as_linetos() {
+    assert_eq!(
+      parsed("m 30 40 110 120 -20 -130"),
+      [
+        PathCommand::MoveTo(p(30.0, 40.0)),
+        PathCommand::LineTo(p(140.0, 160.0)),
+        PathCommand::LineTo(p(120.0, 30.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn a_command_after_close_starts_at_the_subpath_start() {
+    assert_eq!(
+      parsed("M 10 20 L 30 40 Z L 50 60"),
+      [
+        PathCommand::MoveTo(p(10.0, 20.0)),
+        PathCommand::LineTo(p(30.0, 40.0)),
+        PathCommand::Close,
+        PathCommand::MoveTo(p(10.0, 20.0)),
+        PathCommand::LineTo(p(50.0, 60.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn a_relative_moveto_after_close_is_relative_to_the_subpath_start() {
+    assert_eq!(
+      parsed("M 10 10 L 20 20 z m 5 5"),
+      [
+        PathCommand::MoveTo(p(10.0, 10.0)),
+        PathCommand::LineTo(p(20.0, 20.0)),
+        PathCommand::Close,
+        PathCommand::MoveTo(p(15.0, 15.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn repeated_closes_collapse() {
+    assert_eq!(
+      parsed("M 10 20 L 30 40 Z Z Z"),
+      [
+        PathCommand::MoveTo(p(10.0, 20.0)),
+        PathCommand::LineTo(p(30.0, 40.0)),
+        PathCommand::Close,
+      ]
+    );
+  }
+
+  #[test]
+  fn consecutive_movetos_collapse() {
+    assert_eq!(
+      parsed("M 10 10 M 20 20 L 30 30"),
+      [
+        PathCommand::MoveTo(p(20.0, 20.0)),
+        PathCommand::LineTo(p(30.0, 30.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn smooth_curves_reflect_the_previous_control_point() {
+    assert_eq!(
+      parsed("M 30 40 C 16 137 171 45 100 90 S 171 45 180 155"),
+      [
+        PathCommand::MoveTo(p(30.0, 40.0)),
+        PathCommand::CubicTo(p(16.0, 137.0), p(171.0, 45.0), p(100.0, 90.0)),
+        PathCommand::CubicTo(p(29.0, 135.0), p(171.0, 45.0), p(180.0, 155.0)),
+      ]
+    );
+    assert_eq!(
+      parsed("M 30 40 q 171 45 50 40 t 60 80"),
+      [
+        PathCommand::MoveTo(p(30.0, 40.0)),
+        PathCommand::QuadTo(p(201.0, 85.0), p(80.0, 80.0)),
+        PathCommand::QuadTo(p(-41.0, 75.0), p(140.0, 160.0)),
+      ]
+    );
+    assert_eq!(
+      parsed("M 30 40 S 171 45 180 155"),
+      [
+        PathCommand::MoveTo(p(30.0, 40.0)),
+        PathCommand::CubicTo(p(30.0, 40.0), p(171.0, 45.0), p(180.0, 155.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn arc_flags_need_no_separators() {
+    let (commands, complete) = PathData::parse("M10-20A5.5.3-4 010-.1");
+
+    assert!(complete);
+    assert!(matches!(commands.first(), Some(PathCommand::MoveTo(_))));
+    assert!(matches!(commands.last(), Some(PathCommand::CubicTo(..))));
+    assert_eq!(parsed("M0 0 a1 1 0 00 10 10").len(), 3);
+  }
+
+  #[test]
+  fn an_arc_with_zero_radii_is_a_line() {
+    assert_eq!(
+      parsed("M 0 0 A 0 0 0 0 0 10 10"),
+      [
+        PathCommand::MoveTo(p(0.0, 0.0)),
+        PathCommand::LineTo(p(10.0, 10.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn numbers_follow_the_svg_grammar() {
+    assert_eq!(
+      parsed("M 1e2 .5.5-.5 +1.5e-1 2"),
+      [
+        PathCommand::MoveTo(p(100.0, 0.5)),
+        PathCommand::LineTo(p(0.5, -0.5)),
+        PathCommand::LineTo(p(0.15, 2.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn the_commands_before_an_error_are_kept() {
+    let (commands, complete) = PathData::parse("M 10 10 L 20 20 X 30 30");
+
+    assert!(!complete);
+    assert_eq!(
+      commands,
+      [
+        PathCommand::MoveTo(p(10.0, 10.0)),
+        PathCommand::LineTo(p(20.0, 20.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn path_data_must_start_with_a_moveto() {
+    assert_eq!(PathData::parse("L 10 10"), (Vec::new(), false));
+    assert_eq!(
+      PathData::parse("M 0 0 Z 2"),
+      (
+        vec![PathCommand::MoveTo(p(0.0, 0.0)), PathCommand::Close],
+        false
+      )
+    );
+    assert_eq!(PathData::parse(""), (Vec::new(), true));
+  }
+
+  #[test]
+  fn an_incomplete_number_stops_parsing() {
+    assert!(!PathData::parse("M 0 0 L 10").1);
+    assert!(!PathData::parse("M 0 0 L 10 1e").1);
+  }
+
+  #[test]
+  fn an_arc_is_at_most_four_cubics_whatever_its_radius() {
+    for radius in ["1", "1e30", "3.4e38"] {
+      let (commands, complete) = PathData::parse(&format!("M 0 0 A {radius} {radius} 0 1 1 10 10"));
+
+      assert!(complete, "{radius}");
+      assert!(commands.len() <= 5, "{radius}: {}", commands.len());
+    }
+
+    assert_eq!(parsed("M 0 0 A 5 5 0 1 1 0 0.0001").len(), 5);
+  }
+
+  #[test]
+  fn a_value_that_overflows_f32_is_invalid() {
+    assert_eq!(
+      PathData::parse("M 0 0 A 1e39 1 0 0 0 10 10"),
+      (parsed("M 0 0"), false)
+    );
+    assert!(!PathData::parse("M 0 0 L 1e39 0").1);
+    assert!(!PathData::parse("M 3e38 0 l 3e38 0").1);
+    assert!(!PathData::parse("M 3e38 0 m 3e38 0").1);
+  }
+
+  #[test]
+  fn an_arc_flag_takes_spaces_before_its_comma() {
+    assert!(PathData::parse("M 0 0 A 5 5 0 1 ,0 10 10").1);
+    assert!(PathData::parse("M 0 0 A 5 5 0 1 , 0 10 10").1);
   }
 }
