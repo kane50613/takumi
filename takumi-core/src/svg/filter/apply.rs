@@ -11,7 +11,7 @@ use tiny_skia::{BlendMode as TinyBlendMode, IntRect, Pixmap, PixmapPaint, Pixmap
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DiffuseLighting, DisplacementMap, DropShadow,
   Input, Kind, LightSource, MorphologyOperator, Primitive, SpecularLighting, SpotLight, SvgFilter,
-  Turbulence, composite, convolve_matrix, displacement_map, lighting, morphology, turbulence,
+  Turbulence, composite, turbulence,
 };
 use crate::{
   blur::{MIN_SIGMA, blur_rgba_axes},
@@ -626,7 +626,7 @@ impl Run<'_> {
 
     let width = pixmap.width() as usize;
 
-    convolve_matrix::apply(fe, pixmap.rgba_mut(), width);
+    fe.apply(pixmap.rgba_mut(), width);
     Some(Image::new(pixmap, space))
   }
 
@@ -644,7 +644,7 @@ impl Run<'_> {
     if radius.x > 0.0 && radius.y > 0.0 {
       let width = pixmap.width() as usize;
 
-      morphology::apply(operator, radius.x, radius.y, pixmap.rgba_mut(), width);
+      operator.apply(radius.x, radius.y, pixmap.rgba_mut(), width);
     } else {
       pixmap.fill(tiny_skia::Color::TRANSPARENT);
     }
@@ -665,8 +665,7 @@ impl Run<'_> {
     let (sx, sy) = self.transform.row_scales();
 
     demultiply_rgba_in_place(map.data_mut());
-    displacement_map::apply(
-      fe,
+    fe.apply(
       [sx, sy],
       pixmap.width() as usize,
       source.pixmap.rgba(),
@@ -693,7 +692,7 @@ impl Run<'_> {
     };
     let width = pixmap.width() as usize;
 
-    turbulence::apply(fe, &canvas, pixmap.rgba_mut(), width, window);
+    fe.apply(&canvas, pixmap.rgba_mut(), width, window);
     for row in pixmap.rgba_mut()[window.top * width..window.bottom * width].chunks_exact_mut(width)
     {
       for pixel in &mut row[window.left..window.right] {
@@ -714,8 +713,7 @@ impl Run<'_> {
     let light_source = self.light_source(fe.light_source);
     let width = pixmap.width() as usize;
 
-    lighting::diffuse_lighting(
-      fe,
+    fe.apply(
       light_source,
       space.convert_color(fe.lighting_color),
       input.pixmap.rgba(),
@@ -735,8 +733,7 @@ impl Run<'_> {
     let light_source = self.light_source(fe.light_source);
     let width = pixmap.width() as usize;
 
-    lighting::specular_lighting(
-      fe,
+    fe.apply(
       light_source,
       space.convert_color(fe.lighting_color),
       input.pixmap.rgba(),

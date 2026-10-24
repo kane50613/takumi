@@ -52,64 +52,66 @@ struct Tile {
   height: f64,
 }
 
-/// Blink's `FETurbulence` in `fe_turbulence.cc`, which Skia runs as `SkShaders::MakeTurbulence`
-/// and `MakeFractalNoise`. Approximate: the noise follows the reference code of the specification.
-///
-/// `dest` is `width` pixels wide and gets straight alpha within `window`.
-pub(super) fn apply(
-  fe: &Turbulence,
-  canvas: &Canvas,
-  dest: &mut [[u8; 4]],
-  width: usize,
-  window: Rect<usize>,
-) {
-  let lattice = Lattice::new(fe.seed);
-  let height = dest.len() / width;
-  let fill_row = |(y, row): (usize, &mut [[u8; 4]])| {
-    for (x, pixel) in row
-      .iter_mut()
+impl Turbulence {
+  /// Blink's `FETurbulence` in `fe_turbulence.cc`, which Skia runs as `SkShaders::MakeTurbulence`
+  /// and `MakeFractalNoise`. Approximate: the noise follows the reference code of the specification.
+  ///
+  /// `dest` is `width` pixels wide and gets straight alpha within `window`.
+  pub(super) fn apply(
+    &self,
+    canvas: &Canvas,
+    dest: &mut [[u8; 4]],
+    width: usize,
+    window: Rect<usize>,
+  ) {
+    let lattice = Lattice::new(self.seed);
+    let height = dest.len() / width;
+    let fill_row = |(y, row): (usize, &mut [[u8; 4]])| {
+      for (x, pixel) in row
+        .iter_mut()
+        .enumerate()
+        .take(window.right)
+        .skip(window.left)
+      {
+        let noise = turbulence(
+          (
+            (x as f64 + canvas.offset.0) / canvas.scale.0,
+            (y as f64 + canvas.offset.1) / canvas.scale.1,
+          ),
+          Tile {
+            x: x as f64,
+            y: y as f64,
+            width: width as f64,
+            height: height as f64,
+          },
+          self,
+          &lattice,
+        );
+        *pixel = noise.map(|n| {
+          let n = if self.fractal_noise {
+            (n * 255.0 + 255.0) / 2.0
+          } else {
+            n * 255.0
+          };
+
+          ((n as f32).clamp(0.0, 255.0) + 0.5) as u8
+        });
+      }
+    };
+
+    let rows = &mut dest[window.top * width..window.bottom * width];
+
+    #[cfg(feature = "rayon")]
+    rows
+      .par_chunks_mut(width)
       .enumerate()
-      .take(window.right)
-      .skip(window.left)
-    {
-      let noise = turbulence(
-        (
-          (x as f64 + canvas.offset.0) / canvas.scale.0,
-          (y as f64 + canvas.offset.1) / canvas.scale.1,
-        ),
-        Tile {
-          x: x as f64,
-          y: y as f64,
-          width: width as f64,
-          height: height as f64,
-        },
-        fe,
-        &lattice,
-      );
-      *pixel = noise.map(|n| {
-        let n = if fe.fractal_noise {
-          (n * 255.0 + 255.0) / 2.0
-        } else {
-          n * 255.0
-        };
-
-        ((n as f32).clamp(0.0, 255.0) + 0.5) as u8
-      });
-    }
-  };
-
-  let rows = &mut dest[window.top * width..window.bottom * width];
-
-  #[cfg(feature = "rayon")]
-  rows
-    .par_chunks_mut(width)
-    .enumerate()
-    .for_each(|(y, row)| fill_row((y + window.top, row)));
-  #[cfg(not(feature = "rayon"))]
-  rows
-    .chunks_mut(width)
-    .enumerate()
-    .for_each(|(y, row)| fill_row((y + window.top, row)));
+      .for_each(|(y, row)| fill_row((y + window.top, row)));
+    #[cfg(not(feature = "rayon"))]
+    rows
+      .chunks_mut(width)
+      .enumerate()
+      .for_each(|(y, row)| fill_row((y + window.top, row)));
+  }
 }
 
 impl Lattice {

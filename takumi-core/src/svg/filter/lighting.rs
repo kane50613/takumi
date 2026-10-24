@@ -141,103 +141,107 @@ impl Normal {
   }
 }
 
-/// Blink's `FEDiffuseLighting` in `fe_diffuse_lighting.cc`, which Skia runs as
-/// `SkImageFilters::DistantLitDiffuse`, `PointLitDiffuse`, and `SpotLitDiffuse`. Approximate: the
-/// Sobel kernels follow resvg's port of Skia's.
-///
-/// Only the alpha of `src` is read, and `dest` gets straight alpha. Both are `width` pixels wide
-/// and the same length, and nothing is done when they are less than 3x3.
-pub(super) fn diffuse_lighting(
-  fe: &DiffuseLighting,
-  light_source: LightSource,
-  lighting_color: Color,
-  src: &[[u8; 4]],
-  width: usize,
-  dest: &mut [[u8; 4]],
-) {
-  let light_factor = |normal: Normal, light_vector: Vector3| {
-    let k = if normal.normal.approx_zero() {
-      light_vector.z
-    } else {
-      let mut n = normal.normal * (fe.surface_scale / 255.0);
-      n.x *= normal.factor.x;
-      n.y *= normal.factor.y;
+impl DiffuseLighting {
+  /// Blink's `FEDiffuseLighting` in `fe_diffuse_lighting.cc`, which Skia runs as
+  /// `SkImageFilters::DistantLitDiffuse`, `PointLitDiffuse`, and `SpotLitDiffuse`. Approximate: the
+  /// Sobel kernels follow resvg's port of Skia's.
+  ///
+  /// Only the alpha of `src` is read, and `dest` gets straight alpha. Both are `width` pixels wide
+  /// and the same length, and nothing is done when they are less than 3x3.
+  pub(super) fn apply(
+    &self,
+    light_source: LightSource,
+    lighting_color: Color,
+    src: &[[u8; 4]],
+    width: usize,
+    dest: &mut [[u8; 4]],
+  ) {
+    let light_factor = |normal: Normal, light_vector: Vector3| {
+      let k = if normal.normal.approx_zero() {
+        light_vector.z
+      } else {
+        let mut n = normal.normal * (self.surface_scale / 255.0);
+        n.x *= normal.factor.x;
+        n.y *= normal.factor.y;
 
-      let normal = Vector3::new(n.x, n.y, 1.0);
+        let normal = Vector3::new(n.x, n.y, 1.0);
 
-      normal.dot(&light_vector) / normal.length()
+        normal.dot(&light_vector) / normal.length()
+      };
+
+      self.diffuse_constant * k
     };
 
-    fe.diffuse_constant * k
-  };
-
-  apply(
-    light_source,
-    fe.surface_scale,
-    lighting_color,
-    &light_factor,
-    calc_diffuse_alpha,
-    Alpha::new(src, width),
-    dest,
-  );
+    apply(
+      light_source,
+      self.surface_scale,
+      lighting_color,
+      &light_factor,
+      calc_diffuse_alpha,
+      Alpha::new(src, width),
+      dest,
+    );
+  }
 }
 
-/// Blink's `FESpecularLighting` in `fe_specular_lighting.cc`, which Skia runs as
-/// `SkImageFilters::DistantLitSpecular`, `PointLitSpecular`, and `SpotLitSpecular`. Approximate:
-/// the Sobel kernels follow resvg's port of Skia's.
-///
-/// Only the alpha of `src` is read, and `dest` gets premultiplied alpha. Both are `width` pixels
-/// wide and the same length, and nothing is done when they are less than 3x3.
-pub(super) fn specular_lighting(
-  fe: &SpecularLighting,
-  light_source: LightSource,
-  lighting_color: Color,
-  src: &[[u8; 4]],
-  width: usize,
-  dest: &mut [[u8; 4]],
-) {
-  let light_factor = |normal: Normal, light_vector: Vector3| {
-    let h = light_vector + Vector3::new(0.0, 0.0, 1.0);
-    let h_length = h.length();
+impl SpecularLighting {
+  /// Blink's `FESpecularLighting` in `fe_specular_lighting.cc`, which Skia runs as
+  /// `SkImageFilters::DistantLitSpecular`, `PointLitSpecular`, and `SpotLitSpecular`. Approximate:
+  /// the Sobel kernels follow resvg's port of Skia's.
+  ///
+  /// Only the alpha of `src` is read, and `dest` gets premultiplied alpha. Both are `width` pixels
+  /// wide and the same length, and nothing is done when they are less than 3x3.
+  pub(super) fn apply(
+    &self,
+    light_source: LightSource,
+    lighting_color: Color,
+    src: &[[u8; 4]],
+    width: usize,
+    dest: &mut [[u8; 4]],
+  ) {
+    let light_factor = |normal: Normal, light_vector: Vector3| {
+      let h = light_vector + Vector3::new(0.0, 0.0, 1.0);
+      let h_length = h.length();
 
-    if h_length.approx_eq(0.0) {
-      return 0.0;
-    }
-
-    let k = if normal.normal.approx_zero() {
-      let n_dot_h = h.z / h_length;
-      if fe.specular_exponent.approx_eq(1.0) {
-        n_dot_h
-      } else {
-        n_dot_h.powf(fe.specular_exponent)
+      if h_length.approx_eq(0.0) {
+        return 0.0;
       }
-    } else {
-      let mut n = normal.normal * (fe.surface_scale / 255.0);
-      n.x *= normal.factor.x;
-      n.y *= normal.factor.y;
 
-      let normal = Vector3::new(n.x, n.y, 1.0);
-
-      let n_dot_h = normal.dot(&h) / normal.length() / h_length;
-      if fe.specular_exponent.approx_eq(1.0) {
-        n_dot_h
+      let k = if normal.normal.approx_zero() {
+        let n_dot_h = h.z / h_length;
+        if self.specular_exponent.approx_eq(1.0) {
+          n_dot_h
+        } else {
+          n_dot_h.powf(self.specular_exponent)
+        }
       } else {
-        n_dot_h.powf(fe.specular_exponent)
-      }
+        let mut n = normal.normal * (self.surface_scale / 255.0);
+        n.x *= normal.factor.x;
+        n.y *= normal.factor.y;
+
+        let normal = Vector3::new(n.x, n.y, 1.0);
+
+        let n_dot_h = normal.dot(&h) / normal.length() / h_length;
+        if self.specular_exponent.approx_eq(1.0) {
+          n_dot_h
+        } else {
+          n_dot_h.powf(self.specular_exponent)
+        }
+      };
+
+      self.specular_constant * k
     };
 
-    fe.specular_constant * k
-  };
-
-  apply(
-    light_source,
-    fe.surface_scale,
-    lighting_color,
-    &light_factor,
-    calc_specular_alpha,
-    Alpha::new(src, width),
-    dest,
-  );
+    apply(
+      light_source,
+      self.surface_scale,
+      lighting_color,
+      &light_factor,
+      calc_specular_alpha,
+      Alpha::new(src, width),
+      dest,
+    );
+  }
 }
 
 fn apply(
@@ -286,7 +290,7 @@ fn apply(
       }
     }
 
-    let light_color = light_color(&light_source, lighting_color, light_vector);
+    let light_color = light_source.color(lighting_color, light_vector);
     let factor = light_factor(normal, light_vector);
 
     let compute = |x| ((x as f32 * factor).clamp(0.0, 255.0) + 0.5) as u8;
@@ -322,31 +326,33 @@ fn apply(
   }
 }
 
-fn light_color(light: &LightSource, lighting_color: Color, light_vector: Vector3) -> Color {
-  match *light {
-    LightSource::Distant { .. } | LightSource::Point { .. } => lighting_color,
-    LightSource::Spot(ref light) => {
-      let origin = Vector3::new(light.x, light.y, light.z);
-      let direction = Vector3::new(light.points_at_x, light.points_at_y, light.points_at_z);
-      let direction = direction - origin;
-      let direction = direction.normalized().unwrap_or(direction);
-      let minus_l_dot_s = -light_vector.dot(&direction);
-      if minus_l_dot_s <= 0.0 {
-        return Color::black();
+impl LightSource {
+  fn color(&self, lighting_color: Color, light_vector: Vector3) -> Color {
+    match *self {
+      LightSource::Distant { .. } | LightSource::Point { .. } => lighting_color,
+      LightSource::Spot(ref light) => {
+        let origin = Vector3::new(light.x, light.y, light.z);
+        let direction = Vector3::new(light.points_at_x, light.points_at_y, light.points_at_z);
+        let direction = direction - origin;
+        let direction = direction.normalized().unwrap_or(direction);
+        let minus_l_dot_s = -light_vector.dot(&direction);
+        if minus_l_dot_s <= 0.0 {
+          return Color::black();
+        }
+
+        if let Some(limiting_cone_angle) = light.limiting_cone_angle
+          && minus_l_dot_s < limiting_cone_angle.to_radians().cos()
+        {
+          return Color::black();
+        }
+
+        let factor = minus_l_dot_s.powf(light.specular_exponent);
+        let compute = |x| ((x as f32 * factor).clamp(0.0, 255.0) + 0.5) as u8;
+
+        let Color([red, green, blue, _]) = lighting_color;
+
+        Color([compute(red), compute(green), compute(blue), 255])
       }
-
-      if let Some(limiting_cone_angle) = light.limiting_cone_angle
-        && minus_l_dot_s < limiting_cone_angle.to_radians().cos()
-      {
-        return Color::black();
-      }
-
-      let factor = minus_l_dot_s.powf(light.specular_exponent);
-      let compute = |x| ((x as f32 * factor).clamp(0.0, 255.0) + 0.5) as u8;
-
-      let Color([red, green, blue, _]) = lighting_color;
-
-      Color([compute(red), compute(green), compute(blue), 255])
     }
   }
 }

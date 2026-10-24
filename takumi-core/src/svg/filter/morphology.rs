@@ -5,37 +5,27 @@ use std::{array, collections::VecDeque};
 
 use super::MorphologyOperator;
 
-/// Blink's `FEMorphology` in `fe_morphology.cc`, which Skia runs as `SkImageFilters::Erode` and
-/// `Dilate`. Approximate: the window follows resvg's, `ceil(radius) * 2` pixels wide.
-///
-/// Pixels are premultiplied and the slice is `width` pixels wide.
-pub(super) fn apply(
-  operator: MorphologyOperator,
-  rx: f32,
-  ry: f32,
-  pixels: &mut [[u8; 4]],
-  width: usize,
-) {
-  let height = pixels.len() / width;
-  // No point in making matrix larger than image.
-  let columns = ((rx.ceil() as usize).saturating_mul(2)).min(width);
-  let rows = ((ry.ceil() as usize).saturating_mul(2)).min(height);
-  let mut buf = vec![[0; 4]; pixels.len()];
+impl MorphologyOperator {
+  /// Blink's `FEMorphology` in `fe_morphology.cc`, which Skia runs as `SkImageFilters::Erode` and
+  /// `Dilate`. Approximate: the window follows resvg's, `ceil(radius) * 2` pixels wide.
+  ///
+  /// Pixels are premultiplied and the slice is `width` pixels wide.
+  pub(super) fn apply(self, rx: f32, ry: f32, pixels: &mut [[u8; 4]], width: usize) {
+    let height = pixels.len() / width;
+    // No point in making matrix larger than image.
+    let columns = ((rx.ceil() as usize).saturating_mul(2)).min(width);
+    let rows = ((ry.ceil() as usize).saturating_mul(2)).min(height);
+    let mut buf = vec![[0; 4]; pixels.len()];
 
-  // The extremum over a rectangle is the extremum over its rows' extrema, so the window sweeps
-  // each row, then each column.
-  sweep(
-    operator,
-    pixels,
-    &mut buf,
-    columns,
-    height,
-    width,
-    |row, x| row * width + x,
-  );
-  sweep(operator, &buf, pixels, rows, width, height, |column, y| {
-    y * width + column
-  });
+    // The extremum over a rectangle is the extremum over its rows' extrema, so the window sweeps
+    // each row, then each column.
+    sweep(self, pixels, &mut buf, columns, height, width, |row, x| {
+      row * width + x
+    });
+    sweep(self, &buf, pixels, rows, width, height, |column, y| {
+      y * width + column
+    });
+  }
 }
 
 /// Writes to `dst` the extremum of `src` along each of `lines` lines of `length` pixels, over a
@@ -166,7 +156,7 @@ mod tests {
         let rows = ((ry.ceil() as usize) * 2).min(height);
         let expected = naive(operator, columns, rows, width, &data);
 
-        apply(operator, rx, ry, &mut data, width);
+        operator.apply(rx, ry, &mut data, width);
 
         assert_eq!(data, expected, "{operator:?} {rx} {ry}");
       }

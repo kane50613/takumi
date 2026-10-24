@@ -14,7 +14,7 @@ use crate::{
   filter::{ColorMatrix, ColorMatrixChain, TransferFunction},
   geometry::{Rect, Size},
   resources::image::SvgOp,
-  style::{Angle, BlendMode, Color, ColorInterpolation, ComputedStyle, Filter, FromCssStr, Length},
+  style::{Angle, BlendMode, Color, ColorInterpolation, Filter, FromCssStr, Length},
   svg::{
     approx_eq::ApproxEq,
     element::SvgElementKind,
@@ -453,12 +453,11 @@ impl SvgLayout<'_> {
     let input = |layout: &Self, name: &str| layout.input(fe, name, primitives);
     let number = |name: &str| self.number_attribute(fe, name);
     let styled = self.styled_in_place(fe);
-    let style = styled.style();
 
     Some(match tag {
       "feDropShadow" => {
         let (std_dev_x, std_dev_y) = self.std_deviation(fe, scale, "2 2");
-        let (color, opacity) = flood(&styled, style);
+        let (color, opacity) = styled.flood();
 
         Kind::DropShadow(DropShadow {
           input: input(self, "in"),
@@ -493,7 +492,7 @@ impl SvgLayout<'_> {
           .unwrap_or_default(),
       },
       "feFlood" => {
-        let (color, opacity) = flood(&styled, style);
+        let (color, opacity) = styled.flood();
 
         Kind::Flood { color, opacity }
       }
@@ -550,7 +549,7 @@ impl SvgLayout<'_> {
             input: input(self, "in"),
             surface_scale: number("surfaceScale").unwrap_or(1.0),
             diffuse_constant: number("diffuseConstant").unwrap_or(1.0),
-            lighting_color: lighting_color(&styled, style),
+            lighting_color: styled.lighting_color(),
             light_source,
           })
         })
@@ -565,7 +564,7 @@ impl SvgLayout<'_> {
             surface_scale: number("surfaceScale").unwrap_or(1.0),
             specular_constant: number("specularConstant").unwrap_or(1.0),
             specular_exponent: exponent,
-            lighting_color: lighting_color(&styled, style),
+            lighting_color: styled.lighting_color(),
             light_source,
           }),
           _ => Self::dummy_primitive(),
@@ -898,27 +897,31 @@ impl SvgLayout<'_> {
   }
 }
 
-/// The color and opacity of the flood a primitive makes, from `flood-color` and `flood-opacity`.
-fn flood(styled: &Styled, style: &ComputedStyle) -> (Color, f32) {
-  let Color([red, green, blue, alpha]) = style
-    .svg_misc_data
-    .flood_color
-    .resolve(styled.context.current_color);
+impl Styled {
+  /// The color and opacity of the flood a primitive makes, from `flood-color` and `flood-opacity`.
+  fn flood(&self) -> (Color, f32) {
+    let style = self.style();
+    let Color([red, green, blue, alpha]) = style
+      .svg_misc_data
+      .flood_color
+      .resolve(self.context.current_color);
 
-  (
-    Color([red, green, blue, 255]),
-    f32::from(alpha) / 255.0 * style.svg_misc_data.flood_opacity.0.clamp(0.0, 1.0),
-  )
-}
+    (
+      Color([red, green, blue, 255]),
+      f32::from(alpha) / 255.0 * style.svg_misc_data.flood_opacity.0.clamp(0.0, 1.0),
+    )
+  }
 
-/// The color of a lighting primitive, whose alpha does not matter.
-fn lighting_color(styled: &Styled, style: &ComputedStyle) -> Color {
-  let Color([red, green, blue, _]) = style
-    .svg_misc_data
-    .lighting_color
-    .resolve(styled.context.current_color);
+  /// The color of a lighting primitive, whose alpha does not matter.
+  fn lighting_color(&self) -> Color {
+    let Color([red, green, blue, _]) = self
+      .style()
+      .svg_misc_data
+      .lighting_color
+      .resolve(self.context.current_color);
 
-  Color([red, green, blue, 255])
+    Color([red, green, blue, 255])
+  }
 }
 
 fn approx_zero(value: f32) -> bool {
