@@ -26,10 +26,8 @@ use cssparser::Parser;
 
 use self::{
   budget::Budget,
-  object::{
-    Container, Fill, LayoutClip, LayoutDocument, LayoutMask, LayoutObject, Paint, PictureContent,
-    Stroke,
-  },
+  image::ImageContent,
+  object::{Container, Fill, LayoutClip, LayoutDocument, LayoutMask, LayoutObject, Paint, Stroke},
   painter::SvgPainter,
   view_box::PreserveAspectRatio,
 };
@@ -102,7 +100,7 @@ pub(super) struct SvgLayout<'a> {
   /// The paint servers laid out, by element and the viewport their percentages resolved against.
   paint_servers: HashMap<(usize, [u32; 4]), Paint>,
   /// The images decoded so far by the element that names them.
-  images: HashMap<usize, Option<(PictureContent, Size<f32>)>>,
+  images: HashMap<usize, Option<(ImageContent, Size<f32>)>>,
   /// The `use` elements and resources being laid out, which may not contain themselves.
   active: Vec<usize>,
   /// The outlines of the shapes `textPath` elements name, by the element.
@@ -241,23 +239,9 @@ impl<'a> SvgLayout<'a> {
       tree.children.push(LayoutObject::Container(Box::new(group)));
     }
 
-    let (mut width, mut height) = (canvas.width, canvas.height);
-
-    if self.takes_content_extent() {
-      let extent = tree.absolute_bounds();
-
-      if let Some(bounds) = extent
-        && bounds.right > 0.0
-        && bounds.bottom > 0.0
-      {
-        width = bounds.right;
-        height = bounds.bottom;
-      }
-    }
-
     Some(LayoutDocument {
-      width,
-      height,
+      width: canvas.width,
+      height: canvas.height,
       root: tree,
     })
   }
@@ -304,9 +288,11 @@ impl<'a> SvgLayout<'a> {
       return declared;
     }
 
-    self.layout_root().map_or(declared, |document| {
-      Size::new(document.width, document.height)
-    })
+    self
+      .layout_root()
+      .and_then(|document| document.root.absolute_bounds())
+      .filter(|bounds| bounds.right > 0.0 && bounds.bottom > 0.0)
+      .map_or(declared, |bounds| Size::new(bounds.right, bounds.bottom))
   }
 
   /// Runs `f` one level deeper, none past the depth a document may nest to.

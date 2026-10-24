@@ -873,6 +873,7 @@ impl SvgLayout<'_> {
         .and_then(PreserveAspectRatio::parse)
         .unwrap_or_default();
       let rect = Rect::positive_from_xywh(0.0, 0.0, subregion.width(), subregion.height())?;
+      let (content, size) = self.picture_content(content, size, aspect, rect)?;
       let picture = super::object::Picture {
         content,
         width: size.width,

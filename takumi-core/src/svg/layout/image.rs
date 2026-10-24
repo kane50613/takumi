@@ -25,6 +25,14 @@ use crate::{
 /// How deep SVG images may nest in SVG images.
 const MAXIMUM_IMAGE_DEPTH: usize = 8;
 
+/// What an `image` refers to, decoded once: a picture, or an SVG document that lays out at the
+/// container size of each place it draws.
+#[derive(Clone)]
+pub(super) enum ImageContent {
+  Picture(PictureContent),
+  Svg(Rc<SvgDocument>),
+}
+
 /// What an `href` holds.
 enum Source {
   Bitmap(Vec<u8>),
@@ -77,15 +85,41 @@ impl SvgLayout<'_> {
       ImageScalingAlgorithm::Pixelated => ImageScalingAlgorithm::Pixelated,
       _ => ImageScalingAlgorithm::Auto,
     };
+    let (content, size) = self.picture_content(content, actual_size, aspect, rect)?;
     let picture = Picture {
       content,
-      width: actual_size.width,
-      height: actual_size.height,
+      width: size.width,
+      height: size.height,
       visible: style.inherited_data.visibility == Visibility::Visible,
       rendering,
     };
 
-    Self::fit_image(picture, aspect, actual_size, rect, parent)
+    Self::fit_image(picture, aspect, size, rect, parent)
+  }
+
+  /// The picture `content` draws into `rect`, and its size. An SVG lays out at the container size
+  /// Blink's `SVGImagePainter::ComputeImageViewportSize` gives it: the rectangle, or the concrete
+  /// object size in it when `aspect` stretches.
+  pub(super) fn picture_content(
+    &mut self,
+    content: ImageContent,
+    natural_size: Size<f32>,
+    aspect: PreserveAspectRatio,
+    rect: Rect<f32>,
+  ) -> Option<(PictureContent, Size<f32>)> {
+    let document = match content {
+      ImageContent::Picture(picture) => return Some((picture, natural_size)),
+      ImageContent::Svg(document) => document,
+    };
+    let target = Size::new(rect.width(), rect.height());
+    let container = if aspect.stretches() {
+      document.size.intrinsic.concrete_object_size(target)
+    } else {
+      target
+    };
+    let laid_out = self.nested_document(&document, container)?;
+
+    Some((PictureContent::Svg(Rc::new(laid_out)), container))
   }
 
   /// Puts the picture into `parent` scaled and aligned into `rect`, and cropped to it when the
@@ -157,7 +191,7 @@ impl SvgLayout<'_> {
   }
 
   /// What the `image` at `index` shows, decoded once however many `use` elements instantiate it.
-  fn cached_image_content(&mut self, index: usize) -> Option<(PictureContent, Size<f32>)> {
+  fn cached_image_content(&mut self, index: usize) -> Option<(ImageContent, Size<f32>)> {
     if let Some(cached) = self.images.get(&index) {
       return cached.clone();
     }
@@ -172,7 +206,7 @@ impl SvgLayout<'_> {
 
   /// What an `image` shows, and its natural size. Only `data:` URLs load, as files and the network
   /// are not the image's to read.
-  pub(super) fn image_content(&mut self, href: &str) -> Option<(PictureContent, Size<f32>)> {
+  pub(super) fn image_content(&mut self, href: &str) -> Option<(ImageContent, Size<f32>)> {
     if !self.budget.spend_image_bytes(href.len()) {
       return None;
     }
@@ -196,16 +230,25 @@ impl SvgLayout<'_> {
         let size = positive_size(width as f32, height as f32)?;
 
         Some((
-          PictureContent::Bitmap(Some(Rc::new(SvgImageData::Encoded(data.into())))),
+          ImageContent::Picture(PictureContent::Bitmap(Some(Rc::new(
+            SvgImageData::Encoded(data.into()),
+          )))),
           size,
         ))
       }
-      Source::Gif(data) => self.gif_content(data),
+      Source::Gif(data) => self
+        .gif_content(data)
+        .map(|(picture, size)| (ImageContent::Picture(picture), size)),
       Source::Svg(data) => {
-        let document = self.nested_document(&data)?;
-        let size = positive_size(document.width, document.height)?;
+        if self.image_depth >= MAXIMUM_IMAGE_DEPTH {
+          return None;
+        }
 
-        Some((PictureContent::Svg(Rc::new(document)), size))
+        let document = SvgDocument::parse(str::from_utf8(&data).ok()?).ok()?;
+        let (width, height) = document.canvas_size();
+        let size = positive_size(width, height)?;
+
+        Some((ImageContent::Svg(Rc::new(document)), size))
       }
     }
   }
@@ -239,24 +282,17 @@ impl SvgLayout<'_> {
     None
   }
 
-  /// A nested SVG image laid out, none when it does not parse or nests too deep.
-  fn nested_document(&mut self, data: &[u8]) -> Option<LayoutDocument> {
-    if self.image_depth >= MAXIMUM_IMAGE_DEPTH {
-      return None;
-    }
-
-    let document = SvgDocument::parse(str::from_utf8(data).ok()?).ok()?;
-
+  /// A nested SVG image laid out at `container`.
+  fn nested_document(
+    &mut self,
+    document: &SvgDocument,
+    container: Size<f32>,
+  ) -> Option<LayoutDocument> {
     let host = SvgHost::Image {
       current_color: self.styles.root_context().current_color,
       fonts: self.fonts,
     };
-    let mut layout = SvgLayout::nested(
-      &document,
-      host,
-      document.declared_size(),
-      self.image_depth + 1,
-    );
+    let mut layout = SvgLayout::nested(document, host, container, self.image_depth + 1);
 
     layout.budget = mem::take(&mut self.budget);
 
