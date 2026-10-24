@@ -8,6 +8,7 @@ use std::{
 };
 
 use takumi_core::{
+  context::BoxId,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
   layout::{layout_view::LayoutView, node::Node, tree::RenderNode},
@@ -35,8 +36,8 @@ use crate::{
 pub(crate) struct LinkTarget {
   uri: String,
   rect: KrillaRect,
-  /// Source-node path, so the annotation can join that node's `Link` element.
-  path: Vec<usize>,
+  /// The source node's box, so the annotation can join that node's `Link` element.
+  node: BoxId,
   /// Whether a repeated fragment, such as a table header on a later page, paints this link.
   repeated: bool,
 }
@@ -421,7 +422,7 @@ fn collect_paint_links(scene: SceneView<'_>, paint: &NodePaint, links: &mut Vec<
     Some(uri) => links.push(LinkTarget {
       uri: uri.to_string(),
       rect: painted.rect,
-      path: paint.path.clone(),
+      node: painted.node.context.box_id(),
       repeated: painted.repeated,
     }),
     None if painted.node.should_create_inline_layout() => {
@@ -429,7 +430,6 @@ fn collect_paint_links(scene: SceneView<'_>, paint: &NodePaint, links: &mut Vec<
         painted.node,
         painted.layout,
         paint.transform,
-        &paint.path,
         painted.repeated,
         links,
       );
@@ -521,7 +521,6 @@ fn collect_inline_links(
   node: &RenderNode,
   layout: Layout,
   transform: Affine,
-  path: &[usize],
   repeated: bool,
   links: &mut Vec<LinkTarget>,
 ) {
@@ -549,7 +548,7 @@ fn collect_inline_links(
     links.push(LinkTarget {
       uri: uri.to_string(),
       rect,
-      path: path.to_vec(),
+      node: node.context.box_id(),
       repeated,
     });
   }
@@ -603,7 +602,7 @@ pub(crate) fn add_link_annotations<'l>(
       Some(tags) => {
         let identifier = page.add_tagged_annotation(annotation);
 
-        tags.borrow_mut().record_annotation(&link.path, identifier);
+        tags.borrow_mut().record_annotation(link.node, identifier);
       }
       None => page.add_annotation(annotation),
     }

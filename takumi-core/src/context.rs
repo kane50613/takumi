@@ -108,8 +108,8 @@ impl From<RenderContextInit> for RenderContext {
 
 /// Which box a context belongs to, compared where Blink compares `LayoutObject` or
 /// `ComputedStyle` pointers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct BoxId(u64);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BoxId(u64);
 
 /// The [`BoxId`] a context holds. A clone is another box's context, so it takes a new id, as a
 /// copy at another address would compare unequal by pointer.
@@ -166,7 +166,7 @@ impl RenderContext {
   }
 
   /// The box this context belongs to.
-  pub(crate) fn box_id(&self) -> BoxId {
+  pub fn box_id(&self) -> BoxId {
     self.identity.0
   }
 
