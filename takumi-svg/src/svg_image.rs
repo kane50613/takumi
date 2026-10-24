@@ -32,7 +32,7 @@ pub(crate) fn is_vector(ops: &[SvgOp]) -> bool {
 }
 
 impl SvgDocument {
-  /// Writes `ops`, each `Push*` as a `<g>` its `Pop` closes. `is_vector` keeps filters out.
+  /// Writes `ops`, each `Push*` as a `<g>` its `Pop` closes.
   pub(crate) fn svg_ops(&mut self, ops: &[SvgOp]) -> io::Result<()> {
     let mut groups = Vec::new();
 
@@ -85,7 +85,7 @@ impl SvgDocument {
           }
           self.empty("path", &attrs)?;
         }
-        // `is_vector` keeps filters out; the matching `Pop` still needs a group.
+        // `is_vector` keeps filters out, but the matching `Pop` still closes a group.
         SvgOp::PushFilter(_) => {
           groups.push(self.begin_group(Affine::IDENTITY, 1.0, None, None)?);
         }

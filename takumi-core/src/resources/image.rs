@@ -190,8 +190,7 @@ impl SvgSource {
     Cow::Owned(markup)
   }
 
-  /// Flattens the SVG into backend-agnostic vector drawing ops in SVG canvas
-  /// coordinates.
+  /// The SVG's drawing ops, in SVG canvas coordinates.
   pub fn vector_ops(&self, current_color: Color, fonts: Option<&FontsSnapshot>) -> Vec<SvgOp> {
     match self.tree_with_current_color(current_color, fonts) {
       Some(tree) => flatten(&tree),

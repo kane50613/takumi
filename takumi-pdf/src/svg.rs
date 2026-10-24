@@ -1,5 +1,4 @@
-//! Draws flattened SVG ops onto a krilla surface, so SVG image sources embed as real paths,
-//! gradients and images. A group's SVG filters are not drawn.
+//! Draws flattened SVG ops onto a krilla surface, leaving out a group's SVG filters.
 
 use takumi_core::{
   geometry::Point,
@@ -37,8 +36,7 @@ impl<'a> SvgPainter<'a> {
     Self { filter }
   }
 
-  /// Draws `ops` onto `surface` in the current coordinate space and resets the
-  /// fill/stroke state afterwards.
+  /// Draws `ops` onto `surface`, then resets its fill and stroke.
   pub(crate) fn draw(&self, surface: &mut Surface, ops: Vec<SvgOp>) {
     self.draw_ops(surface, ops);
     surface.set_fill(None);
@@ -98,8 +96,7 @@ impl<'a> SvgPainter<'a> {
     }
   }
 
-  /// A JPEG, PNG or WebP embeds as it came; anything else, or anything a filter recolors, is
-  /// decoded first.
+  /// An encoded bitmap embeds as it came unless the filter recolors it.
   fn image(&self, data: &SvgImageData) -> Option<KrillaImage> {
     match (data, self.filter) {
       (SvgImageData::Encoded(bytes), None) => embedded_image(bytes),

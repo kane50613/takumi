@@ -1,6 +1,4 @@
-//! Flattens a usvg tree into backend-agnostic drawing ops, so every backend draws an SVG image
-//! from the same list. Filters, patterns and embedded bitmaps are ops too, and a backend that
-//! cannot express one draws around it.
+//! Flattens a usvg tree into the drawing ops every backend draws an SVG image from.
 
 use std::{iter::repeat_n, sync::Arc};
 

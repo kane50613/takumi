@@ -135,7 +135,7 @@ pub(crate) fn rasterized_image(
   Ok(Some(bitmap_image(buffer, filter)))
 }
 
-/// A decoded bitmap as a PDF image, straight alpha as PDF image streams carry it, recolored by `filter`.
+/// A decoded bitmap as a straight-alpha PDF image, recolored by `filter`.
 #[cfg(feature = "images")]
 pub(crate) fn bitmap_image(buffer: &ImageBuffer, filter: Option<&ColorFilter>) -> KrillaImage {
   let mut data = buffer.data().to_vec();

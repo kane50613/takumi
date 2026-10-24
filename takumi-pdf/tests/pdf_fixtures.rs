@@ -1834,8 +1834,7 @@ fn svg_singular_gradient_transform() {
   });
 }
 
-/// A filtered group draws without its filter, luminance masks become soft masks, and pattern
-/// fills become tiling patterns.
+/// SVG filters drop out, luminance masks become soft masks, and patterns become tiling patterns.
 #[test]
 fn svg_filters_masks_and_patterns() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
@@ -1905,8 +1904,7 @@ fn read_asset(name: &str) -> Vec<u8> {
   .expect("read asset image")
 }
 
-/// A PNG inside an SVG embeds as an image XObject under the SVG's clip and transform, with no
-/// rasterized group.
+/// A PNG inside an SVG embeds as an image XObject, not a rasterized group.
 #[test]
 fn svg_embedded_png() {
   let svg = format!(
@@ -1961,8 +1959,7 @@ fn svg_embedded_jpeg_passes_through() {
   assert!(text.contains("DCTDecode"), "jpeg was re-encoded");
 }
 
-/// A color-matrix `filter` on an SVG image recolors its vector paints and gradient stops, and
-/// its embedded bitmaps, without rasterizing the SVG.
+/// A color-matrix `filter` on an SVG image recolors its paints and bitmaps without rasterizing.
 #[test]
 fn svg_with_color_filter() {
   let svg = format!(
@@ -2870,8 +2867,7 @@ fn text_shadow_and_stroke() {
     contains(b"/Pattern cs"),
     "expected a gradient fill on the clip-text glyphs"
   );
-  // An SVG image layer draws as paths under the glyph clip, so the green tile reaches the file
-  // as a fill and not as an image.
+  // The SVG tile reaches the file as a fill under the glyph clip, not as an image.
   assert!(
     contains(b"0.0863 0.6392 0.2902 rg"),
     "the image layer left the clip-text glyphs with nothing to fill them"

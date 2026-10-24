@@ -595,7 +595,6 @@ impl Emitter<'_> {
   ) {
     let (w, h) = (size.width, size.height);
 
-    // A url() layer draws as an image tile, stretched over the layer.
     #[cfg(feature = "images")]
     if let BackgroundImage::Url(url) = image {
       let Ok(source) = resolve_image(url, &node.context) else {
@@ -945,7 +944,6 @@ impl Emitter<'_> {
     });
     let placement = replaced.placement;
     let (dw, dh) = (placement.size.width, placement.size.height);
-    // SVG sources embed as ops; everything else rasterizes.
     #[cfg(feature = "svg")]
     let svg = match &source {
       ImageSource::Svg(svg) => Some(svg),
