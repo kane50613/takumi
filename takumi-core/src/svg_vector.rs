@@ -170,8 +170,6 @@ pub enum SvgLineJoin {
   Round,
   /// Beveled corner.
   Bevel,
-  /// Miter clipped at the miter limit instead of falling back to a bevel.
-  MiterClip,
 }
 
 /// Paint for fills and strokes.
@@ -543,8 +541,8 @@ impl Flattener {
         usvg::LineCap::Square => SvgLineCap::Square,
       },
       join: match stroke.linejoin() {
-        usvg::LineJoin::Miter => SvgLineJoin::Miter,
-        usvg::LineJoin::MiterClip => SvgLineJoin::MiterClip,
+        // Chrome does not know `miter-clip`, so it keeps the inherited miter.
+        usvg::LineJoin::Miter | usvg::LineJoin::MiterClip => SvgLineJoin::Miter,
         usvg::LineJoin::Round => SvgLineJoin::Round,
         usvg::LineJoin::Bevel => SvgLineJoin::Bevel,
       },
