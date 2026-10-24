@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::{ImageRef, ImageRefMut};
-use crate::resvg::usvg::filter::{ColorChannel, DisplacementMap};
+use crate::svg::tree::filter::{ColorChannel, DisplacementMap};
 
 /// Applies a displacement map.
 ///

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{IdKind, State, convert_clip_path_elements};
 use crate::{
-  resvg::usvg::{ClipPath, Group, NonEmptyString, NonZeroRect, Transform, Units},
+  svg::tree::{ClipPath, Group, NonEmptyString, NonZeroRect, Transform, Units},
   svg::{Attr, Node as SvgNode, Tag},
 };
 

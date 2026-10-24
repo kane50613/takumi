@@ -5,9 +5,7 @@
 
 use strict_num::PositiveF32;
 
-use crate::resvg::usvg::{
-  BlendMode, Color, Group, NonEmptyString, NonZeroF32, NonZeroRect, Opacity,
-};
+use crate::svg::tree::{BlendMode, Color, Group, NonEmptyString, NonZeroF32, NonZeroRect, Opacity};
 
 /// A filter element.
 ///

@@ -13,7 +13,7 @@ use tiny_skia::{
 use crate::{
   geometry::PathCommand,
   style::{BlendMode, ImageScalingAlgorithm},
-  svg_vector::{
+  svg::ops::{
     SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint,
     SvgSpreadMethod, SvgStrokeStyle,
   },

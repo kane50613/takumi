@@ -1,7 +1,7 @@
 // Copyright 2024 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::resvg::usvg::{Cache, Text};
+use crate::svg::tree::{Cache, Text};
 
 pub(crate) mod flatten;
 

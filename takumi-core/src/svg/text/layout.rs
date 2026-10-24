@@ -25,18 +25,18 @@ use crate::fonts::shaping::shape_result_view::ShapeResultView;
 use crate::fonts::simple_font_data::SimpleFontData;
 use crate::layout::inline::decorations::{DecoratingBox, DecorationFont};
 use crate::resources::font::{PrimaryFontMetrics, RunFace, RunSynthesis};
-use crate::resvg::usvg::tree::BBox;
-use crate::resvg::usvg::{
-  AlignmentBaseline, ApproxZeroUlps, BaselineShift, Cache, DominantBaseline, Fill, FillRule, Font,
-  FontFamily, FontOpticalSizing, FontStyle, GlyphId, LengthAdjust, PaintOrder, Path,
-  ShapeRendering, Stroke, Text, TextAnchor, TextChunk, TextDecorationStyle, TextFlow, TextPath,
-  TextSpan, WritingMode,
-};
 use crate::sort_key::sort_by_key;
 use crate::style::{
   Direction as TextDirection, FontFamilyToken, FontFeature, FontLanguageOverride,
   FontOpticalSizing as CssFontOpticalSizing, FontSynthesic, FontVariantCaps, FontVariantLigatures,
   GenericFamilyType, SizedTextDecorationThickness, TextDecorationLines, TextUnderlinePosition,
+};
+use crate::svg::tree::BBox;
+use crate::svg::tree::{
+  AlignmentBaseline, ApproxZeroUlps, BaselineShift, Cache, DominantBaseline, Fill, FillRule, Font,
+  FontFamily, FontOpticalSizing, FontStyle, GlyphId, LengthAdjust, PaintOrder, Path,
+  ShapeRendering, Stroke, Text, TextAnchor, TextChunk, TextDecorationStyle, TextFlow, TextPath,
+  TextSpan, WritingMode,
 };
 use crate::text::bidi_paragraph::{BidiParagraph, direction_from_level};
 

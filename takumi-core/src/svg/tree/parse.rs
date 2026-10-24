@@ -1,13 +1,9 @@
 // Copyright 2018 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-mod options;
-
+use super::Options;
+use crate::svg::layout::ImageHrefResolver;
 use crate::svg::{Document, ParseError, ParseOptions, StyleContext, layout::convert_doc};
-
-pub use crate::svg::layout::ImageHrefResolver;
-pub(crate) use crate::svg::layout::{Cache, filters_from_markup};
-pub use options::Options;
 
 /// List of all errors.
 #[derive(Debug)]
@@ -86,7 +82,7 @@ impl<T> OptionLog for Option<T> {
   }
 }
 
-impl crate::resvg::usvg::Tree {
+impl crate::svg::tree::Tree {
   /// Parses `Tree` from an SVG data.
   ///
   /// Can contain an SVG string or a gzip compressed data.
@@ -111,7 +107,6 @@ impl crate::resvg::usvg::Tree {
       shape_rendering: opt.shape_rendering,
       text_rendering: opt.text_rendering,
       image_rendering: opt.image_rendering,
-      default_size: opt.default_size,
       current_color: opt.current_color,
       image_href_resolver: ImageHrefResolver {
         resolve_data: Box::new(|a, b, c| (opt.image_href_resolver.resolve_data)(a, b, c)),

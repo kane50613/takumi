@@ -2,7 +2,7 @@
 
 use super::State;
 use crate::{
-  resvg::usvg::Units,
+  svg::tree::Units,
   svg::{Attr, Length, LengthContext, LengthMode, Node as SvgNode},
 };
 

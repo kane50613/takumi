@@ -3,7 +3,7 @@
 
 use super::RGBA8;
 use super::{ImageRefMut, f32_bound};
-use crate::resvg::usvg::filter::ColorMatrixKind as ColorMatrix;
+use crate::svg::tree::filter::ColorMatrixKind as ColorMatrix;
 
 /// Applies a color matrix filter.
 ///

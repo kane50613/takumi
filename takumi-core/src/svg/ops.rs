@@ -9,11 +9,11 @@ use crate::resources::image_decoder::decode_gif_frames;
 use crate::{
   geometry::{PathCommand, Point},
   resources::{glyph::ResolvedGlyph, image_buffer::ImageBuffer, image_decoder::decode_image},
-  resvg::usvg::{
+  style::{BlendMode, ImageScalingAlgorithm},
+  svg::tree::{
     self, ClipPath, Group, ImageKind, ImageRendering, Mask, MaskType, Node, Paint, PaintOrder,
     Tree, filter::Filter,
   },
-  style::{BlendMode, ImageScalingAlgorithm},
 };
 
 /// One flattened SVG drawing instruction, in SVG canvas coordinates.
@@ -110,7 +110,7 @@ impl SvgFilters {
   /// Applies each filter in order to `layer`, drawn under `transform`.
   pub fn apply(&self, transform: tiny_skia::Transform, layer: &mut tiny_skia::Pixmap) {
     for filter in &self.0 {
-      crate::resvg::apply_filter(filter, transform, layer);
+      crate::svg::filter::apply_filter(filter, transform, layer);
     }
   }
 }
@@ -299,7 +299,7 @@ impl Flattener {
       pop_count += 1;
     }
 
-    if group.blend_mode() != usvg::BlendMode::Normal {
+    if group.blend_mode() != tree::BlendMode::Normal {
       self
         .ops
         .push(SvgOp::PushBlend(convert_blend_mode(group.blend_mode())));
@@ -339,7 +339,7 @@ impl Flattener {
     }
   }
 
-  fn push_path(&mut self, path: &usvg::Path) {
+  fn push_path(&mut self, path: &tree::Path) {
     if !path.is_visible() {
       return;
     }
@@ -384,7 +384,7 @@ impl Flattener {
     }
   }
 
-  fn push_image(&mut self, image: &usvg::Image) {
+  fn push_image(&mut self, image: &tree::Image) {
     if !image.is_visible() {
       return;
     }
@@ -423,15 +423,15 @@ impl Flattener {
     // (overlapping even-odd shapes render differently in PDF).
     let simple = is_simple_clip_path(clip_path.root())
       && match clip_rules.as_slice() {
-        [usvg::FillRule::EvenOdd] => true,
-        rules => rules.iter().all(|rule| *rule == usvg::FillRule::NonZero),
+        [tree::FillRule::EvenOdd] => true,
+        rules => rules.iter().all(|rule| *rule == tree::FillRule::NonZero),
       };
 
     if simple {
       let rule = clip_rules
         .first()
         .copied()
-        .unwrap_or(usvg::FillRule::NonZero);
+        .unwrap_or(tree::FillRule::NonZero);
 
       self.push_simple_clips(clip_path, rule)
     } else {
@@ -442,7 +442,7 @@ impl Flattener {
     }
   }
 
-  fn push_simple_clips(&mut self, clip_path: &ClipPath, rule: usvg::FillRule) -> usize {
+  fn push_simple_clips(&mut self, clip_path: &ClipPath, rule: tree::FillRule) -> usize {
     let mut pushed = 0;
 
     if let Some(nested) = clip_path.clip_path() {
@@ -459,7 +459,7 @@ impl Flattener {
     }
     self.ops.push(SvgOp::PushClip {
       path: commands,
-      evenodd: rule == usvg::FillRule::EvenOdd,
+      evenodd: rule == tree::FillRule::EvenOdd,
     });
     pushed + 1
   }
@@ -518,30 +518,30 @@ impl Flattener {
     }
   }
 
-  fn convert_fill(&self, fill: &usvg::Fill) -> SvgFill {
+  fn convert_fill(&self, fill: &tree::Fill) -> SvgFill {
     SvgFill {
       paint: self.convert_paint(fill.paint()),
       opacity: fill.opacity().get(),
-      evenodd: fill.rule() == usvg::FillRule::EvenOdd,
+      evenodd: fill.rule() == tree::FillRule::EvenOdd,
     }
   }
 
-  fn convert_stroke(&self, stroke: &usvg::Stroke) -> SvgStrokeStyle {
+  fn convert_stroke(&self, stroke: &tree::Stroke) -> SvgStrokeStyle {
     SvgStrokeStyle {
       paint: self.convert_paint(stroke.paint()),
       opacity: stroke.opacity().get(),
       width: stroke.width().get(),
       miter_limit: stroke.miterlimit().get(),
       cap: match stroke.linecap() {
-        usvg::LineCap::Butt => SvgLineCap::Butt,
-        usvg::LineCap::Round => SvgLineCap::Round,
-        usvg::LineCap::Square => SvgLineCap::Square,
+        tree::LineCap::Butt => SvgLineCap::Butt,
+        tree::LineCap::Round => SvgLineCap::Round,
+        tree::LineCap::Square => SvgLineCap::Square,
       },
       join: match stroke.linejoin() {
-        usvg::LineJoin::Miter => SvgLineJoin::Miter,
-        usvg::LineJoin::MiterClip => SvgLineJoin::MiterClip,
-        usvg::LineJoin::Round => SvgLineJoin::Round,
-        usvg::LineJoin::Bevel => SvgLineJoin::Bevel,
+        tree::LineJoin::Miter => SvgLineJoin::Miter,
+        tree::LineJoin::MiterClip => SvgLineJoin::MiterClip,
+        tree::LineJoin::Round => SvgLineJoin::Round,
+        tree::LineJoin::Bevel => SvgLineJoin::Bevel,
       },
       dash: stroke
         .dasharray()
@@ -665,7 +665,7 @@ fn is_simple_clip_path(group: &Group) -> bool {
   })
 }
 
-fn collect_clip_rules(group: &Group) -> Vec<usvg::FillRule> {
+fn collect_clip_rules(group: &Group) -> Vec<tree::FillRule> {
   let mut rules = Vec::new();
 
   for node in group.children() {
@@ -687,15 +687,15 @@ fn collect_clip_rules(group: &Group) -> Vec<usvg::FillRule> {
 
 fn convert_gradient(
   transform: Transform,
-  spread: usvg::SpreadMethod,
-  stops: &[usvg::Stop],
+  spread: tree::SpreadMethod,
+  stops: &[tree::Stop],
 ) -> SvgGradient {
   SvgGradient {
     transform: transform_array(transform),
     spread: match spread {
-      usvg::SpreadMethod::Pad => SvgSpreadMethod::Pad,
-      usvg::SpreadMethod::Reflect => SvgSpreadMethod::Reflect,
-      usvg::SpreadMethod::Repeat => SvgSpreadMethod::Repeat,
+      tree::SpreadMethod::Pad => SvgSpreadMethod::Pad,
+      tree::SpreadMethod::Reflect => SvgSpreadMethod::Reflect,
+      tree::SpreadMethod::Repeat => SvgSpreadMethod::Repeat,
     },
     stops: stops
       .iter()
@@ -708,25 +708,25 @@ fn convert_gradient(
   }
 }
 
-fn convert_blend_mode(blend: usvg::BlendMode) -> BlendMode {
+fn convert_blend_mode(blend: tree::BlendMode) -> BlendMode {
   match blend {
-    usvg::BlendMode::Normal => BlendMode::Normal,
-    usvg::BlendMode::Multiply => BlendMode::Multiply,
-    usvg::BlendMode::Screen => BlendMode::Screen,
-    usvg::BlendMode::Overlay => BlendMode::Overlay,
-    usvg::BlendMode::Darken => BlendMode::Darken,
-    usvg::BlendMode::Lighten => BlendMode::Lighten,
-    usvg::BlendMode::ColorDodge => BlendMode::ColorDodge,
-    usvg::BlendMode::ColorBurn => BlendMode::ColorBurn,
-    usvg::BlendMode::HardLight => BlendMode::HardLight,
-    usvg::BlendMode::SoftLight => BlendMode::SoftLight,
-    usvg::BlendMode::Difference => BlendMode::Difference,
-    usvg::BlendMode::Exclusion => BlendMode::Exclusion,
-    usvg::BlendMode::Hue => BlendMode::Hue,
-    usvg::BlendMode::Saturation => BlendMode::Saturation,
-    usvg::BlendMode::Color => BlendMode::Color,
-    usvg::BlendMode::Luminosity => BlendMode::Luminosity,
-    usvg::BlendMode::PlusLighter => BlendMode::PlusLighter,
+    tree::BlendMode::Normal => BlendMode::Normal,
+    tree::BlendMode::Multiply => BlendMode::Multiply,
+    tree::BlendMode::Screen => BlendMode::Screen,
+    tree::BlendMode::Overlay => BlendMode::Overlay,
+    tree::BlendMode::Darken => BlendMode::Darken,
+    tree::BlendMode::Lighten => BlendMode::Lighten,
+    tree::BlendMode::ColorDodge => BlendMode::ColorDodge,
+    tree::BlendMode::ColorBurn => BlendMode::ColorBurn,
+    tree::BlendMode::HardLight => BlendMode::HardLight,
+    tree::BlendMode::SoftLight => BlendMode::SoftLight,
+    tree::BlendMode::Difference => BlendMode::Difference,
+    tree::BlendMode::Exclusion => BlendMode::Exclusion,
+    tree::BlendMode::Hue => BlendMode::Hue,
+    tree::BlendMode::Saturation => BlendMode::Saturation,
+    tree::BlendMode::Color => BlendMode::Color,
+    tree::BlendMode::Luminosity => BlendMode::Luminosity,
+    tree::BlendMode::PlusLighter => BlendMode::PlusLighter,
   }
 }
 

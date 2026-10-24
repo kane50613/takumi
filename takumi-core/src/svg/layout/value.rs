@@ -3,7 +3,7 @@
 use tiny_skia::Transform;
 
 use crate::{
-  resvg::usvg::{BlendMode, SpreadMethod, Units},
+  svg::tree::{BlendMode, SpreadMethod, Units},
   svg::{
     Attr, Length, Node, PreserveAspectRatio, ViewBox, parse_angle, parse_length, parse_length_list,
     parse_number, parse_number_list, parse_transform_list,

@@ -4,7 +4,7 @@ use tiny_skia_path::Point;
 
 use super::{IdKind, State, value::Angle};
 use crate::{
-  resvg::usvg::{
+  svg::tree::{
     ApproxEqUlps, ApproxZeroUlps, ClipPath, Fill, Group, Node, NonZeroPositiveF32, NonZeroRect,
     Path, Size, Transform, ViewBox,
   },

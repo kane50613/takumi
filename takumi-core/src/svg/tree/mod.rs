@@ -3,6 +3,7 @@
 
 pub mod filter;
 mod geom;
+mod parse;
 mod text;
 
 use std::fmt::Display;
@@ -13,10 +14,16 @@ pub use strict_num::{self, ApproxEqUlps, NonZeroPositiveF32, NormalizedF32, Posi
 pub use tiny_skia_path;
 
 pub use self::geom::*;
+pub use self::parse::*;
 pub use self::text::*;
+pub use crate::svg::layout::ImageHrefResolver;
+pub(crate) use crate::svg::layout::{Cache, filters_from_markup};
+pub(crate) use crate::svg::option_log::OptionLog;
+pub use crate::svg::options::Options;
+pub use crate::svg::text::GlyphId;
+pub(crate) use crate::svg::text::text_to_paths;
 
 use crate::resources::glyph::ResolvedGlyph;
-use crate::resvg::usvg::OptionLog;
 
 /// An alias to `NormalizedF32`.
 pub type Opacity = NormalizedF32;
@@ -890,11 +897,11 @@ impl Node {
   /// # Example
   ///
   /// ```ignore
-  /// fn all_nodes(parent: &usvg::Group) {
+  /// fn all_nodes(parent: &tree::Group) {
   ///     for node in parent.children() {
   ///         // do stuff...
   ///
-  ///         if let usvg::Node::Group(g) = node {
+  ///         if let tree::Node::Group(g) = node {
   ///             all_nodes(g);
   ///         }
   ///

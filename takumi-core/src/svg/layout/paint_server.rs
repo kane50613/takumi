@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use super::{Cache, IdKind, State, resolve_current_color, split_alpha};
 use crate::{
-  resvg::usvg::*,
   style::ColorInput,
+  svg::tree::*,
   svg::{Attr, Length, LengthUnit as Unit, Node as SvgNode, PreserveAspectRatio, Tag},
 };
 
@@ -283,7 +283,7 @@ fn convert_stops(grad: SvgNode, state: &State) -> Vec<Stop> {
         _ => prev_offset.number,
       };
       prev_offset = Length::number(offset);
-      let offset = crate::resvg::usvg::f32_bound(0.0, offset, 1.0);
+      let offset = crate::svg::tree::f32_bound(0.0, offset, 1.0);
 
       let (stop_color, stop_opacity) = stop.style().map_or((ColorInput::default(), 1.0), |style| {
         (style.stop_color, style.stop_opacity)

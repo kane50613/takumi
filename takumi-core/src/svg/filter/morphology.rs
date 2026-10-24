@@ -3,7 +3,7 @@
 
 use super::ImageRefMut;
 use super::RGBA8;
-use crate::resvg::usvg::filter::MorphologyOperator;
+use crate::svg::tree::filter::MorphologyOperator;
 
 /// Applies a morphology filter.
 ///

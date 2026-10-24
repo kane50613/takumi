@@ -59,25 +59,9 @@ pub mod units;
 /// Viewport dimensions and device-pixel-ratio resolution.
 pub mod viewport;
 
-/// Vendored resvg 0.48.1 (see `resvg/mod.rs` for provenance and stripped features).
-#[cfg(feature = "svg")]
-#[allow(
-  clippy::unwrap_used,
-  clippy::expect_used,
-  clippy::panic,
-  clippy::all,
-  missing_docs,
-  dead_code,
-  deprecated
-)]
-mod resvg;
 /// SVG parsed and styled as Blink does.
 #[cfg(feature = "svg-sizing")]
 pub mod svg;
-#[cfg(feature = "svg-raster")]
-mod svg_drawing;
-#[cfg(feature = "svg")]
-mod svg_vector;
 
 /// Backend painting helpers (gradient LUTs, tile positioning, transfer tables) shared with the
 /// raster and SVG renderers.

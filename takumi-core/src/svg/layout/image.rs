@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{IdKind, State, usvg_image_rendering};
 use crate::{
-  resvg::usvg::{
+  svg::tree::{
     ClipPath, Group, Image, ImageKind, ImageRendering, Node, NonZeroRect, OptionLog, Options, Path,
     Size, Transform, Tree,
   },
@@ -78,7 +78,7 @@ impl ImageHrefResolver<'_> {
   /// If a string is an URL or something else it would be ignored.
   ///
   /// Paths have to be absolute or relative to the input SVG file or relative to
-  /// [Options::resources_dir](crate::resvg::usvg::Options::resources_dir).
+  /// [Options::resources_dir](crate::svg::tree::Options::resources_dir).
   pub fn default_string_resolver() -> ImageHrefStringResolverFn<'static> {
     Box::new(move |href: &str, opts: &Options| {
       let path = opts.get_abs_path(std::path::Path::new(href));
@@ -217,7 +217,7 @@ pub(crate) fn convert_inner(
     rect,
   } = placement;
   let aligned_size = fit_view_box(actual_size, rect, aspect);
-  let (aligned_x, aligned_y) = crate::resvg::usvg::aligned_pos(
+  let (aligned_x, aligned_y) = crate::svg::tree::aligned_pos(
     aspect.align,
     rect.x(),
     rect.y(),
@@ -258,7 +258,7 @@ pub(crate) fn convert_inner(
     let mut path = Path::new_simple(Arc::new(tiny_skia_path::PathBuilder::from_rect(
       rect.to_rect(),
     )))?;
-    path.fill = Some(crate::resvg::usvg::Fill::default());
+    path.fill = Some(crate::svg::tree::Fill::default());
 
     let mut clip = ClipPath::empty(cache.gen_id(IdKind::ClipPath));
     clip.root.children.push(Node::Path(Box::new(path)));

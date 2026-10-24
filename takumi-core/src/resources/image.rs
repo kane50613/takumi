@@ -35,20 +35,20 @@ use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
 use crate::resources::svg_size::parse_svg_document;
 #[cfg(feature = "svg-raster")]
-use crate::resvg::apply_filters_to_layer;
-#[cfg(feature = "svg")]
-use crate::resvg::usvg::{Options, Tree};
+use crate::svg::drawing::SvgDrawing;
 #[cfg(feature = "svg-raster")]
-use crate::resvg::usvg::{Transform, filters_from_markup};
-#[cfg(feature = "svg-raster")]
-use crate::svg_drawing::SvgDrawing;
+use crate::svg::filter::apply_filters_to_layer;
 #[cfg(feature = "svg")]
-use crate::svg_vector::flatten;
+use crate::svg::ops::flatten;
 #[cfg(feature = "svg")]
-pub use crate::svg_vector::{
+pub use crate::svg::ops::{
   SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
   SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
 };
+#[cfg(feature = "svg")]
+use crate::svg::tree::{Options, Tree};
+#[cfg(feature = "svg-raster")]
+use crate::svg::tree::{Transform, filters_from_markup};
 use crate::{
   resources::{
     font::FontsSnapshot,

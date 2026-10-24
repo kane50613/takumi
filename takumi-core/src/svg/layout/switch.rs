@@ -1,6 +1,6 @@
 use super::{State, convert_element, convert_group};
 use crate::{
-  resvg::usvg::{Group, Node, Options},
+  svg::tree::{Group, Node, Options},
   svg::{Attr, Node as SvgNode},
 };
 

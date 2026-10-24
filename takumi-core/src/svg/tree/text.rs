@@ -6,8 +6,8 @@ use std::sync::Arc;
 pub use crate::svg::{AlignmentBaseline, DominantBaseline, TextAnchor};
 use strict_num::NonZeroPositiveF32;
 
-use crate::resvg::usvg::text::layout::Span;
-use crate::resvg::usvg::{
+use crate::svg::text::layout::Span;
+use crate::svg::tree::{
   Fill, Group, NonEmptyString, PaintOrder, Rect, Stroke, TextRendering, Transform,
 };
 

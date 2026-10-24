@@ -7,7 +7,7 @@
 use rayon::prelude::*;
 
 use super::{ImageRefMut, RGBA8, f32_bound};
-use crate::resvg::usvg::ApproxZeroUlps;
+use crate::svg::tree::ApproxZeroUlps;
 
 const RAND_M: i32 = 2147483647; // 2**31 - 1
 const RAND_A: i32 = 16807; // 7**5; primitive root of m

@@ -2,11 +2,11 @@
 
 use super::{State, paint_server, resolve_current_color, split_alpha};
 use crate::{
-  resvg::usvg::{
+  style::FillRule as StyleFillRule,
+  svg::tree::{
     ApproxEqUlps, Color, ContextElement, Fill, FillRule, LineCap, LineJoin, NonZeroPositiveF32,
     Opacity, Paint, Stroke, StrokeMiterlimit, Units,
   },
-  style::FillRule as StyleFillRule,
   svg::{
     Dasharray, Length, LineCap as StyleLineCap, LineJoin as StyleLineJoin, Node as SvgNode,
     Paint as StylePaint, PaintFallback,

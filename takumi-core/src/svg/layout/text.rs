@@ -7,13 +7,13 @@ use kurbo::{ParamCurve, ParamCurveArclen};
 
 use super::{Cache, State, paint, shape, units, value::FromValue};
 use crate::{
-  resvg::usvg::{
+  style::{
+    FontFamilyToken, FontKerning, FontOpticalSizing as StyleFontOpticalSizing, GenericFamilyType,
+  },
+  svg::tree::{
     self, BaselineShift, Font, FontFamily, FontOpticalSizing, FontStretch, FontStyle, Group,
     LengthAdjust, Node, NonEmptyString, NonZeroPositiveF32, Rect, Text, TextChunk, TextDecoration,
     TextDecorationStyle, TextFlow, TextPath, TextSpan, Units, WritingMode,
-  },
-  style::{
-    FontFamilyToken, FontKerning, FontOpticalSizing as StyleFontOpticalSizing, GenericFamilyType,
   },
   svg::{
     Attr, BaselineShift as StyleBaselineShift, DominantBaseline, Length, LengthUnit,
@@ -87,7 +87,7 @@ pub(crate) fn convert(text_node: SvgNode, state: &State, cache: &mut Cache, pare
     layouted: vec![],
   };
 
-  if usvg::text_to_paths(&mut text, cache).is_none() {
+  if tree::text_to_paths(&mut text, cache).is_none() {
     return;
   }
 
@@ -376,7 +376,7 @@ fn convert_font(node: SvgNode) -> Font {
     variations: style
       .font_variation_settings
       .iter()
-      .map(|variation| usvg::FontVariation::new(variation.tag.to_bytes(), variation.value))
+      .map(|variation| tree::FontVariation::new(variation.tag.to_bytes(), variation.value))
       .collect(),
   }
 }

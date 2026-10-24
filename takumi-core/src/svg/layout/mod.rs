@@ -13,11 +13,11 @@ use self::paint_server::process_paint;
 use crate::{
   fonts::font_fallback_map::FontFallbackMap,
   resources::font::Fonts,
-  resvg::usvg::*,
   style::{
     BlendMode as StyleBlendMode, Color as StyleColor, ColorInput, Isolation,
     Visibility as StyleVisibility,
   },
+  svg::tree::*,
   svg::{
     Attr, Display, Document, Length, LengthUnit as Unit, Node as SvgNode, PaintOrderPart,
     PreserveAspectRatio, Tag, ViewBox as ViewBoxAttr,
@@ -37,6 +37,9 @@ mod text;
 mod units;
 mod use_element;
 mod value;
+
+/// The size a percentage stands for when the root has neither a `viewBox` nor an absolute size.
+const DEFAULT_SIZE: f32 = 100.0;
 
 pub(crate) use filter::filters_from_markup;
 
@@ -92,7 +95,7 @@ pub(crate) struct Cache {
 
   pub clip_paths: HashMap<String, Arc<ClipPath>>,
   pub masks: HashMap<String, Arc<Mask>>,
-  pub filters: HashMap<String, Arc<crate::resvg::usvg::filter::Filter>>,
+  pub filters: HashMap<String, Arc<crate::svg::tree::filter::Filter>>,
   pub paint: HashMap<String, Paint>,
 
   // used for ID generation
@@ -391,17 +394,11 @@ fn resolve_svg_size(svg: &SvgNode, opt: &Options) -> (Result<Size, Error>, bool)
     if (width.unit == Unit::Percent || height.unit == Unit::Percent) && view_box.is_none() {
       // Apply the percentages to the fallback size.
       if width.unit == Unit::Percent {
-        width = Length::new(
-          (width.number / 100.0) * state.opt.default_size.width(),
-          Unit::None,
-        );
+        width = Length::new((width.number / 100.0) * DEFAULT_SIZE, Unit::None);
       }
 
       if height.unit == Unit::Percent {
-        height = Length::new(
-          (height.number / 100.0) * state.opt.default_size.height(),
-          Unit::None,
-        );
+        height = Length::new((height.number / 100.0) * DEFAULT_SIZE, Unit::None);
       }
 
       true

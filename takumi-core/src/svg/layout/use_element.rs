@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{IdKind, State, paint};
 use crate::{
-  resvg::usvg::{
+  svg::tree::{
     ContextElement, Group, IsValidLength, Node, NonZeroRect, Path, Size, Transform, ViewBox,
   },
   svg::{Attr, Length, LengthUnit, Node as SvgNode, PreserveAspectRatio, Tag},
@@ -230,12 +230,12 @@ fn clip_element(
   //   <elem/>
   // </g>
 
-  let mut clip_path = crate::resvg::usvg::ClipPath::empty(cache.gen_id(IdKind::ClipPath));
+  let mut clip_path = crate::svg::tree::ClipPath::empty(cache.gen_id(IdKind::ClipPath));
 
   if let Some(mut path) = Path::new_simple(Arc::new(tiny_skia_path::PathBuilder::from_rect(
     clip_rect.to_rect(),
   ))) {
-    path.fill = Some(crate::resvg::usvg::Fill::default());
+    path.fill = Some(crate::svg::tree::Fill::default());
     clip_path.root.children.push(Node::Path(Box::new(path)));
   }
 

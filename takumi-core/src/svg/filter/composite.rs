@@ -3,7 +3,7 @@
 
 use super::RGBA8;
 use super::{ImageRef, ImageRefMut, f32_bound};
-use crate::resvg::usvg::ApproxZeroUlps;
+use crate::svg::tree::ApproxZeroUlps;
 
 /// Performs an arithmetic composition.
 ///

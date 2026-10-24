@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::resources::font::Fonts;
-use crate::resvg::usvg::{ImageHrefResolver, ImageRendering, ShapeRendering, Size, TextRendering};
+use crate::svg::tree::{ImageHrefResolver, ImageRendering, ShapeRendering, TextRendering};
 
 /// Processing options.
 pub struct Options<'a> {
@@ -58,12 +58,6 @@ pub struct Options<'a> {
   /// Default: OptimizeQuality
   pub image_rendering: ImageRendering,
 
-  /// Default viewport size to assume if there is no `viewBox` attribute and
-  /// the `width` or `height` attributes are relative.
-  ///
-  /// Default: `(100, 100)`
-  pub default_size: Size,
-
   /// Specifies the way `xlink:href` in `<image>` elements should be handled.
   ///
   /// Default: see type's documentation for details
@@ -99,7 +93,6 @@ impl Default for Options<'_> {
       shape_rendering: ShapeRendering::default(),
       text_rendering: TextRendering::default(),
       image_rendering: ImageRendering::default(),
-      default_size: Size::from_wh(100.0, 100.0).unwrap(),
       image_href_resolver: ImageHrefResolver::default(),
       fonts: Fonts::default(),
       style_sheet: None,

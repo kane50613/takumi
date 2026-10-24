@@ -13,12 +13,12 @@ use super::{
   value::FromValue,
 };
 use crate::{
-  resvg::usvg::{
+  style::{ColorInput, Filter as StyleFilter, Length as StyleLength, TextShadow},
+  svg::tree::{
     ApproxZeroUlps, Color, Error, Group, Node, NonEmptyString, NonZeroF32, NonZeroRect, Opacity,
     OptionLog, Options, Size, Units,
     filter::{self, *},
   },
-  style::{ColorInput, Filter as StyleFilter, Length as StyleLength, TextShadow},
   svg::{
     Attr, ColorInterpolation as StyleColorInterpolation, Document, FilterValue, Length, LengthUnit,
     Node as SvgNode, ParseOptions, PreserveAspectRatio, Scanner, StyleContext, Tag,
@@ -534,7 +534,7 @@ fn convert_color_matrix_kind(fe: SvgNode) -> Option<ColorMatrixKind> {
     Some("saturate") => {
       if let Some(list) = fe.parse::<Vec<f32>>(Attr::Values) {
         if !list.is_empty() {
-          let n = crate::resvg::usvg::f32_bound(0.0, list[0], 1.0);
+          let n = crate::svg::tree::f32_bound(0.0, list[0], 1.0);
           return Some(ColorMatrixKind::Saturate(positive(n)));
         } else {
           return Some(ColorMatrixKind::Saturate(positive(1.0)));
@@ -888,7 +888,7 @@ fn convert_specular_lighting(fe: SvgNode, primitives: &[Primitive], state: &Stat
     return None;
   }
 
-  let specular_exponent = crate::resvg::usvg::f32_bound(1.0, specular_exponent, 128.0);
+  let specular_exponent = crate::svg::tree::f32_bound(1.0, specular_exponent, 128.0);
 
   Some(Kind::SpecularLighting(SpecularLighting {
     input: resolve_input(fe, Attr::In, primitives),

@@ -3,8 +3,8 @@
 
 use super::RGBA8;
 use super::{ImageRef, ImageRefMut, f32_bound};
-use crate::resvg::usvg::filter::{DiffuseLighting, LightSource, SpecularLighting};
-use crate::resvg::usvg::{ApproxEqUlps, ApproxZeroUlps, Color};
+use crate::svg::tree::filter::{DiffuseLighting, LightSource, SpecularLighting};
+use crate::svg::tree::{ApproxEqUlps, ApproxZeroUlps, Color};
 
 const FACTOR_1_2: f32 = 1.0 / 2.0;
 const FACTOR_1_3: f32 = 1.0 / 3.0;

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{IdKind, State, convert_children};
 use crate::{
-  resvg::usvg::{
+  svg::tree::{
     Group, Mask, MaskType, Node, NonEmptyString, NonZeroRect, OptionLog, Transform, Units,
   },
   svg::{Attr, Length, LengthUnit as Unit, MaskType as StyleMaskType, Node as SvgNode, Tag},

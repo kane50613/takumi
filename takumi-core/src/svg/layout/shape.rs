@@ -4,7 +4,7 @@ use tiny_skia_path::Path;
 
 use super::{State, units};
 use crate::{
-  resvg::usvg::{ApproxEqUlps, IsValidLength, Rect},
+  svg::tree::{ApproxEqUlps, IsValidLength, Rect},
   svg::{Attr, Length, Node as SvgNode, PathSegment, Scanner, Tag, parse_path_data},
 };
 

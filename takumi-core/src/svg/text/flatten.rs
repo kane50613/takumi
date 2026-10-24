@@ -8,10 +8,11 @@ use skrifa::MetadataProvider;
 use strict_num::NonZeroPositiveF32;
 use tiny_skia_path::{NonZeroRect, Transform};
 
+use super::layout;
 use crate::geometry::PathCommand;
 use crate::resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph};
-use crate::resvg::usvg::*;
 use crate::style::Color as RgbaColor;
+use crate::svg::tree::*;
 
 fn resolve_rendering_mode(text: &Text) -> ShapeRendering {
   match text.rendering_mode {

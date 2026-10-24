@@ -3,7 +3,7 @@
 
 use super::RGBA8;
 use super::{ImageRefMut, f32_bound};
-use crate::resvg::usvg::filter::{ConvolveMatrix, EdgeMode};
+use crate::svg::tree::filter::{ConvolveMatrix, EdgeMode};
 
 /// Applies a convolve matrix.
 ///
