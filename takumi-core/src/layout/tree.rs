@@ -2167,15 +2167,18 @@ impl RenderNode {
     self.context.style.base_data.display.is_inline_level()
   }
 
+  /// Blink's `IsAtomicInlineLevel` for an inline-level box: an inline replaced element, or an
+  /// inline-level container whose content lays out as a box of its own.
   pub(crate) fn is_inline_atomic_container(&self) -> bool {
-    matches!(
-      self.context.style.base_data.display,
+    match self.context.style.base_data.display {
       Display::InlineBlock
-        | Display::InlineFlex
-        | Display::InlineGrid
-        | Display::InlineTable
-        | Display::WebkitInlineBox
-    )
+      | Display::InlineFlex
+      | Display::InlineGrid
+      | Display::InlineTable
+      | Display::WebkitInlineBox => true,
+      Display::Inline => self.is_replaced(),
+      _ => false,
+    }
   }
 
   /// True if this node is laid out as an inline-level box (atomic inline or float).
