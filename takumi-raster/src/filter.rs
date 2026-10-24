@@ -684,7 +684,7 @@ mod tests {
     apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
-    assert_eq!(*pixel, [67, 37, 7, 127]);
+    assert_eq!(*pixel, [68, 38, 8, 128]);
 
     Ok(())
   }

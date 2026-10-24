@@ -304,7 +304,8 @@ pub enum TransferFunction {
 
 impl TransferFunction {
   /// The result for each byte of a channel, none when the function leaves the channel as it is.
-  /// Blink's `FEComponentTransfer::GetValues` in `fe_component_transfer.cc`.
+  /// Blink's `FEComponentTransfer::GetValues` in `fe_component_transfer.cc`, which truncates where
+  /// this rounds, as the compositor does for the CSS functions.
   pub fn table(&self) -> Option<TransferTable> {
     if matches!(self, Self::Identity)
       || matches!(self, Self::Table(values) | Self::Discrete(values) if values.is_empty())
@@ -315,7 +316,7 @@ impl TransferFunction {
     let mut table = [0; 256];
 
     for (byte, entry) in table.iter_mut().enumerate() {
-      *entry = self.entry(byte).clamp(0.0, 255.0) as u8;
+      *entry = (self.entry(byte) + 0.5).clamp(0.0, 255.0) as u8;
     }
     Some(table)
   }
@@ -367,7 +368,7 @@ mod tests {
 
     let single = TransferFunction::Table(vec![0.5]).table().expect("a table");
 
-    assert!(single.iter().all(|entry| *entry == 127));
+    assert!(single.iter().all(|entry| *entry == 128));
 
     let discrete = TransferFunction::Discrete(vec![0.0, 1.0])
       .table()
