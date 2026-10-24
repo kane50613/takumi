@@ -182,7 +182,6 @@ css/
 !css/CSS2/linebox/inline-formatting-context-013.xht
 !css/CSS2/linebox/inline-formatting-context-023.xht
 !css/CSS2/linebox/line-height-125.xht
-!css/CSS2/linebox/line-height-129.xht
 !css/CSS2/linebox/vertical-align-122.xht
 !css/CSS2/linebox/vertical-align-sub-001.xht
 !css/CSS2/linebox/vertical-align-super-001.xht
@@ -544,12 +543,10 @@ css/CSS2/lists/list-style-type-applies-to-017.html
 !css/compositing/mix-blend-mode/mix-blend-mode-filter.html
 !css/compositing/mix-blend-mode/mix-blend-mode-iframe-parent.html
 !css/compositing/mix-blend-mode/mix-blend-mode-iframe-sibling.html
-!css/compositing/mix-blend-mode/mix-blend-mode-image.html
 !css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-scroll.html
 !css/compositing/mix-blend-mode/mix-blend-mode-parent-with-text.html
 !css/compositing/mix-blend-mode/mix-blend-mode-sibling-with-3D-transform.html
 !css/compositing/mix-blend-mode/mix-blend-mode-stacking-context-001.html
-!css/compositing/mix-blend-mode/mix-blend-mode-svg.html
 !css/compositing/mix-blend-mode/mix-blend-mode-video.html
 !css/compositing/root-element-background-image-transparency-001.html
 !css/compositing/root-element-background-image-transparency-002.html
@@ -1857,6 +1854,7 @@ css/css-masking/mask-image/mask-image-2.html
 css/css-masking/mask-image/mask-image-5.html
 css/css-masking/mask-image/mask-image-backdrop-filter-with-border-radius.html
 css/css-masking/mask-image/mask-image-data-url-image.html
+css/css-masking/mask-image/mask-image-svg-child-will-change.html
 css/css-masking/mask-image/mask-image-url-image.html
 css/css-masking/mask-image/mask-opacity-1a.html
 css/css-masking/mask-image/mask-opacity-1b.html
@@ -2795,7 +2793,6 @@ css/css-transforms/matrix/svg-matrix-014.html
 !css/css-transforms/transform-fixed-bg-006.html
 !css/css-transforms/transform-fixed-bg-007.html
 !css/css-transforms/transform-iframe-002.html
-!css/css-transforms/transform-image-001.html
 !css/css-transforms/transform-inherit-001.html
 !css/css-transforms/transform-origin/
 css/css-transforms/transform-origin/svg-origin-length-001.html
@@ -3058,7 +3055,6 @@ svg/as-image/sprite-sheet-fractional-size.html
 svg/coordinate-systems/abspos.html
 svg/coordinate-systems/out-of-flow-svg-root.html
 svg/coordinate-systems/view-invalid-viewBox.html
-svg/coordinate-systems/view-transform-viewBox.html
 svg/embedded/
 !svg/embedded/image-embedding-svg-nested-svg-in-foreignobject.html
 !svg/embedded/image-embedding-svg-viewref-with-viewbox.svg
@@ -3122,7 +3118,6 @@ svg/painting/reftests/marker-units-userspaceonuse-non-scaling-stroke.svg
 svg/painting/reftests/markers-orient-001.svg
 svg/painting/reftests/mask-percentage.html
 svg/painting/reftests/mask-print.svg
-svg/painting/reftests/non-scaling-stroke-004.html
 svg/painting/reftests/non-scaling-stroke-precision-loss.html
 svg/painting/reftests/paint-context-001.svg
 svg/painting/reftests/paint-context-002.svg
@@ -3159,6 +3154,7 @@ svg/pservers/reftests/stroke-fallback-invalid-uri.svg
 svg/render/order/clip-path-filter-order.svg
 svg/render/reftests/blending-001.svg
 svg/render/reftests/blending-svg-foreign-object.html
+svg/render/reftests/blending-svg-root.html
 svg/render/reftests/filter-effects-on-pattern.html
 svg/shapes/circle-01.svg
 svg/shapes/ellipse-04.svg
