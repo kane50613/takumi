@@ -226,7 +226,7 @@ impl StylePresets {
     Self(Cow::Owned(HashMap::new()))
   }
 
-  /// The preset of `tag`, which every element of it shares.
+  /// The preset of `tag`, shared until an element changes its copy.
   fn get(&self, tag: &str) -> Option<&Arc<Style>> {
     self.0.get(tag)
   }
