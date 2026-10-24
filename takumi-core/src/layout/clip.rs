@@ -7,6 +7,7 @@ use crate::{
   geometry::{PathBuilder, PathCommand, Point, Rect, Size},
   layout::border::BorderProperties,
   painter::FillShape,
+  path_data::PathData,
   style::{
     Axis, BasicShape, BorderStyle, CircleShape, Color, EllipseShape, FillRule,
     ImageScalingAlgorithm, ShapeRadius, Sides, SizingContext, SpacePair,
@@ -21,15 +22,7 @@ impl BasicShape {
   ///
   /// The commands are unclosed for `path()`, which carries its own closes, and
   /// closed for the shapes that describe a region.
-  /// Returns `None` when the shape cannot be resolved at all, which today means
-  /// a `path()` in a build without the `svg` feature and its path parser. That is
-  /// different from a shape that resolves to no area: callers must not turn it
-  /// into an empty clip, which would hide the element.
-  pub(crate) fn path_commands(
-    &self,
-    context: &RenderContext,
-    size: Size<f32>,
-  ) -> Option<Vec<PathCommand>> {
+  pub(crate) fn path_commands(&self, context: &RenderContext, size: Size<f32>) -> Vec<PathCommand> {
     let mut commands = Vec::new();
 
     match self {
@@ -87,7 +80,7 @@ impl BasicShape {
       }
       BasicShape::Polygon(shape) => {
         let Some((first, rest)) = shape.coordinates.split_first() else {
-          return Some(commands);
+          return commands;
         };
 
         commands.move_to((
@@ -106,16 +99,19 @@ impl BasicShape {
         // path() coordinates are CSS px; scale them like the to_px shapes.
         let scale = context.sizing.to_device(1.0);
 
-        commands.extend(scale_commands(parse_path(shape.path.as_ref())?, scale));
+        let (path, complete) = PathData::parse(shape.path.as_ref());
+        let path = if complete { path } else { Vec::new() };
+
+        commands.extend(scale_commands(path, scale));
       }
     }
-    Some(commands)
+    commands
   }
 }
 
 impl BasicShape {
   /// The shape resolved against a border box as a fill, its rule from `clip_rule` unless the shape
-  /// sets its own, or `None` when it cannot resolve at all.
+  /// sets its own.
   pub fn fill_shape(
     &self,
     context: &RenderContext,
@@ -140,7 +136,7 @@ impl BasicShape {
     }
 
     Some(FillShape::Path {
-      commands: self.path_commands(context, size)?,
+      commands: self.path_commands(context, size),
       rule: self.fill_rule().unwrap_or(clip_rule),
     })
   }
@@ -252,48 +248,6 @@ fn scale_commands(commands: Vec<PathCommand>, scale: f32) -> Vec<PathCommand> {
     .into_iter()
     .map(|command| command.map_points(point))
     .collect()
-}
-
-#[cfg(feature = "svg")]
-fn parse_path(input: &str) -> Option<Vec<PathCommand>> {
-  use svgtypes::{SimplePathSegment, SimplifyingPathParser};
-
-  let mut commands = Vec::new();
-
-  for segment in SimplifyingPathParser::from(input) {
-    let Ok(segment) = segment else {
-      return Some(Vec::new());
-    };
-
-    match segment {
-      SimplePathSegment::MoveTo { x, y } => commands.move_to((x as f32, y as f32)),
-      SimplePathSegment::LineTo { x, y } => commands.line_to((x as f32, y as f32)),
-      SimplePathSegment::CurveTo {
-        x1,
-        y1,
-        x2,
-        y2,
-        x,
-        y,
-      } => commands.curve_to(
-        (x1 as f32, y1 as f32),
-        (x2 as f32, y2 as f32),
-        (x as f32, y as f32),
-      ),
-      SimplePathSegment::Quadratic { x1, y1, x, y } => commands.push(PathCommand::QuadTo(
-        Point::new(x1 as f32, y1 as f32),
-        Point::new(x as f32, y as f32),
-      )),
-      SimplePathSegment::ClosePath => commands.close(),
-    }
-  }
-  Some(commands)
-}
-
-/// Without the path parser a `path()` shape cannot be resolved at all.
-#[cfg(not(feature = "svg"))]
-fn parse_path(_input: &str) -> Option<Vec<PathCommand>> {
-  None
 }
 
 #[cfg(test)]
