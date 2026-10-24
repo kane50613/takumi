@@ -615,6 +615,36 @@ fn a_tables_finished_rows_free_their_layouts_before_the_table_ends() {
   assert!(!is_released("r9"));
 }
 
+/// The rows a table measured for its first page, but placed on none yet, drop their measures.
+#[test]
+fn a_tables_rows_still_to_come_drop_their_measures() {
+  let tree = ten_row_table();
+  let page_size = Size {
+    width: 300.0,
+    height: 200.0,
+  };
+  let mut layout = PagedLayout::new(&tree, page_size, usize::MAX).with_release();
+
+  assert!(layout.next_page().expect("page lays out"));
+  layout.release(0);
+
+  let tree = layout.tree();
+  let cell_has_measures = |content: &str| {
+    let (cell, _) = tree
+      .node_state(node_with_id(tree, content))
+      .box_parent
+      .expect("a cell holds the content");
+
+    tree
+      .node_state(NodeId::new(cell as usize))
+      .cache
+      .has_measures()
+  };
+
+  assert!(cell_has_measures("r0-cell"));
+  assert!(!cell_has_measures("r9-cell"));
+}
+
 #[test]
 fn a_tall_cell_breaks_its_row_across_pages() {
   let tree = render(

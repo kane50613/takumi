@@ -205,6 +205,18 @@ impl LayoutCache {
     self.released == Self::ALL_RELEASED
   }
 
+  /// Whether the box keeps a measure.
+  #[cfg(test)]
+  pub(crate) fn has_measures(&self) -> bool {
+    !self.measures.is_empty()
+  }
+
+  /// Drops the measures and intrinsic sizes, which the box computes again when asked.
+  pub(crate) fn release_measures(&mut self) {
+    self.measures = Vec::new();
+    self.min_max_sizes = Vec::new();
+  }
+
   /// Drops every layout, measure, and intrinsic size, for a box with no fragment to come.
   pub(crate) fn release_all(&mut self) {
     self.released = Self::ALL_RELEASED;
@@ -267,6 +279,11 @@ impl<'r> LayoutTree<'r> {
 
     if result.status == LayoutStatus::Success {
       self.node_state_mut(node).cache.store(space, input, &result);
+      #[cfg(feature = "fragmentation")]
+      if space.cache_slot == CacheSlot::Measure {
+        self.note_measured(usize::from(node));
+        self.release_unplaced_batch();
+      }
       #[cfg(feature = "fragmentation")]
       if space.cache_slot == CacheSlot::Layout
         && let Some(fragment) = input.cached_fragment_index()
@@ -363,6 +380,11 @@ impl<'r> LayoutTree<'r> {
       .node_state_mut(node)
       .cache
       .store_min_max_sizes(key, sizes);
+    #[cfg(feature = "fragmentation")]
+    {
+      self.note_measured(usize::from(node));
+      self.release_unplaced_batch();
+    }
     sizes
   }
 

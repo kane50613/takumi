@@ -294,6 +294,10 @@ pub struct LayoutTree<'r> {
   /// end.
   #[cfg(feature = "fragmentation")]
   releases: Option<Releases>,
+  /// The boxes that measured or prepared inline items since the last release, which drops that
+  /// data again for those layout has yet to place.
+  #[cfg(feature = "fragmentation")]
+  measured: RefCell<Vec<usize>>,
   /// The boxes that ended and were released, whose inline items and table parts nothing may read.
   #[cfg(all(feature = "fragmentation", debug_assertions))]
   released_boxes: RefCell<FxHashSet<usize>>,
@@ -860,6 +864,48 @@ impl LayoutTree<'_> {
       self.release_finished(&mut releases, laid, finished);
     }
     self.releases = Some(releases);
+    self.release_unplaced();
+  }
+
+  /// Drops what the boxes measured since the last release keep while layout has not placed them,
+  /// as a table measures all its rows on its first page. Laying them out computes it again. The
+  /// boxes laying out now keep theirs.
+  fn release_unplaced(&mut self) {
+    let mut measured = take(self.measured.get_mut());
+
+    measured.sort_unstable();
+    measured.dedup();
+    for index in measured {
+      let state = &mut self.nodes[index];
+
+      if state.fragments.iter().any(|fragment| fragment.is_laid_out)
+        || self.running.iter().any(|run| run.node as usize == index)
+      {
+        continue;
+      }
+      state.cache.release_measures();
+      self.inline_node_data.get_mut().remove(&index);
+      self.render_nodes[index]
+        .item_shapes
+        .forget_first_preparation();
+    }
+  }
+
+  /// Notes that the box at `index` measured or prepared its inline items.
+  pub(crate) fn note_measured(&self, index: usize) {
+    if self.releases.is_some() {
+      self.measured.borrow_mut().push(index);
+    }
+  }
+
+  /// Releases what unplaced boxes measured once that many are noted, so that a page that measures
+  /// a long table keeps no more than a batch of it.
+  pub(crate) fn release_unplaced_batch(&mut self) {
+    const BATCH: usize = 4096;
+
+    if self.measured.get_mut().len() >= BATCH {
+      self.release_unplaced();
+    }
   }
 
   fn release_finished(&mut self, releases: &mut Releases, laid: usize, finished: Finished) {
@@ -930,6 +976,8 @@ impl<'r> LayoutTree<'r> {
       releases: None,
       #[cfg(all(feature = "fragmentation", debug_assertions))]
       released_boxes: RefCell::default(),
+      #[cfg(feature = "fragmentation")]
+      measured: RefCell::default(),
     };
 
     tree.push_subtree(render_root);
@@ -1054,7 +1102,11 @@ impl<'r> LayoutTree<'r> {
         .inline_node_data
         .borrow_mut()
         .entry(index)
-        .or_insert_with(|| Rc::new(InlineNode::new(self.render_nodes[index]).prepare_layout())),
+        .or_insert_with(|| {
+          #[cfg(feature = "fragmentation")]
+          self.note_measured(index);
+          Rc::new(InlineNode::new(self.render_nodes[index]).prepare_layout())
+        }),
     )
   }
 
