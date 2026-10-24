@@ -338,7 +338,6 @@ impl Flattener {
       Node::Group(group) => self.push_group(group),
       Node::Path(path) => self.push_path(path),
       Node::Image(image) => self.push_image(image),
-      Node::Text(text) => self.push_group(text.flattened()),
     }
   }
 
@@ -630,12 +629,10 @@ const fn scaling_algorithm(rendering: ImageRendering) -> ImageScalingAlgorithm {
   }
 }
 
-/// The group a node's children live in: the node itself for groups, the flattened outlines for
-/// text.
+/// The group a node's children live in, for groups.
 fn subgroup(node: &Node) -> Option<&Group> {
   match node {
     Node::Group(group) => Some(group),
-    Node::Text(text) => Some(text.flattened()),
     _ => None,
   }
 }

@@ -12,8 +12,6 @@ use tiny_skia_path::PathBuilder;
 use super::svgtree::{self, AId, EId, FromValue, SvgNode};
 use super::units::{self, convert_length};
 use super::{Error, Options, marker};
-use crate::fonts::font_fallback_map::FontFallbackMap;
-use crate::resources::font::Fonts;
 use crate::resvg::usvg::parser::paint_server::process_paint;
 use crate::resvg::usvg::*;
 
@@ -35,10 +33,6 @@ pub struct State<'a> {
 }
 
 pub struct Cache {
-  pub(crate) fonts: Fonts,
-  /// The fallback lists of every `<text>` in the tree, shared across them.
-  pub(crate) font_fallback_map: FontFallbackMap,
-
   pub clip_paths: HashMap<String, Arc<ClipPath>>,
   pub masks: HashMap<String, Arc<Mask>>,
   pub filters: HashMap<String, Arc<filter::Filter>>,
@@ -56,11 +50,8 @@ pub struct Cache {
 }
 
 impl Cache {
-  pub(crate) fn new(fonts: Fonts) -> Self {
+  pub(crate) fn new() -> Self {
     Self {
-      fonts,
-      font_fallback_map: FontFallbackMap::default(),
-
       clip_paths: HashMap::new(),
       masks: HashMap::new(),
       filters: HashMap::new(),
@@ -344,7 +335,7 @@ pub(crate) fn convert_doc(svg_doc: &svgtree::Document, opt: &Options) -> Result<
     opt,
   };
 
-  let mut cache = Cache::new(opt.fonts.clone());
+  let mut cache = Cache::new();
 
   for node in svg_doc.descendants() {
     if let Some(tag) = node.tag_name() {
@@ -390,13 +381,7 @@ pub(crate) fn convert_doc(svg_doc: &svgtree::Document, opt: &Options) -> Result<
   cache.filters.clear();
   cache.paint.clear();
 
-  super::paint_server::update_paint_servers(
-    &mut tree.root,
-    Transform::default(),
-    None,
-    None,
-    &mut cache,
-  );
+  super::paint_server::update_paint_servers(&mut tree.root, Transform::default(), None, &mut cache);
   tree.collect_paint_servers();
   tree.root.collect_clip_paths(&mut tree.clip_paths);
   tree.root.collect_masks(&mut tree.masks);
@@ -592,9 +577,6 @@ fn convert_element_impl(
     EId::Image => {
       super::image::convert(node, state, cache, parent);
     }
-    EId::Text => {
-      super::text::convert(node, state, cache, parent);
-    }
     EId::Svg => {
       // Only the outermost `svg` reaches this point; nested `svg` elements are
       // handled earlier in `convert_element`. The root `svg` itself is
@@ -659,9 +641,6 @@ fn convert_clip_path_elements_impl(
       if let Some(path) = super::shapes::convert(node, state) {
         convert_path(node, path, state, cache, parent);
       }
-    }
-    EId::Text => {
-      super::text::convert(node, state, cache, parent);
     }
     _ => {
       log::warn!("'{}' is no a valid 'clip-path' child.", tag_name);

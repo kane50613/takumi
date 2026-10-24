@@ -11,9 +11,9 @@ pub use super::animated::AnimatedSource;
 use std::borrow::Cow;
 #[cfg(feature = "svg-sizing")]
 use std::str::{FromStr, from_utf8};
-use std::sync::{Arc, Weak};
 #[cfg(feature = "svg")]
-use std::sync::{Mutex, atomic::Ordering};
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Weak};
 
 use quick_cache::{
   DefaultHashBuilder, OptionsBuilder, Weighter,
@@ -28,8 +28,6 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 #[cfg(feature = "svg")]
 use crate::layout::node::Node;
-#[cfg(feature = "svg")]
-use crate::resources::font::Fonts;
 #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "svg-sizing")]
@@ -105,17 +103,13 @@ pub struct SvgSource {
   /// `currentColor` and the root element sets no `color` of its own.
   #[cfg(feature = "svg")]
   uses_current_color: bool,
-  /// The document drawn through the CSS cascade, none where it holds text or a filter, which the
-  /// parse-time tree still draws.
+  /// The document drawn through the CSS cascade, none where it holds a filter, which the parse-time
+  /// tree still draws.
   #[cfg(feature = "svg")]
   document: Option<Arc<SvgDocument>>,
-  /// Whether the markup contains `<text`, so rendering re-parses with fonts.
+  /// Whether the markup contains `<text`, so rendering depends on the registered fonts.
   #[cfg(feature = "svg")]
   has_text: bool,
-  /// Text-capable re-parse of `source`, keyed by the font registry revision
-  /// it was converted with; a registration re-converts on the next render.
-  #[cfg(feature = "svg")]
-  text_tree: Mutex<Option<(u64, Arc<Tree>)>>,
   #[cfg(feature = "svg")]
   #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
   hash: u64,
@@ -224,28 +218,16 @@ impl SvgSource {
       return ops;
     }
 
-    match self.tree_with_current_color(current_color, fonts) {
+    match self.tree_with_current_color(current_color) {
       Some(tree) => flatten(&tree),
-      None => {
-        let text_tree = self.text_tree(fonts);
-
-        flatten(text_tree.as_deref().unwrap_or(&self.tree))
-      }
+      None => flatten(&self.tree),
     }
   }
 
   /// Re-parses the markup with `configure` applied to the parse options.
-  fn reparse(
-    &self,
-    fonts: Option<&FontsSnapshot>,
-    configure: impl FnOnce(&mut Options),
-  ) -> Option<Tree> {
+  fn reparse(&self, configure: impl FnOnce(&mut Options)) -> Option<Tree> {
     let document = parse_svg_document(&self.source).ok()?;
     let mut options = svg_parse_options();
-
-    if let Some(fonts) = fonts.filter(|_| self.has_text) {
-      options.fonts = Fonts::clone(fonts);
-    }
 
     configure(&mut options);
     Tree::from_xmltree(&document, &options).ok()
@@ -253,18 +235,14 @@ impl SvgSource {
 
   /// Re-parses the markup with `current_color` as the `currentColor` fallback.
   /// `None` when rendering does not depend on the host color.
-  fn tree_with_current_color(
-    &self,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
-  ) -> Option<Tree> {
+  fn tree_with_current_color(&self, current_color: Color) -> Option<Tree> {
     if !self.uses_current_color {
       return None;
     }
 
     let [red, green, blue, alpha] = current_color.0;
 
-    self.reparse(fonts, |options| {
+    self.reparse(|options| {
       options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
     })
   }
@@ -301,29 +279,9 @@ impl SvgSource {
       sizing,
       tree,
       uses_current_color,
-      text_tree: Mutex::new(None),
       hash,
       cache,
     })
-  }
-
-  /// The text-capable re-parse for the snapshot's font revision when the
-  /// markup holds `<text>`, or `None` to use the parse-time tree.
-  fn text_tree(&self, fonts: Option<&FontsSnapshot>) -> Option<Arc<Tree>> {
-    let fonts = fonts.filter(|_| self.has_text)?;
-    let revision = fonts.revision();
-    let mut cached = self.text_tree.lock().ok()?;
-
-    if let Some((cached_revision, tree)) = cached.as_ref()
-      && *cached_revision == revision
-    {
-      return Some(tree.clone());
-    }
-
-    let tree = Arc::new(self.reparse(Some(fonts), |_| {})?);
-
-    *cached = Some((revision, tree.clone()));
-    Some(tree)
   }
 
   #[cfg(feature = "svg-raster")]
