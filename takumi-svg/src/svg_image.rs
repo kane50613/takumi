@@ -1,7 +1,11 @@
 //! An SVG image written as the vector ops takumi-core flattens it to, so its text draws in the
 //! fonts the render registered instead of whatever the viewer falls back to.
 
-use std::{borrow::Cow, io};
+use std::{
+  borrow::Cow,
+  hash::{DefaultHasher, Hash, Hasher},
+  io,
+};
 
 use takumi_core::{
   path_data::path_data,
@@ -12,7 +16,7 @@ use takumi_core::{
   style::{Affine, FillRule, ImageScalingAlgorithm, ToCss},
 };
 
-use crate::{Frame, GradientStop, Rgba, SvgDocument, matrix_attr, num, push_opacity};
+use crate::{Frame, GradientStop, ImageKey, Rgba, SvgDocument, matrix_attr, num, push_opacity};
 
 /// Whether SVG elements can express all of `ops`, which leaves out filters.
 pub(crate) fn is_vector(ops: &[SvgOp]) -> bool {
@@ -95,16 +99,21 @@ impl SvgDocument {
           height,
           rendering,
         } => {
-          let Some(href) = image_href(data) else {
+          let key = ImageKey::SvgBitmap(digest(data));
+          let Some(href) = self.image_href(&key, || image_href(data)) else {
             continue;
           };
-          let mut attrs = Frame::new(0.0, 0.0, *width, *height).attrs();
+          let rect = Frame::new(0.0, 0.0, *width, *height);
 
-          attrs.push(("href", href.into()));
           if *rendering == ImageScalingAlgorithm::Pixelated {
+            let mut attrs = rect.attrs();
+
+            attrs.push(("href", href.as_ref().into()));
             attrs.push(("image-rendering", "pixelated".into()));
+            self.empty("image", &attrs)?;
+          } else {
+            self.image_use(&key, &href, (*width, *height), rect)?;
           }
-          self.empty("image", &attrs)?;
         }
       }
     }
@@ -245,6 +254,19 @@ impl SvgDocument {
 }
 
 /// The `data:` URL of an image op's pixels.
+/// A digest of `data`'s bytes or pixels, which keys its one encoding.
+fn digest(data: &SvgImageData) -> u64 {
+  let mut hasher = DefaultHasher::new();
+
+  match data {
+    SvgImageData::Encoded(bytes) => bytes.hash(&mut hasher),
+    SvgImageData::Bitmap(buffer) => {
+      (buffer.width(), buffer.height(), buffer.data()).hash(&mut hasher)
+    }
+  }
+  hasher.finish()
+}
+
 fn image_href(data: &SvgImageData) -> Option<String> {
   match data {
     SvgImageData::Encoded(bytes) => Some(to_data_url(sniff_mime(bytes), bytes)),

@@ -1467,7 +1467,7 @@ mod tests {
     );
   }
 
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-raster")]
   fn premul_at(image: &RenderedImage, x: u32, y: u32) -> [u8; 4] {
     match image {
       RenderedImage::Rasterized(buffer) => buffer.pixel(x, y),
@@ -1943,7 +1943,7 @@ mod tests {
 
   // usvg accepts a namespace-less root, so markup without `xmlns` is still
   // detected and rendered as SVG.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-raster")]
   #[test]
   fn svg_without_xmlns_renders() -> Result<(), ImageError> {
     let svg = r##"<svg width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
@@ -1958,7 +1958,7 @@ mod tests {
 
   // `currentColor` resolves against the host color, like an inline SVG
   // inheriting `color` from its parent element.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-raster")]
   #[test]
   fn svg_current_color_resolves_to_host_color() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
@@ -1979,7 +1979,7 @@ mod tests {
 
   // The dependency on the host color is detected on decoded attribute values,
   // so an entity-encoded `currentColor` inherits too.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-raster")]
   #[test]
   fn svg_entity_encoded_current_color_resolves_to_host_color() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="current&#67;olor"/></svg>"#;
@@ -2000,7 +2000,7 @@ mod tests {
 
   // A `color` attribute on the root wins over the host color, so the host
   // never overrides what the SVG defines itself.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-raster")]
   #[test]
   fn svg_own_color_attribute_beats_host_color() -> Result<(), ImageError> {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"##;
@@ -2101,7 +2101,7 @@ mod tests {
     Ok(())
   }
 
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-raster")]
   #[test]
   fn svg_rasterization_rejects_oversized_target() {
     let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
@@ -2121,7 +2121,7 @@ mod tests {
     assert_matches!(result, Err(ImageError::InvalidPixmapSize));
   }
 
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-raster")]
   #[test]
   fn svg_is_drawable_only_at_a_nonzero_size_within_budget() {
     let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"

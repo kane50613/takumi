@@ -1120,6 +1120,8 @@ pub(crate) enum ImageKey {
     src: Arc<str>,
     current_color: [u8; 4],
   },
+  /// A bitmap inside an SVG image, by a digest of its bytes or pixels.
+  SvgBitmap(u64),
   /// A bitmap glyph of face `index` in the font `font` at a size.
   BitmapGlyph {
     font: u64,
