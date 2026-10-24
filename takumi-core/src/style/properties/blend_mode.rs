@@ -1,4 +1,5 @@
 use cssparser::Parser;
+use tiny_skia::BlendMode as TinyBlendMode;
 
 use crate::style::{
   Animatable, FromCss, ListInterpolationStrategy, ParseResult, impl_css_enum, parse_comma_list,
@@ -60,9 +61,9 @@ pub enum BlendMode {
 }
 
 impl BlendMode {
-  /// The tiny-skia mode, or `None` for the dodge and burn modes the canvas blends on its own.
-  pub fn to_tiny_skia(self) -> Option<tiny_skia::BlendMode> {
-    use tiny_skia::BlendMode as T;
+  /// The tiny-skia mode, or `None` for the dodge, burn, and plus-darker modes the canvas blends.
+  pub fn to_tiny_skia(self) -> Option<TinyBlendMode> {
+    use TinyBlendMode as T;
 
     Some(match self {
       BlendMode::Normal => T::SourceOver,

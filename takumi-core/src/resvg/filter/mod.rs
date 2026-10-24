@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::{
   blur::blur_rgba,
-  resvg::usvg::{ApproxEqUlps, ApproxZeroUlps},
+  resvg::usvg::{ApproxEqUlps, ApproxZeroUlps, BlendMode},
   svg_drawing::SvgDrawing,
   svg_vector::flatten_children,
 };
@@ -798,9 +798,7 @@ fn apply_blend(
   Ok(Image::from_image(pixmap, cs))
 }
 
-fn tiny_skia_blend_mode(mode: crate::resvg::usvg::BlendMode) -> tiny_skia::BlendMode {
-  use crate::resvg::usvg::BlendMode;
-
+fn tiny_skia_blend_mode(mode: BlendMode) -> tiny_skia::BlendMode {
   match mode {
     BlendMode::Normal => tiny_skia::BlendMode::SourceOver,
     BlendMode::Multiply => tiny_skia::BlendMode::Multiply,

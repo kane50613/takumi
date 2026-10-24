@@ -12,6 +12,7 @@ use tiny_skia::{
 
 use crate::{
   geometry::PathCommand,
+  resources::image::within_raster_pixel_budget,
   style::{BlendMode, ImageScalingAlgorithm},
   svg_vector::{
     SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint,
@@ -392,7 +393,7 @@ fn skip_scope(ops: &mut Iter<'_, SvgOp>) {
   }
 }
 
-/// Where a layer sits on `target`, a filter region capped at five times the pixmap.
+/// Where a layer sits on `target`, a filter's region within five pixmaps and the raster budget.
 fn layer_bounds(target: &Target, filters: Option<&SvgFilters>) -> Option<IntRect> {
   let (width, height) = (target.pixmap.width(), target.pixmap.height());
 
@@ -413,12 +414,18 @@ fn layer_bounds(target: &Target, filters: Option<&SvgFilters>) -> Option<IntRect
     height.saturating_mul(5),
   )?;
 
-  IntRect::from_ltrb(
+  let region = IntRect::from_ltrb(
     region.left().max(limit.left()),
     region.top().max(limit.top()),
     region.right().min(limit.right()),
     region.bottom().min(limit.bottom()),
-  )
+  )?;
+
+  if within_raster_pixel_budget(region.width(), region.height()) {
+    Some(region)
+  } else {
+    IntRect::from_xywh(0, 0, width, height)
+  }
 }
 
 /// `outer` narrowed to the inside of `commands`. A path with no area leaves nothing visible.
@@ -665,7 +672,8 @@ mod tests {
       .unwrap()
       .encode_png()
       .unwrap();
-    let path = std::env::temp_dir().join(format!("takumi_lfi_{}.png", std::process::id()));
+    let path =
+      std::env::temp_dir().join(format!("takumi_lfi_svg_drawing_{}.png", std::process::id()));
 
     std::fs::write(&path, &opaque_red).unwrap();
 

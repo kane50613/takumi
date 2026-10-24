@@ -2,7 +2,12 @@
 
 use std::{iter::repeat_n, sync::Arc};
 
+#[cfg(feature = "svg-raster")]
+use tiny_skia::Rect;
 use tiny_skia_path::{PathSegment, Transform};
+
+#[cfg(feature = "svg-raster")]
+use crate::resvg::apply_filter;
 
 #[cfg(feature = "gif")]
 use crate::resources::image_decoder::decode_gif_frames;
@@ -98,7 +103,7 @@ impl SvgFilters {
     let first = regions.next()?;
 
     regions.try_fold(first, |union, region| {
-      tiny_skia::Rect::from_ltrb(
+      Rect::from_ltrb(
         union.left().min(region.left()),
         union.top().min(region.top()),
         union.right().max(region.right()),
@@ -110,7 +115,7 @@ impl SvgFilters {
   /// Applies each filter in order to `layer`, drawn under `transform`.
   pub fn apply(&self, transform: tiny_skia::Transform, layer: &mut tiny_skia::Pixmap) {
     for filter in &self.0 {
-      crate::resvg::apply_filter(filter, transform, layer);
+      apply_filter(filter, transform, layer);
     }
   }
 }

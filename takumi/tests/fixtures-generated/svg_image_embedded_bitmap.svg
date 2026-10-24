@@ -6,7 +6,7 @@
   <g transform="matrix(1.5 0 0 1.5 110 165)" clip-path="url(#cp0)">
     <g style="isolation:isolate">
       <g transform="matrix(45 0 0 45 10 10)">
-        <image x="0" y="0" width="4" height="4" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVR4nGN4Zun2X2tu/38YzQAivixK/A+jGeAyQIBVBQD4diWtpNpYnQAAAABJRU5ErkJggg=="/>
+        <use href="#i0"/>
       </g>
     </g>
   </g>
@@ -32,11 +32,14 @@
         <g clip-path="url(#cp3)">
           <g opacity=".8">
             <g transform="matrix(45 0 0 45 10 10)">
-              <image x="0" y="0" width="4" height="4" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVR4nGN4Zun2X2tu/38YzQAivixK/A+jGeAyQIBVBQD4diWtpNpYnQAAAABJRU5ErkJggg=="/>
+              <use href="#i0"/>
             </g>
           </g>
         </g>
       </g>
     </g>
   </g>
+  <defs>
+    <image id="i0" width="4" height="4" preserveAspectRatio="none" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVR4nGN4Zun2X2tu/38YzQAivixK/A+jGeAyQIBVBQD4diWtpNpYnQAAAABJRU5ErkJggg=="/>
+  </defs>
 </svg>

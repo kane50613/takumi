@@ -62,7 +62,7 @@ use crate::{
 const MAX_RASTER_PIXELS: u64 = 64 << 20;
 
 #[cfg(feature = "svg-raster")]
-fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
+pub(crate) fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
   u64::from(width) * u64::from(height) <= MAX_RASTER_PIXELS
 }
 
@@ -2229,7 +2229,7 @@ mod tests {
       .unwrap()
       .encode_png()
       .unwrap();
-    let path = std::env::temp_dir().join(format!("takumi_lfi_{}.png", std::process::id()));
+    let path = std::env::temp_dir().join(format!("takumi_lfi_image_{}.png", std::process::id()));
     std::fs::write(&path, &opaque_red).unwrap();
 
     let ns = r#"xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink""#;
