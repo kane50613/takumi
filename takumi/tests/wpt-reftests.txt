@@ -1306,7 +1306,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/whitespace-in-flexitem-001.html
 !css/css-fonts/
 css/css-fonts/downloadable-font-in-iframe-print.html
-css/css-fonts/first-available-font-001.html
 css/css-fonts/first-available-font-003.html
 css/css-fonts/first-available-font-004.html
 css/css-fonts/first-available-font-005.html
@@ -1364,7 +1363,6 @@ css/css-fonts/font-size-adjust-007.xht
 css/css-fonts/font-size-adjust-008.xht
 css/css-fonts/font-size-adjust-014.html
 css/css-fonts/font-size-adjust-text-orientation.html
-css/css-fonts/font-size-adjust-units-001.html
 css/css-fonts/font-size-zero-1.html
 css/css-fonts/font-size-zero-2.html
 css/css-fonts/font-size-zero-3.html
