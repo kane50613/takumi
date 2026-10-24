@@ -259,7 +259,9 @@ impl TextPainter<'_> {
       return;
     };
 
-    if !self.charge(1) {
+    // Each glyph keeps its own copy of the pixels, so they are charged as decoded image bytes.
+    if !self.charge(1) || !self.budget.spend_image_bytes(bitmap.image.data().len()) {
+      self.exhausted = true;
       return;
     }
 

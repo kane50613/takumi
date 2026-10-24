@@ -38,7 +38,7 @@ impl XmlSpace {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ElementKind {
   Text,
-  /// A `tspan`, a `tref`, or an `a`.
+  /// A `tspan` or an `a`.
   Span,
   TextPath,
 }
@@ -49,6 +49,9 @@ struct TextElement {
   space: Option<XmlSpace>,
   decorations: Decorations,
   baseline_offset: BaselineOffset,
+  /// Whether it or an element between it and the `text` is not rendered, as `display` and the
+  /// conditional attributes remove a whole subtree.
+  hidden: bool,
 }
 
 enum Content {
@@ -97,6 +100,7 @@ impl TextTree {
       space: layout.own_space(text.index),
       decorations: tree.decorations(layout, scope, text, None),
       baseline_offset: BaselineOffset::default(),
+      hidden: !layout.is_visible_element(text, scope),
     };
     let root = tree.push(None, Content::Element(Box::new(root)));
 
@@ -203,6 +207,7 @@ impl TextTree {
     };
     let (parent_index, parent_context) = (parent.styled.index, parent.styled.context.clone());
     let (parent_decorations, parent_offset) = (parent.decorations.clone(), parent.baseline_offset);
+    let parent_hidden = parent.hidden;
     let document = layout.document;
 
     for &child in &document.elements[parent_index].children {
@@ -219,7 +224,7 @@ impl TextTree {
       }
 
       let element_kind = match kind {
-        SvgElementKind::Tspan | SvgElementKind::Tref => ElementKind::Span,
+        SvgElementKind::Tspan => ElementKind::Span,
         SvgElementKind::G if layout.styles.node(child).tag_name() == Some("a") => ElementKind::Span,
         // A `textPath` is only a direct child of a `text`.
         SvgElementKind::TextPath if self.kind(node) == Some(ElementKind::Text) => {
@@ -239,27 +244,22 @@ impl TextTree {
         kind: element_kind,
         decorations: self.decorations(layout, scope, &styled, Some(&parent_decorations)),
         baseline_offset: baseline_offset(&styled, parent_offset),
+        hidden: parent_hidden || !layout.is_visible_element(&styled, scope),
         styled,
         space: own_space,
       };
       let id = self.push(Some(node), Content::Element(Box::new(element)));
 
-      if kind == SvgElementKind::Tref {
-        if let Some(text) = layout.referenced_text(child) {
-          self.push(Some(id), Content::Text(collapse_text(&text, child_space)));
-        }
-      } else {
-        if !layout.budget.enter() {
-          return false;
-        }
+      if !layout.budget.enter() {
+        return false;
+      }
 
-        let completed = self.add_children(layout, scope, id, child_space);
+      let completed = self.add_children(layout, scope, id, child_space);
 
-        layout.budget.leave();
+      layout.budget.leave();
 
-        if !completed {
-          return false;
-        }
+      if !completed {
+        return false;
       }
     }
 
@@ -639,7 +639,7 @@ impl TextTree {
     };
     let styled = &element.styled;
 
-    if !layout.is_visible_element(styled, scope) || styled.sizing().font_size <= 0.0 {
+    if element.hidden || styled.sizing().font_size <= 0.0 {
       return None;
     }
 
@@ -753,38 +753,6 @@ impl<'a> SvgLayout<'a> {
       NodeKind::Text(data) => &data.text,
       _ => "",
     }
-  }
-
-  /// The characters of the element a `tref` names, all of those below it included, none when it
-  /// names no element or has no characters. The characters are charged to the text budget as the
-  /// walk reads them, so it stops at the budget and a large text costs each `tref` what it holds.
-  fn referenced_text(&mut self, index: usize) -> Option<String> {
-    let id = self.attribute(index, "href")?.trim().strip_prefix('#')?;
-    let target = *self.document.first_ids.get(id)?;
-
-    if self.document.elements[target].kind == SvgElementKind::Unknown {
-      return None;
-    }
-
-    let mut text = String::new();
-    let mut stack = vec![target];
-
-    while let Some(current) = stack.pop() {
-      // Each element visited costs a byte, so a tree without characters ends too.
-      let characters = match self.document.elements[current].kind {
-        SvgElementKind::CharacterData => self.character_data(current),
-        _ => "",
-      };
-
-      if !self.budget.spend_text_bytes(characters.len().max(1)) {
-        return None;
-      }
-
-      text.push_str(characters);
-      stack.extend(self.document.elements[current].children.iter().rev());
-    }
-
-    (!text.is_empty()).then_some(text)
   }
 
   /// The path a `textPath` runs along, none when it names no shape, the shape is invalid, or the

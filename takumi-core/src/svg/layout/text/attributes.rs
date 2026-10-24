@@ -142,14 +142,15 @@ impl SvgLayout<'_> {
   }
 }
 
-/// The lengths a list holds, up to the first that does not parse.
+/// The lengths a list holds, none unless every one parses, as Blink's
+/// `SVGLengthList::SetValueAsString` clears the list on an error.
 fn length_list(text: &str) -> Box<[Length]> {
   let mut parser = Parser::new(text);
   let mut lengths = Vec::new();
 
   while !parser.is_exhausted() {
     let Ok(length) = Length::from_css(&mut parser) else {
-      break;
+      return Box::default();
     };
 
     lengths.push(length);
@@ -160,7 +161,8 @@ fn length_list(text: &str) -> Box<[Length]> {
   lengths.into()
 }
 
-/// The numbers a list holds, none unless every one parses.
+/// The numbers a list holds, none unless every one parses, as Blink's
+/// `SVGNumberList::SetValueAsString` clears the list on an error.
 fn number_list(text: &str) -> Option<Box<[f32]>> {
   let mut parser = Parser::new(text);
   let mut numbers = Vec::new();

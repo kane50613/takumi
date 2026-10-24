@@ -451,7 +451,7 @@ impl TextChunk {
       } else {
         let factor = target_width / width;
 
-        if factor < 0.001 {
+        if !factor.is_finite() || factor < 0.001 {
           continue;
         }
 

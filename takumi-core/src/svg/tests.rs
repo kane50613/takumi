@@ -586,12 +586,48 @@ fn a_text_path_sets_text_along_a_curve() {
 }
 
 #[test]
-fn a_tref_draws_the_text_it_names() {
-  let referenced = extent(&text_ops(
+fn a_tref_draws_nothing_as_blink_removed_it() {
+  let ops = text_ops(
     r##"<defs><text id="t">Hi</text></defs><text x="10" y="50"><tref href="#t"/></text>"##,
-  ));
+  );
 
-  assert!(referenced.is_some_and(|(left, ..)| left >= 10.0));
+  assert_eq!(draw_count(&ops), 0);
+}
+
+#[test]
+fn a_hidden_tspan_hides_the_spans_below_it() {
+  let ops = text_ops(
+    r#"<text x="10" y="50"><tspan display="none">a<tspan display="inline">b</tspan></tspan></text>"#,
+  );
+
+  assert_eq!(draw_count(&ops), 0);
+}
+
+#[test]
+fn a_position_list_with_an_invalid_item_is_ignored() {
+  let valid = extent(&text_ops(r#"<text x="40" y="50">a</text>"#));
+  let invalid = extent(&text_ops(r#"<text x="40 foo" y="50">a</text>"#));
+
+  assert!(valid.is_some_and(|(left, ..)| left >= 40.0));
+  assert!(invalid.is_some_and(|(left, ..)| left < 40.0));
+}
+
+#[test]
+fn stretching_zero_width_glyphs_draws_finite_outlines() {
+  let ops = text_ops(
+    "<text x=\"10\" y=\"50\" textLength=\"50\" lengthAdjust=\"spacingAndGlyphs\">\u{200B}</text>",
+  );
+
+  for op in &ops {
+    if let SvgOp::Draw { path, .. } = op {
+      for command in path {
+        command.map_points(|point| {
+          assert!(point.x.is_finite() && point.y.is_finite());
+          point
+        });
+      }
+    }
+  }
 }
 
 #[test]
@@ -673,6 +709,32 @@ fn a_text_of_a_thousand_tspans_used_a_thousand_times_ends_within_the_instance_bu
   ));
 
   assert_eq!(draw_count(&ops), 0);
+}
+
+#[test]
+fn bitmap_glyphs_stop_at_the_image_byte_budget() {
+  let mut fonts = Fonts::default();
+
+  register(
+    &mut fonts,
+    "../assets/fonts/noto-sans/NotoColorEmoji.ttf",
+    "Emoji",
+  );
+
+  let emoji = "\u{1F600}".repeat(5_000);
+  let markup = svg(&format!(
+    r#"<text font-family="Emoji" font-size="200" y="50">{emoji}</text>"#
+  ));
+  let ops = SvgDocument::parse(&markup)
+    .ok()
+    .and_then(|document| document.ops(BLACK, Some(&fonts.snapshot())))
+    .unwrap_or_default();
+  let images = ops
+    .iter()
+    .filter(|op| matches!(op, SvgOp::Image { .. }))
+    .count();
+
+  assert!(images > 0 && images < 5_000, "{images}");
 }
 
 #[test]

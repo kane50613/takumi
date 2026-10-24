@@ -11,7 +11,7 @@ const MAXIMUM_INSTANCES: usize = 100_000;
 const MAXIMUM_PAINTED: usize = 4_000_000;
 /// How many bytes of images a document may decode and parse.
 const MAXIMUM_IMAGE_BYTES: usize = 32 << 20;
-/// How many bytes of text a document may shape, which `tref` elements multiply.
+/// How many bytes of text a document may shape.
 const MAXIMUM_TEXT_BYTES: usize = 1 << 18;
 
 /// The limits of one document, shared with the SVG images inside it.
