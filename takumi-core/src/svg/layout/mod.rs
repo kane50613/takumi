@@ -197,7 +197,7 @@ impl<'a> SvgLayout<'a> {
       if let Some(background) = background {
         group
           .children
-          .push(shape::background(view_box_rect, background)?);
+          .push(LayoutObject::background(view_box_rect, background)?);
       }
 
       self.convert_element(0, &parent_context, &scope, &mut group);

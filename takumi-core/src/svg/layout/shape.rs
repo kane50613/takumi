@@ -18,31 +18,33 @@ fn is_valid_length(length: f32) -> bool {
   length > 0.0 && length.is_finite()
 }
 
-/// The background of the root as a shape: a rectangle of `color`.
-pub(super) fn background(view_box: Rect<f32>, color: Color) -> Option<LayoutObject> {
-  let commands = PathCommand::rectangle(
-    view_box.x(),
-    view_box.y(),
-    view_box.width(),
-    view_box.height(),
-  );
-  let normalized = PathCommand::normalize(&commands)?;
+impl LayoutObject {
+  /// The background of the root as a shape: a rectangle of `color`.
+  pub(super) fn background(view_box: Rect<f32>, color: Color) -> Option<Self> {
+    let commands = PathCommand::rectangle(
+      view_box.x(),
+      view_box.y(),
+      view_box.width(),
+      view_box.height(),
+    );
+    let normalized = PathCommand::normalize(&commands)?;
 
-  Some(LayoutObject::Shape(Box::new(Shape {
-    commands: normalized.commands,
-    bounds: normalized.bounds,
-    visible: true,
-    fill: Some(Fill {
-      paint: Paint::Color(Color([color.0[0], color.0[1], color.0[2], 255])),
-      opacity: f32::from(color.0[3]) / 255.0,
-      evenodd: false,
-      context: None,
-    }),
-    stroke: None,
-    stroke_first: false,
-    anti_alias: true,
-    abs_transform: Affine::IDENTITY,
-  })))
+    Some(LayoutObject::Shape(Box::new(Shape {
+      commands: normalized.commands,
+      bounds: normalized.bounds,
+      visible: true,
+      fill: Some(Fill {
+        paint: Paint::Color(Color([color.0[0], color.0[1], color.0[2], 255])),
+        opacity: f32::from(color.0[3]) / 255.0,
+        evenodd: false,
+        context: None,
+      }),
+      stroke: None,
+      stroke_first: false,
+      anti_alias: true,
+      abs_transform: Affine::IDENTITY,
+    })))
+  }
 }
 
 impl SvgLayout<'_> {

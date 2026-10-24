@@ -219,11 +219,11 @@ impl<'b> SvgPainter<'b> {
   fn push_clip_path(&mut self, clip_path: &LayoutClip) -> usize {
     let mut rules = Vec::new();
 
-    collect_clip_rules(&clip_path.root, &mut rules);
+    clip_path.root.collect_clip_rules(&mut rules);
 
     // Uniform nonzero rules always convert, even-odd only as a single shape (overlapping even-odd
     // shapes render differently in PDF).
-    let simple = is_simple_clip_path(&clip_path.root)
+    let simple = clip_path.root.is_simple_clip_path()
       && match rules.as_slice() {
         [true] => true,
         rules => rules.iter().all(|evenodd| !evenodd),
@@ -250,7 +250,9 @@ impl<'b> SvgPainter<'b> {
 
     let mut commands = Vec::new();
 
-    extend_clip_commands(&clip_path.root, clip_path.transform, &mut commands);
+    clip_path
+      .root
+      .extend_clip_commands(clip_path.transform, &mut commands);
 
     if commands.is_empty() {
       // A clip path with only hidden children still hides everything.
@@ -323,50 +325,50 @@ impl<'b> SvgPainter<'b> {
   }
 }
 
-/// The fill rules of the shapes below `container`, `true` for even-odd.
-fn collect_clip_rules(container: &Container, rules: &mut Vec<bool>) {
-  for child in &container.children {
-    match child {
-      LayoutObject::Shape(shape) => {
-        if let Some(fill) = &shape.fill {
-          rules.push(fill.evenodd);
+impl Container {
+  /// The fill rules of the shapes below, `true` for even-odd.
+  fn collect_clip_rules(&self, rules: &mut Vec<bool>) {
+    for child in &self.children {
+      match child {
+        LayoutObject::Shape(shape) => {
+          if let Some(fill) = &shape.fill {
+            rules.push(fill.evenodd);
+          }
         }
+        LayoutObject::Container(container) => container.collect_clip_rules(rules),
+        LayoutObject::Picture(_) => {}
       }
-      LayoutObject::Container(container) => collect_clip_rules(container, rules),
-      LayoutObject::Picture(_) => {}
     }
   }
-}
 
-fn is_simple_clip_path(container: &Container) -> bool {
-  container.children.iter().all(|child| match child {
-    LayoutObject::Container(container) => {
-      container.clip_path.is_none() && is_simple_clip_path(container)
-    }
-    _ => true,
-  })
-}
+  fn is_simple_clip_path(&self) -> bool {
+    self.children.iter().all(|child| match child {
+      LayoutObject::Container(container) => {
+        container.clip_path.is_none() && container.is_simple_clip_path()
+      }
+      _ => true,
+    })
+  }
 
-fn extend_clip_commands(container: &Container, transform: Affine, commands: &mut Vec<PathCommand>) {
-  for child in &container.children {
-    match child {
-      LayoutObject::Shape(shape) => {
-        if shape.visible {
-          commands.extend(shape.commands.iter().map(|command| {
-            command.map_points(|point| {
-              let (x, y) = transform.transform_point(point.x, point.y);
+  fn extend_clip_commands(&self, transform: Affine, commands: &mut Vec<PathCommand>) {
+    for child in &self.children {
+      match child {
+        LayoutObject::Shape(shape) => {
+          if shape.visible {
+            commands.extend(shape.commands.iter().map(|command| {
+              command.map_points(|point| {
+                let (x, y) = transform.transform_point(point.x, point.y);
 
-              Point::new(x, y)
-            })
-          }));
+                Point::new(x, y)
+              })
+            }));
+          }
         }
+        LayoutObject::Container(child) => {
+          child.extend_clip_commands(transform * child.transform, commands);
+        }
+        LayoutObject::Picture(_) => {}
       }
-      LayoutObject::Container(child) => {
-        let child_transform = transform * child.transform;
-
-        extend_clip_commands(child, child_transform, commands);
-      }
-      LayoutObject::Picture(_) => {}
     }
   }
 }
