@@ -14,8 +14,6 @@ use tiny_skia::{
   PixmapRef, PremultipliedColorU8, Rect as TinyRect, Transform as TinyTransform,
 };
 
-#[cfg(feature = "svg")]
-use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
 #[cfg(feature = "svg")]
 use crate::resources::image::SvgRaster;
@@ -24,7 +22,7 @@ use crate::{
   PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
   interpolate_with_footprint,
   layout::node::resolve_image,
-  overlay_image, pixmap_ref_from_buffer,
+  overlay_image,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::*,
   try_overlay_gradient_tile,
@@ -305,7 +303,7 @@ impl<'a> SampledBitmapView<'a> {
     height: u32,
     algorithm: ImageScalingAlgorithm,
   ) -> Option<Self> {
-    let source = pixmap_ref_from_buffer(source)?;
+    let source = PixmapRef::try_from(source).ok()?;
     let logical_size = Size { width, height };
 
     Some(Self {
@@ -658,7 +656,9 @@ pub(crate) fn render_tile(
             context,
           )?;
 
-          pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
+          Pixmap::try_from(buffer.as_ref())
+            .ok()
+            .map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
         }
         _ => None,
       }
@@ -804,9 +804,9 @@ fn rasterize_pattern(
     }
   };
   let source = match &content {
-    BackgroundTile::SampledBitmap { source, algo, .. } => {
-      pixmap_ref_from_buffer(source).map(|source| (source, *algo))
-    }
+    BackgroundTile::SampledBitmap { source, algo, .. } => PixmapRef::try_from(source.as_ref())
+      .ok()
+      .map(|source| (source, *algo)),
     BackgroundTile::Pixmap(pixmap) => Some((
       pixmap.as_ref().as_ref(),
       context.style.misc_inherited_data.image_rendering,

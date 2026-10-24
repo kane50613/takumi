@@ -65,9 +65,8 @@ use crate::{
   },
   options::{PT_PER_PX, PdfError},
   paint::{
-    core_transform, draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend,
-    krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized,
-    pop_transforms, rect_path, shape_path, spread,
+    draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_path, krilla_stop,
+    krilla_stops, normalized, pop_transforms, rect_path, shape_path, spread,
   },
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
@@ -272,7 +271,7 @@ impl Emitter<'_> {
       let path = shape_path(&shape, frame.origin).or_else(|| empty_path(frame.origin));
 
       if let Some(path) = path {
-        surface.push_clip_path(&path, &krilla_fill_rule(shape.rule()));
+        surface.push_clip_path(&path, &shape.rule().into());
         pushed += 1;
       }
     }
@@ -508,7 +507,7 @@ impl Emitter<'_> {
 
           surface.push_mask(Mask::new(stream, MaskType::Alpha));
         }
-        (None, Some(clip)) => surface.push_clip_path(clip, &krilla_fill_rule(shape.rule())),
+        (None, Some(clip)) => surface.push_clip_path(clip, &shape.rule().into()),
         (None, None) => return,
       }
       self.paint_background_layers(node, background, frame, surface);
@@ -844,7 +843,7 @@ impl Emitter<'_> {
       let blended = layer.blend_mode != BlendMode::Normal;
 
       if blended {
-        surface.push_blend_mode(krilla_blend(layer.blend_mode));
+        surface.push_blend_mode(layer.blend_mode.into());
       }
       self.layer(
         layer.image,
@@ -1527,7 +1526,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
       return Some((node, BoxFrame::new(layout, origin), 0));
     }
 
-    self.surface.push_transform(&krilla_transform(relative));
+    self.surface.push_transform(&relative.into());
     Some((node, BoxFrame::new(layout, CorePoint::ZERO), 1))
   }
 
@@ -1637,7 +1636,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
         y: relative.y,
       }
     } else {
-      self.surface.push_transform(&krilla_transform(relative));
+      self.surface.push_transform(&relative.into());
       pushed += 1;
       self.current = clip.transform;
       CorePoint::ZERO
@@ -1657,7 +1656,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
     if let Some(path) = shape_path(&clip.shape, origin) {
       self
         .surface
-        .push_clip_path(&path, &krilla_fill_rule(clip.shape.rule()));
+        .push_clip_path(&path, &clip.shape.rule().into());
       pushed += 1;
     }
 
@@ -1720,7 +1719,7 @@ fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
   let mut pushed = 0;
 
   if style.misc_data.mix_blend_mode != BlendMode::Normal {
-    surface.push_blend_mode(krilla_blend(style.misc_data.mix_blend_mode));
+    surface.push_blend_mode(style.misc_data.mix_blend_mode.into());
     pushed += 1;
   }
   if style.misc_data.isolation == Isolation::Isolate {
@@ -1770,7 +1769,7 @@ impl SurfaceDevice<'_, '_> {
     self.open(saved);
 
     if let Some(path) = path {
-      self.surface.push_clip_path(&path, &krilla_fill_rule(rule));
+      self.surface.push_clip_path(&path, &rule.into());
     }
   }
 
@@ -1825,7 +1824,7 @@ impl SurfaceDevice<'_, '_> {
     let artifact = self.artifact && self.stack.is_empty();
 
     if !flat {
-      self.surface.push_transform(&krilla_transform(transform));
+      self.surface.push_transform(&transform.into());
     }
     if artifact {
       self.surface.start_tagged(ARTIFACT);
@@ -1903,7 +1902,7 @@ impl SurfaceDevice<'_, '_> {
     for background in fills {
       self.within(background, |device| {
         let fill = Fill {
-          rule: krilla_fill_rule(shape.rule()),
+          rule: shape.rule().into(),
           ..background.fill.clone()
         };
 
@@ -1970,12 +1969,12 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
 
   fn transform(&self) -> Affine {
     Affine::scale(PT_PER_PX.recip(), PT_PER_PX.recip())
-      * core_transform(self.surface.page_transform())
+      * Affine::from(self.surface.page_transform())
   }
 
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let fill = Fill {
-      rule: krilla_fill_rule(shape.rule()),
+      rule: shape.rule().into(),
       ..fill_from_rgba(filtered(self.filter, color), 1.0)
     };
 
@@ -2077,7 +2076,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     for band in bands {
       let band_shape = shape.spread(band.spread).fill_shape();
       let fill = Fill {
-        rule: krilla_fill_rule(band_shape.rule()),
+        rule: band_shape.rule().into(),
         ..fill_from_rgba(band_color, band.alpha)
       };
 
@@ -2622,7 +2621,7 @@ fn draw_alpha(
     })
     .collect();
 
-  surface.push_transform(&krilla_transform(transform));
+  surface.push_transform(&transform.into());
   surface.draw_image(KrillaImage::from_rgba8(data, width, height), size);
   surface.pop();
 }

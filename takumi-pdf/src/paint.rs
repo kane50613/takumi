@@ -256,48 +256,55 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
   stops
 }
 
-pub(crate) const fn krilla_fill_rule(rule: CoreFillRule) -> FillRule {
-  match rule {
-    CoreFillRule::EvenOdd => FillRule::EvenOdd,
-    _ => FillRule::NonZero,
+impl From<CoreFillRule> for FillRule {
+  fn from(rule: CoreFillRule) -> Self {
+    match rule {
+      CoreFillRule::EvenOdd => Self::EvenOdd,
+      _ => Self::NonZero,
+    }
   }
 }
 
 /// An affine in takumi-core's column order, `[a, b, c, d, e, f]`.
-pub(crate) fn krilla_transform(Affine { a, b, c, d, x, y }: Affine) -> Transform {
-  Transform::from_row(a, b, c, d, x, y)
-}
-
-/// The inverse of [`krilla_transform`].
-pub(crate) fn core_transform(transform: Transform) -> Affine {
-  Affine {
-    a: transform.sx(),
-    b: transform.ky(),
-    c: transform.kx(),
-    d: transform.sy(),
-    x: transform.tx(),
-    y: transform.ty(),
+impl From<Affine> for Transform {
+  fn from(Affine { a, b, c, d, x, y }: Affine) -> Self {
+    Self::from_row(a, b, c, d, x, y)
   }
 }
 
-pub(crate) const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
-  match mode {
-    BlendMode::Multiply => KrillaBlendMode::Multiply,
-    BlendMode::Screen => KrillaBlendMode::Screen,
-    BlendMode::Overlay => KrillaBlendMode::Overlay,
-    BlendMode::Darken => KrillaBlendMode::Darken,
-    BlendMode::Lighten => KrillaBlendMode::Lighten,
-    BlendMode::ColorDodge => KrillaBlendMode::ColorDodge,
-    BlendMode::ColorBurn => KrillaBlendMode::ColorBurn,
-    BlendMode::HardLight => KrillaBlendMode::HardLight,
-    BlendMode::SoftLight => KrillaBlendMode::SoftLight,
-    BlendMode::Difference => KrillaBlendMode::Difference,
-    BlendMode::Exclusion => KrillaBlendMode::Exclusion,
-    BlendMode::Hue => KrillaBlendMode::Hue,
-    BlendMode::Saturation => KrillaBlendMode::Saturation,
-    BlendMode::Color => KrillaBlendMode::Color,
-    BlendMode::Luminosity => KrillaBlendMode::Luminosity,
-    _ => KrillaBlendMode::Normal,
+impl From<Transform> for Affine {
+  fn from(transform: Transform) -> Self {
+    Self {
+      a: transform.sx(),
+      b: transform.ky(),
+      c: transform.kx(),
+      d: transform.sy(),
+      x: transform.tx(),
+      y: transform.ty(),
+    }
+  }
+}
+
+impl From<BlendMode> for KrillaBlendMode {
+  fn from(mode: BlendMode) -> Self {
+    match mode {
+      BlendMode::Multiply => Self::Multiply,
+      BlendMode::Screen => Self::Screen,
+      BlendMode::Overlay => Self::Overlay,
+      BlendMode::Darken => Self::Darken,
+      BlendMode::Lighten => Self::Lighten,
+      BlendMode::ColorDodge => Self::ColorDodge,
+      BlendMode::ColorBurn => Self::ColorBurn,
+      BlendMode::HardLight => Self::HardLight,
+      BlendMode::SoftLight => Self::SoftLight,
+      BlendMode::Difference => Self::Difference,
+      BlendMode::Exclusion => Self::Exclusion,
+      BlendMode::Hue => Self::Hue,
+      BlendMode::Saturation => Self::Saturation,
+      BlendMode::Color => Self::Color,
+      BlendMode::Luminosity => Self::Luminosity,
+      _ => Self::Normal,
+    }
   }
 }
 

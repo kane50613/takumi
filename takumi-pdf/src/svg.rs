@@ -22,7 +22,7 @@ use crate::{
     },
     surface::Surface,
   },
-  paint::{bitmap_image, draw_stream, krilla_blend, krilla_path, krilla_transform, normalized},
+  paint::{bitmap_image, draw_stream, krilla_path, normalized},
   raster::embedded_image,
 };
 
@@ -46,13 +46,13 @@ impl<'a> SvgPainter<'a> {
   fn draw_ops(&self, surface: &mut Surface, ops: Vec<SvgOp>) {
     for op in ops {
       match op {
-        SvgOp::PushTransform(transform) => surface.push_transform(&krilla_transform(transform)),
+        SvgOp::PushTransform(transform) => surface.push_transform(&transform.into()),
         SvgOp::PushClip { path, evenodd } => match krilla_path(&path, Point::ZERO) {
           Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
           // The matching `Pop` still comes; keep the layer stack balanced.
           None => surface.push_transform(&Transform::identity()),
         },
-        SvgOp::PushBlend(blend) => surface.push_blend_mode(krilla_blend(blend)),
+        SvgOp::PushBlend(blend) => surface.push_blend_mode(blend.into()),
         SvgOp::PushOpacity(opacity) => surface.push_opacity(normalized(opacity)),
         SvgOp::PushMask { ops, luminance } => {
           // CSS filters the element after masking, so the mask's own colors stay as drawn.
@@ -172,8 +172,8 @@ impl<'a> SvgPainter<'a> {
           y1: start.y,
           x2: end.x,
           y2: end.y,
-          transform: krilla_transform(gradient.transform),
-          spread_method: spread_method(gradient.spread),
+          transform: gradient.transform.into(),
+          spread_method: gradient.spread.into(),
           stops: self.gradient_stops(&gradient),
           anti_alias: false,
         }
@@ -194,8 +194,8 @@ impl<'a> SvgPainter<'a> {
           fx: focal.x,
           fy: focal.y,
           fr: focal_radius,
-          transform: krilla_transform(gradient.transform),
-          spread_method: spread_method(gradient.spread),
+          transform: gradient.transform.into(),
+          spread_method: gradient.spread.into(),
           stops: self.gradient_stops(&gradient),
           anti_alias: false,
         }
@@ -210,7 +210,7 @@ impl<'a> SvgPainter<'a> {
       } => (
         Pattern {
           stream: draw_stream(surface, |tile| self.draw_ops(tile, ops)),
-          transform: krilla_transform(transform),
+          transform: transform.into(),
           width,
           height,
         }
@@ -237,11 +237,13 @@ impl<'a> SvgPainter<'a> {
   }
 }
 
-const fn spread_method(spread: SvgSpreadMethod) -> SpreadMethod {
-  match spread {
-    SvgSpreadMethod::Pad => SpreadMethod::Pad,
-    SvgSpreadMethod::Reflect => SpreadMethod::Reflect,
-    SvgSpreadMethod::Repeat => SpreadMethod::Repeat,
+impl From<SvgSpreadMethod> for SpreadMethod {
+  fn from(spread: SvgSpreadMethod) -> Self {
+    match spread {
+      SvgSpreadMethod::Pad => Self::Pad,
+      SvgSpreadMethod::Reflect => Self::Reflect,
+      SvgSpreadMethod::Repeat => Self::Repeat,
+    }
   }
 }
 

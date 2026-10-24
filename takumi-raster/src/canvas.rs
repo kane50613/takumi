@@ -26,8 +26,8 @@ use takumi_core::{
   resources::image_buffer::demultiply_pixel,
 };
 use tiny_skia::{
-  FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap, PixmapMut, PixmapPaint, PixmapRef,
-  Transform as TinyTransform,
+  BlendMode as TinyBlendMode, FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap,
+  PixmapMut, PixmapPaint, PixmapRef, Transform as TinyTransform,
 };
 
 use crate::{
@@ -291,7 +291,7 @@ impl Canvas {
       return;
     }
 
-    let Some(blend_mode) = mode.to_tiny_skia() else {
+    let Ok(blend_mode) = TinyBlendMode::try_from(mode) else {
       let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
 
       for pixel in bytemuck::cast_slice_mut::<_, [u8; 4]>(isolated_image.data_mut()) {

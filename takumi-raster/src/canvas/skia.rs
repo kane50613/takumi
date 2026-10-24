@@ -2,8 +2,8 @@
 
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{
-  FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, Paint as TinyPaint,
-  Path as TinyPath, Pattern as TinyPattern, PixmapPaint, SpreadMode as TinySpreadMode,
+  BlendMode as TinyBlendMode, FillRule as TinyFillRule, Paint as TinyPaint, Path as TinyPath,
+  Pattern as TinyPattern, PixmapPaint, SpreadMode as TinySpreadMode,
 };
 
 use super::{DrawTarget, PaintSource};
@@ -31,13 +31,6 @@ pub(crate) struct FillColorOptions<'a> {
   pub mode: BlendMode,
 }
 
-pub(crate) fn to_tiny_filter_quality(algorithm: ImageScalingAlgorithm) -> TinyFilterQuality {
-  match algorithm {
-    ImageScalingAlgorithm::Pixelated => TinyFilterQuality::Nearest,
-    _ => TinyFilterQuality::Bilinear,
-  }
-}
-
 pub(crate) fn try_draw_image_with_tiny_skia(
   target: &mut DrawTarget,
   image: PaintSource<'_>,
@@ -45,14 +38,14 @@ pub(crate) fn try_draw_image_with_tiny_skia(
   algorithm: ImageScalingAlgorithm,
   mode: BlendMode,
 ) -> bool {
-  let Some(blend_mode) = mode.to_tiny_skia() else {
+  let Ok(blend_mode) = TinyBlendMode::try_from(mode) else {
     return false;
   };
 
   let paint = PixmapPaint {
     opacity: 1.0,
     blend_mode,
-    quality: to_tiny_filter_quality(algorithm),
+    quality: algorithm.into(),
   };
   let resolved_mask = target.resolve_combined_mask();
   let combined_mask = resolved_mask.as_deref();
@@ -71,7 +64,7 @@ pub(crate) fn try_fill_color_with_tiny_skia(
   target: &mut DrawTarget,
   options: FillColorOptions<'_>,
 ) -> bool {
-  let Some(blend_mode) = options.mode.to_tiny_skia() else {
+  let Ok(blend_mode) = TinyBlendMode::try_from(options.mode) else {
     return false;
   };
   let Some(path) = build_border_path(options.border, options.content_size) else {
@@ -101,7 +94,7 @@ pub(crate) fn try_fill_image_path_with_tiny_skia(
   image: PaintSource<'_>,
   options: ImagePathFillOptions,
 ) -> bool {
-  let Some(blend_mode) = options.mode.to_tiny_skia() else {
+  let Ok(blend_mode) = TinyBlendMode::try_from(options.mode) else {
     return false;
   };
   let Some(path) = build_border_path(options.border, options.content_size) else {
@@ -116,7 +109,7 @@ pub(crate) fn try_fill_image_path_with_tiny_skia(
         shader: TinyPattern::new(
           source_pixmap,
           TinySpreadMode::Pad,
-          to_tiny_filter_quality(options.algorithm),
+          options.algorithm.into(),
           1.0,
           options.source_to_canvas.into(),
         ),

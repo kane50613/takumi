@@ -158,6 +158,7 @@ pub use text_overflow::*;
 pub use text_shadow::*;
 pub use text_stroke::*;
 pub use text_wrap::*;
+use tiny_skia::FilterQuality as TinyFilterQuality;
 pub use traits::*;
 pub(crate) use traits::{declare_box_alignment_enum_impl, impl_comma_list_from_css, impl_css_enum};
 pub use transform::*;
@@ -1510,6 +1511,15 @@ pub enum ImageScalingAlgorithm {
   /// The image is scaled using nearest neighbor interpolation,
   /// which is suitable for pixel art or images where sharp edges are desired.
   Pixelated,
+}
+
+impl From<ImageScalingAlgorithm> for TinyFilterQuality {
+  fn from(algorithm: ImageScalingAlgorithm) -> Self {
+    match algorithm {
+      ImageScalingAlgorithm::Pixelated => Self::Nearest,
+      _ => Self::Bilinear,
+    }
+  }
 }
 
 impl_css_enum!(
