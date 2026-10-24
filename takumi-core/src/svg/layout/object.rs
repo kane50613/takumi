@@ -3,7 +3,11 @@
 //! masks, and resolved paint.
 
 use std::rc::Rc;
+#[cfg(feature = "svg-raster")]
+use std::sync::Arc;
 
+#[cfg(feature = "svg-raster")]
+use crate::svg::filter::SvgFilter;
 use crate::{
   geometry::{PathCommand, Point, Rect, Size},
   resources::{
@@ -45,6 +49,8 @@ pub(super) struct Container {
   pub(super) isolate: bool,
   pub(super) clip_path: Option<Rc<LayoutClip>>,
   pub(super) mask: Option<Rc<LayoutMask>>,
+  #[cfg(feature = "svg-raster")]
+  pub(super) filters: Vec<Arc<SvgFilter>>,
   /// Whether `context-fill` and `context-stroke` below it read this container's paint.
   pub(super) context_element: bool,
   pub(super) children: Vec<LayoutObject>,
@@ -61,6 +67,8 @@ impl Container {
       isolate: false,
       clip_path: None,
       mask: None,
+      #[cfg(feature = "svg-raster")]
+      filters: Vec::new(),
       context_element: false,
       children: Vec::new(),
       bounding_box: Rect::ZERO,

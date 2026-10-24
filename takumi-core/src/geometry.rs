@@ -241,6 +241,66 @@ impl Rect<f32> {
   }
 }
 
+#[cfg(feature = "svg-raster")]
+impl Rect<f32> {
+  /// The pixels the rect covers under `transform`, none unless they have area: the floor of the
+  /// origin and the ceiling of the size, as tiny-skia's `NonZeroRect::to_int_rect` rounds.
+  pub(crate) fn pixel_bounds(&self, transform: Affine) -> Option<Rect<i32>> {
+    let bounds = self.transformed(transform).filter(Self::has_area)?;
+    let (left, top) = (bounds.left.floor() as i32, bounds.top.floor() as i32);
+
+    Some(Rect {
+      left,
+      top,
+      right: left.checked_add((bounds.width().ceil() as i32).max(1))?,
+      bottom: top.checked_add((bounds.height().ceil() as i32).max(1))?,
+    })
+  }
+}
+
+#[cfg(feature = "svg-raster")]
+impl Rect<i32> {
+  /// The rect at `x`, `y` of `width` by `height` pixels.
+  pub(crate) fn from_size(x: i32, y: i32, width: u32, height: u32) -> Self {
+    Self {
+      left: x,
+      top: y,
+      right: x.saturating_add_unsigned(width),
+      bottom: y.saturating_add_unsigned(height),
+    }
+  }
+
+  pub(crate) fn width(&self) -> u32 {
+    self.right.abs_diff(self.left)
+  }
+
+  pub(crate) fn height(&self) -> u32 {
+    self.bottom.abs_diff(self.top)
+  }
+
+  /// The pixels both rects cover, none when there are none.
+  pub(crate) fn intersection(&self, other: &Self) -> Option<Self> {
+    let rect = Self {
+      left: self.left.max(other.left),
+      top: self.top.max(other.top),
+      right: self.right.min(other.right),
+      bottom: self.bottom.min(other.bottom),
+    };
+
+    (rect.left < rect.right && rect.top < rect.bottom).then_some(rect)
+  }
+
+  /// The rect moved by `dx` and `dy`.
+  pub(crate) fn translated(&self, dx: i32, dy: i32) -> Self {
+    Self {
+      left: self.left.saturating_add(dx),
+      top: self.top.saturating_add(dy),
+      right: self.right.saturating_add(dx),
+      bottom: self.bottom.saturating_add(dy),
+    }
+  }
+}
+
 #[cfg(feature = "svg")]
 impl Rect<f32> {
   /// The rect between the edges, none unless it is finite and not inverted.

@@ -82,23 +82,6 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.svgtypes]
-workspace = true
-optional = true
-
-[dependencies.siphasher]
-workspace = true
-optional = true
-
-[dependencies.strict-num]
-workspace = true
-optional = true
-
-
-[dependencies.tiny-skia-path]
-workspace = true
-optional = true
-
 [dependencies.harfrust]
 workspace = true
 
@@ -129,8 +112,8 @@ jpeg = ["dep:zune-jpeg", "dep:zune-core"]
 webp = ["dep:image-webp", "dep:libwebp-sys"]
 gif = ["dep:gif"]
 svg-sizing = ["dep:roxmltree"]
-svg = ["svg-sizing", "dep:svgtypes", "dep:siphasher", "dep:strict-num", "dep:tiny-skia-path"]
-# Rasterizing an SVG: resvg's filter pipeline and `SvgSource::rasterize_cached`. A backend that does not rasterize goes without.
+svg = ["svg-sizing"]
+# Rasterizing an SVG: the filter pipeline and `SvgSource::rasterize_cached`. A backend that does not rasterize goes without.
 svg-raster = ["svg"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]

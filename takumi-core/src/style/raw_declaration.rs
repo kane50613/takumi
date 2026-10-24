@@ -1,7 +1,5 @@
 //! Declarations kept as their source text, for readers that parse the values themselves.
 
-#[cfg(feature = "svg")]
-use cssparser::RuleBodyParser;
 use cssparser::{
   AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserState, QualifiedRuleParser,
   RuleBodyItemParser, Token, parse_important,
@@ -14,18 +12,6 @@ pub(crate) struct RawDeclaration<'i> {
   pub(crate) name: CowRcStr<'i>,
   pub(crate) value: &'i str,
   pub(crate) important: bool,
-}
-
-#[cfg(feature = "svg")]
-impl<'i> RawDeclaration<'i> {
-  /// The valid declarations of a declaration list such as a `style` attribute, in source order.
-  pub(crate) fn parse_list(text: &'i str) -> Vec<Self> {
-    let mut parser = Parser::new(text);
-
-    RuleBodyParser::new(&mut parser, &mut RawDeclarationParser)
-      .filter_map(Result::ok)
-      .collect()
-  }
 }
 
 pub(crate) struct RawDeclarationParser;
@@ -98,34 +84,5 @@ impl<'i> RuleBodyItemParser<'i, RawDeclaration<'i>, StyleSheetParseError> for Ra
 
   fn parse_qualified(&self) -> bool {
     false
-  }
-}
-
-#[cfg(all(test, feature = "svg"))]
-mod tests {
-  use super::RawDeclaration;
-
-  #[test]
-  fn a_list_keeps_whole_function_values_and_importance() {
-    let declarations: Vec<_> =
-      RawDeclaration::parse_list("fill:rgb(255,255,0); stroke: url(#a) red !important;opacity:.5")
-        .iter()
-        .map(|declaration| {
-          (
-            declaration.name.to_string(),
-            declaration.value,
-            declaration.important,
-          )
-        })
-        .collect();
-
-    assert_eq!(
-      declarations,
-      [
-        ("fill".to_owned(), "rgb(255,255,0)", false),
-        ("stroke".to_owned(), "url(#a) red", true),
-        ("opacity".to_owned(), ".5", false),
-      ]
-    );
   }
 }

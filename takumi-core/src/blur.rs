@@ -8,6 +8,9 @@ use rayon::prelude::*;
 
 use crate::geometry::Point;
 
+/// Smallest sigma that blurs, Skia's `SkBlurEngine::IsEffectivelyIdentity`.
+pub(crate) const MIN_SIGMA: f32 = 0.03;
+
 /// Largest sigma a three-box pass sums without overflowing a `u32`, Skia's `kMaxSigma`.
 pub(crate) const MAX_SIGMA: f32 = 135.0;
 
@@ -15,6 +18,17 @@ pub(crate) const MAX_SIGMA: f32 = 135.0;
 // Inlined so the loops compile at the caller's opt-level, not takumi-core's "z".
 #[inline]
 pub fn blur_rgba(pixels: &mut [[u8; 4]], width: usize, height: usize, sigma: f32) {
+  blur_rgba_axes(pixels, width, height, Point { x: sigma, y: sigma });
+}
+
+/// Blurs premultiplied RGBA pixels in place with a sigma for each axis, as `feGaussianBlur` has.
+#[inline]
+pub(crate) fn blur_rgba_axes(
+  pixels: &mut [[u8; 4]],
+  width: usize,
+  height: usize,
+  sigma: Point<f32>,
+) {
   blur(pixels, width, height, sigma, Rounding::Rgba);
 }
 
@@ -25,7 +39,7 @@ pub fn blur_alpha(alpha: &mut [u8], width: usize, height: usize, sigma: f32) {
     alpha.as_chunks_mut::<1>().0,
     width,
     height,
-    sigma,
+    Point { x: sigma, y: sigma },
     Rounding::Alpha,
   );
 }
@@ -34,43 +48,51 @@ fn blur<const N: usize>(
   pixels: &mut [[u8; N]],
   width: usize,
   height: usize,
-  sigma: f32,
+  sigma: Point<f32>,
   rounding: Rounding,
 ) {
   if width == 0 || height == 0 || pixels.len() != width * height {
     return;
   }
-  if sigma > MAX_SIGMA {
+
+  let sigma = Point {
+    x: if sigma.x.is_finite() { sigma.x } else { 0.0 },
+    y: if sigma.y.is_finite() { sigma.y } else { 0.0 },
+  };
+
+  if sigma.x.max(sigma.y) > MAX_SIGMA {
     return blur_rescaled(pixels, width, height, sigma, rounding);
   }
-  let Some(pass) = Pass::new(sigma, rounding) else {
-    return;
-  };
+
   let parallel = pixels.len() * N >= PARALLEL_CHANNELS;
 
   // Rows blur as the columns of a transposed strip, so both axes run the vectorized column pass.
-  for_each_with(
-    pixels.chunks_mut(ROW_STRIP * width).collect(),
-    parallel,
-    || vec![[0u8; N]; ROW_STRIP * width],
-    |strip, rows| {
-      let lanes = rows.len() / width;
-      let strip = &mut strip[..rows.len()];
+  if let Some(pass) = Pass::new(sigma.x, rounding) {
+    for_each_with(
+      pixels.chunks_mut(ROW_STRIP * width).collect(),
+      parallel,
+      || vec![[0u8; N]; ROW_STRIP * width],
+      |strip, rows| {
+        let lanes = rows.len() / width;
+        let strip = &mut strip[..rows.len()];
 
-      for (lane, row) in rows.chunks_exact(width).enumerate() {
-        for (column, pixel) in strip.chunks_exact_mut(lanes).zip(row) {
-          column[lane] = *pixel;
+        for (lane, row) in rows.chunks_exact(width).enumerate() {
+          for (column, pixel) in strip.chunks_exact_mut(lanes).zip(row) {
+            column[lane] = *pixel;
+          }
         }
-      }
-      pass.blur_columns(strip, lanes, false);
-      for (lane, row) in rows.chunks_exact_mut(width).enumerate() {
-        for (column, pixel) in strip.chunks_exact(lanes).zip(row) {
-          *pixel = column[lane];
+        pass.blur_columns(strip, lanes, false);
+        for (lane, row) in rows.chunks_exact_mut(width).enumerate() {
+          for (column, pixel) in strip.chunks_exact(lanes).zip(row) {
+            *pixel = column[lane];
+          }
         }
-      }
-    },
-  );
-  pass.blur_columns(pixels, width, parallel);
+      },
+    );
+  }
+  if let Some(pass) = Pass::new(sigma.y, rounding) {
+    pass.blur_columns(pixels, width, parallel);
+  }
 }
 
 /// Rows the horizontal pass transposes at once.
@@ -105,10 +127,17 @@ fn blur_rescaled<const N: usize>(
   pixels: &mut [[u8; N]],
   width: usize,
   height: usize,
-  sigma: f32,
+  sigma: Point<f32>,
   rounding: Rounding,
 ) {
-  let scale = MAX_SIGMA / sigma;
+  let scale = Point {
+    x: (MAX_SIGMA / sigma.x).min(1.0),
+    y: (MAX_SIGMA / sigma.y).min(1.0),
+  };
+  let steps = Point {
+    x: downscale_step_count(scale.x),
+    y: downscale_step_count(scale.y),
+  };
   let source = Bounds {
     left: 0.0,
     top: 0.0,
@@ -124,22 +153,30 @@ fn blur_rescaled<const N: usize>(
     pixels: pixels.to_vec(),
   };
 
-  for step in (0..downscale_step_count(scale)).rev() {
-    let (factor_x, factor_y) = if step > 0 {
-      (0.5, 0.5)
-    } else {
-      (
-        source.width() * scale / bounds.width(),
-        source.height() * scale / bounds.height(),
-      )
+  for step in (0..steps.x.max(steps.y)).rev() {
+    let factor = |steps: u32, scale: f32, source: f32, bounds: f32| {
+      if step >= steps {
+        1.0
+      } else if step > 0 {
+        0.5
+      } else {
+        source * scale / bounds
+      }
     };
-    let target = scale_about_center(bounds, factor_x, factor_y);
+    let target = scale_about_center(
+      bounds,
+      factor(steps.x, scale.x, source.width(), bounds.width()),
+      factor(steps.y, scale.y, source.height(), bounds.height()),
+    );
 
     image = image.resampled(bounds, target);
     bounds = target;
   }
 
-  let low_sigma = (sigma * bounds.width() / source.width()).min(MAX_SIGMA);
+  let low_sigma = Point {
+    x: (sigma.x * bounds.width() / source.width()).min(MAX_SIGMA),
+    y: (sigma.y * bounds.height() / source.height()).min(MAX_SIGMA),
+  };
 
   blur(
     &mut image.pixels,
@@ -297,8 +334,7 @@ enum Pass {
 impl Pass {
   /// The pass for `sigma`, or `None` when the blur leaves the pixels as they are.
   fn new(sigma: f32, rounding: Rounding) -> Option<Self> {
-    // Skia's `SkBlurEngine::IsEffectivelyIdentity`.
-    if !sigma.is_finite() || sigma <= 0.03 {
+    if !sigma.is_finite() || sigma <= MIN_SIGMA {
       return None;
     }
 
@@ -586,7 +622,10 @@ fn box_window(sigma: f32) -> usize {
 
 #[cfg(test)]
 mod tests {
-  use super::{BAND_LANES, MAX_SIGMA, blur_alpha, blur_rgba, box_window, downscale_step_count};
+  use super::{
+    BAND_LANES, MAX_SIGMA, Point, blur_alpha, blur_rgba, blur_rgba_axes, box_window,
+    downscale_step_count,
+  };
 
   #[test]
   fn the_box_window_follows_skia() {
@@ -642,6 +681,46 @@ mod tests {
         }
       }
     }
+  }
+
+  #[test]
+  fn a_sigma_of_zero_on_one_axis_leaves_that_axis_alone() {
+    let (width, height) = (15, 7);
+    let mut pixels = vec![[0u8; 4]; width * height];
+
+    pixels[3 * width + 7] = [255; 4];
+    blur_rgba_axes(&mut pixels, width, height, Point { x: 2.0, y: 0.0 });
+
+    assert!(pixels[3 * width + 5][3] > 0);
+    assert!(pixels[2 * width + 7].iter().all(|channel| *channel == 0));
+    assert!(pixels[4 * width + 7].iter().all(|channel| *channel == 0));
+
+    let mut pixels = vec![[0u8; 4]; width * height];
+
+    pixels[3 * width + 7] = [255; 4];
+    blur_rgba_axes(&mut pixels, width, height, Point { x: 0.0, y: 2.0 });
+
+    assert!(pixels[width + 7][3] > 0);
+    assert!(pixels[3 * width + 6].iter().all(|channel| *channel == 0));
+  }
+
+  #[test]
+  fn a_sigma_past_the_limit_on_one_axis_still_blurs_the_other() {
+    let (width, height) = (32, 32);
+    let mut pixels = vec![[0u8; 4]; width * height];
+
+    pixels.iter_mut().for_each(|pixel| *pixel = [255; 4]);
+    blur_rgba_axes(
+      &mut pixels,
+      width,
+      height,
+      Point {
+        x: MAX_SIGMA * 2.0,
+        y: 1.0,
+      },
+    );
+
+    assert!(pixels[16 * width + 16][3] > 0);
   }
 
   #[test]

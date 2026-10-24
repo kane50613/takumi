@@ -285,19 +285,31 @@ fn deeply_nested_groups_do_not_overflow_the_stack() {
   assert_eq!(drawn.ok().flatten(), Some(1));
 }
 
+fn filter_count(ops: &[SvgOp]) -> usize {
+  ops
+    .iter()
+    .filter(|op| matches!(op, SvgOp::PushFilter(_)))
+    .count()
+}
+
 #[test]
-fn filters_are_left_to_the_legacy_renderer() {
+fn a_filter_url_or_a_filter_function_makes_a_filter_layer() {
   for body in [
     r##"<filter id="f"><feOffset dx="1"/></filter><rect width="1" height="1" filter="url(#f)"/>"##,
     r#"<style>rect { filter: blur(2px) }</style><rect width="1" height="1"/>"#,
+    r#"<rect width="10" height="10" style="filter: drop-shadow(2px 2px 1px red)"/>"#,
   ] {
-    let document = SvgDocument::parse(&svg(body));
-
-    assert!(
-      document.is_ok_and(|document| document.needs_legacy_renderer()),
-      "{body}"
-    );
+    assert_eq!(filter_count(&ops(body)), 1, "{body}");
   }
+}
+
+#[test]
+fn a_filter_that_names_nothing_hides_the_element_and_none_leaves_it() {
+  let missing = ops(r##"<rect width="10" height="10" filter="url(#missing)"/>"##);
+  let none = ops(r#"<rect width="10" height="10" filter="none"/>"#);
+
+  assert_eq!(draw_count(&missing), 0);
+  assert_eq!((draw_count(&none), filter_count(&none)), (1, 0));
 }
 
 #[test]

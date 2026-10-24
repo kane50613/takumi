@@ -90,7 +90,7 @@ impl SvgLayout<'_> {
 
   /// Puts the picture into `parent` scaled and aligned into `rect`, and cropped to it when the
   /// aspect ratio slices.
-  fn fit_image(
+  pub(super) fn fit_image(
     picture: Picture,
     aspect: PreserveAspectRatio,
     actual_size: Size<f32>,
@@ -172,7 +172,7 @@ impl SvgLayout<'_> {
 
   /// What an `image` shows, and its natural size. Only `data:` URLs load, as files and the network
   /// are not the image's to read.
-  fn image_content(&mut self, href: &str) -> Option<(PictureContent, Size<f32>)> {
+  pub(super) fn image_content(&mut self, href: &str) -> Option<(PictureContent, Size<f32>)> {
     if !self.budget.spend_image_bytes(href.len()) {
       return None;
     }
@@ -239,19 +239,13 @@ impl SvgLayout<'_> {
     None
   }
 
-  /// A nested SVG image laid out, none when it does not parse, nests too deep, or needs a renderer
-  /// this pipeline lacks.
+  /// A nested SVG image laid out, none when it does not parse or nests too deep.
   fn nested_document(&mut self, data: &[u8]) -> Option<LayoutDocument> {
     if self.image_depth >= MAXIMUM_IMAGE_DEPTH {
       return None;
     }
 
     let document = SvgDocument::parse(str::from_utf8(data).ok()?).ok()?;
-
-    if document.needs_legacy_renderer() {
-      self.unsupported = true;
-      return None;
-    }
 
     let current_color = self.styles.root_context().current_color;
     let mut layout = SvgLayout::nested(&document, current_color, self.fonts, self.image_depth + 1);
@@ -261,9 +255,7 @@ impl SvgLayout<'_> {
     let nested = layout.layout_root();
 
     self.budget = mem::take(&mut layout.budget);
-    self.unsupported |= layout.unsupported;
-    let nested = nested?;
-    Some(nested)
+    nested
   }
 }
 
