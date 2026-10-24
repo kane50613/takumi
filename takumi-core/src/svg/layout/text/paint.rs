@@ -64,10 +64,26 @@ impl SvgLayout<'_> {
 
 impl TextPainter<'_> {
   fn paint_span(&mut self, span: &LaidOutSpan) {
-    if self.exhausted {
+    if self.exhausted || span.opacity <= 0.0 {
       return;
     }
 
+    let first = self.objects.len();
+
+    self.paint_span_objects(span);
+
+    if span.opacity < 1.0 && self.objects.len() > first {
+      let mut group = Container::new(self.abs_transform);
+
+      group.opacity = span.opacity;
+      group.children = self.objects.split_off(first);
+      group.finish();
+      self.objects.push(LayoutObject::Container(Box::new(group)));
+    }
+  }
+
+  /// The decorations and glyphs of `span`, in paint order.
+  fn paint_span_objects(&mut self, span: &LaidOutSpan) {
     self.paint_line(span.overline.as_ref());
     self.paint_line(span.underline.as_ref());
 

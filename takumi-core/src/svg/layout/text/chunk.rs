@@ -52,6 +52,9 @@ struct TextElement {
   /// Whether it or an element between it and the `text` is not rendered, as `display` and the
   /// conditional attributes remove a whole subtree.
   hidden: bool,
+  /// The `opacity` of it and the elements between it and the `text`, which the `text` itself
+  /// applies to the group it makes.
+  opacity: f32,
 }
 
 enum Content {
@@ -101,6 +104,7 @@ impl TextTree {
       decorations: tree.decorations(layout, scope, text, None),
       baseline_offset: BaselineOffset::default(),
       hidden: !layout.is_visible_element(text, scope),
+      opacity: 1.0,
     };
     let root = tree.push(None, Content::Element(Box::new(root)));
 
@@ -207,7 +211,7 @@ impl TextTree {
     };
     let (parent_index, parent_context) = (parent.styled.index, parent.styled.context.clone());
     let (parent_decorations, parent_offset) = (parent.decorations.clone(), parent.baseline_offset);
-    let parent_hidden = parent.hidden;
+    let (parent_hidden, parent_opacity) = (parent.hidden, parent.opacity);
     let document = layout.document;
 
     for &child in &document.elements[parent_index].children {
@@ -245,6 +249,7 @@ impl TextTree {
         decorations: self.decorations(layout, scope, &styled, Some(&parent_decorations)),
         baseline_offset: BaselineOffset::new(&styled, parent_offset),
         hidden: parent_hidden || !layout.is_visible_element(&styled, scope),
+        opacity: parent_opacity * styled.style().svg_data.opacity.0.clamp(0.0, 1.0),
         styled,
         space: own_space,
       };
@@ -677,6 +682,7 @@ impl TextTree {
       alignment_baseline: style.svg_data.alignment_baseline,
       baseline_offset: element.baseline_offset,
       text_length,
+      opacity: element.opacity,
       length_adjust: if layout.attribute(styled.index, "lengthAdjust") == Some("spacingAndGlyphs") {
         LengthAdjust::SpacingAndGlyphs
       } else {

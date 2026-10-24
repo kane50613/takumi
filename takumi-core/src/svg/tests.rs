@@ -896,3 +896,25 @@ fn spans_with_one_font_kern_across_their_boundary() {
 
   assert_eq!(whole, split);
 }
+
+/// The `opacity` of a `tspan`, a `textPath`, or an `a` groups what its characters paint, as Blink
+/// paints each with its effects.
+#[test]
+fn a_tspan_opacity_groups_its_glyphs() {
+  let opacities = |ops: &[SvgOp]| -> Vec<f32> {
+    ops
+      .iter()
+      .filter_map(|op| match op {
+        SvgOp::PushOpacity(opacity) => Some(*opacity),
+        _ => None,
+      })
+      .collect()
+  };
+
+  assert_eq!(
+    opacities(&text_ops(
+      r#"<text y="20">a<tspan opacity="0.5">b<tspan opacity="0.5">c</tspan></tspan></text>"#
+    )),
+    [0.5, 0.25]
+  );
+}

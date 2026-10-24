@@ -32,6 +32,9 @@ pub(super) struct LaidOutSpan {
   pub(super) overline: Option<DecorationLine>,
   /// Painted after the glyphs.
   pub(super) line_through: Option<DecorationLine>,
+  /// The opacity the span's glyphs and decorations take as one group. Approximate: Blink groups
+  /// each `tspan`, `textPath`, and `a`, where the spans of one element group apart.
+  pub(super) opacity: f32,
 }
 
 /// A decoration line to paint with the paint of the element that declared it.
@@ -189,6 +192,7 @@ impl Text {
           underline,
           overline,
           line_through,
+          opacity: style.opacity,
         });
       }
 
