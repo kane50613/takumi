@@ -439,7 +439,7 @@ impl PathData {
 }
 
 /// Reads the numbers of an SVG attribute byte by byte, after svgtypes' `Stream`.
-pub(crate) struct Scanner<'a> {
+struct Scanner<'a> {
   bytes: &'a [u8],
   position: usize,
 }
@@ -467,55 +467,28 @@ struct ArcSegment {
 }
 
 impl<'a> Scanner<'a> {
-  pub(crate) fn new(text: &'a str) -> Self {
+  fn new(text: &'a str) -> Self {
     Self {
       bytes: text.as_bytes(),
       position: 0,
     }
   }
 
-  pub(crate) fn at_end(&self) -> bool {
+  fn at_end(&self) -> bool {
     self.position >= self.bytes.len()
   }
 
-  pub(crate) fn peek(&self) -> Option<u8> {
+  fn peek(&self) -> Option<u8> {
     self.bytes.get(self.position).copied()
   }
 
-  pub(crate) fn skip_spaces(&mut self) {
+  fn skip_spaces(&mut self) {
     while self
       .peek()
       .is_some_and(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
     {
       self.position += 1;
     }
-  }
-
-  /// The run of ASCII letters, digits, `-` and `_` at the cursor.
-  #[cfg(feature = "svg-sizing")]
-  pub(crate) fn identifier(&mut self) -> &'a str {
-    let start = self.position;
-
-    while self
-      .peek()
-      .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-    {
-      self.position += 1;
-    }
-
-    str::from_utf8(&self.bytes[start..self.position]).unwrap_or_default()
-  }
-
-  /// Consumes `byte` when it is next.
-  #[cfg(feature = "svg-sizing")]
-  pub(crate) fn accept(&mut self, byte: u8) -> bool {
-    let found = self.peek() == Some(byte);
-
-    if found {
-      self.position += 1;
-    }
-
-    found
   }
 
   fn skip_digits(&mut self) {
@@ -525,7 +498,7 @@ impl<'a> Scanner<'a> {
   }
 
   /// A number, where `e` not followed by `m` or `x` starts an exponent.
-  pub(crate) fn number(&mut self) -> Option<f64> {
+  fn number(&mut self) -> Option<f64> {
     self.skip_spaces();
 
     let start = self.position;
@@ -573,7 +546,7 @@ impl<'a> Scanner<'a> {
   }
 
   /// A number followed by its optional comma separator.
-  pub(crate) fn list_number(&mut self) -> Option<f64> {
+  fn list_number(&mut self) -> Option<f64> {
     if self.at_end() {
       return None;
     }
@@ -586,7 +559,7 @@ impl<'a> Scanner<'a> {
     Some(number)
   }
 
-  pub(crate) fn skip_comma(&mut self) {
+  fn skip_comma(&mut self) {
     if self.peek() == Some(b',') {
       self.position += 1;
     }
@@ -610,7 +583,7 @@ impl<'a> Scanner<'a> {
     Some(flag)
   }
 
-  pub(crate) fn pair(&mut self) -> Option<(f64, f64)> {
+  fn pair(&mut self) -> Option<(f64, f64)> {
     Some((self.list_number()?, self.list_number()?))
   }
 
@@ -994,6 +967,30 @@ impl ArcSegment {
     }
 
     Some(cubics)
+  }
+}
+
+impl PathData {
+  /// The commands of the clockwise arc of less than half a turn from `from` to `to` on an ellipse
+  /// with radii `rx` and `ry`, as the corners of a `rect` and the sides of an `ellipse` take.
+  #[cfg(feature = "svg")]
+  pub(crate) fn corner_arc(from: (f32, f32), to: (f32, f32), rx: f32, ry: f32) -> Vec<PathCommand> {
+    let point = |(x, y): (f32, f32)| (f64::from(x), f64::from(y));
+    let arc = ArcSegment {
+      radii: (f64::from(rx), f64::from(ry)),
+      rotation: 0.0,
+      large_arc: false,
+      sweep: true,
+      to: point(to),
+    };
+
+    match arc.cubics(point(from), point(to)) {
+      Some(cubics) => cubics
+        .into_iter()
+        .map(|[first, second, to]| PathCommand::CubicTo(single(first), single(second), single(to)))
+        .collect(),
+      None => vec![PathCommand::LineTo(Point::new(to.0, to.1))],
+    }
   }
 }
 

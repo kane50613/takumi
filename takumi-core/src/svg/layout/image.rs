@@ -5,8 +5,6 @@
 use std::sync::Arc;
 use std::{mem, rc::Rc};
 
-use data_url::DataUrl;
-
 use super::{
   Scope, Styled, SvgLayout,
   object::{Container, LayoutClip, LayoutDocument, LayoutObject, Picture, PictureContent},
@@ -17,7 +15,7 @@ use crate::resources::image_decoder::{decode_gif_frames, gif_dimensions};
 use crate::{
   geometry::{Rect, Size},
   resources::{
-    image::SvgImageData,
+    image::{DecodedDataUri, SvgImageData, decode_data_uri},
     image_decoder::{DetectedImageFormat, bitmap_dimensions, detect_image_format},
   },
   style::{Affine, ImageScalingAlgorithm, Length, Size as SizeValue, Visibility},
@@ -125,7 +123,7 @@ impl SvgLayout<'_> {
       x: view_box.x(),
       y: view_box.y(),
     };
-    let mut group = Container::new(parent.abs_transform.concat(image_transform));
+    let mut group = Container::new(parent.abs_transform * image_transform);
 
     group.transform = image_transform;
     group
@@ -179,13 +177,7 @@ impl SvgLayout<'_> {
       return None;
     }
 
-    let url = DataUrl::process(href).ok()?;
-    let (data, _) = url.decode_to_vec().ok()?;
-    let mime = format!(
-      "{}/{}",
-      url.mime_type().type_.as_str(),
-      url.mime_type().subtype.as_str()
-    );
+    let DecodedDataUri { mime, bytes: data } = decode_data_uri(href).ok()?;
     let source = match mime.as_str() {
       "image/jpg" | "image/jpeg" | "image/png" | "image/webp" => Source::Bitmap(data),
       "image/gif" => Source::Gif(data),

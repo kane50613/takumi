@@ -362,7 +362,7 @@ fn extend_clip_commands(container: &Container, transform: Affine, commands: &mut
         }
       }
       LayoutObject::Container(child) => {
-        let child_transform = transform.concat(child.transform);
+        let child_transform = transform * child.transform;
 
         extend_clip_commands(child, child_transform, commands);
       }

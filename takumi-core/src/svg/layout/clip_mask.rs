@@ -57,7 +57,7 @@ impl SvgLayout<'_> {
       .is_some_and(|text| Transforms::from_svg_attribute(text).is_none())
       || self
         .authored_transform(&styled, scope)
-        .is_some_and(|transform| !transform.is_valid())
+        .is_some_and(|transform| !transform.is_renderable())
     {
       return None;
     }
@@ -77,7 +77,7 @@ impl SvgLayout<'_> {
     }
 
     if units == Units::ObjectBoundingBox {
-      transform = transform.concat(object_bounding_box?.unit_square_transform());
+      transform *= object_bounding_box?.unit_square_transform();
     }
 
     // A linked clip path must be valid.
@@ -171,8 +171,7 @@ impl SvgLayout<'_> {
 
     let coordinate = |layout: &Self, name: &str, axis: LengthAxis, default: f32| {
       let length = layout
-        .attribute(link, name)
-        .and_then(Length::from_svg_attribute)
+        .length_attribute(link, name)
         .unwrap_or(Length::Percentage(default));
 
       if units == Units::ObjectBoundingBox {

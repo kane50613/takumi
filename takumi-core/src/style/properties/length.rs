@@ -1,7 +1,5 @@
 use std::{fmt, ops::Neg};
 
-#[cfg(feature = "svg-sizing")]
-use crate::path_data::Scanner;
 pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
 };
@@ -388,34 +386,6 @@ impl<'i> FromCss<'i> for Length {
 }
 
 impl Length {
-  #[cfg(feature = "svg-sizing")]
-  /// A length an SVG attribute holds: a number, or one with a `px`, `em`, `ex`, `in`, `cm`, `mm`,
-  /// `pt`, `pc` or `%` unit, where `ex` is half an `em` as in usvg. The number is read in `f64`,
-  /// as svgtypes does, so a percentage keeps the float it has always rounded to.
-  pub(crate) fn from_svg_attribute(text: &str) -> Option<Self> {
-    let mut scanner = Scanner::new(text);
-    let number = scanner.number()?;
-    let value = number as f32;
-    let length = if scanner.accept(b'%') {
-      Self::Percentage(value)
-    } else {
-      match scanner.identifier() {
-        "" | "px" => Self::Px(value),
-        "em" => Self::Em(value),
-        "ex" => Self::Em((number / 2.0) as f32),
-        "in" => Self::In(value),
-        "cm" => Self::Cm(value),
-        "mm" => Self::Mm(value),
-        "pt" => Self::Pt(value),
-        "pc" => Self::Pc(value),
-        _ => return None,
-      }
-    };
-
-    scanner.skip_spaces();
-    scanner.at_end().then_some(length)
-  }
-
   fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     match self {
       Length::Auto => 0.0,

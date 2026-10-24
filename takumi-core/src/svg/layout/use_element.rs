@@ -133,7 +133,7 @@ impl SvgLayout<'_> {
       .unwrap_or(use_scope.view_box);
 
       if let Some(transform) = self.view_box_transform(styled, &symbol, &use_scope) {
-        new_transform = new_transform.concat(transform);
+        new_transform *= transform;
       }
 
       if let Some(clip_rect) = self.clip_rect(styled, &symbol, &use_scope) {
@@ -176,7 +176,7 @@ impl SvgLayout<'_> {
       }
     }
 
-    original_transform = original_transform.concat(new_transform);
+    original_transform *= new_transform;
 
     if linked_to_symbol {
       let symbol = self.styled(target, &styled.context);
@@ -267,7 +267,7 @@ impl SvgLayout<'_> {
 
     self.convert_group(styled, scope, required, parent, |layout, group| {
       group.transform = transform;
-      group.abs_transform = parent_abs_transform.concat(transform);
+      group.abs_transform = parent_abs_transform * transform;
       group.context_element = is_context_element;
       fill(layout, group);
     })
@@ -321,7 +321,7 @@ impl SvgLayout<'_> {
     let mut new_transform = Affine::translation(x, y);
 
     if let Some(transform) = self.view_box_transform(styled, styled, scope) {
-      new_transform = new_transform.concat(transform);
+      new_transform *= transform;
     }
 
     // The nested viewport is the box the `viewBox` names, or else the `svg`'s own rectangle.
@@ -351,7 +351,7 @@ impl SvgLayout<'_> {
         return;
       };
 
-      clipped.abs_transform = parent.abs_transform.concat(original_transform);
+      clipped.abs_transform = parent.abs_transform * original_transform;
       self.convert_use_content(
         styled,
         &styled.context,
@@ -365,7 +365,7 @@ impl SvgLayout<'_> {
         .children
         .push(LayoutObject::Container(Box::new(clipped)));
     } else {
-      original_transform = original_transform.concat(new_transform);
+      original_transform *= new_transform;
       self.convert_use_content(
         styled,
         &styled.context,

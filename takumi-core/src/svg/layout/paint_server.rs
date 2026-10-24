@@ -11,12 +11,11 @@ use super::{
 };
 use crate::{
   geometry::{Point, Rect, Size},
-  path_data::Scanner,
   resources::{
     image::{SvgGradientStop, SvgSpreadMethod},
     svg_size::ViewBox,
   },
-  style::{Affine, Color, Length},
+  style::{Affine, Color, FromCssStr, Length, PercentageNumber},
   svg::{
     element::SvgElementKind,
     length::{LengthAxis, SvgLengthContext},
@@ -318,10 +317,7 @@ impl SvgLayout<'_> {
   ) -> f32 {
     let source = self.resolve_attr(index, name);
     let styled = self.styled_in_place(source);
-    let length = self
-      .attribute(source, name)
-      .and_then(Length::from_svg_attribute)
-      .unwrap_or(default);
+    let length = self.length_attribute(source, name).unwrap_or(default);
 
     if units == Units::ObjectBoundingBox {
       return SvgLengthContext::resolve_in_bounding_box(length, styled.sizing());
@@ -347,8 +343,8 @@ impl SvgLayout<'_> {
 
       let offset = self
         .attribute(stop, "offset")
-        .and_then(stop_offset)
-        .unwrap_or(previous_offset);
+        .and_then(|text| PercentageNumber::from_css_str(text).ok())
+        .map_or(previous_offset, |PercentageNumber(offset)| offset);
 
       previous_offset = offset;
 
@@ -385,21 +381,6 @@ impl SvgLayout<'_> {
     self.active.pop();
     result
   }
-}
-
-/// A stop's `offset`: a number, or a percentage that is a hundredth of one. Read in `f64`, as
-/// usvg does, so a percentage keeps the float it has always rounded to.
-fn stop_offset(text: &str) -> Option<f32> {
-  let mut scanner = Scanner::new(text);
-  let number = scanner.number()?;
-  let offset = if scanner.accept(b'%') {
-    number / 100.0
-  } else {
-    number
-  };
-
-  scanner.skip_spaces();
-  scanner.at_end().then_some(offset as f32)
 }
 
 fn stops_to_color(stops: &[SvgGradientStop]) -> Option<PaintServer> {

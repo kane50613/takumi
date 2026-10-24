@@ -1,13 +1,13 @@
 //! An SVG's size from its root element alone. Follows usvg's `resolve_svg_size`, except that a
 //! percentage size without a `viewBox` stays at the 100 px default instead of the content bounds.
 
+use cssparser::Parser;
 use roxmltree::{Document, Node, ParsingOptions};
 use thiserror::Error;
 
 use crate::{
   geometry::Size,
-  path_data::Scanner,
-  style::{FontUnits, IntrinsicSizing, Length, SizingContext},
+  style::{FontUnits, FromCssStr, IntrinsicSizing, Length, SizingContext},
   viewport::Viewport,
 };
 
@@ -36,25 +36,24 @@ pub(crate) struct ViewBox {
 }
 
 impl ViewBox {
-  /// Four numbers with a positive size, and nothing but spaces after them.
+  /// Four numbers, spaced or comma-separated, with a positive size.
   pub(crate) fn parse(text: &str) -> Option<Self> {
-    let mut scanner = Scanner::new(text);
-    let x = scanner.list_number()?;
-    let y = scanner.list_number()?;
-    let width = scanner.list_number()?;
-    let height = scanner.list_number()?;
+    let mut parser = Parser::new(text);
+    let mut values = [0.0; 4];
 
-    scanner.skip_spaces();
+    for value in &mut values {
+      *value = parser.expect_number().ok()?;
 
-    if !scanner.at_end() || width <= 0.0 || height <= 0.0 {
-      return None;
+      let _ = parser.try_parse(Parser::expect_comma);
     }
 
-    Some(Self {
-      x: x as f32,
-      y: y as f32,
-      width: width as f32,
-      height: height as f32,
+    let [x, y, width, height] = values;
+
+    (parser.is_exhausted() && width > 0.0 && height > 0.0).then_some(Self {
+      x,
+      y,
+      width,
+      height,
     })
   }
 }
@@ -84,7 +83,11 @@ impl SvgSize {
   }
 
   pub(crate) fn from_root(root: Node) -> Result<Self, SvgSizeError> {
-    let length = |name| root.attribute(name).and_then(Length::from_svg_attribute);
+    let length = |name| {
+      root
+        .attribute(name)
+        .and_then(|text| Length::from_css_str(text).ok())
+    };
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((0, 0)).with_font_size(FONT_SIZE))
       .build();

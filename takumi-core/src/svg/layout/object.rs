@@ -248,7 +248,7 @@ impl Paint {
       Self::Gradient(gradient) => Some(Self::Gradient(Rc::new(GradientPaint {
         geometry: gradient.geometry,
         units: Units::UserSpaceOnUse,
-        transform: bounds.unit_square_transform().concat(gradient.transform),
+        transform: bounds.unit_square_transform() * gradient.transform,
         spread: gradient.spread,
         stops: gradient.stops.clone(),
       }))),
@@ -285,8 +285,8 @@ impl Paint {
   /// that it lands as it does on the context element.
   fn follow_context(&mut self, context_transform: Affine, path_transform: Affine) {
     let Some(reverse) = context_transform
-      .invert_like_skia()
-      .and_then(|inverse| inverse.concat(path_transform).invert_like_skia())
+      .invert()
+      .and_then(|inverse| (inverse * path_transform).invert())
     else {
       return;
     };
@@ -297,7 +297,7 @@ impl Paint {
         *self = Self::Gradient(Rc::new(GradientPaint {
           geometry: gradient.geometry,
           units: gradient.units,
-          transform: reverse.concat(gradient.transform),
+          transform: reverse * gradient.transform,
           spread: gradient.spread,
           stops: gradient.stops.clone(),
         }));
@@ -305,7 +305,7 @@ impl Paint {
       Self::Pattern(pattern) => {
         let mut followed = (**pattern).clone();
 
-        followed.transform = reverse.concat(pattern.transform);
+        followed.transform = reverse * pattern.transform;
         *self = Self::Pattern(Rc::new(followed));
       }
     }
@@ -318,9 +318,7 @@ impl Paint {
       Self::Gradient(gradient) => gradient.to_op(),
       Self::Pattern(pattern) => SvgOpPaint::Pattern {
         ops: tile_ops(&pattern.root),
-        transform: pattern
-          .transform
-          .concat(Affine::translation(pattern.rect.x(), pattern.rect.y())),
+        transform: pattern.transform * Affine::translation(pattern.rect.x(), pattern.rect.y()),
         width: pattern.rect.width(),
         height: pattern.rect.height(),
       },

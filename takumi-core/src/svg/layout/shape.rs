@@ -2,76 +2,17 @@
 //! `SVGCircleElement::AsPath`, `SVGEllipseElement::AsPath`, `SVGLineElement::AsPath`,
 //! `SVGPolyElement::AsPath`, `SVGPathElement::AsPath`, and `LayoutSVGShape`.
 
-use kurbo::{Arc, Point as KurboPoint, SvgArc, Vec2};
-
 use super::{
   Scope, Styled, SvgLayout,
   approx_eq::ApproxEq,
   object::{Container, ContextSource, Fill, LayoutObject, Paint, Shape},
 };
 use crate::{
-  geometry::{PathCommand, Point, Rect},
+  geometry::{PathBuilder, PathCommand, Point, Rect},
   path_data::PathData,
   style::{Affine, Color, Length, PaintPhase, ShapeRendering, Size, Visibility},
   svg::{element::SvgElementKind, length::LengthAxis},
 };
-
-/// A path being built from the commands an element draws, tracking its last point for arcs.
-#[derive(Default)]
-struct OutlineBuilder {
-  commands: Vec<PathCommand>,
-  last: Option<Point<f32>>,
-}
-
-impl OutlineBuilder {
-  fn move_to(&mut self, x: f32, y: f32) {
-    self.commands.push(PathCommand::MoveTo(Point::new(x, y)));
-    self.last = Some(Point::new(x, y));
-  }
-
-  fn line_to(&mut self, x: f32, y: f32) {
-    self.commands.push(PathCommand::LineTo(Point::new(x, y)));
-    self.last = Some(Point::new(x, y));
-  }
-
-  fn close(&mut self) {
-    self.commands.push(PathCommand::Close);
-  }
-
-  /// An arc to `(x, y)` as the cubics kurbo flattens it to, or a line where it has no arc. This is
-  /// the arithmetic usvg draws rounded rectangles and ellipses with.
-  fn arc_to(&mut self, rx: f32, ry: f32, x: f32, y: f32) {
-    let Some(previous) = self.last else {
-      return;
-    };
-    let arc = SvgArc {
-      from: KurboPoint::new(f64::from(previous.x), f64::from(previous.y)),
-      to: KurboPoint::new(f64::from(x), f64::from(y)),
-      radii: Vec2::new(f64::from(rx), f64::from(ry)),
-      x_rotation: 0.0,
-      large_arc: false,
-      sweep: true,
-    };
-
-    match Arc::from_svg_arc(&arc) {
-      Some(arc) => {
-        let mut cubics = Vec::new();
-
-        arc.to_cubic_beziers(0.1, |first, second, to| cubics.push((first, second, to)));
-
-        for (first, second, to) in cubics {
-          let point = |point: KurboPoint| Point::new(point.x as f32, point.y as f32);
-
-          self
-            .commands
-            .push(PathCommand::CubicTo(point(first), point(second), point(to)));
-          self.last = Some(point(to));
-        }
-      }
-      None => self.line_to(x, y),
-    }
-  }
-}
 
 fn is_valid_length(length: f32) -> bool {
   length > 0.0 && length.is_finite()
@@ -160,19 +101,35 @@ impl SvgLayout<'_> {
     }
 
     // https://www.w3.org/TR/SVG11/shapes.html#RectElement
-    let mut outline = OutlineBuilder::default();
+    let (right, bottom) = (x + width, y + height);
+    let mut outline = Vec::new();
 
-    outline.move_to(x + rx, y);
-    outline.line_to(x + width - rx, y);
-    outline.arc_to(rx, ry, x + width, y + ry);
-    outline.line_to(x + width, y + height - ry);
-    outline.arc_to(rx, ry, x + width - rx, y + height);
-    outline.line_to(x + rx, y + height);
-    outline.arc_to(rx, ry, x, y + height - ry);
-    outline.line_to(x, y + ry);
-    outline.arc_to(rx, ry, x + rx, y);
+    outline.move_to((x + rx, y));
+    outline.line_to((right - rx, y));
+    outline.extend(PathData::corner_arc(
+      (right - rx, y),
+      (right, y + ry),
+      rx,
+      ry,
+    ));
+    outline.line_to((right, bottom - ry));
+    outline.extend(PathData::corner_arc(
+      (right, bottom - ry),
+      (right - rx, bottom),
+      rx,
+      ry,
+    ));
+    outline.line_to((x + rx, bottom));
+    outline.extend(PathData::corner_arc(
+      (x + rx, bottom),
+      (x, bottom - ry),
+      rx,
+      ry,
+    ));
+    outline.line_to((x, y + ry));
+    outline.extend(PathData::corner_arc((x, y + ry), (x + rx, y), rx, ry));
     outline.close();
-    Some(outline.commands)
+    Some(outline)
   }
 
   /// `rx` and `ry` in user units, where a radius that is missing takes the other.
@@ -464,15 +421,15 @@ fn settle(
   placed
 }
 
-/// An ellipse as four arcs, after usvg's `ellipse_to_path`.
+/// An ellipse as four arcs, after Blink's `Path::AddEllipse`.
 fn ellipse_outline(cx: f32, cy: f32, rx: f32, ry: f32) -> Vec<PathCommand> {
-  let mut outline = OutlineBuilder::default();
+  let mut outline = Vec::new();
 
-  outline.move_to(cx + rx, cy);
-  outline.arc_to(rx, ry, cx, cy + ry);
-  outline.arc_to(rx, ry, cx - rx, cy);
-  outline.arc_to(rx, ry, cx, cy - ry);
-  outline.arc_to(rx, ry, cx + rx, cy);
+  outline.move_to((cx + rx, cy));
+  outline.extend(PathData::corner_arc((cx + rx, cy), (cx, cy + ry), rx, ry));
+  outline.extend(PathData::corner_arc((cx, cy + ry), (cx - rx, cy), rx, ry));
+  outline.extend(PathData::corner_arc((cx - rx, cy), (cx, cy - ry), rx, ry));
+  outline.extend(PathData::corner_arc((cx, cy - ry), (cx + rx, cy), rx, ry));
   outline.close();
-  outline.commands
+  outline
 }

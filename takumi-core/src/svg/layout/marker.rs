@@ -14,9 +14,8 @@ use super::{
 };
 use crate::{
   geometry::{PathCommand, Point, Rect, Size},
-  path_data::Scanner,
   resources::svg_size::ViewBox,
-  style::{Affine, Length, Overflow},
+  style::{Affine, Angle, FromCssStr, Length, Overflow},
   svg::{element::SvgElementKind, length::LengthAxis},
 };
 
@@ -162,7 +161,7 @@ impl SvgLayout<'_> {
       };
 
       if !angle.approx_eq(0.0) {
-        transform = transform.concat(Affine::rotation_like_skia(angle));
+        transform *= Affine::rotation(Angle::new(angle));
       }
 
       if let Some((view_box, aspect)) = view_box {
@@ -184,14 +183,14 @@ impl SvgLayout<'_> {
           + view_box_transform.d * view_box_transform.d)
           .sqrt();
 
-        transform = transform.concat(Affine::scale(scale_x, scale_y));
+        transform *= Affine::scale(scale_x, scale_y);
       } else {
-        transform = transform.concat(Affine::scale(stroke_scale, stroke_scale));
+        transform *= Affine::scale(stroke_scale, stroke_scale);
       }
 
-      transform = transform.concat(Affine::translation(-rect.x(), -rect.y()));
+      transform *= Affine::translation(-rect.x(), -rect.y());
 
-      let mut group = Container::new(parent.abs_transform.concat(transform));
+      let mut group = Container::new(parent.abs_transform * transform);
 
       group.transform = transform;
       group.clip_path = clip_path.clone();
@@ -244,33 +243,10 @@ impl SvgLayout<'_> {
     match self.attribute(marker, "orient") {
       Some("auto") => MarkerOrientation::Auto,
       Some("auto-start-reverse") => MarkerOrientation::AutoStartReverse,
-      Some(text) => MarkerOrientation::Angle(parse_angle(text).unwrap_or(0.0)),
+      Some(text) => MarkerOrientation::Angle(Angle::from_css_str(text).map_or(0.0, |angle| *angle)),
       None => MarkerOrientation::Angle(0.0),
     }
   }
-}
-
-/// An angle in degrees: a number with an optional `deg`, `grad`, `rad` or `turn` unit.
-fn parse_angle(text: &str) -> Option<f32> {
-  let mut scanner = Scanner::new(text);
-  let number = scanner.number()?;
-  let unit = scanner.identifier();
-
-  scanner.skip_spaces();
-
-  if !scanner.at_end() {
-    return None;
-  }
-
-  let degrees = match unit {
-    "" | "deg" => number,
-    "grad" => number * 180.0 / 200.0,
-    "rad" => number.to_degrees(),
-    "turn" => number * 360.0,
-    _ => return None,
-  };
-
-  Some(degrees as f32)
 }
 
 fn segments(commands: &[PathCommand]) -> Vec<Segment> {

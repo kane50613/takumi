@@ -40,7 +40,7 @@ use crate::{
   resources::{font::FontsSnapshot, image::SvgOp, svg_size::ViewBox},
   style::{
     Affine, BackgroundImage, BasicShape, BlendMode, Color, ColorInput, ComputedStyle, Display,
-    Isolation, Length, SizingContext, SvgResource,
+    FromCssStr, Isolation, Length, SizingContext, SvgResource,
   },
 };
 
@@ -202,8 +202,7 @@ impl<'a> SvgLayout<'a> {
     // A size given in percentages of a viewport nothing gives takes the extent of the content.
     let relative = |name| {
       self
-        .attribute(0, name)
-        .and_then(Length::from_svg_attribute)
+        .length_attribute(0, name)
         .is_none_or(|length| matches!(length, Length::Percentage(_)))
     };
     let (mut width, mut height) = (size.width, size.height);
@@ -260,6 +259,10 @@ impl<'a> SvgLayout<'a> {
     self.styles.node(index).attribute(name)
   }
 
+  fn length_attribute(&self, index: usize, name: &str) -> Option<Length> {
+    Length::from_css_str(self.attribute(index, name)?).ok()
+  }
+
   fn has_attribute(&self, index: usize, name: &str) -> bool {
     self.attribute(index, name).is_some()
   }
@@ -290,10 +293,7 @@ impl<'a> SvgLayout<'a> {
     axis: LengthAxis,
     default: Length,
   ) -> f32 {
-    let length = self
-      .attribute(styled.index, name)
-      .and_then(Length::from_svg_attribute)
-      .unwrap_or(default);
+    let length = self.length_attribute(styled.index, name).unwrap_or(default);
 
     self.px(styled, scope, length, axis)
   }
@@ -304,7 +304,7 @@ impl<'a> SvgLayout<'a> {
     styled.style().base_data.display != Display::None
       && self
         .authored_transform(styled, scope)
-        .is_none_or(Affine::is_valid)
+        .is_none_or(Affine::is_renderable)
       && self.passes_conditions(styled.index)
   }
 
@@ -325,7 +325,7 @@ impl<'a> SvgLayout<'a> {
   fn resolve_transform(&self, styled: &Styled, scope: &Scope) -> Affine {
     let transform = self
       .authored_transform(styled, scope)
-      .filter(|transform| transform.is_valid())
+      .filter(|transform| transform.is_renderable())
       .unwrap_or(Affine::IDENTITY);
     let (x, y) = styled.style().svg_data.transform_origin.to_point(
       styled.sizing(),
@@ -337,9 +337,7 @@ impl<'a> SvgLayout<'a> {
       return transform;
     }
 
-    Affine::translation(x, y)
-      .concat(transform)
-      .concat(Affine::translation(-x, -y))
+    Affine::translation(x, y) * transform * Affine::translation(-x, -y)
   }
 
   fn convert_children(
@@ -514,7 +512,7 @@ impl<'a> SvgLayout<'a> {
     let blend_mode = style.misc_data.mix_blend_mode;
     let isolate = style.misc_data.isolation == Isolation::Isolate;
     let is_g_or_use = matches!(styled.kind, SvgElementKind::G | SvgElementKind::Use);
-    let mut group = Container::new(parent.abs_transform.concat(transform));
+    let mut group = Container::new(parent.abs_transform * transform);
 
     group.transform = transform;
     group.opacity = opacity;
