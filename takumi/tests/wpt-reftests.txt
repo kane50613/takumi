@@ -3071,7 +3071,6 @@ svg/extensibility/foreignObject/foreign-object-scale-scroll.html
 svg/extensibility/foreignObject/will-change-in-foreign-object-paint-order.html
 svg/geometry/reftests/
 !svg/geometry/reftests/circle-003.svg
-!svg/geometry/reftests/circle-004.svg
 !svg/geometry/reftests/ellipse-005.svg
 !svg/geometry/reftests/ellipse-006.svg
 !svg/geometry/reftests/percentage-attribute.svg

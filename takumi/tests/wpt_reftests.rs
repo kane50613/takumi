@@ -509,14 +509,10 @@ fn changes_itself(source: &str) -> bool {
   })
 }
 
-/// The names a reference link takes: HTML's, and the XHTML-namespaced forms SVG tests use.
-const LINK_NAMES: [&str; 3] = ["link", "h:link", "html:link"];
-
 /// The references `source` links, each with whether the test must match it.
 fn references(source: &str) -> Vec<(String, bool)> {
-  LINK_NAMES
-    .iter()
-    .flat_map(|name| tags(source, name))
+  html_tags(source, "link")
+    .into_iter()
     .filter_map(|attributes| {
       let matches = match attributes.get("rel")?.as_str() {
         "match" => true,
@@ -546,7 +542,7 @@ fn is_print_reftest(path: &Path) -> bool {
 
 /// The 1-based page ranges a `<meta name=reftest-pages>` in `source` compares, none for every page.
 fn reftest_pages(source: &str) -> Option<Vec<(usize, usize)>> {
-  let content = tags(source, "meta")
+  let content = html_tags(source, "meta")
     .into_iter()
     .find(|attributes| {
       attributes
@@ -571,6 +567,15 @@ fn reftest_pages(source: &str) -> Option<Vec<(usize, usize)>> {
       Some((first, last)) => Some((bound(first, 1)?, bound(last, usize::MAX)?)),
       None => item.trim().parse().ok().map(|page| (page, page)),
     })
+    .collect()
+}
+
+/// The HTML elements named `name` in `source`, under the `h:` and `html:` prefixes SVG tests
+/// give the XHTML namespace too.
+fn html_tags(source: &str, name: &str) -> Vec<HashMap<String, String>> {
+  ["", "h:", "html:"]
+    .into_iter()
+    .flat_map(|prefix| tags(source, &format!("{prefix}{name}")))
     .collect()
 }
 
@@ -675,7 +680,7 @@ impl Fuzzy {
   /// The allowance `source`'s `<meta name=fuzzy>` gives the reference at `reference`: one naming
   /// that reference wins over one naming none.
   fn of(source: &str, reference: &str) -> Self {
-    let allowances: Vec<(Option<String>, String)> = tags(source, "meta")
+    let allowances: Vec<(Option<String>, String)> = html_tags(source, "meta")
       .into_iter()
       .filter(|attributes| attributes.get("name").is_some_and(|name| name == "fuzzy"))
       .filter_map(|attributes| attributes.get("content").cloned())
