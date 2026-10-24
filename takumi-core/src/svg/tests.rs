@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 
-use super::SvgDocument;
+use super::{SvgDocument, SvgHost};
 use crate::{
   fonts::shaping::testing::{GEIST, register},
   geometry::Point,
@@ -26,7 +26,12 @@ fn ops(body: &str) -> Vec<SvgOp> {
 
   document
     .ok()
-    .and_then(|document| document.ops(BLACK, None))
+    .and_then(|document| {
+      document.ops(SvgHost::Image {
+        current_color: BLACK,
+        fonts: None,
+      })
+    })
     .unwrap_or_default()
 }
 
@@ -92,7 +97,12 @@ fn the_host_color_is_what_current_color_is() {
   let color = Color([10, 20, 30, 255]);
   let ops = document
     .ok()
-    .and_then(|document| document.ops(color, None))
+    .and_then(|document| {
+      document.ops(SvgHost::Image {
+        current_color: color,
+        fonts: None,
+      })
+    })
     .unwrap_or_default();
 
   assert_eq!(fills(&ops), [Some(color)]);
@@ -327,7 +337,10 @@ fn only_the_presentation_attributes_blink_maps_are_styled() {
     r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="10" height="10" background-color="red"><rect width="5" height="5"/></svg>"#,
   )
   .ok()
-  .and_then(|document| document.ops(BLACK, None))
+  .and_then(|document| document.ops(SvgHost::Image {
+      current_color: BLACK,
+      fonts: None,
+    }))
   .unwrap_or_default();
 
   assert_eq!(fills(&ops), [Some(BLACK)]);
@@ -478,7 +491,12 @@ fn text_ops(body: &str) -> Vec<SvgOp> {
 
   SvgDocument::parse(&markup)
     .ok()
-    .and_then(|document| document.ops(BLACK, Some(&geist())))
+    .and_then(|document| {
+      document.ops(SvgHost::Image {
+        current_color: BLACK,
+        fonts: Some(&geist()),
+      })
+    })
     .unwrap_or_default()
 }
 
@@ -515,7 +533,12 @@ fn text_draws_nothing_without_a_font() {
   let markup = svg(r#"<text x="10" y="50">Hi</text>"#);
   let ops = SvgDocument::parse(&markup)
     .ok()
-    .and_then(|document| document.ops(BLACK, None))
+    .and_then(|document| {
+      document.ops(SvgHost::Image {
+        current_color: BLACK,
+        fonts: None,
+      })
+    })
     .unwrap_or_default();
 
   assert_eq!(draw_count(&ops), 0);
@@ -739,7 +762,12 @@ fn bitmap_glyphs_stop_at_the_image_byte_budget() {
   ));
   let ops = SvgDocument::parse(&markup)
     .ok()
-    .and_then(|document| document.ops(BLACK, Some(&fonts.snapshot())))
+    .and_then(|document| {
+      document.ops(SvgHost::Image {
+        current_color: BLACK,
+        fonts: Some(&fonts.snapshot()),
+      })
+    })
     .unwrap_or_default();
   let images = ops
     .iter()

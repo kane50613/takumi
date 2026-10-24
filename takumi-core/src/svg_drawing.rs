@@ -556,6 +556,7 @@ mod tests {
 
   use super::Target;
   use crate::{
+    context::RenderContext,
     resources::{
       image::{ImageSource, RenderedImage, SvgSource, to_data_url},
       image_buffer::ImageBuffer,
@@ -575,8 +576,7 @@ mod tests {
         size,
         ImageScalingAlgorithm::Auto,
         0,
-        current_color,
-        None,
+        &RenderContext::with_current_color(current_color),
       )
       .unwrap();
     let RenderedImage::Rasterized(buffer) = rendered else {
@@ -649,7 +649,7 @@ mod tests {
     )
     .parse()
     .unwrap();
-    let ops = source.vector_ops(Color::black(), None);
+    let ops = source.vector_ops(&RenderContext::with_current_color(Color::black()));
     let Some(SvgOp::PushFilter(filters)) = ops.iter().find(|op| matches!(op, SvgOp::PushFilter(_)))
     else {
       panic!("expected a filter op");

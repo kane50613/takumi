@@ -1013,6 +1013,22 @@ macro_rules! define_style {
           }
         }
 
+        /// Whether `property` holds its initial value; a logical-axis longhand has no field of its
+        /// own, so it always does.
+        #[cfg(feature = "svg")]
+        pub(crate) fn is_initial_longhand(&self, property: LonghandId) -> bool {
+          INITIAL_STYLE.with(|initial| match property {
+            $($(LonghandId::[<$longhand:camel>] => self.$group.$longhand == initial.$group.$longhand,)*)*
+            $(LonghandId::[<$transient:camel>] => true,)*
+          })
+        }
+
+        /// Sets `property` back to its initial value.
+        #[cfg(feature = "svg")]
+        pub(crate) fn reset_longhand(&mut self, property: LonghandId) {
+          INITIAL_STYLE.with(|initial| self.copy_longhand(property, initial));
+        }
+
         /// Points each group still at its initial values to the computed one every such box
         /// shares.
         fn share_computed_initial_groups(&mut self) {

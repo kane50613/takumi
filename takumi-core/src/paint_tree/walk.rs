@@ -30,7 +30,7 @@ use crate::{
     BackgroundClipArea, BoxFrame, BoxPainter, CellBackground, FillShape, OverflowClip, OwnContent,
     PaintDevice, PaintedInline, TableDecorations, TextClip, paint_collapsed_borders,
   },
-  resources::image::{sniff_mime, to_data_url},
+  resources::image::{ImageSource as LoadedImage, sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
   sort_key::sort_by_key,
   style::{Affine, BackgroundImage, Filter, Isolation, TextAlign, ToCss},
@@ -209,6 +209,10 @@ impl Walker {
     let src = match &image.src {
       ImageSourceInput::Url(url) => url.to_string(),
       ImageSourceInput::Buffer(bytes) => to_data_url(sniff_mime(bytes), bytes),
+      #[cfg(feature = "svg-sizing")]
+      ImageSourceInput::Loaded(LoadedImage::Svg(svg)) => {
+        to_data_url("image/svg+xml", svg.source().as_bytes())
+      }
       _ => return,
     };
     let intrinsic = image

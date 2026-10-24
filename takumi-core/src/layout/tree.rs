@@ -2244,7 +2244,7 @@ impl RenderNode {
   fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
-      parent_context.stylesheet(),
+      &[parent_context.stylesheet()],
       parent_context.sizing.viewport,
     );
     let mut tree =

@@ -8,6 +8,7 @@ mod element;
 pub(crate) mod filter;
 mod layout;
 mod length;
+mod markup;
 mod style;
 #[cfg(test)]
 mod tests;
@@ -17,12 +18,11 @@ use std::{
   sync::Arc,
 };
 
-use roxmltree::{Node as XmlNode, NodeType};
-
-use self::element::SvgElementKind;
 #[cfg(feature = "svg-raster")]
 use self::filter::SvgFilter;
+use self::{element::SvgElementKind, markup::Markup};
 use crate::{
+  context::RenderContext,
   geometry::Size,
   layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   resources::{
@@ -36,6 +36,39 @@ use crate::{
 const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
 const XLINK_NAMESPACE: &str = "http://www.w3.org/1999/xlink";
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
+
+/// The box an SVG document draws in, which its root element inherits from.
+#[derive(Clone, Copy)]
+pub(crate) enum SvgHost<'a> {
+  /// An image, whose root inherits only the `color` of the box.
+  Image {
+    current_color: Color,
+    fonts: Option<&'a FontsSnapshot>,
+  },
+  /// An inline `svg` element, whose root inherits the style of the box and whose elements match the
+  /// page's stylesheet, then the document's `style` elements. Approximate: Blink orders them by
+  /// where they sit in the document, matches selectors across the HTML ancestors, and applies the
+  /// `style` elements to the whole page.
+  Inline(&'a RenderContext),
+}
+
+impl SvgHost<'_> {
+  /// An image in a box whose `color` is black.
+  const BLACK: Self = Self::Image {
+    current_color: Color([0, 0, 0, 255]),
+    fonts: None,
+  };
+}
+
+impl<'a> SvgHost<'a> {
+  /// The fonts the document's text draws with.
+  fn fonts(self) -> Option<&'a FontsSnapshot> {
+    match self {
+      Self::Image { fonts, .. } => fonts,
+      Self::Inline(context) => Some(context.fonts()),
+    }
+  }
+}
 
 /// Where an element sits in the document, in the preorder the selector matcher numbers nodes by.
 #[derive(Debug)]
@@ -66,21 +99,29 @@ impl SvgDocument {
   /// Parses SVG markup. The root must be an `svg` element in the SVG namespace or in none.
   pub(crate) fn parse(markup: &str) -> Result<Self, ImageError> {
     let xml = parse_svg_document(markup).map_err(ImageError::svg_parse)?;
-    let root = xml.root_element();
 
-    if !is_svg_element(root) || root.tag_name().name() != "svg" {
+    Self::build(xml.root_element())
+  }
+
+  /// The document of an inline `svg` element, every attribute of it and of its descendants kept in
+  /// their attribute maps.
+  pub(crate) fn from_element(root: &Node) -> Result<Self, ImageError> {
+    Self::build(root)
+  }
+
+  /// The document of the root element `root`, which must be an `svg` element.
+  fn build<'a>(root: impl Markup<'a>) -> Result<Self, ImageError> {
+    if root.element() != Some(("svg", true)) {
       return Err(ImageError::svg_parse(roxmltree::Error::NoRootNode));
     }
 
-    let size = SvgSize::from_root(root).map_err(ImageError::svg_parse)?;
-    let sheets: Vec<&str> = xml
-      .descendants()
-      .filter(|node| node.is_element() && node.tag_name().name() == "style")
-      .filter(|node| matches!(node.attribute("type"), None | Some("text/css")))
-      .filter_map(|node| node.text())
-      .collect();
+    let size = SvgSize::from_root(|name| root.attribute(name)).map_err(ImageError::svg_parse)?;
+    let mut sheets = Vec::new();
+
+    root.style_sheets(&mut sheets);
+
     let mut builder = TreeBuilder::default();
-    let root_node = builder.element(root, None, 0);
+    let root_node = builder.element(root, "svg", true, None, 0);
 
     let mut document = Self {
       stylesheet: Arc::new(StyleSheet::parse_list_loosy(&sheets)),
@@ -97,7 +138,7 @@ impl SvgDocument {
       size,
     };
 
-    document.canvas = layout::SvgLayout::new(&document, Color([0, 0, 0, 255]), None).canvas_size();
+    document.canvas = layout::SvgLayout::new(&document, SvgHost::BLACK).canvas_size();
 
     Ok(document)
   }
@@ -156,17 +197,12 @@ impl SvgDocument {
   /// The filter the element `id` names, laid out for content of `width` by `height`.
   #[cfg(feature = "svg-raster")]
   pub(crate) fn filter(&self, id: &str, width: f32, height: f32) -> Option<Arc<SvgFilter>> {
-    layout::SvgLayout::new(self, Color([0, 0, 0, 255]), None).filter_by_id(id, width, height)
+    layout::SvgLayout::new(self, SvgHost::BLACK).filter_by_id(id, width, height)
   }
 
-  /// The drawing ops of the document in canvas coordinates, with `current_color` the `color` the
-  /// root inherits from its host.
-  pub(crate) fn ops(
-    &self,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
-  ) -> Option<Vec<SvgOp>> {
-    layout::SvgLayout::new(self, current_color, fonts).layout()
+  /// The drawing ops of the document in canvas coordinates, drawn in `host`.
+  pub(crate) fn ops(&self, host: SvgHost<'_>) -> Option<Vec<SvgOp>> {
+    layout::SvgLayout::new(self, host).layout()
   }
 }
 
@@ -175,10 +211,6 @@ fn contains_ignore_case(text: &str, needle: &str) -> bool {
     .as_bytes()
     .windows(needle.len())
     .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
-}
-
-fn is_svg_element(node: XmlNode) -> bool {
-  node.is_element() && matches!(node.tag_name().namespace(), None | Some(SVG_NAMESPACE))
 }
 
 /// Builds the node tree and the element table together, numbering each node as the matcher will.
@@ -191,23 +223,26 @@ struct TreeBuilder {
 }
 
 impl TreeBuilder {
-  /// The node for `xml` and its subtree, none for a comment or an instruction, or a subtree that
-  /// nests too deep.
-  fn node(&mut self, xml: XmlNode, parent: Option<usize>, depth: usize) -> Option<Node> {
+  /// The node for `markup` and its subtree, none for a comment or an instruction, or a subtree
+  /// that nests too deep.
+  fn node<'a>(
+    &mut self,
+    markup: impl Markup<'a>,
+    parent: Option<usize>,
+    depth: usize,
+  ) -> Option<Node> {
     if depth >= MAXIMUM_DOM_TREE_DEPTH {
       return None;
     }
 
-    match xml.node_type() {
-      NodeType::Element => Some(self.element(xml, parent, depth)),
-      NodeType::Text => {
-        let text = xml.text()?;
-
-        self.push_entry(SvgElementKind::CharacterData, parent);
-        Some(Node::text(text))
-      }
-      _ => None,
+    if let Some((name, is_svg)) = markup.element() {
+      return Some(self.element(markup, name, is_svg, parent, depth));
     }
+
+    let text = markup.text()?;
+
+    self.push_entry(SvgElementKind::CharacterData, parent);
+    Some(Node::text(text))
   }
 
   fn push_entry(&mut self, kind: SvgElementKind, parent: Option<usize>) -> usize {
@@ -226,21 +261,26 @@ impl TreeBuilder {
     index
   }
 
-  fn element(&mut self, xml: XmlNode, parent: Option<usize>, depth: usize) -> Node {
-    let kind = if is_svg_element(xml) {
-      SvgElementKind::from_tag(xml.tag_name().name())
+  fn element<'a>(
+    &mut self,
+    markup: impl Markup<'a>,
+    name: &str,
+    is_svg: bool,
+    parent: Option<usize>,
+    depth: usize,
+  ) -> Node {
+    let kind = if is_svg {
+      SvgElementKind::from_tag(name)
     } else {
       SvgElementKind::Unknown
     };
     let index = self.push_entry(kind, parent);
-    let mut node = Node::container([]).with_tag_name(xml.tag_name().name());
+    let mut node = Node::container([]).with_tag_name(name);
     let mut attributes = BTreeMap::new();
     let mut href = None;
 
-    for attribute in xml.attributes() {
-      let value = attribute.value();
-
-      match (attribute.namespace(), attribute.name()) {
+    for (namespace, name, value) in markup.attributes() {
+      match (namespace, name) {
         (None | Some(SVG_NAMESPACE), "class") => {
           node = node.with_class_name(value);
         }
@@ -289,7 +329,7 @@ impl TreeBuilder {
       node = node.with_attributes(attributes);
     }
 
-    let children = xml
+    let children = markup
       .children()
       .filter_map(|child| self.node(child, Some(index), depth + 1))
       .collect();

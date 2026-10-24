@@ -34,6 +34,8 @@ use html5ever::{
   serialize::{SerializeOpts, TraversalScope, serialize},
   tendril::TendrilSink,
 };
+#[cfg(feature = "svg")]
+use takumi_core::resources::image::{ImageSource, SvgSource};
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   style::{
@@ -451,7 +453,7 @@ impl NodeBuilder<'_> {
       },
       _ if UNRENDERED_TAGS.contains(&tag) => return Ok(None),
       "svg" => Node::image(ImageData {
-        src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
+        src: self.inline_svg(handle, depth)?,
         width: pixels(handle, tag, "width"),
         height: pixels(handle, tag, "height"),
       }),
@@ -545,6 +547,69 @@ impl NodeBuilder<'_> {
     }
 
     node
+  }
+
+  /// The source of an inline `<svg>`: its subtree as nodes, which the page's stylesheet reaches,
+  /// or its markup when the nodes do not form a document.
+  #[cfg(feature = "svg")]
+  fn inline_svg(&self, handle: NodeRef<'_>, depth: usize) -> Result<ImageSourceInput, HtmlError> {
+    let markup = serialize_outer_html(handle);
+    let root = self.svg_node(handle, depth)?;
+    let source = str::from_utf8(&markup)
+      .ok()
+      .zip(root)
+      .and_then(|(markup, root)| SvgSource::from_inline_element(&root, markup).ok());
+
+    Ok(match source {
+      Some(source) => ImageSourceInput::Loaded(ImageSource::from(source)),
+      None => ImageSourceInput::Buffer(markup),
+    })
+  }
+
+  #[cfg(not(feature = "svg"))]
+  fn inline_svg(&self, handle: NodeRef<'_>, _depth: usize) -> Result<ImageSourceInput, HtmlError> {
+    Ok(ImageSourceInput::Buffer(serialize_outer_html(handle)))
+  }
+
+  /// An element of an inline `<svg>` with every attribute in its attribute map under its
+  /// qualified name, or a text, none for other nodes. A subtree past the depth limit fails as the
+  /// rest of the document does.
+  #[cfg(feature = "svg")]
+  fn svg_node(&self, handle: NodeRef<'_>, depth: usize) -> Result<Option<Node>, HtmlError> {
+    if depth >= self.max_depth {
+      return Err(HtmlError::MaxDepthExceeded(self.max_depth));
+    }
+
+    Ok(match handle.data() {
+      NodeData::Text(contents) => Some(Node::text(contents.to_string())),
+      NodeData::Element { name, attrs, .. } => {
+        let attributes: BTreeMap<Box<str>, Box<str>> = attrs
+          .iter()
+          .map(|attr| {
+            let local = &*attr.name.local;
+            let name = match attr.name.ns {
+              ns!(xlink) => format!("xlink:{local}").into(),
+              ns!(xml) => format!("xml:{local}").into(),
+              _ => local.into(),
+            };
+
+            (name, attr.value.as_ref().into())
+          })
+          .collect();
+        let mut children = Vec::new();
+
+        for child in handle.children() {
+          children.extend(self.svg_node(child, depth + 1)?);
+        }
+
+        Some(
+          Node::container(children)
+            .with_tag_name(&*name.local)
+            .with_attributes(attributes),
+        )
+      }
+      _ => None,
+    })
   }
 
   /// The style a `style` attribute of `css` sets.
@@ -687,6 +752,17 @@ mod tests {
     ));
     assert!(image.to_html().contains("width: 50%"));
     assert!(svg.to_html().contains("width: 100%; height: 2em"));
+  }
+
+  /// A subtree of an inline `<svg>` past the depth limit fails as the rest of the document does,
+  /// rather than drawing without its deepest elements.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn an_inline_svg_past_the_depth_limit_fails() {
+    let options = FromHtmlOptions::builder().max_depth(2).build();
+    let result = from_html(r#"<svg><g><rect width="1" height="1"/></g></svg>"#, options);
+
+    assert!(matches!(result, Err(HtmlError::MaxDepthExceeded(2))));
   }
 
   /// A `style` attribute is a declaration list, and CSS drops only the declaration it

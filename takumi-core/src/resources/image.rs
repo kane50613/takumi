@@ -31,7 +31,9 @@ use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "svg-sizing")]
 use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
-use crate::svg::SvgDocument;
+use crate::style::Color;
+#[cfg(feature = "svg")]
+use crate::svg::{SvgDocument, SvgHost};
 #[cfg(feature = "svg-raster")]
 #[cfg(feature = "svg-raster")]
 use crate::svg_drawing::SvgDrawing;
@@ -41,12 +43,12 @@ pub use crate::svg_vector::{
   SvgOpPaint, SvgSpreadMethod, SvgStrokeStyle,
 };
 use crate::{
+  context::RenderContext,
   resources::{
-    font::FontsSnapshot,
     image_buffer::ImageBuffer,
     image_decoder::{DecodeTarget, bitmap_dimensions, decode_bitmap_scaled, decode_image},
   },
-  style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
+  style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
 #[cfg(feature = "svg-raster")]
 use tiny_skia::Transform;
@@ -94,6 +96,9 @@ pub struct SvgSource {
   /// The document, drawn through the CSS cascade.
   #[cfg(feature = "svg")]
   document: Arc<SvgDocument>,
+  /// Whether the document is an inline `svg` element, which draws in the style of its box.
+  #[cfg(feature = "svg")]
+  inline: bool,
   /// Whether the markup contains `<text`, so rendering depends on the registered fonts.
   #[cfg(feature = "svg-raster")]
   has_text: bool,
@@ -180,26 +185,56 @@ impl SvgSource {
     self.document.node_count() * size_of::<Node>()
   }
 
-  /// The SVG's drawing ops, in SVG canvas coordinates.
-  pub fn vector_ops(&self, current_color: Color, fonts: Option<&FontsSnapshot>) -> Vec<SvgOp> {
-    self.document.ops(current_color, fonts).unwrap_or_default()
+  /// The SVG's drawing ops in SVG canvas coordinates, drawn in the box `host` styles.
+  pub fn vector_ops(&self, host: &RenderContext) -> Vec<SvgOp> {
+    let host = if self.inline {
+      SvgHost::Inline(host)
+    } else {
+      SvgHost::Image {
+        current_color: host.current_color,
+        fonts: Some(host.fonts()),
+      }
+    };
+
+    self.document.ops(host).unwrap_or_default()
+  }
+
+  /// An inline `svg` element of an HTML document and its subtree, every attribute kept in the
+  /// attribute maps, with `markup` its serialization for vector backends to embed.
+  pub fn from_inline_element(root: &Node, markup: &str) -> Result<Self, ImageError> {
+    let document = SvgDocument::from_element(root)?;
+
+    Ok(Self {
+      inline: true,
+      cache: Weak::new(),
+      hash: xxh3_64(markup.as_bytes()),
+      ..Self::from_document(document, markup)
+    })
   }
 
   /// Parses SVG markup; rasterized pixmaps go into `cache` while it is alive,
   /// keyed by content hash and target size. A dead handle rasterizes per call.
   fn parse(src: &str, hash: u64, cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
-    let document = SvgDocument::parse(src)?;
+    Ok(Self {
+      hash,
+      cache,
+      ..Self::from_document(SvgDocument::parse(src)?, src)
+    })
+  }
 
-    Ok(SvgSource {
+  /// The source of `document`, parsed from `src`, as an image that no cache holds.
+  fn from_document(document: SvgDocument, src: &str) -> Self {
+    Self {
       #[cfg(feature = "svg-raster")]
       has_text: document.has_text(),
       uses_current_color: document.uses_current_color(),
       sizing: document.size,
       document: Arc::new(document),
+      inline: false,
       source: Box::from(src),
-      hash,
-      cache,
-    })
+      hash: 0,
+      cache: Weak::new(),
+    }
   }
 
   #[cfg(feature = "svg-raster")]
@@ -207,8 +242,7 @@ impl SvgSource {
     &self,
     width: u32,
     height: u32,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
+    host: &RenderContext,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
     if !within_raster_pixel_budget(width, height) {
       return Err(ImageError::InvalidPixmapSize);
@@ -221,7 +255,7 @@ impl SvgSource {
     let sy = height as f32 / original_height;
 
     SvgDrawing.draw(
-      &self.vector_ops(current_color, fonts),
+      &self.vector_ops(host),
       Transform::from_scale(sx, sy),
       &mut pixmap.as_mut(),
     );
@@ -237,27 +271,27 @@ impl SvgSource {
     width: u32,
     height: u32,
     image_rendering: ImageScalingAlgorithm,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
+    host: &RenderContext,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
     let mut hash = if self.uses_current_color {
-      self.hash ^ xxh3_64(&current_color.0)
+      self.hash ^ xxh3_64(&host.current_color.0)
     } else {
       self.hash
     };
 
     // Text rasterization depends on which fonts are registered.
-    if self.has_text
-      && let Some(fonts) = fonts
-    {
-      hash ^= xxh3_64(&fonts.revision().to_le_bytes());
+    if self.has_text {
+      hash ^= xxh3_64(&host.fonts().revision().to_le_bytes());
+    }
+
+    // An inline `svg` draws in the style of its box, which the key cannot hold.
+    if self.inline {
+      return self.rasterize(width, height, host);
     }
 
     let key = ResourceCacheKey::sized(hash, width, height, image_rendering);
 
-    cached_sized(&self.cache, key, || {
-      self.rasterize(width, height, current_color, fonts)
-    })
+    cached_sized(&self.cache, key, || self.rasterize(width, height, host))
   }
 }
 
@@ -503,8 +537,7 @@ impl ImageSource {
       allow(unused_variables)
     )]
     time_ms: u64,
-    #[cfg_attr(not(feature = "svg-raster"), allow(unused_variables))] current_color: Color,
-    #[cfg_attr(not(feature = "svg-raster"), allow(unused_variables))] fonts: Option<&FontsSnapshot>,
+    #[cfg_attr(not(feature = "svg-raster"), allow(unused_variables))] host: &RenderContext,
   ) -> Result<RenderedImage, ImageError> {
     match self {
       ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Sampled {
@@ -544,8 +577,7 @@ impl ImageSource {
         width,
         height,
         image_rendering,
-        current_color,
-        fonts,
+        host,
       )?)),
       #[cfg(all(feature = "svg-sizing", not(feature = "svg-raster")))]
       ImageSource::Svg(_) => Err(ImageError::SvgParseNotSupported),
@@ -998,6 +1030,7 @@ mod resource_cache_tests {
     CacheEntry, ImageCacheMode, RenderedImage, ResourceCache, ResourceCacheKey, ResourceWeighter,
   };
   use crate::{
+    context::RenderContext,
     resources::{image::ImageSource, image_buffer::ImageBuffer},
     style::{Color, ImageScalingAlgorithm},
   };
@@ -1053,8 +1086,7 @@ mod resource_cache_tests {
         height,
         ImageScalingAlgorithm::Auto,
         0,
-        Color::black(),
-        None,
+        &RenderContext::with_current_color(Color::black()),
       )
       .unwrap()
     {
@@ -1147,8 +1179,7 @@ mod resource_cache_tests {
         height,
         ImageScalingAlgorithm::Auto,
         0,
-        Color::black(),
-        None,
+        &RenderContext::with_current_color(Color::black()),
       )
       .unwrap()
     {
@@ -1238,6 +1269,7 @@ mod tests {
   use crate::resources::animated::AnimatedFormat;
   #[cfg(any(feature = "png", feature = "webp"))]
   use crate::resources::image_decoder::DecodeTarget;
+  use crate::style::Color;
 
   use super::*;
 
@@ -2041,8 +2073,13 @@ mod tests {
     let image = ImageSource::from_bytes(svg.as_bytes())?;
 
     assert!(matches!(image, ImageSource::Svg(_)));
-    let rendered =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, Color::black(), None)?;
+    let rendered = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      &RenderContext::with_current_color(Color::black()),
+    )?;
     assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
     Ok(())
   }
@@ -2060,8 +2097,7 @@ mod tests {
       4,
       ImageScalingAlgorithm::Auto,
       0,
-      Color([255, 0, 0, 255]),
-      None,
+      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
     )?;
 
     assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
@@ -2081,8 +2117,7 @@ mod tests {
       4,
       ImageScalingAlgorithm::Auto,
       0,
-      Color([255, 0, 0, 255]),
-      None,
+      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
     )?;
 
     assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
@@ -2102,8 +2137,7 @@ mod tests {
       4,
       ImageScalingAlgorithm::Auto,
       0,
-      Color([255, 0, 0, 255]),
-      None,
+      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
     )?;
 
     assert_eq!(premul_at(&rendered, 2, 2), [0, 255, 0, 255]);
@@ -2149,8 +2183,13 @@ mod tests {
     let buffer = ImageBuffer::from_rgba_bytes(bitmap, 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
-    let rendered =
-      image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, 0, Color::black(), None)?;
+    let rendered = image.render_for_layout(
+      2,
+      2,
+      ImageScalingAlgorithm::Auto,
+      0,
+      &RenderContext::with_current_color(Color::black()),
+    )?;
 
     assert!(matches!(rendered, RenderedImage::Sampled { .. }));
     Ok(())
@@ -2173,8 +2212,7 @@ mod tests {
       4,
       ImageScalingAlgorithm::Pixelated,
       0,
-      Color::black(),
-      None,
+      &RenderContext::with_current_color(Color::black()),
     )?;
     let RenderedImage::Sampled {
       width,
@@ -2205,8 +2243,7 @@ mod tests {
       8192,
       ImageScalingAlgorithm::Auto,
       0,
-      Color::black(),
-      None,
+      &RenderContext::with_current_color(Color::black()),
     );
 
     assert_matches!(result, Err(ImageError::InvalidPixmapSize));
@@ -2333,7 +2370,9 @@ mod tests {
       path.display()
     );
     let source = svg.parse::<SvgSource>().unwrap();
-    let rasterized = source.rasterize(8, 8, Color::black(), None).unwrap();
+    let rasterized = source
+      .rasterize(8, 8, &RenderContext::with_current_color(Color::black()))
+      .unwrap();
 
     std::fs::remove_file(&path).ok();
 

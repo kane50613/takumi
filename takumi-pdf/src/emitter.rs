@@ -1027,7 +1027,7 @@ impl Emitter<'_> {
     if svg_width <= 0.0 || svg_height <= 0.0 {
       return;
     }
-    let ops = svg.vector_ops(context.current_color, Some(context.fonts()));
+    let ops = svg.vector_ops(context);
     let canvas = KrillaRect::from_xywh(0.0, 0.0, svg_width, svg_height).and_then(rect_path);
 
     surface.push_transform(&Transform::from_row(
