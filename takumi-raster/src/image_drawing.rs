@@ -59,8 +59,7 @@ fn process_image_for_object_fit(
     height,
     context.style.misc_inherited_data.image_rendering,
     context.time_ms(),
-    context.current_color,
-    Some(context.fonts()),
+    context,
   )?;
   let logical_to_source = if placement.size.width == 0.0 || placement.size.height == 0.0 {
     Affine::IDENTITY

@@ -178,7 +178,7 @@ fn pixel_size(source: &ImageSource) -> Option<(f32, f32)> {
 /// `svg`'s ops, when SVG elements can express every op.
 fn vector_ops(svg: &SvgSource, context: &RenderContext) -> Option<Drawing> {
   let (width, height) = svg.dimensions();
-  let ops = svg.vector_ops(context.current_color, Some(context.fonts()));
+  let ops = svg.vector_ops(context);
 
   (width > 0.0 && height > 0.0 && is_vector(&ops)).then(|| Drawing::Ops {
     ops,

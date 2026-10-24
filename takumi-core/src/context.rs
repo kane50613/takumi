@@ -10,6 +10,9 @@ use std::{
 
 use typed_builder::TypedBuilder;
 
+#[cfg(test)]
+use crate::{resources::font::Fonts, viewport::Viewport};
+
 use crate::{
   font_style::ExpandedFamilies,
   fonts::{
@@ -309,5 +312,21 @@ impl RenderContext {
     if display != self.style.base_data.display {
       self.style_mut().base_data_mut().display = display;
     }
+  }
+}
+
+#[cfg(test)]
+impl RenderContext {
+  /// A context with no registered fonts whose `color` is `current_color`.
+  pub(crate) fn with_current_color(current_color: Color) -> Self {
+    Self::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((800, 600)))
+          .build(),
+      )
+      .current_color(current_color)
+      .build()
   }
 }
