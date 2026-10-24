@@ -259,8 +259,7 @@ pub(crate) fn flatten(tree: &Tree) -> Vec<SvgOp> {
   Flattener::default().flatten(tree.root())
 }
 
-/// Flattens the children of `group`, which an `feImage` filter draws without the group's own
-/// transform.
+/// Flattens `group`'s children without its transform, as an `feImage` filter draws them.
 #[cfg(feature = "svg-raster")]
 pub(crate) fn flatten_children(group: &Group) -> Vec<SvgOp> {
   let mut flattener = Flattener::default();

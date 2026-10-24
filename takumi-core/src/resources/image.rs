@@ -319,8 +319,7 @@ impl SvgSource {
       .ok_or(ImageError::InvalidPixmapSize)
   }
 
-  /// The SVG drawn by `drawer` at `width` by `height` pixels, reused when it was drawn the same
-  /// way before.
+  /// The SVG drawn by `drawer` at `width` by `height` pixels, cached like other images.
   #[cfg(feature = "svg-raster")]
   pub fn rasterize_cached(
     &self,
