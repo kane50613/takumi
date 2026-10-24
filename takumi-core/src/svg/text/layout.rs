@@ -9,7 +9,7 @@ use harfrust::{Feature, Tag as HbTag, font::Variation};
 use kurbo::{ParamCurve, ParamCurveArclen, ParamCurveDeriv};
 use skrifa::raw::types::F2Dot14;
 use strict_num::NonZeroPositiveF32;
-use tiny_skia_path::{NonZeroRect, Transform};
+use tiny_skia::{NonZeroRect, Transform};
 
 use crate::font_style::ExpandedFontFamily;
 use crate::fonts::font::Font as ShapingFont;
@@ -280,7 +280,7 @@ fn convert_span(
   text_ts: Transform,
 ) -> Option<(Vec<GlyphCluster>, NonZeroRect)> {
   let mut span_clusters = vec![];
-  let mut bboxes_builder = tiny_skia_path::PathBuilder::new();
+  let mut bboxes_builder = tiny_skia::PathBuilder::new();
 
   for cluster in clusters {
     if !cluster.visible {
@@ -355,7 +355,7 @@ pub(crate) fn convert_decoration(
 ) -> Option<Path> {
   debug_assert!(!decoration_spans.is_empty());
 
-  let mut builder = tiny_skia_path::PathBuilder::new();
+  let mut builder = tiny_skia::PathBuilder::new();
   for dec_span in decoration_spans {
     let rect = match NonZeroRect::from_xywh(0.0, -thickness / 2.0, dec_span.width, thickness) {
       Some(v) => v,
@@ -367,7 +367,7 @@ pub(crate) fn convert_decoration(
 
     let ts = dec_span.transform.pre_translate(0.0, dy);
 
-    let mut path = tiny_skia_path::PathBuilder::from_rect(rect.to_rect());
+    let mut path = tiny_skia::PathBuilder::from_rect(rect.to_rect());
     path = match path.transform(ts) {
       Some(v) => v,
       None => continue,
@@ -616,7 +616,7 @@ fn collect_normals(
   text: &Text,
   chunk: &TextChunk,
   clusters: &[GlyphCluster],
-  path: &tiny_skia_path::Path,
+  path: &tiny_skia::Path,
   char_offset: usize,
   offset: f32,
 ) -> Vec<Option<PathNormal>> {
@@ -667,29 +667,27 @@ fn collect_normals(
   let mut length: f64 = 0.0;
   for seg in path.segments() {
     let curve = match seg {
-      tiny_skia_path::PathSegment::MoveTo(p) => {
+      tiny_skia::PathSegment::MoveTo(p) => {
         prev_mx = p.x;
         prev_my = p.y;
         prev_x = p.x;
         prev_y = p.y;
         continue;
       }
-      tiny_skia_path::PathSegment::LineTo(p) => create_curve_from_line(prev_x, prev_y, p.x, p.y),
-      tiny_skia_path::PathSegment::QuadTo(p1, p) => kurbo::QuadBez {
+      tiny_skia::PathSegment::LineTo(p) => create_curve_from_line(prev_x, prev_y, p.x, p.y),
+      tiny_skia::PathSegment::QuadTo(p1, p) => kurbo::QuadBez {
         p0: kurbo::Point::new(prev_x as f64, prev_y as f64),
         p1: kurbo::Point::new(p1.x as f64, p1.y as f64),
         p2: kurbo::Point::new(p.x as f64, p.y as f64),
       }
       .raise(),
-      tiny_skia_path::PathSegment::CubicTo(p1, p2, p) => kurbo::CubicBez {
+      tiny_skia::PathSegment::CubicTo(p1, p2, p) => kurbo::CubicBez {
         p0: kurbo::Point::new(prev_x as f64, prev_y as f64),
         p1: kurbo::Point::new(p1.x as f64, p1.y as f64),
         p2: kurbo::Point::new(p2.x as f64, p2.y as f64),
         p3: kurbo::Point::new(p.x as f64, p.y as f64),
       },
-      tiny_skia_path::PathSegment::Close => {
-        create_curve_from_line(prev_x, prev_y, prev_mx, prev_my)
-      }
+      tiny_skia::PathSegment::Close => create_curve_from_line(prev_x, prev_y, prev_mx, prev_my),
     };
 
     let arclen_accuracy = {

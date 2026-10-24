@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 pub use strict_num::{self, ApproxEqUlps, NonZeroPositiveF32, NormalizedF32, PositiveF32};
 
-pub use tiny_skia_path;
+pub use tiny_skia;
 
 pub use self::geom::*;
 pub use self::parse::*;
@@ -529,21 +529,21 @@ impl Stroke {
     self.linejoin
   }
 
-  /// Converts into a `tiny_skia_path::Stroke` type.
-  pub fn to_tiny_skia(&self) -> tiny_skia_path::Stroke {
-    let mut stroke = tiny_skia_path::Stroke {
+  /// Converts into a `tiny_skia::Stroke` type.
+  pub fn to_tiny_skia(&self) -> tiny_skia::Stroke {
+    let mut stroke = tiny_skia::Stroke {
       width: self.width.get(),
       miter_limit: self.miterlimit.get(),
       line_cap: match self.linecap {
-        LineCap::Butt => tiny_skia_path::LineCap::Butt,
-        LineCap::Round => tiny_skia_path::LineCap::Round,
-        LineCap::Square => tiny_skia_path::LineCap::Square,
+        LineCap::Butt => tiny_skia::LineCap::Butt,
+        LineCap::Round => tiny_skia::LineCap::Round,
+        LineCap::Square => tiny_skia::LineCap::Square,
       },
       line_join: match self.linejoin {
-        LineJoin::Miter => tiny_skia_path::LineJoin::Miter,
-        LineJoin::MiterClip => tiny_skia_path::LineJoin::MiterClip,
-        LineJoin::Round => tiny_skia_path::LineJoin::Round,
-        LineJoin::Bevel => tiny_skia_path::LineJoin::Bevel,
+        LineJoin::Miter => tiny_skia::LineJoin::Miter,
+        LineJoin::MiterClip => tiny_skia::LineJoin::MiterClip,
+        LineJoin::Round => tiny_skia::LineJoin::Round,
+        LineJoin::Bevel => tiny_skia::LineJoin::Bevel,
       },
       // According to the spec, dash should not be accounted during
       // bbox calculation.
@@ -551,7 +551,7 @@ impl Stroke {
     };
 
     if let Some(ref list) = self.dasharray {
-      stroke.dash = tiny_skia_path::StrokeDash::new(list.clone(), self.dashoffset);
+      stroke.dash = tiny_skia::StrokeDash::new(list.clone(), self.dashoffset);
     }
 
     stroke
@@ -1181,7 +1181,7 @@ pub struct Path {
   pub(crate) stroke: Option<Stroke>,
   pub(crate) paint_order: PaintOrder,
   pub(crate) rendering_mode: ShapeRendering,
-  pub(crate) data: Arc<tiny_skia_path::Path>,
+  pub(crate) data: Arc<tiny_skia::Path>,
   pub(crate) abs_transform: Transform,
   pub(crate) bounding_box: Rect,
   pub(crate) abs_bounding_box: Rect,
@@ -1190,7 +1190,7 @@ pub struct Path {
 }
 
 impl Path {
-  pub(crate) fn new_simple(data: Arc<tiny_skia_path::Path>) -> Option<Self> {
+  pub(crate) fn new_simple(data: Arc<tiny_skia::Path>) -> Option<Self> {
     Self::new(
       String::new(),
       true,
@@ -1210,7 +1210,7 @@ impl Path {
     stroke: Option<Stroke>,
     paint_order: PaintOrder,
     rendering_mode: ShapeRendering,
-    data: Arc<tiny_skia_path::Path>,
+    data: Arc<tiny_skia::Path>,
     abs_transform: Transform,
   ) -> Option<Self> {
     let bounding_box = data.compute_tight_bounds()?;
@@ -1293,7 +1293,7 @@ impl Path {
   /// Segments list.
   ///
   /// All segments are in absolute coordinates.
-  pub fn data(&self) -> &tiny_skia_path::Path {
+  pub fn data(&self) -> &tiny_skia::Path {
     self.data.as_ref()
   }
 
@@ -1335,7 +1335,7 @@ impl Path {
     self.abs_stroke_bounding_box
   }
 
-  fn calculate_stroke_bbox(stroke: Option<&Stroke>, path: &tiny_skia_path::Path) -> Option<Rect> {
+  fn calculate_stroke_bbox(stroke: Option<&Stroke>, path: &tiny_skia::Path) -> Option<Rect> {
     let mut stroke = stroke?.to_tiny_skia();
     // According to the spec, dash should not be accounted during bbox calculation.
     stroke.dash = None;

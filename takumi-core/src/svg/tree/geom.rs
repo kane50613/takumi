@@ -3,7 +3,7 @@
 
 use crate::svg::{Align, PreserveAspectRatio};
 use strict_num::ApproxEqUlps;
-pub use tiny_skia_path::{NonZeroRect, Rect, Size, Transform};
+pub use tiny_skia::{NonZeroRect, Rect, Size, Transform};
 
 /// Approximate zero equality comparisons.
 pub trait ApproxZeroUlps: ApproxEqUlps {

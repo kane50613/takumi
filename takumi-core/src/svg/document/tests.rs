@@ -116,15 +116,3 @@ fn the_root_must_be_svg() {
     Err(ParseError::NotSvg)
   ));
 }
-
-#[test]
-fn the_host_color_is_needed_only_where_color_is_unset() {
-  let current =
-    parse(r#"<svg xmlns="http://www.w3.org/2000/svg"><rect fill="currentColor"/></svg>"#);
-  let own = parse(
-    r#"<svg xmlns="http://www.w3.org/2000/svg" color="red"><rect fill="currentColor"/></svg>"#,
-  );
-
-  assert!(current.uses_host_color());
-  assert!(!own.uses_host_color());
-}

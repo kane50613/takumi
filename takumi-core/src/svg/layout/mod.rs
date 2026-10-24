@@ -7,7 +7,7 @@ use std::{
   sync::Arc,
 };
 
-use tiny_skia_path::PathBuilder;
+use tiny_skia::PathBuilder;
 
 use self::paint_server::process_paint;
 use crate::{
@@ -722,17 +722,17 @@ pub(crate) fn convert_group(
 
 fn convert_path(
   node: SvgNode,
-  tiny_skia_path: Arc<tiny_skia_path::Path>,
+  tiny_skia: Arc<tiny_skia::Path>,
   state: &State,
   cache: &mut Cache,
   parent: &mut Group,
 ) {
-  debug_assert!(tiny_skia_path.len() >= 2);
-  if tiny_skia_path.len() < 2 {
+  debug_assert!(tiny_skia.len() >= 2);
+  if tiny_skia.len() < 2 {
     return;
   }
 
-  let has_bbox = tiny_skia_path.bounds().width() > 0.0 && tiny_skia_path.bounds().height() > 0.0;
+  let has_bbox = tiny_skia.bounds().width() > 0.0 && tiny_skia.bounds().height() > 0.0;
   let mut fill = paint::resolve_fill(node, has_bbox, state, cache);
   let mut stroke = paint::resolve_stroke(node, has_bbox, state, cache);
   let Some(style) = node.style() else {
@@ -766,7 +766,7 @@ fn convert_path(
       context_transform,
       context_bbox.map(|r| r.to_rect()),
       path_transform,
-      tiny_skia_path.bounds(),
+      tiny_skia.bounds(),
       cache,
     );
     fill.context_element = None;
@@ -781,7 +781,7 @@ fn convert_path(
       context_transform,
       context_bbox.map(|r| r.to_rect()),
       path_transform,
-      tiny_skia_path.bounds(),
+      tiny_skia.bounds(),
       cache,
     );
     stroke.context_element = None;
@@ -796,7 +796,7 @@ fn convert_path(
 
     let mut marker_state = state.clone();
 
-    let bbox = tiny_skia_path
+    let bbox = tiny_skia
       .compute_tight_bounds()
       .and_then(|r| r.to_non_zero_rect());
 
@@ -812,13 +812,7 @@ fn convert_path(
 
     marker_state.context_element = Some((fill, stroke));
 
-    marker::convert(
-      node,
-      &tiny_skia_path,
-      &marker_state,
-      cache,
-      &mut marker_group,
-    );
+    marker::convert(node, &tiny_skia, &marker_state, cache, &mut marker_group);
     marker_group.calculate_bounding_boxes();
     marker = Some(marker_group);
   }
@@ -837,7 +831,7 @@ fn convert_path(
     stroke,
     paint_order,
     rendering_mode,
-    tiny_skia_path,
+    tiny_skia,
     path_transform,
   );
 

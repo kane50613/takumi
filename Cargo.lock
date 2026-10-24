@@ -1721,7 +1721,6 @@ dependencies = [
  "thin-vec",
  "thiserror",
  "tiny-skia",
- "tiny-skia-path",
  "typed-builder",
  "unicode-bidi",
  "wuff",

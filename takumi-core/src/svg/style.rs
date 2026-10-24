@@ -484,15 +484,6 @@ pub struct StyleContext {
   pub dpi: f32,
 }
 
-impl Paint {
-  fn uses_current_color(&self) -> bool {
-    matches!(
-      self,
-      Self::CurrentColor | Self::Url(_, Some(PaintFallback::CurrentColor))
-    )
-  }
-}
-
 /// The style properties of one element, after the cascade and inheritance.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SvgStyle {
@@ -613,16 +604,6 @@ pub struct SvgStyle {
 }
 
 impl SvgStyle {
-  /// Whether a paint of this element reads the `color` property.
-  pub fn uses_current_color(&self) -> bool {
-    self.fill.uses_current_color()
-      || self.stroke.uses_current_color()
-      || self.flood_color == ColorInput::CurrentColor
-      || self.lighting_color == ColorInput::CurrentColor
-      || self.stop_color == ColorInput::CurrentColor
-      || self.background_color == ColorInput::CurrentColor
-  }
-
   /// The initial values of every property.
   pub fn initial(context: &StyleContext) -> Self {
     Self {

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use skrifa::MetadataProvider;
 use strict_num::NonZeroPositiveF32;
-use tiny_skia_path::{NonZeroRect, Transform};
+use tiny_skia::{NonZeroRect, Transform};
 
 use super::layout;
 use crate::geometry::PathCommand;
@@ -35,7 +35,7 @@ impl TextPaths {
     span: &layout::Span,
     fill: Option<Fill>,
     stroke: Option<Stroke>,
-    path: tiny_skia_path::Path,
+    path: tiny_skia::Path,
   ) {
     if let Some(path) = Path::new(
       String::new(),
@@ -61,8 +61,8 @@ impl TextPaths {
   }
 
   /// Pushes the plain outlines `builder` collected as one path in the span's paint.
-  fn flush(&mut self, span: &layout::Span, builder: &mut tiny_skia_path::PathBuilder) {
-    let builder = mem::replace(builder, tiny_skia_path::PathBuilder::new());
+  fn flush(&mut self, span: &layout::Span, builder: &mut tiny_skia::PathBuilder) {
+    let builder = mem::replace(builder, tiny_skia::PathBuilder::new());
 
     if let Some(path) = builder.finish() {
       self.push(span, span.fill.clone(), span.stroke.clone(), path);
@@ -109,7 +109,7 @@ impl TextPaths {
     &mut self,
     span: &layout::Span,
     glyph: &layout::PositionedGlyph,
-    builder: &mut tiny_skia_path::PathBuilder,
+    builder: &mut tiny_skia::PathBuilder,
     cache: &Cache,
   ) -> Option<()> {
     let font = glyph.font.typeface.font_ref()?;
@@ -185,7 +185,7 @@ impl layout::Span {
     &self,
     outline: &ResolvedOutlineGlyph,
     glyph: &layout::PositionedGlyph,
-  ) -> Vec<(Fill, tiny_skia_path::Path)> {
+  ) -> Vec<(Fill, tiny_skia::Path)> {
     let (Some(layers), Some(fill)) = (outline.color_layers(), self.fill.as_ref()) else {
       return Vec::new();
     };
@@ -235,7 +235,7 @@ pub(crate) fn flatten(text: &mut Text, cache: &Cache) -> Option<(Group, NonZeroR
     paths.push_decoration(span.overline.as_ref());
     paths.push_decoration(span.underline.as_ref());
 
-    let mut builder = tiny_skia_path::PathBuilder::new();
+    let mut builder = tiny_skia::PathBuilder::new();
 
     for glyph in &span.positioned_glyphs {
       paths.push_glyph(span, glyph, &mut builder, cache);

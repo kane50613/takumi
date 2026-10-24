@@ -232,7 +232,7 @@ fn clip_element(
 
   let mut clip_path = crate::svg::tree::ClipPath::empty(cache.gen_id(IdKind::ClipPath));
 
-  if let Some(mut path) = Path::new_simple(Arc::new(tiny_skia_path::PathBuilder::from_rect(
+  if let Some(mut path) = Path::new_simple(Arc::new(tiny_skia::PathBuilder::from_rect(
     clip_rect.to_rect(),
   ))) {
     path.fill = Some(crate::svg::tree::Fill::default());

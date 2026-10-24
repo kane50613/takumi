@@ -255,9 +255,7 @@ pub(crate) fn convert_inner(
 
   if aspect.slice {
     // Image slice acts like a rectangular clip.
-    let mut path = Path::new_simple(Arc::new(tiny_skia_path::PathBuilder::from_rect(
-      rect.to_rect(),
-    )))?;
+    let mut path = Path::new_simple(Arc::new(tiny_skia::PathBuilder::from_rect(rect.to_rect())))?;
     path.fill = Some(crate::svg::tree::Fill::default());
 
     let mut clip = ClipPath::empty(cache.gen_id(IdKind::ClipPath));

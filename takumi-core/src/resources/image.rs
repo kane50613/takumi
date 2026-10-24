@@ -49,6 +49,8 @@ pub use crate::svg::ops::{
 use crate::svg::tree::{Options, Tree};
 #[cfg(feature = "svg-raster")]
 use crate::svg::tree::{Transform, filters_from_markup};
+#[cfg(feature = "svg")]
+use crate::svg::{Document, ParseOptions, StyleContext, Tag};
 use crate::{
   resources::{
     font::FontsSnapshot,
@@ -94,6 +96,9 @@ pub struct SvgSource {
   source: Box<str>,
   /// Canvas size and CSS intrinsic sizing read from the root element.
   sizing: SvgSize,
+  /// The parsed element tree, laid out again when fonts or the host color change.
+  #[cfg(feature = "svg")]
+  document: Document,
   /// Parsed SVG tree used for size and initial metadata.
   #[cfg(feature = "svg")]
   pub(crate) tree: Tree,
@@ -204,13 +209,12 @@ impl SvgSource {
     }
   }
 
-  /// Re-parses the markup with `configure` applied to the parse options.
-  fn reparse(
+  /// Lays the element tree out again with `configure` applied to the options.
+  fn relayout(
     &self,
     fonts: Option<&FontsSnapshot>,
     configure: impl FnOnce(&mut Options),
   ) -> Option<Tree> {
-    let document = parse_svg_document(&self.source).ok()?;
     let mut options = svg_parse_options();
 
     if let Some(fonts) = fonts.filter(|_| self.has_text) {
@@ -218,7 +222,7 @@ impl SvgSource {
     }
 
     configure(&mut options);
-    Tree::from_xmltree(&document, &options).ok()
+    Tree::from_document(&self.document, &options).ok()
   }
 
   /// Re-parses the markup with `current_color` as the `currentColor` fallback.
@@ -232,7 +236,7 @@ impl SvgSource {
       return None;
     }
 
-    self.reparse(fonts, |options| {
+    self.relayout(fonts, |options| {
       options.current_color = Some(current_color);
     })
   }
@@ -240,14 +244,21 @@ impl SvgSource {
   /// Parses SVG markup; rasterized pixmaps go into `cache` while it is alive,
   /// keyed by content hash and target size. A dead handle rasterizes per call.
   fn parse(src: &str, hash: u64, cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
-    // One parse, shared with usvg via `from_xmltree` (what `from_str` does
-    // internally). No text stripping: usvg drops `<text>`/`<tspan>` with its
-    // `text` feature off.
-    let document = parse_svg_document(src).map_err(ImageError::svg_parse)?;
-
+    let xml = parse_svg_document(src).map_err(ImageError::svg_parse)?;
     let options = svg_parse_options();
-    let tree = Tree::from_xmltree(&document, &options).map_err(ImageError::svg_parse)?;
-    let sizing = SvgSize::from_root(document.root_element()).map_err(ImageError::svg_parse)?;
+    let document = Document::from_xml(
+      &xml,
+      &ParseOptions {
+        style: StyleContext {
+          font_size: options.font_size,
+          dpi: options.dpi,
+        },
+        style_sheet: None,
+      },
+    )
+    .map_err(ImageError::svg_parse)?;
+    let tree = Tree::from_document(&document, &options).map_err(ImageError::svg_parse)?;
+    let sizing = SvgSize::from_root(xml.root_element()).map_err(ImageError::svg_parse)?;
     // Set during parsing whenever a `currentColor` finds no `color` attribute
     // on its ancestors, so it also catches entity-encoded values a source-text
     // scan would miss.
@@ -256,9 +267,10 @@ impl SvgSource {
     Ok(SvgSource {
       has_text: document
         .descendants()
-        .any(|node| node.tag_name().name() == "text"),
+        .any(|node| node.tag() == Some(Tag::Text)),
       source: Box::from(src),
       sizing,
+      document,
       tree,
       uses_current_color,
       text_tree: Mutex::new(None),
@@ -280,7 +292,7 @@ impl SvgSource {
       return Some(tree.clone());
     }
 
-    let tree = Arc::new(self.reparse(Some(fonts), |_| {})?);
+    let tree = Arc::new(self.relayout(Some(fonts), |_| {})?);
 
     *cached = Some((revision, tree.clone()));
     Some(tree)

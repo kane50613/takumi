@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tiny_skia_path::Path;
+use tiny_skia::Path;
 
 use super::{State, units};
 use crate::{
@@ -23,7 +23,7 @@ pub(crate) fn convert(node: SvgNode, state: &State) -> Option<Arc<Path>> {
 
 pub(crate) fn convert_path(node: SvgNode) -> Option<Arc<Path>> {
   let value: &str = node.parse(Attr::D)?;
-  let mut builder = tiny_skia_path::PathBuilder::new();
+  let mut builder = tiny_skia::PathBuilder::new();
 
   for segment in parse_path_data(value) {
     match segment {
@@ -85,9 +85,9 @@ fn convert_rect(node: SvgNode, state: &State) -> Option<Arc<Path>> {
 
   // Conversion according to https://www.w3.org/TR/SVG11/shapes.html#RectElement
   let path = if rx.approx_eq_ulps(&0.0, 4) {
-    tiny_skia_path::PathBuilder::from_rect(Rect::from_xywh(x, y, width, height)?)
+    tiny_skia::PathBuilder::from_rect(Rect::from_xywh(x, y, width, height)?)
   } else {
-    let mut builder = tiny_skia_path::PathBuilder::new();
+    let mut builder = tiny_skia::PathBuilder::new();
     builder.move_to(x + rx, y);
 
     builder.line_to(x + width - rx, y);
@@ -151,7 +151,7 @@ fn convert_line(node: SvgNode, state: &State) -> Option<Arc<Path>> {
   let x2 = node.convert_user_length(Attr::X2, state, Length::number(0.0));
   let y2 = node.convert_user_length(Attr::Y2, state, Length::number(0.0));
 
-  let mut builder = tiny_skia_path::PathBuilder::new();
+  let mut builder = tiny_skia::PathBuilder::new();
   builder.move_to(x1, y1);
   builder.line_to(x2, y2);
   builder.finish().map(Arc::new)
@@ -168,8 +168,8 @@ fn convert_polygon(node: SvgNode) -> Option<Arc<Path>> {
   builder.finish().map(Arc::new)
 }
 
-fn points_to_path(node: SvgNode, eid: &str) -> Option<tiny_skia_path::PathBuilder> {
-  let mut builder = tiny_skia_path::PathBuilder::new();
+fn points_to_path(node: SvgNode, eid: &str) -> Option<tiny_skia::PathBuilder> {
+  let mut builder = tiny_skia::PathBuilder::new();
   match node.parse::<&str>(Attr::Points) {
     Some(text) => {
       let mut scanner = Scanner::new(text);
@@ -247,7 +247,7 @@ fn convert_ellipse(node: SvgNode, state: &State) -> Option<Arc<Path>> {
 }
 
 fn ellipse_to_path(cx: f32, cy: f32, rx: f32, ry: f32) -> Option<Arc<Path>> {
-  let mut builder = tiny_skia_path::PathBuilder::new();
+  let mut builder = tiny_skia::PathBuilder::new();
   builder.move_to(cx + rx, cy);
   builder.clockwise_arc_to(rx, ry, cx, cy + ry);
   builder.clockwise_arc_to(rx, ry, cx - rx, cy);
@@ -262,7 +262,7 @@ trait PathBuilderExt {
   fn clockwise_arc_to(&mut self, rx: f32, ry: f32, x: f32, y: f32);
 }
 
-impl PathBuilderExt for tiny_skia_path::PathBuilder {
+impl PathBuilderExt for tiny_skia::PathBuilder {
   fn clockwise_arc_to(&mut self, rx: f32, ry: f32, x: f32, y: f32) {
     let Some(prev) = self.last_point() else {
       return;

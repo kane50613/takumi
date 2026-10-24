@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tiny_skia_path::Point;
+use tiny_skia::Point;
 
 use super::{IdKind, State, value::Angle};
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
   svg::{Attr, Length, Node as SvgNode, PreserveAspectRatio, Tag},
 };
 
-// Similar to `tiny_skia_path::PathSegment`, but without the `QuadTo`.
+// Similar to `tiny_skia::PathSegment`, but without the `QuadTo`.
 #[derive(Copy, Clone, Debug)]
 enum Segment {
   MoveTo(Point),
@@ -37,7 +37,7 @@ pub(crate) fn is_valid(node: SvgNode) -> bool {
 
 pub(crate) fn convert(
   node: SvgNode,
-  path: &tiny_skia_path::Path,
+  path: &tiny_skia::Path,
   state: &State,
   cache: &mut super::Cache,
   parent: &mut Group,
@@ -87,7 +87,7 @@ enum MarkerOrientation {
 
 fn resolve(
   shape_node: SvgNode,
-  path: &tiny_skia_path::Path,
+  path: &tiny_skia::Path,
   marker_node: SvgNode,
   marker_kind: MarkerKind,
   state: &State,
@@ -116,7 +116,7 @@ fn resolve(
 
     let mut clip_path = ClipPath::empty(cache.gen_id(IdKind::ClipPath));
 
-    let mut path = Path::new_simple(Arc::new(tiny_skia_path::PathBuilder::from_rect(
+    let mut path = Path::new_simple(Arc::new(tiny_skia::PathBuilder::from_rect(
       clip_rect.to_rect(),
     )))?;
     path.fill = Some(Fill::default());
@@ -134,32 +134,32 @@ fn resolve(
   let mut prev_move = Point::zero();
   for seg in path.segments() {
     match seg {
-      tiny_skia_path::PathSegment::MoveTo(p) => {
+      tiny_skia::PathSegment::MoveTo(p) => {
         segments.push(Segment::MoveTo(p));
         prev = p;
         prev_move = p;
       }
-      tiny_skia_path::PathSegment::LineTo(p) => {
+      tiny_skia::PathSegment::LineTo(p) => {
         segments.push(Segment::LineTo(p));
         prev = p;
       }
-      tiny_skia_path::PathSegment::QuadTo(p1, p) => {
+      tiny_skia::PathSegment::QuadTo(p1, p) => {
         let (p1, p2, p) = quad_to_curve(prev, p1, p);
         segments.push(Segment::CubicTo(p1, p2, p));
         prev = p;
       }
-      tiny_skia_path::PathSegment::CubicTo(p1, p2, p) => {
+      tiny_skia::PathSegment::CubicTo(p1, p2, p) => {
         segments.push(Segment::CubicTo(p1, p2, p));
         prev = p;
       }
-      tiny_skia_path::PathSegment::Close => {
+      tiny_skia::PathSegment::Close => {
         segments.push(Segment::Close);
         prev = prev_move;
       }
     }
   }
 
-  let draw_marker = |p: tiny_skia_path::Point, idx: usize| {
+  let draw_marker = |p: tiny_skia::Point, idx: usize| {
     let mut ts = Transform::from_translate(p.x, p.y);
 
     let angle = match convert_orientation(marker_node) {
@@ -229,7 +229,7 @@ fn stroke_scale(
 
 fn draw_markers<P>(path: &[Segment], kind: MarkerKind, mut draw_marker: P)
 where
-  P: FnMut(tiny_skia_path::Point, usize),
+  P: FnMut(tiny_skia::Point, usize),
 {
   match kind {
     MarkerKind::Start => {
@@ -427,7 +427,7 @@ fn calc_angle(in_from: Point, in_to: Point, out_from: Point, out_to: Point) -> f
   normalize(angle).to_degrees()
 }
 
-fn get_subpath_start(segments: &[Segment], idx: usize) -> tiny_skia_path::Point {
+fn get_subpath_start(segments: &[Segment], idx: usize) -> tiny_skia::Point {
   let offset = segments.len() - idx;
   for seg in segments.iter().rev().skip(offset) {
     if let Segment::MoveTo(p) = *seg {
@@ -435,10 +435,10 @@ fn get_subpath_start(segments: &[Segment], idx: usize) -> tiny_skia_path::Point 
     }
   }
 
-  tiny_skia_path::Point::zero()
+  tiny_skia::Point::zero()
 }
 
-fn get_prev_vertex(segments: &[Segment], idx: usize) -> tiny_skia_path::Point {
+fn get_prev_vertex(segments: &[Segment], idx: usize) -> tiny_skia::Point {
   match segments[idx - 1] {
     Segment::MoveTo(p) => p,
     Segment::LineTo(p) => p,

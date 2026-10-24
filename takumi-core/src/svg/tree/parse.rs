@@ -146,7 +146,12 @@ impl crate::svg::tree::Tree {
       },
     )?;
 
-    convert_doc(&doc, opt)
+    Self::from_document(&doc, opt)
+  }
+
+  /// Lays out a parsed `Document` as a `Tree`.
+  pub fn from_document(document: &Document, opt: &Options) -> Result<Self, Error> {
+    convert_doc(document, opt)
   }
 }
 

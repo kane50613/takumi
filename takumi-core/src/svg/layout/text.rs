@@ -682,7 +682,7 @@ fn convert_writing_mode(_text_node: SvgNode) -> WritingMode {
   WritingMode::LeftToRight
 }
 
-fn path_length(path: &tiny_skia_path::Path) -> f64 {
+fn path_length(path: &tiny_skia::Path) -> f64 {
   let mut prev_mx = path.points()[0].x;
   let mut prev_my = path.points()[0].y;
   let mut prev_x = prev_mx;
@@ -701,29 +701,27 @@ fn path_length(path: &tiny_skia_path::Path) -> f64 {
   let mut length = 0.0;
   for seg in path.segments() {
     let curve = match seg {
-      tiny_skia_path::PathSegment::MoveTo(p) => {
+      tiny_skia::PathSegment::MoveTo(p) => {
         prev_mx = p.x;
         prev_my = p.y;
         prev_x = p.x;
         prev_y = p.y;
         continue;
       }
-      tiny_skia_path::PathSegment::LineTo(p) => create_curve_from_line(prev_x, prev_y, p.x, p.y),
-      tiny_skia_path::PathSegment::QuadTo(p1, p) => kurbo::QuadBez::new(
+      tiny_skia::PathSegment::LineTo(p) => create_curve_from_line(prev_x, prev_y, p.x, p.y),
+      tiny_skia::PathSegment::QuadTo(p1, p) => kurbo::QuadBez::new(
         kurbo::Point::new(prev_x as f64, prev_y as f64),
         kurbo::Point::new(p1.x as f64, p1.y as f64),
         kurbo::Point::new(p.x as f64, p.y as f64),
       )
       .raise(),
-      tiny_skia_path::PathSegment::CubicTo(p1, p2, p) => kurbo::CubicBez::new(
+      tiny_skia::PathSegment::CubicTo(p1, p2, p) => kurbo::CubicBez::new(
         kurbo::Point::new(prev_x as f64, prev_y as f64),
         kurbo::Point::new(p1.x as f64, p1.y as f64),
         kurbo::Point::new(p2.x as f64, p2.y as f64),
         kurbo::Point::new(p.x as f64, p.y as f64),
       ),
-      tiny_skia_path::PathSegment::Close => {
-        create_curve_from_line(prev_x, prev_y, prev_mx, prev_my)
-      }
+      tiny_skia::PathSegment::Close => create_curve_from_line(prev_x, prev_y, prev_mx, prev_my),
     };
 
     length += curve.arclen(0.5);

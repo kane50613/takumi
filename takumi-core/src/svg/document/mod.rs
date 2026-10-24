@@ -92,7 +92,6 @@ pub struct Document {
   nodes: Vec<NodeData>,
   attributes: Vec<(Attr, Box<str>)>,
   ids: HashMap<Box<str>, NodeId>,
-  uses_host_color: bool,
 }
 
 impl Document {
@@ -144,11 +143,6 @@ impl Document {
       }
     }
     document.cut_cycles();
-    document.uses_host_color = document.descendants().any(|node| {
-      node
-        .style()
-        .is_some_and(|style| style.color.is_none() && style.uses_current_color())
-    });
     Ok(document)
   }
 
@@ -170,11 +164,6 @@ impl Document {
   /// Every node below the root, in document order.
   pub fn descendants(&self) -> Descendants<'_> {
     self.root().descendants()
-  }
-
-  /// Whether any element paints with the color of the host, which `color` leaves unset.
-  pub fn uses_host_color(&self) -> bool {
-    self.uses_host_color
   }
 
   fn node(&self, id: NodeId) -> Node<'_> {
@@ -452,7 +441,6 @@ impl<'a, 'input: 'a> Builder<'a, 'input> {
         nodes: Vec::new(),
         attributes: Vec::new(),
         ids: HashMap::new(),
-        uses_host_color: false,
       },
       sheet,
       xml_ids,

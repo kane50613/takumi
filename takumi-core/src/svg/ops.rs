@@ -2,7 +2,7 @@
 
 use std::{iter::repeat_n, sync::Arc};
 
-use tiny_skia_path::{PathSegment, Transform};
+use tiny_skia::{PathSegment, Transform};
 
 #[cfg(feature = "gif")]
 use crate::resources::image_decoder::decode_gif_frames;
@@ -730,8 +730,8 @@ fn convert_blend_mode(blend: tree::BlendMode) -> BlendMode {
   }
 }
 
-fn path_commands(path: &tiny_skia_path::Path) -> Vec<PathCommand> {
-  let point = |p: tiny_skia_path::Point| Point { x: p.x, y: p.y };
+fn path_commands(path: &tiny_skia::Path) -> Vec<PathCommand> {
+  let point = |p: tiny_skia::Point| Point { x: p.x, y: p.y };
 
   path
     .segments()

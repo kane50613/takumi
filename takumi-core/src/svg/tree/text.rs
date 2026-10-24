@@ -395,7 +395,7 @@ impl TextSpan {
 pub struct TextPath {
   pub(crate) id: NonEmptyString,
   pub(crate) start_offset: f32,
-  pub(crate) path: Arc<tiny_skia_path::Path>,
+  pub(crate) path: Arc<tiny_skia::Path>,
 }
 
 impl TextPath {
@@ -414,7 +414,7 @@ impl TextPath {
   }
 
   /// A path.
-  pub fn path(&self) -> &tiny_skia_path::Path {
+  pub fn path(&self) -> &tiny_skia::Path {
     &self.path
   }
 }
