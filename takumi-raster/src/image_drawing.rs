@@ -4,8 +4,6 @@ use takumi_core::{
   painter::{FillShape, PaintDevice},
 };
 
-#[cfg(feature = "svg")]
-use crate::SvgDrawing;
 use crate::{
   BorderProperties, Canvas, CanvasDevice, PaintSource, RenderContext, Result, SamplingOptions,
   painter::BoxPainter,
@@ -13,30 +11,6 @@ use crate::{
   resources::image::{ImageSource, RenderedImage},
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
-
-/// `image` ready to draw at `width` by `height`. An SVG draws through [`SvgDrawing`].
-pub(crate) fn render_image(
-  image: &ImageSource,
-  context: &RenderContext,
-  width: u32,
-  height: u32,
-) -> Result<RenderedImage> {
-  let rendering = context.style.misc_inherited_data.image_rendering;
-
-  #[cfg(feature = "svg")]
-  if let ImageSource::Svg(svg) = image {
-    return Ok(RenderedImage::Rasterized(svg.rasterize_cached(
-      width,
-      height,
-      rendering,
-      context.current_color,
-      Some(context.fonts()),
-      &SvgDrawing,
-    )?));
-  }
-
-  Ok(image.render_for_layout(width, height, rendering, context.time_ms())?)
-}
 
 struct PreparedImage {
   image: RenderedImage,
@@ -80,7 +54,14 @@ fn process_image_for_object_fit(
     return Ok(None);
   }
 
-  let rendered = render_image(image, context, width, height)?;
+  let rendered = image.render_for_layout(
+    width,
+    height,
+    context.style.misc_inherited_data.image_rendering,
+    context.time_ms(),
+    context.current_color,
+    Some(context.fonts()),
+  )?;
   let logical_to_source = if placement.size.width == 0.0 || placement.size.height == 0.0 {
     Affine::IDENTITY
   } else {

@@ -6,7 +6,8 @@ use std::rc::Rc;
 use crate::{
   blur::blur_rgba,
   resvg::usvg::{ApproxEqUlps, ApproxZeroUlps},
-  svg_vector::{SvgDrawer, flatten_children},
+  svg_drawing::SvgDrawing,
+  svg_vector::flatten_children,
 };
 use tiny_skia::IntRect;
 
@@ -392,9 +393,8 @@ pub fn apply(
   filter: &crate::resvg::usvg::filter::Filter,
   ts: tiny_skia::Transform,
   source: &mut tiny_skia::Pixmap,
-  drawer: &dyn SvgDrawer,
 ) {
-  let result = apply_inner(filter, ts, source, drawer);
+  let result = apply_inner(filter, ts, source);
   let result = result.and_then(|image| apply_to_canvas(image, source));
 
   // Clear on error.
@@ -415,7 +415,6 @@ fn apply_inner(
   filter: &crate::resvg::usvg::filter::Filter,
   ts: crate::resvg::usvg::Transform,
   source: &mut tiny_skia::Pixmap,
-  drawer: &dyn SvgDrawer,
 ) -> Result<Image, Error> {
   let region = filter
     .rect()
@@ -479,7 +478,7 @@ fn apply_inner(
         let input = get_input(fe.input(), region, source, &results)?;
         apply_tile(input, region)
       }
-      crate::resvg::usvg::filter::Kind::Image(fe) => apply_image(fe, region, subregion, ts, drawer),
+      crate::resvg::usvg::filter::Kind::Image(fe) => apply_image(fe, region, subregion, ts),
       crate::resvg::usvg::filter::Kind::ComponentTransfer(fe) => {
         let input = get_input(fe.input(), region, source, &results)?;
         apply_component_transfer(fe, cs, input)
@@ -957,7 +956,6 @@ fn apply_image(
   region: IntRect,
   subregion: IntRect,
   ts: crate::resvg::usvg::Transform,
-  drawer: &dyn SvgDrawer,
 ) -> Result<Image, Error> {
   let mut pixmap = tiny_skia::Pixmap::try_create(region.width(), region.height())?;
 
@@ -965,7 +963,7 @@ fn apply_image(
   let transform =
     tiny_skia::Transform::from_row(sx, 0.0, 0.0, sy, subregion.x() as f32, subregion.y() as f32);
 
-  drawer.draw(
+  SvgDrawing.draw(
     &flatten_children(fe.root()),
     transform,
     &mut pixmap.as_mut(),

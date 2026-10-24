@@ -59,6 +59,32 @@ pub enum BlendMode {
   PlusDarker,
 }
 
+impl BlendMode {
+  /// The tiny-skia mode, or `None` for the dodge and burn modes the canvas blends on its own.
+  pub fn to_tiny_skia(self) -> Option<tiny_skia::BlendMode> {
+    use tiny_skia::BlendMode as T;
+
+    Some(match self {
+      BlendMode::Normal => T::SourceOver,
+      BlendMode::Multiply => T::Multiply,
+      BlendMode::Screen => T::Screen,
+      BlendMode::Overlay => T::Overlay,
+      BlendMode::Darken => T::Darken,
+      BlendMode::Lighten => T::Lighten,
+      BlendMode::HardLight => T::HardLight,
+      BlendMode::SoftLight => T::SoftLight,
+      BlendMode::Difference => T::Difference,
+      BlendMode::Exclusion => T::Exclusion,
+      BlendMode::Hue => T::Hue,
+      BlendMode::Saturation => T::Saturation,
+      BlendMode::Color => T::Color,
+      BlendMode::Luminosity => T::Luminosity,
+      BlendMode::PlusLighter => T::Plus,
+      _ => return None,
+    })
+  }
+}
+
 impl_css_enum!(
   custom_animatable BlendMode,
   "normal" => BlendMode::Normal,
@@ -93,6 +119,12 @@ impl Animatable for BlendMode {
 mod tests {
   use super::*;
   use crate::style::{FromCssStr, ToCss};
+
+  #[test]
+  fn color_dodge_and_color_burn_stay_off_the_approximate_reciprocal() {
+    assert!(BlendMode::ColorDodge.to_tiny_skia().is_none());
+    assert!(BlendMode::ColorBurn.to_tiny_skia().is_none());
+  }
 
   #[test]
   fn test_parse_blend_mode() {

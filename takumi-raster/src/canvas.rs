@@ -30,7 +30,6 @@ use tiny_skia::{
   Transform as TinyTransform,
 };
 
-pub(crate) use self::skia::to_tiny_blend_mode;
 use crate::{
   BackgroundTile, Bitmap, BorderProperties, Placement, Result,
   blend::*,
@@ -292,7 +291,7 @@ impl Canvas {
       return;
     }
 
-    let Some(blend_mode) = to_tiny_blend_mode(mode) else {
+    let Some(blend_mode) = mode.to_tiny_skia() else {
       let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
 
       for pixel in bytemuck::cast_slice_mut::<_, [u8; 4]>(isolated_image.data_mut()) {

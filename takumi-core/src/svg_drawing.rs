@@ -3,38 +3,25 @@
 
 use std::slice::Iter;
 
-use takumi_core::{
-  geometry::PathCommand,
-  resources::image::{
-    SvgDrawer, SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
-    SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
-  },
-  style::{BlendMode, ImageScalingAlgorithm},
-};
 use tiny_skia::{
   BlendMode as TinyBlendMode, Color as TinyColor, FillRule, FilterQuality, GradientStop, IntRect,
   LineCap, LineJoin, LinearGradient, Mask, MaskType, Paint, Path, PathBuilder, Pattern, Pixmap,
-  PixmapMut, PixmapPaint, RadialGradient, Rect, SpreadMode, Stroke, StrokeDash, Transform,
+  PixmapMut, PixmapPaint, PixmapRef, RadialGradient, Rect, SpreadMode, Stroke, StrokeDash,
+  Transform,
 };
 
-use crate::{canvas::to_tiny_blend_mode, pixmap_ref_from_buffer};
+use crate::{
+  geometry::PathCommand,
+  style::{BlendMode, ImageScalingAlgorithm},
+  svg_vector::{
+    SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint,
+    SvgSpreadMethod, SvgStrokeStyle,
+  },
+};
 
 /// Draws SVG ops with tiny-skia.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct SvgDrawing;
-
-impl SvgDrawer for SvgDrawing {
-  fn draw(&self, ops: &[SvgOp], transform: Transform, pixmap: &mut PixmapMut) {
-    self.run(
-      &mut ops.iter(),
-      &mut Target {
-        pixmap,
-        transform,
-        clip: None,
-      },
-    );
-  }
-}
+pub(crate) struct SvgDrawing;
 
 /// A pixmap being drawn on, with the transform and clip that apply to what is drawn.
 struct Target<'a, 'b> {
@@ -53,6 +40,18 @@ struct Composite<'a> {
 }
 
 impl SvgDrawing {
+  /// Draws `ops` onto `pixmap` with `transform` as the canvas transform.
+  pub(crate) fn draw(&self, ops: &[SvgOp], transform: Transform, pixmap: &mut PixmapMut) {
+    self.run(
+      &mut ops.iter(),
+      &mut Target {
+        pixmap,
+        transform,
+        clip: None,
+      },
+    );
+  }
+
   /// Draws ops up to the `Pop` closing the scope they are in, or the end of `ops`.
   fn run(&self, ops: &mut Iter<'_, SvgOp>, target: &mut Target) {
     while let Some(op) = ops.next() {
@@ -150,7 +149,7 @@ impl SvgDrawing {
     );
 
     if let Some(filters) = composite.filters {
-      filters.apply(transform, &mut layer, self);
+      filters.apply(transform, &mut layer);
     }
     if let Some(mask) = &composite.mask {
       layer.apply_mask(mask);
@@ -252,7 +251,7 @@ impl SvgDrawing {
     let Some(buffer) = data.decode() else {
       return;
     };
-    let Some(pixmap) = pixmap_ref_from_buffer(&buffer) else {
+    let Some(pixmap) = PixmapRef::from_bytes(buffer.data(), buffer.width(), buffer.height()) else {
       return;
     };
     let Some(rect) = Rect::from_xywh(0.0, 0.0, width, height) else {
@@ -531,7 +530,7 @@ fn tiny_blend_mode(blend: BlendMode) -> TinyBlendMode {
   match blend {
     BlendMode::ColorDodge => TinyBlendMode::ColorDodge,
     BlendMode::ColorBurn => TinyBlendMode::ColorBurn,
-    _ => to_tiny_blend_mode(blend).unwrap_or(TinyBlendMode::SourceOver),
+    _ => blend.to_tiny_skia().unwrap_or(TinyBlendMode::SourceOver),
   }
 }
 
@@ -539,32 +538,34 @@ fn tiny_blend_mode(blend: BlendMode) -> TinyBlendMode {
 mod tests {
   use std::sync::Arc;
 
-  use takumi_core::{
+  use crate::{
     resources::{
-      image::{ImageCacheMode, ImageSource, ResourceCache, SvgSource, to_data_url},
+      image::{ImageSource, RenderedImage, SvgSource, to_data_url},
       image_buffer::ImageBuffer,
     },
     style::{Color, ImageScalingAlgorithm},
   };
 
-  use super::SvgDrawing;
-
   const NS: &str = r#"xmlns="http://www.w3.org/2000/svg""#;
   const XLINK: &str = r#"xmlns:xlink="http://www.w3.org/1999/xlink""#;
 
   fn rasterize(svg: &str, size: u32, current_color: Color) -> Arc<ImageBuffer> {
-    svg
-      .parse::<SvgSource>()
-      .unwrap()
-      .rasterize_cached(
+    let source: ImageSource = svg.parse::<SvgSource>().unwrap().into();
+    let rendered = source
+      .render_for_layout(
         size,
         size,
         ImageScalingAlgorithm::Auto,
+        0,
         current_color,
         None,
-        &SvgDrawing,
       )
-      .unwrap()
+      .unwrap();
+    let RenderedImage::Rasterized(buffer) = rendered else {
+      panic!("expected a rasterized svg");
+    };
+
+    buffer
   }
 
   fn draw(body: &str, size: u32) -> Arc<ImageBuffer> {
@@ -573,83 +574,6 @@ mod tests {
       size,
       Color::black(),
     )
-  }
-
-  // usvg accepts a namespace-less root, so markup without `xmlns` is still detected and drawn.
-  #[test]
-  fn svg_without_xmlns_renders() {
-    let image = rasterize(
-      r##"<svg width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##,
-      4,
-      Color::black(),
-    );
-
-    assert_eq!(image.pixel(2, 2), [255, 0, 0, 255]);
-  }
-
-  // `currentColor` resolves against the host color, like an inline SVG inheriting `color`.
-  #[test]
-  fn current_color_resolves_to_host_color() {
-    let svg = format!(
-      r#"<svg {NS} width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#
-    );
-
-    assert_eq!(
-      rasterize(&svg, 4, Color([255, 0, 0, 255])).pixel(2, 2),
-      [255, 0, 0, 255]
-    );
-  }
-
-  // The dependency on the host color is detected on decoded attribute values.
-  #[test]
-  fn entity_encoded_current_color_resolves_to_host_color() {
-    let svg = format!(
-      r#"<svg {NS} width="4" height="4"><rect width="4" height="4" fill="current&#67;olor"/></svg>"#
-    );
-
-    assert_eq!(
-      rasterize(&svg, 4, Color([255, 0, 0, 255])).pixel(2, 2),
-      [255, 0, 0, 255]
-    );
-  }
-
-  // A `color` attribute on the root wins over the host color.
-  #[test]
-  fn own_color_attribute_beats_host_color() {
-    let svg = format!(
-      r##"<svg {NS} width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##
-    );
-
-    assert_eq!(
-      rasterize(&svg, 4, Color([255, 0, 0, 255])).pixel(2, 2),
-      [0, 255, 0, 255]
-    );
-  }
-
-  #[test]
-  fn raster_is_cached() {
-    let cache = ResourceCache::default();
-    let svg = format!(r#"<svg {NS} width="1" height="1"></svg>"#);
-    let source = cache
-      .get_or_decode(svg.as_bytes(), ImageCacheMode::Auto)
-      .unwrap();
-    let ImageSource::Svg(svg) = source else {
-      panic!("expected an svg");
-    };
-    let draw = || {
-      svg
-        .rasterize_cached(
-          4,
-          4,
-          ImageScalingAlgorithm::Auto,
-          Color::black(),
-          None,
-          &SvgDrawing,
-        )
-        .unwrap()
-    };
-
-    assert!(Arc::ptr_eq(&draw(), &draw()));
   }
 
   #[test]

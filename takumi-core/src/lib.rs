@@ -71,6 +71,8 @@ pub mod viewport;
   deprecated
 )]
 mod resvg;
+#[cfg(feature = "svg-raster")]
+mod svg_drawing;
 #[cfg(feature = "svg")]
 mod svg_vector;
 
