@@ -1,9 +1,8 @@
-// Copyright 2018 the Resvg Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
-
-use super::svgtree::{AId, SvgNode};
-use super::{Options, converter};
-use crate::resvg::usvg::{Group, Node};
+use super::{State, convert_element, convert_group};
+use crate::{
+  resvg::usvg::{Group, Node, Options},
+  svg::{Attr, Node as SvgNode},
+};
 
 // Full list can be found here: https://www.w3.org/TR/SVG11/feature.html
 static FEATURES: &[&str] = &[
@@ -42,15 +41,15 @@ static FEATURES: &[&str] = &[
 
 pub(crate) fn convert(
   node: SvgNode,
-  state: &converter::State,
-  cache: &mut converter::Cache,
+  state: &State,
+  cache: &mut super::Cache,
   parent: &mut Group,
 ) -> Option<()> {
   let child = node
     .children()
     .find(|n| is_condition_passed(*n, state.opt))?;
-  if let Some(g) = converter::convert_group(node, state, false, cache, parent, &|cache, g| {
-    converter::convert_element(child, state, cache, g);
+  if let Some(g) = convert_group(node, state, false, cache, parent, &|cache, g| {
+    convert_element(child, state, cache, g);
   }) {
     parent.children.push(Node::Group(Box::new(g)));
   }
@@ -63,7 +62,7 @@ pub(crate) fn is_condition_passed(node: SvgNode, opt: &Options) -> bool {
     return false;
   }
 
-  if node.has_attribute(AId::RequiredExtensions) {
+  if node.has_attribute(Attr::RequiredExtensions) {
     return false;
   }
 
@@ -72,7 +71,7 @@ pub(crate) fn is_condition_passed(node: SvgNode, opt: &Options) -> bool {
   // Only feature strings defined in the Feature String appendix are allowed.
   // If all of the given features are supported, then the attribute evaluates to true;
   // otherwise, the current element and its children are skipped and thus will not be rendered.'
-  if let Some(features) = node.attribute::<&str>(AId::RequiredFeatures) {
+  if let Some(features) = node.parse::<&str>(Attr::RequiredFeatures) {
     for feature in features.split_ascii_whitespace() {
       if !FEATURES.contains(&feature) {
         return false;
@@ -94,7 +93,7 @@ fn is_valid_sys_lang(node: SvgNode, opt: &Options) -> bool {
   //
   // But we support only simple cases like `en` or `en-US`.
   // No one really uses this, especially with complex BCP 47 values.
-  if let Some(langs) = node.attribute::<&str>(AId::SystemLanguage) {
+  if let Some(langs) = node.parse::<&str>(Attr::SystemLanguage) {
     let mut has_match = false;
     for lang in langs.split(',') {
       let lang = lang.trim();

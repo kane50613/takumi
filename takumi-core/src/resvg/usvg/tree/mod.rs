@@ -92,113 +92,7 @@ impl Default for Visibility {
   }
 }
 
-/// A shape rendering method.
-///
-/// `shape-rendering` attribute in the SVG.
-#[derive(Clone, Copy, PartialEq, Debug)]
-#[allow(missing_docs)]
-pub enum ShapeRendering {
-  OptimizeSpeed,
-  CrispEdges,
-  GeometricPrecision,
-}
-
-impl ShapeRendering {
-  /// Checks if anti-aliasing should be enabled.
-  pub fn use_shape_antialiasing(self) -> bool {
-    match self {
-      ShapeRendering::OptimizeSpeed => false,
-      ShapeRendering::CrispEdges => false,
-      ShapeRendering::GeometricPrecision => true,
-    }
-  }
-}
-
-impl Default for ShapeRendering {
-  fn default() -> Self {
-    Self::GeometricPrecision
-  }
-}
-
-impl std::str::FromStr for ShapeRendering {
-  type Err = &'static str;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "optimizeSpeed" => Ok(ShapeRendering::OptimizeSpeed),
-      "crispEdges" => Ok(ShapeRendering::CrispEdges),
-      "geometricPrecision" => Ok(ShapeRendering::GeometricPrecision),
-      _ => Err("invalid"),
-    }
-  }
-}
-
-/// A text rendering method.
-///
-/// `text-rendering` attribute in the SVG.
-#[allow(missing_docs)]
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum TextRendering {
-  OptimizeSpeed,
-  OptimizeLegibility,
-  GeometricPrecision,
-}
-
-impl Default for TextRendering {
-  fn default() -> Self {
-    Self::OptimizeLegibility
-  }
-}
-
-impl std::str::FromStr for TextRendering {
-  type Err = &'static str;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "optimizeSpeed" => Ok(TextRendering::OptimizeSpeed),
-      "optimizeLegibility" => Ok(TextRendering::OptimizeLegibility),
-      "geometricPrecision" => Ok(TextRendering::GeometricPrecision),
-      _ => Err("invalid"),
-    }
-  }
-}
-
-/// An image rendering method.
-///
-/// `image-rendering` attribute in the SVG.
-#[allow(missing_docs)]
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum ImageRendering {
-  OptimizeQuality,
-  OptimizeSpeed,
-  // The following can only appear as presentation attributes.
-  Smooth,
-  HighQuality,
-  CrispEdges,
-  Pixelated,
-}
-
-impl Default for ImageRendering {
-  fn default() -> Self {
-    Self::OptimizeQuality
-  }
-}
-
-impl std::str::FromStr for ImageRendering {
-  type Err = &'static str;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "optimizeQuality" => Ok(ImageRendering::OptimizeQuality),
-      "optimizeSpeed" => Ok(ImageRendering::OptimizeSpeed),
-      "smooth" => Ok(ImageRendering::Smooth),
-      "high-quality" => Ok(ImageRendering::HighQuality),
-      "crisp-edges" => Ok(ImageRendering::CrispEdges),
-      "pixelated" => Ok(ImageRendering::Pixelated),
-      _ => Err("invalid"),
-    }
-  }
-}
+pub use crate::svg::{ImageRendering, ShapeRendering, TextRendering};
 
 /// A blending mode property.
 ///
@@ -222,6 +116,7 @@ pub enum BlendMode {
   Saturation,
   Color,
   Luminosity,
+  PlusLighter,
 }
 
 impl Default for BlendMode {
@@ -249,6 +144,7 @@ impl Display for BlendMode {
       BlendMode::Saturation => "saturation",
       BlendMode::Color => "color",
       BlendMode::Luminosity => "luminosity",
+      BlendMode::PlusLighter => "plus-lighter",
     };
     write!(f, "{blend_mode}")
   }

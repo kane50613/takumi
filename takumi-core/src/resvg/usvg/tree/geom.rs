@@ -1,8 +1,8 @@
 // Copyright 2018 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::svg::{Align, PreserveAspectRatio};
 use strict_num::ApproxEqUlps;
-use svgtypes::{Align, AspectRatio};
 pub use tiny_skia_path::{NonZeroRect, Rect, Size, Transform};
 
 /// Approximate zero equality comparisons.
@@ -50,7 +50,7 @@ pub(crate) struct ViewBox {
   pub rect: NonZeroRect,
 
   /// Value of the `preserveAspectRatio` attribute.
-  pub aspect: AspectRatio,
+  pub aspect: PreserveAspectRatio,
 }
 
 impl ViewBox {

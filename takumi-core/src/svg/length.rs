@@ -59,6 +59,11 @@ pub struct LengthContext {
 }
 
 impl Length {
+  /// A number with a unit.
+  pub const fn new(number: f32, unit: LengthUnit) -> Self {
+    Self { number, unit }
+  }
+
   /// A bare number.
   pub const fn number(number: f32) -> Self {
     Self {

@@ -217,6 +217,7 @@ names! {
     FontSize => "font-size",
     FontStretch => "font-stretch",
     FontStyle => "font-style",
+    FontVariant => "font-variant",
     FontVariationSettings => "font-variation-settings",
     FontWeight => "font-weight",
     ImageRendering => "image-rendering",
@@ -248,6 +249,7 @@ names! {
     TextDecoration => "text-decoration",
     TextRendering => "text-rendering",
     Transform => "transform",
+    TransformOrigin => "transform-origin",
     VectorEffect => "vector-effect",
     Visibility => "visibility",
     WhiteSpace => "white-space",
@@ -282,6 +284,7 @@ impl Property {
         | Self::FontSize
         | Self::FontStretch
         | Self::FontStyle
+        | Self::FontVariant
         | Self::FontWeight
         | Self::ImageRendering
         | Self::LetterSpacing
@@ -309,10 +312,43 @@ impl Property {
         | Self::TextDecoration
         | Self::TextRendering
         | Self::Transform
+        | Self::TransformOrigin
         | Self::VectorEffect
         | Self::Visibility
         | Self::WordSpacing
     )
     .then_some(property)
+  }
+}
+
+impl Tag {
+  /// Whether the element draws, as a graphics element (SVG 1.1, 1.3).
+  pub fn is_graphic(self) -> bool {
+    matches!(
+      self,
+      Self::Circle
+        | Self::Ellipse
+        | Self::Image
+        | Self::Line
+        | Self::Path
+        | Self::Polygon
+        | Self::Polyline
+        | Self::Rect
+        | Self::Text
+        | Self::Use
+    )
+  }
+
+  /// Whether the element is a gradient.
+  pub fn is_gradient(self) -> bool {
+    matches!(self, Self::LinearGradient | Self::RadialGradient)
+  }
+
+  /// Whether the element is a paint server.
+  pub fn is_paint_server(self) -> bool {
+    matches!(
+      self,
+      Self::LinearGradient | Self::RadialGradient | Self::Pattern
+    )
   }
 }

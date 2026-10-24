@@ -57,7 +57,6 @@ serde_json = "1"
 siphasher = "1"
 thin-vec = "0.2"
 strict-num = "0.1"
-svgtypes = "0.16"
 thiserror = "2.0"
 tiny-skia-path = "0.12"
 tracing = "0.1"
@@ -232,8 +231,6 @@ strip = "debuginfo"
 # Size-optimizing them is perf-neutral (verified via the napi JS bench). Hot
 # raster/shaping and image-webp (wasm webp encode) stay at opt-level 3.
 [profile.release.package.roxmltree]
-opt-level = "z"
-[profile.release.package.svgtypes]
 opt-level = "z"
 [profile.release.package.zune-jpeg]
 opt-level = "z"

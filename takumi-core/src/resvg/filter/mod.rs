@@ -818,6 +818,7 @@ fn tiny_skia_blend_mode(mode: crate::resvg::usvg::BlendMode) -> tiny_skia::Blend
     BlendMode::Saturation => tiny_skia::BlendMode::Saturation,
     BlendMode::Color => tiny_skia::BlendMode::Color,
     BlendMode::Luminosity => tiny_skia::BlendMode::Luminosity,
+    BlendMode::PlusLighter => tiny_skia::BlendMode::Plus,
   }
 }
 

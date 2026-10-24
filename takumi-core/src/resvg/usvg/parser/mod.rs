@@ -1,30 +1,12 @@
 // Copyright 2018 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-mod clippath;
-mod converter;
-mod filter;
-mod image;
-mod marker;
-mod mask;
 mod options;
-mod paint_server;
-mod shapes;
-mod style;
-mod svgtree;
-mod switch;
-mod text;
-mod units;
-mod use_node;
 
-use std::sync::Arc;
+use crate::svg::{Document, ParseError, ParseOptions, StyleContext, layout::convert_doc};
 
-use crate::resvg::usvg::NonZeroRect;
-use crate::resvg::usvg::filter::Filter;
-use svgtree::AId;
-
-pub(crate) use converter::Cache;
-pub use image::ImageHrefResolver;
+pub use crate::svg::layout::ImageHrefResolver;
+pub(crate) use crate::svg::layout::{Cache, filters_from_markup};
 pub use options::Options;
 
 /// List of all errors.
@@ -53,9 +35,13 @@ pub enum Error {
   ParsingFailed(roxmltree::Error),
 }
 
-impl From<roxmltree::Error> for Error {
-  fn from(e: roxmltree::Error) -> Self {
-    Error::ParsingFailed(e)
+impl From<ParseError> for Error {
+  fn from(error: ParseError) -> Self {
+    match error {
+      ParseError::Xml(error) => Error::ParsingFailed(error),
+      ParseError::NotSvg => Error::ParsingFailed(roxmltree::Error::NoRootNode),
+      ParseError::TooLarge => Error::ElementsLimitReached,
+    }
   }
 }
 
@@ -154,52 +140,19 @@ impl crate::resvg::usvg::Tree {
 
   /// Parses `Tree` from `roxmltree::Document`.
   pub fn from_xmltree(doc: &roxmltree::Document, opt: &Options) -> Result<Self, Error> {
-    let doc = svgtree::Document::parse_tree(doc, opt.style_sheet.as_deref())?;
-    self::converter::convert_doc(&doc, opt)
+    let doc = Document::from_xml(
+      doc,
+      &ParseOptions {
+        style: StyleContext {
+          font_size: opt.font_size,
+          dpi: opt.dpi,
+        },
+        style_sheet: opt.style_sheet.as_deref(),
+      },
+    )?;
+
+    convert_doc(&doc, opt)
   }
-}
-
-/// Parses standalone `<filter>` markup (carrying `id="{filter_id}"`) and
-/// resolves it against a `width` x `height` element box, skipping the render
-/// tree entirely.
-///
-/// Returns `Ok(None)` when the filter reference is invalid, which per the
-/// converter's behaviour hides the filtered element.
-pub(crate) fn filters_from_markup(
-  markup: &str,
-  filter_id: &str,
-  width: f32,
-  height: f32,
-  opt: &Options,
-) -> Result<Option<Vec<Arc<Filter>>>, Error> {
-  let document = format!(
-    r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">{markup}<rect width="{width}" height="{height}" filter="url(#{filter_id})"/></svg>"#
-  );
-  let xml_opt = roxmltree::ParsingOptions {
-    allow_dtd: true,
-    ..Default::default()
-  };
-  let xml =
-    roxmltree::Document::parse_with_options(&document, xml_opt).map_err(Error::ParsingFailed)?;
-  let doc = svgtree::Document::parse_tree(&xml, None)?;
-
-  let bbox = NonZeroRect::from_xywh(0.0, 0.0, width, height).ok_or(Error::InvalidSize)?;
-  let state = converter::State {
-    parent_clip_path: None,
-    parent_markers: Vec::new(),
-    context_element: None,
-    fe_image_link: false,
-    view_box: bbox,
-    use_size: (None, None),
-    opt,
-  };
-  let mut cache = converter::Cache::new(opt.fonts.clone());
-  let node = doc
-    .descendants()
-    .find(|n| n.has_attribute(AId::Filter))
-    .ok_or(Error::InvalidSize)?;
-
-  Ok(filter::convert(node, &state, Some(bbox), &mut cache).ok())
 }
 
 #[inline]

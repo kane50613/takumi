@@ -18,6 +18,7 @@ use super::{
 };
 use crate::style::RawDeclaration;
 
+mod cycles;
 #[cfg(test)]
 mod tests;
 mod text;
@@ -142,6 +143,7 @@ impl Document {
         document.ids.entry(value).or_insert(id);
       }
     }
+    document.cut_cycles();
     document.uses_host_color = document.descendants().any(|node| {
       node
         .style()
@@ -331,6 +333,15 @@ impl<'a> Node<'a> {
     std::iter::successors(self.first_child(), Node::next_sibling)
   }
 
+  /// This node, then the elements its `href` chain names, stopping at a cycle.
+  pub fn href_chain(&self) -> HrefChain<'a> {
+    HrefChain {
+      start: *self,
+      current: Some(*self),
+      visited: Vec::new(),
+    }
+  }
+
   /// This node and everything below it, in document order.
   pub fn descendants(&self) -> Descendants<'a> {
     Descendants {
@@ -366,6 +377,36 @@ impl<'a> Iterator for Descendants<'a> {
         node = node.parent()?;
       }
     });
+    Some(current)
+  }
+}
+
+/// The nodes of an `href` chain.
+#[derive(Debug, Clone)]
+pub struct HrefChain<'a> {
+  start: Node<'a>,
+  current: Option<Node<'a>>,
+  visited: Vec<Node<'a>>,
+}
+
+impl<'a> Iterator for HrefChain<'a> {
+  type Item = Node<'a>;
+
+  fn next(&mut self) -> Option<Node<'a>> {
+    let current = self.current?;
+
+    self.current = current.linked(Attr::Href).filter(|link| {
+      let cycle = *link == current || *link == self.start || self.visited.contains(link);
+
+      if cycle {
+        log::warn!(
+          "Element '#{}' cannot reference itself via 'href'.",
+          self.start.element_id()
+        );
+      }
+      !cycle
+    });
+    self.visited.push(current);
     Some(current)
   }
 }
@@ -514,7 +555,7 @@ impl<'a, 'input: 'a> Builder<'a, 'input> {
     self.collect_attributes(node, tag, ignore_ids);
 
     let attributes = start..self.document.attributes.len();
-    let style = self.compute_style(node, parent_style);
+    let style = self.compute_style(node, tag, parent == NodeId::new(0), parent_style);
 
     self.append(
       parent,
@@ -574,8 +615,21 @@ impl<'a, 'input: 'a> Builder<'a, 'input> {
 
   /// Blink's cascade: presentation attributes, then style sheet rules by specificity, then the
   /// `style` attribute, with `!important` declarations after all of them.
-  fn compute_style(&mut self, node: XmlNode<'a, 'input>, parent: &Arc<SvgStyle>) -> Arc<SvgStyle> {
+  fn compute_style(
+    &mut self,
+    node: XmlNode<'a, 'input>,
+    tag: Tag,
+    is_root: bool,
+    parent: &Arc<SvgStyle>,
+  ) -> Arc<SvgStyle> {
     let mut declarations: Vec<(Property, &str, bool)> = Vec::new();
+
+    // Blink's `svg.css`: `svg:not(:root), symbol, image, marker, pattern { overflow: hidden }`.
+    if matches!(tag, Tag::Symbol | Tag::Image | Tag::Marker | Tag::Pattern)
+      || (tag == Tag::Svg && !is_root)
+    {
+      declarations.push((Property::Overflow, "hidden", false));
+    }
 
     for attribute in node.attributes() {
       if !matches!(

@@ -2,7 +2,101 @@
 
 use tiny_skia::Transform;
 
-use super::scan::Scanner;
+use super::{
+  length::Length,
+  scan::{Scanner, parse_length},
+};
+
+/// The `transform-origin` offsets that SVG uses: the x and y of the origin.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TransformOrigin {
+  /// The horizontal offset.
+  pub x: Length,
+  /// The vertical offset.
+  pub y: Length,
+}
+
+#[derive(Clone, Copy)]
+enum Component {
+  Length(Length),
+  Left,
+  Right,
+  Top,
+  Bottom,
+  Center,
+}
+
+impl Component {
+  fn parse(word: &str) -> Option<Self> {
+    match word {
+      "left" => Some(Self::Left),
+      "right" => Some(Self::Right),
+      "top" => Some(Self::Top),
+      "bottom" => Some(Self::Bottom),
+      "center" => Some(Self::Center),
+      _ => parse_length(word).map(Self::Length),
+    }
+  }
+
+  fn can_be_horizontal(self) -> bool {
+    matches!(
+      self,
+      Self::Length(_) | Self::Left | Self::Right | Self::Center
+    )
+  }
+
+  fn can_be_vertical(self) -> bool {
+    matches!(
+      self,
+      Self::Length(_) | Self::Top | Self::Bottom | Self::Center
+    )
+  }
+
+  fn is_free(self) -> bool {
+    matches!(self, Self::Length(_) | Self::Center)
+  }
+
+  fn length(self) -> Length {
+    match self {
+      Self::Length(length) => length,
+      Self::Left | Self::Top => Length::percent(0.0),
+      Self::Right | Self::Bottom => Length::percent(100.0),
+      Self::Center => Length::percent(50.0),
+    }
+  }
+}
+
+/// Parses `transform-origin`, whose optional third length is ignored.
+pub fn parse_transform_origin(text: &str) -> Option<TransformOrigin> {
+  let words: Vec<&str> = text
+    .split(|character: char| character.is_ascii_whitespace() || character == ',')
+    .filter(|word| !word.is_empty())
+    .collect();
+  let (first, second) = match words[..] {
+    [first] => (Component::parse(first)?, None),
+    [first, second] | [first, second, _] => {
+      if let [_, _, third] = words[..] {
+        parse_length(third).filter(|length| length.unit != super::length::LengthUnit::Percent)?;
+      }
+      (Component::parse(first)?, Some(Component::parse(second)?))
+    }
+    _ => return None,
+  };
+
+  let (x, y) = match second {
+    None if first.can_be_horizontal() => (first, Component::Center),
+    None => (Component::Center, first),
+    Some(second) if first.is_free() && second.is_free() => (first, second),
+    Some(second) if first.can_be_horizontal() && second.can_be_vertical() => (first, second),
+    Some(second) if first.can_be_vertical() && second.can_be_horizontal() => (second, first),
+    Some(_) => return None,
+  };
+
+  Some(TransformOrigin {
+    x: x.length(),
+    y: y.length(),
+  })
+}
 
 /// Parses a transform list into one matrix, or `None` when the list is malformed. An empty list
 /// is the identity.
@@ -150,6 +244,25 @@ mod tests {
     assert!((sy - 0.866_025_4).abs() < 1e-6);
     assert!((tx - 11.339_746).abs() < 1e-5);
     assert!((ty + 2.320_508).abs() < 1e-5);
+  }
+
+  #[test]
+  fn transform_origin_takes_keywords_and_lengths() {
+    let origin = parse_transform_origin("bottom 10px").unwrap();
+
+    assert_eq!(
+      origin.x,
+      Length {
+        number: 10.0,
+        unit: super::super::length::LengthUnit::Px
+      }
+    );
+    assert_eq!(origin.y, Length::percent(100.0));
+    assert!(parse_transform_origin("left right").is_none());
+    assert_eq!(
+      parse_transform_origin("center").unwrap().x,
+      Length::percent(50.0)
+    );
   }
 
   #[test]

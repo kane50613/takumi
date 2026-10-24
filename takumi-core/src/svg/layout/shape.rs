@@ -1,75 +1,58 @@
-// Copyright 2018 the Resvg Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
-
 use std::sync::Arc;
 
-use svgtypes::Length;
 use tiny_skia_path::Path;
 
-use super::svgtree::{AId, EId, SvgNode};
-use super::{converter, units};
-use crate::resvg::usvg::{ApproxEqUlps, IsValidLength, Rect};
+use super::{State, units};
+use crate::{
+  resvg::usvg::{ApproxEqUlps, IsValidLength, Rect},
+  svg::{Attr, Length, Node as SvgNode, PathSegment, Scanner, Tag, parse_path_data},
+};
 
-pub(crate) fn convert(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> {
-  match node.tag_name()? {
-    EId::Rect => convert_rect(node, state),
-    EId::Circle => convert_circle(node, state),
-    EId::Ellipse => convert_ellipse(node, state),
-    EId::Line => convert_line(node, state),
-    EId::Polyline => convert_polyline(node),
-    EId::Polygon => convert_polygon(node),
-    EId::Path => convert_path(node),
+pub(crate) fn convert(node: SvgNode, state: &State) -> Option<Arc<Path>> {
+  match node.tag()? {
+    Tag::Rect => convert_rect(node, state),
+    Tag::Circle => convert_circle(node, state),
+    Tag::Ellipse => convert_ellipse(node, state),
+    Tag::Line => convert_line(node, state),
+    Tag::Polyline => convert_polyline(node),
+    Tag::Polygon => convert_polygon(node),
+    Tag::Path => convert_path(node),
     _ => None,
   }
 }
 
 pub(crate) fn convert_path(node: SvgNode) -> Option<Arc<Path>> {
-  let value: &str = node.attribute(AId::D)?;
+  let value: &str = node.parse(Attr::D)?;
   let mut builder = tiny_skia_path::PathBuilder::new();
-  for segment in svgtypes::SimplifyingPathParser::from(value) {
-    let segment = match segment {
-      Ok(v) => v,
-      Err(e) => {
-        log::warn!("Error during path parsing: {e}");
-        break;
-      }
-    };
 
+  for segment in parse_path_data(value) {
     match segment {
-      svgtypes::SimplePathSegment::MoveTo { x, y } => {
-        builder.move_to(x as f32, y as f32);
-      }
-      svgtypes::SimplePathSegment::LineTo { x, y } => {
-        builder.line_to(x as f32, y as f32);
-      }
-      svgtypes::SimplePathSegment::Quadratic { x1, y1, x, y } => {
+      PathSegment::MoveTo { x, y } => builder.move_to(x as f32, y as f32),
+      PathSegment::LineTo { x, y } => builder.line_to(x as f32, y as f32),
+      PathSegment::QuadTo { x1, y1, x, y } => {
         builder.quad_to(x1 as f32, y1 as f32, x as f32, y as f32);
       }
-      svgtypes::SimplePathSegment::CurveTo {
+      PathSegment::CubicTo {
         x1,
         y1,
         x2,
         y2,
         x,
         y,
-      } => {
-        builder.cubic_to(
-          x1 as f32, y1 as f32, x2 as f32, y2 as f32, x as f32, y as f32,
-        );
-      }
-      svgtypes::SimplePathSegment::ClosePath => {
-        builder.close();
-      }
+      } => builder.cubic_to(
+        x1 as f32, y1 as f32, x2 as f32, y2 as f32, x as f32, y as f32,
+      ),
+      PathSegment::Close => builder.close(),
     }
   }
 
   builder.finish().map(Arc::new)
 }
 
-fn convert_rect(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> {
+fn convert_rect(node: SvgNode, state: &State) -> Option<Arc<Path>> {
   // 'width' and 'height' attributes must be positive and non-zero.
-  let width = node.convert_user_length(AId::Width, state, Length::zero());
-  let height = node.convert_user_length(AId::Height, state, Length::zero());
+  let width = node.convert_user_length(Attr::Width, state, Length::number(0.0));
+  let height = node.convert_user_length(Attr::Height, state, Length::number(0.0));
   if !width.is_valid_length() {
     log::warn!(
       "Rect '{}' has an invalid 'width' value. Skipped.",
@@ -85,8 +68,8 @@ fn convert_rect(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> {
     return None;
   }
 
-  let x = node.convert_user_length(AId::X, state, Length::zero());
-  let y = node.convert_user_length(AId::Y, state, Length::zero());
+  let x = node.convert_user_length(Attr::X, state, Length::number(0.0));
+  let y = node.convert_user_length(Attr::Y, state, Length::number(0.0));
 
   let (mut rx, mut ry) = resolve_rx_ry(node, state);
 
@@ -108,16 +91,16 @@ fn convert_rect(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> {
     builder.move_to(x + rx, y);
 
     builder.line_to(x + width - rx, y);
-    builder.arc_to(rx, ry, 0.0, false, true, x + width, y + ry);
+    builder.clockwise_arc_to(rx, ry, x + width, y + ry);
 
     builder.line_to(x + width, y + height - ry);
-    builder.arc_to(rx, ry, 0.0, false, true, x + width - rx, y + height);
+    builder.clockwise_arc_to(rx, ry, x + width - rx, y + height);
 
     builder.line_to(x + rx, y + height);
-    builder.arc_to(rx, ry, 0.0, false, true, x, y + height - ry);
+    builder.clockwise_arc_to(rx, ry, x, y + height - ry);
 
     builder.line_to(x, y + ry);
-    builder.arc_to(rx, ry, 0.0, false, true, x + rx, y);
+    builder.clockwise_arc_to(rx, ry, x + rx, y);
 
     builder.close();
 
@@ -127,46 +110,46 @@ fn convert_rect(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> {
   Some(Arc::new(path))
 }
 
-fn resolve_rx_ry(node: SvgNode, state: &converter::State) -> (f32, f32) {
-  let mut rx_opt = node.attribute::<Length>(AId::Rx);
-  let mut ry_opt = node.attribute::<Length>(AId::Ry);
+fn resolve_rx_ry(node: SvgNode, state: &State) -> (f32, f32) {
+  let mut rx_opt = node.parse::<Length>(Attr::Rx);
+  let mut ry_opt = node.parse::<Length>(Attr::Ry);
 
   // Remove negative values first.
-  if let Some(v) = rx_opt {
-    if v.number.is_sign_negative() {
-      rx_opt = None;
-    }
+  if let Some(v) = rx_opt
+    && v.number.is_sign_negative()
+  {
+    rx_opt = None;
   }
-  if let Some(v) = ry_opt {
-    if v.number.is_sign_negative() {
-      ry_opt = None;
-    }
+  if let Some(v) = ry_opt
+    && v.number.is_sign_negative()
+  {
+    ry_opt = None;
   }
 
   // Resolve.
   match (rx_opt, ry_opt) {
     (None, None) => (0.0, 0.0),
     (Some(rx), None) => {
-      let rx = units::convert_user_length(rx, node, AId::Rx, state);
+      let rx = units::convert_user_length(rx, node, Attr::Rx, state);
       (rx, rx)
     }
     (None, Some(ry)) => {
-      let ry = units::convert_user_length(ry, node, AId::Ry, state);
+      let ry = units::convert_user_length(ry, node, Attr::Ry, state);
       (ry, ry)
     }
     (Some(rx), Some(ry)) => {
-      let rx = units::convert_user_length(rx, node, AId::Rx, state);
-      let ry = units::convert_user_length(ry, node, AId::Ry, state);
+      let rx = units::convert_user_length(rx, node, Attr::Rx, state);
+      let ry = units::convert_user_length(ry, node, Attr::Ry, state);
       (rx, ry)
     }
   }
 }
 
-fn convert_line(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> {
-  let x1 = node.convert_user_length(AId::X1, state, Length::zero());
-  let y1 = node.convert_user_length(AId::Y1, state, Length::zero());
-  let x2 = node.convert_user_length(AId::X2, state, Length::zero());
-  let y2 = node.convert_user_length(AId::Y2, state, Length::zero());
+fn convert_line(node: SvgNode, state: &State) -> Option<Arc<Path>> {
+  let x1 = node.convert_user_length(Attr::X1, state, Length::number(0.0));
+  let y1 = node.convert_user_length(Attr::Y1, state, Length::number(0.0));
+  let x2 = node.convert_user_length(Attr::X2, state, Length::number(0.0));
+  let y2 = node.convert_user_length(Attr::Y2, state, Length::number(0.0));
 
   let mut builder = tiny_skia_path::PathBuilder::new();
   builder.move_to(x1, y1);
@@ -186,12 +169,13 @@ fn convert_polygon(node: SvgNode) -> Option<Arc<Path>> {
 }
 
 fn points_to_path(node: SvgNode, eid: &str) -> Option<tiny_skia_path::PathBuilder> {
-  use svgtypes::PointsParser;
-
   let mut builder = tiny_skia_path::PathBuilder::new();
-  match node.attribute::<&str>(AId::Points) {
+  match node.parse::<&str>(Attr::Points) {
     Some(text) => {
-      for (x, y) in PointsParser::from(text) {
+      let mut scanner = Scanner::new(text);
+
+      scanner.skip_spaces();
+      while let (Some(x), Some(y)) = (scanner.number_f64(), scanner.number_f64()) {
         if builder.is_empty() {
           builder.move_to(x as f32, y as f32);
         } else {
@@ -222,10 +206,10 @@ fn points_to_path(node: SvgNode, eid: &str) -> Option<tiny_skia_path::PathBuilde
   Some(builder)
 }
 
-fn convert_circle(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> {
-  let cx = node.convert_user_length(AId::Cx, state, Length::zero());
-  let cy = node.convert_user_length(AId::Cy, state, Length::zero());
-  let r = node.convert_user_length(AId::R, state, Length::zero());
+fn convert_circle(node: SvgNode, state: &State) -> Option<Arc<Path>> {
+  let cx = node.convert_user_length(Attr::Cx, state, Length::number(0.0));
+  let cy = node.convert_user_length(Attr::Cy, state, Length::number(0.0));
+  let r = node.convert_user_length(Attr::R, state, Length::number(0.0));
 
   if !r.is_valid_length() {
     log::warn!(
@@ -238,9 +222,9 @@ fn convert_circle(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> 
   ellipse_to_path(cx, cy, r, r)
 }
 
-fn convert_ellipse(node: SvgNode, state: &converter::State) -> Option<Arc<Path>> {
-  let cx = node.convert_user_length(AId::Cx, state, Length::zero());
-  let cy = node.convert_user_length(AId::Cy, state, Length::zero());
+fn convert_ellipse(node: SvgNode, state: &State) -> Option<Arc<Path>> {
+  let cx = node.convert_user_length(Attr::Cx, state, Length::number(0.0));
+  let cy = node.convert_user_length(Attr::Cy, state, Length::number(0.0));
   let (rx, ry) = resolve_rx_ry(node, state);
 
   if !rx.is_valid_length() {
@@ -265,50 +249,32 @@ fn convert_ellipse(node: SvgNode, state: &converter::State) -> Option<Arc<Path>>
 fn ellipse_to_path(cx: f32, cy: f32, rx: f32, ry: f32) -> Option<Arc<Path>> {
   let mut builder = tiny_skia_path::PathBuilder::new();
   builder.move_to(cx + rx, cy);
-  builder.arc_to(rx, ry, 0.0, false, true, cx, cy + ry);
-  builder.arc_to(rx, ry, 0.0, false, true, cx - rx, cy);
-  builder.arc_to(rx, ry, 0.0, false, true, cx, cy - ry);
-  builder.arc_to(rx, ry, 0.0, false, true, cx + rx, cy);
+  builder.clockwise_arc_to(rx, ry, cx, cy + ry);
+  builder.clockwise_arc_to(rx, ry, cx - rx, cy);
+  builder.clockwise_arc_to(rx, ry, cx, cy - ry);
+  builder.clockwise_arc_to(rx, ry, cx + rx, cy);
   builder.close();
   builder.finish().map(Arc::new)
 }
 
 trait PathBuilderExt {
-  fn arc_to(
-    &mut self,
-    rx: f32,
-    ry: f32,
-    x_axis_rotation: f32,
-    large_arc: bool,
-    sweep: bool,
-    x: f32,
-    y: f32,
-  );
+  /// A quarter-turn arc to `(x, y)` that sweeps clockwise.
+  fn clockwise_arc_to(&mut self, rx: f32, ry: f32, x: f32, y: f32);
 }
 
 impl PathBuilderExt for tiny_skia_path::PathBuilder {
-  fn arc_to(
-    &mut self,
-    rx: f32,
-    ry: f32,
-    x_axis_rotation: f32,
-    large_arc: bool,
-    sweep: bool,
-    x: f32,
-    y: f32,
-  ) {
-    let prev = match self.last_point() {
-      Some(v) => v,
-      None => return,
+  fn clockwise_arc_to(&mut self, rx: f32, ry: f32, x: f32, y: f32) {
+    let Some(prev) = self.last_point() else {
+      return;
     };
 
     let svg_arc = kurbo::SvgArc {
       from: kurbo::Point::new(prev.x as f64, prev.y as f64),
       to: kurbo::Point::new(x as f64, y as f64),
       radii: kurbo::Vec2::new(rx as f64, ry as f64),
-      x_rotation: (x_axis_rotation as f64).to_radians(),
-      large_arc,
-      sweep,
+      x_rotation: 0.0,
+      large_arc: false,
+      sweep: true,
     };
 
     match kurbo::Arc::from_svg_arc(&svg_arc) {

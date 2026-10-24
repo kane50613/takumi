@@ -15,12 +15,13 @@ use super::{
     LineJoin, MaskType, Overflow, Paint, PaintFallback, PaintOrder, Reference, ShapeRendering,
     Spacing, StyleContext, SvgStyle, TextAnchor, TextDecoration, TextRendering, VectorEffect,
   },
-  transform::parse_transform_list,
+  transform::{parse_transform_list, parse_transform_origin},
 };
 use crate::style::{
-  BlendMode, Color, ColorInput, FillRule, Filter, FontFamily, FontKerning, FontOpticalSizing,
-  FontShorthand, FontSize, FontSizeKeyword, FontStretch, FontStyle, FontVariationSettings,
-  FontWeight, FromCss, Isolation, Visibility,
+  Angle, BlendMode, Color, ColorInput, FillRule, Filter, FontFamily, FontKerning,
+  FontOpticalSizing, FontShorthand, FontSize, FontSizeKeyword, FontStretch, FontStyle,
+  FontVariantCaps, FontVariationSettings, FontWeight, FromCss, Isolation, PercentageNumber,
+  Visibility,
 };
 
 /// A CSS-wide keyword.
@@ -78,6 +79,7 @@ impl SvgStyle {
       overflow,
       vector_effect,
       transform,
+      transform_origin,
       text_decoration,
       alignment_baseline,
       baseline_shift,
@@ -129,6 +131,7 @@ impl SvgStyle {
         font_family,
         font_size,
         font_style,
+        small_caps,
         font_weight,
         font_stretch,
         font_kerning,
@@ -142,6 +145,7 @@ impl SvgStyle {
       Property::FontStretch => copy!(self, source, font_stretch),
       Property::FontStyle => copy!(self, source, font_style),
       Property::FontVariationSettings => copy!(self, source, font_variation_settings),
+      Property::FontVariant => copy!(self, source, small_caps),
       Property::FontWeight => copy!(self, source, font_weight),
       Property::ImageRendering => copy!(self, source, image_rendering),
       Property::Isolation => copy!(self, source, isolation),
@@ -172,6 +176,7 @@ impl SvgStyle {
       Property::TextDecoration => copy!(self, source, text_decoration),
       Property::TextRendering => copy!(self, source, text_rendering),
       Property::Transform => copy!(self, source, transform),
+      Property::TransformOrigin => copy!(self, source, transform_origin),
       Property::VectorEffect => copy!(self, source, vector_effect),
       Property::Visibility => copy!(self, source, visibility),
       Property::WhiteSpace => copy!(self, source, preserve_white_space),
@@ -221,7 +226,8 @@ impl SvgStyle {
           self.font_weight = font.weight.resolve_against(parent.font_weight).value();
           self.font_stretch = font.stretch;
           self.font_size = font_size_px(font.size, parent.font_size, context);
-          self.font_family = font.family;
+          self.font_family = Some(font.family);
+          self.small_caps = font.caps == FontVariantCaps::SmallCaps;
           self.font_kerning = FontKerning::Auto;
           self.font_optical_sizing = FontOpticalSizing::default();
           self.font_variation_settings = FontVariationSettings::from([]);
@@ -229,7 +235,10 @@ impl SvgStyle {
         }
         None => false,
       },
-      Property::FontFamily => set(&mut self.font_family, parse_css::<FontFamily>(value)),
+      Property::FontFamily => set(
+        &mut self.font_family,
+        parse_css::<FontFamily>(value).map(Some),
+      ),
       Property::FontKerning => set(&mut self.font_kerning, parse_css::<FontKerning>(value)),
       Property::FontOpticalSizing => set(
         &mut self.font_optical_sizing,
@@ -245,6 +254,7 @@ impl SvgStyle {
         &mut self.font_variation_settings,
         parse_css::<FontVariationSettings>(value),
       ),
+      Property::FontVariant => set(&mut self.small_caps, parse_font_variant(value)),
       Property::FontWeight => set(
         &mut self.font_weight,
         parse_css::<FontWeight>(value)
@@ -299,6 +309,10 @@ impl SvgStyle {
       Property::TextDecoration => set(&mut self.text_decoration, parse_text_decoration(value)),
       Property::TextRendering => set(&mut self.text_rendering, parse_css::<TextRendering>(value)),
       Property::Transform => set(&mut self.transform, parse_transform(value)),
+      Property::TransformOrigin => set(
+        &mut self.transform_origin,
+        parse_transform_origin(value).map(Some),
+      ),
       Property::VectorEffect => set(&mut self.vector_effect, parse_css::<VectorEffect>(value)),
       Property::Visibility => set(&mut self.visibility, parse_css::<Visibility>(value)),
       Property::WhiteSpace => set(&mut self.preserve_white_space, parse_white_space(value)),
@@ -340,6 +354,7 @@ fn is_inherited(property: Property) -> bool {
       | Property::StopOpacity
       | Property::TextDecoration
       | Property::Transform
+      | Property::TransformOrigin
       | Property::VectorEffect
   )
 }
@@ -420,6 +435,14 @@ fn parse_text_decoration(text: &str) -> Option<TextDecoration> {
     }
   }
   Some(lines)
+}
+
+fn parse_font_variant(text: &str) -> Option<bool> {
+  match text {
+    "normal" => Some(false),
+    "small-caps" => Some(true),
+    _ => None,
+  }
 }
 
 fn parse_white_space(text: &str) -> Option<bool> {
@@ -534,9 +557,39 @@ fn parse_filter_list(text: &str) -> Option<Vec<FilterValue>> {
       continue;
     }
     parser.reset(&start);
-    filters.push(FilterValue::Function(Filter::from_css(&mut parser).ok()?));
+    filters.push(FilterValue::Function(function_from(&mut parser)?));
   }
   (!filters.is_empty()).then_some(filters)
+}
+
+/// A filter function, with the default amount when the parentheses are empty.
+fn function_from(input: &mut Parser) -> Option<Filter> {
+  let start = input.state();
+
+  if let Ok(Token::Function(name)) = input.next().cloned() {
+    let empty = input
+      .parse_nested_block::<_, _, ()>(|block| block.expect_exhausted().map_err(Into::into))
+      .is_ok();
+    let whole = PercentageNumber(1.0);
+    let default = match name.to_ascii_lowercase().as_str() {
+      "brightness" => Some(Filter::Brightness(whole)),
+      "contrast" => Some(Filter::Contrast(whole)),
+      "grayscale" => Some(Filter::Grayscale(whole)),
+      "invert" => Some(Filter::Invert(whole)),
+      "opacity" => Some(Filter::Opacity(whole)),
+      "saturate" => Some(Filter::Saturate(whole)),
+      "sepia" => Some(Filter::Sepia(whole)),
+      "hue-rotate" => Some(Filter::HueRotate(Angle::zero())),
+      "blur" => Some(Filter::Blur(crate::style::Length::zero())),
+      _ => None,
+    };
+
+    if empty && default.is_some() {
+      return default;
+    }
+  }
+  input.reset(&start);
+  Filter::from_css(input).ok()
 }
 
 fn parse_font_size(text: &str, parent: f32, context: &StyleContext) -> Option<f32> {

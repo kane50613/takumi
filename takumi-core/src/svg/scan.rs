@@ -199,6 +199,34 @@ pub fn parse_length(text: &str) -> Option<Length> {
   scanner.is_at_end().then_some(value)
 }
 
+/// An angle that fills `text`, in degrees. Without a unit the number is degrees.
+pub fn parse_angle(text: &str) -> Option<f32> {
+  let mut scanner = Scanner::new(text);
+
+  scanner.skip_spaces();
+
+  let number = scanner.raw_number()?;
+  let degrees = [
+    ("deg", 1.0),
+    ("grad", 180.0 / 200.0),
+    ("rad", 180.0 / std::f64::consts::PI),
+    ("turn", 360.0),
+  ]
+  .into_iter()
+  .find(|(unit, _)| scanner.rest().starts_with(unit))
+  .map_or(number, |(unit, factor)| {
+    scanner.advance(unit.len());
+    if unit == "rad" {
+      number.to_degrees()
+    } else {
+      number * factor
+    }
+  });
+
+  scanner.skip_spaces();
+  scanner.is_at_end().then_some(degrees as f32)
+}
+
 /// Numbers separated by white space or commas, or `None` when one is malformed.
 pub fn parse_number_list(text: &str) -> Option<Vec<f32>> {
   let mut scanner = Scanner::new(text);

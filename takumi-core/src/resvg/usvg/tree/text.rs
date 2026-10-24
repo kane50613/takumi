@@ -3,13 +3,30 @@
 
 use std::sync::Arc;
 
+pub use crate::svg::{AlignmentBaseline, DominantBaseline, TextAnchor};
 use strict_num::NonZeroPositiveF32;
-pub use svgtypes::FontFamily;
 
 use crate::resvg::usvg::text::layout::Span;
 use crate::resvg::usvg::{
   Fill, Group, NonEmptyString, PaintOrder, Rect, Stroke, TextRendering, Transform,
 };
+
+/// A font family in a font stack.
+#[derive(Clone, Eq, PartialEq, Debug, Hash)]
+pub enum FontFamily {
+  /// `serif`
+  Serif,
+  /// `sans-serif`
+  SansSerif,
+  /// `cursive`
+  Cursive,
+  /// `fantasy`
+  Fantasy,
+  /// `monospace`
+  Monospace,
+  /// A family by name.
+  Named(String),
+}
 
 /// A font stretch property.
 #[allow(missing_docs)]
@@ -135,54 +152,6 @@ impl Font {
   /// Font variation settings for variable fonts.
   pub fn variations(&self) -> &[FontVariation] {
     &self.variations
-  }
-}
-
-/// A dominant baseline property.
-#[allow(missing_docs)]
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum DominantBaseline {
-  Auto,
-  UseScript,
-  NoChange,
-  ResetSize,
-  Ideographic,
-  Alphabetic,
-  Hanging,
-  Mathematical,
-  Central,
-  Middle,
-  TextAfterEdge,
-  TextBeforeEdge,
-}
-
-impl Default for DominantBaseline {
-  fn default() -> Self {
-    Self::Auto
-  }
-}
-
-/// An alignment baseline property.
-#[allow(missing_docs)]
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum AlignmentBaseline {
-  Auto,
-  Baseline,
-  BeforeEdge,
-  TextBeforeEdge,
-  Middle,
-  Central,
-  AfterEdge,
-  TextAfterEdge,
-  Ideographic,
-  Alphabetic,
-  Hanging,
-  Mathematical,
-}
-
-impl Default for AlignmentBaseline {
-  fn default() -> Self {
-    Self::Auto
   }
 }
 
@@ -418,21 +387,6 @@ impl TextSpan {
   /// A length adjust property.
   pub fn length_adjust(&self) -> LengthAdjust {
     self.length_adjust
-  }
-}
-
-/// A text chunk anchor property.
-#[allow(missing_docs)]
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum TextAnchor {
-  Start,
-  Middle,
-  End,
-}
-
-impl Default for TextAnchor {
-  fn default() -> Self {
-    Self::Start
   }
 }
 

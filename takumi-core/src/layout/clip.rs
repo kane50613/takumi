@@ -254,21 +254,20 @@ fn scale_commands(commands: Vec<PathCommand>, scale: f32) -> Vec<PathCommand> {
     .collect()
 }
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 fn parse_path(input: &str) -> Option<Vec<PathCommand>> {
-  use svgtypes::{SimplePathSegment, SimplifyingPathParser};
+  use crate::svg::{PathSegment, parse_path_data_strict};
 
+  let Some(segments) = parse_path_data_strict(input) else {
+    return Some(Vec::new());
+  };
   let mut commands = Vec::new();
 
-  for segment in SimplifyingPathParser::from(input) {
-    let Ok(segment) = segment else {
-      return Some(Vec::new());
-    };
-
+  for segment in segments {
     match segment {
-      SimplePathSegment::MoveTo { x, y } => commands.move_to((x as f32, y as f32)),
-      SimplePathSegment::LineTo { x, y } => commands.line_to((x as f32, y as f32)),
-      SimplePathSegment::CurveTo {
+      PathSegment::MoveTo { x, y } => commands.move_to((x as f32, y as f32)),
+      PathSegment::LineTo { x, y } => commands.line_to((x as f32, y as f32)),
+      PathSegment::CubicTo {
         x1,
         y1,
         x2,
@@ -280,18 +279,18 @@ fn parse_path(input: &str) -> Option<Vec<PathCommand>> {
         (x2 as f32, y2 as f32),
         (x as f32, y as f32),
       ),
-      SimplePathSegment::Quadratic { x1, y1, x, y } => commands.push(PathCommand::QuadTo(
+      PathSegment::QuadTo { x1, y1, x, y } => commands.push(PathCommand::QuadTo(
         Point::new(x1 as f32, y1 as f32),
         Point::new(x as f32, y as f32),
       )),
-      SimplePathSegment::ClosePath => commands.close(),
+      PathSegment::Close => commands.close(),
     }
   }
   Some(commands)
 }
 
 /// Without the path parser a `path()` shape cannot be resolved at all.
-#[cfg(not(feature = "svg"))]
+#[cfg(not(feature = "svg-sizing"))]
 fn parse_path(_input: &str) -> Option<Vec<PathCommand>> {
   None
 }

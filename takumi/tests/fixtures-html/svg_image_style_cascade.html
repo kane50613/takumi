@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_image_style_cascade</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        background-color: rgb(255, 255, 255);
+      "
+      ><img
+        width="800"
+        height="400"
+        src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22400%22 viewBox=%220 0 400 200%22%3E%0A%3Cstyle%3E.a%7Bfill:%232563eb%7D%23b%7Bfill:%2316a34a %21important%7Drect%7Bstroke:%23111%3Bstroke-width:4%7D%3C/style%3E%0A%3Crect class=%22a%22 x=%2210%22 y=%2210%22 width=%2280%22 height=%2260%22 fill=%22red%22/%3E%0A%3Crect id=%22b%22 x=%22110%22 y=%2210%22 width=%2280%22 height=%2260%22 style=%22fill:red%22/%3E%0A%3Cg style=%22fill:%23f59e0b%22%3E%3Crect x=%22210%22 y=%2210%22 width=%2280%22 height=%2260%22 style=%22fill:inherit%22/%3E%3C/g%3E%0A%3Crect x=%22310%22 y=%2210%22 width=%2280%22 height=%2260%22 fill=%22%237c3aed%22 stroke-width=%22-5%22/%3E%0A%3Crect x=%2210%22 y=%2290%22 width=%2260%22 height=%2260%22 fill=%22%237f0000%22 stroke=%22none%22/%3E%0A%3Crect x=%2240%22 y=%2290%22 width=%2260%22 height=%2260%22 fill=%22%23007f00%22 stroke=%22none%22 style=%22mix-blend-mode:plus-lighter%22/%3E%0A%3Crect x=%22150%22 y=%2290%22 width=%2260%22 height=%2260%22 fill=%22%23ef4444%22 stroke=%22none%22 transform=%22rotate(30)%22 style=%22transform-origin:180px 120px%22/%3E%0A%3Crect x=%22260%22 y=%2290%22 width=%2260%22 height=%2260%22 fill=%22%230ea5e9%22 stroke=%22none%22 style=%22filter:grayscale() opacity(.5)%22/%3E%0A%3Ctext x=%2210%22 y=%22185%22 style=%22font:bold 20px Geist%22 fill=%22%230f172a%22%3EFont shorthand 1em 2em%3C/text%3E%0A%3C/svg%3E"
+    /></div>
+  </body>
+</html>

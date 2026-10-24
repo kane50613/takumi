@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use bitflags::bitflags;
 
-use super::length::Length;
+use super::{length::Length, transform::TransformOrigin};
 use crate::style::{
   BlendMode, Color, ColorInput, FillRule, FontFamily, FontKerning, FontOpticalSizing, FontStretch,
   FontStyle, FontVariationSettings, Isolation, Visibility, impl_css_enum,
@@ -574,8 +574,10 @@ pub struct SvgStyle {
   pub vector_effect: VectorEffect,
   /// `transform`
   pub transform: Option<tiny_skia::Transform>,
+  /// `transform-origin`
+  pub transform_origin: Option<TransformOrigin>,
   /// `font-family`
-  pub font_family: FontFamily,
+  pub font_family: Option<FontFamily>,
   /// `font-size`, in pixels.
   pub font_size: f32,
   /// `font-style`
@@ -584,6 +586,8 @@ pub struct SvgStyle {
   pub font_weight: f32,
   /// `font-stretch`
   pub font_stretch: FontStretch,
+  /// `font-variant`, whether it asks for small caps.
+  pub small_caps: bool,
   /// `font-kerning`
   pub font_kerning: FontKerning,
   /// `font-optical-sizing`
@@ -661,11 +665,13 @@ impl SvgStyle {
       overflow: Overflow::Visible,
       vector_effect: VectorEffect::None,
       transform: None,
-      font_family: FontFamily::default(),
+      transform_origin: None,
+      font_family: None,
       font_size: context.font_size,
       font_style: FontStyle::default(),
       font_weight: 400.0,
       font_stretch: FontStretch::default(),
+      small_caps: false,
       font_kerning: FontKerning::Auto,
       font_optical_sizing: FontOpticalSizing::default(),
       font_variation_settings: FontVariationSettings::from([]),

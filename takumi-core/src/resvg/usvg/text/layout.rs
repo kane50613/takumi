@@ -9,7 +9,6 @@ use harfrust::{Feature, Tag as HbTag, font::Variation};
 use kurbo::{ParamCurve, ParamCurveArclen, ParamCurveDeriv};
 use skrifa::raw::types::F2Dot14;
 use strict_num::NonZeroPositiveF32;
-use svgtypes::FontFamily;
 use tiny_skia_path::{NonZeroRect, Transform};
 
 use crate::font_style::ExpandedFontFamily;
@@ -29,8 +28,9 @@ use crate::resources::font::{PrimaryFontMetrics, RunFace, RunSynthesis};
 use crate::resvg::usvg::tree::BBox;
 use crate::resvg::usvg::{
   AlignmentBaseline, ApproxZeroUlps, BaselineShift, Cache, DominantBaseline, Fill, FillRule, Font,
-  FontOpticalSizing, FontStyle, GlyphId, LengthAdjust, PaintOrder, Path, ShapeRendering, Stroke,
-  Text, TextAnchor, TextChunk, TextDecorationStyle, TextFlow, TextPath, TextSpan, WritingMode,
+  FontFamily, FontOpticalSizing, FontStyle, GlyphId, LengthAdjust, PaintOrder, Path,
+  ShapeRendering, Stroke, Text, TextAnchor, TextChunk, TextDecorationStyle, TextFlow, TextPath,
+  TextSpan, WritingMode,
 };
 use crate::sort_key::sort_by_key;
 use crate::style::{

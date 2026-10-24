@@ -1,17 +1,14 @@
-// Copyright 2018 the Resvg Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
-
 use std::sync::Arc;
 
-use strict_num::NonZeroPositiveF32;
-use svgtypes::Length;
 use tiny_skia_path::Point;
 
-use super::converter;
-use super::svgtree::{AId, EId, SvgNode};
-use crate::resvg::usvg::{
-  ApproxEqUlps, ApproxZeroUlps, ClipPath, Fill, Group, Node, NonZeroRect, Path, Size, Transform,
-  ViewBox,
+use super::{IdKind, State, value::Angle};
+use crate::{
+  resvg::usvg::{
+    ApproxEqUlps, ApproxZeroUlps, ClipPath, Fill, Group, Node, NonZeroPositiveF32, NonZeroRect,
+    Path, Size, Transform, ViewBox,
+  },
+  svg::{Attr, Length, Node as SvgNode, PreserveAspectRatio, Tag},
 };
 
 // Similar to `tiny_skia_path::PathSegment`, but without the `QuadTo`.
@@ -25,38 +22,41 @@ enum Segment {
 
 pub(crate) fn is_valid(node: SvgNode) -> bool {
   // `marker-*` attributes cannot be set on shapes inside a `clipPath`.
-  if node
-    .ancestors()
-    .any(|n| n.tag_name() == Some(EId::ClipPath))
-  {
+  if node.ancestors().any(|n| n.tag() == Some(Tag::ClipPath)) {
     return false;
   }
 
-  let start = node.find_attribute::<SvgNode>(AId::MarkerStart);
-  let mid = node.find_attribute::<SvgNode>(AId::MarkerMid);
-  let end = node.find_attribute::<SvgNode>(AId::MarkerEnd);
-  start.is_some() || mid.is_some() || end.is_some()
+  let Some(style) = node.style() else {
+    return false;
+  };
+
+  [&style.marker_start, &style.marker_mid, &style.marker_end]
+    .into_iter()
+    .any(|reference| node.reference(reference).is_some())
 }
 
 pub(crate) fn convert(
   node: SvgNode,
   path: &tiny_skia_path::Path,
-  state: &converter::State,
-  cache: &mut converter::Cache,
+  state: &State,
+  cache: &mut super::Cache,
   parent: &mut Group,
 ) {
+  let Some(style) = node.style() else {
+    return;
+  };
   let list = [
-    (AId::MarkerStart, MarkerKind::Start),
-    (AId::MarkerMid, MarkerKind::Middle),
-    (AId::MarkerEnd, MarkerKind::End),
+    (&style.marker_start, MarkerKind::Start),
+    (&style.marker_mid, MarkerKind::Middle),
+    (&style.marker_end, MarkerKind::End),
   ];
 
-  for (aid, kind) in &list {
+  for (reference, kind) in &list {
     let mut marker = None;
-    if let Some(link) = node.find_attribute::<SvgNode>(*aid) {
-      if link.tag_name() == Some(EId::Marker) {
-        marker = Some(link);
-      }
+    if let Some(link) = node.reference(reference)
+      && link.tag() == Some(Tag::Marker)
+    {
+      marker = Some(link);
     }
 
     if let Some(marker) = marker {
@@ -90,8 +90,8 @@ fn resolve(
   path: &tiny_skia_path::Path,
   marker_node: SvgNode,
   marker_kind: MarkerKind,
-  state: &converter::State,
-  cache: &mut converter::Cache,
+  state: &State,
+  cache: &mut super::Cache,
   parent: &mut Group,
 ) -> Option<()> {
   let stroke_scale = stroke_scale(shape_node, marker_node, state)?.get();
@@ -101,15 +101,11 @@ fn resolve(
   let view_box = marker_node.parse_viewbox().map(|vb| ViewBox {
     rect: vb,
     aspect: marker_node
-      .attribute(AId::PreserveAspectRatio)
+      .parse::<PreserveAspectRatio>(Attr::PreserveAspectRatio)
       .unwrap_or_default(),
   });
 
-  let has_overflow = {
-    let overflow = marker_node.attribute(AId::Overflow);
-    // `overflow` is `hidden` by default.
-    overflow.is_none() || overflow == Some("hidden") || overflow == Some("scroll")
-  };
+  let has_overflow = marker_node.style()?.overflow.clips();
 
   let clip_path = if has_overflow {
     let clip_rect = if let Some(vbox) = view_box {
@@ -118,7 +114,7 @@ fn resolve(
       r.size().to_non_zero_rect(0.0, 0.0)
     };
 
-    let mut clip_path = ClipPath::empty(cache.gen_clip_path_id());
+    let mut clip_path = ClipPath::empty(cache.gen_id(IdKind::ClipPath));
 
     let mut path = Path::new_simple(Arc::new(tiny_skia_path::PathBuilder::from_rect(
       clip_rect.to_rect(),
@@ -181,7 +177,9 @@ fn resolve(
     }
 
     if let Some(vbox) = view_box {
-      let size = Size::from_wh(r.width() * stroke_scale, r.height() * stroke_scale).unwrap();
+      let Some(size) = Size::from_wh(r.width() * stroke_scale, r.height() * stroke_scale) else {
+        return;
+      };
       let vbox_ts = vbox.to_transform(size);
       let (sx, sy) = vbox_ts.get_scale();
       ts = ts.pre_scale(sx, sy);
@@ -201,7 +199,7 @@ fn resolve(
 
     let mut marker_state = state.clone();
     marker_state.parent_markers.push(marker_node);
-    converter::convert_children(marker_node, &marker_state, cache, &mut g);
+    super::convert_children(marker_node, &marker_state, cache, &mut g);
     g.calculate_bounding_boxes();
 
     if g.has_children() {
@@ -217,11 +215,15 @@ fn resolve(
 fn stroke_scale(
   path_node: SvgNode,
   marker_node: SvgNode,
-  state: &converter::State,
+  state: &State,
 ) -> Option<NonZeroPositiveF32> {
-  match marker_node.attribute(AId::MarkerUnits) {
+  match marker_node.parse(Attr::MarkerUnits) {
     Some("userSpaceOnUse") => NonZeroPositiveF32::new(1.0),
-    _ => path_node.resolve_valid_length(AId::StrokeWidth, state, 1.0),
+    _ => NonZeroPositiveF32::new(super::units::convert_other_length(
+      path_node.style()?.stroke_width,
+      path_node,
+      state,
+    )),
   }
 }
 
@@ -283,12 +285,12 @@ fn calc_vertex_angle(path: &[Segment], idx: usize) -> f32 {
     let seg2 = path[1];
 
     match (seg1, seg2) {
-      (Segment::MoveTo(pm), Segment::LineTo(p)) => calc_line_angle(pm.x, pm.y, p.x, p.y),
+      (Segment::MoveTo(pm), Segment::LineTo(p)) => calc_line_angle(pm, p),
       (Segment::MoveTo(pm), Segment::CubicTo(p1, _, p)) => {
         if pm.x.approx_eq_ulps(&p1.x, 4) && pm.y.approx_eq_ulps(&p1.y, 4) {
-          calc_line_angle(pm.x, pm.y, p.x, p.y)
+          calc_line_angle(pm, p)
         } else {
-          calc_line_angle(pm.x, pm.y, p1.x, p1.y)
+          calc_line_angle(pm, p1)
         }
       }
       _ => 0.0,
@@ -303,25 +305,23 @@ fn calc_vertex_angle(path: &[Segment], idx: usize) -> f32 {
       (_, Segment::MoveTo(_)) => 0.0, // unreachable
       (_, Segment::LineTo(p)) => {
         let prev = get_prev_vertex(path, idx);
-        calc_line_angle(prev.x, prev.y, p.x, p.y)
+        calc_line_angle(prev, p)
       }
       (_, Segment::CubicTo(p1, p2, p)) => {
         if p2.x.approx_eq_ulps(&p.x, 4) && p2.y.approx_eq_ulps(&p.y, 4) {
-          calc_line_angle(p1.x, p1.y, p.x, p.y)
+          calc_line_angle(p1, p)
         } else {
-          calc_line_angle(p2.x, p2.y, p.x, p.y)
+          calc_line_angle(p2, p)
         }
       }
       (Segment::LineTo(p), Segment::Close) => {
         let next = get_subpath_start(path, idx);
-        calc_line_angle(p.x, p.y, next.x, next.y)
+        calc_line_angle(p, next)
       }
       (Segment::CubicTo(_, p2, p), Segment::Close) => {
         let prev = get_prev_vertex(path, idx);
         let next = get_subpath_start(path, idx);
-        calc_curves_angle(
-          prev.x, prev.y, p2.x, p2.y, p.x, p.y, next.x, next.y, next.x, next.y,
-        )
+        calc_curves_angle(prev, p2, p, next, next)
       }
       (_, Segment::Close) => 0.0,
     }
@@ -333,81 +333,76 @@ fn calc_vertex_angle(path: &[Segment], idx: usize) -> f32 {
 
     // TODO: Not sure if there is a better way.
     match (seg1, seg2) {
-      (Segment::MoveTo(pm), Segment::LineTo(p)) => calc_line_angle(pm.x, pm.y, p.x, p.y),
-      (Segment::MoveTo(pm), Segment::CubicTo(p1, _, _)) => calc_line_angle(pm.x, pm.y, p1.x, p1.y),
+      (Segment::MoveTo(pm), Segment::LineTo(p)) => calc_line_angle(pm, p),
+      (Segment::MoveTo(pm), Segment::CubicTo(p1, _, _)) => calc_line_angle(pm, p1),
       (Segment::LineTo(p1), Segment::LineTo(p2)) => {
         let prev = get_prev_vertex(path, idx);
-        calc_angle(prev.x, prev.y, p1.x, p1.y, p1.x, p1.y, p2.x, p2.y)
+        calc_angle(prev, p1, p1, p2)
       }
       (Segment::CubicTo(_, c1_p2, c1_p), Segment::CubicTo(c2_p1, _, c2_p)) => {
         let prev = get_prev_vertex(path, idx);
-        calc_curves_angle(
-          prev.x, prev.y, c1_p2.x, c1_p2.y, c1_p.x, c1_p.y, c2_p1.x, c2_p1.y, c2_p.x, c2_p.y,
-        )
+        calc_curves_angle(prev, c1_p2, c1_p, c2_p1, c2_p)
       }
       (Segment::LineTo(pl), Segment::CubicTo(p1, _, p)) => {
         let prev = get_prev_vertex(path, idx);
-        calc_curves_angle(
-          prev.x, prev.y, prev.x, prev.y, pl.x, pl.y, p1.x, p1.y, p.x, p.y,
-        )
+        calc_curves_angle(prev, prev, pl, p1, p)
       }
       (Segment::CubicTo(_, p2, p), Segment::LineTo(pl)) => {
         let prev = get_prev_vertex(path, idx);
-        calc_curves_angle(prev.x, prev.y, p2.x, p2.y, p.x, p.y, pl.x, pl.y, pl.x, pl.y)
+        calc_curves_angle(prev, p2, p, pl, pl)
       }
       (Segment::LineTo(p), Segment::MoveTo(_)) => {
         let prev = get_prev_vertex(path, idx);
-        calc_line_angle(prev.x, prev.y, p.x, p.y)
+        calc_line_angle(prev, p)
       }
       (Segment::CubicTo(_, p2, p), Segment::MoveTo(_)) => {
         if p.x.approx_eq_ulps(&p2.x, 4) && p.y.approx_eq_ulps(&p2.y, 4) {
           let prev = get_prev_vertex(path, idx);
-          calc_line_angle(prev.x, prev.y, p.x, p.y)
+          calc_line_angle(prev, p)
         } else {
-          calc_line_angle(p2.x, p2.y, p.x, p.y)
+          calc_line_angle(p2, p)
         }
       }
       (Segment::LineTo(p), Segment::Close) => {
         let prev = get_prev_vertex(path, idx);
         let next = get_subpath_start(path, idx);
-        calc_angle(prev.x, prev.y, p.x, p.y, p.x, p.y, next.x, next.y)
+        calc_angle(prev, p, p, next)
       }
       (_, Segment::Close) => {
         let prev = get_prev_vertex(path, idx);
         let next = get_subpath_start(path, idx);
-        calc_line_angle(prev.x, prev.y, next.x, next.y)
+        calc_line_angle(prev, next)
       }
       (_, Segment::MoveTo(_)) | (Segment::Close, _) => 0.0,
     }
   }
 }
 
-fn calc_line_angle(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
-  calc_angle(x1, y1, x2, y2, x1, y1, x2, y2)
+fn calc_line_angle(from: Point, to: Point) -> f32 {
+  calc_angle(from, to, from, to)
 }
 
 fn calc_curves_angle(
-  px: f32,
-  py: f32, // previous vertex
-  cx1: f32,
-  cy1: f32, // previous control point
-  x: f32,
-  y: f32, // current vertex
-  cx2: f32,
-  cy2: f32, // next control point
-  nx: f32,
-  ny: f32, // next vertex
+  previous: Point,
+  previous_control: Point,
+  vertex: Point,
+  next_control: Point,
+  next: Point,
 ) -> f32 {
-  if cx1.approx_eq_ulps(&x, 4) && cy1.approx_eq_ulps(&y, 4) {
-    calc_angle(px, py, x, y, x, y, cx2, cy2)
-  } else if x.approx_eq_ulps(&cx2, 4) && y.approx_eq_ulps(&cy2, 4) {
-    calc_angle(cx1, cy1, x, y, x, y, nx, ny)
+  if previous_control.x.approx_eq_ulps(&vertex.x, 4)
+    && previous_control.y.approx_eq_ulps(&vertex.y, 4)
+  {
+    calc_angle(previous, vertex, vertex, next_control)
+  } else if vertex.x.approx_eq_ulps(&next_control.x, 4)
+    && vertex.y.approx_eq_ulps(&next_control.y, 4)
+  {
+    calc_angle(previous_control, vertex, vertex, next)
   } else {
-    calc_angle(cx1, cy1, x, y, x, y, cx2, cy2)
+    calc_angle(previous_control, vertex, vertex, next_control)
   }
 }
 
-fn calc_angle(x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, x4: f32, y4: f32) -> f32 {
+fn calc_angle(in_from: Point, in_to: Point, out_from: Point, out_to: Point) -> f32 {
   use std::f32::consts::*;
 
   fn normalize(rad: f32) -> f32 {
@@ -420,8 +415,8 @@ fn calc_angle(x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, x4: f32, y4:
     if rad.is_nan() { 0.0 } else { normalize(rad) }
   }
 
-  let in_a = vector_angle(x2 - x1, y2 - y1);
-  let out_a = vector_angle(x4 - x3, y4 - y3);
+  let in_a = vector_angle(in_to.x - in_from.x, in_to.y - in_from.y);
+  let out_a = vector_angle(out_to.x - out_from.x, out_to.y - out_from.y);
   let d = (out_a - in_a) * 0.5;
 
   let mut angle = in_a + d;
@@ -452,23 +447,24 @@ fn get_prev_vertex(segments: &[Segment], idx: usize) -> tiny_skia_path::Point {
   }
 }
 
-fn convert_rect(node: SvgNode, state: &converter::State) -> Option<NonZeroRect> {
+fn convert_rect(node: SvgNode, state: &State) -> Option<NonZeroRect> {
   NonZeroRect::from_xywh(
-    node.convert_user_length(AId::RefX, state, Length::zero()),
-    node.convert_user_length(AId::RefY, state, Length::zero()),
-    node.convert_user_length(AId::MarkerWidth, state, Length::new_number(3.0)),
-    node.convert_user_length(AId::MarkerHeight, state, Length::new_number(3.0)),
+    node.convert_user_length(Attr::RefX, state, Length::number(0.0)),
+    node.convert_user_length(Attr::RefY, state, Length::number(0.0)),
+    node.convert_user_length(Attr::MarkerWidth, state, Length::number(3.0)),
+    node.convert_user_length(Attr::MarkerHeight, state, Length::number(3.0)),
   )
 }
 
 fn convert_orientation(node: SvgNode) -> MarkerOrientation {
-  match node.attribute(AId::Orient) {
+  match node.parse(Attr::Orient) {
     Some("auto") => MarkerOrientation::Auto,
     Some("auto-start-reverse") => MarkerOrientation::AutoStartReverse,
-    _ => match node.attribute::<svgtypes::Angle>(AId::Orient) {
-      Some(angle) => MarkerOrientation::Angle(angle.to_degrees() as f32),
-      None => MarkerOrientation::Angle(0.0),
-    },
+    _ => MarkerOrientation::Angle(
+      node
+        .parse::<Angle>(Attr::Orient)
+        .map_or(0.0, |angle| angle.0),
+    ),
   }
 }
 

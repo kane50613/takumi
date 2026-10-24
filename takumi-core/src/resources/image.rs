@@ -232,10 +232,8 @@ impl SvgSource {
       return None;
     }
 
-    let [red, green, blue, alpha] = current_color.0;
-
     self.reparse(fonts, |options| {
-      options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
+      options.current_color = Some(current_color);
     })
   }
 

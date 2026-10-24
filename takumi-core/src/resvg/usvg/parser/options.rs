@@ -81,7 +81,7 @@ pub struct Options<'a> {
   /// from its host document.
   ///
   /// Default: `None` (resolves to black)
-  pub current_color: Option<svgtypes::Color>,
+  pub current_color: Option<crate::style::Color>,
 
   /// Set by the parser when a `currentColor` fell through to the
   /// [`current_color`](Self::current_color) fallback, meaning the rendered

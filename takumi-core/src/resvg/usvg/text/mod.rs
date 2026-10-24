@@ -24,7 +24,7 @@ impl From<GlyphId> for skrifa::raw::types::GlyphId {
 ///    is not based on the outlines of a glyph, but instead the glyph metrics as well
 ///    as decoration spans).
 /// 2. We convert all of the positioned glyphs into outlines.
-pub(crate) fn convert(text: &mut Text, cache: &mut Cache) -> Option<()> {
+pub(crate) fn text_to_paths(text: &mut Text, cache: &mut Cache) -> Option<()> {
   let (text_fragments, bbox) = layout::layout_text(text, cache)?;
   text.layouted = text_fragments;
   text.bounding_box = bbox.to_rect();

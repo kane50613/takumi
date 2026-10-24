@@ -348,7 +348,7 @@ impl Flattener {
       return;
     }
 
-    let anti_alias = path.rendering_mode().use_shape_antialiasing();
+    let anti_alias = path.rendering_mode().anti_alias();
     let fill = path.fill().map(|fill| self.convert_fill(fill));
     let stroke = path.stroke().map(|stroke| self.convert_stroke(stroke));
 
@@ -726,6 +726,7 @@ fn convert_blend_mode(blend: usvg::BlendMode) -> BlendMode {
     usvg::BlendMode::Saturation => BlendMode::Saturation,
     usvg::BlendMode::Color => BlendMode::Color,
     usvg::BlendMode::Luminosity => BlendMode::Luminosity,
+    usvg::BlendMode::PlusLighter => BlendMode::PlusLighter,
   }
 }
 
