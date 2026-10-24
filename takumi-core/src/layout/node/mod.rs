@@ -38,8 +38,7 @@ pub(crate) struct NodeMetadata {
   pub id: Option<Box<str>>,
   /// Additional element attributes for selector matching and serialization.
   pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
-  /// Default style presets from HTML element type (lowest priority), shared by the elements of a
-  /// type.
+  /// Default style presets from HTML element type (lowest priority).
   pub preset: Option<Arc<Style>>,
   /// The styling properties for this node.
   pub style: Option<Box<Style>>,
