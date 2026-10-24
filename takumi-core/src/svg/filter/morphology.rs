@@ -1,7 +1,7 @@
 // Copyright 2020 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::array;
+use std::{array, collections::VecDeque};
 
 use super::MorphologyOperator;
 
@@ -40,6 +40,7 @@ pub(super) fn apply(
 
 /// Writes to `dst` the extremum of `src` along each of `lines` lines of `length` pixels, over a
 /// window of `size` pixels that starts `size / 2` before each pixel and is clipped to the line.
+/// Each channel keeps the candidates of its window in a queue, so a pixel costs a constant.
 fn sweep(
   operator: MorphologyOperator,
   src: &[[u8; 4]],
@@ -50,20 +51,52 @@ fn sweep(
   index: impl Fn(usize, usize) -> usize,
 ) {
   let before = size / 2;
+  let mut queues: [VecDeque<usize>; 4] = Default::default();
 
   for line in 0..lines {
+    let mut next = 0;
+
+    queues.iter_mut().for_each(VecDeque::clear);
+
     for position in 0..length {
       let start = position.saturating_sub(before);
       let end = std::cmp::min((position + size).saturating_sub(before), length);
 
-      dst[index(line, position)] = (start..end)
-        .map(|offset| src[index(line, offset)])
-        .reduce(|extremum, pixel| combine(operator, extremum, pixel))
-        .unwrap_or_default();
+      while next < end {
+        let pixel = src[index(line, next)];
+
+        for (channel, queue) in queues.iter_mut().enumerate() {
+          while queue.back().is_some_and(|&back| {
+            let behind = src[index(line, back)][channel];
+
+            match operator {
+              MorphologyOperator::Erode => behind >= pixel[channel],
+              MorphologyOperator::Dilate => behind <= pixel[channel],
+            }
+          }) {
+            queue.pop_back();
+          }
+          queue.push_back(next);
+        }
+        next += 1;
+      }
+
+      for queue in &mut queues {
+        while queue.front().is_some_and(|&front| front < start) {
+          queue.pop_front();
+        }
+      }
+
+      dst[index(line, position)] = array::from_fn(|channel| {
+        queues[channel]
+          .front()
+          .map_or(0, |&front| src[index(line, front)][channel])
+      });
     }
   }
 }
 
+#[cfg(test)]
 fn combine(operator: MorphologyOperator, a: [u8; 4], b: [u8; 4]) -> [u8; 4] {
   let pick = match operator {
     MorphologyOperator::Erode => u8::min,

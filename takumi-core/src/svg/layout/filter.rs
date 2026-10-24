@@ -27,6 +27,10 @@ use crate::{
   },
 };
 
+/// Most cells a convolution kernel has, takumi's own limit, as a convolution costs a pixel times
+/// its cells.
+const MAX_KERNEL_CELLS: u32 = 400;
+
 /// Most octaves of noise a turbulence runs, takumi's own limit past which one adds nothing to a pixel.
 const MAX_OCTAVES: f32 = 24.0;
 
@@ -281,6 +285,11 @@ impl SvgLayout<'_> {
     for child in self.document.element_children(filter) {
       if self.document.elements[child].kind != SvgElementKind::FilterPrimitive {
         continue;
+      }
+
+      // Each primitive holds buffers of the filter region when it runs, so it costs an instance.
+      if !self.budget.spend_instance() {
+        return Vec::new();
       }
 
       let tag = self.styles.node(child).tag_name().unwrap_or_default();
@@ -672,6 +681,13 @@ impl SvgLayout<'_> {
       if x > 0 && y > 0 {
         (order_x, order_y) = (x as u32, y as u32);
       }
+    }
+
+    if order_x
+      .checked_mul(order_y)
+      .is_none_or(|cells| cells > MAX_KERNEL_CELLS)
+    {
+      return None;
     }
 
     let matrix = self

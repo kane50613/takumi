@@ -52,7 +52,7 @@ use crate::{
 use tiny_skia::Transform;
 
 #[cfg(feature = "svg-raster")]
-const MAX_RASTER_PIXELS: u64 = 64 << 20;
+pub(crate) const MAX_RASTER_PIXELS: u64 = 64 << 20;
 
 #[cfg(feature = "svg-raster")]
 pub(crate) fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
@@ -1271,6 +1271,46 @@ mod tests {
     filtered_layer(
       r#"<filter id="f" filterUnits="userSpaceOnUse" x="-1000000" y="-1000000" width="2000000" height="2000000"><feGaussianBlur stdDeviation="2"/></filter>"#,
       8,
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_filter_keeping_thousands_of_results_alive_ends() {
+    let flood = (0..2000).fold(String::new(), |mut markup, index| {
+      markup.push_str(&format!(r#"<feFlood result="r{index}"/>"#));
+      markup
+    });
+    let nodes = (0..2000).fold(String::new(), |mut markup, index| {
+      markup.push_str(&format!(r#"<feMergeNode in="r{index}"/>"#));
+      markup
+    });
+
+    filtered_layer(
+      &format!(r#"<filter id="f">{flood}<feMerge>{nodes}</feMerge></filter>"#),
+      1024,
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_convolution_of_a_million_cells_is_invalid() {
+    let kernel = "0 ".repeat(1_000_000);
+
+    filtered_layer(
+      &format!(
+        r#"<filter id="f"><feConvolveMatrix order="1000" kernelMatrix="{kernel}"/></filter>"#
+      ),
+      64,
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_morphology_radius_past_the_layer_costs_the_layer_once() {
+    filtered_layer(
+      r#"<filter id="f"><feMorphology radius="100000" operator="dilate"/></filter>"#,
+      2000,
     );
   }
 

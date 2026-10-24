@@ -17,7 +17,7 @@ use crate::{
   blur::{MIN_SIGMA, blur_rgba_axes},
   geometry::{Point, Rect},
   resources::{
-    image::within_raster_pixel_budget,
+    image::{MAX_RASTER_PIXELS, within_raster_pixel_budget},
     image_buffer::{demultiply_pixel, demultiply_rgba_in_place, premultiply_pixel},
   },
   style::{Affine, Color, TransferTable, math::mul_div_255},
@@ -177,7 +177,12 @@ impl SvgFilter {
         name: primitive.result.clone(),
         image,
       });
+
       run.release(true);
+
+      if run.live_bytes() > MAX_LIVE_BYTES {
+        return None;
+      }
     }
 
     let image = run.results.pop()?.image;
@@ -232,7 +237,22 @@ impl SvgFilter {
   }
 }
 
+/// Most bytes a filter's live results and sources hold at once, takumi's own limit.
+const MAX_LIVE_BYTES: u64 = MAX_RASTER_PIXELS * 4;
+
 impl Run<'_> {
+  /// The bytes of the pixmaps the run keeps.
+  fn live_bytes(&self) -> u64 {
+    self
+      .results
+      .iter()
+      .map(|result| &result.image)
+      .chain(&self.source_graphic)
+      .chain(&self.source_alpha)
+      .map(|image| image.pixmap.data().len() as u64)
+      .sum()
+  }
+
   /// Runs one primitive, cutting its result to its subregion.
   fn primitive(&mut self, primitive: &Primitive) -> Option<Image> {
     let mut subregion = primitive.subregion.pixel_bounds(self.transform)?;
