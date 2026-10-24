@@ -295,3 +295,120 @@ fn text_and_filters_are_left_to_the_legacy_renderer() {
     );
   }
 }
+
+#[test]
+fn a_switch_ignores_required_features() {
+  let ops = ops(
+    r#"<switch><rect requiredFeatures="bogus" width="10" height="10" fill="red"/><rect width="10" height="10" fill="blue"/></switch>"#,
+  );
+
+  assert_eq!(fills(&ops), [red()]);
+}
+
+#[test]
+fn only_the_presentation_attributes_blink_maps_are_styled() {
+  let ops = SvgDocument::parse(
+    r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="10" height="10" background-color="red"><rect width="5" height="5"/></svg>"#,
+  )
+  .ok()
+  .and_then(|document| document.ops(BLACK, None))
+  .unwrap_or_default();
+
+  assert_eq!(fills(&ops), [Some(BLACK)]);
+}
+
+#[test]
+fn a_use_sizes_a_symbol_against_the_viewport_around_it() {
+  let ops = ops(
+    r##"<symbol id="s" viewBox="0 0 10 10"><rect width="10" height="10"/></symbol>
+        <use href="#s" width="50%" height="50%"/>"##,
+  );
+  let scale = ops.iter().find_map(|op| match op {
+    SvgOp::PushTransform(transform) => Some(transform.a),
+    _ => None,
+  });
+
+  assert!(
+    scale.is_some_and(|scale| (scale - 5.0).abs() < 1e-4),
+    "{scale:?}"
+  );
+}
+
+#[test]
+fn a_gradient_resolves_its_percentages_against_each_viewport_that_uses_it() {
+  let ops = ops(
+    r##"<linearGradient id="g" gradientUnits="userSpaceOnUse" x2="50%">
+          <stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/>
+        </linearGradient>
+        <rect width="10" height="10" fill="url(#g)"/>
+        <svg width="40" height="40" viewBox="0 0 40 40"><rect width="10" height="10" fill="url(#g)"/></svg>"##,
+  );
+  let ends: Vec<f32> = ops
+    .iter()
+    .filter_map(|op| match op {
+      SvgOp::Draw {
+        fill:
+          Some(SvgFill {
+            paint: SvgOpPaint::Linear { end, .. },
+            ..
+          }),
+        ..
+      } => Some(end.x),
+      _ => None,
+    })
+    .collect();
+
+  assert_eq!(ends, [50.0, 20.0]);
+}
+
+#[test]
+fn a_clip_path_clipped_in_bounding_box_units_is_not_shared_between_shapes() {
+  let ops = ops(
+    r##"<clipPath id="outer" clip-path="url(#inner)"><rect width="100" height="100"/></clipPath>
+        <clipPath id="inner" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath>
+        <rect width="10" height="10" clip-path="url(#outer)"/>
+        <rect width="20" height="20" clip-path="url(#outer)"/>"##,
+  );
+  let widths: Vec<f32> = ops
+    .iter()
+    .filter_map(|op| match op {
+      SvgOp::PushClip { path, .. } => path
+        .iter()
+        .map(|command| {
+          let mut width: f32 = 0.0;
+
+          command.map_points(|point| {
+            width = width.max(point.x);
+            point
+          });
+          width
+        })
+        .reduce(f32::max),
+      _ => None,
+    })
+    .collect();
+
+  assert!(
+    widths.contains(&10.0) && widths.contains(&20.0),
+    "{widths:?}"
+  );
+}
+
+#[test]
+fn a_long_chain_of_clip_paths_is_walked_once_for_all_its_references() {
+  let mut body = String::new();
+
+  for link in 0..1000 {
+    let _ = write!(
+      body,
+      r##"<clipPath id="c{link}" clip-path="url(#c{})"><rect width="1" height="1"/></clipPath>"##,
+      link + 1
+    );
+  }
+
+  body.push_str(r##"<clipPath id="c1000"><rect width="1" height="1"/></clipPath>"##);
+  body.push_str(&r##"<rect width="1" height="1" clip-path="url(#c0)"/>"##.repeat(1000));
+
+  // The chain is deeper than a document may nest, so the shapes are hidden, but the walk ends.
+  assert!(with_deep_stack(move || draw_count(&ops(&body))).is_some());
+}

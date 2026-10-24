@@ -31,7 +31,11 @@ pub(super) enum PaintServer {
 impl SvgLayout<'_> {
   /// The paint the server element at `index` makes.
   pub(super) fn paint_server(&mut self, index: usize, scope: &Scope) -> Option<PaintServer> {
-    if let Some(paint) = self.paint_servers.get(&index) {
+    let key = (index, scope.view_box.to_bits());
+    // A pattern reads the paints of the `use` or marker it sits in, so one inside them is not shared.
+    let cacheable = scope.context_paints.is_none();
+
+    if cacheable && let Some(paint) = self.paint_servers.get(&key) {
       return Some(PaintServer::Server(paint.clone()));
     }
 
@@ -44,8 +48,8 @@ impl SvgLayout<'_> {
       _ => None,
     }?;
 
-    if let PaintServer::Server(paint) = &server {
-      self.paint_servers.insert(index, paint.clone());
+    if cacheable && let PaintServer::Server(paint) = &server {
+      self.paint_servers.insert(key, paint.clone());
     }
 
     Some(server)

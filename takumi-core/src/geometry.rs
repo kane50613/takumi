@@ -310,6 +310,11 @@ impl Rect<f32> {
     Self::from_ltrb(left, top, right, bottom)
   }
 
+  /// The edges as bits, to key a cache by the rect.
+  pub(crate) fn to_bits(self) -> [u32; 4] {
+    [self.left, self.top, self.right, self.bottom].map(f32::to_bits)
+  }
+
   /// The rect with its coordinates read as fractions of `bbox`.
   pub(crate) fn in_bounding_box(&self, bbox: &Self) -> Option<Self> {
     Self::positive_from_xywh(

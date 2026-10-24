@@ -87,6 +87,7 @@ impl SvgSize {
       root
         .attribute(name)
         .and_then(|text| Length::from_css_str(text).ok())
+        .filter(|length| !matches!(length, Length::Auto))
     };
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((0, 0)).with_font_size(FONT_SIZE))
@@ -191,6 +192,13 @@ mod tests {
     assert_eq!(svg.intrinsic.width, Some(192.0));
     assert_eq!(svg.intrinsic.height, Some(96.0));
     assert_eq!(svg.intrinsic.ratio(), Some(2.0));
+  }
+
+  #[test]
+  fn auto_is_not_a_root_length() {
+    let svg = size(r#"width="auto" height="auto""#);
+
+    assert_eq!((svg.width, svg.height), (DEFAULT_SIZE, DEFAULT_SIZE));
   }
 
   #[test]

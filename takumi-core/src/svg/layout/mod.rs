@@ -84,7 +84,10 @@ pub(super) struct SvgLayout<'a> {
   styles: StyleResolver<'a>,
   clip_paths: HashMap<usize, Rc<LayoutClip>>,
   masks: HashMap<usize, Rc<LayoutMask>>,
-  paint_servers: HashMap<usize, Paint>,
+  /// Whether each clip path or mask, or one it chains to, is in bounding box units.
+  bounding_box_units: HashMap<(clip_mask::Resource, usize), bool>,
+  /// The paint servers laid out, by element and the viewport their percentages resolved against.
+  paint_servers: HashMap<(usize, [u32; 4]), Paint>,
   /// The images decoded so far by the element that names them.
   images: HashMap<usize, Option<(PictureContent, Size<f32>)>>,
   /// The `use` elements and resources being laid out, which may not contain themselves.
@@ -118,6 +121,7 @@ impl<'a> SvgLayout<'a> {
       styles: StyleResolver::new(document, current_color, fonts),
       clip_paths: HashMap::new(),
       masks: HashMap::new(),
+      bounding_box_units: HashMap::new(),
       paint_servers: HashMap::new(),
       images: HashMap::new(),
       active: Vec::new(),

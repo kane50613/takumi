@@ -1,6 +1,6 @@
 //! Clip paths and masks, after Blink's `LayoutSVGResourceClipper` and `LayoutSVGResourceMasker`.
 
-use std::rc::Rc;
+use std::{collections::HashSet, rc::Rc};
 
 use super::{
   Scope, SvgLayout,
@@ -14,6 +14,13 @@ use crate::{
     length::{LengthAxis, SvgLengthContext},
   },
 };
+
+/// The kinds of resource a `clip-path` or `mask` chain walks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) enum Resource {
+  ClipPath,
+  Mask,
+}
 
 impl SvgLayout<'_> {
   /// The clip path the element at `link` makes for content with `object_bounding_box`, none when
@@ -68,9 +75,9 @@ impl SvgLayout<'_> {
       _ => Units::UserSpaceOnUse,
     };
 
-    // Only a clip path in user units can be shared, as one in bounding box units becomes
-    // specific to the content.
-    let cacheable = units == Units::UserSpaceOnUse;
+    // Only a clip path in user units, clipped by none in bounding box units, can be shared, as
+    // the others become specific to the content.
+    let cacheable = !self.clip_path_uses_bounding_box(link);
 
     if cacheable && let Some(clip) = self.clip_paths.get(&link) {
       return Some(Rc::clone(clip));
@@ -118,6 +125,71 @@ impl SvgLayout<'_> {
     Some(clip)
   }
 
+  /// Whether the clip path at `link`, or one it is clipped by, is in bounding box units.
+  fn clip_path_uses_bounding_box(&mut self, link: usize) -> bool {
+    self.chain_uses_bounding_box(Resource::ClipPath, link)
+  }
+
+  /// Whether the mask at `link`, or one it is masked by, is in bounding box units.
+  fn mask_uses_bounding_box(&mut self, link: usize) -> bool {
+    self.chain_uses_bounding_box(Resource::Mask, link)
+  }
+
+  /// Whether a resource of the chain that starts at `link` is in bounding box units. Each
+  /// resource is walked once for the document, whatever references it, and a cycle ends the walk.
+  fn chain_uses_bounding_box(&mut self, resource: Resource, link: usize) -> bool {
+    let mut chain = Vec::new();
+    let mut seen = HashSet::new();
+    let mut current = Some(link);
+    let mut result = false;
+
+    while let Some(id) = current {
+      if let Some(&known) = self.bounding_box_units.get(&(resource, id)) {
+        result = known;
+        break;
+      }
+
+      if !seen.insert(id) {
+        break;
+      }
+
+      let (own, next) = self.bounding_box_step(resource, id);
+
+      chain.push((id, own));
+      current = next;
+    }
+
+    // A resource depends on the content when it or the one it chains to does.
+    for (id, own) in chain.into_iter().rev() {
+      result |= own;
+      self.bounding_box_units.insert((resource, id), result);
+    }
+
+    result
+  }
+
+  /// Whether the resource at `id` is in bounding box units, and the resource it chains to.
+  fn bounding_box_step(&self, resource: Resource, id: usize) -> (bool, Option<usize>) {
+    match resource {
+      Resource::ClipPath => {
+        let own = self.attribute(id, "clipPathUnits") == Some("objectBoundingBox");
+        let styled = self.styled_in_place(id);
+        let next = match &styled.style().misc1_data.clip_path {
+          Some(BasicShape::Url(url)) => self.reference(url),
+          _ => None,
+        };
+
+        (own, next)
+      }
+      Resource::Mask => {
+        let own = self.attribute(id, "maskUnits") != Some("userSpaceOnUse")
+          || self.attribute(id, "maskContentUnits") == Some("objectBoundingBox");
+
+        (own, self.mask_reference(self.styled_in_place(id).style()))
+      }
+    }
+  }
+
   /// The mask the element at `link` makes for content with `object_bounding_box`, none when the
   /// mask is invalid, which hides the content.
   pub(super) fn convert_mask(
@@ -161,9 +233,9 @@ impl SvgLayout<'_> {
       _ => Units::UserSpaceOnUse,
     };
 
-    // Only a mask in user units can be shared, as one in bounding box units becomes specific to
-    // the content.
-    let cacheable = units == Units::UserSpaceOnUse && content_units == Units::UserSpaceOnUse;
+    // Only a mask in user units, masked by none in bounding box units, can be shared, as the
+    // others become specific to the content.
+    let cacheable = !self.mask_uses_bounding_box(link);
 
     if cacheable && let Some(mask) = self.masks.get(&link) {
       return Some(Rc::clone(mask));
@@ -204,7 +276,6 @@ impl SvgLayout<'_> {
         root: Container::new(Affine::IDENTITY),
       });
 
-      self.masks.insert(link, Rc::clone(&mask));
       return Some(mask);
     }
 

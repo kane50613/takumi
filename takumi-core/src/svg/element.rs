@@ -7,7 +7,7 @@ use crate::{
   style::{CssInput, PropertyId, Style, StyleDeclaration, SvgPath, Transforms},
 };
 
-/// The SVG elements usvg reads. Any other element is dropped with its subtree.
+/// The SVG elements takumi lays out, and the kinds of node it keeps in the tree for selectors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SvgElementKind {
   Svg,
@@ -237,8 +237,8 @@ impl SvgElementKind {
 }
 
 /// The attributes that name a CSS property of the same name on any SVG element, from Blink's
-/// `SVGElement::CssPropertyIdForSVGAttributeName`. `mix-blend-mode` and `isolation` are CSS-only.
-const PRESENTATION_ATTRIBUTES: [&str; 59] = [
+/// `SVGElement::CssPropertyIdForSVGAttributeName`, less the ones takumi has no property for. `mix-blend-mode` and `isolation` are CSS-only.
+const PRESENTATION_ATTRIBUTES: [&str; 54] = [
   "alignment-baseline",
   "baseline-shift",
   "clip-path",
@@ -292,10 +292,5 @@ const PRESENTATION_ATTRIBUTES: [&str; 59] = [
   "visibility",
   "word-spacing",
   "writing-mode",
-  "font-kerning",
-  "font-optical-sizing",
-  "font-variation-settings",
   "text-rendering",
-  "white-space",
-  "background-color",
 ];

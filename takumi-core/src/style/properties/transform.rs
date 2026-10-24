@@ -141,11 +141,15 @@ impl Mul<Affine> for Affine {
   type Output = Affine;
 
   fn mul(self, rhs: Affine) -> Self::Output {
-    if self.is_identity() {
+    // A factor that only rounds the linear part is skipped, but never a translation, which a
+    // large scale on the other factor could make visible.
+    let is_noop = |factor: Self| factor.x == 0.0 && factor.y == 0.0 && factor.is_identity();
+
+    if is_noop(self) {
       return rhs;
     }
 
-    if rhs.is_identity() {
+    if is_noop(rhs) {
       return self;
     }
 
@@ -754,6 +758,13 @@ mod tests {
   fn css_still_wants_commas_and_units() {
     assert!(Transform::from_css_str("translate(10 20)").is_err());
     assert!(Transform::from_css_str("rotate(10 1 1)").is_err());
+  }
+
+  #[test]
+  fn a_small_translation_survives_a_product_with_a_large_scale() {
+    let product = Affine::scale(1e6, 1e6) * Affine::translation(9e-7, 0.0);
+
+    assert!((product.x - 0.9).abs() < 1e-4, "{product:?}");
   }
 
   #[test]

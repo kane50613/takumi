@@ -132,11 +132,11 @@ impl SvgLayout<'_> {
       )
       .unwrap_or(use_scope.view_box);
 
-      if let Some(transform) = self.view_box_transform(styled, &symbol, &use_scope) {
+      if let Some(transform) = self.view_box_transform(styled, &symbol, scope) {
         new_transform *= transform;
       }
 
-      if let Some(clip_rect) = self.clip_rect(styled, &symbol, &use_scope) {
+      if let Some(clip_rect) = self.clip_rect(styled, &symbol, scope) {
         let Some(mut clipped) = self.clip_container(original_transform, clip_rect, parent) else {
           return;
         };
