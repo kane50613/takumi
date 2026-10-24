@@ -30,7 +30,7 @@ use tiny_skia::{
   Transform as TinyTransform,
 };
 
-use self::skia::to_tiny_blend_mode;
+pub(crate) use self::skia::to_tiny_blend_mode;
 use crate::{
   BackgroundTile, Bitmap, BorderProperties, Placement, Result,
   blend::*,

@@ -1,6 +1,5 @@
-//! Draws flattened SVG ops onto a tiny-skia pixmap, so SVG images rasterize from the same ops
-//! the vector backends write. Layers are as large as the pixmap they sit on, except a filter
-//! layer, which is as large as its filter region.
+//! Draws flattened SVG ops onto a tiny-skia pixmap. A layer covers the whole pixmap, except a
+//! filter layer, which covers its filter region.
 
 use std::slice::Iter;
 
@@ -18,7 +17,7 @@ use tiny_skia::{
   PixmapMut, PixmapPaint, RadialGradient, Rect, SpreadMode, Stroke, StrokeDash, Transform,
 };
 
-use crate::pixmap_ref_from_buffer;
+use crate::{canvas::to_tiny_blend_mode, pixmap_ref_from_buffer};
 
 /// Draws SVG ops with tiny-skia.
 #[derive(Debug, Clone, Copy, Default)]
@@ -283,8 +282,7 @@ impl SvgDrawing {
       .fill_rect(rect, &paint, target.transform, target.clip.as_ref());
   }
 
-  /// Hands `draw` the tiny-skia paint for `paint` at `opacity`. A pattern tile is drawn at the
-  /// scale `transform` gives it.
+  /// Hands `draw` the tiny-skia paint for `paint`, a pattern tile drawn at `transform`'s scale.
   fn with_paint(
     &self,
     paint: &SvgPaint,
@@ -395,8 +393,7 @@ fn skip_scope(ops: &mut Iter<'_, SvgOp>) {
   }
 }
 
-/// Where a layer sits on `target`: the whole pixmap, or for a filter its region, which is capped
-/// at five times the pixmap so a huge region cannot tank the render.
+/// Where a layer sits on `target`, a filter region capped at five times the pixmap.
 fn layer_bounds(target: &Target, filters: Option<&SvgFilters>) -> Option<IntRect> {
   let (width, height) = (target.pixmap.width(), target.pixmap.height());
 
@@ -529,24 +526,12 @@ fn tiny_transform([sx, ky, kx, sy, tx, ty]: [f32; 6]) -> Transform {
   Transform::from_row(sx, ky, kx, sy, tx, ty)
 }
 
+/// `blend` in tiny-skia, with the dodge and burn modes the canvas blends on its own.
 fn tiny_blend_mode(blend: BlendMode) -> TinyBlendMode {
   match blend {
-    BlendMode::Multiply => TinyBlendMode::Multiply,
-    BlendMode::Screen => TinyBlendMode::Screen,
-    BlendMode::Overlay => TinyBlendMode::Overlay,
-    BlendMode::Darken => TinyBlendMode::Darken,
-    BlendMode::Lighten => TinyBlendMode::Lighten,
     BlendMode::ColorDodge => TinyBlendMode::ColorDodge,
     BlendMode::ColorBurn => TinyBlendMode::ColorBurn,
-    BlendMode::HardLight => TinyBlendMode::HardLight,
-    BlendMode::SoftLight => TinyBlendMode::SoftLight,
-    BlendMode::Difference => TinyBlendMode::Difference,
-    BlendMode::Exclusion => TinyBlendMode::Exclusion,
-    BlendMode::Hue => TinyBlendMode::Hue,
-    BlendMode::Saturation => TinyBlendMode::Saturation,
-    BlendMode::Color => TinyBlendMode::Color,
-    BlendMode::Luminosity => TinyBlendMode::Luminosity,
-    _ => TinyBlendMode::SourceOver,
+    _ => to_tiny_blend_mode(blend).unwrap_or(TinyBlendMode::SourceOver),
   }
 }
 
