@@ -47,7 +47,7 @@ use crate::svg_vector::flatten;
 #[cfg(feature = "svg")]
 pub use crate::svg_vector::{
   SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
-  SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
+  SvgOpPaint, SvgSpreadMethod, SvgStrokeStyle,
 };
 use crate::{
   resources::{

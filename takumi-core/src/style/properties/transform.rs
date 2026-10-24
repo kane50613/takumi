@@ -124,6 +124,19 @@ impl From<Affine> for TinyTransform {
   }
 }
 
+impl From<TinyTransform> for Affine {
+  fn from(transform: TinyTransform) -> Self {
+    Self {
+      a: transform.sx,
+      b: transform.ky,
+      c: transform.kx,
+      d: transform.sy,
+      x: transform.tx,
+      y: transform.ty,
+    }
+  }
+}
+
 impl Mul<Affine> for Affine {
   type Output = Affine;
 

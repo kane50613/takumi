@@ -3,8 +3,8 @@
 use takumi_core::{
   geometry::Point,
   resources::image::{
-    SvgFill, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
-    SvgStrokeStyle,
+    SvgFill, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
+    SvgSpreadMethod, SvgStrokeStyle,
   },
   style::Color,
 };
@@ -145,8 +145,8 @@ impl<'a> SvgPainter<'a> {
   }
 
   /// `color` and `opacity` as the filter leaves them.
-  fn filtered_color(&self, [red, green, blue]: [u8; 3], opacity: f32) -> (rgb::Color, f32) {
-    let [red, green, blue, alpha] = filtered(self.filter, Color([red, green, blue, 255]));
+  fn filtered_color(&self, color: Color, opacity: f32) -> (rgb::Color, f32) {
+    let [red, green, blue, alpha] = filtered(self.filter, color);
 
     (
       rgb::Color::new(red, green, blue),
@@ -155,14 +155,14 @@ impl<'a> SvgPainter<'a> {
   }
 
   /// `paint` for a fill or stroke of `opacity`, with the opacity the filter leaves it.
-  fn paint(&self, paint: SvgPaint, opacity: f32, surface: &mut Surface) -> (Paint, f32) {
+  fn paint(&self, paint: SvgOpPaint, opacity: f32, surface: &mut Surface) -> (Paint, f32) {
     match paint {
-      SvgPaint::Color(color) => {
+      SvgOpPaint::Color(color) => {
         let (color, opacity) = self.filtered_color(color, opacity);
 
         (color.into(), opacity)
       }
-      SvgPaint::Linear {
+      SvgOpPaint::Linear {
         start,
         end,
         gradient,
@@ -180,7 +180,7 @@ impl<'a> SvgPainter<'a> {
         .into(),
         opacity,
       ),
-      SvgPaint::Radial {
+      SvgOpPaint::Radial {
         center,
         radius,
         focal,
@@ -202,7 +202,7 @@ impl<'a> SvgPainter<'a> {
         .into(),
         opacity,
       ),
-      SvgPaint::Pattern {
+      SvgOpPaint::Pattern {
         ops,
         transform,
         width,
