@@ -1,4 +1,4 @@
-//! Runs the web-platform-tests CSS reftests: renders each test and its reference, and compares the
+//! Runs the web-platform-tests CSS and SVG reftests: renders each test and its reference, and compares the
 //! pixels as the WPT harness does.
 //! <https://web-platform-tests.org/writing-tests/reftests.html>
 //!
@@ -51,6 +51,9 @@ const VIEWPORT: (u32, u32) = (800, 600);
 /// pixels an inch.
 const PRINT_PAGE_AREA: (u32, u32) = (384, 192);
 
+/// The WPT directories the run discovers reftests in.
+const ROOTS: [&str; 2] = ["css", "svg"];
+
 /// The run reports progress every this many finished tests.
 const PROGRESS_EVERY: usize = 500;
 
@@ -81,7 +84,7 @@ fn wpt_reftests() {
     PathBuf::from,
   );
 
-  if !root.join("css").is_dir() {
+  if !ROOTS.iter().all(|suite| root.join(suite).is_dir()) {
     eprintln!(
       "no WPT checkout at {}; run scripts/wpt-checkout.sh",
       root.display()
@@ -92,7 +95,10 @@ fn wpt_reftests() {
 
   let only = env::var("WPT").ok();
   let runner = Runner::new(&root);
-  let discovered = reftests(&root.join("css"));
+  let discovered: Vec<PathBuf> = ROOTS
+    .iter()
+    .flat_map(|suite| reftests(&root.join(suite)))
+    .collect();
   let all: Vec<String> = discovered
     .iter()
     .map(|path| runner.relative(path))
@@ -211,6 +217,26 @@ fn wpt_reftests() {
 /// What a browser's default style sheet sets that takumi's does not: CSS's initial `box-sizing`,
 /// which takumi changes to `border-box`, apart from tables.
 const UA_SHEET: &str = "* { box-sizing: content-box } ::before, ::after { box-sizing: content-box } table { box-sizing: border-box }";
+
+/// What a standalone SVG document's viewport sets: no margin, and a root that fills it.
+const STANDALONE_SVG_SHEET: &str =
+  "html, body { margin: 0; height: 100% } body > svg { display: block }";
+
+/// `source` with the width and height a standalone root `<svg>` lacks set to 100% of the viewport.
+/// <https://svgwg.org/svg2-draft/geometry.html#Sizing>
+fn with_standalone_size(source: &str) -> String {
+  let Some((start, attributes)) = positioned_tags(source, "svg").into_iter().next() else {
+    return source.to_owned();
+  };
+  let insert_at = start + "<svg".len();
+  let missing: String = ["width", "height"]
+    .into_iter()
+    .filter(|name| !attributes.contains_key(*name))
+    .map(|name| format!(" {name}=\"100%\""))
+    .collect();
+
+  format!("{}{missing}{}", &source[..insert_at], &source[insert_at..])
+}
 
 /// The `<style>` blocks of a document with their offsets. HTML reads a block as raw text; XHTML
 /// reads it as XML, which unwraps CDATA sections and decodes character references, so each block
@@ -403,7 +429,7 @@ impl Directory {
   }
 }
 
-/// Every reftest under `dir`: an HTML or XHTML file that links a reference, and is not one.
+/// Every reftest under `dir`: an HTML, XHTML, or SVG file that links a reference, and is not one.
 fn reftests(dir: &Path) -> Vec<PathBuf> {
   let mut documents = Vec::new();
   let mut pending = vec![dir.to_path_buf()];
@@ -428,7 +454,7 @@ fn reftests(dir: &Path) -> Vec<PathBuf> {
         continue;
       }
 
-      let is_document = ["html", "htm", "xht", "xhtml"]
+      let is_document = ["html", "htm", "xht", "xhtml", "svg"]
         .iter()
         .any(|extension| path.extension().is_some_and(|ext| ext == *extension));
       let stem = path.file_stem().unwrap_or_default().to_string_lossy();
@@ -485,7 +511,7 @@ fn changes_itself(source: &str) -> bool {
 
 /// The references `source` links, each with whether the test must match it.
 fn references(source: &str) -> Vec<(String, bool)> {
-  tags(source, "link")
+  html_tags(source, "link")
     .into_iter()
     .filter_map(|attributes| {
       let matches = match attributes.get("rel")?.as_str() {
@@ -494,7 +520,11 @@ fn references(source: &str) -> Vec<(String, bool)> {
         _ => return None,
       };
 
-      Some((attributes.get("href")?.clone(), matches))
+      let href = attributes
+        .get("href")
+        .or_else(|| attributes.get("xlink:href"))?;
+
+      Some((href.clone(), matches))
     })
     .collect()
 }
@@ -512,7 +542,7 @@ fn is_print_reftest(path: &Path) -> bool {
 
 /// The 1-based page ranges a `<meta name=reftest-pages>` in `source` compares, none for every page.
 fn reftest_pages(source: &str) -> Option<Vec<(usize, usize)>> {
-  let content = tags(source, "meta")
+  let content = html_tags(source, "meta")
     .into_iter()
     .find(|attributes| {
       attributes
@@ -537,6 +567,15 @@ fn reftest_pages(source: &str) -> Option<Vec<(usize, usize)>> {
       Some((first, last)) => Some((bound(first, 1)?, bound(last, usize::MAX)?)),
       None => item.trim().parse().ok().map(|page| (page, page)),
     })
+    .collect()
+}
+
+/// The HTML elements named `name` in `source`, under the `h:` and `html:` prefixes SVG tests
+/// give the XHTML namespace too.
+fn html_tags(source: &str, name: &str) -> Vec<HashMap<String, String>> {
+  ["", "h:", "html:"]
+    .into_iter()
+    .flat_map(|prefix| tags(source, &format!("{prefix}{name}")))
     .collect()
 }
 
@@ -641,7 +680,7 @@ impl Fuzzy {
   /// The allowance `source`'s `<meta name=fuzzy>` gives the reference at `reference`: one naming
   /// that reference wins over one naming none.
   fn of(source: &str, reference: &str) -> Self {
-    let allowances: Vec<(Option<String>, String)> = tags(source, "meta")
+    let allowances: Vec<(Option<String>, String)> = html_tags(source, "meta")
       .into_iter()
       .filter(|attributes| attributes.get("name").is_some_and(|name| name == "fuzzy"))
       .filter_map(|attributes| attributes.get("content").cloned())
@@ -914,6 +953,14 @@ impl Runner {
 
   /// The document at `path` rendered onto white, as RGBA, across print pages when `print`.
   fn render(&self, path: &Path, source: &str, print: bool) -> Result<Rendering, String> {
+    let is_svg = path.extension().is_some_and(|extension| extension == "svg");
+    let sized;
+    let source = if is_svg {
+      sized = with_standalone_size(source);
+      &sized
+    } else {
+      source
+    };
     let linked: Vec<(usize, PathBuf, String)> = positioned_tags(source, "link")
       .into_iter()
       .filter_map(|(start, attributes)| {
@@ -982,7 +1029,8 @@ impl Runner {
       })
       .collect();
     let stylesheet = StyleSheet::parse_list_loosy(
-      [UA_SHEET.to_owned()]
+      [UA_SHEET, if is_svg { STANDALONE_SVG_SHEET } else { "" }]
+        .map(str::to_owned)
         .into_iter()
         .chain(sheets.into_iter().map(|(.., sheet)| sheet)),
     );
