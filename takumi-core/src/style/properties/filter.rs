@@ -325,10 +325,14 @@ impl Filter {
     match *self {
       Filter::Brightness(PercentageNumber(v)) => linear(v, 0.0).map(TransferChannel::Rgb),
       Filter::Contrast(PercentageNumber(v)) => linear(v, 0.5 - 0.5 * v).map(TransferChannel::Rgb),
-      Filter::Invert(PercentageNumber(v)) => TransferFunction::Table(vec![v, 1.0 - v])
-        .table()
-        .map(TransferChannel::Rgb),
-      Filter::Opacity(PercentageNumber(v)) => TransferFunction::Table(vec![0.0, v])
+      Filter::Invert(PercentageNumber(v)) => {
+        let v = v.clamp(0.0, 1.0);
+
+        TransferFunction::Table(vec![v, 1.0 - v])
+          .table()
+          .map(TransferChannel::Rgb)
+      }
+      Filter::Opacity(PercentageNumber(v)) => TransferFunction::Table(vec![0.0, v.clamp(0.0, 1.0)])
         .table()
         .map(TransferChannel::Alpha),
       _ => None,

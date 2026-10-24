@@ -150,6 +150,7 @@ impl Normal {
 pub(super) fn diffuse_lighting(
   fe: &DiffuseLighting,
   light_source: LightSource,
+  lighting_color: Color,
   src: &[[u8; 4]],
   width: usize,
   dest: &mut [[u8; 4]],
@@ -173,7 +174,7 @@ pub(super) fn diffuse_lighting(
   apply(
     light_source,
     fe.surface_scale,
-    fe.lighting_color,
+    lighting_color,
     &light_factor,
     calc_diffuse_alpha,
     Alpha::new(src, width),
@@ -190,6 +191,7 @@ pub(super) fn diffuse_lighting(
 pub(super) fn specular_lighting(
   fe: &SpecularLighting,
   light_source: LightSource,
+  lighting_color: Color,
   src: &[[u8; 4]],
   width: usize,
   dest: &mut [[u8; 4]],
@@ -230,7 +232,7 @@ pub(super) fn specular_lighting(
   apply(
     light_source,
     fe.surface_scale,
-    fe.lighting_color,
+    lighting_color,
     &light_factor,
     calc_specular_alpha,
     Alpha::new(src, width),

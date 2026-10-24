@@ -645,7 +645,10 @@ pub fn apply_svg_filter(
   markup: &str,
   filter_id: &str,
 ) -> Result<(), ImageError> {
-  let document = SvgDocument::parse(&format!("<svg>{markup}</svg>"))?;
+  // The markup may come out of a document that declared `xlink` on an outer element.
+  let document = SvgDocument::parse(&format!(
+    r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">{markup}</svg>"#
+  ))?;
 
   let Some(filter) = document.filter(filter_id, width as f32, height as f32) else {
     // An invalid filter reference hides the element.
@@ -1321,6 +1324,102 @@ mod tests {
       r#"<filter id="f"><feTurbulence baseFrequency="0.05" numOctaves="1000000000"/></filter>"#,
       16,
     );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  fn pixel(layer: &[u8], size: u32, x: u32, y: u32) -> [u8; 4] {
+    let start = ((y * size + x) * 4) as usize;
+
+    [
+      layer[start],
+      layer[start + 1],
+      layer[start + 2],
+      layer[start + 3],
+    ]
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn filter_markup_may_use_xlink_without_declaring_it() {
+    let mut layer = vec![255u8; 16 * 16 * 4];
+
+    assert!(
+      apply_svg_filter(
+        &mut layer,
+        16,
+        16,
+        r##"<filter id="f"><feImage xlink:href="#missing"/></filter>"##,
+        "f"
+      )
+      .is_ok()
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_tiled_linear_rgb_result_converts_back_to_srgb() {
+    let layer = filtered_layer(
+      r#"<filter id="f"><feFlood flood-color="rgb(200, 100, 50)"/><feGaussianBlur stdDeviation="1" result="a"/><feTile in="a"/></filter>"#,
+      20,
+    );
+    let [red, green, blue, alpha] = pixel(&layer, 20, 10, 10);
+
+    assert!(
+      red.abs_diff(200) <= 2 && green.abs_diff(100) <= 2 && blue.abs_diff(50) <= 2 && alpha == 255,
+      "{:?}",
+      [red, green, blue, alpha]
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_lighting_color_lights_in_its_own_color() {
+    let layer = filtered_layer(
+      r#"<filter id="f"><feDiffuseLighting lighting-color="rgb(200, 100, 50)"><feDistantLight elevation="90"/></feDiffuseLighting></filter>"#,
+      16,
+    );
+    let [red, green, blue, _] = pixel(&layer, 16, 8, 8);
+
+    assert!(
+      red.abs_diff(200) <= 2 && green.abs_diff(100) <= 2 && blue.abs_diff(50) <= 2,
+      "{:?}",
+      [red, green, blue]
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_specular_exponent_past_128_clamps_instead_of_clearing() {
+    let layer = filtered_layer(
+      r#"<filter id="f"><feSpecularLighting specularExponent="200"><feDistantLight elevation="90"/></feSpecularLighting></filter>"#,
+      16,
+    );
+
+    assert_ne!(pixel(&layer, 16, 8, 8), [0, 0, 0, 0]);
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_background_image_input_reads_the_result_before() {
+    let layer = filtered_layer(
+      r#"<filter id="f"><feFlood flood-color="rgb(0, 0, 255)"/><feComposite in="BackgroundImage" in2="BackgroundImage"/></filter>"#,
+      16,
+    );
+    let [red, _, blue, _] = pixel(&layer, 16, 8, 8);
+
+    assert!(blue > 200 && red < 50, "{:?}", pixel(&layer, 16, 8, 8));
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_bounding_box_subregion_is_a_fraction_of_the_box() {
+    let layer = filtered_layer(
+      r#"<filter id="f" primitiveUnits="objectBoundingBox"><feColorMatrix type="saturate" values="1" x="0.25" width="0.5"/></filter>"#,
+      40,
+    );
+
+    assert_eq!(pixel(&layer, 40, 20, 20), [255, 255, 255, 255]);
+    assert_eq!(pixel(&layer, 40, 4, 20), [0, 0, 0, 0]);
   }
 
   /// `SvgSize` reads the root element only; the canvas of the laid out document and the intrinsic

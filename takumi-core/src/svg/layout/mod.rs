@@ -150,7 +150,8 @@ impl<'a> SvgLayout<'a> {
     }
   }
 
-  /// The ops of the document, none when it outgrows the budget.
+  /// The ops of the document, none when its root cannot be laid out and empty when it outgrows the
+  /// budget.
   pub(super) fn layout(mut self) -> Option<Vec<SvgOp>> {
     let document = self.layout_root()?;
 
@@ -305,7 +306,8 @@ impl<'a> SvgLayout<'a> {
     Length::from_css_str(self.attribute(index, name)?).ok()
   }
 
-  /// The numbers a list attribute holds, none unless every one parses.
+  /// The numbers a list attribute holds, none unless every one parses, as Blink's
+  /// `SVGNumberList::SetValueAsString` clears the list on an error.
   fn number_list(&self, index: usize, name: &str) -> Option<Vec<f32>> {
     let mut parser = Parser::new(self.attribute(index, name)?);
     let mut numbers = Vec::new();

@@ -29,7 +29,7 @@ use crate::{
 #[derive(Clone)]
 struct Image {
   pixmap: Rc<Pixmap>,
-  /// The part of the filter region with data, in the region's pixels. The rest is transparent.
+  /// The part of the filter region with data, in the layer's pixels. The rest is transparent.
   region: Rect<i32>,
   color_space: ColorSpace,
 }
@@ -286,8 +286,9 @@ impl Run<'_> {
       }
 
       image = Image::new(pixmap, color_space);
-      image.region = subregion;
     }
+
+    image.region = subregion;
 
     Some(image)
   }
@@ -464,8 +465,8 @@ impl Run<'_> {
             0.0,
             0.0,
             sy,
-            subregion.left as f32,
-            subregion.top as f32,
+            (subregion.left - self.region.left) as f32,
+            (subregion.top - self.region.top) as f32,
           ),
           &mut pixmap.as_mut(),
         );
@@ -613,7 +614,7 @@ impl Run<'_> {
       Transform::identity(),
       None,
     );
-    Some(Image::new(pixmap, ColorSpace::Srgb))
+    Some(Image::new(pixmap, input.color_space))
   }
 
   fn convolve_matrix(&self, fe: &ConvolveMatrix, input: Image, space: ColorSpace) -> Option<Image> {
@@ -716,6 +717,7 @@ impl Run<'_> {
     lighting::diffuse_lighting(
       fe,
       light_source,
+      space.convert_color(fe.lighting_color),
       input.pixmap.rgba(),
       width,
       pixmap.rgba_mut(),
@@ -736,6 +738,7 @@ impl Run<'_> {
     lighting::specular_lighting(
       fe,
       light_source,
+      space.convert_color(fe.lighting_color),
       input.pixmap.rgba(),
       width,
       pixmap.rgba_mut(),
@@ -750,7 +753,8 @@ impl Run<'_> {
 
       (x - self.region.left as f32, y - self.region.top as f32)
     };
-    let depth = self.transform.a.hypot(self.transform.d) / SQRT_2;
+    let (scale_x, scale_y) = self.transform.row_scales();
+    let depth = scale_x.hypot(scale_y) / SQRT_2;
 
     match source {
       LightSource::Distant { .. } => source,

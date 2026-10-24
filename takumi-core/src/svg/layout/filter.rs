@@ -131,14 +131,37 @@ impl SvgLayout<'_> {
 
   /// The filter a CSS filter function stands for, none for one without a region to filter.
   fn function_filter(&self, kind: Kind, bounding_box: Option<Rect<f32>>) -> Option<Arc<SvgFilter>> {
-    // A function has no filter region, so it takes a fairly large one.
-    let region = match kind {
-      Kind::DropShadow(_) | Kind::GaussianBlur { .. } => {
-        Rect::positive_from_xywh(-0.5, -0.5, 2.0, 2.0)
-      }
-      _ => Rect::positive_from_xywh(-0.1, -0.1, 1.2, 1.2),
-    }?
-    .in_bounding_box(&bounding_box?)?;
+    let bounding_box = bounding_box?;
+    let fraction =
+      |x, y, size| Rect::positive_from_xywh(x, y, size, size)?.in_bounding_box(&bounding_box);
+    // The box spread by three standard deviations and moved by an offset, as cc's
+    // `FilterOperation::MapRect` reaches.
+    let reach = |std_dev_x: f32, std_dev_y: f32, dx: f32, dy: f32| {
+      let (spread_x, spread_y) = (std_dev_x * 3.0, std_dev_y * 3.0);
+
+      Rect::from_ltrb(
+        bounding_box.left.min(bounding_box.left + dx - spread_x),
+        bounding_box.top.min(bounding_box.top + dy - spread_y),
+        bounding_box.right.max(bounding_box.right + dx + spread_x),
+        bounding_box.bottom.max(bounding_box.bottom + dy + spread_y),
+      )
+    };
+    // A function has no filter region, so it takes one past the box, grown to what a blur or a
+    // shadow reaches.
+    let region = match &kind {
+      Kind::GaussianBlur {
+        std_dev_x,
+        std_dev_y,
+        ..
+      } => fraction(-0.5, -0.5, 2.0)?.union(&reach(*std_dev_x, *std_dev_y, 0.0, 0.0)?),
+      Kind::DropShadow(shadow) => fraction(-0.5, -0.5, 2.0)?.union(&reach(
+        shadow.std_dev_x,
+        shadow.std_dev_y,
+        shadow.dx,
+        shadow.dy,
+      )?),
+      _ => fraction(-0.1, -0.1, 1.2)?,
+    };
 
     Some(Arc::new(SvgFilter {
       region,
@@ -293,8 +316,7 @@ impl SvgLayout<'_> {
       }
 
       let tag = self.styles.node(child).tag_name().unwrap_or_default();
-      let Some(subregion) =
-        self.primitive_subregion(child, tag, units, scope, bounding_box, region)
+      let Some(subregion) = self.primitive_subregion(child, units, scope, bounding_box, region)
       else {
         break;
       };
@@ -346,7 +368,6 @@ impl SvgLayout<'_> {
   fn primitive_subregion(
     &self,
     child: usize,
-    tag: &str,
     units: Units,
     scope: &Scope,
     bounding_box: Option<Rect<f32>>,
@@ -367,22 +388,17 @@ impl SvgLayout<'_> {
       length("width", LengthAxis::X),
       length("height", LengthAxis::Y),
     );
-    let fractions = || {
-      Rect::positive_from_xywh(
-        x.unwrap_or(0.0),
-        y.unwrap_or(0.0),
-        width.unwrap_or(1.0),
-        height.unwrap_or(1.0),
-      )
-    };
-
-    // `feFlood` and `feImage` take their fractions from the bounding box.
-    if units == Units::ObjectBoundingBox && matches!(tag, "feFlood" | "feImage") {
-      return fractions()?.in_bounding_box(&bounding_box?);
-    }
-
+    // A specified value is a fraction of the bounding box and a missing one takes the edge of the
+    // filter region, as Blink's `SVGFilterPrimitiveStandardAttributes::SetStandardAttributes`.
     if units == Units::ObjectBoundingBox {
-      return region.in_bounding_box(&fractions()?);
+      let bounding_box = bounding_box?;
+
+      return Rect::positive_from_xywh(
+        x.map_or(region.x(), |x| bounding_box.x() + x * bounding_box.width()),
+        y.map_or(region.y(), |y| bounding_box.y() + y * bounding_box.height()),
+        width.map_or(region.width(), |width| width * bounding_box.width()),
+        height.map_or(region.height(), |height| height * bounding_box.height()),
+      );
     }
 
     Rect::positive_from_xywh(
@@ -412,11 +428,8 @@ impl SvgLayout<'_> {
     match self.attribute(child, name) {
       Some("SourceGraphic") => Input::SourceGraphic,
       Some("SourceAlpha") => Input::SourceAlpha,
-      // The inputs that need a backdrop or a paint are not supported.
-      Some("BackgroundImage" | "BackgroundAlpha" | "FillPaint" | "StrokePaint") => {
-        Input::SourceGraphic
-      }
-      // A result nothing made falls back to the result before.
+      // A result nothing made, `BackgroundImage` and the paint inputs among them, falls back to
+      // the result before, as Blink's `SVGFilterBuilder::GetEffectById` does.
       Some(reference)
         if primitives
           .iter()
@@ -543,20 +556,18 @@ impl SvgLayout<'_> {
         })
         .unwrap_or_else(Self::dummy_primitive),
       "feSpecularLighting" => {
-        let exponent = number("specularExponent").unwrap_or(1.0);
+        // Blink's `FESpecularLighting` clamps the exponent to its range.
+        let exponent = number("specularExponent").unwrap_or(1.0).clamp(1.0, 128.0);
 
-        // An exponent out of range ignores the primitive.
         match self.light_source(fe) {
-          Some(light_source) if (1.0..=128.0).contains(&exponent) => {
-            Kind::SpecularLighting(SpecularLighting {
-              input: input(self, "in"),
-              surface_scale: number("surfaceScale").unwrap_or(1.0),
-              specular_constant: number("specularConstant").unwrap_or(1.0),
-              specular_exponent: exponent,
-              lighting_color: lighting_color(&styled, style),
-              light_source,
-            })
-          }
+          Some(light_source) => Kind::SpecularLighting(SpecularLighting {
+            input: input(self, "in"),
+            surface_scale: number("surfaceScale").unwrap_or(1.0),
+            specular_constant: number("specularConstant").unwrap_or(1.0),
+            specular_exponent: exponent,
+            lighting_color: lighting_color(&styled, style),
+            light_source,
+          }),
           _ => Self::dummy_primitive(),
         }
       }

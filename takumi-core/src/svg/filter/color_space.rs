@@ -5,9 +5,26 @@
 //! asks for, as tables because the results are 8 bits.
 
 use super::ColorSpace;
-use crate::resources::image_buffer::{demultiply_rgba_in_place, premultiply_rgba_in_place};
+use crate::{
+  resources::image_buffer::{demultiply_rgba_in_place, premultiply_rgba_in_place},
+  style::Color,
+};
 
 impl ColorSpace {
+  /// The sRGB `color` converted into this space, as Blink's `FELighting` adapts `lighting-color` to the
+  /// operating space.
+  pub(super) fn convert_color(self, Color([red, green, blue, alpha]): Color) -> Color {
+    match self {
+      Self::Srgb => Color([red, green, blue, alpha]),
+      Self::LinearRgb => Color([
+        SRGB_TO_LINEAR_RGB_TABLE[usize::from(red)],
+        SRGB_TO_LINEAR_RGB_TABLE[usize::from(green)],
+        SRGB_TO_LINEAR_RGB_TABLE[usize::from(blue)],
+        alpha,
+      ]),
+    }
+  }
+
   /// Converts premultiplied RGBA bytes from `self` to `target`.
   pub(super) fn convert(self, target: Self, pixels: &mut [u8]) {
     let table = match (self, target) {
