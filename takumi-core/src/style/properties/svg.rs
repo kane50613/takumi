@@ -1,8 +1,8 @@
 //! The value types of the SVG presentation properties, named after Blink's.
 
-use std::{borrow::Cow, fmt, sync::Arc};
+use std::{fmt, sync::Arc};
 
-use cssparser::{ParseError as CssParseError, Parser, Token, serialize_string};
+use cssparser::{Parser, Token, serialize_string};
 
 use crate::{
   geometry::{PathCommand, Point},
@@ -13,10 +13,6 @@ use crate::{
     unexpected_token,
   },
 };
-
-fn invalid<'i>(message: &'static str) -> CssParseError<ValueError<'i>> {
-  CssParseError::custom(ValueError::from(Cow::Borrowed(message)))
-}
 
 fn accepts_keyword<'i>(input: &mut Parser<'i>, keyword: &str) -> bool {
   input
@@ -187,7 +183,7 @@ impl StrokeDasharray {
     let length = Length::from_css(input)?;
 
     if matches!(length, Length::Auto) || length.is_negative() {
-      return Err(invalid("a dash must be a non-negative length"));
+      return Err(ValueError::invalid("a dash must be a non-negative length"));
     }
 
     Ok(length)
@@ -283,7 +279,7 @@ impl<'i> FromCss<'i> for StrokeMiterlimit {
     let limit = input.expect_number()?;
 
     if limit < 0.0 {
-      return Err(invalid("a miter limit must not be negative"));
+      return Err(ValueError::invalid("a miter limit must not be negative"));
     }
 
     Ok(Self(limit))
@@ -403,20 +399,22 @@ impl<'i> FromCss<'i> for PaintOrder {
         .into_iter()
         .find(|(keyword, _)| ident.eq_ignore_ascii_case(keyword))
         .map(|(_, phase)| phase)
-        .ok_or_else(|| invalid("expected fill, stroke, or markers"))
+        .ok_or_else(|| ValueError::invalid("expected fill, stroke, or markers"))
       }) else {
         break;
       };
 
       if phases.contains(&phase) {
-        return Err(invalid("a paint phase may be named once"));
+        return Err(ValueError::invalid("a paint phase may be named once"));
       }
 
       phases.push(phase);
     }
 
     if phases.is_empty() {
-      return Err(invalid("expected normal, fill, stroke, or markers"));
+      return Err(ValueError::invalid(
+        "expected normal, fill, stroke, or markers",
+      ));
     }
 
     for phase in [PaintPhase::Fill, PaintPhase::Stroke, PaintPhase::Markers] {
@@ -699,7 +697,7 @@ impl<'i> FromCss<'i> for BaselineShift {
     let length = Length::from_css(input)?;
 
     if matches!(length, Length::Auto) {
-      return Err(invalid("baseline-shift takes no `auto`"));
+      return Err(ValueError::invalid("baseline-shift takes no `auto`"));
     }
 
     Ok(Self::Length(length))
@@ -813,7 +811,7 @@ impl<'i> FromCss<'i> for SvgPath {
       let (commands, complete) = PathData::parse(input.expect_string()?);
 
       if !complete || commands.is_empty() {
-        return Err(invalid("expected complete path data"));
+        return Err(ValueError::invalid("expected complete path data"));
       }
 
       Ok(Self(commands.into()))

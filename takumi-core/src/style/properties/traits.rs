@@ -23,6 +23,13 @@ pub(crate) enum ValueError<'i> {
   },
 }
 
+impl<'i> ValueError<'i> {
+  /// The parse error that says `message`.
+  pub(crate) fn invalid(message: &'static str) -> CssParseError<Self> {
+    CssParseError::custom(Self::Message(Cow::Borrowed(message)))
+  }
+}
+
 impl fmt::Display for ValueError<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
