@@ -1841,3 +1841,35 @@ fn vertical_align_resets_an_earlier_baseline_source() {
     BaselineSource::Auto
   );
 }
+
+#[test]
+fn builder_methods_match_declarations() {
+  assert_eq!(
+    Style::default().font_size(32.0.px()),
+    Style::default().with(StyleDeclaration::font_size(Length::Px(32.0).into())),
+  );
+  assert_eq!(
+    Style::default().width(50.0.percent()).height(8.0.px()),
+    Style::default()
+      .with(StyleDeclaration::width(Length::Percentage(50.0)))
+      .with(StyleDeclaration::height(Length::Px(8.0))),
+  );
+  assert_eq!(
+    Style::default().margin_inline_start(4.0.px()),
+    Style::default().with(StyleDeclaration::margin_inline_start(Length::Px(4.0))),
+  );
+  assert_eq!(
+    Style::default().padding_block_start(4.0.px()),
+    Style::default().with(StyleDeclaration::padding_top(Length::Px(4.0))),
+  );
+}
+
+#[test]
+fn length_unit_returns_matching_lengths() {
+  assert_eq!(1.0.px(), Length::Px(1.0));
+  assert_eq!(2.0.percent(), Length::Percentage(2.0));
+  assert_eq!(3.0.em(), Length::Em(3.0));
+  assert_eq!(4.0.rem(), Length::Rem(4.0));
+  assert_eq!(5.0.vw(), Length::Vw(5.0));
+  assert_eq!(6.0.vh(), Length::Vh(6.0));
+}

@@ -34,8 +34,8 @@ fn nested_clip_masks_fixture() -> Node {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
-        .with_overflow(SpacePair::from_single(Overflow::Clip))
+        .border_radius(BorderRadius::from_css_str(radius).unwrap())
+        .overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([200, 30, 30, 255]),
         ))),
@@ -49,8 +49,8 @@ fn nested_clip_masks_fixture() -> Node {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(95.0)))
         .with(StyleDeclaration::height(Percentage(95.0)))
-        .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
-        .with_overflow(SpacePair::from_single(Overflow::Clip))
+        .border_radius(BorderRadius::from_css_str(radius).unwrap())
+        .overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([30, 30, 200, 255]),
         ))),
@@ -88,8 +88,8 @@ fn sibling_clip_masks_fixture() -> Node {
         .with(StyleDeclaration::height(Px(92.0)))
         .with(StyleDeclaration::margin_top(Px(4.0)))
         .with(StyleDeclaration::margin_left(Px(4.0)))
-        .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
-        .with_overflow(SpacePair::from_single(Overflow::Clip)),
+        .border_radius(BorderRadius::from_css_str("24px").unwrap())
+        .overflow(SpacePair::from_single(Overflow::Clip)),
     )
   });
 
@@ -118,8 +118,8 @@ fn scaled_image_fixture() -> Node {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(720.0)))
       .with(StyleDeclaration::height(Px(720.0)))
-      .with_border_radius(BorderRadius::from_css_str("96px").unwrap())
-      .with_overflow(SpacePair::from_single(Overflow::Clip))
+      .border_radius(BorderRadius::from_css_str("96px").unwrap())
+      .overflow(SpacePair::from_single(Overflow::Clip))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([245, 247, 250, 255]),
       ))),
@@ -136,8 +136,8 @@ fn gradient_clip_mask_fixture() -> Node {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(640.0)))
       .with(StyleDeclaration::height(Px(640.0)))
-      .with_border_radius(BorderRadius::from_css_str("64px").unwrap())
-      .with_overflow(SpacePair::from_single(Overflow::Clip))
+      .border_radius(BorderRadius::from_css_str("64px").unwrap())
+      .overflow(SpacePair::from_single(Overflow::Clip))
       .with(StyleDeclaration::background_image(Some(gradient)))
       .with(StyleDeclaration::background_size(
         BackgroundSizes::from_css_str("100% 100%").unwrap(),

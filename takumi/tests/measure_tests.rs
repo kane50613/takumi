@@ -1314,13 +1314,13 @@ fn test_measure_inline_atomic_containers_fixture() {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(display))
-        .with_padding(Sides([Px(8.0); 4]))
+        .padding(Sides([Px(8.0); 4]))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           bg_color,
         )))
-        .with_border_width(Sides([Px(5.0).into(); 4]))
-        .with_border_style(Sides([BorderStyle::Solid; 4]))
-        .with_border_color(Sides([ColorInput::Value(border_color); 4])),
+        .border_width(Sides([Px(5.0).into(); 4]))
+        .border_style(Sides([BorderStyle::Solid; 4]))
+        .border_color(Sides([ColorInput::Value(border_color); 4])),
     )
   };
 
@@ -1355,9 +1355,9 @@ fn test_measure_inline_atomic_containers_fixture() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with_border_width(Sides([Px(6.0).into(); 4]))
-      .with_border_style(Sides([BorderStyle::Solid; 4]))
-      .with_border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
+      .border_width(Sides([Px(6.0).into(); 4]))
+      .border_style(Sides([BorderStyle::Solid; 4]))
+      .border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
   )])
   .with_style(
     Style::default()
@@ -1369,7 +1369,7 @@ fn test_measure_inline_atomic_containers_fixture() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       )))
-      .with_white_space(WhiteSpace::pre()),
+      .white_space(WhiteSpace::pre()),
   );
 
   let result = measure(node, create_test_viewport());
@@ -1525,9 +1525,9 @@ fn test_measure_inline_image_uses_replaced_baseline_fallback() {
         .with(StyleDeclaration::box_sizing(BoxSizing::ContentBox))
         .with(StyleDeclaration::width(Px(20.0)))
         .with(StyleDeclaration::height(Px(20.0)))
-        .with_padding(Sides([Px(4.0); 4]))
-        .with_border_width(Sides([Px(2.0).into(); 4]))
-        .with_border_style(Sides([BorderStyle::Solid; 4])),
+        .padding(Sides([Px(4.0); 4]))
+        .border_width(Sides([Px(2.0).into(); 4]))
+        .border_style(Sides([BorderStyle::Solid; 4])),
     ),
     Node::text("world".to_string())
       .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
@@ -1560,8 +1560,8 @@ fn test_measure_inline_image_respects_box_sizing_with_border() {
       .with(StyleDeclaration::box_sizing(box_sizing))
       .with(StyleDeclaration::width(Px(20.0)))
       .with(StyleDeclaration::height(Px(20.0)))
-      .with_border_width(Sides([Px(2.0).into(); 4]))
-      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .border_width(Sides([Px(2.0).into(); 4]))
+      .border_style(Sides([BorderStyle::Solid; 4]))
   };
 
   let build = |box_sizing| {
@@ -1591,7 +1591,7 @@ fn test_measure_inline_image_border_box_single_axis_preserves_aspect_ratio() {
       .with(StyleDeclaration::display(Display::Inline))
       .with(StyleDeclaration::box_sizing(BoxSizing::BorderBox))
       .with(StyleDeclaration::width(Px(48.0)))
-      .with_padding_inline(SpacePair::from_single(Px(4.0))),
+      .padding_inline(SpacePair::from_single(Px(4.0))),
   )])
   .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
 
@@ -1799,7 +1799,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::position(Position::Absolute))
-        .with_inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
+        .inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
         .with(StyleDeclaration::display(Display::Flex)),
     )])
   .with_style(
@@ -1839,7 +1839,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::position(Position::Absolute))
-      .with_inset(Sides([Auto, Px(60.0), Px(60.0), Auto]))
+      .inset(Sides([Auto, Px(60.0), Px(60.0), Auto]))
       .with(StyleDeclaration::display(Display::Flex)),
   )])
   .with_style(
@@ -1851,7 +1851,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with_padding(Sides([Px(60.0); 4])),
+      .padding(Sides([Px(60.0); 4])),
   );
 
   let result = measure(node, create_test_viewport());

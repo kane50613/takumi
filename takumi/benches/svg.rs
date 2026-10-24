@@ -66,7 +66,7 @@ fn cjk_fixture() -> Node {
       StyleDeclaration::background_color(ColorInput::Value(Color([240, 240, 240, 255]))),
       StyleDeclaration::font_size(Px(64.0).into()),
     ])
-    .with_padding(Sides::from(Px(24.0))),
+    .padding(Sides::from(Px(24.0))),
   )
 }
 
@@ -80,7 +80,7 @@ fn shape_border_fixture() -> Node {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([(i * 9) as u8, (255 - i * 9) as u8, 128, 255]),
         )))
-        .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
+        .border_radius(BorderRadius::from_css_str("24px").unwrap())
         .with(StyleDeclaration::border_top_width(Px(6.0).into()))
         .with(StyleDeclaration::border_right_width(Px(6.0).into()))
         .with(StyleDeclaration::border_bottom_width(Px(6.0).into()))

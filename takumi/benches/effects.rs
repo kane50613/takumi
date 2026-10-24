@@ -35,7 +35,7 @@ fn backdrop_blur_cards() -> Node {
         .with(StyleDeclaration::height(Px(120.0)))
         .with(StyleDeclaration::margin_top(Px(4.0)))
         .with(StyleDeclaration::margin_left(Px(4.0)))
-        .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
+        .border_radius(BorderRadius::from_css_str("24px").unwrap())
         .with(StyleDeclaration::backdrop_filter(
           Filters::from_css_str("blur(10px)").unwrap(),
         ))

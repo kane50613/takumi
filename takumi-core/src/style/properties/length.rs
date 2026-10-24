@@ -556,6 +556,53 @@ impl MakeComputed for Length {
   }
 }
 
+/// Builds a [`Length`] from a number, as in `32.0.px()`.
+pub trait LengthUnit {
+  /// Returns a `Px` length.
+  fn px(self) -> Length;
+
+  /// Returns a `Percentage` length.
+  fn percent(self) -> Length;
+
+  /// Returns an `Em` length.
+  fn em(self) -> Length;
+
+  /// Returns a `Rem` length.
+  fn rem(self) -> Length;
+
+  /// Returns a `Vw` length.
+  fn vw(self) -> Length;
+
+  /// Returns a `Vh` length.
+  fn vh(self) -> Length;
+}
+
+impl LengthUnit for f32 {
+  fn px(self) -> Length {
+    Length::Px(self)
+  }
+
+  fn percent(self) -> Length {
+    Length::Percentage(self)
+  }
+
+  fn em(self) -> Length {
+    Length::Em(self)
+  }
+
+  fn rem(self) -> Length {
+    Length::Rem(self)
+  }
+
+  fn vw(self) -> Length {
+    Length::Vw(self)
+  }
+
+  fn vh(self) -> Length {
+    Length::Vh(self)
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use std::assert_matches;
