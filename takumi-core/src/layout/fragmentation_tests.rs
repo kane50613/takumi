@@ -584,7 +584,6 @@ fn ten_row_table() -> RenderNode {
   render(root([table(rows)]), TABLE_CSS)
 }
 
-/// The box of the element with the id `id`.
 fn node_with_id(tree: &LayoutTree<'_>, id: &str) -> NodeId {
   (0..tree.node_count())
     .map(NodeId::new)
@@ -603,8 +602,8 @@ fn a_tables_finished_rows_free_their_layouts_before_the_table_ends() {
   let mut layout = PagedLayout::new(&tree, page_size, usize::MAX).with_release();
 
   assert!(layout.next_page().expect("page lays out"));
-  assert!(layout.next_page().expect("page lays out"));
   layout.release(1);
+  assert!(layout.next_page().expect("page lays out"));
 
   let tree = layout.tree();
   let is_released = |id: &str| tree.node_state(node_with_id(tree, id)).cache.is_released();
