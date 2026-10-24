@@ -5,7 +5,9 @@ use std::rc::Rc;
 
 use crate::{
   blur::blur_rgba,
-  resvg::usvg::{ApproxEqUlps, ApproxZeroUlps},
+  resvg::usvg::{ApproxEqUlps, ApproxZeroUlps, BlendMode},
+  svg_drawing::SvgDrawing,
+  svg_vector::flatten_children,
 };
 use tiny_skia::IntRect;
 
@@ -786,7 +788,7 @@ fn apply_blend(
     0,
     input1.as_ref().as_ref(),
     &tiny_skia::PixmapPaint {
-      blend_mode: crate::resvg::render::convert_blend_mode(fe.mode()),
+      blend_mode: tiny_skia_blend_mode(fe.mode()),
       ..tiny_skia::PixmapPaint::default()
     },
     tiny_skia::Transform::identity(),
@@ -794,6 +796,27 @@ fn apply_blend(
   );
 
   Ok(Image::from_image(pixmap, cs))
+}
+
+fn tiny_skia_blend_mode(mode: BlendMode) -> tiny_skia::BlendMode {
+  match mode {
+    BlendMode::Normal => tiny_skia::BlendMode::SourceOver,
+    BlendMode::Multiply => tiny_skia::BlendMode::Multiply,
+    BlendMode::Screen => tiny_skia::BlendMode::Screen,
+    BlendMode::Overlay => tiny_skia::BlendMode::Overlay,
+    BlendMode::Darken => tiny_skia::BlendMode::Darken,
+    BlendMode::Lighten => tiny_skia::BlendMode::Lighten,
+    BlendMode::ColorDodge => tiny_skia::BlendMode::ColorDodge,
+    BlendMode::ColorBurn => tiny_skia::BlendMode::ColorBurn,
+    BlendMode::HardLight => tiny_skia::BlendMode::HardLight,
+    BlendMode::SoftLight => tiny_skia::BlendMode::SoftLight,
+    BlendMode::Difference => tiny_skia::BlendMode::Difference,
+    BlendMode::Exclusion => tiny_skia::BlendMode::Exclusion,
+    BlendMode::Hue => tiny_skia::BlendMode::Hue,
+    BlendMode::Saturation => tiny_skia::BlendMode::Saturation,
+    BlendMode::Color => tiny_skia::BlendMode::Color,
+    BlendMode::Luminosity => tiny_skia::BlendMode::Luminosity,
+  }
 }
 
 fn apply_composite(
@@ -938,11 +961,11 @@ fn apply_image(
   let transform =
     tiny_skia::Transform::from_row(sx, 0.0, 0.0, sy, subregion.x() as f32, subregion.y() as f32);
 
-  let ctx = crate::resvg::render::Context {
-    max_bbox: tiny_skia::IntRect::from_xywh(0, 0, region.width(), region.height()).unwrap(),
-  };
-
-  crate::resvg::render::render_nodes(fe.root(), &ctx, transform, &mut pixmap.as_mut());
+  SvgDrawing.draw(
+    &flatten_children(fe.root()),
+    transform,
+    &mut pixmap.as_mut(),
+  );
 
   Ok(Image::from_image(
     pixmap,

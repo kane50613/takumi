@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#eef2ff"/>
+  <clipPath id="cp0">
+    <path d="M0 0H200V200H0Z"/>
+  </clipPath>
+  <g transform="matrix(1.5 0 0 1.5 110 165)" clip-path="url(#cp0)">
+    <g style="isolation:isolate">
+      <g transform="matrix(45 0 0 45 10 10)">
+        <use href="#i0"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp1">
+    <path d="M0 0H200V200H0Z"/>
+  </clipPath>
+  <g transform="matrix(1.5 0 0 1.5 450 165)" clip-path="url(#cp1)">
+    <g style="isolation:isolate">
+      <g transform="matrix(45 0 0 45 10 10)">
+        <image x="0" y="0" width="4" height="4" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVR4nGN4Zun2X2tu/38YzQAivixK/A+jGeAyQIBVBQD4diWtpNpYnQAAAABJRU5ErkJggg==" image-rendering="pixelated"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp2">
+    <path d="M0 0H200V200H0Z"/>
+  </clipPath>
+  <g transform="matrix(1.5 0 0 1.5 790 165)" clip-path="url(#cp2)">
+    <g style="isolation:isolate">
+      <g transform="matrix(.978 .208 -.208 .978 22.976 -18.606)">
+        <clipPath id="cp3">
+          <path d="M180 100c0 44.18-35.82 80-80 80s-80-35.82-80-80 35.82-80 80-80 80 35.82 80 80Z"/>
+        </clipPath>
+        <g clip-path="url(#cp3)">
+          <g opacity=".8">
+            <g transform="matrix(45 0 0 45 10 10)">
+              <use href="#i0"/>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <defs>
+    <image id="i0" width="4" height="4" preserveAspectRatio="none" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVR4nGN4Zun2X2tu/38YzQAivixK/A+jGeAyQIBVBQD4diWtpNpYnQAAAABJRU5ErkJggg=="/>
+  </defs>
+</svg>

@@ -34,12 +34,14 @@ use crate::resources::image_decoder::decoder_compiled_out;
 use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
 use crate::resources::svg_size::parse_svg_document;
+#[cfg(feature = "svg-raster")]
+use crate::resvg::apply_filters_to_layer;
 #[cfg(feature = "svg")]
 use crate::resvg::usvg::{Options, Tree};
 #[cfg(feature = "svg-raster")]
 use crate::resvg::usvg::{Transform, filters_from_markup};
 #[cfg(feature = "svg-raster")]
-use crate::resvg::{apply_filters_to_layer, render as render_svg_tree};
+use crate::svg_drawing::SvgDrawing;
 #[cfg(feature = "svg")]
 use crate::svg_vector::flatten;
 #[cfg(feature = "svg")]
@@ -60,7 +62,7 @@ use crate::{
 const MAX_RASTER_PIXELS: u64 = 64 << 20;
 
 #[cfg(feature = "svg-raster")]
-fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
+pub(crate) fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
   u64::from(width) * u64::from(height) <= MAX_RASTER_PIXELS
 }
 
@@ -304,14 +306,8 @@ impl SvgSource {
     let sx = width as f32 / original_size.width();
     let sy = height as f32 / original_size.height();
 
-    let recolored = self.tree_with_current_color(current_color, fonts);
-    let text_tree = recolored.is_none().then(|| self.text_tree(fonts)).flatten();
-
-    render_svg_tree(
-      recolored
-        .as_ref()
-        .or(text_tree.as_deref())
-        .unwrap_or(&self.tree),
+    SvgDrawing.draw(
+      &self.vector_ops(current_color, fonts),
       Transform::from_scale(sx, sy),
       &mut pixmap.as_mut(),
     );
@@ -1467,7 +1463,7 @@ mod tests {
     );
   }
 
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   fn premul_at(image: &RenderedImage, x: u32, y: u32) -> [u8; 4] {
     match image {
       RenderedImage::Rasterized(buffer) => buffer.pixel(x, y),
@@ -1943,7 +1939,7 @@ mod tests {
 
   // usvg accepts a namespace-less root, so markup without `xmlns` is still
   // detected and rendered as SVG.
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   #[test]
   fn svg_without_xmlns_renders() -> Result<(), ImageError> {
     let svg = r##"<svg width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
@@ -1958,7 +1954,7 @@ mod tests {
 
   // `currentColor` resolves against the host color, like an inline SVG
   // inheriting `color` from its parent element.
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   #[test]
   fn svg_current_color_resolves_to_host_color() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
@@ -1979,7 +1975,7 @@ mod tests {
 
   // The dependency on the host color is detected on decoded attribute values,
   // so an entity-encoded `currentColor` inherits too.
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   #[test]
   fn svg_entity_encoded_current_color_resolves_to_host_color() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="current&#67;olor"/></svg>"#;
@@ -2000,7 +1996,7 @@ mod tests {
 
   // A `color` attribute on the root wins over the host color, so the host
   // never overrides what the SVG defines itself.
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   #[test]
   fn svg_own_color_attribute_beats_host_color() -> Result<(), ImageError> {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"##;
@@ -2101,7 +2097,7 @@ mod tests {
     Ok(())
   }
 
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   #[test]
   fn svg_rasterization_rejects_oversized_target() {
     let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
@@ -2121,7 +2117,7 @@ mod tests {
     assert_matches!(result, Err(ImageError::InvalidPixmapSize));
   }
 
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   #[test]
   fn svg_is_drawable_only_at_a_nonzero_size_within_budget() {
     let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
@@ -2233,7 +2229,7 @@ mod tests {
       .unwrap()
       .encode_png()
       .unwrap();
-    let path = std::env::temp_dir().join(format!("takumi_lfi_{}.png", std::process::id()));
+    let path = std::env::temp_dir().join(format!("takumi_lfi_image_{}.png", std::process::id()));
     std::fs::write(&path, &opaque_red).unwrap();
 
     let ns = r#"xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink""#;

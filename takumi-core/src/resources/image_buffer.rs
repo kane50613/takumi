@@ -62,12 +62,6 @@ impl ImageBuffer {
     self.height
   }
 
-  /// Consumes the buffer, returning the premultiplied RGBA bytes.
-  #[cfg(feature = "svg-raster")]
-  pub(crate) fn into_premultiplied_rgba(self) -> Vec<u8> {
-    self.data
-  }
-
   /// The premultiplied RGBA bytes, row-major.
   pub fn data(&self) -> &[u8] {
     &self.data

@@ -70,7 +70,9 @@ impl SvgDocument {
             self.end_group(group)?;
           }
         }
-        SvgOp::Draw { path, fill, stroke } => {
+        SvgOp::Draw {
+          path, fill, stroke, ..
+        } => {
           let mut attrs: Vec<(&str, Cow<'_, str>)> =
             vec![("d", path_data(path, Affine::IDENTITY).into())];
 
@@ -138,7 +140,7 @@ impl SvgDocument {
       SvgLineCap::Square => attrs.push(("stroke-linecap", "square".into())),
     }
     match stroke.join {
-      SvgLineJoin::Miter => {}
+      SvgLineJoin::Miter | SvgLineJoin::MiterClip => {}
       SvgLineJoin::Round => attrs.push(("stroke-linejoin", "round".into())),
       SvgLineJoin::Bevel => attrs.push(("stroke-linejoin", "bevel".into())),
     }
@@ -175,19 +177,22 @@ impl SvgDocument {
         center,
         radius,
         focal,
+        focal_radius,
         gradient,
-      } => self.svg_gradient(
-        "radialGradient",
-        "rg",
-        vec![
+      } => {
+        let mut geometry = vec![
           ("cx", num(center.x).into()),
           ("cy", num(center.y).into()),
           ("r", num(*radius).into()),
           ("fx", num(focal.x).into()),
           ("fy", num(focal.y).into()),
-        ],
-        gradient,
-      ),
+        ];
+
+        if *focal_radius != 0.0 {
+          geometry.push(("fr", num(*focal_radius).into()));
+        }
+        self.svg_gradient("radialGradient", "rg", geometry, gradient)
+      }
       SvgPaint::Pattern {
         ops,
         transform,
