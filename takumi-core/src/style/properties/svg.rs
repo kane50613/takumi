@@ -359,6 +359,15 @@ impl PaintOrder {
     }
   }
 
+  /// Whether the stroke paints before the fill, with markers wherever they fall.
+  #[cfg(feature = "svg")]
+  pub(crate) fn strokes_first(self) -> bool {
+    matches!(
+      self.phases(),
+      [PaintPhase::Stroke, ..] | [PaintPhase::Markers, PaintPhase::Stroke, _]
+    )
+  }
+
   fn from_phases(phases: [PaintPhase; 3]) -> Self {
     use PaintPhase::{Fill, Markers, Stroke};
 

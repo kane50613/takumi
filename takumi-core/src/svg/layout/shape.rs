@@ -233,10 +233,7 @@ impl SvgLayout<'_> {
     let visibility = style.inherited_data.visibility == Visibility::Visible;
     let mut visible = visibility;
     let phases = style.svg_inherited_data.paint_order.phases();
-    let stroke_first = matches!(
-      phases,
-      [PaintPhase::Stroke, ..] | [PaintPhase::Markers, PaintPhase::Stroke, _]
-    );
+    let stroke_first = style.svg_inherited_data.paint_order.strokes_first();
 
     // A shape with neither fill nor stroke is invisible.
     if fill.is_none() && stroke.is_none() {

@@ -8,7 +8,6 @@ use std::str::FromStr;
 #[rustfmt::skip] mod names;
 mod parse;
 mod style_sheet;
-mod text;
 
 use tiny_skia_path::Transform;
 

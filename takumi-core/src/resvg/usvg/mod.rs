@@ -28,9 +28,6 @@ and can focus just on the rendering part.
 - Internal, base64 images will be decoded
 - All references (like `#elem` and `url(#elem)`) will be resolved
 - `switch` will be resolved
-- Text elements, which are probably the hardest part of SVG, will be completely resolved.
-  This includes all the attributes resolving, whitespaces preprocessing (`xml:space`),
-  text chunks and spans resolving
 - Markers will be converted into regular elements. No need to place them manually
 - All filters are supported. Including filter functions, like `filter="contrast(50%)"`
 - Recursive elements will be detected and removed
@@ -52,9 +49,7 @@ and can focus just on the rendering part.
 #![warn(missing_copy_implementations)]
 
 mod parser;
-mod text;
 mod tree;
 
 pub use parser::*;
-pub use text::*;
 pub use tree::*;

@@ -2,7 +2,12 @@ use std::fmt::Write as _;
 
 use super::SvgDocument;
 use crate::{
-  resources::image::{SvgFill, SvgOp, SvgOpPaint},
+  fonts::shaping::testing::{GEIST, register},
+  geometry::Point,
+  resources::{
+    font::{Fonts, FontsSnapshot},
+    image::{SvgFill, SvgOp, SvgOpPaint},
+  },
   style::Color,
 };
 
@@ -281,9 +286,8 @@ fn deeply_nested_groups_do_not_overflow_the_stack() {
 }
 
 #[test]
-fn text_and_filters_are_left_to_the_legacy_renderer() {
+fn filters_are_left_to_the_legacy_renderer() {
   for body in [
-    r#"<text>hi</text>"#,
     r##"<filter id="f"><feOffset dx="1"/></filter><rect width="1" height="1" filter="url(#f)"/>"##,
     r#"<style>rect { filter: blur(2px) }</style><rect width="1" height="1"/>"#,
   ] {
@@ -411,4 +415,303 @@ fn a_long_chain_of_clip_paths_is_walked_once_for_all_its_references() {
 
   // The chain is deeper than a document may nest, so the shapes are hidden, but the walk ends.
   assert!(with_deep_stack(move || draw_count(&ops(&body))).is_some());
+}
+
+fn geist() -> FontsSnapshot {
+  let mut fonts = Fonts::default();
+
+  register(&mut fonts, GEIST, "Geist");
+  fonts.snapshot()
+}
+
+/// The ops of a document whose `font-family` is Geist, set on the root so that text inherits it.
+fn text_ops(body: &str) -> Vec<SvgOp> {
+  let markup = svg(&format!(
+    r#"<g font-family="Geist" font-size="20">{body}</g>"#
+  ));
+
+  SvgDocument::parse(&markup)
+    .ok()
+    .and_then(|document| document.ops(BLACK, Some(&geist())))
+    .unwrap_or_default()
+}
+
+/// The horizontal and vertical extent of what the ops draw, ignoring transforms.
+fn extent(ops: &[SvgOp]) -> Option<(f32, f32, f32, f32)> {
+  let mut points = Vec::new();
+
+  for op in ops {
+    if let SvgOp::Draw { path, .. } = op {
+      for command in path {
+        command.map_points(|point| {
+          points.push(point);
+
+          point
+        });
+      }
+    }
+  }
+
+  let fold = |value: fn(&Point<f32>) -> f32, merge: fn(f32, f32) -> f32| {
+    points.iter().map(value).reduce(merge)
+  };
+
+  Some((
+    fold(|point| point.x, f32::min)?,
+    fold(|point| point.x, f32::max)?,
+    fold(|point| point.y, f32::min)?,
+    fold(|point| point.y, f32::max)?,
+  ))
+}
+
+#[test]
+fn text_draws_nothing_without_a_font() {
+  let markup = svg(r#"<text x="10" y="50">Hi</text>"#);
+  let ops = SvgDocument::parse(&markup)
+    .ok()
+    .and_then(|document| document.ops(BLACK, None))
+    .unwrap_or_default();
+
+  assert_eq!(draw_count(&ops), 0);
+}
+
+#[test]
+fn text_is_drawn_as_filled_glyph_outlines() {
+  let ops = text_ops(r#"<text x="10" y="50">Hi</text>"#);
+
+  assert_eq!(fills(&ops), [Some(BLACK)]);
+  assert!(extent(&ops).is_some_and(|(left, ..)| left >= 10.0));
+}
+
+#[test]
+fn x_places_text_and_text_anchor_moves_it_back() {
+  let start = extent(&text_ops(r#"<text x="50" y="50">Hi</text>"#));
+  let middle = extent(&text_ops(
+    r#"<text x="50" y="50" text-anchor="middle">Hi</text>"#,
+  ));
+  let end = extent(&text_ops(
+    r#"<text x="50" y="50" text-anchor="end">Hi</text>"#,
+  ));
+  let (Some(start), Some(middle), Some(end)) = (start, middle, end) else {
+    panic!("text is drawn");
+  };
+
+  assert!(start.0 >= 50.0);
+  assert!(middle.0 < 50.0 && middle.1 > 50.0);
+  assert!(end.1 <= 50.5);
+}
+
+#[test]
+fn dx_and_dy_shift_the_characters_that_follow() {
+  let plain = extent(&text_ops(r#"<text x="10" y="50">Hi</text>"#));
+  let shifted = extent(&text_ops(
+    r#"<text x="10" y="50"><tspan dx="7" dy="-5">Hi</tspan></text>"#,
+  ));
+  let (Some(plain), Some(shifted)) = (plain, shifted) else {
+    panic!("text is drawn");
+  };
+
+  assert!((shifted.0 - plain.0 - 7.0).abs() < 0.01);
+  assert!((shifted.2 - plain.2 + 5.0).abs() < 0.01);
+}
+
+#[test]
+fn white_space_collapses_as_xml_space_says() {
+  let collapsed = extent(&text_ops("<text x=\"0\" y=\"50\">a \n   b</text>"));
+  let single = extent(&text_ops(r#"<text x="0" y="50">a b</text>"#));
+  let preserved = extent(&text_ops(
+    "<text x=\"0\" y=\"50\" xml:space=\"preserve\">a   b</text>",
+  ));
+
+  assert_eq!(collapsed, single);
+  assert!(preserved.is_some_and(|preserved| preserved.1 > collapsed.map_or(0.0, |it| it.1)));
+}
+
+#[test]
+fn rotate_turns_the_characters() {
+  let upright = extent(&text_ops(r#"<text x="10" y="50">I</text>"#));
+  let turned = extent(&text_ops(r#"<text x="10" y="50" rotate="90">I</text>"#));
+  let (Some(upright), Some(turned)) = (upright, turned) else {
+    panic!("text is drawn");
+  };
+
+  // A turned upright stroke is wider than tall.
+  assert!(upright.3 - upright.2 > upright.1 - upright.0);
+  assert!(turned.3 - turned.2 < turned.1 - turned.0);
+}
+
+#[test]
+fn a_text_path_sets_text_along_a_curve() {
+  let ops = text_ops(
+    r##"<defs><path id="p" d="M 10 80 Q 50 0 90 80"/></defs>
+        <text><textPath href="#p">Curved text</textPath></text>"##,
+  );
+  let (_, _, top, bottom) = extent(&ops).expect("text is drawn");
+
+  assert!(bottom - top > 20.0);
+}
+
+#[test]
+fn a_tref_draws_the_text_it_names() {
+  let referenced = extent(&text_ops(
+    r##"<defs><text id="t">Hi</text></defs><text x="10" y="50"><tref href="#t"/></text>"##,
+  ));
+
+  assert!(referenced.is_some_and(|(left, ..)| left >= 10.0));
+}
+
+#[test]
+fn text_decoration_adds_a_line() {
+  let plain = draw_count(&text_ops(r#"<text x="10" y="50">Hi</text>"#));
+  let underlined = draw_count(&text_ops(
+    r#"<text x="10" y="50" text-decoration="underline">Hi</text>"#,
+  ));
+
+  assert_eq!(underlined, plain + 1);
+}
+
+#[test]
+fn hidden_text_is_not_drawn() {
+  let ops = text_ops(r#"<text x="10" y="50" display="none">Hi</text>"#);
+
+  assert_eq!(draw_count(&ops), 0);
+}
+
+#[test]
+fn a_tref_bomb_shapes_within_the_text_budget() {
+  let target = "a".repeat(20_000);
+  let trefs = r##"<tref href="#t"/>"##.repeat(100);
+  let ops = text_ops(&format!(
+    r##"<defs><text id="t">{target}</text></defs><text x="0" y="50">{trefs}</text>"##
+  ));
+
+  assert!(ops.is_empty());
+}
+
+#[test]
+fn ten_thousand_trefs_to_a_large_text_end_within_the_budget() {
+  let target = "a".repeat(100_000);
+  let trefs = r##"<tref href="#t"/>"##.repeat(10_000);
+  let ops = text_ops(&format!(
+    r##"<defs><text id="t">{target}</text></defs><text x="0" y="50">{trefs}</text>"##
+  ));
+
+  assert!(ops.is_empty());
+}
+
+#[test]
+fn ten_thousand_text_paths_to_a_huge_path_end_within_the_budget() {
+  let path = format!("M 0 0 {}", "L 1 1 L 2 0 ".repeat(50_000));
+  let text_paths = r##"<textPath href="#p">a</textPath>"##.repeat(10_000);
+  let ops = text_ops(&format!(
+    r##"<defs><path id="p" d="{path}"/></defs><text>{text_paths}</text>"##
+  ));
+
+  assert!(ops.is_empty());
+}
+
+#[test]
+fn a_text_of_a_thousand_tspans_used_a_thousand_times_ends_within_the_instance_budget() {
+  let spans = "<tspan/>".repeat(1000);
+  let uses = r##"<use href="#t"/>"##.repeat(1000);
+  let ops = text_ops(&format!(
+    r##"<defs><text id="t" y="50">{spans}</text></defs>{uses}"##
+  ));
+
+  assert_eq!(draw_count(&ops), 0);
+}
+
+#[test]
+fn a_hundred_thousand_glyphs_paint_within_the_budget() {
+  let text = "g@%&amp;".repeat(25_000);
+  let ops = text_ops(&format!(r#"<text x="0" y="50">{text}</text>"#));
+
+  // Their outlines outgrow what a document may paint, so it paints nothing.
+  assert!(ops.is_empty());
+}
+
+#[test]
+fn nested_decorated_groups_around_nested_tspans_do_not_cost_quadratic_time() {
+  let depth = 250;
+  let groups = r#"<g text-decoration="underline">"#.repeat(depth);
+  let spans = "<tspan>a".repeat(depth);
+  let body = format!(
+    r#"{groups}<text x="0" y="50">{spans}{}</text>{}"#,
+    "</tspan>".repeat(depth),
+    "</g>".repeat(depth),
+  );
+
+  assert!(with_deep_stack(move || draw_count(&text_ops(&body))).is_some());
+}
+
+#[test]
+fn a_plain_space_attribute_is_not_xml_space() {
+  let preserved = extent(&text_ops(
+    r#"<text x="0" y="50" space="preserve">a   b</text>"#,
+  ));
+  let collapsed = extent(&text_ops(r#"<text x="0" y="50">a b</text>"#));
+
+  assert_eq!(preserved, collapsed);
+}
+
+#[test]
+fn a_tspan_with_x_inside_a_text_path_stays_on_the_path() {
+  let ops = text_ops(
+    r##"<defs><path id="p" d="M 0 0 L 100 100"/></defs>
+        <text><textPath href="#p"><tspan>a</tspan><tspan x="50">b</tspan></textPath></text>"##,
+  );
+  let (_, _, _, bottom) = extent(&ops).expect("text is drawn");
+
+  assert!(bottom > 30.0, "{bottom}");
+}
+
+#[test]
+fn dx_follows_the_characters_it_names_after_a_hidden_span() {
+  let plain = extent(&text_ops(
+    r#"<text x="10" y="50">a<tspan display="none">b</tspan>cd</text>"#,
+  ));
+  let shifted = extent(&text_ops(
+    r#"<text x="10" y="50" dx="0 0 0 40">a<tspan display="none">b</tspan>cd</text>"#,
+  ));
+  let (Some(plain), Some(shifted)) = (plain, shifted) else {
+    panic!("text is drawn");
+  };
+
+  assert!(
+    (shifted.1 - plain.1 - 40.0).abs() < 0.01,
+    "{plain:?} {shifted:?}"
+  );
+}
+
+#[test]
+fn a_negative_dx_on_a_text_path_hides_only_the_character_it_moves_off_the_path() {
+  let on_path = |attributes: &str, text: &str| {
+    let ops = text_ops(&format!(
+      r##"<defs><path id="p" d="M 0 50 L 100 50"/></defs>
+          <text {attributes}><textPath href="#p">{text}</textPath></text>"##
+    ));
+
+    ops
+      .iter()
+      .find_map(|op| match op {
+        SvgOp::Draw { path, .. } => Some(path.len()),
+        _ => None,
+      })
+      .unwrap_or_default()
+  };
+
+  assert!(on_path("", "ac") > 0);
+  assert_eq!(on_path(r#"dx="0 -60 80""#, "abc"), on_path("", "ac"));
+}
+
+#[test]
+fn a_hundred_thousand_positions_and_a_long_dash_array_end_within_the_budget() {
+  let positions: String = (0..100_000).map(|index| format!("{index} ")).collect();
+  let dashes: String = (0..100_000).map(|_| "1 ").collect();
+  let characters = "a".repeat(100_000);
+  let ops = text_ops(&format!(
+    r#"<text x="{positions}" y="50" stroke="black" stroke-dasharray="{dashes}">{characters}</text>"#
+  ));
+
+  assert!(draw_count(&ops) <= 100_000);
 }

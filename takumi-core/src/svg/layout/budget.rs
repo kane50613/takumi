@@ -11,6 +11,8 @@ const MAXIMUM_INSTANCES: usize = 100_000;
 const MAXIMUM_PAINTED: usize = 4_000_000;
 /// How many bytes of images a document may decode and parse.
 const MAXIMUM_IMAGE_BYTES: usize = 32 << 20;
+/// How many bytes of text a document may shape, which `tref` elements multiply.
+const MAXIMUM_TEXT_BYTES: usize = 1 << 18;
 
 /// The limits of one document, shared with the SVG images inside it.
 #[derive(Debug)]
@@ -18,6 +20,7 @@ pub(super) struct Budget {
   instances: usize,
   painted: usize,
   image_bytes: usize,
+  text_bytes: usize,
   depth: usize,
 }
 
@@ -27,6 +30,7 @@ impl Default for Budget {
       instances: MAXIMUM_INSTANCES,
       painted: MAXIMUM_PAINTED,
       image_bytes: MAXIMUM_IMAGE_BYTES,
+      text_bytes: MAXIMUM_TEXT_BYTES,
       depth: 0,
     }
   }
@@ -46,6 +50,17 @@ impl Budget {
   /// Takes `bytes` of image payload, false once they are spent.
   pub(super) fn spend_image_bytes(&mut self, bytes: usize) -> bool {
     Self::spend(&mut self.image_bytes, bytes)
+  }
+
+  /// Takes `bytes` of text to shape, false once they are spent, which leaves nothing to paint.
+  pub(super) fn spend_text_bytes(&mut self, bytes: usize) -> bool {
+    let spent = Self::spend(&mut self.text_bytes, bytes);
+
+    if !spent {
+      self.painted = 0;
+    }
+
+    spent
   }
 
   /// Goes one level deeper, false at the depth a document may nest to. Each success needs a

@@ -416,7 +416,7 @@ pub(super) struct Stroke {
   pub(super) miter_limit: f32,
   pub(super) cap: SvgLineCap,
   pub(super) join: SvgLineJoin,
-  pub(super) dash: Option<(Vec<f32>, f32)>,
+  pub(super) dash: Option<Rc<(Vec<f32>, f32)>>,
   pub(super) context: Option<ContextSource>,
 }
 

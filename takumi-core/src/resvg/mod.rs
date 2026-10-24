@@ -8,11 +8,7 @@ Vendored from resvg 0.48.1 (Apache-2.0 OR MIT), stripped of the `svgz`,
 `system-fonts`, `memmap-fonts` and `writer` features, the CLI and the raster renderer. The
 parser and the filter pipeline remain, and a backend draws the tree from `SvgOp`s.
 
-Text support diverges from upstream: `<text>` matches fonts through the renderer's
-`FontFallbackList` and shapes through its `HarfBuzzShaper` in place of `fontdb` and
-`rustybuzz`, `unicode-script`/`unicode-vo` are replaced by `icu_properties`, and glyphs resolve
-through the renderer's glyph cache, which draws COLRv0 layers and bitmap glyphs but not
-SVG-in-font glyphs.
+Text is not drawn here: `<text>` is laid out by the cascade pipeline in `crate::svg`.
 */
 
 #![forbid(unsafe_code)]
