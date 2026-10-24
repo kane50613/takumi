@@ -1,22 +1,27 @@
 //! An SVG image written as the vector ops takumi-core flattens it to, so its text draws in the
 //! fonts the render registered instead of whatever the viewer falls back to.
 
-use std::{borrow::Cow, io};
+use std::{
+  borrow::Cow,
+  hash::{DefaultHasher, Hash, Hasher},
+  io,
+};
 
 use takumi_core::{
   path_data::path_data,
   resources::image::{
-    SvgGradient, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
+    SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
+    SvgStrokeStyle, sniff_mime, to_data_url,
   },
-  style::{Affine, FillRule, ToCss},
+  style::{Affine, FillRule, ImageScalingAlgorithm, ToCss},
 };
 
-use crate::{GradientStop, Rgba, SvgDocument, matrix_attr, num, push_opacity};
+use crate::{Frame, GradientStop, ImageKey, Rgba, SvgDocument, matrix_attr, num, push_opacity};
 
-/// Whether `ops` draw without a rasterized subtree, so SVG elements can express all of them.
+/// Whether SVG elements can express all of `ops`, which leaves out filters.
 pub(crate) fn is_vector(ops: &[SvgOp]) -> bool {
   ops.iter().all(|op| match op {
-    SvgOp::Raster { .. } => false,
+    SvgOp::PushFilter(_) => false,
     SvgOp::PushMask { ops, .. } => is_vector(ops),
     SvgOp::Draw { fill, stroke, .. } => fill
       .iter()
@@ -31,7 +36,7 @@ pub(crate) fn is_vector(ops: &[SvgOp]) -> bool {
 }
 
 impl SvgDocument {
-  /// Writes `ops`, each `Push*` as a `<g>` its `Pop` closes. `is_vector` keeps rasters out.
+  /// Writes `ops`, each `Push*` as a `<g>` its `Pop` closes.
   pub(crate) fn svg_ops(&mut self, ops: &[SvgOp]) -> io::Result<()> {
     let mut groups = Vec::new();
 
@@ -84,7 +89,32 @@ impl SvgDocument {
           }
           self.empty("path", &attrs)?;
         }
-        SvgOp::Raster { .. } => {}
+        // `is_vector` keeps filters out, but the matching `Pop` still closes a group.
+        SvgOp::PushFilter(_) => {
+          groups.push(self.begin_group(Affine::IDENTITY, 1.0, None, None)?);
+        }
+        SvgOp::Image {
+          data,
+          width,
+          height,
+          rendering,
+        } => {
+          let key = ImageKey::SvgBitmap(digest(data));
+          let Some(href) = self.image_href(&key, || image_href(data)) else {
+            continue;
+          };
+          let rect = Frame::new(0.0, 0.0, *width, *height);
+
+          if *rendering == ImageScalingAlgorithm::Pixelated {
+            let mut attrs = rect.attrs();
+
+            attrs.push(("href", href.as_ref().into()));
+            attrs.push(("image-rendering", "pixelated".into()));
+            self.empty("image", &attrs)?;
+          } else {
+            self.image_use(&key, &href, (*width, *height), rect)?;
+          }
+        }
       }
     }
 
@@ -220,6 +250,29 @@ impl SvgDocument {
       geometry,
       &stops,
     )
+  }
+}
+
+/// The `data:` URL of an image op's pixels.
+/// A digest of `data`'s bytes or pixels, which keys its one encoding.
+fn digest(data: &SvgImageData) -> u64 {
+  let mut hasher = DefaultHasher::new();
+
+  match data {
+    SvgImageData::Encoded(bytes) => bytes.hash(&mut hasher),
+    SvgImageData::Bitmap(buffer) => {
+      (buffer.width(), buffer.height(), buffer.data()).hash(&mut hasher)
+    }
+  }
+  hasher.finish()
+}
+
+fn image_href(data: &SvgImageData) -> Option<String> {
+  match data {
+    SvgImageData::Encoded(bytes) => Some(to_data_url(sniff_mime(bytes), bytes)),
+    SvgImageData::Bitmap(buffer) => buffer
+      .encode_png()
+      .map(|png| to_data_url("image/png", &png)),
   }
 }
 

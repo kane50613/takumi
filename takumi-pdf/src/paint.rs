@@ -10,7 +10,7 @@ use takumi_core::{
   context::RenderContext,
   resources::{
     image::{ImageError, ImageSource, RenderedImage},
-    image_buffer::demultiply_pixel,
+    image_buffer::{ImageBuffer, demultiply_pixel},
   },
 };
 use takumi_core::{
@@ -91,8 +91,7 @@ fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
 
 /// Rasterizes an image source into a krilla image. Encoded bytes pass through
 /// undecoded unless a filter has to run over the pixels; bitmap sources
-/// rasterize at their intrinsic size; SVG sources at twice the target size for
-/// print density.
+/// rasterize at their intrinsic size. An SVG source draws as ops instead and has nothing here.
 ///
 /// `Ok(None)` is a source with nothing to draw, `Err` one that should have
 /// drawn and could not.
@@ -100,11 +99,6 @@ fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
 pub(crate) fn rasterized_image(
   source: &ImageSource,
   context: &RenderContext,
-  #[cfg_attr(
-    not(feature = "svg"),
-    expect(unused_variables, reason = "only an SVG rasterizes at the target size")
-  )]
-  target: Size<f32>,
   filter: Option<&ColorFilter>,
 ) -> Result<Option<KrillaImage>, String> {
   if filter.is_none()
@@ -118,11 +112,6 @@ pub(crate) fn rasterized_image(
     ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
     ImageSource::Animated(animated) => animated.dimensions(),
     ImageSource::Encoded(encoded) => encoded.dimensions(),
-    #[cfg(feature = "svg")]
-    ImageSource::Svg(_) => (
-      (target.width * 2.0).ceil() as u32,
-      (target.height * 2.0).ceil() as u32,
-    ),
     _ => return Ok(None),
   };
   if width == 0 || height == 0 {
@@ -142,11 +131,15 @@ pub(crate) fn rasterized_image(
     RenderedImage::Rasterized(buffer) => buffer.as_ref(),
     RenderedImage::Sampled { source, .. } => source.as_ref(),
   };
+
+  Ok(Some(bitmap_image(buffer, filter)))
+}
+
+/// A decoded bitmap as a straight-alpha PDF image, recolored by `filter`.
+#[cfg(feature = "images")]
+pub(crate) fn bitmap_image(buffer: &ImageBuffer, filter: Option<&ColorFilter>) -> KrillaImage {
   let mut data = buffer.data().to_vec();
 
-  // Undoes the premultiplication takumi-core renders with: PDF image streams
-  // carry straight alpha. Only the paths that go through core reach this;
-  // embedded bytes never become premultiplied samples in the first place.
   data
     .as_chunks_mut::<4>()
     .0
@@ -157,21 +150,16 @@ pub(crate) fn rasterized_image(
       *pixel = filter.apply(*pixel);
     }
   }
-  Ok(Some(KrillaImage::from_rgba8(
-    data,
-    buffer.width(),
-    buffer.height(),
-  )))
+
+  KrillaImage::from_rgba8(data, buffer.width(), buffer.height())
 }
 
-/// What a rasterized image depends on: the `src` it resolved from, the filter, and for an SVG the
-/// size and `currentColor` it renders at.
+/// What a rasterized image depends on: the `src` it resolved from and the filter.
 #[cfg(feature = "images")]
 #[derive(Hash, PartialEq, Eq)]
 struct RasterKey {
   src: Arc<str>,
   filter: Vec<u32>,
-  svg: Option<([u32; 2], [u8; 4])>,
 }
 
 /// Images [`rasterized_image`] made for one document, so an image drawn again from the same `src`
@@ -191,29 +179,18 @@ impl RasterizedImages {
     src: &Arc<str>,
     source: &ImageSource,
     context: &RenderContext,
-    target: Size<f32>,
     filter: Option<&ColorFilter>,
   ) -> Result<Option<KrillaImage>, String> {
-    #[cfg(feature = "svg")]
-    let svg = matches!(source, ImageSource::Svg(_)).then(|| {
-      (
-        [target.width.to_bits(), target.height.to_bits()],
-        context.current_color.0,
-      )
-    });
-    #[cfg(not(feature = "svg"))]
-    let svg = None;
     let key = RasterKey {
       src: Arc::clone(src),
       filter: filter.map(ColorFilter::key).unwrap_or_default(),
-      svg,
     };
 
     if let Some(image) = self.images.borrow().get(&key) {
       return Ok(image.clone());
     }
 
-    let image = rasterized_image(source, context, target, filter)?;
+    let image = rasterized_image(source, context, filter)?;
 
     self.images.borrow_mut().insert(key, image.clone());
     Ok(image)

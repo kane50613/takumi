@@ -3,7 +3,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[cfg(all(feature = "images", feature = "svg"))]
-use takumi_core::resources::image::ImageSource;
+use takumi_core::resources::image::{ImageSource, SvgSource};
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
@@ -43,7 +43,7 @@ use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
 #[cfg(all(feature = "svg", feature = "images"))]
-use crate::svg;
+use crate::svg::SvgPainter;
 use crate::{
   chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
@@ -595,22 +595,22 @@ impl Emitter<'_> {
   ) {
     let (w, h) = (size.width, size.height);
 
-    // A url() layer draws as an image tile; the transform applies to pixels,
-    // so it goes through the same rasterization as a filtered <img>.
     #[cfg(feature = "images")]
     if let BackgroundImage::Url(url) = image {
       let Ok(source) = resolve_image(url, &node.context) else {
         return;
       };
+      #[cfg(feature = "svg")]
+      if let ImageSource::Svg(svg) = &source {
+        self.draw_svg(svg, &node.context, at, size, surface);
+        return;
+      }
       let Some(krilla_image) = self.drawable(
         url,
-        self.document.images.get(
-          url,
-          &source,
-          &node.context,
-          size,
-          self.color_filter.as_deref(),
-        ),
+        self
+          .document
+          .images
+          .get(url, &source, &node.context, self.color_filter.as_deref()),
       ) else {
         return;
       };
@@ -944,45 +944,25 @@ impl Emitter<'_> {
     });
     let placement = replaced.placement;
     let (dw, dh) = (placement.size.width, placement.size.height);
-    // SVG sources embed as vector ops; everything else rasterizes. A color
-    // filter rasterizes them too, since the transform applies to pixels.
     #[cfg(feature = "svg")]
-    let vector = if let (ImageSource::Svg(svg), None) = (&source, &self.color_filter) {
-      let (svg_width, svg_height) = svg.dimensions();
-      if svg_width <= 0.0 || svg_height <= 0.0 {
-        return;
-      }
-      // Fallback rasters (filters, embedded bitmaps) keep the old 2x density.
-      let raster_scale = 2.0 * (dw / svg_width).max(dh / svg_height);
-
-      Some((
-        svg.vector_ops(raster_scale, context.current_color, Some(context.fonts())),
-        svg_width,
-        svg_height,
-      ))
-    } else {
-      None
+    let svg = match &source {
+      ImageSource::Svg(svg) => Some(svg),
+      _ => None,
     };
     #[cfg(not(feature = "svg"))]
-    let vector: Option<((), f32, f32)> = None;
+    let svg: Option<()> = None;
 
-    let krilla_image = if vector.is_none() {
+    let krilla_image = if svg.is_none() {
       let Some(image) = self.drawable(
         image_label(&image.src),
         match &image.src {
-          ImageSourceInput::Url(src) => self.document.images.get(
-            src,
-            &source,
-            context,
-            placement.size,
-            self.color_filter.as_deref(),
-          ),
-          _ => rasterized_image(
-            &source,
-            context,
-            placement.size,
-            self.color_filter.as_deref(),
-          ),
+          ImageSourceInput::Url(src) => {
+            self
+              .document
+              .images
+              .get(src, &source, context, self.color_filter.as_deref())
+          }
+          _ => rasterized_image(&source, context, self.color_filter.as_deref()),
         },
       ) else {
         return;
@@ -1010,25 +990,17 @@ impl Emitter<'_> {
       surface.push_clip_path(path, &FillRule::NonZero);
     }
     #[cfg(feature = "svg")]
-    if let Some((ops, svg_width, svg_height)) = vector {
-      let canvas = KrillaRect::from_xywh(0.0, 0.0, svg_width, svg_height).and_then(rect_path);
-
-      surface.push_transform(&Transform::from_row(
-        dw / svg_width,
-        0.0,
-        0.0,
-        dh / svg_height,
-        ix,
-        iy,
-      ));
-      if let Some(canvas) = &canvas {
-        surface.push_clip_path(canvas, &FillRule::NonZero);
-      }
-      svg::draw_svg_ops(surface, ops);
-      if canvas.is_some() {
-        surface.pop();
-      }
-      surface.pop();
+    if let Some(svg) = svg {
+      self.draw_svg(
+        svg,
+        context,
+        CorePoint { x: ix, y: iy },
+        Size {
+          width: dw,
+          height: dh,
+        },
+        surface,
+      );
     }
     if let Some(krilla_image) = krilla_image {
       surface.push_transform(&Transform::from_translate(ix, iy));
@@ -1038,6 +1010,42 @@ impl Emitter<'_> {
     if clip_path.is_some() {
       surface.pop();
     }
+  }
+
+  #[cfg(all(feature = "svg", feature = "images"))]
+  /// Draws `svg` stretched over `size` at `at`, clipped to its canvas.
+  fn draw_svg(
+    &self,
+    svg: &SvgSource,
+    context: &RenderContext,
+    at: CorePoint<f32>,
+    size: Size<f32>,
+    surface: &mut Surface,
+  ) {
+    let (svg_width, svg_height) = svg.dimensions();
+
+    if svg_width <= 0.0 || svg_height <= 0.0 {
+      return;
+    }
+    let ops = svg.vector_ops(context.current_color, Some(context.fonts()));
+    let canvas = KrillaRect::from_xywh(0.0, 0.0, svg_width, svg_height).and_then(rect_path);
+
+    surface.push_transform(&Transform::from_row(
+      size.width / svg_width,
+      0.0,
+      0.0,
+      size.height / svg_height,
+      at.x,
+      at.y,
+    ));
+    if let Some(canvas) = &canvas {
+      surface.push_clip_path(canvas, &FillRule::NonZero);
+    }
+    SvgPainter::new(self.color_filter.as_deref()).draw(surface, ops);
+    if canvas.is_some() {
+      surface.pop();
+    }
+    surface.pop();
   }
 
   /// Draws a text-bearing box's runs, from the pre-built inline map when the node is in it (content

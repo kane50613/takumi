@@ -13,6 +13,7 @@ use std::{
   sync::Arc,
 };
 
+use base64::{Engine, prelude::BASE64_STANDARD};
 use flate2::read::ZlibDecoder;
 use takumi_core::{
   Fonts,
@@ -1833,10 +1834,9 @@ fn svg_singular_gradient_transform() {
   });
 }
 
-/// Filters rasterize, luminance masks become soft masks, and pattern fills
-/// become tiling patterns.
+/// SVG filters drop out, luminance masks become soft masks, and patterns become tiling patterns.
 #[test]
-fn svg_fallback_and_masks() {
+fn svg_filters_masks_and_patterns() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
   <defs>
     <filter id="b"><feGaussianBlur stdDeviation="1"/></filter>
@@ -1851,7 +1851,7 @@ fn svg_fallback_and_masks() {
   <rect x="18" y="4" width="12" height="16" fill="#33a" mask="url(#m)"/>
   <rect x="34" y="4" width="12" height="16" fill="url(#p)"/>
 </svg>"##;
-  let pdf = run_pdf_fixture("svg-fallback-and-masks", |fonts| {
+  let pdf = run_pdf_fixture("svg-filters-masks-and-patterns", |fonts| {
     let image = Node::image(ImageData {
       src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
       width: Some(48.0),
@@ -1873,13 +1873,176 @@ fn svg_fallback_and_masks() {
   let text = String::from_utf8_lossy(&pdf);
 
   assert!(
-    text.contains("/Subtype/Image"),
-    "filtered subtree should rasterize"
+    !text.contains("/Subtype/Image"),
+    "filtered subtree should not rasterize"
   );
   assert!(text.contains("/SMask"), "mask lost its soft mask");
   assert!(
     text.contains("/PatternType 1"),
     "pattern fill lost its tiling pattern"
+  );
+}
+
+fn svg_image_node(svg: &str, width: f32, height: f32) -> Node {
+  Node::image(ImageData {
+    src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+    width: Some(width),
+    height: Some(height),
+  })
+}
+
+fn data_url(mime: &str, bytes: &[u8]) -> String {
+  format!("data:{mime};base64,{}", BASE64_STANDARD.encode(bytes))
+}
+
+fn read_asset(name: &str) -> Vec<u8> {
+  fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/images")
+      .join(name),
+  )
+  .expect("read asset image")
+}
+
+/// A PNG inside an SVG embeds as an image XObject, not a rasterized group.
+#[test]
+fn svg_embedded_png() {
+  let svg = format!(
+    r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 48 24" width="48" height="24">
+  <defs><clipPath id="c"><circle cx="12" cy="12" r="10"/></clipPath></defs>
+  <image x="2" y="2" width="20" height="20" clip-path="url(#c)" xlink:href="{}"/>
+  <image x="26" y="2" width="20" height="20" transform="rotate(8 36 12)" opacity="0.6" xlink:href="{}"/>
+</svg>"##,
+    data_url("image/png", &read_asset("yeecord.png")),
+    data_url("image/png", &read_asset("yeecord.png")),
+  );
+  let pdf = run_pdf_fixture("svg-embedded-png", |fonts| {
+    PdfOptions::builder()
+      .node(Node::container(vec![svg_image_node(&svg, 96.0, 48.0)]))
+      .viewport(Viewport::new((120, 60)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    text.contains("/Subtype/Image"),
+    "embedded bitmap was dropped"
+  );
+  assert!(
+    text.contains("/Filter/FlateDecode"),
+    "bitmap lost its stream"
+  );
+}
+
+/// A JPEG inside an SVG passes through to the PDF undecoded.
+#[test]
+fn svg_embedded_jpeg_passes_through() {
+  let svg = format!(
+    r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
+  <image x="0" y="0" width="48" height="24" href="{}"/>
+</svg>"##,
+    data_url(
+      "image/jpeg",
+      &read_asset("luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg")
+    ),
+  );
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(Node::container(vec![svg_image_node(&svg, 96.0, 48.0)]))
+      .viewport(Viewport::new((120, 60)))
+      .fonts(&fonts())
+      .build(),
+  );
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(text.contains("DCTDecode"), "jpeg was re-encoded");
+}
+
+/// A color-matrix `filter` on an SVG image recolors its paints and bitmaps without rasterizing.
+#[test]
+fn svg_with_color_filter() {
+  let svg = format!(
+    r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ff0044"/><stop offset="1" stop-color="#0044ff"/>
+  </linearGradient></defs>
+  <rect width="24" height="24" fill="url(#g)"/>
+  <rect x="26" width="10" height="10" fill="#e11d48"/>
+  <image x="38" y="0" width="10" height="10" href="{}"/>
+</svg>"##,
+    data_url("image/png", &read_asset("yeecord.png")),
+  );
+  let html = format!(
+    r##"<div style="padding: 8px;"><img src="{}" style="width: 96px; height: 48px; filter: grayscale(1);"></div>"##,
+    data_url("image/svg+xml", svg.as_bytes()),
+  );
+  let pdf = run_pdf_fixture("svg-with-color-filter", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse svg filter fixture"))
+      .viewport(Viewport::new((120, 70)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = inflated_text(&pdf);
+
+  assert!(text.contains("/Shading"), "gradient lost its shading");
+  assert!(
+    !text.contains("0.8824 0.1137 0.2824 rg"),
+    "the filtered fill kept its original color"
+  );
+}
+
+/// A CSS `filter` on an SVG image leaves the SVG's mask content as drawn.
+#[test]
+fn svg_color_filter_leaves_masks_alone() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs><mask id="m"><rect width="24" height="24" fill="#ffffff"/></mask></defs>
+  <rect width="24" height="24" fill="#e11d48" mask="url(#m)"/>
+</svg>"##;
+  let html = format!(
+    r##"<img src="{}" style="width: 48px; height: 48px; filter: invert(1);">"##,
+    data_url("image/svg+xml", svg.as_bytes()),
+  );
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse svg mask fixture"))
+      .viewport(Viewport::new((64, 64)))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render svg mask fixture");
+
+  assert!(
+    inflated_text(&pdf).contains("1 1 1 rg"),
+    "the filter inverted the mask"
+  );
+}
+
+/// An SVG `background-image` draws as ops like an `<img>` does.
+#[test]
+fn svg_background_image() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <circle cx="12" cy="12" r="10" fill="#16a34a"/>
+</svg>"##;
+  let pdf = run_pdf_fixture("svg-background-image", |fonts| {
+    let html = format!(
+      r##"<div style="width: 80px; height: 40px; background-image: url('{url}'); background-size: 100% 100%;"></div>
+      <div style="font-size: 28px; background-image: url('{url}'); background-clip: text; color: transparent;">Clip</div>"##,
+      url = data_url("image/svg+xml", svg.as_bytes()),
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse svg background fixture"))
+      .viewport(Viewport::new((100, 100)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    !text.contains("/Subtype/Image"),
+    "svg background should not rasterize"
   );
 }
 
@@ -2730,12 +2893,14 @@ fn text_shadow_and_stroke() {
     contains(b"/Pattern cs"),
     "expected a gradient fill on the clip-text glyphs"
   );
-  // An image layer has no paint of its own. Without a pattern carrying it, the
-  // layer is dropped and the transparent text comes out invisible, taking the
-  // embedded image with it.
+  // The SVG tile reaches the file as a fill under the glyph clip, not as an image.
   assert!(
-    find(&pdf, b"/Subtype /Image").is_some() || find(&pdf, b"/Subtype/Image").is_some(),
+    contains(b"0.0863 0.6392 0.2902 rg"),
     "the image layer left the clip-text glyphs with nothing to fill them"
+  );
+  assert!(
+    find(&pdf, b"/Subtype/Image").is_none() && find(&pdf, b"/Subtype /Image").is_none(),
+    "the SVG layer rasterized"
   );
   // A stroke colour keeps its alpha: the quarter-opaque outline reaches the
   // file as a stroking alpha, not as a solid line. The value is the alpha byte

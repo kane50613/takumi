@@ -23,20 +23,30 @@ SVG-in-font glyphs.
 #![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::wrong_self_convention)]
 
+#[cfg(feature = "svg-raster")]
 use std::sync::Arc;
 
+#[cfg(feature = "svg-raster")]
 use usvg::filter::Filter;
 
 pub mod usvg;
 
+#[cfg(feature = "svg-raster")]
 mod clip;
+#[cfg(feature = "svg-raster")]
 mod filter;
+#[cfg(feature = "svg-raster")]
 mod geom;
+#[cfg(feature = "svg-raster")]
 mod image;
+#[cfg(feature = "svg-raster")]
 mod mask;
+#[cfg(feature = "svg-raster")]
 mod path;
+#[cfg(feature = "svg-raster")]
 mod render;
 
+#[cfg(feature = "svg-raster")]
 /// Renders a tree onto the pixmap.
 ///
 /// `transform` will be used as a root transform.
@@ -54,6 +64,7 @@ pub fn render(
   render::render_nodes(tree.root(), &ctx, transform, pixmap);
 }
 
+#[cfg(feature = "svg-raster")]
 /// Renders a node onto the pixmap.
 ///
 /// `transform` will be used as a root transform.
@@ -81,6 +92,7 @@ pub fn render_node(
   Some(())
 }
 
+#[cfg(feature = "svg-raster")]
 fn max_filter_bbox(width: u32, height: u32) -> tiny_skia::IntRect {
   tiny_skia::IntRect::from_xywh(
     i32::try_from(width).unwrap_or(i32::MAX).saturating_mul(-2),
@@ -93,6 +105,7 @@ fn max_filter_bbox(width: u32, height: u32) -> tiny_skia::IntRect {
   })
 }
 
+#[cfg(feature = "svg-raster")]
 /// Applies parsed filters to a premultiplied RGBA layer in place.
 ///
 /// Mirrors the `render_group` filter path: each filter runs on a pixmap sized
@@ -155,6 +168,7 @@ impl<T> OptionLog for Option<T> {
   }
 }
 
+#[cfg(feature = "svg-raster")]
 #[cfg(test)]
 mod tests {
   #[test]
