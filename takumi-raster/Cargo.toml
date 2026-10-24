@@ -53,7 +53,7 @@ optional = true
 
 [features]
 default = ["svg", "rayon"]
-svg = ["takumi-core/svg"]
+svg = ["takumi-core/svg-raster"]
 png = ["takumi-core/png"]
 gif = ["takumi-core/gif"]
 webp = ["takumi-core/webp"]

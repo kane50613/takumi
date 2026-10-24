@@ -24,7 +24,7 @@ path = "../takumi-bindings-common"
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["woff2", "woff", "svg", "image-decoding"]
+features = ["woff2", "woff", "svg-raster", "image-decoding"]
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"

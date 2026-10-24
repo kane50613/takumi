@@ -22,6 +22,7 @@ use quick_cache::{
 use serde::Deserialize;
 use thiserror::Error;
 #[cfg(feature = "svg")]
+#[cfg(feature = "svg-raster")]
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
@@ -34,16 +35,17 @@ use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
 use crate::resources::svg_size::parse_svg_document;
 #[cfg(feature = "svg")]
-use crate::resvg::{
-  apply_filters_to_layer, render as render_svg_tree,
-  usvg::{Options, Transform, Tree, filters_from_markup},
-};
+use crate::resvg::usvg::{Options, Tree};
+#[cfg(feature = "svg-raster")]
+use crate::resvg::usvg::{Transform, filters_from_markup};
+#[cfg(feature = "svg-raster")]
+use crate::resvg::{apply_filters_to_layer, render as render_svg_tree};
 #[cfg(feature = "svg")]
 use crate::svg_vector::flatten;
 #[cfg(feature = "svg")]
 pub use crate::svg_vector::{
-  SvgFill, SvgGradient, SvgGradientStop, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
-  SvgStrokeStyle,
+  SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
+  SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
 };
 use crate::{
   resources::{
@@ -54,10 +56,10 @@ use crate::{
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-raster")]
 const MAX_RASTER_PIXELS: u64 = 64 << 20;
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-raster")]
 fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
   u64::from(width) * u64::from(height) <= MAX_RASTER_PIXELS
 }
@@ -105,8 +107,10 @@ pub struct SvgSource {
   #[cfg(feature = "svg")]
   text_tree: Mutex<Option<(u64, Arc<Tree>)>>,
   #[cfg(feature = "svg")]
+  #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
   hash: u64,
   #[cfg(feature = "svg")]
+  #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
   cache: Weak<SharedResourceCache>,
 }
 
@@ -187,21 +191,14 @@ impl SvgSource {
   }
 
   /// Flattens the SVG into backend-agnostic vector drawing ops in SVG canvas
-  /// coordinates. `raster_scale` is the device-pixels-per-user-unit factor
-  /// used when a subtree (filters, embedded bitmaps) has to fall back to
-  /// rasterization.
-  pub fn vector_ops(
-    &self,
-    raster_scale: f32,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
-  ) -> Vec<SvgOp> {
+  /// coordinates.
+  pub fn vector_ops(&self, current_color: Color, fonts: Option<&FontsSnapshot>) -> Vec<SvgOp> {
     match self.tree_with_current_color(current_color, fonts) {
-      Some(tree) => flatten(&tree, raster_scale),
+      Some(tree) => flatten(&tree),
       None => {
         let text_tree = self.text_tree(fonts);
 
-        flatten(text_tree.as_deref().unwrap_or(&self.tree), raster_scale)
+        flatten(text_tree.as_deref().unwrap_or(&self.tree))
       }
     }
   }
@@ -290,6 +287,7 @@ impl SvgSource {
     Some(tree)
   }
 
+  #[cfg(feature = "svg-raster")]
   fn rasterize(
     &self,
     width: u32,
@@ -324,6 +322,7 @@ impl SvgSource {
       .ok_or(ImageError::InvalidPixmapSize)
   }
 
+  #[cfg(feature = "svg-raster")]
   fn rasterize_cached(
     &self,
     width: u32,
@@ -575,7 +574,7 @@ impl ImageSource {
     }
 
     match self {
-      #[cfg(feature = "svg")]
+      #[cfg(feature = "svg-raster")]
       ImageSource::Svg(_) => within_raster_pixel_budget(width, height),
       _ => true,
     }
@@ -595,8 +594,8 @@ impl ImageSource {
       allow(unused_variables)
     )]
     time_ms: u64,
-    #[cfg_attr(not(feature = "svg"), allow(unused_variables))] current_color: Color,
-    #[cfg_attr(not(feature = "svg"), allow(unused_variables))] fonts: Option<&FontsSnapshot>,
+    #[cfg_attr(not(feature = "svg-raster"), allow(unused_variables))] current_color: Color,
+    #[cfg_attr(not(feature = "svg-raster"), allow(unused_variables))] fonts: Option<&FontsSnapshot>,
   ) -> Result<RenderedImage, ImageError> {
     match self {
       ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Sampled {
@@ -631,7 +630,7 @@ impl ImageSource {
           source_scale,
         })
       }
-      #[cfg(feature = "svg")]
+      #[cfg(feature = "svg-raster")]
       ImageSource::Svg(svg) => Ok(RenderedImage::Rasterized(svg.rasterize_cached(
         width,
         height,
@@ -639,7 +638,7 @@ impl ImageSource {
         current_color,
         fonts,
       )?)),
-      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
+      #[cfg(all(feature = "svg-sizing", not(feature = "svg-raster")))]
       ImageSource::Svg(_) => Err(ImageError::SvgParseNotSupported),
     }
   }
@@ -729,7 +728,7 @@ pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError>
 ///
 /// The markup is resolved against the layer bounds and applied straight to
 /// the layer pixels; no render tree is built and nothing is re-encoded.
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-raster")]
 pub fn apply_svg_filter(
   layer: &mut [u8],
   width: u32,
@@ -841,7 +840,7 @@ pub enum ImageError {
   #[error("An error occurred while parsing an SVG image: {0}")]
   SvgParseError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
   /// SVG rendering is not supported in this build
-  #[cfg(not(feature = "svg"))]
+  #[cfg(not(feature = "svg-raster"))]
   #[error("SVG rendering is not supported in this build")]
   SvgParseNotSupported,
   /// The image source is unknown

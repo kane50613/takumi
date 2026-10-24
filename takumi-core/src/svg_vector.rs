@@ -1,20 +1,21 @@
-//! Flattens a usvg tree into backend-agnostic vector drawing ops so vector
-//! backends (PDF) can embed SVG images as real paths instead of bitmaps.
-//! Groups with filters, patterns and embedded raster images fall back to
-//! rasterization, mirroring krilla-svg.
+//! Flattens a usvg tree into backend-agnostic drawing ops, so every backend draws an SVG image
+//! from the same list. Filters, patterns and embedded bitmaps are ops too, and a backend that
+//! cannot express one draws around it.
 
-use std::iter::repeat_n;
+use std::{iter::repeat_n, sync::Arc};
 
-use tiny_skia::Pixmap;
-use tiny_skia_path::{NonZeroRect, PathSegment, Transform};
+use tiny_skia_path::{PathSegment, Transform};
 
+#[cfg(feature = "gif")]
+use crate::resources::image_decoder::decode_gif_frames;
 use crate::{
   geometry::{PathCommand, Point},
-  resvg::{
-    render_node,
-    usvg::{self, ClipPath, Group, ImageKind, Mask, MaskType, Node, Paint, PaintOrder, Tree},
+  resources::{glyph::ResolvedGlyph, image_buffer::ImageBuffer, image_decoder::decode_image},
+  resvg::usvg::{
+    self, ClipPath, Group, ImageKind, ImageRendering, Mask, MaskType, Node, Paint, PaintOrder,
+    Tree, filter::Filter,
   },
-  style::BlendMode,
+  style::{BlendMode, ImageScalingAlgorithm},
 };
 
 /// One flattened SVG drawing instruction, in SVG canvas coordinates.
@@ -40,6 +41,8 @@ pub enum SvgOp {
     /// `true` to mask by luminance, `false` by alpha.
     luminance: bool,
   },
+  /// Filters nested ops as one layer, in the coordinate space the layer is pushed in.
+  PushFilter(SvgFilters),
   /// Closes the innermost open `Push*` layer.
   Pop,
   /// Fills and/or strokes a path.
@@ -51,19 +54,41 @@ pub enum SvgOp {
     /// Stroke paint, if any.
     stroke: Option<SvgStrokeStyle>,
   },
-  /// Draws a pre-rasterized RGBA8 (straight alpha) region: the fallback for subtrees vector ops
-  /// cannot express (filters, embedded bitmaps).
-  Raster {
-    /// Un-premultiplied RGBA8 pixels.
-    rgba: Vec<u8>,
-    /// Pixel width.
-    width: u32,
-    /// Pixel height.
-    height: u32,
-    /// Placement rect `(x, y, w, h)` in the current coordinate space.
-    rect: (f32, f32, f32, f32),
+  /// Draws a bitmap over `(0, 0, width, height)` in the current coordinate space.
+  Image {
+    /// Bitmap pixels.
+    data: SvgImageData,
+    /// Width in user units.
+    width: f32,
+    /// Height in user units.
+    height: f32,
+    /// How the bitmap resamples.
+    rendering: ImageScalingAlgorithm,
   },
 }
+
+/// The pixels of a bitmap inside an SVG.
+#[derive(Debug, Clone)]
+pub enum SvgImageData {
+  /// PNG, JPEG or WebP bytes, as the SVG carries them.
+  Encoded(Arc<Vec<u8>>),
+  /// Decoded pixels, for a GIF's first frame or a bitmap glyph.
+  Bitmap(ImageBuffer),
+}
+
+impl SvgImageData {
+  /// The decoded pixels, or `None` when the bytes do not decode.
+  pub fn decode(&self) -> Option<ImageBuffer> {
+    match self {
+      Self::Encoded(bytes) => decode_image(bytes).ok(),
+      Self::Bitmap(buffer) => Some(buffer.clone()),
+    }
+  }
+}
+
+/// The SVG filters of one group, applied to its layer.
+#[derive(Debug, Clone)]
+pub struct SvgFilters(#[allow(dead_code)] pub(crate) Vec<Arc<Filter>>);
 
 /// Fill style for [`SvgOp::Draw`].
 #[derive(Debug, Clone)]
@@ -189,27 +214,20 @@ pub struct SvgGradientStop {
 }
 
 /// Flattens `tree` into vector ops in SVG canvas coordinates.
-pub(crate) fn flatten(tree: &Tree, raster_scale: f32) -> Vec<SvgOp> {
-  Flattener::new(raster_scale).flatten(tree.root())
+pub(crate) fn flatten(tree: &Tree) -> Vec<SvgOp> {
+  Flattener::default().flatten(tree.root())
 }
 
-/// One op list being written, at one raster scale.
+/// One op list being written.
+#[derive(Default)]
 struct Flattener {
-  raster_scale: f32,
   ops: Vec<SvgOp>,
 }
 
 impl Flattener {
-  fn new(raster_scale: f32) -> Self {
-    Self {
-      raster_scale,
-      ops: Vec::new(),
-    }
-  }
-
-  /// The ops `fill` writes into a fresh list at this scale: a mask, a clip mask or a pattern tile.
+  /// The ops `fill` writes into a fresh list: a mask, a clip mask or a pattern tile.
   fn nested(&self, fill: impl FnOnce(&mut Self)) -> Vec<SvgOp> {
-    let mut nested = Self::new(self.raster_scale);
+    let mut nested = Self::default();
 
     fill(&mut nested);
     nested.ops
@@ -221,11 +239,6 @@ impl Flattener {
   }
 
   fn push_group(&mut self, group: &Group) {
-    if !group.filters().is_empty() {
-      self.raster_fallback(group);
-      return;
-    }
-
     let mut pop_count = 0;
 
     if group.transform() != Transform::identity() {
@@ -255,6 +268,13 @@ impl Flattener {
 
     if group.opacity().get() < 1.0 {
       self.ops.push(SvgOp::PushOpacity(group.opacity().get()));
+      pop_count += 1;
+    }
+
+    if !group.filters().is_empty() {
+      self
+        .ops
+        .push(SvgOp::PushFilter(SvgFilters(group.filters().to_vec())));
       pop_count += 1;
     }
 
@@ -336,84 +356,16 @@ impl Flattener {
       return;
     }
 
-    // Encoded bitmap inside the SVG: let resvg draw it (decode, orientation,
-    // rendering mode) and embed the pixels.
-    let bbox = image.bounding_box();
+    if let Some(data) = image_data(image.kind()) {
+      let size = image.size();
 
-    self.raster_node(
-      &Node::Image(Box::new(image.clone())),
-      (bbox.x(), bbox.y(), bbox.width(), bbox.height()),
-    );
-  }
-
-  /// Rasterizes a group that vector ops cannot express (filters).
-  fn raster_fallback(&mut self, group: &Group) {
-    let Some(bbox) = group.layer_bounding_box().transform(group.transform()) else {
-      return;
-    };
-
-    self.raster_node(
-      &Node::Group(Box::new(group.clone())),
-      (bbox.x(), bbox.y(), bbox.width(), bbox.height()),
-    );
-  }
-
-  /// Renders `node` through resvg at the raster scale and emits the pixels
-  /// placed over `local_bbox`, the node's layer bounding box in the currently
-  /// open coordinate space (a group's own transform is not yet pushed when it
-  /// falls back, so it is part of the placement).
-  fn raster_node(&mut self, node: &Node, local_bbox: (f32, f32, f32, f32)) {
-    let (bbox_x, bbox_y, bbox_width, bbox_height) = local_bbox;
-    if bbox_width <= 0.0 || bbox_height <= 0.0 {
-      return;
+      self.ops.push(SvgOp::Image {
+        data,
+        width: size.width(),
+        height: size.height(),
+        rendering: scaling_algorithm(image.rendering_mode()),
+      });
     }
-
-    // Cap the fallback bitmap at 5000px on the long edge, like krilla-svg.
-    const PIXEL_THRESHOLD: f32 = 5000.0;
-    let scale = self
-      .raster_scale
-      .min(PIXEL_THRESHOLD / bbox_width)
-      .min(PIXEL_THRESHOLD / bbox_height);
-
-    let width = (bbox_width * scale).round().max(1.0) as u32;
-    let height = (bbox_height * scale).round().max(1.0) as u32;
-    let Some(mut pixmap) = Pixmap::new(width, height) else {
-      return;
-    };
-
-    // `resvg::render_node` pre-translates by the node's absolute layer bbox
-    // origin; counter it so the pixmap is filled from the local layer bbox
-    // instead (same trick as krilla-svg).
-    let abs_bbox = node.abs_layer_bounding_box();
-    let initial_transform = Transform::from_scale(scale, scale)
-      .pre_concat(Transform::from_translate(-bbox_x, -bbox_y))
-      .pre_concat(Transform::from_translate(
-        abs_bbox.as_ref().map_or(0.0, NonZeroRect::x),
-        abs_bbox.as_ref().map_or(0.0, NonZeroRect::y),
-      ));
-
-    render_node(node, initial_transform, &mut pixmap.as_mut());
-
-    let rgba = pixmap
-      .pixels()
-      .iter()
-      .flat_map(|pixel| {
-        let demultiplied = pixel.demultiply();
-        [
-          demultiplied.red(),
-          demultiplied.green(),
-          demultiplied.blue(),
-          demultiplied.alpha(),
-        ]
-      })
-      .collect();
-
-    self.ops.push(SvgOp::Raster {
-      rgba,
-      width,
-      height,
-      rect: (bbox_x, bbox_y, bbox_width, bbox_height),
-    });
   }
 
   /// Emits clip layers for `clip_path`; returns how many layers were pushed.
@@ -591,6 +543,40 @@ impl Flattener {
           height: rect.height(),
         }
       }
+    }
+  }
+}
+
+/// The pixels `kind` carries, or `None` for an SVG or a bitmap that does not decode.
+fn image_data(kind: &ImageKind) -> Option<SvgImageData> {
+  match kind {
+    ImageKind::JPEG(bytes) | ImageKind::PNG(bytes) | ImageKind::WEBP(bytes) => {
+      Some(SvgImageData::Encoded(Arc::clone(bytes)))
+    }
+    #[cfg(feature = "gif")]
+    ImageKind::GIF(bytes) => {
+      let mut first = None;
+
+      decode_gif_frames(bytes, 0, Some(1), None, |frame| first = Some(frame)).ok()?;
+      first.map(|frame| SvgImageData::Bitmap(Arc::unwrap_or_clone(frame)))
+    }
+    #[cfg(not(feature = "gif"))]
+    ImageKind::GIF(_) => None,
+    ImageKind::Glyph(glyph) => match glyph.as_ref() {
+      ResolvedGlyph::Bitmap(bitmap) => Some(SvgImageData::Bitmap(bitmap.image.clone())),
+      ResolvedGlyph::Outline(_) => None,
+    },
+    ImageKind::SVG(_) => None,
+  }
+}
+
+const fn scaling_algorithm(rendering: ImageRendering) -> ImageScalingAlgorithm {
+  match rendering {
+    ImageRendering::OptimizeQuality | ImageRendering::Smooth | ImageRendering::HighQuality => {
+      ImageScalingAlgorithm::Auto
+    }
+    ImageRendering::OptimizeSpeed | ImageRendering::CrispEdges | ImageRendering::Pixelated => {
+      ImageScalingAlgorithm::Pixelated
     }
   }
 }
