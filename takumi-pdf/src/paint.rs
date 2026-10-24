@@ -265,8 +265,8 @@ pub(crate) const fn krilla_fill_rule(rule: CoreFillRule) -> FillRule {
 }
 
 /// An affine in takumi-core's column order, `[a, b, c, d, e, f]`.
-pub(crate) fn krilla_transform([a, b, c, d, e, f]: [f32; 6]) -> Transform {
-  Transform::from_row(a, b, c, d, e, f)
+pub(crate) fn krilla_transform(Affine { a, b, c, d, x, y }: Affine) -> Transform {
+  Transform::from_row(a, b, c, d, x, y)
 }
 
 /// The inverse of [`krilla_transform`].

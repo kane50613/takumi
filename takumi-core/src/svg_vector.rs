@@ -18,14 +18,14 @@ use crate::{
     self, ClipPath, Group, ImageKind, ImageRendering, Mask, MaskType, Node, Paint, PaintOrder,
     Tree, filter::Filter,
   },
-  style::{BlendMode, ImageScalingAlgorithm},
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 
 /// One flattened SVG drawing instruction, in SVG canvas coordinates.
 #[derive(Debug, Clone)]
 pub enum SvgOp {
-  /// Applies an affine transform `(sx, ky, kx, sy, tx, ty)` to nested ops.
-  PushTransform([f32; 6]),
+  /// Applies an affine transform to nested ops.
+  PushTransform(Affine),
   /// Clips nested ops to a path.
   PushClip {
     /// Clip outline.
@@ -124,7 +124,7 @@ impl SvgFilters {
 #[derive(Debug, Clone)]
 pub struct SvgFill {
   /// Fill paint.
-  pub paint: SvgPaint,
+  pub paint: SvgOpPaint,
   /// Fill opacity in `0..=1`.
   pub opacity: f32,
   /// `true` for the even-odd fill rule, `false` for nonzero.
@@ -135,7 +135,7 @@ pub struct SvgFill {
 #[derive(Debug, Clone)]
 pub struct SvgStrokeStyle {
   /// Stroke paint.
-  pub paint: SvgPaint,
+  pub paint: SvgOpPaint,
   /// Stroke opacity in `0..=1`.
   pub opacity: f32,
   /// Stroke width in user units.
@@ -176,9 +176,9 @@ pub enum SvgLineJoin {
 
 /// Paint for fills and strokes.
 #[derive(Debug, Clone)]
-pub enum SvgPaint {
-  /// Solid sRGB color.
-  Color([u8; 3]),
+pub enum SvgOpPaint {
+  /// Opaque sRGB color.
+  Color(Color),
   /// Linear gradient from `start` to `end` in user space.
   Linear {
     /// Gradient line start.
@@ -205,8 +205,8 @@ pub enum SvgPaint {
   Pattern {
     /// Tile content, flattened recursively.
     ops: Vec<SvgOp>,
-    /// Pattern space transform `(sx, ky, kx, sy, tx, ty)`.
-    transform: [f32; 6],
+    /// Pattern space transform.
+    transform: Affine,
     /// Tile width.
     width: f32,
     /// Tile height.
@@ -217,8 +217,8 @@ pub enum SvgPaint {
 /// Parameters shared by both gradient kinds.
 #[derive(Debug, Clone)]
 pub struct SvgGradient {
-  /// Extra gradient transform `(sx, ky, kx, sy, tx, ty)`.
-  pub transform: [f32; 6],
+  /// Extra gradient transform.
+  pub transform: Affine,
   /// How the gradient extends past its bounds.
   pub spread: SvgSpreadMethod,
   /// Color stops, offsets ascending in `0..=1`.
@@ -241,8 +241,8 @@ pub enum SvgSpreadMethod {
 pub struct SvgGradientStop {
   /// Offset in `0..=1`.
   pub offset: f32,
-  /// sRGB color.
-  pub color: [u8; 3],
+  /// Opaque sRGB color.
+  pub color: Color,
   /// Stop opacity in `0..=1`.
   pub opacity: f32,
 }
@@ -289,7 +289,7 @@ impl Flattener {
     if group.transform() != Transform::identity() {
       self
         .ops
-        .push(SvgOp::PushTransform(transform_array(group.transform())));
+        .push(SvgOp::PushTransform(group.transform().into()));
       pop_count += 1;
     }
 
@@ -482,7 +482,7 @@ impl Flattener {
       if clip_path.transform() != Transform::identity() {
         mask
           .ops
-          .push(SvgOp::PushTransform(transform_array(clip_path.transform())));
+          .push(SvgOp::PushTransform(clip_path.transform().into()));
         pop_count += 1;
       }
       mask.push_group(clip_path.root());
@@ -554,10 +554,10 @@ impl Flattener {
     }
   }
 
-  fn convert_paint(&self, paint: &Paint) -> SvgPaint {
+  fn convert_paint(&self, paint: &Paint) -> SvgOpPaint {
     match paint {
-      Paint::Color(color) => SvgPaint::Color([color.red, color.green, color.blue]),
-      Paint::LinearGradient(linear) => SvgPaint::Linear {
+      Paint::Color(color) => SvgOpPaint::Color(Color([color.red, color.green, color.blue, 255])),
+      Paint::LinearGradient(linear) => SvgOpPaint::Linear {
         start: Point {
           x: linear.x1(),
           y: linear.y1(),
@@ -568,7 +568,7 @@ impl Flattener {
         },
         gradient: convert_gradient(linear.transform(), linear.spread_method(), linear.stops()),
       },
-      Paint::RadialGradient(radial) => SvgPaint::Radial {
+      Paint::RadialGradient(radial) => SvgOpPaint::Radial {
         center: Point {
           x: radial.cx(),
           y: radial.cy(),
@@ -587,9 +587,9 @@ impl Flattener {
           .transform()
           .pre_concat(Transform::from_translate(rect.x(), rect.y()));
 
-        SvgPaint::Pattern {
+        SvgOpPaint::Pattern {
           ops: self.nested(|tile| tile.push_group(pattern.root())),
-          transform: transform_array(transform),
+          transform: transform.into(),
           width: rect.width(),
           height: rect.height(),
         }
@@ -696,7 +696,7 @@ fn convert_gradient(
   stops: &[usvg::Stop],
 ) -> SvgGradient {
   SvgGradient {
-    transform: transform_array(transform),
+    transform: transform.into(),
     spread: match spread {
       usvg::SpreadMethod::Pad => SvgSpreadMethod::Pad,
       usvg::SpreadMethod::Reflect => SvgSpreadMethod::Reflect,
@@ -706,7 +706,7 @@ fn convert_gradient(
       .iter()
       .map(|stop| SvgGradientStop {
         offset: stop.offset().get(),
-        color: [stop.color().red, stop.color().green, stop.color().blue],
+        color: Color([stop.color().red, stop.color().green, stop.color().blue, 255]),
         opacity: stop.opacity().get(),
       })
       .collect(),
@@ -759,16 +759,5 @@ fn rect_commands(x: f32, y: f32, width: f32, height: f32) -> Vec<PathCommand> {
     }),
     PathCommand::LineTo(Point { x, y: y + height }),
     PathCommand::Close,
-  ]
-}
-
-fn transform_array(transform: Transform) -> [f32; 6] {
-  [
-    transform.sx,
-    transform.ky,
-    transform.kx,
-    transform.sy,
-    transform.tx,
-    transform.ty,
   ]
 }
