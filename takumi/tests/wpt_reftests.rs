@@ -1,4 +1,4 @@
-//! Runs the web-platform-tests CSS reftests: renders each test and its reference, and compares the
+//! Runs the web-platform-tests CSS and SVG reftests: renders each test and its reference, and compares the
 //! pixels as the WPT harness does.
 //! <https://web-platform-tests.org/writing-tests/reftests.html>
 //!
@@ -51,6 +51,9 @@ const VIEWPORT: (u32, u32) = (800, 600);
 /// pixels an inch.
 const PRINT_PAGE_AREA: (u32, u32) = (384, 192);
 
+/// The WPT directories the run discovers reftests in.
+const ROOTS: [&str; 2] = ["css", "svg"];
+
 /// The run reports progress every this many finished tests.
 const PROGRESS_EVERY: usize = 500;
 
@@ -81,7 +84,7 @@ fn wpt_reftests() {
     PathBuf::from,
   );
 
-  if !root.join("css").is_dir() {
+  if !ROOTS.iter().all(|suite| root.join(suite).is_dir()) {
     eprintln!(
       "no WPT checkout at {}; run scripts/wpt-checkout.sh",
       root.display()
@@ -92,7 +95,10 @@ fn wpt_reftests() {
 
   let only = env::var("WPT").ok();
   let runner = Runner::new(&root);
-  let discovered = reftests(&root.join("css"));
+  let discovered: Vec<PathBuf> = ROOTS
+    .iter()
+    .flat_map(|suite| reftests(&root.join(suite)))
+    .collect();
   let all: Vec<String> = discovered
     .iter()
     .map(|path| runner.relative(path))
@@ -403,7 +409,7 @@ impl Directory {
   }
 }
 
-/// Every reftest under `dir`: an HTML or XHTML file that links a reference, and is not one.
+/// Every reftest under `dir`: an HTML, XHTML, or SVG file that links a reference, and is not one.
 fn reftests(dir: &Path) -> Vec<PathBuf> {
   let mut documents = Vec::new();
   let mut pending = vec![dir.to_path_buf()];
@@ -428,7 +434,7 @@ fn reftests(dir: &Path) -> Vec<PathBuf> {
         continue;
       }
 
-      let is_document = ["html", "htm", "xht", "xhtml"]
+      let is_document = ["html", "htm", "xht", "xhtml", "svg"]
         .iter()
         .any(|extension| path.extension().is_some_and(|ext| ext == *extension));
       let stem = path.file_stem().unwrap_or_default().to_string_lossy();
@@ -483,10 +489,14 @@ fn changes_itself(source: &str) -> bool {
   })
 }
 
+/// The names a reference link takes: HTML's, and the XHTML-namespaced forms SVG tests use.
+const LINK_NAMES: [&str; 3] = ["link", "h:link", "html:link"];
+
 /// The references `source` links, each with whether the test must match it.
 fn references(source: &str) -> Vec<(String, bool)> {
-  tags(source, "link")
-    .into_iter()
+  LINK_NAMES
+    .iter()
+    .flat_map(|name| tags(source, name))
     .filter_map(|attributes| {
       let matches = match attributes.get("rel")?.as_str() {
         "match" => true,
@@ -494,7 +504,11 @@ fn references(source: &str) -> Vec<(String, bool)> {
         _ => return None,
       };
 
-      Some((attributes.get("href")?.clone(), matches))
+      let href = attributes
+        .get("href")
+        .or_else(|| attributes.get("xlink:href"))?;
+
+      Some((href.clone(), matches))
     })
     .collect()
 }
