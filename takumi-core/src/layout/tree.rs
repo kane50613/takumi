@@ -260,7 +260,8 @@ pub struct LayoutTree<'r> {
   /// context holds, by node, when one is.
   inline_containers: FxHashMap<usize, &'r RenderNode>,
   /// Each inline formatting context's prepared items, which every pass of one layout shares, as
-  /// Blink keeps them until `NeedsCollectInlines`.
+  /// Blink keeps them until `NeedsCollectInlines`. Unlike Blink, a streamed layout drops those of a
+  /// box it has not placed yet and prepares them again when it lays the box out.
   inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
   /// Each table's parts, gathered when the tree is built.
   tables: FxHashMap<usize, Rc<TableStructure>>,
@@ -294,8 +295,7 @@ pub struct LayoutTree<'r> {
   /// end.
   #[cfg(feature = "fragmentation")]
   releases: Option<Releases>,
-  /// The boxes that measured or prepared inline items since the last release, which drops that
-  /// data again for those layout has yet to place.
+  /// The boxes that measured or prepared inline items since `release_unplaced` last ran.
   #[cfg(feature = "fragmentation")]
   measured: RefCell<Vec<usize>>,
   /// The boxes that ended and were released, whose inline items and table parts nothing may read.
@@ -867,9 +867,7 @@ impl LayoutTree<'_> {
     self.release_unplaced();
   }
 
-  /// Drops what the boxes measured since the last release keep while layout has not placed them,
-  /// as a table measures all its rows on its first page. Laying them out computes it again. The
-  /// boxes laying out now keep theirs.
+  /// Drops the measures and inline items of the noted boxes that layout neither placed nor runs.
   fn release_unplaced(&mut self) {
     let mut measured = take(self.measured.get_mut());
 
@@ -885,9 +883,7 @@ impl LayoutTree<'_> {
       }
       state.cache.release_measures();
       self.inline_node_data.get_mut().remove(&index);
-      self.render_nodes[index]
-        .item_shapes
-        .forget_first_preparation();
+      self.render_nodes[index].item_shapes.clear();
     }
   }
 
@@ -898,8 +894,7 @@ impl LayoutTree<'_> {
     }
   }
 
-  /// Releases what unplaced boxes measured once that many are noted, so that a page that measures
-  /// a long table keeps no more than a batch of it.
+  /// Runs `release_unplaced` once a batch of boxes is noted, as one page can measure a whole table.
   pub(crate) fn release_unplaced_batch(&mut self) {
     const BATCH: usize = 4096;
 

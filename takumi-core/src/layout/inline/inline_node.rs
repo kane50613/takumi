@@ -163,16 +163,6 @@ impl ItemShapes {
     };
   }
 
-  /// Forgets that the items were prepared once, so preparing them again keeps no shapes.
-  #[cfg(feature = "fragmentation")]
-  pub(crate) fn forget_first_preparation(&self) {
-    let mut kept = self.0.borrow_mut();
-
-    if matches!(*kept, KeptShapes::PreparedOnce) {
-      *kept = KeptShapes::Unprepared;
-    }
-  }
-
   /// Forgets the kept shapes, which no longer hold once the tree may have changed.
   pub(crate) fn clear(&self) {
     self.0.take();
