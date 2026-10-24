@@ -2,6 +2,8 @@
 
 use std::ops::{Add, Sub};
 
+#[cfg(feature = "svg")]
+use tiny_skia::PathSegment;
 use tiny_skia::{Path, PathBuilder as TinyPathBuilder};
 use xxhash_rust::xxh3::Xxh3;
 
@@ -383,6 +385,55 @@ impl PathCommand {
     builder.finish()
   }
 
+  /// The closed rectangle at `x`, `y` of `width` by `height`.
+  #[cfg(feature = "svg")]
+  pub(crate) fn rectangle(x: f32, y: f32, width: f32, height: f32) -> Vec<Self> {
+    vec![
+      Self::MoveTo(Point::new(x, y)),
+      Self::LineTo(Point::new(x + width, y)),
+      Self::LineTo(Point::new(x + width, y + height)),
+      Self::LineTo(Point::new(x, y + height)),
+      Self::Close,
+    ]
+  }
+
+  /// The commands of a tiny-skia path.
+  #[cfg(feature = "svg")]
+  pub(crate) fn from_path(path: &Path) -> Vec<Self> {
+    let point = |point: tiny_skia::Point| Point::new(point.x, point.y);
+
+    path
+      .segments()
+      .map(|segment| match segment {
+        PathSegment::MoveTo(to) => Self::MoveTo(point(to)),
+        PathSegment::LineTo(to) => Self::LineTo(point(to)),
+        PathSegment::QuadTo(control, to) => Self::QuadTo(point(control), point(to)),
+        PathSegment::CubicTo(first, second, to) => {
+          Self::CubicTo(point(first), point(second), point(to))
+        }
+        PathSegment::Close => Self::Close,
+      })
+      .collect()
+  }
+
+  /// `paths` as tiny-skia's path builder normalizes them. None for commands that draw nothing.
+  #[cfg(feature = "svg")]
+  pub(crate) fn normalize(paths: &[Self]) -> Option<NormalizedPath> {
+    let path = Self::build_path(paths)?;
+    let edges = |bounds: tiny_skia::Rect| Rect {
+      left: bounds.left(),
+      right: bounds.right(),
+      top: bounds.top(),
+      bottom: bounds.bottom(),
+    };
+
+    Some(NormalizedPath {
+      commands: Self::from_path(&path),
+      bounds: edges(path.compute_tight_bounds()?),
+      control_bounds: edges(path.bounds()),
+    })
+  }
+
   /// A digest of `paths`, which the same commands always give.
   pub fn digest(paths: &[Self]) -> u64 {
     let mut h = Xxh3::new();
@@ -430,6 +481,16 @@ impl PathCommand {
       Self::Close => Self::Close,
     }
   }
+}
+
+/// A path as tiny-skia's builder normalizes it, with its bounds.
+#[cfg(feature = "svg")]
+pub(crate) struct NormalizedPath {
+  pub(crate) commands: Vec<PathCommand>,
+  /// The tight bounds of the outline.
+  pub(crate) bounds: Rect<f32>,
+  /// The bounds of the points, control points included.
+  pub(crate) control_bounds: Rect<f32>,
 }
 
 /// Push-style sugar over a [`PathCommand`] list, shared by the geometry and rasterization path

@@ -419,8 +419,27 @@ impl fmt::Display for Num {
   }
 }
 
-/// Reads path data text byte by byte, after svgtypes' `Stream`.
-struct Scanner<'a> {
+impl PathData {
+  /// The points of a `points` attribute: pairs of numbers, up to the first thing that is not one.
+  #[cfg(feature = "svg")]
+  pub(crate) fn parse_points(text: &str) -> Vec<Point<f32>> {
+    let mut scanner = Scanner::new(text);
+    let mut points = Vec::new();
+
+    while !scanner.at_end() {
+      let Some((x, y)) = scanner.pair() else {
+        break;
+      };
+
+      points.push(single((x, y)));
+    }
+
+    points
+  }
+}
+
+/// Reads the numbers of an SVG attribute byte by byte, after svgtypes' `Stream`.
+pub(crate) struct Scanner<'a> {
   bytes: &'a [u8],
   position: usize,
 }
@@ -448,28 +467,55 @@ struct ArcSegment {
 }
 
 impl<'a> Scanner<'a> {
-  fn new(text: &'a str) -> Self {
+  pub(crate) fn new(text: &'a str) -> Self {
     Self {
       bytes: text.as_bytes(),
       position: 0,
     }
   }
 
-  fn at_end(&self) -> bool {
+  pub(crate) fn at_end(&self) -> bool {
     self.position >= self.bytes.len()
   }
 
-  fn peek(&self) -> Option<u8> {
+  pub(crate) fn peek(&self) -> Option<u8> {
     self.bytes.get(self.position).copied()
   }
 
-  fn skip_spaces(&mut self) {
+  pub(crate) fn skip_spaces(&mut self) {
     while self
       .peek()
       .is_some_and(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
     {
       self.position += 1;
     }
+  }
+
+  /// The run of ASCII letters, digits, `-` and `_` at the cursor.
+  #[cfg(feature = "svg-sizing")]
+  pub(crate) fn identifier(&mut self) -> &'a str {
+    let start = self.position;
+
+    while self
+      .peek()
+      .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+      self.position += 1;
+    }
+
+    str::from_utf8(&self.bytes[start..self.position]).unwrap_or_default()
+  }
+
+  /// Consumes `byte` when it is next.
+  #[cfg(feature = "svg-sizing")]
+  pub(crate) fn accept(&mut self, byte: u8) -> bool {
+    let found = self.peek() == Some(byte);
+
+    if found {
+      self.position += 1;
+    }
+
+    found
   }
 
   fn skip_digits(&mut self) {
@@ -479,7 +525,7 @@ impl<'a> Scanner<'a> {
   }
 
   /// A number, where `e` not followed by `m` or `x` starts an exponent.
-  fn number(&mut self) -> Option<f64> {
+  pub(crate) fn number(&mut self) -> Option<f64> {
     self.skip_spaces();
 
     let start = self.position;
@@ -527,7 +573,7 @@ impl<'a> Scanner<'a> {
   }
 
   /// A number followed by its optional comma separator.
-  fn list_number(&mut self) -> Option<f64> {
+  pub(crate) fn list_number(&mut self) -> Option<f64> {
     if self.at_end() {
       return None;
     }
@@ -540,7 +586,7 @@ impl<'a> Scanner<'a> {
     Some(number)
   }
 
-  fn skip_comma(&mut self) {
+  pub(crate) fn skip_comma(&mut self) {
     if self.peek() == Some(b',') {
       self.position += 1;
     }
@@ -564,7 +610,7 @@ impl<'a> Scanner<'a> {
     Some(flag)
   }
 
-  fn pair(&mut self) -> Option<(f64, f64)> {
+  pub(crate) fn pair(&mut self) -> Option<(f64, f64)> {
     Some((self.list_number()?, self.list_number()?))
   }
 

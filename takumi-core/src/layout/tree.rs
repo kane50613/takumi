@@ -2781,6 +2781,11 @@ impl RenderContext {
       style.push(StyleDeclaration::direction(dir), false);
     }
 
+    // Blink's `StyleResolver::MatchPresentationalHints`.
+    if let Some(presentation) = node_layers.presentation {
+      style.append_block(presentation.declarations);
+    }
+
     for declarations in matched_declarations.layered_normal() {
       style.merge_matched_block(declarations);
     }
@@ -2862,7 +2867,7 @@ impl RenderContext {
 
   /// Resolves a child's style and sizing from its matched declarations, sharing the style a box
   /// with the same preset resolved to from the same declarations under an equal parent.
-  fn resolve_child_style(
+  pub(crate) fn resolve_child_style(
     &self,
     node: &mut Node,
     source_order: usize,

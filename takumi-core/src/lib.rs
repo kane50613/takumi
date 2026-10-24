@@ -71,6 +71,9 @@ pub mod viewport;
   deprecated
 )]
 mod resvg;
+/// SVG documents laid out through the CSS cascade.
+#[cfg(feature = "svg")]
+pub(crate) mod svg;
 #[cfg(feature = "svg-raster")]
 mod svg_drawing;
 #[cfg(feature = "svg")]

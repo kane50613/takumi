@@ -27,6 +27,8 @@ use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 #[cfg(feature = "svg")]
+use crate::layout::node::Node;
+#[cfg(feature = "svg")]
 use crate::resources::font::Fonts;
 #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
@@ -40,6 +42,8 @@ use crate::resvg::apply_filters_to_layer;
 use crate::resvg::usvg::{Options, Tree};
 #[cfg(feature = "svg-raster")]
 use crate::resvg::usvg::{Transform, filters_from_markup};
+#[cfg(feature = "svg")]
+use crate::svg::SvgDocument;
 #[cfg(feature = "svg-raster")]
 use crate::svg_drawing::SvgDrawing;
 #[cfg(feature = "svg")]
@@ -101,6 +105,10 @@ pub struct SvgSource {
   /// `currentColor` and the root element sets no `color` of its own.
   #[cfg(feature = "svg")]
   uses_current_color: bool,
+  /// The document drawn through the CSS cascade, none where it holds text or a filter, which the
+  /// parse-time tree still draws.
+  #[cfg(feature = "svg")]
+  document: Option<Arc<SvgDocument>>,
   /// Whether the markup contains `<text`, so rendering re-parses with fonts.
   #[cfg(feature = "svg")]
   has_text: bool,
@@ -131,6 +139,11 @@ impl SvgSource {
   #[cfg(not(feature = "svg"))]
   pub fn dimensions(&self) -> (f32, f32) {
     (self.sizing.width, self.sizing.height)
+  }
+
+  #[cfg(not(feature = "svg"))]
+  fn document_bytes(&self) -> usize {
+    0
   }
 
   /// The original SVG markup, for embedding directly in a vector backend.
@@ -192,8 +205,25 @@ impl SvgSource {
     Cow::Owned(markup)
   }
 
+  /// What the document drawn through the cascade retains, estimated from its node count.
+  #[cfg(feature = "svg")]
+  fn document_bytes(&self) -> usize {
+    self
+      .document
+      .as_ref()
+      .map_or(0, |document| document.node_count() * size_of::<Node>())
+  }
+
   /// The SVG's drawing ops, in SVG canvas coordinates.
   pub fn vector_ops(&self, current_color: Color, fonts: Option<&FontsSnapshot>) -> Vec<SvgOp> {
+    if let Some(ops) = self
+      .document
+      .as_ref()
+      .and_then(|document| document.ops(current_color, fonts))
+    {
+      return ops;
+    }
+
     match self.tree_with_current_color(current_color, fonts) {
       Some(tree) => flatten(&tree),
       None => {
@@ -253,9 +283,17 @@ impl SvgSource {
     // Set during parsing whenever a `currentColor` finds no `color` attribute
     // on its ancestors, so it also catches entity-encoded values a source-text
     // scan would miss.
-    let uses_current_color = options.current_color_used.load(Ordering::Relaxed);
+    let cascade_document = SvgDocument::parse(src)
+      .ok()
+      .filter(|document| !document.needs_legacy_renderer())
+      .map(Arc::new);
+    let uses_current_color = options.current_color_used.load(Ordering::Relaxed)
+      || cascade_document
+        .as_ref()
+        .is_some_and(|document| document.uses_current_color());
 
     Ok(SvgSource {
+      document: cascade_document,
       has_text: document
         .descendants()
         .any(|node| node.tag_name().name() == "text"),
@@ -475,7 +513,7 @@ impl ImageSource {
       // Markup plus a parsed-tree estimate; rasterized pixmaps are weighted
       // separately as their own sized entries.
       #[cfg(feature = "svg-sizing")]
-      Self::Svg(svg) => svg.source.len() * 3,
+      Self::Svg(svg) => svg.source.len() * 3 + svg.document_bytes(),
     }
   }
 

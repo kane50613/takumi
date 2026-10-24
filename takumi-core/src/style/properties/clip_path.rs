@@ -6,8 +6,8 @@ use crate::{
   geometry::{Point, Size},
   path_data::PathData,
   style::{
-    FromCss, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair, ToCss, ValueError,
-    impl_css_enum, unexpected_token,
+    FromCss, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair, SvgResource,
+    ToCss, ValueError, impl_css_enum, unexpected_token,
   },
 };
 
@@ -176,6 +176,8 @@ pub enum BasicShape {
   Polygon(PolygonShape),
   /// path() function
   Path(PathShape),
+  /// url() reference to an SVG `clipPath` element
+  Url(SvgResource),
 }
 
 impl MakeComputed for BasicShape {
@@ -185,7 +187,7 @@ impl MakeComputed for BasicShape {
       BasicShape::Circle(shape) => shape.make_computed(sizing),
       BasicShape::Ellipse(shape) => shape.make_computed(sizing),
       BasicShape::Polygon(shape) => shape.make_computed(sizing),
-      BasicShape::Path(_) => {}
+      BasicShape::Path(_) | BasicShape::Url(_) => {}
     }
   }
 }
@@ -263,8 +265,12 @@ impl<'i> FromCss<'i> for BasicShape {
     let token = parser.next()?;
 
     match token {
+      Token::UnquotedUrl(url) => Ok(BasicShape::Url(SvgResource::new(url.as_ref()))),
       Token::Function(function) => {
         match_ignore_ascii_case! { &function,
+          "url" => parser.parse_nested_block(|input| {
+            Ok(BasicShape::Url(SvgResource::new(input.expect_string()?.as_ref())))
+          }),
           "inset" => parser.parse_nested_block(|input| {
             let inset = Sides::from_css(input)?;
             let border_radius = if input.try_parse(|input| input.expect_ident_matching("round")).is_ok() {
@@ -330,6 +336,7 @@ impl<'i> FromCss<'i> for BasicShape {
     "<ellipse()>",
     "<polygon()>",
     "<path()>",
+    "<url()>",
   ];
 }
 
@@ -406,6 +413,7 @@ impl ToCss for BasicShape {
         serialize_string(&shape.path, dest)?;
         dest.write_char(')')
       }
+      Self::Url(resource) => resource.to_css(dest),
     }
   }
 }
@@ -551,6 +559,18 @@ mod tests {
         fill_rule: None,
         path: "M 10 10 L 90 90".into(),
       }))
+    );
+  }
+
+  #[test]
+  fn test_parse_url_reference() {
+    assert_eq!(
+      BasicShape::from_css_str("url(#clip)"),
+      Ok(BasicShape::Url(SvgResource::new("#clip")))
+    );
+    assert_eq!(
+      BasicShape::from_css_str("url('#clip')").map(|shape| shape.to_css_string()),
+      Ok("url(\"#clip\")".to_owned())
     );
   }
 

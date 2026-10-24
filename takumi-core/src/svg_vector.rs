@@ -4,7 +4,7 @@ use std::{iter::repeat_n, sync::Arc};
 
 #[cfg(feature = "svg-raster")]
 use tiny_skia::Rect;
-use tiny_skia_path::{PathSegment, Transform};
+use tiny_skia_path::Transform;
 
 #[cfg(feature = "svg-raster")]
 use crate::resvg::apply_filter;
@@ -348,7 +348,7 @@ impl Flattener {
     if !path.is_visible() {
       return;
     }
-    let commands = path_commands(path.data());
+    let commands = PathCommand::from_path(path.data());
     if commands.is_empty() {
       return;
     }
@@ -397,7 +397,7 @@ impl Flattener {
     if let ImageKind::SVG(tree) = image.kind() {
       let size = tree.size();
       self.ops.push(SvgOp::PushClip {
-        path: rect_commands(0.0, 0.0, size.width(), size.height()),
+        path: PathCommand::rectangle(0.0, 0.0, size.width(), size.height()),
         evenodd: false,
       });
       self.push_group(tree.root());
@@ -509,7 +509,7 @@ impl Flattener {
       let rect = mask.rect();
 
       flattener.ops.push(SvgOp::PushClip {
-        path: rect_commands(rect.x(), rect.y(), rect.width(), rect.height()),
+        path: PathCommand::rectangle(rect.x(), rect.y(), rect.width(), rect.height()),
         evenodd: false,
       });
       pop_count += 1;
@@ -649,7 +649,7 @@ fn extend_clip_commands(group: &Group, transform: &Transform, commands: &mut Vec
         if path.is_visible()
           && let Some(transformed) = path.data().clone().transform(*transform)
         {
-          commands.extend(path_commands(&transformed));
+          commands.extend(PathCommand::from_path(&transformed));
         }
       }
       node => {
@@ -732,32 +732,4 @@ fn convert_blend_mode(blend: usvg::BlendMode) -> BlendMode {
     usvg::BlendMode::Color => BlendMode::Color,
     usvg::BlendMode::Luminosity => BlendMode::Luminosity,
   }
-}
-
-fn path_commands(path: &tiny_skia_path::Path) -> Vec<PathCommand> {
-  let point = |p: tiny_skia_path::Point| Point { x: p.x, y: p.y };
-
-  path
-    .segments()
-    .map(|segment| match segment {
-      PathSegment::MoveTo(p) => PathCommand::MoveTo(point(p)),
-      PathSegment::LineTo(p) => PathCommand::LineTo(point(p)),
-      PathSegment::QuadTo(c, p) => PathCommand::QuadTo(point(c), point(p)),
-      PathSegment::CubicTo(c1, c2, p) => PathCommand::CubicTo(point(c1), point(c2), point(p)),
-      PathSegment::Close => PathCommand::Close,
-    })
-    .collect()
-}
-
-fn rect_commands(x: f32, y: f32, width: f32, height: f32) -> Vec<PathCommand> {
-  vec![
-    PathCommand::MoveTo(Point { x, y }),
-    PathCommand::LineTo(Point { x: x + width, y }),
-    PathCommand::LineTo(Point {
-      x: x + width,
-      y: y + height,
-    }),
-    PathCommand::LineTo(Point { x, y: y + height }),
-    PathCommand::Close,
-  ]
 }

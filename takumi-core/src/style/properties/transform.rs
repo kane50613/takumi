@@ -6,6 +6,8 @@ use std::{
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 use tiny_skia::Transform as TinyTransform;
 
+#[cfg(feature = "svg")]
+use crate::path_data::Scanner;
 use crate::style::{
   Angle, Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseResult,
   PercentageNumber, SizingContext, ToCss, discrete, lerp, unexpected_token,
@@ -167,6 +169,65 @@ impl MulAssign<Affine> for Affine {
 }
 
 impl Affine {
+  #[cfg(feature = "svg")]
+  /// tiny-skia's `Transform::pre_concat` arithmetic, which keeps the SVG goldens: exact identity
+  /// checks, a scale-and-translate fast path, and `f64` products otherwise.
+  pub(crate) fn concat(self, other: Self) -> Self {
+    let exact_identity =
+      |transform: Self| transform.to_cols_array() == Self::IDENTITY.to_cols_array();
+    let has_skew = |transform: Self| transform.b != 0.0 || transform.c != 0.0;
+    let mul_add_mul = |a: f32, b: f32, c: f32, d: f32| {
+      (f64::from(a) * f64::from(b) + f64::from(c) * f64::from(d)) as f32
+    };
+
+    if exact_identity(self) {
+      other
+    } else if exact_identity(other) {
+      self
+    } else if !has_skew(self) && !has_skew(other) {
+      Self {
+        a: self.a * other.a,
+        b: 0.0,
+        c: 0.0,
+        d: self.d * other.d,
+        x: self.a * other.x + self.x,
+        y: self.d * other.y + self.y,
+      }
+    } else {
+      Self {
+        a: mul_add_mul(self.a, other.a, self.c, other.b),
+        b: mul_add_mul(self.b, other.a, self.d, other.b),
+        c: mul_add_mul(self.a, other.c, self.c, other.d),
+        d: mul_add_mul(self.b, other.c, self.d, other.d),
+        x: mul_add_mul(self.a, other.x, self.c, other.y) + self.x,
+        y: mul_add_mul(self.b, other.x, self.d, other.y) + self.y,
+      }
+    }
+  }
+
+  #[cfg(feature = "svg")]
+  /// The rotation by `degrees` by tiny-skia's arithmetic, which keeps the SVG goldens.
+  pub(crate) fn rotation_like_skia(degrees: f32) -> Self {
+    TinyTransform::from_rotate(degrees).into()
+  }
+
+  #[cfg(feature = "svg")]
+  /// The inverse by tiny-skia's arithmetic, which keeps the SVG goldens.
+  pub(crate) fn invert_like_skia(self) -> Option<Self> {
+    TinyTransform::from(self).invert().map(Self::from)
+  }
+
+  #[cfg(feature = "svg")]
+  /// Whether every entry is finite and the axes keep a scale, as tiny-skia's `Transform::is_valid`.
+  pub(crate) fn is_valid(self) -> bool {
+    let scale_x = (self.a * self.a + self.c * self.c).sqrt();
+    let scale_y = (self.b * self.b + self.d * self.d).sqrt();
+
+    self.to_cols_array().iter().all(|entry| entry.is_finite())
+      && scale_x.abs() > f32::EPSILON
+      && scale_y.abs() > f32::EPSILON
+  }
+
   /// Converts the affine transform to a column-major array.
   pub fn to_cols_array(&self) -> [f32; 6] {
     [self.a, self.b, self.c, self.d, self.x, self.y]
@@ -409,6 +470,141 @@ impl<'i> FromCss<'i> for Transforms {
   const VALID_TOKENS: &'static [&'static str] = Transform::VALID_TOKENS;
 }
 
+#[cfg(feature = "svg")]
+impl Transforms {
+  /// The matrix an SVG `transform` attribute names, which writes its lists without units. Follows
+  /// svgtypes' `Transform::from_str`, multiplying in `f64` before the single narrowing.
+  pub(crate) fn from_svg_attribute(text: &str) -> Option<Self> {
+    type Matrix = [f64; 6];
+
+    let multiply = |left: Matrix, right: Matrix| -> Matrix {
+      [
+        left[0] * right[0] + left[2] * right[1],
+        left[1] * right[0] + left[3] * right[1],
+        left[0] * right[2] + left[2] * right[3],
+        left[1] * right[2] + left[3] * right[3],
+        left[0] * right[4] + left[2] * right[5] + left[4],
+        left[1] * right[4] + left[3] * right[5] + left[5],
+      ]
+    };
+    let mut scanner = Scanner::new(text);
+    let mut matrix: Matrix = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+    loop {
+      scanner.skip_spaces();
+
+      if scanner.at_end() {
+        break;
+      }
+
+      let name = scanner.identifier();
+
+      scanner.skip_spaces();
+
+      if !scanner.accept(b'(') {
+        return None;
+      }
+
+      let tokens: Vec<Matrix> = match name {
+        "matrix" => vec![[
+          scanner.list_number()?,
+          scanner.list_number()?,
+          scanner.list_number()?,
+          scanner.list_number()?,
+          scanner.list_number()?,
+          scanner.list_number()?,
+        ]],
+        "translate" => {
+          let x = scanner.list_number()?;
+
+          scanner.skip_spaces();
+
+          let y = if scanner.peek() == Some(b')') {
+            0.0
+          } else {
+            scanner.list_number()?
+          };
+
+          vec![[1.0, 0.0, 0.0, 1.0, x, y]]
+        }
+        "scale" => {
+          let x = scanner.list_number()?;
+
+          scanner.skip_spaces();
+
+          let y = if scanner.peek() == Some(b')') {
+            x
+          } else {
+            scanner.list_number()?
+          };
+
+          vec![[x, 0.0, 0.0, y, 0.0, 0.0]]
+        }
+        "rotate" => {
+          let angle = scanner.list_number()?.to_radians();
+          let rotation = [
+            angle.cos(),
+            angle.sin(),
+            -angle.sin(),
+            angle.cos(),
+            0.0,
+            0.0,
+          ];
+
+          scanner.skip_spaces();
+
+          if scanner.peek() == Some(b')') {
+            vec![rotation]
+          } else {
+            let cx = scanner.list_number()?;
+            let cy = scanner.list_number()?;
+
+            vec![
+              [1.0, 0.0, 0.0, 1.0, cx, cy],
+              rotation,
+              [1.0, 0.0, 0.0, 1.0, -cx, -cy],
+            ]
+          }
+        }
+        "skewX" => vec![[
+          1.0,
+          0.0,
+          scanner.list_number()?.to_radians().tan(),
+          1.0,
+          0.0,
+          0.0,
+        ]],
+        "skewY" => vec![[
+          1.0,
+          scanner.list_number()?.to_radians().tan(),
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+        ]],
+        _ => return None,
+      };
+
+      scanner.skip_spaces();
+
+      if !scanner.accept(b')') {
+        return None;
+      }
+
+      scanner.skip_spaces();
+      scanner.skip_comma();
+
+      for token in tokens {
+        matrix = multiply(matrix, token);
+      }
+    }
+
+    let [a, b, c, d, x, y] = matrix.map(|entry| entry as f32);
+
+    Some(Self::from([Transform::Matrix(Affine { a, b, c, d, x, y })]))
+  }
+}
+
 impl MakeComputed for Transforms {
   fn make_computed(&mut self, sizing: &SizingContext) {
     self.0.make_computed(sizing);
@@ -579,6 +775,41 @@ impl<'i> FromCss<'i> for Transform {
 mod tests {
   use super::*;
   use crate::style::FromCssStr;
+
+  #[cfg(feature = "svg")]
+  fn svg_matrix(text: &str) -> Option<[f32; 6]> {
+    match Transforms::from_svg_attribute(text)?.first()? {
+      Transform::Matrix(affine) => Some(affine.to_cols_array()),
+      _ => None,
+    }
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn an_svg_attribute_multiplies_its_list_into_one_matrix() {
+    assert_eq!(
+      svg_matrix("translate(10 15) translate(0 5)"),
+      Some([1.0, 0.0, 0.0, 1.0, 10.0, 20.0])
+    );
+    assert_eq!(svg_matrix("scale(2)"), Some([2.0, 0.0, 0.0, 2.0, 0.0, 0.0]));
+    assert_eq!(
+      svg_matrix("translate(5), scale(2 3)"),
+      Some([2.0, 0.0, 0.0, 3.0, 5.0, 0.0])
+    );
+    assert_eq!(svg_matrix(""), Some([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]));
+    assert_eq!(
+      svg_matrix("rotate(90 10 10)").map(|matrix| matrix.map(f32::round)),
+      Some([0.0, 1.0, -1.0, 0.0, 20.0, 0.0])
+    );
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn an_svg_attribute_with_a_bad_item_is_invalid() {
+    assert_eq!(svg_matrix("translate(10) bogus(1)"), None);
+    assert_eq!(svg_matrix("translate(10"), None);
+    assert_eq!(svg_matrix("scale()"), None);
+  }
 
   #[test]
   fn test_transform_from_str() {
