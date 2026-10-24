@@ -2,7 +2,7 @@
 //! percentage size without a `viewBox` stays at the 100 px default instead of the content bounds.
 
 use cssparser::Parser;
-use roxmltree::{Document, Node, ParsingOptions};
+use roxmltree::{Document, ParsingOptions};
 use thiserror::Error;
 
 use crate::{
@@ -79,13 +79,15 @@ impl SvgSize {
       return Err(SvgSizeError::InvalidRoot);
     }
 
-    Self::from_root(root)
+    Self::from_root(|name| root.attribute(name))
   }
 
-  pub(crate) fn from_root(root: Node) -> Result<Self, SvgSizeError> {
+  /// The size the root element's attributes, which `attribute` reads by name, give.
+  pub(crate) fn from_root<'a>(
+    attribute: impl Fn(&str) -> Option<&'a str>,
+  ) -> Result<Self, SvgSizeError> {
     let length = |name| {
-      root
-        .attribute(name)
+      attribute(name)
         .and_then(|text| Length::from_css_str(text).ok())
         .filter(|length| !matches!(length, Length::Auto))
     };
@@ -106,8 +108,7 @@ impl SvgSize {
         },
       )
     });
-    let view_box = root
-      .attribute("viewBox")
+    let view_box = attribute("viewBox")
       .and_then(ViewBox::parse)
       .map(|view_box| (view_box.width, view_box.height));
 
