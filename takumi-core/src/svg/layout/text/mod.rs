@@ -21,7 +21,7 @@ use self::{
 use super::{Container, Fill, Scope, Stroke, Styled, SvgLayout};
 use crate::{
   geometry::PathCommand,
-  style::{AlignmentBaseline, DominantBaseline, TextAnchor},
+  style::{AlignmentBaseline, BaselineShift, DominantBaseline, TextAnchor},
 };
 
 /// The characters of a `text` element, ready to lay out.
@@ -108,6 +108,28 @@ struct BaselineOffset {
   length: f32,
   /// The superscripts less the subscripts, each of which is half the height of the font.
   superscripts: i32,
+}
+
+impl BaselineOffset {
+  /// The `baseline-shift` of an element stacked on that of the elements around it.
+  fn new(styled: &Styled, around: Self) -> Self {
+    let font_size = styled.sizing().font_size;
+
+    match styled.style().svg_misc_data.baseline_shift {
+      BaselineShift::Sub => Self {
+        superscripts: around.superscripts - 1,
+        ..around
+      },
+      BaselineShift::Super => Self {
+        superscripts: around.superscripts + 1,
+        ..around
+      },
+      BaselineShift::Length(length) => Self {
+        length: around.length + length.to_px(styled.sizing(), font_size),
+        ..around
+      },
+    }
+  }
 }
 
 /// The fill and stroke a decoration line is painted with.

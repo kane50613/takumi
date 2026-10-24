@@ -588,6 +588,16 @@ impl PathCommand {
     h.digest()
   }
 
+  /// The command with its points mapped through `transform`.
+  #[cfg(feature = "svg")]
+  pub(crate) fn transformed(self, transform: Affine) -> Self {
+    self.map_points(|point| {
+      let (x, y) = transform.transform_point(point.x, point.y);
+
+      Point::new(x, y)
+    })
+  }
+
   /// Maps every point the command carries through `f`.
   pub fn map_points(self, mut f: impl FnMut(Point<f32>) -> Point<f32>) -> Self {
     match self {

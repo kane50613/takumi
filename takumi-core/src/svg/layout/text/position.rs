@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
   geometry::{PathCommand, Point, Rect},
-  style::{Affine, Angle, TextAnchor, TextDecorationLines},
+  style::{Affine, Angle, TextDecorationLines},
   svg::layout::approx_eq::ApproxEq,
 };
 
@@ -222,7 +222,7 @@ impl Text {
     characters: &ByteCharacters,
     clusters: &mut [GlyphCluster],
   ) -> (f32, f32) {
-    let mut x = anchor_offset(chunk.anchor, clusters_length(clusters));
+    let mut x = chunk.anchor.offset(clusters_length(clusters));
     let mut y = 0.0;
 
     for cluster in clusters {
@@ -260,9 +260,8 @@ impl Text {
     let mut last_y = 0.0;
     let mut dy = 0.0;
     // In the path mode, the `x` of a chunk is an additional offset along the path.
-    let start_offset = chunk.x.unwrap_or(0.0)
-      + path.start_offset
-      + anchor_offset(chunk.anchor, clusters_length(clusters));
+    let start_offset =
+      chunk.x.unwrap_or(0.0) + path.start_offset + chunk.anchor.offset(clusters_length(clusters));
     let normals = self.collect_normals(chunk, characters, clusters, path, start_offset);
 
     for (cluster, normal) in clusters.iter_mut().zip(normals) {
@@ -493,14 +492,6 @@ impl SpanStyle {
   }
 }
 
-fn anchor_offset(anchor: TextAnchor, text_width: f32) -> f32 {
-  match anchor {
-    TextAnchor::Start => 0.0,
-    TextAnchor::Middle => -text_width / 2.0,
-    TextAnchor::End => -text_width,
-  }
-}
-
 fn clusters_length(clusters: &[GlyphCluster]) -> f32 {
   clusters
     .iter()
@@ -587,13 +578,6 @@ fn decoration_line(
   spans: &[DecorationSpan],
   transform: Affine,
 ) -> Option<(Vec<PathCommand>, Rect<f32>)> {
-  let map = |affine: Affine| {
-    move |point: Point<f32>| {
-      let (x, y) = affine.transform_point(point.x, point.y);
-
-      Point::new(x, y)
-    }
-  };
   let mut commands = Vec::new();
 
   for span in spans {
@@ -606,13 +590,13 @@ fn decoration_line(
     commands.extend(
       PathCommand::rectangle(0.0, -thickness / 2.0, span.width, thickness)
         .into_iter()
-        .map(|command| command.map_points(map(placement))),
+        .map(|command| command.transformed(placement)),
     );
   }
 
   let placed: Vec<PathCommand> = commands
     .into_iter()
-    .map(|command| command.map_points(map(transform)))
+    .map(|command| command.transformed(transform))
     .collect();
   let outline = PathCommand::normalize(&placed)?;
 

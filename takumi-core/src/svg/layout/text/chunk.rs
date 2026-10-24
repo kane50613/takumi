@@ -13,9 +13,9 @@ use super::{
 use crate::{
   font_style::SizedFontStyle,
   fonts::font_description::FontDescription,
-  geometry::{PathCommand, Point},
+  geometry::PathCommand,
   layout::node::NodeKind,
-  style::{Affine, BaselineShift, DominantBaseline, Length, TextDecorationLines, Visibility},
+  style::{DominantBaseline, Length, TextDecorationLines, Visibility},
   svg::{element::SvgElementKind, length::LengthAxis},
 };
 
@@ -243,7 +243,7 @@ impl TextTree {
       let element = TextElement {
         kind: element_kind,
         decorations: self.decorations(layout, scope, &styled, Some(&parent_decorations)),
-        baseline_offset: baseline_offset(&styled, parent_offset),
+        baseline_offset: BaselineOffset::new(&styled, parent_offset),
         hidden: parent_hidden || !layout.is_visible_element(&styled, scope),
         styled,
         space: own_space,
@@ -686,26 +686,6 @@ impl TextTree {
   }
 }
 
-/// The `baseline-shift` of an element stacked on that of the elements around it.
-fn baseline_offset(styled: &Styled, around: BaselineOffset) -> BaselineOffset {
-  let font_size = styled.sizing().font_size;
-
-  match styled.style().svg_misc_data.baseline_shift {
-    BaselineShift::Sub => BaselineOffset {
-      superscripts: around.superscripts - 1,
-      ..around
-    },
-    BaselineShift::Super => BaselineOffset {
-      superscripts: around.superscripts + 1,
-      ..around
-    },
-    BaselineShift::Length(length) => BaselineOffset {
-      length: around.length + length.to_px(styled.sizing(), font_size),
-      ..around
-    },
-  }
-}
-
 impl<'a> SvgLayout<'a> {
   /// The decoration lines the elements above the one at `index` declare.
   fn outer_decorations(&self, index: usize) -> TextDecorationLines {
@@ -799,18 +779,12 @@ impl<'a> SvgLayout<'a> {
     } else {
       commands
         .into_iter()
-        .map(|command| command.map_points(|point| transformed(transform, point)))
+        .map(|command| command.transformed(transform))
         .collect()
     };
 
     Some(Rc::new(TextPathShape::new(commands)))
   }
-}
-
-fn transformed(transform: Affine, point: Point<f32>) -> Point<f32> {
-  let (x, y) = transform.transform_point(point.x, point.y);
-
-  Point::new(x, y)
 }
 
 /// `text` with its line breaks and tabs as spaces and, unless `space` preserves them, each run of

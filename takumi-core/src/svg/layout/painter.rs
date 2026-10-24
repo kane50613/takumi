@@ -363,13 +363,12 @@ impl Container {
       match child {
         LayoutObject::Shape(shape) => {
           if shape.visible {
-            commands.extend(shape.commands.iter().map(|command| {
-              command.map_points(|point| {
-                let (x, y) = transform.transform_point(point.x, point.y);
-
-                Point::new(x, y)
-              })
-            }));
+            commands.extend(
+              shape
+                .commands
+                .iter()
+                .map(|command| command.transformed(transform)),
+            );
           }
         }
         LayoutObject::Container(child) => {

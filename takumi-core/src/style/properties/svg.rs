@@ -491,6 +491,18 @@ pub enum TextAnchor {
   End,
 }
 
+impl TextAnchor {
+  /// Where text `width` long starts relative to its anchor.
+  #[cfg(feature = "svg")]
+  pub(crate) fn offset(self, width: f32) -> f32 {
+    match self {
+      Self::Start => 0.0,
+      Self::Middle => -width / 2.0,
+      Self::End => -width,
+    }
+  }
+}
+
 impl_css_enum!(
   TextAnchor,
   "start" => TextAnchor::Start,

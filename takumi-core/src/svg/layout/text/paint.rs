@@ -12,7 +12,7 @@ use super::{
   shape::PositionedGlyph,
 };
 use crate::{
-  geometry::{PathCommand, Point, Rect},
+  geometry::{PathCommand, Rect},
   resources::{
     font::FontsSnapshot,
     glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
@@ -331,12 +331,6 @@ impl LaidOutSpan {
 fn place(commands: &[PathCommand], transform: Affine) -> Vec<PathCommand> {
   commands
     .iter()
-    .map(|command| {
-      command.map_points(|point| {
-        let (x, y) = transform.transform_point(point.x, point.y);
-
-        Point::new(x, y)
-      })
-    })
+    .map(|command| command.transformed(transform))
     .collect()
 }
