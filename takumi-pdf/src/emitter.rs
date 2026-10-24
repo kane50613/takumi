@@ -1522,9 +1522,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
       return Some((node, BoxFrame::new(layout, origin), 0));
     }
 
-    self
-      .surface
-      .push_transform(&krilla_transform(relative.to_cols_array()));
+    self.surface.push_transform(&krilla_transform(relative));
     Some((node, BoxFrame::new(layout, CorePoint::ZERO), 1))
   }
 
@@ -1634,9 +1632,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
         y: relative.y,
       }
     } else {
-      self
-        .surface
-        .push_transform(&krilla_transform(relative.to_cols_array()));
+      self.surface.push_transform(&krilla_transform(relative));
       pushed += 1;
       self.current = clip.transform;
       CorePoint::ZERO
@@ -1824,9 +1820,7 @@ impl SurfaceDevice<'_, '_> {
     let artifact = self.artifact && self.stack.is_empty();
 
     if !flat {
-      self
-        .surface
-        .push_transform(&krilla_transform(transform.to_cols_array()));
+      self.surface.push_transform(&krilla_transform(transform));
     }
     if artifact {
       self.surface.start_tagged(ARTIFACT);
@@ -2623,7 +2617,7 @@ fn draw_alpha(
     })
     .collect();
 
-  surface.push_transform(&krilla_transform(transform.to_cols_array()));
+  surface.push_transform(&krilla_transform(transform));
   surface.draw_image(KrillaImage::from_rgba8(data, width, height), size);
   surface.pop();
 }

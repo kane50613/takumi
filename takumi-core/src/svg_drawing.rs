@@ -13,9 +13,9 @@ use tiny_skia::{
 use crate::{
   geometry::PathCommand,
   resources::image::within_raster_pixel_budget,
-  style::{BlendMode, ImageScalingAlgorithm},
+  style::{BlendMode, Color, ImageScalingAlgorithm},
   svg_vector::{
-    SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint,
+    SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
     SvgSpreadMethod, SvgStrokeStyle,
   },
 };
@@ -100,7 +100,7 @@ impl SvgDrawing {
         SvgOp::PushTransform(transform) => {
           let outer = target.transform;
 
-          target.transform = outer.pre_concat(tiny_transform(*transform));
+          target.transform = outer.pre_concat(Transform::from(*transform));
           self.run(ops, target);
           target.transform = outer;
         }
@@ -329,7 +329,7 @@ impl SvgDrawing {
   /// Hands `draw` the tiny-skia paint for `paint`, a pattern tile drawn at `transform`'s scale.
   fn with_paint(
     &self,
-    paint: &SvgPaint,
+    paint: &SvgOpPaint,
     opacity: f32,
     transform: Transform,
     anti_alias: bool,
@@ -342,10 +342,10 @@ impl SvgDrawing {
     };
 
     match paint {
-      SvgPaint::Color([red, green, blue]) => {
+      SvgOpPaint::Color(Color([red, green, blue, _])) => {
         tiny.set_color_rgba8(*red, *green, *blue, to_u8(opacity));
       }
-      SvgPaint::Linear {
+      SvgOpPaint::Linear {
         start,
         end,
         gradient,
@@ -355,14 +355,14 @@ impl SvgDrawing {
           (end.x, end.y).into(),
           gradient_stops(gradient, opacity),
           spread_mode(gradient.spread),
-          tiny_transform(gradient.transform),
+          Transform::from(gradient.transform),
         ) else {
           return;
         };
 
         tiny.shader = shader;
       }
-      SvgPaint::Radial {
+      SvgOpPaint::Radial {
         center,
         radius,
         focal,
@@ -376,20 +376,20 @@ impl SvgDrawing {
           *radius,
           gradient_stops(gradient, opacity),
           spread_mode(gradient.spread),
-          tiny_transform(gradient.transform),
+          Transform::from(gradient.transform),
         ) else {
           return;
         };
 
         tiny.shader = shader;
       }
-      SvgPaint::Pattern {
+      SvgOpPaint::Pattern {
         ops,
         transform: pattern_transform,
         width,
         height,
       } => {
-        let pattern_transform = tiny_transform(*pattern_transform);
+        let pattern_transform = Transform::from(*pattern_transform);
         let (scale_x, scale_y) = transform.pre_concat(pattern_transform).get_scale();
         let tile_width = (width * scale_x).round() as u32;
         let tile_height = (height * scale_y).round() as u32;
@@ -518,9 +518,9 @@ fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {
       GradientStop::new(
         stop.offset,
         TinyColor::from_rgba8(
-          stop.color[0],
-          stop.color[1],
-          stop.color[2],
+          stop.color.0[0],
+          stop.color.0[1],
+          stop.color.0[2],
           to_u8(stop.opacity * opacity),
         ),
       )
@@ -538,11 +538,6 @@ const fn spread_mode(spread: SvgSpreadMethod) -> SpreadMode {
 
 fn to_u8(opacity: f32) -> u8 {
   (opacity.clamp(0.0, 1.0) * 255.0).round() as u8
-}
-
-/// A transform in an op's `(sx, ky, kx, sy, tx, ty)` order.
-fn tiny_transform([sx, ky, kx, sy, tx, ty]: [f32; 6]) -> Transform {
-  Transform::from_row(sx, ky, kx, sy, tx, ty)
 }
 
 /// `blend` in tiny-skia, with the dodge and burn modes the canvas blends on its own.

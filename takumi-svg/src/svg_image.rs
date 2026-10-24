@@ -10,7 +10,7 @@ use std::{
 use takumi_core::{
   path_data::path_data,
   resources::image::{
-    SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
+    SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint, SvgSpreadMethod,
     SvgStrokeStyle, sniff_mime, to_data_url,
   },
   style::{Affine, FillRule, ImageScalingAlgorithm, ToCss},
@@ -28,7 +28,7 @@ pub(crate) fn is_vector(ops: &[SvgOp]) -> bool {
       .map(|fill| &fill.paint)
       .chain(stroke.iter().map(|stroke| &stroke.paint))
       .all(|paint| match paint {
-        SvgPaint::Pattern { ops, .. } => is_vector(ops),
+        SvgOpPaint::Pattern { ops, .. } => is_vector(ops),
         _ => true,
       }),
     _ => true,
@@ -43,7 +43,7 @@ impl SvgDocument {
     for op in ops {
       match op {
         SvgOp::PushTransform(transform) => {
-          groups.push(self.begin_group(affine(*transform), 1.0, None, None)?);
+          groups.push(self.begin_group(*transform, 1.0, None, None)?);
         }
         SvgOp::PushClip { path, evenodd } => {
           let clip = self.clip_path(
@@ -155,10 +155,10 @@ impl SvgDocument {
   }
 
   /// The `fill` or `stroke` value for `paint`, defining its gradient or pattern first.
-  fn svg_paint(&mut self, paint: &SvgPaint) -> io::Result<String> {
+  fn svg_paint(&mut self, paint: &SvgOpPaint) -> io::Result<String> {
     match paint {
-      SvgPaint::Color([red, green, blue]) => Ok(Rgba([*red, *green, *blue, 255]).hex()),
-      SvgPaint::Linear {
+      SvgOpPaint::Color(color) => Ok(Rgba(color.0).hex()),
+      SvgOpPaint::Linear {
         start,
         end,
         gradient,
@@ -173,7 +173,7 @@ impl SvgDocument {
         ],
         gradient,
       ),
-      SvgPaint::Radial {
+      SvgOpPaint::Radial {
         center,
         radius,
         focal,
@@ -193,7 +193,7 @@ impl SvgDocument {
         }
         self.svg_gradient("radialGradient", "rg", geometry, gradient)
       }
-      SvgPaint::Pattern {
+      SvgOpPaint::Pattern {
         ops,
         transform,
         width,
@@ -206,7 +206,7 @@ impl SvgDocument {
           &[
             ("id", id.into()),
             ("patternUnits", "userSpaceOnUse".into()),
-            ("patternTransform", matrix(*transform).into()),
+            ("patternTransform", matrix_attr(*transform).into()),
             ("width", num(*width).into()),
             ("height", num(*height).into()),
           ],
@@ -227,12 +227,12 @@ impl SvgDocument {
     mut geometry: Vec<(&str, Cow<'_, str>)>,
     gradient: &SvgGradient,
   ) -> io::Result<String> {
-    let transform = affine(gradient.transform);
+    let transform = gradient.transform;
     let stops: Vec<GradientStop> = gradient
       .stops
       .iter()
       .map(|stop| {
-        let [red, green, blue] = stop.color;
+        let [red, green, blue, _] = stop.color.0;
 
         GradientStop {
           offset: stop.offset,
@@ -279,15 +279,6 @@ fn image_href(data: &SvgImageData) -> Option<String> {
       .encode_png()
       .map(|png| to_data_url("image/png", &png)),
   }
-}
-
-/// `matrix(...)` for an op's `(sx, ky, kx, sy, tx, ty)` transform.
-fn matrix(transform: [f32; 6]) -> String {
-  matrix_attr(affine(transform))
-}
-
-fn affine([a, b, c, d, x, y]: [f32; 6]) -> Affine {
-  Affine { a, b, c, d, x, y }
 }
 
 fn fill_rule(evenodd: bool) -> FillRule {
