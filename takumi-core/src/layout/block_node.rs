@@ -199,6 +199,12 @@ impl LayoutCache {
     self.released += count;
   }
 
+  /// Whether the box ended and dropped everything it kept.
+  #[cfg(test)]
+  pub(crate) fn is_released(&self) -> bool {
+    self.released == Self::ALL_RELEASED
+  }
+
   /// Drops every layout, measure, and intrinsic size, for a box with no fragment to come.
   pub(crate) fn release_all(&mut self) {
     self.released = Self::ALL_RELEASED;
@@ -301,14 +307,15 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Whether laying `node` out resumes the layouts of its children that ended, which flex, grid,
-  /// and table layouts take to size their items again.
+  /// Whether laying `node` out again reads what its child `child` kept after `child` ended: flex and
+  /// grid layouts size every item again, and a table measures its captions for each fragment.
   #[cfg(feature = "fragmentation")]
-  pub(crate) fn relays_out_ended_children(&self, node: NodeId) -> bool {
-    matches!(
-      self.algorithm(node),
-      Algorithm::Table | Algorithm::Flex | Algorithm::Grid
-    )
+  pub(crate) fn relays_out_ended_child(&self, node: NodeId, child: NodeId) -> bool {
+    match self.algorithm(node) {
+      Algorithm::Flex | Algorithm::Grid => true,
+      Algorithm::Table => self.layout_style(child).display == Display::TableCaption,
+      Algorithm::Hidden | Algorithm::Replaced | Algorithm::Block => false,
+    }
   }
 
   fn algorithm(&self, node: NodeId) -> Algorithm {
