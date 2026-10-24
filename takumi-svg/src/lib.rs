@@ -803,6 +803,7 @@ impl SvgDocument {
           }
           references.push(self.reference_filter(reference)?);
         }
+        Filter::Url(_) => {}
         other => pending.push(other),
       }
     }
