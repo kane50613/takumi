@@ -10,8 +10,8 @@ use super::{
 use crate::{
   geometry::Size,
   style::{
-    ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style, StyleBaseData,
-    StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
+    ComputedStyle, CssInput, CustomProperties, DeferredDeclaration, SizingContext, Style,
+    StyleBaseData, StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
   },
   viewport::Viewport,
 };
@@ -1872,4 +1872,231 @@ fn length_unit_returns_matching_lengths() {
   assert_eq!(4.0.rem(), Length::Rem(4.0));
   assert_eq!(5.0.vw(), Length::Vw(5.0));
   assert_eq!(6.0.vh(), Length::Vh(6.0));
+}
+
+fn svg_style(name: &'static str, value: &'static str) -> ComputedStyle {
+  inherited_style_from_pairs([(name, value)], &ComputedStyle::default())
+}
+
+#[test]
+fn svg_properties_start_at_their_initial_values() {
+  let style = ComputedStyle::default();
+
+  assert_eq!(
+    style.svg_fill_data.fill,
+    SvgPaint::Color(ColorInput::Value(Color::black()))
+  );
+  assert_eq!(style.svg_stroke_data.stroke, SvgPaint::None);
+  assert_eq!(style.svg_stroke_data.stroke_width, Length::Px(1.0));
+  assert_eq!(
+    style.svg_stroke_data.stroke_miterlimit,
+    StrokeMiterlimit::new(4.0)
+  );
+  assert_eq!(style.svg_stroke_data.stroke_linecap, LineCap::Butt);
+  assert_eq!(style.svg_geometry_data.rx, Length::Auto);
+  assert_eq!(style.svg_geometry_data.d, None);
+  assert_eq!(
+    style.svg_inherited_data.color_interpolation_filters,
+    ColorInterpolation::LinearRgb
+  );
+  assert_eq!(
+    style.svg_inherited_data.color_interpolation,
+    ColorInterpolation::Srgb
+  );
+  assert_eq!(
+    style.svg_stop_data.stop_color,
+    ColorInput::Value(Color::black())
+  );
+  assert_eq!(
+    style.svg_misc_data.lighting_color,
+    ColorInput::Value(Color::white())
+  );
+  assert_eq!(style.svg_misc_data.baseline_shift, BaselineShift::default());
+}
+
+#[test]
+fn svg_paint_parses_urls_with_fallbacks_and_context_keywords() {
+  let red = ColorInput::Value(Color([255, 0, 0, 255]));
+
+  assert_eq!(
+    svg_style("fill", "url(#g) red").svg_fill_data.fill,
+    SvgPaint::Url(SvgResource::new("#g"), Some(red))
+  );
+  assert_eq!(
+    svg_style("fill", "url(#g) none").svg_fill_data.fill,
+    SvgPaint::Url(SvgResource::new("#g"), None)
+  );
+  assert_eq!(
+    svg_style("stroke", "context-stroke").svg_stroke_data.stroke,
+    SvgPaint::ContextStroke
+  );
+  assert_eq!(
+    svg_style("stroke", "currentcolor").svg_stroke_data.stroke,
+    SvgPaint::Color(ColorInput::CurrentColor)
+  );
+  assert_eq!(SvgResource::new("#g").fragment(), Some("g"));
+}
+
+#[test]
+fn svg_paint_serializes_back_to_css() {
+  for css in ["none", "context-fill", "url(\"#g\") rgb(255, 0, 0)"] {
+    let parsed = SvgPaint::from_css_str(css);
+
+    assert_eq!(
+      parsed.map(|paint| paint.to_css_string()),
+      Ok(css.to_owned()),
+      "{css}"
+    );
+  }
+}
+
+#[test]
+fn stroke_dasharray_takes_commas_and_spaces_but_no_negatives() {
+  let style = svg_style("stroke-dasharray", "1, 2 3");
+  let dashes = style
+    .svg_stroke_data
+    .stroke_dasharray
+    .as_ref()
+    .map(|dasharray| dasharray.lengths().len());
+
+  assert_eq!(dashes, Some(3));
+  assert!(parse_declarations_is_err("stroke-dasharray", "-1"));
+  assert!(
+    PropertyId::from_kebab_case("stroke-dasharray")
+      .parse_css_input_declarations(CssInput::Str("1,".into()))
+      .is_err()
+  );
+  assert!(parse_declarations_is_err("stroke-width", "-1"));
+  assert!(parse_declarations_is_err("stroke-miterlimit", "-1"));
+}
+
+#[test]
+fn paint_order_completes_the_phases_it_names() {
+  assert_eq!(
+    svg_style("paint-order", "stroke")
+      .svg_inherited_data
+      .paint_order,
+    PaintOrder::StrokeFillMarkers
+  );
+  assert_eq!(
+    svg_style("paint-order", "markers fill")
+      .svg_inherited_data
+      .paint_order,
+    PaintOrder::MarkersFillStroke
+  );
+  assert!(parse_declarations_is_err("paint-order", "fill fill"));
+  assert_eq!(
+    PaintOrder::StrokeFillMarkers.to_css_string(),
+    "stroke fill markers"
+  );
+  assert_eq!(
+    PaintOrder::MarkersFillStroke.phases(),
+    [PaintPhase::Markers, PaintPhase::Fill, PaintPhase::Stroke]
+  );
+}
+
+#[test]
+fn d_takes_complete_path_data_only() {
+  let style = svg_style("d", "path(\"M0 0 L 10 10\")");
+
+  assert_eq!(
+    style
+      .svg_geometry_data
+      .d
+      .as_ref()
+      .map(|path| path.commands().len()),
+    Some(2)
+  );
+  assert!(parse_declarations_is_err("d", "path(\"M0 0 X\")"));
+  assert_eq!(svg_style("d", "none").svg_geometry_data.d, None);
+  assert_eq!(
+    SvgPath::from_css_str("path(\"M0 0 L 10 10 Z\")").map(|path| path.to_css_string()),
+    Ok("path(\"M 0 0 L 10 10 Z\")".to_owned())
+  );
+}
+
+#[test]
+fn marker_sets_the_three_longhands() {
+  let style = svg_style("marker", "url(#m)");
+  let marker = Some(SvgResource::new("#m"));
+
+  assert_eq!(style.svg_resources_data.marker_start, marker);
+  assert_eq!(style.svg_resources_data.marker_mid, marker);
+  assert_eq!(style.svg_resources_data.marker_end, marker);
+}
+
+#[test]
+fn baseline_shift_takes_keywords_and_lengths() {
+  assert_eq!(
+    svg_style("baseline-shift", "super")
+      .svg_misc_data
+      .baseline_shift,
+    BaselineShift::Super
+  );
+  assert_eq!(
+    svg_style("baseline-shift", "baseline")
+      .svg_misc_data
+      .baseline_shift,
+    BaselineShift::default()
+  );
+  assert_eq!(
+    svg_style("baseline-shift", "3px")
+      .svg_misc_data
+      .baseline_shift,
+    BaselineShift::Length(Length::Px(3.0))
+  );
+}
+
+#[test]
+fn inherited_svg_properties_pass_down_and_the_rest_do_not() {
+  let parent = svg_style("fill", "red");
+  let child = inherited_style_from_pairs([], &parent);
+
+  assert_eq!(child.svg_fill_data.fill, parent.svg_fill_data.fill);
+
+  let stopped = svg_style("stop-color", "red");
+  let child = inherited_style_from_pairs([], &stopped);
+
+  assert_eq!(
+    child.svg_stop_data.stop_color,
+    ColorInput::Value(Color::black())
+  );
+}
+
+fn round_trip<T: FromCssStr + ToCss>(css: &str) -> Option<String> {
+  T::from_css_str(css).ok().map(|value| value.to_css_string())
+}
+
+#[test]
+fn svg_keywords_round_trip() {
+  assert_eq!(
+    round_trip::<ShapeRendering>("crispedges").as_deref(),
+    Some("crispEdges")
+  );
+  assert_eq!(
+    round_trip::<ColorInterpolation>("LINEARRGB").as_deref(),
+    Some("linearRGB")
+  );
+  assert_eq!(
+    round_trip::<TextAnchor>("middle").as_deref(),
+    Some("middle")
+  );
+  assert_eq!(
+    round_trip::<DominantBaseline>("text-after-edge").as_deref(),
+    Some("text-after-edge")
+  );
+  assert_eq!(
+    round_trip::<AlignmentBaseline>("before-edge").as_deref(),
+    Some("before-edge")
+  );
+  assert_eq!(
+    round_trip::<VectorEffect>("non-scaling-stroke").as_deref(),
+    Some("non-scaling-stroke")
+  );
+  assert_eq!(round_trip::<MaskType>("alpha").as_deref(), Some("alpha"));
+  assert_eq!(round_trip::<LineCap>("square").as_deref(), Some("square"));
+  assert_eq!(
+    round_trip::<StrokeDasharray>("1px, 2px 3px").as_deref(),
+    Some("1px, 2px, 3px")
+  );
 }

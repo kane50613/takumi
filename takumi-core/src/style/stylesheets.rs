@@ -1516,6 +1516,32 @@ define_style! {
       opacity: PercentageNumber,
       transform: Option<Transforms>,
       transform_origin: PositionValue = PositionValue::center(),
+      alignment_baseline: AlignmentBaseline,
+      mask_type: MaskType,
+      vector_effect: VectorEffect,
+    }
+    /// Blink's `svg->geometry` field group: the lengths and path SVG shapes are laid out from.
+    svg_geometry_data: StyleSvgGeometryData {
+      x: Length = Length::zero(),
+      y: Length = Length::zero(),
+      cx: Length = Length::zero(),
+      cy: Length = Length::zero(),
+      r: Length where non_negative = true = Length::zero(),
+      rx: Length where non_negative = true = Length::Auto,
+      ry: Length where non_negative = true = Length::Auto,
+      d: Option<SvgPath>,
+    }
+    /// Blink's `svg->stop` field group.
+    svg_stop_data: StyleSvgStopData {
+      stop_color: ColorInput = ColorInput::Value(Color::black()),
+      stop_opacity: PercentageNumber,
+    }
+    /// Blink's `svg->svgmisc` field group.
+    svg_misc_data: StyleSvgMiscData {
+      baseline_shift: BaselineShift,
+      flood_color: ColorInput = ColorInput::Value(Color::black()),
+      flood_opacity: PercentageNumber,
+      lighting_color: ColorInput = ColorInput::Value(Color::white()),
     }
     /// Blink's `misc` field group: its rarely set non-inherited fields under eight bits.
     misc_data: StyleMiscData {
@@ -1668,6 +1694,37 @@ define_style! {
       webkit_text_stroke_width: Option<Length> where inherit = true,
       widows: MinLines where inherit = true,
     }
+    /// Blink's `svginherited` field group.
+    svg_inherited_data: StyleSvgInheritedData {
+      color_interpolation: ColorInterpolation where inherit = true,
+      color_interpolation_filters: ColorInterpolation where inherit = true = ColorInterpolation::LinearRgb,
+      dominant_baseline: DominantBaseline where inherit = true,
+      fill_rule: FillRule where inherit = true,
+      paint_order: PaintOrder where inherit = true,
+      shape_rendering: ShapeRendering where inherit = true,
+      text_anchor: TextAnchor where inherit = true,
+    }
+    /// Blink's `svginherited->fill` field group.
+    svg_fill_data: StyleSvgFillData {
+      fill: SvgPaint where inherit = true = SvgPaint::Color(ColorInput::Value(Color::black())),
+      fill_opacity: PercentageNumber where inherit = true,
+    }
+    /// Blink's `svginherited->stroke` field group, but for `stroke-linejoin`, which `misc_inherited_data` keeps.
+    svg_stroke_data: StyleSvgStrokeData {
+      stroke: SvgPaint where inherit = true = SvgPaint::None,
+      stroke_width: Length where inherit = true where non_negative = true = Length::Px(1.0),
+      stroke_opacity: PercentageNumber where inherit = true,
+      stroke_dasharray: Option<StrokeDasharray> where inherit = true,
+      stroke_dashoffset: Length where inherit = true = Length::zero(),
+      stroke_linecap: LineCap where inherit = true,
+      stroke_miterlimit: StrokeMiterlimit where inherit = true,
+    }
+    /// Blink's `svginherited->resources` field group.
+    svg_resources_data: StyleSvgResourcesData {
+      marker_start: Option<SvgResource> where inherit = true,
+      marker_mid: Option<SvgResource> where inherit = true,
+      marker_end: Option<SvgResource> where inherit = true,
+    }
   }
   transient_longhands {
     margin_inline_start: Length = Length::zero() => (box_data.margin_left, box_data.margin_right),
@@ -1692,6 +1749,11 @@ define_style! {
       target.push(StyleDeclaration::list_style_type(value.style_type));
       target.push(StyleDeclaration::list_style_position(value.position));
       target.push(StyleDeclaration::list_style_image(value.image));
+    },
+    marker: Option<SvgResource> => [MarkerStart, MarkerMid, MarkerEnd] |value, target| {
+      target.push(StyleDeclaration::marker_start(value.clone()));
+      target.push(StyleDeclaration::marker_mid(value.clone()));
+      target.push(StyleDeclaration::marker_end(value));
     },
     offset: OffsetShorthand => [OffsetPosition, OffsetPath, OffsetDistance, OffsetRotate, OffsetAnchor] |value, target| {
       target.push(StyleDeclaration::offset_position(value.position));
