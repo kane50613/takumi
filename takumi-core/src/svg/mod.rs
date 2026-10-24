@@ -2,7 +2,10 @@
 //! `SVGImage`. An element's style comes from its `<style>` rules, its `style` attribute, and its
 //! presentation attributes, and its layout from the shapes, containers, and resources it names.
 
+mod approx_eq;
 mod element;
+#[cfg(feature = "svg-raster")]
+pub(crate) mod filter;
 mod layout;
 mod length;
 mod style;
@@ -17,7 +20,10 @@ use std::{
 use roxmltree::{Node as XmlNode, NodeType};
 
 use self::element::SvgElementKind;
+#[cfg(feature = "svg-raster")]
+use self::filter::SvgFilter;
 use crate::{
+  geometry::Size,
   layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   resources::{
     font::FontsSnapshot,
@@ -50,7 +56,8 @@ pub(crate) struct SvgDocument {
   /// The element an `id` names for every other reference, which takes the last.
   pub(super) last_ids: HashMap<Box<str>, usize>,
   pub(super) size: SvgSize,
-  legacy_only: bool,
+  /// The size of the canvas, which the extent of the content gives when the root sets none.
+  canvas: Size<f32>,
   mentions_current_color: bool,
   has_color: bool,
 }
@@ -75,12 +82,8 @@ impl SvgDocument {
     let mut builder = TreeBuilder::default();
     let root_node = builder.element(root, None, 0);
 
-    Ok(Self {
+    let mut document = Self {
       stylesheet: Arc::new(StyleSheet::parse_list_loosy(&sheets)),
-      legacy_only: builder.legacy_only
-        || sheets
-          .iter()
-          .any(|sheet| contains_ignore_case(sheet, "filter")),
       mentions_current_color: builder.mentions_current_color
         || sheets
           .iter()
@@ -90,8 +93,27 @@ impl SvgDocument {
       elements: builder.elements,
       first_ids: builder.first_ids,
       last_ids: builder.last_ids,
+      canvas: Size::new(size.width, size.height),
       size,
-    })
+    };
+
+    document.canvas = layout::SvgLayout::new(&document, Color([0, 0, 0, 255]), None).canvas_size();
+
+    Ok(document)
+  }
+
+  /// The size of the canvas in pixels.
+  pub(crate) fn canvas_size(&self) -> (f32, f32) {
+    (self.canvas.width, self.canvas.height)
+  }
+
+  /// Whether the document holds a `text` element, which draws with the registered fonts.
+  #[cfg(feature = "svg-raster")]
+  pub(crate) fn has_text(&self) -> bool {
+    self
+      .elements
+      .iter()
+      .any(|element| element.kind == SvgElementKind::Text)
   }
 
   /// Every node in the preorder the selector matcher numbers them by.
@@ -120,12 +142,6 @@ impl SvgDocument {
       .collect()
   }
 
-  /// Whether the document needs the legacy renderer: it holds a filter, which this pipeline
-  /// does not draw yet.
-  pub(crate) fn needs_legacy_renderer(&self) -> bool {
-    self.legacy_only
-  }
-
   /// Whether the rendering depends on the host `color`: the markup names `currentColor` and the
   /// root sets no `color` of its own.
   pub(crate) fn uses_current_color(&self) -> bool {
@@ -137,9 +153,14 @@ impl SvgDocument {
     self.elements.len()
   }
 
+  /// The filter the element `id` names, laid out for content of `width` by `height`.
+  #[cfg(feature = "svg-raster")]
+  pub(crate) fn filter(&self, id: &str, width: f32, height: f32) -> Option<Arc<SvgFilter>> {
+    layout::SvgLayout::new(self, Color([0, 0, 0, 255]), None).filter_by_id(id, width, height)
+  }
+
   /// The drawing ops of the document in canvas coordinates, with `current_color` the `color` the
-  /// root inherits from its host. `None` when the document holds something this pipeline cannot
-  /// draw.
+  /// root inherits from its host.
   pub(crate) fn ops(
     &self,
     current_color: Color,
@@ -166,7 +187,6 @@ struct TreeBuilder {
   elements: Vec<ElementEntry>,
   first_ids: HashMap<Box<str>, usize>,
   last_ids: HashMap<Box<str>, usize>,
-  legacy_only: bool,
   mentions_current_color: bool,
 }
 
@@ -230,7 +250,6 @@ impl TreeBuilder {
           self.last_ids.insert(value.into(), index);
         }
         (None | Some(SVG_NAMESPACE), "style") => {
-          self.legacy_only |= contains_ignore_case(value, "filter");
           self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
           node = node.with_style(Style::from(StyleDeclarationBlock::parse_loosy(value)));
         }
@@ -249,10 +268,6 @@ impl TreeBuilder {
           }
         }
         (None | Some(SVG_NAMESPACE), name) => {
-          if name == "filter" && value != "none" {
-            self.legacy_only = true;
-          }
-
           self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
           attributes.insert(name.into(), value.into());
         }
@@ -262,13 +277,6 @@ impl TreeBuilder {
 
     if let Some(href) = href {
       attributes.insert("href".into(), href.into());
-    }
-
-    if matches!(
-      kind,
-      SvgElementKind::Filter | SvgElementKind::FilterPrimitive
-    ) {
-      self.legacy_only = true;
     }
 
     if let Some(preset) = kind.preset(parent.is_none()) {

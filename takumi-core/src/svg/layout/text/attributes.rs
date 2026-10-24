@@ -47,7 +47,7 @@ impl PositionLists {
       y: lengths("y"),
       dx: lengths("dx"),
       dy: lengths("dy"),
-      rotate: layout.attribute(index, "rotate").and_then(number_list),
+      rotate: layout.number_list(index, "rotate").map(Into::into),
     }
   }
 }
@@ -159,19 +159,4 @@ fn length_list(text: &str) -> Box<[Length]> {
   }
 
   lengths.into()
-}
-
-/// The numbers a list holds, none unless every one parses, as Blink's
-/// `SVGNumberList::SetValueAsString` clears the list on an error.
-fn number_list(text: &str) -> Option<Box<[f32]>> {
-  let mut parser = Parser::new(text);
-  let mut numbers = Vec::new();
-
-  while !parser.is_exhausted() {
-    numbers.push(parser.expect_number().ok()?);
-
-    let _ = parser.try_parse(Parser::expect_comma);
-  }
-
-  Some(numbers.into())
 }

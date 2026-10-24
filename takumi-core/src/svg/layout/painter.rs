@@ -10,6 +10,8 @@ use super::{
     Container, Fill, LayoutClip, LayoutMask, LayoutObject, Picture, PictureContent, Shape, Stroke,
   },
 };
+#[cfg(feature = "svg-raster")]
+use crate::resources::image::SvgFilters;
 use crate::{
   geometry::{PathCommand, Point},
   resources::image::{SvgFill, SvgImageData, SvgOp, SvgStrokeStyle},
@@ -102,6 +104,14 @@ impl<'b> SvgPainter<'b> {
 
     if container.opacity < 1.0 {
       self.push(SvgOp::PushOpacity(container.opacity));
+      pop_count += 1;
+    }
+
+    #[cfg(feature = "svg-raster")]
+    if !container.filters.is_empty() {
+      self.push(SvgOp::PushFilter(SvgFilters::new(
+        container.filters.clone(),
+      )));
       pop_count += 1;
     }
 

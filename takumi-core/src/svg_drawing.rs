@@ -540,7 +540,7 @@ fn to_u8(opacity: f32) -> u8 {
 }
 
 /// `blend` in tiny-skia, with the dodge and burn modes the canvas blends on its own.
-fn tiny_blend_mode(blend: BlendMode) -> TinyBlendMode {
+pub(crate) fn tiny_blend_mode(blend: BlendMode) -> TinyBlendMode {
   match blend {
     BlendMode::ColorDodge => TinyBlendMode::ColorDodge,
     BlendMode::ColorBurn => TinyBlendMode::ColorBurn,
@@ -674,6 +674,37 @@ mod tests {
       nested.layer_bounds(Some(filters)),
       IntRect::from_xywh(0, 0, 50, 50)
     );
+  }
+
+  #[test]
+  fn a_displacement_map_moves_pixels_by_its_scale_once() {
+    // A red map displaces by half the scale, so the square at 10..14 reads from 5 pixels on.
+    let image = draw(
+      r##"<defs><filter id="d" filterUnits="userSpaceOnUse" x="0" y="0" width="30" height="30">
+        <feFlood flood-color="#ff0000" result="map"/>
+        <feDisplacementMap in="SourceGraphic" in2="map" scale="10" xChannelSelector="R" yChannelSelector="R"/>
+      </filter></defs>
+      <rect x="10" y="10" width="4" height="4" fill="#000" filter="url(#d)"/>"##,
+      30,
+    );
+
+    assert_eq!(image.pixel(7, 7)[3], 255);
+    assert_eq!(image.pixel(12, 12)[3], 0);
+  }
+
+  #[test]
+  fn a_result_nothing_reads_again_is_not_kept() {
+    let image = draw(
+      r##"<defs><filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="20" height="20">
+        <feFlood flood-color="#00ff00" result="unused"/>
+        <feOffset in="SourceGraphic" dx="3"/>
+      </filter></defs>
+      <rect x="2" y="2" width="4" height="4" fill="#000" filter="url(#f)"/>"##,
+      20,
+    );
+
+    assert_eq!(image.pixel(6, 3)[3], 255);
+    assert_eq!(image.pixel(3, 3)[3], 0);
   }
 
   #[test]

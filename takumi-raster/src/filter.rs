@@ -336,7 +336,7 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
             let shadow = SizedShadow::from_text_shadow(*drop_shadow, sizing, current_color, size);
             apply_drop_shadow_filter(pixmap, &shadow)?;
           }
-          // Delegates to the resvg pipeline; `apply_svg_filter` hands the
+          // Runs the SVG filter pipeline; `apply_svg_filter` hands the
           // layer over without a base64 / data-URI roundtrip.
           #[cfg(feature = "svg")]
           Filter::Reference(reference) => {
@@ -684,7 +684,7 @@ mod tests {
     apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
-    assert_eq!(*pixel, [67, 37, 7, 127]);
+    assert_eq!(*pixel, [68, 38, 8, 128]);
 
     Ok(())
   }

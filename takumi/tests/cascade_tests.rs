@@ -611,3 +611,25 @@ fn css_wide_keywords_resolve_on_custom_properties() {
     assert_eq!(result.children[0].width, width, "{css}");
   }
 }
+
+/// A `filter: url(#id)` names an element of the same document, which HTML has none of, so it
+/// paints as no filter does.
+#[test]
+fn a_filter_url_to_a_fragment_leaves_an_html_element_unfiltered() {
+  use crate::test_utils::render_node;
+
+  let page = |filter: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="width:40px;height:40px;background-color:rgb(10,120,200);{filter}"></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parses")
+  };
+  let viewport = Viewport::new((60, 60));
+  let plain = render_node(page(""), viewport);
+  let filtered = render_node(page("filter:url(#missing)"), viewport);
+
+  assert_eq!(plain.as_raw(), filtered.as_raw());
+}
