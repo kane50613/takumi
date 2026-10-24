@@ -1229,11 +1229,17 @@ impl Emitter<'_> {
     if node.origin == NodeOrigin::Marker
       && let Some((_, owner_path)) = path.split_last()
     {
-      tags
-        .borrow_mut()
-        .record_label(self.marker_tag_target(owner_path), identifier);
+      if let Some(owner) = self
+        .scene
+        .root
+        .node_at_path(self.marker_tag_target(owner_path))
+      {
+        tags
+          .borrow_mut()
+          .record_label(owner.context.box_id(), identifier);
+      }
     } else {
-      tags.borrow_mut().record(path, identifier);
+      tags.borrow_mut().record(node.context.box_id(), identifier);
     }
   }
 
