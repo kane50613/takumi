@@ -95,6 +95,7 @@ impl BasicShape {
         }
         commands.close();
       }
+      BasicShape::Url(_) => {}
       BasicShape::Path(shape) => {
         // path() coordinates are CSS px; scale them like the to_px shapes.
         let scale = context.sizing.to_device(1.0);
@@ -111,7 +112,7 @@ impl BasicShape {
 
 impl BasicShape {
   /// The shape resolved against a border box as a fill, its rule from `clip_rule` unless the shape
-  /// sets its own.
+  /// sets its own, or `None` for a `url()` reference, which clips nothing outside SVG.
   pub fn fill_shape(
     &self,
     context: &RenderContext,
@@ -132,6 +133,7 @@ impl BasicShape {
 
         return Some(FillShape::Ellipse { center, radius });
       }
+      BasicShape::Url(_) => return None,
       _ => {}
     }
 
@@ -254,9 +256,38 @@ fn scale_commands(commands: Vec<PathCommand>, scale: f32) -> Vec<PathCommand> {
 mod tests {
   use super::resolve_radius;
   use crate::{
-    style::{Length, ShapeRadius, SizingContext},
+    context::RenderContext,
+    geometry::Size,
+    resources::font::Fonts,
+    style::{BasicShape, FillRule, FromCssStr, Length, ShapeRadius, SizingContext},
     viewport::Viewport,
   };
+
+  #[test]
+  fn a_url_reference_clips_nothing() {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(sizing)
+      .build();
+    let shape = BasicShape::from_css_str("url(#clip)").ok();
+
+    assert!(shape.is_some());
+    assert!(
+      shape
+        .and_then(|shape| shape.fill_shape(
+          &context,
+          Size {
+            width: 10.0,
+            height: 10.0
+          },
+          FillRule::NonZero
+        ))
+        .is_none()
+    );
+  }
 
   #[test]
   fn keyword_radii_measure_along_their_own_axis() {

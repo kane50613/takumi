@@ -140,7 +140,7 @@ impl SvgDocument {
       SvgLineCap::Square => attrs.push(("stroke-linecap", "square".into())),
     }
     match stroke.join {
-      SvgLineJoin::Miter | SvgLineJoin::MiterClip => {}
+      SvgLineJoin::Miter => {}
       SvgLineJoin::Round => attrs.push(("stroke-linejoin", "round".into())),
       SvgLineJoin::Bevel => attrs.push(("stroke-linejoin", "bevel".into())),
     }

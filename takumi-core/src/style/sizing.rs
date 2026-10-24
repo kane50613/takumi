@@ -36,6 +36,17 @@ pub struct SizingContext {
   /// `FontSizes::Ch` reads it from `PrimaryFontWithDigitZero`.
   #[builder(default = viewport.to_device(viewport.font_size) / 2.0)]
   pub(crate) ch: f32,
+  /// Pixel basis for the `ex` unit: the x-height of the primary font, or half the font size when
+  /// it has none, as Blink's `FontSizes::Ex`.
+  #[builder(default = viewport.to_device(viewport.font_size) / 2.0)]
+  pub(crate) ex: f32,
+}
+
+/// The pixel bases the `ch` and `ex` units read from the primary font.
+#[derive(Clone, Copy)]
+pub(crate) struct FontUnits {
+  pub(crate) ch: f32,
+  pub(crate) ex: f32,
 }
 
 impl SizingContext {
@@ -61,6 +72,7 @@ impl SizingContext {
       && self.line_height == other.line_height
       && self.root_line_height == other.root_line_height
       && self.ch == other.ch
+      && self.ex == other.ex
   }
 
   /// A copy with its font and line-height metrics replaced, keeping its viewport and container.
@@ -70,14 +82,15 @@ impl SizingContext {
     root_font_size: Option<f32>,
     line_height: f32,
     root_line_height: Option<f32>,
-    ch: f32,
+    units: FontUnits,
   ) -> Self {
     Self {
       font_size,
       root_font_size,
       line_height,
       root_line_height,
-      ch,
+      ch: units.ch,
+      ex: units.ex,
       ..self.clone()
     }
   }

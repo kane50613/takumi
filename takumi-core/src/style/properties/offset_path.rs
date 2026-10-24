@@ -558,6 +558,7 @@ fn basic_shape_to_bezpath(
 
       Some(ellipse_path(center, radius))
     }
+    BasicShape::Url(_) => None,
     BasicShape::Inset(inset) => {
       // ponytail: rounded-inset corners ignored for offset-path sampling.
       let [top, right, bottom, left] = inset.inset.0;

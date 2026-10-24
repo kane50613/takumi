@@ -419,7 +419,26 @@ impl fmt::Display for Num {
   }
 }
 
-/// Reads path data text byte by byte, after svgtypes' `Stream`.
+impl PathData {
+  /// The points of a `points` attribute: pairs of numbers, up to the first thing that is not one.
+  #[cfg(feature = "svg")]
+  pub(crate) fn parse_points(text: &str) -> Vec<Point<f32>> {
+    let mut scanner = Scanner::new(text);
+    let mut points = Vec::new();
+
+    while !scanner.at_end() {
+      let Some((x, y)) = scanner.pair() else {
+        break;
+      };
+
+      points.push(single((x, y)));
+    }
+
+    points
+  }
+}
+
+/// Reads the numbers of an SVG attribute byte by byte, after svgtypes' `Stream`.
 struct Scanner<'a> {
   bytes: &'a [u8],
   position: usize,
@@ -948,6 +967,30 @@ impl ArcSegment {
     }
 
     Some(cubics)
+  }
+}
+
+impl PathData {
+  /// The commands of the clockwise arc of less than half a turn from `from` to `to` on an ellipse
+  /// with radii `rx` and `ry`, as the corners of a `rect` and the sides of an `ellipse` take.
+  #[cfg(feature = "svg")]
+  pub(crate) fn corner_arc(from: (f32, f32), to: (f32, f32), rx: f32, ry: f32) -> Vec<PathCommand> {
+    let point = |(x, y): (f32, f32)| (f64::from(x), f64::from(y));
+    let arc = ArcSegment {
+      radii: (f64::from(rx), f64::from(ry)),
+      rotation: 0.0,
+      large_arc: false,
+      sweep: true,
+      to: point(to),
+    };
+
+    match arc.cubics(point(from), point(to)) {
+      Some(cubics) => cubics
+        .into_iter()
+        .map(|[first, second, to]| PathCommand::CubicTo(single(first), single(second), single(to)))
+        .collect(),
+      None => vec![PathCommand::LineTo(Point::new(to.0, to.1))],
+    }
   }
 }
 

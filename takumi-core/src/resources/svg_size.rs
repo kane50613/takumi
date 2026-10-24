@@ -1,15 +1,16 @@
 //! An SVG's size from its root element alone. Follows usvg's `resolve_svg_size`, except that a
 //! percentage size without a `viewBox` stays at the 100 px default instead of the content bounds.
 
-use std::str::FromStr;
-
+use cssparser::Parser;
 use roxmltree::{Document, Node, ParsingOptions};
-use svgtypes::{Length, LengthUnit, ViewBox};
 use thiserror::Error;
 
-use crate::{geometry::Size, style::IntrinsicSizing};
+use crate::{
+  geometry::Size,
+  style::{FontUnits, FromCssStr, IntrinsicSizing, Length, SizingContext},
+  viewport::Viewport,
+};
 
-const DPI: f32 = 96.0;
 const FONT_SIZE: f32 = 12.0;
 const DEFAULT_SIZE: f32 = 100.0;
 #[cfg(any(test, not(feature = "svg")))]
@@ -23,6 +24,38 @@ pub(crate) struct SvgSize {
   /// Per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>: a non-percentage
   /// `width`/`height` is an intrinsic dimension, the `viewBox` gives the ratio.
   pub(crate) intrinsic: IntrinsicSizing,
+}
+
+/// The `viewBox` attribute: the user-space rectangle a viewport maps onto.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ViewBox {
+  pub(crate) x: f32,
+  pub(crate) y: f32,
+  pub(crate) width: f32,
+  pub(crate) height: f32,
+}
+
+impl ViewBox {
+  /// Four numbers, spaced or comma-separated, with a positive size.
+  pub(crate) fn parse(text: &str) -> Option<Self> {
+    let mut parser = Parser::new(text);
+    let mut values = [0.0; 4];
+
+    for value in &mut values {
+      *value = parser.expect_number().ok()?;
+
+      let _ = parser.try_parse(Parser::expect_comma);
+    }
+
+    let [x, y, width, height] = values;
+
+    (parser.is_exhausted() && width > 0.0 && height > 0.0).then_some(Self {
+      x,
+      y,
+      width,
+      height,
+    })
+  }
 }
 
 #[derive(Debug, Error)]
@@ -53,23 +86,39 @@ impl SvgSize {
     let length = |name| {
       root
         .attribute(name)
-        .and_then(|value| Length::from_str(value).ok())
+        .and_then(|text| Length::from_css_str(text).ok())
+        .filter(|length| !matches!(length, Length::Auto))
     };
-    let font_size = length("font-size").map_or(FONT_SIZE, |size| to_px(size, FONT_SIZE, FONT_SIZE));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((0, 0)).with_font_size(FONT_SIZE))
+      .build();
+    let sizing = length("font-size").map_or(sizing.clone(), |size| {
+      let font_size = size.to_px(&sizing, FONT_SIZE);
+
+      sizing.with_font_metrics(
+        font_size,
+        None,
+        font_size,
+        None,
+        FontUnits {
+          ch: font_size / 2.0,
+          ex: font_size / 2.0,
+        },
+      )
+    });
     let view_box = root
       .attribute("viewBox")
-      .and_then(|value| ViewBox::from_str(value).ok())
-      .map(|view_box| (view_box.w as f32, view_box.h as f32))
-      .filter(|&(width, height)| positive(width) && positive(height));
+      .and_then(ViewBox::parse)
+      .map(|view_box| (view_box.width, view_box.height));
 
     let width = length("width");
     let height = length("height");
-    let default = Length::new(100.0, LengthUnit::Percent);
+    let default = Length::Percentage(100.0);
 
     let (width_px, height_px) = match view_box {
       Some((box_width, box_height)) => {
-        let width_px = to_px(width.unwrap_or(default), font_size, box_width);
-        let height_px = to_px(height.unwrap_or(default), font_size, box_height);
+        let width_px = width.unwrap_or(default).to_px(&sizing, box_width);
+        let height_px = height.unwrap_or(default).to_px(&sizing, box_height);
         match (width, height) {
           (Some(_), None) => (width_px, box_height * width_px / box_width),
           (None, Some(_)) => (box_width * height_px / box_height, height_px),
@@ -77,8 +126,8 @@ impl SvgSize {
         }
       }
       None => (
-        to_px(width.unwrap_or(default), font_size, DEFAULT_SIZE),
-        to_px(height.unwrap_or(default), font_size, DEFAULT_SIZE),
+        width.unwrap_or(default).to_px(&sizing, DEFAULT_SIZE),
+        height.unwrap_or(default).to_px(&sizing, DEFAULT_SIZE),
       ),
     };
 
@@ -88,7 +137,7 @@ impl SvgSize {
 
     let absolute = |length: Option<Length>, px| {
       length
-        .filter(|length| length.unit != LengthUnit::Percent)
+        .filter(|length| !matches!(length, Length::Percentage(_)))
         .map(|_| px)
     };
     let intrinsic_width = absolute(width, width_px);
@@ -125,21 +174,6 @@ fn positive(value: f32) -> bool {
   value.is_finite() && value > 0.0
 }
 
-fn to_px(length: Length, font_size: f32, percent_base: f32) -> f32 {
-  let n = length.number as f32;
-  match length.unit {
-    LengthUnit::None | LengthUnit::Px => n,
-    LengthUnit::Em => n * font_size,
-    LengthUnit::Ex => n * font_size / 2.0,
-    LengthUnit::In => n * DPI,
-    LengthUnit::Cm => n * DPI / 2.54,
-    LengthUnit::Mm => n * DPI / 25.4,
-    LengthUnit::Pt => n * DPI / 72.0,
-    LengthUnit::Pc => n * DPI / 6.0,
-    LengthUnit::Percent => percent_base * n / 100.0,
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -158,6 +192,13 @@ mod tests {
     assert_eq!(svg.intrinsic.width, Some(192.0));
     assert_eq!(svg.intrinsic.height, Some(96.0));
     assert_eq!(svg.intrinsic.ratio(), Some(2.0));
+  }
+
+  #[test]
+  fn auto_is_not_a_root_length() {
+    let svg = size(r#"width="auto" height="auto""#);
+
+    assert_eq!((svg.width, svg.height), (DEFAULT_SIZE, DEFAULT_SIZE));
   }
 
   #[test]

@@ -2,6 +2,8 @@
 
 use std::ops::{Add, Sub};
 
+#[cfg(feature = "svg")]
+use tiny_skia::PathSegment;
 use tiny_skia::{Path, PathBuilder as TinyPathBuilder};
 use xxhash_rust::xxh3::Xxh3;
 
@@ -239,6 +241,123 @@ impl Rect<f32> {
   }
 }
 
+#[cfg(feature = "svg")]
+impl Rect<f32> {
+  /// The rect between the edges, none unless it is finite and not inverted.
+  pub(crate) fn from_ltrb(left: f32, top: f32, right: f32, bottom: f32) -> Option<Self> {
+    let rect = Self {
+      left,
+      right,
+      top,
+      bottom,
+    };
+    let finite = [left, right, top, bottom, rect.width(), rect.height()]
+      .iter()
+      .all(|value| value.is_finite());
+
+    (finite && left <= right && top <= bottom).then_some(rect)
+  }
+
+  /// The rect at `x`, `y` of `width` by `height`, none unless it is finite and not inverted.
+  pub(crate) fn from_xywh(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
+    Self::from_ltrb(x, y, width + x, height + y)
+  }
+
+  /// [`Self::from_xywh`], but with both dimensions above zero.
+  pub(crate) fn positive_from_xywh(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
+    Self::from_xywh(x, y, width, height).filter(Self::has_area)
+  }
+
+  pub(crate) fn x(&self) -> f32 {
+    self.left
+  }
+
+  pub(crate) fn y(&self) -> f32 {
+    self.top
+  }
+
+  pub(crate) fn width(&self) -> f32 {
+    self.right - self.left
+  }
+
+  pub(crate) fn height(&self) -> f32 {
+    self.bottom - self.top
+  }
+
+  /// Whether the rect has both dimensions above zero.
+  pub(crate) fn has_area(&self) -> bool {
+    self.left < self.right && self.top < self.bottom
+  }
+
+  /// The smallest rect holding both.
+  pub(crate) fn union(&self, other: &Self) -> Self {
+    Self {
+      left: self.left.min(other.left),
+      right: self.right.max(other.right),
+      top: self.top.min(other.top),
+      bottom: self.bottom.max(other.bottom),
+    }
+  }
+
+  /// The bounds of the rect under `transform`, none when they are not finite.
+  pub(crate) fn transformed(&self, transform: Affine) -> Option<Self> {
+    let (left, top, right, bottom) = transformed_rect_extents(
+      self.top_left(),
+      Size::new(self.width(), self.height()),
+      transform,
+    )?;
+
+    Self::from_ltrb(left, top, right, bottom)
+  }
+
+  /// The edges as bits, to key a cache by the rect.
+  pub(crate) fn to_bits(self) -> [u32; 4] {
+    [self.left, self.top, self.right, self.bottom].map(f32::to_bits)
+  }
+
+  /// The rect with its coordinates read as fractions of `bbox`.
+  pub(crate) fn in_bounding_box(&self, bbox: &Self) -> Option<Self> {
+    Self::positive_from_xywh(
+      self.x() * bbox.width() + bbox.x(),
+      self.y() * bbox.height() + bbox.y(),
+      self.width() * bbox.width(),
+      self.height() * bbox.height(),
+    )
+  }
+
+  /// The transform that maps the unit square onto the rect.
+  pub(crate) fn unit_square_transform(&self) -> Affine {
+    Affine {
+      a: self.width(),
+      b: 0.0,
+      c: 0.0,
+      d: self.height(),
+      x: self.x(),
+      y: self.y(),
+    }
+  }
+}
+
+#[cfg(feature = "svg")]
+impl Size<f32> {
+  /// The size scaled to fit inside `target` keeping its ratio, or to cover it when `expand`, after
+  /// tiny-skia's `Size::scale_to` and `Size::expand_to`.
+  pub(crate) fn fitted_to(self, target: Self, expand: bool) -> Self {
+    let width = target.height * self.width / self.height;
+    let fits_height = if expand {
+      width <= target.width
+    } else {
+      width >= target.width
+    };
+
+    if fits_height {
+      Self::new(target.width, target.width * self.height / self.width)
+    } else {
+      Self::new(width, target.height)
+    }
+  }
+}
+
 /// The computed box geometry of a laid-out node, as backends read it.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ComputedLayout {
@@ -383,6 +502,55 @@ impl PathCommand {
     builder.finish()
   }
 
+  /// The closed rectangle at `x`, `y` of `width` by `height`.
+  #[cfg(feature = "svg")]
+  pub(crate) fn rectangle(x: f32, y: f32, width: f32, height: f32) -> Vec<Self> {
+    vec![
+      Self::MoveTo(Point::new(x, y)),
+      Self::LineTo(Point::new(x + width, y)),
+      Self::LineTo(Point::new(x + width, y + height)),
+      Self::LineTo(Point::new(x, y + height)),
+      Self::Close,
+    ]
+  }
+
+  /// The commands of a tiny-skia path.
+  #[cfg(feature = "svg")]
+  pub(crate) fn from_path(path: &Path) -> Vec<Self> {
+    let point = |point: tiny_skia::Point| Point::new(point.x, point.y);
+
+    path
+      .segments()
+      .map(|segment| match segment {
+        PathSegment::MoveTo(to) => Self::MoveTo(point(to)),
+        PathSegment::LineTo(to) => Self::LineTo(point(to)),
+        PathSegment::QuadTo(control, to) => Self::QuadTo(point(control), point(to)),
+        PathSegment::CubicTo(first, second, to) => {
+          Self::CubicTo(point(first), point(second), point(to))
+        }
+        PathSegment::Close => Self::Close,
+      })
+      .collect()
+  }
+
+  /// `paths` as tiny-skia's path builder normalizes them. None for commands that draw nothing.
+  #[cfg(feature = "svg")]
+  pub(crate) fn normalize(paths: &[Self]) -> Option<NormalizedPath> {
+    let path = Self::build_path(paths)?;
+    let edges = |bounds: tiny_skia::Rect| Rect {
+      left: bounds.left(),
+      right: bounds.right(),
+      top: bounds.top(),
+      bottom: bounds.bottom(),
+    };
+
+    Some(NormalizedPath {
+      commands: Self::from_path(&path),
+      bounds: edges(path.compute_tight_bounds()?),
+      control_bounds: edges(path.bounds()),
+    })
+  }
+
   /// A digest of `paths`, which the same commands always give.
   pub fn digest(paths: &[Self]) -> u64 {
     let mut h = Xxh3::new();
@@ -430,6 +598,16 @@ impl PathCommand {
       Self::Close => Self::Close,
     }
   }
+}
+
+/// A path as tiny-skia's builder normalizes it, with its bounds.
+#[cfg(feature = "svg")]
+pub(crate) struct NormalizedPath {
+  pub(crate) commands: Vec<PathCommand>,
+  /// The tight bounds of the outline.
+  pub(crate) bounds: Rect<f32>,
+  /// The bounds of the points, control points included.
+  pub(crate) control_bounds: Rect<f32>,
 }
 
 /// Push-style sugar over a [`PathCommand`] list, shared by the geometry and rasterization path

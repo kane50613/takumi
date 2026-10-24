@@ -141,11 +141,15 @@ impl Mul<Affine> for Affine {
   type Output = Affine;
 
   fn mul(self, rhs: Affine) -> Self::Output {
-    if self.is_identity() {
+    // A factor that only rounds the linear part is skipped, but never a translation, which a
+    // large scale on the other factor could make visible.
+    let is_noop = |factor: Self| factor.x == 0.0 && factor.y == 0.0 && factor.is_identity();
+
+    if is_noop(self) {
       return rhs;
     }
 
-    if rhs.is_identity() {
+    if is_noop(rhs) {
       return self;
     }
 
@@ -167,6 +171,17 @@ impl MulAssign<Affine> for Affine {
 }
 
 impl Affine {
+  /// Whether every entry is finite and neither axis collapses to a point. A rank-1 matrix passes,
+  /// which `is_invertible` rejects, so it still reaches the paint it transforms.
+  #[cfg(feature = "svg")]
+  pub(crate) fn is_renderable(self) -> bool {
+    let (scale_x, scale_y) = (self.a.hypot(self.c), self.b.hypot(self.d));
+
+    self.to_cols_array().iter().all(|entry| entry.is_finite())
+      && scale_x > f32::EPSILON
+      && scale_y > f32::EPSILON
+  }
+
   /// Converts the affine transform to a column-major array.
   pub fn to_cols_array(&self) -> [f32; 6] {
     [self.a, self.b, self.c, self.d, self.x, self.y]
@@ -370,24 +385,75 @@ impl Affine {
   }
 }
 
-impl<'i> FromCss<'i> for Affine {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let a = input.expect_number()?;
-    input.expect_comma()?;
-    let b = input.expect_number()?;
-    input.expect_comma()?;
-    let c = input.expect_number()?;
-    input.expect_comma()?;
-    let d = input.expect_number()?;
-    input.expect_comma()?;
-    let x = input.expect_number()?;
-    input.expect_comma()?;
-    let y = input.expect_number()?;
+impl Affine {
+  fn parse<'i>(input: &mut Parser<'i>, syntax: Syntax) -> ParseResult<'i, Self> {
+    let mut entries = [0.0; 6];
+
+    for (index, entry) in entries.iter_mut().enumerate() {
+      if index > 0 {
+        syntax.skip_separator(input)?;
+      }
+
+      *entry = input.expect_number()?;
+    }
+
+    let [a, b, c, d, x, y] = entries;
 
     Ok(Affine { a, b, c, d, x, y })
   }
+}
+
+impl<'i> FromCss<'i> for Affine {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::parse(input, Syntax::Css)
+  }
 
   const VALID_TOKENS: &'static [&'static str] = &["<number>"];
+}
+
+/// How a transform list is written. An SVG `transform` attribute is Blink's `kSVGAttributeMode`:
+/// bare numbers are lengths in px and angles in degrees, and commas are optional.
+#[derive(Clone, Copy)]
+enum Syntax {
+  Css,
+  #[cfg(feature = "svg")]
+  SvgAttribute,
+}
+
+impl Syntax {
+  fn is_svg_attribute(self) -> bool {
+    #[cfg(feature = "svg")]
+    return matches!(self, Self::SvgAttribute);
+    #[cfg(not(feature = "svg"))]
+    return false;
+  }
+
+  /// The comma between two arguments, which an SVG attribute may leave out.
+  fn skip_separator<'i>(self, input: &mut Parser<'i>) -> ParseResult<'i, ()> {
+    if self.is_svg_attribute() {
+      let _ = input.try_parse(Parser::expect_comma);
+    } else {
+      input.expect_comma()?;
+    }
+
+    Ok(())
+  }
+
+  fn length<'i>(self, input: &mut Parser<'i>) -> ParseResult<'i, Length> {
+    if self.is_svg_attribute() {
+      Ok(Length::Px(input.expect_number()?))
+    } else {
+      Length::from_css(input)
+    }
+  }
+
+  fn angle<'i>(self, input: &mut Parser<'i>) -> ParseResult<'i, Angle> {
+    if self.is_svg_attribute() {
+      Ok(Angle::new(input.expect_number()?))
+    } else {
+      Angle::from_css(input)
+    }
+  }
 }
 
 /// A collection of transform operations that can be applied together
@@ -396,17 +462,32 @@ pub struct Transforms(pub Box<[Transform]>);
 
 impl<'i> FromCss<'i> for Transforms {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::parse(input, Syntax::Css)
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = Transform::VALID_TOKENS;
+}
+
+impl Transforms {
+  fn parse<'i>(input: &mut Parser<'i>, syntax: Syntax) -> ParseResult<'i, Self> {
     let mut transforms = Vec::new();
 
     while !input.is_exhausted() {
-      let transform = Transform::from_css(input)?;
-      transforms.push(transform);
+      transforms.push(Transform::parse(input, syntax)?);
+
+      if syntax.is_svg_attribute() {
+        let _ = input.try_parse(Parser::expect_comma);
+      }
     }
 
     Ok(Transforms(transforms.into_boxed_slice()))
   }
 
-  const VALID_TOKENS: &'static [&'static str] = Transform::VALID_TOKENS;
+  /// The list an SVG `transform` attribute writes, none when it is malformed.
+  #[cfg(feature = "svg")]
+  pub(crate) fn from_svg_attribute(text: &str) -> Option<Self> {
+    Self::parse(&mut Parser::new(text), Syntax::SvgAttribute).ok()
+  }
 }
 
 impl MakeComputed for Transforms {
@@ -508,68 +589,111 @@ impl ToCss for Transforms {
   }
 }
 
-impl<'i> FromCss<'i> for Transform {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let token = parser.next()?;
+impl Transform {
+  fn parse<'i>(parser: &mut Parser<'i>, syntax: Syntax) -> ParseResult<'i, Self> {
+    let function = match parser.next()?.clone() {
+      Token::Function(function) => function,
+      // An SVG attribute may put spaces between a function's name and its parenthesis.
+      Token::Ident(function) if syntax.is_svg_attribute() => {
+        parser.expect_parenthesis_block()?;
 
-    let Token::Function(function) = token else {
-      return Err(CssParseError::unexpected_token());
+        function
+      }
+      _ => return Err(CssParseError::unexpected_token()),
     };
 
-    let parse: fn(&mut Parser<'i>) -> ParseResult<'i, Self> = match_ignore_ascii_case! {function,
-      "translate" => |input| {
-        let x = Length::from_css(input)?;
-        input.expect_comma()?;
-        let y = Length::from_css(input)?;
+    let parse: fn(&mut Parser<'i>, Syntax) -> ParseResult<'i, Self> = match_ignore_ascii_case! {&function,
+      "translate" => |input, syntax| {
+        let x = syntax.length(input)?;
+
+        syntax.skip_separator(input)?;
+
+        let y = if syntax.is_svg_attribute() {
+          input
+            .try_parse(|input| syntax.length(input))
+            .unwrap_or_else(|_| Length::zero())
+        } else {
+          syntax.length(input)?
+        };
 
         Ok(Self::Translate(x, y))
       },
-      "translatex" => |input| Ok(Self::Translate(
-        Length::from_css(input)?,
+      "translatex" => |input, syntax| Ok(Self::Translate(
+        syntax.length(input)?,
         Length::zero(),
       )),
-      "translatey" => |input| Ok(Self::Translate(
+      "translatey" => |input, syntax| Ok(Self::Translate(
         Length::zero(),
-        Length::from_css(input)?,
+        syntax.length(input)?,
       )),
-      "scale" => |input| {
+      "scale" => |input, syntax| {
         let PercentageNumber(x) = PercentageNumber::from_css(input)?;
-        if input.try_parse(Parser::expect_comma).is_ok() {
+        let has_comma = input.try_parse(Parser::expect_comma).is_ok();
+        let has_y = if syntax.is_svg_attribute() {
+          !input.is_exhausted()
+        } else {
+          has_comma
+        };
+
+        if has_y {
           let PercentageNumber(y) = PercentageNumber::from_css(input)?;
           Ok(Self::Scale(x, y))
         } else {
           Ok(Self::Scale(x, x))
         }
       },
-      "scalex" => |input| Ok(Self::Scale(
+      "scalex" => |input, _| Ok(Self::Scale(
         PercentageNumber::from_css(input)?.0,
         DEFAULT_SCALE,
       )),
-      "scaley" => |input| Ok(Self::Scale(
+      "scaley" => |input, _| Ok(Self::Scale(
         DEFAULT_SCALE,
         PercentageNumber::from_css(input)?.0,
       )),
-      "skew" => |input| {
-        let x = Angle::from_css(input)?;
-        input.expect_comma()?;
-        let y = Angle::from_css(input)?;
+      "skew" => |input, syntax| {
+        let x = syntax.angle(input)?;
+        syntax.skip_separator(input)?;
+        let y = syntax.angle(input)?;
 
         Ok(Self::Skew(x, y))
       },
-      "skewx" => |input| Ok(Self::Skew(
-        Angle::from_css(input)?,
+      "skewx" => |input, syntax| Ok(Self::Skew(
+        syntax.angle(input)?,
         Angle::default(),
       )),
-      "skewy" => |input| Ok(Self::Skew(
+      "skewy" => |input, syntax| Ok(Self::Skew(
         Angle::default(),
-        Angle::from_css(input)?,
+        syntax.angle(input)?,
       )),
-      "rotate" => |input| Ok(Self::Rotate(Angle::from_css(input)?)),
-      "matrix" => |input| Ok(Self::Matrix(Affine::from_css(input)?)),
-      _ => return Err(unexpected_token!(token)),
+      "rotate" => |input, syntax| {
+        let angle = syntax.angle(input)?;
+
+        if syntax.is_svg_attribute() {
+          syntax.skip_separator(input)?;
+
+          if let Ok(x) = input.try_parse(Parser::expect_number) {
+            syntax.skip_separator(input)?;
+
+            let y = input.expect_number()?;
+            let about = Affine::translation(x, y) * Affine::rotation(angle) * Affine::translation(-x, -y);
+
+            return Ok(Self::Matrix(about));
+          }
+        }
+
+        Ok(Self::Rotate(angle))
+      },
+      "matrix" => |input, syntax| Ok(Self::Matrix(Affine::parse(input, syntax)?)),
+      _ => return Err(unexpected_token!(&Token::Function(function))),
     };
 
-    parser.parse_nested_block(parse)
+    parser.parse_nested_block(|input| parse(input, syntax))
+  }
+}
+
+impl<'i> FromCss<'i> for Transform {
+  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::parse(parser, Syntax::Css)
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<transform-function>"];
@@ -579,6 +703,69 @@ impl<'i> FromCss<'i> for Transform {
 mod tests {
   use super::*;
   use crate::style::FromCssStr;
+  #[cfg(feature = "svg")]
+  use crate::viewport::Viewport;
+
+  #[cfg(feature = "svg")]
+  fn svg_matrix(text: &str) -> Option<[f32; 6]> {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, Some(100))))
+      .build();
+    let transforms = Transforms::from_svg_attribute(text)?;
+
+    Some(Affine::from_transforms(transforms.iter(), &sizing, 0.0, 0.0).to_cols_array())
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn an_svg_attribute_writes_its_lists_without_units() {
+    assert_eq!(
+      svg_matrix("translate(10 15) translate(0 5)"),
+      Some([1.0, 0.0, 0.0, 1.0, 10.0, 20.0])
+    );
+    assert_eq!(svg_matrix("scale(2)"), Some([2.0, 0.0, 0.0, 2.0, 0.0, 0.0]));
+    assert_eq!(
+      svg_matrix("translate(5), scale(2 3)"),
+      Some([2.0, 0.0, 0.0, 3.0, 5.0, 0.0])
+    );
+    assert_eq!(
+      svg_matrix("translate(10-5)"),
+      Some([1.0, 0.0, 0.0, 1.0, 10.0, -5.0])
+    );
+    assert_eq!(svg_matrix(""), Some([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]));
+    assert_eq!(
+      svg_matrix("rotate(90 10 10)").map(|matrix| matrix.map(f32::round)),
+      Some([0.0, 1.0, -1.0, 0.0, 20.0, 0.0])
+    );
+    assert_eq!(
+      svg_matrix("matrix(1 0 0 1 3,4)"),
+      Some([1.0, 0.0, 0.0, 1.0, 3.0, 4.0])
+    );
+    assert_eq!(
+      svg_matrix("  matrix  (  1 0 0 1 3 4  )  "),
+      Some([1.0, 0.0, 0.0, 1.0, 3.0, 4.0])
+    );
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn an_svg_attribute_with_a_bad_item_is_invalid() {
+    assert_eq!(svg_matrix("translate(10) bogus(1)"), None);
+    assert_eq!(svg_matrix("scale()"), None);
+  }
+
+  #[test]
+  fn css_still_wants_commas_and_units() {
+    assert!(Transform::from_css_str("translate(10 20)").is_err());
+    assert!(Transform::from_css_str("rotate(10 1 1)").is_err());
+  }
+
+  #[test]
+  fn a_small_translation_survives_a_product_with_a_large_scale() {
+    let product = Affine::scale(1e6, 1e6) * Affine::translation(9e-7, 0.0);
+
+    assert!((product.x - 0.9).abs() < 1e-4, "{product:?}");
+  }
 
   #[test]
   fn test_transform_from_str() {

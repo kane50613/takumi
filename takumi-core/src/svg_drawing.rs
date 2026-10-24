@@ -499,7 +499,6 @@ fn tiny_stroke(stroke: &SvgStrokeStyle) -> Stroke {
     },
     line_join: match stroke.join {
       SvgLineJoin::Miter => LineJoin::Miter,
-      SvgLineJoin::MiterClip => LineJoin::MiterClip,
       SvgLineJoin::Round => LineJoin::Round,
       SvgLineJoin::Bevel => LineJoin::Bevel,
     },
