@@ -2,7 +2,7 @@
 //! containers, shapes, and pictures with their transforms, clips, masks, and paint resolved, and
 //! the painter writes the result as ops.
 
-mod bounds;
+mod approx_eq;
 mod budget;
 mod clip_mask;
 mod image;
@@ -19,7 +19,7 @@ mod view_box;
 use std::{collections::HashMap, rc::Rc};
 
 use self::{
-  bounds::ApproxEq,
+  approx_eq::ApproxEq,
   budget::Budget,
   object::{
     Container, Fill, LayoutClip, LayoutDocument, LayoutMask, LayoutObject, Paint, PictureContent,

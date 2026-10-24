@@ -6,7 +6,7 @@ use kurbo::{Arc, Point as KurboPoint, SvgArc, Vec2};
 
 use super::{
   Scope, Styled, SvgLayout,
-  bounds::ApproxEq,
+  approx_eq::ApproxEq,
   object::{Container, ContextSource, Fill, LayoutObject, Paint, Shape},
 };
 use crate::{

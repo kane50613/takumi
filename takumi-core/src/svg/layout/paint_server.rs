@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use super::{
   Scope, SvgLayout,
-  bounds::ApproxEq,
+  approx_eq::ApproxEq,
   object::{Container, GradientGeometry, GradientPaint, LayoutObject, Paint, PatternPaint, Units},
   view_box::PreserveAspectRatio,
 };

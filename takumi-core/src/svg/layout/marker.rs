@@ -8,7 +8,7 @@ use std::{
 
 use super::{
   Scope, Styled, SvgLayout,
-  bounds::ApproxEq,
+  approx_eq::ApproxEq,
   object::{Container, LayoutClip, LayoutObject},
   view_box::PreserveAspectRatio,
 };
