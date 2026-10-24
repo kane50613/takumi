@@ -3047,6 +3047,7 @@ css/filter-effects/root-element-with-opacity-filter-001.html
 css/filter-effects/svg-feflood-001.html
 css/filter-effects/svg-feimage-001.html
 css/filter-effects/svg-filter-gradient-interpolation.html
+css/filter-effects/svg-image-root-filter.html
 css/filter-effects/svg-relative-urls-002.html
 css/filter-effects/svg-unknown-input-001.html
 css/filter-effects/svg-unknown-input-002.html
