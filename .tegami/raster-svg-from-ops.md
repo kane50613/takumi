@@ -4,6 +4,6 @@ packages:
   takumi-raster: patch
 ---
 
-# Rasterize SVG images from their ops in the raster backend
+# Draw SVG images in takumi-raster from the same ops as PDF
 
-takumi-raster draws an SVG image from the same `SvgOp` list the PDF and SVG backends use, through the new `SvgDrawing`, and no longer through resvg's renderer. `SvgSource::rasterize_cached` and `apply_svg_filter` take an `SvgDrawer`, and `ImageSource::render_for_layout` drops its `current_color` and `fonts` arguments and returns `ImageError::SvgNotRasterized` for an SVG. Edges of SVG shapes can differ from before by antialiasing.
+takumi-raster draws SVG images from `SvgOp`s with its new `SvgDrawing`, so takumi-core no longer carries resvg's renderer. `SvgSource::rasterize_cached` and `apply_svg_filter` take an `SvgDrawer`. `ImageSource::render_for_layout` drops its `current_color` and `fonts` arguments and returns `ImageError::SvgNotRasterized` for an SVG.
