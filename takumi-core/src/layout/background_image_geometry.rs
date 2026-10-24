@@ -892,6 +892,7 @@ impl BackgroundImageGeometry {
         width: ref_tile_width.to_float(),
         height: ref_tile_height.to_float(),
       },
+      image_size: self.tile_size.to_size(),
       spacing: self.repeat_spacing.to_size(),
     })
   }
@@ -916,6 +917,7 @@ impl BackgroundImageGeometry {
           y: dest.top - offset_in_tile.top.to_float(),
         },
         tile: tile_size,
+        image_size: tile_size,
         spacing: Size::ZERO,
       };
     }
@@ -948,6 +950,7 @@ impl BackgroundImageGeometry {
         width: intrinsic_tile_size.width * dest_per_source.width,
         height: intrinsic_tile_size.height * dest_per_source.height,
       },
+      image_size: tile_size,
       spacing: Size::ZERO,
     }
   }
@@ -1038,6 +1041,9 @@ pub struct ImageTiling {
   pub phase: Point<f32>,
   /// The size one tile draws at.
   pub tile: Size<f32>,
+  /// The size the image renders at before the tile snaps to device pixels, the container size
+  /// Blink's `BoxPainterBase::PaintFillLayer` asks the image for.
+  pub image_size: Size<f32>,
   /// The gap between neighbouring tiles.
   pub spacing: Size<f32>,
 }

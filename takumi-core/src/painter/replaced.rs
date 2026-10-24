@@ -14,6 +14,9 @@ use crate::{
 pub struct ReplacedContent {
   /// Where the content draws and how large, relative to the content box.
   pub placement: ReplacedPlacement,
+  /// The placement's size before snapping, the container size Blink's `ImagePainter` asks an SVG
+  /// image for.
+  pub container: Size<f32>,
   /// The content box's curve when the box is rounded, its rectangle when the content reaches past
   /// it, and `None` when nothing needs clipping.
   pub clip: Option<ClipBox>,
@@ -58,6 +61,10 @@ impl BoxPainter<'_> {
         ..content_box
       });
 
-    ReplacedContent { placement, clip }
+    ReplacedContent {
+      placement,
+      container: unsnapped.size,
+      clip,
+    }
   }
 }

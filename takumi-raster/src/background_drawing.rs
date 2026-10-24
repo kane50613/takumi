@@ -17,6 +17,8 @@ use tiny_skia::{
 #[cfg(feature = "svg")]
 use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
+#[cfg(feature = "svg")]
+use crate::resources::image::SvgRaster;
 use crate::{
   BilinearAxis, BilinearColumns, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions,
   PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
@@ -569,9 +571,11 @@ impl BackgroundTile {
   }
 }
 
-/// Builds one tile of a background layer at the size the geometry resolved to.
+/// Builds one tile of a background layer over `tile_w` by `tile_h` pixels, of an image rendered at
+/// `image_size`.
 pub(crate) fn render_tile(
   image: &BackgroundImage,
+  #[cfg_attr(not(feature = "svg"), allow(unused_variables))] image_size: Size<f32>,
   tile_w: u32,
   tile_h: u32,
   context: &RenderContext,
@@ -645,19 +649,17 @@ pub(crate) fn render_tile(
           }),
           RenderedImage::Rasterized(..) => None,
         },
+        // An SVG lays out at the tile size, Blink's container size, and fills the tile's pixels.
         #[cfg(feature = "svg")]
-        ImageSource::Svg(..) => match source.render_for_layout(
-          tile_w,
-          tile_h,
-          context.style.misc_inherited_data.image_rendering,
-          context.time_ms(),
-          context,
-        )? {
-          RenderedImage::Rasterized(buffer) => {
-            pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
-          }
-          RenderedImage::Sampled { .. } => None,
-        },
+        ImageSource::Svg(svg) => {
+          let buffer = svg.rasterize_cached(
+            SvgRaster::whole(image_size, tile_w, tile_h),
+            context.style.misc_inherited_data.image_rendering,
+            context,
+          )?;
+
+          pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
+        }
         _ => None,
       }
     }
@@ -688,6 +690,7 @@ pub(crate) fn tile_layers(
 
     let Some(tile) = render_tile(
       layer.image,
+      tiling.image_size,
       tiling.tile.width as u32,
       tiling.tile.height as u32,
       context,
@@ -789,6 +792,7 @@ fn rasterize_pattern(
     (None, image) => {
       let Some(tile) = render_tile(
         image,
+        tiling.image_size,
         tiling.tile.width.ceil() as u32,
         tiling.tile.height.ceil() as u32,
         context,

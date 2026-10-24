@@ -109,6 +109,11 @@ pub(super) struct SvgLayout<'a> {
   text_paths: HashMap<usize, Rc<text::TextPathShape>>,
   /// The position and rotation lists of the elements in a `text`, by the element.
   position_lists: HashMap<usize, Rc<text::PositionLists>>,
+  /// The size the root is laid out at.
+  viewport: Size<f32>,
+  /// Whether a root without a `viewBox` takes one from its `width` and `height`, as Blink's
+  /// `SVGSVGElement::ShouldSynthesizeViewBox` does for an `SVGImage`.
+  synthesizes_view_box: bool,
   /// How many SVG images the one being laid out sits in.
   image_depth: usize,
   /// How many more element instances may be laid out.
@@ -117,14 +122,23 @@ pub(super) struct SvgLayout<'a> {
 }
 
 impl<'a> SvgLayout<'a> {
-  pub(super) fn new(document: &'a SvgDocument, host: SvgHost<'a>) -> Self {
-    Self::nested(document, host, 0)
+  /// A layout of `document` drawn in `host` at `viewport`, Blink's container size of an
+  /// `SVGImage` or the content box of an inline `svg`, in CSS pixels.
+  pub(super) fn new(document: &'a SvgDocument, host: SvgHost<'a>, viewport: Size<f32>) -> Self {
+    Self::nested(document, host, viewport, 0)
   }
 
-  fn nested(document: &'a SvgDocument, host: SvgHost<'a>, image_depth: usize) -> Self {
+  fn nested(
+    document: &'a SvgDocument,
+    host: SvgHost<'a>,
+    viewport: Size<f32>,
+    image_depth: usize,
+  ) -> Self {
     Self {
       document,
-      styles: StyleResolver::new(document, host),
+      styles: StyleResolver::new(document, host, viewport),
+      viewport,
+      synthesizes_view_box: matches!(host, SvgHost::Image { .. }),
       clip_paths: HashMap::new(),
       masks: HashMap::new(),
       #[cfg(feature = "svg-raster")]
@@ -153,20 +167,37 @@ impl<'a> SvgLayout<'a> {
   /// The document as Blink's `LayoutSVGRoot` lays it out: the container of everything it draws and
   /// the canvas size.
   fn layout_root(&mut self) -> Option<LayoutDocument> {
-    let size = self.document.size;
-    let canvas = Size::new(size.width, size.height);
+    let canvas = self.viewport;
     let parent_context = self.styles.root_context().clone();
     let root = self.styled(0, &parent_context);
-    let view_box = self.attribute(0, "viewBox").and_then(ViewBox::parse);
-    let view_box_rect = view_box
+    let view_box = self
+      .attribute(0, "viewBox")
+      .and_then(ViewBox::parse)
       .and_then(|view_box| {
         Rect::positive_from_xywh(view_box.x, view_box.y, view_box.width, view_box.height)
-      })
-      .or_else(|| Rect::positive_from_xywh(0.0, 0.0, size.width, size.height))?;
-    let aspect = self
-      .attribute(0, "preserveAspectRatio")
-      .and_then(PreserveAspectRatio::parse)
-      .unwrap_or_default();
+      });
+    let (view_box_rect, aspect) = match view_box {
+      Some(view_box) => (
+        view_box,
+        self
+          .attribute(0, "preserveAspectRatio")
+          .and_then(PreserveAspectRatio::parse)
+          .unwrap_or_default(),
+      ),
+      // Blink's `SVGSVGElement::CurrentPreserveAspectRatio` stretches a synthesized view box.
+      None if self.synthesizes_view_box => {
+        let size = self.synthesized_view_box_size();
+
+        (
+          Rect::positive_from_xywh(0.0, 0.0, size.width, size.height)?,
+          PreserveAspectRatio::NONE,
+        )
+      }
+      None => (
+        Rect::positive_from_xywh(0.0, 0.0, canvas.width, canvas.height)?,
+        PreserveAspectRatio::default(),
+      ),
+    };
     let background = match root.style().background_data.background_color {
       ColorInput::Value(color) if color.0[3] != 0 => Some(color),
       _ => None,
@@ -176,8 +207,8 @@ impl<'a> SvgLayout<'a> {
 
     if !self.is_visible_element(&root, &scope) {
       return Some(LayoutDocument {
-        width: size.width,
-        height: size.height,
+        width: canvas.width,
+        height: canvas.height,
         root: tree,
       });
     }
@@ -191,25 +222,26 @@ impl<'a> SvgLayout<'a> {
     .to_transform(aspect, canvas);
     let identity = root_transform.to_cols_array() == Affine::IDENTITY.to_cols_array();
 
-    if identity && background.is_none() {
+    // The root's background propagates to the canvas, which the viewport covers.
+    if let Some(background) = background {
+      tree.children.push(LayoutObject::background(
+        Rect::positive_from_xywh(0.0, 0.0, canvas.width, canvas.height)?,
+        background,
+      )?);
+    }
+
+    if identity {
       self.convert_element(0, &parent_context, &scope, &mut tree);
     } else {
       let mut group = Container::new(root_transform);
 
       group.transform = root_transform;
-
-      if let Some(background) = background {
-        group
-          .children
-          .push(LayoutObject::background(view_box_rect, background)?);
-      }
-
       self.convert_element(0, &parent_context, &scope, &mut group);
       group.finish();
       tree.children.push(LayoutObject::Container(Box::new(group)));
     }
 
-    let (mut width, mut height) = (size.width, size.height);
+    let (mut width, mut height) = (canvas.width, canvas.height);
 
     if self.takes_content_extent() {
       let extent = tree.absolute_bounds();
@@ -228,6 +260,23 @@ impl<'a> SvgLayout<'a> {
       height,
       root: tree,
     })
+  }
+
+  /// The `viewBox` size Blink's `SVGSVGElement::ViewBoxToViewTransform` synthesizes for a root
+  /// without one: its `width` and `height`, a percentage of the viewport.
+  fn synthesized_view_box_size(&self) -> Size<f32> {
+    let intrinsic = self.document.size.intrinsic;
+    let side = |name, absolute: Option<f32>, viewport: f32| {
+      absolute.unwrap_or_else(|| match self.length_attribute(0, name) {
+        Some(Length::Percentage(percent)) => viewport * percent / 100.0,
+        _ => viewport,
+      })
+    };
+
+    Size::new(
+      side("width", intrinsic.width, self.viewport.width),
+      side("height", intrinsic.height, self.viewport.height),
+    )
   }
 
   /// Whether the canvas is sized in percentages of a viewport nothing gives, so it takes the extent

@@ -54,6 +54,12 @@ impl Default for PreserveAspectRatio {
 }
 
 impl PreserveAspectRatio {
+  /// `none`, which stretches the view box over the viewport.
+  pub(super) const NONE: Self = Self {
+    align: Align::None,
+    slice: false,
+  };
+
   /// `[defer] <align> [meet | slice]`.
   pub(super) fn parse(text: &str) -> Option<Self> {
     let mut words = text.split_ascii_whitespace().peekable();

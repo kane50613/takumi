@@ -20,13 +20,8 @@ fn is_valid_length(length: f32) -> bool {
 
 impl LayoutObject {
   /// The background of the root as a shape: a rectangle of `color`.
-  pub(super) fn background(view_box: Rect<f32>, color: Color) -> Option<Self> {
-    let commands = PathCommand::rectangle(
-      view_box.x(),
-      view_box.y(),
-      view_box.width(),
-      view_box.height(),
-    );
+  pub(super) fn background(canvas: Rect<f32>, color: Color) -> Option<Self> {
+    let commands = PathCommand::rectangle(canvas.x(), canvas.y(), canvas.width(), canvas.height());
     let normalized = PathCommand::normalize(&commands)?;
 
     Some(LayoutObject::Shape(Box::new(Shape {

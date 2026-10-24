@@ -7,6 +7,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 use super::{SvgDocument, SvgHost};
 use crate::{
   context::RenderContext,
+  geometry::Size,
   layout::node::Node,
   matching::{NodeMatchedDeclarations, match_stylesheets_view},
   resources::font::Fonts,
@@ -41,15 +42,18 @@ pub(super) struct StyleResolver<'a> {
 }
 
 impl<'a> StyleResolver<'a> {
-  /// A resolver whose root inherits from `host`.
-  pub(super) fn new(document: &'a SvgDocument, host: SvgHost<'a>) -> Self {
+  /// A resolver whose root inherits from `host`, laid out at `viewport`, which the viewport units
+  /// of an image measure.
+  pub(super) fn new(document: &'a SvgDocument, host: SvgHost<'a>, viewport: Size<f32>) -> Self {
     let (root_context, matched, inline) = match host {
       SvgHost::Image {
         current_color,
         fonts,
       } => {
-        let size = document.size;
-        let viewport = Viewport::new((size.width.round() as u32, size.height.round() as u32));
+        let viewport = Viewport::new((
+          viewport.width.round() as u32,
+          viewport.height.round() as u32,
+        ));
         let mut parent_style = ComputedStyle::default();
 
         parent_style.inherited_data_mut().color = ColorInput::Value(current_color);
