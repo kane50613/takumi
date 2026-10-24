@@ -120,8 +120,8 @@ impl SvgDocument {
       .collect()
   }
 
-  /// Whether the document needs the legacy renderer: it holds text or a filter, which this
-  /// pipeline does not draw yet.
+  /// Whether the document needs the legacy renderer: it holds a filter, which this pipeline
+  /// does not draw yet.
   pub(crate) fn needs_legacy_renderer(&self) -> bool {
     self.legacy_only
   }
@@ -240,6 +240,9 @@ impl TreeBuilder {
         (None | Some(SVG_NAMESPACE), "href") => {
           href = Some(value);
         }
+        (Some(XML_NAMESPACE), "space") => {
+          attributes.insert("xml:space".into(), value.into());
+        }
         (Some(XML_NAMESPACE), "lang") | (None, "lang") => {
           if let Ok(lang) = Lang::parse(value) {
             node = node.with_lang(lang);
@@ -263,12 +266,7 @@ impl TreeBuilder {
 
     if matches!(
       kind,
-      SvgElementKind::Text
-        | SvgElementKind::Tspan
-        | SvgElementKind::TextPath
-        | SvgElementKind::Tref
-        | SvgElementKind::Filter
-        | SvgElementKind::FilterPrimitive
+      SvgElementKind::Filter | SvgElementKind::FilterPrimitive
     ) {
       self.legacy_only = true;
     }
