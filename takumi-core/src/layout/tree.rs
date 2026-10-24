@@ -273,6 +273,8 @@ pub struct LayoutTree<'r> {
   table_hidden: FxHashMap<NodeId, HiddenParts>,
   /// Every cell and row some table's layout hid.
   hidden: FxHashSet<usize>,
+  /// Every (container, out-of-flow box) pair in some node's `hoisted_children`.
+  pub(in crate::layout) hoisted_pairs: FxHashSet<(NodeId, NodeId)>,
   /// Which boxes positioned each out-of-flow box as their containing block.
   #[cfg(feature = "fragmentation")]
   pub(in crate::layout) hoisted_by: HoistedBy,
@@ -956,6 +958,7 @@ impl<'r> LayoutTree<'r> {
       table_fragments: FxHashMap::default(),
       table_hidden: FxHashMap::default(),
       hidden: FxHashSet::default(),
+      hoisted_pairs: FxHashSet::default(),
       #[cfg(feature = "fragmentation")]
       hoisted_by: HoistedBy::default(),
       #[cfg(feature = "fragmentation")]
