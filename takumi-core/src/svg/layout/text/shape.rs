@@ -23,7 +23,7 @@ use crate::{
     Affine, AlignmentBaseline, Direction, DominantBaseline, SizedTextDecorationThickness,
     TextDecorationLines, TextUnderlinePosition,
   },
-  text::bidi_paragraph::{BidiParagraph, direction_from_level},
+  text::bidi_paragraph::{BidiParagraph, Run, direction_from_level},
 };
 
 /// A glyph that has already been positioned correctly.
@@ -261,16 +261,57 @@ impl TextChunk {
     clusters
   }
 
+  /// The chunk's text in visual runs, ordered by the bidi algorithm with the controls of the
+  /// elements around it, which the runs leave out.
+  fn bidi_runs(&self) -> Vec<Run> {
+    if self.controls.is_empty() {
+      return BidiParagraph::new(&self.text, self.direction).get_visual_runs();
+    }
+
+    let mut text = String::with_capacity(self.text.len() + self.controls.len() * 3);
+    // Where each control sits in `text`, which its length moves the characters after.
+    let mut inserted = Vec::with_capacity(self.controls.len());
+    let mut from = 0;
+
+    for &(offset, control) in &self.controls {
+      text.push_str(&self.text[from..offset]);
+      inserted.push((text.len(), control.len_utf8()));
+      text.push(control);
+      from = offset;
+    }
+
+    text.push_str(&self.text[from..]);
+
+    // The offset in the chunk's text of the offset `at` in `text`.
+    let original = |at: usize| {
+      at - inserted
+        .iter()
+        .take_while(|&&(position, _)| position < at)
+        .map(|&(_, length)| length)
+        .sum::<usize>()
+    };
+
+    BidiParagraph::new(&text, self.direction)
+      .get_visual_runs()
+      .into_iter()
+      .map(|run| Run {
+        start: original(run.start),
+        end: original(run.end),
+        level: run.level,
+      })
+      .filter(|run| run.start < run.end)
+      .collect()
+  }
+
   /// Shapes the chunk through `HarfBuzzShaper` and spaces it through `ShapeResultSpacing`, in
   /// visual order. Spans shape with their own font and spacing, so a bidi run is shaped piece by
   /// piece where the font changes.
   fn shape(&self, faces: &mut FontFaces) -> Vec<Glyph> {
-    let bidi = BidiParagraph::new(&self.text, Some(Direction::Ltr));
     let shaper = HarfBuzzShaper::new(&self.text);
     let mut spacing = ShapeResultSpacing::new(&self.text, true);
     let mut glyphs = Vec::new();
 
-    for run in bidi.get_visual_runs() {
+    for run in self.bidi_runs() {
       let direction = direction_from_level(run.level);
       let first = self.spans.partition_point(|span| span.end <= run.start);
       let mut pieces: Vec<(&TextSpan, usize, usize)> = self.spans[first..]

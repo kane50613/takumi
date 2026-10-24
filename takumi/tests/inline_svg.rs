@@ -59,3 +59,48 @@ fn the_root_opacity_applies_once() {
 
   assert_eq!(center(&html, "svg { opacity: 0.5 }"), [128, 128, 128, 255]);
 }
+
+/// The columns of a 120×40 render of `html` that hold ink.
+fn inked_columns(html: &str) -> Vec<usize> {
+  let node = Node::from_html(html, FromHtmlOptions::default()).unwrap();
+  let bitmap = render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((120, 40)))
+      .node(node)
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+  let pixels = bitmap.as_raw();
+
+  (0..120)
+    .filter(|x| (0..40).any(|y| pixels[(y * 120 + x) * 4 + 3] > 0))
+    .collect()
+}
+
+/// A `tspan` opens the bidi controls its `unicode-bidi` and `direction` call for, as an inline
+/// box does in Blink, so an override reverses its characters. Shaping right to left places a
+/// glyph up to a pixel apart.
+#[test]
+fn a_tspan_override_reorders_its_characters() {
+  let text = |body: &str| {
+    inked_columns(&format!(
+      r#"<svg width="120" height="40" style="display:block"><text x="10" y="30" font-size="24">{body}</text></svg>"#
+    ))
+  };
+  let overridden =
+    text(r#"a<tspan style="unicode-bidi: bidi-override; direction: rtl">bc</tspan>"#);
+  let reversed = text("a<tspan>cb</tspan>");
+  let apart = overridden
+    .iter()
+    .filter(|column| !reversed.contains(column))
+    .chain(
+      reversed
+        .iter()
+        .filter(|column| !overridden.contains(column)),
+    )
+    .count();
+
+  assert_ne!(overridden, text("a<tspan>bc</tspan>"));
+  assert!(apart <= 2, "{overridden:?} {reversed:?}");
+}

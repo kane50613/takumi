@@ -21,7 +21,7 @@ use self::{
 use super::{Container, Fill, Scope, Stroke, Styled, SvgLayout};
 use crate::{
   geometry::PathCommand,
-  style::{AlignmentBaseline, BaselineShift, DominantBaseline, TextAnchor},
+  style::{AlignmentBaseline, BaselineShift, Direction, DominantBaseline, TextAnchor},
 };
 
 /// The characters of a `text` element, ready to lay out.
@@ -46,6 +46,11 @@ struct TextChunk {
   spans: Vec<TextSpan>,
   flow: TextFlow,
   text: String,
+  /// The bidi controls the elements around the chunk's characters put before the byte at each
+  /// offset, as Blink's `InlineItemsBuilder` inserts them into the text it shapes.
+  controls: Vec<(usize, char)>,
+  /// The paragraph direction, none when the first strong character decides it.
+  direction: Option<Direction>,
 }
 
 /// Where a chunk's text runs.
