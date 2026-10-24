@@ -400,6 +400,12 @@ pub(crate) struct LayoutNodeState {
   /// or when the layout does not release.
   #[cfg(feature = "fragmentation")]
   pub(crate) ended_by: Option<NonZeroUsize>,
+  /// The box whose box children hold it, and its position among them.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) box_parent: Option<(u32, u32)>,
+  /// Which of its box children each of its fragments holds, once layout placed any.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) child_links: Option<Box<ChildLinks>>,
 }
 
 /// A box's fragments, one unless it fragmented.
@@ -447,6 +453,63 @@ impl BoxFragment {
       fragments[start..].partition_point(|fragment| fragment.container_fragment_index == container);
 
     start..start + len
+  }
+}
+
+/// Blink's `PhysicalBoxFragment::Children` as a live layout logs them, by position among the box
+/// children. A later layout of a child can leave a link stale, so a reader checks each.
+#[cfg(feature = "fragmentation")]
+#[derive(Default)]
+pub(crate) struct ChildLinks {
+  by_fragment: Vec<Vec<u32>>,
+  /// Sorted.
+  hoisted: Vec<u32>,
+}
+
+#[cfg(feature = "fragmentation")]
+impl ChildLinks {
+  /// The positions logged as placed in fragment `fragment_index`, in any order and repeating.
+  pub(crate) fn placed_in(&self, fragment_index: usize) -> &[u32] {
+    self
+      .by_fragment
+      .get(fragment_index)
+      .map_or(&[], Vec::as_slice)
+  }
+
+  /// The positions logged as positioned by another box.
+  pub(crate) fn hoisted(&self) -> &[u32] {
+    &self.hoisted
+  }
+
+  fn link(&mut self, fragment_index: usize, position: u32) {
+    if self.by_fragment.len() <= fragment_index {
+      self.by_fragment.resize_with(fragment_index + 1, Vec::new);
+    }
+
+    let placed = &mut self.by_fragment[fragment_index];
+
+    if placed.last() != Some(&position) {
+      placed.push(position);
+    }
+  }
+
+  fn link_hoisted(&mut self, position: u32) {
+    if let Err(index) = self.hoisted.binary_search(&position) {
+      self.hoisted.insert(index, position);
+    }
+  }
+
+  /// Moves each position to `moved[position]`, as the box children reorder.
+  fn reorder(&mut self, moved: &[u32]) {
+    for position in self
+      .by_fragment
+      .iter_mut()
+      .flatten()
+      .chain(&mut self.hoisted)
+    {
+      *position = moved[*position as usize];
+    }
+    self.hoisted.sort_unstable();
   }
 }
 
@@ -501,6 +564,10 @@ impl LayoutNodeState {
       claims,
       #[cfg(feature = "fragmentation")]
       ended_by: None,
+      #[cfg(feature = "fragmentation")]
+      box_parent: None,
+      #[cfg(feature = "fragmentation")]
+      child_links: None,
     }
   }
 }
@@ -879,7 +946,8 @@ impl<'r> LayoutTree<'r> {
       .iter()
       .map(|known| known.node_id)
       .collect();
-    let mut box_children = state.box_children.to_vec();
+    let mut box_children: Vec<(OrderedChild, usize)> =
+      state.box_children.iter().cloned().zip(0..).collect();
 
     for (child, path) in children {
       let Some((&render_index, inline_path)) = path.split_first() else {
@@ -887,21 +955,55 @@ impl<'r> LayoutTree<'r> {
       };
 
       if known.insert(child) {
-        box_children.push(OrderedChild {
-          render_index,
-          inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
-          node_id: child,
-          hoisted_cb: None,
-        });
+        box_children.push((
+          OrderedChild {
+            render_index,
+            inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
+            node_id: child,
+            hoisted_cb: None,
+          },
+          box_children.len(),
+        ));
       }
     }
     if box_children.len() == state.box_children.len() {
       return;
     }
-    box_children.sort_by(|a, b| {
+    box_children.sort_by(|(a, _), (b, _)| {
       (a.render_index, a.inline_path.as_deref()).cmp(&(b.render_index, b.inline_path.as_deref()))
     });
-    state.box_children = box_children.into_boxed_slice();
+    #[cfg(feature = "fragmentation")]
+    {
+      let known = self.nodes[usize::from(parent)].box_children.len();
+      let mut moved = vec![0; box_children.len()];
+
+      for (position, (child, previous)) in box_children.iter().enumerate() {
+        moved[*previous] = position as u32;
+        self.nodes[usize::from(child.node_id)].box_parent =
+          Some((usize::from(parent) as u32, position as u32));
+      }
+      if let Some(links) = &mut self.nodes[usize::from(parent)].child_links {
+        links.reorder(&moved);
+      }
+      // A box its inline content placed before it joined the box children.
+      for (child, _) in box_children
+        .iter()
+        .filter(|(_, previous)| *previous >= known)
+      {
+        let containers: SmallVec<[usize; 2]> = self.nodes[usize::from(child.node_id)]
+          .fragments
+          .iter()
+          .filter(|fragment| fragment.is_laid_out)
+          .map(|fragment| fragment.container_fragment_index)
+          .collect();
+
+        for container_fragment_index in containers {
+          self.link_child(child.node_id, container_fragment_index);
+        }
+      }
+    }
+    self.nodes[usize::from(parent)].box_children =
+      box_children.into_iter().map(|(child, _)| child).collect();
   }
 
   /// The node the box `render_node` of an inline formatting context lays out as, its subtree
@@ -1095,6 +1197,13 @@ impl<'r> LayoutTree<'r> {
 
         let (&render_index, inline_path) = finished.render_path.split_first().unwrap_or((&0, &[]));
 
+        #[cfg(feature = "fragmentation")]
+        {
+          nodes[index].box_parent = Some((
+            usize::from(parent.node_id) as u32,
+            parent.box_children.len() as u32,
+          ));
+        }
         parent.box_children.push(OrderedChild {
           render_index,
           inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
@@ -1374,6 +1483,32 @@ impl<'r> LayoutTree<'r> {
         "a fragment follows the one before it"
       );
       fragments.push(fragment);
+    }
+    #[cfg(feature = "fragmentation")]
+    if fragment.is_laid_out {
+      self.link_child(node, fragment.container_fragment_index);
+    }
+  }
+
+  /// Logs that `child`'s box parent's fragment `container_fragment_index` holds it.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn link_child(&mut self, child: NodeId, container_fragment_index: usize) {
+    if let Some((parent, position)) = self.nodes[usize::from(child)].box_parent {
+      self.nodes[parent as usize]
+        .child_links
+        .get_or_insert_default()
+        .link(container_fragment_index, position);
+    }
+  }
+
+  /// Logs that a box other than its box parent may position `child`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn link_hoisted_child(&mut self, child: NodeId) {
+    if let Some((parent, position)) = self.nodes[usize::from(child)].box_parent {
+      self.nodes[parent as usize]
+        .child_links
+        .get_or_insert_default()
+        .link_hoisted(position);
     }
   }
 

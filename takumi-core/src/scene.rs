@@ -625,6 +625,10 @@ fn build_layers(
       .nth(1)
       .is_some())
     .then(|| {
+      #[cfg(feature = "fragmentation")]
+      if let Some(linked) = layout_results.linked_children(visit.node_id, visit.fragment_index) {
+        return linked;
+      }
       fragment_children
         .entry(visit.node_id)
         .or_insert_with(|| FragmentChildren::of(layout_results, visit.node_id, layout_children))
@@ -997,13 +1001,13 @@ impl HoistedFragments {
 
 /// A fragmented box's children by the fragment of it that holds them, as positions among its box
 /// children, and its hoisted children, which belong to the fragment of their containing block.
-struct FragmentChildren {
+pub(crate) struct FragmentChildren {
   held: Vec<Vec<usize>>,
   hoisted: Vec<usize>,
 }
 
 impl FragmentChildren {
-  fn of(results: LayoutView<'_>, parent: NodeId, children: &[OrderedChild]) -> Self {
+  pub(crate) fn of(results: LayoutView<'_>, parent: NodeId, children: &[OrderedChild]) -> Self {
     let mut held: Vec<Vec<usize>> = Vec::new();
     let mut hoisted = Vec::new();
 
@@ -1025,7 +1029,7 @@ impl FragmentChildren {
   }
 
   /// The positions the box's fragment `fragment_index` visits, in child order.
-  fn in_fragment(&self, fragment_index: usize) -> Vec<usize> {
+  pub(crate) fn in_fragment(&self, fragment_index: usize) -> Vec<usize> {
     let mut positions: Vec<usize> = self
       .held
       .get(fragment_index)

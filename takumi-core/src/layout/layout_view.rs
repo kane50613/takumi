@@ -186,6 +186,45 @@ impl<'a> LayoutView<'a> {
     children.iter().copied()
   }
 
+  /// The positions among `node_id`'s box children its fragment visits, in order, or `None` for a
+  /// finished layout, which logs no links.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn linked_children(
+    self,
+    node_id: NodeId,
+    fragment_index: usize,
+  ) -> Option<Vec<usize>> {
+    let Self::Live(live) = self else {
+      return None;
+    };
+    let node = live.nodes.get(usize::from(node_id))?;
+    let Some(links) = node.child_links.as_deref() else {
+      return Some(Vec::new());
+    };
+    let children = &node.box_children;
+    let placed = links.placed_in(fragment_index).iter().filter(|&&position| {
+      let child = &children[position as usize];
+
+      self.hoisted_cb(node_id, child).is_none()
+        && self
+          .fragment_containers(child.node_id)
+          .any(|(_, container)| container == fragment_index)
+    });
+    let hoisted = links.hoisted().iter().filter(|&&position| {
+      self
+        .hoisted_cb(node_id, &children[position as usize])
+        .is_some()
+    });
+    let mut positions: Vec<usize> = placed
+      .chain(hoisted)
+      .map(|&position| position as usize)
+      .collect();
+
+    positions.sort_unstable();
+    positions.dedup();
+    Some(positions)
+  }
+
   /// The run of `node_id`'s box children its fragment holds, for children that break in order.
   pub(crate) fn ordered_children_in(
     self,

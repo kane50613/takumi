@@ -13,7 +13,10 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   paint_chunk::PaintChunk,
-  scene::{NodePaint, PageWindows, PagedScene, SceneBounds, SceneRef, StackingContextNode},
+  scene::{
+    FragmentChildren, NodePaint, PageWindows, PagedScene, SceneBounds, SceneRef,
+    StackingContextNode,
+  },
 };
 
 /// What `view` answers for every box, as text, with the pages up to `page_count` to ask about.
@@ -105,6 +108,7 @@ fn check_pages(root: &RenderNode, page_size: Size<f32>, streams: bool) {
     finalized = (0..finalized_pages)
       .map(|page| layout.view().fragment_in(NodeId::ROOT, page))
       .collect();
+    assert_child_links(layout.view(), layout.tree().node_count());
   }
 
   assert!(layout.is_finished());
@@ -124,6 +128,31 @@ fn check_pages(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   );
   for (page, fragment) in finalized.into_iter().enumerate() {
     assert_eq!(fragment, results.view().fragment_in(NodeId::ROOT, page));
+  }
+}
+
+/// Checks that the children each fragment of a broken box links are those a scan of every child
+/// finds there.
+fn assert_child_links(view: LayoutView<'_>, node_count: usize) {
+  for node in (0..node_count).map(NodeId::new) {
+    let fragments: Vec<usize> = view
+      .fragment_containers(node)
+      .map(|(index, _)| index)
+      .collect();
+
+    if fragments.len() < 2 {
+      continue;
+    }
+
+    let scanned = FragmentChildren::of(view, node, view.box_children(node).expect("children"));
+
+    for fragment in fragments {
+      assert_eq!(
+        view.linked_children(node, fragment),
+        Some(scanned.in_fragment(fragment)),
+        "the links of {node:?}'s fragment {fragment}"
+      );
+    }
   }
 }
 
