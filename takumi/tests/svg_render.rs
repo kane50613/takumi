@@ -144,7 +144,7 @@ fn underline_decoration_renders() {
         0, 0, 0, 255,
       ]))))
       .with(StyleDeclaration::font_size(FontSize::Length(Px(48.0))))
-      .with_text_decoration(
+      .text_decoration(
         TextDecoration::builder()
           .line(TextDecorationLines::UNDERLINE)
           .color(ColorInput::Value(Color([255, 0, 0, 255])))

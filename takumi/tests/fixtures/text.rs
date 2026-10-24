@@ -10,7 +10,7 @@ fn unbreakable_ellipsis_root(text_overflow: TextOverflow) -> Node {
     Style::default()
       .with(StyleDeclaration::text_overflow(text_overflow))
       .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
-      .with_overflow(SpacePair::from_single(Overflow::Hidden))
+      .overflow(SpacePair::from_single(Overflow::Hidden))
       .with(StyleDeclaration::width(Length::Px(360.0)))
       .with(StyleDeclaration::color(ColorInput::Value(Color::black()))),
   );

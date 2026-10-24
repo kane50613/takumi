@@ -792,10 +792,28 @@ macro_rules! define_style {
           self.with_declarations([declaration], false)
         }
 
+        $($(
+          #[doc = concat!("Sets `", stringify!($longhand), "`.")]
+          pub fn $longhand(self, value: impl Into<$longhand_ty>) -> Self {
+            self.with(StyleDeclaration::[<$longhand:camel>](value.into()))
+          }
+        )*)*
         $(
+          #[doc = concat!("Sets `", stringify!($transient), "`.")]
+          pub fn $transient(self, value: impl Into<$transient_ty>) -> Self {
+            self.with(StyleDeclaration::[<$transient:camel>](value.into()))
+          }
+        )*
+        $(
+          #[doc = concat!("Sets `", stringify!($shorthand), "`, expanded and appended in source order.")]
+          pub fn $shorthand(self, value: impl Into<$shorthand_ty>) -> Self {
+            self.with_declarations(StyleDeclaration::[<expand_ $shorthand>](value.into()), false)
+          }
+
           /// Returns a new style with this shorthand expanded and appended in source order.
+          #[deprecated(note = "use the method of the same name without the `with_` prefix")]
           pub fn [<with_ $shorthand>](self, value: $shorthand_ty) -> Self {
-            self.with_declarations(StyleDeclaration::[<expand_ $shorthand>](value), false)
+            self.$shorthand(value)
           }
         )*
 

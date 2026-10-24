@@ -48,8 +48,8 @@ fn emoji_social_fixture() -> Node {
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with_overflow(SpacePair::from_single(Overflow::Clip))
-        .with_border_radius(BorderRadius::from_css_str("40px").unwrap()),
+        .overflow(SpacePair::from_single(Overflow::Clip))
+        .border_radius(BorderRadius::from_css_str("40px").unwrap()),
     ),
     Node::container([
       Node::text("Ship faster with tiny-skia".to_string()).with_style(
@@ -78,7 +78,7 @@ fn emoji_social_fixture() -> Node {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
-      .with_padding(Sides([Px(48.0), Px(56.0), Px(48.0), Px(56.0)]))
+      .padding(Sides([Px(48.0), Px(56.0), Px(48.0), Px(56.0)]))
       .with(StyleDeclaration::background_image(Some(
         BackgroundImages::from_css_str(
           "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 45%, #cbd5e1 100%)",
