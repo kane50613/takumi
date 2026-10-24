@@ -4,6 +4,6 @@ packages:
   takumi-raster: patch
 ---
 
-# Draw SVG images in takumi-raster from the same ops as PDF
+# Rasterize SVG images from the same ops as PDF
 
-takumi-raster draws SVG images from `SvgOp`s with its new `SvgDrawing`, so takumi-core no longer carries resvg's renderer. `SvgSource::rasterize_cached` and `apply_svg_filter` take an `SvgDrawer`. `ImageSource::render_for_layout` drops its `current_color` and `fonts` arguments and returns `ImageError::SvgNotRasterized` for an SVG.
+takumi-core now rasterizes an SVG from the `SvgOp` list with tiny-skia, so resvg's renderer is gone and the raster, PDF, and SVG backends draw one flattened tree. `SvgOp` gains anti-aliasing, the radial focal radius, and a `miter-clip` join, which resvg drew and the ops had dropped. `BlendMode::to_tiny_skia` replaces takumi-raster's private conversion.

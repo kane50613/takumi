@@ -108,23 +108,11 @@ impl SvgFilters {
   }
 
   /// Applies each filter in order to `layer`, drawn under `transform`.
-  pub fn apply(
-    &self,
-    transform: tiny_skia::Transform,
-    layer: &mut tiny_skia::Pixmap,
-    drawer: &dyn SvgDrawer,
-  ) {
+  pub fn apply(&self, transform: tiny_skia::Transform, layer: &mut tiny_skia::Pixmap) {
     for filter in &self.0 {
-      crate::resvg::apply_filter(filter, transform, layer, drawer);
+      crate::resvg::apply_filter(filter, transform, layer);
     }
   }
-}
-
-/// Draws SVG ops onto a pixmap, for the filter primitives that render content.
-#[cfg(feature = "svg-raster")]
-pub trait SvgDrawer {
-  /// Draws `ops` onto `pixmap` with `transform` as the canvas transform.
-  fn draw(&self, ops: &[SvgOp], transform: tiny_skia::Transform, pixmap: &mut tiny_skia::PixmapMut);
 }
 
 /// Fill style for [`SvgOp::Draw`].

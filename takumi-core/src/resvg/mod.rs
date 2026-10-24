@@ -30,18 +30,14 @@ use std::sync::Arc;
 #[cfg(feature = "svg-raster")]
 use usvg::filter::Filter;
 
-#[cfg(feature = "svg-raster")]
-use crate::svg_vector::SvgDrawer;
-
 /// Applies one filter to a layer, which `transform` maps the filter's user space onto.
 #[cfg(feature = "svg-raster")]
 pub(crate) fn apply_filter(
   filter: &Filter,
   transform: tiny_skia::Transform,
   layer: &mut tiny_skia::Pixmap,
-  drawer: &dyn SvgDrawer,
 ) {
-  filter::apply(filter, transform, layer, drawer);
+  filter::apply(filter, transform, layer);
 }
 
 pub mod usvg;
@@ -64,7 +60,6 @@ pub(crate) fn apply_filters_to_layer(
   layer: &mut [u8],
   width: u32,
   height: u32,
-  drawer: &dyn SvgDrawer,
 ) -> Option<()> {
   for f in filters {
     let region = f.rect();
@@ -84,7 +79,7 @@ pub(crate) fn apply_filters_to_layer(
       None,
     );
 
-    filter::apply(f, ts, &mut sub, drawer);
+    filter::apply(f, ts, &mut sub);
 
     let mut out = tiny_skia::Pixmap::new(width, height)?;
     out.draw_pixmap(
