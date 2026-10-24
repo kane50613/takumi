@@ -645,6 +645,26 @@ fn ten_thousand_text_paths_to_a_huge_path_end_within_the_budget() {
 }
 
 #[test]
+fn a_long_position_list_used_many_times_is_parsed_once() {
+  let positions = "1 ".repeat(200_000);
+  let uses = r##"<use href="#t"/>"##.repeat(2_000);
+
+  text_ops(&format!(
+    r##"<defs><text id="t" x="{positions}" rotate="{positions}" y="50">a</text></defs>{uses}"##
+  ));
+}
+
+#[test]
+fn text_on_a_path_of_huge_coordinates_ends() {
+  let text = "a".repeat(2_000);
+  let ops = text_ops(&format!(
+    r##"<defs><path id="p" d="M 0 0 C 1e30 -1e30 -1e30 1e30 1e30 1e30"/></defs><text><textPath href="#p">{text}</textPath></text>"##
+  ));
+
+  assert!(draw_count(&ops) <= 2_000);
+}
+
+#[test]
 fn a_text_of_a_thousand_tspans_used_a_thousand_times_ends_within_the_instance_budget() {
   let spans = "<tspan/>".repeat(1000);
   let uses = r##"<use href="#t"/>"##.repeat(1000);

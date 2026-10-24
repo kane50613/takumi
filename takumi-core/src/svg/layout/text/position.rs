@@ -59,6 +59,15 @@ struct DecorationSpan {
 /// How closely the curves of a `textPath` are measured, in user units.
 const ARCLEN_ACCURACY: f64 = 0.1;
 
+/// How closely `curve` is measured: [`ARCLEN_ACCURACY`], loosened for a long curve so that its
+/// cost stays bounded by the ratio rather than by its size.
+fn arclen_accuracy(curve: &CubicBez) -> f64 {
+  let polygon =
+    curve.p0.distance(curve.p1) + curve.p1.distance(curve.p2) + curve.p2.distance(curve.p3);
+
+  (polygon * 1e-4).max(ARCLEN_ACCURACY)
+}
+
 /// A point of a `textPath` a cluster sits on, and the direction of the path there.
 struct PathNormal {
   x: f32,
@@ -348,7 +357,7 @@ impl TextPathShape {
     let ends = curves
       .iter()
       .map(|curve| {
-        length += curve.arclen(ARCLEN_ACCURACY);
+        length += curve.arclen(arclen_accuracy(curve));
         length
       })
       .collect();
@@ -377,7 +386,7 @@ impl TextPathShape {
       .checked_sub(1)
       .map_or(0.0, |previous| self.ends[previous]);
     let position = curve
-      .inv_arclen(offset - start, ARCLEN_ACCURACY)
+      .inv_arclen(offset - start, arclen_accuracy(curve))
       .clamp(0.0, 1.0);
     let point = curve.eval(position);
     let derivative = curve.deriv().eval(position);

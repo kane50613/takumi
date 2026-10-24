@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 use kurbo::CubicBez;
 
+pub(super) use self::attributes::PositionLists;
 use self::{
   chunk::TextTree,
   shape::{FontFaces, TextFont},

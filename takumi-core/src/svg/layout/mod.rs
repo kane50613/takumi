@@ -97,6 +97,8 @@ pub(super) struct SvgLayout<'a> {
   active: Vec<usize>,
   /// The outlines of the shapes `textPath` elements name, by the element.
   text_paths: HashMap<usize, Rc<text::TextPathShape>>,
+  /// The position and rotation lists of the elements in a `text`, by the element.
+  position_lists: HashMap<usize, Rc<text::PositionLists>>,
   /// How many SVG images the one being laid out sits in.
   image_depth: usize,
   /// How many more element instances may be laid out.
@@ -130,6 +132,7 @@ impl<'a> SvgLayout<'a> {
       paint_servers: HashMap::new(),
       images: HashMap::new(),
       text_paths: HashMap::new(),
+      position_lists: HashMap::new(),
       active: Vec::new(),
       image_depth,
       budget: Budget::default(),
