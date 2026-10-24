@@ -2100,3 +2100,12 @@ fn svg_keywords_round_trip() {
     Some("1px, 2px, 3px")
   );
 }
+
+#[test]
+fn clip_path_with_incomplete_path_data_is_invalid() {
+  assert!(parse_declarations_is_err("clip-path", "path('M0 0 X')"));
+  assert!(!parse_declarations_is_err(
+    "clip-path",
+    "path('M0 0 L 10 10')"
+  ));
+}

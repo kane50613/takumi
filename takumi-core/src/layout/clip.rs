@@ -99,10 +99,10 @@ impl BasicShape {
         // path() coordinates are CSS px; scale them like the to_px shapes.
         let scale = context.sizing.to_device(1.0);
 
-        let (path, complete) = PathData::parse(shape.path.as_ref());
-        let path = if complete { path } else { Vec::new() };
-
-        commands.extend(scale_commands(path, scale));
+        commands.extend(scale_commands(
+          PathData::parse(shape.path.as_ref()).0,
+          scale,
+        ));
       }
     }
     commands
