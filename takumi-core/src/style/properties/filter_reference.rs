@@ -1,7 +1,7 @@
 //! Parsed SVG `<filter>` references for `filter: url(data:image/svg+xml,...)`.
 //!
 //! The markup is validated and extracted at CSS parse time; execution is
-//! delegated to `resvg` in the raster backend and emitted verbatim by the SVG
+//! run by takumi's own SVG filter pipeline in the raster backend and emitted verbatim by the SVG
 //! backend, so both sides share one spec implementation.
 
 use std::{str::from_utf8, sync::Arc};

@@ -5,7 +5,6 @@ use std::rc::Rc;
 
 use super::{
   Scope, SvgLayout,
-  approx_eq::ApproxEq,
   object::{Container, GradientGeometry, GradientPaint, LayoutObject, Paint, PatternPaint, Units},
   view_box::PreserveAspectRatio,
 };
@@ -16,6 +15,7 @@ use crate::{
     svg_size::ViewBox,
   },
   style::{Affine, Color, FromCssStr, Length, PercentageNumber},
+  svg::approx_eq::ApproxEq,
   svg::{
     element::SvgElementKind,
     length::{LengthAxis, SvgLengthContext},
@@ -200,7 +200,7 @@ impl SvgLayout<'_> {
   }
 
   /// The elements an `href` chain visits from the one at `index`, stopping before a cycle.
-  fn href_chain(&self, index: usize) -> Vec<usize> {
+  pub(super) fn href_chain(&self, index: usize) -> Vec<usize> {
     let mut chain = vec![index];
     let mut current = index;
 
@@ -288,7 +288,7 @@ impl SvgLayout<'_> {
     index
   }
 
-  fn units(&self, index: usize, name: &str, default: Units) -> Units {
+  pub(super) fn units(&self, index: usize, name: &str, default: Units) -> Units {
     match self.attribute(self.resolve_attr(index, name), name) {
       Some("userSpaceOnUse") => Units::UserSpaceOnUse,
       Some("objectBoundingBox") => Units::ObjectBoundingBox,

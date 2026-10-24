@@ -2,9 +2,10 @@
 //! containers, shapes, and pictures with their transforms, clips, masks, and paint resolved, and
 //! the painter writes the result as ops.
 
-mod approx_eq;
 mod budget;
 mod clip_mask;
+#[cfg(feature = "svg-raster")]
+mod filter;
 mod image;
 mod marker;
 mod object;
@@ -17,10 +18,13 @@ mod text;
 mod use_element;
 mod view_box;
 
+#[cfg(feature = "svg-raster")]
+use std::sync::Arc;
 use std::{collections::HashMap, rc::Rc};
 
+use cssparser::Parser;
+
 use self::{
-  approx_eq::ApproxEq,
   budget::Budget,
   object::{
     Container, Fill, LayoutClip, LayoutDocument, LayoutMask, LayoutObject, Paint, PictureContent,
@@ -31,10 +35,13 @@ use self::{
 };
 use super::{
   SvgDocument,
+  approx_eq::ApproxEq,
   element::SvgElementKind,
   length::{LengthAxis, SvgLengthContext},
   style::StyleResolver,
 };
+#[cfg(feature = "svg-raster")]
+use crate::svg::filter::SvgFilter;
 use crate::{
   context::RenderContext,
   geometry::{Rect, Size},
@@ -85,6 +92,9 @@ pub(super) struct SvgLayout<'a> {
   styles: StyleResolver<'a>,
   clip_paths: HashMap<usize, Rc<LayoutClip>>,
   masks: HashMap<usize, Rc<LayoutMask>>,
+  /// The filters in user units, by element and the viewport their percentages resolved against.
+  #[cfg(feature = "svg-raster")]
+  filters: HashMap<(usize, [u32; 4]), Arc<SvgFilter>>,
   /// Whether each clip path or mask, or one it chains to, is in bounding box units.
   bounding_box_units: HashMap<(clip_mask::Resource, usize), bool>,
   /// The paint servers laid out, by element and the viewport their percentages resolved against.
@@ -100,8 +110,6 @@ pub(super) struct SvgLayout<'a> {
   /// How many more element instances may be laid out.
   budget: Budget,
   fonts: Option<&'a FontsSnapshot>,
-  /// Set when the document holds something this pipeline does not draw.
-  unsupported: bool,
 }
 
 impl<'a> SvgLayout<'a> {
@@ -124,6 +132,8 @@ impl<'a> SvgLayout<'a> {
       styles: StyleResolver::new(document, current_color, fonts),
       clip_paths: HashMap::new(),
       masks: HashMap::new(),
+      #[cfg(feature = "svg-raster")]
+      filters: HashMap::new(),
       bounding_box_units: HashMap::new(),
       paint_servers: HashMap::new(),
       images: HashMap::new(),
@@ -132,17 +142,12 @@ impl<'a> SvgLayout<'a> {
       image_depth,
       budget: Budget::default(),
       fonts,
-      unsupported: false,
     }
   }
 
-  /// The ops of the document, none when it holds something this pipeline does not draw.
+  /// The ops of the document, none when it outgrows the budget.
   pub(super) fn layout(mut self) -> Option<Vec<SvgOp>> {
     let document = self.layout_root()?;
-
-    if self.unsupported {
-      return None;
-    }
 
     // A document that outgrows the budget draws nothing.
     Some(SvgPainter::paint(&document.root, &mut self.budget).unwrap_or_default())
@@ -207,15 +212,9 @@ impl<'a> SvgLayout<'a> {
       tree.children.push(LayoutObject::Container(Box::new(group)));
     }
 
-    // A size given in percentages of a viewport nothing gives takes the extent of the content.
-    let relative = |name| {
-      self
-        .length_attribute(0, name)
-        .is_none_or(|length| matches!(length, Length::Percentage(_)))
-    };
     let (mut width, mut height) = (size.width, size.height);
 
-    if (relative("width") || relative("height")) && view_box.is_none() {
+    if self.takes_content_extent() {
       let extent = tree.absolute_bounds();
 
       if let Some(bounds) = extent
@@ -231,6 +230,36 @@ impl<'a> SvgLayout<'a> {
       width,
       height,
       root: tree,
+    })
+  }
+
+  /// Whether the canvas is sized in percentages of a viewport nothing gives, so it takes the extent
+  /// of the content.
+  fn takes_content_extent(&self) -> bool {
+    let relative = |name| {
+      self
+        .length_attribute(0, name)
+        .is_none_or(|length| matches!(length, Length::Percentage(_)))
+    };
+
+    (relative("width") || relative("height"))
+      && self
+        .attribute(0, "viewBox")
+        .and_then(ViewBox::parse)
+        .is_none()
+  }
+
+  /// The size of the canvas, which the extent of the content gives when the root does not.
+  pub(super) fn canvas_size(mut self) -> Size<f32> {
+    let size = self.document.size;
+    let declared = Size::new(size.width, size.height);
+
+    if !self.takes_content_extent() {
+      return declared;
+    }
+
+    self.layout_root().map_or(declared, |document| {
+      Size::new(document.width, document.height)
     })
   }
 
@@ -269,6 +298,29 @@ impl<'a> SvgLayout<'a> {
 
   fn length_attribute(&self, index: usize, name: &str) -> Option<Length> {
     Length::from_css_str(self.attribute(index, name)?).ok()
+  }
+
+  /// The numbers a list attribute holds, none unless every one parses.
+  fn number_list(&self, index: usize, name: &str) -> Option<Vec<f32>> {
+    let mut parser = Parser::new(self.attribute(index, name)?);
+    let mut numbers = Vec::new();
+
+    while !parser.is_exhausted() {
+      numbers.push(parser.expect_number().ok()?);
+
+      let _ = parser.try_parse(Parser::expect_comma);
+    }
+
+    Some(numbers)
+  }
+
+  /// The number an attribute holds, none unless the whole attribute is one finite number.
+  #[cfg(feature = "svg-raster")]
+  fn number_attribute(&self, index: usize, name: &str) -> Option<f32> {
+    let mut parser = Parser::new(self.attribute(index, name)?);
+    let number = parser.expect_number().ok()?;
+
+    (parser.is_exhausted() && number.is_finite()).then_some(number)
   }
 
   fn has_attribute(&self, index: usize, name: &str) -> bool {
@@ -548,7 +600,20 @@ impl<'a> SvgLayout<'a> {
       mask = Some(self.convert_mask(link, scope, object_bounding_box)?);
     }
 
+    // A filter and a mask cannot be set on a `clipPath` child.
+    #[cfg(feature = "svg-raster")]
+    let filters = if scope.parent_clip_path.is_none() {
+      self.convert_filters(styled, scope, object_bounding_box)?
+    } else {
+      Vec::new()
+    };
+    #[cfg(feature = "svg-raster")]
+    let filtered = !filters.is_empty();
+    #[cfg(not(feature = "svg-raster"))]
+    let filtered = false;
+
     let required = !opacity.approx_eq(1.0)
+      || filtered
       || clip_path.is_some()
       || mask.is_some()
       || transform.to_cols_array() != Affine::IDENTITY.to_cols_array()
@@ -564,6 +629,10 @@ impl<'a> SvgLayout<'a> {
 
     group.clip_path = clip_path;
     group.mask = mask;
+    #[cfg(feature = "svg-raster")]
+    {
+      group.filters = filters;
+    }
     group.finish();
     Some(group)
   }

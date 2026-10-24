@@ -59,18 +59,6 @@ pub mod units;
 /// Viewport dimensions and device-pixel-ratio resolution.
 pub mod viewport;
 
-/// Vendored resvg 0.48.1 (see `resvg/mod.rs` for provenance and stripped features).
-#[cfg(feature = "svg")]
-#[allow(
-  clippy::unwrap_used,
-  clippy::expect_used,
-  clippy::panic,
-  clippy::all,
-  missing_docs,
-  dead_code,
-  deprecated
-)]
-mod resvg;
 /// SVG documents laid out through the CSS cascade.
 #[cfg(feature = "svg")]
 pub(crate) mod svg;

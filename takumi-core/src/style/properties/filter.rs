@@ -8,6 +8,7 @@ use std::{borrow::Cow, sync::Arc};
 #[cfg(feature = "svg")]
 use crate::style::{ValueError, properties::filter_reference::FilterReference};
 use crate::{
+  filter::TransferFunction,
   scene::SceneBounds,
   style::{
     Affine, Angle, Animatable, Color, CssExpectedMessage, FromCss, Length,
@@ -18,14 +19,6 @@ use crate::{
 
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
-
-pub(crate) fn build_transfer_table<F: Fn(usize) -> f32>(f: F) -> TransferTable {
-  let mut table = [0u8; 256];
-  for (i, entry) in table.iter_mut().enumerate() {
-    *entry = f(i).clamp(0.0, 255.0) as u8;
-  }
-  table
-}
 
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, PartialEq)]
@@ -327,26 +320,17 @@ impl Filter {
 
   /// Returns the 1D channel transfer table for this filter, if any.
   pub fn transfer_table(&self) -> Option<TransferChannel> {
+    let linear = |slope, intercept| TransferFunction::Linear { slope, intercept }.table();
+
     match *self {
-      Filter::Brightness(PercentageNumber(v)) => {
-        Some(TransferChannel::Rgb(build_transfer_table(|i| i as f32 * v)))
-      }
-      Filter::Contrast(PercentageNumber(v)) => {
-        Some(TransferChannel::Rgb(build_transfer_table(|i| {
-          (i as f32 - 128.0) * v + 128.0
-        })))
-      }
-      Filter::Invert(PercentageNumber(v)) => {
-        Some(TransferChannel::Rgb(build_transfer_table(|i| {
-          let inverted = 255 - i as u8;
-          (i as f32 * (1.0 - v)) + (inverted as f32 * v)
-        })))
-      }
-      Filter::Opacity(PercentageNumber(v)) => {
-        Some(TransferChannel::Alpha(build_transfer_table(|i| {
-          i as f32 * v
-        })))
-      }
+      Filter::Brightness(PercentageNumber(v)) => linear(v, 0.0).map(TransferChannel::Rgb),
+      Filter::Contrast(PercentageNumber(v)) => linear(v, 0.5 - 0.5 * v).map(TransferChannel::Rgb),
+      Filter::Invert(PercentageNumber(v)) => TransferFunction::Table(vec![v, 1.0 - v])
+        .table()
+        .map(TransferChannel::Rgb),
+      Filter::Opacity(PercentageNumber(v)) => TransferFunction::Table(vec![0.0, v])
+        .table()
+        .map(TransferChannel::Alpha),
       _ => None,
     }
   }
