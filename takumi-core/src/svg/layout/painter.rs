@@ -48,7 +48,15 @@ impl<'b> SvgPainter<'b> {
   /// Appends an op, charging the budget for it and the path it carries.
   fn push(&mut self, op: SvgOp) {
     let weight = match &op {
-      SvgOp::PushClip { path, .. } | SvgOp::Draw { path, .. } => 1 + path.len(),
+      SvgOp::PushClip { path, .. } => 1 + path.len(),
+      SvgOp::Draw { path, stroke, .. } => {
+        let dashes = stroke
+          .as_ref()
+          .and_then(|stroke| stroke.dash.as_ref())
+          .map_or(0, |(dashes, _)| dashes.len());
+
+        1 + path.len() + dashes
+      }
       SvgOp::Image {
         data: SvgImageData::Bitmap(buffer),
         ..
@@ -208,7 +216,7 @@ impl<'b> SvgPainter<'b> {
       miter_limit: stroke.miter_limit,
       cap: stroke.cap,
       join: stroke.join,
-      dash: stroke.dash.clone(),
+      dash: stroke.dash.as_deref().cloned(),
     }
   }
 

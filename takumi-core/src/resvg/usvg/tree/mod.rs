@@ -3,7 +3,6 @@
 
 pub mod filter;
 mod geom;
-mod text;
 
 use std::fmt::Display;
 use std::sync::Arc;
@@ -13,7 +12,6 @@ pub use strict_num::{self, ApproxEqUlps, NonZeroPositiveF32, NormalizedF32, Posi
 pub use tiny_skia_path;
 
 pub use self::geom::*;
-pub use self::text::*;
 
 use crate::resources::glyph::ResolvedGlyph;
 use crate::resvg::usvg::OptionLog;
@@ -899,7 +897,6 @@ pub enum Node {
   Group(Box<Group>),
   Path(Box<Path>),
   Image(Box<Image>),
-  Text(Box<Text>),
 }
 
 impl Node {
@@ -909,7 +906,6 @@ impl Node {
       Node::Group(e) => e.id.as_str(),
       Node::Path(e) => e.id.as_str(),
       Node::Image(e) => e.id.as_str(),
-      Node::Text(e) => e.id.as_str(),
     }
   }
 
@@ -921,7 +917,6 @@ impl Node {
       Node::Group(group) => group.abs_transform(),
       Node::Path(path) => path.abs_transform(),
       Node::Image(image) => image.abs_transform(),
-      Node::Text(text) => text.abs_transform(),
     }
   }
 
@@ -931,7 +926,6 @@ impl Node {
       Node::Group(group) => group.bounding_box(),
       Node::Path(path) => path.bounding_box(),
       Node::Image(image) => image.bounding_box(),
-      Node::Text(text) => text.bounding_box(),
     }
   }
 
@@ -941,7 +935,6 @@ impl Node {
       Node::Group(group) => group.abs_bounding_box(),
       Node::Path(path) => path.abs_bounding_box(),
       Node::Image(image) => image.abs_bounding_box(),
-      Node::Text(text) => text.abs_bounding_box(),
     }
   }
 
@@ -952,7 +945,6 @@ impl Node {
       Node::Path(path) => path.stroke_bounding_box(),
       // Image cannot be stroked.
       Node::Image(image) => image.bounding_box(),
-      Node::Text(text) => text.stroke_bounding_box(),
     }
   }
 
@@ -963,7 +955,6 @@ impl Node {
       Node::Path(path) => path.abs_stroke_bounding_box(),
       // Image cannot be stroked.
       Node::Image(image) => image.abs_bounding_box(),
-      Node::Text(text) => text.abs_stroke_bounding_box(),
     }
   }
 
@@ -979,7 +970,6 @@ impl Node {
       // Hor/ver path without stroke can return None. This is expected.
       Node::Path(path) => path.abs_bounding_box().to_non_zero_rect(),
       Node::Image(image) => image.abs_bounding_box().to_non_zero_rect(),
-      Node::Text(text) => text.abs_bounding_box().to_non_zero_rect(),
     }
   }
 
@@ -1012,7 +1002,6 @@ impl Node {
       Node::Group(group) => group.subroots(&mut f),
       Node::Path(path) => path.subroots(&mut f),
       Node::Image(image) => image.subroots(&mut f),
-      Node::Text(text) => text.subroots(&mut f),
     }
   }
 }
@@ -1739,9 +1728,7 @@ fn loop_over_paint_servers(parent: &Group, f: &mut dyn FnMut(&Paint)) {
         push(path.fill.as_ref().map(|f| &f.paint), f);
         push(path.stroke.as_ref().map(|f| &f.paint), f);
       }
-      Node::Image(_) => {}
-      // Flattened text would be used instead.
-      Node::Text(_) => {}
+      Node::Image(_) => {} // Flattened text would be used instead.
     }
 
     node.subroots(|subroot| loop_over_paint_servers(subroot, f));

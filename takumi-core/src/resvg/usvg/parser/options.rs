@@ -1,7 +1,6 @@
 // Copyright 2018 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::resources::font::Fonts;
 use crate::resvg::usvg::{ImageHrefResolver, ImageRendering, ShapeRendering, Size, TextRendering};
 
 /// Processing options.
@@ -69,9 +68,6 @@ pub struct Options<'a> {
   /// Default: see type's documentation for details
   pub image_href_resolver: ImageHrefResolver<'a>,
 
-  /// The fonts `<text>` matches and shapes with.
-  pub fonts: Fonts,
-
   /// A CSS stylesheet that should be injected into the SVG. Can be used to overwrite
   /// certain attributes.
   pub style_sheet: Option<String>,
@@ -101,7 +97,6 @@ impl Default for Options<'_> {
       image_rendering: ImageRendering::default(),
       default_size: Size::from_wh(100.0, 100.0).unwrap(),
       image_href_resolver: ImageHrefResolver::default(),
-      fonts: Fonts::default(),
       style_sheet: None,
       current_color: None,
       current_color_used: std::sync::atomic::AtomicBool::new(false),

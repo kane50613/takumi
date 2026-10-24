@@ -1,6 +1,8 @@
 //! The fill and stroke of a shape, after Blink's `SVGLayoutSupport::ResolveSVGPaint` and
 //! `ApplyStrokeStyleToStrokeData`.
 
+use std::rc::Rc;
+
 use super::{
   Scope, Styled, SvgLayout,
   object::{ContextSource, Fill, Paint, Stroke, Units},
@@ -89,10 +91,10 @@ impl SvgLayout<'_> {
         LineJoin::Bevel => SvgLineJoin::Bevel,
       },
       dash: self.dash_pattern(styled, scope).map(|dashes| {
-        (
+        Rc::new((
           dashes,
           self.px(styled, scope, data.stroke_dashoffset, LengthAxis::Other),
-        )
+        ))
       }),
       context,
     })
@@ -167,8 +169,14 @@ impl SvgLayout<'_> {
 
   /// `stroke-dasharray` as an even list of user units, none where it paints a solid line.
   /// https://www.w3.org/TR/SVG11/painting.html#StrokeDasharrayProperty
-  fn dash_pattern(&self, styled: &Styled, scope: &Scope) -> Option<Vec<f32>> {
+  fn dash_pattern(&mut self, styled: &Styled, scope: &Scope) -> Option<Vec<f32>> {
     let lengths = styled.style().svg_stroke_data.stroke_dasharray.as_ref()?;
+
+    // Blink caps nothing, so the pattern costs the document as much as it paints.
+    if !self.budget.spend_painted(lengths.lengths().len()) {
+      return None;
+    }
+
     let list: Vec<f32> = lengths
       .lengths()
       .iter()

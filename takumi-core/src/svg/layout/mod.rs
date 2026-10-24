@@ -13,6 +13,7 @@ mod paint_server;
 mod painter;
 mod shape;
 mod switch;
+mod text;
 mod use_element;
 mod view_box;
 
@@ -92,6 +93,8 @@ pub(super) struct SvgLayout<'a> {
   images: HashMap<usize, Option<(PictureContent, Size<f32>)>>,
   /// The `use` elements and resources being laid out, which may not contain themselves.
   active: Vec<usize>,
+  /// The outlines of the shapes `textPath` elements name, by the element.
+  text_paths: HashMap<usize, Rc<text::TextPathShape>>,
   /// How many SVG images the one being laid out sits in.
   image_depth: usize,
   /// How many more element instances may be laid out.
@@ -124,6 +127,7 @@ impl<'a> SvgLayout<'a> {
       bounding_box_units: HashMap::new(),
       paint_servers: HashMap::new(),
       images: HashMap::new(),
+      text_paths: HashMap::new(),
       active: Vec::new(),
       image_depth,
       budget: Budget::default(),
@@ -427,7 +431,7 @@ impl<'a> SvgLayout<'a> {
       SvgElementKind::Svg | SvgElementKind::G => {
         self.convert_children(styled.index, &styled.context, scope, parent);
       }
-      SvgElementKind::Text => self.unsupported = true,
+      SvgElementKind::Text => self.convert_text(styled, scope, parent),
       _ => {}
     }
   }
@@ -477,7 +481,7 @@ impl<'a> SvgLayout<'a> {
       parent,
       |layout, group| match styled.kind {
         SvgElementKind::Line => {}
-        SvgElementKind::Text => layout.unsupported = true,
+        SvgElementKind::Text => layout.convert_text(&styled, scope, group),
         kind if kind.is_shape() => {
           if let Some(commands) = layout.shape_commands(&styled, scope) {
             layout.convert_shape(&styled, scope, commands, group);

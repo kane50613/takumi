@@ -13,7 +13,6 @@ mod shapes;
 mod style;
 mod svgtree;
 mod switch;
-mod text;
 mod units;
 mod use_node;
 
@@ -23,7 +22,6 @@ use crate::resvg::usvg::NonZeroRect;
 use crate::resvg::usvg::filter::Filter;
 use svgtree::AId;
 
-pub(crate) use converter::Cache;
 pub use image::ImageHrefResolver;
 pub use options::Options;
 
@@ -132,7 +130,6 @@ impl crate::resvg::usvg::Tree {
         // External images should be ignored.
         resolve_string: Box::new(|_, _| None),
       },
-      fonts: opt.fonts.clone(),
       ..Options::default()
     };
 
@@ -193,7 +190,7 @@ pub(crate) fn filters_from_markup(
     use_size: (None, None),
     opt,
   };
-  let mut cache = converter::Cache::new(opt.fonts.clone());
+  let mut cache = converter::Cache::new();
   let node = doc
     .descendants()
     .find(|n| n.has_attribute(AId::Filter))
