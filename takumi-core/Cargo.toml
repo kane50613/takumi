@@ -130,7 +130,7 @@ webp = ["dep:image-webp", "dep:libwebp-sys"]
 gif = ["dep:gif"]
 svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
 svg = ["svg-sizing", "dep:siphasher", "dep:strict-num", "dep:tiny-skia-path"]
-# resvg's raster renderer, which draws an SVG into a pixmap. Backends that draw `SvgOp`s themselves go without.
+# Rasterizing an SVG: resvg's filter pipeline and `SvgSource::rasterize_cached`. A backend that does not rasterize goes without.
 svg-raster = ["svg"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]

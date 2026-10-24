@@ -3,6 +3,9 @@ use std::{array, iter::successors};
 use smallvec::SmallVec;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, resources::image::apply_svg_filter, style::FilterReference};
+
+#[cfg(feature = "svg")]
+use crate::SvgDrawing;
 use takumi_core::{
   filter::{ColorMatrix, ColorMatrixChain},
   geometry::{Point, Size},
@@ -348,6 +351,7 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
                 height,
                 &reference.markup,
                 FilterReference::ID,
+                &SvgDrawing,
               )
               .map_err(Error::ImageResolveError)?;
             }

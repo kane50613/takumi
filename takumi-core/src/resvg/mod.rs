@@ -5,7 +5,8 @@
 [resvg](https://github.com/linebender/resvg) is an SVG rendering library.
 
 Vendored from resvg 0.48.1 (Apache-2.0 OR MIT), stripped of the `svgz`,
-`system-fonts`, `memmap-fonts` and `writer` features and the CLI.
+`system-fonts`, `memmap-fonts` and `writer` features, the CLI and the raster renderer. The
+parser and the filter pipeline remain, and a backend draws the tree from `SvgOp`s.
 
 Text support diverges from upstream: `<text>` matches fonts through the renderer's
 `FontFallbackList` and shapes through its `HarfBuzzShaper` in place of `fontdb` and
@@ -29,86 +30,31 @@ use std::sync::Arc;
 #[cfg(feature = "svg-raster")]
 use usvg::filter::Filter;
 
+#[cfg(feature = "svg-raster")]
+use crate::svg_vector::SvgDrawer;
+
+/// Applies one filter to a layer, which `transform` maps the filter's user space onto.
+#[cfg(feature = "svg-raster")]
+pub(crate) fn apply_filter(
+  filter: &Filter,
+  transform: tiny_skia::Transform,
+  layer: &mut tiny_skia::Pixmap,
+  drawer: &dyn SvgDrawer,
+) {
+  filter::apply(filter, transform, layer, drawer);
+}
+
 pub mod usvg;
 
-#[cfg(feature = "svg-raster")]
-mod clip;
 #[cfg(feature = "svg-raster")]
 mod filter;
 #[cfg(feature = "svg-raster")]
 mod geom;
-#[cfg(feature = "svg-raster")]
-mod image;
-#[cfg(feature = "svg-raster")]
-mod mask;
-#[cfg(feature = "svg-raster")]
-mod path;
-#[cfg(feature = "svg-raster")]
-mod render;
-
-#[cfg(feature = "svg-raster")]
-/// Renders a tree onto the pixmap.
-///
-/// `transform` will be used as a root transform.
-/// Can be used to position SVG inside the `pixmap`.
-///
-/// The produced content is in the sRGB color space.
-pub fn render(
-  tree: &crate::resvg::usvg::Tree,
-  transform: tiny_skia::Transform,
-  pixmap: &mut tiny_skia::PixmapMut,
-) {
-  let max_bbox = max_filter_bbox(pixmap.width(), pixmap.height());
-
-  let ctx = render::Context { max_bbox };
-  render::render_nodes(tree.root(), &ctx, transform, pixmap);
-}
-
-#[cfg(feature = "svg-raster")]
-/// Renders a node onto the pixmap.
-///
-/// `transform` will be used as a root transform.
-/// Can be used to position SVG inside the `pixmap`.
-///
-/// The expected pixmap size can be retrieved from `crate::resvg::usvg::Node::abs_layer_bounding_box()`.
-///
-/// Returns `None` when `node` has a zero size.
-///
-/// The produced content is in the sRGB color space.
-pub fn render_node(
-  node: &crate::resvg::usvg::Node,
-  mut transform: tiny_skia::Transform,
-  pixmap: &mut tiny_skia::PixmapMut,
-) -> Option<()> {
-  let bbox = node.abs_layer_bounding_box()?;
-
-  let max_bbox = max_filter_bbox(pixmap.width(), pixmap.height());
-
-  transform = transform.pre_translate(-bbox.x(), -bbox.y());
-
-  let ctx = render::Context { max_bbox };
-  render::render_node(node, &ctx, transform, pixmap);
-
-  Some(())
-}
-
-#[cfg(feature = "svg-raster")]
-fn max_filter_bbox(width: u32, height: u32) -> tiny_skia::IntRect {
-  tiny_skia::IntRect::from_xywh(
-    i32::try_from(width).unwrap_or(i32::MAX).saturating_mul(-2),
-    i32::try_from(height).unwrap_or(i32::MAX).saturating_mul(-2),
-    width.saturating_mul(5),
-    height.saturating_mul(5),
-  )
-  .unwrap_or_else(|| {
-    tiny_skia::IntRect::from_ltrb(i32::MIN / 2, i32::MIN / 2, i32::MAX / 2, i32::MAX / 2).unwrap()
-  })
-}
 
 #[cfg(feature = "svg-raster")]
 /// Applies parsed filters to a premultiplied RGBA layer in place.
 ///
-/// Mirrors the `render_group` filter path: each filter runs on a pixmap sized
+/// Mirrors resvg's `render_group` filter path: each filter runs on a pixmap sized
 /// to its region (the contract the filter primitives assert), with the layer
 /// placed at the region offset and the region window copied back afterwards.
 ///
@@ -118,6 +64,7 @@ pub(crate) fn apply_filters_to_layer(
   layer: &mut [u8],
   width: u32,
   height: u32,
+  drawer: &dyn SvgDrawer,
 ) -> Option<()> {
   for f in filters {
     let region = f.rect();
@@ -137,7 +84,7 @@ pub(crate) fn apply_filters_to_layer(
       None,
     );
 
-    filter::apply(f, ts, &mut sub);
+    filter::apply(f, ts, &mut sub, drawer);
 
     let mut out = tiny_skia::Pixmap::new(width, height)?;
     out.draw_pixmap(
@@ -165,18 +112,5 @@ impl<T> OptionLog for Option<T> {
       f();
       None
     })
-  }
-}
-
-#[cfg(feature = "svg-raster")]
-#[cfg(test)]
-mod tests {
-  #[test]
-  fn max_filter_bbox_is_clamped() {
-    let bbox = super::max_filter_bbox(u32::MAX, u32::MAX);
-    assert_eq!(bbox.left(), i32::MIN / 2);
-    assert_eq!(bbox.top(), i32::MIN / 2);
-    assert_eq!(bbox.right(), i32::MAX / 2);
-    assert_eq!(bbox.bottom(), i32::MAX / 2);
   }
 }

@@ -22,7 +22,7 @@ use crate::{
   PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
   interpolate_with_footprint,
   layout::node::resolve_image,
-  overlay_image, pixmap_ref_from_buffer,
+  overlay_image, pixmap_ref_from_buffer, render_image,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::*,
   try_overlay_gradient_tile,
@@ -630,14 +630,7 @@ pub(crate) fn render_tile(
           height: tile_h,
           algo: context.style.misc_inherited_data.image_rendering,
         }),
-        ImageSource::Encoded(..) => match source.render_for_layout(
-          tile_w,
-          tile_h,
-          context.style.misc_inherited_data.image_rendering,
-          context.time_ms(),
-          context.current_color,
-          Some(context.fonts()),
-        )? {
+        ImageSource::Encoded(..) => match render_image(&source, context, tile_w, tile_h)? {
           RenderedImage::Sampled { source, .. } => Some(BackgroundTile::SampledBitmap {
             source,
             width: tile_w,
@@ -647,14 +640,7 @@ pub(crate) fn render_tile(
           RenderedImage::Rasterized(..) => None,
         },
         #[cfg(feature = "svg")]
-        ImageSource::Svg(..) => match source.render_for_layout(
-          tile_w,
-          tile_h,
-          context.style.misc_inherited_data.image_rendering,
-          context.time_ms(),
-          context.current_color,
-          Some(context.fonts()),
-        )? {
+        ImageSource::Svg(..) => match render_image(&source, context, tile_w, tile_h)? {
           RenderedImage::Rasterized(buffer) => {
             pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
           }

@@ -123,8 +123,6 @@ pub(crate) fn rasterized_image(
       height,
       context.style.misc_inherited_data.image_rendering,
       0,
-      context.current_color,
-      Some(context.fonts()),
     )
     .map_err(|error| undrawable_reason(filter.is_some(), &error))?;
   let buffer = match &rendered {

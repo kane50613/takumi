@@ -6,6 +6,7 @@ use std::rc::Rc;
 use crate::{
   blur::blur_rgba,
   resvg::usvg::{ApproxEqUlps, ApproxZeroUlps},
+  svg_vector::{SvgDrawer, flatten_children},
 };
 use tiny_skia::IntRect;
 
@@ -391,8 +392,9 @@ pub fn apply(
   filter: &crate::resvg::usvg::filter::Filter,
   ts: tiny_skia::Transform,
   source: &mut tiny_skia::Pixmap,
+  drawer: &dyn SvgDrawer,
 ) {
-  let result = apply_inner(filter, ts, source);
+  let result = apply_inner(filter, ts, source, drawer);
   let result = result.and_then(|image| apply_to_canvas(image, source));
 
   // Clear on error.
@@ -413,6 +415,7 @@ fn apply_inner(
   filter: &crate::resvg::usvg::filter::Filter,
   ts: crate::resvg::usvg::Transform,
   source: &mut tiny_skia::Pixmap,
+  drawer: &dyn SvgDrawer,
 ) -> Result<Image, Error> {
   let region = filter
     .rect()
@@ -476,7 +479,7 @@ fn apply_inner(
         let input = get_input(fe.input(), region, source, &results)?;
         apply_tile(input, region)
       }
-      crate::resvg::usvg::filter::Kind::Image(fe) => apply_image(fe, region, subregion, ts),
+      crate::resvg::usvg::filter::Kind::Image(fe) => apply_image(fe, region, subregion, ts, drawer),
       crate::resvg::usvg::filter::Kind::ComponentTransfer(fe) => {
         let input = get_input(fe.input(), region, source, &results)?;
         apply_component_transfer(fe, cs, input)
@@ -786,7 +789,7 @@ fn apply_blend(
     0,
     input1.as_ref().as_ref(),
     &tiny_skia::PixmapPaint {
-      blend_mode: crate::resvg::render::convert_blend_mode(fe.mode()),
+      blend_mode: tiny_skia_blend_mode(fe.mode()),
       ..tiny_skia::PixmapPaint::default()
     },
     tiny_skia::Transform::identity(),
@@ -794,6 +797,29 @@ fn apply_blend(
   );
 
   Ok(Image::from_image(pixmap, cs))
+}
+
+fn tiny_skia_blend_mode(mode: crate::resvg::usvg::BlendMode) -> tiny_skia::BlendMode {
+  use crate::resvg::usvg::BlendMode;
+
+  match mode {
+    BlendMode::Normal => tiny_skia::BlendMode::SourceOver,
+    BlendMode::Multiply => tiny_skia::BlendMode::Multiply,
+    BlendMode::Screen => tiny_skia::BlendMode::Screen,
+    BlendMode::Overlay => tiny_skia::BlendMode::Overlay,
+    BlendMode::Darken => tiny_skia::BlendMode::Darken,
+    BlendMode::Lighten => tiny_skia::BlendMode::Lighten,
+    BlendMode::ColorDodge => tiny_skia::BlendMode::ColorDodge,
+    BlendMode::ColorBurn => tiny_skia::BlendMode::ColorBurn,
+    BlendMode::HardLight => tiny_skia::BlendMode::HardLight,
+    BlendMode::SoftLight => tiny_skia::BlendMode::SoftLight,
+    BlendMode::Difference => tiny_skia::BlendMode::Difference,
+    BlendMode::Exclusion => tiny_skia::BlendMode::Exclusion,
+    BlendMode::Hue => tiny_skia::BlendMode::Hue,
+    BlendMode::Saturation => tiny_skia::BlendMode::Saturation,
+    BlendMode::Color => tiny_skia::BlendMode::Color,
+    BlendMode::Luminosity => tiny_skia::BlendMode::Luminosity,
+  }
 }
 
 fn apply_composite(
@@ -931,6 +957,7 @@ fn apply_image(
   region: IntRect,
   subregion: IntRect,
   ts: crate::resvg::usvg::Transform,
+  drawer: &dyn SvgDrawer,
 ) -> Result<Image, Error> {
   let mut pixmap = tiny_skia::Pixmap::try_create(region.width(), region.height())?;
 
@@ -938,11 +965,11 @@ fn apply_image(
   let transform =
     tiny_skia::Transform::from_row(sx, 0.0, 0.0, sy, subregion.x() as f32, subregion.y() as f32);
 
-  let ctx = crate::resvg::render::Context {
-    max_bbox: tiny_skia::IntRect::from_xywh(0, 0, region.width(), region.height()).unwrap(),
-  };
-
-  crate::resvg::render::render_nodes(fe.root(), &ctx, transform, &mut pixmap.as_mut());
+  drawer.draw(
+    &flatten_children(fe.root()),
+    transform,
+    &mut pixmap.as_mut(),
+  );
 
   Ok(Image::from_image(
     pixmap,
