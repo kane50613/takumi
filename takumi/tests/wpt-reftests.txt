@@ -1778,6 +1778,10 @@ css/css-masking/clip-path-svg-content/mask-nested-clip-path-004.svg
 css/css-masking/clip-path-svg-content/mask-nested-clip-path-007.svg
 css/css-masking/clip-path-svg-content/mask-nested-clip-path-008.svg
 css/css-masking/clip-path-svg-content/mask-nested-clip-path-010.svg
+css/css-masking/clip-path-svg-content/mask-objectboundingbox-content-clip-transform.svg
+css/css-masking/clip-path-svg-content/mask-objectboundingbox-content-clip.svg
+css/css-masking/clip-path-svg-content/mask-userspaceonuse-content-clip-transform.svg
+css/css-masking/clip-path-svg-content/mask-userspaceonuse-content-clip.svg
 css/css-masking/clip-path/animations/clip-path-animation-forward-fill-positive-delay.html
 css/css-masking/clip-path/animations/clip-path-animation-forward-fill.html
 css/css-masking/clip-path/animations/clip-path-animation-fragmented-inline.html
@@ -3092,7 +3096,6 @@ svg/linking/reftests/svgview-and-xywh.html
 svg/linking/reftests/url-processing-fetch-properties-002.sub.svg
 svg/linking/reftests/url-processing-whitespace-002.svg
 svg/linking/reftests/url-processing-whitespace-003.svg
-svg/linking/reftests/url-reference-local-textpath.svg
 svg/linking/reftests/use-descendant-combinator-001.html
 svg/linking/reftests/use-nested-symbol-001.html
 svg/linking/reftests/use-symbol-rendered-001.html
@@ -3118,6 +3121,7 @@ svg/painting/reftests/marker-units-userspaceonuse-non-scaling-stroke.svg
 svg/painting/reftests/markers-orient-001.svg
 svg/painting/reftests/mask-percentage.html
 svg/painting/reftests/mask-print.svg
+svg/painting/reftests/non-scaling-stroke-004.html
 svg/painting/reftests/non-scaling-stroke-precision-loss.html
 svg/painting/reftests/paint-context-001.svg
 svg/painting/reftests/paint-context-002.svg

@@ -218,6 +218,26 @@ fn wpt_reftests() {
 /// which takumi changes to `border-box`, apart from tables.
 const UA_SHEET: &str = "* { box-sizing: content-box } ::before, ::after { box-sizing: content-box } table { box-sizing: border-box }";
 
+/// What a standalone SVG document's viewport sets: no margin, and a root that fills it.
+const STANDALONE_SVG_SHEET: &str =
+  "html, body { margin: 0; height: 100% } body > svg { display: block }";
+
+/// `source` with the width and height a standalone root `<svg>` lacks set to 100% of the viewport.
+/// <https://svgwg.org/svg2-draft/geometry.html#Sizing>
+fn with_standalone_size(source: &str) -> String {
+  let Some((start, attributes)) = positioned_tags(source, "svg").into_iter().next() else {
+    return source.to_owned();
+  };
+  let insert_at = start + "<svg".len();
+  let missing: String = ["width", "height"]
+    .into_iter()
+    .filter(|name| !attributes.contains_key(*name))
+    .map(|name| format!(" {name}=\"100%\""))
+    .collect();
+
+  format!("{}{missing}{}", &source[..insert_at], &source[insert_at..])
+}
+
 /// The `<style>` blocks of a document with their offsets. HTML reads a block as raw text; XHTML
 /// reads it as XML, which unwraps CDATA sections and decodes character references, so each block
 /// goes through an XML parser alone, apart from the entities of the document's DTD.
@@ -928,6 +948,14 @@ impl Runner {
 
   /// The document at `path` rendered onto white, as RGBA, across print pages when `print`.
   fn render(&self, path: &Path, source: &str, print: bool) -> Result<Rendering, String> {
+    let is_svg = path.extension().is_some_and(|extension| extension == "svg");
+    let sized;
+    let source = if is_svg {
+      sized = with_standalone_size(source);
+      &sized
+    } else {
+      source
+    };
     let linked: Vec<(usize, PathBuf, String)> = positioned_tags(source, "link")
       .into_iter()
       .filter_map(|(start, attributes)| {
@@ -996,7 +1024,8 @@ impl Runner {
       })
       .collect();
     let stylesheet = StyleSheet::parse_list_loosy(
-      [UA_SHEET.to_owned()]
+      [UA_SHEET, if is_svg { STANDALONE_SVG_SHEET } else { "" }]
+        .map(str::to_owned)
         .into_iter()
         .chain(sheets.into_iter().map(|(.., sheet)| sheet)),
     );
