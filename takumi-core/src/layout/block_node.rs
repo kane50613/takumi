@@ -44,13 +44,19 @@ use crate::{
 /// children and a few measures that did not.
 #[derive(Default)]
 pub(crate) struct LayoutCache {
-  /// Blink's `layout_results_`: the last layout of each fragment, with the break token it resumed
-  /// at, from fragment `released` on.
-  layouts: Vec<(ConstraintSpace, ChildBreakToken, Rc<LayoutResult>)>,
   /// How many of the first fragments' layouts were released, [`Self::ALL_RELEASED`] once the box
   /// ended.
   #[cfg(feature = "fragmentation")]
   released: usize,
+  /// Boxed, as most boxes of a long document keep nothing while layout is on other pages.
+  entries: Option<Box<CacheEntries>>,
+}
+
+#[derive(Default)]
+struct CacheEntries {
+  /// Blink's `layout_results_`: the last layout of each fragment, with the break token it resumed
+  /// at, from fragment `released` on.
+  layouts: Vec<(ConstraintSpace, ChildBreakToken, Rc<LayoutResult>)>,
   measures: Vec<(ConstraintSpace, Rc<LayoutResult>)>,
   min_max_sizes: Vec<((MinMaxKey, SizeType), MinMaxSizesResult)>,
 }
@@ -100,6 +106,8 @@ impl LayoutCache {
     }
 
     self
+      .entries
+      .as_deref()?
       .measures
       .iter()
       .find(|(cached, _)| cached == space)
@@ -121,11 +129,13 @@ impl LayoutCache {
         return;
       };
 
+      let layouts = &mut self.entries.get_or_insert_default().layouts;
+
       // The later fragments resumed from an earlier layout of this one, and lay out anew.
-      self.layouts.truncate(slot);
-      if self.layouts.len() == slot {
+      layouts.truncate(slot);
+      if layouts.len() == slot {
         push_tight(
-          &mut self.layouts,
+          layouts,
           (space.clone(), input.child_break_token(), Rc::clone(result)),
         );
       }
@@ -135,14 +145,19 @@ impl LayoutCache {
       return;
     }
 
-    if self.measures.len() == Self::MEASURES {
-      self.measures.remove(0);
+    let measures = &mut self.entries.get_or_insert_default().measures;
+
+    if measures.len() == Self::MEASURES {
+      measures.remove(0);
     }
-    push_tight(&mut self.measures, (space.clone(), Rc::clone(result)));
+    push_tight(measures, (space.clone(), Rc::clone(result)));
   }
 
   fn store_min_max_sizes(&mut self, key: (MinMaxKey, SizeType), sizes: MinMaxSizesResult) {
-    push_tight(&mut self.min_max_sizes, (key, sizes));
+    push_tight(
+      &mut self.entries.get_or_insert_default().min_max_sizes,
+      (key, sizes),
+    );
   }
 
   fn min_max_sizes(&self, key: (MinMaxKey, SizeType)) -> Option<MinMaxSizesResult> {
@@ -153,6 +168,8 @@ impl LayoutCache {
     );
 
     self
+      .entries
+      .as_deref()?
       .min_max_sizes
       .iter()
       .find(|(cached, _)| *cached == key)
@@ -183,7 +200,7 @@ impl LayoutCache {
     &self,
     index: usize,
   ) -> Option<&(ConstraintSpace, ChildBreakToken, Rc<LayoutResult>)> {
-    self.layouts.get(self.slot(index)?)
+    self.entries.as_deref()?.layouts.get(self.slot(index)?)
   }
 }
 
@@ -191,11 +208,14 @@ impl LayoutCache {
 impl LayoutCache {
   /// Drops the layouts of the fragments before `fragment`, which are not resumed again.
   pub(crate) fn release_before(&mut self, fragment: usize) {
+    let Some(entries) = self.entries.as_deref_mut() else {
+      return;
+    };
     let count = fragment
       .saturating_sub(self.released)
-      .min(self.layouts.len());
+      .min(entries.layouts.len());
 
-    self.layouts.drain(..count);
+    entries.layouts.drain(..count);
     self.released += count;
   }
 
@@ -208,21 +228,30 @@ impl LayoutCache {
   /// Whether the box keeps a measure.
   #[cfg(test)]
   pub(crate) fn has_measures(&self) -> bool {
-    !self.measures.is_empty()
+    self
+      .entries
+      .as_deref()
+      .is_some_and(|entries| !entries.measures.is_empty())
   }
 
   /// Drops the measures and intrinsic sizes, which the box computes again when asked.
   pub(crate) fn release_measures(&mut self) {
-    self.measures = Vec::new();
-    self.min_max_sizes = Vec::new();
+    let Some(entries) = self.entries.as_deref_mut() else {
+      return;
+    };
+
+    if entries.layouts.is_empty() {
+      self.entries = None;
+    } else {
+      entries.measures = Vec::new();
+      entries.min_max_sizes = Vec::new();
+    }
   }
 
   /// Drops every layout, measure, and intrinsic size, for a box with no fragment to come.
   pub(crate) fn release_all(&mut self) {
     self.released = Self::ALL_RELEASED;
-    self.layouts = Vec::new();
-    self.measures = Vec::new();
-    self.min_max_sizes = Vec::new();
+    self.entries = None;
   }
 }
 
