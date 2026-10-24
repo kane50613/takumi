@@ -175,11 +175,17 @@ impl Affine {
   /// which `is_invertible` rejects, so it still reaches the paint it transforms.
   #[cfg(feature = "svg")]
   pub(crate) fn is_renderable(self) -> bool {
-    let (scale_x, scale_y) = (self.a.hypot(self.c), self.b.hypot(self.d));
+    let (scale_x, scale_y) = self.row_scales();
 
     self.to_cols_array().iter().all(|entry| entry.is_finite())
       && scale_x > f32::EPSILON
       && scale_y > f32::EPSILON
+  }
+
+  /// The length of each row of the linear part, as tiny-skia's `Transform::get_scale` has them.
+  #[cfg(feature = "svg")]
+  pub(crate) fn row_scales(self) -> (f32, f32) {
+    (self.a.hypot(self.c), self.b.hypot(self.d))
   }
 
   /// Converts the affine transform to a column-major array.

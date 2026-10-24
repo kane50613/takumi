@@ -4,13 +4,13 @@
 
 use super::{
   Scope, Styled, SvgLayout,
-  approx_eq::ApproxEq,
   object::{Container, ContextSource, Fill, LayoutObject, Paint, Shape},
 };
 use crate::{
   geometry::{PathBuilder, PathCommand, Point, Rect},
   path_data::PathData,
   style::{Affine, Color, Length, PaintPhase, ShapeRendering, Size, Visibility},
+  svg::approx_eq::ApproxEq,
   svg::{element::SvgElementKind, length::LengthAxis},
 };
 

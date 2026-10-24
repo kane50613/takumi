@@ -16,7 +16,7 @@ use super::{
 use crate::{
   geometry::{PathCommand, Point, Rect},
   style::{Affine, Angle, TextAnchor, TextDecorationLines},
-  svg::layout::approx_eq::ApproxEq,
+  svg::approx_eq::ApproxEq,
 };
 
 /// The glyphs of a span that share one paint.

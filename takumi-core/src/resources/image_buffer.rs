@@ -195,6 +195,16 @@ fn has_opaque_alpha(raw: &[u8]) -> bool {
     .all(|pixel| pixel[3] == u8::MAX)
 }
 
+/// Converts premultiplied RGBA bytes to straight alpha in place, as [`demultiply_pixel`] does.
+#[cfg(feature = "svg-raster")]
+pub(crate) fn demultiply_rgba_in_place(raw: &mut [u8]) {
+  raw
+    .as_chunks_mut::<4>()
+    .0
+    .iter_mut()
+    .for_each(demultiply_pixel);
+}
+
 #[inline(always)]
 pub(crate) fn premultiply_rgba_in_place(raw: &mut [u8]) {
   for pixel in raw.as_chunks_mut::<4>().0 {

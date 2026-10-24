@@ -120,18 +120,4 @@ impl SvgLayout<'_> {
 
     Some(lengths)
   }
-
-  /// The numbers a list attribute holds, none unless every one parses.
-  fn number_list(&self, index: usize, name: &str) -> Option<Vec<f32>> {
-    let mut parser = Parser::new(self.attribute(index, name)?);
-    let mut numbers = Vec::new();
-
-    while !parser.is_exhausted() {
-      numbers.push(parser.expect_number().ok()?);
-
-      let _ = parser.try_parse(Parser::expect_comma);
-    }
-
-    Some(numbers)
-  }
 }

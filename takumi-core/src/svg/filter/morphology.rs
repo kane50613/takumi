@@ -1,53 +1,49 @@
 // Copyright 2020 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::ImageRefMut;
-use super::RGBA8;
-use crate::resvg::usvg::filter::MorphologyOperator;
+use std::array;
 
-/// Applies a morphology filter.
+use super::MorphologyOperator;
+
+/// Blink's `FEMorphology` in `fe_morphology.cc`, which Skia runs as `SkImageFilters::Erode` and
+/// `Dilate`. Approximate: the window follows resvg's, `ceil(radius) * 2` pixels wide.
 ///
-/// `src` pixels should have a **premultiplied alpha**.
-///
-/// # Allocations
-///
-/// This method will allocate a copy of the `src` image as a back buffer.
-pub fn apply(operator: MorphologyOperator, rx: f32, ry: f32, src: ImageRefMut) {
+/// Pixels are premultiplied and the slice is `width` pixels wide.
+pub(super) fn apply(
+  operator: MorphologyOperator,
+  rx: f32,
+  ry: f32,
+  pixels: &mut [[u8; 4]],
+  width: usize,
+) {
+  let height = pixels.len() / width;
   // No point in making matrix larger than image.
-  let columns = std::cmp::min((rx.ceil() as u32).saturating_mul(2), src.width) as usize;
-  let rows = std::cmp::min((ry.ceil() as u32).saturating_mul(2), src.height) as usize;
-  let width = src.width as usize;
-  let height = src.height as usize;
-  let mut buf = vec![RGBA8::default(); src.data.len()];
+  let columns = ((rx.ceil() as usize).saturating_mul(2)).min(width);
+  let rows = ((ry.ceil() as usize).saturating_mul(2)).min(height);
+  let mut buf = vec![[0; 4]; pixels.len()];
 
   // The extremum over a rectangle is the extremum over its rows' extrema, so the window sweeps
   // each row, then each column.
   sweep(
     operator,
-    src.data,
+    pixels,
     &mut buf,
     columns,
     height,
     width,
     |row, x| row * width + x,
   );
-  sweep(
-    operator,
-    &buf,
-    src.data,
-    rows,
-    width,
-    height,
-    |column, y| y * width + column,
-  );
+  sweep(operator, &buf, pixels, rows, width, height, |column, y| {
+    y * width + column
+  });
 }
 
 /// Writes to `dst` the extremum of `src` along each of `lines` lines of `length` pixels, over a
 /// window of `size` pixels that starts `size / 2` before each pixel and is clipped to the line.
 fn sweep(
   operator: MorphologyOperator,
-  src: &[RGBA8],
-  dst: &mut [RGBA8],
+  src: &[[u8; 4]],
+  dst: &mut [[u8; 4]],
   size: usize,
   lines: usize,
   length: usize,
@@ -68,18 +64,13 @@ fn sweep(
   }
 }
 
-fn combine(operator: MorphologyOperator, a: RGBA8, b: RGBA8) -> RGBA8 {
+fn combine(operator: MorphologyOperator, a: [u8; 4], b: [u8; 4]) -> [u8; 4] {
   let pick = match operator {
-    MorphologyOperator::Erode => std::cmp::min::<u8>,
-    MorphologyOperator::Dilate => std::cmp::max::<u8>,
+    MorphologyOperator::Erode => u8::min,
+    MorphologyOperator::Dilate => u8::max,
   };
 
-  RGBA8 {
-    r: pick(a.r, b.r),
-    g: pick(a.g, b.g),
-    b: pick(a.b, b.b),
-    a: pick(a.a, b.a),
-  }
+  array::from_fn(|channel| pick(a[channel], b[channel]))
 }
 
 #[cfg(test)]
@@ -91,9 +82,10 @@ mod tests {
     operator: MorphologyOperator,
     columns: usize,
     rows: usize,
-    src: &ImageRefMut,
-  ) -> Vec<RGBA8> {
-    let (width, height) = (src.width as usize, src.height as usize);
+    width: usize,
+    src: &[[u8; 4]],
+  ) -> Vec<[u8; 4]> {
+    let height = src.len() / width;
     let mut out = Vec::new();
 
     for y in 0..height {
@@ -104,7 +96,7 @@ mod tests {
 
         out.push(
           pixels
-            .map(|index| src.data[index])
+            .map(|index| src[index])
             .reduce(|a, b| combine(operator, a, b))
             .unwrap_or_default(),
         );
@@ -118,15 +110,13 @@ mod tests {
   fn sweeps_match_the_whole_rectangle() {
     let (width, height) = (9, 7);
     let mut seed = 0x2545_f491_u32;
-    let pixels: Vec<RGBA8> = (0..width * height)
+    let pixels: Vec<[u8; 4]> = (0..width * height)
       .map(|_| {
         seed ^= seed << 13;
         seed ^= seed >> 17;
         seed ^= seed << 5;
 
-        let [r, g, b, a] = seed.to_le_bytes();
-
-        RGBA8 { r, g, b, a }
+        seed.to_le_bytes()
       })
       .collect();
 
@@ -139,16 +129,11 @@ mod tests {
         (20.0, 20.0),
       ] {
         let mut data = pixels.clone();
-        let columns = ((rx.ceil() as usize) * 2).min(width as usize);
-        let rows = ((ry.ceil() as usize) * 2).min(height as usize);
-        let expected = naive(
-          operator,
-          columns,
-          rows,
-          &ImageRefMut::new(width, height, &mut data.clone()),
-        );
+        let columns = ((rx.ceil() as usize) * 2).min(width);
+        let rows = ((ry.ceil() as usize) * 2).min(height);
+        let expected = naive(operator, columns, rows, width, &data);
 
-        apply(operator, rx, ry, ImageRefMut::new(width, height, &mut data));
+        apply(operator, rx, ry, &mut data, width);
 
         assert_eq!(data, expected, "{operator:?} {rx} {ry}");
       }

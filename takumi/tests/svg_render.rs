@@ -168,3 +168,28 @@ fn underline_decoration_renders() {
     .count();
   assert!(red > 0, "expected red underline pixels, found none");
 }
+
+#[test]
+fn a_filter_url_to_a_fragment_emits_no_filter() {
+  let page = |filter: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="width:40px;height:40px;background-color:rgb(10,120,200);{filter}"></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parses")
+  };
+  let emit = |node| {
+    render(
+      SvgOptions::builder()
+        .node(node)
+        .viewport(Viewport::new((60, 60)))
+        .fonts(&context())
+        .build(),
+    )
+    .expect("render svg")
+  };
+
+  assert_eq!(emit(page("")), emit(page("filter:url(#missing)")));
+}

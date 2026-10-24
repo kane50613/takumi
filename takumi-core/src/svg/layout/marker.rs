@@ -8,7 +8,6 @@ use std::{
 
 use super::{
   Scope, Styled, SvgLayout,
-  approx_eq::ApproxEq,
   object::{Container, LayoutClip, LayoutObject},
   view_box::PreserveAspectRatio,
 };
@@ -16,6 +15,7 @@ use crate::{
   geometry::{PathCommand, Point, Rect, Size},
   resources::svg_size::ViewBox,
   style::{Affine, Angle, FromCssStr, Length, Overflow},
+  svg::approx_eq::ApproxEq,
   svg::{element::SvgElementKind, length::LengthAxis},
 };
 

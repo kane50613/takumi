@@ -12,3 +12,11 @@ impl ApproxEq for f32 {
         && self.to_bits().abs_diff(other.to_bits()) <= 4)
   }
 }
+
+impl ApproxEq for f64 {
+  fn approx_eq(self, other: Self) -> bool {
+    self == other
+      || (self.is_sign_negative() == other.is_sign_negative()
+        && self.to_bits().abs_diff(other.to_bits()) <= 4)
+  }
+}

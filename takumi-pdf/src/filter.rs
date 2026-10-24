@@ -19,12 +19,12 @@ pub(crate) struct ColorFilter {
   functions: ColorMatrixChain,
 }
 
-/// The first filter function that does not fold into a color matrix, written
-/// back as CSS.
+/// The first filter function that does not fold into a color matrix, written back as CSS.
+/// A `url()` to a fragment names no filter outside an SVG document, so it is skipped.
 pub(crate) fn unsupported_filter(filters: &[Filter]) -> Option<String> {
   filters
     .iter()
-    .find(|filter| ColorMatrix::from_filter(filter).is_none())
+    .find(|filter| !matches!(filter, Filter::Url(_)) && ColorMatrix::from_filter(filter).is_none())
     .map(ToCss::to_css_string)
 }
 

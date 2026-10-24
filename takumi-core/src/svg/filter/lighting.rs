@@ -1,10 +1,8 @@
 // Copyright 2020 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::RGBA8;
-use super::{ImageRef, ImageRefMut, f32_bound};
-use crate::resvg::usvg::filter::{DiffuseLighting, LightSource, SpecularLighting};
-use crate::resvg::usvg::{ApproxEqUlps, ApproxZeroUlps, Color};
+use super::{DiffuseLighting, LightSource, SpecularLighting};
+use crate::{style::Color, svg::approx_eq::ApproxEq};
 
 const FACTOR_1_2: f32 = 1.0 / 2.0;
 const FACTOR_1_3: f32 = 1.0 / 3.0;
@@ -25,7 +23,7 @@ impl Vector2 {
 
   #[inline]
   fn approx_zero(&self) -> bool {
-    self.x.approx_zero_ulps(4) && self.y.approx_zero_ulps(4)
+    self.x.approx_eq(0.0) && self.y.approx_eq(0.0)
   }
 }
 
@@ -67,7 +65,7 @@ impl Vector3 {
   #[inline]
   fn normalized(&self) -> Option<Self> {
     let length = self.length();
-    if !length.approx_zero_ulps(4) {
+    if !length.approx_eq(0.0) {
       Some(Vector3 {
         x: self.x / length,
         y: self.y / length,
@@ -105,6 +103,28 @@ impl core::ops::Sub<Vector3> for Vector3 {
   }
 }
 
+/// The alpha channel of straight or premultiplied pixels.
+#[derive(Clone, Copy)]
+struct Alpha<'a> {
+  pixels: &'a [[u8; 4]],
+  width: usize,
+  height: usize,
+}
+
+impl<'a> Alpha<'a> {
+  fn new(pixels: &'a [[u8; 4]], width: usize) -> Self {
+    Self {
+      pixels,
+      width,
+      height: pixels.len() / width,
+    }
+  }
+
+  fn at(&self, x: usize, y: usize) -> i16 {
+    i16::from(self.pixels[self.width * y + x][3])
+  }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Normal {
   factor: Vector2,
@@ -121,27 +141,24 @@ impl Normal {
   }
 }
 
-/// Renders a diffuse lighting.
+/// Blink's `FEDiffuseLighting` in `fe_diffuse_lighting.cc`, which Skia runs as
+/// `SkImageFilters::DistantLitDiffuse`, `PointLitDiffuse`, and `SpotLitDiffuse`. Approximate: the
+/// Sobel kernels follow resvg's port of Skia's.
 ///
-/// - `src` pixels can have any alpha method, since only the alpha channel is used.
-/// - `dest` will have an **unpremultiplied alpha**.
-///
-/// Does nothing when `src` is less than 3x3.
-///
-/// `src` and `dest` dimensions must match.
-pub fn diffuse_lighting(
+/// Only the alpha of `src` is read, and `dest` gets straight alpha. Both are `width` pixels wide
+/// and the same length, and nothing is done when they are less than 3x3.
+pub(super) fn diffuse_lighting(
   fe: &DiffuseLighting,
   light_source: LightSource,
-  src: ImageRef,
-  dest: ImageRefMut,
+  src: &[[u8; 4]],
+  width: usize,
+  dest: &mut [[u8; 4]],
 ) {
-  debug_assert!(src.width == dest.width && src.height == dest.height);
-
   let light_factor = |normal: Normal, light_vector: Vector3| {
     let k = if normal.normal.approx_zero() {
       light_vector.z
     } else {
-      let mut n = normal.normal * (fe.surface_scale() / 255.0);
+      let mut n = normal.normal * (fe.surface_scale / 255.0);
       n.x *= normal.factor.x;
       n.y *= normal.factor.y;
 
@@ -150,76 +167,73 @@ pub fn diffuse_lighting(
       normal.dot(&light_vector) / normal.length()
     };
 
-    fe.diffuse_constant() * k
+    fe.diffuse_constant * k
   };
 
   apply(
     light_source,
-    fe.surface_scale(),
-    fe.lighting_color(),
+    fe.surface_scale,
+    fe.lighting_color,
     &light_factor,
     calc_diffuse_alpha,
-    src,
+    Alpha::new(src, width),
     dest,
   );
 }
 
-/// Renders a specular lighting.
+/// Blink's `FESpecularLighting` in `fe_specular_lighting.cc`, which Skia runs as
+/// `SkImageFilters::DistantLitSpecular`, `PointLitSpecular`, and `SpotLitSpecular`. Approximate:
+/// the Sobel kernels follow resvg's port of Skia's.
 ///
-/// - `src` pixels can have any alpha method, since only the alpha channel is used.
-/// - `dest` will have a **premultiplied alpha**.
-///
-/// Does nothing when `src` is less than 3x3.
-///
-/// `src` and `dest` dimensions must match.
-pub fn specular_lighting(
+/// Only the alpha of `src` is read, and `dest` gets premultiplied alpha. Both are `width` pixels
+/// wide and the same length, and nothing is done when they are less than 3x3.
+pub(super) fn specular_lighting(
   fe: &SpecularLighting,
   light_source: LightSource,
-  src: ImageRef,
-  dest: ImageRefMut,
+  src: &[[u8; 4]],
+  width: usize,
+  dest: &mut [[u8; 4]],
 ) {
-  debug_assert!(src.width == dest.width && src.height == dest.height);
-
   let light_factor = |normal: Normal, light_vector: Vector3| {
     let h = light_vector + Vector3::new(0.0, 0.0, 1.0);
     let h_length = h.length();
 
-    if h_length.approx_zero_ulps(4) {
+    if h_length.approx_eq(0.0) {
       return 0.0;
     }
 
     let k = if normal.normal.approx_zero() {
       let n_dot_h = h.z / h_length;
-      if fe.specular_exponent().approx_eq_ulps(&1.0, 4) {
+      if fe.specular_exponent.approx_eq(1.0) {
         n_dot_h
       } else {
-        n_dot_h.powf(fe.specular_exponent())
+        n_dot_h.powf(fe.specular_exponent)
       }
     } else {
-      let mut n = normal.normal * (fe.surface_scale() / 255.0);
+      let mut n = normal.normal * (fe.surface_scale / 255.0);
       n.x *= normal.factor.x;
       n.y *= normal.factor.y;
 
       let normal = Vector3::new(n.x, n.y, 1.0);
 
       let n_dot_h = normal.dot(&h) / normal.length() / h_length;
-      if fe.specular_exponent().approx_eq_ulps(&1.0, 4) {
+      if fe.specular_exponent.approx_eq(1.0) {
         n_dot_h
       } else {
-        n_dot_h.powf(fe.specular_exponent())
+        n_dot_h.powf(fe.specular_exponent)
       }
     };
 
-    fe.specular_constant() * k
+    fe.specular_constant * k
   };
 
   apply(
     light_source,
-    fe.surface_scale(),
-    fe.lighting_color(),
+    fe.surface_scale,
+    fe.lighting_color,
     &light_factor,
     calc_specular_alpha,
-    src,
+    Alpha::new(src, width),
     dest,
   );
 }
@@ -230,21 +244,20 @@ fn apply(
   lighting_color: Color,
   light_factor: &dyn Fn(Normal, Vector3) -> f32,
   calc_alpha: fn(u8, u8, u8) -> u8,
-  src: ImageRef,
-  mut dest: ImageRefMut,
+  src: Alpha,
+  dest: &mut [[u8; 4]],
 ) {
-  if src.width < 3 || src.height < 3 {
+  let Alpha { width, height, .. } = src;
+
+  if width < 3 || height < 3 {
     return;
   }
 
-  let width = src.width;
-  let height = src.height;
-
   // `feDistantLight` has a fixed vector, so calculate it beforehand.
   let mut light_vector = match light_source {
-    LightSource::DistantLight(light) => {
-      let azimuth = light.azimuth.to_radians();
-      let elevation = light.elevation.to_radians();
+    LightSource::Distant { azimuth, elevation } => {
+      let azimuth = azimuth.to_radians();
+      let elevation = elevation.to_radians();
       Vector3::new(
         azimuth.cos() * elevation.cos(),
         azimuth.sin() * elevation.cos(),
@@ -256,15 +269,15 @@ fn apply(
 
   let mut calc = |nx, ny, normal: Normal| {
     match light_source {
-      LightSource::DistantLight(_) => {}
-      LightSource::PointLight(ref light) => {
-        let nz = src.alpha_at(nx, ny) as f32 / 255.0 * surface_scale;
-        let origin = Vector3::new(light.x, light.y, light.z);
+      LightSource::Distant { .. } => {}
+      LightSource::Point { x, y, z } => {
+        let nz = src.at(nx, ny) as f32 / 255.0 * surface_scale;
+        let origin = Vector3::new(x, y, z);
         let v = origin - Vector3::new(nx as f32, ny as f32, nz);
         light_vector = v.normalized().unwrap_or(v);
       }
-      LightSource::SpotLight(ref light) => {
-        let nz = src.alpha_at(nx, ny) as f32 / 255.0 * surface_scale;
+      LightSource::Spot(ref light) => {
+        let nz = src.at(nx, ny) as f32 / 255.0 * surface_scale;
         let origin = Vector3::new(light.x, light.y, light.z);
         let v = origin - Vector3::new(nx as f32, ny as f32, nz);
         light_vector = v.normalized().unwrap_or(v);
@@ -274,14 +287,15 @@ fn apply(
     let light_color = light_color(&light_source, lighting_color, light_vector);
     let factor = light_factor(normal, light_vector);
 
-    let compute = |x| (f32_bound(0.0, x as f32 * factor, 255.0) + 0.5) as u8;
+    let compute = |x| ((x as f32 * factor).clamp(0.0, 255.0) + 0.5) as u8;
 
-    let r = compute(light_color.red);
-    let g = compute(light_color.green);
-    let b = compute(light_color.blue);
+    let Color([red, green, blue, _]) = light_color;
+    let r = compute(red);
+    let g = compute(green);
+    let b = compute(blue);
     let a = calc_alpha(r, g, b);
 
-    *dest.pixel_at_mut(nx, ny) = RGBA8 { b, g, r, a };
+    dest[ny * width + nx] = [r, g, b, a];
   };
 
   calc(0, 0, top_left_normal(src));
@@ -308,8 +322,8 @@ fn apply(
 
 fn light_color(light: &LightSource, lighting_color: Color, light_vector: Vector3) -> Color {
   match *light {
-    LightSource::DistantLight(_) | LightSource::PointLight(_) => lighting_color,
-    LightSource::SpotLight(ref light) => {
+    LightSource::Distant { .. } | LightSource::Point { .. } => lighting_color,
+    LightSource::Spot(ref light) => {
       let origin = Vector3::new(light.x, light.y, light.z);
       let direction = Vector3::new(light.points_at_x, light.points_at_y, light.points_at_z);
       let direction = direction - origin;
@@ -319,29 +333,27 @@ fn light_color(light: &LightSource, lighting_color: Color, light_vector: Vector3
         return Color::black();
       }
 
-      if let Some(limiting_cone_angle) = light.limiting_cone_angle {
-        if minus_l_dot_s < limiting_cone_angle.to_radians().cos() {
-          return Color::black();
-        }
+      if let Some(limiting_cone_angle) = light.limiting_cone_angle
+        && minus_l_dot_s < limiting_cone_angle.to_radians().cos()
+      {
+        return Color::black();
       }
 
-      let factor = minus_l_dot_s.powf(light.specular_exponent.get());
-      let compute = |x| (f32_bound(0.0, x as f32 * factor, 255.0) + 0.5) as u8;
+      let factor = minus_l_dot_s.powf(light.specular_exponent);
+      let compute = |x| ((x as f32 * factor).clamp(0.0, 255.0) + 0.5) as u8;
 
-      Color::new_rgb(
-        compute(lighting_color.red),
-        compute(lighting_color.green),
-        compute(lighting_color.blue),
-      )
+      let Color([red, green, blue, _]) = lighting_color;
+
+      Color([compute(red), compute(green), compute(blue), 255])
     }
   }
 }
 
-fn top_left_normal(img: ImageRef) -> Normal {
-  let center = img.alpha_at(0, 0);
-  let right = img.alpha_at(1, 0);
-  let bottom = img.alpha_at(0, 1);
-  let bottom_right = img.alpha_at(1, 1);
+fn top_left_normal(img: Alpha) -> Normal {
+  let center = img.at(0, 0);
+  let right = img.at(1, 0);
+  let bottom = img.at(0, 1);
+  let bottom_right = img.at(1, 1);
 
   Normal::new(
     FACTOR_2_3,
@@ -351,11 +363,11 @@ fn top_left_normal(img: ImageRef) -> Normal {
   )
 }
 
-fn top_right_normal(img: ImageRef) -> Normal {
-  let left = img.alpha_at(img.width - 2, 0);
-  let center = img.alpha_at(img.width - 1, 0);
-  let bottom_left = img.alpha_at(img.width - 2, 1);
-  let bottom = img.alpha_at(img.width - 1, 1);
+fn top_right_normal(img: Alpha) -> Normal {
+  let left = img.at(img.width - 2, 0);
+  let center = img.at(img.width - 1, 0);
+  let bottom_left = img.at(img.width - 2, 1);
+  let bottom = img.at(img.width - 1, 1);
 
   Normal::new(
     FACTOR_2_3,
@@ -365,11 +377,11 @@ fn top_right_normal(img: ImageRef) -> Normal {
   )
 }
 
-fn bottom_left_normal(img: ImageRef) -> Normal {
-  let top = img.alpha_at(0, img.height - 2);
-  let top_right = img.alpha_at(1, img.height - 2);
-  let center = img.alpha_at(0, img.height - 1);
-  let right = img.alpha_at(1, img.height - 1);
+fn bottom_left_normal(img: Alpha) -> Normal {
+  let top = img.at(0, img.height - 2);
+  let top_right = img.at(1, img.height - 2);
+  let center = img.at(0, img.height - 1);
+  let right = img.at(1, img.height - 1);
 
   Normal::new(
     FACTOR_2_3,
@@ -379,11 +391,11 @@ fn bottom_left_normal(img: ImageRef) -> Normal {
   )
 }
 
-fn bottom_right_normal(img: ImageRef) -> Normal {
-  let top_left = img.alpha_at(img.width - 2, img.height - 2);
-  let top = img.alpha_at(img.width - 1, img.height - 2);
-  let left = img.alpha_at(img.width - 2, img.height - 1);
-  let center = img.alpha_at(img.width - 1, img.height - 1);
+fn bottom_right_normal(img: Alpha) -> Normal {
+  let top_left = img.at(img.width - 2, img.height - 2);
+  let top = img.at(img.width - 1, img.height - 2);
+  let left = img.at(img.width - 2, img.height - 1);
+  let center = img.at(img.width - 1, img.height - 1);
 
   Normal::new(
     FACTOR_2_3,
@@ -393,13 +405,13 @@ fn bottom_right_normal(img: ImageRef) -> Normal {
   )
 }
 
-fn top_row_normal(img: ImageRef, x: u32) -> Normal {
-  let left = img.alpha_at(x - 1, 0);
-  let center = img.alpha_at(x, 0);
-  let right = img.alpha_at(x + 1, 0);
-  let bottom_left = img.alpha_at(x - 1, 1);
-  let bottom = img.alpha_at(x, 1);
-  let bottom_right = img.alpha_at(x + 1, 1);
+fn top_row_normal(img: Alpha, x: usize) -> Normal {
+  let left = img.at(x - 1, 0);
+  let center = img.at(x, 0);
+  let right = img.at(x + 1, 0);
+  let bottom_left = img.at(x - 1, 1);
+  let bottom = img.at(x, 1);
+  let bottom_right = img.at(x + 1, 1);
 
   Normal::new(
     FACTOR_1_3,
@@ -409,13 +421,13 @@ fn top_row_normal(img: ImageRef, x: u32) -> Normal {
   )
 }
 
-fn bottom_row_normal(img: ImageRef, x: u32) -> Normal {
-  let top_left = img.alpha_at(x - 1, img.height - 2);
-  let top = img.alpha_at(x, img.height - 2);
-  let top_right = img.alpha_at(x + 1, img.height - 2);
-  let left = img.alpha_at(x - 1, img.height - 1);
-  let center = img.alpha_at(x, img.height - 1);
-  let right = img.alpha_at(x + 1, img.height - 1);
+fn bottom_row_normal(img: Alpha, x: usize) -> Normal {
+  let top_left = img.at(x - 1, img.height - 2);
+  let top = img.at(x, img.height - 2);
+  let top_right = img.at(x + 1, img.height - 2);
+  let left = img.at(x - 1, img.height - 1);
+  let center = img.at(x, img.height - 1);
+  let right = img.at(x + 1, img.height - 1);
 
   Normal::new(
     FACTOR_1_3,
@@ -425,13 +437,13 @@ fn bottom_row_normal(img: ImageRef, x: u32) -> Normal {
   )
 }
 
-fn left_column_normal(img: ImageRef, y: u32) -> Normal {
-  let top = img.alpha_at(0, y - 1);
-  let top_right = img.alpha_at(1, y - 1);
-  let center = img.alpha_at(0, y);
-  let right = img.alpha_at(1, y);
-  let bottom = img.alpha_at(0, y + 1);
-  let bottom_right = img.alpha_at(1, y + 1);
+fn left_column_normal(img: Alpha, y: usize) -> Normal {
+  let top = img.at(0, y - 1);
+  let top_right = img.at(1, y - 1);
+  let center = img.at(0, y);
+  let right = img.at(1, y);
+  let bottom = img.at(0, y + 1);
+  let bottom_right = img.at(1, y + 1);
 
   Normal::new(
     FACTOR_1_2,
@@ -441,13 +453,13 @@ fn left_column_normal(img: ImageRef, y: u32) -> Normal {
   )
 }
 
-fn right_column_normal(img: ImageRef, y: u32) -> Normal {
-  let top_left = img.alpha_at(img.width - 2, y - 1);
-  let top = img.alpha_at(img.width - 1, y - 1);
-  let left = img.alpha_at(img.width - 2, y);
-  let center = img.alpha_at(img.width - 1, y);
-  let bottom_left = img.alpha_at(img.width - 2, y + 1);
-  let bottom = img.alpha_at(img.width - 1, y + 1);
+fn right_column_normal(img: Alpha, y: usize) -> Normal {
+  let top_left = img.at(img.width - 2, y - 1);
+  let top = img.at(img.width - 1, y - 1);
+  let left = img.at(img.width - 2, y);
+  let center = img.at(img.width - 1, y);
+  let bottom_left = img.at(img.width - 2, y + 1);
+  let bottom = img.at(img.width - 1, y + 1);
 
   Normal::new(
     FACTOR_1_2,
@@ -457,15 +469,15 @@ fn right_column_normal(img: ImageRef, y: u32) -> Normal {
   )
 }
 
-fn interior_normal(img: ImageRef, x: u32, y: u32) -> Normal {
-  let top_left = img.alpha_at(x - 1, y - 1);
-  let top = img.alpha_at(x, y - 1);
-  let top_right = img.alpha_at(x + 1, y - 1);
-  let left = img.alpha_at(x - 1, y);
-  let right = img.alpha_at(x + 1, y);
-  let bottom_left = img.alpha_at(x - 1, y + 1);
-  let bottom = img.alpha_at(x, y + 1);
-  let bottom_right = img.alpha_at(x + 1, y + 1);
+fn interior_normal(img: Alpha, x: usize, y: usize) -> Normal {
+  let top_left = img.at(x - 1, y - 1);
+  let top = img.at(x, y - 1);
+  let top_right = img.at(x + 1, y - 1);
+  let left = img.at(x - 1, y);
+  let right = img.at(x + 1, y);
+  let bottom_left = img.at(x - 1, y + 1);
+  let bottom = img.at(x, y + 1);
+  let bottom_right = img.at(x + 1, y + 1);
 
   Normal::new(
     FACTOR_1_4,

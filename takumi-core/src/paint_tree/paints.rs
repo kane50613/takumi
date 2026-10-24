@@ -463,6 +463,9 @@ impl PaintFilter {
     let mut matrices = ColorMatrixChain::default();
 
     for filter in filters {
+      if matches!(filter, Filter::Url(_)) {
+        continue;
+      }
       if let Some(matrix) = ColorMatrix::from_filter(filter) {
         matrices.push(matrix);
         continue;
