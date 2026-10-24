@@ -6,14 +6,12 @@ use std::collections::HashMap;
 use roxmltree::Error;
 use svgtypes::FontShorthand;
 
-use super::{
-  AId, Attribute, Document, EId, NodeData, NodeId, NodeKind, ShortRange, style_sheet::StyleSheet,
-};
-use crate::style::RawDeclaration;
+use super::{AId, Attribute, Document, EId, NodeData, NodeId, NodeKind, ShortRange};
+use crate::{style::RawDeclaration, svg::style_sheet::StyleSheet};
 
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
 const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
-pub(super) const XML_NAMESPACE_NS: &str = "http://www.w3.org/XML/1998/namespace";
+const XML_NAMESPACE_NS: &str = "http://www.w3.org/XML/1998/namespace";
 
 impl<'input> Document<'input> {
   /// Parses a [`Document`] from a [`roxmltree::Document`].

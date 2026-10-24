@@ -1,13 +1,14 @@
 //! An SVG's size from its root element alone. Follows usvg's `resolve_svg_size`, except that a
 //! percentage size without a `viewBox` stays at the 100 px default instead of the content bounds.
 
-use std::str::FromStr;
-
 use roxmltree::{Document, Node, ParsingOptions};
-use svgtypes::{Length, LengthUnit, ViewBox};
 use thiserror::Error;
 
-use crate::{geometry::Size, style::IntrinsicSizing};
+use crate::{
+  geometry::Size,
+  style::IntrinsicSizing,
+  svg::{Length, LengthContext, LengthMode, LengthUnit, ViewBox, parse_length},
+};
 
 const DPI: f32 = 96.0;
 const FONT_SIZE: f32 = 12.0;
@@ -50,21 +51,17 @@ impl SvgSize {
   }
 
   pub(crate) fn from_root(root: Node) -> Result<Self, SvgSizeError> {
-    let length = |name| {
-      root
-        .attribute(name)
-        .and_then(|value| Length::from_str(value).ok())
-    };
+    let length = |name| root.attribute(name).and_then(parse_length);
     let font_size = length("font-size").map_or(FONT_SIZE, |size| to_px(size, FONT_SIZE, FONT_SIZE));
     let view_box = root
       .attribute("viewBox")
-      .and_then(|value| ViewBox::from_str(value).ok())
-      .map(|view_box| (view_box.w as f32, view_box.h as f32))
+      .and_then(ViewBox::parse)
+      .map(|view_box| (view_box.width, view_box.height))
       .filter(|&(width, height)| positive(width) && positive(height));
 
     let width = length("width");
     let height = length("height");
-    let default = Length::new(100.0, LengthUnit::Percent);
+    let default = Length::percent(100.0);
 
     let (width_px, height_px) = match view_box {
       Some((box_width, box_height)) => {
@@ -126,18 +123,15 @@ fn positive(value: f32) -> bool {
 }
 
 fn to_px(length: Length, font_size: f32, percent_base: f32) -> f32 {
-  let n = length.number as f32;
-  match length.unit {
-    LengthUnit::None | LengthUnit::Px => n,
-    LengthUnit::Em => n * font_size,
-    LengthUnit::Ex => n * font_size / 2.0,
-    LengthUnit::In => n * DPI,
-    LengthUnit::Cm => n * DPI / 2.54,
-    LengthUnit::Mm => n * DPI / 25.4,
-    LengthUnit::Pt => n * DPI / 72.0,
-    LengthUnit::Pc => n * DPI / 6.0,
-    LengthUnit::Percent => percent_base * n / 100.0,
-  }
+  length.to_user_units(
+    LengthMode::Width,
+    &LengthContext {
+      font_size,
+      width: percent_base,
+      height: percent_base,
+      dpi: DPI,
+    },
+  )
 }
 
 #[cfg(test)]

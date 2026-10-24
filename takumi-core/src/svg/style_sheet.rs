@@ -18,7 +18,7 @@ use selectors::{
   parser::{ParseRelative, Selector, SelectorList},
 };
 
-use super::parse::XML_NAMESPACE_NS;
+use super::document::XML_NAMESPACE;
 use crate::{
   error::StyleSheetParseError,
   matching::lang_matches,
@@ -243,7 +243,7 @@ impl Element for XmlElement<'_, '_> {
       .ancestors()
       .find_map(|node| {
         node
-          .attribute((XML_NAMESPACE_NS, "lang"))
+          .attribute((XML_NAMESPACE, "lang"))
           .or_else(|| node.attribute("lang"))
       })
       .is_some_and(|lang| ranges.iter().any(|range| lang_matches(lang, range)))

@@ -5,7 +5,8 @@
 
 use roxmltree::Error;
 
-use super::{AId, Document, EId, NodeId, NodeKind, SvgNode, style_sheet::StyleSheet};
+use super::{AId, Document, EId, NodeId, NodeKind, SvgNode};
+use crate::svg::style_sheet::StyleSheet;
 
 const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
 

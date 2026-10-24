@@ -1,6 +1,6 @@
 //! Declarations kept as their source text, for readers that parse the values themselves.
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 use cssparser::RuleBodyParser;
 use cssparser::{
   AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserState, QualifiedRuleParser,
@@ -16,7 +16,7 @@ pub(crate) struct RawDeclaration<'i> {
   pub(crate) important: bool,
 }
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 impl<'i> RawDeclaration<'i> {
   /// The valid declarations of a declaration list such as a `style` attribute, in source order.
   pub(crate) fn parse_list(text: &'i str) -> Vec<Self> {
@@ -101,7 +101,7 @@ impl<'i> RuleBodyItemParser<'i, RawDeclaration<'i>, StyleSheetParseError> for Ra
   }
 }
 
-#[cfg(all(test, feature = "svg"))]
+#[cfg(all(test, feature = "svg-sizing"))]
 mod tests {
   use super::RawDeclaration;
 
