@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>border_negative_width</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 320px; height: 160px">
+    <div
+      style="
+        display: flex;
+        gap: 24px;
+        width: 100%;
+        height: 100%;
+        padding: 32px;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="width: 80px; height: 80px; border: 6px solid rgb(37, 99, 235); border-width: -4px"
+      ></div>
+      <div style="width: 80px; height: 80px; border: -4px solid rgb(220, 38, 38)"></div>
+    </div>
+  </body>
+</html>

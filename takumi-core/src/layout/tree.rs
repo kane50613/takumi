@@ -46,9 +46,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, LineHeight, MatchedStyleKey, Position, Registrations, SizingContext,
-    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, WhiteSpaceCollapse,
-    apply_stylesheet_animations,
+    Direction, Display, Float, FontUnits, LineHeight, MatchedStyleKey, Position, Registrations,
+    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+    WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -2781,6 +2781,11 @@ impl RenderContext {
       style.push(StyleDeclaration::direction(dir), false);
     }
 
+    // Blink's `StyleResolver::MatchPresentationalHints`.
+    if let Some(presentation) = node_layers.presentation {
+      style.append_block(presentation.declarations);
+    }
+
     for declarations in matched_declarations.layered_normal() {
       style.merge_matched_block(declarations);
     }
@@ -2862,7 +2867,7 @@ impl RenderContext {
 
   /// Resolves a child's style and sizing from its matched declarations, sharing the style a box
   /// with the same preset resolved to from the same declarations under an equal parent.
-  fn resolve_child_style(
+  pub(crate) fn resolve_child_style(
     &self,
     node: &mut Node,
     source_order: usize,
@@ -3001,6 +3006,10 @@ impl RenderContext {
       .primary_simple_font_data_with_digit_zero()
       .and_then(|font| font.font_metrics())
       .map_or(0.0, |metrics| metrics.zero_width);
+    // Blink's `FontSizes::Ex`: the x-height of the primary font, or half an em when it has none.
+    let ex = metrics
+      .and_then(|metrics| metrics.x_height)
+      .unwrap_or(font_size / 2.0);
     let normal_basis = match style.inherited_data.line_height {
       LineHeight::Normal => metrics.map_or(font_size, PrimaryFontMetrics::line_spacing),
       _ => 0.0,
@@ -3021,7 +3030,7 @@ impl RenderContext {
         .sizing
         .root_line_height
         .or_else(|| is_document_root.then_some(line_height)),
-      ch,
+      FontUnits { ch, ex },
     )
   }
 

@@ -33,6 +33,7 @@ pub struct CalcFormula {
   pub(crate) lh: f32,
   pub(crate) rlh: f32,
   pub(crate) ch: f32,
+  pub(crate) ex: f32,
   pub(crate) vh: f32,
   pub(crate) vw: f32,
   pub(crate) cqh: f32,
@@ -60,6 +61,7 @@ pub(crate) enum CalcUnit {
   Lh,
   Rlh,
   Ch,
+  Ex,
   Vh,
   Vw,
   Cqh,
@@ -80,6 +82,7 @@ impl CalcUnit {
       Self::Lh => "lh",
       Self::Rlh => "rlh",
       Self::Ch => "ch",
+      Self::Ex => "ex",
       Self::Vh => "vh",
       Self::Vw => "vw",
       Self::Cqh => "cqh",
@@ -161,6 +164,7 @@ impl CalcTerms {
         CalcUnit::Lh => px += value * sizing.line_height,
         CalcUnit::Rlh => px += value * sizing.root_line_height_basis(),
         CalcUnit::Ch => px += value * sizing.ch,
+        CalcUnit::Ex => px += value * sizing.ex,
         CalcUnit::Vh => px += value * viewport_height / 100.0,
         CalcUnit::Vw => px += value * viewport_width / 100.0,
         CalcUnit::Cqh => px += value * container_height / 100.0,
@@ -183,8 +187,8 @@ impl CalcTerms {
 macro_rules! for_each_unit {
   ($callback:ident) => {
     $callback!(
-      px, percent, rem, em, lh, rlh, ch, vh, vw, cqh, cqw, cqmin, cqmax, vmin, vmax, cm, mm, inch,
-      q, pt, pc
+      px, percent, rem, em, lh, rlh, ch, ex, vh, vw, cqh, cqw, cqmin, cqmax, vmin, vmax, cm, mm,
+      inch, q, pt, pc
     );
   };
 }
@@ -251,6 +255,7 @@ impl CalcFormula {
       Length::Lh(v) => Self::lh(v),
       Length::Rlh(v) => Self::rlh(v),
       Length::Ch(v) => Self::ch(v),
+      Length::Ex(v) => Self::ex(v),
       Length::Vw(v) => Self::vw(v),
       Length::CqW(v) => Self::cqw(v),
       Length::Vh(v) => Self::vh(v),
@@ -288,6 +293,7 @@ impl CalcFormula {
       (CalcUnit::Lh, self.lh),
       (CalcUnit::Rlh, self.rlh),
       (CalcUnit::Ch, self.ch),
+      (CalcUnit::Ex, self.ex),
       (CalcUnit::Vh, self.vh),
       (CalcUnit::Vw, self.vw),
       (CalcUnit::Cqh, self.cqh),

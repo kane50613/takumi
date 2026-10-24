@@ -40,6 +40,9 @@ pub(crate) struct NodeMetadata {
   pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
   /// Default style presets from HTML element type (lowest priority).
   pub preset: Option<Arc<Style>>,
+  /// Presentation attributes as declarations, which the cascade places between the preset and
+  /// author rules, as Blink's presentational hints.
+  pub presentation: Option<Box<Style>>,
   /// The styling properties for this node.
   pub style: Option<Box<Style>>,
   /// The tailwind properties for this node.
@@ -329,6 +332,25 @@ impl Node {
     }
   }
 
+  /// A copy with what styles the node and none of its children or selector attributes.
+  #[cfg(feature = "svg")]
+  pub(crate) fn styling_clone(&self) -> Self {
+    Self {
+      metadata: NodeMetadata {
+        tag_name: self.metadata.tag_name.clone(),
+        preset: self.metadata.preset.clone(),
+        presentation: self.metadata.presentation.clone(),
+        style: self.metadata.style.clone(),
+        dir: self.metadata.dir,
+        lang: self.metadata.lang,
+        ..NodeMetadata::default()
+      },
+      kind: NodeKind::Container {
+        children: Vec::new(),
+      },
+    }
+  }
+
   /// Takes the node's own text, leaving an empty container behind.
   pub(crate) fn take_text(&mut self) -> Option<String> {
     let NodeKind::Text(data) = &mut self.kind else {
@@ -543,6 +565,7 @@ impl Node {
 
     NodeStyleLayers {
       preset,
+      presentation: self.metadata.presentation.take(),
       inline: self.metadata.style.take(),
       dir: self.metadata.dir.take(),
       lang: self.metadata.lang.take(),
@@ -661,6 +684,8 @@ impl Node {
 pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
   pub(crate) preset: Option<Arc<Style>>,
+  /// Presentation attributes, which author rules outrank.
+  pub(crate) presentation: Option<Box<Style>>,
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Box<Style>>,
   pub(crate) dir: Option<Direction>,
@@ -670,7 +695,10 @@ pub(crate) struct NodeStyleLayers {
 impl NodeStyleLayers {
   /// Whether nothing but the preset styles the element beyond its matched rules.
   pub(crate) fn is_preset_only(&self) -> bool {
-    self.inline.is_none() && self.dir.is_none() && self.lang.is_none()
+    self.presentation.is_none()
+      && self.inline.is_none()
+      && self.dir.is_none()
+      && self.lang.is_none()
   }
 }
 

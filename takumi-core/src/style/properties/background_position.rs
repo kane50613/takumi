@@ -211,6 +211,16 @@ impl<'i> FromCss<'i> for PositionValue {
     let first = PositionComponent::from_css(input)?;
     let second = input.try_parse(PositionComponent::from_css).ok();
 
+    // Two keywords of one axis name no position, where `center` belongs to either.
+    // https://drafts.csswg.org/css-values-4/#position, and Blink's `ConsumePosition` in
+    // `css_parsing_utils.cc`.
+    if let Some(second) = second
+      && first.keyword_axis() == second.keyword_axis()
+      && first.keyword_axis().is_some()
+    {
+      return Err(input.new_error_for_next_token());
+    }
+
     let (x, y) = match (first, second) {
       (PositionComponent::KeywordY(_), None) => {
         (PositionComponent::KeywordX(PositionKeywordX::Center), first)
@@ -224,6 +234,18 @@ impl<'i> FromCss<'i> for PositionValue {
   }
 
   const VALID_TOKENS: &'static [&'static str] = PositionComponent::VALID_TOKENS;
+}
+
+impl PositionComponent {
+  /// Whether a side keyword is horizontal, none for `center` and for a length.
+  fn keyword_axis(self) -> Option<bool> {
+    match self {
+      Self::KeywordX(PositionKeywordX::Center) => None,
+      Self::KeywordX(_) => Some(true),
+      Self::KeywordY(_) => Some(false),
+      _ => None,
+    }
+  }
 }
 
 impl<'i> FromCss<'i> for PositionComponent {
@@ -303,6 +325,28 @@ impl ToCss for PositionValue {
 mod tests {
   use super::*;
   use crate::style::FromCssStr;
+
+  #[test]
+  fn two_side_keywords_of_one_axis_are_not_a_position() {
+    for css in [
+      "bottom bottom",
+      "top bottom",
+      "left right",
+      "right right",
+      "left left",
+    ] {
+      assert!(PositionValue::from_css_str(css).is_err(), "{css}");
+    }
+    for css in [
+      "center center",
+      "left center",
+      "center left",
+      "top center",
+      "bottom left",
+    ] {
+      assert!(PositionValue::from_css_str(css).is_ok(), "{css}");
+    }
+  }
 
   #[test]
   fn test_parse_position_value() {

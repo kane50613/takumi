@@ -1514,10 +1514,27 @@ pub enum ImageScalingAlgorithm {
 
 impl_css_enum!(
   ImageScalingAlgorithm,
-  "auto" => ImageScalingAlgorithm::Auto,
-  "smooth" => ImageScalingAlgorithm::Smooth,
-  "pixelated" => ImageScalingAlgorithm::Pixelated
+  "auto" | "optimizeQuality" => ImageScalingAlgorithm::Auto,
+  "smooth" | "high-quality" => ImageScalingAlgorithm::Smooth,
+  "pixelated" | "crisp-edges" | "optimizeSpeed" => ImageScalingAlgorithm::Pixelated
 );
+
+#[cfg(test)]
+mod image_scaling_algorithm_tests {
+  use crate::style::{FromCssStr, ImageScalingAlgorithm};
+
+  #[test]
+  fn svg_and_css_names_pick_the_same_algorithm() {
+    for (keyword, algorithm) in [
+      ("optimizeQuality", ImageScalingAlgorithm::Auto),
+      ("high-quality", ImageScalingAlgorithm::Smooth),
+      ("crisp-edges", ImageScalingAlgorithm::Pixelated),
+      ("optimizeSpeed", ImageScalingAlgorithm::Pixelated),
+    ] {
+      assert_eq!(ImageScalingAlgorithm::from_css_str(keyword), Ok(algorithm));
+    }
+  }
+}
 
 /// Represents border style options.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]

@@ -133,7 +133,7 @@ impl<'a> SvgPainter<'a> {
         SvgLineCap::Square => LineCap::Square,
       },
       line_join: match stroke.join {
-        SvgLineJoin::Miter | SvgLineJoin::MiterClip => LineJoin::Miter,
+        SvgLineJoin::Miter => LineJoin::Miter,
         SvgLineJoin::Round => LineJoin::Round,
         SvgLineJoin::Bevel => LineJoin::Bevel,
       },

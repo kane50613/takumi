@@ -2916,6 +2916,19 @@ fn ch_matches_the_advance_of_zero() {
   );
 }
 
+/// `ex` is the x-height of the primary font, which Geist sets apart from half an em.
+#[test]
+fn ex_is_the_x_height_of_the_font() {
+  let root = Node::container([Node::container([]).with_class_name("box")]).with_class_name("root");
+  let result = measure_with_css(
+    root,
+    ".root { display: block; font: 100px Geist; } .box { display: block; width: 1ex; height: 1px; }",
+  );
+  let width = result.children[0].width;
+
+  assert!((width - 53.0).abs() < 0.5, "1ex is {width}px");
+}
+
 #[test]
 fn test_measure_default_object_size_scales_with_device_pixel_ratio() {
   // An SVG with no size and no viewBox has no natural size, so it takes the 300x150 default
