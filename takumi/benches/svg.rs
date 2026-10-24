@@ -3,9 +3,7 @@ use std::{collections::HashMap, fs, hint::black_box, path::Path, sync::Arc};
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::prelude::{
   BorderRadius, BorderStyle, Color, ColorInput, Display, FlexWrap, FontResource, Fonts, FromCssStr,
-  ImageSource,
-  Length::{Percentage, Px},
-  Node, Sides, Style, StyleDeclaration, Viewport,
+  ImageSource, Length::Px, LengthUnit, Node, Sides, Style, StyleDeclaration, Viewport,
 };
 use takumi_svg::{SvgOptions, render};
 
@@ -43,9 +41,9 @@ fn render_node(fonts: &Fonts, node: Node) {
 
 fn full(decls: impl IntoIterator<Item = StyleDeclaration>) -> Style {
   let mut style = Style::default()
-    .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Percentage(100.0)))
-    .with(StyleDeclaration::height(Percentage(100.0)));
+    .display(Display::Flex)
+    .width(100.0.percent())
+    .height(100.0.percent());
   for declaration in decls {
     style = style.with(declaration);
   }
@@ -74,33 +72,28 @@ fn shape_border_fixture() -> Node {
   let cells = (0..24).map(|i| {
     Node::container([]).with_style(
       Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(160.0)))
-        .with(StyleDeclaration::height(Px(120.0)))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([(i * 9) as u8, (255 - i * 9) as u8, 128, 255]),
-        )))
+        .display(Display::Flex)
+        .width(160.0.px())
+        .height(120.0.px())
+        .background_color(ColorInput::Value(Color([
+          (i * 9) as u8,
+          (255 - i * 9) as u8,
+          128,
+          255,
+        ])))
         .border_radius(BorderRadius::from_css_str("24px").unwrap())
-        .with(StyleDeclaration::border_top_width(Px(6.0).into()))
-        .with(StyleDeclaration::border_right_width(Px(6.0).into()))
-        .with(StyleDeclaration::border_bottom_width(Px(6.0).into()))
-        .with(StyleDeclaration::border_left_width(Px(6.0).into()))
-        .with(StyleDeclaration::border_top_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_right_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_bottom_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_left_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_top_color(ColorInput::Value(
-          Color([30, 30, 30, 255]),
-        )))
-        .with(StyleDeclaration::border_right_color(ColorInput::Value(
-          Color([30, 30, 30, 255]),
-        )))
-        .with(StyleDeclaration::border_bottom_color(ColorInput::Value(
-          Color([30, 30, 30, 255]),
-        )))
-        .with(StyleDeclaration::border_left_color(ColorInput::Value(
-          Color([30, 30, 30, 255]),
-        ))),
+        .border_top_width(6.0.px())
+        .border_right_width(6.0.px())
+        .border_bottom_width(6.0.px())
+        .border_left_width(6.0.px())
+        .border_top_style(BorderStyle::Solid)
+        .border_right_style(BorderStyle::Solid)
+        .border_bottom_style(BorderStyle::Solid)
+        .border_left_style(BorderStyle::Solid)
+        .border_top_color(ColorInput::Value(Color([30, 30, 30, 255])))
+        .border_right_color(ColorInput::Value(Color([30, 30, 30, 255])))
+        .border_bottom_color(ColorInput::Value(Color([30, 30, 30, 255])))
+        .border_left_color(ColorInput::Value(Color([30, 30, 30, 255]))),
     )
   });
 

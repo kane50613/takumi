@@ -628,14 +628,14 @@ fn pixels(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<f32> {
 
 /// The style of an `<img>` without a source: an inline-block, sized by its `width` and `height`.
 fn empty_image_style(handle: NodeRef<'_>) -> Style {
-  let mut style = Style::default().with(StyleDeclaration::display(Display::InlineBlock));
+  let mut style = Style::default().display(Display::InlineBlock);
 
   if let Some(width) = dimension(handle, "img", "width") {
-    style = style.with(StyleDeclaration::width(width));
+    style = style.width(width);
   }
 
   if let Some(height) = dimension(handle, "img", "height") {
-    style = style.with(StyleDeclaration::height(height));
+    style = style.height(height);
   }
 
   style

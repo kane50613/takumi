@@ -21,7 +21,7 @@
 //!
 //! # fn main() -> takumi::prelude::Result<()> {
 //! let node = Node::container([Node::text("Hello, world!").with_style(
-//!   Style::default().with(StyleDeclaration::font_size(Length::Px(32.0).into())),
+//!   Style::default().font_size(32.0.px()),
 //! )]);
 //!
 //! // Takumi loads no system fonts. Register fonts once and reuse `fonts` across renders.

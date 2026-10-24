@@ -2,10 +2,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
-  prelude::{
-    BackgroundImages, Fonts, FromCssStr, Length, Node, RenderOptions, Style, StyleDeclaration,
-    Viewport,
-  },
+  prelude::{BackgroundImages, Fonts, FromCssStr, Length, Node, RenderOptions, Style, Viewport},
   render,
 };
 
@@ -15,11 +12,9 @@ const BENCH_HEIGHT: u32 = 630;
 fn gradient_node(background_image: &str) -> Node {
   Node::container([]).with_style(
     Style::default()
-      .with(StyleDeclaration::width(Length::Px(BENCH_WIDTH as f32)))
-      .with(StyleDeclaration::height(Length::Px(BENCH_HEIGHT as f32)))
-      .with(StyleDeclaration::background_image(
-        BackgroundImages::from_css_str(background_image).ok(),
-      )),
+      .width(Length::Px(BENCH_WIDTH as f32))
+      .height(Length::Px(BENCH_HEIGHT as f32))
+      .background_image(BackgroundImages::from_css_str(background_image).ok()),
   )
 }
 

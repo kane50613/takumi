@@ -16,8 +16,8 @@ use takumi_core::{
   resources::image::ImageSource,
   scene::{Scene, SceneView},
   style::{
-    ComputedStyle, Display, FontFamily, Lang, Length, Position, SizingContext, Style,
-    StyleDeclaration, StyleSheet, ZIndex,
+    ComputedStyle, Display, FontFamily, Lang, LengthUnit, Position, SizingContext, Style,
+    StyleSheet, ZIndex,
   },
   viewport::Viewport,
 };
@@ -225,11 +225,11 @@ impl PagedContent {
 // inside it.
 fn fill_root(node: Node, viewport: Viewport) -> Node {
   let mut style = Style::default()
-    .with(StyleDeclaration::display(Display::FlowRoot))
-    .with(StyleDeclaration::width(Length::Percentage(100.0)));
+    .display(Display::FlowRoot)
+    .width(100.0.percent());
 
   if viewport.size.height.is_some() {
-    style = style.with(StyleDeclaration::height(Length::Percentage(100.0)));
+    style = style.height(100.0.percent());
   }
 
   Node::container([node]).with_style(style)
@@ -286,9 +286,9 @@ fn take_repeating_fixed(node: &mut RenderNode) -> Vec<(RenderNode, RenderContext
 pub(crate) fn page_root(context: &RenderContext, child: RenderNode) -> RenderNode {
   let area = Node::container([]).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Length::Percentage(100.0)))
-      .with(StyleDeclaration::height(Length::Percentage(100.0))),
+      .display(Display::Block)
+      .width(100.0.percent())
+      .height(100.0.percent()),
   );
   let mut root = RenderNode::from_node(context, area);
 
