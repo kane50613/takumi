@@ -1,0 +1,778 @@
+//! Draws flattened SVG ops onto a tiny-skia pixmap, so SVG images rasterize from the same ops
+//! the vector backends write. Layers are as large as the pixmap they sit on, except a filter
+//! layer, which is as large as its filter region.
+
+use std::slice::Iter;
+
+use takumi_core::{
+  geometry::PathCommand,
+  resources::image::{
+    SvgDrawer, SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
+    SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
+  },
+  style::{BlendMode, ImageScalingAlgorithm},
+};
+use tiny_skia::{
+  BlendMode as TinyBlendMode, Color as TinyColor, FillRule, FilterQuality, GradientStop, IntRect,
+  LineCap, LineJoin, LinearGradient, Mask, MaskType, Paint, Path, PathBuilder, Pattern, Pixmap,
+  PixmapMut, PixmapPaint, RadialGradient, Rect, SpreadMode, Stroke, StrokeDash, Transform,
+};
+
+use crate::pixmap_ref_from_buffer;
+
+/// Draws SVG ops with tiny-skia.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SvgDrawing;
+
+impl SvgDrawer for SvgDrawing {
+  fn draw(&self, ops: &[SvgOp], transform: Transform, pixmap: &mut PixmapMut) {
+    self.run(
+      &mut ops.iter(),
+      &mut Target {
+        pixmap,
+        transform,
+        clip: None,
+      },
+    );
+  }
+}
+
+/// A pixmap being drawn on, with the transform and clip that apply to what is drawn.
+struct Target<'a, 'b> {
+  pixmap: &'a mut PixmapMut<'b>,
+  transform: Transform,
+  clip: Option<Mask>,
+}
+
+/// How a layer joins the target below it.
+#[derive(Default)]
+struct Composite<'a> {
+  opacity: Option<f32>,
+  blend: Option<TinyBlendMode>,
+  mask: Option<Mask>,
+  filters: Option<&'a SvgFilters>,
+}
+
+impl SvgDrawing {
+  /// Draws ops up to the `Pop` closing the scope they are in, or the end of `ops`.
+  fn run(&self, ops: &mut Iter<'_, SvgOp>, target: &mut Target) {
+    while let Some(op) = ops.next() {
+      match op {
+        SvgOp::Pop => return,
+        SvgOp::PushTransform(transform) => {
+          let outer = target.transform;
+
+          target.transform = outer.pre_concat(tiny_transform(*transform));
+          self.run(ops, target);
+          target.transform = outer;
+        }
+        SvgOp::PushClip { path, evenodd } => {
+          let outer = target.clip.take();
+
+          target.clip = clipped(outer.as_ref(), path, *evenodd, target);
+          self.run(ops, target);
+          target.clip = outer;
+        }
+        SvgOp::PushOpacity(opacity) => self.layer(
+          ops,
+          target,
+          Composite {
+            opacity: Some(*opacity),
+            ..Composite::default()
+          },
+        ),
+        SvgOp::PushBlend(blend) => self.layer(
+          ops,
+          target,
+          Composite {
+            blend: Some(tiny_blend_mode(*blend)),
+            ..Composite::default()
+          },
+        ),
+        SvgOp::PushMask {
+          ops: mask_ops,
+          luminance,
+        } => match self.mask(mask_ops, *luminance, target) {
+          Some(mask) => self.layer(
+            ops,
+            target,
+            Composite {
+              mask: Some(mask),
+              ..Composite::default()
+            },
+          ),
+          None => skip_scope(ops),
+        },
+        SvgOp::PushFilter(filters) => self.layer(
+          ops,
+          target,
+          Composite {
+            filters: Some(filters),
+            ..Composite::default()
+          },
+        ),
+        SvgOp::Draw {
+          path,
+          fill,
+          stroke,
+          anti_alias,
+        } => self.draw_path(target, path, fill.as_ref(), stroke.as_ref(), *anti_alias),
+        SvgOp::Image {
+          data,
+          width,
+          height,
+          rendering,
+        } => self.draw_image(target, data, *width, *height, *rendering),
+      }
+    }
+  }
+
+  /// Draws the scope that follows into a fresh layer and composites the layer onto `target`.
+  fn layer(&self, ops: &mut Iter<'_, SvgOp>, target: &mut Target, composite: Composite) {
+    let Some(bounds) = layer_bounds(target, composite.filters) else {
+      skip_scope(ops);
+      return;
+    };
+    let Some(mut layer) = Pixmap::new(bounds.width(), bounds.height()) else {
+      skip_scope(ops);
+      return;
+    };
+    let transform = Transform::from_translate(-bounds.x() as f32, -bounds.y() as f32)
+      .pre_concat(target.transform);
+    let mut view = layer.as_mut();
+
+    self.run(
+      ops,
+      &mut Target {
+        pixmap: &mut view,
+        transform,
+        clip: None,
+      },
+    );
+
+    if let Some(filters) = composite.filters {
+      filters.apply(transform, &mut layer, self);
+    }
+    if let Some(mask) = &composite.mask {
+      layer.apply_mask(mask);
+    }
+
+    target.pixmap.draw_pixmap(
+      bounds.x(),
+      bounds.y(),
+      layer.as_ref(),
+      &PixmapPaint {
+        opacity: composite.opacity.unwrap_or(1.0),
+        blend_mode: composite.blend.unwrap_or(TinyBlendMode::SourceOver),
+        quality: FilterQuality::Nearest,
+      },
+      Transform::identity(),
+      target.clip.as_ref(),
+    );
+  }
+
+  /// The mask `ops` draw, which cuts the layer it is pushed with.
+  fn mask(&self, ops: &[SvgOp], luminance: bool, target: &Target) -> Option<Mask> {
+    let mut drawn = Pixmap::new(target.pixmap.width(), target.pixmap.height())?;
+
+    self.draw(ops, target.transform, &mut drawn.as_mut());
+
+    Some(Mask::from_pixmap(
+      drawn.as_ref(),
+      if luminance {
+        MaskType::Luminance
+      } else {
+        MaskType::Alpha
+      },
+    ))
+  }
+
+  fn draw_path(
+    &self,
+    target: &mut Target,
+    commands: &[PathCommand],
+    fill: Option<&SvgFill>,
+    stroke: Option<&SvgStrokeStyle>,
+    anti_alias: bool,
+  ) {
+    let Some(path) = tiny_path(commands) else {
+      return;
+    };
+
+    if let Some(fill) = fill {
+      // Horizontal and vertical lines have no area to fill.
+      if path.bounds().width() != 0.0 && path.bounds().height() != 0.0 {
+        self.with_paint(
+          &fill.paint,
+          fill.opacity,
+          target.transform,
+          anti_alias,
+          |paint| {
+            target.pixmap.fill_path(
+              &path,
+              paint,
+              if fill.evenodd {
+                FillRule::EvenOdd
+              } else {
+                FillRule::Winding
+              },
+              target.transform,
+              target.clip.as_ref(),
+            );
+          },
+        );
+      }
+    }
+    if let Some(stroke) = stroke {
+      self.with_paint(
+        &stroke.paint,
+        stroke.opacity,
+        target.transform,
+        anti_alias,
+        |paint| {
+          target.pixmap.stroke_path(
+            &path,
+            paint,
+            &tiny_stroke(stroke),
+            target.transform,
+            target.clip.as_ref(),
+          );
+        },
+      );
+    }
+  }
+
+  fn draw_image(
+    &self,
+    target: &mut Target,
+    data: &SvgImageData,
+    width: f32,
+    height: f32,
+    rendering: ImageScalingAlgorithm,
+  ) {
+    let Some(buffer) = data.decode() else {
+      return;
+    };
+    let Some(pixmap) = pixmap_ref_from_buffer(&buffer) else {
+      return;
+    };
+    let Some(rect) = Rect::from_xywh(0.0, 0.0, width, height) else {
+      return;
+    };
+    let scale = Transform::from_scale(
+      width / pixmap.width() as f32,
+      height / pixmap.height() as f32,
+    );
+    let paint = Paint {
+      shader: Pattern::new(
+        pixmap,
+        SpreadMode::Pad,
+        if rendering == ImageScalingAlgorithm::Pixelated {
+          FilterQuality::Nearest
+        } else {
+          FilterQuality::Bicubic
+        },
+        1.0,
+        scale,
+      ),
+      ..Paint::default()
+    };
+
+    target
+      .pixmap
+      .fill_rect(rect, &paint, target.transform, target.clip.as_ref());
+  }
+
+  /// Hands `draw` the tiny-skia paint for `paint` at `opacity`. A pattern tile is drawn at the
+  /// scale `transform` gives it.
+  fn with_paint(
+    &self,
+    paint: &SvgPaint,
+    opacity: f32,
+    transform: Transform,
+    anti_alias: bool,
+    draw: impl FnOnce(&Paint),
+  ) {
+    let tile;
+    let mut tiny = Paint {
+      anti_alias,
+      ..Paint::default()
+    };
+
+    match paint {
+      SvgPaint::Color([red, green, blue]) => {
+        tiny.set_color_rgba8(*red, *green, *blue, to_u8(opacity));
+      }
+      SvgPaint::Linear {
+        start,
+        end,
+        gradient,
+      } => {
+        let Some(shader) = LinearGradient::new(
+          (start.x, start.y).into(),
+          (end.x, end.y).into(),
+          gradient_stops(gradient, opacity),
+          spread_mode(gradient.spread),
+          tiny_transform(gradient.transform),
+        ) else {
+          return;
+        };
+
+        tiny.shader = shader;
+      }
+      SvgPaint::Radial {
+        center,
+        radius,
+        focal,
+        focal_radius,
+        gradient,
+      } => {
+        let Some(shader) = RadialGradient::new(
+          (focal.x, focal.y).into(),
+          *focal_radius,
+          (center.x, center.y).into(),
+          *radius,
+          gradient_stops(gradient, opacity),
+          spread_mode(gradient.spread),
+          tiny_transform(gradient.transform),
+        ) else {
+          return;
+        };
+
+        tiny.shader = shader;
+      }
+      SvgPaint::Pattern {
+        ops,
+        transform: pattern_transform,
+        width,
+        height,
+      } => {
+        let pattern_transform = tiny_transform(*pattern_transform);
+        let (scale_x, scale_y) = transform.pre_concat(pattern_transform).get_scale();
+        let Some(mut pixmap) = Pixmap::new(
+          (width * scale_x).round() as u32,
+          (height * scale_y).round() as u32,
+        ) else {
+          return;
+        };
+
+        self.draw(
+          ops,
+          Transform::from_scale(scale_x, scale_y),
+          &mut pixmap.as_mut(),
+        );
+        tile = pixmap;
+        tiny.shader = Pattern::new(
+          tile.as_ref(),
+          SpreadMode::Repeat,
+          FilterQuality::Bicubic,
+          opacity,
+          pattern_transform.pre_scale(1.0 / scale_x, 1.0 / scale_y),
+        );
+      }
+    }
+    tiny.blend_mode = TinyBlendMode::SourceOver;
+    draw(&tiny);
+  }
+}
+
+/// Skips ops up to the `Pop` closing the scope they are in.
+fn skip_scope(ops: &mut Iter<'_, SvgOp>) {
+  let mut depth = 0_usize;
+
+  for op in ops {
+    match op {
+      SvgOp::Pop if depth == 0 => return,
+      SvgOp::Pop => depth -= 1,
+      SvgOp::PushTransform(_)
+      | SvgOp::PushClip { .. }
+      | SvgOp::PushOpacity(_)
+      | SvgOp::PushBlend(_)
+      | SvgOp::PushMask { .. }
+      | SvgOp::PushFilter(_) => depth += 1,
+      SvgOp::Draw { .. } | SvgOp::Image { .. } => {}
+    }
+  }
+}
+
+/// Where a layer sits on `target`: the whole pixmap, or for a filter its region, which is capped
+/// at five times the pixmap so a huge region cannot tank the render.
+fn layer_bounds(target: &Target, filters: Option<&SvgFilters>) -> Option<IntRect> {
+  let (width, height) = (target.pixmap.width(), target.pixmap.height());
+
+  let Some(filters) = filters else {
+    return IntRect::from_xywh(0, 0, width, height);
+  };
+  let region = filters.region()?.transform(target.transform)?;
+  let region = IntRect::from_xywh(
+    region.x().floor() as i32,
+    region.y().floor() as i32,
+    region.width().ceil().max(1.0) as u32,
+    region.height().ceil().max(1.0) as u32,
+  )?;
+  let limit = IntRect::from_xywh(
+    i32::try_from(width).unwrap_or(i32::MAX).saturating_mul(-2),
+    i32::try_from(height).unwrap_or(i32::MAX).saturating_mul(-2),
+    width.saturating_mul(5),
+    height.saturating_mul(5),
+  )?;
+
+  IntRect::from_ltrb(
+    region.left().max(limit.left()),
+    region.top().max(limit.top()),
+    region.right().min(limit.right()),
+    region.bottom().min(limit.bottom()),
+  )
+}
+
+/// `outer` narrowed to the inside of `commands`. A path with no area leaves nothing visible.
+fn clipped(
+  outer: Option<&Mask>,
+  commands: &[PathCommand],
+  evenodd: bool,
+  target: &Target,
+) -> Option<Mask> {
+  let rule = if evenodd {
+    FillRule::EvenOdd
+  } else {
+    FillRule::Winding
+  };
+  let path = tiny_path(commands);
+
+  match (outer, path) {
+    (Some(outer), Some(path)) => {
+      let mut mask = outer.clone();
+
+      mask.intersect_path(&path, rule, true, target.transform);
+      Some(mask)
+    }
+    (None, Some(path)) => {
+      let mut mask = Mask::new(target.pixmap.width(), target.pixmap.height())?;
+
+      mask.fill_path(&path, rule, true, target.transform);
+      Some(mask)
+    }
+    (_, None) => Mask::new(target.pixmap.width(), target.pixmap.height()),
+  }
+}
+
+fn tiny_path(commands: &[PathCommand]) -> Option<Path> {
+  let mut builder = PathBuilder::new();
+
+  for command in commands {
+    match command {
+      PathCommand::MoveTo(p) => builder.move_to(p.x, p.y),
+      PathCommand::LineTo(p) => builder.line_to(p.x, p.y),
+      PathCommand::QuadTo(c, p) => builder.quad_to(c.x, c.y, p.x, p.y),
+      PathCommand::CubicTo(c1, c2, p) => builder.cubic_to(c1.x, c1.y, c2.x, c2.y, p.x, p.y),
+      PathCommand::Close => builder.close(),
+    }
+  }
+
+  builder.finish()
+}
+
+fn tiny_stroke(stroke: &SvgStrokeStyle) -> Stroke {
+  Stroke {
+    width: stroke.width,
+    miter_limit: stroke.miter_limit,
+    line_cap: match stroke.cap {
+      SvgLineCap::Butt => LineCap::Butt,
+      SvgLineCap::Round => LineCap::Round,
+      SvgLineCap::Square => LineCap::Square,
+    },
+    line_join: match stroke.join {
+      SvgLineJoin::Miter => LineJoin::Miter,
+      SvgLineJoin::MiterClip => LineJoin::MiterClip,
+      SvgLineJoin::Round => LineJoin::Round,
+      SvgLineJoin::Bevel => LineJoin::Bevel,
+    },
+    dash: stroke
+      .dash
+      .as_ref()
+      .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
+  }
+}
+
+fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {
+  gradient
+    .stops
+    .iter()
+    .map(|stop| {
+      GradientStop::new(
+        stop.offset,
+        TinyColor::from_rgba8(
+          stop.color[0],
+          stop.color[1],
+          stop.color[2],
+          to_u8(stop.opacity * opacity),
+        ),
+      )
+    })
+    .collect()
+}
+
+const fn spread_mode(spread: SvgSpreadMethod) -> SpreadMode {
+  match spread {
+    SvgSpreadMethod::Pad => SpreadMode::Pad,
+    SvgSpreadMethod::Reflect => SpreadMode::Reflect,
+    SvgSpreadMethod::Repeat => SpreadMode::Repeat,
+  }
+}
+
+fn to_u8(opacity: f32) -> u8 {
+  (opacity.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+/// A transform in an op's `(sx, ky, kx, sy, tx, ty)` order.
+fn tiny_transform([sx, ky, kx, sy, tx, ty]: [f32; 6]) -> Transform {
+  Transform::from_row(sx, ky, kx, sy, tx, ty)
+}
+
+fn tiny_blend_mode(blend: BlendMode) -> TinyBlendMode {
+  match blend {
+    BlendMode::Multiply => TinyBlendMode::Multiply,
+    BlendMode::Screen => TinyBlendMode::Screen,
+    BlendMode::Overlay => TinyBlendMode::Overlay,
+    BlendMode::Darken => TinyBlendMode::Darken,
+    BlendMode::Lighten => TinyBlendMode::Lighten,
+    BlendMode::ColorDodge => TinyBlendMode::ColorDodge,
+    BlendMode::ColorBurn => TinyBlendMode::ColorBurn,
+    BlendMode::HardLight => TinyBlendMode::HardLight,
+    BlendMode::SoftLight => TinyBlendMode::SoftLight,
+    BlendMode::Difference => TinyBlendMode::Difference,
+    BlendMode::Exclusion => TinyBlendMode::Exclusion,
+    BlendMode::Hue => TinyBlendMode::Hue,
+    BlendMode::Saturation => TinyBlendMode::Saturation,
+    BlendMode::Color => TinyBlendMode::Color,
+    BlendMode::Luminosity => TinyBlendMode::Luminosity,
+    _ => TinyBlendMode::SourceOver,
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::sync::Arc;
+
+  use takumi_core::{
+    resources::{
+      image::{ImageCacheMode, ImageSource, ResourceCache, SvgSource, to_data_url},
+      image_buffer::ImageBuffer,
+    },
+    style::{Color, ImageScalingAlgorithm},
+  };
+
+  use super::SvgDrawing;
+
+  const NS: &str = r#"xmlns="http://www.w3.org/2000/svg""#;
+  const XLINK: &str = r#"xmlns:xlink="http://www.w3.org/1999/xlink""#;
+
+  fn rasterize(svg: &str, size: u32, current_color: Color) -> Arc<ImageBuffer> {
+    svg
+      .parse::<SvgSource>()
+      .unwrap()
+      .rasterize_cached(
+        size,
+        size,
+        ImageScalingAlgorithm::Auto,
+        current_color,
+        None,
+        &SvgDrawing,
+      )
+      .unwrap()
+  }
+
+  fn draw(body: &str, size: u32) -> Arc<ImageBuffer> {
+    rasterize(
+      &format!(r#"<svg {NS} {XLINK} width="{size}" height="{size}">{body}</svg>"#),
+      size,
+      Color::black(),
+    )
+  }
+
+  // usvg accepts a namespace-less root, so markup without `xmlns` is still detected and drawn.
+  #[test]
+  fn svg_without_xmlns_renders() {
+    let image = rasterize(
+      r##"<svg width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##,
+      4,
+      Color::black(),
+    );
+
+    assert_eq!(image.pixel(2, 2), [255, 0, 0, 255]);
+  }
+
+  // `currentColor` resolves against the host color, like an inline SVG inheriting `color`.
+  #[test]
+  fn current_color_resolves_to_host_color() {
+    let svg = format!(
+      r#"<svg {NS} width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#
+    );
+
+    assert_eq!(
+      rasterize(&svg, 4, Color([255, 0, 0, 255])).pixel(2, 2),
+      [255, 0, 0, 255]
+    );
+  }
+
+  // The dependency on the host color is detected on decoded attribute values.
+  #[test]
+  fn entity_encoded_current_color_resolves_to_host_color() {
+    let svg = format!(
+      r#"<svg {NS} width="4" height="4"><rect width="4" height="4" fill="current&#67;olor"/></svg>"#
+    );
+
+    assert_eq!(
+      rasterize(&svg, 4, Color([255, 0, 0, 255])).pixel(2, 2),
+      [255, 0, 0, 255]
+    );
+  }
+
+  // A `color` attribute on the root wins over the host color.
+  #[test]
+  fn own_color_attribute_beats_host_color() {
+    let svg = format!(
+      r##"<svg {NS} width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##
+    );
+
+    assert_eq!(
+      rasterize(&svg, 4, Color([255, 0, 0, 255])).pixel(2, 2),
+      [0, 255, 0, 255]
+    );
+  }
+
+  #[test]
+  fn raster_is_cached() {
+    let cache = ResourceCache::default();
+    let svg = format!(r#"<svg {NS} width="1" height="1"></svg>"#);
+    let source = cache
+      .get_or_decode(svg.as_bytes(), ImageCacheMode::Auto)
+      .unwrap();
+    let ImageSource::Svg(svg) = source else {
+      panic!("expected an svg");
+    };
+    let draw = || {
+      svg
+        .rasterize_cached(
+          4,
+          4,
+          ImageScalingAlgorithm::Auto,
+          Color::black(),
+          None,
+          &SvgDrawing,
+        )
+        .unwrap()
+    };
+
+    assert!(Arc::ptr_eq(&draw(), &draw()));
+  }
+
+  #[test]
+  fn clip_and_opacity_apply_to_a_group() {
+    let image = draw(
+      r##"<defs><clipPath id="c"><rect width="4" height="8"/></clipPath></defs>
+      <g clip-path="url(#c)" opacity="0.5"><rect width="8" height="8" fill="#0000ff"/></g>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(6, 4), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(2, 4), [0, 0, 128, 128]);
+  }
+
+  #[test]
+  fn luminance_mask_cuts_by_brightness() {
+    let image = draw(
+      r##"<defs><mask id="m"><rect width="4" height="8" fill="#fff"/><rect x="4" width="4" height="8" fill="#000"/></mask></defs>
+      <rect width="8" height="8" fill="#ff0000" mask="url(#m)"/>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(2, 4), [255, 0, 0, 255]);
+    assert_eq!(image.pixel(6, 4), [0, 0, 0, 0]);
+  }
+
+  #[test]
+  fn pattern_fill_tiles_its_content() {
+    let image = draw(
+      r##"<defs><pattern id="p" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="4" fill="#00ff00"/></pattern></defs>
+      <rect width="8" height="8" fill="url(#p)"/>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(1, 1), [0, 255, 0, 255]);
+    assert_eq!(image.pixel(3, 1), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(5, 1), [0, 255, 0, 255]);
+  }
+
+  #[test]
+  fn filter_blurs_its_group() {
+    let sharp = draw(
+      r##"<rect x="2" y="2" width="4" height="4" fill="#000"/>"##,
+      8,
+    );
+    let blurred = draw(
+      r##"<defs><filter id="b"><feGaussianBlur stdDeviation="1"/></filter></defs>
+      <rect x="2" y="2" width="4" height="4" fill="#000" filter="url(#b)"/>"##,
+      8,
+    );
+
+    assert_eq!(sharp.pixel(1, 4)[3], 0);
+    assert!(blurred.pixel(1, 4)[3] > 0);
+    assert!(blurred.pixel(3, 4)[3] < 255);
+  }
+
+  #[test]
+  fn embedded_bitmap_draws_and_a_pixelated_one_keeps_its_edges() {
+    let png = ImageBuffer::from_rgba_bytes(
+      [
+        255, 0, 0, 255, 0, 0, 255, 255, 0, 0, 255, 255, 255, 0, 0, 255,
+      ]
+      .to_vec(),
+      2,
+      2,
+    )
+    .unwrap()
+    .encode_png()
+    .unwrap();
+    let href = to_data_url("image/png", &png);
+    let image = |style: &str| {
+      draw(
+        &format!(r#"<image xlink:href="{href}" width="8" height="8" style="{style}"/>"#),
+        8,
+      )
+    };
+    let pixelated = image("image-rendering:pixelated");
+
+    assert_eq!(image("").pixel(0, 0), [255, 0, 0, 255]);
+    assert_eq!(pixelated.pixel(3, 0), [255, 0, 0, 255]);
+    assert_eq!(pixelated.pixel(4, 0), [0, 0, 255, 255]);
+  }
+
+  // An `<image>` whose href is a local file path must not be read from disk.
+  #[cfg(feature = "png")]
+  #[test]
+  fn image_href_local_path_is_not_read() {
+    let opaque_red = ImageBuffer::from_rgba_bytes([255, 0, 0, 255].repeat(4 * 4), 4, 4)
+      .unwrap()
+      .encode_png()
+      .unwrap();
+    let path = std::env::temp_dir().join(format!("takumi_lfi_{}.png", std::process::id()));
+
+    std::fs::write(&path, &opaque_red).unwrap();
+
+    let image = draw(
+      &format!(
+        r#"<image xlink:href="{}" width="8" height="8"/>"#,
+        path.display()
+      ),
+      8,
+    );
+
+    std::fs::remove_file(&path).ok();
+
+    assert!(
+      image.data().iter().all(|&byte| byte == 0),
+      "local file was read and composited into the SVG output"
+    );
+  }
+}

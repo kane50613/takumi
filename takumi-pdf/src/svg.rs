@@ -66,7 +66,9 @@ impl<'a> SvgPainter<'a> {
         }
         SvgOp::PushFilter(_) => surface.push_transform(&Transform::identity()),
         SvgOp::Pop => surface.pop(),
-        SvgOp::Draw { path, fill, stroke } => {
+        SvgOp::Draw {
+          path, fill, stroke, ..
+        } => {
           let Some(path) = krilla_path(&path, Point::ZERO) else {
             continue;
           };
@@ -127,7 +129,7 @@ impl<'a> SvgPainter<'a> {
         SvgLineCap::Square => LineCap::Square,
       },
       line_join: match stroke.join {
-        SvgLineJoin::Miter => LineJoin::Miter,
+        SvgLineJoin::Miter | SvgLineJoin::MiterClip => LineJoin::Miter,
         SvgLineJoin::Round => LineJoin::Round,
         SvgLineJoin::Bevel => LineJoin::Bevel,
       },
@@ -178,6 +180,7 @@ impl<'a> SvgPainter<'a> {
         center,
         radius,
         focal,
+        focal_radius,
         gradient,
       } => (
         RadialGradient {
@@ -186,7 +189,7 @@ impl<'a> SvgPainter<'a> {
           cr: radius,
           fx: focal.x,
           fy: focal.y,
-          fr: 0.0,
+          fr: focal_radius,
           transform: krilla_transform(gradient.transform),
           spread_method: spread_method(gradient.spread),
           stops: self.gradient_stops(&gradient),

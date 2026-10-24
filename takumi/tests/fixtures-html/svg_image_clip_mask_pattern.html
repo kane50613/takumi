@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_image_clip_mask_pattern</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        width: 100%;
+        height: 100%;
+        gap: 40px;
+        align-items: center;
+        justify-content: center;
+        background-color: rgb(255, 255, 255);
+      "
+      ><img
+        width="720"
+        height="400"
+        src="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22720%22 height=%22400%22 viewBox=%220 0 360 200%22><defs><clipPath id=%22outer%22><circle cx=%2250%22 cy=%2250%22 r=%2240%22/></clipPath><clipPath id=%22inner%22 clip-path=%22url(%23outer)%22><rect x=%2230%22 y=%2210%22 width=%22100%22 height=%2240%22/><rect x=%2210%22 y=%2250%22 width=%2240%22 height=%2260%22/></clipPath><linearGradient id=%22fade%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%220%22><stop offset=%220%22 stop-color=%22white%22/><stop offset=%221%22 stop-color=%22black%22/></linearGradient><mask id=%22luma%22 maskUnits=%22userSpaceOnUse%22 x=%22140%22 y=%2210%22 width=%22100%22 height=%2280%22><rect x=%22140%22 y=%2210%22 width=%22100%22 height=%2280%22 fill=%22url(%23fade)%22/></mask><pattern id=%22dots%22 width=%2212%22 height=%2212%22 patternUnits=%22userSpaceOnUse%22 patternTransform=%22rotate(30)%22><circle cx=%226%22 cy=%226%22 r=%223%22 fill=%22%23e63946%22/></pattern><filter id=%22shadow%22 x=%22-20%%22 y=%22-20%%22 width=%22160%%22 height=%22160%%22><feOffset in=%22SourceAlpha%22 dx=%226%22 dy=%226%22 result=%22o%22/><feFlood flood-color=%22%231d3557%22 flood-opacity=%220.6%22/><feComposite in2=%22o%22 operator=%22in%22/><feMerge><feMergeNode/><feMergeNode in=%22SourceGraphic%22/></feMerge></filter></defs><rect width=%22360%22 height=%22200%22 fill=%22%23f1faee%22/><rect x=%220%22 y=%220%22 width=%22140%22 height=%22120%22 fill=%22%23457b9d%22 clip-path=%22url(%23inner)%22/><rect x=%22140%22 y=%2210%22 width=%22100%22 height=%2280%22 fill=%22%232a9d8f%22 mask=%22url(%23luma)%22/><rect x=%22250%22 y=%2210%22 width=%22100%22 height=%2280%22 fill=%22url(%23dots)%22 stroke=%22%231d3557%22 stroke-width=%224%22 stroke-dasharray=%2210 6%22 stroke-linejoin=%22round%22/><g filter=%22url(%23shadow)%22><rect x=%2220%22 y=%22130%22 width=%2290%22 height=%2250%22 rx=%2210%22 fill=%22%23e9c46a%22/></g><g opacity=%220.6%22><circle cx=%22190%22 cy=%22150%22 r=%2230%22 fill=%22%23e63946%22/><circle cx=%22215%22 cy=%22150%22 r=%2230%22 fill=%22%232a9d8f%22 style=%22mix-blend-mode:multiply%22/></g><path d=%22M260 190 L290 120 L320 190 Z%22 fill=%22none%22 stroke=%22%23264653%22 stroke-width=%228%22 stroke-linejoin=%22miter-clip%22 stroke-miterlimit=%222%22/></svg>"
+      /></div>
+  </body>
+</html>

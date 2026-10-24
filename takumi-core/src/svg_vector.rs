@@ -51,6 +51,8 @@ pub enum SvgOp {
     fill: Option<SvgFill>,
     /// Stroke paint, if any.
     stroke: Option<SvgStrokeStyle>,
+    /// `false` for `shape-rendering: crispEdges` and `optimizeSpeed`.
+    anti_alias: bool,
   },
   /// Draws a bitmap over `(0, 0, width, height)` in the current coordinate space.
   Image {
@@ -86,7 +88,44 @@ impl SvgImageData {
 
 /// The SVG filters of one group, applied to its layer.
 #[derive(Debug, Clone)]
-pub struct SvgFilters(#[allow(dead_code)] pub(crate) Vec<Arc<Filter>>);
+pub struct SvgFilters(#[cfg_attr(not(feature = "svg-raster"), allow(dead_code))] Vec<Arc<Filter>>);
+
+#[cfg(feature = "svg-raster")]
+impl SvgFilters {
+  /// The union of the filter regions in the group's coordinate space.
+  pub fn region(&self) -> Option<tiny_skia::Rect> {
+    let mut regions = self.0.iter().map(|filter| filter.rect().to_rect());
+    let first = regions.next()?;
+
+    regions.try_fold(first, |union, region| {
+      tiny_skia::Rect::from_ltrb(
+        union.left().min(region.left()),
+        union.top().min(region.top()),
+        union.right().max(region.right()),
+        union.bottom().max(region.bottom()),
+      )
+    })
+  }
+
+  /// Applies each filter in order to `layer`, drawn under `transform`.
+  pub fn apply(
+    &self,
+    transform: tiny_skia::Transform,
+    layer: &mut tiny_skia::Pixmap,
+    drawer: &dyn SvgDrawer,
+  ) {
+    for filter in &self.0 {
+      crate::resvg::apply_filter(filter, transform, layer, drawer);
+    }
+  }
+}
+
+/// Draws SVG ops onto a pixmap, for the filter primitives that render content.
+#[cfg(feature = "svg-raster")]
+pub trait SvgDrawer {
+  /// Draws `ops` onto `pixmap` with `transform` as the canvas transform.
+  fn draw(&self, ops: &[SvgOp], transform: tiny_skia::Transform, pixmap: &mut tiny_skia::PixmapMut);
+}
 
 /// Fill style for [`SvgOp::Draw`].
 #[derive(Debug, Clone)]
@@ -132,12 +171,14 @@ pub enum SvgLineCap {
 /// Line join for [`SvgStrokeStyle`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SvgLineJoin {
-  /// Sharp corner, subject to the miter limit.
+  /// Sharp corner, which becomes a bevel past the miter limit.
   Miter,
   /// Rounded corner.
   Round,
   /// Beveled corner.
   Bevel,
+  /// Miter clipped at the miter limit instead of falling back to a bevel.
+  MiterClip,
 }
 
 /// Paint for fills and strokes.
@@ -154,7 +195,7 @@ pub enum SvgPaint {
     /// Shared gradient parameters.
     gradient: SvgGradient,
   },
-  /// Radial gradient (focal point form, focal radius is always zero).
+  /// Radial gradient with a focal circle.
   Radial {
     /// Center.
     center: Point<f32>,
@@ -162,6 +203,8 @@ pub enum SvgPaint {
     radius: f32,
     /// Focal point.
     focal: Point<f32>,
+    /// Focal radius.
+    focal_radius: f32,
     /// Shared gradient parameters.
     gradient: SvgGradient,
   },
@@ -214,6 +257,18 @@ pub struct SvgGradientStop {
 /// Flattens `tree` into vector ops in SVG canvas coordinates.
 pub(crate) fn flatten(tree: &Tree) -> Vec<SvgOp> {
   Flattener::default().flatten(tree.root())
+}
+
+/// Flattens the children of `group`, which an `feImage` filter draws without the group's own
+/// transform.
+#[cfg(feature = "svg-raster")]
+pub(crate) fn flatten_children(group: &Group) -> Vec<SvgOp> {
+  let mut flattener = Flattener::default();
+
+  for child in group.children() {
+    flattener.push_node(child);
+  }
+  flattener.ops
 }
 
 /// One op list being written.
@@ -306,6 +361,7 @@ impl Flattener {
       return;
     }
 
+    let anti_alias = path.rendering_mode().use_shape_antialiasing();
     let fill = path.fill().map(|fill| self.convert_fill(fill));
     let stroke = path.stroke().map(|stroke| self.convert_stroke(stroke));
 
@@ -318,6 +374,7 @@ impl Flattener {
         path: commands,
         fill,
         stroke,
+        anti_alias,
       }),
       PaintOrder::StrokeAndFill => {
         if let Some(stroke) = stroke {
@@ -325,6 +382,7 @@ impl Flattener {
             path: commands.clone(),
             fill: None,
             stroke: Some(stroke),
+            anti_alias,
           });
         }
         if let Some(fill) = fill {
@@ -332,6 +390,7 @@ impl Flattener {
             path: commands,
             fill: Some(fill),
             stroke: None,
+            anti_alias,
           });
         }
       }
@@ -492,7 +551,8 @@ impl Flattener {
         usvg::LineCap::Square => SvgLineCap::Square,
       },
       join: match stroke.linejoin() {
-        usvg::LineJoin::Miter | usvg::LineJoin::MiterClip => SvgLineJoin::Miter,
+        usvg::LineJoin::Miter => SvgLineJoin::Miter,
+        usvg::LineJoin::MiterClip => SvgLineJoin::MiterClip,
         usvg::LineJoin::Round => SvgLineJoin::Round,
         usvg::LineJoin::Bevel => SvgLineJoin::Bevel,
       },
@@ -526,6 +586,7 @@ impl Flattener {
           x: radial.fx(),
           y: radial.fy(),
         },
+        focal_radius: radial.fr().get(),
         gradient: convert_gradient(radial.transform(), radial.spread_method(), radial.stops()),
       },
       Paint::Pattern(pattern) => {
