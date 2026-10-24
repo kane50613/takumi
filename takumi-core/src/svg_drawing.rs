@@ -29,6 +29,50 @@ struct Target<'a, 'b> {
   pixmap: &'a mut PixmapMut<'b>,
   transform: Transform,
   clip: Option<Mask>,
+  /// The root pixmap grown by twice its size on each side, in this pixmap's pixels, as resvg's `max_bbox`.
+  limit: IntRect,
+}
+
+impl<'a, 'b> Target<'a, 'b> {
+  fn root(pixmap: &'a mut PixmapMut<'b>, transform: Transform) -> Option<Self> {
+    let (width, height) = (pixmap.width(), pixmap.height());
+    let limit = IntRect::from_xywh(
+      i32::try_from(width).ok()?.checked_mul(-2)?,
+      i32::try_from(height).ok()?.checked_mul(-2)?,
+      width.checked_mul(5)?,
+      height.checked_mul(5)?,
+    )?;
+
+    Some(Self {
+      pixmap,
+      transform,
+      clip: None,
+      limit,
+    })
+  }
+
+  /// Where a layer sits, a filter's region within `limit` and the raster budget.
+  fn layer_bounds(&self, filters: Option<&SvgFilters>) -> Option<IntRect> {
+    let (width, height) = (self.pixmap.width(), self.pixmap.height());
+
+    let Some(filters) = filters else {
+      return IntRect::from_xywh(0, 0, width, height);
+    };
+    let region = filters.region()?.transform(self.transform)?;
+    let region = IntRect::from_xywh(
+      region.x().floor() as i32,
+      region.y().floor() as i32,
+      region.width().ceil().max(1.0) as u32,
+      region.height().ceil().max(1.0) as u32,
+    )?
+    .intersect(&self.limit)?;
+
+    if within_raster_pixel_budget(region.width(), region.height()) {
+      Some(region)
+    } else {
+      IntRect::from_xywh(0, 0, width, height)
+    }
+  }
 }
 
 /// How a layer joins the target below it.
@@ -43,14 +87,9 @@ struct Composite<'a> {
 impl SvgDrawing {
   /// Draws `ops` onto `pixmap` with `transform` as the canvas transform.
   pub(crate) fn draw(&self, ops: &[SvgOp], transform: Transform, pixmap: &mut PixmapMut) {
-    self.run(
-      &mut ops.iter(),
-      &mut Target {
-        pixmap,
-        transform,
-        clip: None,
-      },
-    );
+    if let Some(mut target) = Target::root(pixmap, transform) {
+      self.run(&mut ops.iter(), &mut target);
+    }
   }
 
   /// Draws ops up to the `Pop` closing the scope they are in, or the end of `ops`.
@@ -128,7 +167,7 @@ impl SvgDrawing {
 
   /// Draws the scope that follows into a fresh layer and composites the layer onto `target`.
   fn layer(&self, ops: &mut Iter<'_, SvgOp>, target: &mut Target, composite: Composite) {
-    let Some(bounds) = layer_bounds(target, composite.filters) else {
+    let Some(bounds) = target.layer_bounds(composite.filters) else {
       skip_scope(ops);
       return;
     };
@@ -138,6 +177,10 @@ impl SvgDrawing {
     };
     let transform = Transform::from_translate(-bounds.x() as f32, -bounds.y() as f32)
       .pre_concat(target.transform);
+    let Some(limit) = target.limit.translate(-bounds.x(), -bounds.y()) else {
+      skip_scope(ops);
+      return;
+    };
     let mut view = layer.as_mut();
 
     self.run(
@@ -146,6 +189,7 @@ impl SvgDrawing {
         pixmap: &mut view,
         transform,
         clip: None,
+        limit,
       },
     );
 
@@ -347,10 +391,14 @@ impl SvgDrawing {
       } => {
         let pattern_transform = tiny_transform(*pattern_transform);
         let (scale_x, scale_y) = transform.pre_concat(pattern_transform).get_scale();
-        let Some(mut pixmap) = Pixmap::new(
-          (width * scale_x).round() as u32,
-          (height * scale_y).round() as u32,
-        ) else {
+        let tile_width = (width * scale_x).round() as u32;
+        let tile_height = (height * scale_y).round() as u32;
+
+        if !within_raster_pixel_budget(tile_width, tile_height) {
+          return;
+        }
+
+        let Some(mut pixmap) = Pixmap::new(tile_width, tile_height) else {
           return;
         };
 
@@ -390,41 +438,6 @@ fn skip_scope(ops: &mut Iter<'_, SvgOp>) {
       | SvgOp::PushFilter(_) => depth += 1,
       SvgOp::Draw { .. } | SvgOp::Image { .. } => {}
     }
-  }
-}
-
-/// Where a layer sits on `target`, a filter's region within five pixmaps and the raster budget.
-fn layer_bounds(target: &Target, filters: Option<&SvgFilters>) -> Option<IntRect> {
-  let (width, height) = (target.pixmap.width(), target.pixmap.height());
-
-  let Some(filters) = filters else {
-    return IntRect::from_xywh(0, 0, width, height);
-  };
-  let region = filters.region()?.transform(target.transform)?;
-  let region = IntRect::from_xywh(
-    region.x().floor() as i32,
-    region.y().floor() as i32,
-    region.width().ceil().max(1.0) as u32,
-    region.height().ceil().max(1.0) as u32,
-  )?;
-  let limit = IntRect::from_xywh(
-    i32::try_from(width).unwrap_or(i32::MAX).saturating_mul(-2),
-    i32::try_from(height).unwrap_or(i32::MAX).saturating_mul(-2),
-    width.saturating_mul(5),
-    height.saturating_mul(5),
-  )?;
-
-  let region = IntRect::from_ltrb(
-    region.left().max(limit.left()),
-    region.top().max(limit.top()),
-    region.right().min(limit.right()),
-    region.bottom().min(limit.bottom()),
-  )?;
-
-  if within_raster_pixel_budget(region.width(), region.height()) {
-    Some(region)
-  } else {
-    IntRect::from_xywh(0, 0, width, height)
   }
 }
 
@@ -545,12 +558,16 @@ fn tiny_blend_mode(blend: BlendMode) -> TinyBlendMode {
 mod tests {
   use std::sync::Arc;
 
+  use tiny_skia::{IntRect, Pixmap, Transform};
+
+  use super::Target;
   use crate::{
     resources::{
       image::{ImageSource, RenderedImage, SvgSource, to_data_url},
       image_buffer::ImageBuffer,
     },
     style::{Color, ImageScalingAlgorithm},
+    svg_vector::SvgOp,
   };
 
   const NS: &str = r#"xmlns="http://www.w3.org/2000/svg""#;
@@ -618,6 +635,51 @@ mod tests {
     assert_eq!(image.pixel(1, 1), [0, 255, 0, 255]);
     assert_eq!(image.pixel(3, 1), [0, 0, 0, 0]);
     assert_eq!(image.pixel(5, 1), [0, 255, 0, 255]);
+  }
+
+  #[test]
+  fn pattern_tile_over_the_raster_budget_paints_nothing() {
+    let image = draw(
+      r##"<defs><pattern id="p" width="9000" height="9000" patternUnits="userSpaceOnUse"><rect width="9000" height="9000" fill="#00ff00"/></pattern></defs>
+      <rect width="8" height="8" fill="url(#p)"/>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(4, 4), [0, 0, 0, 0]);
+  }
+
+  #[test]
+  fn nested_filter_layer_stays_within_the_root_limit() {
+    let source: SvgSource = format!(
+      r##"<svg {NS} width="10" height="10"><filter id="f" filterUnits="userSpaceOnUse" x="-1000" y="-1000" width="5000" height="5000"><feOffset/></filter><rect width="10" height="10" filter="url(#f)"/></svg>"##
+    )
+    .parse()
+    .unwrap();
+    let ops = source.vector_ops(Color::black(), None);
+    let Some(SvgOp::PushFilter(filters)) = ops.iter().find(|op| matches!(op, SvgOp::PushFilter(_)))
+    else {
+      panic!("expected a filter op");
+    };
+    let mut root = Pixmap::new(10, 10).unwrap();
+    let mut root_view = root.as_mut();
+    let root_target = Target::root(&mut root_view, Transform::identity()).unwrap();
+    let bounds = root_target.layer_bounds(Some(filters)).unwrap();
+
+    assert_eq!(bounds, IntRect::from_xywh(-20, -20, 50, 50).unwrap());
+
+    let mut layer = Pixmap::new(bounds.width(), bounds.height()).unwrap();
+    let mut layer_view = layer.as_mut();
+    let nested = Target {
+      pixmap: &mut layer_view,
+      transform: Transform::from_translate(20.0, 20.0),
+      clip: None,
+      limit: root_target.limit.translate(20, 20).unwrap(),
+    };
+
+    assert_eq!(
+      nested.layer_bounds(Some(filters)),
+      IntRect::from_xywh(0, 0, 50, 50)
+    );
   }
 
   #[test]
