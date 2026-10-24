@@ -23,6 +23,13 @@ pub(crate) enum ValueError<'i> {
   },
 }
 
+impl<'i> ValueError<'i> {
+  /// The parse error that says `message`.
+  pub(crate) fn invalid(message: &'static str) -> CssParseError<Self> {
+    CssParseError::custom(Self::Message(Cow::Borrowed(message)))
+  }
+}
+
 impl fmt::Display for ValueError<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
@@ -444,25 +451,37 @@ fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>>(
       ))
     }
     ListInterpolationStrategy::RepeatToLcm => {
-      if from.is_empty() || to.is_empty() {
-        return None;
-      }
-
-      let output_len = lcm(from.len(), to.len()).min(MAX_INTERPOLATED_LIST_LEN);
-
-      Some(interpolate_pairwise_list(
-        from,
-        to,
-        output_len,
-        progress,
-        sizing,
-        current_color,
-      ))
+      interpolate_repeated_list(from, to, progress, sizing, current_color)
     }
     ListInterpolationStrategy::PadToLongestWithNeutral => {
       interpolate_neutral_padded_list(from, to, progress, sizing, current_color)
     }
   }
+}
+
+/// The lists repeated to their least common multiple and interpolated item by item, none when
+/// either is empty.
+pub(crate) fn interpolate_repeated_list<T: Animatable + Clone>(
+  from: &[T],
+  to: &[T],
+  progress: f32,
+  sizing: &SizingContext,
+  current_color: Color,
+) -> Option<Vec<T>> {
+  if from.is_empty() || to.is_empty() {
+    return None;
+  }
+
+  let output_len = lcm(from.len(), to.len()).min(MAX_INTERPOLATED_LIST_LEN);
+
+  Some(interpolate_pairwise_list(
+    from,
+    to,
+    output_len,
+    progress,
+    sizing,
+    current_color,
+  ))
 }
 
 fn interpolate_pairwise_list<T: Animatable + Clone>(

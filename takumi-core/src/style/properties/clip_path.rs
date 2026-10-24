@@ -4,8 +4,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::{
   geometry::{Point, Size},
+  path_data::PathData,
   style::{
-    FromCss, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair, ToCss,
+    FromCss, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair, ToCss, ValueError,
     impl_css_enum, unexpected_token,
   },
 };
@@ -305,7 +306,11 @@ impl<'i> FromCss<'i> for BasicShape {
           "path" => parser.parse_nested_block(|input| {
             let fill_rule = FillRule::parse_prefix(input)?;
 
-            let path = input.expect_string()?.as_ref().into();
+            let path: Box<str> = input.expect_string()?.as_ref().into();
+
+            if !PathData::parse(&path).1 {
+              return Err(ValueError::invalid("expected complete path data"));
+            }
 
             Ok(BasicShape::Path(PathShape {
               fill_rule,
@@ -547,6 +552,12 @@ mod tests {
         path: "M 10 10 L 90 90".into(),
       }))
     );
+  }
+
+  #[test]
+  fn an_incomplete_path_is_invalid() {
+    assert!(BasicShape::from_css_str("path('M 0 0 X')").is_err());
+    assert!(BasicShape::from_css_str("path('L 10 10')").is_err());
   }
 
   #[test]
