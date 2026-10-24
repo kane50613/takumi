@@ -38,8 +38,9 @@ pub(crate) struct NodeMetadata {
   pub id: Option<Box<str>>,
   /// Additional element attributes for selector matching and serialization.
   pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
-  /// Default style presets from HTML element type (lowest priority).
-  pub preset: Option<Box<Style>>,
+  /// Default style presets from HTML element type (lowest priority), shared by the elements of a
+  /// type.
+  pub preset: Option<Arc<Style>>,
   /// The styling properties for this node.
   pub style: Option<Box<Style>>,
   /// The tailwind properties for this node.
@@ -406,8 +407,8 @@ impl Node {
   }
 
   /// Sets the preset style and returns the updated node.
-  pub fn with_preset(mut self, preset: Style) -> Self {
-    self.metadata.preset = Some(Box::new(preset));
+  pub fn with_preset(mut self, preset: impl Into<Arc<Style>>) -> Self {
+    self.metadata.preset = Some(preset.into());
     self
   }
 
@@ -660,7 +661,7 @@ impl Node {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
-  pub(crate) preset: Option<Box<Style>>,
+  pub(crate) preset: Option<Arc<Style>>,
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Box<Style>>,
   pub(crate) dir: Option<Direction>,

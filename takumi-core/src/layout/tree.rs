@@ -2585,7 +2585,7 @@ impl RenderContext {
     let mut style = NodeStyle::default();
 
     if let Some(preset) = node_layers.preset {
-      style.append_block(preset.declarations);
+      style.append_block(Arc::unwrap_or_clone(preset).declarations);
     }
 
     if let Some(dir) = node_layers.dir {

@@ -26,7 +26,7 @@ use std::{
   cell::RefCell,
   collections::{BTreeMap, HashMap},
   str::FromStr,
-  sync::LazyLock,
+  sync::{Arc, LazyLock},
 };
 
 use html5ever::{
@@ -186,13 +186,13 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("col", "display:table-column"),
 ];
 
-static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {
+static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Arc<Style>>> = LazyLock::new(|| {
   DEFAULT_PRESETS
     .iter()
     .map(|&(tag, css)| {
       (
         tag.into(),
-        Style::from(StyleDeclarationBlock::parse_loosy(css)),
+        Arc::new(Style::from(StyleDeclarationBlock::parse_loosy(css))),
       )
     })
     .collect()
@@ -213,7 +213,7 @@ pub enum HtmlError {
 /// static at no allocation cost. Supply your own with [`From`]; disable presets
 /// with [`StylePresets::empty`].
 #[derive(Debug, Clone)]
-pub struct StylePresets(Cow<'static, HashMap<Box<str>, Style>>);
+pub struct StylePresets(Cow<'static, HashMap<Box<str>, Arc<Style>>>);
 
 impl StylePresets {
   /// Built-in Chromium element presets.
@@ -226,7 +226,8 @@ impl StylePresets {
     Self(Cow::Owned(HashMap::new()))
   }
 
-  fn get(&self, tag: &str) -> Option<&Style> {
+  /// The preset of `tag`, which every element of it shares.
+  fn get(&self, tag: &str) -> Option<&Arc<Style>> {
     self.0.get(tag)
   }
 }
@@ -239,7 +240,12 @@ impl Default for StylePresets {
 
 impl From<HashMap<Box<str>, Style>> for StylePresets {
   fn from(presets: HashMap<Box<str>, Style>) -> Self {
-    Self(Cow::Owned(presets))
+    Self(Cow::Owned(
+      presets
+        .into_iter()
+        .map(|(tag, style)| (tag, Arc::new(style)))
+        .collect(),
+    ))
   }
 }
 
@@ -482,9 +488,7 @@ impl NodeBuilder<'_> {
         if let Some(length) =
           dimension(handle, tag, name).filter(|length| !matches!(length, Length::Px(_)))
         {
-          preset
-            .get_or_insert_default()
-            .push(declaration(length), false);
+          Arc::make_mut(preset.get_or_insert_default()).push(declaration(length), false);
         }
       }
     }
