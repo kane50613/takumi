@@ -34,6 +34,8 @@ use html5ever::{
   serialize::{SerializeOpts, TraversalScope, serialize},
   tendril::TendrilSink,
 };
+#[cfg(feature = "svg")]
+use takumi_core::resources::image::{ImageSource, SvgSource};
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   style::{
@@ -451,7 +453,7 @@ impl NodeBuilder<'_> {
       },
       _ if UNRENDERED_TAGS.contains(&tag) => return Ok(None),
       "svg" => Node::image(ImageData {
-        src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
+        src: self.inline_svg(handle, depth),
         width: pixels(handle, tag, "width"),
         height: pixels(handle, tag, "height"),
       }),
@@ -545,6 +547,67 @@ impl NodeBuilder<'_> {
     }
 
     node
+  }
+
+  /// The source of an inline `<svg>`: its subtree as nodes, which the page's stylesheet reaches,
+  /// or its markup when the nodes do not form a document.
+  #[cfg(feature = "svg")]
+  fn inline_svg(&self, handle: NodeRef<'_>, depth: usize) -> ImageSourceInput {
+    let markup = serialize_outer_html(handle);
+    let source = str::from_utf8(&markup).ok().and_then(|markup| {
+      let root = self.svg_node(handle, depth)?;
+
+      SvgSource::from_inline_element(&root, markup).ok()
+    });
+
+    match source {
+      Some(source) => ImageSourceInput::Loaded(ImageSource::from(source)),
+      None => ImageSourceInput::Buffer(markup),
+    }
+  }
+
+  #[cfg(not(feature = "svg"))]
+  fn inline_svg(&self, handle: NodeRef<'_>, _depth: usize) -> ImageSourceInput {
+    ImageSourceInput::Buffer(serialize_outer_html(handle))
+  }
+
+  /// An element of an inline `<svg>` with every attribute in its attribute map under its
+  /// qualified name, or a text, none for other nodes and past the depth limit.
+  #[cfg(feature = "svg")]
+  fn svg_node(&self, handle: NodeRef<'_>, depth: usize) -> Option<Node> {
+    if depth >= self.max_depth {
+      return None;
+    }
+
+    match handle.data() {
+      NodeData::Text(contents) => Some(Node::text(contents.to_string())),
+      NodeData::Element { name, attrs, .. } => {
+        let attributes: BTreeMap<Box<str>, Box<str>> = attrs
+          .iter()
+          .map(|attr| {
+            let local = &*attr.name.local;
+            let name = match attr.name.ns {
+              ns!(xlink) => format!("xlink:{local}").into(),
+              ns!(xml) => format!("xml:{local}").into(),
+              _ => local.into(),
+            };
+
+            (name, attr.value.as_ref().into())
+          })
+          .collect();
+        let children: Vec<Node> = handle
+          .children()
+          .filter_map(|child| self.svg_node(child, depth + 1))
+          .collect();
+
+        Some(
+          Node::container(children)
+            .with_tag_name(&*name.local)
+            .with_attributes(attributes),
+        )
+      }
+      _ => None,
+    }
   }
 
   /// The style a `style` attribute of `css` sets.

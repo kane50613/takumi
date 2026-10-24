@@ -19,7 +19,7 @@ use crate::{
     image_decoder::{DetectedImageFormat, bitmap_dimensions, detect_image_format},
   },
   style::{Affine, ImageScalingAlgorithm, Length, Size as SizeValue, Visibility},
-  svg::{SvgDocument, length::LengthAxis},
+  svg::{SvgDocument, SvgHost, length::LengthAxis},
 };
 
 /// How deep SVG images may nest in SVG images.
@@ -247,8 +247,11 @@ impl SvgLayout<'_> {
 
     let document = SvgDocument::parse(str::from_utf8(data).ok()?).ok()?;
 
-    let current_color = self.styles.root_context().current_color;
-    let mut layout = SvgLayout::nested(&document, current_color, self.fonts, self.image_depth + 1);
+    let host = SvgHost::Image {
+      current_color: self.styles.root_context().current_color,
+      fonts: self.fonts,
+    };
+    let mut layout = SvgLayout::nested(&document, host, self.image_depth + 1);
 
     layout.budget = mem::take(&mut self.budget);
 

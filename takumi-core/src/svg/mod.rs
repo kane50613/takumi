@@ -22,6 +22,7 @@ use std::{
 use self::filter::SvgFilter;
 use self::{element::SvgElementKind, markup::Markup};
 use crate::{
+  context::RenderContext,
   geometry::Size,
   layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   resources::{
@@ -35,6 +36,39 @@ use crate::{
 const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
 const XLINK_NAMESPACE: &str = "http://www.w3.org/1999/xlink";
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
+
+/// The box an SVG document draws in, which its root element inherits from.
+#[derive(Clone, Copy)]
+pub(crate) enum SvgHost<'a> {
+  /// An image, whose root inherits only the `color` of the box.
+  Image {
+    current_color: Color,
+    fonts: Option<&'a FontsSnapshot>,
+  },
+  /// An inline `svg` element, whose root inherits the style of the box and whose elements match the
+  /// page's stylesheet, then the document's `style` elements. Approximate: Blink orders them by
+  /// where they sit in the document, matches selectors across the HTML ancestors, and applies the
+  /// `style` elements to the whole page.
+  Inline(&'a RenderContext),
+}
+
+impl SvgHost<'_> {
+  /// An image in a box whose `color` is black.
+  const BLACK: Self = Self::Image {
+    current_color: Color([0, 0, 0, 255]),
+    fonts: None,
+  };
+}
+
+impl<'a> SvgHost<'a> {
+  /// The fonts the document's text draws with.
+  fn fonts(self) -> Option<&'a FontsSnapshot> {
+    match self {
+      Self::Image { fonts, .. } => fonts,
+      Self::Inline(context) => Some(context.fonts()),
+    }
+  }
+}
 
 /// Where an element sits in the document, in the preorder the selector matcher numbers nodes by.
 #[derive(Debug)]
@@ -69,6 +103,12 @@ impl SvgDocument {
     Self::build(xml.root_element())
   }
 
+  /// The document of an inline `svg` element, every attribute of it and of its descendants kept in
+  /// their attribute maps.
+  pub(crate) fn from_element(root: &Node) -> Result<Self, ImageError> {
+    Self::build(root)
+  }
+
   /// The document of the root element `root`, which must be an `svg` element.
   fn build<'a>(root: impl Markup<'a>) -> Result<Self, ImageError> {
     if root.element() != Some(("svg", true)) {
@@ -98,7 +138,7 @@ impl SvgDocument {
       size,
     };
 
-    document.canvas = layout::SvgLayout::new(&document, Color([0, 0, 0, 255]), None).canvas_size();
+    document.canvas = layout::SvgLayout::new(&document, SvgHost::BLACK).canvas_size();
 
     Ok(document)
   }
@@ -157,17 +197,12 @@ impl SvgDocument {
   /// The filter the element `id` names, laid out for content of `width` by `height`.
   #[cfg(feature = "svg-raster")]
   pub(crate) fn filter(&self, id: &str, width: f32, height: f32) -> Option<Arc<SvgFilter>> {
-    layout::SvgLayout::new(self, Color([0, 0, 0, 255]), None).filter_by_id(id, width, height)
+    layout::SvgLayout::new(self, SvgHost::BLACK).filter_by_id(id, width, height)
   }
 
-  /// The drawing ops of the document in canvas coordinates, with `current_color` the `color` the
-  /// root inherits from its host.
-  pub(crate) fn ops(
-    &self,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
-  ) -> Option<Vec<SvgOp>> {
-    layout::SvgLayout::new(self, current_color, fonts).layout()
+  /// The drawing ops of the document in canvas coordinates, drawn in `host`.
+  pub(crate) fn ops(&self, host: SvgHost<'_>) -> Option<Vec<SvgOp>> {
+    layout::SvgLayout::new(self, host).layout()
   }
 }
 

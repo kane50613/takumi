@@ -31,7 +31,9 @@ use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "svg-sizing")]
 use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
-use crate::svg::SvgDocument;
+use crate::style::Color;
+#[cfg(feature = "svg")]
+use crate::svg::{SvgDocument, SvgHost};
 #[cfg(feature = "svg-raster")]
 #[cfg(feature = "svg-raster")]
 use crate::svg_drawing::SvgDrawing;
@@ -46,7 +48,7 @@ use crate::{
     image_buffer::ImageBuffer,
     image_decoder::{DecodeTarget, bitmap_dimensions, decode_bitmap_scaled, decode_image},
   },
-  style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
+  style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
 #[cfg(feature = "svg-raster")]
 use tiny_skia::Transform;
@@ -94,6 +96,9 @@ pub struct SvgSource {
   /// The document, drawn through the CSS cascade.
   #[cfg(feature = "svg")]
   document: Arc<SvgDocument>,
+  /// Whether the document is an inline `svg` element, which draws in the style of its box.
+  #[cfg(feature = "svg")]
+  inline: bool,
   /// Whether the markup contains `<text`, so rendering depends on the registered fonts.
   #[cfg(feature = "svg-raster")]
   has_text: bool,
@@ -182,27 +187,54 @@ impl SvgSource {
 
   /// The SVG's drawing ops in SVG canvas coordinates, drawn in the box `host` styles.
   pub fn vector_ops(&self, host: &RenderContext) -> Vec<SvgOp> {
-    self
-      .document
-      .ops(host.current_color, Some(host.fonts()))
-      .unwrap_or_default()
+    let host = if self.inline {
+      SvgHost::Inline(host)
+    } else {
+      SvgHost::Image {
+        current_color: host.current_color,
+        fonts: Some(host.fonts()),
+      }
+    };
+
+    self.document.ops(host).unwrap_or_default()
+  }
+
+  /// An inline `svg` element of an HTML document and its subtree, every attribute kept in the
+  /// attribute maps, with `markup` its serialization for vector backends to embed.
+  pub fn from_inline_element(root: &Node, markup: &str) -> Result<Self, ImageError> {
+    let document = SvgDocument::from_element(root)?;
+
+    Ok(Self {
+      inline: true,
+      cache: Weak::new(),
+      hash: xxh3_64(markup.as_bytes()),
+      ..Self::from_document(document, markup)
+    })
   }
 
   /// Parses SVG markup; rasterized pixmaps go into `cache` while it is alive,
   /// keyed by content hash and target size. A dead handle rasterizes per call.
   fn parse(src: &str, hash: u64, cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
-    let document = SvgDocument::parse(src)?;
+    Ok(Self {
+      hash,
+      cache,
+      ..Self::from_document(SvgDocument::parse(src)?, src)
+    })
+  }
 
-    Ok(SvgSource {
+  /// The source of `document`, parsed from `src`, as an image that no cache holds.
+  fn from_document(document: SvgDocument, src: &str) -> Self {
+    Self {
       #[cfg(feature = "svg-raster")]
       has_text: document.has_text(),
       uses_current_color: document.uses_current_color(),
       sizing: document.size,
       document: Arc::new(document),
+      inline: false,
       source: Box::from(src),
-      hash,
-      cache,
-    })
+      hash: 0,
+      cache: Weak::new(),
+    }
   }
 
   #[cfg(feature = "svg-raster")]
@@ -250,6 +282,11 @@ impl SvgSource {
     // Text rasterization depends on which fonts are registered.
     if self.has_text {
       hash ^= xxh3_64(&host.fonts().revision().to_le_bytes());
+    }
+
+    // An inline `svg` draws in the style of its box, which the key cannot hold.
+    if self.inline {
+      return self.rasterize(width, height, host);
     }
 
     let key = ResourceCacheKey::sized(hash, width, height, image_rendering);
@@ -1232,6 +1269,7 @@ mod tests {
   use crate::resources::animated::AnimatedFormat;
   #[cfg(any(feature = "png", feature = "webp"))]
   use crate::resources::image_decoder::DecodeTarget;
+  use crate::style::Color;
 
   use super::*;
 

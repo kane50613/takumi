@@ -18,6 +18,10 @@ path = "../takumi-core"
 version = "0.32.0"
 default-features = false
 
+[features]
+# Keeps inline `<svg>` elements as nodes that the page's stylesheet reaches.
+svg = ["takumi-core/svg"]
+
 [lints]
 workspace = true
 

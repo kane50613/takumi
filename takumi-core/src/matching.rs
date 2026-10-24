@@ -20,7 +20,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
+    BreakpointOverrides, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -647,26 +647,55 @@ impl RuleIndex {
   }
 }
 
-/// Matches every rule in `stylesheet` against the tree rooted at `root`,
-/// returning the declaration blocks that apply to each node in tree order.
+/// A stylesheet among those a tree matches, with where its rules and named layers sit among them.
+struct SheetPlacement<'a> {
+  sheet: &'a StyleSheet,
+  matching_media: Vec<bool>,
+  rule_offset: usize,
+  layer_offset: usize,
+}
+
+/// Matches every rule in `stylesheets`, which cascade in order, against the tree rooted at
+/// `root`, returning the declaration blocks that apply to each node in tree order. Approximate:
+/// the named layers of different sheets stay apart where CSS merges those with the same name.
 pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
-  stylesheet: &'a StyleSheet,
+  stylesheets: &[&'a StyleSheet],
   viewport: Viewport,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
-  let index = stylesheet.rule_index();
-  let matching_media = index.matching_media(viewport);
+  let mut placements = Vec::with_capacity(stylesheets.len());
+  let (mut rule_offset, mut layer_offset) = (0, 0);
+
+  for &sheet in stylesheets {
+    placements.push(SheetPlacement {
+      sheet,
+      matching_media: sheet.rule_index().matching_media(viewport),
+      rule_offset,
+      layer_offset,
+    });
+    rule_offset += sheet.rules().len();
+    layer_offset += sheet.layer_count;
+  }
+
+  let no_breakpoints = BreakpointOverrides::default();
+  let breakpoints = stylesheets
+    .last()
+    .map_or(&no_breakpoints, |sheet| &sheet.breakpoints);
 
   let arena = StyleArena::new(root);
   let node_count = arena.nodes.len();
   let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
   let tw_order = tw_rule_order(&arena);
   // The named layers, then the `tw` layer, declared last.
-  let layers = stylesheet.layer_count + 1;
+  let layers = layer_offset + 1;
 
   // Every distinct media query list gates some rule, so none matching means no
   // stylesheet rule applies. Without utilities either, skip the matching walk.
-  if !matching_media.contains(&true) && tw_order.is_empty() {
+  if placements
+    .iter()
+    .all(|placement| !placement.matching_media.contains(&true))
+    && tw_order.is_empty()
+  {
     return per_node;
   }
 
@@ -717,45 +746,60 @@ pub(crate) fn match_stylesheets_view<'a>(
       MatchingForInvalidation::No,
     );
 
-    index.candidates(arena.nodes[i].node, &matching_media, &mut candidates);
+    for placement in &placements {
+      placement.sheet.rule_index().candidates(
+        arena.nodes[i].node,
+        &placement.matching_media,
+        &mut candidates,
+      );
 
-    for &source_order in &candidates {
-      let rule = &stylesheet.rules()[source_order];
-      let mut best_specificities: [Option<u32>; 3] = [None; 3];
+      for &rule_index in &candidates {
+        let rule = &placement.sheet.rules()[rule_index];
+        let source_order = placement.rule_offset + rule_index;
+        let mut best_specificities: [Option<u32>; 3] = [None; 3];
 
-      for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
-        let Some(target) = selector_target(selector) else {
-          continue;
-        };
-        if is_replaced && target != SelectorTarget::Element {
-          continue;
+        for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
+          let Some(target) = selector_target(selector) else {
+            continue;
+          };
+          if is_replaced && target != SelectorTarget::Element {
+            continue;
+          }
+
+          let selector_key = (source_order, selector_index);
+          let ancestor_hashes = selector_ancestor_hashes_cache
+            .entry(selector_key)
+            .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks));
+
+          if early_reject_by_local_name(selector, 0, &element) {
+            continue;
+          }
+
+          let ctx = if target == SelectorTarget::Element {
+            &mut element_ctx
+          } else {
+            &mut pseudo_ctx
+          };
+
+          if matches_selector(selector, 0, Some(ancestor_hashes), &element, ctx) {
+            let specificity = selector.specificity();
+            let slot = &mut best_specificities[target as usize];
+
+            *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
+          }
         }
 
-        let selector_key = (source_order, selector_index);
-        let ancestor_hashes = selector_ancestor_hashes_cache
-          .entry(selector_key)
-          .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks));
-
-        if early_reject_by_local_name(selector, 0, &element) {
-          continue;
+        for (best_specificity, bucket) in best_specificities.into_iter().zip(node_rules.iter_mut())
+        {
+          record_matches(
+            rule,
+            source_order,
+            placement.layer_offset,
+            layers,
+            best_specificity,
+            bucket,
+          );
         }
-
-        let ctx = if target == SelectorTarget::Element {
-          &mut element_ctx
-        } else {
-          &mut pseudo_ctx
-        };
-
-        if matches_selector(selector, 0, Some(ancestor_hashes), &element, ctx) {
-          let specificity = selector.specificity();
-          let slot = &mut best_specificities[target as usize];
-
-          *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
-        }
-      }
-
-      for (best_specificity, bucket) in best_specificities.into_iter().zip(node_rules.iter_mut()) {
-        record_matches(rule, source_order, layers, best_specificity, bucket);
       }
     }
 
@@ -769,7 +813,7 @@ pub(crate) fn match_stylesheets_view<'a>(
         && rule
           .breakpoint
           .as_ref()
-          .is_none_or(|breakpoint| breakpoint.matches(viewport, &stylesheet.breakpoints))
+          .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
         && rule
           .condition
           .as_ref()
@@ -807,10 +851,12 @@ fn selector_target(selector: &Selector<SelectorImpl>) -> Option<SelectorTarget> 
 }
 
 /// Records `rule`'s blocks in `bucket` when one of its selectors matched, at `best_specificity`;
-/// `layers` counts the named layers and the `tw` layer after them.
+/// its sheet's named layers start at `layer_offset`, and `layers` counts every named layer and the
+/// `tw` layer after them.
 fn record_matches<'a>(
   rule: &'a CssRule,
   source_order: usize,
+  layer_offset: usize,
   layers: usize,
   best_specificity: Option<u32>,
   bucket: &mut Vec<MatchedRule<'a>>,
@@ -818,10 +864,12 @@ fn record_matches<'a>(
   let Some(specificity) = best_specificity else {
     return;
   };
+  let layer = rule.layer_order.map(|layer| layer_offset + layer);
+
   if !rule.normal_declarations.is_empty() {
     bucket.push(MatchedRule {
       important: false,
-      layer_order: layer_order(rule.layer_order, false, layers),
+      layer_order: layer_order(layer, false, layers),
       specificity,
       source_order,
       id: RuleId::Sheet(source_order),
@@ -831,7 +879,7 @@ fn record_matches<'a>(
   if !rule.important_declarations.is_empty() {
     bucket.push(MatchedRule {
       important: true,
-      layer_order: layer_order(rule.layer_order, true, layers),
+      layer_order: layer_order(layer, true, layers),
       specificity,
       source_order,
       id: RuleId::Sheet(source_order),

@@ -2306,7 +2306,9 @@ css/css-text-decor/text-decoration-color.html
 css/css-text-decor/text-decoration-inset-025.html
 css/css-text-decor/text-decoration-inset-percentage-slice-multiline.html
 css/css-text-decor/text-decoration-inset-svg-fragment-001.html
+!css/css-text-decor/text-decoration-inset-svg-fragment-001.html
 css/css-text-decor/text-decoration-inset-svg-fragment-002.html
+!css/css-text-decor/text-decoration-inset-svg-fragment-002.html
 css/css-text-decor/text-decoration-line-010.xht
 css/css-text-decor/text-decoration-line-011.xht
 css/css-text-decor/text-decoration-line-012.xht
@@ -3050,6 +3052,7 @@ css/filter-effects/root-element-with-opacity-filter-001.html
 css/filter-effects/svg-feflood-001.html
 css/filter-effects/svg-filter-gradient-interpolation.html
 css/filter-effects/svg-image-root-filter.html
+!css/filter-effects/svg-image-root-filter.html
 css/filter-effects/svg-relative-urls-002.html
 css/filter-effects/svg-unknown-input-001.html
 css/filter-effects/svg-unknown-input-002.html

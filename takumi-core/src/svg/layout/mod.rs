@@ -34,7 +34,7 @@ use self::{
   view_box::PreserveAspectRatio,
 };
 use super::{
-  SvgDocument,
+  SvgDocument, SvgHost,
   approx_eq::ApproxEq,
   element::SvgElementKind,
   length::{LengthAxis, SvgLengthContext},
@@ -47,8 +47,8 @@ use crate::{
   geometry::{Rect, Size},
   resources::{font::FontsSnapshot, image::SvgOp, svg_size::ViewBox},
   style::{
-    Affine, BackgroundImage, BasicShape, BlendMode, Color, ColorInput, ComputedStyle, Display,
-    FromCssStr, Isolation, Length, SizingContext, SvgResource,
+    Affine, BackgroundImage, BasicShape, BlendMode, ColorInput, ComputedStyle, Display, FromCssStr,
+    Isolation, Length, SizingContext, SvgResource,
   },
 };
 
@@ -117,23 +117,14 @@ pub(super) struct SvgLayout<'a> {
 }
 
 impl<'a> SvgLayout<'a> {
-  pub(super) fn new(
-    document: &'a SvgDocument,
-    current_color: Color,
-    fonts: Option<&'a FontsSnapshot>,
-  ) -> Self {
-    Self::nested(document, current_color, fonts, 0)
+  pub(super) fn new(document: &'a SvgDocument, host: SvgHost<'a>) -> Self {
+    Self::nested(document, host, 0)
   }
 
-  fn nested(
-    document: &'a SvgDocument,
-    current_color: Color,
-    fonts: Option<&'a FontsSnapshot>,
-    image_depth: usize,
-  ) -> Self {
+  fn nested(document: &'a SvgDocument, host: SvgHost<'a>, image_depth: usize) -> Self {
     Self {
       document,
-      styles: StyleResolver::new(document, current_color, fonts),
+      styles: StyleResolver::new(document, host),
       clip_paths: HashMap::new(),
       masks: HashMap::new(),
       #[cfg(feature = "svg-raster")]
@@ -146,7 +137,7 @@ impl<'a> SvgLayout<'a> {
       active: Vec::new(),
       image_depth,
       budget: Budget::default(),
-      fonts,
+      fonts: host.fonts(),
     }
   }
 

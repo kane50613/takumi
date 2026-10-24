@@ -933,7 +933,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -956,7 +956,7 @@ mod matching_tests {
     );
 
     for (viewport, width) in [((400, 300), 10.0), ((800, 600), 20.0), ((400, 300), 10.0)] {
-      let matched = match_stylesheets_view(&root, &stylesheet, Viewport::new(viewport));
+      let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::new(viewport));
       assert_eq!(
         computed_style_from_matches(matched[0].element())
           .box_data
@@ -980,7 +980,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
       computed_style_from_matches(matched[1].element())
@@ -1006,7 +1006,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1021,7 +1021,7 @@ mod matching_tests {
     let root = container_with_class("card");
     let stylesheet = parse_stylesheet(".card { width: 10px; } .card { width: 20px; }");
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1048,7 +1048,7 @@ mod matching_tests {
       "#,
     ]);
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1069,7 +1069,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1096,7 +1096,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 5);
     assert_eq!(
       computed_style_from_matches(matched[2].element())
@@ -1145,7 +1145,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
       computed_style_from_matches(matched[1].element())
@@ -1165,7 +1165,7 @@ mod matching_tests {
   fn test_repro_mixed_importance_bug() {
     let stylesheet = parse_stylesheet(".test { width: 10px; height: 20px !important; }");
     let root = Node::container([]).with_class_name("test");
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
 
     assert_eq!(matched[0].element().unlayered_normal()[0].len(), 1);
     assert!(
@@ -1186,7 +1186,7 @@ mod matching_tests {
       Node::container([Node::text("x")]).with_class_name("box"),
       Node::container([Node::container([])]).with_class_name("box"),
     ]);
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     let matches_empty = |index: usize| !matched[index].element().unlayered_normal().is_empty();
 
     assert!(matches_empty(1));
@@ -1205,7 +1205,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
 
     assert!(!matched[0].element().unlayered_normal().is_empty());
@@ -1218,7 +1218,7 @@ mod matching_tests {
     let root = Node::image("data:image/png;base64,iVBOR").with_class_name("logo");
     let stylesheet = parse_stylesheet(r#".logo::before { content: "x"; }"#);
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert!(matched[0].before().is_none());
     assert!(matched[0].after().is_none());
@@ -1229,7 +1229,7 @@ mod matching_tests {
     let root = Node::container([]).with_class_name("card");
     let stylesheet = parse_stylesheet(r#".card::placeholder { color: red; }"#);
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert!(matched[0].before().is_none());
     assert!(matched[0].after().is_none());

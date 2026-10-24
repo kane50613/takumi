@@ -4,6 +4,7 @@ mod cascade_tests;
 mod fixtures;
 mod font_tests;
 mod html_fixtures;
+mod inline_svg;
 mod measure_tests;
 mod oversized_nodes;
 mod paint_tree_tests;
