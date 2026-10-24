@@ -1672,6 +1672,8 @@ fn negative_padding_and_sizes_are_invalid() {
     "min-width: -1px",
     "max-height: -1em",
     "inline-size: -1px",
+    "border-bottom-width: -1ex",
+    "border-left-width: -1px",
   ] {
     assert!(
       StyleDeclarationBlock::parse_loosy(css).is_empty(),
