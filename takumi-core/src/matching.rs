@@ -670,8 +670,8 @@ pub(crate) fn match_stylesheets_view<'a>(
     return per_node;
   }
 
-  // Indexed by `SelectorTarget`.
-  let mut matched_rules: Vec<[Vec<MatchedRule<'a>>; 3]> = vec![Default::default(); node_count];
+  // Indexed by `SelectorTarget`, each emptied into the node's view once it is matched.
+  let mut node_rules: [Vec<MatchedRule<'a>>; 3] = Default::default();
 
   let mut ancestor_bloom_filter = BloomFilter::new();
   let mut ancestor_stack: Vec<usize> = Vec::new();
@@ -686,7 +686,7 @@ pub(crate) fn match_stylesheets_view<'a>(
   // ancestor chain replaces a per-node filter copy: pop-and-remove until the
   // stack top is this node's parent, match against strict-ancestor hashes
   // only, then push self before descending.
-  for (i, node_rules) in matched_rules.iter_mut().enumerate() {
+  for (i, matched) in per_node.iter_mut().enumerate() {
     while ancestor_stack.last().copied() != arena.nodes[i].parent {
       let Some(left) = ancestor_stack.pop() else {
         break;
@@ -785,14 +785,13 @@ pub(crate) fn match_stylesheets_view<'a>(
       }
     }
 
-    ancestor_stack.push(i);
-    add_node_unique_hashes_to_filter(arena.nodes[i].node, &mut ancestor_bloom_filter);
-  }
+    let [element_rules, before, after] = &mut node_rules;
 
-  for (matched, [element, before, after]) in per_node.iter_mut().zip(&mut matched_rules) {
-    finalize_bucket(element, layers, &mut matched.element);
+    finalize_bucket(element_rules, layers, &mut matched.element);
     matched.before = take_pseudo_bucket(before, layers).map(Box::new);
     matched.after = take_pseudo_bucket(after, layers).map(Box::new);
+    ancestor_stack.push(i);
+    add_node_unique_hashes_to_filter(arena.nodes[i].node, &mut ancestor_bloom_filter);
   }
 
   per_node

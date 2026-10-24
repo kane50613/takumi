@@ -4,6 +4,7 @@
 use std::{
   cell::{Cell, RefCell},
   rc::Rc,
+  sync::Arc,
 };
 
 use rustc_hash::FxHashMap;
@@ -47,7 +48,7 @@ impl MatchedStyleKey {
 struct MatchedStyle {
   parent: Rc<ComputedStyle>,
   parent_sizing: SizingContext,
-  preset: Option<Box<Style>>,
+  preset: Option<Arc<Style>>,
   inherits_explicitly: bool,
   resolved: (Rc<ComputedStyle>, SizingContext, Color),
 }
@@ -101,7 +102,7 @@ impl MatchedStyleCache {
     key: MatchedStyleKey,
     parent: Rc<ComputedStyle>,
     parent_sizing: SizingContext,
-    preset: Option<Box<Style>>,
+    preset: Option<Arc<Style>>,
     inherits_explicitly: bool,
     resolved: (Rc<ComputedStyle>, SizingContext, Color),
   ) {

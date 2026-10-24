@@ -1,4 +1,4 @@
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 
 use crate::{
   context::RenderContext,
@@ -26,12 +26,12 @@ impl ImageData {
   }
 
   /// Pushes the element's `width` and `height` attributes into its preset style.
-  pub(super) fn push_size_preset(&self, preset: &mut Option<Box<Style>>) {
+  pub(super) fn push_size_preset(&self, preset: &mut Option<Arc<Style>>) {
     if self.width.is_none() && self.height.is_none() {
       return;
     }
 
-    let preset = preset.get_or_insert_default();
+    let preset = Arc::make_mut(preset.get_or_insert_default());
 
     if let Some(width) = self.width {
       preset.push(StyleDeclaration::width(Length::Px(width)), false);
