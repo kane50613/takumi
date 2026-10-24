@@ -136,7 +136,8 @@ impl SvgLayout<'_> {
   fn radii(&self, styled: &Styled, scope: &Scope) -> (f32, f32) {
     let geometry = &styled.style().svg_geometry_data;
     let radius = |length: Length, axis| {
-      (!matches!(length, Length::Auto)).then(|| self.px(styled, scope, length, axis))
+      // A `calc()` below zero clamps to zero, as the properties are non-negative.
+      (!matches!(length, Length::Auto)).then(|| self.px(styled, scope, length, axis).max(0.0))
     };
 
     match (

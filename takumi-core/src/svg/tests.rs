@@ -361,15 +361,9 @@ fn a_gradient_resolves_its_percentages_against_each_viewport_that_uses_it() {
   assert_eq!(ends, [50.0, 20.0]);
 }
 
-#[test]
-fn a_clip_path_clipped_in_bounding_box_units_is_not_shared_between_shapes() {
-  let ops = ops(
-    r##"<clipPath id="outer" clip-path="url(#inner)"><rect width="100" height="100"/></clipPath>
-        <clipPath id="inner" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath>
-        <rect width="10" height="10" clip-path="url(#outer)"/>
-        <rect width="20" height="20" clip-path="url(#outer)"/>"##,
-  );
-  let widths: Vec<f32> = ops
+/// The right edge of each clip path pushed, in order.
+fn clip_widths(ops: &[SvgOp]) -> Vec<f32> {
+  ops
     .iter()
     .filter_map(|op| match op {
       SvgOp::PushClip { path, .. } => path
@@ -386,12 +380,52 @@ fn a_clip_path_clipped_in_bounding_box_units_is_not_shared_between_shapes() {
         .reduce(f32::max),
       _ => None,
     })
-    .collect();
+    .collect()
+}
+
+#[test]
+fn a_clip_path_clipped_in_bounding_box_units_is_not_shared_between_shapes() {
+  let widths = clip_widths(&ops(
+    r##"<clipPath id="outer" clip-path="url(#inner)"><rect width="100" height="100"/></clipPath>
+        <clipPath id="inner" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath>
+        <rect width="10" height="10" clip-path="url(#outer)"/>
+        <rect width="20" height="20" clip-path="url(#outer)"/>"##,
+  ));
 
   assert!(
     widths.contains(&10.0) && widths.contains(&20.0),
     "{widths:?}"
   );
+}
+
+#[test]
+fn a_clip_path_resolves_its_percentages_in_the_viewport_of_each_shape() {
+  let widths = clip_widths(&ops(
+    r##"<clipPath id="c"><rect width="50%" height="50%"/></clipPath>
+        <rect width="100" height="100" clip-path="url(#c)"/>
+        <svg width="40" height="40"><rect width="40" height="40" clip-path="url(#c)"/></svg>"##,
+  ));
+
+  assert_eq!((widths.first(), widths.last()), (Some(&50.0), Some(&20.0)));
+}
+
+#[test]
+fn a_rect_radius_below_zero_clamps_to_a_square_corner() {
+  let ops = ops(r#"<rect width="20" height="20" style="rx: calc(10% - 20px)"/>"#);
+  let first = ops.iter().find_map(|op| match op {
+    SvgOp::Draw { path, .. } => path.first().cloned(),
+    _ => None,
+  });
+  let mut start = None;
+
+  first.map(|command| {
+    command.map_points(|point| {
+      start.get_or_insert(point);
+      point
+    })
+  });
+
+  assert_eq!(start.map(|point| point.x), Some(0.0));
 }
 
 #[test]

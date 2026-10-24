@@ -82,8 +82,10 @@ struct Scope {
 pub(super) struct SvgLayout<'a> {
   document: &'a SvgDocument,
   styles: StyleResolver<'a>,
-  clip_paths: HashMap<usize, Rc<LayoutClip>>,
-  masks: HashMap<usize, Rc<LayoutMask>>,
+  /// The clip paths and masks laid out, by element and the viewport their percentages resolved
+  /// against.
+  clip_paths: HashMap<(usize, [u32; 4]), Rc<LayoutClip>>,
+  masks: HashMap<(usize, [u32; 4]), Rc<LayoutMask>>,
   /// Whether each clip path or mask, or one it chains to, is in bounding box units.
   bounding_box_units: HashMap<(clip_mask::Resource, usize), bool>,
   /// The paint servers laid out, by element and the viewport their percentages resolved against.

@@ -79,7 +79,7 @@ impl SvgLayout<'_> {
     // the others become specific to the content.
     let cacheable = !self.clip_path_uses_bounding_box(link);
 
-    if cacheable && let Some(clip) = self.clip_paths.get(&link) {
+    if cacheable && let Some(clip) = self.clip_paths.get(&(link, scope.view_box.to_bits())) {
       return Some(Rc::clone(clip));
     }
 
@@ -119,7 +119,9 @@ impl SvgLayout<'_> {
     });
 
     if cacheable {
-      self.clip_paths.insert(link, Rc::clone(&clip));
+      self
+        .clip_paths
+        .insert((link, scope.view_box.to_bits()), Rc::clone(&clip));
     }
 
     Some(clip)
@@ -235,9 +237,10 @@ impl SvgLayout<'_> {
 
     // Only a mask in user units, masked by none in bounding box units, can be shared, as the
     // others become specific to the content.
+    let key = (link, scope.view_box.to_bits());
     let cacheable = !self.mask_uses_bounding_box(link);
 
-    if cacheable && let Some(mask) = self.masks.get(&link) {
+    if cacheable && let Some(mask) = self.masks.get(&key) {
       return Some(Rc::clone(mask));
     }
 
@@ -301,7 +304,11 @@ impl SvgLayout<'_> {
     {
       let real_root = sub_root.as_mut().unwrap_or(&mut root);
 
-      self.convert_children(link, &styled.context, scope, real_root);
+      // Blink paints the content of a mask without the context paints of the element it masks.
+      let mut content_scope = scope.clone();
+
+      content_scope.context_paints = None;
+      self.convert_children(link, &styled.context, &content_scope, real_root);
 
       // A mask without content is invalid.
       if !real_root.has_children() {
@@ -324,7 +331,7 @@ impl SvgLayout<'_> {
     });
 
     if cacheable {
-      self.masks.insert(link, Rc::clone(&mask));
+      self.masks.insert(key, Rc::clone(&mask));
     }
 
     Some(mask)
