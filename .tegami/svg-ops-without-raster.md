@@ -5,6 +5,6 @@ packages:
   takumi-svg: patch
 ---
 
-# Draw an SVG's bitmaps and filtered groups without rasterizing it
+# Draw an SVG's bitmaps and filtered groups in a PDF without rasterizing
 
-`SvgOp::Raster` is gone. `SvgOp::Image` carries a bitmap inside an SVG and `SvgOp::PushFilter` marks a filtered group, and `SvgSource::vector_ops` no longer takes a raster scale. Resvg's raster renderer now sits behind the `svg-raster` feature, which is on by default. takumi-pdf embeds an SVG's PNG, JPEG and WebP images as PDF images and draws a filtered group without its filter. An `<img>` or `background-image` of an SVG under a CSS `filter` recolors its paints instead of rasterizing. takumi-svg writes an SVG's bitmaps as `<image>` elements.
+takumi-pdf embeds the PNG, JPEG, and WebP images inside an SVG as PDF images, and draws an SVG group without its filter. A CSS color `filter` on an SVG `<img>` or `background-image` recolors the SVG instead of rasterizing it, and takumi-svg writes an SVG's bitmaps as `<image>` elements. `SvgOp::Image` and `SvgOp::PushFilter` replace `SvgOp::Raster`, `SvgSource::vector_ops` no longer takes a raster scale, and resvg's renderer moves behind the `svg-raster` feature, on by default.
