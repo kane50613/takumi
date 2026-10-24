@@ -5,10 +5,8 @@ use takumi::{
   prelude::{
     AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
     Color, ColorInput, Display, FlexWrap, Fonts, FromCssStr, FromHtml, FromHtmlOptions, ImageData,
-    ImageSourceInput, JustifyContent,
-    Length::{Percentage, Px},
-    Node, ObjectFit, Overflow, PositionValues, RenderOptions, RgbaImage, SpacePair, Style,
-    StyleDeclaration, StylePresets, Viewport,
+    ImageSourceInput, JustifyContent, LengthUnit, Node, ObjectFit, Overflow, PositionValues,
+    RenderOptions, RgbaImage, SpacePair, Style, StylePresets, Viewport,
   },
   render,
 };
@@ -31,14 +29,12 @@ fn nested_clip_masks_fixture() -> Node {
   let leaf = |radius: &str| {
     Node::container([]).with_style(
       Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
+        .display(Display::Flex)
+        .width(100.0.percent())
+        .height(100.0.percent())
         .border_radius(BorderRadius::from_css_str(radius).unwrap())
         .overflow(SpacePair::from_single(Overflow::Clip))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([200, 30, 30, 255]),
-        ))),
+        .background_color(ColorInput::Value(Color([200, 30, 30, 255]))),
     )
   };
 
@@ -46,27 +42,23 @@ fn nested_clip_masks_fixture() -> Node {
   for radius in ["24px", "32px", "40px", "48px", "56px"] {
     current = Node::container([current]).with_style(
       Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(95.0)))
-        .with(StyleDeclaration::height(Percentage(95.0)))
+        .display(Display::Flex)
+        .width(95.0.percent())
+        .height(95.0.percent())
         .border_radius(BorderRadius::from_css_str(radius).unwrap())
         .overflow(SpacePair::from_single(Overflow::Clip))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([30, 30, 200, 255]),
-        ))),
+        .background_color(ColorInput::Value(Color([30, 30, 200, 255]))),
     );
   }
 
   Node::container([current]).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color::white(),
-      ))),
+      .display(Display::Flex)
+      .width(100.0.percent())
+      .height(100.0.percent())
+      .align_items(AlignItems::Center)
+      .justify_content(JustifyContent::Center)
+      .background_color(ColorInput::Value(Color::white())),
   )
 }
 
@@ -74,20 +66,18 @@ fn sibling_clip_masks_fixture() -> Node {
   let cards = (0..64).map(|index| {
     let inner = Node::container([]).with_style(
       Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([200, 30, index as u8, 255]),
-        ))),
+        .width(100.0.percent())
+        .height(100.0.percent())
+        .background_color(ColorInput::Value(Color([200, 30, index as u8, 255]))),
     );
 
     Node::container([inner]).with_style(
       Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(92.0)))
-        .with(StyleDeclaration::height(Px(92.0)))
-        .with(StyleDeclaration::margin_top(Px(4.0)))
-        .with(StyleDeclaration::margin_left(Px(4.0)))
+        .display(Display::Flex)
+        .width(92.0.px())
+        .height(92.0.px())
+        .margin_top(4.0.px())
+        .margin_left(4.0.px())
         .border_radius(BorderRadius::from_css_str("24px").unwrap())
         .overflow(SpacePair::from_single(Overflow::Clip)),
     )
@@ -95,34 +85,30 @@ fn sibling_clip_masks_fixture() -> Node {
 
   Node::container(cards.collect::<Vec<_>>()).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color::white(),
-      ))),
+      .display(Display::Flex)
+      .flex_wrap(FlexWrap::Wrap)
+      .width(100.0.percent())
+      .height(100.0.percent())
+      .background_color(ColorInput::Value(Color::white())),
   )
 }
 
 fn scaled_image_fixture() -> Node {
   Node::container([Node::image(IMAGE_PATH).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::object_fit(ObjectFit::Cover)),
+      .display(Display::Flex)
+      .width(100.0.percent())
+      .height(100.0.percent())
+      .object_fit(ObjectFit::Cover),
   )])
   .with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(720.0)))
-      .with(StyleDeclaration::height(Px(720.0)))
+      .display(Display::Flex)
+      .width(720.0.px())
+      .height(720.0.px())
       .border_radius(BorderRadius::from_css_str("96px").unwrap())
       .overflow(SpacePair::from_single(Overflow::Clip))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color([245, 247, 250, 255]),
-      ))),
+      .background_color(ColorInput::Value(Color([245, 247, 250, 255]))),
   )
 }
 
@@ -133,33 +119,25 @@ fn gradient_clip_mask_fixture() -> Node {
   .unwrap();
   Node::container([Node::container([]).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(640.0)))
-      .with(StyleDeclaration::height(Px(640.0)))
+      .display(Display::Flex)
+      .width(640.0.px())
+      .height(640.0.px())
       .border_radius(BorderRadius::from_css_str("64px").unwrap())
       .overflow(SpacePair::from_single(Overflow::Clip))
-      .with(StyleDeclaration::background_image(Some(gradient)))
-      .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_css_str("100% 100%").unwrap(),
-      ))
-      .with(StyleDeclaration::background_position(
-        PositionValues::from_css_str("0 0").unwrap(),
-      ))
-      .with(StyleDeclaration::background_repeat(
-        BackgroundRepeats::from_css_str("no-repeat").unwrap(),
-      ))
-      .with(StyleDeclaration::background_clip(BackgroundClip::BorderBox)),
+      .background_image(Some(gradient))
+      .background_size(BackgroundSizes::from_css_str("100% 100%").unwrap())
+      .background_position(PositionValues::from_css_str("0 0").unwrap())
+      .background_repeat(BackgroundRepeats::from_css_str("no-repeat").unwrap())
+      .background_clip(BackgroundClip::BorderBox),
   )])
   .with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color::white(),
-      ))),
+      .display(Display::Flex)
+      .width(100.0.percent())
+      .height(100.0.percent())
+      .align_items(AlignItems::Center)
+      .justify_content(JustifyContent::Center)
+      .background_color(ColorInput::Value(Color::white())),
   )
 }
 

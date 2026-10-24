@@ -9,9 +9,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
   prelude::{
     BackgroundImages, BackgroundRepeats, BackgroundSizes, Color, ColorInput, Display, Fonts,
-    FromCssStr, ImageScalingAlgorithm, ImageSource,
-    Length::{Percentage, Px},
-    Node, ObjectFit, RenderOptions, Style, StyleDeclaration, Viewport,
+    FromCssStr, ImageScalingAlgorithm, ImageSource, Length::Px, LengthUnit, Node, ObjectFit,
+    RenderOptions, Style, Viewport,
   },
   render,
 };
@@ -58,35 +57,29 @@ fn panel(style: Style) -> Node {
 
 fn base_style() -> Style {
   Style::default()
-    .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Percentage(100.0)))
-    .with(StyleDeclaration::height(Percentage(100.0)))
-    .with(StyleDeclaration::background_color(ColorInput::Value(
-      Color([18, 18, 22, 255]),
-    )))
+    .display(Display::Flex)
+    .width(100.0.percent())
+    .height(100.0.percent())
+    .background_color(ColorInput::Value(Color([18, 18, 22, 255])))
 }
 
 fn background_style(algorithm: ImageScalingAlgorithm) -> Style {
   base_style()
-    .with(StyleDeclaration::background_image(Some(
+    .background_image(Some(
       BackgroundImages::from_css_str(&format!("url({WALLPAPER_URL})")).expect("background url"),
-    )))
-    .with(StyleDeclaration::background_size(
-      BackgroundSizes::from_css_str("100% 100%").expect("background size"),
     ))
-    .with(StyleDeclaration::background_repeat(
-      BackgroundRepeats::from_css_str("no-repeat").expect("background repeat"),
-    ))
-    .with(StyleDeclaration::image_rendering(algorithm))
+    .background_size(BackgroundSizes::from_css_str("100% 100%").expect("background size"))
+    .background_repeat(BackgroundRepeats::from_css_str("no-repeat").expect("background repeat"))
+    .image_rendering(algorithm)
 }
 
 fn image_node(source: ImageSource) -> Node {
   Node::container([Node::image(source).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(PANEL_WIDTH as f32)))
-      .with(StyleDeclaration::height(Px(PANEL_HEIGHT as f32)))
-      .with(StyleDeclaration::object_fit(ObjectFit::Fill)),
+      .display(Display::Flex)
+      .width(Px(PANEL_WIDTH as f32))
+      .height(Px(PANEL_HEIGHT as f32))
+      .object_fit(ObjectFit::Fill),
   )])
   .with_style(base_style())
 }
