@@ -1,3 +1,21 @@
+## takumi-raster@0.5.10
+
+### Free the layout data of a page once it is drawn
+
+`render_pages` and `render` free the layout data a page held, such as its text lines and cached layouts, once the page is drawn and no later page paints from it. The source tree and the tree of boxes stay in memory for the whole render, so peak memory still grows with the size of the document. A document that lays out to its end before the first page is drawn frees nothing early. A page that would paint from a released page fails with `Error::PageReleased` instead.
+
+### Hand each page to `render_pages` before the whole document is laid out
+
+`render_pages` calls back with a page as soon as no page still to lay out can paint onto it, so a long document holds one page's scene at a time. Layout errors, including `TooManyPages`, can now arrive after the callback has received earlier pages.
+
+### Write ICO files without the `image` crate
+
+`OutputFormat::Ico` now wraps the image in an ICO container around the same PNG `write_image` produces, so the icon gets its palette and filter choices and `takumi-raster` no longer depends on `image`. The error for an icon over 256 pixels on a side reads differently.
+
+### Rasterize SVG images from the same ops as PDF
+
+takumi-core now rasterizes an SVG from the `SvgOp` list with tiny-skia, so resvg's renderer is gone and the raster, PDF, and SVG backends draw one flattened tree. `SvgOp` gains anti-aliasing, the radial focal radius, and a `miter-clip` join, which resvg drew and the ops had dropped. `BlendMode::to_tiny_skia` replaces takumi-raster's private conversion.
+
 ## takumi-raster@0.5.5
 
 ### Read layer alpha a pixel at a time
