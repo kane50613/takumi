@@ -100,6 +100,9 @@ impl<'b> SvgPainter<'b> {
     if container.blend_mode != BlendMode::Normal {
       self.push(SvgOp::PushBlend(container.blend_mode));
       pop_count += 1;
+    } else if container.isolate && container.opacity >= 1.0 {
+      self.push(SvgOp::PushIsolation);
+      pop_count += 1;
     }
 
     if container.opacity < 1.0 {

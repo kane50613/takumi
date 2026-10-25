@@ -127,6 +127,7 @@ impl SvgDrawing {
             ..Composite::default()
           },
         ),
+        SvgOp::PushIsolation => self.layer(ops, target, Composite::default()),
         SvgOp::PushMask {
           ops: mask_ops,
           luminance,
@@ -434,6 +435,7 @@ fn skip_scope(ops: &mut Iter<'_, SvgOp>) {
       | SvgOp::PushClip { .. }
       | SvgOp::PushOpacity(_)
       | SvgOp::PushBlend(_)
+      | SvgOp::PushIsolation
       | SvgOp::PushMask { .. }
       | SvgOp::PushFilter(_) => depth += 1,
       SvgOp::Draw { .. } | SvgOp::Image { .. } => {}

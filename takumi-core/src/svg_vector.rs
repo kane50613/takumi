@@ -24,6 +24,8 @@ pub enum SvgOp {
   },
   /// Blends nested ops onto the backdrop with a blend mode.
   PushBlend(BlendMode),
+  /// Composites nested ops as one isolated group, so their blend modes stop at its backdrop.
+  PushIsolation,
   /// Applies uniform opacity to nested ops as one isolated group.
   PushOpacity(f32),
   /// Masks nested ops with the rendering of `ops` (an alpha or luminance soft mask).

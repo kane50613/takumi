@@ -918,3 +918,28 @@ fn a_tspan_opacity_groups_its_glyphs() {
     [0.5, 0.25]
   );
 }
+
+/// `isolation: isolate` groups what a container paints, so a descendant's blend mode stops at it.
+#[test]
+fn an_isolated_group_contains_its_blend_modes() {
+  let isolations = |body: &str| {
+    ops(body)
+      .iter()
+      .filter(|op| matches!(op, SvgOp::PushIsolation))
+      .count()
+  };
+
+  assert_eq!(
+    isolations(
+      r#"<g style="isolation:isolate"><rect width="10" height="10"/><g style="mix-blend-mode:multiply"><rect width="10" height="10"/></g></g>"#
+    ),
+    1
+  );
+  assert_eq!(
+    isolations(
+      r#"<g style="isolation:isolate;mix-blend-mode:multiply"><rect width="10" height="10"/></g>"#
+    ),
+    0
+  );
+  assert_eq!(isolations(r#"<g><rect width="10" height="10"/></g>"#), 0);
+}
