@@ -159,6 +159,22 @@ pub fn render_node(node: Node, viewport: Viewport) -> Bitmap {
   .unwrap()
 }
 
+/// Rasterizes `svg` with takumi's own SVG renderer, filling a `width` by `height` viewport.
+pub fn rasterize_svg(svg: String, width: u32, height: u32) -> Bitmap {
+  let image = ImageData {
+    src: ImageSourceInput::Buffer(svg.into_bytes()),
+    width: None,
+    height: None,
+  };
+  let node = Node::image(image).with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Length::Percentage(100.0)))
+      .with(StyleDeclaration::height(Length::Percentage(100.0))),
+  );
+
+  render_node(node, Viewport::new((width, height)))
+}
+
 pub fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
   measure(
     RenderOptions::builder()

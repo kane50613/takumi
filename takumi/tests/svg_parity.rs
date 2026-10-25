@@ -1,9 +1,9 @@
 //! Visual-parity gate for the SVG backend: the SVG backend exists to reproduce
-//! the raster picture, so every fixture's emitted SVG, rasterized with resvg, must
+//! the raster picture, so every fixture's emitted SVG, rasterized by takumi itself, must
 //! match the raster WebP golden within tolerance. This turns silent divergence
 //! into a test failure.
 //!
-//! Cross-rasterizer noise (anti-aliasing, gradient interpolation, image scaling)
+//! Vector-versus-raster noise (anti-aliasing, gradient interpolation, image scaling)
 //! keeps this from being pixel-exact, so the gate is a share-of-pixels-within-
 //! tolerance floor. Fixtures the SVG backend still gets wrong are listed in
 //! `KNOWN_DIVERGENT` with the reason; that list is the SVG backend's debt and is
@@ -15,11 +15,7 @@ mod test_utils;
 use std::{collections::HashMap, convert::identity, fs, path::Path};
 
 use rayon::{iter::Either, prelude::*};
-use resvg::{
-  tiny_skia::Pixmap,
-  usvg::{Options, Transform, Tree},
-};
-use test_utils::{GENERATED_DIR, decode_rgba};
+use test_utils::{GENERATED_DIR, decode_rgba, rasterize_svg};
 
 /// Per-channel tolerance counted as "matching".
 const TOL: i32 = 16;
@@ -37,7 +33,7 @@ const KNOWN_DIVERGENT: &[(&str, &str)] = &[
   ),
   (
     "showcase_halftone",
-    "contrast(14) magnifies the gradient sampling differences between resvg \
+    "contrast(14) magnifies the gradient sampling differences between the svg \
      and raster into different halftone dots (80.6%, floor is 90%)",
   ),
   (
@@ -50,7 +46,7 @@ const KNOWN_DIVERGENT: &[(&str, &str)] = &[
 
 /// Straight-alpha composite over white. Transparent pixels become white, so two
 /// pixels that look identical on a white page compare equal regardless of the RGB
-/// left under a zero alpha (webp keeps dirty RGB there, resvg zeroes it).
+/// left under a zero alpha.
 fn over_white(p: [u8; 4]) -> [u8; 3] {
   let a = p[3] as f32 / 255.0;
   [0, 1, 2].map(|i| (p[i] as f32 * a + 255.0 * (1.0 - a)).round() as u8)
@@ -63,39 +59,24 @@ fn within(a: [u8; 4], b: [u8; 4]) -> bool {
     .all(|(x, y)| (*x as i32 - *y as i32).abs() <= TOL)
 }
 
-/// Share of pixels within tolerance, or `None` if the fixture can't be compared
-/// (unparseable svg, zero size, dimension mismatch).
+/// Share of pixels within tolerance, or `None` if the fixture can't be compared.
 fn parity(svg_path: &Path, webp_path: &Path) -> Option<f32> {
   let svg = fs::read_to_string(svg_path).ok()?;
-  let tree = Tree::from_str(&svg, &Options::default()).ok()?;
-  let size = tree.size();
-  let (w, h) = (size.width().round() as u32, size.height().round() as u32);
-  if w == 0 || h == 0 {
-    return None;
-  }
-  let mut svg_px = Pixmap::new(w, h)?;
-  resvg::render(&tree, Transform::identity(), &mut svg_px.as_mut());
+  let (width, height, webp) = decode_rgba(&fs::read(webp_path).ok()?);
 
-  let (webp_width, webp_height, webp) = decode_rgba(&fs::read(webp_path).ok()?);
-  if webp_width != w || webp_height != h {
+  if width == 0 || height == 0 {
     return None;
   }
 
-  let mut total = 0u32;
-  let mut ok = 0u32;
-  for y in 0..h {
-    for x in 0..w {
-      let s = svg_px.pixel(x, y)?.demultiply();
-      total += 1;
-      if within(
-        [s.red(), s.green(), s.blue(), s.alpha()],
-        webp.as_chunks::<4>().0[(y * w + x) as usize],
-      ) {
-        ok += 1;
-      }
-    }
-  }
-  Some(ok as f32 / total as f32 * 100.0)
+  let bitmap = rasterize_svg(svg, width, height);
+  let pixels = bitmap.as_raw().as_chunks::<4>().0;
+  let matching = pixels
+    .iter()
+    .zip(webp.as_chunks::<4>().0)
+    .filter(|&(&svg, &raster)| within(svg, raster))
+    .count();
+
+  Some(matching as f32 / pixels.len() as f32 * 100.0)
 }
 
 #[test]
