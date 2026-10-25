@@ -1,449 +1,89 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Draw an outline that sets only `outline-style`\n\nAn element with `outline-style: solid` and no `outline-width` now draws a `medium` (3px) outline, as browsers do. It used to draw no outline unless another outline longhand, such as `outline-color`, was also set.\n"
-    filename: outline-style-without-width.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Apply the dimension limit to each GIF frame\n\nA GIF frame wider or taller than 8192 pixels now fails to decode, as a GIF whose canvas is that large already does.\n"
-    filename: gif-frame-size-budget.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n# Copy font and image bytes before a worker thread reads them\n\n`registerFont`, `render`, `renderSvg`, `measure`, and `renderAnimation` now copy the `Buffer`, `Uint8Array`, or `ArrayBuffer` they are given before work moves to a worker thread. Rewriting or transferring those bytes while the call runs no longer corrupts its result or reads freed memory.\n"
-    filename: napi-copy-input-bytes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: patch\n  takumi-pdf:\n    type: patch\n  takumi-svg:\n    type: patch\n---\n\n# Draw SVG images at the size they take up\n\nAn SVG in an `<img>`, a background, or an inline `<svg>` now lays out at the size it is drawn at, as in Chrome, instead of drawing at its own size and stretching. A `viewBox` keeps its `preserveAspectRatio` in a box of another shape, viewport units and percentages measure that box, and `object-fit: cover` crops the SVG instead of squeezing it. An SVG without a `viewBox` still stretches, as in Chrome.\n"
-    filename: svg-container-size.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Lean a synthesized italic right and keep it where its advance puts it\n\nA run slanted for a face with no italic of its own leaned left, and was drawn about a quarter of an em to the right, into the next word in LTR text and into the previous word in RTL text. It now leans right about its own baseline, as in PNG output.\n"
-    filename: pdf-synthetic-italic-baseline.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n  takumi-pdf:\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n# Lay out tables with Chromium's table algorithm\n\nTables now follow Chromium's table layout instead of a grid approximation, so column widths, row heights, and collapsed borders match Chromium. `<col>` and `<colgroup>` size their columns and paint their backgrounds, and `visibility: collapse`, `empty-cells: hide`, and `display: inline-table` work. A `rowspan` now stops at the end of its row group.\n"
-    filename: blink-table-layout.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Free the layout data of a page once it is drawn\n\n`render_pages` and `render` free the layout data a page held, such as its text lines and cached layouts, once the page is drawn and no later page paints from it. The source tree and the tree of boxes stay in memory for the whole render, so peak memory still grows with the size of the document. A document that lays out to its end before the first page is drawn frees nothing early. A page that would paint from a released page fails with `Error::PageReleased` instead.\n"
-    filename: free-finished-pages.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-svg:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Isolate an SVG group with `isolation: isolate`\n\nA `<g style=\"isolation: isolate\">` inside an SVG image or inline `<svg>` now composites its content as one group, as in Chrome, so a descendant's `mix-blend-mode` blends only with what the group paints instead of with the page behind it.\n"
-    filename: svg-isolation.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Repeat a fixed box from the page it starts on\n\nIn paged output, a `position: fixed` box now repeats on the page that holds its static position and on every page after it, no longer on the pages before.\n"
-    filename: fixed-box-repeats-from-its-page.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Stream PDF documents with page counters, page-number bands or internal links\n\n`render` now draws a page at a time for documents whose header, footer or content shows `pageNumber`, `totalPages` or `targetPageNumber`, or links to an element with `href=\"#id\"`. Passes that only lay the pages out count them and find the targets first, so the output is unchanged and peak memory drops, at the cost of laying the content out once more. A counter that is still moving after three passes lays the document out to its end before the first page is drawn.\n"
-    filename: stream-pdf-prepasses.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: patch\n---\n\n# Paint outside list markers as boxes of the page\n\nAn outside list marker now paints and stacks as Chrome paints it. In a tagged PDF, the text of a list item stays in one marked-content region instead of being split around its marker.\n"
-    filename: paint-outside-markers.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Break boxes inside a positioned inline box across pages\n\nIn paged output, an absolutely positioned box whose containing block is a `position: relative` inline box now moves to the next page when it starts past the page end, and breaks across pages when it is taller than the space left.\n"
-    filename: inline-containing-block-pages.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: patch\n---\n\n# Parse every `break-before`, `break-after`, and `break-inside` keyword\n\n`break-before` and `break-after` now accept `avoid`, `avoid-page`, `avoid-column`, `column`, `recto`, and `verso`, and keep `left` and `right` as their own values. `break-inside` accepts `avoid-page` and `avoid-column`. In a PDF, `recto` and `verso` force a page break, and `break-inside: avoid-page` keeps a box on one page as `avoid` does. A PDF does not yet avoid a break between boxes for `break-before` or `break-after`.\n"
-    filename: break-keywords.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Break positioned boxes across the pages of flex, grid and table containers\n\nIn paged output, an absolutely positioned box in a flex, grid or table container now breaks across pages with its container, and one placed in a grid area that starts on a later page lands on that page.\n"
-    filename: flex-grid-table-containing-block-pages.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: patch\n  takumi-svg:\n    type: patch\n---\n\n# Draw an SVG's bitmaps and filtered groups in a PDF without rasterizing\n\ntakumi-pdf embeds the PNG, JPEG, and WebP images inside an SVG as PDF images, and draws an SVG group without its filter. A CSS color `filter` on an SVG `<img>` or `background-image` recolors the SVG instead of rasterizing it, and takumi-svg writes an SVG's bitmaps as `<image>` elements. `SvgOp::Image` and `SvgOp::PushFilter` replace `SvgOp::Raster`, `SvgSource::vector_ops` no longer takes a raster scale, and resvg's renderer moves behind the `svg-raster` feature, on by default.\n"
-    filename: svg-ops-without-raster.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Compose PDF pages while later pages still lay out\n\n`render` draws a page as soon as no page still to lay out can paint onto it, so a long document holds one page's scene at a time. Layout errors, including `TooManyPages`, can now arrive after earlier pages were composed, so an error from drawing a page can come before one from laying out a later page.\n"
-    filename: stream-pdf-pages.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n  takumi:\n    type: minor\n---\n\n# Style inline `<svg>` elements with the page's stylesheet\n\nAn inline `<svg>` in HTML now inherits the style of the element it sits in, so `fill`, `stroke`, and font properties set on an ancestor reach its shapes and text. The page's stylesheet also matches the elements inside it, before the `<svg>`'s own `<style>` rules. Selectors that need an HTML ancestor of the `<svg>`, such as `.card path`, still do not match.\n"
-    filename: inline-svg-page-styles.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: patch\n---\n\n# Size images by percentage `width` and `height` attributes\n\n`<img width=\"50%\">` and `<svg width=\"100%\" height=\"2em\">` now take those sizes, as Chrome maps the attributes to style. A plain number of pixels sizes an image as before.\n"
-    filename: html-size-attributes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Align and decorate SVG text with the font metrics HTML text uses\n\nSVG `<text>` now places `dominant-baseline`, `alignment-baseline`, and text decorations from the same font metrics as HTML text. `baseline-shift=\"sub\"` and `\"super\"` move text by half the font's height, as Chromium does, and decoration lines are a tenth of the font size thick.\n"
-    filename: svg-text-blink-metrics.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Lay out SVG text as Chrome does\n\nSVG `<text>` now takes its font, size, spacing, and anchoring from the CSS cascade and lays out with Chrome's SVG text algorithm. Text without a `font-size` is 16px, as in Chrome, instead of 12px, and text without a `font-family` uses the same default font as the rest of the page.\n"
-    filename: svg-text-blink.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Run `feMorphology` and `feConvolveMatrix` as Chrome does\n\n`feMorphology` now rounds its radius, reads transparent pixels past the filter region, and leaves an axis with a radius of zero as it is. `feConvolveMatrix` now adds its bias before premultiplying, tiles `duplicate` and `wrap` within the primitive's subregion, passes the source graphic on for a kernel over 256 cells, and falls back to the kernel's sum for a divisor of zero. Both also run several times faster on large images.\n"
-    filename: svg-filter-skia-ports.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support the `grid` and `grid-template` shorthands\n\n`grid-template` and `grid` now set the grid longhands as browsers do, including the areas form such as `grid-template: \"head head\" 40px \"side main\" 1fr / 120px 1fr`. Track sizes also accept `min-content`, `max-content`, and `fit-content()`. A `grid-template-areas` row must now be a quoted string, and a value whose named areas do not form rectangles is rejected, as in browsers.\n"
-    filename: grid-shorthands.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Stack boxes inside inline blocks and inline floats as Chrome does\n\nA positioned box or a `z-index` inside an inline block or a float of a line now stacks with the rest of the page, as Chrome stacks it, and `measure` reports what an inline block holds.\n"
-    filename: paint-atomic-inlines.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Run arithmetic `feComposite` and `feDisplacementMap` as Chrome does\n\nThe arithmetic operator of `feComposite` now saturates every channel and rounds its result as Skia does, instead of truncating. `feDisplacementMap` reads its map as straight colors in floats and samples the source pixel nearest each displaced pixel center. Arithmetic compositing also runs about 20% faster.\n"
-    filename: svg-composite-displacement-skia.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Size and place flex items where Chrome does\n\nFlex and `-webkit-box` containers now size, wrap, and align their items as Chrome does.\n"
-    filename: blink-flex-layout.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Match an SVG's `<style>` rules like the page's own CSS\n\nAn SVG image's `<style>` sheet and `style` attributes now go through the selector engine takumi uses for HTML. Selectors such as `:nth-child()`, `:not()`, `:is()`, `:lang()`, and `~` now apply, where they used to drop the rule.\n\nAn `@property` descriptor marked `!important` is now ignored, as in Chrome, where its value used to keep the annotation.\n"
-    filename: svg-style-selectors.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support the `ex` length unit\n\n`ex` lengths now resolve to the x-height of the element's font, or half its font size when the font has none, as in Chrome.\n"
-    filename: ex-length-unit.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Lay out a flex or grid container's text as an item beside its `::after`\n\nAn element with its own text and an `::after` now lays the text out as an anonymous flex or grid item, as it already did beside a `::before`. Before, the text sat on the container itself, so `align-items` and `justify-content` ignored it and the `::after` box landed on top of it.\n"
-    filename: pseudo-after-own-text.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Lay out `::before` and `::after` as flex and grid containers\n\nA `::before` or `::after` with `display: flex` or `display: grid` now lays its content out as items, so `align-items`, `justify-content`, and `place-items` center a generated number or icon. Before, the box became a block and ignored them. Adjacent strings and `attr()` values in `content` form one item, as in Chrome.\n"
-    filename: pseudo-flex.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Size and place grid items where Chrome does\n\nGrid containers now place, size, and align their items as Chrome does, and an absolutely positioned child of a grid takes its grid area. Line names after the last track of a `repeat()` no longer drop.\n"
-    filename: blink-grid-layout.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Composite SVG layers faster\n\nAn SVG image now composites its opacity, clip, and filter layers with integer source-over, and converts filter colors between sRGB and linearRGB in one pass. A 2000 by 2000 SVG with a filter renders 25 to 40 ms faster. Edges can shift by one level of a channel.\n"
-    filename: svg-filter-composite.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Light SVG filters as Chrome does\n\n`feDiffuseLighting` and `feSpecularLighting` now follow Skia's lighting shaders. Normals come from one Sobel kernel clamped at the primitive's edges, `surfaceScale` scales with the image, a spotlight fades in over Skia's narrow band past its cone, and a cone angle of zero or past 90 degrees widens to 90 as in Blink. They also run about 40% faster on large images.\n"
-    filename: svg-lighting-skia.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Keep an inline box inline when it holds a block\n\nA block inside an inline box, such as a `<div>` in a `<span>`, now sits on a line of its own while the inline box keeps its lines before and after it, as in Chrome. The inline box used to turn into a block, so its background and border wrapped the whole thing.\n"
-    filename: block-in-inline.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Draw synthetic bold, synthetic italic, and color emoji in SVG text\n\nSVG `<text>` now draws the synthetic bold and italic HTML text gets for a face without that weight or style, and draws COLRv0 color glyphs such as Twemoji in color. These glyphs used to draw upright, at regular weight, or not at all.\n"
-    filename: svg-text-glyphs.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Apply `unicode-bidi` and `direction` to SVG text\n\nSVG text now orders its characters with the `unicode-bidi` and `direction` of the `text` and of each `tspan`, `textPath`, and `a`, as in Chrome, so an override or an isolate takes effect and an RTL `text` starts its paragraph right to left.\n"
-    filename: svg-text-bidi.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Wrap text around floats outside its block\n\nText now flows beside a float that an earlier block placed, as Chrome lays it out, instead of running over it. A `line-clamp` container sits beside such a float as a block formatting context of its own, and clips the floats inside it at its last shown line. A positioned box that was inline sits where Chrome puts it among blocks and floats, `text-align` and `text-indent` included.\n"
-    filename: text-beside-floats.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Lay an SVG in an SVG `<image>` out at the image's size\n\nAn SVG that an SVG `<image>` or `feImage` shows now lays out at the image's rectangle, as in Chrome, so its viewport units and percentages measure that rectangle.\n"
-    filename: svg-image-element-container.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Style SVG images with the full CSS cascade\n\nAn SVG image now resolves its `<style>` rules, `style` attributes, and presentation attributes through takumi's CSS cascade, so selectors, `!important`, `@media`, and `var()` work as in Chrome, and CSS can set geometry such as `r` or `d`. `stroke-linejoin: miter-clip` and `arcs` are invalid, as in Chrome. SVG images that contain filters are still drawn as before.\n"
-    filename: svg-document-cascade.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Space SVG text as HTML text does\n\nSVG `<text>` now applies `letter-spacing` and `word-spacing` with the same rules as HTML text. Nonzero `letter-spacing` turns off ligatures, and the spacing also follows the last letter, which moves text centered with `text-anchor=\"middle\"`. `word-spacing` now applies to a leading space too, as Chromium does in SVG.\n"
-    filename: svg-text-spacing.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Set overflow per logical axis with `overflow-inline` and `overflow-block`\n\n`overflow-inline` sets the horizontal overflow and `overflow-block` sets the vertical overflow, as Chrome maps them in horizontal text.\n"
-    filename: overflow-logical-axes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Resolve conflicting `tw` utilities in Tailwind's order\n\nTwo `tw` utilities or `@apply` entries that set the same property now resolve as Tailwind's compiled CSS does, whatever their order. `pt-2 p-4` and `p-4 pt-2` both pad the top by `pt-2`, where before the later class won. To keep the old behavior, merge the class list first with a tool such as `tailwind-merge`.\n"
-    filename: tw-utility-order.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `text-decoration-inset`\n\n`text-decoration-inset` now pulls the ends of a decoration line in or pushes them out, as in Chrome. `auto` keeps adjacent decorations apart, a percentage measures the whole decorated run, and `box-decoration-break` decides whether each line of a wrapped run insets on its own.\n"
-    filename: text-decoration-inset.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Match and shape SVG text fonts as HTML text does\n\nSVG `<text>` now picks fonts with the CSS font matching HTML text uses, falls back per character through the same font list, and shapes through the same shaper. `font-variant=\"small-caps\"` now synthesizes small capitals for a font without them. `font-weight`, `font-style`, and `font-stretch` pick faces and variation axes as CSS does.\n"
-    filename: svg-text-harfbuzz-shaper.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Run SVG filters in takumi\n\nSVG `filter` elements and `filter` functions on SVG elements now resolve through the CSS cascade and run in takumi, and the `resvg`, `usvg`, and `svgtypes` dependencies are gone. Text in an SVG image that uses a filter is drawn again. `feGaussianBlur` blurs like CSS `blur()`, `feDisplacementMap` moves pixels by its `scale` instead of its square, and `saturate()` and `contrast()` use the Filter Effects coefficients, so filtered pixels can differ by a few levels.\n"
-    filename: svg-filters-own.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Style `::before` and `::after` from `tw` with `before:`, `after:`, and `content-[…]`\n\nThe `tw` prop now takes `before:` and `after:` variants, which style the element's `::before` and `::after`, and `content-['…']`, `content-[attr(…)]`, and `content-none` set what they show. They combine with structural variants and breakpoints, as in `first:before:content-['→']`. Like Tailwind, a `before:` or `after:` utility makes the box even without `content-*`.\n"
-    filename: tw-pseudo-elements.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Resolve `inherit`, `initial`, and `unset` on custom properties\n\nA custom property set to `inherit`, `initial`, or `unset` now takes the value the keyword names, as in Chrome. `inherit` takes the parent's value, `initial` takes the `@property` initial value or leaves the property unset so `var()` uses its fallback, and `unset` acts as `inherit` or `initial` by whether the property inherits. Before, `var()` substituted the keyword itself, so `--w: inherit; width: var(--w)` became `width: inherit`.\n"
-    filename: custom-property-keywords.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Draw inline boxes that have no content\n\nAn inline element with no content, such as `<span style=\"padding: 0 10px; background: red\"></span>`, now paints its background, border, and outline, as browsers do. It used to take its space on the line but paint nothing.\n"
-    filename: empty-inline-boxes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Style list rows with `first:`, `odd:`, and other structural variants in `tw`\n\nThe `tw` prop now applies structural variants, which match the element's place in the tree or, for `empty:`, its contents. They are `first:`, `last:`, `only:`, `odd:`, `even:`, the `*-of-type:` forms, `empty:`, `nth-3:` and its relatives, `nth-[2n+1]:`, `not-*:`, and arbitrary variants on the element such as `[&:nth-child(3)]:`. They combine with breakpoints, as in `md:first:mt-0`. Before, a class with one of these variants was ignored.\n\n`:empty` in a stylesheet now also matches an element whose only children are text nodes with no characters, as in Chrome.\n"
-    filename: tw-structural-variants.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Center a block's content with `align-content`\n\n`align-content: center` and `end` now move the content of a block container with a fixed height, as Chrome does, and `space-around` and `space-evenly` center it. Content that overflows stays at the top unless the value says `unsafe`, as in `unsafe end`. A container with an `align-content` other than `normal` becomes a block formatting context. `align-content` and `justify-content` now keep `unsafe` and accept `flow-start` and `flow-end`. Table cells honor `unsafe` too.\n"
-    filename: align-content-block.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Pick an inline block's baseline with `baseline-source`\n\n`baseline-source: first` lines an inline block up by its first line, and `last` by its last line. `auto` keeps the default, which is the last line of an inline block and the first baseline of an inline flex or grid container. A `vertical-align` declared after `baseline-source` resets it to `auto`, as Chrome does.\n"
-    filename: baseline-source.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Line up inline blocks and inline images where Chrome does\n\nAn inline block now sits on the baseline of its last line as Chrome places it, also when its `height` cuts that line off, and a percentage size inside an inline box resolves against its containing block as Chrome resolves it.\n"
-    filename: atomic-inline-layout.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Draw `feTurbulence` noise as Chrome does\n\n`feTurbulence` now follows Skia's Perlin noise. It samples pixel centers without the specification's lattice offset, looks the lattice up once per corner, stores gradients in 16 bits, stitches tiles at the primitive subregion's whole size, and caps octaves at 9 as Blink does. Its noise now matches Chrome's to within rounding, where it used to differ visibly, and it runs about a third faster.\n"
-    filename: svg-turbulence-skia.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Expose `rgba_len` for sizing RGBA buffers\n\n`resources::image_buffer::rgba_len` returns the byte length of a `width` by `height` RGBA buffer, or `None` when it overflows `usize`, so backends check sizes the same way the core does.\n"
-    filename: public-rgba-len.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Start a step animation at its first step\n\nAn animation at the very start of an iteration now samples the interval from its first keyframe, as in Chrome, so `steps(n, start)` shows its first step at time zero instead of the starting keyframe.\n"
-    filename: animation-start-interval.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Draw disc, circle, square, and disclosure list markers as shapes\n\nThese markers are now filled or stroked shapes sized from the marker's font, as Chrome draws them, in raster, SVG, PDF, and paint-tree output. They used to be text glyphs, so their size and position followed whichever font had the bullet character. An outside marker now sits as far from its item's text as it does in Chrome.\n"
-    filename: symbol-marker-shapes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Paint a block inside an inline box as Chrome does\n\nA block inside an inline box, such as a `<div>` in a `<span>`, now paints its background before the line's inline boxes, and its positioned boxes stack with the rest of the page. A percentage height inside it now resolves against its containing block.\n"
-    filename: paint-block-in-inline.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Decode images without the `image` crate\n\nPNG and JPEG images now decode straight into RGBA through `png` and `zune-jpeg`, so `takumi-core` no longer depends on `image`. A 16-bit PNG channel now keeps its high byte instead of rounding to the nearest 8-bit value, and decode errors read differently. Raw bitmaps that SVG output embeds as PNG now compress with `png`'s fast setting, trading some size for encode time.\n"
-    filename: decode-without-image-crate.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Parse `filter` as Chrome does\n\n`filter` now accepts `url(#id)`, which an HTML element ignores. A filter function with no argument uses its default amount, a negative amount is invalid, `hue-rotate()` takes only an angle with a unit or `0`, and `blur()` takes only a length.\n"
-    filename: filter-url-and-defaults.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Run SVG color filters in floats as Chrome does\n\n`feColorMatrix`, `feComponentTransfer`, and the conversions between sRGB and linearRGB now run as Skia's color filters do, in floats on unpremultiplied colors with Skia's `approx_powf`. A run of them stores bytes once instead of after each step. `saturate` above 1 now oversaturates, a `values` list of the wrong length leaves the colors as they are, and `feComponentTransfer` truncates its tables as Blink does. A chain of these filters now matches Chrome to within a level of rounding.\n"
-    filename: svg-color-filters-skia.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Set any style property with a builder method\n\n`Style` now has one builder per longhand and shorthand, so `Style::default().font_size(32.0.px())` replaces `Style::default().with(StyleDeclaration::font_size(...))`. The `LengthUnit` trait adds `px`, `percent`, `em`, `rem`, `vw`, and `vh` to `f32`, each returning a `Length`. The `Style::with_<shorthand>` methods are deprecated in favor of the shorthand's builder of the same name.\n"
-    filename: style-builder-methods.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Collect images from Tailwind `list-image-*` and `content-*`\n\n`Node::image_urls` now returns the images that `list-image-[url(...)]` and `content-[url(...)]` reference, as it does when the same properties are set in `style`. Before, it returned only the images from Tailwind `bg-*` and `mask-*`.\n"
-    filename: tw-image-urls.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Size tables inside flex and grid containers as Chrome does\n\nA table that is a flex or grid item now takes the size its container gives it.\n"
-    filename: table-items-sizing.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: patch\n---\n\n# Rasterize SVG images from the same ops as PDF\n\ntakumi-core now rasterizes an SVG from the `SvgOp` list with tiny-skia, so resvg's renderer is gone and the raster, PDF, and SVG backends draw one flattened tree. `SvgOp` gains anti-aliasing, the radial focal radius, and a `miter-clip` join, which resvg drew and the ops had dropped. `BlendMode::to_tiny_skia` replaces takumi-raster's private conversion.\n"
-    filename: raster-svg-from-ops.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Place outside list markers outside the list item's border box, as Chrome does\n\nAn outside marker now hangs from the list item's border edge, so padding or a border on the item moves the text but not the marker. A marker taller than the first line, such as a large `list-style-image`, now pushes the content down so the two share a baseline.\n"
-    filename: outside-marker-position.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Unset a property whose `var()` substitutes to nothing valid\n\nA declaration such as `width: var(--missing)` now resets the property as `unset` does when the variable is missing or substitutes to an invalid value, as in Chrome. It used to be skipped, so an earlier value for the same property stayed in effect.\n"
-    filename: var-invalid-at-computed-value-time.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Place margins, floats, and positioned boxes where Chrome does\n\nBlock layout now collapses margins and places floats, cleared boxes, and positioned boxes as Chrome does. Positions round to 1/64px, so text can move by up to 0.01px.\n"
-    filename: blink-block-layout.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Draw bitmap emoji in SVG text\n\nSVG `<text>` now draws bitmap glyphs, such as Noto Color Emoji's, in their own colors and the text's `fill-opacity`, as HTML text does. These glyphs used to be left out.\n"
-    filename: svg-text-bitmap-glyphs.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Style SVG with `fill`, `stroke`, and the other SVG properties\n\nStylesheets now parse `fill`, `stroke` and its longhands, `marker`, `paint-order`, `stop-color`, `flood-color`, `lighting-color`, `text-anchor`, `dominant-baseline`, `baseline-shift`, `vector-effect`, `mask-type`, and the shape properties `x`, `y`, `cx`, `cy`, `r`, `rx`, `ry`, and `d`. `color-rendering` and `buffered-rendering` are not parsed. A `clip-path: path()` whose string is not valid path data is now an invalid declaration, as in Chrome. Code that builds a `ComputedStyle` with a full struct literal must add the new fields or end with `..Default::default()`.\n"
-    filename: svg-style-properties.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Apply effects to inline images\n\nAn `<img>` or `<svg>` that sits in a line now paints as an atomic inline, as in Chrome, so its `opacity`, `filter`, `transform`, `clip-path`, `mask`, and `mix-blend-mode` take effect. They were ignored before unless the element was `inline-block` or a block.\n"
-    filename: inline-replaced-effects.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Lay out and paint a document a page at a time\n\n`PagedLayout` lays a render tree out one `next_page` call at a time, `LayoutView` reads it while it goes on, and `PageStream` hands out the scene of each page once no later page can paint onto it. `Scene::enter`, `PagedScene::page_origin` and the `LayoutResults` methods `is_repeated_fragment`, `table_fragment`, `is_hidden_for_paint` and `is_line_clamp_clipped_float` are gone, in favor of `Scene::view`, `SceneRef::page_origin` and the same methods on `LayoutView`. `TextClip::of`, `TableDecorations::of` and `paint_collapsed_borders` read a `LayoutView`, and the last two take the `NodePaint`.\n"
-    filename: paged-layout.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `:dir()`\n\nThe `:dir(ltr)` and `:dir(rtl)` selectors now match an element by its directionality, taken from the `dir` attribute on the element or its nearest ancestor, and `ltr` when none sets one.\n"
-    filename: dir-pseudo-class.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Support `vector-effect: non-scaling-stroke`\n\nAn SVG shape with `vector-effect: non-scaling-stroke` now strokes its outline in the space of the SVG's viewport, as in Chrome, so the stroke keeps its width however the shape is transformed, and its markers scale with that width.\n"
-    filename: svg-non-scaling-stroke.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Apply `opacity` to SVG text spans\n\nThe `opacity` of a `tspan`, `textPath`, or `a` in SVG text now fades the characters it holds, as in Chrome. It was ignored before.\n"
-    filename: svg-tspan-opacity.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support the `all` shorthand\n\n`all: initial`, `all: inherit`, and `all: unset` now set every property except `direction`, `unicode-bidi`, and custom properties, as in Chrome. `all: revert` is ignored, as `revert` is on every other property.\n"
-    filename: css-all-shorthand.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Share a shaped run's font bytes without copying them\n\n`ShapedRun::font_blob` is now public, and `FontBlob::shared_data` returns the font's bytes as a shared `Arc`, so a backend can keep them without copying the file.\n"
-    filename: pdf-share-font-data.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-svg:\n    type: patch\n---\n\n# Draw SVG images in SVG output with the render's fonts\n\nAn `<img>` of an SVG is now written into SVG output as paths, so its `<text>` uses the fonts the render registered and matches the PNG output. It used to embed the original markup, which the viewer drew in its own fallback font. An SVG with a filter or an embedded bitmap is still embedded as before.\n"
-    filename: svg-output-vector-svg-images.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-svg:\n    type: patch\n---\n\n# Draw SVG backgrounds and masks in SVG output with the render's fonts\n\nA `background-image` or `mask-image` of an SVG `url(...)` is now written into SVG output as paths, like an `<img>` of an SVG. Its `<text>` uses the fonts the render registered and matches the PNG output. A tile too large to rasterize is skipped, as in PNG output.\n"
-    filename: svg-output-vector-svg-backgrounds.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n# Write ICO files without the `image` crate\n\n`OutputFormat::Ico` now wraps the image in an ICO container around the same PNG `write_image` produces, so the icon gets its palette and filter choices and `takumi-raster` no longer depends on `image`. The error for an icon over 256 pixels on a side reads differently.\n"
-    filename: raster-without-image-crate.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n# Hand each page to `render_pages` before the whole document is laid out\n\n`render_pages` calls back with a page as soon as no page still to lay out can paint onto it, so a long document holds one page's scene at a time. Layout errors, including `TooManyPages`, can now arrive after the callback has received earlier pages.\n"
-    filename: stream-pages.md
+  - content: "---\npackages:\n  takumi-js:\n    type: patch\n---\n\n# Render without the images that fail to fetch\n\nThe `images` option of `render()` and `ImageResponse` now takes `throwOnError`. Set it to `false` and an image that fails to fetch, such as an emoji Twemoji has no image for, is left out instead of rejecting the whole render. It defaults to `true`, so existing renders behave as before.\n"
+    filename: images-throw-on-error.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
+  - id: npm:@takumi-rs/core
+    updated: true
+  - changelogIds:
+      - images-throw-on-error.md
+    id: npm:takumi-js
+    updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
   - id: npm:takumi-paint
-    updated: true
-  - changelogIds:
-      - outline-style-without-width.md
-      - gif-frame-size-budget.md
-    id: npm:@takumi-rs/wasm
-    updated: true
-  - changelogIds:
-      - outline-style-without-width.md
-      - gif-frame-size-budget.md
-      - napi-copy-input-bytes.md
-    id: npm:@takumi-rs/core
-    updated: true
-  - changelogIds:
-      - svg-container-size.md
-      - pdf-synthetic-italic-baseline.md
-      - blink-table-layout.md
-      - free-finished-pages.md
-      - svg-isolation.md
-      - fixed-box-repeats-from-its-page.md
-      - stream-pdf-prepasses.md
-      - paint-outside-markers.md
-      - inline-containing-block-pages.md
-      - break-keywords.md
-      - flex-grid-table-containing-block-pages.md
-      - svg-ops-without-raster.md
-      - stream-pdf-pages.md
-    id: npm:takumi-pdf
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:takumi-js
-    updated: true
   - id: npm:docs
     updated: false
-  - changelogIds:
-      - blink-table-layout.md
-    id: npm:@takumi-rs/helpers
+  - id: npm:takumi-pdf
     updated: true
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-generate-invoice
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:pdf-bench
     updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:pdf-bench
+  - id: npm:example-twitter-images
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-twitter-images
+  - id: npm:waku-ssr
     updated: false
   - id: npm:example-tanstack-start
     updated: false
+  - id: npm:example-generate-invoice
+    updated: false
   - id: npm:example-e-invoice
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-css-library-integration
     updated: false
   - id: npm:ffplay
     updated: false
-  - id: npm:waku-ssr
+  - id: npm:example-liquid-glass
     updated: false
-  - changelogIds:
-      - inline-svg-page-styles.md
-      - blink-table-layout.md
-      - html-size-attributes.md
-    id: cargo:takumi-html
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi
     updated: true
-  - changelogIds:
-      - inline-svg-page-styles.md
-      - outline-style-without-width.md
-      - gif-frame-size-budget.md
-    id: cargo:takumi
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-pdf
     updated: true
-  - changelogIds:
-      - svg-text-blink-metrics.md
-      - svg-text-blink.md
-      - svg-filter-skia-ports.md
-      - grid-shorthands.md
-      - paint-atomic-inlines.md
-      - svg-composite-displacement-skia.md
-      - blink-flex-layout.md
-      - svg-style-selectors.md
-      - ex-length-unit.md
-      - pseudo-after-own-text.md
-      - svg-container-size.md
-      - pseudo-flex.md
-      - blink-grid-layout.md
-      - svg-filter-composite.md
-      - inline-svg-page-styles.md
-      - svg-lighting-skia.md
-      - block-in-inline.md
-      - outline-style-without-width.md
-      - svg-text-glyphs.md
-      - svg-text-bidi.md
-      - text-beside-floats.md
-      - svg-image-element-container.md
-      - svg-document-cascade.md
-      - svg-text-spacing.md
-      - overflow-logical-axes.md
-      - blink-table-layout.md
-      - free-finished-pages.md
-      - tw-utility-order.md
-      - text-decoration-inset.md
-      - svg-text-harfbuzz-shaper.md
-      - svg-filters-own.md
-      - tw-pseudo-elements.md
-      - svg-isolation.md
-      - custom-property-keywords.md
-      - fixed-box-repeats-from-its-page.md
-      - empty-inline-boxes.md
-      - tw-structural-variants.md
-      - align-content-block.md
-      - paint-outside-markers.md
-      - baseline-source.md
-      - atomic-inline-layout.md
-      - svg-turbulence-skia.md
-      - inline-containing-block-pages.md
-      - public-rgba-len.md
-      - break-keywords.md
-      - gif-frame-size-budget.md
-      - animation-start-interval.md
-      - symbol-marker-shapes.md
-      - flex-grid-table-containing-block-pages.md
-      - paint-block-in-inline.md
-      - decode-without-image-crate.md
-      - filter-url-and-defaults.md
-      - svg-color-filters-skia.md
-      - style-builder-methods.md
-      - tw-image-urls.md
-      - table-items-sizing.md
-      - raster-svg-from-ops.md
-      - outside-marker-position.md
-      - svg-ops-without-raster.md
-      - var-invalid-at-computed-value-time.md
-      - blink-block-layout.md
-      - svg-text-bitmap-glyphs.md
-      - svg-style-properties.md
-      - inline-replaced-effects.md
-      - paged-layout.md
-      - dir-pseudo-class.md
-      - svg-non-scaling-stroke.md
-      - svg-tspan-opacity.md
-      - css-all-shorthand.md
-      - pdf-share-font-data.md
-    id: cargo:takumi-core
-    updated: true
-  - changelogIds:
-      - svg-container-size.md
-      - pdf-synthetic-italic-baseline.md
-      - blink-table-layout.md
-      - free-finished-pages.md
-      - svg-isolation.md
-      - fixed-box-repeats-from-its-page.md
-      - stream-pdf-prepasses.md
-      - paint-outside-markers.md
-      - inline-containing-block-pages.md
-      - break-keywords.md
-      - flex-grid-table-containing-block-pages.md
-      - svg-ops-without-raster.md
-      - stream-pdf-pages.md
-    id: cargo:takumi-pdf
-    updated: true
-  - changelogIds:
-      - svg-output-vector-svg-images.md
-      - svg-output-vector-svg-backgrounds.md
-      - svg-container-size.md
-      - svg-isolation.md
-      - svg-ops-without-raster.md
-    id: cargo:takumi-svg
-    updated: true
-  - changelogIds:
-      - svg-container-size.md
-      - free-finished-pages.md
-      - raster-without-image-crate.md
-      - stream-pages.md
-      - raster-svg-from-ops.md
-    id: cargo:takumi-raster
-    updated: true
+  - id: cargo:takumi-html
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
 npm:packages:
   - id: npm:takumi-workspace
-  - id: npm:takumi-paint
-  - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/core
-  - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/image-response
   - id: npm:takumi-js
-  - id: npm:docs
   - id: npm:@takumi-rs/helpers
-  - id: npm:example-cloudflare-workers
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-css-library-integration
-  - id: npm:example-liquid-glass
-  - id: npm:example-generate-invoice
-  - id: npm:svelte
+  - id: npm:takumi-paint
+  - id: npm:@takumi-rs/image-response
+  - id: npm:docs
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/wasm
   - id: npm:pdf-bench
-  - id: npm:example-nextjs
-  - id: npm:example-satori-html
+  - id: npm:svelte
   - id: npm:example-twitter-images
-  - id: npm:example-tanstack-start
-  - id: npm:example-e-invoice
-  - id: npm:ffplay
+  - id: npm:example-nextjs
   - id: npm:waku-ssr
+  - id: npm:example-tanstack-start
+  - id: npm:example-generate-invoice
+  - id: npm:example-e-invoice
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-css-library-integration
+  - id: npm:ffplay
+  - id: npm:example-liquid-glass
+  - id: npm:example-satori-html
+  - id: npm:ffmpeg-keyframe-animation
