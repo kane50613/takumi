@@ -1625,6 +1625,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "takumi-core",
+ "wuff",
 ]
 
 [[package]]
