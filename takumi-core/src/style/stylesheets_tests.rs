@@ -10,8 +10,9 @@ use super::{
 use crate::{
   geometry::Size,
   style::{
-    ComputedStyle, CssInput, CustomProperties, DeferredDeclaration, SizingContext, Style,
-    StyleBaseData, StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
+    ComputedStyle, CssInput, CustomProperties, DeferredDeclaration, InvalidDeclarations,
+    SizingContext, Style, StyleBaseData, StyleBoxData, StyleDeclaration, StyleSvgData,
+    properties::*,
   },
   viewport::Viewport,
 };
@@ -40,12 +41,30 @@ fn parse_declarations_is_err(name: &str, css: &str) -> bool {
 /// the sizing keywords too.
 #[test]
 fn flex_basis_diagnostics_list_the_sizing_keywords() {
-  let error = from_value::<Style>(json!({ "flexBasis": "nope" }))
-    .unwrap_err()
-    .to_string();
+  let (_, invalid) =
+    InvalidDeclarations::collect(|| from_value::<Style>(json!({ "flexBasis": "nope" })));
+  let [error] = invalid.messages() else {
+    panic!("expected one invalid declaration, got {invalid:?}");
+  };
 
   assert!(error.contains("'min-content'"), "{error}");
   assert!(error.contains("'content'"), "{error}");
+}
+
+/// An invalid value drops its declaration, as a browser drops one in a `style` attribute, and the rest of the object still applies.
+#[test]
+fn an_invalid_value_drops_only_its_declaration() {
+  let (style, invalid) = InvalidDeclarations::collect(|| {
+    from_value::<Style>(json!({ "width": "10px", "height": "-1.5%" }))
+  });
+
+  assert_eq!(style.ok(), Some(Style::default().width(Length::Px(10.0))));
+  assert_eq!(
+    invalid.messages(),
+    [
+      r#"invalid value for height: string "-1.5%"; Unexpected token: -1.5%, expected a value of <length>, 'min-content', 'max-content', 'fit-content' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'."#
+    ]
+  );
 }
 
 fn inherited_style_from_pairs(
@@ -131,13 +150,25 @@ fn importance_split(value: serde_json::Value) -> Result<(usize, usize), serde_js
   Ok((normal.declarations.len(), important.declarations.len()))
 }
 
-/// A `style` object is hand-written, so a value the parser cannot read to its
-/// end is an error rather than a truncated declaration.
+/// The style objects in `value` and how many declarations they dropped as invalid.
+fn read_style(value: serde_json::Value) -> (Style, usize) {
+  let (style, invalid) = InvalidDeclarations::collect(|| from_value::<Style>(value));
+
+  (style.unwrap_or_default(), invalid.messages().len())
+}
+
+/// A value the parser cannot read to its end drops its declaration rather than truncating it.
 #[test]
 fn an_inline_value_parses_entirely() {
-  assert!(from_value::<Style>(json!({ "width": "55px" })).is_ok());
-  assert!(from_value::<Style>(json!({ "width": "55px zzz" })).is_err());
-  assert!(from_value::<Style>(json!({ "width": "55px 99px" })).is_err());
+  assert_eq!(read_style(json!({ "width": "55px" })).1, 0);
+  assert_eq!(
+    read_style(json!({ "width": "55px zzz" })),
+    (Style::default(), 1)
+  );
+  assert_eq!(
+    read_style(json!({ "width": "55px 99px" })),
+    (Style::default(), 1)
+  );
 }
 
 #[test]
@@ -194,7 +225,10 @@ fn inline_important_reads_as_a_token() -> Result<(), serde_json::Error> {
     importance_split(json!({ "content": "\"a\" !important" }))?,
     (0, 1)
   );
-  assert!(from_value::<Style>(json!({ "width": "55px !nope" })).is_err());
+  assert_eq!(
+    read_style(json!({ "width": "55px !nope" })),
+    (Style::default(), 1)
+  );
   Ok(())
 }
 

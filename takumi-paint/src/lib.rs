@@ -10,6 +10,7 @@ use takumi_bindings_common::{
   FontCacheOptions, FontStore,
   input::{Font, ImageSource, decode_images},
   stylesheet,
+  wasm::from_js,
 };
 use takumi_core::{
   layout::node::Node,
@@ -159,7 +160,7 @@ impl Painter {
     node: NodeType,
     options: Option<RenderOptionsType>,
   ) -> Result<RenderedPaint, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let node: Node = from_js(node.into())?;
     let options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?

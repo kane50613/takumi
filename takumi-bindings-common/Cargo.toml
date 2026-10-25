@@ -5,8 +5,11 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+js-sys = { workspace = true, optional = true }
 serde.workspace = true
+serde-wasm-bindgen = { workspace = true, optional = true }
 serde_bytes.workspace = true
+wasm-bindgen = { workspace = true, optional = true }
 
 [dependencies.takumi-core]
 path = "../takumi-core"
@@ -19,3 +22,4 @@ workspace = true
 [features]
 default = ["svg"]
 svg = ["takumi-core/svg"]
+wasm = ["dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
