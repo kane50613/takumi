@@ -15,7 +15,7 @@ use crate::{
   fonts::font_description::FontDescription,
   geometry::PathCommand,
   layout::node::NodeKind,
-  style::{DominantBaseline, Length, TextDecorationLines, Visibility},
+  style::{Direction, DominantBaseline, Length, TextDecorationLines, UnicodeBidi, Visibility},
   svg::{element::SvgElementKind, length::LengthAxis},
 };
 
@@ -85,6 +85,38 @@ struct ChunkState {
   split_chunk: bool,
   flow: TextFlow,
   chunks: Vec<TextChunk>,
+  /// The opening and closing bidi controls of the elements the walk is in, outermost first, which
+  /// a new chunk opens again.
+  bidi_contexts: Vec<(char, char)>,
+  /// The paragraph direction of every chunk.
+  direction: Option<Direction>,
+}
+
+impl ChunkState {
+  /// Opens the bidi controls of an element, in the current chunk and in any chunk that starts
+  /// before the element ends.
+  fn enter_bidi(&mut self, controls: &[(char, char)]) {
+    for &(enter, exit) in controls {
+      if let Some(chunk) = self.chunks.last_mut() {
+        chunk.controls.push((self.chunk_bytes, enter));
+      }
+
+      self.bidi_contexts.push((enter, exit));
+    }
+  }
+
+  /// Closes the `count` bidi controls the element the walk leaves opened.
+  fn exit_bidi(&mut self, count: usize) {
+    for _ in 0..count {
+      let Some((_, exit)) = self.bidi_contexts.pop() else {
+        return;
+      };
+
+      if let Some(chunk) = self.chunks.last_mut() {
+        chunk.controls.push((self.chunk_bytes, exit));
+      }
+    }
+  }
 }
 
 impl TextTree {
@@ -468,6 +500,13 @@ impl TextTree {
     positions: &[CharacterPosition],
     faces: &mut FontFaces,
   ) -> Vec<TextChunk> {
+    let root = self.element(0).map(Styled::style);
+    let direction = root
+      .map(|style| style.inherited_data.direction)
+      .unwrap_or_default();
+    let unicode_bidi = root
+      .map(|style| style.misc_data.unicode_bidi)
+      .unwrap_or_default();
     let mut state = ChunkState {
       exhausted: false,
       styles: HashMap::new(),
@@ -476,6 +515,8 @@ impl TextTree {
       split_chunk: false,
       flow: TextFlow::Linear,
       chunks: Vec::new(),
+      bidi_contexts: unicode_bidi.block_controls(direction).into_iter().collect(),
+      direction: (unicode_bidi != UnicodeBidi::Plaintext).then_some(direction),
     };
 
     self.collect_chunks(layout, scope, positions, faces, 0, &mut state);
@@ -525,7 +566,21 @@ impl TextTree {
           return;
         }
 
+        let controls = self
+          .element(child)
+          .map(|styled| {
+            let style = styled.style();
+
+            style
+              .misc_data
+              .unicode_bidi
+              .inline_controls(style.inherited_data.direction)
+          })
+          .unwrap_or_default();
+
+        state.enter_bidi(&controls);
         self.collect_chunks(layout, scope, positions, faces, child, state);
+        state.exit_bidi(controls.len());
         layout.budget.leave();
 
         if kind == ElementKind::TextPath {
@@ -603,6 +658,12 @@ impl TextTree {
           }],
           flow: state.flow.clone(),
           text: character.to_string(),
+          controls: state
+            .bidi_contexts
+            .iter()
+            .map(|&(enter, _)| (0, enter))
+            .collect(),
+          direction: state.direction,
         });
       } else if let Some(chunk) = state.chunks.last_mut() {
         chunk.text.push(character);
