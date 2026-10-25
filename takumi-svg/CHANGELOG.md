@@ -1,3 +1,25 @@
+## takumi-svg@0.3.32
+
+### Draw SVG images in SVG output with the render's fonts
+
+An `<img>` of an SVG is now written into SVG output as paths, so its `<text>` uses the fonts the render registered and matches the PNG output. It used to embed the original markup, which the viewer drew in its own fallback font. An SVG with a filter or an embedded bitmap is still embedded as before.
+
+### Draw SVG backgrounds and masks in SVG output with the render's fonts
+
+A `background-image` or `mask-image` of an SVG `url(...)` is now written into SVG output as paths, like an `<img>` of an SVG. Its `<text>` uses the fonts the render registered and matches the PNG output. A tile too large to rasterize is skipped, as in PNG output.
+
+### Draw SVG images at the size they take up
+
+An SVG in an `<img>`, a background, or an inline `<svg>` now lays out at the size it is drawn at, as in Chrome, instead of drawing at its own size and stretching. A `viewBox` keeps its `preserveAspectRatio` in a box of another shape, viewport units and percentages measure that box, and `object-fit: cover` crops the SVG instead of squeezing it. An SVG without a `viewBox` still stretches, as in Chrome.
+
+### Isolate an SVG group with `isolation: isolate`
+
+A `<g style="isolation: isolate">` inside an SVG image or inline `<svg>` now composites its content as one group, as in Chrome, so a descendant's `mix-blend-mode` blends only with what the group paints instead of with the page behind it.
+
+### Draw an SVG's bitmaps and filtered groups in a PDF without rasterizing
+
+takumi-pdf embeds the PNG, JPEG, and WebP images inside an SVG as PDF images, and draws an SVG group without its filter. A CSS color `filter` on an SVG `<img>` or `background-image` recolors the SVG instead of rasterizing it, and takumi-svg writes an SVG's bitmaps as `<image>` elements. `SvgOp::Image` and `SvgOp::PushFilter` replace `SvgOp::Raster`, `SvgSource::vector_ops` no longer takes a raster scale, and resvg's renderer moves behind the `svg-raster` feature, on by default.
+
 ## takumi-svg@0.3.27
 
 ### Stop clipping blurred shadows in SVG output

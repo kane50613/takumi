@@ -1,3 +1,17 @@
+## @takumi-rs/core@2.18.0
+
+### Draw an outline that sets only `outline-style`
+
+An element with `outline-style: solid` and no `outline-width` now draws a `medium` (3px) outline, as browsers do. It used to draw no outline unless another outline longhand, such as `outline-color`, was also set.
+
+### Apply the dimension limit to each GIF frame
+
+A GIF frame wider or taller than 8192 pixels now fails to decode, as a GIF whose canvas is that large already does.
+
+### Copy font and image bytes before a worker thread reads them
+
+`registerFont`, `render`, `renderSvg`, `measure`, and `renderAnimation` now copy the `Buffer`, `Uint8Array`, or `ArrayBuffer` they are given before work moves to a worker thread. Rewriting or transferring those bytes while the call runs no longer corrupts its result or reads freed memory.
+
 ## @takumi-rs/core@2.17.1
 
 ### Skip an SVG too large to rasterize instead of failing the render

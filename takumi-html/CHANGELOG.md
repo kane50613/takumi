@@ -1,3 +1,17 @@
+## takumi-html@0.7.0
+
+### Style inline `<svg>` elements with the page's stylesheet
+
+An inline `<svg>` in HTML now inherits the style of the element it sits in, so `fill`, `stroke`, and font properties set on an ancestor reach its shapes and text. The page's stylesheet also matches the elements inside it, before the `<svg>`'s own `<style>` rules. Selectors that need an HTML ancestor of the `<svg>`, such as `.card path`, still do not match.
+
+### Lay out tables with Chromium's table algorithm
+
+Tables now follow Chromium's table layout instead of a grid approximation, so column widths, row heights, and collapsed borders match Chromium. `<col>` and `<colgroup>` size their columns and paint their backgrounds, and `visibility: collapse`, `empty-cells: hide`, and `display: inline-table` work. A `rowspan` now stops at the end of its row group.
+
+### Size images by percentage `width` and `height` attributes
+
+`<img width="50%">` and `<svg width="100%" height="2em">` now take those sizes, as Chrome maps the attributes to style. A plain number of pixels sizes an image as before.
+
 ## takumi-html@0.6.0
 
 ### Parse a document that starts with a byte order mark as a document

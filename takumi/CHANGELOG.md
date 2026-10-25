@@ -1,3 +1,17 @@
+## takumi@2.18.0
+
+### Style inline `<svg>` elements with the page's stylesheet
+
+An inline `<svg>` in HTML now inherits the style of the element it sits in, so `fill`, `stroke`, and font properties set on an ancestor reach its shapes and text. The page's stylesheet also matches the elements inside it, before the `<svg>`'s own `<style>` rules. Selectors that need an HTML ancestor of the `<svg>`, such as `.card path`, still do not match.
+
+### Draw an outline that sets only `outline-style`
+
+An element with `outline-style: solid` and no `outline-width` now draws a `medium` (3px) outline, as browsers do. It used to draw no outline unless another outline longhand, such as `outline-color`, was also set.
+
+### Apply the dimension limit to each GIF frame
+
+A GIF frame wider or taller than 8192 pixels now fails to decode, as a GIF whose canvas is that large already does.
+
 ## takumi@2.17.1
 
 ### Skip an SVG too large to rasterize instead of failing the render
