@@ -486,7 +486,7 @@ impl Run<'_> {
         map_straight(&mut pixmap, window, |pixel| chain.apply_rgba8(pixel));
         Some(Image::new(pixmap, space))
       }
-      Kind::ConvolveMatrix(fe) => self.convolve_matrix(fe, next()?, space),
+      Kind::ConvolveMatrix(fe) => self.convolve_matrix(fe, next()?, space, window),
       Kind::Morphology {
         operator,
         radius_x,
@@ -617,16 +617,18 @@ impl Run<'_> {
     Some(Image::new(pixmap, input.color_space))
   }
 
-  fn convolve_matrix(&self, fe: &ConvolveMatrix, input: Image, space: ColorSpace) -> Option<Image> {
-    let mut pixmap = input.into_color_space(space).take();
-
-    if fe.preserve_alpha {
-      demultiply_rgba_in_place(pixmap.data_mut());
-    }
-
+  fn convolve_matrix(
+    &self,
+    fe: &ConvolveMatrix,
+    input: Image,
+    space: ColorSpace,
+    window: Rect<usize>,
+  ) -> Option<Image> {
+    let input = input.into_color_space(space);
+    let mut pixmap = input.blank_like()?;
     let width = pixmap.width() as usize;
 
-    fe.apply(pixmap.rgba_mut(), width);
+    fe.apply(input.pixmap.rgba(), width, window, pixmap.rgba_mut());
     Some(Image::new(pixmap, space))
   }
 
@@ -639,16 +641,9 @@ impl Run<'_> {
   ) -> Option<Image> {
     let mut pixmap = input.into_color_space(space).take();
     let radius = self.scaled(radius.0, radius.1);
+    let width = pixmap.width() as usize;
 
-    // A radius of zero on either axis clears the result.
-    if radius.x > 0.0 && radius.y > 0.0 {
-      let width = pixmap.width() as usize;
-
-      operator.apply(radius.x, radius.y, pixmap.rgba_mut(), width);
-    } else {
-      pixmap.fill(tiny_skia::Color::TRANSPARENT);
-    }
-
+    operator.apply(radius.x, radius.y, pixmap.rgba_mut(), width);
     Some(Image::new(pixmap, space))
   }
 
