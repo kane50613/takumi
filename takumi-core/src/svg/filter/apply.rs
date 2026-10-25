@@ -10,28 +10,36 @@ use tiny_skia::{BlendMode as TinyBlendMode, IntRect, Pixmap, PixmapPaint, Pixmap
 
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,
-  LightSource, MorphologyOperator, Primitive, SpotLight, SvgFilter, Turbulence, composite,
-  lighting::Lighting, turbulence,
+  LightSource, MorphologyOperator, Primitive, SpotLight, SvgFilter, Turbulence,
+  color_filter::{ColorFilter, ColorFilters},
+  composite,
+  lighting::Lighting,
+  turbulence,
 };
 use crate::{
   blur::{MIN_SIGMA, blur_rgba_axes},
   geometry::{Point, Rect},
   resources::{
     image::{MAX_RASTER_PIXELS, within_raster_pixel_budget},
-    image_buffer::{demultiply_pixel, premultiply_pixel},
+    image_buffer::premultiply_pixel,
   },
-  style::{Affine, Color, TransferTable, math::mul_div_255},
+  style::{Affine, Color, math::mul_div_255},
   svg::approx_eq::ApproxEq,
   svg_drawing::{SvgDrawing, draw_over, tiny_blend_mode},
 };
 
 /// A primitive result: the pixels of the filter region, and where they hold data.
+///
+/// The pixels hold the colors before `filters`, which Skia's `FilterResult` likewise defers so a
+/// run of color filters stores bytes once. Every reader but a pointwise primitive resolves them.
 #[derive(Clone)]
 struct Image {
   pixmap: Rc<Pixmap>,
   /// The part of the filter region with data, in the layer's pixels. The rest is transparent.
   region: Rect<i32>,
+  /// The space of the colors after `filters`.
   color_space: ColorSpace,
+  filters: ColorFilters,
 }
 
 impl Image {
@@ -40,25 +48,67 @@ impl Image {
       region: Rect::from_size(0, 0, pixmap.width(), pixmap.height()),
       pixmap: Rc::new(pixmap),
       color_space,
+      filters: ColorFilters::default(),
     }
   }
 
-  /// The pixels in `color_space`.
-  fn into_color_space(self, color_space: ColorSpace) -> Self {
+  /// The image with `filter` deferred after its other filters.
+  fn with_filter(mut self, filter: ColorFilter) -> Self {
+    self.filters.push(filter);
+    self
+  }
+
+  /// The image with its colors to be converted to `color_space`, deferred.
+  fn in_color_space(self, color_space: ColorSpace) -> Self {
     if color_space == self.color_space {
       return self;
     }
 
-    let region = self.region;
-    let from = self.color_space;
-    let mut pixmap = self.take();
+    Self {
+      color_space,
+      ..self.with_filter(ColorFilter::Space(color_space))
+    }
+  }
 
-    from.convert(color_space, pixmap.data_mut());
+  /// The pixels in `color_space`, with every filter run.
+  fn into_color_space(self, color_space: ColorSpace) -> Self {
+    self.in_color_space(color_space).resolved()
+  }
+
+  /// The image with its filters run over every pixel.
+  fn resolved(self) -> Self {
+    let (width, height) = (self.pixmap.width() as usize, self.pixmap.height() as usize);
+
+    self.resolved_within(Rect {
+      left: 0,
+      right: width,
+      top: 0,
+      bottom: height,
+    })
+  }
+
+  /// The image with its filters run over the pixels of `window`, leaving the rest as they were.
+  fn resolved_within(mut self, window: Rect<usize>) -> Self {
+    if self.filters.is_empty() {
+      return self;
+    }
+
+    let filters = std::mem::take(&mut self.filters);
+    let region = self.region;
+    let color_space = self.color_space;
+    let mut pixmap = Rc::unwrap_or_clone(self.pixmap);
+    let width = pixmap.width() as usize;
+
+    for line in pixmap.rgba_mut()[window.top * width..window.bottom * width].chunks_exact_mut(width)
+    {
+      filters.apply(&mut line[window.left..window.right]);
+    }
 
     Self {
       pixmap: Rc::new(pixmap),
       region,
       color_space,
+      filters: ColorFilters::default(),
     }
   }
 
@@ -85,9 +135,9 @@ impl Image {
     }
   }
 
-  /// The pixels, copied only when another result still reads them.
+  /// The pixels with every filter run, copied only when another result still reads them.
   fn take(self) -> Pixmap {
-    Rc::unwrap_or_clone(self.pixmap)
+    Rc::unwrap_or_clone(self.resolved().pixmap)
   }
 }
 
@@ -331,11 +381,19 @@ impl Run<'_> {
     let space = primitive.color_space;
     // The part of the result that the subregion keeps, which is all that pointwise primitives run on.
     let window = self.window(subregion);
+    let pointwise = matches!(
+      primitive.kind,
+      Kind::ColorMatrix { .. } | Kind::ComponentTransfer { .. }
+    );
     let mut inputs = primitive
       .kind
       .inputs()
       .into_iter()
-      .map(|input| self.input(input))
+      .map(|input| {
+        let image = self.input(input)?;
+
+        Some(if pointwise { image } else { image.resolved() })
+      })
       .collect::<Option<Vec<_>>>()?
       .into_iter();
 
@@ -474,17 +532,11 @@ impl Run<'_> {
       }
       // `FEComponentTransfer` in `fe_component_transfer.cc`.
       Kind::ComponentTransfer { tables, .. } => {
-        let mut pixmap = next()?.into_color_space(space).take();
-
-        map_straight(&mut pixmap, window, |pixel| transfer(tables, pixel));
-        Some(Image::new(pixmap, space))
+        Some(self.color_filter(next()?, space, window, ColorFilter::Table(tables.clone())))
       }
       // `FEColorMatrix` in `fe_color_matrix.cc`, which CSS filter functions build as well.
       Kind::ColorMatrix { chain, .. } => {
-        let mut pixmap = next()?.into_color_space(space).take();
-
-        map_straight(&mut pixmap, window, |pixel| chain.apply_rgba8(pixel));
-        Some(Image::new(pixmap, space))
+        Some(self.color_filter(next()?, space, window, ColorFilter::Matrix(chain.clone())))
       }
       Kind::ConvolveMatrix(fe) => self.convolve_matrix(fe, next()?, space, window),
       Kind::Morphology {
@@ -536,6 +588,30 @@ impl Run<'_> {
   }
 
   /// `subregion` in the pixels of the filter region, cut to it.
+  /// A pointwise primitive: `filter` deferred on `input` when it covers the whole region, and run
+  /// over its window otherwise, as the subregion clears the rest.
+  fn color_filter(
+    &self,
+    input: Image,
+    space: ColorSpace,
+    window: Rect<usize>,
+    filter: ColorFilter,
+  ) -> Image {
+    let whole = self.window(self.region);
+    let input = if input.filters.is_full() {
+      input.resolved()
+    } else {
+      input
+    };
+    let image = input.in_color_space(space).with_filter(filter);
+
+    if window == whole {
+      image
+    } else {
+      image.resolved_within(window)
+    }
+  }
+
   fn window(&self, subregion: Rect<i32>) -> Rect<usize> {
     let (width, height) = (self.region.width() as i32, self.region.height() as i32);
     let column = |x: i32| (x - self.region.left).clamp(0, width) as usize;
@@ -581,7 +657,9 @@ impl Run<'_> {
 
     // The shadow color is defined in sRGB, so only a linearRGB interpolation space needs a
     // conversion.
-    ColorSpace::Srgb.convert(space, shadow_pixmap.data_mut());
+    let shadow_pixmap = Image::new(shadow_pixmap, ColorSpace::Srgb)
+      .into_color_space(space)
+      .take();
 
     let mut pixmap = self.blank()?;
 
@@ -880,27 +958,4 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
     line[..left].fill([0; 4]);
     line[right..].fill([0; 4]);
   }
-}
-
-/// Runs `map` on the straight-alpha pixels, which Filter Effects defines the color primitives on.
-fn map_straight(pixmap: &mut Pixmap, window: Rect<usize>, map: impl Fn([u8; 4]) -> [u8; 4]) {
-  let width = pixmap.width() as usize;
-  let rows = &mut pixmap.rgba_mut()[window.top * width..window.bottom * width];
-
-  for row in rows.chunks_exact_mut(width) {
-    for pixel in &mut row[window.left..window.right] {
-      demultiply_pixel(pixel);
-      *pixel = premultiply_pixel(map(*pixel));
-    }
-  }
-}
-
-/// A pixel with each channel through its table, if any.
-fn transfer(tables: &[Option<TransferTable>; 4], mut pixel: [u8; 4]) -> [u8; 4] {
-  for (channel, table) in pixel.iter_mut().zip(tables) {
-    if let Some(table) = table {
-      *channel = table[usize::from(*channel)];
-    }
-  }
-  pixel
 }

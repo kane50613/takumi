@@ -514,7 +514,11 @@ impl SvgLayout<'_> {
       "feImage" => self.image_primitive(fe, subregion, scope),
       "feComponentTransfer" => Kind::ComponentTransfer {
         input: input(self, "in"),
-        tables: Box::new(self.transfer_functions(fe).map(|function| function.table())),
+        tables: Box::new(
+          self
+            .transfer_functions(fe)
+            .map(|function| function.truncated_table()),
+        ),
       },
       "feColorMatrix" => Kind::ColorMatrix {
         input: input(self, "in"),
@@ -612,19 +616,17 @@ impl SvgLayout<'_> {
     }
   }
 
+  /// Blink's `FEColorMatrix`: values of the wrong count leave the identity, and none is clamped.
   fn color_matrix(&self, fe: usize) -> Option<ColorMatrix> {
-    let values = self.number_list(fe, "values");
+    let values = self.number_list(fe, "values").unwrap_or_default();
 
-    match self.attribute(fe, "type") {
-      Some("saturate") => Some(ColorMatrix::saturate(
-        values?.first().map_or(1.0, |value| value.clamp(0.0, 1.0)),
-      )),
-      Some("hueRotate") => Some(ColorMatrix::hue_rotate(Angle::new(
-        values?.first().copied().unwrap_or(0.0),
-      ))),
-      Some("luminanceToAlpha") => Some(ColorMatrix::luminance_to_alpha()),
-      _ => values
-        .and_then(|list| <[f32; 20]>::try_from(list).ok())
+    match (self.attribute(fe, "type"), values.as_slice()) {
+      (Some("saturate"), &[amount]) => Some(ColorMatrix::saturate(amount)),
+      (Some("hueRotate"), &[angle]) => Some(ColorMatrix::hue_rotate(Angle::new(angle))),
+      (Some("luminanceToAlpha"), _) => Some(ColorMatrix::luminance_to_alpha()),
+      (Some("saturate" | "hueRotate"), _) => None,
+      _ => <[f32; 20]>::try_from(values)
+        .ok()
         .map(ColorMatrix::from_values),
     }
   }

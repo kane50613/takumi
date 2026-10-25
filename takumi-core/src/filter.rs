@@ -47,12 +47,16 @@ impl ColorMatrixChain {
   /// Runs every matrix over an 8-bit straight colour.
   #[inline]
   pub fn apply_rgba8(&self, rgba: [u8; 4]) -> [u8; 4] {
-    to_rgba8(
-      self
-        .0
-        .iter()
-        .fold(from_rgba8(rgba), |color, matrix| matrix.apply(color)),
-    )
+    to_rgba8(self.apply(from_rgba8(rgba)))
+  }
+
+  /// Runs every matrix over a straight colour in the 0..1 range.
+  #[inline]
+  pub fn apply(&self, color: [f32; 4]) -> [f32; 4] {
+    self
+      .0
+      .iter()
+      .fold(color, |color, matrix| matrix.apply(color))
   }
 }
 
@@ -303,22 +307,26 @@ pub enum TransferFunction {
 }
 
 impl TransferFunction {
-  /// The result for each byte of a channel, none when the function leaves the channel as it is.
-  /// Blink's `FEComponentTransfer::GetValues` in `fe_component_transfer.cc`, which truncates where
-  /// this rounds, as the compositor does for the CSS functions.
+  /// The result for each byte of a channel, rounded as the compositor builds the CSS functions,
+  /// none when the function leaves the channel as it is.
   pub fn table(&self) -> Option<TransferTable> {
+    self.table_by(|entry| (entry + 0.5).clamp(0.0, 255.0) as u8)
+  }
+
+  /// The result for each byte of a channel, truncated as Blink's `FEComponentTransfer::GetValues`
+  /// in `fe_component_transfer.cc` builds it for SVG.
+  pub fn truncated_table(&self) -> Option<TransferTable> {
+    self.table_by(|entry| entry.clamp(0.0, 255.0) as u8)
+  }
+
+  fn table_by(&self, to_byte: impl Fn(f64) -> u8) -> Option<TransferTable> {
     if matches!(self, Self::Identity)
       || matches!(self, Self::Table(values) | Self::Discrete(values) if values.is_empty())
     {
       return None;
     }
 
-    let mut table = [0; 256];
-
-    for (byte, entry) in table.iter_mut().enumerate() {
-      *entry = (self.entry(byte) + 0.5).clamp(0.0, 255.0) as u8;
-    }
-    Some(table)
+    Some(std::array::from_fn(|byte| to_byte(self.entry(byte))))
   }
 
   /// The result for `byte`, before it is rounded down to one.
