@@ -30,8 +30,8 @@ use crate::{
 /// filter, which passes the source graphic on.
 const MAX_KERNEL_CELLS: u32 = 256;
 
-/// Most octaves of noise a turbulence runs, takumi's own limit past which one adds nothing to a pixel.
-const MAX_OCTAVES: f32 = 24.0;
+/// Most octaves of noise a turbulence runs, Blink's cap in `FETurbulence::CreateImageFilter`.
+const MAX_OCTAVES: f32 = 9.0;
 
 impl SvgLayout<'_> {
   /// The filter the element `id` names, for content of `width` by `height` at the origin.
