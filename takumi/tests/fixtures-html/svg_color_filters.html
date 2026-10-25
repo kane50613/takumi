@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_color_filters</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 480px; height: 140px">
+    <svg width="480" height="140" style="display: block; background: white">
+      <defs>
+        <linearGradient id="dark" x1="0" x2="1">
+          <stop offset="0" stop-color="rgb(10, 12, 40)" />
+          <stop offset="0.5" stop-color="rgba(60, 20, 10, 0.6)" />
+          <stop offset="1" stop-color="rgb(5, 90, 30)" />
+        </linearGradient>
+        <filter id="chain" x="0" y="0" width="1" height="1">
+          <feColorMatrix type="saturate" values="2.5" />
+          <feComponentTransfer>
+            <feFuncR type="gamma" amplitude="1.6" exponent="0.6" />
+            <feFuncG type="table" tableValues="0 0.3 1" />
+            <feFuncA type="linear" slope="0.9" intercept="0.1" />
+          </feComponentTransfer>
+          <feColorMatrix type="hueRotate" values="40" />
+        </filter>
+        <filter id="srgb" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+          <feColorMatrix
+            type="matrix"
+            values="1.4 0 0 0 0.05  0 1.2 0 0 0  0 0 0.8 0 0.1  0 0 0 1 0"
+          />
+          <feComponentTransfer>
+            <feFuncB type="discrete" tableValues="0.2 0.6 0.9" />
+          </feComponentTransfer>
+        </filter>
+        <filter id="clipped" x="0" y="0" width="1" height="1">
+          <feColorMatrix type="luminanceToAlpha" x="20%" y="20%" width="60%" height="60%" />
+        </filter>
+      </defs>
+      <rect x="10" y="10" width="140" height="120" rx="16" fill="url(#dark)" filter="url(#chain)" />
+      <rect x="170" y="10" width="140" height="120" rx="16" fill="url(#dark)" filter="url(#srgb)" />
+      <rect
+        x="330"
+        y="10"
+        width="140"
+        height="120"
+        rx="16"
+        fill="url(#dark)"
+        filter="url(#clipped)"
+      />
+    </svg>
+  </body>
+</html>

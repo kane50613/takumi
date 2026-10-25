@@ -47,12 +47,16 @@ impl ColorMatrixChain {
   /// Runs every matrix over an 8-bit straight colour.
   #[inline]
   pub fn apply_rgba8(&self, rgba: [u8; 4]) -> [u8; 4] {
-    to_rgba8(
-      self
-        .0
-        .iter()
-        .fold(from_rgba8(rgba), |color, matrix| matrix.apply(color)),
-    )
+    to_rgba8(self.apply(from_rgba8(rgba)))
+  }
+
+  /// Runs every matrix over a straight colour in the 0..1 range.
+  #[inline]
+  pub fn apply(&self, color: [f32; 4]) -> [f32; 4] {
+    self
+      .0
+      .iter()
+      .fold(color, |color, matrix| matrix.apply(color))
   }
 }
 

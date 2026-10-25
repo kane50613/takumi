@@ -5,7 +5,7 @@
 #[cfg(feature = "svg-raster")]
 mod apply;
 #[cfg(feature = "svg-raster")]
-mod color_space;
+mod color_filter;
 #[cfg(feature = "svg-raster")]
 mod composite;
 #[cfg(feature = "svg-raster")]
