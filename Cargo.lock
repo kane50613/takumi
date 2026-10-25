@@ -1600,7 +1600,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "2.17.1"
+version = "2.18.0"
 dependencies = [
  "criterion",
  "gif",
@@ -1629,7 +1629,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-core"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1674,7 +1674,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-html"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "html5ever",
  "takumi-core",
@@ -1713,7 +1713,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-pdf"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "base64",
  "bumpalo",
@@ -1760,7 +1760,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-raster"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "bytemuck",
  "color",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-svg"
-version = "0.3.31"
+version = "0.3.32"
 dependencies = [
  "quick-xml",
  "takumi-core",

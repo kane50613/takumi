@@ -1,3 +1,9 @@
+## @takumi-rs/helpers@2.18.0
+
+### Lay out tables with Chromium's table algorithm
+
+Tables now follow Chromium's table layout instead of a grid approximation, so column widths, row heights, and collapsed borders match Chromium. `<col>` and `<colgroup>` size their columns and paint their backgrounds, and `visibility: collapse`, `empty-cells: hide`, and `display: inline-table` work. A `rowspan` now stops at the end of its row group.
+
 ## @takumi-rs/helpers@2.17.1
 
 ### Keep the box of an element that holds only white space
