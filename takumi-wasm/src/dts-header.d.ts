@@ -32,8 +32,13 @@ export type OutputFormat = "png" | "jpeg" | "webp" | "ico" | "raw";
 /** Output format for animated images. */
 export type AnimationOutputFormat = "webp" | "apng" | "gif";
 
-/** Gradient dithering algorithm. */
-export type DitheringAlgorithm = "none" | "ordered-bayer";
+/**
+ * Gradient dithering algorithm.
+ *
+ * `"floyd-steinberg"` is a deprecated alias of `"ordered-bayer"`; it will be
+ * removed in v3.
+ */
+export type DitheringAlgorithm = "none" | "ordered-bayer" | "floyd-steinberg";
 
 /** Cache policy for a decoded image. Defaults to `"auto"`. */
 export type ImageCacheMode = "auto" | "none";

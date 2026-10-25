@@ -60,7 +60,7 @@ fn raster_options<'fonts>(
       .resource_cache(resource_cache.clone())
       .stylesheet(stylesheet)
       .time_ms(time_ms(options.time_ms))
-      .dithering(options.dithering.map(Into::into).unwrap_or_default())
+      .dithering(options.dithering.unwrap_or_default())
       .node(node)
       .fonts(fonts)
       .font_families(options.font_families.map(FontFamily::from_names))

@@ -25,7 +25,7 @@ function testRender(name: string, template: ReactNode) {
     const webp = await render(template, {
       ...options,
       format: "webp",
-      dithering: "ordered-bayer",
+      dithering: "floyd-steinberg",
     });
     const svg = await renderSvg(template, options);
 
