@@ -6,7 +6,7 @@
 
 use super::ColorSpace;
 use crate::{
-  resources::image_buffer::{demultiply_rgba_in_place, premultiply_rgba_in_place},
+  resources::image_buffer::{demultiply_pixel, premultiply_pixel},
   style::Color,
 };
 
@@ -33,13 +33,23 @@ impl ColorSpace {
       _ => return,
     };
 
-    demultiply_rgba_in_place(pixels);
-    for pixel in pixels.as_chunks_mut::<4>().0 {
+    let look_up = |pixel: &mut [u8; 4]| {
       for channel in &mut pixel[..3] {
         *channel = table[usize::from(*channel)];
       }
+    };
+
+    for pixel in pixels.as_chunks_mut::<4>().0 {
+      match pixel[3] {
+        0 => *pixel = [0; 4],
+        u8::MAX => look_up(pixel),
+        _ => {
+          demultiply_pixel(pixel);
+          look_up(pixel);
+          *pixel = premultiply_pixel(*pixel);
+        }
+      }
     }
-    premultiply_rgba_in_place(pixels);
   }
 }
 

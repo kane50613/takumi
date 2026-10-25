@@ -1,5 +1,7 @@
 //! Backend-agnostic decoded-image storage.
 
+use std::array;
+
 #[cfg(feature = "png")]
 use png::{BitDepth, ColorType, Compression, Encoder, Filter};
 
@@ -172,6 +174,24 @@ const DEMULTIPLY_RECIPROCALS: [u32; 256] = {
   }
   reciprocals
 };
+
+/// Premultiplied source-over of each pixel of `src` onto `dst`, with selects instead of branches
+/// so it vectorizes.
+#[inline(always)]
+pub fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
+  for (dst, &src) in dst.iter_mut().zip(src) {
+    let inverse = u8::MAX - src[3];
+    let over = array::from_fn(|lane| src[lane].saturating_add(mul_div_255(dst[lane], inverse)));
+
+    *dst = if src[3] == 0 {
+      *dst
+    } else if dst[3] == 0 {
+      src
+    } else {
+      over
+    };
+  }
+}
 
 /// Converts one straight-alpha RGBA pixel to premultiplied alpha.
 #[inline(always)]
