@@ -5,6 +5,6 @@ packages:
   takumi-js: major
 ---
 
-# Remove deprecated compatibility APIs
+# Stop accepting the `floyd-steinberg` dithering value
 
 Gradient dithering now accepts only `none` and `ordered-bayer`. The deprecated `floyd-steinberg` alias is gone.
