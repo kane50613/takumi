@@ -16,7 +16,6 @@ use crate::{
   resources::image::SvgOp,
   style::{Angle, BlendMode, Color, ColorInterpolation, Filter, FromCssStr, Length},
   svg::{
-    approx_eq::ApproxEq,
     element::SvgElementKind,
     filter::{
       ColorChannel, ColorSpace, CompositeOperator, ConvolveMatrix, DiffuseLighting,
@@ -27,9 +26,9 @@ use crate::{
   },
 };
 
-/// Most cells a convolution kernel has, takumi's own limit, as a convolution costs a pixel times
-/// its cells.
-const MAX_KERNEL_CELLS: u32 = 400;
+/// Most cells a convolution kernel has, Skia's `kLargeKernelSize`. A larger one makes no Skia
+/// filter, which passes the source graphic on.
+const MAX_KERNEL_CELLS: u32 = 256;
 
 /// Most octaves of noise a turbulence runs, takumi's own limit past which one adds nothing to a pixel.
 const MAX_OCTAVES: f32 = 24.0;
@@ -697,25 +696,24 @@ impl SvgLayout<'_> {
       .checked_mul(order_y)
       .is_none_or(|cells| cells > MAX_KERNEL_CELLS)
     {
-      return None;
+      return Some(Kind::Merge {
+        inputs: vec![Input::SourceGraphic],
+      });
     }
 
     let matrix = self
       .number_list(fe, "kernelMatrix")
       .filter(|list| order_x.checked_mul(order_y).map(|len| len as usize) == Some(list.len()))
       .unwrap_or_default();
-    // The sum rounds up to keep float precision from deciding it.
-    let mut kernel_sum = (matrix.iter().sum::<f32>() * 1_000_000.0).round() / 1_000_000.0;
-
-    if approx_zero(kernel_sum) {
-      kernel_sum = 1.0;
-    }
-
-    let divisor = self.number_attribute(fe, "divisor").unwrap_or(kernel_sum);
-
-    if approx_zero(divisor) {
-      return None;
-    }
+    // `FEConvolveMatrix::ComputeDivisor`: a divisor of zero falls back to the sum, and a sum of
+    // zero to one.
+    let divisor = match self.number_attribute(fe, "divisor") {
+      Some(divisor) if divisor != 0.0 => divisor,
+      _ => match matrix.iter().sum::<f32>() {
+        0.0 => 1.0,
+        sum => sum,
+      },
+    };
 
     let kernel = Kernel::new(
       parse_target(self.number_attribute(fe, "targetX"), order_x)?,
@@ -903,8 +901,4 @@ impl Styled {
 
     Color([red, green, blue, 255])
   }
-}
-
-fn approx_zero(value: f32) -> bool {
-  value.approx_eq(0.0)
 }

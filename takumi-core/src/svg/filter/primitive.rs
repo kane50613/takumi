@@ -160,11 +160,6 @@ impl Kernel {
       data,
     })
   }
-
-  /// The entry at the position, which must be inside the kernel.
-  pub(in crate::svg) fn get(&self, x: u32, y: u32) -> f32 {
-    self.data[(y * self.columns + x) as usize]
-  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
