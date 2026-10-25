@@ -20,7 +20,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    BreakpointOverrides, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
+    BreakpointOverrides, Direction, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -178,6 +178,23 @@ fn remove_node_unique_hashes_from_filter(node: &Node, filter: &mut BloomFilter) 
 impl<'a> ArenaElement<'a> {
   fn style_node(&self) -> &'a StyleNode<'a> {
     &self.tree.nodes[self.index]
+  }
+
+  /// HTML's directionality: the `dir` of the nearest element that sets one, left to right when
+  /// none does.
+  /// <https://html.spec.whatwg.org/multipage/dom.html#the-directionality>
+  fn directionality(&self) -> Direction {
+    let mut current = Some(*self);
+
+    while let Some(element) = current {
+      if let Some(direction) = element.style_node().node.metadata.dir {
+        return direction;
+      }
+
+      current = element.parent_element();
+    }
+
+    Direction::Ltr
   }
 
   fn at(&self, index: Option<usize>) -> Option<Self> {
@@ -345,8 +362,16 @@ impl Element for ArenaElement<'_> {
     pc: &<Self::Impl as SelectorImplTrait>::NonTSPseudoClass,
     _context: &mut MatchingContext<'_, Self::Impl>,
   ) -> bool {
-    let PseudoClass::Lang(ranges) = pc else {
-      return false;
+    let ranges = match pc {
+      PseudoClass::Lang(ranges) => ranges,
+      PseudoClass::Dir(direction) => {
+        return *direction
+          == match self.directionality() {
+            Direction::Ltr => "ltr",
+            Direction::Rtl => "rtl",
+          };
+      }
+      PseudoClass::Other(_) => return false,
     };
 
     // `lang` is inherited: walk up from this element to the nearest ancestor-or-self that
