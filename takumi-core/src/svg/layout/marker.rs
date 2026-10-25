@@ -14,7 +14,7 @@ use super::{
 use crate::{
   geometry::{PathCommand, Point, Rect, Size},
   resources::svg_size::ViewBox,
-  style::{Affine, Angle, FromCssStr, Length, Overflow},
+  style::{Affine, Angle, FromCssStr, Length, Overflow, VectorEffect},
   svg::approx_eq::ApproxEq,
   svg::{element::SvgElementKind, length::LengthAxis},
 };
@@ -108,7 +108,7 @@ impl SvgLayout<'_> {
     parent: &mut Container,
   ) -> Option<()> {
     let marker_styled = self.styled_in_place(marker);
-    let stroke_scale = self.stroke_scale(shape, marker, scope)?;
+    let stroke_scale = self.stroke_scale(shape, marker, scope, parent.abs_transform)?;
     let rect = self.marker_rect(&marker_styled, scope)?;
     let view_box = self
       .attribute(marker, "viewBox")
@@ -211,18 +211,30 @@ impl SvgLayout<'_> {
     Some(())
   }
 
-  /// How much the marker scales: its stroke width, or one for `markerUnits="userSpaceOnUse"`.
-  fn stroke_scale(&self, shape: &Styled, marker: usize, scope: &Scope) -> Option<f32> {
+  /// How much the marker scales: its stroke width, or one for `markerUnits="userSpaceOnUse"`. A
+  /// non-scaling stroke under `transform` counts in the host's units, as Blink's
+  /// `LayoutSVGShape::StrokeWidthForMarkerUnits` measures it.
+  fn stroke_scale(
+    &self,
+    shape: &Styled,
+    marker: usize,
+    scope: &Scope,
+    transform: Affine,
+  ) -> Option<f32> {
     if self.attribute(marker, "markerUnits") == Some("userSpaceOnUse") {
       return Some(1.0);
     }
 
-    let width = self.px(
+    let mut width = self.px(
       shape,
       scope,
       shape.style().svg_stroke_data.stroke_width,
       LengthAxis::Other,
     );
+
+    if shape.style().svg_data.vector_effect == VectorEffect::NonScalingStroke {
+      width /= transform.root_mean_square_scale();
+    }
 
     (width > 0.0 && width.is_finite()).then_some(width)
   }

@@ -299,22 +299,25 @@ impl Paint {
       return;
     };
 
-    match self {
-      Self::Color(_) => {}
-      Self::Gradient(gradient) => {
-        *self = Self::Gradient(Rc::new(GradientPaint {
-          geometry: gradient.geometry,
-          units: gradient.units,
-          transform: reverse * gradient.transform,
-          spread: gradient.spread,
-          stops: gradient.stops.clone(),
-        }));
-      }
-      Self::Pattern(pattern) => {
-        let mut followed = (**pattern).clone();
+    *self = self.transformed(reverse);
+  }
 
-        followed.transform = reverse * pattern.transform;
-        *self = Self::Pattern(Rc::new(followed));
+  /// The paint drawn in a space that `transform` maps its user space into.
+  pub(super) fn transformed(&self, transform: Affine) -> Self {
+    match self {
+      Self::Color(_) => self.clone(),
+      Self::Gradient(gradient) => Self::Gradient(Rc::new(GradientPaint {
+        geometry: gradient.geometry,
+        units: gradient.units,
+        transform: transform * gradient.transform,
+        spread: gradient.spread,
+        stops: gradient.stops.clone(),
+      })),
+      Self::Pattern(pattern) => {
+        let mut moved = (**pattern).clone();
+
+        moved.transform = transform * pattern.transform;
+        Self::Pattern(Rc::new(moved))
       }
     }
   }

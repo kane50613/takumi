@@ -188,6 +188,15 @@ impl Affine {
     (self.a.hypot(self.c), self.b.hypot(self.d))
   }
 
+  /// The scale Blink's `LayoutSVGShape::StrokeWidthForMarkerUnits` divides a non-scaling stroke by:
+  /// the root mean square of the axis scales.
+  #[cfg(feature = "svg")]
+  pub(crate) fn root_mean_square_scale(self) -> f32 {
+    let (x, y) = self.scale_components();
+
+    ((x * x + y * y) / 2.0).sqrt()
+  }
+
   /// Converts the affine transform to a column-major array.
   pub fn to_cols_array(&self) -> [f32; 6] {
     [self.a, self.b, self.c, self.d, self.x, self.y]

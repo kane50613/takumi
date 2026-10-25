@@ -613,6 +613,31 @@ mod tests {
     assert_eq!(image.pixel(38, 22), [0, 0, 0, 0]);
   }
 
+  /// A non-scaling stroke keeps its width in the host's units under a transform that scales.
+  #[test]
+  fn a_non_scaling_stroke_ignores_the_scale_of_its_transform() {
+    let image = draw(
+      r#"<line x2="10" y1="5" y2="5" stroke="red" stroke-width="2" vector-effect="non-scaling-stroke" transform="scale(5)"/>"#,
+      100,
+    );
+
+    assert_eq!(image.pixel(20, 25), [255, 0, 0, 255]);
+    assert_eq!(image.pixel(20, 22), [0, 0, 0, 0]);
+  }
+
+  /// A non-scaling stroke strokes the outline in the host's space, so a transform that scales its
+  /// axes apart leaves the stroke as wide on both.
+  #[test]
+  fn a_non_scaling_stroke_is_even_under_a_transform_that_scales_its_axes_apart() {
+    let image = draw(
+      r#"<line x1="2" x2="2" y2="10" stroke="red" stroke-width="4" vector-effect="non-scaling-stroke" transform="scale(10 1)"/>"#,
+      100,
+    );
+
+    assert_eq!(image.pixel(21, 5), [255, 0, 0, 255]);
+    assert_eq!(image.pixel(22, 5), [0, 0, 0, 0]);
+  }
+
   #[test]
   fn clip_and_opacity_apply_to_a_group() {
     let image = draw(
