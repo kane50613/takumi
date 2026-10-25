@@ -1622,9 +1622,12 @@ dependencies = [
 name = "takumi-bindings-common"
 version = "0.0.0"
 dependencies = [
+ "js-sys",
  "serde",
+ "serde-wasm-bindgen",
  "serde_bytes",
  "takumi-core",
+ "wasm-bindgen",
 ]
 
 [[package]]

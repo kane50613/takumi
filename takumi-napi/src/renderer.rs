@@ -570,7 +570,7 @@ impl Renderer {
     options: Option<RenderOptions>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<RenderTask>> {
-    let node = NodeSource::from_js(source)?;
+    let node = NodeSource::from_js(&env, source)?;
 
     Ok(AsyncTask::with_optional_signal(
       RenderTask::from_options(
@@ -595,7 +595,7 @@ impl Renderer {
     options: Option<SvgRenderOptions>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<SvgRenderTask>> {
-    let node = NodeSource::from_js(source)?;
+    let node = NodeSource::from_js(&env, source)?;
 
     Ok(AsyncTask::with_optional_signal(
       SvgRenderTask::from_options(
@@ -620,7 +620,7 @@ impl Renderer {
     options: Option<RenderOptions>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<MeasureTask>> {
-    let node = NodeSource::from_js(source)?;
+    let node = NodeSource::from_js(&env, source)?;
 
     Ok(AsyncTask::with_optional_signal(
       MeasureTask::from_options(

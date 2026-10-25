@@ -19,7 +19,7 @@ use napi_derive::napi;
 pub use renderer::Renderer;
 use serde::de::DeserializeOwned;
 use takumi_bindings_common::input::FontOptions;
-use takumi_core::{layout::node::Node, resources::glyph_cache};
+use takumi_core::{layout::node::Node, resources::glyph_cache, style::InvalidDeclarations};
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
 /// `0` stops caching. Defaults to 8 MiB.
@@ -128,6 +128,31 @@ pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Re
   T::deserialize(&mut de).map_err(|e| Error::from_reason(e.to_string()))
 }
 
+/// Reads a node tree from a JS object, warning about the declarations its style objects drop.
+pub(crate) fn deserialize_node(env: &Env, value: Object) -> Result<Node> {
+  let (node, invalid) = InvalidDeclarations::collect(|| deserialize_with_tracing(value));
+
+  warn_invalid_declarations(env, &invalid)?;
+
+  node
+}
+
+/// Reports each dropped declaration through `console.warn`, as a browser console reports one.
+pub(crate) fn warn_invalid_declarations(env: &Env, invalid: &InvalidDeclarations) -> Result<()> {
+  if invalid.is_empty() {
+    return Ok(());
+  }
+
+  let console: Object = env.get_global()?.get_named_property("console")?;
+  let warn: Function<String, Unknown> = console.get_named_property("warn")?;
+
+  for message in invalid.messages() {
+    warn.apply(console, format!("takumi: ignoring {message}"))?;
+  }
+
+  Ok(())
+}
+
 /// A node tree from JS: JSON text, parsed on the worker thread, or a tree read from an object.
 pub(crate) enum NodeSource {
   Json(String),
@@ -136,27 +161,30 @@ pub(crate) enum NodeSource {
 
 impl NodeSource {
   /// Reads `source`, leaving JSON text for [`NodeSource::into_node`] to parse.
-  pub(crate) fn from_js(source: Either<String, Object>) -> Result<Self> {
+  pub(crate) fn from_js(env: &Env, source: Either<String, Object>) -> Result<Self> {
     match source {
       Either::A(json) => Ok(Self::Json(json)),
-      Either::B(object) => deserialize_with_tracing(object).map(|node| Self::Tree(Box::new(node))),
+      Either::B(object) => deserialize_node(env, object).map(|node| Self::Tree(Box::new(node))),
     }
   }
 
-  /// The node tree, failing with the message the object path reports for the same input.
-  pub(crate) fn into_node(self) -> Result<Node> {
+  /// The node tree and the declarations JSON text dropped, failing with the message the object path reports for the same input.
+  pub(crate) fn into_node(self) -> Result<(Node, InvalidDeclarations)> {
     let json = match self {
       Self::Json(json) => json,
-      Self::Tree(node) => return Ok(*node),
+      Self::Tree(node) => return Ok((*node, InvalidDeclarations::default())),
     };
+    let (node, invalid) = InvalidDeclarations::collect(|| serde_json::from_str(&json));
 
-    serde_json::from_str(&json).map_err(|error| {
-      let message = error.to_string();
-      let position = format!(" at line {} column {}", error.line(), error.column());
-      let message = message.strip_suffix(&position).unwrap_or(&message);
+    node
+      .map(|node| (node, invalid))
+      .map_err(|error: serde_json::Error| {
+        let message = error.to_string();
+        let position = format!(" at line {} column {}", error.line(), error.column());
+        let message = message.strip_suffix(&position).unwrap_or(&message);
 
-      Error::from_reason(format!("{}, {message}", Status::InvalidArg))
-    })
+        Error::from_reason(format!("{}, {message}", Status::InvalidArg))
+      })
   }
 }
 

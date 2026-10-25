@@ -23,6 +23,12 @@ The `style` prop sets `CSSProperties` on one node. It beats the tag default and 
 <div style={{ display: "flex", padding: 48, background: "#0f172a" }}>Hello</div>
 ```
 
+Takumi ignores a declaration whose value it cannot read, as a browser ignores one in a `style` attribute. The rest of the style still applies, and `console.warn` reports the declaration it dropped:
+
+```txt title="A negative height"
+takumi: ignoring invalid value for height: string "-5%"; Unexpected token: -5%, expected a value of <length>, 'min-content', 'max-content', 'fit-content' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'.
+```
+
 ## CSS
 
 Pass stylesheet text, or a list of stylesheets, through `css`.

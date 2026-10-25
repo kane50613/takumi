@@ -6,7 +6,7 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontStore, css_or_stylesheets, device_pixel_ratio, input::decode_images, parse_lang, stylesheet,
-  time_ms,
+  time_ms, wasm::from_js,
 };
 use takumi_core::{
   Fonts,
@@ -163,7 +163,7 @@ impl Renderer {
     node: NodeType,
     options: Option<RenderOptionsType>,
   ) -> Result<Vec<u8>, JsValue> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let node: Node = from_js(node.into())?;
     let options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -210,7 +210,7 @@ impl Renderer {
     node: NodeType,
     options: Option<SvgRenderOptionsType>,
   ) -> Result<String, JsValue> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let node: Node = from_js(node.into())?;
     let options: SvgRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -251,7 +251,7 @@ impl Renderer {
     node: NodeType,
     options: Option<RenderOptionsType>,
   ) -> Result<MeasuredNodeType, JsValue> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let node: Node = from_js(node.into())?;
     let options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -276,7 +276,7 @@ impl Renderer {
     node: NodeType,
     options: RenderOptionsType,
   ) -> Result<String, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let node: Node = from_js(node.into())?;
     let options: RenderOptions = from_value(options.into()).map_err(map_error)?;
 
     let format = options.format.unwrap_or(OutputFormat::Png);
@@ -318,7 +318,7 @@ impl Renderer {
       fps,
       font_families,
       lang,
-    } = from_value(options.into()).map_err(map_error)?;
+    } = from_js(options.into())?;
 
     let lang = parse_lang(lang.as_deref()).map_err(map_error)?;
 

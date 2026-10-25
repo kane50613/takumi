@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 use takumi_bindings_common::{parse_lang, stylesheet, time_ms};
 use takumi_core::{
   Fonts,
-  style::{FontFamily, Lang, StyleSheet},
+  style::{FontFamily, InvalidDeclarations, Lang, StyleSheet},
   viewport::Viewport,
 };
 
@@ -14,10 +14,12 @@ use crate::{
     ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images,
     deserialize_css, deserialize_keyframes,
   },
+  warn_invalid_declarations,
 };
 
 pub struct SvgRenderTask {
   pub(crate) node: Option<NodeSource>,
+  pub(crate) invalid: InvalidDeclarations,
   pub(crate) state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
@@ -45,6 +47,7 @@ impl SvgRenderTask {
 
     Ok(SvgRenderTask {
       node: Some(node),
+      invalid: InvalidDeclarations::default(),
       fonts: state.fonts_for_render(options.font_families.as_deref())?,
       state,
       viewport: Viewport::new((options.width, options.height)),
@@ -65,7 +68,9 @@ impl Task for SvgRenderTask {
     let Some(node) = self.node.take() else {
       unreachable!()
     };
-    let node = node.into_node()?;
+    let (node, invalid) = node.into_node()?;
+
+    self.invalid = invalid;
 
     let images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
 
@@ -84,7 +89,9 @@ impl Task for SvgRenderTask {
     .map_err(map_error)
   }
 
-  fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+  fn resolve(&mut self, env: Env, output: Self::Output) -> Result<Self::JsValue> {
+    warn_invalid_declarations(&env, &self.invalid)?;
+
     Ok(output)
   }
 }

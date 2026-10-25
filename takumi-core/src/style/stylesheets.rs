@@ -19,8 +19,8 @@ use crate::{
   Error,
   error::StyleDeclarationBlockParseError,
   style::{
-    CssInput, CssUnexpected, CssValueSeed, CustomProperties, SizingContext, properties::*,
-    selector::StyleDeclarationParser, unexpected_token,
+    CssInput, CssUnexpected, CssValueSeed, CustomProperties, InvalidDeclarations, SizingContext,
+    properties::*, selector::StyleDeclarationParser, unexpected_token,
   },
   viewport::Viewport,
 };
@@ -748,13 +748,12 @@ macro_rules! define_style {
                     );
                   }
                 } else {
-                  style
-                    .declarations
-                    .append_parsed_declarations(
-                      ParsedValues::parse(property, css_input)
-                        .map_err(|error| error.into_serde_error(&key))?,
-                      important,
-                    );
+                  match ParsedValues::parse(property, css_input) {
+                    Ok(declarations) => {
+                      style.declarations.append_parsed_declarations(declarations, important);
+                    }
+                    Err(error) => InvalidDeclarations::record(|| error.message(&key)),
+                  }
                 }
               }
 

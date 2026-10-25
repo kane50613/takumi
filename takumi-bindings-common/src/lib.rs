@@ -8,6 +8,8 @@
 
 pub mod font_cache;
 pub mod input;
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 

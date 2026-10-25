@@ -14,7 +14,7 @@ use takumi_raster::{
 };
 
 use crate::{
-  JsBytes, deserialize_with_tracing, map_error,
+  JsBytes, deserialize_node, map_error,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
     decode_images, deserialize_css, deserialize_keyframes, webp_lossless,
@@ -64,7 +64,7 @@ impl RenderAnimationTask {
     } = options;
     let scenes = scenes
       .into_iter()
-      .map(|scene| Ok((deserialize_with_tracing(scene.node)?, scene.duration_ms)))
+      .map(|scene| Ok((deserialize_node(&env, scene.node)?, scene.duration_ms)))
       .collect::<Result<Vec<(Node, u32)>>>()?;
 
     if scenes.is_empty() {
