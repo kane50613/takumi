@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_turbulence</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 520px; height: 240px">
+    <svg width="520" height="240" style="display: block; background: white">
+      <defs>
+        <filter id="turbulence" x="0" y="0" width="1" height="1">
+          <feTurbulence baseFrequency="0.05" numOctaves="2" />
+        </filter>
+        <filter id="fractal" x="0" y="0" width="1" height="1">
+          <feTurbulence type="fractalNoise" baseFrequency="0.03 0.08" numOctaves="4" seed="7" />
+        </filter>
+        <filter id="stitch" x="0" y="0" width="1" height="1">
+          <feTurbulence baseFrequency="0.07" numOctaves="3" seed="-3.7" stitchTiles="stitch" />
+        </filter>
+        <filter id="many" x="0" y="0" width="1" height="1">
+          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="20" seed="1234" />
+        </filter>
+      </defs>
+      <rect x="10" y="10" width="110" height="110" filter="url(#turbulence)" />
+      <rect x="140" y="10" width="110" height="110" filter="url(#fractal)" />
+      <rect x="270" y="10" width="110" height="110" filter="url(#stitch)" />
+      <rect x="400" y="10" width="110" height="110" filter="url(#many)" />
+      <g transform="translate(10 130) scale(2 1)">
+        <rect width="120" height="100" filter="url(#turbulence)" />
+      </g>
+    </svg>
+  </body>
+</html>

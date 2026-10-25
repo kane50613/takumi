@@ -494,7 +494,7 @@ impl Run<'_> {
         ..
       } => self.morphology(*operator, (*radius_x, *radius_y), next()?, space),
       Kind::DisplacementMap(fe) => self.displacement_map(fe, next()?, next()?, space),
-      Kind::Turbulence(fe) => self.turbulence(fe, window, space),
+      Kind::Turbulence(fe) => self.turbulence(fe, primitive.subregion, window, space),
       Kind::DiffuseLighting(fe) => self.lighting(
         |light, color, depth| fe.lighting(light, color, depth),
         fe.light_source,
@@ -684,7 +684,13 @@ impl Run<'_> {
     Some(Image::new(pixmap, space))
   }
 
-  fn turbulence(&self, fe: &Turbulence, window: Rect<usize>, space: ColorSpace) -> Option<Image> {
+  fn turbulence(
+    &self,
+    fe: &Turbulence,
+    tile: Rect<f32>,
+    window: Rect<usize>,
+    space: ColorSpace,
+  ) -> Option<Image> {
     let mut pixmap = self.blank()?;
     let (sx, sy) = self.transform.row_scales();
 
@@ -694,21 +700,20 @@ impl Run<'_> {
 
     let canvas = turbulence::Canvas {
       offset: (
-        f64::from(self.region.left) - f64::from(self.transform.x),
-        f64::from(self.region.top) - f64::from(self.transform.y),
+        self.transform.x - self.region.left as f32,
+        self.transform.y - self.region.top as f32,
       ),
-      scale: (f64::from(sx), f64::from(sy)),
+      scale: (sx, sy),
     };
     let width = pixmap.width() as usize;
 
-    fe.apply(&canvas, pixmap.rgba_mut(), width, window);
-    for row in pixmap.rgba_mut()[window.top * width..window.bottom * width].chunks_exact_mut(width)
-    {
-      for pixel in &mut row[window.left..window.right] {
-        *pixel = premultiply_pixel(*pixel);
-      }
-    }
-
+    fe.apply(
+      &canvas,
+      (tile.width(), tile.height()),
+      pixmap.rgba_mut(),
+      width,
+      window,
+    );
     Some(Image::new(pixmap, space))
   }
 
