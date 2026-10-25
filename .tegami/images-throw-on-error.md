@@ -1,6 +1,6 @@
 ---
 packages:
-  takumi-js: minor
+  takumi-js: patch
 ---
 
 # Render without the images that fail to fetch
