@@ -625,8 +625,7 @@ mod tests {
     assert_eq!(image.pixel(20, 22), [0, 0, 0, 0]);
   }
 
-  /// A non-scaling stroke strokes the outline in the host's space, so a transform that scales its
-  /// axes apart leaves the stroke as wide on both.
+  /// A non-scaling stroke is as wide on both axes under a transform that scales them apart.
   #[test]
   fn a_non_scaling_stroke_is_even_under_a_transform_that_scales_its_axes_apart() {
     let image = draw(
@@ -636,6 +635,17 @@ mod tests {
 
     assert_eq!(image.pixel(21, 5), [255, 0, 0, 255]);
     assert_eq!(image.pixel(22, 5), [0, 0, 0, 0]);
+  }
+
+  /// A transform that scales far down still has an inverse a non-scaling stroke draws through.
+  #[test]
+  fn a_non_scaling_stroke_draws_under_a_tiny_scale() {
+    let image = draw(
+      r#"<line x2="100000" y1="10000" y2="10000" stroke="red" stroke-width="4" vector-effect="non-scaling-stroke" transform="scale(0.0003)"/>"#,
+      100,
+    );
+
+    assert_eq!(image.pixel(10, 3), [255, 0, 0, 255]);
   }
 
   #[test]

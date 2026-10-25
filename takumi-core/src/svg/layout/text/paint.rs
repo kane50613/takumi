@@ -220,6 +220,7 @@ impl TextPainter<'_> {
         join: SvgLineJoin::Miter,
         dash: None,
         context: fill.context,
+        user_space: None,
       });
 
     if layers.is_empty() && bold.is_none() {

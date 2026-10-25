@@ -197,6 +197,25 @@ impl Affine {
     ((x * x + y * y) / 2.0).sqrt()
   }
 
+  /// Blink's `AffineTransform::Inverse` where `IsInvertible` holds: a normal determinant.
+  #[cfg(feature = "svg")]
+  pub(crate) fn normal_inverse(self) -> Option<Self> {
+    let det = self.determinant();
+
+    if !det.is_normal() {
+      return None;
+    }
+
+    Some(Self {
+      a: self.d / det,
+      b: -self.b / det,
+      c: -self.c / det,
+      d: self.a / det,
+      x: (self.c * self.y - self.d * self.x) / det,
+      y: (self.b * self.x - self.a * self.y) / det,
+    })
+  }
+
   /// Converts the affine transform to a column-major array.
   pub fn to_cols_array(&self) -> [f32; 6] {
     [self.a, self.b, self.c, self.d, self.x, self.y]

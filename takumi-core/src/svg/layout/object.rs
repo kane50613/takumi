@@ -429,6 +429,9 @@ pub(super) struct Stroke {
   pub(super) join: SvgLineJoin,
   pub(super) dash: Option<Rc<(Vec<f32>, f32)>>,
   pub(super) context: Option<ContextSource>,
+  /// The transform and bounds of the user space a non-scaling stroke's paint settles in, while it
+  /// waits for a `use` element to give it geometry; the stroke draws in the host's space.
+  pub(super) user_space: Option<(Affine, Rect<f32>)>,
 }
 
 /// Blink's `LayoutSVGShape`: an outline with the fill and stroke that paint it.

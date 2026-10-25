@@ -3197,4 +3197,5 @@ svg/text/reftests/textpath-pathlength-zero-offset-zero.svg
 svg/text/reftests/textpath-shape-001.svg
 svg/text/reftests/textpath-side-002.svg
 svg/text/reftests/textpath-side-004.svg
+svg/text/reftests/tspan-opacity-mixed-direction.svg
 svg/top-level-document/svg-image-document-svg-xml-mime-type.tentative.html

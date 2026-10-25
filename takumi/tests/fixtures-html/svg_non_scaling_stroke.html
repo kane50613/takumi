@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_non_scaling_stroke</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 600px; height: 160px">
+    <svg width="600" height="160" style="display: block; background: white">
+      <defs>
+        <linearGradient id="fade">
+          <stop offset="0" stop-color="rgb(37, 99, 235)" />
+          <stop offset="1" stop-color="rgb(220, 38, 38)" />
+        </linearGradient>
+        <marker id="dot" markerWidth="4" markerHeight="4" refX="2" refY="2">
+          <circle cx="2" cy="2" r="2" fill="rgb(22, 163, 74)" />
+        </marker>
+        <symbol id="ring" overflow="visible">
+          <circle
+            cx="0"
+            cy="0"
+            r="10"
+            fill="none"
+            stroke="context-stroke"
+            stroke-width="3"
+            vector-effect="non-scaling-stroke"
+          />
+        </symbol>
+      </defs>
+      <rect
+        x="2"
+        y="2"
+        width="12"
+        height="12"
+        transform="scale(8)"
+        fill="rgb(254, 240, 138)"
+        stroke="black"
+        stroke-width="2"
+        vector-effect="non-scaling-stroke"
+      />
+      <line
+        x1="14"
+        y1="20"
+        x2="14"
+        y2="140"
+        transform="scale(10 1)"
+        stroke="black"
+        stroke-width="6"
+        vector-effect="non-scaling-stroke"
+      />
+      <rect
+        x="70"
+        y="8"
+        width="40"
+        height="40"
+        transform="scale(3 1)"
+        fill="none"
+        stroke="url(#fade)"
+        stroke-width="8"
+        vector-effect="non-scaling-stroke"
+      />
+      <polyline
+        points="120,50 140,30 160,50"
+        transform="scale(2)"
+        fill="none"
+        stroke="black"
+        stroke-width="2"
+        marker-mid="url(#dot)"
+        vector-effect="non-scaling-stroke"
+      />
+      <use href="#ring" x="120" y="18" transform="scale(4)" stroke="url(#fade)" />
+    </svg>
+  </body>
+</html>

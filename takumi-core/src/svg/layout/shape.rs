@@ -382,16 +382,25 @@ impl Shape {
       self.fill = Some(fill);
     }
 
-    if let Some(mut stroke) = self.stroke.take()
-      && settle(
+    if let Some(mut stroke) = self.stroke.take() {
+      let (stroke_transform, stroke_bounds) = stroke.user_space.unwrap_or((path_transform, bounds));
+
+      if settle(
         &mut stroke.paint,
         &mut stroke.context,
         use_context,
-        path_transform,
-        bounds,
-      )
-    {
-      self.stroke = Some(stroke);
+        stroke_transform,
+        stroke_bounds,
+      ) {
+        // A paint settled in the user space of a non-scaling stroke moves into the host's space.
+        if stroke.context.is_none()
+          && let Some((transform, _)) = stroke.user_space.take()
+        {
+          stroke.paint = stroke.paint.transformed(transform);
+        }
+
+        self.stroke = Some(stroke);
+      }
     }
   }
 }
@@ -402,9 +411,24 @@ impl Shape {
   /// the host's space under the inverse mapping, its paint server moved along.
   fn with_non_scaling_stroke(self) -> Vec<LayoutObject> {
     let transform = self.abs_transform;
-    let (Some(stroke), Some(inverse)) = (self.stroke.as_ref(), transform.invert()) else {
+    let Some(stroke) = self.stroke.as_ref() else {
       return vec![LayoutObject::Shape(Box::new(self))];
     };
+    // Blink's `SetupNonScalingStrokeContext` paints no stroke where the transform has no inverse.
+    let Some(inverse) = transform.normal_inverse() else {
+      return self
+        .fill
+        .is_some()
+        .then(|| {
+          LayoutObject::Shape(Box::new(Shape {
+            stroke: None,
+            ..self
+          }))
+        })
+        .into_iter()
+        .collect();
+    };
+    let waiting = matches!(stroke.context, Some(ContextSource::UseNode));
     let stroked = Shape {
       commands: self
         .commands
@@ -414,7 +438,12 @@ impl Shape {
       bounds: self.bounds.transformed(transform).unwrap_or(self.bounds),
       fill: None,
       stroke: Some(Stroke {
-        paint: stroke.paint.transformed(transform),
+        paint: if waiting {
+          stroke.paint.clone()
+        } else {
+          stroke.paint.transformed(transform)
+        },
+        user_space: waiting.then_some((transform, self.bounds)),
         ..stroke.clone()
       }),
       abs_transform: Affine::IDENTITY,
