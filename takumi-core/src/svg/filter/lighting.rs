@@ -1,505 +1,289 @@
-// Copyright 2020 the Resvg Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
-
 use super::{DiffuseLighting, LightSource, SpecularLighting};
-use crate::{style::Color, svg::approx_eq::ApproxEq};
+use crate::{geometry::Rect, style::Color};
 
-const FACTOR_1_2: f32 = 1.0 / 2.0;
-const FACTOR_1_3: f32 = 1.0 / 3.0;
-const FACTOR_1_4: f32 = 1.0 / 4.0;
-const FACTOR_2_3: f32 = 2.0 / 3.0;
+/// Skia's `SkRasterPipeline` reads a byte as a float by this product rather than a division.
+const BYTE_TO_FLOAT: f32 = 1.0 / 255.0;
 
-#[derive(Clone, Copy, Debug)]
-struct Vector2 {
-  x: f32,
-  y: f32,
+/// How far past its cutoff a spotlight fades in, Skia's `kConeAAThreshold`.
+const CONE_FADE: f32 = 0.016;
+
+/// A lighting primitive in the layer's pixels, as Skia's `SkLightingImageFilter` takes it.
+pub(super) struct Lighting {
+  material: Material,
+  light: Light,
+  /// The light's color times the material's constant, in `0..=1` per unit of constant.
+  color: [f32; 3],
+  /// `surfaceScale` in the layer's pixels.
+  depth: f32,
 }
 
-impl Vector2 {
-  #[inline]
-  fn new(x: f32, y: f32) -> Self {
-    Vector2 { x, y }
-  }
-
-  #[inline]
-  fn approx_zero(&self) -> bool {
-    self.x.approx_eq(0.0) && self.y.approx_eq(0.0)
-  }
+enum Material {
+  Diffuse,
+  Specular { shininess: f32 },
 }
 
-impl core::ops::Mul<f32> for Vector2 {
-  type Output = Self;
-
-  #[inline]
-  fn mul(self, c: f32) -> Self::Output {
-    Vector2 {
-      x: self.x * c,
-      y: self.y * c,
-    }
-  }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Vector3 {
-  x: f32,
-  y: f32,
-  z: f32,
-}
-
-impl Vector3 {
-  #[inline]
-  fn new(x: f32, y: f32, z: f32) -> Self {
-    Vector3 { x, y, z }
-  }
-
-  #[inline]
-  fn dot(&self, other: &Self) -> f32 {
-    self.x * other.x + self.y * other.y + self.z * other.z
-  }
-
-  #[inline]
-  fn length(&self) -> f32 {
-    (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
-  }
-
-  #[inline]
-  fn normalized(&self) -> Option<Self> {
-    let length = self.length();
-    if !length.approx_eq(0.0) {
-      Some(Vector3 {
-        x: self.x / length,
-        y: self.y / length,
-        z: self.z / length,
-      })
-    } else {
-      None
-    }
-  }
-}
-
-impl core::ops::Add<Vector3> for Vector3 {
-  type Output = Self;
-
-  #[inline]
-  fn add(self, rhs: Vector3) -> Self::Output {
-    Vector3 {
-      x: self.x + rhs.x,
-      y: self.y + rhs.y,
-      z: self.z + rhs.z,
-    }
-  }
-}
-
-impl core::ops::Sub<Vector3> for Vector3 {
-  type Output = Self;
-
-  #[inline]
-  fn sub(self, rhs: Vector3) -> Self::Output {
-    Vector3 {
-      x: self.x - rhs.x,
-      y: self.y - rhs.y,
-      z: self.z - rhs.z,
-    }
-  }
-}
-
-/// The alpha channel of straight or premultiplied pixels.
-#[derive(Clone, Copy)]
-struct Alpha<'a> {
-  pixels: &'a [[u8; 4]],
-  width: usize,
-  height: usize,
-}
-
-impl<'a> Alpha<'a> {
-  fn new(pixels: &'a [[u8; 4]], width: usize) -> Self {
-    Self {
-      pixels,
-      width,
-      height: pixels.len() / width,
-    }
-  }
-
-  fn at(&self, x: usize, y: usize) -> i16 {
-    i16::from(self.pixels[self.width * y + x][3])
-  }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Normal {
-  factor: Vector2,
-  normal: Vector2,
-}
-
-impl Normal {
-  #[inline]
-  fn new(factor_x: f32, factor_y: f32, nx: i16, ny: i16) -> Self {
-    Normal {
-      factor: Vector2::new(factor_x, factor_y),
-      normal: Vector2::new(-nx as f32, -ny as f32),
-    }
-  }
+enum Light {
+  /// The unit vector towards the light.
+  Distant([f32; 3]),
+  Point([f32; 3]),
+  Spot {
+    position: [f32; 3],
+    /// The unit vector from the light towards what it points at.
+    direction: [f32; 3],
+    falloff: f32,
+    cos_cutoff: f32,
+  },
 }
 
 impl DiffuseLighting {
-  /// Blink's `FEDiffuseLighting` in `fe_diffuse_lighting.cc`, which Skia runs as
-  /// `SkImageFilters::DistantLitDiffuse`, `PointLitDiffuse`, and `SpotLitDiffuse`. Approximate: the
-  /// Sobel kernels follow resvg's port of Skia's.
-  ///
-  /// Only the alpha of `src` is read, and `dest` gets straight alpha. Both are `width` pixels wide
-  /// and the same length, and nothing is done when they are less than 3x3.
-  pub(super) fn apply(
-    &self,
-    light_source: LightSource,
-    lighting_color: Color,
-    src: &[[u8; 4]],
-    width: usize,
-    dest: &mut [[u8; 4]],
-  ) {
-    let light_factor = |normal: Normal, light_vector: Vector3| {
-      let k = if normal.normal.approx_zero() {
-        light_vector.z
-      } else {
-        let mut n = normal.normal * (self.surface_scale / 255.0);
-        n.x *= normal.factor.x;
-        n.y *= normal.factor.y;
-
-        let normal = Vector3::new(n.x, n.y, 1.0);
-
-        normal.dot(&light_vector) / normal.length()
-      };
-
-      self.diffuse_constant * k
-    };
-
-    apply(
-      light_source,
-      self.surface_scale,
-      lighting_color,
-      &light_factor,
-      calc_diffuse_alpha,
-      Alpha::new(src, width),
-      dest,
-    );
+  /// The lighting of this primitive, with its light already in the layer's pixels.
+  pub(super) fn lighting(&self, light: LightSource, color: Color, depth: f32) -> Lighting {
+    Lighting::new(
+      Material::Diffuse,
+      light,
+      color,
+      self.diffuse_constant,
+      self.surface_scale * depth,
+    )
   }
 }
 
 impl SpecularLighting {
-  /// Blink's `FESpecularLighting` in `fe_specular_lighting.cc`, which Skia runs as
-  /// `SkImageFilters::DistantLitSpecular`, `PointLitSpecular`, and `SpotLitSpecular`. Approximate:
-  /// the Sobel kernels follow resvg's port of Skia's.
-  ///
-  /// Only the alpha of `src` is read, and `dest` gets premultiplied alpha. Both are `width` pixels
-  /// wide and the same length, and nothing is done when they are less than 3x3.
-  pub(super) fn apply(
-    &self,
-    light_source: LightSource,
-    lighting_color: Color,
-    src: &[[u8; 4]],
-    width: usize,
-    dest: &mut [[u8; 4]],
-  ) {
-    let light_factor = |normal: Normal, light_vector: Vector3| {
-      let h = light_vector + Vector3::new(0.0, 0.0, 1.0);
-      let h_length = h.length();
-
-      if h_length.approx_eq(0.0) {
-        return 0.0;
-      }
-
-      let k = if normal.normal.approx_zero() {
-        let n_dot_h = h.z / h_length;
-        if self.specular_exponent.approx_eq(1.0) {
-          n_dot_h
-        } else {
-          n_dot_h.powf(self.specular_exponent)
-        }
-      } else {
-        let mut n = normal.normal * (self.surface_scale / 255.0);
-        n.x *= normal.factor.x;
-        n.y *= normal.factor.y;
-
-        let normal = Vector3::new(n.x, n.y, 1.0);
-
-        let n_dot_h = normal.dot(&h) / normal.length() / h_length;
-        if self.specular_exponent.approx_eq(1.0) {
-          n_dot_h
-        } else {
-          n_dot_h.powf(self.specular_exponent)
-        }
-      };
-
-      self.specular_constant * k
-    };
-
-    apply(
-      light_source,
-      self.surface_scale,
-      lighting_color,
-      &light_factor,
-      calc_specular_alpha,
-      Alpha::new(src, width),
-      dest,
-    );
+  /// The lighting of this primitive, with its light already in the layer's pixels.
+  pub(super) fn lighting(&self, light: LightSource, color: Color, depth: f32) -> Lighting {
+    Lighting::new(
+      Material::Specular {
+        shininess: self.specular_exponent,
+      },
+      light,
+      color,
+      self.specular_constant,
+      self.surface_scale * depth,
+    )
   }
 }
 
-fn apply(
-  light_source: LightSource,
-  surface_scale: f32,
-  lighting_color: Color,
-  light_factor: &dyn Fn(Normal, Vector3) -> f32,
-  calc_alpha: fn(u8, u8, u8) -> u8,
-  src: Alpha,
-  dest: &mut [[u8; 4]],
-) {
-  let Alpha { width, height, .. } = src;
+impl Lighting {
+  /// Blink's `FELighting::CreateImageFilter`, which hands the light to Skia.
+  fn new(material: Material, light: LightSource, color: Color, k: f32, depth: f32) -> Self {
+    let light = match light {
+      LightSource::Distant { azimuth, elevation } => {
+        let (azimuth, elevation) = (azimuth.to_radians(), elevation.to_radians());
 
-  if width < 3 || height < 3 {
+        Light::Distant(unit_direction([
+          azimuth.cos() * elevation.cos(),
+          azimuth.sin() * elevation.cos(),
+          elevation.sin(),
+        ]))
+      }
+      LightSource::Point { x, y, z } => Light::Point([x, y, z]),
+      LightSource::Spot(spot) => {
+        let cone = spot
+          .limiting_cone_angle
+          .filter(|angle| *angle != 0.0 && (-90.0..=90.0).contains(angle))
+          .unwrap_or(90.0);
+
+        Light::Spot {
+          position: [spot.x, spot.y, spot.z],
+          direction: unit_direction([
+            spot.points_at_x - spot.x,
+            spot.points_at_y - spot.y,
+            spot.points_at_z - spot.z,
+          ]),
+          falloff: spot.specular_exponent,
+          cos_cutoff: cone.to_radians().cos(),
+        }
+      }
+    };
+    let Color([red, green, blue, _]) = color;
+    let scale = k * BYTE_TO_FLOAT;
+
+    Self {
+      material,
+      light,
+      color: [red, green, blue].map(|channel| f32::from(channel) * scale),
+      depth,
+    }
+  }
+
+  /// Lights the `window` of `out` from the alpha of `source`, a premultiplied layer `width` pixels
+  /// wide, as Skia's `sk_normal` and `sk_lighting` shaders do. Samples clamp to `edges`, and read
+  /// transparent past the layer.
+  pub(super) fn apply(
+    &self,
+    source: &[[u8; 4]],
+    width: usize,
+    window: Rect<usize>,
+    edges: Rect<isize>,
+    out: &mut [[u8; 4]],
+  ) {
+    let span = window.right.saturating_sub(window.left);
+
+    if span == 0 || window.bottom <= window.top {
+      return;
+    }
+
+    let mut rows = [(); 3].map(|_| vec![0.0_f32; span + 2]);
+    let mut row_labels = [None; 3];
+    let mut normals = vec![[0.0_f32; 3]; span];
+    let mut to_light = vec![[0.0_f32; 3]; span];
+    let mut scales = vec![1.0_f32; span];
+
+    for y in window.top..window.bottom {
+      for dy in -1..=1 {
+        let row = y as isize + dy;
+        let slot = row.rem_euclid(3) as usize;
+
+        if row_labels[slot] != Some(row) {
+          alpha_row(
+            source,
+            width,
+            edges,
+            window.left as isize - 1,
+            row,
+            &mut rows[slot],
+          );
+          row_labels[slot] = Some(row);
+        }
+      }
+
+      let slot = |dy: isize| (y as isize + dy).rem_euclid(3) as usize;
+      let (above, middle, below) = (&rows[slot(-1)], &rows[slot(0)], &rows[slot(1)]);
+
+      // `$normal_filter`: the Sobel kernel's right column less its left, and bottom row less its top.
+      for (column, normal) in normals.iter_mut().enumerate() {
+        let column_sum = |x: usize| 0.25 * above[x] + 0.5 * middle[x] + 0.25 * below[x];
+        let row_sum =
+          |row: &[f32]| 0.25 * row[column] + 0.5 * row[column + 1] + 0.25 * row[column + 2];
+        let nx = column_sum(column + 2) - column_sum(column);
+        let ny = row_sum(below) - row_sum(above);
+
+        *normal = normalize([-self.depth * nx, -self.depth * ny, 1.0]);
+      }
+
+      // `$surface_to_light` and `$spotlight_scale`.
+      let surface = |column: usize| {
+        [
+          (window.left + column) as f32 + 0.5,
+          y as f32 + 0.5,
+          self.depth * middle[column + 1],
+        ]
+      };
+
+      match self.light {
+        Light::Distant(direction) => to_light.fill(direction),
+        Light::Point(position) => {
+          for (column, to_light) in to_light.iter_mut().enumerate() {
+            *to_light = normalize(sub(position, surface(column)));
+          }
+        }
+        Light::Spot {
+          position,
+          direction,
+          falloff,
+          cos_cutoff,
+        } => {
+          for (column, (to_light, scale)) in to_light.iter_mut().zip(&mut scales).enumerate() {
+            *to_light = normalize(sub(position, surface(column)));
+
+            let cos_angle = -dot(*to_light, direction);
+
+            *scale = if cos_angle < cos_cutoff {
+              0.0
+            } else if cos_angle < cos_cutoff + CONE_FADE {
+              cos_angle.powf(falloff) * (cos_angle - cos_cutoff) / CONE_FADE
+            } else {
+              cos_angle.powf(falloff)
+            };
+          }
+        }
+      }
+
+      // `$compute_lighting`.
+      let line = &mut out[y * width + window.left..][..span];
+      let lit = normals.iter().zip(&to_light).zip(&scales);
+
+      match self.material {
+        Material::Diffuse => {
+          for (pixel, ((normal, to_light), scale)) in line.iter_mut().zip(lit) {
+            let coefficient = dot(*normal, *to_light) * scale;
+            let [red, green, blue] = self
+              .color
+              .map(|channel| (coefficient * channel).clamp(0.0, 1.0));
+
+            *pixel = to_bytes([red, green, blue, 1.0]);
+          }
+        }
+        Material::Specular { shininess } => {
+          for (pixel, ((normal, to_light), scale)) in line.iter_mut().zip(lit) {
+            let half_way = normalize([to_light[0], to_light[1], to_light[2] + 1.0]);
+            let coefficient = dot(*normal, half_way).powf(shininess) * scale;
+            let [red, green, blue] = self
+              .color
+              .map(|channel| (coefficient * channel).clamp(0.0, 1.0));
+
+            *pixel = to_bytes([red, green, blue, red.max(green).max(blue)]);
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Fills `alpha` with the alpha of `source` along `row` from `left` on, clamped to `edges` and
+/// transparent past the layer.
+fn alpha_row(
+  source: &[[u8; 4]],
+  width: usize,
+  edges: Rect<isize>,
+  left: isize,
+  row: isize,
+  alpha: &mut [f32],
+) {
+  let height = (source.len() / width) as isize;
+  let row = row.clamp(edges.top, edges.bottom - 1);
+
+  if !(0..height).contains(&row) {
+    alpha.fill(0.0);
     return;
   }
 
-  // `feDistantLight` has a fixed vector, so calculate it beforehand.
-  let mut light_vector = match light_source {
-    LightSource::Distant { azimuth, elevation } => {
-      let azimuth = azimuth.to_radians();
-      let elevation = elevation.to_radians();
-      Vector3::new(
-        azimuth.cos() * elevation.cos(),
-        azimuth.sin() * elevation.cos(),
-        elevation.sin(),
-      )
-    }
-    _ => Vector3::new(1.0, 1.0, 1.0),
-  };
+  let line = &source[row as usize * width..][..width];
 
-  let mut calc = |nx, ny, normal: Normal| {
-    match light_source {
-      LightSource::Distant { .. } => {}
-      LightSource::Point { x, y, z } => {
-        let nz = src.at(nx, ny) as f32 / 255.0 * surface_scale;
-        let origin = Vector3::new(x, y, z);
-        let v = origin - Vector3::new(nx as f32, ny as f32, nz);
-        light_vector = v.normalized().unwrap_or(v);
-      }
-      LightSource::Spot(ref light) => {
-        let nz = src.at(nx, ny) as f32 / 255.0 * surface_scale;
-        let origin = Vector3::new(light.x, light.y, light.z);
-        let v = origin - Vector3::new(nx as f32, ny as f32, nz);
-        light_vector = v.normalized().unwrap_or(v);
-      }
-    }
+  for (offset, alpha) in alpha.iter_mut().enumerate() {
+    let x = (left + offset as isize).clamp(edges.left, edges.right - 1);
 
-    let light_color = light_source.color(lighting_color, light_vector);
-    let factor = light_factor(normal, light_vector);
-
-    let compute = |x| ((x as f32 * factor).clamp(0.0, 255.0) + 0.5) as u8;
-
-    let Color([red, green, blue, _]) = light_color;
-    let r = compute(red);
-    let g = compute(green);
-    let b = compute(blue);
-    let a = calc_alpha(r, g, b);
-
-    dest[ny * width + nx] = [r, g, b, a];
-  };
-
-  calc(0, 0, top_left_normal(src));
-  calc(width - 1, 0, top_right_normal(src));
-  calc(0, height - 1, bottom_left_normal(src));
-  calc(width - 1, height - 1, bottom_right_normal(src));
-
-  for x in 1..width - 1 {
-    calc(x, 0, top_row_normal(src, x));
-    calc(x, height - 1, bottom_row_normal(src, x));
-  }
-
-  for y in 1..height - 1 {
-    calc(0, y, left_column_normal(src, y));
-    calc(width - 1, y, right_column_normal(src, y));
-  }
-
-  for y in 1..height - 1 {
-    for x in 1..width - 1 {
-      calc(x, y, interior_normal(src, x, y));
-    }
+    *alpha = usize::try_from(x)
+      .ok()
+      .and_then(|x| line.get(x))
+      .map_or(0.0, |pixel| f32::from(pixel[3]) * BYTE_TO_FLOAT);
   }
 }
 
-impl LightSource {
-  fn color(&self, lighting_color: Color, light_vector: Vector3) -> Color {
-    match *self {
-      LightSource::Distant { .. } | LightSource::Point { .. } => lighting_color,
-      LightSource::Spot(ref light) => {
-        let origin = Vector3::new(light.x, light.y, light.z);
-        let direction = Vector3::new(light.points_at_x, light.points_at_y, light.points_at_z);
-        let direction = direction - origin;
-        let direction = direction.normalized().unwrap_or(direction);
-        let minus_l_dot_s = -light_vector.dot(&direction);
-        if minus_l_dot_s <= 0.0 {
-          return Color::black();
-        }
-
-        if let Some(limiting_cone_angle) = light.limiting_cone_angle
-          && minus_l_dot_s < limiting_cone_angle.to_radians().cos()
-        {
-          return Color::black();
-        }
-
-        let factor = minus_l_dot_s.powf(light.specular_exponent);
-        let compute = |x| ((x as f32 * factor).clamp(0.0, 255.0) + 0.5) as u8;
-
-        let Color([red, green, blue, _]) = lighting_color;
-
-        Color([compute(red), compute(green), compute(blue), 255])
-      }
-    }
-  }
+fn to_bytes(color: [f32; 4]) -> [u8; 4] {
+  color.map(|channel| (channel * 255.0 + 0.5) as u8)
 }
 
-fn top_left_normal(img: Alpha) -> Normal {
-  let center = img.at(0, 0);
-  let right = img.at(1, 0);
-  let bottom = img.at(0, 1);
-  let bottom_right = img.at(1, 1);
-
-  Normal::new(
-    FACTOR_2_3,
-    FACTOR_2_3,
-    -2 * center + 2 * right - bottom + bottom_right,
-    -2 * center - right + 2 * bottom + bottom_right,
-  )
+fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+  a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
-fn top_right_normal(img: Alpha) -> Normal {
-  let left = img.at(img.width - 2, 0);
-  let center = img.at(img.width - 1, 0);
-  let bottom_left = img.at(img.width - 2, 1);
-  let bottom = img.at(img.width - 1, 1);
-
-  Normal::new(
-    FACTOR_2_3,
-    FACTOR_2_3,
-    -2 * left + 2 * center - bottom_left + bottom,
-    -left - 2 * center + bottom_left + 2 * bottom,
-  )
+fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+  [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
-fn bottom_left_normal(img: Alpha) -> Normal {
-  let top = img.at(0, img.height - 2);
-  let top_right = img.at(1, img.height - 2);
-  let center = img.at(0, img.height - 1);
-  let right = img.at(1, img.height - 1);
+/// SkSL's `normalize`, which multiplies by the inverse length.
+fn normalize(vector: [f32; 3]) -> [f32; 3] {
+  let inverse = 1.0 / dot(vector, vector).sqrt();
 
-  Normal::new(
-    FACTOR_2_3,
-    FACTOR_2_3,
-    -top + top_right - 2 * center + 2 * right,
-    -2 * top - top_right + 2 * center + right,
-  )
+  vector.map(|component| component * inverse)
 }
 
-fn bottom_right_normal(img: Alpha) -> Normal {
-  let top_left = img.at(img.width - 2, img.height - 2);
-  let top = img.at(img.width - 1, img.height - 2);
-  let left = img.at(img.width - 2, img.height - 1);
-  let center = img.at(img.width - 1, img.height - 1);
+/// A light direction as Skia's `make_lighting_shader` sets it up: unit length, or zero for a zero
+/// vector.
+fn unit_direction(vector: [f32; 3]) -> [f32; 3] {
+  let length = dot(vector, vector).sqrt();
+  let inverse = if length > 0.0 { 1.0 / length } else { 0.0 };
 
-  Normal::new(
-    FACTOR_2_3,
-    FACTOR_2_3,
-    -top_left + top - 2 * left + 2 * center,
-    -top_left - 2 * top + left + 2 * center,
-  )
-}
-
-fn top_row_normal(img: Alpha, x: usize) -> Normal {
-  let left = img.at(x - 1, 0);
-  let center = img.at(x, 0);
-  let right = img.at(x + 1, 0);
-  let bottom_left = img.at(x - 1, 1);
-  let bottom = img.at(x, 1);
-  let bottom_right = img.at(x + 1, 1);
-
-  Normal::new(
-    FACTOR_1_3,
-    FACTOR_1_2,
-    -2 * left + 2 * right - bottom_left + bottom_right,
-    -left - 2 * center - right + bottom_left + 2 * bottom + bottom_right,
-  )
-}
-
-fn bottom_row_normal(img: Alpha, x: usize) -> Normal {
-  let top_left = img.at(x - 1, img.height - 2);
-  let top = img.at(x, img.height - 2);
-  let top_right = img.at(x + 1, img.height - 2);
-  let left = img.at(x - 1, img.height - 1);
-  let center = img.at(x, img.height - 1);
-  let right = img.at(x + 1, img.height - 1);
-
-  Normal::new(
-    FACTOR_1_3,
-    FACTOR_1_2,
-    -top_left + top_right - 2 * left + 2 * right,
-    -top_left - 2 * top - top_right + left + 2 * center + right,
-  )
-}
-
-fn left_column_normal(img: Alpha, y: usize) -> Normal {
-  let top = img.at(0, y - 1);
-  let top_right = img.at(1, y - 1);
-  let center = img.at(0, y);
-  let right = img.at(1, y);
-  let bottom = img.at(0, y + 1);
-  let bottom_right = img.at(1, y + 1);
-
-  Normal::new(
-    FACTOR_1_2,
-    FACTOR_1_3,
-    -top + top_right - 2 * center + 2 * right - bottom + bottom_right,
-    -2 * top - top_right + 2 * bottom + bottom_right,
-  )
-}
-
-fn right_column_normal(img: Alpha, y: usize) -> Normal {
-  let top_left = img.at(img.width - 2, y - 1);
-  let top = img.at(img.width - 1, y - 1);
-  let left = img.at(img.width - 2, y);
-  let center = img.at(img.width - 1, y);
-  let bottom_left = img.at(img.width - 2, y + 1);
-  let bottom = img.at(img.width - 1, y + 1);
-
-  Normal::new(
-    FACTOR_1_2,
-    FACTOR_1_3,
-    -top_left + top - 2 * left + 2 * center - bottom_left + bottom,
-    -top_left - 2 * top + bottom_left + 2 * bottom,
-  )
-}
-
-fn interior_normal(img: Alpha, x: usize, y: usize) -> Normal {
-  let top_left = img.at(x - 1, y - 1);
-  let top = img.at(x, y - 1);
-  let top_right = img.at(x + 1, y - 1);
-  let left = img.at(x - 1, y);
-  let right = img.at(x + 1, y);
-  let bottom_left = img.at(x - 1, y + 1);
-  let bottom = img.at(x, y + 1);
-  let bottom_right = img.at(x + 1, y + 1);
-
-  Normal::new(
-    FACTOR_1_4,
-    FACTOR_1_4,
-    -top_left + top_right - 2 * left + 2 * right - bottom_left + bottom_right,
-    -top_left - 2 * top - top_right + bottom_left + 2 * bottom + bottom_right,
-  )
-}
-
-fn calc_diffuse_alpha(_: u8, _: u8, _: u8) -> u8 {
-  255
-}
-
-fn calc_specular_alpha(r: u8, g: u8, b: u8) -> u8 {
-  use core::cmp::max;
-  max(max(r, g), b)
+  vector.map(|component| component * inverse)
 }

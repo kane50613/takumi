@@ -9,9 +9,9 @@ use std::{f32::consts::SQRT_2, rc::Rc};
 use tiny_skia::{BlendMode as TinyBlendMode, IntRect, Pixmap, PixmapPaint, PixmapRef, Transform};
 
 use super::{
-  ColorSpace, CompositeOperator, ConvolveMatrix, DiffuseLighting, DisplacementMap, DropShadow,
-  Input, Kind, LightSource, MorphologyOperator, Primitive, SpecularLighting, SpotLight, SvgFilter,
-  Turbulence, composite, turbulence,
+  ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,
+  LightSource, MorphologyOperator, Primitive, SpotLight, SvgFilter, Turbulence, composite,
+  lighting::Lighting, turbulence,
 };
 use crate::{
   blur::{MIN_SIGMA, blur_rgba_axes},
@@ -495,8 +495,22 @@ impl Run<'_> {
       } => self.morphology(*operator, (*radius_x, *radius_y), next()?, space),
       Kind::DisplacementMap(fe) => self.displacement_map(fe, next()?, next()?, space),
       Kind::Turbulence(fe) => self.turbulence(fe, window, space),
-      Kind::DiffuseLighting(fe) => self.diffuse_lighting(fe, next()?, space),
-      Kind::SpecularLighting(fe) => self.specular_lighting(fe, next()?, space),
+      Kind::DiffuseLighting(fe) => self.lighting(
+        |light, color, depth| fe.lighting(light, color, depth),
+        fe.light_source,
+        fe.lighting_color,
+        next()?,
+        space,
+        subregion,
+      ),
+      Kind::SpecularLighting(fe) => self.lighting(
+        |light, color, depth| fe.lighting(light, color, depth),
+        fe.light_source,
+        fe.lighting_color,
+        next()?,
+        space,
+        subregion,
+      ),
     }
   }
 
@@ -698,48 +712,51 @@ impl Run<'_> {
     Some(Image::new(pixmap, space))
   }
 
-  fn diffuse_lighting(
+  /// Lights `input`, clamping its samples to the edges Skia's `SkLightingImageFilter` picks: the
+  /// window's edge where the input ends there, and one pixel past the window elsewhere.
+  fn lighting(
     &self,
-    fe: &DiffuseLighting,
+    lighting: impl FnOnce(LightSource, Color, f32) -> Lighting,
+    light: LightSource,
+    lighting_color: Color,
     input: Image,
     space: ColorSpace,
+    subregion: Rect<i32>,
   ) -> Option<Image> {
     let mut pixmap = input.blank_like()?;
-    let light_source = self.light_source(fe.light_source);
     let width = pixmap.width() as usize;
+    let window = self.window(subregion);
+    let local = |rect: Rect<i32>| Rect {
+      left: (rect.left - self.region.left) as isize,
+      right: (rect.right - self.region.left) as isize,
+      top: (rect.top - self.region.top) as isize,
+      bottom: (rect.bottom - self.region.top) as isize,
+    };
+    let (input_rect, output) = (local(input.region), local(subregion));
+    let edge = |input: isize, output: isize, outset: isize| {
+      if input == output { output } else { outset }
+    };
+    let edges = Rect {
+      left: edge(input_rect.left, output.left, output.left - 1),
+      right: edge(input_rect.right, output.right, output.right + 1),
+      top: edge(input_rect.top, output.top, output.top - 1),
+      bottom: edge(input_rect.bottom, output.bottom, output.bottom + 1),
+    };
+    let (light, depth) = self.light_source(light);
 
-    fe.apply(
-      light_source,
-      space.convert_color(fe.lighting_color),
+    lighting(light, space.convert_color(lighting_color), depth).apply(
       input.pixmap.rgba(),
       width,
+      window,
+      edges,
       pixmap.rgba_mut(),
     );
     Some(Image::new(pixmap, space))
   }
 
-  fn specular_lighting(
-    &self,
-    fe: &SpecularLighting,
-    input: Image,
-    space: ColorSpace,
-  ) -> Option<Image> {
-    let mut pixmap = input.blank_like()?;
-    let light_source = self.light_source(fe.light_source);
-    let width = pixmap.width() as usize;
-
-    fe.apply(
-      light_source,
-      space.convert_color(fe.lighting_color),
-      input.pixmap.rgba(),
-      width,
-      pixmap.rgba_mut(),
-    );
-    Some(Image::new(pixmap, space))
-  }
-
-  /// The light source in the pixels of the filter region.
-  fn light_source(&self, source: LightSource) -> LightSource {
+  /// The light source in the pixels of the filter region, and how far a unit of depth reaches
+  /// there.
+  fn light_source(&self, source: LightSource) -> (LightSource, f32) {
     let to_region = |x: f32, y: f32| {
       let (x, y) = self.transform.transform_point(x, y);
 
@@ -748,7 +765,7 @@ impl Run<'_> {
     let (scale_x, scale_y) = self.transform.row_scales();
     let depth = scale_x.hypot(scale_y) / SQRT_2;
 
-    match source {
+    let light = match source {
       LightSource::Distant { .. } => source,
       LightSource::Point { x, y, z } => {
         let (x, y) = to_region(x, y);
@@ -769,7 +786,9 @@ impl Run<'_> {
           ..light
         })
       }
-    }
+    };
+
+    (light, depth)
   }
 }
 
