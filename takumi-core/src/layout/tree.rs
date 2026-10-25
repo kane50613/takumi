@@ -3447,6 +3447,59 @@ mod tests {
     assert_eq!(resolved.box_data.width, Length::Px(10.0).into());
   }
 
+  /// `:dir()` matches HTML's directionality: the `dir` of the nearest element that sets one, and
+  /// left to right where none does.
+  #[test]
+  fn dir_pseudo_class_matches_the_nearest_dir_attribute() {
+    use std::sync::Arc;
+
+    use crate::{
+      context::RenderContext,
+      layout::{node::Node, tree::RenderNode},
+      resources::font::Fonts,
+      style::{Direction, SizingContext},
+    };
+
+    let stylesheet = StyleSheet::parse(
+      r#"
+        :dir(ltr) { width: 10px; }
+        :dir(rtl) { width: 20px; }
+        :dir(sideways) { height: 5px; }
+      "#,
+    )
+    .expect("stylesheet parses");
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([
+        Node::container([Node::text("inherits")]).with_dir(Direction::Rtl),
+        Node::container([Node::container([Node::text("deeper")])]).with_dir(Direction::Rtl),
+      ]),
+    );
+    let children = tree.children.as_deref().expect("block children");
+    let grandchild = &children[1].children.as_deref().expect("block children")[0];
+
+    assert_eq!(tree.context.style.box_data.width, Length::Px(10.0).into());
+    assert_eq!(
+      children[0].context.style.box_data.width,
+      Length::Px(20.0).into()
+    );
+    assert_eq!(
+      grandchild.context.style.box_data.width,
+      Length::Px(20.0).into()
+    );
+    assert_eq!(tree.context.style.box_data.height, Length::Auto.into());
+  }
+
   #[test]
   fn lang_pseudo_class_matches_the_nearest_ancestor_or_self_lang_attribute() {
     use std::sync::Arc;
