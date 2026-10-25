@@ -22,7 +22,7 @@ use crate::{
   },
   style::{Affine, Color, TransferTable, math::mul_div_255},
   svg::approx_eq::ApproxEq,
-  svg_drawing::{SvgDrawing, tiny_blend_mode},
+  svg_drawing::{SvgDrawing, draw_over, tiny_blend_mode},
 };
 
 /// A primitive result: the pixels of the filter region, and where they hold data.
@@ -820,6 +820,11 @@ impl PixmapPixels for Pixmap {
 
 /// Draws `source` over `target` with its top-left corner at `x`, `y`.
 fn draw(target: &mut Pixmap, source: PixmapRef, x: i32, y: i32, blend_mode: TinyBlendMode) {
+  if blend_mode == TinyBlendMode::SourceOver {
+    draw_over(&mut target.as_mut(), source, (x, y), 1.0, None);
+    return;
+  }
+
   target.draw_pixmap(
     x,
     y,

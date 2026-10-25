@@ -12,8 +12,8 @@ use tiny_skia::{
 
 use crate::{
   geometry::PathCommand,
-  resources::image::within_raster_pixel_budget,
-  style::{BlendMode, Color, ImageScalingAlgorithm},
+  resources::{image::within_raster_pixel_budget, image_buffer::composite_premultiplied_over_row},
+  style::{BlendMode, Color, ImageScalingAlgorithm, math::mul_div_255},
   svg_vector::{
     SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
     SvgSpreadMethod, SvgStrokeStyle,
@@ -201,13 +201,27 @@ impl SvgDrawing {
       layer.apply_mask(mask);
     }
 
+    let opacity = composite.opacity.unwrap_or(1.0);
+    let blend_mode = composite.blend.unwrap_or(TinyBlendMode::SourceOver);
+
+    if blend_mode == TinyBlendMode::SourceOver {
+      draw_over(
+        target.pixmap,
+        layer.as_ref(),
+        (bounds.x(), bounds.y()),
+        opacity,
+        target.clip.as_ref(),
+      );
+      return;
+    }
+
     target.pixmap.draw_pixmap(
       bounds.x(),
       bounds.y(),
       layer.as_ref(),
       &PixmapPaint {
-        opacity: composite.opacity.unwrap_or(1.0),
-        blend_mode: composite.blend.unwrap_or(TinyBlendMode::SourceOver),
+        opacity,
+        blend_mode,
         quality: FilterQuality::Nearest,
       },
       Transform::identity(),
@@ -420,6 +434,63 @@ impl SvgDrawing {
     }
     tiny.blend_mode = TinyBlendMode::SourceOver;
     draw(&tiny);
+  }
+}
+
+/// Draws `source` over `target` with its top left at `origin`, at `opacity` and inside `clip` when
+/// there is one, as tiny-skia's source-over `draw_pixmap` does, in integers.
+pub(crate) fn draw_over(
+  target: &mut PixmapMut,
+  source: PixmapRef,
+  (x, y): (i32, i32),
+  opacity: f32,
+  clip: Option<&Mask>,
+) {
+  let (target_width, target_height) = (target.width() as i32, target.height() as i32);
+  let source_width = source.width() as i32;
+  let left = x.max(0);
+  let right = (x + source_width).min(target_width);
+  let top = y.max(0);
+  let bottom = (y + source.height() as i32).min(target_height);
+  let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+
+  if left >= right || top >= bottom || alpha == 0 {
+    return;
+  }
+
+  let span = (right - left) as usize;
+  let target_pixels = target.data_mut().as_chunks_mut::<4>().0;
+  let source_pixels = source.data().as_chunks::<4>().0;
+  let mut covered = Vec::new();
+
+  for row in top..bottom {
+    let target_start = (row * target_width + left) as usize;
+    let source_row = &source_pixels[((row - y) * source_width + left - x) as usize..][..span];
+    let source_row = match (clip, alpha) {
+      (None, u8::MAX) => source_row,
+      (None, alpha) => {
+        covered.clear();
+        covered.extend(
+          source_row
+            .iter()
+            .map(|pixel| pixel.map(|channel| mul_div_255(channel, alpha))),
+        );
+        &covered
+      }
+      (Some(clip), alpha) => {
+        let coverage = &clip.data()[target_start..][..span];
+
+        covered.clear();
+        covered.extend(source_row.iter().zip(coverage).map(|(pixel, &coverage)| {
+          let coverage = mul_div_255(coverage, alpha);
+
+          pixel.map(|channel| mul_div_255(channel, coverage))
+        }));
+        &covered
+      }
+    };
+
+    composite_premultiplied_over_row(&mut target_pixels[target_start..][..span], source_row);
   }
 }
 
