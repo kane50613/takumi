@@ -744,39 +744,19 @@ impl SvgLayout<'_> {
       "dilate" => MorphologyOperator::Dilate,
       _ => MorphologyOperator::Erode,
     };
-    let (mut radius_x, mut radius_y) = (scale.width, scale.height);
-
-    if let Some(list) = self.number_list(fe, "radius") {
-      let (mut x, mut y) = match list.as_slice() {
-        [x, y] => (*x, *y),
-        [x] => (*x, *x),
-        _ => (0.0, 0.0),
-      };
-
-      if approx_zero(x) && approx_zero(y) {
-        (x, y) = (1.0, 1.0);
-      }
-
-      // One radius of zero becomes one, as Chrome and Safari do.
-      if approx_zero(x) && !approx_zero(y) {
-        x = 1.0;
-      }
-
-      if !approx_zero(x) && approx_zero(y) {
-        y = 1.0;
-      }
-
-      // Both radii must be positive.
-      if x.is_sign_positive() && y.is_sign_positive() {
-        (radius_x, radius_y) = (x * scale.width, y * scale.height);
-      }
-    }
+    // `SVGFEMorphologyElement::Build`: a missing or invalid radius is zero, and `FEMorphology`
+    // takes a negative one as zero.
+    let (x, y) = match self.number_list(fe, "radius").as_deref() {
+      Some(&[x, y]) => (x, y),
+      Some(&[x]) => (x, x),
+      _ => (0.0, 0.0),
+    };
 
     Kind::Morphology {
       input,
       operator,
-      radius_x,
-      radius_y,
+      radius_x: x.max(0.0) * scale.width,
+      radius_y: y.max(0.0) * scale.height,
     }
   }
 

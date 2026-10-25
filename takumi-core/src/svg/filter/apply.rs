@@ -639,16 +639,9 @@ impl Run<'_> {
   ) -> Option<Image> {
     let mut pixmap = input.into_color_space(space).take();
     let radius = self.scaled(radius.0, radius.1);
+    let width = pixmap.width() as usize;
 
-    // A radius of zero on either axis clears the result.
-    if radius.x > 0.0 && radius.y > 0.0 {
-      let width = pixmap.width() as usize;
-
-      operator.apply(radius.x, radius.y, pixmap.rgba_mut(), width);
-    } else {
-      pixmap.fill(tiny_skia::Color::TRANSPARENT);
-    }
-
+    operator.apply(radius.x, radius.y, pixmap.rgba_mut(), width);
     Some(Image::new(pixmap, space))
   }
 
