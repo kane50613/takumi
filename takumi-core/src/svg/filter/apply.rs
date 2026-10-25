@@ -18,7 +18,7 @@ use crate::{
   geometry::{Point, Rect},
   resources::{
     image::{MAX_RASTER_PIXELS, within_raster_pixel_budget},
-    image_buffer::{demultiply_pixel, demultiply_rgba_in_place, premultiply_pixel},
+    image_buffer::{demultiply_pixel, premultiply_pixel},
   },
   style::{Affine, Color, TransferTable, math::mul_div_255},
   svg::approx_eq::ApproxEq,
@@ -493,7 +493,7 @@ impl Run<'_> {
         radius_y,
         ..
       } => self.morphology(*operator, (*radius_x, *radius_y), next()?, space),
-      Kind::DisplacementMap(fe) => self.displacement_map(fe, next()?, next()?, space),
+      Kind::DisplacementMap(fe) => self.displacement_map(fe, next()?, next()?, space, window),
       Kind::Turbulence(fe) => self.turbulence(fe, primitive.subregion, window, space),
       Kind::DiffuseLighting(fe) => self.lighting(
         |light, color, depth| fe.lighting(light, color, depth),
@@ -667,18 +667,19 @@ impl Run<'_> {
     source: Image,
     map: Image,
     space: ColorSpace,
+    window: Rect<usize>,
   ) -> Option<Image> {
     let source = source.into_color_space(space);
-    let mut map = map.into_color_space(space).take();
+    let map = map.into_color_space(space);
     let mut pixmap = source.blank_like()?;
     let (sx, sy) = self.transform.row_scales();
 
-    demultiply_rgba_in_place(map.data_mut());
     fe.apply(
       [sx, sy],
       pixmap.width() as usize,
+      window,
       source.pixmap.rgba(),
-      map.rgba(),
+      map.pixmap.rgba(),
       pixmap.rgba_mut(),
     );
     Some(Image::new(pixmap, space))

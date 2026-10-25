@@ -26,3 +26,7 @@ pub(in crate::svg) use self::primitive::{
   DropShadow, EdgeMode, Input, Kernel, Kind, LightSource, MorphologyOperator, Primitive,
   SpecularLighting, SpotLight, Turbulence,
 };
+
+/// Skia's `SkRasterPipeline` reads a byte as a float by this product rather than a division.
+#[cfg(feature = "svg-raster")]
+const BYTE_TO_FLOAT: f32 = 1.0 / 255.0;
