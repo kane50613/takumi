@@ -56,18 +56,22 @@ pub fn blur_alpha_region(
   sigma: f32,
 ) -> Vec<u8> {
   let sigma = if sigma.is_finite() { sigma } else { 0.0 };
-  let region = Window::of(region);
-  let mask_window = Window::of(mask_at);
+  let region = Window::from(region);
+  let mask_window = Window::from(mask_at);
+
+  if mask.len() != mask_window.width() * mask_window.height() {
+    return vec![0; region.width() * region.height()];
+  }
+
+  let source = Raster {
+    left: mask_window.columns.start,
+    top: mask_window.rows.start,
+    width: mask_window.width(),
+    height: mask_window.height(),
+    pixels: mask.as_chunks::<1>().0.to_vec(),
+  };
 
   if sigma > MAX_SIGMA {
-    let pixels = mask.as_chunks::<1>().0.to_vec();
-    let source = Raster {
-      left: mask_window.columns.start,
-      top: mask_window.rows.start,
-      width: mask_window.width(),
-      height: mask_window.height(),
-      pixels,
-    };
     let size = (image.width as usize, image.height as usize);
 
     return rescaled(
@@ -83,55 +87,28 @@ pub fn blur_alpha_region(
 
   // Every pass reads a pixel's neighbours no further than three sigma away, plus a rounding margin.
   let reach = (3.0 * sigma).ceil() as i64 + 4;
-  let image_window = Window::of(Placement {
+  let image_window = Window::from(Placement {
     left: 0,
     top: 0,
     width: image.width,
     height: image.height,
   });
   let crop = region.grown(reach).intersection(&image_window);
-  let mut pixels = vec![[0u8; 1]; crop.width() * crop.height()];
-  let overlap = mask_window.intersection(&crop);
-
-  if !overlap.is_empty() {
-    for row in overlap.rows.clone() {
-      let source = (row - mask_window.rows.start) * mask_window.width() as i64
-        + (overlap.columns.start - mask_window.columns.start);
-      let target = (row - crop.rows.start) * crop.width() as i64
-        + (overlap.columns.start - crop.columns.start);
-      let source = &mask[source as usize..][..overlap.width()];
-
-      for (pixel, &alpha) in pixels[target as usize..][..overlap.width()]
-        .iter_mut()
-        .zip(source)
-      {
-        *pixel = [alpha];
-      }
-    }
-  }
+  let mut cropped = source.within(crop.clone());
 
   blur(
-    &mut pixels,
+    &mut cropped.pixels,
     crop.width(),
     crop.height(),
     Point { x: sigma, y: sigma },
     Rounding::Alpha,
   );
 
-  let inside = region.intersection(&crop);
-  let mut blurred = Vec::with_capacity(inside.width() * inside.height());
-
-  for row in inside.rows.clone() {
-    let start =
-      (row - crop.rows.start) * crop.width() as i64 + (inside.columns.start - crop.columns.start);
-
-    blurred.extend(
-      pixels[start as usize..][..inside.width()]
-        .iter()
-        .map(|pixel| pixel[0]),
-    );
-  }
-  blurred
+  cropped
+    .within(region.intersection(&crop))
+    .pixels
+    .as_flattened()
+    .to_vec()
 }
 
 fn blur<const N: usize>(
@@ -378,8 +355,8 @@ struct Window {
   rows: Range<i64>,
 }
 
-impl Window {
-  fn of(placement: Placement) -> Self {
+impl From<Placement> for Window {
+  fn from(placement: Placement) -> Self {
     let (left, top) = (i64::from(placement.left), i64::from(placement.top));
 
     Self {
@@ -387,7 +364,9 @@ impl Window {
       rows: top..top + i64::from(placement.height),
     }
   }
+}
 
+impl Window {
   /// The pixels `bounds` touches.
   fn covering(bounds: Bounds) -> Self {
     let (left, top) = (bounds.left.floor() as i64, bounds.top.floor() as i64);
@@ -404,10 +383,6 @@ impl Window {
 
   fn height(&self) -> usize {
     (self.rows.end - self.rows.start).max(0) as usize
-  }
-
-  fn is_empty(&self) -> bool {
-    self.width() == 0 || self.height() == 0
   }
 
   fn grown(&self, by: i64) -> Self {
@@ -505,7 +480,7 @@ impl<const N: usize> Raster<N> {
     }
   }
 
-  /// The image on a transparent raster of `window`, which holds it.
+  /// The part of the image `window` covers, on a transparent raster of `window`.
   fn within(self, window: Window) -> Self {
     let (width, height) = (window.width(), window.height());
     let mut pixels = vec![[0u8; N]; width * height];
@@ -978,6 +953,35 @@ mod tests {
     assert_eq!(pixels[3], pixels[5]);
     assert_eq!(pixels[2], pixels[6]);
     assert!(pixels[4][3] > pixels[3][3]);
+  }
+
+  /// A mask that does not fill its placement blurs to a transparent region, as `blur` leaves
+  /// pixels of the wrong length alone.
+  #[test]
+  fn a_short_mask_blurs_to_a_transparent_region() {
+    let mask_at = Placement {
+      left: 2,
+      top: 2,
+      width: 4,
+      height: 4,
+    };
+    let region = Placement {
+      left: 0,
+      top: 0,
+      width: 8,
+      height: 8,
+    };
+    let image = Size {
+      width: 8,
+      height: 8,
+    };
+
+    for sigma in [2.0, MAX_SIGMA + 1.0] {
+      assert_eq!(
+        blur_alpha_region(&[255; 3], mask_at, image, region, sigma),
+        [0; 64]
+      );
+    }
   }
 
   /// A region blurs to the pixels the whole image blurs to, below the sigma limit and past it.
