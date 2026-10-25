@@ -28,6 +28,8 @@ export type ImagesInput =
       fetchCache?: ImageFetchCache;
       /** Decode-cache default for every image this render; a source's own `cache` wins. */
       cache?: NonNullable<ImageLoader["cache"]>;
+      /** Throw on any fetch failure; if `false`, failed images are left out of the render. @default true */
+      throwOnError?: boolean;
     });
 
 /** The managed-renderer plumbing shared by every entry point. */
@@ -164,9 +166,8 @@ async function collectImages(
   options?: PipelineOptions,
 ): Promise<ImageLoader[]> {
   const images = options?.images;
-  const { sources, fetchCache, fetch, timeout, maxBytes, allowUrl, cache } = Array.isArray(images)
-    ? { sources: images }
-    : (images ?? {});
+  const { sources, fetchCache, fetch, timeout, maxBytes, allowUrl, cache, throwOnError } =
+    Array.isArray(images) ? { sources: images } : (images ?? {});
 
   const prepared = await prepareImages({
     node,
@@ -176,6 +177,7 @@ async function collectImages(
     timeout,
     maxBytes,
     allowUrl,
+    throwOnError,
     signal: options?.signal,
   });
 
