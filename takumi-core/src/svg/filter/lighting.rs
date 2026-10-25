@@ -1,8 +1,5 @@
-use super::{DiffuseLighting, LightSource, SpecularLighting};
+use super::{BYTE_TO_FLOAT, DiffuseLighting, LightSource, SpecularLighting};
 use crate::{geometry::Rect, style::Color};
-
-/// Skia's `SkRasterPipeline` reads a byte as a float by this product rather than a division.
-const BYTE_TO_FLOAT: f32 = 1.0 / 255.0;
 
 /// How far past its cutoff a spotlight fades in, Skia's `kConeAAThreshold`.
 const CONE_FADE: f32 = 0.016;

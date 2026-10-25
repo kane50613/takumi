@@ -1,41 +1,51 @@
-// Copyright 2020 the Resvg Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
-
-use super::{ColorChannel, DisplacementMap};
+use super::{BYTE_TO_FLOAT, ColorChannel, DisplacementMap};
+use crate::geometry::Rect;
 
 impl DisplacementMap {
-  /// Blink's `FEDisplacementMap` in `fe_displacement_map.cc`, which Skia runs as
-  /// `SkImageFilters::DisplacementMap`. Approximate: pixels move to the nearest pixel, as in resvg.
+  /// Blink's `FEDisplacementMap` as Skia's `sk_displacement` shader runs it, over the `window` of
+  /// `dest`: each pixel takes the `src` pixel nearest its center moved by the straight `map`
+  /// channels. `scale` is the layer's pixels per user unit on each axis.
   ///
-  /// `map` pixels are straight alpha, `src` any alpha, and `sx` and `sy` the scale of the canvas.
-  /// The slices are `width` pixels wide and have the same length.
+  /// `src` and `map` are premultiplied, and all three are `width` pixels wide and the same length.
   pub(super) fn apply(
     &self,
-    [sx, sy]: [f32; 2],
+    scale: [f32; 2],
     width: usize,
+    window: Rect<usize>,
     src: &[[u8; 4]],
     map: &[[u8; 4]],
     dest: &mut [[u8; 4]],
   ) {
     let height = src.len() / width;
-    let offset = |pixel: &[u8; 4], channel| {
-      let index = match channel {
-        ColorChannel::R => 0,
-        ColorChannel::G => 1,
-        ColorChannel::B => 2,
-        ColorChannel::A => 3,
-      };
-
-      f32::from(pixel[index]) / 255.0 - 0.5
+    let index = |channel| match channel {
+      ColorChannel::R => 0,
+      ColorChannel::G => 1,
+      ColorChannel::B => 2,
+      ColorChannel::A => 3,
     };
+    let (x_channel, y_channel) = (index(self.x_channel), index(self.y_channel));
+    let (scale_x, scale_y) = (scale[0] * self.scale, scale[1] * self.scale);
 
-    for (index, pixel) in map.iter().enumerate() {
-      let (x, y) = (index % width, index / width);
-      let ox = (x as f32 + offset(pixel, self.x_channel) * sx * self.scale).round() as i32;
-      let oy = (y as f32 + offset(pixel, self.y_channel) * sy * self.scale).round() as i32;
+    for y in window.top..window.bottom {
+      for x in window.left..window.right {
+        let pixel = map[y * width + x];
+        let alpha = f32::from(pixel[3]) * BYTE_TO_FLOAT;
+        // `saturate(unpremul(displMap.eval(coord)))`.
+        let straight = |channel: usize| {
+          let value = f32::from(pixel[channel]) * BYTE_TO_FLOAT;
 
-      if (0..width as i32).contains(&ox) && (0..height as i32).contains(&oy) {
-        dest[index] = src[oy as usize * width + ox as usize];
+          if channel == 3 {
+            value
+          } else {
+            (value / alpha.max(0.0001)).clamp(0.0, 1.0)
+          }
+        };
+        let source_x = (x as f32 + 0.5 + scale_x * (straight(x_channel) - 0.5)).floor();
+        let source_y = (y as f32 + 0.5 + scale_y * (straight(y_channel) - 0.5)).floor();
+
+        if (0.0..width as f32).contains(&source_x) && (0.0..height as f32).contains(&source_y) {
+          dest[y * width + x] = src[source_y as usize * width + source_x as usize];
+        }
       }
     }
   }

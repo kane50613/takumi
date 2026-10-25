@@ -1,12 +1,9 @@
-use super::{ConvolveMatrix, EdgeMode};
+use super::{BYTE_TO_FLOAT, ConvolveMatrix, EdgeMode};
 use crate::geometry::Rect;
 
 /// Kernels with fewer cells keep their entries whole, Skia's `kMaxUniformKernelSize`. Larger ones
 /// go through an 8-bit texture.
 const MAX_UNIFORM_CELLS: usize = 28;
-
-/// Skia's `SkRasterPipeline` reads a byte as a float by this product rather than a division.
-const BYTE_TO_FLOAT: f32 = 1.0 / 255.0;
 
 impl ConvolveMatrix {
   /// Blink's `FEConvolveMatrix` as Skia's `SkMatrixConvolutionImageFilter` shader runs it, over
