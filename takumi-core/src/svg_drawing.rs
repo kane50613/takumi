@@ -599,6 +599,20 @@ mod tests {
     )
   }
 
+  /// An SVG in an `image` lays out at the image's rectangle, which its viewport units measure, as
+  /// Blink's `SVGImagePainter::ComputeImageViewportSize` gives it.
+  #[test]
+  fn a_nested_svg_lays_out_at_its_image_rectangle() {
+    let image = draw(
+      r#"<image width="80" height="40" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='50vw' height='50vh' fill='red'/%3E%3C/svg%3E"/>"#,
+      100,
+    );
+
+    assert_eq!(image.pixel(38, 18), [255, 0, 0, 255]);
+    assert_eq!(image.pixel(42, 18), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(38, 22), [0, 0, 0, 0]);
+  }
+
   #[test]
   fn clip_and_opacity_apply_to_a_group() {
     let image = draw(

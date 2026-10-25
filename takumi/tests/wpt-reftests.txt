@@ -3031,9 +3031,6 @@ svg/embedded/
 !svg/embedded/image-embedding-svg-nested-svg-in-foreignobject.html
 !svg/embedded/image-embedding-svg-viewref-with-viewbox.svg
 !svg/embedded/image-embedding-svg-with-near-integral-width.html
-!svg/embedded/image-embedding-svg-with-viewport-units-inline-style.svg
-!svg/embedded/image-embedding-svg-with-viewport-units.svg
-!svg/embedded/image-fractional-width-vertical-fidelity.svg
 svg/extensibility/foreignObject/composited-inside-object.html
 svg/extensibility/foreignObject/compositing-backface-visibility.html
 svg/extensibility/foreignObject/foreign-object-scale-scroll.html
