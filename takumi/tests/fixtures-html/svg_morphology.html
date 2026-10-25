@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_morphology</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 480px; height: 140px">
+    <svg width="480" height="140" style="display: block; background: white">
+      <defs>
+        <filter id="erode"><feMorphology operator="erode" radius="3" /></filter>
+        <filter id="dilate"><feMorphology operator="dilate" radius="2.6" /></filter>
+        <filter id="one-axis"><feMorphology operator="dilate" radius="0 6" /></filter>
+        <filter id="edge" x="0" y="0" width="1" height="1">
+          <feFlood flood-color="rgb(37, 99, 235)" />
+          <feMorphology operator="erode" radius="8" />
+        </filter>
+      </defs>
+      <g filter="url(#erode)">
+        <rect x="20" y="30" width="80" height="80" rx="12" fill="rgb(220, 38, 38)" />
+        <rect x="40" y="50" width="40" height="6" fill="rgb(22, 163, 74)" />
+      </g>
+      <g filter="url(#dilate)">
+        <circle cx="180" cy="70" r="30" fill="none" stroke="rgb(124, 58, 237)" stroke-width="2" />
+      </g>
+      <g filter="url(#one-axis)">
+        <path d="M260 40h80M260 70h80M260 100h80" stroke="rgb(234, 88, 12)" stroke-width="2" />
+      </g>
+      <rect x="380" y="30" width="80" height="80" filter="url(#edge)" />
+    </svg>
+  </body>
+</html>
