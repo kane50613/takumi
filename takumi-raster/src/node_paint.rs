@@ -33,10 +33,10 @@ use super::{
 };
 use crate::{
   BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, PlacedMask, Placement, Result,
-  Stroke, Style, alpha_mask, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage,
+  Stroke, Style, alpha_mask, attenuate_alpha_by_mask, bitmap_coverage, blur_alpha_region_bytes,
   cached_glyph_mask, checked_area, draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
-  render_mask,
+  placement_overlap, render_mask,
   style::{Affine, BlendMode},
   union_alpha_masks,
 };
@@ -401,29 +401,40 @@ impl<'c> CanvasDevice<'c> {
     let padding = BlurType::Shadow.extent(blur_radius) as u32;
     let width = placement.width.saturating_add(padding * 2);
     let height = placement.height.saturating_add(padding * 2);
-    let Some(area) = checked_area(width, height, 1) else {
-      return;
-    };
-    let mut blurred = vec![0; area];
 
-    for (row, source) in mask.chunks_exact(placement.width as usize).enumerate() {
-      let start = (row + padding as usize) * width as usize + padding as usize;
-
-      blurred[start..start + source.len()].copy_from_slice(source);
-    }
-
-    if apply_blur_alpha_bytes(&mut blurred, width, height, blur_radius, BlurType::Shadow).is_err() {
+    if checked_area(width, height, 1).is_none() {
       return;
     }
 
-    let placement = Placement {
+    let padded = Placement {
       left: placement.left - padding as i32,
       top: placement.top - padding as i32,
       width,
       height,
     };
+    let Some(overlap) = placement_overlap(padded, self.canvas.viewport().placement()) else {
+      return;
+    };
+    let region = Placement {
+      left: overlap.lhs_offset.x as i32,
+      top: overlap.lhs_offset.y as i32,
+      ..overlap.placement
+    };
+    let source = Placement {
+      left: padding as i32,
+      top: padding as i32,
+      ..placement
+    };
+    let blurred = blur_alpha_region_bytes(
+      &mask,
+      source,
+      Size { width, height },
+      region,
+      blur_radius,
+      BlurType::Shadow,
+    );
 
-    self.draw_coverage((blurred, placement), color);
+    self.draw_coverage((blurred, overlap.placement), color);
   }
 
   /// Paints the shadow the open `shadow` casts from `commands` drawn as `style` under `transform`.

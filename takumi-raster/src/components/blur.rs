@@ -1,4 +1,7 @@
-use takumi_core::blur::{blur_alpha, blur_rgba};
+use takumi_core::{
+  blur::{blur_alpha, blur_alpha_region, blur_rgba},
+  geometry::{Placement, Size},
+};
 
 use crate::{Error, Result, checked_area};
 
@@ -29,6 +32,19 @@ pub(crate) fn apply_blur_alpha_bytes(
     blur_type.to_sigma(radius),
   );
   Ok(())
+}
+
+/// The pixels of `region` once a CSS blur `radius` blurs `mask` at `mask_at` in a transparent
+/// `image`, which are all that is allocated of it.
+pub(crate) fn blur_alpha_region_bytes(
+  mask: &[u8],
+  mask_at: Placement,
+  image: Size<u32>,
+  region: Placement,
+  radius: f32,
+  blur_type: BlurType,
+) -> Vec<u8> {
+  blur_alpha_region(mask, mask_at, image, region, blur_type.to_sigma(radius))
 }
 
 /// Blurs premultiplied RGBA pixels in place by a CSS blur `radius`.

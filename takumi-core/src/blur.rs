@@ -1,12 +1,12 @@
 //! Gaussian blur as Skia's raster `SkBlurEngine` runs it for Chrome's filters and text shadows.
 //! Follows Skia under the notice in LICENSE-CHROMIUM.
 
-use std::{array, f32::consts::PI};
+use std::{array, f32::consts::PI, ops::Range};
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
-use crate::geometry::Point;
+use crate::geometry::{Placement, Point, Size};
 
 /// Smallest sigma that blurs, Skia's `SkBlurEngine::IsEffectivelyIdentity`.
 pub(crate) const MIN_SIGMA: f32 = 0.03;
@@ -42,6 +42,96 @@ pub fn blur_alpha(alpha: &mut [u8], width: usize, height: usize, sigma: f32) {
     Point { x: sigma, y: sigma },
     Rounding::Alpha,
   );
+}
+
+/// Blurs `mask`, placed at `mask_at` in an `image` of transparent pixels, and returns the pixels
+/// `region` covers as [`blur_alpha`] leaves them, without allocating or blurring the rest.
+///
+/// `mask_at` and `region` lie in the image, with the top-left pixel at the origin.
+pub fn blur_alpha_region(
+  mask: &[u8],
+  mask_at: Placement,
+  image: Size<u32>,
+  region: Placement,
+  sigma: f32,
+) -> Vec<u8> {
+  let sigma = if sigma.is_finite() { sigma } else { 0.0 };
+  let region = Window::of(region);
+  let mask_window = Window::of(mask_at);
+
+  if sigma > MAX_SIGMA {
+    let pixels = mask.as_chunks::<1>().0.to_vec();
+    let source = Raster {
+      left: mask_window.columns.start,
+      top: mask_window.rows.start,
+      width: mask_window.width(),
+      height: mask_window.height(),
+      pixels,
+    };
+    let size = (image.width as usize, image.height as usize);
+
+    return rescaled(
+      source,
+      size,
+      &region,
+      Point { x: sigma, y: sigma },
+      Rounding::Alpha,
+    )
+    .as_flattened()
+    .to_vec();
+  }
+
+  // Every pass reads a pixel's neighbours no further than three sigma away, plus a rounding margin.
+  let reach = (3.0 * sigma).ceil() as i64 + 4;
+  let image_window = Window::of(Placement {
+    left: 0,
+    top: 0,
+    width: image.width,
+    height: image.height,
+  });
+  let crop = region.grown(reach).intersection(&image_window);
+  let mut pixels = vec![[0u8; 1]; crop.width() * crop.height()];
+  let overlap = mask_window.intersection(&crop);
+
+  if !overlap.is_empty() {
+    for row in overlap.rows.clone() {
+      let source = (row - mask_window.rows.start) * mask_window.width() as i64
+        + (overlap.columns.start - mask_window.columns.start);
+      let target = (row - crop.rows.start) * crop.width() as i64
+        + (overlap.columns.start - crop.columns.start);
+      let source = &mask[source as usize..][..overlap.width()];
+
+      for (pixel, &alpha) in pixels[target as usize..][..overlap.width()]
+        .iter_mut()
+        .zip(source)
+      {
+        *pixel = [alpha];
+      }
+    }
+  }
+
+  blur(
+    &mut pixels,
+    crop.width(),
+    crop.height(),
+    Point { x: sigma, y: sigma },
+    Rounding::Alpha,
+  );
+
+  let inside = region.intersection(&crop);
+  let mut blurred = Vec::with_capacity(inside.width() * inside.height());
+
+  for row in inside.rows.clone() {
+    let start =
+      (row - crop.rows.start) * crop.width() as i64 + (inside.columns.start - crop.columns.start);
+
+    blurred.extend(
+      pixels[start as usize..][..inside.width()]
+        .iter()
+        .map(|pixel| pixel[0]),
+    );
+  }
+  blurred
 }
 
 fn blur<const N: usize>(
@@ -121,8 +211,6 @@ fn for_each_with<T: Send, S>(
 }
 
 /// Shrinks, blurs and scales back past `MAX_SIGMA`, as Skia's `FilterResult::Builder::blur` does.
-///
-/// Approximate: resamples in `f32`, where Skia's raster pipeline may filter at eight bits.
 fn blur_rescaled<const N: usize>(
   pixels: &mut [[u8; N]],
   width: usize,
@@ -130,6 +218,32 @@ fn blur_rescaled<const N: usize>(
   sigma: Point<f32>,
   rounding: Rounding,
 ) {
+  let source = Raster {
+    left: 0,
+    top: 0,
+    width,
+    height,
+    pixels: pixels.to_vec(),
+  };
+  let whole = Window {
+    columns: 0..width as i64,
+    rows: 0..height as i64,
+  };
+
+  pixels.copy_from_slice(&rescaled(source, (width, height), &whole, sigma, rounding));
+}
+
+/// The pixels of `region` that `source`, in an image of `size` otherwise transparent, blurs to
+/// past `MAX_SIGMA`.
+///
+/// Approximate: resamples in `f32`, where Skia's raster pipeline may filter at eight bits.
+fn rescaled<const N: usize>(
+  source: Raster<N>,
+  (width, height): (usize, usize),
+  region: &Window,
+  sigma: Point<f32>,
+  rounding: Rounding,
+) -> Vec<[u8; N]> {
   let scale = Point {
     x: (MAX_SIGMA / sigma.x).min(1.0),
     y: (MAX_SIGMA / sigma.y).min(1.0),
@@ -138,20 +252,14 @@ fn blur_rescaled<const N: usize>(
     x: downscale_step_count(scale.x),
     y: downscale_step_count(scale.y),
   };
-  let source = Bounds {
+  let image_bounds = Bounds {
     left: 0.0,
     top: 0.0,
     right: width as f32,
     bottom: height as f32,
   };
-  let mut bounds = source;
-  let mut image = Raster {
-    left: 0,
-    top: 0,
-    width,
-    height,
-    pixels: pixels.to_vec(),
-  };
+  let mut bounds = image_bounds;
+  let mut image = source;
 
   for step in (0..steps.x.max(steps.y)).rev() {
     let factor = |steps: u32, scale: f32, source: f32, bounds: f32| {
@@ -165,17 +273,18 @@ fn blur_rescaled<const N: usize>(
     };
     let target = scale_about_center(
       bounds,
-      factor(steps.x, scale.x, source.width(), bounds.width()),
-      factor(steps.y, scale.y, source.height(), bounds.height()),
+      factor(steps.x, scale.x, image_bounds.width(), bounds.width()),
+      factor(steps.y, scale.y, image_bounds.height(), bounds.height()),
     );
 
     image = image.resampled(bounds, target);
     bounds = target;
   }
 
+  let mut image = image.within(Window::covering(bounds));
   let low_sigma = Point {
-    x: (sigma.x * bounds.width() / source.width()).min(MAX_SIGMA),
-    y: (sigma.y * bounds.height() / source.height()).min(MAX_SIGMA),
+    x: (sigma.x * bounds.width() / image_bounds.width()).min(MAX_SIGMA),
+    y: (sigma.y * bounds.height() / image_bounds.height()).min(MAX_SIGMA),
   };
 
   blur(
@@ -186,14 +295,17 @@ fn blur_rescaled<const N: usize>(
     rounding,
   );
 
-  for (index, pixel) in pixels.iter_mut().enumerate() {
-    let center = Point {
-      x: (index % width) as f32 + 0.5,
-      y: (index / width) as f32 + 0.5,
-    };
+  region
+    .pixels()
+    .map(|(column, row)| {
+      let center = Point {
+        x: column as f32 + 0.5,
+        y: row as f32 + 0.5,
+      };
 
-    *pixel = image.sample(map_between(center, source, bounds));
-  }
+      image.sample(map_between(center, image_bounds, bounds))
+    })
+    .collect()
 }
 
 /// Skia's `downscale_step_count`.
@@ -259,6 +371,91 @@ impl Bounds {
   }
 }
 
+/// A rectangle of pixels by its columns and rows.
+#[derive(Clone)]
+struct Window {
+  columns: Range<i64>,
+  rows: Range<i64>,
+}
+
+impl Window {
+  fn of(placement: Placement) -> Self {
+    let (left, top) = (i64::from(placement.left), i64::from(placement.top));
+
+    Self {
+      columns: left..left + i64::from(placement.width),
+      rows: top..top + i64::from(placement.height),
+    }
+  }
+
+  /// The pixels `bounds` touches.
+  fn covering(bounds: Bounds) -> Self {
+    let (left, top) = (bounds.left.floor() as i64, bounds.top.floor() as i64);
+
+    Self {
+      columns: left..(bounds.right.ceil() as i64).max(left),
+      rows: top..(bounds.bottom.ceil() as i64).max(top),
+    }
+  }
+
+  fn width(&self) -> usize {
+    (self.columns.end - self.columns.start).max(0) as usize
+  }
+
+  fn height(&self) -> usize {
+    (self.rows.end - self.rows.start).max(0) as usize
+  }
+
+  fn is_empty(&self) -> bool {
+    self.width() == 0 || self.height() == 0
+  }
+
+  fn grown(&self, by: i64) -> Self {
+    Self {
+      columns: self.columns.start - by..self.columns.end + by,
+      rows: self.rows.start - by..self.rows.end + by,
+    }
+  }
+
+  fn intersection(&self, other: &Self) -> Self {
+    Self {
+      columns: self.columns.start.max(other.columns.start)..self.columns.end.min(other.columns.end),
+      rows: self.rows.start.max(other.rows.start)..self.rows.end.min(other.rows.end),
+    }
+  }
+
+  /// Each pixel's column and row, row by row.
+  fn pixels(&self) -> impl Iterator<Item = (i64, i64)> + '_ {
+    self
+      .rows
+      .clone()
+      .flat_map(|row| self.columns.clone().map(move |column| (column, row)))
+  }
+}
+
+/// The pixels along one axis of `target` whose taps can land on the `source` pixels from its
+/// origin, when `from` (the edge and extent) maps onto `to`.
+fn reaching(
+  (origin, size): (i64, usize),
+  (from_edge, from_extent): (f32, f32),
+  (to_edge, to_extent): (f32, f32),
+  target: &Range<i64>,
+) -> Range<i64> {
+  let map = |position: f32| to_edge + (position - from_edge) * to_extent / from_extent;
+  let (low, high) = (
+    map(origin as f32 - 1.0),
+    map((origin + size as i64) as f32 + 1.0),
+  );
+
+  if !low.is_finite() || !high.is_finite() {
+    return target.clone();
+  }
+
+  let (low, high) = (low.min(high), low.max(high));
+
+  (low.floor() as i64 - 2).max(target.start)..(high.ceil() as i64 + 2).min(target.end)
+}
+
 /// An image whose top-left pixel sits at `left`, `top`.
 struct Raster<const N: usize> {
   left: i64,
@@ -269,16 +466,30 @@ struct Raster<const N: usize> {
 }
 
 impl<const N: usize> Raster<N> {
-  /// The image mapped from `from` onto the pixels `to` touches, filtered bilinearly.
+  /// The image mapped from `from` onto the pixels `to` touches, filtered bilinearly, as far as
+  /// its taps reach this image and no further.
   fn resampled(&self, from: Bounds, to: Bounds) -> Self {
-    let (left, top) = (to.left.floor() as i64, to.top.floor() as i64);
-    let width = (to.right.ceil() as i64 - left).max(0) as usize;
-    let height = (to.bottom.ceil() as i64 - top).max(0) as usize;
-    let pixels = (0..width * height)
-      .map(|index| {
+    let touched = Window::covering(to);
+    let window = Window {
+      columns: reaching(
+        (self.left, self.width),
+        (from.left, from.width()),
+        (to.left, to.width()),
+        &touched.columns,
+      ),
+      rows: reaching(
+        (self.top, self.height),
+        (from.top, from.height()),
+        (to.top, to.height()),
+        &touched.rows,
+      ),
+    };
+    let pixels = window
+      .pixels()
+      .map(|(column, row)| {
         let center = Point {
-          x: (left + (index % width) as i64) as f32 + 0.5,
-          y: (top + (index / width) as i64) as f32 + 0.5,
+          x: column as f32 + 0.5,
+          y: row as f32 + 0.5,
         };
 
         self.sample(map_between(center, to, from))
@@ -286,8 +497,41 @@ impl<const N: usize> Raster<N> {
       .collect();
 
     Self {
-      left,
-      top,
+      left: window.columns.start,
+      top: window.rows.start,
+      width: window.width(),
+      height: window.height(),
+      pixels,
+    }
+  }
+
+  /// The image on a transparent raster of `window`, which holds it.
+  fn within(self, window: Window) -> Self {
+    let (width, height) = (window.width(), window.height());
+    let mut pixels = vec![[0u8; N]; width * height];
+    let columns =
+      self.left.max(window.columns.start)..(self.left + self.width as i64).min(window.columns.end);
+
+    if !columns.is_empty() {
+      let length = (columns.end - columns.start) as usize;
+
+      for row in 0..self.height {
+        let y = self.top + row as i64 - window.rows.start;
+
+        if y < 0 || y >= height as i64 {
+          continue;
+        }
+
+        let from = row * self.width + (columns.start - self.left) as usize;
+        let to = y as usize * width + (columns.start - window.columns.start) as usize;
+
+        pixels[to..to + length].copy_from_slice(&self.pixels[from..from + length]);
+      }
+    }
+
+    Self {
+      left: window.columns.start,
+      top: window.rows.start,
       width,
       height,
       pixels,
@@ -623,8 +867,8 @@ fn box_window(sigma: f32) -> usize {
 #[cfg(test)]
 mod tests {
   use super::{
-    BAND_LANES, MAX_SIGMA, Point, blur_alpha, blur_rgba, blur_rgba_axes, box_window,
-    downscale_step_count,
+    BAND_LANES, MAX_SIGMA, Placement, Point, Size, blur_alpha, blur_alpha_region, blur_rgba,
+    blur_rgba_axes, box_window, downscale_step_count,
   };
 
   #[test]
@@ -734,5 +978,86 @@ mod tests {
     assert_eq!(pixels[3], pixels[5]);
     assert_eq!(pixels[2], pixels[6]);
     assert!(pixels[4][3] > pixels[3][3]);
+  }
+
+  /// A region blurs to the pixels the whole image blurs to, below the sigma limit and past it.
+  #[test]
+  fn a_region_blurs_as_the_whole_image_does() {
+    let image = Size {
+      width: 360,
+      height: 280,
+    };
+    let mask_at = Placement {
+      left: 90,
+      top: 70,
+      width: 113,
+      height: 61,
+    };
+    let mask: Vec<u8> = (0..mask_at.width * mask_at.height)
+      .map(|index| (index.wrapping_mul(2_654_435_761) >> 13) as u8)
+      .collect();
+    let regions = [
+      Placement {
+        left: 0,
+        top: 0,
+        width: 360,
+        height: 280,
+      },
+      Placement {
+        left: 17,
+        top: 203,
+        width: 150,
+        height: 77,
+      },
+      Placement {
+        left: 330,
+        top: 3,
+        width: 30,
+        height: 40,
+      },
+    ];
+
+    for sigma in [
+      0.0,
+      0.5,
+      1.7,
+      3.0,
+      11.0,
+      40.0,
+      MAX_SIGMA - 1.0,
+      MAX_SIGMA + 0.5,
+      190.0,
+      400.0,
+    ] {
+      let mut whole = vec![0u8; (image.width * image.height) as usize];
+
+      for (row, source) in mask.chunks_exact(mask_at.width as usize).enumerate() {
+        let start = (mask_at.top as usize + row) * image.width as usize + mask_at.left as usize;
+
+        whole[start..start + source.len()].copy_from_slice(source);
+      }
+      blur_alpha(
+        &mut whole,
+        image.width as usize,
+        image.height as usize,
+        sigma,
+      );
+
+      for region in regions {
+        let expected: Vec<u8> = (region.top..region.bottom())
+          .flat_map(|row| {
+            let start = row as usize * image.width as usize + region.left as usize;
+
+            whole[start..start + region.width as usize].iter().copied()
+          })
+          .collect();
+
+        assert_eq!(
+          blur_alpha_region(&mask, mask_at, image, region, sigma),
+          expected,
+          "sigma {sigma} region {region:?}"
+        );
+      }
+    }
   }
 }
