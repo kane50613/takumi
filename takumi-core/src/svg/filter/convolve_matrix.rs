@@ -77,13 +77,14 @@ impl ConvolveMatrix {
 
           color = [color[0] * alpha, color[1] * alpha, color[2] * alpha, alpha];
         } else {
-          color[3] = color[3].clamp(0.0, 1.0);
+          // `max` and `min` keep a NaN alpha from a huge gain at zero, where `clamp` would panic.
+          color[3] = color[3].max(0.0).min(1.0);
         }
 
         out[row + x] = [
-          color[0].clamp(0.0, color[3]),
-          color[1].clamp(0.0, color[3]),
-          color[2].clamp(0.0, color[3]),
+          color[0].max(0.0).min(color[3]),
+          color[1].max(0.0).min(color[3]),
+          color[2].max(0.0).min(color[3]),
           color[3],
         ]
         .map(|channel| (channel * 255.0 + 0.5) as u8);
@@ -178,5 +179,39 @@ impl ConvolveMatrix {
         color
       };
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::svg::filter::{Input, Kernel};
+
+  #[test]
+  fn a_gain_past_floats_clears_transparent_pixels() {
+    let convolve = ConvolveMatrix {
+      input: Input::SourceGraphic,
+      kernel: Kernel::new(1, 1, 3, 3, vec![1.0; 9]).expect("a 3x3 kernel"),
+      divisor: 1e-40,
+      bias: 0.0,
+      edge_mode: EdgeMode::None,
+      preserve_alpha: false,
+    };
+    let source = vec![[0; 4]; 16];
+    let mut out = vec![[9; 4]; 16];
+
+    convolve.apply(
+      &source,
+      4,
+      Rect {
+        left: 0,
+        right: 4,
+        top: 0,
+        bottom: 4,
+      },
+      &mut out,
+    );
+
+    assert_eq!(out, vec![[0; 4]; 16]);
   }
 }
