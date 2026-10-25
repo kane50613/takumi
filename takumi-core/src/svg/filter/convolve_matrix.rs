@@ -77,14 +77,19 @@ impl ConvolveMatrix {
 
           color = [color[0] * alpha, color[1] * alpha, color[2] * alpha, alpha];
         } else {
-          // `max` and `min` keep a NaN alpha from a huge gain at zero, where `clamp` would panic.
-          color[3] = color[3].max(0.0).min(1.0);
+          // A huge gain can make alpha NaN, which saturates to zero as Skia's does in practice and
+          // must not reach the `clamp` bounds below.
+          color[3] = if color[3].is_nan() {
+            0.0
+          } else {
+            color[3].clamp(0.0, 1.0)
+          };
         }
 
         out[row + x] = [
-          color[0].max(0.0).min(color[3]),
-          color[1].max(0.0).min(color[3]),
-          color[2].max(0.0).min(color[3]),
+          color[0].clamp(0.0, color[3]),
+          color[1].clamp(0.0, color[3]),
+          color[2].clamp(0.0, color[3]),
           color[3],
         ]
         .map(|channel| (channel * 255.0 + 0.5) as u8);
