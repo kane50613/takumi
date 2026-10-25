@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="160" viewBox="0 0 400 160">
+  <rect x="0" y="0" width="400" height="160" fill="#fff"/>
+  <clipPath id="cp0">
+    <path d="M0 0H400V160H0Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <g style="isolation:isolate">
+      <path d="M0 0h400v160h-400Z" fill="#facc15"/>
+      <g style="isolation:isolate">
+        <path d="M20 20h80v120h-80Z" fill="#2563eb"/>
+        <g style="mix-blend-mode:multiply">
+          <path d="M60 40h120v80h-120Z" fill="#dc2626"/>
+        </g>
+      </g>
+      <path d="M220 20h80v120h-80Z" fill="#2563eb"/>
+      <g style="mix-blend-mode:multiply">
+        <path d="M260 40h120v80h-120Z" fill="#dc2626"/>
+      </g>
+    </g>
+  </g>
+</svg>
