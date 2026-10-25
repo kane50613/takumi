@@ -273,7 +273,7 @@ const LINEAR_TO_SRGB: TransferFunction = TransferFunction {
   g: 0.416_666_66,
   a: 1.137_283_3,
   b: -0.0,
-  c: 12.920_000,
+  c: 12.92,
   d: 0.003_130_805,
   e: -0.054_969_788,
   f: -0.0,
@@ -334,7 +334,7 @@ fn approx_pow2(x: f32) -> f32 {
 
 /// A channel as `store_8888` writes it: clamped to `0..=1` and rounded.
 fn to_byte(channel: f32) -> u8 {
-  (channel.max(0.0).min(1.0) * 255.0 + 0.5) as u8
+  (channel.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
 }
 
 #[cfg(test)]
