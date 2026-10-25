@@ -7,7 +7,6 @@ use takumi_core::{
   layout::node::Node,
   style::{CssSource, KeyframesRule},
 };
-use takumi_raster::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -56,6 +55,26 @@ pub struct RendererOptions {
   /// Bytes of decoded fonts that renders' `fonts` lists may keep registered; past it, the least
   /// recently used families are released. Unbounded by default.
   pub font_cache_max_bytes: Option<u64>,
+}
+
+/// Gradient dithering exposed by the WebAssembly binding.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum DitheringAlgorithm {
+  /// Disable gradient dithering.
+  #[default]
+  None,
+  /// Dither gradient fills with an ordered 8x8 Bayer pattern.
+  OrderedBayer,
+}
+
+impl From<DitheringAlgorithm> for takumi_raster::DitheringAlgorithm {
+  fn from(dithering: DitheringAlgorithm) -> Self {
+    match dithering {
+      DitheringAlgorithm::None => Self::None,
+      DitheringAlgorithm::OrderedBayer => Self::OrderedBayer,
+    }
+  }
 }
 
 /// Options for rendering an image.

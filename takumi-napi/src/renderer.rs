@@ -269,18 +269,13 @@ pub enum DitheringAlgorithm {
   None,
   #[napi(value = "ordered-bayer")]
   OrderedBayer,
-  /// @deprecated Alias of `ordered-bayer`. Will be removed in v3.
-  #[napi(value = "floyd-steinberg")]
-  FloydSteinberg,
 }
 
-#[allow(deprecated)]
 impl From<DitheringAlgorithm> for CoreDitheringAlgorithm {
   fn from(dithering: DitheringAlgorithm) -> Self {
     match dithering {
       DitheringAlgorithm::None => Self::None,
       DitheringAlgorithm::OrderedBayer => Self::OrderedBayer,
-      DitheringAlgorithm::FloydSteinberg => Self::FloydSteinberg,
     }
   }
 }
