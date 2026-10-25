@@ -23,8 +23,21 @@
         </filter>
         <filter id="spot">
           <feGaussianBlur stdDeviation="2" />
-          <feSpecularLighting surfaceScale="5" specularConstant="1.2" specularExponent="12" lighting-color="rgb(147, 197, 253)">
-            <feSpotLight x="300" y="20" z="120" pointsAtX="340" pointsAtY="80" limitingConeAngle="30" specularExponent="3" />
+          <feSpecularLighting
+            surfaceScale="5"
+            specularConstant="1.2"
+            specularExponent="12"
+            lighting-color="rgb(147, 197, 253)"
+          >
+            <feSpotLight
+              x="300"
+              y="20"
+              z="120"
+              pointsAtX="340"
+              pointsAtY="80"
+              limitingConeAngle="30"
+              specularExponent="3"
+            />
           </feSpecularLighting>
         </filter>
         <filter id="shine">
@@ -40,9 +53,21 @@
       <rect x="150" y="20" width="100" height="100" rx="20" filter="url(#point)" />
       <path d="M290 30h100v100h-100z M310 50h60v60h-60z" fill-rule="evenodd" filter="url(#spot)" />
       <g transform="translate(420 20) scale(1.5)">
-        <rect x="0" y="0" width="100" height="60" rx="14" fill="rgb(220, 38, 38)" filter="url(#shine)" />
+        <rect
+          x="0"
+          y="0"
+          width="100"
+          height="60"
+          rx="14"
+          fill="rgb(220, 38, 38)"
+          filter="url(#shine)"
+        />
       </g>
-      <path d="M20 160h40v20h-20v40h-20z M80 160h60l-30 60z" fill="rgb(22, 163, 74)" filter="url(#shine)" />
+      <path
+        d="M20 160h40v20h-20v40h-20z M80 160h60l-30 60z"
+        fill="rgb(22, 163, 74)"
+        filter="url(#shine)"
+      />
     </svg>
   </body>
 </html>
