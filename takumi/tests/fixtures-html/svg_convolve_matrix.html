@@ -14,20 +14,60 @@
           <stop offset="0.5" stop-color="rgba(234, 88, 12, 0.6)" />
           <stop offset="1" stop-color="rgb(22, 163, 74)" />
         </linearGradient>
-        <filter id="sharpen"><feConvolveMatrix order="3" kernelMatrix="0 -1 0 -1 5 -1 0 -1 0" /></filter>
+        <filter id="sharpen">
+          <feConvolveMatrix order="3" kernelMatrix="0 -1 0 -1 5 -1 0 -1 0" />
+        </filter>
         <filter id="emboss">
-          <feConvolveMatrix order="3" kernelMatrix="-2 -1 0 -1 1 1 0 1 2" bias="0.3" preserveAlpha="true" />
+          <feConvolveMatrix
+            order="3"
+            kernelMatrix="-2 -1 0 -1 1 1 0 1 2"
+            bias="0.3"
+            preserveAlpha="true"
+          />
         </filter>
         <filter id="wrap" x="0" y="0" width="1" height="1">
-          <feConvolveMatrix order="5 3" targetX="0" kernelMatrix="1 0 0 0 1 0 0 1 0 0 1 0 0 0 1" edgeMode="wrap" x="10%" y="10%" width="80%" height="80%" />
+          <feConvolveMatrix
+            order="5 3"
+            targetX="0"
+            kernelMatrix="1 0 0 0 1 0 0 1 0 0 1 0 0 0 1"
+            edgeMode="wrap"
+            x="10%"
+            y="10%"
+            width="80%"
+            height="80%"
+          />
         </filter>
         <filter id="duplicate" x="0" y="0" width="1" height="1">
-          <feConvolveMatrix order="5 3" targetX="0" kernelMatrix="1 0 0 0 1 0 0 1 0 0 1 0 0 0 1" edgeMode="duplicate" x="10%" y="10%" width="80%" height="80%" />
+          <feConvolveMatrix
+            order="5 3"
+            targetX="0"
+            kernelMatrix="1 0 0 0 1 0 0 1 0 0 1 0 0 0 1"
+            edgeMode="duplicate"
+            x="10%"
+            y="10%"
+            width="80%"
+            height="80%"
+          />
         </filter>
         <filter id="none" x="0" y="0" width="1" height="1">
-          <feConvolveMatrix order="5 3" targetX="0" kernelMatrix="1 0 0 0 1 0 0 1 0 0 1 0 0 0 1" edgeMode="none" x="10%" y="10%" width="80%" height="80%" />
+          <feConvolveMatrix
+            order="5 3"
+            targetX="0"
+            kernelMatrix="1 0 0 0 1 0 0 1 0 0 1 0 0 0 1"
+            edgeMode="none"
+            x="10%"
+            y="10%"
+            width="80%"
+            height="80%"
+          />
         </filter>
-        <filter id="large"><feConvolveMatrix order="6" kernelMatrix="-1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1" divisor="0" /></filter>
+        <filter id="large">
+          <feConvolveMatrix
+            order="6"
+            kernelMatrix="-1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1 1 3 0 2 -1"
+            divisor="0"
+          />
+        </filter>
       </defs>
       <rect x="10" y="10" width="80" height="80" rx="10" fill="url(#fade)" filter="url(#sharpen)" />
       <rect x="110" y="10" width="80" height="80" rx="10" fill="url(#fade)" filter="url(#emboss)" />
@@ -35,7 +75,15 @@
       <rect x="310" y="10" width="80" height="80" fill="url(#fade)" filter="url(#duplicate)" />
       <rect x="410" y="10" width="80" height="80" fill="url(#fade)" filter="url(#none)" />
       <rect x="10" y="120" width="80" height="80" rx="10" fill="url(#fade)" filter="url(#large)" />
-      <circle cx="160" cy="160" r="40" fill="none" stroke="url(#fade)" stroke-width="6" filter="url(#emboss)" />
+      <circle
+        cx="160"
+        cy="160"
+        r="40"
+        fill="none"
+        stroke="url(#fade)"
+        stroke-width="6"
+        filter="url(#emboss)"
+      />
     </svg>
   </body>
 </html>
