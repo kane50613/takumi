@@ -598,6 +598,11 @@ impl Run<'_> {
     filter: ColorFilter,
   ) -> Image {
     let whole = self.window(self.region);
+    let input = if input.filters.is_full() {
+      input.resolved()
+    } else {
+      input
+    };
     let image = input.in_color_space(space).with_filter(filter);
 
     if window == whole {

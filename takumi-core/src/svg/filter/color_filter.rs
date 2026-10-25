@@ -33,6 +33,12 @@ impl ColorFilters {
     self.0.is_empty()
   }
 
+  /// Whether the chain is as long as a result may defer, which bounds the filters every result
+  /// copies when a document chains many pointwise primitives.
+  pub(super) fn is_full(&self) -> bool {
+    self.0.len() >= MAX_DEFERRED
+  }
+
   /// Runs every filter over premultiplied pixels, storing each pixel once.
   pub(super) fn apply(&self, pixels: &mut [[u8; 4]]) {
     if let [ColorFilter::Space(space)] = self.0[..] {
@@ -87,6 +93,9 @@ impl ColorFilters {
     pixels[0]
   }
 }
+
+/// Most color filters a result defers before it runs them.
+const MAX_DEFERRED: usize = 8;
 
 /// Pixels a chunk of `ColorFilters::apply` holds as floats.
 const CHUNK: usize = 64;
