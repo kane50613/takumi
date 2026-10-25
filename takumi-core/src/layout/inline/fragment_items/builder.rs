@@ -18,7 +18,7 @@ use crate::{
       decorations::{
         BoxFont, DecoratedLeaf, DecoratedLeaves, DecorationInset, DecorationPlacement,
       },
-      inline_item::InlineItem,
+      inline_item::{InlineItem, LayoutObject},
       inline_layout_algorithm::LineBoxFragment,
       inline_node_data::InlineNodeData,
       items::{DecorationLink, InlineSpans, ProcessedInlineSpan},
@@ -649,7 +649,7 @@ impl DecoratedLeaf {
     let object = child
       .layout_object
       .or_else(|| child.inline_item?.layout_object);
-    let context = object.map(|object| object.context());
+    let context = object.map(LayoutObject::context);
 
     Some(Self {
       line,
@@ -659,7 +659,7 @@ impl DecoratedLeaf {
       decorations: context
         .map(|context| context.text_decorations.clone())
         .unwrap_or_default(),
-      object: object.map(|object| object.context().box_id()),
+      object: context.map(RenderContext::box_id),
       rtl: context.is_some_and(|context| context.style.inherited_data.direction == Direction::Rtl),
     })
   }
