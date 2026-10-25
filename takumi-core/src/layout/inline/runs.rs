@@ -62,6 +62,15 @@ pub(super) fn glyph_skips_ink(text: &str, cluster: Range<usize>) -> bool {
     .is_none_or(skips_ink)
 }
 
+/// What every [`ShapedRun::same_face`] pair agrees on, which narrows the faces worth comparing.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) struct FaceKey {
+  font_id: u64,
+  font_index: u32,
+  font_size_bits: u32,
+  source_span_id: Option<u64>,
+}
+
 /// A shaped, positioned glyph run, which Blink's `TextFragmentPainter` paints. Owns everything
 /// both backends need to paint a run.
 #[derive(Clone)]
@@ -118,6 +127,17 @@ impl ShapedRun {
         embolden: self.synthetic_bold,
         skew: self.synthetic_skew,
       },
+    }
+  }
+
+  /// The key every run [`Self::same_face`] as this one shares.
+  pub(super) fn face_key(&self) -> FaceKey {
+    FaceKey {
+      font_id: self.font_id(),
+      font_index: self.font_index,
+      // Adding zero folds -0.0 into 0.0, which compare equal.
+      font_size_bits: (self.font_size + 0.0).to_bits(),
+      source_span_id: self.brush.source_span_id,
     }
   }
 

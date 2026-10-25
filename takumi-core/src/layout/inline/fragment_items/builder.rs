@@ -86,6 +86,7 @@ impl FragmentItems {
       span_ink_reach: 0.0,
       text_items: Vec::new(),
       faces: Vec::new(),
+      face_indices: FxHashMap::default(),
       face_glyphs: Vec::new(),
       glyphs: GlyphStore::default(),
       inline_boxes: Vec::new(),
