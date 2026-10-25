@@ -512,16 +512,13 @@ impl FromStr for Tag {
   }
 }
 
-#[allow(unused)]
 impl Tag {
   // General tables.
-  const CMAP: Self = Self(*b"cmap");
   const HEAD: Self = Self(*b"head");
   const HHEA: Self = Self(*b"hhea");
   const HMTX: Self = Self(*b"hmtx");
   const MAXP: Self = Self(*b"maxp");
   const NAME: Self = Self(*b"name");
-  const OS2: Self = Self(*b"OS/2");
   const POST: Self = Self(*b"post");
 
   // TrueType.
@@ -530,23 +527,10 @@ impl Tag {
   const PREP: Self = Self(*b"prep");
   const FPGM: Self = Self(*b"fpgm");
   const CVT: Self = Self(*b"cvt ");
-  const GASP: Self = Self(*b"gasp");
 
   // CFF.
   const CFF: Self = Self(*b"CFF ");
   const CFF2: Self = Self(*b"CFF2");
-  const VORG: Self = Self(*b"VORG");
-
-  // Bitmap and color fonts.
-  const EBDT: Self = Self(*b"EBDT");
-  const EBLC: Self = Self(*b"EBLC");
-  const EBSC: Self = Self(*b"EBSC");
-  const COLR: Self = Self(*b"COLR");
-  const CPAL: Self = Self(*b"CPAL");
-  const CBDT: Self = Self(*b"CBDT");
-  const CBLC: Self = Self(*b"CBLC");
-  const SBIX: Self = Self(*b"sbix");
-  const SVG: Self = Self(*b"SVG ");
 }
 
 impl Readable<'_> for Tag {

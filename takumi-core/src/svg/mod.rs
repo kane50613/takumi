@@ -30,7 +30,7 @@ use crate::{
     image::{ImageError, SvgOp},
     svg_size::{SvgSize, parse_svg_document},
   },
-  style::{Color, Lang, Style, StyleDeclarationBlock, StyleSheet},
+  style::{Color, IntrinsicSizing, Lang, Style, StyleDeclarationBlock, StyleSheet},
 };
 
 const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
@@ -147,6 +147,10 @@ impl SvgDocument {
   /// The size of the canvas in pixels.
   pub(crate) fn canvas_size(&self) -> (f32, f32) {
     (self.canvas.width, self.canvas.height)
+  }
+
+  pub(crate) fn intrinsic_sizing(&self) -> IntrinsicSizing {
+    self.size.intrinsic
   }
 
   /// Whether the document holds a `text` element, which draws with the registered fonts.

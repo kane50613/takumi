@@ -20,10 +20,6 @@ use crate::{
   },
 };
 
-/// Draws SVG ops with tiny-skia.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct SvgDrawing;
-
 /// A pixmap being drawn on, with the transform and clip that apply to what is drawn.
 struct Target<'a, 'b> {
   pixmap: &'a mut PixmapMut<'b>,
@@ -73,47 +69,28 @@ impl<'a, 'b> Target<'a, 'b> {
       IntRect::from_xywh(0, 0, width, height)
     }
   }
-}
-
-/// How a layer joins the target below it.
-#[derive(Default)]
-struct Composite<'a> {
-  opacity: Option<f32>,
-  blend: Option<TinyBlendMode>,
-  mask: Option<Mask>,
-  filters: Option<&'a SvgFilters>,
-}
-
-impl SvgDrawing {
-  /// Draws `ops` onto `pixmap` with `transform` as the canvas transform.
-  pub(crate) fn draw(&self, ops: &[SvgOp], transform: Transform, pixmap: &mut PixmapMut) {
-    if let Some(mut target) = Target::root(pixmap, transform) {
-      self.run(&mut ops.iter(), &mut target);
-    }
-  }
 
   /// Draws ops up to the `Pop` closing the scope they are in, or the end of `ops`.
-  fn run(&self, ops: &mut Iter<'_, SvgOp>, target: &mut Target) {
+  fn run(&mut self, ops: &mut Iter<'_, SvgOp>) {
     while let Some(op) = ops.next() {
       match op {
         SvgOp::Pop => return,
         SvgOp::PushTransform(transform) => {
-          let outer = target.transform;
+          let outer = self.transform;
 
-          target.transform = outer.pre_concat(Transform::from(*transform));
-          self.run(ops, target);
-          target.transform = outer;
+          self.transform = outer.pre_concat(Transform::from(*transform));
+          self.run(ops);
+          self.transform = outer;
         }
         SvgOp::PushClip { path, evenodd } => {
-          let outer = target.clip.take();
+          let outer = self.clip.take();
 
-          target.clip = clipped(outer.as_ref(), path, *evenodd, target);
-          self.run(ops, target);
-          target.clip = outer;
+          self.clip = clipped(outer.as_ref(), path, *evenodd, self);
+          self.run(ops);
+          self.clip = outer;
         }
         SvgOp::PushOpacity(opacity) => self.layer(
           ops,
-          target,
           Composite {
             opacity: Some(*opacity),
             ..Composite::default()
@@ -121,20 +98,18 @@ impl SvgDrawing {
         ),
         SvgOp::PushBlend(blend) => self.layer(
           ops,
-          target,
           Composite {
             blend: Some(tiny_blend_mode(*blend)),
             ..Composite::default()
           },
         ),
-        SvgOp::PushIsolation => self.layer(ops, target, Composite::default()),
+        SvgOp::PushIsolation => self.layer(ops, Composite::default()),
         SvgOp::PushMask {
           ops: mask_ops,
           luminance,
-        } => match self.mask(mask_ops, *luminance, target) {
+        } => match self.mask(mask_ops, *luminance) {
           Some(mask) => self.layer(
             ops,
-            target,
             Composite {
               mask: Some(mask),
               ..Composite::default()
@@ -144,7 +119,6 @@ impl SvgDrawing {
         },
         SvgOp::PushFilter(filters) => self.layer(
           ops,
-          target,
           Composite {
             filters: Some(filters),
             ..Composite::default()
@@ -155,20 +129,20 @@ impl SvgDrawing {
           fill,
           stroke,
           anti_alias,
-        } => self.draw_path(target, path, fill.as_ref(), stroke.as_ref(), *anti_alias),
+        } => self.draw_path(path, fill.as_ref(), stroke.as_ref(), *anti_alias),
         SvgOp::Image {
           data,
           width,
           height,
           rendering,
-        } => self.draw_image(target, data, *width, *height, *rendering),
+        } => self.draw_image(data, *width, *height, *rendering),
       }
     }
   }
 
-  /// Draws the scope that follows into a fresh layer and composites the layer onto `target`.
-  fn layer(&self, ops: &mut Iter<'_, SvgOp>, target: &mut Target, composite: Composite) {
-    let Some(bounds) = target.layer_bounds(composite.filters) else {
+  /// Draws the scope that follows into a fresh layer and composites it onto this target.
+  fn layer(&mut self, ops: &mut Iter<'_, SvgOp>, composite: Composite) {
+    let Some(bounds) = self.layer_bounds(composite.filters) else {
       skip_scope(ops);
       return;
     };
@@ -176,23 +150,21 @@ impl SvgDrawing {
       skip_scope(ops);
       return;
     };
-    let transform = Transform::from_translate(-bounds.x() as f32, -bounds.y() as f32)
-      .pre_concat(target.transform);
-    let Some(limit) = target.limit.translate(-bounds.x(), -bounds.y()) else {
+    let transform =
+      Transform::from_translate(-bounds.x() as f32, -bounds.y() as f32).pre_concat(self.transform);
+    let Some(limit) = self.limit.translate(-bounds.x(), -bounds.y()) else {
       skip_scope(ops);
       return;
     };
     let mut view = layer.as_mut();
 
-    self.run(
-      ops,
-      &mut Target {
-        pixmap: &mut view,
-        transform,
-        clip: None,
-        limit,
-      },
-    );
+    Target {
+      pixmap: &mut view,
+      transform,
+      clip: None,
+      limit,
+    }
+    .run(ops);
 
     if let Some(filters) = composite.filters {
       filters.apply(transform, &mut layer);
@@ -206,16 +178,16 @@ impl SvgDrawing {
 
     if blend_mode == TinyBlendMode::SourceOver {
       draw_over(
-        target.pixmap,
+        self.pixmap,
         layer.as_ref(),
         (bounds.x(), bounds.y()),
         opacity,
-        target.clip.as_ref(),
+        self.clip.as_ref(),
       );
       return;
     }
 
-    target.pixmap.draw_pixmap(
+    self.pixmap.draw_pixmap(
       bounds.x(),
       bounds.y(),
       layer.as_ref(),
@@ -225,15 +197,15 @@ impl SvgDrawing {
         quality: FilterQuality::Nearest,
       },
       Transform::identity(),
-      target.clip.as_ref(),
+      self.clip.as_ref(),
     );
   }
 
   /// The mask `ops` draw, which cuts the layer it is pushed with.
-  fn mask(&self, ops: &[SvgOp], luminance: bool, target: &Target) -> Option<Mask> {
-    let mut drawn = Pixmap::new(target.pixmap.width(), target.pixmap.height())?;
+  fn mask(&self, ops: &[SvgOp], luminance: bool) -> Option<Mask> {
+    let mut drawn = Pixmap::new(self.pixmap.width(), self.pixmap.height())?;
 
-    self.draw(ops, target.transform, &mut drawn.as_mut());
+    draw(ops, self.transform, &mut drawn.as_mut());
 
     Some(Mask::from_pixmap(
       drawn.as_ref(),
@@ -246,8 +218,7 @@ impl SvgDrawing {
   }
 
   fn draw_path(
-    &self,
-    target: &mut Target,
+    &mut self,
     commands: &[PathCommand],
     fill: Option<&SvgFill>,
     stroke: Option<&SvgStrokeStyle>,
@@ -260,13 +231,10 @@ impl SvgDrawing {
     if let Some(fill) = fill {
       // Horizontal and vertical lines have no area to fill.
       if path.bounds().width() != 0.0 && path.bounds().height() != 0.0 {
-        self.with_paint(
-          &fill.paint,
-          fill.opacity,
-          target.transform,
-          anti_alias,
-          |paint| {
-            target.pixmap.fill_path(
+        fill
+          .paint
+          .with_tiny(fill.opacity, self.transform, anti_alias, |paint| {
+            self.pixmap.fill_path(
               &path,
               paint,
               if fill.evenodd {
@@ -274,35 +242,29 @@ impl SvgDrawing {
               } else {
                 FillRule::Winding
               },
-              target.transform,
-              target.clip.as_ref(),
+              self.transform,
+              self.clip.as_ref(),
             );
-          },
-        );
+          });
       }
     }
     if let Some(stroke) = stroke {
-      self.with_paint(
-        &stroke.paint,
-        stroke.opacity,
-        target.transform,
-        anti_alias,
-        |paint| {
-          target.pixmap.stroke_path(
+      stroke
+        .paint
+        .with_tiny(stroke.opacity, self.transform, anti_alias, |paint| {
+          self.pixmap.stroke_path(
             &path,
             paint,
             &Stroke::from(stroke),
-            target.transform,
-            target.clip.as_ref(),
+            self.transform,
+            self.clip.as_ref(),
           );
-        },
-      );
+        });
     }
   }
 
   fn draw_image(
-    &self,
-    target: &mut Target,
+    &mut self,
     data: &SvgImageData,
     width: f32,
     height: f32,
@@ -336,19 +298,20 @@ impl SvgDrawing {
       ..Paint::default()
     };
 
-    target
+    self
       .pixmap
-      .fill_rect(rect, &paint, target.transform, target.clip.as_ref());
+      .fill_rect(rect, &paint, self.transform, self.clip.as_ref());
   }
+}
 
-  /// Hands `draw` the tiny-skia paint for `paint`, a pattern tile drawn at `transform`'s scale.
-  fn with_paint(
+impl SvgOpPaint {
+  /// Hands `paint_with` a tiny-skia paint, rasterizing a pattern tile at `transform`'s scale.
+  fn with_tiny(
     &self,
-    paint: &SvgOpPaint,
     opacity: f32,
     transform: Transform,
     anti_alias: bool,
-    draw: impl FnOnce(&Paint),
+    paint_with: impl FnOnce(&Paint),
   ) {
     let tile;
     let mut tiny = Paint {
@@ -356,7 +319,7 @@ impl SvgDrawing {
       ..Paint::default()
     };
 
-    match paint {
+    match self {
       SvgOpPaint::Color(Color([red, green, blue, _])) => {
         tiny.set_color_rgba8(*red, *green, *blue, to_u8(opacity));
       }
@@ -417,7 +380,7 @@ impl SvgDrawing {
           return;
         };
 
-        self.draw(
+        draw(
           ops,
           Transform::from_scale(scale_x, scale_y),
           &mut pixmap.as_mut(),
@@ -433,7 +396,23 @@ impl SvgDrawing {
       }
     }
     tiny.blend_mode = TinyBlendMode::SourceOver;
-    draw(&tiny);
+    paint_with(&tiny);
+  }
+}
+
+/// How a layer joins the target below it.
+#[derive(Default)]
+struct Composite<'a> {
+  opacity: Option<f32>,
+  blend: Option<TinyBlendMode>,
+  mask: Option<Mask>,
+  filters: Option<&'a SvgFilters>,
+}
+
+/// Draws `ops` onto `pixmap` with `transform` as the canvas transform.
+pub(crate) fn draw(ops: &[SvgOp], transform: Transform, pixmap: &mut PixmapMut) {
+  if let Some(mut target) = Target::root(pixmap, transform) {
+    target.run(&mut ops.iter());
   }
 }
 

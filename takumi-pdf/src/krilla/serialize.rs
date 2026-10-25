@@ -157,67 +157,36 @@ impl Default for SerializeSettings {
   }
 }
 
-pub(crate) enum PageInfo {
-  /// A page built with krilla.
-  Krilla {
-    /// The reference of the page in the chunk.
-    ref_: Ref,
-    /// The page size, necessary so that we can convert from PDF coordinates to
-    /// krilla coordinates.
-    surface_size: Size,
-    /// The refs of the annotations that are used by that page, and optionally
-    /// a ref to their struct parent in the tag tree.
-    ///
-    /// Note that this will be empty be default when adding a new `PageInfo` to
-    /// `page_infos` in `SerializeContext`, and only once we actually serialize
-    /// the page will the annotations be populated.
-    annotations: Vec<(Ref, OnceCell<Ref>)>,
-    /// The page label of the page.
-    page_label: PageLabel,
-  },
-  /// A page embedded from an external PDF file.
-  #[allow(dead_code)]
-  Pdf {
-    ref_: Ref,
-    size: Size,
-    page_label: PageLabel,
-  },
+pub(crate) struct PageInfo {
+  ref_: Ref,
+  surface_size: Size,
+  annotations: Vec<(Ref, OnceCell<Ref>)>,
+  page_label: PageLabel,
 }
 
 impl PageInfo {
   pub(crate) fn ref_(&self) -> Ref {
-    match self {
-      PageInfo::Krilla { ref_, .. } => *ref_,
-      PageInfo::Pdf { ref_, .. } => *ref_,
-    }
+    self.ref_
   }
 
   pub(crate) fn size(&self) -> Size {
-    match self {
-      PageInfo::Krilla { surface_size, .. } => *surface_size,
-      PageInfo::Pdf { size, .. } => *size,
-    }
+    self.surface_size
   }
 
   pub(crate) fn page_label(&self) -> &PageLabel {
-    match self {
-      PageInfo::Krilla { page_label, .. } => page_label,
-      PageInfo::Pdf { page_label, .. } => page_label,
-    }
+    &self.page_label
   }
 
   pub(crate) fn annotations(&self) -> &[(Ref, OnceCell<Ref>)] {
-    match self {
-      PageInfo::Krilla { annotations, .. } => annotations,
-      PageInfo::Pdf { .. } => &[],
-    }
+    &self.annotations
   }
 
   pub(crate) fn annotations_mut(&mut self) -> &mut [(Ref, OnceCell<Ref>)] {
-    match self {
-      PageInfo::Krilla { annotations, .. } => annotations,
-      PageInfo::Pdf { .. } => &mut [],
-    }
+    &mut self.annotations
+  }
+
+  pub(crate) fn set_annotations(&mut self, annotations: Vec<(Ref, OnceCell<Ref>)>) {
+    self.annotations = annotations;
   }
 }
 
@@ -551,7 +520,7 @@ impl SerializeContext {
 
   pub(crate) fn register_page(&mut self, page: InternalPage) {
     let ref_ = self.new_ref();
-    self.page_infos.push(PageInfo::Krilla {
+    self.page_infos.push(PageInfo {
       ref_,
       surface_size: page.page_settings.surface_size(),
       // Will be populated when the page is serialized.
