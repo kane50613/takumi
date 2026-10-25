@@ -206,6 +206,22 @@ Retries also stop when any of these happens:
 
 A custom `fetch` must honor the abort signal it receives.
 
+### Failed fetches
+
+By default, one image that fails to fetch rejects the whole render. Set `throwOnError: false` to leave that image out and draw the rest. An emoji with no Twemoji image counts as a failed fetch too.
+
+```tsx twoslash title="Render without the images that failed"
+import { render } from "takumi-js";
+
+const element = <img src="https://example.com/image.png" />;
+
+const image = await render(element, {
+  images: {
+    throwOnError: false, // [!code highlight]
+  },
+});
+```
+
 ### URLs from user input
 
 <Callout type="warn">
