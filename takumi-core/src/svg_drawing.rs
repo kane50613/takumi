@@ -912,4 +912,20 @@ mod tests {
       "local file was read and composited into the SVG output"
     );
   }
+
+  #[test]
+  fn a_spotlight_clamps_its_exponent_as_blink_does() {
+    let spot = |exponent: &str| {
+      draw(
+        &format!(
+          r#"<filter id="f" x="0" y="0" width="1" height="1"><feSpecularLighting specularExponent="4"><feSpotLight x="20" y="0" z="30" pointsAtX="20" pointsAtY="40" specularExponent="{exponent}"/></feSpecularLighting></filter><rect width="40" height="40" filter="url(#f)"/>"#
+        ),
+        40,
+      )
+    };
+
+    assert_eq!(spot("0.5").data(), spot("1").data());
+    assert_eq!(spot("500").data(), spot("128").data());
+    assert_ne!(spot("2").data(), spot("1").data());
+  }
 }

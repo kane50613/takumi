@@ -816,10 +816,11 @@ impl SvgLayout<'_> {
         points_at_x: number("pointsAtX"),
         points_at_y: number("pointsAtY"),
         points_at_z: number("pointsAtZ"),
+        // `SpotLightSource` clamps the exponent to `1..=128`.
         specular_exponent: self
           .number_attribute(child, "specularExponent")
-          .filter(|exponent| *exponent >= 0.0)
-          .unwrap_or(1.0),
+          .unwrap_or(1.0)
+          .clamp(1.0, 128.0),
         limiting_cone_angle: self.number_attribute(child, "limitingConeAngle"),
       })),
     }
