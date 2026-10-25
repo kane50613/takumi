@@ -349,7 +349,8 @@ fn sample_keyframe_segment<'a>(
 ) -> Option<InterpolationSegment<'a>> {
   let first = resolved_frames.points.first()?;
 
-  if progress <= first.offset {
+  // A progress on the first keyframe starts the interval from it.
+  if progress < first.offset {
     let segment_progress = if first.offset <= 0.0 {
       1.0
     } else {
@@ -645,6 +646,28 @@ mod tests {
       "expected value between bevel and squircle, got {}",
       midpoint.0
     );
+  }
+
+  /// At its start an animation samples the interval from its first keyframe, so a step that jumps
+  /// at the start shows its first step there.
+  /// <https://drafts.csswg.org/web-animations-1/#the-effect-value-of-a-keyframe-animation-effect>
+  #[test]
+  fn a_start_step_jumps_at_the_first_keyframe() {
+    let stylesheet =
+      StyleSheet::parse("@keyframes fade { from { opacity: 0 } to { opacity: 1 } }").unwrap();
+    let style = ComputedStyle {
+      misc1_data: Rc::new(StyleMisc1Data {
+        animation_name: AnimationNames::from_css_str("fade").unwrap(),
+        animation_duration: AnimationDurations::from_css_str("1000ms").unwrap(),
+        animation_timing_function: AnimationTimingFunctions::from_css_str("steps(2, start)")
+          .unwrap(),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+    let animated = apply_stylesheet_animations(style, &stylesheet, 0, &sizing(), current_color());
+
+    assert_eq!(animated.svg_data.opacity.0, 0.5);
   }
 
   fn sizing() -> SizingContext {

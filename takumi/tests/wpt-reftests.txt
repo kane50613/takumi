@@ -3172,6 +3172,7 @@ svg/styling/render/transform-origin.svg
 svg/styling/render/transform.svg
 svg/styling/stroke-color-inherit-link-visited.svg
 svg/styling/text-overflow-presentation-attribute-foreignobject.html
+svg/styling/use-element-animations.html
 svg/styling/use-element-non-rendered-sibling-selector.html
 svg/text/reftests/dominant-baseline-central-large-font-size.svg
 svg/text/reftests/dominant-baseline-text-after-edge.svg
