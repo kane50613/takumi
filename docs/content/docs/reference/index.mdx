@@ -367,3 +367,30 @@ size, as browsers do. `fontSynthesisSmallCaps: none` turns this off.
 <sup>4</sup> `hyphens: auto` breaks only at soft hyphens. Takumi has no hyphenation dictionaries.
 
 <sup>5</sup> Preserved tabs expand to that many spaces. `tabSize` takes no `<length>` and has no tab stops.
+
+### SVG
+
+These style the elements inside an SVG, inline or as an image. An SVG's presentation attributes, such as `fill="red"`, set the same properties, and a stylesheet or `style` attribute overrides them.
+
+| Property                                                      | Values                                                                                                                                                              |
+| :------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fill`, `stroke`                                              | `none`, `<color>`, `url()` with an optional fallback, `context-fill`, `context-stroke`                                                                              |
+| `fillOpacity`, `strokeOpacity`, `stopOpacity`, `floodOpacity` | `<number>`, `<percentage>`                                                                                                                                          |
+| `fillRule`                                                    | `nonzero`, `evenodd`                                                                                                                                                |
+| `strokeWidth`, `strokeDashoffset`                             | `<length-percentage>`, `<number>`                                                                                                                                   |
+| `strokeDasharray`                                             | `none`, a list of `<length-percentage>` or `<number>`                                                                                                               |
+| `strokeLinecap`                                               | `butt`, `round`, `square`                                                                                                                                           |
+| `strokeMiterlimit`                                            | `<number>`                                                                                                                                                          |
+| `paintOrder`                                                  | `normal`, or an order of `fill`, `stroke`, `markers`                                                                                                                |
+| `vectorEffect`                                                | `none`, `non-scaling-stroke`                                                                                                                                        |
+| `markerStart`, `markerMid`, `markerEnd`, `marker`             | `none`, `url()`                                                                                                                                                     |
+| `stopColor`, `floodColor`, `lightingColor`                    | `<color>`                                                                                                                                                           |
+| `colorInterpolation`, `colorInterpolationFilters`             | `auto`, `sRGB`, `linearRGB`                                                                                                                                         |
+| `shapeRendering`                                              | `auto`, `optimizeSpeed`, `crispEdges`, `geometricPrecision`                                                                                                         |
+| `maskType`                                                    | `luminance`, `alpha`                                                                                                                                                |
+| `x`, `y`, `cx`, `cy`, `r`, `rx`, `ry`                         | `<length-percentage>`, `auto` for `rx` and `ry`                                                                                                                     |
+| `d`                                                           | `none`, `path()`                                                                                                                                                    |
+| `textAnchor`                                                  | `start`, `middle`, `end`                                                                                                                                            |
+| `dominantBaseline`                                            | `auto`, `alphabetic`, `ideographic`, `middle`, `central`, `mathematical`, `hanging`, `text-after-edge`, `text-before-edge`, `use-script`, `no-change`, `reset-size` |
+| `alignmentBaseline`                                           | `auto`, `baseline`, `alphabetic`, `ideographic`, `middle`, `central`, `mathematical`, `before-edge`, `text-before-edge`, `after-edge`, `text-after-edge`            |
+| `baselineShift`                                               | `baseline`, `sub`, `super`, `<length-percentage>`                                                                                                                   |
