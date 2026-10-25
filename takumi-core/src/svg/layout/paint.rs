@@ -97,6 +97,7 @@ impl SvgLayout<'_> {
         ))
       }),
       context,
+      user_space: None,
     })
   }
 

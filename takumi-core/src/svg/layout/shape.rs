@@ -4,12 +4,12 @@
 
 use super::{
   Scope, Styled, SvgLayout,
-  object::{Container, ContextSource, Fill, LayoutObject, Paint, Shape},
+  object::{Container, ContextSource, Fill, LayoutObject, Paint, Shape, Stroke},
 };
 use crate::{
   geometry::{PathBuilder, PathCommand, Point, Rect},
   path_data::PathData,
-  style::{Affine, Color, Length, PaintPhase, ShapeRendering, Size, Visibility},
+  style::{Affine, Color, Length, PaintPhase, ShapeRendering, Size, VectorEffect, Visibility},
   svg::approx_eq::ApproxEq,
   svg::{element::SvgElementKind, length::LengthAxis},
 };
@@ -299,17 +299,24 @@ impl SvgLayout<'_> {
 
     shape.settle_paints(None);
 
-    let object = |shape: Shape| LayoutObject::Shape(Box::new(shape));
+    let non_scaling = style.svg_data.vector_effect == VectorEffect::NonScalingStroke;
+    let objects = |shape: Shape| {
+      if non_scaling {
+        shape.with_non_scaling_stroke()
+      } else {
+        vec![LayoutObject::Shape(Box::new(shape))]
+      }
+    };
     let single_phase = |shape: &Shape, phase: PaintPhase| {
       let mut single = shape.clone();
 
       match phase {
         PaintPhase::Fill if single.fill.is_some() => single.stroke = None,
         PaintPhase::Stroke if single.stroke.is_some() => single.fill = None,
-        _ => return None,
+        _ => return Vec::new(),
       }
 
-      Some(object(single))
+      objects(single)
     };
 
     match (phases, markers) {
@@ -317,7 +324,7 @@ impl SvgLayout<'_> {
         parent
           .children
           .push(LayoutObject::Container(Box::new(markers)));
-        parent.children.push(object(shape));
+        parent.children.extend(objects(shape));
       }
       ([first, PaintPhase::Markers, last], Some(markers)) => {
         parent.children.extend(single_phase(&shape, first));
@@ -327,12 +334,12 @@ impl SvgLayout<'_> {
         parent.children.extend(single_phase(&shape, last));
       }
       ([_, _, PaintPhase::Markers], Some(markers)) => {
-        parent.children.push(object(shape));
+        parent.children.extend(objects(shape));
         parent
           .children
           .push(LayoutObject::Container(Box::new(markers)));
       }
-      _ => parent.children.push(object(shape)),
+      _ => parent.children.extend(objects(shape)),
     }
   }
 
@@ -375,16 +382,91 @@ impl Shape {
       self.fill = Some(fill);
     }
 
-    if let Some(mut stroke) = self.stroke.take()
-      && settle(
+    if let Some(mut stroke) = self.stroke.take() {
+      let (stroke_transform, stroke_bounds) = stroke.user_space.unwrap_or((path_transform, bounds));
+
+      if settle(
         &mut stroke.paint,
         &mut stroke.context,
         use_context,
-        path_transform,
-        bounds,
-      )
-    {
-      self.stroke = Some(stroke);
+        stroke_transform,
+        stroke_bounds,
+      ) {
+        // A paint settled in the user space of a non-scaling stroke moves into the host's space.
+        if stroke.context.is_none()
+          && let Some((transform, _)) = stroke.user_space.take()
+        {
+          stroke.paint = stroke.paint.transformed(transform);
+        }
+
+        self.stroke = Some(stroke);
+      }
+    }
+  }
+}
+
+impl Shape {
+  /// The objects that paint a shape with `vector-effect: non-scaling-stroke`, as Blink's
+  /// `SVGShapePainter` paints it: the fill where it is, and the stroke of the outline mapped into
+  /// the host's space under the inverse mapping, its paint server moved along.
+  fn with_non_scaling_stroke(self) -> Vec<LayoutObject> {
+    let transform = self.abs_transform;
+    let Some(stroke) = self.stroke.as_ref() else {
+      return vec![LayoutObject::Shape(Box::new(self))];
+    };
+    // Blink's `SetupNonScalingStrokeContext` paints no stroke where the transform has no inverse.
+    let Some(inverse) = transform.normal_inverse() else {
+      return self
+        .fill
+        .is_some()
+        .then(|| {
+          LayoutObject::Shape(Box::new(Shape {
+            stroke: None,
+            ..self
+          }))
+        })
+        .into_iter()
+        .collect();
+    };
+    let waiting = matches!(stroke.context, Some(ContextSource::UseNode));
+    let stroked = Shape {
+      commands: self
+        .commands
+        .iter()
+        .map(|command| command.transformed(transform))
+        .collect(),
+      bounds: self.bounds.transformed(transform).unwrap_or(self.bounds),
+      fill: None,
+      stroke: Some(Stroke {
+        paint: if waiting {
+          stroke.paint.clone()
+        } else {
+          stroke.paint.transformed(transform)
+        },
+        user_space: waiting.then_some((transform, self.bounds)),
+        ..stroke.clone()
+      }),
+      abs_transform: Affine::IDENTITY,
+      ..self.clone()
+    };
+    let mut host = Container::new(Affine::IDENTITY);
+
+    host.transform = inverse;
+    host.children.push(LayoutObject::Shape(Box::new(stroked)));
+    host.finish();
+
+    let stroke = LayoutObject::Container(Box::new(host));
+    let fill = self.fill.is_some().then(|| {
+      LayoutObject::Shape(Box::new(Shape {
+        stroke: None,
+        ..self.clone()
+      }))
+    });
+
+    if self.stroke_first {
+      [Some(stroke), fill].into_iter().flatten().collect()
+    } else {
+      [fill, Some(stroke)].into_iter().flatten().collect()
     }
   }
 }
