@@ -1635,6 +1635,7 @@ define_style! {
       row_gap: Gap,
       scale: Option<SpacePair<PercentageNumber>>,
       text_decoration_color: ColorInput,
+      text_decoration_inset: TextDecorationInset,
       text_decoration_thickness: TextDecorationThickness,
     }
     /// Blink's `misc->misc4` field group, which Blink nests in `misc`.
