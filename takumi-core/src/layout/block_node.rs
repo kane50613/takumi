@@ -790,10 +790,8 @@ impl<'r> LayoutTree<'r> {
 
   /// Records that `container` laid out the out-of-flow `node` as its containing block.
   pub(crate) fn add_hoisted_child(&mut self, container: NodeId, node: NodeId) {
-    let hoisted_children = &mut self.node_state_mut(container).hoisted_children;
-
-    if !hoisted_children.contains(&node) {
-      hoisted_children.push(node);
+    if self.hoisted_pairs.insert((container, node)) {
+      self.node_state_mut(container).hoisted_children.push(node);
       #[cfg(feature = "fragmentation")]
       {
         self.hoisted_by.insert(container, node);
@@ -803,12 +801,11 @@ impl<'r> LayoutTree<'r> {
   }
 
   pub(crate) fn clear_hoisted_children(&mut self, container: NodeId) {
-    #[cfg(feature = "fragmentation")]
     for child in take(&mut self.node_state_mut(container).hoisted_children) {
+      self.hoisted_pairs.remove(&(container, child));
+      #[cfg(feature = "fragmentation")]
       self.hoisted_by.remove(container, child);
     }
-    #[cfg(not(feature = "fragmentation"))]
-    self.node_state_mut(container).hoisted_children.clear();
   }
 
   /// Lays `node` and every box under it out empty, as `display: none` leaves them.
@@ -1065,5 +1062,35 @@ mod tests {
     cache.store(&space, &fresh, &first);
 
     assert!(cache.get(&space, &resumed_after(200)).is_none());
+  }
+}
+
+#[cfg(test)]
+mod hoisting_tests {
+  use crate::{
+    geometry::NodeId,
+    layout::{inline::testing::render_tree, node::Node, tree::LayoutTree},
+  };
+
+  #[test]
+  fn hoisted_children_keep_first_insertion_order_without_duplicates() {
+    let child = || Node::container([]).with_class_name("container");
+    let root = render_tree([child(), child(), child()], "");
+    let mut tree = LayoutTree::from_render_node(&root);
+
+    let [a, b, c] = [1, 2, 3].map(NodeId::new);
+
+    for node in [b, a, b, c, a, c] {
+      tree.add_hoisted_child(NodeId::ROOT, node);
+    }
+    assert_eq!(tree.node_state(NodeId::ROOT).hoisted_children, [b, a, c]);
+
+    tree.clear_hoisted_children(NodeId::ROOT);
+    assert!(tree.node_state(NodeId::ROOT).hoisted_children.is_empty());
+
+    for node in [c, a, c] {
+      tree.add_hoisted_child(NodeId::ROOT, node);
+    }
+    assert_eq!(tree.node_state(NodeId::ROOT).hoisted_children, [c, a]);
   }
 }
