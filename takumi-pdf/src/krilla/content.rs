@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use float_cmp::approx_eq;
 use pdf_writer::types::TextRenderingMode;
-use pdf_writer::{Content, Finish, Name, Ref, Str, TextStr};
+use pdf_writer::{Content, Finish, Name, Str, TextStr};
 use tiny_skia_path::{Path, PathSegment, PathVerb};
 
 use crate::krilla::chunk_container::ChunkContainer;
@@ -901,30 +901,6 @@ impl ContentBuilder {
         let x_object_name = sb
           .rd_builder
           .register_resource(sc.register_resourceable(chunk_container, x_object));
-        sb.content.x_object(x_object_name.to_pdf_name());
-      },
-      sc,
-      chunk_container,
-    );
-  }
-
-  #[allow(dead_code)]
-  pub(crate) fn draw_xobject_by_reference(
-    &mut self,
-    sc: &mut SerializeContext,
-    chunk_container: &mut ChunkContainer,
-    bbox: Rect,
-    x_object: Ref,
-  ) {
-    // TODO: Consider bbox of XObject somehow?
-    self.apply_isolated_op(
-      |sb, _, _| {
-        sb.expand_bbox(bbox);
-      },
-      move |sb, _, _| {
-        let x_object_name = sb
-          .rd_builder
-          .register_resource(resource::XObject::new(x_object));
         sb.content.x_object(x_object_name.to_pdf_name());
       },
       sc,

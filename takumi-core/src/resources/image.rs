@@ -32,15 +32,14 @@ use crate::geometry::Size;
 use crate::layout::node::Node;
 #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
-#[cfg(feature = "svg-sizing")]
+#[cfg(all(feature = "svg-sizing", any(test, not(feature = "svg"))))]
 use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
 use crate::style::Color;
 #[cfg(feature = "svg")]
 use crate::svg::{SvgDocument, SvgHost};
 #[cfg(feature = "svg-raster")]
-#[cfg(feature = "svg-raster")]
-use crate::svg_drawing::SvgDrawing;
+use crate::svg_drawing;
 #[cfg(feature = "svg")]
 pub use crate::svg_vector::{
   SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
@@ -92,6 +91,7 @@ pub struct SvgSource {
   /// Original SVG source, for embedding directly in a vector backend.
   source: Box<str>,
   /// Canvas size and CSS intrinsic sizing read from the root element.
+  #[cfg(not(feature = "svg"))]
   sizing: SvgSize,
   /// Whether rendering depends on the host `color`: the markup references
   /// `currentColor` and the root element sets no `color` of its own.
@@ -138,6 +138,17 @@ impl SvgSource {
   /// The original SVG markup, for embedding directly in a vector backend.
   pub fn source(&self) -> &str {
     &self.source
+  }
+
+  fn intrinsic_sizing(&self) -> IntrinsicSizing {
+    #[cfg(feature = "svg")]
+    {
+      self.document.intrinsic_sizing()
+    }
+    #[cfg(not(feature = "svg"))]
+    {
+      self.sizing.intrinsic
+    }
   }
 }
 
@@ -233,7 +244,6 @@ impl SvgSource {
       #[cfg(feature = "svg-raster")]
       has_text: document.has_text(),
       uses_current_color: document.uses_current_color(),
-      sizing: document.size,
       document: Arc::new(document),
       inline: false,
       source: Box::from(src),
@@ -264,7 +274,7 @@ impl SvgSource {
     let sx = width as f32 / size.width;
     let sy = height as f32 / size.height;
 
-    SvgDrawing.draw(
+    svg_drawing::draw(
       &self.vector_ops(host, viewport),
       Transform::from_row(sx, 0.0, 0.0, sy, -origin.x * sx, -origin.y * sy),
       &mut pixmap.as_mut(),
@@ -688,7 +698,7 @@ impl ImageSource {
   pub fn intrinsic_sizing(&self) -> IntrinsicSizing {
     match self {
       #[cfg(feature = "svg-sizing")]
-      ImageSource::Svg(svg) => svg.sizing.intrinsic,
+      ImageSource::Svg(svg) => svg.intrinsic_sizing(),
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
@@ -1638,7 +1648,7 @@ mod tests {
       let Ok(source) = svg.parse::<SvgSource>() else {
         unreachable!("valid svg");
       };
-      source.sizing.intrinsic
+      source.intrinsic_sizing()
     }
     let ns = r#"xmlns="http://www.w3.org/2000/svg""#;
 

@@ -25,7 +25,7 @@ use crate::{
   },
   style::{Affine, Color, math::mul_div_255},
   svg::approx_eq::ApproxEq,
-  svg_drawing::{SvgDrawing, draw_over, tiny_blend_mode},
+  svg_drawing::{draw as draw_svg, draw_over, tiny_blend_mode},
 };
 
 /// A primitive result: the pixels of the filter region, and where they hold data.
@@ -516,7 +516,7 @@ impl Run<'_> {
         let mut pixmap = self.blank()?;
         let (sx, sy) = self.transform.row_scales();
 
-        SvgDrawing.draw(
+        draw_svg(
           ops,
           Transform::from_row(
             sx,
