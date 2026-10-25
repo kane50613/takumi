@@ -3181,6 +3181,7 @@ svg/text/reftests/lengthAdjust-large-font.svg
 svg/text/reftests/multiple-textpaths.svg
 svg/text/reftests/no-background.svg
 svg/text/reftests/no-margin-border-padding.svg
+svg/text/reftests/opacity.svg
 svg/text/reftests/text-bidi-controls-anchors-1.svg
 svg/text/reftests/text-context-fill.svg
 svg/text/reftests/text-font-face-load-image.html
@@ -3197,5 +3198,4 @@ svg/text/reftests/textpath-pathlength-zero-offset-zero.svg
 svg/text/reftests/textpath-shape-001.svg
 svg/text/reftests/textpath-side-002.svg
 svg/text/reftests/textpath-side-004.svg
-svg/text/reftests/tspan-opacity-mixed-direction.svg
 svg/top-level-document/svg-image-document-svg-xml-mime-type.tentative.html

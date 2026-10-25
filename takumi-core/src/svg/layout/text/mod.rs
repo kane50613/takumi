@@ -98,6 +98,8 @@ struct SpanStyle {
   /// The length the span is stretched to, from `textLength`.
   text_length: Option<f32>,
   length_adjust: LengthAdjust,
+  /// The opacity of the span's glyphs and decorations together.
+  opacity: f32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
