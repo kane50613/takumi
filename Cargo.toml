@@ -91,11 +91,6 @@ features = ["std", "rust-allocator"]
 version = "0.18"
 features = ["zlib-rs"]
 
-[workspace.dependencies.resvg]
-version = "0.48"
-default-features = false
-features = ["raster-images"]
-
 [workspace.dependencies.clap]
 version = "4.6"
 features = ["derive"]
