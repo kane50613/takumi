@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>filter_overflow_source</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        gap: 20px;
+        width: 680px;
+        height: 200px;
+      }
+      .box {
+        display: flex;
+        position: relative;
+        width: 200px;
+        height: 160px;
+        margin: 20px 0;
+        background: black;
+        overflow: hidden;
+      }
+      .circle {
+        display: flex;
+        position: absolute;
+        left: -60px;
+        top: 20px;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: white;
+        filter: blur(20px);
+      }
+      .circle div {
+        display: flex;
+      }
+    </style>
+  </head>
+  <body style="width: 680px; height: 600px">
+    <div
+      style="display: flex; flex-direction: column; width: 680px; height: 600px; background: #888"
+    >
+      <div class="row">
+        <div class="box"><div class="circle"></div></div>
+        <div class="box" style="border-radius: 30px"><div class="circle"></div></div>
+        <div class="box" style="opacity: 0.6"><div class="circle"></div></div>
+      </div>
+      <div class="row">
+        <div class="box">
+          <div class="circle" style="filter: drop-shadow(50px 0 12px white)"></div>
+        </div>
+        <div class="box">
+          <div class="circle" style="filter: blur(10px); opacity: 0.6"></div>
+        </div>
+        <div class="box">
+          <div class="circle" style="filter: blur(10px); background: transparent">
+            <div
+              style="position: absolute; left: 40px; width: 60px; height: 120px; overflow: hidden"
+            >
+              <div
+                style="
+                  position: absolute;
+                  left: -40px;
+                  width: 120px;
+                  height: 120px;
+                  background: white;
+                "
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="box">
+          <div class="circle" style="clip-path: inset(0 0 0 60px)"></div>
+        </div>
+        <div class="box">
+          <div
+            class="circle"
+            style="
+              border-radius: 0;
+              mask-image: linear-gradient(to right, transparent 50%, black 50%);
+            "
+          ></div>
+        </div>
+        <div class="box">
+          <div class="circle" style="clip-path: inset(0 0 0 60px); opacity: 0.6"></div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

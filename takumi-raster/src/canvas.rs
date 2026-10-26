@@ -7,7 +7,12 @@ mod mask;
 mod paint_source;
 mod skia;
 
-use std::{borrow::Cow, io, mem::replace, sync::Arc};
+use std::{
+  borrow::Cow,
+  io,
+  mem::{replace, take},
+  sync::Arc,
+};
 
 use blit::{blit_paint_source_translation, blit_translucent_translation};
 pub(crate) use blit::{overlay_image, overlay_sampled_paint_source, placement_overlap};
@@ -188,6 +193,15 @@ impl Canvas {
     }
 
     Pixmap::new(size.width, size.height).ok_or_else(dimension_mismatch)
+  }
+
+  /// Keeps the output clip on the parent device, as Skia's `internalSaveLayer` does.
+  pub(crate) fn begin_effect_subcanvas(&mut self, bounds: Placement) -> Result<CanvasSubcanvas> {
+    let mut subcanvas = self.begin_subcanvas(bounds)?;
+    let masks = take(&mut self.constraint_mask_stack);
+
+    subcanvas.constraint_mask_stack.get_or_insert(masks);
+    Ok(subcanvas)
   }
 
   pub(crate) fn begin_subcanvas(&mut self, bounds: Placement) -> Result<CanvasSubcanvas> {
