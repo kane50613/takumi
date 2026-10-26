@@ -36,7 +36,7 @@ impl<'b> SvgPainter<'b> {
     };
 
     painter.container(root);
-    if has_isolation(&painter.ops) {
+    if has_bounded_layer(&painter.ops) {
       annotate_isolation_bounds(&mut painter.ops);
     }
     (!painter.exhausted).then_some(painter.ops)
@@ -49,7 +49,7 @@ impl<'b> SvgPainter<'b> {
     fill(self);
     let mut nested = mem::replace(&mut self.ops, outer);
 
-    if has_isolation(&nested) {
+    if has_bounded_layer(&nested) {
       annotate_isolation_bounds(&mut nested);
     }
 
@@ -117,7 +117,10 @@ impl<'b> SvgPainter<'b> {
     }
 
     if container.blend_mode != BlendMode::Normal {
-      self.push(SvgOp::PushBlend(container.blend_mode));
+      self.push(SvgOp::PushBlend {
+        blend: container.blend_mode,
+        bounds: None,
+      });
       pop_count += 1;
     } else if container.isolate && container.opacity >= 1.0 {
       self.push(SvgOp::PushIsolation { bounds: None });
@@ -125,7 +128,10 @@ impl<'b> SvgPainter<'b> {
     }
 
     if container.opacity < 1.0 {
-      self.push(SvgOp::PushOpacity(container.opacity));
+      self.push(SvgOp::PushOpacity {
+        opacity: container.opacity,
+        bounds: None,
+      });
       pop_count += 1;
     }
 
@@ -418,10 +424,10 @@ fn annotate_isolation_bounds(ops: &mut [SvgOp]) {
   let _ = scope_bounds(ops, &mut index);
 }
 
-fn has_isolation(ops: &[SvgOp]) -> bool {
+fn has_bounded_layer(ops: &[SvgOp]) -> bool {
   ops.iter().any(|op| match op {
-    SvgOp::PushIsolation { .. } => true,
-    SvgOp::PushMask { ops, .. } => has_isolation(ops),
+    SvgOp::PushBlend { .. } | SvgOp::PushIsolation { .. } | SvgOp::PushOpacity { .. } => true,
+    SvgOp::PushMask { ops, .. } => has_bounded_layer(ops),
     _ => false,
   })
 }
@@ -452,11 +458,28 @@ fn scope_bounds(ops: &mut [SvgOp], index: &mut usize) -> ScopeBounds {
 
         child.clipped(clip)
       }
-      SvgOp::PushBlend(_) | SvgOp::PushOpacity(_) => scope_bounds(ops, index),
+      SvgOp::PushBlend { .. } => {
+        let child = scope_bounds(ops, index);
+
+        if let SvgOp::PushBlend { bounds, .. } = &mut ops[op_index] {
+          *bounds = child.rect();
+        }
+
+        child
+      }
       SvgOp::PushIsolation { .. } => {
         let child = scope_bounds(ops, index);
 
         if let SvgOp::PushIsolation { bounds } = &mut ops[op_index] {
+          *bounds = child.rect();
+        }
+
+        child
+      }
+      SvgOp::PushOpacity { .. } => {
+        let child = scope_bounds(ops, index);
+
+        if let SvgOp::PushOpacity { bounds, .. } = &mut ops[op_index] {
           *bounds = child.rect();
         }
 

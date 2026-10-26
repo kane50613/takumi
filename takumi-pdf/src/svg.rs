@@ -52,9 +52,9 @@ impl<'a> SvgPainter<'a> {
           // The matching `Pop` still comes; keep the layer stack balanced.
           None => surface.push_transform(&Transform::identity()),
         },
-        SvgOp::PushBlend(blend) => surface.push_blend_mode(blend.into()),
+        SvgOp::PushBlend { blend, .. } => surface.push_blend_mode(blend.into()),
         SvgOp::PushIsolation { .. } => surface.push_isolated(),
-        SvgOp::PushOpacity(opacity) => surface.push_opacity(normalized(opacity)),
+        SvgOp::PushOpacity { opacity, .. } => surface.push_opacity(normalized(opacity)),
         SvgOp::PushMask { ops, luminance } => {
           // CSS filters the element after masking, so the mask's own colors stay as drawn.
           let stream = draw_stream(surface, |mask| SvgPainter::new(None).draw_ops(mask, ops));

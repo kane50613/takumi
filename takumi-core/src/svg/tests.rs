@@ -905,7 +905,7 @@ fn a_tspan_opacity_groups_its_glyphs() {
     ops
       .iter()
       .filter_map(|op| match op {
-        SvgOp::PushOpacity(opacity) => Some(*opacity),
+        SvgOp::PushOpacity { opacity, .. } => Some(*opacity),
         _ => None,
       })
       .collect()
@@ -962,6 +962,33 @@ fn an_isolated_group_carries_its_paint_bounds() {
       right: 30.0,
       bottom: 50.0,
     })
+  );
+}
+
+#[test]
+fn effect_groups_carry_their_paint_bounds() {
+  let bounds = |body: &str| {
+    ops(body).into_iter().find_map(|op| match op {
+      SvgOp::PushBlend { bounds, .. } | SvgOp::PushOpacity { bounds, .. } => bounds,
+      _ => None,
+    })
+  };
+  let rect = Some(Rect {
+    left: 20.0,
+    top: 30.0,
+    right: 30.0,
+    bottom: 50.0,
+  });
+
+  assert_eq!(
+    bounds(r#"<g opacity="0.5"><rect x="20" y="30" width="10" height="20"/></g>"#),
+    rect
+  );
+  assert_eq!(
+    bounds(
+      r#"<g style="mix-blend-mode:multiply"><rect x="20" y="30" width="10" height="20"/></g>"#
+    ),
+    rect
   );
 }
 

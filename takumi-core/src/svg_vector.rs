@@ -25,14 +25,24 @@ pub enum SvgOp {
     bounds: Option<Rect<f32>>,
   },
   /// Blends nested ops onto the backdrop with a blend mode.
-  PushBlend(BlendMode),
+  PushBlend {
+    /// Blend mode to apply to the group.
+    blend: BlendMode,
+    /// Conservative bounds of the nested paint in the group's coordinate space.
+    bounds: Option<Rect<f32>>,
+  },
   /// Composites nested ops as one isolated group, so their blend modes stop at its backdrop.
   PushIsolation {
     /// Conservative bounds of the nested paint in the group's coordinate space.
     bounds: Option<Rect<f32>>,
   },
   /// Applies uniform opacity to nested ops as one isolated group.
-  PushOpacity(f32),
+  PushOpacity {
+    /// Group opacity in `0..=1`.
+    opacity: f32,
+    /// Conservative bounds of the nested paint in the group's coordinate space.
+    bounds: Option<Rect<f32>>,
+  },
   /// Masks nested ops with the rendering of `ops` (an alpha or luminance soft mask).
   PushMask {
     /// Mask content, flattened recursively.
