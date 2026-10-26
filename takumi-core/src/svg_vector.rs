@@ -21,6 +21,8 @@ pub enum SvgOp {
     path: Vec<PathCommand>,
     /// `true` for the even-odd fill rule, `false` for nonzero.
     evenodd: bool,
+    /// Conservative clip bounds in the clip's coordinate space.
+    bounds: Option<Rect<f32>>,
   },
   /// Blends nested ops onto the backdrop with a blend mode.
   PushBlend(BlendMode),

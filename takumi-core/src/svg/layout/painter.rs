@@ -83,6 +83,16 @@ impl<'b> SvgPainter<'b> {
     self.ops.push(op);
   }
 
+  fn push_clip(&mut self, path: Vec<PathCommand>, evenodd: bool) {
+    let bounds = PathCommand::normalize(&path).map(|path| path.bounds);
+
+    self.push(SvgOp::PushClip {
+      path,
+      evenodd,
+      bounds,
+    });
+  }
+
   fn container(&mut self, container: &Container) {
     if self.exhausted {
       return;
@@ -198,10 +208,10 @@ impl<'b> SvgPainter<'b> {
 
     match &picture.content {
       PictureContent::Svg(document) => {
-        self.push(SvgOp::PushClip {
-          path: PathCommand::rectangle(0.0, 0.0, document.width, document.height),
-          evenodd: false,
-        });
+        self.push_clip(
+          PathCommand::rectangle(0.0, 0.0, document.width, document.height),
+          false,
+        );
         self.container(&document.root);
         self.push(SvgOp::Pop);
       }
@@ -290,10 +300,7 @@ impl<'b> SvgPainter<'b> {
       commands.push(PathCommand::LineTo(Point::ZERO));
     }
 
-    self.push(SvgOp::PushClip {
-      path: commands,
-      evenodd,
-    });
+    self.push_clip(commands, evenodd);
     pushed + 1
   }
 
@@ -334,15 +341,15 @@ impl<'b> SvgPainter<'b> {
         pop_count += 1;
       }
 
-      painter.push(SvgOp::PushClip {
-        path: PathCommand::rectangle(
+      painter.push_clip(
+        PathCommand::rectangle(
           mask.rect.x(),
           mask.rect.y(),
           mask.rect.width(),
           mask.rect.height(),
         ),
-        evenodd: false,
-      });
+        false,
+      );
       pop_count += 1;
       painter.container(&mask.root);
       painter.pop(pop_count);
@@ -439,7 +446,7 @@ fn scope_bounds(ops: &mut [SvgOp], index: &mut usize) -> ScopeBounds {
       SvgOp::PushClip { .. } => {
         let child = scope_bounds(ops, index);
         let clip = match &ops[op_index] {
-          SvgOp::PushClip { path, .. } => PathCommand::normalize(path).map(|path| path.bounds),
+          SvgOp::PushClip { bounds, .. } => *bounds,
           _ => unreachable!(),
         };
 

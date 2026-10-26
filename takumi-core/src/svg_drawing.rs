@@ -92,7 +92,17 @@ impl<'a, 'b> Target<'a, 'b> {
           self.run(ops);
           self.transform = outer;
         }
-        SvgOp::PushClip { path, evenodd } => {
+        SvgOp::PushClip {
+          path,
+          evenodd,
+          bounds,
+        } => {
+          if self.clip.is_none()
+            && !scope_has_unbounded_effects(&mut ops.clone())
+            && self.clip_layer(ops, path, *evenodd, *bounds)
+          {
+            continue;
+          }
           let outer = self.clip.take();
 
           self.clip = clipped(outer.as_ref(), path, *evenodd, self);
@@ -218,6 +228,47 @@ impl<'a, 'b> Target<'a, 'b> {
       Transform::identity(),
       self.clip.as_ref(),
     );
+  }
+
+  /// Draws a clipped scope against a copied backdrop, then replaces that clipped region.
+  fn clip_layer(
+    &mut self,
+    ops: &mut Iter<'_, SvgOp>,
+    path: &[PathCommand],
+    evenodd: bool,
+    scope: Option<ScopeRect<f32>>,
+  ) -> bool {
+    let Some(scope) = scope.and_then(|scope| self.scope_bounds(scope)) else {
+      return false;
+    };
+    if !within_raster_pixel_budget(scope.width(), scope.height()) {
+      return false;
+    }
+    let Some(mut layer) = Pixmap::new(scope.width(), scope.height()) else {
+      return false;
+    };
+
+    copy_to_layer(self.pixmap.as_ref(), &mut layer, scope);
+    let transform = Transform::from_translate(-(scope.x() as f32), -(scope.y() as f32))
+      .pre_concat(self.transform);
+    let Some(limit) = self.limit.translate(-scope.x(), -scope.y()) else {
+      return false;
+    };
+    let mut view = layer.as_mut();
+    let mut target = Target {
+      pixmap: &mut view,
+      transform,
+      clip: None,
+      limit,
+    };
+    let Some(clip) = clipped(None, path, evenodd, &target) else {
+      return false;
+    };
+
+    target.clip = Some(clip);
+    target.run(ops);
+    copy_from_layer(&layer, self.pixmap, scope);
+    true
   }
 
   /// The mask `ops` draw, which cuts the layer it is pushed with.
@@ -503,6 +554,56 @@ pub(crate) fn draw_over(
   }
 }
 
+fn copy_to_layer(source: PixmapRef, target: &mut Pixmap, bounds: IntRect) {
+  let width = bounds.width() as usize;
+  let source_width = source.width() as usize;
+  let source_x = bounds.x() as usize;
+  let source_y = bounds.y() as usize;
+
+  for row in 0..bounds.height() as usize {
+    let source_start = ((source_y + row) * source_width + source_x) * 4;
+    let target_start = row * width * 4;
+
+    target.data_mut()[target_start..][..width * 4]
+      .copy_from_slice(&source.data()[source_start..][..width * 4]);
+  }
+}
+
+fn copy_from_layer(source: &Pixmap, target: &mut PixmapMut, bounds: IntRect) {
+  let width = bounds.width() as usize;
+  let target_width = target.width() as usize;
+  let target_x = bounds.x() as usize;
+  let target_y = bounds.y() as usize;
+
+  for row in 0..bounds.height() as usize {
+    let source_start = row * width * 4;
+    let target_start = ((target_y + row) * target_width + target_x) * 4;
+
+    target.data_mut()[target_start..][..width * 4]
+      .copy_from_slice(&source.data()[source_start..][..width * 4]);
+  }
+}
+
+fn scope_has_unbounded_effects(ops: &mut Iter<'_, SvgOp>) -> bool {
+  let mut depth = 0;
+
+  for op in ops {
+    match op {
+      SvgOp::PushFilter(_) | SvgOp::PushMask { .. } => return true,
+      SvgOp::Pop if depth == 0 => return false,
+      SvgOp::Pop => depth -= 1,
+      SvgOp::PushTransform(_)
+      | SvgOp::PushClip { .. }
+      | SvgOp::PushOpacity(_)
+      | SvgOp::PushBlend(_)
+      | SvgOp::PushIsolation { .. } => depth += 1,
+      SvgOp::Draw { .. } | SvgOp::Image { .. } => {}
+    }
+  }
+
+  false
+}
+
 /// Skips ops up to the `Pop` closing the scope they are in.
 fn skip_scope(ops: &mut Iter<'_, SvgOp>) {
   let mut depth = 0_usize;
@@ -752,6 +853,19 @@ mod tests {
 
     assert_eq!(image.pixel(6, 4), [0, 0, 0, 0]);
     assert_eq!(image.pixel(2, 4), [0, 0, 255, 255]);
+  }
+
+  #[test]
+  fn a_clipped_blend_uses_its_backdrop() {
+    let image = draw(
+      r##"<defs><clipPath id="c"><rect width="4" height="8"/></clipPath></defs>
+      <rect width="8" height="8" fill="#ff0000"/>
+      <g clip-path="url(#c)"><rect width="8" height="8" fill="#0000ff" style="mix-blend-mode:multiply"/></g>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(2, 4), [0, 0, 0, 255]);
+    assert_eq!(image.pixel(6, 4), [255, 0, 0, 255]);
   }
 
   #[test]

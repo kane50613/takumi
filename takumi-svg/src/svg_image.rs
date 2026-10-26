@@ -45,7 +45,7 @@ impl SvgDocument {
         SvgOp::PushTransform(transform) => {
           groups.push(self.begin_group(*transform, 1.0, None, None)?);
         }
-        SvgOp::PushClip { path, evenodd } => {
+        SvgOp::PushClip { path, evenodd, .. } => {
           let clip = self.clip_path(
             &path_data(path, Affine::IDENTITY),
             fill_rule(*evenodd),
