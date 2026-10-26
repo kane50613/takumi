@@ -109,21 +109,21 @@ impl<'a, 'b> Target<'a, 'b> {
           self.run(ops);
           self.clip = outer;
         }
-        SvgOp::PushOpacity(opacity) => self.layer(
+        SvgOp::PushOpacity { opacity, bounds } => self.layer(
           ops,
           Composite {
             opacity: Some(*opacity),
             ..Composite::default()
           },
-          None,
+          *bounds,
         ),
-        SvgOp::PushBlend(blend) => self.layer(
+        SvgOp::PushBlend { blend, bounds } => self.layer(
           ops,
           Composite {
             blend: Some(tiny_blend_mode(*blend)),
             ..Composite::default()
           },
-          None,
+          *bounds,
         ),
         SvgOp::PushIsolation { bounds } => self.layer(ops, Composite::default(), *bounds),
         SvgOp::PushMask {
@@ -594,8 +594,8 @@ fn scope_has_unbounded_effects(ops: &mut Iter<'_, SvgOp>) -> bool {
       SvgOp::Pop => depth -= 1,
       SvgOp::PushTransform(_)
       | SvgOp::PushClip { .. }
-      | SvgOp::PushOpacity(_)
-      | SvgOp::PushBlend(_)
+      | SvgOp::PushOpacity { .. }
+      | SvgOp::PushBlend { .. }
       | SvgOp::PushIsolation { .. } => depth += 1,
       SvgOp::Draw { .. } | SvgOp::Image { .. } => {}
     }
@@ -614,8 +614,8 @@ fn skip_scope(ops: &mut Iter<'_, SvgOp>) {
       SvgOp::Pop => depth -= 1,
       SvgOp::PushTransform(_)
       | SvgOp::PushClip { .. }
-      | SvgOp::PushOpacity(_)
-      | SvgOp::PushBlend(_)
+      | SvgOp::PushOpacity { .. }
+      | SvgOp::PushBlend { .. }
       | SvgOp::PushIsolation { .. }
       | SvgOp::PushMask { .. }
       | SvgOp::PushFilter(_) => depth += 1,
