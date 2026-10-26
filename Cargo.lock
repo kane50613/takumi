@@ -229,9 +229,8 @@ dependencies = [
 
 [[package]]
 name = "crc32fast"
-version = "1.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01a7799fd6b852db0e61728dde9a204c423b44d689dbd432522543614b490e78"
+version = "1.5.3"
+source = "git+https://github.com/kane50613/rust-crc32fast?rev=af25a08a9bfc9fd3afca1ccdf4fe92be0cba67ed#af25a08a9bfc9fd3afca1ccdf4fe92be0cba67ed"
 dependencies = [
  "cfg-if",
 ]
@@ -1622,6 +1621,7 @@ dependencies = [
 name = "takumi-bindings-common"
 version = "0.0.0"
 dependencies = [
+ "crc32fast",
  "serde",
  "serde_bytes",
  "takumi-core",

@@ -4,6 +4,10 @@ publish = false
 edition = "2024"
 license = "MIT OR Apache-2.0"
 
+# This dependency selects the WASM codec table policy through feature unification.
+[package.metadata.cargo-machete]
+ignored = ["crc32fast"]
+
 [dependencies]
 serde.workspace = true
 serde_bytes.workspace = true
@@ -12,6 +16,10 @@ serde_bytes.workspace = true
 path = "../takumi-core"
 default-features = false
 features = ["woff2"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.crc32fast]
+workspace = true
+features = ["wasm-runtime-tables"]
 
 [lints]
 workspace = true

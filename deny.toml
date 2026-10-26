@@ -10,5 +10,5 @@ skip = [{ crate = "syn" }]
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-# The forks the font stack is pinned to, by rev: fontations gates hinting, harfrust gates AAT.
-allow-git = ["https://github.com/kane50613/fontations", "https://github.com/kane50613/harfrust"]
+# Pinned forks for font feature gates and WASM CRC table generation.
+allow-git = ["https://github.com/kane50613/fontations", "https://github.com/kane50613/harfrust", "https://github.com/kane50613/rust-crc32fast"]
