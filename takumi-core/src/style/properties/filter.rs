@@ -101,6 +101,16 @@ impl BlurType {
 }
 
 impl Filter {
+  /// Whether the filter can move pixels outside their source bounds.
+  pub(crate) fn moves_pixels(&self) -> bool {
+    match self {
+      Self::Blur(_) | Self::DropShadow(_) | Self::Url(_) => true,
+      #[cfg(feature = "svg")]
+      Self::Reference(_) => true,
+      _ => false,
+    }
+  }
+
   /// Whether this is `drop-shadow()`, which `backdrop-filter` ignores.
   pub fn is_drop_shadow(&self) -> bool {
     matches!(self, Filter::DropShadow(_))

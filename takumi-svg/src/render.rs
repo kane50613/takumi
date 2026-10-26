@@ -16,6 +16,7 @@ use takumi_core::{
     node::Node,
     tree::RenderNode,
   },
+  paint_property::EffectKind,
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, CellArea,
     CellBackground, FillShape, GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent,
@@ -187,6 +188,16 @@ impl<'n> PlacedBox<'n> {
 
     let (token, reference) = doc.begin_mask(false)?;
     let border_box = Frame::border_box(self.frame);
+    let border = *self.painter.border();
+    let clip = if border.is_zero() {
+      None
+    } else if let Some(shape) = BackgroundClipArea::BorderBox(border).shape(size) {
+      let clip = doc.clip_shape(&shape, self.frame.translation())?;
+
+      Some(doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)?)
+    } else {
+      None
+    };
 
     let layers = FillLayers::mask(style).resolve(
       images,
@@ -195,6 +206,9 @@ impl<'n> PlacedBox<'n> {
     );
 
     LayerEmitter::new(&self.node.context, doc).layers(&layers, border_box)?;
+    if let Some(clip) = clip {
+      doc.end_group(clip)?;
+    }
     doc.end_mask(token)?;
     Ok(Some(doc.begin_masked_group(&reference)?))
   }
@@ -328,26 +342,54 @@ impl<'n> PlacedBox<'n> {
 pub(crate) struct EffectGroups(Vec<GroupToken>);
 
 impl EffectGroups {
-  /// Opens `placed`'s blend, isolation, mask, filter and opacity groups, moved by
-  /// `group_transform`, then its `clip-path`.
+  /// Opens the normal and filter effect stages of an inline box.
   pub(crate) fn open(
     placed: &PlacedBox,
     group_transform: Affine,
+    doc: &mut SvgDocument,
+  ) -> io::Result<Self> {
+    let mut groups = Self::open_stage(placed, group_transform, EffectKind::Group, doc)?.0;
+
+    groups.extend(placed.begin_clip_path_group(doc)?);
+
+    if !placed.node.context.style.misc1_data.filter.is_empty() {
+      groups.extend(Self::open_stage(placed, Affine::IDENTITY, EffectKind::Filter, doc)?.0);
+    }
+
+    Ok(Self(groups))
+  }
+
+  /// Opens one property-tree effect stage.
+  pub(crate) fn open_stage(
+    placed: &PlacedBox,
+    group_transform: Affine,
+    kind: EffectKind,
     doc: &mut SvgDocument,
   ) -> io::Result<Self> {
     let context = &placed.node.context;
     let style = &context.style;
     let mut groups = Vec::new();
 
-    if style.misc_data.mix_blend_mode != BlendMode::Normal {
-      groups.push(doc.begin_blend_group(&style.misc_data.mix_blend_mode.to_css_string())?);
+    if !group_transform.is_identity() {
+      groups.push(doc.begin_group(group_transform, 1.0, None, None)?);
     }
-    if style.misc_data.isolation == Isolation::Isolate {
-      groups.push(doc.begin_isolate_group()?);
-    }
-    groups.extend(placed.begin_mask_group(doc)?);
 
-    let opacity = style.svg_data.opacity.0;
+    if kind == EffectKind::Group {
+      if style.misc_data.mix_blend_mode != BlendMode::Normal {
+        groups.push(doc.begin_blend_group(&style.misc_data.mix_blend_mode.to_css_string())?);
+      }
+      if style.misc_data.isolation == Isolation::Isolate {
+        groups.push(doc.begin_isolate_group()?);
+      }
+      groups.extend(placed.begin_mask_group(doc)?);
+
+      if style.svg_data.opacity.0 < 1.0 {
+        groups.push(doc.begin_group(Affine::IDENTITY, style.svg_data.opacity.0, None, None)?);
+      }
+
+      return Ok(Self(groups));
+    }
+
     let filter_refs = doc.filter(
       &style.misc1_data.filter,
       context,
@@ -357,10 +399,10 @@ impl EffectGroups {
 
     groups.extend(doc.begin_filter_wrappers(&filter_refs)?);
 
-    if !group_transform.is_identity() || opacity < 1.0 || !filter_refs.is_empty() {
+    if !filter_refs.is_empty() {
       groups.push(doc.begin_group(
-        group_transform,
-        opacity,
+        Affine::IDENTITY,
+        1.0,
         None,
         filter_refs.first().map(String::as_str),
       )?);
@@ -374,8 +416,6 @@ impl EffectGroups {
     if !filter_refs.is_empty() {
       doc.rect(Frame::border_box(placed.frame), Rgba::TRANSPARENT)?;
     }
-
-    groups.extend(placed.begin_clip_path_group(doc)?);
 
     Ok(Self(groups))
   }

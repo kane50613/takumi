@@ -151,6 +151,11 @@ pub(crate) struct CanvasSubcanvas {
   offset: Point<i32>,
 }
 
+enum SubcanvasClips {
+  Inherit,
+  Output,
+}
+
 impl Canvas {
   /// Creates a canvas backed by a `size`-sized pixmap, or `None` when the pixmap
   /// cannot be allocated (zero size, over the pixel budget, or dimensions large
@@ -197,14 +202,18 @@ impl Canvas {
 
   /// Keeps the output clip on the parent device, as Skia's `internalSaveLayer` does.
   pub(crate) fn begin_effect_subcanvas(&mut self, bounds: Placement) -> Result<CanvasSubcanvas> {
-    let mut subcanvas = self.begin_subcanvas(bounds)?;
-    let masks = take(&mut self.constraint_mask_stack);
-
-    subcanvas.constraint_mask_stack.get_or_insert(masks);
-    Ok(subcanvas)
+    self.begin_subcanvas_with_clips(bounds, SubcanvasClips::Output)
   }
 
   pub(crate) fn begin_subcanvas(&mut self, bounds: Placement) -> Result<CanvasSubcanvas> {
+    self.begin_subcanvas_with_clips(bounds, SubcanvasClips::Inherit)
+  }
+
+  fn begin_subcanvas_with_clips(
+    &mut self,
+    bounds: Placement,
+    clips: SubcanvasClips,
+  ) -> Result<CanvasSubcanvas> {
     let image = Self::acquire_offscreen(Size {
       width: bounds.width,
       height: bounds.height,
@@ -214,7 +223,10 @@ impl Canvas {
       return Ok(CanvasSubcanvas {
         image: replace(&mut self.image, image),
         origin: None,
-        constraint_mask_stack: None,
+        constraint_mask_stack: match clips {
+          SubcanvasClips::Inherit => None,
+          SubcanvasClips::Output => Some(take(&mut self.constraint_mask_stack)),
+        },
         offset: Point { x: 0, y: 0 },
       });
     }
@@ -227,7 +239,10 @@ impl Canvas {
       x: bounds.left,
       y: bounds.top,
     };
-    let constraint_mask_stack = self.constraint_mask_stack.clone();
+    let constraint_mask_stack = match clips {
+      SubcanvasClips::Inherit => self.constraint_mask_stack.clone(),
+      SubcanvasClips::Output => Vec::new(),
+    };
 
     Ok(CanvasSubcanvas {
       image: replace(&mut self.image, image),

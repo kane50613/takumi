@@ -13,7 +13,7 @@ use takumi_core::{
     decoration::ClipBox,
     inline::{PositionedGlyph, PositionedInlineRun},
   },
-  paint_property::ClipNode,
+  paint_property::{ClipKind, ClipNode},
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, CellArea, CellBackground,
     FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice, PendingOutline, ShadowShape,
@@ -161,7 +161,7 @@ fn within_cell(
   let clip = ClipNode {
     parent: None,
     transform: transform * Affine::translation(cell.offset.x, cell.offset.y),
-    shape: FillShape::Rect(cell.size),
+    kind: ClipKind::Shape(FillShape::Rect(cell.size)),
     owner: Vec::new(),
   };
   let Some(mask) = PlacedMask::of_clip(&clip, canvas.viewport()) else {

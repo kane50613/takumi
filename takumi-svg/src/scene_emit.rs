@@ -10,7 +10,7 @@ use std::io;
 use takumi_core::{
   geometry::Point,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
-  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
+  paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
   painter::{BoxFrame, TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene},
   style::{Affine, Filter},
@@ -182,12 +182,13 @@ impl ChunkWriter<'_, '_, '_> {
   }
 
   /// Opens the groups of the effect `paint` owns, after its filtered backdrop.
-  fn open_effect(&mut self, paint: &NodePaint) -> io::Result<Vec<GroupToken>> {
+  fn open_effect(&mut self, paint: &NodePaint, kind: EffectKind) -> io::Result<Vec<GroupToken>> {
     let Some((placed, group_transform)) = self.emitter.place(paint, self.current()) else {
       return Ok(Vec::new());
     };
 
-    if self.backdrops
+    if kind == EffectKind::Group
+      && self.backdrops
       && !placed
         .node
         .context
@@ -199,7 +200,7 @@ impl ChunkWriter<'_, '_, '_> {
       self.emit_backdrop(&placed, paint, group_transform)?;
     }
 
-    Ok(EffectGroups::open(&placed, group_transform, self.doc)?.into_tokens())
+    Ok(EffectGroups::open_stage(&placed, group_transform, kind, self.doc)?.into_tokens())
   }
 
   /// Emits `placed`'s backdrop: the chunks before its own, filtered and clipped to its border box,
@@ -230,7 +231,6 @@ impl ChunkWriter<'_, '_, '_> {
       .then(|| doc.begin_group(group_transform, 1.0, None, None))
       .transpose()?;
     let clip_group = doc.begin_clipped_group(&placed.border_box_path_data())?;
-    let shape_clip = placed.begin_clip_path_group(doc)?;
     let mask = placed.begin_mask_group(doc)?;
     // The blur feathers the clipped backdrop's alpha at its edges; restoring it averages only the
     // pixels inside, close to the mirrored edges browsers sample. Skipped for opacity(), which
@@ -269,7 +269,7 @@ impl ChunkWriter<'_, '_, '_> {
     doc.end_group(backdrop_clip)?;
     doc.end_group(filter_group)?;
     doc.end_filter_wrappers(filter_wrappers)?;
-    for group in [mask, shape_clip].into_iter().flatten() {
+    for group in [mask].into_iter().flatten() {
       doc.end_group(group)?;
     }
     doc.end_group(clip_group)?;
@@ -295,10 +295,13 @@ impl ChunkWriter<'_, '_, '_> {
 
 impl PropertySink for ChunkWriter<'_, '_, '_> {
   fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
+    let (ClipKind::Shape(shape) | ClipKind::ClipPath(shape)) = &clip.kind else {
+      return;
+    };
     let relative = self.current().invert().unwrap_or(Affine::IDENTITY) * clip.transform;
     let doc = &mut *self.doc;
     let opened = doc
-      .clip_shape(&clip.shape, relative)
+      .clip_shape(shape, relative)
       .and_then(|reference| doc.begin_group(Affine::IDENTITY, 1.0, Some(&reference), None));
 
     match opened {
@@ -310,13 +313,15 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
     }
   }
 
-  fn pop_clip(&mut self) {
-    self.close();
+  fn pop_clip(&mut self, clip: &ClipNode) {
+    if !matches!(clip.kind, ClipKind::PixelMovingFilter(_)) {
+      self.close();
+    }
   }
 
-  fn begin_effect(&mut self, id: EffectId, _effect: &EffectNode) {
+  fn begin_effect(&mut self, id: EffectId, effect: &EffectNode) {
     let opened = match self.owners[id.index()] {
-      Some(owner) => self.open_effect(owner),
+      Some(owner) => self.open_effect(owner, effect.kind),
       None => Ok(Vec::new()),
     };
 

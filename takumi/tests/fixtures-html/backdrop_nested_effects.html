@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>backdrop_nested_effects</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 320px; height: 240px">
+    <div style="display: flex; position: relative; width: 320px; height: 240px; background: red">
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 20px;
+          top: 20px;
+          width: 280px;
+          height: 200px;
+          backdrop-filter: invert(1);
+        "
+      >
+        <div
+          style="
+            display: flex;
+            position: absolute;
+            left: 40px;
+            top: 40px;
+            width: 160px;
+            height: 80px;
+            backdrop-filter: invert(1);
+          "
+        ></div>
+      </div>
+    </div>
+  </body>
+</html>

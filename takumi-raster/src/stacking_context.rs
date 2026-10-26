@@ -1,19 +1,19 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
-  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
+  paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
   painter::{TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene, SceneBounds, SceneView},
 };
 use tiny_skia::PixmapMut;
 
 use crate::{
-  BorderProperties, Canvas, CanvasDevice, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error,
-  NodeMasks, PlacedMask, RenderContext, Result, apply_backdrop_filter, apply_filters_to_pixmap,
+  Backdrop, BorderProperties, Canvas, CanvasDevice, CanvasSubcanvas, CanvasViewport,
+  DeferredOutline, Error, NodeMasks, PlacedMask, RenderContext, Result, apply_filters_to_pixmap,
   draw_debug_border, draw_table_box_shell,
   inline_drawing::draw_own_content,
   layout::tree::RenderNode,
-  style::{Affine, Filter, SizingContext, expand_filter_bounds},
+  style::{Affine, BlendMode, Filter, SizingContext, expand_filter_bounds},
   within_pixmap_pixel_budget,
 };
 
@@ -70,8 +70,11 @@ enum OpenEffect {
 
 struct EffectGroup {
   layer: CanvasSubcanvas,
+  /// Keeps nested effects from sampling the already filtered backdrop.
+  content_layer: Option<CanvasSubcanvas>,
   masks: usize,
   context: RenderContext,
+  kind: EffectKind,
   filter_bounds: Option<SceneBounds>,
 }
 
@@ -154,39 +157,36 @@ impl ScenePainter<'_, '_> {
     let canvas = &mut *self.canvas;
     let style = &context.style;
 
-    if !style.misc1_data.backdrop_filter.is_empty() {
-      let shell_mask = if style.has_shape_mask() {
-        match NodeMasks::of(&context, layout, paint.transform, canvas.viewport())? {
-          Some(masks) => masks.into_shell_mask(),
-          None => return Ok(OpenEffect::Hidden),
-        }
+    let backdrop =
+      if effect.kind == EffectKind::Group && !style.misc1_data.backdrop_filter.is_empty() {
+        let border = BorderProperties::from_context(&context, layout.size, layout.border);
+
+        Backdrop::new(canvas, border, layout.size, paint.transform, &context)?
       } else {
         None
       };
-      let border = BorderProperties::from_context(&context, layout.size, layout.border);
-
-      apply_backdrop_filter(
-        canvas,
-        border,
-        layout.size,
-        paint.transform,
-        &context,
-        shell_mask.as_ref(),
-      )?;
-    }
 
     let viewport = canvas.viewport();
     let placement = effect
       .bounds
-      .and_then(|bounds| layer_placement(viewport, bounds, &context, paint.transform))
+      .and_then(|bounds| {
+        if effect.kind == EffectKind::Filter {
+          layer_placement(viewport, bounds, &context, paint.transform)
+        } else {
+          viewport.clamp_bounds(bounds, 2)
+        }
+      })
       .unwrap_or_else(|| viewport.placement());
-    let Some(masks) = NodeMasks::of(&context, layout, paint.transform, viewport)? else {
-      return Ok(OpenEffect::Hidden);
-    };
-    let count = masks.len();
+    let mut count = 0;
 
-    for mask in masks.shell {
-      canvas.push_mask(PlacedMask::covering(viewport, mask));
+    if effect.kind == EffectKind::Group {
+      let Some(masks) = NodeMasks::of(&context, layout, paint.transform, viewport)? else {
+        return Ok(OpenEffect::Hidden);
+      };
+      count = masks.len();
+      for mask in masks.shell {
+        canvas.push_mask(PlacedMask::covering(viewport, mask));
+      }
     }
 
     let layer = match canvas.begin_effect_subcanvas(placement) {
@@ -200,10 +200,30 @@ impl ScenePainter<'_, '_> {
       }
     };
 
+    let content_layer = if let Some(backdrop) = backdrop {
+      backdrop.paint(canvas);
+
+      match canvas.begin_effect_subcanvas(placement) {
+        Ok(content) => Some(content),
+        Err(error) => {
+          canvas.composite_subcanvas(layer, BlendMode::Normal, 0.0);
+          for _ in 0..count {
+            canvas.pop_mask();
+          }
+
+          return Err(error);
+        }
+      }
+    } else {
+      None
+    };
+
     Ok(OpenEffect::Group(Box::new(EffectGroup {
       layer,
+      content_layer,
       masks: count,
       context,
+      kind: effect.kind,
       filter_bounds: effect.bounds,
     })))
   }
@@ -217,22 +237,34 @@ impl ScenePainter<'_, '_> {
     };
     let EffectGroup {
       layer,
+      content_layer,
       masks,
       context,
+      kind,
       filter_bounds,
     } = *group;
-    let result = if context.style.misc1_data.filter.is_empty() {
-      Ok(())
-    } else {
+    if let Some(content) = content_layer {
+      canvas.composite_subcanvas(content, BlendMode::Normal, 1.0);
+    }
+    let result = if kind == EffectKind::Filter {
       apply_filters(canvas, &context, filter_bounds)
+    } else {
+      Ok(())
     };
-    let opacity = if result.is_ok() {
+    let opacity = if result.is_err() {
+      0.0
+    } else if kind == EffectKind::Group {
       context.style.svg_data.opacity.0
     } else {
-      0.0
+      1.0
+    };
+    let blend = if kind == EffectKind::Group {
+      context.style.misc_data.mix_blend_mode
+    } else {
+      BlendMode::Normal
     };
 
-    canvas.composite_subcanvas(layer, context.style.misc_data.mix_blend_mode, opacity);
+    canvas.composite_subcanvas(layer, blend, opacity);
 
     for _ in 0..masks {
       canvas.pop_mask();
@@ -244,16 +276,25 @@ impl ScenePainter<'_, '_> {
 
 impl PropertySink for ScenePainter<'_, '_> {
   fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
+    if matches!(clip.kind, ClipKind::PixelMovingFilter(_)) {
+      return;
+    }
     let viewport = self.canvas.viewport();
 
     match PlacedMask::of_clip(clip, viewport) {
-      Some(mask) => self.canvas.push_mask(mask),
-      None => self.record(Err(Error::InvalidViewport)),
+      Some(mask) => {
+        self.canvas.push_mask(mask);
+      }
+      None => {
+        self.record(Err(Error::InvalidViewport));
+      }
     }
   }
 
-  fn pop_clip(&mut self) {
-    self.canvas.pop_mask();
+  fn pop_clip(&mut self, clip: &ClipNode) {
+    if !matches!(clip.kind, ClipKind::PixelMovingFilter(_)) {
+      self.canvas.pop_mask();
+    }
   }
 
   fn begin_effect(&mut self, id: EffectId, effect: &EffectNode) {

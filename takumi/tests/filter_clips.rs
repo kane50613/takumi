@@ -1,13 +1,12 @@
 use takumi::{prelude::*, render};
 
-fn render_case(overflow: &str, filter: &str, extra: &str, content: &str) -> Bitmap {
+fn case(overflow: &str, filter: &str, extra: &str, content: &str) -> (Node, StyleSheet) {
   let html = format!("<div class='outer'><div class='source'>{content}</div></div>");
   let css = format!(
     ".outer {{ position: absolute; left: 80px; top: 40px; width: 160px; height: 160px; overflow: {overflow}; }}
      .source {{ position: absolute; left: -60px; top: 20px; width: 120px; height: 120px; background: white; filter: {filter}; }}
      {extra}"
   );
-  let fonts = Fonts::default();
   let node = Node::from_html(
     &html,
     FromHtmlOptions::builder()
@@ -16,15 +15,54 @@ fn render_case(overflow: &str, filter: &str, extra: &str, content: &str) -> Bitm
   )
   .unwrap();
 
+  (node, StyleSheet::parse(&css).unwrap())
+}
+
+fn render_case(overflow: &str, filter: &str, extra: &str, content: &str) -> Bitmap {
+  let (node, stylesheet) = case(overflow, filter, extra, content);
+  let fonts = Fonts::default();
+
   render(
     RenderOptions::builder()
       .viewport(Viewport::new((320, 240)))
       .node(node)
-      .stylesheet(StyleSheet::parse(&css).unwrap().into())
+      .stylesheet(stylesheet.into())
       .fonts(&fonts)
       .build(),
   )
   .unwrap()
+}
+
+#[test]
+fn svg_clips_filter_output_after_blurring() {
+  let (node, stylesheet) = case(
+    "visible",
+    "blur(20px)",
+    ".source { clip-path: inset(0 0 0 60px); }",
+    "",
+  );
+  let fonts = Fonts::default();
+  let svg = takumi_svg::render(
+    takumi_svg::SvgOptions::builder()
+      .viewport(Viewport::new((320, 240)))
+      .node(node)
+      .stylesheet(stylesheet.into())
+      .fonts(&fonts)
+      .build(),
+  )
+  .unwrap();
+  let image = crate::test_utils::rasterize_svg(svg, 320, 240);
+  let pixels = image.as_raw().as_chunks::<4>().0;
+
+  assert_eq!(
+    pixels[120 * 320 + 79][3],
+    0,
+    "clip-path must clip the output"
+  );
+  assert!(
+    pixels[120 * 320 + 80][3] > 240,
+    "clip-path removed filter input"
+  );
 }
 
 #[test]
@@ -41,6 +79,7 @@ fn ancestor_overflow_clips_filtered_output() {
       ".outer { opacity: 0.5; }",
       ".source { opacity: 0.5; }",
       ".outer, .source { display: block; }",
+      ".source { transform: rotate(15deg); opacity: 0.5; }",
     ] {
       let visible = render_case("visible", filter, extra, "");
       let hidden = render_case("hidden", filter, extra, "");
@@ -140,4 +179,94 @@ fn own_shape_masks_clip_filtered_output() {
       }
     }
   }
+}
+
+#[test]
+fn mask_image_respects_the_rounded_border_box() {
+  let image = render_case(
+    "visible",
+    "blur(20px)",
+    ".source { border-radius: 50%; mask-image: linear-gradient(to right, transparent 50%, black 50%); }",
+    "",
+  );
+  let pixels = image.as_raw().as_chunks::<4>().0;
+
+  assert_eq!(
+    pixels[60 * 320 + 90][3],
+    0,
+    "the mask escaped the rounded border"
+  );
+  assert!(pixels[120 * 320 + 80][3] > 0, "the mask removed the center");
+}
+
+#[test]
+fn backdrop_effect_respects_opacity_and_ancestor_clip() {
+  let render_backdrop = |effect: &str| {
+    let html = "<div class='root'><div class='outer'><div class='glass'></div></div></div>";
+    let css = format!(
+      ".root {{ width: 320px; height: 240px; background: red; }}
+       .outer {{ position: absolute; left: 100px; top: 40px; width: 80px; height: 160px; overflow: hidden; }}
+       .glass {{ position: absolute; left: -40px; width: 160px; height: 160px; {effect} }}"
+    );
+    let fonts = Fonts::default();
+    let node = Node::from_html(
+      html,
+      FromHtmlOptions::builder()
+        .presets(StylePresets::empty())
+        .build(),
+    )
+    .unwrap();
+
+    render(
+      RenderOptions::builder()
+        .viewport(Viewport::new((320, 240)))
+        .node(node)
+        .stylesheet(StyleSheet::parse(&css).unwrap().into())
+        .fonts(&fonts)
+        .build(),
+    )
+    .unwrap()
+  };
+  let plain = render_backdrop("");
+  let invisible = render_backdrop("opacity: 0; backdrop-filter: invert(1);");
+  let half = render_backdrop("opacity: 0.5; backdrop-filter: invert(1);");
+  let filtered = render_backdrop("backdrop-filter: invert(1);");
+  let plain = plain.as_raw().as_chunks::<4>().0;
+  let invisible = invisible.as_raw().as_chunks::<4>().0;
+  let half = half.as_raw().as_chunks::<4>().0;
+  let filtered = filtered.as_raw().as_chunks::<4>().0;
+
+  assert_eq!(invisible[120 * 320 + 120], plain[120 * 320 + 120]);
+  assert!(
+    half[120 * 320 + 120]
+      .iter()
+      .zip([127u8, 128, 128, 255])
+      .all(|(&actual, expected)| actual.abs_diff(expected) <= 1)
+  );
+  assert_eq!(filtered[120 * 320 + 80], plain[120 * 320 + 80]);
+  assert_ne!(filtered[120 * 320 + 120], plain[120 * 320 + 120]);
+}
+
+#[test]
+fn nested_backdrops_do_not_read_the_filtered_parent_backdrop() {
+  let html = "<div style='display:flex;position:relative;width:320px;height:240px;background:red'><div style='display:flex;position:absolute;left:20px;top:20px;width:280px;height:200px;backdrop-filter:invert(1)'><div style='display:flex;position:absolute;left:40px;top:40px;width:160px;height:80px;backdrop-filter:invert(1)'></div></div></div>";
+  let fonts = Fonts::default();
+  let node = Node::from_html(
+    html,
+    FromHtmlOptions::builder()
+      .presets(StylePresets::empty())
+      .build(),
+  )
+  .unwrap();
+  let image = render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((320, 240)))
+      .node(node)
+      .fonts(&fonts)
+      .build(),
+  )
+  .unwrap();
+  let pixels = image.as_raw().as_chunks::<4>().0;
+
+  assert_eq!(pixels[100 * 320 + 120], [0, 255, 255, 255]);
 }

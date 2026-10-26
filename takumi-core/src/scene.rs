@@ -18,7 +18,7 @@ use crate::{
   },
   paint_chunk::PaintChunk,
   paint_property::{
-    ContainerContents, LineClampFloatClip, NodeProperties, PropertyState, PropertyTrees,
+    ContainerContents, EffectKind, LineClampFloatClip, NodeProperties, PropertyState, PropertyTrees,
   },
   painter::OwnContent,
   shadow::SizedShadow,
@@ -1643,11 +1643,14 @@ fn set_effect_bounds(
 
   for &id in ids.iter().rev() {
     let (union, unknown) = bounds[id.index()];
-    let grown =
+    let grown = if properties.effect(id).kind == EffectKind::Filter {
       match owners[id.index()].and_then(|owner| Some((owner, root.node_at_path(&owner.path)?))) {
         Some((owner, node)) => outset_bounds(union, filter_reach(&node.context), owner.transform),
         None => union,
-      };
+      }
+    } else {
+      union
+    };
 
     if let Some(parent) = properties.effect(id).parent {
       let (parent_union, parent_unknown) = &mut bounds[parent.index()];

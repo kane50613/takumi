@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+  <rect x="0" y="0" width="320" height="240" fill="#f00"/>
+  <clipPath id="cp0">
+    <path d="M20 20h280v200h-280v-200Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <filter id="ft1" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feComponentTransfer in="SourceGraphic" result="f0">
+        <feFuncR type="table" tableValues="1 0"/>
+        <feFuncG type="table" tableValues="1 0"/>
+        <feFuncB type="table" tableValues="1 0"/>
+      </feComponentTransfer>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
+    </filter>
+    <g filter="url(#ft1)">
+      <clipPath id="cp2">
+        <path d="M20 20h280v200h-280v-200Z"/>
+      </clipPath>
+      <g clip-path="url(#cp2)">
+        <rect x="0" y="0" width="320" height="240" fill="#f00"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp3">
+    <path d="M60 60h160v80h-160v-80Z"/>
+  </clipPath>
+  <g clip-path="url(#cp3)">
+    <filter id="ft4" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feComponentTransfer in="SourceGraphic" result="f0">
+        <feFuncR type="table" tableValues="1 0"/>
+        <feFuncG type="table" tableValues="1 0"/>
+        <feFuncB type="table" tableValues="1 0"/>
+      </feComponentTransfer>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
+    </filter>
+    <g filter="url(#ft4)">
+      <clipPath id="cp5">
+        <path d="M60 60h160v80h-160v-80Z"/>
+      </clipPath>
+      <g clip-path="url(#cp5)">
+        <rect x="0" y="0" width="320" height="240" fill="#f00"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -4,8 +4,8 @@ use smallvec::SmallVec;
 
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
-  paint_property::ClipNode,
-  painter::{BoxPainter, FillShape},
+  paint_property::{ClipKind, ClipNode},
+  painter::{BackgroundClipArea, FillShape},
   resources::glyph_cache::{glyph_mask, max_entry_bytes},
   scene::SceneBounds,
 };
@@ -13,8 +13,8 @@ use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  BoxMask, Command, Fill, Placement, RenderContext, Result, Style, checked_area, create_mask,
-  mul_div_255, placement_overlap, style::Affine,
+  BorderProperties, BoxMask, Command, Fill, Placement, RenderContext, Result, Style, checked_area,
+  create_mask, mul_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -127,15 +127,14 @@ impl CanvasViewport {
   }
 }
 
-/// The masks a node's `clip-path` and `mask-image` lay over the box and its descendants.
+/// The masks a node's `mask-image` lays over the box and its descendants.
 #[derive(Default)]
 pub(crate) struct NodeMasks {
   pub(crate) shell: SmallVec<[TinyMask; 2]>,
 }
 
 impl NodeMasks {
-  /// The masks of the node `context` paints at `layout` under `transform`, or `None` when one of
-  /// them hides the node entirely.
+  /// The node's mask-image, or `None` when it hides the node entirely.
   pub(crate) fn of(
     context: &RenderContext,
     layout: Layout,
@@ -144,25 +143,27 @@ impl NodeMasks {
   ) -> Result<Option<Self>> {
     let mut masks = Self::default();
 
-    if let Some(shape) = BoxPainter::new(context, layout).clip_path()
-      && !masks.add(clip_path_mask(&shape, context, viewport))
-    {
-      return Ok(None);
-    }
-
     let Some(inverse_transform) = transform.invert() else {
       return Ok(None);
     };
 
-    if let Some(mask) = create_mask(context, layout)?
-      && !masks.add(mask_image_mask(
+    if let Some(mask) = create_mask(context, layout)? {
+      if !masks.add(mask_image_mask(
         &mask,
         transform,
         inverse_transform,
         viewport,
-      ))
-    {
-      return Ok(None);
+      )) {
+        return Ok(None);
+      }
+
+      let border = BorderProperties::from_context(context, layout.size, layout.border);
+      if !border.is_zero()
+        && let Some(shape) = BackgroundClipArea::BorderBox(border).shape(layout.size)
+        && !masks.add(shape_mask(&shape, context, viewport))
+      {
+        return Ok(None);
+      }
     }
 
     Ok(Some(masks))
@@ -176,20 +177,6 @@ impl NodeMasks {
     }
 
     true
-  }
-
-  /// The `clip-path` and `mask-image` masks as one: their product, which bounds what the node
-  /// shows of its filtered backdrop.
-  pub(crate) fn into_shell_mask(self) -> Option<TinyMask> {
-    let mut masks = self.shell.into_iter();
-    let mut combined = masks.next()?;
-
-    for mask in masks {
-      for (alpha, other) in combined.data_mut().iter_mut().zip(mask.data()) {
-        *alpha = mul_div_255(*alpha, *other);
-      }
-    }
-    Some(combined)
   }
 
   /// How many masks the node pushes.
@@ -216,12 +203,15 @@ impl PlacedMask {
 
   /// The region `clip` keeps, over the pixels it covers alone, or `None` for an empty viewport.
   pub(crate) fn of_clip(clip: &ClipNode, viewport: CanvasViewport) -> Option<Self> {
+    let (ClipKind::Shape(shape) | ClipKind::ClipPath(shape)) = &clip.kind else {
+      return None;
+    };
     IntSize::from_wh(viewport.size.width, viewport.size.height)?;
 
     let (mask, placement) = render_mask(
-      &clip.shape.to_commands(),
+      &shape.to_commands(),
       Some(clip.transform),
-      Some(Fill::from(clip.shape.rule()).into()),
+      Some(Fill::from(shape.rule()).into()),
       Some(viewport),
     );
     // The mask is culled to the viewport, so its placement starts inside it.
@@ -242,8 +232,8 @@ impl PlacedMask {
   }
 }
 
-/// The `clip-path` shape as a viewport mask over the box and its descendants.
-fn clip_path_mask(
+/// A shape as a viewport mask over the box and its descendants.
+fn shape_mask(
   shape: &FillShape,
   context: &RenderContext,
   viewport: CanvasViewport,

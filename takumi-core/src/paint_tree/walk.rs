@@ -25,7 +25,7 @@ use crate::{
     tree::RenderNode,
   },
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
-  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
+  paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
   painter::{
     BackgroundClipArea, BoxFrame, BoxPainter, CellBackground, FillShape, OverflowClip, OwnContent,
     PaintDevice, PaintedInline, TableDecorations, TextClip, paint_collapsed_borders,
@@ -745,16 +745,35 @@ impl StepWriter<'_, '_> {
 
 impl PropertySink for StepWriter<'_, '_> {
   fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
+    if matches!(
+      clip.kind,
+      ClipKind::PixelMovingFilter(_) | ClipKind::ClipPath(_)
+    ) {
+      return;
+    }
     let owner = self.paints.get(clip.owner.as_slice()).copied();
 
     self.open(owner, |node| PaintStep::BeginClip { node });
   }
 
-  fn pop_clip(&mut self) {
-    self.close(|node| PaintStep::EndClip { node });
+  fn pop_clip(&mut self, clip: &ClipNode) {
+    if matches!(clip.kind, ClipKind::Shape(_)) {
+      self.close(|node| PaintStep::EndClip { node });
+    }
   }
 
-  fn begin_effect(&mut self, id: EffectId, _effect: &EffectNode) {
+  fn begin_effect(&mut self, id: EffectId, effect: &EffectNode) {
+    if effect.kind == EffectKind::Filter
+      && effect.parent.is_some_and(|parent| {
+        let parent = self.scene.properties.effect(parent);
+
+        parent.kind == EffectKind::Group && parent.owner == effect.owner
+      })
+    {
+      self.open.push(None);
+      return;
+    }
+
     let owner = self.owners[id.index()];
 
     self.open(owner, |node| PaintStep::BeginGroup { node });
