@@ -14,7 +14,7 @@ use super::{
 use crate::resources::image::SvgFilters;
 use crate::{
   geometry::{PathCommand, Point, Rect},
-  resources::image::{SvgFill, SvgImageData, SvgOp, SvgStrokeStyle},
+  resources::image::{SvgFill, SvgImageData, SvgLineCap, SvgOp, SvgStrokeStyle},
   style::{Affine, BlendMode},
 };
 
@@ -484,7 +484,11 @@ fn draw_bounds(path: &[PathCommand], stroke: Option<&SvgStrokeStyle>) -> ScopeBo
     return ScopeBounds::Empty;
   };
   let bounds = if let Some(stroke) = stroke {
-    let reach = stroke.width * stroke.miter_limit.max(1.0) * 0.5;
+    let cap_reach = match stroke.cap {
+      SvgLineCap::Square => std::f32::consts::SQRT_2,
+      SvgLineCap::Butt | SvgLineCap::Round => 1.0,
+    };
+    let reach = stroke.width * stroke.miter_limit.max(cap_reach) * 0.5;
 
     Rect::from_ltrb(
       path.control_bounds.left - reach,

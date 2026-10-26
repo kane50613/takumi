@@ -53,8 +53,10 @@ impl<'a, 'b> Target<'a, 'b> {
     scope: Option<ScopeRect<f32>>,
     filters: Option<&SvgFilters>,
   ) -> Option<IntRect> {
-    if let Some(scope) = scope {
-      return self.scope_bounds(scope);
+    if let Some(scope) = scope
+      && let Some(bounds) = self.scope_bounds(scope)
+    {
+      return Some(bounds);
     }
 
     let (width, height) = (self.pixmap.width(), self.pixmap.height());

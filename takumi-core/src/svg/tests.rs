@@ -964,3 +964,22 @@ fn an_isolated_group_carries_its_paint_bounds() {
     })
   );
 }
+
+#[test]
+fn an_isolated_square_cap_stroke_carries_its_ink_bounds() {
+  let bounds = ops(
+    r#"<g style="isolation:isolate"><path d="M10 10h10" fill="none" stroke="black" stroke-linecap="square" stroke-miterlimit="1" stroke-width="4"/></g>"#,
+  )
+  .into_iter()
+  .find_map(|op| match op {
+    SvgOp::PushIsolation { bounds } => bounds,
+    _ => None,
+  })
+  .unwrap();
+  let reach = 2.0 * std::f32::consts::SQRT_2;
+
+  assert!(bounds.left <= 10.0 - reach);
+  assert!(bounds.top <= 10.0 - reach);
+  assert!(bounds.right >= 20.0 + reach);
+  assert!(bounds.bottom >= 10.0 + reach);
+}
