@@ -1,4 +1,4 @@
-//! Draws flattened SVG ops onto a tiny-skia pixmap. A layer covers the whole pixmap, except a
+//! Draws flattened SVG ops onto a tiny-skia pixmap. A layer covers its painted bounds, except a
 //! filter layer, which covers its filter region.
 
 use std::slice::Iter;
@@ -83,6 +83,18 @@ impl<'a, 'b> Target<'a, 'b> {
           self.transform = outer;
         }
         SvgOp::PushClip { path, evenodd } => {
+          if let Some(bounds) = self.clipped_scope_bounds(&mut ops.clone(), path)
+            && is_solid_source_over_scope(&mut ops.clone())
+          {
+            self.layer(
+              ops,
+              Composite::default(),
+              Some(bounds),
+              Some((path, *evenodd)),
+            );
+            continue;
+          }
+
           let outer = self.clip.take();
 
           self.clip = clipped(outer.as_ref(), path, *evenodd, self);
@@ -95,6 +107,8 @@ impl<'a, 'b> Target<'a, 'b> {
             opacity: Some(*opacity),
             ..Composite::default()
           },
+          None,
+          None,
         ),
         SvgOp::PushBlend(blend) => self.layer(
           ops,
@@ -102,8 +116,16 @@ impl<'a, 'b> Target<'a, 'b> {
             blend: Some(tiny_blend_mode(*blend)),
             ..Composite::default()
           },
+          None,
+          None,
         ),
-        SvgOp::PushIsolation => self.layer(ops, Composite::default()),
+        SvgOp::PushIsolation => {
+          let scope = is_solid_source_over_scope(&mut ops.clone())
+            .then(|| self.scope_bounds(&mut ops.clone()))
+            .flatten();
+
+          self.layer(ops, Composite::default(), scope, None);
+        }
         SvgOp::PushMask {
           ops: mask_ops,
           luminance,
@@ -114,6 +136,8 @@ impl<'a, 'b> Target<'a, 'b> {
               mask: Some(mask),
               ..Composite::default()
             },
+            None,
+            None,
           ),
           None => skip_scope(ops),
         },
@@ -123,6 +147,8 @@ impl<'a, 'b> Target<'a, 'b> {
             filters: Some(filters),
             ..Composite::default()
           },
+          None,
+          None,
         ),
         SvgOp::Draw {
           path,
@@ -141,8 +167,14 @@ impl<'a, 'b> Target<'a, 'b> {
   }
 
   /// Draws the scope that follows into a fresh layer and composites it onto this target.
-  fn layer(&mut self, ops: &mut Iter<'_, SvgOp>, composite: Composite) {
-    let Some(bounds) = self.layer_bounds(composite.filters) else {
+  fn layer(
+    &mut self,
+    ops: &mut Iter<'_, SvgOp>,
+    composite: Composite,
+    scope: Option<IntRect>,
+    clip_path: Option<(&[PathCommand], bool)>,
+  ) {
+    let Some(bounds) = scope.or_else(|| self.layer_bounds(composite.filters)) else {
       skip_scope(ops);
       return;
     };
@@ -158,13 +190,15 @@ impl<'a, 'b> Target<'a, 'b> {
     };
     let mut view = layer.as_mut();
 
-    Target {
+    let mut target = Target {
       pixmap: &mut view,
       transform,
       clip: None,
       limit,
-    }
-    .run(ops);
+    };
+
+    target.clip = clip_path.and_then(|(path, evenodd)| clipped(None, path, evenodd, &target));
+    target.run(ops);
 
     if let Some(filters) = composite.filters {
       filters.apply(transform, &mut layer);
@@ -215,6 +249,28 @@ impl<'a, 'b> Target<'a, 'b> {
         MaskType::Alpha
       },
     ))
+  }
+
+  fn scope_bounds(&self, ops: &mut Iter<'_, SvgOp>) -> Option<IntRect> {
+    let bounds = scope_bounds(ops, self.transform)?
+      .outset(2.0, 2.0)?
+      .round_out()?;
+    let canvas = IntRect::from_xywh(0, 0, self.pixmap.width(), self.pixmap.height())?;
+
+    bounds.intersect(&canvas)
+  }
+
+  fn clipped_scope_bounds(
+    &self,
+    ops: &mut Iter<'_, SvgOp>,
+    path: &[PathCommand],
+  ) -> Option<IntRect> {
+    let bounds =
+      scope_bounds(ops, self.transform)?.intersect(&path_bounds(path, self.transform)?)?;
+    let bounds = bounds.outset(2.0, 2.0)?.round_out()?;
+    let canvas = IntRect::from_xywh(0, 0, self.pixmap.width(), self.pixmap.height())?;
+
+    bounds.intersect(&canvas)
   }
 
   fn draw_path(
@@ -302,6 +358,95 @@ impl<'a, 'b> Target<'a, 'b> {
       .pixmap
       .fill_rect(rect, &paint, self.transform, self.clip.as_ref());
   }
+}
+
+fn scope_bounds(ops: &mut Iter<'_, SvgOp>, transform: Transform) -> Option<Rect> {
+  let mut bounds = None;
+
+  while let Some(op) = ops.next() {
+    let current = match op {
+      SvgOp::Pop => return bounds,
+      SvgOp::PushTransform(next) => scope_bounds(ops, transform.pre_concat(Transform::from(*next))),
+      SvgOp::PushClip { path, .. } => {
+        let child = scope_bounds(ops, transform)?;
+        child.intersect(&path_bounds(path, transform)?)
+      }
+      SvgOp::PushOpacity(_) | SvgOp::PushBlend(_) | SvgOp::PushIsolation => {
+        scope_bounds(ops, transform)
+      }
+      SvgOp::PushMask { .. } | SvgOp::PushFilter(_) => {
+        skip_scope(ops);
+        return None;
+      }
+      SvgOp::Draw { path, .. } => path_bounds(path, transform),
+      SvgOp::Image { width, height, .. } => {
+        Rect::from_xywh(0.0, 0.0, *width, *height)?.transform(transform)
+      }
+    };
+
+    let Some(current) = current else {
+      continue;
+    };
+
+    bounds = match bounds {
+      Some(bounds) => bounds.join(&current),
+      None => Some(current),
+    };
+  }
+
+  bounds
+}
+
+fn path_bounds(path: &[PathCommand], transform: Transform) -> Option<Rect> {
+  tiny_path(path)?
+    .transform(transform)
+    .map(|path| path.bounds())
+}
+
+fn is_solid_source_over_scope(ops: &mut Iter<'_, SvgOp>) -> bool {
+  let mut draws = 0;
+
+  solid_source_over_scope(ops, &mut draws) && draws == 1
+}
+
+fn solid_source_over_scope(ops: &mut Iter<'_, SvgOp>, draws: &mut u32) -> bool {
+  while let Some(op) = ops.next() {
+    match op {
+      SvgOp::Pop => return true,
+      SvgOp::PushTransform(_) | SvgOp::PushClip { .. } => {
+        if !solid_source_over_scope(ops, draws) {
+          return false;
+        }
+      }
+      SvgOp::Draw { fill, stroke, .. } => {
+        let fill_is_opaque = matches!(
+          fill,
+          Some(SvgFill {
+            paint: SvgOpPaint::Color(Color([_, _, _, u8::MAX])),
+            opacity,
+            ..
+          }) if *opacity >= 1.0
+        );
+
+        if !fill_is_opaque || stroke.is_some() {
+          return false;
+        }
+
+        *draws += 1;
+      }
+      SvgOp::Image { .. } => return false,
+      SvgOp::PushOpacity(_)
+      | SvgOp::PushBlend(_)
+      | SvgOp::PushIsolation
+      | SvgOp::PushMask { .. }
+      | SvgOp::PushFilter(_) => {
+        skip_scope(ops);
+        return false;
+      }
+    }
+  }
+
+  true
 }
 
 impl SvgOpPaint {
@@ -713,6 +858,29 @@ mod tests {
   }
 
   #[test]
+  fn clip_applies_to_a_direct_group() {
+    let image = draw(
+      r##"<defs><clipPath id="c"><rect width="4" height="8"/></clipPath></defs>
+      <g clip-path="url(#c)"><rect width="8" height="8" fill="#0000ff"/></g>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(6, 4), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(2, 4), [0, 0, 255, 255]);
+  }
+
+  #[test]
+  fn isolation_applies_to_a_solid_group() {
+    let image = draw(
+      r##"<g style="isolation:isolate"><rect x="2" y="3" width="4" height="2" fill="#0000ff"/></g>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(1, 4), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(3, 4), [0, 0, 255, 255]);
+  }
+
+  #[test]
   fn luminance_mask_cuts_by_brightness() {
     let image = draw(
       r##"<defs><mask id="m"><rect width="4" height="8" fill="#fff"/><rect x="4" width="4" height="8" fill="#000"/></mask></defs>
@@ -785,6 +953,28 @@ mod tests {
     assert_eq!(
       nested.layer_bounds(Some(filters)),
       IntRect::from_xywh(0, 0, 50, 50)
+    );
+  }
+
+  #[test]
+  fn an_isolation_layer_covers_its_content() {
+    let ops = [
+      SvgOp::PushIsolation,
+      SvgOp::Draw {
+        path: crate::geometry::PathCommand::rectangle(20.0, 30.0, 10.0, 20.0),
+        fill: None,
+        stroke: None,
+        anti_alias: true,
+      },
+      SvgOp::Pop,
+    ];
+    let mut pixmap = Pixmap::new(100, 100).unwrap();
+    let mut view = pixmap.as_mut();
+    let target = Target::root(&mut view, Transform::identity()).unwrap();
+
+    assert_eq!(
+      target.scope_bounds(&mut ops.iter()),
+      IntRect::from_xywh(18, 28, 14, 24)
     );
   }
 
