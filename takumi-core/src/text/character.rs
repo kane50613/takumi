@@ -3,11 +3,9 @@
 use std::ops::RangeInclusive;
 
 use icu_properties::{
-  CodePointMapData, CodePointSetData,
-  props::{
-    DefaultIgnorableCodePoint, Emoji, EmojiModifierBase, EmojiPresentation, ExtendedPictographic,
-    GeneralCategory, Script,
-  },
+  CodePointSetData,
+  props::{DefaultIgnorableCodePoint, Emoji, EmojiModifierBase, EmojiPresentation, Script},
+  script::ScriptWithExtensions,
 };
 
 pub(crate) const TAB: char = '\t';
@@ -83,9 +81,53 @@ pub(crate) fn is_emoji_tag_sequence(c: char) -> bool {
 
 /// Blink's `IsEmojiReserved`.
 pub(crate) fn is_emoji_reserved(c: char) -> bool {
-  CodePointMapData::<GeneralCategory>::new().get(c) == GeneralCategory::Unassigned
-    && CodePointSetData::new::<ExtendedPictographic>().contains(c)
+  let code_point = u32::from(c);
+  let index = RESERVED_EMOJI_RANGES.partition_point(|&(_, end)| end < code_point);
+
+  RESERVED_EMOJI_RANGES
+    .get(index)
+    .is_some_and(|&(start, _)| start <= code_point)
 }
+
+// ICU 2.3.0's General_Category=Unassigned intersected with Extended_Pictographic.
+const RESERVED_EMOJI_RANGES: &[(u32, u32)] = &[
+  (0x1F02C, 0x1F02F),
+  (0x1F094, 0x1F09F),
+  (0x1F0AF, 0x1F0B0),
+  (0x1F0C0, 0x1F0C0),
+  (0x1F0D0, 0x1F0D0),
+  (0x1F0F6, 0x1F0FF),
+  (0x1F1AE, 0x1F1E5),
+  (0x1F203, 0x1F20F),
+  (0x1F23C, 0x1F23F),
+  (0x1F249, 0x1F24F),
+  (0x1F252, 0x1F25F),
+  (0x1F266, 0x1F2FF),
+  (0x1F6D9, 0x1F6DB),
+  (0x1F6ED, 0x1F6EF),
+  (0x1F6FD, 0x1F6FF),
+  (0x1F7DA, 0x1F7DF),
+  (0x1F7EC, 0x1F7EF),
+  (0x1F7F1, 0x1F7FF),
+  (0x1F80C, 0x1F80F),
+  (0x1F848, 0x1F84F),
+  (0x1F85A, 0x1F85F),
+  (0x1F888, 0x1F88F),
+  (0x1F8AE, 0x1F8AF),
+  (0x1F8BC, 0x1F8BF),
+  (0x1F8C2, 0x1F8CF),
+  (0x1F8D9, 0x1F8FF),
+  (0x1FA58, 0x1FA5F),
+  (0x1FA6E, 0x1FA6F),
+  (0x1FA7D, 0x1FA7F),
+  (0x1FA8B, 0x1FA8D),
+  (0x1FAC7, 0x1FAC7),
+  (0x1FAC9, 0x1FACC),
+  (0x1FADD, 0x1FADE),
+  (0x1FAEB, 0x1FAEE),
+  (0x1FAF9, 0x1FAFF),
+  (0x1FC00, 0x1FFFD),
+];
 
 /// Blink's `IsEmojiIncludingReserved`.
 pub(crate) fn is_emoji_including_reserved(c: char) -> bool {
@@ -110,9 +152,20 @@ pub(crate) fn maybe_emoji_presentation(c: char) -> bool {
     || u32::from(c) >= 0x10000
 }
 
+pub(crate) fn script(c: char) -> Script {
+  ScriptWithExtensions::new().get_script_val(c)
+}
+
+pub(crate) fn is_mandatory_break(c: char) -> bool {
+  matches!(
+    c,
+    '\u{A}' | '\u{B}' | '\u{C}' | '\u{D}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+  )
+}
+
 /// Blink's `HasLikelyScript`.
 pub(crate) fn has_likely_script(c: char) -> bool {
-  let mut script = CodePointMapData::<Script>::new().get(c);
+  let mut script = script(c);
 
   if matches!(script, Script::Inherited | Script::Common) {
     script = get_script_based_on_unicode_block(c);
@@ -139,10 +192,7 @@ fn get_script_based_on_unicode_block(c: char) -> Script {
 
 /// Blink's `IsCommonOrInheritedScript`.
 pub(crate) fn is_common_or_inherited_script(c: char) -> bool {
-  matches!(
-    CodePointMapData::<Script>::new().get(c),
-    Script::Common | Script::Inherited
-  )
+  matches!(script(c), Script::Common | Script::Inherited)
 }
 
 /// Blink's `IsDefaultIgnorable`.
@@ -174,7 +224,7 @@ pub(crate) fn treat_as_zero_width_space(c: char) -> bool {
 /// Blink's `IsCursiveScript`.
 pub(crate) fn is_cursive_script(c: char) -> bool {
   matches!(
-    CodePointMapData::<Script>::new().get(c),
+    script(c),
     Script::Arabic
       | Script::HanifiRohingya
       | Script::Mandaic
@@ -341,7 +391,51 @@ pub(crate) fn char_before(text: &str, offset: usize) -> char {
 
 #[cfg(test)]
 mod tests {
-  use super::char_before;
+  use icu_properties::{
+    CodePointMapData, CodePointSetData,
+    props::{ExtendedPictographic, GeneralCategory, LineBreak, Script},
+  };
+
+  use super::{char_before, is_emoji_reserved, is_mandatory_break, script};
+
+  #[test]
+  fn primary_scripts_match_icu_across_unicode() {
+    let reference = CodePointMapData::<Script>::new();
+
+    for character in (0..=0x10FFFF).filter_map(char::from_u32) {
+      assert_eq!(script(character), reference.get(character), "{character:?}");
+    }
+  }
+
+  #[test]
+  fn reserved_emoji_match_icu_across_unicode() {
+    let categories = CodePointMapData::<GeneralCategory>::new();
+    let pictographic = CodePointSetData::new::<ExtendedPictographic>();
+
+    for character in (0..=0x10FFFF).filter_map(char::from_u32) {
+      let expected = categories.get(character) == GeneralCategory::Unassigned
+        && pictographic.contains(character);
+
+      assert_eq!(is_emoji_reserved(character), expected, "{character:?}");
+    }
+  }
+
+  #[test]
+  fn mandatory_breaks_match_icu_across_unicode() {
+    let reference = CodePointMapData::<LineBreak>::new();
+
+    for character in (0..=0x10FFFF).filter_map(char::from_u32) {
+      let expected = matches!(
+        reference.get(character),
+        LineBreak::MandatoryBreak
+          | LineBreak::CarriageReturn
+          | LineBreak::LineFeed
+          | LineBreak::NextLine
+      );
+
+      assert_eq!(is_mandatory_break(character), expected, "{character:?}");
+    }
+  }
 
   #[test]
   fn char_before_a_mid_character_offset_is_none() {
