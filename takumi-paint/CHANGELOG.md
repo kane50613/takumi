@@ -1,3 +1,9 @@
+## takumi-paint@0.4.4
+
+### Faster renderer initialization
+
+Renderers now load the bundled variable Geist font without decompressing WOFF2 or copying its bytes. Custom WOFF2 fonts remain supported.
+
 ## takumi-paint@0.4.0
 
 ### Bound render fonts with `fontCacheMaxBytes`

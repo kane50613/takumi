@@ -1,3 +1,9 @@
+## takumi-raster@0.5.11
+
+### Correct filter and backdrop clipping
+
+Ancestor overflow clips and an element's `clip-path` and `mask-image` now apply after filtering, preserving source pixels for blur and drop shadows. Rounded mask images follow the border box, and raster backdrop filters respect opacity, ancestor clips, and nested effect isolation. In `takumi-core`, the paint property tree exposes separate effect stages and filter clip boundaries through `EffectNode::kind` and `ClipNode::kind`, and `PropertySink::pop_clip` receives the clip being removed.
+
 ## takumi-raster@0.5.10
 
 ### Draw SVG images at the size they take up
