@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/core",
-  "version": "2.18.1",
+  "version": "2.18.2",
   "description": "Native Node.js bindings for Takumi: render images, animations, and SVG from node trees. No headless browser.",
   "keywords": [
     "css",

@@ -1,3 +1,9 @@
+## @takumi-rs/wasm@2.18.2
+
+### Faster renderer initialization
+
+Renderers now load the bundled variable Geist font without decompressing WOFF2 or copying its bytes. Custom WOFF2 fonts remain supported.
+
 ## @takumi-rs/wasm@2.18.0
 
 ### Draw an outline that sets only `outline-style`
