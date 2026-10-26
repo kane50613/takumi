@@ -1,22 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
   <rect x="0" y="0" width="600" height="400" fill="#fff"/>
-  <g transform="matrix(3 0 0 3 40 40)" opacity=".9">
-    <path d="M70-16h27c16.02 0 29 12.98 29 29s-12.98 29-29 29h-27c-16.02 0-29-12.98-29-29s12.98-29 29-29Z" fill="#fee2e2"/>
-    <g fill="#141414">
-      <use href="#g0" x="0" y="20"/>
-      <use href="#g1" x="13.96" y="20"/>
-      <use href="#g2" x="25.26" y="20"/>
-    </g>
-    <g fill="#991b1b">
-      <use href="#g3" x="61.48" y="20"/>
-      <use href="#g4" x="71.68" y="20"/>
-      <use href="#g4" x="82.94" y="20"/>
-      <use href="#g5" x="94.2" y="20"/>
-    </g>
-    <g fill="#141414">
-      <use href="#g4" x="130.83" y="20"/>
-      <use href="#g6" x="142.09" y="20"/>
-      <use href="#g7" x="153.49" y="20"/>
+  <g transform="matrix(3 0 0 3 40 40)">
+    <g opacity=".9">
+      <path d="M70-16h27c16.02 0 29 12.98 29 29s-12.98 29-29 29h-27c-16.02 0-29-12.98-29-29s12.98-29 29-29Z" fill="#fee2e2"/>
+      <g fill="#141414">
+        <use href="#g0" x="0" y="20"/>
+        <use href="#g1" x="13.96" y="20"/>
+        <use href="#g2" x="25.26" y="20"/>
+      </g>
+      <g fill="#991b1b">
+        <use href="#g3" x="61.48" y="20"/>
+        <use href="#g4" x="71.68" y="20"/>
+        <use href="#g4" x="82.94" y="20"/>
+        <use href="#g5" x="94.2" y="20"/>
+      </g>
+      <g fill="#141414">
+        <use href="#g4" x="130.83" y="20"/>
+        <use href="#g6" x="142.09" y="20"/>
+        <use href="#g7" x="153.49" y="20"/>
+      </g>
     </g>
   </g>
   <defs>
