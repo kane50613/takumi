@@ -72,7 +72,7 @@ test("sections paginate at their own width with real page boxes", async () => {
     footer: `<div>Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>`,
     sections: [
       {
-        node: `<style>.ledger-page { height:100vh; }</style><main><section class="ledger-page"><h1>Ledger</h1></section><section class="ledger-page">Continuation</section></main>`,
+        node: `<style>.ledger-page { height:100vh; }</style><main><section class="ledger-page"><h1 style="margin:0">Ledger</h1></section><section class="ledger-page">Continuation</section></main>`,
         landscape: true,
         margin: 32,
       },
