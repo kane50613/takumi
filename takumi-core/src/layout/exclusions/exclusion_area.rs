@@ -1,8 +1,6 @@
 //! Blink's [`ExclusionArea`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/exclusions/exclusion_area.h).
 
-use taffy::Float;
-
-use crate::layout::bfc_rect::BfcRect;
+use crate::layout::{bfc_rect::BfcRect, floats_utils::Float};
 
 /// Blink's `ExclusionArea`: a float's margin box.
 #[derive(Debug, Clone, Copy, PartialEq)]

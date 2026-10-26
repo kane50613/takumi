@@ -1,14 +1,17 @@
 //! Blink's [`ExclusionSpace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/exclusions/exclusion_space.cc),
-//! without `shape-outside`, initial letters, block fragmentation, or the sharing of exclusions
-//! between copies.
+//! without `shape-outside` or initial letters.
 
-use std::cell::RefCell;
-
-use taffy::{Clear, Float};
+use std::{
+  cell::{Ref, RefCell},
+  rc::Rc,
+};
 
 use super::{exclusion_area::ExclusionArea, layout_opportunity::LayoutOpportunity};
 use crate::{
-  layout::bfc_rect::{BfcOffset, BfcRect},
+  layout::{
+    bfc_rect::{BfcOffset, BfcRect},
+    floats_utils::{Clear, Float},
+  },
   layout_unit::LayoutUnit,
   style::Direction as TextDirection,
 };
@@ -446,27 +449,140 @@ impl DerivedGeometry {
   }
 }
 
+/// The exclusions one copy of an exclusion space sees: the first `len` of an array its copies
+/// share, which a copy holding the array's end adds to in place, as Blink's
+/// `ExclusionSpaceInternal` shares `exclusions_`. No array while there are none.
+#[derive(Debug, Clone, Default)]
+struct Exclusions {
+  /// In ascending block start order.
+  shared: Option<Rc<RefCell<Vec<ExclusionArea>>>>,
+  len: usize,
+}
+
+impl Exclusions {
+  fn is_empty(&self) -> bool {
+    self.len == 0
+  }
+
+  fn get(&self) -> Option<Ref<'_, [ExclusionArea]>> {
+    let shared = self.shared.as_ref()?;
+
+    Some(Ref::map(shared.borrow(), |areas| &areas[..self.len]))
+  }
+
+  /// Blink's `ExclusionSpaceInternal::Add` of `exclusion` to the array: in place at its end, as the
+  /// one an earlier layout pass added there, or else onto a copy of what this one sees.
+  fn push(&mut self, exclusion: ExclusionArea) {
+    let Some(shared) = &self.shared else {
+      self.shared = Some(Rc::new(RefCell::new(vec![exclusion])));
+      self.len = 1;
+      return;
+    };
+    let mut areas = shared.borrow_mut();
+
+    if areas.len() == self.len {
+      areas.push(exclusion);
+    } else if areas[self.len] != exclusion {
+      let mut copy = areas[..self.len].to_vec();
+
+      copy.push(exclusion);
+      drop(areas);
+      self.shared = Some(Rc::new(RefCell::new(copy)));
+    }
+    self.len += 1;
+  }
+}
+
 /// Blink's `ExclusionSpace`: the floats of a block formatting context, queried for the space
 /// they leave.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub(crate) struct ExclusionSpace {
-  /// In ascending block start order.
-  exclusions: Vec<ExclusionArea>,
+  exclusions: Exclusions,
   /// The lowest block end of the left and right floats, for clearance.
   left_clear_offset: Option<LayoutUnit>,
   right_clear_offset: Option<LayoutUnit>,
   /// For the top edge alignment rule; floats may sit at negative offsets.
   last_float_block_start: Option<LayoutUnit>,
+  /// Blink's `has_break_before_*_float_` and `has_break_inside_*_float_`: the left and right
+  /// floats a page broke before or inside.
+  #[cfg(feature = "fragmentation")]
+  float_breaks: FloatBreaks,
   derived_geometry: RefCell<Option<DerivedGeometry>>,
 }
 
+/// The left and right floats a page broke before or inside.
+#[cfg(feature = "fragmentation")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct FloatBreaks {
+  before_left: bool,
+  before_right: bool,
+  inside_left: bool,
+  inside_right: bool,
+}
+
+/// Blink's copy constructor, which moves the derived geometry to the copy, where it is more likely
+/// to be used next.
+impl Clone for ExclusionSpace {
+  fn clone(&self) -> Self {
+    Self {
+      exclusions: self.exclusions.clone(),
+      left_clear_offset: self.left_clear_offset,
+      right_clear_offset: self.right_clear_offset,
+      last_float_block_start: self.last_float_block_start,
+      #[cfg(feature = "fragmentation")]
+      float_breaks: self.float_breaks,
+      derived_geometry: RefCell::new(self.derived_geometry.take()),
+    }
+  }
+}
+
+/// Blink's `operator==`: copies of the same exclusions, compared by the array they share.
 impl PartialEq for ExclusionSpace {
   fn eq(&self, other: &Self) -> bool {
-    self.exclusions == other.exclusions
+    if self.exclusions.is_empty() && other.exclusions.is_empty() {
+      return true;
+    }
+    #[cfg(feature = "fragmentation")]
+    if self.float_breaks != other.float_breaks {
+      return false;
+    }
+    self.exclusions.len == other.exclusions.len
+      && match (&self.exclusions.shared, &other.exclusions.shared) {
+        (Some(shared), Some(other_shared)) => Rc::ptr_eq(shared, other_shared),
+        _ => false,
+      }
   }
 }
 
 impl ExclusionSpace {
+  /// An exclusion space with no floats, one the render's spaces share as Blink's share a null
+  /// `exclusion_space_`.
+  pub(crate) fn empty() -> Rc<Self> {
+    thread_local! {
+      static EMPTY: Rc<ExclusionSpace> = Rc::default();
+    }
+
+    EMPTY.with(Rc::clone)
+  }
+
+  /// `self` behind an `Rc`, the shared [`Self::empty`] when it holds nothing.
+  pub(crate) fn into_rc(self) -> Rc<Self> {
+    #[cfg(feature = "fragmentation")]
+    let has_float_breaks = self.float_breaks != FloatBreaks::default();
+    #[cfg(not(feature = "fragmentation"))]
+    let has_float_breaks = false;
+
+    if self.exclusions.is_empty()
+      && self.left_clear_offset.is_none()
+      && self.right_clear_offset.is_none()
+      && self.last_float_block_start.is_none()
+      && !has_float_breaks
+    {
+      return Self::empty();
+    }
+    Rc::new(self)
+  }
+
   fn left_clear_offset(&self) -> LayoutUnit {
     self.left_clear_offset.unwrap_or(LayoutUnit::MIN)
   }
@@ -565,6 +681,57 @@ impl ExclusionSpace {
     }
   }
 
+  /// Blink's `SetHasBreakBeforeFloat`: a page broke before a float of `float_type`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn set_has_break_before_float(&mut self, float_type: Float) {
+    match float_type {
+      Float::Left => self.float_breaks.before_left = true,
+      Float::Right => self.float_breaks.before_right = true,
+      Float::None => {}
+    }
+  }
+
+  /// Blink's `SetHasBreakInsideFloat`: a page broke inside a float of `float_type`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn set_has_break_inside_float(&mut self, float_type: Float) {
+    match float_type {
+      Float::Left => self.float_breaks.inside_left = true,
+      Float::Right => self.float_breaks.inside_right = true,
+      Float::None => {}
+    }
+  }
+
+  /// Blink's `NeedsClearancePastFragmentainer`: whether a box that clears `clear_type` clears a
+  /// float that continues on the next page, so it has to go there too.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn needs_clearance_past_fragmentainer(&self, clear_type: Clear) -> bool {
+    let breaks = self.float_breaks;
+    let left = breaks.inside_left || breaks.before_left;
+    let right = breaks.inside_right || breaks.before_right;
+
+    match clear_type {
+      Clear::None => false,
+      Clear::Left => left,
+      Clear::Right => right,
+      Clear::Both => left || right,
+    }
+  }
+
+  /// Blink's `NeedsBreakBeforeFloat`: a float cannot start above an earlier one, so once a page
+  /// pushed a float to the next, every later float follows.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn needs_break_before_float(&self, clear_type: Clear) -> bool {
+    self.float_breaks.before_left
+      || self.float_breaks.before_right
+      || self.needs_clearance_past_fragmentainer(clear_type)
+  }
+
+  /// Blink's `HasFragmentainerBreak`: a float broke before or inside on this page.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn has_fragmentainer_break(&self) -> bool {
+    self.needs_clearance_past_fragmentainer(Clear::Both)
+  }
+
   /// Blink's `LastFloatBlockStart`.
   pub(crate) fn last_float_block_start(&self) -> LayoutUnit {
     self.last_float_block_start.unwrap_or(LayoutUnit::MIN)
@@ -588,11 +755,10 @@ impl ExclusionSpace {
     }
 
     let geometry = derived_geometry.get_or_insert_with(|| {
-      debug_assert!(!self.exclusions.is_empty());
-
+      let shared = self.exclusions.get();
+      let exclusions = shared.as_deref().unwrap_or_default();
       // The first exclusion starting at or after the limit.
-      let mut index = self
-        .exclusions
+      let mut index = exclusions
         .partition_point(|exclusion| exclusion.rect.block_start_offset() < block_offset_limit);
       let limit = if index == 0 {
         LayoutUnit::MIN
@@ -601,18 +767,18 @@ impl ExclusionSpace {
         loop {
           index -= 1;
 
-          if index == 0 || self.exclusions[index].is_past_other_exclusions {
+          if index == 0 || exclusions[index].is_past_other_exclusions {
             break;
           }
         }
 
-        debug_assert!(self.exclusions[index].rect.block_start_offset() <= block_offset_limit);
+        debug_assert!(exclusions[index].rect.block_start_offset() <= block_offset_limit);
 
-        self.exclusions[index].rect.block_start_offset()
+        exclusions[index].rect.block_start_offset()
       };
       let mut geometry = DerivedGeometry::new(limit);
 
-      for exclusion in &self.exclusions[index..] {
+      for exclusion in &exclusions[index..] {
         geometry.add(exclusion);
       }
 
@@ -625,7 +791,7 @@ impl ExclusionSpace {
 
 #[cfg(test)]
 mod tests {
-  use taffy::Float;
+  use crate::layout::floats_utils::Float;
 
   use super::ExclusionSpace;
   use crate::{

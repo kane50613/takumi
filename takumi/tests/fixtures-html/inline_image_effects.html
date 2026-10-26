@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_image_effects</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .line {
+        padding: 40px;
+        font-size: 48px;
+        background-color: rgb(254, 240, 138);
+      }
+      img {
+        width: 96px;
+        height: 96px;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body style="width: 800px; height: 200px">
+    <div class="line">
+      a<img src="assets/images/yeecord.png" style="opacity: 0.4" />b<img
+        src="assets/images/yeecord.png"
+        style="filter: grayscale(1)"
+      />c<img src="assets/images/yeecord.png" style="transform: rotate(20deg)" />d<img
+        src="assets/images/yeecord.png"
+        style="mix-blend-mode: multiply"
+      />e
+    </div>
+  </body>
+</html>

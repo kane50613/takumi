@@ -389,13 +389,13 @@ macro_rules! define_style {
       }
 
       impl LonghandId {
-        const COUNT: usize = [$($(Self::[<$longhand:camel>],)*)* $(Self::[<$transient:camel>],)*].len();
+        pub(crate) const COUNT: usize = [$($(Self::[<$longhand:camel>],)*)* $(Self::[<$transient:camel>],)*].len();
         const ALL: [Self; Self::COUNT] = [
           $($(Self::[<$longhand:camel>],)*)*
           $(Self::[<$transient:camel>],)*
         ];
 
-        const fn index(self) -> usize {
+        pub(crate) const fn index(self) -> usize {
           self as usize
         }
 
@@ -543,7 +543,7 @@ macro_rules! define_style {
           }
         }
 
-        fn from_kebab_case(name: &str) -> Self {
+        pub(crate) fn from_kebab_case(name: &str) -> Self {
           PropertyId::from_name(name, normalize_kebab_property_name)
         }
 
@@ -674,7 +674,7 @@ macro_rules! define_style {
         }
 
         /// Longhands this property expands into (shorthand-expansion targets; unrelated to `!important`).
-        fn target_longhands(self) -> PropertyMask {
+        pub(crate) fn target_longhands(self) -> PropertyMask {
           match self {
             Self::Ignored | Self::Custom => PropertyMask::default(),
             Self::Longhand(property) => [property].into_iter().collect(),
@@ -792,10 +792,28 @@ macro_rules! define_style {
           self.with_declarations([declaration], false)
         }
 
+        $($(
+          #[doc = concat!("Sets `", stringify!($longhand), "`.")]
+          pub fn $longhand(self, value: impl Into<$longhand_ty>) -> Self {
+            self.with(StyleDeclaration::[<$longhand:camel>](value.into()))
+          }
+        )*)*
         $(
+          #[doc = concat!("Sets `", stringify!($transient), "`.")]
+          pub fn $transient(self, value: impl Into<$transient_ty>) -> Self {
+            self.with(StyleDeclaration::[<$transient:camel>](value.into()))
+          }
+        )*
+        $(
+          #[doc = concat!("Sets `", stringify!($shorthand), "`, expanded and appended in source order.")]
+          pub fn $shorthand(self, value: impl Into<$shorthand_ty>) -> Self {
+            self.with_declarations(StyleDeclaration::[<expand_ $shorthand>](value.into()), false)
+          }
+
           /// Returns a new style with this shorthand expanded and appended in source order.
+          #[deprecated(note = "use the method of the same name without the `with_` prefix")]
           pub fn [<with_ $shorthand>](self, value: $shorthand_ty) -> Self {
-            self.with_declarations(StyleDeclaration::[<expand_ $shorthand>](value), false)
+            self.$shorthand(value)
           }
         )*
 
@@ -807,11 +825,6 @@ macro_rules! define_style {
         /// Appends another declaration block in source order.
         pub(crate) fn append_block(&mut self, declarations: StyleDeclarationBlock) {
           self.declarations.append(declarations);
-        }
-
-        /// Appends a borrowed declaration block in source order, cloning it.
-        pub(crate) fn append_block_cloned(&mut self, declarations: &StyleDeclarationBlock) {
-          self.declarations.append_cloned(declarations);
         }
 
         /// Merges a matched block declaration by declaration, which the cascade
@@ -856,7 +869,9 @@ macro_rules! define_style {
           for declaration in self.declarations.declarations {
             match declaration {
               StyleDeclaration::CustomProperty(name, value) => {
-                style.custom_properties.set(name, value);
+                style
+                  .custom_properties
+                  .declare(name, value, Some(&parent.custom_properties));
               }
               declaration => declarations.push(declaration),
             }
@@ -996,6 +1011,22 @@ macro_rules! define_style {
             })*)*
             $(LonghandId::[<$transient:camel>] => {})*
           }
+        }
+
+        /// Whether `property` holds its initial value; a logical-axis longhand has no field of its
+        /// own, so it always does.
+        #[cfg(feature = "svg")]
+        pub(crate) fn is_initial_longhand(&self, property: LonghandId) -> bool {
+          INITIAL_STYLE.with(|initial| match property {
+            $($(LonghandId::[<$longhand:camel>] => self.$group.$longhand == initial.$group.$longhand,)*)*
+            $(LonghandId::[<$transient:camel>] => true,)*
+          })
+        }
+
+        /// Sets `property` back to its initial value.
+        #[cfg(feature = "svg")]
+        pub(crate) fn reset_longhand(&mut self, property: LonghandId) {
+          INITIAL_STYLE.with(|initial| self.copy_longhand(property, initial));
         }
 
         /// Points each group still at its initial values to the computed one every such box
@@ -1272,6 +1303,8 @@ macro_rules! define_style {
           style: &mut ComputedStyle,
           parent: &ComputedStyle,
         ) {
+          self.apply_wide_overlapping(style);
+
           let is_rtl = style.inherited_data.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => {
@@ -1312,7 +1345,9 @@ macro_rules! define_style {
               }
             }
             Self::CustomProperty(name, value) => {
-              style.custom_properties.set(name, value);
+              style
+                .custom_properties
+                .declare(name, value, Some(&parent.custom_properties));
             }
             Self::Deferred(deferred) => deferred.apply_with_parent(style, parent),
             Self::VarRef(var_ref) => var_ref.apply(style, Some(parent)),
@@ -1331,6 +1366,8 @@ macro_rules! define_style {
 
         /// Applies this declaration to a computed style without a parent.
         pub(crate) fn apply_to_computed(&self, style: &mut ComputedStyle) {
+          self.apply_wide_overlapping(style);
+
           let is_rtl = style.inherited_data.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => match keyword {
@@ -1349,7 +1386,9 @@ macro_rules! define_style {
               CssWideKeyword::Inherit | CssWideKeyword::Unset => {}
             },
             Self::CustomProperty(name, value) => {
-              style.custom_properties.set(name.to_owned(), value.to_owned());
+              style
+                .custom_properties
+                .declare(name.to_owned(), value.to_owned(), None);
             }
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, None, deferred);
@@ -1442,15 +1481,16 @@ define_style! {
       justify_content: JustifyContent,
       align_items: AlignItems,
       z_index: ZIndex,
-      border_top_width: LineWidth,
-      border_right_width: LineWidth,
-      border_bottom_width: LineWidth,
-      border_left_width: LineWidth,
+      border_top_width: LineWidth where non_negative = true,
+      border_right_width: LineWidth where non_negative = true,
+      border_bottom_width: LineWidth where non_negative = true,
+      border_left_width: LineWidth where non_negative = true,
       border_top_style: BorderStyle,
       border_right_style: BorderStyle,
       border_bottom_style: BorderStyle,
       border_left_style: BorderStyle,
       box_decoration_break: BoxDecorationBreak,
+      baseline_source: BaselineSource,
     }
     /// Blink's `surround` field group: insets, corner radii, and border colors.
     surround_data: StyleSurroundData {
@@ -1492,6 +1532,32 @@ define_style! {
       opacity: PercentageNumber,
       transform: Option<Transforms>,
       transform_origin: PositionValue = PositionValue::center(),
+      alignment_baseline: AlignmentBaseline,
+      mask_type: MaskType,
+      vector_effect: VectorEffect,
+    }
+    /// Blink's `svg->geometry` field group: the lengths and path SVG shapes are laid out from.
+    svg_geometry_data: StyleSvgGeometryData {
+      x: Length = Length::zero(),
+      y: Length = Length::zero(),
+      cx: Length = Length::zero(),
+      cy: Length = Length::zero(),
+      r: Length where non_negative = true = Length::zero(),
+      rx: Length where non_negative = true = Length::Auto,
+      ry: Length where non_negative = true = Length::Auto,
+      d: SvgPath,
+    }
+    /// Blink's `svg->stop` field group.
+    svg_stop_data: StyleSvgStopData {
+      stop_color: ColorInput = ColorInput::Value(Color::black()),
+      stop_opacity: PercentageNumber,
+    }
+    /// Blink's `svg->svgmisc` field group.
+    svg_misc_data: StyleSvgMiscData {
+      baseline_shift: BaselineShift,
+      flood_color: ColorInput = ColorInput::Value(Color::black()),
+      flood_opacity: PercentageNumber,
+      lighting_color: ColorInput = ColorInput::Value(Color::white()),
     }
     /// Blink's `misc` field group: its rarely set non-inherited fields under eight bits.
     misc_data: StyleMiscData {
@@ -1569,6 +1635,7 @@ define_style! {
       row_gap: Gap,
       scale: Option<SpacePair<PercentageNumber>>,
       text_decoration_color: ColorInput,
+      text_decoration_inset: TextDecorationInset,
       text_decoration_thickness: TextDecorationThickness,
     }
     /// Blink's `misc->misc4` field group, which Blink nests in `misc`.
@@ -1644,6 +1711,37 @@ define_style! {
       webkit_text_stroke_width: Option<Length> where inherit = true,
       widows: MinLines where inherit = true,
     }
+    /// Blink's `svginherited` field group.
+    svg_inherited_data: StyleSvgInheritedData {
+      color_interpolation: ColorInterpolation where inherit = true,
+      color_interpolation_filters: ColorInterpolation where inherit = true = ColorInterpolation::LinearRgb,
+      dominant_baseline: DominantBaseline where inherit = true,
+      fill_rule: FillRule where inherit = true,
+      paint_order: PaintOrder where inherit = true,
+      shape_rendering: ShapeRendering where inherit = true,
+      text_anchor: TextAnchor where inherit = true,
+    }
+    /// Blink's `svginherited->fill` field group.
+    svg_fill_data: StyleSvgFillData {
+      fill: SvgPaint where inherit = true = SvgPaint::Color(ColorInput::Value(Color::black())),
+      fill_opacity: PercentageNumber where inherit = true,
+    }
+    /// Blink's `svginherited->stroke` field group, but for `stroke-linejoin`, which `misc_inherited_data` keeps.
+    svg_stroke_data: StyleSvgStrokeData {
+      stroke: SvgPaint where inherit = true = SvgPaint::None,
+      stroke_width: Length where inherit = true where non_negative = true = Length::Px(1.0),
+      stroke_opacity: PercentageNumber where inherit = true,
+      stroke_dasharray: Option<StrokeDasharray> where inherit = true,
+      stroke_dashoffset: Length where inherit = true = Length::zero(),
+      stroke_linecap: LineCap where inherit = true,
+      stroke_miterlimit: StrokeMiterlimit where inherit = true,
+    }
+    /// Blink's `svginherited->resources` field group.
+    svg_resources_data: StyleSvgResourcesData {
+      marker_start: Option<SvgResource> where inherit = true,
+      marker_mid: Option<SvgResource> where inherit = true,
+      marker_end: Option<SvgResource> where inherit = true,
+    }
   }
   transient_longhands {
     margin_inline_start: Length = Length::zero() => (box_data.margin_left, box_data.margin_right),
@@ -1668,6 +1766,11 @@ define_style! {
       target.push(StyleDeclaration::list_style_type(value.style_type));
       target.push(StyleDeclaration::list_style_position(value.position));
       target.push(StyleDeclaration::list_style_image(value.image));
+    },
+    marker: Option<SvgResource> => [MarkerStart, MarkerMid, MarkerEnd] |value, target| {
+      target.push(StyleDeclaration::marker_start(value.clone()));
+      target.push(StyleDeclaration::marker_mid(value.clone()));
+      target.push(StyleDeclaration::marker_end(value));
     },
     offset: OffsetShorthand => [OffsetPosition, OffsetPath, OffsetDistance, OffsetRotate, OffsetAnchor] |value, target| {
       target.push(StyleDeclaration::offset_position(value.position));
@@ -1835,6 +1938,19 @@ define_style! {
     grid_row: GridLine => [GridRowStart, GridRowEnd] |value, target| {
       target.push(StyleDeclaration::grid_row_start(value.start));
       target.push(StyleDeclaration::grid_row_end(value.end));
+    },
+    grid_template: GridTemplate => [GridTemplateRows, GridTemplateColumns, GridTemplateAreas] |value, target| {
+      target.push(StyleDeclaration::grid_template_rows(value.rows));
+      target.push(StyleDeclaration::grid_template_columns(value.columns));
+      target.push(StyleDeclaration::grid_template_areas(value.areas));
+    },
+    grid: Grid => [GridTemplateRows, GridTemplateColumns, GridTemplateAreas, GridAutoFlow, GridAutoRows, GridAutoColumns] |value, target| {
+      target.push(StyleDeclaration::grid_template_rows(value.template.rows));
+      target.push(StyleDeclaration::grid_template_columns(value.template.columns));
+      target.push(StyleDeclaration::grid_template_areas(value.template.areas));
+      target.push(StyleDeclaration::grid_auto_flow(value.auto_flow));
+      target.push(StyleDeclaration::grid_auto_rows(value.auto_rows));
+      target.push(StyleDeclaration::grid_auto_columns(value.auto_columns));
     },
     grid_area: GridArea => [GridRowStart, GridColumnStart, GridRowEnd, GridColumnEnd] |value, target| {
       target.push(StyleDeclaration::grid_row_start(value.row_start));
@@ -2026,6 +2142,12 @@ define_style! {
     overflow: SpacePair<Overflow> => [OverflowX, OverflowY] |value, target| {
       push_axis_declarations!(target, value, overflow_x, overflow_y);
     },
+    overflow_inline: Overflow => [OverflowX] |value, target| {
+      target.push(StyleDeclaration::overflow_x(value));
+    },
+    overflow_block: Overflow => [OverflowY] |value, target| {
+      target.push(StyleDeclaration::overflow_y(value));
+    },
     background: Backgrounds => [BackgroundImage, BackgroundPosition, BackgroundSize, BackgroundRepeat, BackgroundColor, BackgroundClip, BackgroundOrigin] |value, target| {
       target.push(StyleDeclaration::background_position(
         value.iter().map(|background| background.position).collect(),
@@ -2130,6 +2252,18 @@ define_style! {
 }
 
 impl StyleDeclaration {
+  /// Blink's `StyleCascade::ApplyWideOverlapping` for `vertical-align`, which is to become a
+  /// shorthand of `baseline-source`: it resets `baseline-source`, which a later declaration sets
+  /// again.
+  fn apply_wide_overlapping(&self, style: &mut ComputedStyle) {
+    if matches!(
+      self,
+      Self::VerticalAlign(_) | Self::CssWideKeyword(LonghandId::VerticalAlign, _)
+    ) {
+      style.box_data_mut().baseline_source = BaselineSource::default();
+    }
+  }
+
   /// Applies this declaration against `parent`, or as the root's when there is none.
   pub(crate) fn apply(self, style: &mut ComputedStyle, parent: Option<&ComputedStyle>) {
     match parent {
@@ -2367,16 +2501,6 @@ impl StyleDeclarationBlock {
     }
 
     (normal, important)
-  }
-
-  /// Appends a borrowed block's declarations and importance, cloning them.
-  pub(crate) fn append_cloned(&mut self, other: &Self) {
-    self.importance.extend_from(&other.importance);
-    self.extend_element_state(other.element_state.iter().map(Box::as_ref));
-    self
-      .important
-      .append(self.declarations.len(), &other.important);
-    self.declarations.extend(other.declarations.iter().cloned());
   }
 
   /// Appends another block's declarations and importance.

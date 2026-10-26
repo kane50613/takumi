@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use serde::{
   Deserialize, Deserializer,
@@ -7,7 +7,7 @@ use serde::{
 
 use crate::{
   layout::node::{ImageData, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind, NodeMetadata, TextData},
-  style::ParsedValues,
+  style::{ParsedValues, Style},
 };
 
 impl<'de> Deserialize<'de> for Node {
@@ -187,7 +187,7 @@ impl<'de> Visitor<'de> for NodeVisitor {
         NodeField::ClassName => metadata.class_name = map.next_value()?,
         NodeField::Id => metadata.id = map.next_value()?,
         NodeField::Attributes => metadata.attributes = map.next_value()?,
-        NodeField::Preset => metadata.preset = map.next_value()?,
+        NodeField::Preset => metadata.preset = map.next_value::<Option<Style>>()?.map(Arc::new),
         NodeField::Style => metadata.style = map.next_value()?,
         NodeField::Tw => metadata.tw = map.next_value()?,
         NodeField::Dir => metadata.dir = map.next_value()?,

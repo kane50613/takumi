@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_level_absolute_static_position</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: block;
+        position: relative;
+        width: 300px;
+        height: 200px;
+        margin: 32px;
+        direction: rtl;
+        text-align: left;
+        text-indent: 20px;
+        background-color: rgb(248, 250, 252);
+      "
+      ><div style="display: block; height: 50px; background-color: rgb(203, 213, 225)"></div
+      ><div
+        style="
+          display: block;
+          float: left;
+          width: 100px;
+          height: 100px;
+          background-color: rgb(59, 130, 246);
+        "
+      ></div
+      ><div
+        style="
+          display: inline;
+          position: absolute;
+          width: 60px;
+          height: 60px;
+          background-color: rgb(234, 88, 12);
+        "
+      ></div
+    ></div>
+  </body>
+</html>

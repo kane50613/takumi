@@ -1,0 +1,2709 @@
+//! Blink's [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc):
+//! a block container's children in a block formatting context, with margins collapsing, floats,
+//! and clearance, an inline formatting context's lines among them. Without columns, clamping by
+//! height, `text-box-trim`, `margin-trim`, ruby annotations, list marker propagation, or quirks
+//! mode.
+//!
+//! Follows Blink under the notice in LICENSE-CHROMIUM.
+
+#[cfg(feature = "fragmentation")]
+mod fragmentation;
+
+#[cfg(feature = "fragmentation")]
+use std::collections::VecDeque;
+use std::{mem::take, rc::Rc};
+
+#[cfg(feature = "fragmentation")]
+use crate::layout::box_fragment_builder::BoxFragmentBuilder;
+#[cfg(not(feature = "fragmentation"))]
+use crate::layout::{floats_utils::PositionedFloat, layout_result::StaticPosition};
+
+use crate::{
+  context::RenderContext,
+  geometry::{AvailableSpace, NodeId, Point, Size},
+  layout::{
+    bfc_rect::BfcOffset,
+    constraint_space::{
+      AdjoiningObjectTypes, AutoSizeBehavior, BaselineAlgorithmType, CacheSlot, ConstraintSpace,
+    },
+    content_alignment::BlockContentAlignment,
+    exclusions::exclusion_space::ExclusionSpace,
+    floats_utils::{Clear, Float, UnpositionedFloat, adjust_to_clearance, position_float},
+    fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
+    inline::{
+      atomic_inline::BoxAtomicInline,
+      inline_break_token::InlineBreakToken,
+      inline_child_layout_context::InlineChildLayoutContext,
+      inline_layout_algorithm::{InlineLayoutAlgorithm, LineBoxFragment},
+      inline_node::InlineNode,
+      inline_node_data::InlineNodeData,
+      line_info::text_align,
+      score_line_breaker::ScoreLineBreakContext,
+      text_fit_utils::ParagraphScale,
+      unpositioned_list_marker::UnpositionedListMarker,
+    },
+    layout_result::{
+      InlineEdge, LayoutResult, LayoutStatus, LogicalStaticPosition, OutOfFlowCandidate,
+    },
+    layout_style::LayoutStyle,
+    length_utils::{
+      LengthResolver, child_available_size, child_percentage_size, margins_for,
+      resolve_inline_auto_margins,
+    },
+    line_clamp_data::LineClampData,
+    logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
+    margin_strut::MarginStrut,
+    min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
+    relative_utils::compute_relative_offset,
+    tree::{LayoutTree, RenderNode},
+  },
+  layout_unit::LayoutUnit,
+  style::{AlignItems, Direction, TextFitMode, TextFitTarget, TextWrapStyle},
+};
+
+/// Blink's `PreviousInflowPosition`.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct PreviousInflowPosition {
+  pub(crate) logical_block_offset: LayoutUnit,
+  pub(crate) margin_strut: MarginStrut,
+  pub(crate) self_collapsing_child_had_clearance: bool,
+}
+
+/// Blink's `BlockLineClampData`, clamping by lines alone. Approximate: a block child's lines do not
+/// count toward its container's clamp, so only the clamp container's own lines clamp.
+#[derive(Debug, Clone, Copy, Default)]
+struct BlockLineClampData {
+  data: LineClampData,
+  ignore_line_clamp: bool,
+  previous_inflow_position_when_clamped: Option<PreviousInflowPosition>,
+}
+
+impl BlockLineClampData {
+  /// Blink's `Setup`: the clamp a `line-clamp` sets, else the one the space passes down.
+  fn setup(&mut self, line_clamp: Option<u32>, space: &ConstraintSpace) {
+    self.data = match line_clamp {
+      Some(_) if self.ignore_line_clamp => LineClampData::default(),
+      Some(lines) => LineClampData {
+        lines_until_clamp: Some(lines as i32),
+      },
+      None => space.line_clamp_data,
+    };
+  }
+
+  /// Blink's `ShouldRelayoutWithNoForcedTruncate`: no line followed the clamp line.
+  fn should_relayout_with_no_forced_truncate(&self) -> bool {
+    self.previous_inflow_position_when_clamped.is_some() && self.data.lines_until_clamp == Some(0)
+  }
+
+  /// Blink's `UpdateAfterLayout`, the child laid out as `result` ending at `previous`.
+  fn update_after_layout(
+    &mut self,
+    result: &LayoutResult,
+    previous: &PreviousInflowPosition,
+    is_line_box: bool,
+  ) {
+    let Some(old_lines_until_clamp) = self.data.lines_until_clamp else {
+      return;
+    };
+
+    if is_line_box {
+      self.data.lines_until_clamp = result.lines_until_clamp;
+    } else if old_lines_until_clamp == 0 {
+      // A lineless box right after the clamp point is content after it.
+      self.data.lines_until_clamp = Some(-1);
+    }
+
+    if self.data.is_past_clamp_point() && self.previous_inflow_position_when_clamped.is_none() {
+      self.previous_inflow_position_when_clamped = Some(*previous);
+    }
+  }
+}
+
+/// The `InlineNode` child of an inline formatting context root, laid out a line at a time.
+struct InlineChild<'a, 'r> {
+  node: InlineNode<'r>,
+  items_data: &'a InlineNodeData<'r>,
+  context: InlineChildLayoutContext<'a, 'r>,
+  /// Blink's `previous_inline_break_token`: where the next line starts.
+  break_token: Option<InlineBreakToken>,
+  /// The outside list marker the box has yet to place beside a line.
+  unpositioned_list_marker: Option<UnpositionedListMarker<'r>>,
+  /// The lines laid out, in the content box.
+  lines: Vec<LineBoxFragment<'a, 'r>>,
+  /// The break tokens the box resumed at that the lines have yet to take, after `break_token`.
+  #[cfg(feature = "fragmentation")]
+  resumed_break_tokens: VecDeque<InlineBreakToken>,
+}
+
+impl<'a, 'r> InlineChild<'a, 'r> {
+  fn new(node: InlineNode<'r>, items_data: &'a InlineNodeData<'r>) -> Self {
+    let mut context = InlineChildLayoutContext::default();
+
+    // Blink's `LayoutWithOptimalInlineChildLayoutContext`.
+    if node.block.context.style.inherited_data.text_wrap_style != TextWrapStyle::Auto
+      && !items_data.is_score_line_break_disabled
+    {
+      context.score_line_break_context = Some(ScoreLineBreakContext::default());
+    }
+
+    Self {
+      node,
+      items_data,
+      context,
+      break_token: None,
+      unpositioned_list_marker: UnpositionedListMarker::of(items_data),
+      lines: Vec::new(),
+      #[cfg(feature = "fragmentation")]
+      resumed_break_tokens: VecDeque::new(),
+    }
+  }
+}
+
+/// Blink's `LayoutInputNode` as `HandleInflow` lays it out: a block, or the next line of the inline
+/// content.
+enum InflowChild<'i, 'a, 'r> {
+  Block(NodeId, ChildBreakToken),
+  Inline(&'i mut InlineChild<'a, 'r>),
+}
+
+impl InflowChild<'_, '_, '_> {
+  fn block(&self) -> Option<NodeId> {
+    match self {
+      Self::Block(node, _) => Some(*node),
+      Self::Inline(_) => None,
+    }
+  }
+
+  /// Where a block child resumes.
+  fn block_break_token(&self) -> Option<&ChildBreakToken> {
+    match self {
+      Self::Block(_, token) => Some(token),
+      Self::Inline(_) => None,
+    }
+  }
+}
+
+/// Blink's `InflowChildData`.
+#[derive(Debug, Clone, Copy)]
+struct InflowChildData {
+  bfc_offset_estimate: BfcOffset,
+  margin_strut: MarginStrut,
+  margins: LogicalBoxStrut,
+  is_pushed_by_floats: bool,
+}
+
+/// Blink's `ToAdjoiningObjectTypes`.
+fn adjoining_object_types(clear: Clear) -> AdjoiningObjectTypes {
+  match clear {
+    Clear::None => AdjoiningObjectTypes::empty(),
+    Clear::Left => AdjoiningObjectTypes::FLOAT_LEFT,
+    Clear::Right => AdjoiningObjectTypes::FLOAT_RIGHT,
+    Clear::Both => AdjoiningObjectTypes::FLOAT_BOTH,
+  }
+}
+
+/// Blink's `HasClearancePastAdjoiningFloats`.
+fn has_clearance_past_adjoining_floats(
+  types: AdjoiningObjectTypes,
+  child_style: &LayoutStyle,
+) -> bool {
+  adjoining_object_types(child_style.clear).intersects(types)
+}
+
+/// Blink's `LogicalFromBfcLineOffset`.
+fn logical_from_bfc_line_offset(
+  child_bfc_line_offset: LayoutUnit,
+  parent_bfc_line_offset: LayoutUnit,
+  child_inline_size: LayoutUnit,
+  parent_inline_size: LayoutUnit,
+  direction: Direction,
+) -> LayoutUnit {
+  let relative_line_offset = child_bfc_line_offset - parent_bfc_line_offset;
+
+  match direction {
+    Direction::Ltr => relative_line_offset,
+    Direction::Rtl => parent_inline_size - relative_line_offset - child_inline_size,
+  }
+}
+
+/// Blink's `LogicalFromBfcOffsets`.
+fn logical_from_bfc_offsets(
+  child_bfc_offset: BfcOffset,
+  parent_bfc_offset: BfcOffset,
+  child_inline_size: LayoutUnit,
+  parent_inline_size: LayoutUnit,
+  direction: Direction,
+) -> LogicalOffset {
+  LogicalOffset::new(
+    logical_from_bfc_line_offset(
+      child_bfc_offset.line_offset,
+      parent_bfc_offset.line_offset,
+      child_inline_size,
+      parent_inline_size,
+      direction,
+    ),
+    child_bfc_offset.block_offset - parent_bfc_offset.block_offset,
+  )
+}
+
+/// Blink's `LayoutResultForPropagation`: a line holding a block-in-inline breaks as the block does.
+fn result_for_propagation<'l>(
+  result: &'l LayoutResult,
+  line: Option<&'l LineBoxFragment<'_, '_>>,
+) -> &'l LayoutResult {
+  line
+    .and_then(LineBoxFragment::block_in_inline)
+    .map_or(result, |(_, block_in_inline)| block_in_inline)
+}
+
+/// Blink's `ApplyClearance`.
+fn apply_clearance(space: &ConstraintSpace, bfc_block_offset: &mut LayoutUnit) -> bool {
+  if space.has_clearance_offset() && *bfc_block_offset < space.clearance_offset {
+    *bfc_block_offset = space.clearance_offset;
+    return true;
+  }
+
+  false
+}
+
+/// A child placed in the fragment: its border box's location and its layout.
+struct PlacedChild {
+  node: NodeId,
+  /// Which of the child's fragments the layout made.
+  fragment_index: usize,
+  location: Point<LayoutUnit>,
+  result: Rc<LayoutResult>,
+}
+
+/// Blink's `BlockLayoutAlgorithm` with its `BoxFragmentBuilder`.
+pub(crate) struct BlockLayoutAlgorithm<'t, 'r> {
+  tree: &'t mut LayoutTree<'r>,
+  node: NodeId,
+  space: &'t ConstraintSpace,
+  style: Rc<LayoutStyle>,
+  border_padding: LogicalBoxStrut,
+  inline_size: LayoutUnit,
+  child_available_size: AvailableLogicalSize,
+  child_percentage_size: AvailableLogicalSize,
+  bfc_line_offset: LayoutUnit,
+  bfc_block_offset: Option<LayoutUnit>,
+  exclusion_space: ExclusionSpace,
+  adjoining_object_types: AdjoiningObjectTypes,
+  is_pushed_by_floats: bool,
+  abort_when_bfc_block_offset_updated: bool,
+  line_clamp_data: BlockLineClampData,
+  intrinsic_block_size: LayoutUnit,
+  first_baseline: Option<LayoutUnit>,
+  last_baseline: Option<LayoutUnit>,
+  children: Vec<PlacedChild>,
+  out_of_flow: Vec<OutOfFlowCandidate>,
+  /// Blink's `UnpositionedListMarker` of a list item beside block content: its outside marker
+  /// child, yet to place beside the first child with a baseline.
+  list_marker: Option<NodeId>,
+  /// Where this layout resumes the box, and where it has to break.
+  input: FragmentationLayoutInput,
+  #[cfg(feature = "fragmentation")]
+  builder: BoxFragmentBuilder,
+  /// Blink's `has_break_opportunity_before_next_child_`.
+  #[cfg(feature = "fragmentation")]
+  has_break_opportunity_before_next_child: bool,
+  /// Blink's `first_overflowing_line_`, zero for none.
+  #[cfg(feature = "fragmentation")]
+  first_overflowing_line: usize,
+  /// Blink's `fit_all_lines_`.
+  #[cfg(feature = "fragmentation")]
+  fit_all_lines: bool,
+}
+
+impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
+  pub(crate) fn new(
+    tree: &'t mut LayoutTree<'r>,
+    node: NodeId,
+    space: &'t ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> Self {
+    let style = Rc::clone(tree.layout_style_rc(node));
+    let resolver = LengthResolver::new(space, &style);
+    let border_padding = resolver.border_padding;
+    let inline_size = resolver
+      .inline_size_for_fragment(&mut |size_type| tree.min_max_sizes(node, space, size_type));
+    let initial_block_size = resolver.initial_block_size_for_fragment(None, Some(inline_size));
+    let child_available_size = child_available_size(
+      AvailableLogicalSize {
+        inline_size: Some(inline_size),
+        block_size: initial_block_size,
+      },
+      border_padding,
+    );
+    let child_percentage_size =
+      child_percentage_size(space, tree.is_anonymous(node), child_available_size);
+
+    #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
+    let mut algorithm = Self {
+      exclusion_space: (*space.exclusion_space).clone(),
+      #[cfg(feature = "fragmentation")]
+      builder: BoxFragmentBuilder::new(space, &style, border_padding, input.break_token.clone()),
+      tree,
+      node,
+      space,
+      style,
+      border_padding,
+      inline_size,
+      child_available_size,
+      child_percentage_size,
+      bfc_line_offset: space.bfc_offset.line_offset,
+      bfc_block_offset: None,
+      adjoining_object_types: AdjoiningObjectTypes::empty(),
+      is_pushed_by_floats: false,
+      abort_when_bfc_block_offset_updated: false,
+      line_clamp_data: BlockLineClampData::default(),
+      intrinsic_block_size: LayoutUnit::ZERO,
+      first_baseline: None,
+      last_baseline: None,
+      children: Vec::new(),
+      out_of_flow: Vec::new(),
+      list_marker: None,
+      input: input.clone(),
+      #[cfg(feature = "fragmentation")]
+      has_break_opportunity_before_next_child: false,
+      #[cfg(feature = "fragmentation")]
+      first_overflowing_line: 0,
+      #[cfg(feature = "fragmentation")]
+      fit_all_lines: false,
+    };
+
+    #[cfg(feature = "fragmentation")]
+    algorithm.setup_fragment_builder_for_fragmentation();
+    if !algorithm.tree.has_inline_children(node) && algorithm.keeps_list_marker() {
+      algorithm.list_marker = algorithm
+        .tree
+        .child_nodes(node)
+        .first()
+        .copied()
+        .filter(|&child| algorithm.tree.render_node(child).is_outside_list_marker());
+    }
+    algorithm
+  }
+
+  fn direction(&self) -> Direction {
+    self.space.direction
+  }
+
+  fn child_available_inline_size(&self) -> LayoutUnit {
+    self
+      .child_available_size
+      .inline_size
+      .unwrap_or(LayoutUnit::ZERO)
+  }
+
+  /// Blink's `BfcBlockOffset`: the resolved one, else the parent's estimate.
+  fn bfc_block_offset_or_estimate(&self) -> LayoutUnit {
+    self
+      .bfc_block_offset
+      .unwrap_or(self.space.bfc_offset.block_offset)
+  }
+
+  /// Blink's `ContainerBfcOffset`.
+  fn container_bfc_offset(&self) -> BfcOffset {
+    BfcOffset::new(self.bfc_line_offset, self.bfc_block_offset_or_estimate())
+  }
+
+  /// Blink's `NextBorderEdge`.
+  fn next_border_edge(&self, previous: &PreviousInflowPosition) -> LayoutUnit {
+    self.bfc_block_offset_or_estimate()
+      + previous.logical_block_offset
+      + previous.margin_strut.sum()
+  }
+
+  /// Blink's `NeedsAbortOnBfcBlockOffsetChange`.
+  fn needs_abort_on_bfc_block_offset_change(&self) -> bool {
+    self.abort_when_bfc_block_offset_updated
+      && self.bfc_block_offset != Some(self.space.expected_bfc_block_offset())
+  }
+
+  /// Blink's `ResolveBfcBlockOffset`: false when the layout has to start over at the new offset.
+  fn resolve_bfc_block_offset(
+    &mut self,
+    previous: &mut PreviousInflowPosition,
+    bfc_block_offset: LayoutUnit,
+    forced_bfc_block_offset: Option<LayoutUnit>,
+  ) -> bool {
+    if self.space.is_pushed_by_floats {
+      self.is_pushed_by_floats = true;
+    }
+    if self.bfc_block_offset.is_some() {
+      return true;
+    }
+
+    let mut bfc_block_offset = forced_bfc_block_offset.unwrap_or(bfc_block_offset);
+
+    if apply_clearance(self.space, &mut bfc_block_offset) {
+      self.is_pushed_by_floats = true;
+    }
+    self.bfc_block_offset = Some(bfc_block_offset);
+
+    if self.needs_abort_on_bfc_block_offset_change() {
+      return false;
+    }
+
+    previous.logical_block_offset = LayoutUnit::ZERO;
+    previous.margin_strut = MarginStrut::default();
+    true
+  }
+
+  /// [`Self::resolve_bfc_block_offset`] at `bfc_block_offset`, forced as the space says.
+  fn resolve_bfc_block_offset_at(
+    &mut self,
+    previous: &mut PreviousInflowPosition,
+    bfc_block_offset: LayoutUnit,
+  ) -> bool {
+    self.resolve_bfc_block_offset(
+      previous,
+      bfc_block_offset,
+      self.space.forced_bfc_block_offset,
+    )
+  }
+
+  /// [`Self::resolve_bfc_block_offset`] committing the pending margins.
+  fn resolve_bfc_block_offset_here(&mut self, previous: &mut PreviousInflowPosition) -> bool {
+    let next_border_edge = self.next_border_edge(previous);
+
+    self.resolve_bfc_block_offset_at(previous, next_border_edge)
+  }
+
+  /// Blink's `ClearBorderScrollbarPaddingBlockEnd`, on the fragment builder's copy too.
+  fn clear_border_padding_block_end(&mut self) {
+    self.border_padding.block_end = LayoutUnit::ZERO;
+    #[cfg(feature = "fragmentation")]
+    {
+      self.builder.border_padding.block_end = LayoutUnit::ZERO;
+    }
+  }
+
+  /// The layout as far as it got, to lay out again once the container moved it.
+  fn abort(&self, status: LayoutStatus) -> LayoutResult {
+    LayoutResult::aborted(status, self.bfc_block_offset, self.is_pushed_by_floats)
+  }
+
+  /// Blink's `Layout`, and its `HandleNonsuccessfulLayoutResult` for a clamp that hid no line.
+  pub(crate) fn layout(mut self) -> LayoutResult {
+    let items_data = self
+      .tree
+      .has_inline_children(self.node)
+      .then(|| self.tree.inline_node_data(usize::from(self.node)));
+    let status = self.start_layout().and_then(|mut previous| {
+      let lines = match &items_data {
+        Some(items_data) => Some(self.layout_lines(items_data, &mut previous)?),
+        None => {
+          self.layout_block_children(&mut previous)?;
+          None
+        }
+      };
+
+      Ok((previous, lines))
+    });
+    let (mut previous, lines) = match status {
+      Ok(laid_out) => laid_out,
+      Err(status) => return self.handle_nonsuccessful_layout_result(status),
+    };
+
+    if self.should_relayout_ignoring_line_clamp() {
+      return self.relayout_ignoring_line_clamp();
+    }
+
+    self.intrinsic_block_size = self.border_padding.block_start;
+    self.finish_layout(&mut previous, items_data.as_deref().zip(lines))
+  }
+
+  /// Blink's `FinishLayout` asking for `RelayoutIgnoringLineClamp`: the clamp hid no line.
+  pub(in crate::layout) fn should_relayout_ignoring_line_clamp(&self) -> bool {
+    self.space.is_new_formatting_context
+      && self
+        .line_clamp_data
+        .should_relayout_with_no_forced_truncate()
+  }
+
+  /// Blink's `RelayoutIgnoringLineClamp`.
+  fn relayout_ignoring_line_clamp(self) -> LayoutResult {
+    Self::new(self.tree, self.node, self.space, &self.input)
+      .ignoring_line_clamp()
+      .layout()
+  }
+
+  /// The algorithm set up as `RelayoutIgnoringLineClamp` sets it up.
+  pub(in crate::layout) fn ignoring_line_clamp(mut self) -> Self {
+    self.line_clamp_data.ignore_line_clamp = true;
+    self
+  }
+
+  /// Blink's `Layout` up to the children: the margins coming in, the offset resolved where none
+  /// collapses through the block start, and the clamp set up.
+  pub(in crate::layout) fn start_layout(&mut self) -> Result<PreviousInflowPosition, LayoutStatus> {
+    let space = self.space;
+
+    if !space.adjoining_object_types.is_empty() {
+      self.abort_when_bfc_block_offset_updated = true;
+      self.adjoining_object_types = space.adjoining_object_types;
+    } else if self.has_block_fragmentation() {
+      // The offset from the page's block start is part of the space.
+      self.abort_when_bfc_block_offset_updated = true;
+    }
+
+    let line_clamp = self.tree.render_node(self.node).context.style.line_clamp();
+
+    self.line_clamp_data.setup(line_clamp, space);
+
+    let content_edge = self.border_padding.block_start;
+    let mut previous = PreviousInflowPosition {
+      logical_block_offset: LayoutUnit::ZERO,
+      margin_strut: space.margin_strut,
+      self_collapsing_child_had_clearance: false,
+    };
+
+    self.start_fragment(&mut previous);
+
+    // Margins do not collapse through border or padding, into a new formatting context, or from
+    // one fragment into the next.
+    if content_edge != LayoutUnit::ZERO || self.is_resuming() || space.is_new_formatting_context {
+      let discard_subsequent_margins =
+        previous.margin_strut.discard_margins && content_edge == LayoutUnit::ZERO;
+
+      if !self.resolve_bfc_block_offset_here(&mut previous) {
+        return Err(LayoutStatus::BfcBlockOffsetResolved);
+      }
+      previous.logical_block_offset = content_edge;
+      if discard_subsequent_margins {
+        previous.margin_strut.discard_margins = true;
+      }
+    }
+
+    Ok(previous)
+  }
+
+  /// The loop over the children in Blink's `Layout`.
+  fn layout_block_children(
+    &mut self,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<(), LayoutStatus> {
+    let entries = self.block_child_entries();
+    let entry_count = entries.len();
+    let mut handled = 0;
+
+    for (child, child_break_token) in entries {
+      let child_style = Rc::clone(self.tree.layout_style_rc(child));
+
+      handled += 1;
+      // The item places its outside marker beside a child's baseline instead.
+      if self.tree.render_node(child).is_outside_list_marker() {
+        continue;
+      }
+      if child_style.is_out_of_flow() {
+        self.handle_out_of_flow_positioned(previous, child, &child_style, &child_break_token);
+      } else if child_style.is_floating() {
+        self.handle_float(previous, child, &child_break_token);
+      } else {
+        if self.break_before_early_break_target(Some(child), previous)? {
+          break;
+        }
+        if self.tree.creates_new_formatting_context(child) {
+          self.handle_new_formatting_context(child, &child_style, previous, child_break_token)?;
+        } else {
+          self.handle_inflow(
+            InflowChild::Block(child, child_break_token),
+            &child_style,
+            previous,
+          )?;
+        }
+        if self.has_inflow_child_break_inside() {
+          break;
+        }
+      }
+    }
+    if handled == entry_count {
+      self.set_has_seen_all_children();
+    }
+
+    Ok(())
+  }
+
+  /// Blink's `FinishLayout`.
+  fn finish_layout(
+    mut self,
+    previous: &mut PreviousInflowPosition,
+    lines: Option<(&InlineNodeData<'r>, Vec<LineBoxFragment<'_, 'r>>)>,
+  ) -> LayoutResult {
+    let space = self.space;
+    let clamped = self.line_clamp_data.previous_inflow_position_when_clamped;
+
+    // A clamp sizes the box as if nothing followed the clamp point.
+    if let Some(clamped) = clamped {
+      *previous = clamped;
+    }
+
+    let mut end_margin_strut = previous.margin_strut;
+
+    if self.border_padding.block_end != LayoutUnit::ZERO
+      || previous.self_collapsing_child_had_clearance
+      || space.is_new_formatting_context
+    {
+      // A new formatting context encloses its floats, unless it clamped.
+      if space.is_new_formatting_context && clamped.is_none() {
+        self.intrinsic_block_size = self
+          .intrinsic_block_size
+          .max(self.exclusion_space.clearance_offset(Clear::Both));
+      }
+
+      if self.bfc_block_offset.is_none() {
+        if !self.resolve_bfc_block_offset_here(previous) {
+          return self.abort(LayoutStatus::BfcBlockOffsetResolved);
+        }
+      } else {
+        // The trailing margin strut is part of the block size only past something that separates
+        // it from the incoming one.
+        let margin_strut_sum = self.adjusted_margin_after_final_child_fragment(
+          previous.logical_block_offset,
+          end_margin_strut.sum(),
+        );
+
+        self.intrinsic_block_size = self
+          .intrinsic_block_size
+          .max(previous.logical_block_offset + margin_strut_sum);
+      }
+
+      if !self.should_include_block_end_border_padding() {
+        self.clear_border_padding_block_end();
+      }
+      self.intrinsic_block_size += self.border_padding.block_end;
+      end_margin_strut = MarginStrut::default();
+    } else {
+      self.intrinsic_block_size = self.intrinsic_block_size.max(previous.logical_block_offset);
+    }
+
+    // A marker with no baseline to sit beside goes at the top, unless a later page holds one.
+    if !self.has_inflow_child_break_inside()
+      && let Err(status) = self.position_list_marker_without_line_boxes(previous)
+    {
+      return self.abort(status);
+    }
+
+    let style = Rc::clone(&self.style);
+    let mut resolver = LengthResolver::new(space, &style);
+
+    resolver.border_padding = self.border_padding_for_size(resolver.border_padding);
+
+    let stitched_intrinsic_block_size =
+      self.previously_consumed_block_size() + self.intrinsic_block_size;
+    let mut block_size = resolver
+      .block_size_for_fragment(
+        Some(stitched_intrinsic_block_size),
+        Some(self.inline_size),
+        None,
+      )
+      .unwrap_or(stitched_intrinsic_block_size);
+
+    // Something solid to hang on to: a block size, a fragment before, or no way through.
+    if self.bfc_block_offset.is_none()
+      && (block_size != LayoutUnit::ZERO || self.is_resuming())
+      && !self.resolve_bfc_block_offset_here(previous)
+    {
+      return self.abort(LayoutStatus::BfcBlockOffsetResolved);
+    }
+
+    // The last child's margins do not collapse through a block size that differs from the content,
+    // or one the style fixes.
+    if self.bfc_block_offset.is_some()
+      && (block_size != stitched_intrinsic_block_size
+        || resolver
+          .initial_block_size_for_fragment(None, Some(self.inline_size))
+          .is_some())
+    {
+      end_margin_strut = MarginStrut::default();
+    }
+
+    let is_self_collapsing = self.bfc_block_offset.is_none();
+    let mut bfc_block_offset = self.bfc_block_offset;
+
+    if is_self_collapsing {
+      if let Some(forced) = space.forced_bfc_block_offset {
+        bfc_block_offset = Some(forced);
+        if space.is_pushed_by_floats {
+          self.is_pushed_by_floats = true;
+        }
+      }
+    } else {
+      self.adjoining_object_types = AdjoiningObjectTypes::empty();
+    }
+
+    match self.finalize_for_fragmentation(block_size) {
+      Ok(fragment_block_size) => block_size = fragment_block_size,
+      Err(status) => return self.handle_nonsuccessful_layout_result(status),
+    }
+
+    let content_offset = self.align_block_content(block_size);
+
+    // Blink's `InlineNode` child keeps its lines until the fragment knows its size.
+    if let Some((items_data, mut lines)) = lines {
+      let available_space = self.inline_available_space();
+
+      for line in &mut lines {
+        line.move_by(BfcOffset::new(LayoutUnit::ZERO, content_offset));
+      }
+      self.tree.keep_inline_content(
+        self.node,
+        space,
+        self.inline_size,
+        (items_data, &lines),
+        available_space,
+      );
+    }
+
+    let size = LogicalSize::new(self.inline_size, block_size);
+    let mut result = LayoutResult::of_box(size, &self.style, space);
+
+    self.exclude_broken_sides(&mut result);
+
+    if self.tree.has_inline_children(self.node) {
+      let candidates = self.tree.finish_inline_content(
+        self.node,
+        (self.fragment_index(), self.holds_every_line()),
+        &result,
+        space,
+        #[cfg(feature = "fragmentation")]
+        self
+          .builder
+          .breaks_out_of_flow_children(&self.style)
+          .then_some(&mut self.builder),
+      );
+
+      self.out_of_flow.extend(candidates);
+    }
+    self.out_of_flow = self.tree.lay_out_container_out_of_flow(
+      (self.node, self.fragment_index()),
+      &self.style,
+      size,
+      self.space,
+      take(&mut self.out_of_flow),
+      #[cfg(feature = "fragmentation")]
+      &mut self.builder,
+    );
+    self.commit_children();
+
+    #[cfg(feature = "fragmentation")]
+    let break_info = self.break_info();
+
+    if !space.is_new_formatting_context {
+      result.exclusion_space = self.exclusion_space.into_rc();
+    }
+
+    LayoutResult {
+      intrinsic_block_size: self.intrinsic_block_size,
+      bfc_line_offset: self.bfc_line_offset,
+      bfc_block_offset,
+      end_margin_strut,
+      adjoining_object_types: self.adjoining_object_types,
+      is_self_collapsing,
+      is_pushed_by_floats: self.is_pushed_by_floats,
+      first_baseline: self.first_baseline,
+      last_baseline: self.last_baseline,
+      use_last_baseline_for_inline_baseline: space.baseline_algorithm
+        == BaselineAlgorithmType::InlineBlock,
+      #[cfg(feature = "fragmentation")]
+      break_info,
+      out_of_flow: self.out_of_flow,
+      ..result
+    }
+  }
+
+  /// Blink's `AlignBlockContent`, or `FinalizeTableCellLayout` for a cell: how far alignment
+  /// moves the content of a box `block_size` tall down, its children, out-of-flow boxes, and
+  /// baselines moved with it.
+  fn align_block_content(&mut self, block_size: LayoutUnit) -> LayoutUnit {
+    let offset = if self.space.is_table_cell {
+      self.table_cell_content_offset(block_size)
+    } else if self.is_resuming() || !self.should_include_block_end_border_padding() {
+      // A fragment after the first or before the block end aligns nothing.
+      LayoutUnit::ZERO
+    } else {
+      BlockContentAlignment::for_block(self.style.align_content)
+        .offset(block_size - self.intrinsic_block_size)
+    };
+
+    if offset == LayoutUnit::ZERO {
+      return offset;
+    }
+
+    let shift = Point::new(LayoutUnit::ZERO, offset);
+
+    for child in &mut self.children {
+      child.location = child.location + shift;
+    }
+    for candidate in &mut self.out_of_flow {
+      *candidate = candidate.moved_by(shift);
+    }
+    for baseline in [&mut self.first_baseline, &mut self.last_baseline]
+      .into_iter()
+      .flatten()
+    {
+      *baseline += offset;
+    }
+
+    offset
+  }
+
+  /// The alignment part of Blink's `FinalizeTableCellLayout`: how far a cell's `vertical-align`
+  /// or `align-content` moves its content in a cell `block_size` tall. A baseline-aligned cell
+  /// without a baseline takes the end of its content box as one.
+  fn table_cell_content_offset(&mut self, block_size: LayoutUnit) -> LayoutUnit {
+    // A cell resumed after a break starts at the top of the page.
+    if self.is_resuming() {
+      return LayoutUnit::ZERO;
+    }
+
+    let render_node = self.tree.render_node(self.node);
+    let alignment = BlockContentAlignment::for_table_cell(&render_node.context.style);
+    let free_space = block_size - self.intrinsic_block_size;
+
+    if alignment != BlockContentAlignment::Baseline {
+      return alignment.offset(free_space);
+    }
+    if self.first_baseline.is_none() || self.style.applies_layout_containment() {
+      let content_end = self.intrinsic_block_size - self.border_padding.block_end;
+
+      self.first_baseline = Some(content_end);
+      self.last_baseline = Some(content_end);
+    }
+    // Only in-flow content aligns: a cell holding out-of-flow boxes alone keeps them in place.
+    if !render_node.has_table_cell_content() {
+      return LayoutUnit::ZERO;
+    }
+
+    match (
+      self.space.table_cell_alignment_baseline,
+      self.first_baseline,
+    ) {
+      (Some(row), Some(cell)) => row - cell,
+      _ => LayoutUnit::ZERO,
+    }
+  }
+
+  /// Writes each placed child's geometry once the layout stands, which only a layout that places
+  /// its boxes does.
+  fn commit_children(&mut self) {
+    if self.space.cache_slot != CacheSlot::Layout {
+      return;
+    }
+
+    let container_fragment_index = self.fragment_index();
+
+    for child in take(&mut self.children) {
+      self.tree.place_child(
+        child.node,
+        child.fragment_index,
+        container_fragment_index,
+        child.location,
+        &child.result,
+      );
+    }
+  }
+
+  /// The border-box location of a child `child_inline_size` wide at the logical `offset`.
+  fn physical_offset(
+    &self,
+    offset: LogicalOffset,
+    child_inline_size: LayoutUnit,
+  ) -> Point<LayoutUnit> {
+    let x = match self.direction() {
+      Direction::Ltr => offset.inline_offset,
+      Direction::Rtl => self.inline_size - offset.inline_offset - child_inline_size,
+    };
+
+    Point::new(x, offset.block_offset)
+  }
+
+  /// Blink's `BoxFragmentBuilder::AddResult`: the child moved by `position: relative`, its
+  /// out-of-flow boxes along with it.
+  fn add_result(
+    &mut self,
+    node: NodeId,
+    result: Rc<LayoutResult>,
+    offset: LogicalOffset,
+    fragment_index: usize,
+  ) {
+    let relative_offset = compute_relative_offset(
+      self.tree.render_node(node),
+      self.direction(),
+      self
+        .child_available_size
+        .inline_size
+        .map(LayoutUnit::to_float),
+      self
+        .child_available_size
+        .block_size
+        .map(LayoutUnit::to_float),
+    );
+    let location = self.physical_offset(offset, result.size.inline_size)
+      + relative_offset.map(LayoutUnit::from_float);
+
+    self
+      .out_of_flow
+      .extend(result.out_of_flow_moved_by(location));
+    self.propagate_break_info(node, &result, offset.block_offset);
+    self.children.push(PlacedChild {
+      node,
+      fragment_index,
+      location,
+      result,
+    });
+  }
+
+  /// Blink's `HandleOutOfFlowPositioned`.
+  fn handle_out_of_flow_positioned(
+    &mut self,
+    previous: &PreviousInflowPosition,
+    child: NodeId,
+    child_style: &LayoutStyle,
+    child_break_token: &ChildBreakToken,
+  ) {
+    // A break the content before forces goes before the box, which takes its static position on
+    // the next page.
+    if self.breaks_before_float_or_out_of_flow(child)
+      || self.resumes_out_of_flow(child, child_break_token)
+    {
+      return;
+    }
+
+    let mut static_position = LogicalStaticPosition {
+      offset: LogicalOffset::new(
+        self.border_padding.inline_start,
+        previous.logical_block_offset,
+      ),
+      ..LogicalStaticPosition::default()
+    };
+
+    // The margin strut joins the static position only once the box is known not to collapse.
+    if self.bfc_block_offset.is_some() {
+      static_position.offset.block_offset += previous.margin_strut.sum();
+    }
+
+    if self
+      .tree
+      .render_node(child)
+      .is_original_display_inline_type()
+    {
+      // An inline-level box's static position follows the floats before it.
+      if self.bfc_block_offset.is_none() {
+        self.adjoining_object_types |= AdjoiningObjectTypes::INLINE_OUT_OF_FLOW;
+        self.abort_when_bfc_block_offset_updated = true;
+      }
+
+      let origin_bfc_block_offset = self
+        .bfc_block_offset
+        .unwrap_or(self.space.expected_bfc_block_offset())
+        + static_position.offset.block_offset;
+      let origin = BfcOffset::new(
+        self.space.bfc_offset.line_offset + self.border_padding.line_left(self.direction()),
+        origin_bfc_block_offset,
+      );
+
+      static_position.offset.inline_offset += calculate_out_of_flow_static_inline_level_offset(
+        &self.tree.render_node(self.node).context,
+        origin,
+        &self.exclusion_space,
+        self.child_available_inline_size(),
+      );
+    } else {
+      // The alignment container for a block-level out-of-flow box is a zero-thickness line in the
+      // inline direction. https://drafts.csswg.org/css-position-3/#staticpos-rect
+      let available = self.child_available_inline_size();
+
+      match child_style.justify_self {
+        AlignItems::Center | AlignItems::SafeCenter => {
+          static_position.inline_edge = InlineEdge::Center;
+          static_position.offset.inline_offset += available / 2;
+        }
+        AlignItems::End | AlignItems::SafeEnd | AlignItems::FlexEnd | AlignItems::SafeFlexEnd => {
+          static_position.inline_edge = InlineEdge::End;
+          static_position.offset.inline_offset += available;
+        }
+        _ => {}
+      }
+    }
+
+    let candidate = self.out_of_flow_candidate(
+      child,
+      static_position.to_physical(self.direction(), self.inline_size),
+    );
+
+    self.out_of_flow.push(candidate);
+  }
+
+  /// Blink's `HandleFloat`.
+  fn handle_float(
+    &mut self,
+    previous: &PreviousInflowPosition,
+    child: NodeId,
+    child_break_token: &ChildBreakToken,
+  ) {
+    if self.breaks_before_float_or_out_of_flow(child) {
+      return;
+    }
+
+    let space = self.space;
+    let mut origin_bfc_offset = BfcOffset::new(
+      space.bfc_offset.line_offset + self.border_padding.line_left(space.direction),
+      if self.bfc_block_offset.is_some() {
+        self.next_border_edge(previous)
+      } else {
+        space.expected_bfc_block_offset()
+      },
+    );
+
+    origin_bfc_offset.block_offset += self.float_monolithic_overflow(child_break_token);
+
+    let render_node = self.tree.render_node(child);
+    let mut unpositioned_float = UnpositionedFloat::new(
+      render_node,
+      (self.child_available_size, self.child_percentage_size),
+      origin_bfc_offset,
+      space,
+      self.line_clamp_data.data.float_state(),
+    );
+
+    self.setup_float_for_fragmentation(&mut unpositioned_float, child, child_break_token);
+
+    if self.bfc_block_offset.is_none() {
+      self.adjoining_object_types |= if unpositioned_float.float_type() == Float::Left {
+        AdjoiningObjectTypes::FLOAT_LEFT
+      } else {
+        AdjoiningObjectTypes::FLOAT_RIGHT
+      };
+      // Floats placed at the expected offset move once the offset resolves elsewhere.
+      if space.forced_bfc_block_offset.is_none() {
+        self.abort_when_bfc_block_offset_updated = true;
+      }
+    }
+
+    let input = self.child_layout_input(child, child_break_token);
+    let tree = &mut *self.tree;
+    let positioned = position_float(
+      &mut unpositioned_float,
+      &mut self.exclusion_space,
+      &mut |_, float_space| tree.layout_fragment(child, float_space, &input),
+    );
+
+    if self.breaks_before_positioned_float(child, &positioned) {
+      return;
+    }
+    let result = positioned.layout_result;
+    let bfc_offset = BfcOffset::new(
+      space.bfc_offset.line_offset,
+      self
+        .bfc_block_offset
+        .unwrap_or(space.expected_bfc_block_offset()),
+    );
+    let offset = logical_from_bfc_offsets(
+      positioned.bfc_offset,
+      bfc_offset,
+      result.size.inline_size,
+      self.inline_size,
+      space.direction,
+    );
+
+    self.add_result(
+      child,
+      result,
+      offset,
+      Self::child_fragment_index(child_break_token),
+    );
+  }
+
+  /// Blink's `CalculateMargins`: the child's margins, and how far `justify-self` or `auto` margins
+  /// move it along the line.
+  fn calculate_margins(
+    &mut self,
+    child: NodeId,
+    child_style: &LayoutStyle,
+    is_new_fc: bool,
+  ) -> (LogicalBoxStrut, LayoutUnit) {
+    let mut margins = margins_for(
+      child_style,
+      self.child_percentage_size.inline_size,
+      self.direction(),
+    );
+
+    if is_new_fc {
+      return (margins, LayoutUnit::ZERO);
+    }
+
+    let child_space = self.inline_size_space_for_child(child, child_style);
+    let child_inline_size = {
+      let resolver = LengthResolver::new(&child_space, child_style);
+      let tree = &mut *self.tree;
+
+      resolver.inline_size_for_fragment(&mut |size_type| {
+        tree.min_max_sizes(child, &child_space, size_type)
+      })
+    };
+    let available_space = self.child_available_inline_size();
+    let (start, end) = self
+      .direction()
+      .inline_sides(child_style.margin.left, child_style.margin.right);
+    let mut text_align_offset = LayoutUnit::ZERO;
+
+    if start.is_auto() || end.is_auto() {
+      resolve_inline_auto_margins(
+        child_style,
+        self.direction(),
+        available_space,
+        child_inline_size,
+        &mut margins,
+      );
+    } else {
+      text_align_offset =
+        justify_self_offset(child_style, available_space, &margins, child_inline_size);
+    }
+
+    let additional_line_offset = match self.direction() {
+      Direction::Rtl => {
+        available_space - text_align_offset - child_inline_size - margins.inline_sum()
+      }
+      Direction::Ltr => text_align_offset,
+    };
+
+    (margins, additional_line_offset)
+  }
+
+  /// The space a child resolves its inline size in, as `CalculateMargins` builds it.
+  fn inline_size_space_for_child(
+    &self,
+    child: NodeId,
+    child_style: &LayoutStyle,
+  ) -> ConstraintSpace {
+    let mut space =
+      ConstraintSpace::new(self.child_available_size.inline_size, child_style.direction);
+
+    space.available_block_size = self.child_available_size.block_size;
+    space.percentage_resolution_inline_size = self.child_percentage_size.inline_size;
+    space.percentage_resolution_block_size = self.child_percentage_size.block_size;
+    space.inline_auto_behavior = self.inline_auto_behavior_for_child(child, child_style);
+    space.cache_slot = self.space.cache_slot;
+    space
+  }
+
+  /// How a child's `auto` inline size resolves, from its `justify-self`.
+  fn inline_auto_behavior_for_child(
+    &self,
+    child: NodeId,
+    child_style: &LayoutStyle,
+  ) -> AutoSizeBehavior {
+    if self.tree.is_anonymous(child) && !self.tree.is_table(child) {
+      return AutoSizeBehavior::StretchImplicit;
+    }
+
+    match child_style.justify_self {
+      AlignItems::Stretch => AutoSizeBehavior::StretchExplicit,
+      AlignItems::Normal => {
+        if self.tree.is_table(child) || child_style.is_replaced {
+          AutoSizeBehavior::FitContent
+        } else {
+          AutoSizeBehavior::StretchImplicit
+        }
+      }
+      _ => AutoSizeBehavior::FitContent,
+    }
+  }
+
+  /// Blink's `ComputeChildData`.
+  fn compute_child_data(
+    &mut self,
+    previous: &PreviousInflowPosition,
+    child: Option<NodeId>,
+    child_style: &LayoutStyle,
+    is_new_fc: bool,
+    child_break_token: Option<&ChildBreakToken>,
+  ) -> InflowChildData {
+    // Blink's `CalculateMargins` gives an inline child none.
+    let (mut margins, additional_line_offset) = child
+      .map_or((LogicalBoxStrut::default(), LayoutUnit::ZERO), |child| {
+        self.calculate_margins(child, child_style, is_new_fc)
+      });
+    let mut margin_strut = previous.margin_strut;
+    let mut logical_block_offset = previous.logical_block_offset;
+
+    self.adjust_child_data_for_fragmentation(
+      child_break_token,
+      &mut margins,
+      &mut margin_strut,
+      &mut logical_block_offset,
+    );
+    margin_strut.append(margins.block_start);
+
+    let direction = self.direction();
+    let bfc_offset = BfcOffset::new(
+      self.space.bfc_offset.line_offset
+        + self.border_padding.line_left(direction)
+        + additional_line_offset
+        + margins.line_left(direction),
+      self.bfc_block_offset_or_estimate() + logical_block_offset,
+    );
+
+    InflowChildData {
+      bfc_offset_estimate: bfc_offset,
+      margin_strut,
+      margins,
+      is_pushed_by_floats: false,
+    }
+  }
+
+  /// Blink's `CreateConstraintSpaceForChild`.
+  #[allow(clippy::too_many_arguments)]
+  fn create_constraint_space_for_child(
+    &self,
+    child: Option<NodeId>,
+    child_style: &LayoutStyle,
+    child_data: &InflowChildData,
+    child_available_size: AvailableLogicalSize,
+    is_new_fc: bool,
+    child_bfc_block_offset: Option<LayoutUnit>,
+    has_clearance_past_adjoining_floats: bool,
+  ) -> ConstraintSpace {
+    let space = self.space;
+    let mut builder = ConstraintSpace::new(child_available_size.inline_size, child_style.direction);
+
+    builder.inline_auto_behavior = child.map_or(AutoSizeBehavior::StretchImplicit, |child| {
+      self.inline_auto_behavior_for_child(child, child_style)
+    });
+    builder.available_block_size = child_available_size.block_size;
+    builder.percentage_resolution_inline_size = self.child_percentage_size.inline_size;
+    builder.percentage_resolution_block_size = self.child_percentage_size.block_size;
+    builder.is_new_formatting_context = is_new_fc;
+    builder.cache_slot = space.cache_slot;
+    // Approximate: only the lines count toward the clamp, a block child getting the one above.
+    builder.line_clamp_data = match child {
+      Some(_) => space.line_clamp_data,
+      None => self.line_clamp_data.data,
+    };
+
+    let has_bfc_block_offset = self.bfc_block_offset.is_some();
+
+    if !has_bfc_block_offset && let Some(forced) = space.forced_bfc_block_offset {
+      builder.forced_bfc_block_offset = Some(forced);
+    }
+    if let (Some(offset), false) = (child_bfc_block_offset, is_new_fc) {
+      builder.forced_bfc_block_offset = Some(offset);
+    }
+    if !has_bfc_block_offset && let Some(optimistic) = space.optimistic_bfc_block_offset {
+      builder.optimistic_bfc_block_offset = Some(optimistic);
+    }
+    if (!has_bfc_block_offset && space.ancestor_has_clearance_past_adjoining_floats)
+      || has_clearance_past_adjoining_floats
+    {
+      builder.ancestor_has_clearance_past_adjoining_floats = true;
+    }
+
+    let mut clearance_offset = if space.is_new_formatting_context {
+      LayoutUnit::MIN
+    } else {
+      space.clearance_offset
+    };
+
+    if child.is_some() {
+      clearance_offset =
+        clearance_offset.max(self.exclusion_space.clearance_offset(child_style.clear));
+    }
+    builder.clearance_offset = clearance_offset;
+    builder.baseline_algorithm = space.baseline_algorithm;
+
+    if child_data.is_pushed_by_floats {
+      builder.is_pushed_by_floats = true;
+    }
+
+    if !is_new_fc {
+      builder.margin_strut = child_data.margin_strut;
+      builder.bfc_offset = child_data.bfc_offset_estimate;
+      builder.exclusion_space = self.exclusion_space.clone().into_rc();
+      if !has_bfc_block_offset {
+        builder.adjoining_object_types = self.adjoining_object_types;
+      }
+    }
+
+    if !space.is_new_formatting_context {
+      builder.ignore_block_margins_for_stretch = (
+        self.border_padding.block_start == LayoutUnit::ZERO,
+        self.border_padding.block_end == LayoutUnit::ZERO,
+      );
+    }
+
+    self.setup_space_builder_for_fragmentation(
+      &mut builder,
+      child,
+      is_new_fc,
+      child_bfc_block_offset,
+    );
+    builder
+  }
+
+  /// Blink's `HandleNewFormattingContext`.
+  fn handle_new_formatting_context(
+    &mut self,
+    child: NodeId,
+    child_style: &LayoutStyle,
+    previous: &mut PreviousInflowPosition,
+    child_break_token: ChildBreakToken,
+  ) -> Result<(), LayoutStatus> {
+    let space = self.space;
+    let child_data = self.compute_child_data(
+      previous,
+      Some(child),
+      child_style,
+      true,
+      Some(&child_break_token),
+    );
+    let child_origin_line_offset =
+      space.bfc_offset.line_offset + self.border_padding.line_left(self.direction());
+    let adjoining_bfc_offset_estimate =
+      child_data.bfc_offset_estimate.block_offset + child_data.margin_strut.sum();
+    let non_adjoining_bfc_offset_estimate =
+      child_data.bfc_offset_estimate.block_offset + previous.margin_strut.sum();
+    let mut child_bfc_offset_estimate = adjoining_bfc_offset_estimate;
+    let mut bfc_offset_already_resolved = false;
+    let mut child_determined_bfc_offset = false;
+    let mut child_margin_got_separated = false;
+    let mut has_adjoining_floats = false;
+
+    if self.bfc_block_offset.is_none() {
+      has_adjoining_floats = self
+        .adjoining_object_types
+        .intersects(AdjoiningObjectTypes::FLOAT_BOTH);
+
+      let has_clearance_past_adjoining_floats = space.ancestor_has_clearance_past_adjoining_floats
+        || has_clearance_past_adjoining_floats(self.adjoining_object_types, child_style);
+
+      if has_clearance_past_adjoining_floats {
+        child_bfc_offset_estimate = self.next_border_edge(previous);
+        child_margin_got_separated = true;
+      } else if let Some(forced) = space.forced_bfc_block_offset {
+        bfc_offset_already_resolved = true;
+        child_bfc_offset_estimate = forced;
+        child_margin_got_separated = child_bfc_offset_estimate != adjoining_bfc_offset_estimate;
+      }
+
+      child_determined_bfc_offset = true;
+
+      if !self.resolve_bfc_block_offset_at(previous, child_bfc_offset_estimate) {
+        return Err(LayoutStatus::BfcBlockOffsetResolved);
+      }
+
+      // Clearance may have moved it.
+      child_bfc_offset_estimate = self.container_bfc_offset().block_offset;
+    }
+
+    let abort_if_cleared = child_data.margins.block_start != LayoutUnit::ZERO
+      && !child_margin_got_separated
+      && child_determined_bfc_offset;
+    let mut laid_out = self.layout_new_formatting_context(
+      child,
+      child_style,
+      &child_data,
+      BfcOffset::new(child_origin_line_offset, child_bfc_offset_estimate),
+      abort_if_cleared,
+      &child_break_token,
+    );
+
+    if laid_out.is_none() {
+      // Pushed down by floats, so the child's margin should not have affected them.
+      if child_determined_bfc_offset {
+        let old_offset = self.bfc_block_offset;
+
+        self.bfc_block_offset = None;
+        self.resolve_bfc_block_offset(previous, non_adjoining_bfc_offset_estimate, None);
+
+        if (bfc_offset_already_resolved || has_adjoining_floats)
+          && old_offset != self.bfc_block_offset
+        {
+          return Err(LayoutStatus::BfcBlockOffsetResolved);
+        }
+      }
+
+      child_bfc_offset_estimate = non_adjoining_bfc_offset_estimate;
+      laid_out = self.layout_new_formatting_context(
+        child,
+        child_style,
+        &child_data,
+        BfcOffset::new(child_origin_line_offset, child_bfc_offset_estimate),
+        false,
+        &child_break_token,
+      );
+    }
+
+    let Some((result, child_bfc_offset)) = laid_out else {
+      return Ok(());
+    };
+
+    if self.break_before_child_if_needed(
+      Some((child, child_style)),
+      &result,
+      previous,
+      child_bfc_offset.block_offset,
+      child_bfc_offset.block_offset > child_bfc_offset_estimate || result.is_pushed_by_floats,
+    )? {
+      return Ok(());
+    }
+
+    let mut offset = logical_from_bfc_offsets(
+      child_bfc_offset,
+      self.container_bfc_offset(),
+      result.size.inline_size,
+      self.inline_size,
+      self.direction(),
+    );
+
+    self.position_list_marker_beside_child(&result, &mut offset, previous)?;
+    self.propagate_baseline_from_block_child(child, &result, offset.block_offset);
+    self.add_result(
+      child,
+      Rc::clone(&result),
+      offset,
+      Self::child_fragment_index(&child_break_token),
+    );
+    *previous = self.compute_inflow_position(
+      previous,
+      &child_data,
+      Some(child_bfc_offset.block_offset),
+      offset,
+      &result,
+      false,
+    );
+    self.update_break_opportunity_before_next_child(&result, Some(&child_break_token));
+
+    Ok(())
+  }
+
+  /// Blink's `LayoutNewFormattingContext`: the child laid out in the first layout opportunity it
+  /// fits, `None` when `abort_if_cleared` and floats push it down.
+  #[allow(clippy::too_many_arguments)]
+  fn layout_new_formatting_context(
+    &mut self,
+    child: NodeId,
+    child_style: &LayoutStyle,
+    child_data: &InflowChildData,
+    mut origin_offset: BfcOffset,
+    abort_if_cleared: bool,
+    child_break_token: &ChildBreakToken,
+  ) -> Option<(Rc<LayoutResult>, BfcOffset)> {
+    let direction = self.direction();
+
+    if !Self::is_break_inside_child(child_break_token) {
+      adjust_to_clearance(
+        self.exclusion_space.clearance_offset(child_style.clear),
+        &mut origin_offset,
+      );
+    }
+
+    let available_inline_size = self.child_available_inline_size();
+    let opportunities = self.exclusion_space.all_layout_opportunities(
+      origin_offset,
+      available_inline_size,
+      direction,
+    );
+    let line_left_margin = child_data.margins.line_left(direction);
+    let line_right_margin = child_data.margins.line_right(direction);
+    let mut last = None;
+
+    for opportunity in opportunities {
+      if abort_if_cleared && origin_offset.block_offset < opportunity.rect.block_start_offset() {
+        return None;
+      }
+
+      let has_floats_on_line_left =
+        opportunity.rect.line_start_offset() != origin_offset.line_offset;
+      let has_floats_on_line_right =
+        opportunity.rect.line_end_offset() != origin_offset.line_offset + available_inline_size;
+      let can_expand_outside_opportunity = !has_floats_on_line_left && !has_floats_on_line_right;
+      let mut line_left_offset = opportunity.rect.line_start_offset();
+      let mut line_right_offset = opportunity.rect.line_end_offset();
+
+      if can_expand_outside_opportunity {
+        line_left_offset += line_left_margin;
+        line_right_offset -= line_right_margin;
+      } else {
+        // Margins apply from the content box, not the opportunity.
+        line_left_offset = line_left_offset
+          .max(origin_offset.line_offset + line_left_margin.clamp_negative_to_zero());
+        line_right_offset = line_right_offset.min(
+          origin_offset.line_offset + available_inline_size
+            - line_right_margin.clamp_negative_to_zero(),
+        );
+      }
+
+      let opportunity_size = (line_right_offset - line_left_offset).clamp_negative_to_zero();
+      let child_available_inline_size =
+        (opportunity_size + child_data.margins.inline_sum()).clamp_negative_to_zero();
+      let child_space = self.create_constraint_space_for_child(
+        Some(child),
+        child_style,
+        child_data,
+        AvailableLogicalSize {
+          inline_size: Some(child_available_inline_size),
+          block_size: self.child_available_size.block_size,
+        },
+        true,
+        Some(opportunity.rect.start_offset.block_offset),
+        false,
+      );
+      let result = self.lay_out_child(child, &child_space, child_break_token);
+
+      last = Some((
+        Rc::clone(&result),
+        opportunity,
+        line_left_offset,
+        line_right_offset,
+      ));
+
+      if result.size.block_size > opportunity.rect.block_size() {
+        continue;
+      }
+
+      let mut auto_margins = child_data.margins;
+      let mut text_align_offset = LayoutUnit::ZERO;
+      let (start, end) = direction.inline_sides(child_style.margin.left, child_style.margin.right);
+      let has_auto_margins = start.is_auto() || end.is_auto();
+
+      if has_auto_margins {
+        resolve_inline_auto_margins(
+          child_style,
+          direction,
+          child_available_inline_size,
+          result.size.inline_size,
+          &mut auto_margins,
+        );
+      } else {
+        text_align_offset = justify_self_offset(
+          child_style,
+          opportunity.rect.inline_size(),
+          &child_data.margins,
+          result.size.inline_size,
+        );
+      }
+
+      let line_offset = match direction {
+        Direction::Ltr => {
+          line_left_offset
+            + (auto_margins.line_left(direction) - line_left_margin)
+            + text_align_offset
+        }
+        Direction::Rtl => {
+          line_right_offset
+            - text_align_offset
+            - (auto_margins.line_right(direction) - line_right_margin)
+            - result.size.inline_size
+        }
+      };
+      let child_bfc_offset = BfcOffset::new(line_offset, opportunity.rect.block_start_offset());
+
+      if has_floats_on_line_left
+        && child_bfc_offset.line_offset < opportunity.rect.line_start_offset()
+      {
+        continue;
+      }
+      if has_floats_on_line_right
+        && child_bfc_offset.line_offset + result.size.inline_size
+          > opportunity.rect.line_end_offset()
+      {
+        continue;
+      }
+      if !can_expand_outside_opportunity && result.size.inline_size > opportunity.rect.inline_size()
+      {
+        continue;
+      }
+
+      return Some((result, child_bfc_offset));
+    }
+
+    // The last opportunity is unbounded, so a child that fits nowhere else fits there.
+    last.map(|(result, opportunity, line_left_offset, _)| {
+      (
+        result,
+        BfcOffset::new(line_left_offset, opportunity.rect.block_start_offset()),
+      )
+    })
+  }
+
+  /// Blink's `HandleInflow` and `FinishInflow`.
+  fn handle_inflow(
+    &mut self,
+    mut child: InflowChild<'_, '_, 'r>,
+    child_style: &LayoutStyle,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<(), LayoutStatus> {
+    let has_clearance_past_adjoining_floats = self.bfc_block_offset.is_none()
+      && child.block().is_some()
+      && has_clearance_past_adjoining_floats(self.adjoining_object_types, child_style);
+    let mut forced_bfc_block_offset = None;
+    let mut is_pushed_by_floats = false;
+
+    // Clearance past adjoining floats separates the margins before from the child, so the offset
+    // resolves now and the child goes past the floats.
+    if has_clearance_past_adjoining_floats {
+      if !self.resolve_bfc_block_offset_here(previous) {
+        return Err(LayoutStatus::BfcBlockOffsetResolved);
+      }
+      forced_bfc_block_offset = Some(self.exclusion_space.clearance_offset(child_style.clear));
+      is_pushed_by_floats = true;
+    }
+
+    let child_break_token = child.block_break_token().cloned();
+    let mut child_data = self.compute_child_data(
+      previous,
+      child.block(),
+      child_style,
+      false,
+      child_break_token.as_ref(),
+    );
+
+    child_data.is_pushed_by_floats = is_pushed_by_floats;
+
+    let child_space = self.create_constraint_space_for_child(
+      child.block(),
+      child_style,
+      &child_data,
+      self.child_available_size,
+      false,
+      forced_bfc_block_offset,
+      has_clearance_past_adjoining_floats,
+    );
+    let (mut result, mut line) = self.layout_inflow(&child_space, &mut child);
+    let mut child_bfc_block_offset = result.bfc_block_offset;
+    let is_self_collapsing = result.is_self_collapsing;
+    let normal_child_had_clearance = result.is_pushed_by_floats && !is_self_collapsing;
+
+    // A child that resolved its offset before this one did makes this one resolve, and start over
+    // if the floats before it moved.
+    if result.status == LayoutStatus::BfcBlockOffsetResolved && self.bfc_block_offset.is_none() {
+      self.abort_when_bfc_block_offset_updated = true;
+
+      let mut bfc_block_offset = child_bfc_block_offset.unwrap_or(self.next_border_edge(previous));
+
+      if normal_child_had_clearance {
+        if self.space.clearance_offset == child_space.clearance_offset {
+          self.is_pushed_by_floats = true;
+        } else {
+          bfc_block_offset = self.next_border_edge(previous);
+        }
+      }
+
+      if !self.resolve_bfc_block_offset(previous, bfc_block_offset, None) {
+        return Err(LayoutStatus::BfcBlockOffsetResolved);
+      }
+    }
+
+    let mut self_collapsing_child_had_clearance =
+      is_self_collapsing && has_clearance_past_adjoining_floats;
+
+    if child_bfc_block_offset.is_none()
+      && child_space.has_clearance_offset()
+      && child_style.clear != Clear::None
+    {
+      // A self-collapsing child collapsed through: detect clearance from its hypothetical edge.
+      let child_block_offset_estimate =
+        self.bfc_block_offset_or_estimate() + result.end_margin_strut.sum();
+
+      if child_block_offset_estimate < child_space.clearance_offset {
+        self_collapsing_child_had_clearance = true;
+      }
+    }
+
+    let child_had_clearance = self_collapsing_child_had_clearance || normal_child_had_clearance;
+
+    if child_had_clearance && !self.resolve_bfc_block_offset_here(previous) {
+      return Err(LayoutStatus::BfcBlockOffsetResolved);
+    }
+
+    let mut self_collapsing_child_needs_relayout = false;
+
+    if child_bfc_block_offset.is_none() {
+      if self.bfc_block_offset.is_some() && result.status == LayoutStatus::Success {
+        let mut offset =
+          child_data.bfc_offset_estimate.block_offset + result.end_margin_strut.sum();
+
+        apply_clearance(&child_space, &mut offset);
+        child_bfc_block_offset = Some(offset);
+
+        // Out-of-flow boxes inside break by their fragmentainer offset.
+        if offset != child_space.expected_bfc_block_offset()
+          && (!result.adjoining_object_types.is_empty() || self.has_block_fragmentation())
+        {
+          self_collapsing_child_needs_relayout = true;
+        }
+      }
+    } else if !child_had_clearance && !is_self_collapsing {
+      let offset = child_bfc_block_offset.unwrap_or_default();
+
+      if !self.resolve_bfc_block_offset_at(previous, offset) {
+        return Err(LayoutStatus::BfcBlockOffsetResolved);
+      }
+    }
+
+    // A self-collapsing child past clearance leaves the incoming margin strut behind.
+    if self_collapsing_child_had_clearance {
+      let mut margin_strut = MarginStrut::default();
+
+      margin_strut.append(child_data.margins.block_start);
+      if child_data.margin_strut != margin_strut {
+        child_data.margin_strut = margin_strut;
+        self_collapsing_child_needs_relayout = true;
+      }
+    }
+
+    if (result.status == LayoutStatus::BfcBlockOffsetResolved
+      || self_collapsing_child_needs_relayout)
+      && child_bfc_block_offset.is_some()
+    {
+      child_data.is_pushed_by_floats = result.is_pushed_by_floats;
+
+      let new_space = self.create_constraint_space_for_child(
+        child.block(),
+        child_style,
+        &child_data,
+        self.child_available_size,
+        false,
+        child_bfc_block_offset,
+        false,
+      );
+
+      (result, line) = self.layout_inflow(&new_space, &mut child);
+
+      if result.status == LayoutStatus::BfcBlockOffsetResolved {
+        child_bfc_block_offset = result.bfc_block_offset;
+
+        let final_space = self.create_constraint_space_for_child(
+          child.block(),
+          child_style,
+          &child_data,
+          self.child_available_size,
+          false,
+          child_bfc_block_offset,
+          false,
+        );
+
+        (result, line) = self.layout_inflow(&final_space, &mut child);
+      }
+    }
+
+    if result.status != LayoutStatus::Success {
+      return Err(result.status);
+    }
+
+    // A line that resumes a block-in-inline in a parallel flow cannot break before.
+    if self.bfc_block_offset.is_some()
+      && !line.as_ref().is_some_and(Self::is_line_for_parallel_flow)
+      && let Some(child_bfc_block_offset) = child_bfc_block_offset
+    {
+      let line_box_bfc_block_offset = result.line_box_bfc_block_offset;
+      let is_line_box_pushed_by_floats =
+        line_box_bfc_block_offset.is_some_and(|offset| offset > child_bfc_block_offset);
+      let block_child = child.block().map(|node| (node, child_style));
+
+      if self.break_before_child_if_needed(
+        block_child,
+        result_for_propagation(&result, line.as_ref()),
+        previous,
+        line_box_bfc_block_offset.unwrap_or(child_bfc_block_offset),
+        !self.is_pushed_by_floats && (result.is_pushed_by_floats || is_line_box_pushed_by_floats),
+      )? {
+        return Ok(());
+      }
+    }
+    if let InflowChild::Inline(inline_child) = &mut child {
+      self.add_parallel_flow_break_tokens(inline_child);
+    }
+
+    self.exclusion_space = (*result.exclusion_space).clone();
+    self.adjoining_object_types = result.adjoining_object_types;
+
+    if self.bfc_block_offset.is_none() {
+      self.abort_when_bfc_block_offset_updated |= !result.adjoining_object_types.is_empty();
+      if result.is_pushed_by_floats {
+        self.is_pushed_by_floats = true;
+      }
+    }
+
+    if let Some(line_box_bfc_block_offset) = result.line_box_bfc_block_offset {
+      child_bfc_block_offset = Some(line_box_bfc_block_offset);
+    }
+
+    let mut offset = self.calculate_logical_offset(
+      result.size.inline_size,
+      result.bfc_line_offset,
+      child_bfc_block_offset,
+    );
+
+    match (&mut child, line) {
+      (InflowChild::Block(node, child_break_token), _) => {
+        self.position_list_marker_beside_child(&result, &mut offset, previous)?;
+        self.propagate_baseline_from_block_child(*node, &result, offset.block_offset);
+        self.add_result(
+          *node,
+          Rc::clone(&result),
+          offset,
+          Self::child_fragment_index(child_break_token),
+        );
+      }
+      (InflowChild::Inline(inline_child), Some(mut line)) => {
+        // Where the line box sits in the block formatting context, which `offset` places, and
+        // its out-of-flow boxes with it.
+        let line_box_bfc_block_offset =
+          child_bfc_block_offset.unwrap_or_else(|| self.bfc_block_offset_or_estimate());
+
+        line.static_bfc_block_offset = line_box_bfc_block_offset;
+        self.position_or_propagate_list_marker(inline_child, &mut line, &mut offset.block_offset);
+        self.propagate_baseline_from_line_box(&line, offset.block_offset);
+
+        // The line moves from the block formatting context into the content box.
+        line.move_by(BfcOffset::new(
+          -child_space.bfc_offset.line_offset,
+          offset.block_offset - line_box_bfc_block_offset - self.border_padding.block_start,
+        ));
+        inline_child.break_token = line.break_token.clone();
+        self.add_line_for_fragmentation(&line, offset.block_offset);
+        inline_child.lines.push(line);
+      }
+      (InflowChild::Inline(_), None) => unreachable!("an inline child lays out a line"),
+    }
+
+    *previous = self.compute_inflow_position(
+      previous,
+      &child_data,
+      child_bfc_block_offset,
+      offset,
+      &result,
+      self_collapsing_child_had_clearance,
+    );
+    self.line_clamp_data.update_after_layout(
+      &result,
+      previous,
+      matches!(child, InflowChild::Inline(_)),
+    );
+    self.update_break_opportunity_before_next_child(&result, child_break_token.as_ref());
+
+    Ok(())
+  }
+
+  /// Blink's `LayoutInflow`: a block child laid out by its algorithm, or the next line of the
+  /// inline content by Blink's `InlineNode::Layout`.
+  fn layout_inflow<'a>(
+    &mut self,
+    child_space: &ConstraintSpace,
+    child: &mut InflowChild<'_, 'a, 'r>,
+  ) -> (Rc<LayoutResult>, Option<LineBoxFragment<'a, 'r>>) {
+    match child {
+      InflowChild::Block(node, child_break_token) => (
+        self.lay_out_child(*node, child_space, child_break_token),
+        None,
+      ),
+      InflowChild::Inline(inline_child) => {
+        let mut atomic_inline = self.box_atomic_inline();
+        let line = InlineLayoutAlgorithm::new(
+          inline_child.node,
+          inline_child.items_data,
+          child_space,
+          inline_child.break_token.clone(),
+          &mut inline_child.context,
+          &mut atomic_inline,
+        )
+        .layout();
+
+        (Rc::new(line.layout_result(child_space)), Some(line))
+      }
+    }
+  }
+
+  /// The atomic inlines of the inline content laid out in the content box.
+  fn box_atomic_inline(&mut self) -> BoxAtomicInline<'_, 'r> {
+    let available_space = self.inline_available_space();
+    let mut atomic_inline = BoxAtomicInline::new(self.tree, available_space);
+
+    atomic_inline.cache_slot = self.space.cache_slot;
+    atomic_inline
+  }
+
+  /// The space the inline content's atomic inlines lay out in: the content box's inline size, and
+  /// the block size percentages resolve against.
+  fn inline_available_space(&self) -> Size<AvailableSpace> {
+    Size {
+      width: AvailableSpace::Definite(self.child_available_inline_size().to_float()),
+      height: self
+        .child_percentage_size
+        .block_size
+        .map_or(AvailableSpace::MaxContent, |size| {
+          AvailableSpace::Definite(size.to_float())
+        }),
+    }
+  }
+
+  /// Blink's `CalculateLogicalOffset`.
+  fn calculate_logical_offset(
+    &self,
+    child_inline_size: LayoutUnit,
+    child_bfc_line_offset: LayoutUnit,
+    child_bfc_block_offset: Option<LayoutUnit>,
+  ) -> LogicalOffset {
+    if let (Some(child_bfc_block_offset), Some(_)) = (child_bfc_block_offset, self.bfc_block_offset)
+    {
+      return logical_from_bfc_offsets(
+        BfcOffset::new(child_bfc_line_offset, child_bfc_block_offset),
+        self.container_bfc_offset(),
+        child_inline_size,
+        self.inline_size,
+        self.direction(),
+      );
+    }
+
+    // A child, or this box, without a block offset yet sits at the block start.
+    LogicalOffset::new(
+      logical_from_bfc_line_offset(
+        child_bfc_line_offset,
+        self.bfc_line_offset,
+        child_inline_size,
+        self.inline_size,
+        self.direction(),
+      ),
+      LayoutUnit::ZERO,
+    )
+  }
+
+  /// Blink's `ComputeInflowPosition`.
+  fn compute_inflow_position(
+    &self,
+    previous: &PreviousInflowPosition,
+    child_data: &InflowChildData,
+    child_bfc_block_offset: Option<LayoutUnit>,
+    logical_offset: LogicalOffset,
+    result: &LayoutResult,
+    self_collapsing_child_had_clearance: bool,
+  ) -> PreviousInflowPosition {
+    let is_self_collapsing = result.is_self_collapsing;
+    let logical_block_offset = if is_self_collapsing {
+      let mut logical_block_offset = previous.logical_block_offset;
+
+      if self_collapsing_child_had_clearance {
+        // The clearance a self-collapsing child had, explicitly: past the margin before it, by
+        // what it takes to place it below the float.
+        logical_block_offset += previous.margin_strut.sum();
+        logical_block_offset += child_bfc_block_offset.unwrap_or_default()
+          - result.end_margin_strut.sum()
+          - self.next_border_edge(previous);
+      }
+
+      logical_block_offset
+    } else {
+      logical_offset.block_offset + result.size.block_size + result.clearance_after_line
+    };
+    let mut margin_strut = result.end_margin_strut;
+
+    margin_strut.append(child_data.margins.block_end);
+    Self::discard_margins_after_break(result, &mut margin_strut);
+
+    PreviousInflowPosition {
+      logical_block_offset,
+      margin_strut,
+      self_collapsing_child_had_clearance: self_collapsing_child_had_clearance
+        || (previous.self_collapsing_child_had_clearance && is_self_collapsing),
+    }
+  }
+
+  /// Blink's `PropagateBaselineFromBlockChild`.
+  fn propagate_baseline_from_block_child(
+    &mut self,
+    child: NodeId,
+    result: &LayoutResult,
+    block_offset: LayoutUnit,
+  ) {
+    let algorithm = self.space.baseline_algorithm;
+
+    // An inline-block takes no baselines from its tables.
+    if self.tree.is_table(child) && algorithm == BaselineAlgorithmType::InlineBlock {
+      return;
+    }
+
+    if self.first_baseline.is_none()
+      && let Some(first) = result.first_baseline
+    {
+      self.first_baseline = Some(block_offset + first);
+    }
+
+    let use_last_baseline =
+      algorithm == BaselineAlgorithmType::Default || result.use_last_baseline_for_inline_baseline;
+    let mut last = if use_last_baseline {
+      result.last_baseline
+    } else {
+      result.first_baseline
+    };
+
+    // Some scroll containers force an inline-block's baseline to their block-end margin edge.
+    if algorithm == BaselineAlgorithmType::InlineBlock
+      && result.forces_inline_baseline_synthesis(self.tree.layout_style(child))
+    {
+      let margins = margins_for(
+        self.tree.layout_style(child),
+        self.child_percentage_size.inline_size,
+        self.direction(),
+      );
+
+      last = Some(result.size.block_size + margins.block_end);
+    }
+
+    if let Some(last) = last {
+      self.last_baseline = Some(block_offset + last);
+    }
+  }
+
+  /// Blink's `LayoutInlineChild`: the lines it lays the inline content of `items_data` out in, at
+  /// the scale a consistent `text-fit` measures.
+  pub(in crate::layout) fn layout_lines<'a>(
+    &mut self,
+    items_data: &'a InlineNodeData<'r>,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<Vec<LineBoxFragment<'a, 'r>>, LayoutStatus> {
+    let node = InlineNode::new(self.tree.render_node(self.node));
+    let paragraph_scale = self.measure_paragraph_scale(node, items_data)?;
+    let mut inline_child = InlineChild::new(node, items_data);
+
+    inline_child
+      .context
+      .enable_measuring_mode_if_necessary(Some(paragraph_scale));
+    self.layout_inline_children(&mut inline_child, previous)?;
+
+    Ok(inline_child.lines)
+  }
+
+  /// The scale every line of a consistent `text-fit` takes, as Blink's `LayoutInlineChild`
+  /// measures it with a layout of its own.
+  fn measure_paragraph_scale(
+    &mut self,
+    node: InlineNode<'r>,
+    items_data: &InlineNodeData<'r>,
+  ) -> Result<ParagraphScale, LayoutStatus> {
+    let text_fit = node.block.context.style.misc_inherited1_data.text_fit;
+    let grow_consistent =
+      text_fit.mode == TextFitMode::Grow && text_fit.target == TextFitTarget::Consistent;
+    let shrink_consistent =
+      text_fit.mode == TextFitMode::Shrink && text_fit.target == TextFitTarget::Consistent;
+
+    if !grow_consistent && !shrink_consistent {
+      return Ok(ParagraphScale::default());
+    }
+
+    let available_inline_size = self.child_available_inline_size();
+    // The scale takes every line of the paragraph into account, not this page's alone.
+    let space = self.space.without_fragmentation();
+    let input = FragmentationLayoutInput::default();
+    let mut measuring = BlockLayoutAlgorithm::new(&mut *self.tree, self.node, &space, &input);
+    let mut inline_child = InlineChild::new(node, items_data);
+
+    measuring.line_clamp_data = self.line_clamp_data;
+    inline_child
+      .context
+      .enable_measuring_mode_if_necessary(None);
+
+    if let Err(status) = measuring
+      .start_layout()
+      .and_then(|mut previous| measuring.layout_inline_children(&mut inline_child, &mut previous))
+    {
+      // The container reads the offset the measuring layout resolved.
+      if status == LayoutStatus::BfcBlockOffsetResolved {
+        self.bfc_block_offset = measuring.bfc_block_offset;
+      }
+
+      return Err(status);
+    }
+
+    let paragraph_scale =
+      node.measure_per_block_scale(items_data, &inline_child.lines, available_inline_size);
+
+    if (paragraph_scale.scale < 1.0 && !shrink_consistent)
+      || (paragraph_scale.scale > 1.0 && !grow_consistent)
+    {
+      return Ok(ParagraphScale::default());
+    }
+
+    Ok(paragraph_scale)
+  }
+
+  /// The loop over the children in Blink's `Layout` for an inline formatting context: a line at a
+  /// time until the content ends.
+  fn layout_inline_children(
+    &mut self,
+    inline_child: &mut InlineChild<'_, 'r>,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<(), LayoutStatus> {
+    let style = Rc::clone(&self.style);
+
+    if !self.resume_inline_child(inline_child) {
+      self.set_has_seen_all_children();
+      return Ok(());
+    }
+
+    loop {
+      if self.break_before_early_break_target(None, previous)? {
+        return Ok(());
+      }
+
+      self.handle_inflow(InflowChild::Inline(&mut *inline_child), &style, previous)?;
+      self.advance_inline_break_token(inline_child);
+
+      if inline_child.break_token.is_none() {
+        self.set_has_seen_all_children();
+        return Ok(());
+      }
+      if self.has_inflow_child_break_inside() {
+        return Ok(());
+      }
+    }
+  }
+
+  /// Blink's `PositionOrPropagateListMarker` for a line: the outside marker goes beside the first
+  /// line box, which moves down from `block_offset` when the marker reaches higher.
+  fn position_or_propagate_list_marker(
+    &mut self,
+    inline_child: &mut InlineChild<'_, 'r>,
+    line: &mut LineBoxFragment<'_, 'r>,
+    block_offset: &mut LayoutUnit,
+  ) {
+    if line.line_box_bfc_block_offset.is_none() {
+      return;
+    }
+
+    let Some(marker) = inline_child.unpositioned_list_marker.take() else {
+      return;
+    };
+    let marker_block_offset = marker.add_to_box(line, block_offset, &mut self.box_atomic_inline());
+
+    line.list_marker_intruded_float_offset =
+      self.list_marker_intruded_float_offset(marker.node, marker_block_offset);
+  }
+
+  /// Blink's `PositionOrPropagateListMarker` for a block child laid out as `result` at `offset`:
+  /// the item's outside marker goes beside the child's first baseline, and the child moves down
+  /// when the marker reaches higher.
+  fn position_list_marker_beside_child(
+    &mut self,
+    result: &LayoutResult,
+    offset: &mut LogicalOffset,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<(), LayoutStatus> {
+    let (Some(marker), Some(content_baseline)) = (self.list_marker, result.first_baseline) else {
+      return Ok(());
+    };
+
+    self.list_marker = None;
+    let mut atomic_inline = self.box_atomic_inline();
+    let marker_result = atomic_inline.lay_out_node(marker);
+    let line_result = atomic_inline.line_result(marker, &marker_result);
+
+    if self.bfc_block_offset.is_none() && !self.resolve_bfc_block_offset_here(previous) {
+      return Err(LayoutStatus::BfcBlockOffsetResolved);
+    }
+
+    let block_offset = UnpositionedListMarker::block_offset_beside(
+      &line_result,
+      content_baseline,
+      &mut offset.block_offset,
+    );
+    let render_node = self.tree.render_node(marker);
+    let inline_offset = UnpositionedListMarker { node: render_node }
+      .inline_offset(marker_result.size.inline_size)
+      + self.list_marker_intruded_float_offset(render_node, block_offset);
+
+    self.add_result(
+      marker,
+      marker_result,
+      LogicalOffset::new(inline_offset, block_offset),
+      0,
+    );
+    Ok(())
+  }
+
+  /// Blink's `PositionListMarkerWithoutLineBoxes`: an item without a baseline to align its outside
+  /// marker to takes it at its top, and grows to hold it.
+  fn position_list_marker_without_line_boxes(
+    &mut self,
+    previous: &mut PreviousInflowPosition,
+  ) -> Result<(), LayoutStatus> {
+    let Some(marker) = self.list_marker.take() else {
+      return Ok(());
+    };
+    let marker_result = self.box_atomic_inline().lay_out_node(marker);
+
+    if self.bfc_block_offset.is_none() && !self.resolve_bfc_block_offset_here(previous) {
+      return Err(LayoutStatus::BfcBlockOffsetResolved);
+    }
+
+    let marker_block_size = marker_result.size.block_size;
+    let inline_offset = UnpositionedListMarker {
+      node: self.tree.render_node(marker),
+    }
+    .inline_offset(marker_result.size.inline_size);
+
+    self.add_result(
+      marker,
+      marker_result,
+      LogicalOffset::new(inline_offset, LayoutUnit::ZERO),
+      0,
+    );
+    // Whether the marker grows the item is not well defined, but 3 out of 4 engines do,
+    // https://github.com/w3c/csswg-drafts/issues/2418.
+    if self.bfc_block_offset.is_some() {
+      self.intrinsic_block_size = self.intrinsic_block_size.max(marker_block_size);
+    }
+    Ok(())
+  }
+
+  /// Blink's `ComputeIntrudedFloatOffset`: how far the floats beside an outside marker at
+  /// `block_offset` push it in from the item's content edge.
+  fn list_marker_intruded_float_offset(
+    &self,
+    marker: &RenderNode,
+    block_offset: LayoutUnit,
+  ) -> LayoutUnit {
+    let Some(bfc_block_offset) = self.bfc_block_offset else {
+      return LayoutUnit::ZERO;
+    };
+    let origin = BfcOffset::new(
+      self.bfc_line_offset + self.border_padding.inline_start,
+      bfc_block_offset + block_offset,
+    );
+    let available_inline_size = self.child_available_inline_size();
+    let direction = marker.context.style.inherited_data.direction;
+    let opportunity = self.exclusion_space.find_layout_opportunity(
+      origin,
+      available_inline_size,
+      direction,
+      LayoutUnit::ZERO,
+    );
+
+    match direction {
+      Direction::Ltr => opportunity.rect.line_start_offset() - origin.line_offset,
+      Direction::Rtl => {
+        origin.line_offset + available_inline_size - opportunity.rect.line_end_offset()
+      }
+    }
+    .clamp_negative_to_zero()
+  }
+
+  /// Blink's `PropagateBaselineFromLineBox`.
+  fn propagate_baseline_from_line_box(
+    &mut self,
+    line: &LineBoxFragment<'_, 'r>,
+    block_offset: LayoutUnit,
+  ) {
+    if line.is_empty_line_box || self.line_clamp_data.data.is_past_clamp_point() {
+      return;
+    }
+
+    let Some(baseline) = line.baseline() else {
+      return;
+    };
+
+    if self.first_baseline.is_none() {
+      self.first_baseline = Some(block_offset + baseline);
+    }
+    self.last_baseline = Some(block_offset + baseline);
+  }
+}
+
+/// The block fragmentation hooks without the `fragmentation` feature, where nothing breaks.
+#[cfg(not(feature = "fragmentation"))]
+impl<'r> BlockLayoutAlgorithm<'_, 'r> {
+  fn has_block_fragmentation(&self) -> bool {
+    false
+  }
+
+  fn keeps_list_marker(&self) -> bool {
+    true
+  }
+
+  fn is_resuming(&self) -> bool {
+    false
+  }
+
+  fn border_padding_for_size(&self, border_padding: LogicalBoxStrut) -> LogicalBoxStrut {
+    border_padding
+  }
+
+  fn fragment_index(&self) -> usize {
+    0
+  }
+
+  fn holds_every_line(&self) -> bool {
+    true
+  }
+
+  fn start_fragment(&mut self, _previous: &mut PreviousInflowPosition) {}
+
+  fn block_child_entries(
+    &self,
+  ) -> impl ExactSizeIterator<Item = (NodeId, ChildBreakToken)> + use<> {
+    let children = self.tree.child_nodes(self.node);
+
+    (0..children.len()).map(move |index| (children[index], ()))
+  }
+
+  fn break_before_early_break_target(
+    &mut self,
+    _child: Option<NodeId>,
+    _previous: &mut PreviousInflowPosition,
+  ) -> Result<bool, LayoutStatus> {
+    Ok(false)
+  }
+
+  fn has_inflow_child_break_inside(&self) -> bool {
+    false
+  }
+
+  fn set_has_seen_all_children(&mut self) {}
+
+  fn is_break_inside_child(_token: &ChildBreakToken) -> bool {
+    false
+  }
+
+  fn child_fragment_index(_token: &ChildBreakToken) -> usize {
+    0
+  }
+
+  fn lay_out_child(
+    &mut self,
+    child: NodeId,
+    space: &ConstraintSpace,
+    _token: &ChildBreakToken,
+  ) -> Rc<LayoutResult> {
+    self.tree.layout(child, space)
+  }
+
+  fn child_layout_input(
+    &self,
+    _child: NodeId,
+    _token: &ChildBreakToken,
+  ) -> FragmentationLayoutInput {
+    FragmentationLayoutInput::default()
+  }
+
+  fn resumes_out_of_flow(&mut self, _child: NodeId, _token: &ChildBreakToken) -> bool {
+    false
+  }
+
+  fn out_of_flow_candidate(
+    &self,
+    child: NodeId,
+    static_position: StaticPosition,
+  ) -> OutOfFlowCandidate {
+    OutOfFlowCandidate::new(child, static_position)
+  }
+
+  fn breaks_before_float_or_out_of_flow(&mut self, _child: NodeId) -> bool {
+    false
+  }
+
+  fn float_monolithic_overflow(&self, _token: &ChildBreakToken) -> LayoutUnit {
+    LayoutUnit::ZERO
+  }
+
+  fn setup_float_for_fragmentation(
+    &self,
+    _unpositioned_float: &mut UnpositionedFloat<'_>,
+    _child: NodeId,
+    _token: &ChildBreakToken,
+  ) {
+  }
+
+  fn breaks_before_positioned_float(
+    &mut self,
+    _child: NodeId,
+    _positioned: &PositionedFloat,
+  ) -> bool {
+    false
+  }
+
+  fn adjust_child_data_for_fragmentation(
+    &self,
+    _token: Option<&ChildBreakToken>,
+    _margins: &mut LogicalBoxStrut,
+    _margin_strut: &mut MarginStrut,
+    _logical_block_offset: &mut LayoutUnit,
+  ) {
+  }
+
+  fn setup_space_builder_for_fragmentation(
+    &self,
+    _builder: &mut ConstraintSpace,
+    _child: Option<NodeId>,
+    _is_new_fc: bool,
+    _child_bfc_block_offset: Option<LayoutUnit>,
+  ) {
+  }
+
+  fn propagate_break_info(
+    &mut self,
+    _node: NodeId,
+    _result: &LayoutResult,
+    _block_offset: LayoutUnit,
+  ) {
+  }
+
+  fn add_line_for_fragmentation(
+    &mut self,
+    _line: &LineBoxFragment<'_, 'r>,
+    _block_offset: LayoutUnit,
+  ) {
+  }
+
+  fn resume_inline_child(&mut self, _inline_child: &mut InlineChild<'_, 'r>) -> bool {
+    true
+  }
+
+  fn is_line_for_parallel_flow(_line: &LineBoxFragment<'_, 'r>) -> bool {
+    false
+  }
+
+  fn add_parallel_flow_break_tokens(&mut self, _inline_child: &mut InlineChild<'_, 'r>) {}
+
+  fn advance_inline_break_token(&mut self, _inline_child: &mut InlineChild<'_, 'r>) {}
+
+  fn update_break_opportunity_before_next_child(
+    &mut self,
+    _result: &LayoutResult,
+    _token: Option<&ChildBreakToken>,
+  ) {
+  }
+
+  fn discard_margins_after_break(_result: &LayoutResult, _margin_strut: &mut MarginStrut) {}
+
+  fn break_before_child_if_needed(
+    &mut self,
+    _child: Option<(NodeId, &LayoutStyle)>,
+    _result: &LayoutResult,
+    _previous: &mut PreviousInflowPosition,
+    _bfc_block_offset: LayoutUnit,
+    _is_separated_by_floats: bool,
+  ) -> Result<bool, LayoutStatus> {
+    Ok(false)
+  }
+
+  fn adjusted_margin_after_final_child_fragment(
+    &self,
+    _block_offset: LayoutUnit,
+    block_end_margin: LayoutUnit,
+  ) -> LayoutUnit {
+    block_end_margin
+  }
+
+  fn should_include_block_end_border_padding(&self) -> bool {
+    true
+  }
+
+  fn previously_consumed_block_size(&self) -> LayoutUnit {
+    LayoutUnit::ZERO
+  }
+
+  fn finalize_for_fragmentation(
+    &mut self,
+    block_size: LayoutUnit,
+  ) -> Result<LayoutUnit, LayoutStatus> {
+    Ok(block_size)
+  }
+
+  fn handle_nonsuccessful_layout_result(self, status: LayoutStatus) -> LayoutResult {
+    self.abort(status)
+  }
+
+  fn exclude_broken_sides(&self, _result: &mut LayoutResult) {}
+}
+
+/// Blink's `CalculateOutOfFlowStaticInlineLevelOffset`: where a zero-sized line from `origin`
+/// would start beside the floats, aligned and indented as the lines of `container` are.
+fn calculate_out_of_flow_static_inline_level_offset(
+  container: &RenderContext,
+  origin: BfcOffset,
+  exclusion_space: &ExclusionSpace,
+  child_available_inline_size: LayoutUnit,
+) -> LayoutUnit {
+  let style = &container.style;
+  let direction = style.inherited_data.direction;
+  let is_ltr = direction == Direction::Ltr;
+  let opportunity = exclusion_space.find_layout_opportunity(
+    origin,
+    child_available_inline_size,
+    direction,
+    LayoutUnit::ZERO,
+  );
+  let child_line_offset = if is_ltr {
+    opportunity.rect.line_start_offset()
+  } else {
+    opportunity.rect.line_end_offset()
+  };
+  let relative_line_offset = child_line_offset - origin.line_offset;
+  let mut inline_offset = if is_ltr {
+    relative_line_offset
+  } else {
+    child_available_inline_size - relative_line_offset
+  };
+  let line_offset =
+    text_align(style, false).line_offset_for_text_align(direction, opportunity.rect.inline_size());
+
+  inline_offset += if is_ltr {
+    line_offset
+  } else {
+    opportunity.rect.inline_size() - line_offset
+  };
+
+  let text_indent = style.misc_inherited1_data.text_indent;
+
+  if !text_indent.hanging {
+    inline_offset += text_indent
+      .amount
+      .minimum_value_for(&container.sizing, child_available_inline_size);
+  }
+
+  inline_offset
+}
+
+/// Blink's `WebkitTextAlignAndJustifySelfOffset`, for `justify-self` alone.
+fn justify_self_offset(
+  child_style: &LayoutStyle,
+  available_space: LayoutUnit,
+  margins: &LogicalBoxStrut,
+  child_inline_size: LayoutUnit,
+) -> LayoutUnit {
+  let free_space = available_space - child_inline_size - margins.inline_sum();
+  let (position, is_safe) = match child_style.justify_self {
+    AlignItems::Center => (InlineEdge::Center, false),
+    AlignItems::SafeCenter => (InlineEdge::Center, true),
+    AlignItems::End | AlignItems::FlexEnd => (InlineEdge::End, false),
+    AlignItems::SafeEnd | AlignItems::SafeFlexEnd => (InlineEdge::End, true),
+    _ => return LayoutUnit::ZERO,
+  };
+  // `normal` alignment is safe; a stated one is unsafe unless it says otherwise.
+  let free_space = if is_safe {
+    free_space.clamp_negative_to_zero()
+  } else {
+    free_space
+  };
+
+  match position {
+    InlineEdge::Center => free_space / 2,
+    InlineEdge::End => free_space,
+    InlineEdge::Start => LayoutUnit::ZERO,
+  }
+}
+
+/// Blink's `BlockLayoutAlgorithm::ComputeMinMaxSizes`: the min-content and max-content sizes of a
+/// block container with block-level children, floats beside each other on their "line".
+pub(crate) fn block_min_max_sizes(
+  tree: &mut LayoutTree<'_>,
+  node: NodeId,
+  space: &ConstraintSpace,
+) -> MinMaxSizesResult {
+  let style = Rc::clone(tree.layout_style_rc(node));
+  let resolver = LengthResolver::new(space, &style);
+  let border_padding = resolver.border_padding;
+  // Blink's intrinsic fragment geometry: an indefinite inline size, and the block size the style
+  // gives without content.
+  let child_available_size = child_available_size(
+    AvailableLogicalSize {
+      inline_size: None,
+      block_size: resolver.initial_block_size_for_fragment(None, None),
+    },
+    border_padding,
+  );
+  let child_percentage_size =
+    child_percentage_size(space, tree.is_anonymous(node), child_available_size);
+  let direction = style.direction;
+  let children = tree.child_nodes(node);
+  let mut sizes = MinMaxSizes::default();
+  let mut depends_on_block_constraints = false;
+  let mut float_left_inline_size = LayoutUnit::ZERO;
+  let mut float_right_inline_size = LayoutUnit::ZERO;
+
+  for &child in children.iter() {
+    let child_style = Rc::clone(tree.layout_style_rc(child));
+
+    if child_style.is_out_of_flow() {
+      continue;
+    }
+
+    let child_clear = child_style.clear;
+    let child_is_new_fc = tree.creates_new_formatting_context(child);
+    let is_floating = child_style.is_floating();
+
+    // A float or new formatting context with clearance starts a new "line".
+    if is_floating || child_is_new_fc {
+      let float_inline_size = float_left_inline_size + float_right_inline_size;
+
+      if child_clear != Clear::None {
+        sizes.max_size = sizes.max_size.max(float_inline_size);
+      }
+      if matches!(child_clear, Clear::Both | Clear::Left) {
+        float_left_inline_size = LayoutUnit::ZERO;
+      }
+      if matches!(child_clear, Clear::Both | Clear::Right) {
+        float_right_inline_size = LayoutUnit::ZERO;
+      }
+    }
+
+    let mut child_space = ConstraintSpace::new(None, child_style.direction);
+
+    child_space.available_block_size = child_available_size.block_size;
+    child_space.percentage_resolution_block_size = child_percentage_size.block_size;
+    child_space.is_new_formatting_context = child_is_new_fc;
+    child_space.cache_slot = CacheSlot::Measure;
+
+    let child_result = tree.min_and_max_content_contribution(child, &child_space);
+    let margins = margins_for(&child_style, None, direction);
+    let max_inline_contribution = if is_floating {
+      let float_inline_size = child_result.sizes.max_size + margins.inline_sum();
+
+      // A float that negative margins move outside the content box takes no room.
+      if float_inline_size > LayoutUnit::ZERO {
+        if child_style.float == Float::Left {
+          float_left_inline_size += float_inline_size;
+        } else {
+          float_right_inline_size += float_inline_size;
+        }
+      }
+
+      float_left_inline_size + float_right_inline_size
+    } else if child_is_new_fc {
+      let margin_line_left = margins.line_left(direction);
+      let margin_line_right = margins.line_right(direction);
+      let line_left_inset = if margin_line_left > LayoutUnit::ZERO {
+        float_left_inline_size.max(margin_line_left)
+      } else {
+        float_left_inline_size + margin_line_left
+      };
+      let line_right_inset = if margin_line_right > LayoutUnit::ZERO {
+        float_right_inline_size.max(margin_line_right)
+      } else {
+        float_right_inline_size + margin_line_right
+      };
+
+      child_result.sizes.max_size + (line_left_inset + line_right_inset)
+    } else {
+      child_result.sizes.max_size + margins.inline_sum()
+    };
+
+    sizes.max_size = sizes.max_size.max(max_inline_contribution);
+    sizes.min_size = sizes
+      .min_size
+      .max(child_result.sizes.min_size + margins.inline_sum());
+    depends_on_block_constraints |= child_result.depends_on_block_constraints;
+
+    // Anything but a float starts a new "line".
+    if !is_floating {
+      float_left_inline_size = LayoutUnit::ZERO;
+      float_right_inline_size = LayoutUnit::ZERO;
+    }
+  }
+
+  sizes += border_padding.inline_sum();
+  MinMaxSizesResult::new(sizes, depends_on_block_constraints)
+}

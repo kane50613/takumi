@@ -1,7 +1,5 @@
 //! Blink's [`InlineItemsBuilder`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_items_builder.cc).
 
-use std::ptr;
-
 use super::outline::InlineOutline;
 use super::{
   inline_item::{
@@ -17,11 +15,8 @@ use crate::{
     WhiteSpaceCollapse,
   },
   text::character::{
-    CARRIAGE_RETURN, FIRST_STRONG_ISOLATE, FORM_FEED, LEFT_TO_RIGHT_EMBEDDING,
-    LEFT_TO_RIGHT_ISOLATE, LEFT_TO_RIGHT_OVERRIDE, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER,
-    POP_DIRECTIONAL_FORMATTING, POP_DIRECTIONAL_ISOLATE, RIGHT_TO_LEFT_EMBEDDING,
-    RIGHT_TO_LEFT_ISOLATE, RIGHT_TO_LEFT_OVERRIDE, TAB, ZERO_WIDTH_NON_JOINER, ZERO_WIDTH_SPACE,
-    maybe_bidi_rtl,
+    CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER, TAB,
+    ZERO_WIDTH_NON_JOINER, ZERO_WIDTH_SPACE, maybe_bidi_rtl,
   },
 };
 
@@ -146,25 +141,6 @@ impl RenderNode {
         .is_some_and(|shadows| !shadows.is_empty())
   }
 }
-
-/// The left-to-right opening, right-to-left opening, and closing controls of an embedding.
-const EMBED: [char; 3] = [
-  LEFT_TO_RIGHT_EMBEDDING,
-  RIGHT_TO_LEFT_EMBEDDING,
-  POP_DIRECTIONAL_FORMATTING,
-];
-/// The left-to-right opening, right-to-left opening, and closing controls of an override.
-const OVERRIDE: [char; 3] = [
-  LEFT_TO_RIGHT_OVERRIDE,
-  RIGHT_TO_LEFT_OVERRIDE,
-  POP_DIRECTIONAL_FORMATTING,
-];
-/// The left-to-right opening, right-to-left opening, and closing controls of an isolate.
-const ISOLATE: [char; 3] = [
-  LEFT_TO_RIGHT_ISOLATE,
-  RIGHT_TO_LEFT_ISOLATE,
-  POP_DIRECTIONAL_ISOLATE,
-];
 
 /// Blink's `BidiContext`: an embedding, override, or isolate open while items are collected, and
 /// the character that closes it.
@@ -807,26 +783,10 @@ impl<'c> InlineItemsBuilder<'c> {
     self.has_bidi_controls = true;
   }
 
-  /// [`Self::enter_bidi_context`] with `ltr` or `rtl` as `style`'s `direction` picks.
-  fn enter_directional_context(
-    &mut self,
-    node: Option<&'c RenderNode>,
-    layout_object: LayoutObject<'c>,
-    style: &ComputedStyle,
-    [ltr, rtl, exit]: [char; 3],
-  ) {
-    let enter = match style.inherited_data.direction {
-      TextDirection::Ltr => ltr,
-      TextDirection::Rtl => rtl,
-    };
-
-    self.enter_bidi_context(node, layout_object, enter, exit);
-  }
-
   /// Blink's `Exit`: closes the contexts `node` opened.
   fn exit(&mut self, node: Option<&'c RenderNode>) {
     while let Some(context) = self.bidi_context.last()
-      && context.node.map(ptr::from_ref) == node.map(ptr::from_ref)
+      && context.node.map(|node| node.context.box_id()) == node.map(|node| node.context.box_id())
     {
       let (layout_object, exit) = (context.layout_object, context.exit);
 
@@ -846,10 +806,16 @@ impl<'c> InlineItemsBuilder<'c> {
           self.has_bidi_controls = true;
         }
       }
-      UnicodeBidi::BidiOverride | UnicodeBidi::IsolateOverride => {
-        self.enter_directional_context(None, LayoutObject::Box(block), style, OVERRIDE)
-      }
+      UnicodeBidi::BidiOverride | UnicodeBidi::IsolateOverride => {}
       UnicodeBidi::Plaintext => self.has_bidi_controls = true,
+    }
+
+    if let Some((enter, exit)) = style
+      .misc_data
+      .unicode_bidi
+      .block_controls(style.inherited_data.direction)
+    {
+      self.enter_bidi_context(None, LayoutObject::Box(block), enter, exit);
     }
   }
 
@@ -859,32 +825,12 @@ impl<'c> InlineItemsBuilder<'c> {
     let style = &node.context.style;
     let layout_object = LayoutObject::Inline(node);
 
-    match style.misc_data.unicode_bidi {
-      UnicodeBidi::Normal => {}
-      UnicodeBidi::Embed => {
-        self.enter_directional_context(Some(node), layout_object, style, EMBED);
-      }
-      UnicodeBidi::BidiOverride => {
-        self.enter_directional_context(Some(node), layout_object, style, OVERRIDE);
-      }
-      UnicodeBidi::Isolate => {
-        self.enter_directional_context(Some(node), layout_object, style, ISOLATE);
-      }
-      UnicodeBidi::Plaintext => self.enter_bidi_context(
-        Some(node),
-        layout_object,
-        FIRST_STRONG_ISOLATE,
-        POP_DIRECTIONAL_ISOLATE,
-      ),
-      UnicodeBidi::IsolateOverride => {
-        self.enter_bidi_context(
-          Some(node),
-          layout_object,
-          FIRST_STRONG_ISOLATE,
-          POP_DIRECTIONAL_ISOLATE,
-        );
-        self.enter_directional_context(Some(node), layout_object, style, OVERRIDE);
-      }
+    for (enter, exit) in style
+      .misc_data
+      .unicode_bidi
+      .inline_controls(style.inherited_data.direction)
+    {
+      self.enter_bidi_context(Some(node), layout_object, enter, exit);
     }
 
     self.append_opaque(InlineItemType::OpenTag, layout_object);

@@ -1,14 +1,13 @@
 ---
 title: Invoices
-description: Generate paginated PDF invoices with line items, totals, page numbers, and optional embedded XML.
-icon: Receipt
+description: Render a paginated PDF invoice with page numbers and totals, and attach Factur-X or ZUGFeRD XML when the format requires it.
 ---
 
-Render line items and totals as a paged document. If your invoice format needs embedded XML, attach it and set the PDF/A and XMP options the format requires.
+An invoice needs line items that flow across pages, totals that stay in one piece, and a footer with a page counter. Some formats also need embedded XML. Takumi renders the invoice as a paged document, and for those formats you attach the XML and set the PDF/A and XMP options the format requires.
 
 ## A plain invoice
 
-Here, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. Line items flow across pages, and the footer carries the page counter. `measure()` returns the footer's height, so you can reserve enough bottom margin:
+Here, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. Line items flow across pages, and the footer carries the page counter. `measure()` returns the footer's height, so you can reserve enough bottom margin. [Headers & footers](/docs/pdf/headers) covers the footer in full.
 
 ```tsx twoslash title="Reserve space for an invoice footer"
 import type { ReactNode } from "react";
@@ -43,7 +42,7 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
 
 For complete templates, see the [invoice and receipt example](https://github.com/kane50613/takumi/tree/master/example/generate-invoice).
 
-Use `break-inside: avoid`, or `break-inside-avoid` in Tailwind, to keep a line item on one page:
+Use `break-inside: avoid`, or `break-inside-avoid` in Tailwind, to keep a line item on one page. [Pagination](/docs/pdf/pagination) lists every break property.
 
 ```tsx twoslash title="Keep a line item together"
 declare const item: { description: string; amount: string };
@@ -61,7 +60,7 @@ Apply the same style to the totals block.
 
 ## Electronic invoices
 
-Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. Map what your profile requires to these options:
+Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. The table maps what your profile requires to the option that provides it:
 
 | The profile requires         | The option         |
 | ---------------------------- | ------------------ |
@@ -71,7 +70,7 @@ Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. Map wha
 | A modification date per file | `modificationDate` |
 | Embedded subset fonts        | always on          |
 
-Each attachment's `modificationDate` falls back to `metadata.creationDate`, so one document date covers both. This example also validates against PDF/UA-1:
+Each attachment's `modificationDate` falls back to `metadata.creationDate`, so one document date covers both. See [Attachments](/docs/pdf/attachments) for every attachment field. This example also validates against PDF/UA-1:
 
 ```tsx twoslash title="Attach invoice XML"
 import type { ReactNode } from "react";
@@ -114,9 +113,7 @@ Takumi does not build the invoice XML. Use a library for your profile, or write 
 
 ### Validating the result
 
-Two validators cover the two halves. Both need Java.
-
-[veraPDF](https://verapdf.org) checks the container:
+Two validators cover the two halves, and both need Java. [veraPDF](https://verapdf.org) checks the container:
 
 ```bash title="Validate PDF/A and PDF/UA"
 verapdf --flavour 3b --format text invoice.pdf
@@ -133,8 +130,8 @@ Mustang finds the profile through the `fx:` XMP block. Takumi writes each value 
 
 ## Accessible invoices
 
-For PDF/UA-1 output, set `tagged: "ua1"`, `lang`, and `metadata.title`. Then review the reading order and table structure yourself. See [PDF/A and PDF/UA](/docs/pdf/pdf-a#required-inputs).
+For PDF/UA-1 output, set `tagged: "ua1"`, `lang`, and `metadata.title`. Then review the reading order and table structure yourself. See [PDF/A & PDF/UA](/docs/pdf/conformance#required-inputs).
 
 ## Reproducible bytes
 
-Same content, resources, renderer version, and `metadata.creationDate` produce the same bytes. A new date changes the file even when the invoice looks the same.
+The same content, resources, renderer version, and `metadata.creationDate` produce the same bytes. A new date changes the file even when the invoice looks the same.

@@ -2,7 +2,7 @@
   <rect x="0" y="0" width="320" height="200" fill="#f1f5f9"/>
   <rect x="20" y="20" width="40" height="26" fill="#fef3c7"/>
   <rect x="20" y="62" width="40" height="26" fill="#fef3c7"/>
-  <rect x="20" y="104" width="40" height="26" fill="#fef3c7"/>
+  <rect x="20" y="104" width="40" height="4" fill="#fef3c7"/>
   <g fill="#000">
     <use href="#g0" x="20" y="40"/>
     <use href="#g1" x="62.96" y="40"/>

@@ -5,10 +5,10 @@ set -eu
 
 revision=eed8aea45725da5b002ee8778400d14148d0ebfe
 dir="${WPT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)/target/wpt}"
-# The CSS modules takumi renders, then what their tests share.
+# The CSS modules and SVG tests takumi renders, then what they share.
 paths="
   css/css-text css/css-text-decor css/css-inline css/css-overflow
-  css/css-backgrounds css/css-box css/css-color css/css-display css/css-flexbox css/css-fonts
+  css/css-backgrounds css/css-box css/css-break css/css-color css/css-display css/css-flexbox css/css-fonts
   css/css-grid css/css-images css/css-masking css/css-position css/css-sizing css/css-tables
   css/css-transforms css/compositing css/filter-effects
   css/CSS2/backgrounds css/CSS2/borders css/CSS2/box css/CSS2/colors css/CSS2/floats
@@ -16,7 +16,7 @@ paths="
   css/CSS2/normal-flow css/CSS2/positioning css/CSS2/tables css/CSS2/text css/CSS2/visudet
   css/CSS2/visuren
   css/reference css/support css/CSS2/reference css/CSS2/support
-  common fonts images
+  svg common fonts images
 "
 stamp="$dir/.takumi-paths"
 

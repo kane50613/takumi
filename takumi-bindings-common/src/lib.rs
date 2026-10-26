@@ -18,7 +18,7 @@ use serde::Deserialize;
 use takumi_core::{
   Error as CoreError, Fonts,
   resources::{
-    font::{FontError, FontOverride, FontResource, RegisteredFamily},
+    font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
     image::ResourceCache,
   },
   style::{CssSource, CssSourceError, KeyframesRule, Lang, StyleSheet},
@@ -29,7 +29,7 @@ use takumi_core::{
 /// resolve to caller-registered fonts via the fallback bucket instead of this
 /// face.
 const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
-  include_bytes!("../../assets/fonts/geist/geist-latin-wght-300-800.woff2"),
+  include_bytes!("../../assets/fonts/geist/geist-latin-wght-300-800.ttf"),
   "Geist",
 )];
 
@@ -49,7 +49,7 @@ fn register_embedded(fonts: &mut Fonts, wanted: impl Fn(&str) -> bool) -> Result
       continue;
     }
 
-    let resource = FontResource::new(*bytes)
+    let resource = FontResource::new(FontSource::from_static(bytes))
       .override_info(FontOverride {
         family_name: Some((*name).into()),
         ..Default::default()

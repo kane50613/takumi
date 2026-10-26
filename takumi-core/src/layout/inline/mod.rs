@@ -1,21 +1,19 @@
 //! Inline layout, ported from Blink's `core/layout/inline`.
 
-use taffy::{CollapsibleMarginSet, Line};
-
 use crate::{
-  geometry::{Point, Size},
+  geometry::Point,
   style::{AppliedTextDecorations, Color, TextDecorationSkipInk},
 };
 
 pub(crate) mod atomic_inline;
 mod background;
-mod block_layout;
 mod cache;
 pub(crate) mod decorations;
 mod fragment_items;
 pub(crate) mod inline_box_state;
 pub(crate) mod inline_break_token;
 pub(crate) mod inline_child_layout_context;
+mod inline_content;
 pub(crate) mod inline_item;
 pub(crate) mod inline_item_result;
 pub(crate) mod inline_item_segment;
@@ -47,50 +45,36 @@ pub(crate) mod testing;
 mod text_fit;
 pub(crate) mod text_fit_scale;
 pub(crate) mod text_fit_utils;
-mod unpositioned_list_marker;
+pub(crate) mod unpositioned_list_marker;
 
 pub(crate) use self::items::InlineContentKind;
-pub(crate) use self::{
-  background::PaddingBox,
-  fragment_items::{ContentBox, InkBox},
-  items::InlineOutOfFlow,
-  outline::{OutlineIsland, RightAngleContour},
-};
 pub use self::{
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationLine,
   fragment_items::FragmentItems,
   items::{DecorationLink, InlineBoxItem, ProcessedInlineSpan},
-  metrics::{InlineBoxKind, InlinePass, VisualInlineBox},
+  metrics::{InlineBoxKind, VisualInlineBox},
   outline::InlineOutlineRect,
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
     RunMetrics, ShapedRun,
   },
 };
+pub(crate) use self::{
+  fragment_items::{ContentBox, InkBox},
+  inline_content::InlineContent,
+  items::InlineOutOfFlow,
+  outline::{OutlineIsland, RightAngleContour},
+};
 pub(crate) use cache::InlineLayoutCache;
 
 /// Where an out-of-flow box sits before insets move it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct StaticPosition {
   /// The inline-start and block-start corner of its margin box.
   pub(crate) point: Point<f32>,
   /// Whether the inline start is the right edge, in a right-to-left paragraph.
   pub(crate) from_end: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-/// The size an inline layout measures at and where its first and last lines sit.
-pub struct InlineMeasurement {
-  pub(crate) size: Size<f32>,
-  /// Baseline of the first line from the content-box top.
-  pub(crate) first_baseline: Option<f32>,
-  /// Baseline of the last line from the content-box top.
-  pub(crate) last_baseline: Option<f32>,
-  /// Whether a height or line limit may have dropped lines.
-  pub(crate) clamped: bool,
-  /// The margins collapsing out through the content's block-start and block-end edges.
-  pub(crate) margins: Line<CollapsibleMarginSet>,
 }
 
 #[derive(Clone, PartialEq, Debug)]

@@ -17,7 +17,7 @@ use crate::krilla::geom::{Rect, Size, Transform};
 use crate::krilla::interactive::annotation::Annotation;
 use crate::krilla::interchange::tagging::{AnnotationIdentifier, Identifier, PageTagIdentifier};
 use crate::krilla::resource::ResourceDictionary;
-use crate::krilla::serialize::{PageInfo, SerializeContext};
+use crate::krilla::serialize::SerializeContext;
 use crate::krilla::stream::{FilterStreamBuilder, Stream};
 use crate::krilla::surface::Surface;
 use crate::krilla::util::Deferred;
@@ -493,10 +493,7 @@ impl InternalPage {
     }
 
     // Populate the refs for each annotation in page infos.
-    let PageInfo::Krilla { annotations, .. } = &mut sc.page_infos_mut()[self.page_index] else {
-      unreachable!()
-    };
-    *annotations = annotation_refs;
+    sc.page_infos_mut()[self.page_index].set_annotations(annotation_refs);
 
     page.finish();
     chunk_container.streams.pages.push(self.stream_chunk);

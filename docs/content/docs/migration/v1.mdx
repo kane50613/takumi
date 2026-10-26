@@ -1,0 +1,152 @@
+---
+title: Upgrade to v1
+description: Upgrade your code from Takumi v0 to v1 by working through the breaking changes that affect templates, JavaScript, or Rust.
+---
+
+v1 is the first stable release, and releases within v1.x stay backward compatible under semver. This guide covers the move from v0. To move on from v1, see [Upgrade to v2](/docs/migration/v2).
+
+## Install
+
+```npm
+npm i takumi-js@1
+```
+
+## Breaking changes at a glance
+
+The table lists every change with the package it affects. Read the section for the code you have, either templates, JavaScript or TypeScript, or Rust.
+
+| Change                                     | Package           | Migration                                   |
+| ------------------------------------------ | ----------------- | ------------------------------------------- |
+| `display` defaults to `inline`             | templates         | Add `display: flex` to flex containers      |
+| Runtime auto-detection                     | `takumi-js`       | Import from `takumi-js/response`            |
+| `emoji` option                             | `takumi-js`       | Opt into `from-font` if needed              |
+| Lowercase image formats                    | `@takumi-rs/core` | `"WebP"` -> `"webp"`                        |
+| `putPersistentImage()` takes `ImageSource` | `@takumi-rs/core` | Pass `{ src, data }`                        |
+| Deprecated exports removed                 | `@takumi-rs/core` | Switch to non-deprecated APIs               |
+| `RenderOptions::builder()`                 | Rust              | Replace `RenderOptionsBuilder`              |
+| `Viewport` constructor                     | Rust              | Use `Viewport::new(...)`                    |
+| Removed Rust APIs                          | Rust              | See [Removed Rust APIs](#removed-rust-apis) |
+
+## Templates
+
+### `display` defaults to `inline`
+
+Early Takumi defaulted `display` to `flex`. v1 defaults to `inline`, as the CSS specification does, so components written for the web, including LLM-generated ones, lay out as expected.
+
+Add `display: flex`, or the `flex` Tailwind class, to every container that needs flexbox.
+
+```tsx title="display defaults to inline"
+<div
+  style={{
+    // [!code ++]
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  {/* Your content here */}
+</div>
+```
+
+## JavaScript / TypeScript
+
+### Unified runtime detection and fallback
+
+`takumi-js` now picks the right bindings for your environment, such as Node.js or Workers. You no longer import the NAPI (native Node addon) or WASM (WebAssembly) bindings directly.
+
+```ts title="Unified runtime detection and fallback"
+import { ImageResponse } from "@takumi-rs/image-response"; // [!code --]
+import { ImageResponse } from "takumi-js/response"; // [!code ++]
+```
+
+### `emoji` option for dynamic emoji loading
+
+`takumi-js` adds an `emoji` option that selects the emoji provider, matching Next.js's `ImageResponse` API. It defaults to `twemoji`. To draw emoji from a font instead, set it to `from-font` and include an emoji font in `fonts`.
+
+See [Image loading & emoji](/docs/images).
+
+```tsx title="emoji option for dynamic emoji loading"
+import { ImageResponse } from "takumi-js/response";
+import notoEmojiFont from "@fontsource/noto-color-emoji/files/noto-color-emoji-emoji-400-normal.woff2";
+
+export function GET() {
+  return new ImageResponse(<div>It works! 😀</div>, {
+    emoji: "from-font", // [!code ++]
+    fonts: [
+      {
+        name: "Noto Color Emoji",
+        data: notoEmojiFont,
+      },
+    ],
+  });
+}
+```
+
+### Lowercase image formats
+
+Image format options in `@takumi-rs/core` now take lowercase strings only.
+
+```ts title="Lowercase image formats"
+const image = await renderer.render(node, {
+  format: "WebP" // [!code --]
+  format: "webp" // [!code ++]
+});
+```
+
+### `putPersistentImage()` takes `ImageSource`
+
+`renderer.putPersistentImage()` no longer accepts a raw `Buffer` as the second argument. Pass an `ImageSource` object instead.
+
+```ts title="putPersistentImage() takes ImageSource"
+const data = await readFile("foo.png");
+
+await renderer.putPersistentImage("foo.png", data); // [!code --]
+await renderer.putPersistentImage({ src: "foo.png", data }); // [!code ++]
+```
+
+<Callout type="warn">
+  v2 removes this method. Pass images through the `images` render option instead.
+</Callout>
+
+### Deprecated exports removed
+
+v1 removes all previously deprecated exports from `@takumi-rs/core`. Switch to the non-deprecated APIs.
+
+## Rust
+
+### `RenderOptions::builder()` replaces `RenderOptionsBuilder`
+
+The standalone `RenderOptionsBuilder` struct is removed. Call `RenderOptions::builder()` instead. It uses [typed-builder](https://docs.rs/typed-builder), which checks required fields at compile time, so `build()` needs no `.unwrap()`.
+
+```rust title="RenderOptions::builder() replaces RenderOptionsBuilder"
+let options = RenderOptionsBuilder::default().build().unwrap(); // [!code --]
+let options = RenderOptions::builder().build(); // [!code ++]
+```
+
+### `Viewport` constructor parameter change
+
+`Viewport` no longer implements `From<(u32, u32)>`. Use the explicit constructor.
+
+```rust title="Viewport constructor parameter change"
+let viewport = (800_u32, 600_u32).into(); // [!code --]
+let viewport = Viewport::new((800, 600)); // [!code ++]
+```
+
+### Removed Rust APIs
+
+| Removed                         | Replacement                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| `parse_svg_str(data)`           | `SvgSource::from_str(data)`                                                         |
+| `FetchTaskCollection`           | `Node::resource_urls` / `Style::resource_urls`, then feed URLs back to the renderer |
+| `SpacePair::from_reversed_pair` | Construct `SpacePair` with values in order                                          |
+| `TakumiError` re-export         | `takumi::prelude::Error` (or `takumi_core::error::Error`)                           |
+| `detailed_css_error` feature    | Detailed CSS errors are always on, so no feature flag exists                        |
+
+```rust title="Removed Rust APIs"
+use takumi::TakumiError; // [!code --]
+use takumi::prelude::Error; // [!code ++]
+```
+
+## Full changelog
+
+For every change, see the [releases](https://github.com/kane50613/takumi/releases).

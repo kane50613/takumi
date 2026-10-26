@@ -1,204 +1,89 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Skip an SVG too large to rasterize instead of failing the render\n\nAn SVG image or background that would rasterize past the pixel budget, such as `background-size: cover` on an SVG with an extreme `viewBox`, is now left undrawn. The whole render used to fail with `InvalidPixmapSize`.\n"
-    filename: unrasterizable-svg.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Clip a repeated background to its box\n\nA repeated `background-image` whose tiles do not divide the box evenly, such as 15px tiles in a 96px box, now stops at the box's edge. Its last row and column of tiles used to paint past it.\n"
-    filename: clip-background-tiles.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Scale images up faster\n\nA magnified image lerped every source row across the destination width again for each destination row that read it. Each source row is now lerped once and reused, so drawing a small image across a large box takes about 40% less time. The output is unchanged.\n"
-    filename: bilinear-row-cache.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Blur what lies past the canvas edge\n\nSince 2.15.0, an element with a pixel-moving filter such as `blur()` that reached past the canvas's top or left edge lost that part before filtering, so its blur faded toward the edge. The filter layer now takes in what the filter reads past the canvas, as Chrome's compositor does.\n"
-    filename: blur-past-canvas-edge.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Keep the box of an element that holds only white space\n\nAn element whose only content is white space, such as `<div style=\"height: 20px; background: green\"> </div>`, now takes up space and paints its background and border in `fromHtml`, `fromJsx`, and `takumi-html`. It used to vanish along with its text.\n"
-    filename: whitespace-only-element-box.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Type the `Renderer` methods' results again\n\n2.17.0 declared `render`, `renderAsDataUrl`, `renderSvg`, `measure`, `renderAnimation`, and `registerFont` as returning `any`, so `takumi-js`'s `render()` and `measure()` inferred `any` too. They now declare their promised results, such as `Promise<Uint8Array<ArrayBuffer>>` for `render`.\n"
-    filename: wasm-return-types.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Match fonts once per style in a render\n\nEach run of inline text matched its fonts and fallback faces again, even when an earlier run had the same font style. Runs with the same font style now share one fallback list for the whole render.\n"
-    filename: shared-fallback-lists.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Shape SVG text with the registry's faces\n\nSVG `<text>` shapes with the faces the font registry holds, sharing their shaping tables instead of building new ones for each text chunk.\n"
-    filename: svg-shared-faces.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# List the images a stylesheet references\n\n`StyleSheet::image_urls` lists the `url()`s its rules and keyframes reference, as `Node::image_urls` does for a node tree, so a caller can load them before rendering.\n"
-    filename: stylesheet-image-urls.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Read `ch` and normal line height from the font that draws\n\n`ch`, `line-height: normal`, and an inline box's ascent now come from the same primary font the text draws with, at its variation instance. With `font-optical-sizing: auto`, `ch` used the parent's font size to pick the optical size, so a `10ch` box in a 64px Inter came out 11px wider than in Chrome.\n"
-    filename: primary-font-metrics.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Honor emoji and text variation selectors in font fallback\n\nSince 2.17.0, the first font with a glyph drew a character whatever variation selector followed it, so `‼️` came out monochrome after a text font and `‼︎` in color after an emoji font. A font that lacks a variation sequence now hands it to a later font that draws it the way it asks, as Chrome does, and only when none does does the base character's glyph stand in.\n"
-    filename: variation-selector-fallback.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Lay out nested inline blocks in linear time\n\nEach level of nested `inline-block` boxes laid out the level below it several times over, so a few levels deep took minutes. An inline block now keeps the layout it took in each available space.\n"
-    filename: atomic-inline-cache.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Share the font registry between renders\n\nA render's font snapshot shares the registry instead of copying it, and SVG `<text>` builds its face store once per set of registered fonts instead of once per render.\n"
-    filename: shared-font-registry.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Generate `::before` and `::after` whose `content` is empty\n\nA pseudo-element with `content: \"\"` now gets a box, so a clearfix, a decorative bar, or an absolutely positioned overlay drawn by one shows up. It used to be dropped because it held no text.\n"
-    filename: empty-pseudo-content.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Speed up `feMorphology`\n\n`feMorphology` read every pixel of its radius rectangle for each output pixel. It now sweeps rows, then columns, with the same result. A large radius runs several times faster.\n"
-    filename: separable-morphology.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Keep a background whose shorthand names an attachment\n\n`background: red url(a.png) no-repeat fixed` used to drop the whole declaration over `fixed`. The shorthand now accepts `scroll`, `fixed`, and `local`; a still image paints them alike.\n"
-    filename: background-attachment.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Keep a line whole around a `display: none` element\n\nA `display: none` element inside a line of text, such as `Only <span style=\"display: none\">sold out</span>$20`, no longer breaks the line in two. Such an element now gets no box at all, so `measure()` leaves it out of the children it returns.\n"
-    filename: display-none-no-box.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Reject negative padding and sizes\n\nA negative `padding`, `width`, `height`, `min-*`, or `max-*`, including their logical forms, is now invalid, as in browsers: a stylesheet drops it and keeps the earlier declaration, and a style object reports it as an invalid value instead of using it.\n"
-    filename: non-negative-sizes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Parse `flex: none` as `0 0 auto`\n\n`flex: none` now keeps a flex item from growing or shrinking, as CSS defines it. It used to reset the item to `0 1 auto`, so the item still shrank to fit its container.\n"
-    filename: flex-none.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `white-space: break-spaces`\n\n`white-space: break-spaces` and `white-space-collapse: break-spaces` keep every space and let a line wrap after any of them, so spaces that reach the end of a line wrap onto the next instead of hanging past it.\n"
-    filename: break-spaces.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Keep scene bounds past the canvas's top and left edges\n\n`SceneBounds` fields are now `i32`, and a node that reaches past the canvas's top or left edge gets negative bounds instead of bounds clamped to zero.\n"
-    filename: signed-scene-bounds.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Hide images an ellipsis cuts off\n\nSince 2.17.0, an inline image at or past a `text-overflow: ellipsis` cut was still painted, over the ellipsis or in its place. It is now left out, and an ellipsis that lands right after an image paints as well.\n"
-    filename: truncated-atomic-inline.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Shape every size of a face with one font\n\nA face builds its shaping tables once while it stays registered, instead of once for each size, variation, and render that uses it.\n"
-    filename: shared-shaping-font.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support the `ch` unit\n\n`ch` lengths, alone or in `calc()`, resolve to the advance of the `0` glyph in the first font that covers it, or half the font size when that font has no `0`.\n"
-    filename: ch-unit.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: patch\n---\n\n# Parse a document that starts with a byte order mark as a document\n\n`from_html` now drops a leading byte order mark, as a browser does when it decodes a page. A document saved with one used to parse as a fragment, so it lost its `<body>` and the body's margin.\n"
-    filename: html-byte-order-mark.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: minor\n---\n\n# Parse a source with a doctype as a document\n\n`from_html` parses a source that opens with a doctype as a document even without an `<html>` tag, so it gains the `<html>`, `<head>`, and `<body>` a browser builds, along with the body's default margin.\n"
-    filename: doctype-document.md
+  - content: "---\npackages:\n  takumi-js:\n    type: patch\n---\n\n# Render without the images that fail to fetch\n\nThe `images` option of `render()` and `ImageResponse` now takes `throwOnError`. Set it to `false` and an image that fails to fetch, such as an emoji Twemoji has no image for, is left out instead of rejecting the whole render. It defaults to `true`, so existing renders behave as before.\n"
+    filename: images-throw-on-error.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
-  - id: npm:docs
-    updated: false
-  - changelogIds:
-      - unrasterizable-svg.md
-      - clip-background-tiles.md
-      - bilinear-row-cache.md
-      - blur-past-canvas-edge.md
-    id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:takumi-js
-    updated: true
-  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/core
     updated: true
   - changelogIds:
-      - whitespace-only-element-box.md
-    id: npm:@takumi-rs/helpers
+      - images-throw-on-error.md
+    id: npm:takumi-js
     updated: true
-  - id: npm:@takumi-rs/image-response
-    updated: true
-  - changelogIds:
-      - unrasterizable-svg.md
-      - clip-background-tiles.md
-      - bilinear-row-cache.md
-      - wasm-return-types.md
-      - blur-past-canvas-edge.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-paint
     updated: true
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:docs
     updated: false
-  - id: npm:example-css-library-integration
+  - id: npm:takumi-pdf
+    updated: true
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:pdf-bench
     updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:svelte
     updated: false
   - id: npm:example-twitter-images
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:pdf-bench
+  - id: npm:waku-ssr
     updated: false
-  - id: npm:ffplay
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-generate-invoice
     updated: false
-  - id: npm:svelte
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-liquid-glass
     updated: false
   - id: npm:example-satori-html
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi
+    updated: true
+  - id: cargo:takumi-svg
     updated: false
   - id: cargo:takumi-pdf
     updated: true
-  - id: cargo:takumi-svg
-    updated: true
+  - id: cargo:takumi-html
+    updated: false
   - id: cargo:takumi-raster
-    updated: true
-  - changelogIds:
-      - unrasterizable-svg.md
-      - clip-background-tiles.md
-      - bilinear-row-cache.md
-      - blur-past-canvas-edge.md
-    id: cargo:takumi
-    updated: true
-  - changelogIds:
-      - shared-fallback-lists.md
-      - svg-shared-faces.md
-      - stylesheet-image-urls.md
-      - primary-font-metrics.md
-      - variation-selector-fallback.md
-      - atomic-inline-cache.md
-      - shared-font-registry.md
-      - unrasterizable-svg.md
-      - empty-pseudo-content.md
-      - separable-morphology.md
-      - background-attachment.md
-      - display-none-no-box.md
-      - non-negative-sizes.md
-      - flex-none.md
-      - break-spaces.md
-      - signed-scene-bounds.md
-      - truncated-atomic-inline.md
-      - shared-shaping-font.md
-      - ch-unit.md
-    id: cargo:takumi-core
-    updated: true
-  - changelogIds:
-      - html-byte-order-mark.md
-      - whitespace-only-element-box.md
-      - doctype-document.md
-    id: cargo:takumi-html
-    updated: true
+    updated: false
 npm:packages:
   - id: npm:takumi-workspace
-  - id: npm:docs
   - id: npm:@takumi-rs/core
   - id: npm:takumi-js
-  - id: npm:takumi-pdf
   - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-paint
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-css-library-integration
-  - id: npm:example-tanstack-start
-  - id: npm:waku-ssr
-  - id: npm:example-e-invoice
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-liquid-glass
+  - id: npm:@takumi-rs/image-response
+  - id: npm:docs
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/wasm
+  - id: npm:pdf-bench
+  - id: npm:svelte
   - id: npm:example-twitter-images
   - id: npm:example-nextjs
-  - id: npm:pdf-bench
-  - id: npm:ffplay
+  - id: npm:waku-ssr
+  - id: npm:example-tanstack-start
   - id: npm:example-generate-invoice
-  - id: npm:svelte
+  - id: npm:example-e-invoice
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-css-library-integration
+  - id: npm:ffplay
+  - id: npm:example-liquid-glass
   - id: npm:example-satori-html
+  - id: npm:ffmpeg-keyframe-animation

@@ -4,7 +4,10 @@
 use std::fs;
 
 use takumi::prelude::*;
-use takumi_core::resources::image::{RenderedImage, ResourceCache};
+use takumi_core::{
+  context::RenderContext,
+  resources::image::{RenderedImage, ResourceCache},
+};
 
 use crate::test_utils::{repo_base_path, write_goldens};
 
@@ -32,15 +35,16 @@ fn decode(cache: &ResourceCache, svg: &str) -> ImageSource {
 }
 
 fn raster(source: &ImageSource, fonts: &Fonts) -> Vec<u8> {
-  let RenderedImage::Rasterized(buffer) = source
-    .render_for_layout(
-      200,
-      80,
-      ImageScalingAlgorithm::Auto,
-      0,
-      Color::black(),
-      Some(&fonts.snapshot()),
+  let host = RenderContext::builder()
+    .fonts(fonts.snapshot())
+    .sizing(
+      SizingContext::builder()
+        .viewport(Viewport::new((200, 80)))
+        .build(),
     )
+    .build();
+  let RenderedImage::Rasterized(buffer) = source
+    .render_for_layout(200, 80, ImageScalingAlgorithm::Auto, 0, &host)
     .unwrap()
   else {
     panic!("expected rasterized svg");

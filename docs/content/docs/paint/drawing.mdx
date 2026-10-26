@@ -1,22 +1,19 @@
 ---
 title: Drawing
-description: Place nodes with their transform, then replay the steps.
-icon: PenTool
+description: Place each node with its transform, replay the paint steps in order, and draw every drawable type on your own canvas.
 ---
 
 A renderer reads where each node sits and the order to draw it in.
 
 ## Place a node
 
-Each node has a **local space** from `(0, 0)` to `(width, height)`. Its drawables use that space. `node.transform` maps the space onto the canvas.
+Each node has a local space from `(0, 0)` to `(width, height)`. Its drawables use that space. `node.transform` maps the space onto the canvas.
 
 Pick a rotation below. The drawables stay the same. Only the transform changes.
 
 <LocalSpace />
 
-`node.bounds` is the node's bounding rectangle on the canvas, so it grows when the node rotates.
-
-Canvas takes the matrix in the same order: `ctx.setTransform(...node.transform)`.
+`node.bounds` is the node's bounding rectangle on the canvas, so it can change when the node rotates. To apply the transform, call `ctx.setTransform(...node.transform)`, which takes the matrix in the same order.
 
 | Node    | Local space                                |
 | ------- | ------------------------------------------ |
@@ -99,15 +96,11 @@ function replay(ctx: CanvasRenderingContext2D, tree: PaintTree) {
 | `masked` | Draw `content` into a layer, keep it only where `mask` covers, then composite it                                         |
 | `group`  | Draw `drawables` into a layer, then composite it at `opacity`                                                            |
 
-A `shadow` or `glyphs` blur is a Gaussian standard deviation, half the CSS blur radius. A `glyphs` drawable with a blur is a text shadow.
-
-Every drawable except `group` has a `role`, such as `background`, `border`, or `text`. Exporters use it to rebuild editable objects. For example, a slide writer can merge a box's background, border, and shadow into one shape.
+A `shadow` or `glyphs` blur is a Gaussian standard deviation, half the CSS blur radius. A `glyphs` drawable with a blur is a text shadow. Every drawable except `group` has a `role`, such as `background`, `border`, or `text`, which exporters use to rebuild editable objects. For example, a slide writer can merge a box's background, border, and shadow into one shape.
 
 ## Read paints
 
-Interpolate gradient stops linearly in sRGB. Takumi adds stops wherever the CSS interpolation color space, Oklab by default, would differ.
-
-A repeating gradient has `spread: "repeat"`. Its stops cover one period, as with SVG's `spreadMethod`. Canvas gradients only pad, so repeat the stops across the area yourself.
+Interpolate gradient stops linearly in sRGB. Takumi adds stops wherever the CSS interpolation color space, Oklab by default, would differ. A repeating gradient has `spread: "repeat"` and its stops cover one period, as with SVG's `spreadMethod`. Canvas gradients only pad, so repeat the stops across the area yourself.
 
 Background and mask layers arrive as `pattern` paints. A pattern draws one tile at every `x` and `y` pair, clipped to `area`.
 

@@ -12,8 +12,9 @@ use super::{
 };
 use crate::{
   Placement,
-  blend::{blend_premultiplied_pixel, composite_premultiplied_over_row, scale_premultiplied_pixel},
+  blend::{blend_premultiplied_pixel, scale_premultiplied_pixel},
   mul_div_255,
+  resources::image_buffer::composite_premultiplied_over_row,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 

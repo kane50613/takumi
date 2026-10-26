@@ -1,12 +1,10 @@
 use std::fmt;
 
-use cssparser::Parser;
-use taffy::Point;
-
 use crate::style::{
   Animatable, Color, CssExpectedMessage, FromCss, Length, MakeComputed, Overflow, ParseResult,
   SizingContext, ToCss,
 };
+use cssparser::Parser;
 
 /// A pair of values for horizontal and vertical axes.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -49,13 +47,6 @@ impl<T: Copy> SpacePair<T> {
   #[inline]
   pub const fn from_pair(x: T, y: T) -> Self {
     Self { x, y }
-  }
-
-  pub(crate) fn into_taffy(self) -> Point<T> {
-    Point {
-      x: self.x,
-      y: self.y,
-    }
   }
 }
 

@@ -562,3 +562,74 @@ fn a_var_that_substitutes_to_nothing_drops_the_earlier_value() {
 
   assert_eq!(result.children[0].width, result.width);
 }
+
+/// Boxes that match the same rules share a resolved style only when their `tw` classes and the
+/// variants their place admits agree.
+#[test]
+fn tw_boxes_share_styles_only_when_their_classes_agree() {
+  let root = block_of([
+    tw_block("row", "block w-[10px] last:w-[40px]"),
+    tw_block("row", "block w-[20px]"),
+    tw_block("row", "block w-[10px] last:w-[40px]"),
+    tw_block("row", "block w-[10px] last:w-[40px]"),
+  ]);
+  let widths: Vec<f32> = measure_with_css(root, "")
+    .children
+    .iter()
+    .map(|child| child.width)
+    .collect();
+
+  assert_eq!(widths, [10.0, 20.0, 10.0, 40.0]);
+}
+
+/// A CSS-wide keyword on a custom property resolves in the cascade instead of becoming its value:
+/// `inherit` takes the parent's, `initial` the registered initial value or none, and `unset`
+/// either one as the property inherits.
+#[test]
+fn css_wide_keywords_resolve_on_custom_properties() {
+  let registered = "@property --w { syntax: '<length>'; inherits: false; initial-value: 10px; }";
+
+  for (css, width) in [
+    (".box { --w: inherit; width: var(--w); }".to_owned(), 50.0),
+    (
+      ".box { --w: initial; width: var(--w, 70px); }".to_owned(),
+      70.0,
+    ),
+    (".box { --w: unset; width: var(--w); }".to_owned(), 50.0),
+    (
+      format!("{registered} .box {{ --w: inherit; width: var(--w); }}"),
+      50.0,
+    ),
+    (
+      format!("{registered} .box {{ --w: unset; width: var(--w); }}"),
+      10.0,
+    ),
+  ] {
+    let root = Node::container([block("box")]).with_class_name("outer");
+    let result = measure_with_css(root, &format!(".outer {{ --w: 50px; }} {css}"));
+
+    assert_eq!(result.children[0].width, width, "{css}");
+  }
+}
+
+/// A `filter: url(#id)` names an element of the same document, which HTML has none of, so it
+/// paints as no filter does.
+#[test]
+fn a_filter_url_to_a_fragment_leaves_an_html_element_unfiltered() {
+  use crate::test_utils::render_node;
+
+  let page = |filter: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="width:40px;height:40px;background-color:rgb(10,120,200);{filter}"></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parses")
+  };
+  let viewport = Viewport::new((60, 60));
+  let plain = render_node(page(""), viewport);
+  let filtered = render_node(page("filter:url(#missing)"), viewport);
+
+  assert_eq!(plain.as_raw(), filtered.as_raw());
+}

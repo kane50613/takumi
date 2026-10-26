@@ -34,6 +34,7 @@ fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
 
   config.lossless = if lossless { 1 } else { 0 };
   config.method = speed.clamp(0, 6) as i32;
+  // SAFETY: `config` is an initialized config that libwebp only reads.
   if unsafe { WebPValidateConfig(&config) } == 0 {
     return Err(WebPError::EncoderSetupFailed.into());
   }
@@ -67,26 +68,42 @@ fn import_rgba_picture(
   region: &FrameRegion,
   config: &WebPConfig,
 ) -> Result<WebPPicture> {
+  let stride = image.stride();
+  let (Ok(width), Ok(height), Ok(rgba_stride)) = (
+    i32::try_from(region.width),
+    i32::try_from(region.height),
+    i32::try_from(stride),
+  ) else {
+    return Err(
+      WebPError::EncodeFailedWithCode {
+        error_code: format!("{:?}", WebPEncodingError::VP8_ENC_ERROR_BAD_DIMENSION),
+      }
+      .into(),
+    );
+  };
   let mut picture = WebPPicture::new().map_err(|_| WebPError::EncoderSetupFailed)?;
 
-  picture.width = region.width as i32;
-  picture.height = region.height as i32;
+  picture.width = width;
+  picture.height = height;
   // Import() subsamples to YUV420 unless use_argb is set; WebPEncode converts back
   // for VP8L, so a lossless encode would round-trip through chroma subsampling.
   // https://github.com/webmproject/libwebp/blob/main/src/enc/picture_csp_enc.c
   picture.use_argb = config.lossless;
 
-  let stride = image.stride();
   let region_start = region.y as usize * stride + region.x as usize * 4;
+  // SAFETY: `region` lies inside `image`, so `height` rows of `width` pixels at `rgba_stride` from
+  // `region_start` stay inside its bytes, and `4 * width` cannot overflow since it is at most
+  // `rgba_stride`.
   let import_ok = unsafe {
     WebPPictureImportRGBA(
       &mut picture,
       image.as_raw()[region_start..].as_ptr(),
-      stride as i32,
+      rgba_stride,
     )
   };
 
   if import_ok == 0 {
+    // SAFETY: `picture` was initialized by `WebPPicture::new` and is freed once.
     unsafe { WebPPictureFree(&mut picture) };
     return Err(
       WebPError::EncodeFailedWithCode {
@@ -103,13 +120,16 @@ struct WebPMemoryBuffer {
   writer: WebPMemoryWriter,
 }
 
+// SAFETY: the writer uniquely owns its libwebp allocation, which any thread may free.
 unsafe impl Send for WebPMemoryBuffer {}
 
 impl WebPMemoryBuffer {
   fn new() -> Self {
     let mut writer = MaybeUninit::<WebPMemoryWriter>::uninit();
+    // SAFETY: `writer` is valid for writes.
     unsafe { WebPMemoryWriterInit(writer.as_mut_ptr()) };
     Self {
+      // SAFETY: `WebPMemoryWriterInit` set every field.
       writer: unsafe { writer.assume_init() },
     }
   }
@@ -121,12 +141,18 @@ impl WebPMemoryBuffer {
 
 impl AsRef<[u8]> for WebPMemoryBuffer {
   fn as_ref(&self) -> &[u8] {
+    if self.writer.mem.is_null() {
+      return &[];
+    }
+
+    // SAFETY: libwebp wrote `size` bytes at `mem`, which the writer owns until it is cleared.
     unsafe { slice::from_raw_parts(self.writer.mem, self.writer.size) }
   }
 }
 
 impl Drop for WebPMemoryBuffer {
   fn drop(&mut self) {
+    // SAFETY: the writer was initialized in `new` and is cleared once.
     unsafe { WebPMemoryWriterClear(&raw mut self.writer) };
   }
 }
@@ -142,7 +168,10 @@ fn encode_picture(
   picture.writer = Some(WebPMemoryWrite);
   picture.custom_ptr = writer.as_mut_ptr().cast();
 
+  // SAFETY: `picture` holds the imported pixels, and `custom_ptr` points at `writer`, which
+  // outlives the call.
   let encode_ok = unsafe { WebPEncode(config, &raw mut picture) };
+  // SAFETY: `picture` was imported above and is freed once.
   unsafe { WebPPictureFree(&raw mut picture) };
 
   if encode_ok == 0 {

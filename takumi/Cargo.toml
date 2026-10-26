@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "2.17.1"
+version = "2.18.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Render images, animations, and SVG from HTML, CSS, or node trees. No headless browser."
@@ -15,24 +15,24 @@ autotests = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.32.0"
+version = "0.33.0"
 default-features = false
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
-version = "0.5.9"
+version = "0.5.10"
 default-features = false
 optional = true
 
 [dependencies.takumi-svg]
 path = "../takumi-svg"
-version = "0.3.31"
+version = "0.3.32"
 default-features = false
 optional = true
 
 [dependencies.takumi-html]
 path = "../takumi-html"
-version = "0.6.0"
+version = "0.7.0"
 default-features = false
 optional = true
 
@@ -42,7 +42,7 @@ raster-backend = ["dep:takumi-raster"]
 # Expose the backend crates wholesale under `takumi::unstable`. Everything behind
 # this flag is implementation surface with no semver guarantee.
 unstable = []
-svg-source = ["takumi-core/svg", "takumi-raster?/svg"]
+svg-source = ["takumi-core/svg", "takumi-raster?/svg", "takumi-html?/svg"]
 svg-backend = ["dep:takumi-svg"]
 woff2 = ["takumi-core/woff2"]
 woff = ["takumi-core/woff"]
@@ -52,6 +52,8 @@ jpeg = ["takumi-core/jpeg"]
 webp = ["takumi-core/webp", "takumi-raster?/webp"]
 gif = ["takumi-core/gif", "takumi-raster?/gif"]
 rayon = ["takumi-raster?/rayon"]
+# Raster rendering across pages, through takumi-core's block fragmentation.
+pages = ["takumi-raster?/pages"]
 from-html = ["dep:takumi-html"]
 
 [dev-dependencies]
@@ -61,18 +63,17 @@ image-webp.workspace = true
 png.workspace = true
 rayon.workspace = true
 roxmltree.workspace = true
-resvg.workspace = true
 serde_json.workspace = true
 zune-core.workspace = true
 zune-jpeg.workspace = true
 
 [dev-dependencies.takumi]
 path = "."
-features = ["from-html", "svg-backend"]
+features = ["from-html", "svg-backend", "unstable", "pages"]
 
 [dev-dependencies.takumi-core]
 path = "../takumi-core"
-features = ["paint-tree"]
+features = ["paint-tree", "fragmentation"]
 
 [dev-dependencies.takumi-svg]
 path = "../takumi-svg"

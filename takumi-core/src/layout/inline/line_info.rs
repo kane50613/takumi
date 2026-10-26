@@ -1,5 +1,7 @@
 //! Blink's [`LineInfo`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/line_info.cc),
-//! without ruby, initial letters, or block fragmentation.
+//! without ruby or initial letters.
+
+use std::rc::Rc;
 
 use super::{
   inline_break_token::InlineBreakToken,
@@ -11,7 +13,10 @@ use super::{
 use crate::{
   context::RenderContext,
   fonts::shaping::shape_result_run::AdjustMidCluster,
-  layout::bfc_rect::BfcOffset,
+  layout::{
+    bfc_rect::BfcOffset, floats_utils::PositionedFloat,
+    layout_result::LayoutResult as BoxLayoutResult,
+  },
   layout_unit::LayoutUnit,
   style::{ComputedStyle, Direction as TextDirection, TextAlign, WhiteSpaceCollapse},
   text::character::{LINE_FEED, is_other_space_separator},
@@ -44,7 +49,10 @@ pub(crate) struct LineInfo<'a, 'c> {
   pub(crate) results: InlineItemResults<'a, 'c>,
   /// Blink's `BfcOffset`: the line-left and block offsets of the line opportunity.
   pub(crate) bfc_offset: BfcOffset,
-  pub(crate) break_token: Option<InlineBreakToken<'c>>,
+  pub(crate) break_token: Option<InlineBreakToken>,
+  /// Blink's `ParallelFlowBreakTokens`: where the floats and blocks-in-inline a page broke resume.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) parallel_flow_break_tokens: Vec<InlineBreakToken>,
   available_width: LayoutUnit,
   width: LayoutUnit,
   hang_width: LayoutUnit,
@@ -78,6 +86,8 @@ impl<'a, 'c> LineInfo<'a, 'c> {
       results: InlineItemResults::new(),
       bfc_offset: BfcOffset::default(),
       break_token: None,
+      #[cfg(feature = "fragmentation")]
+      parallel_flow_break_tokens: Vec::new(),
       available_width: LayoutUnit::ZERO,
       width: LayoutUnit::ZERO,
       hang_width: LayoutUnit::ZERO,
@@ -102,6 +112,27 @@ impl<'a, 'c> LineInfo<'a, 'c> {
     }
   }
 
+  /// Blink's `PropagateParallelFlowBreakToken` for a float the page broke, whose item starts at
+  /// `start`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn propagate_float_break(
+    &mut self,
+    positioned_float: &PositionedFloat,
+    start: InlineItemTextIndex,
+  ) {
+    self
+      .parallel_flow_break_tokens
+      .extend(positioned_float.parallel_flow_break_token(start));
+  }
+
+  #[cfg(not(feature = "fragmentation"))]
+  pub(crate) fn propagate_float_break(
+    &mut self,
+    _positioned_float: &PositionedFloat,
+    _start: InlineItemTextIndex,
+  ) {
+  }
+
   /// Blink's `Reset`.
   pub(crate) fn reset(&mut self) {
     *self = Self::new(self.items_data, self.line_style);
@@ -120,6 +151,14 @@ impl<'a, 'c> LineInfo<'a, 'c> {
       .iter()
       .find(|result| result.item.item_type == InlineItemType::BlockInInline)
       .and_then(|result| result.layout_result)
+  }
+
+  /// Blink's `BlockInInlineLayoutResult`: the layout of the line's block-in-inline.
+  pub(crate) fn block_in_inline_result(&self) -> Option<&Rc<BoxLayoutResult>> {
+    self
+      .results
+      .iter()
+      .find_map(|result| result.block_in_inline_result.as_ref())
   }
 
   /// Blink's `IsEndParagraph`.

@@ -1,11 +1,20 @@
 use std::{collections::HashMap, mem, rc::Rc, sync::Arc};
 
 pub use takumi_core::layout::measure::{MeasuredNode, MeasuredTextRun};
+#[cfg(feature = "pages")]
+use takumi_core::{
+  geometry::Size,
+  page_stream::{PageStream, SETTLED_PAGES, Settle, Settled},
+  scene::SceneRef,
+};
 use takumi_core::{
   scene::Scene,
   style::{ComputedStyle, Lang},
 };
 use typed_builder::TypedBuilder;
+
+#[cfg(feature = "pages")]
+use crate::stacking_context::ScenePaint;
 
 use crate::{
   AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
@@ -96,6 +105,13 @@ pub struct SequentialScene<'g> {
 }
 
 impl RenderOptions<'_> {
+  /// The render context a node lays out under, taking these options' images.
+  pub fn take_render_context(&mut self) -> RenderContext {
+    let images = Rc::new(mem::take(&mut self.images));
+
+    self.render_context(self.fonts_snapshot(), images, self.time_ms)
+  }
+
   fn fonts_snapshot(&self) -> FontsSnapshot {
     self
       .fonts
@@ -129,20 +145,82 @@ impl RenderOptions<'_> {
 
 /// Measures the layout of a node.
 pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
-  let images = Rc::new(mem::take(&mut options.images));
-  let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
+  let render_context = options.take_render_context();
   let mut root = RenderNode::from_node(&render_context, options.node);
-  let layout_results = LayoutResults::compute(&root, options.viewport.into());
+  let layout_results = LayoutResults::compute_document(&root, options.viewport.into());
 
   MeasuredNode::of(&mut root, &layout_results, options.viewport.size.into())
 }
 
 /// Renders a node to an image.
 pub fn render<'g>(mut options: RenderOptions<'g>) -> Result<Bitmap> {
-  let images = Rc::new(mem::take(&mut options.images));
-  let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
+  let render_context = options.take_render_context();
 
   render_with_context(render_context, options.node, options.viewport)
+}
+
+/// Paints a laid-out scene to an image the size of `scene.size`.
+pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
+  let size = scene.size.map(|length| length.round() as u32);
+
+  if size.width == 0 || size.height == 0 {
+    return Err(Error::InvalidViewport);
+  }
+
+  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
+
+  paint_scene(scene, &mut canvas)?;
+  canvas.into_inner()
+}
+
+/// Renders a node across at most `max_pages` pages `page_size`, handing each page's image to
+/// `page` in order, so a long document holds one page's pixels and scene at a time.
+///
+/// A page is handed over as soon as no page still to lay out can paint onto it, which a box the
+/// tree does not bound, such as one with a transform, delays until it is laid out. Layout runs
+/// while the pages go out, so [`Error::TooManyPages`] and any other layout error can follow pages
+/// `page` has already received.
+#[cfg(feature = "pages")]
+pub fn render_pages<'g>(
+  options: RenderOptions<'g>,
+  page_size: Size<f32>,
+  max_pages: usize,
+  page: impl FnMut(Bitmap) -> Result<()>,
+) -> Result<()> {
+  render_pages_settling(options, page_size, max_pages, SETTLED_PAGES, page)
+}
+
+/// [`render_pages`] with `settle` saying how many of the first pages are safe to hand over.
+#[cfg(feature = "pages")]
+pub(crate) fn render_pages_settling<'g>(
+  mut options: RenderOptions<'g>,
+  page_size: Size<f32>,
+  max_pages: usize,
+  settle: Settle<'_>,
+  mut page: impl FnMut(Bitmap) -> Result<()>,
+) -> Result<()> {
+  let render_context = options.take_render_context();
+  let root = RenderNode::from_node(&render_context, options.node);
+  let mut stream = PageStream::new(&root, page_size, max_pages);
+  let size = page_size.map(|length| length.round() as u32);
+
+  loop {
+    let Settled { pages, laid } = stream.advance(settle)?;
+
+    for index in pages {
+      let scene = stream.window(index)?;
+      let origin = SceneRef::page_origin(page_size, index).map(|length| length.round() as i32);
+      let mut canvas = Canvas::try_new(size)
+        .ok_or(Error::InvalidViewport)?
+        .with_origin(origin);
+
+      ScenePaint::new(scene.view()).paint(&mut canvas)?;
+      page(canvas.into_inner()?)?;
+    }
+    if !laid {
+      return Ok(());
+    }
+  }
 }
 
 /// Rasterizes `node` under an already-built [`RenderContext`]. The context
@@ -153,20 +231,9 @@ fn render_with_context(
   node: Node,
   viewport: Viewport,
 ) -> Result<Bitmap> {
-  let mut scene = Scene::lay_out(RenderNode::from_node(&render_context, node), viewport, true)?;
-  let size = scene.size.map(|length| length.round() as u32);
+  let scene = Scene::lay_out(RenderNode::from_node(&render_context, node), viewport, true)?;
 
-  if size.width == 0 || size.height == 0 {
-    return Err(Error::InvalidViewport);
-  }
-
-  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
-
-  paint_scene(&mut scene, &mut canvas)?;
-
-  let image = canvas.into_inner()?;
-
-  Ok(image)
+  render_scene(&scene)
 }
 
 /// A scene with its per-frame-invariant render state precomputed: the font
@@ -321,18 +388,9 @@ fn resolve_at_time(
 }
 
 #[cfg(test)]
-fn resolve_scene_at_time<'a, 'g>(
-  scenes: &'a [SequentialScene<'g>],
-  time_ms: u64,
-) -> Option<(&'a SequentialScene<'g>, u64)> {
-  resolve_at_time(scenes.len(), |index| scenes[index].duration_ms, time_ms)
-    .map(|(index, local_time_ms)| (&scenes[index], local_time_ms))
-}
-
-#[cfg(test)]
 mod tests {
 
-  use super::{RenderOptions, SequentialScene, render, render_animation, resolve_scene_at_time};
+  use super::{RenderOptions, SequentialScene, render, render_animation, resolve_at_time};
   use crate::{
     Fonts,
     layout::node::Node,
@@ -344,6 +402,14 @@ mod tests {
     },
     viewport::Viewport,
   };
+
+  fn resolve_scene_at_time<'a, 'g>(
+    scenes: &'a [SequentialScene<'g>],
+    time_ms: u64,
+  ) -> Option<(&'a SequentialScene<'g>, u64)> {
+    resolve_at_time(scenes.len(), |index| scenes[index].duration_ms, time_ms)
+      .map(|(index, local_time_ms)| (&scenes[index], local_time_ms))
+  }
 
   fn make_scene<'g>(fonts: &'g Fonts, duration_ms: u32) -> SequentialScene<'g> {
     let options = RenderOptions::builder()

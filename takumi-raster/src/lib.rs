@@ -30,6 +30,8 @@ mod palette;
 mod path;
 /// Main image renderer and viewport management
 mod render;
+#[cfg(all(test, feature = "pages"))]
+mod render_pages_tests;
 mod scanline;
 mod simd;
 mod stacking_context;
@@ -51,26 +53,10 @@ pub(crate) use path::*;
 pub use render::*;
 pub(crate) use takumi_core::geometry::Placement;
 pub(crate) use text_drawing::*;
-use tiny_skia::PixmapRef;
-#[cfg(any(feature = "svg", test))]
-use tiny_skia::{IntSize, Pixmap};
 pub use write::*;
 
-use crate::resources::image_buffer::ImageBuffer;
 pub(crate) use crate::{
   context::RenderContext,
   font_style::*,
   style::math::{div_255, mul_div_255},
 };
-
-/// Borrows an [`ImageBuffer`] as a zero-copy `tiny_skia` pixmap view.
-pub(crate) fn pixmap_ref_from_buffer(buffer: &ImageBuffer) -> Option<PixmapRef<'_>> {
-  PixmapRef::from_bytes(buffer.data(), buffer.width(), buffer.height())
-}
-
-/// Copies an [`ImageBuffer`] into an owned `tiny_skia` pixmap.
-#[cfg(any(feature = "svg", test))]
-pub(crate) fn pixmap_from_buffer(buffer: &ImageBuffer) -> Option<Pixmap> {
-  let size = IntSize::from_wh(buffer.width(), buffer.height())?;
-  Pixmap::from_vec(buffer.data().to_vec(), size)
-}

@@ -1,5 +1,5 @@
 mod animation;
-mod calc;
+pub(crate) mod calc;
 mod css_input;
 mod css_source;
 mod custom_properties;
@@ -16,7 +16,7 @@ mod tw;
 
 pub(crate) use animation::apply_stylesheet_animations;
 pub use animation::{KeyframeRule, KeyframesRule};
-pub(crate) use calc::{CalcArena, parse_calc_number_expression};
+pub(crate) use calc::parse_calc_number_expression;
 pub(crate) use css_input::{CssInput, CssNumber, CssUnexpected, CssValueSeed};
 pub use css_source::{
   AnimationRule, AnimationStep, CssSource, CssSourceError, LayerRule, MediaRule, StyleRule,
@@ -33,6 +33,7 @@ pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
 // under `selector::` for the renderer's `layout::matching`; only the stylesheet
 // entry point and `@property` rule type are part of the public surface.
 pub use selector::{MediaQueryList, PropertyRule, StyleSheet};
+pub(crate) use sizing::FontUnits;
 pub use sizing::SizingContext;
 pub use stylesheets::*;
 pub use tw::*;

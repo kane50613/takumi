@@ -9,12 +9,13 @@
 //! cells onto `THead`/`TBody`/`TFoot`, `TR`, and `TH`/`TD`.
 
 use std::{
-  collections::{HashMap, HashSet},
+  collections::HashSet,
   mem,
   num::{NonZeroU16, NonZeroU32},
 };
 
 use takumi_core::{
+  context::BoxId,
   layout::{node::NodeKind, tree::RenderNode},
   style::{CaptionSide, Display, FlexDirection, ListStyleType},
 };
@@ -31,47 +32,79 @@ pub(crate) const ARTIFACT: ContentTag<'static> = ContentTag::Artifact(Artifact {
   bbox: None,
 });
 
-/// Marked-content identifiers recorded during emission, keyed by the source
-/// node's path from the root.
+/// Marked-content identifiers recorded during emission, by the source node's box, in the order
+/// they were recorded.
 #[derive(Default)]
 pub(crate) struct TagCollector {
-  recorded: HashMap<Vec<usize>, Recorded>,
-  pub(crate) prefix: Vec<usize>,
+  records: Vec<Record>,
+}
+
+/// One identifier a source node recorded, `None` once the structure tree took it.
+struct Record {
+  node: BoxId,
+  kind: RecordKind,
+  identifier: Option<Identifier>,
+}
+
+#[derive(Clone, Copy)]
+enum RecordKind {
+  Content,
+  /// A generated list label, for a list item.
+  Label,
+  /// A link annotation, joined into the node's `Link` element (or wrapped in one) so
+  /// annotations sit inside the tree.
+  Annotation,
 }
 
 /// What one source node recorded.
 #[derive(Default)]
 struct Recorded {
   identifiers: Vec<Identifier>,
-  /// Generated list-label identifiers, for a list item.
   labels: Vec<Identifier>,
-  /// Link-annotation identifiers, joined into the node's `Link` element (or
-  /// wrapped in one) so annotations sit inside the tree.
   annotations: Vec<Identifier>,
 }
 
 impl TagCollector {
-  pub(crate) fn record(&mut self, path: &[usize], identifier: Identifier) {
-    self.at(path).identifiers.push(identifier);
+  pub(crate) fn record(&mut self, node: BoxId, identifier: Identifier) {
+    self.push(node, RecordKind::Content, identifier);
   }
 
-  pub(crate) fn record_label(&mut self, path: &[usize], identifier: Identifier) {
-    self.at(path).labels.push(identifier);
+  pub(crate) fn record_label(&mut self, node: BoxId, identifier: Identifier) {
+    self.push(node, RecordKind::Label, identifier);
   }
 
-  pub(crate) fn record_annotation(&mut self, path: &[usize], identifier: Identifier) {
-    self.at(path).annotations.push(identifier);
+  pub(crate) fn record_annotation(&mut self, node: BoxId, identifier: Identifier) {
+    self.push(node, RecordKind::Annotation, identifier);
   }
 
-  fn at(&mut self, path: &[usize]) -> &mut Recorded {
-    self
-      .recorded
-      .entry([self.prefix.as_slice(), path].concat())
-      .or_default()
+  fn push(&mut self, node: BoxId, kind: RecordKind, identifier: Identifier) {
+    self.records.push(Record {
+      node,
+      kind,
+      identifier: Some(identifier),
+    });
   }
 
-  fn take(&mut self, path: &[usize]) -> Recorded {
-    self.recorded.remove(path).unwrap_or_default()
+  /// What `node` recorded and the tree has not taken yet, with the records sorted by node.
+  fn take(&mut self, node: BoxId) -> Recorded {
+    let start = self.records.partition_point(|record| record.node < node);
+    let mut recorded = Recorded::default();
+
+    for record in self.records[start..]
+      .iter_mut()
+      .take_while(|record| record.node == node)
+    {
+      let Some(identifier) = record.identifier.take() else {
+        continue;
+      };
+
+      match record.kind {
+        RecordKind::Content => recorded.identifiers.push(identifier),
+        RecordKind::Label => recorded.labels.push(identifier),
+        RecordKind::Annotation => recorded.annotations.push(identifier),
+      }
+    }
+    recorded
   }
 
   /// Walks the source tree in logical order and builds the structure tree from
@@ -82,6 +115,9 @@ impl TagCollector {
     lang: Option<&str>,
     targets: &HashSet<Vec<usize>>,
   ) -> TagTree {
+    // Stable, so each node's identifiers keep the order they were drawn in.
+    self.records.sort_by_key(|record| record.node);
+
     let mut tree = TagTree::new().with_lang(lang.map(str::to_string));
     let mut top = Vec::new();
     let mut pending = Vec::new();
@@ -226,7 +262,7 @@ fn build_node(
         identifiers,
         labels,
         annotations,
-      } = walk.collector.take(path);
+      } = walk.collector.take(node.context.box_id());
       // Items of a row-direction flex container read as one visual line, so
       // their block boundaries do not split the paragraph run.
       let block = is_block(node) && !nesting.in_row;
@@ -265,7 +301,7 @@ fn build_element(
     identifiers,
     labels,
     mut annotations,
-  } = walk.collector.take(path);
+  } = walk.collector.take(node.context.box_id());
   let is_link = kind.is_link();
   let is_list_item = kind.is_list_item();
   let is_list = kind.is_list();
@@ -389,7 +425,7 @@ fn build_table(
     identifiers,
     annotations,
     ..
-  } = walk.collector.take(path);
+  } = walk.collector.take(node.context.box_id());
   let mut kind = Tag::TABLE;
   let is_target = walk.name_target(path, &mut kind);
   let mut groups = Vec::new();

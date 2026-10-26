@@ -14,15 +14,15 @@ use tiny_skia::{
   PixmapRef, PremultipliedColorU8, Rect as TinyRect, Transform as TinyTransform,
 };
 
-#[cfg(feature = "svg")]
-use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
+#[cfg(feature = "svg")]
+use crate::resources::image::SvgRaster;
 use crate::{
   BilinearAxis, BilinearColumns, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions,
   PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
   interpolate_with_footprint,
   layout::node::resolve_image,
-  overlay_image, pixmap_ref_from_buffer,
+  overlay_image,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::*,
   try_overlay_gradient_tile,
@@ -303,7 +303,7 @@ impl<'a> SampledBitmapView<'a> {
     height: u32,
     algorithm: ImageScalingAlgorithm,
   ) -> Option<Self> {
-    let source = pixmap_ref_from_buffer(source)?;
+    let source = PixmapRef::try_from(source).ok()?;
     let logical_size = Size { width, height };
 
     Some(Self {
@@ -569,9 +569,11 @@ impl BackgroundTile {
   }
 }
 
-/// Builds one tile of a background layer at the size the geometry resolved to.
+/// Builds one tile of a background layer over `tile_w` by `tile_h` pixels, of an image rendered at
+/// `image_size`.
 pub(crate) fn render_tile(
   image: &BackgroundImage,
+  #[cfg_attr(not(feature = "svg"), allow(unused_variables))] image_size: Size<f32>,
   tile_w: u32,
   tile_h: u32,
   context: &RenderContext,
@@ -635,8 +637,7 @@ pub(crate) fn render_tile(
           tile_h,
           context.style.misc_inherited_data.image_rendering,
           context.time_ms(),
-          context.current_color,
-          Some(context.fonts()),
+          context,
         )? {
           RenderedImage::Sampled { source, .. } => Some(BackgroundTile::SampledBitmap {
             source,
@@ -646,20 +647,19 @@ pub(crate) fn render_tile(
           }),
           RenderedImage::Rasterized(..) => None,
         },
+        // An SVG lays out at the tile size, Blink's container size, and fills the tile's pixels.
         #[cfg(feature = "svg")]
-        ImageSource::Svg(..) => match source.render_for_layout(
-          tile_w,
-          tile_h,
-          context.style.misc_inherited_data.image_rendering,
-          context.time_ms(),
-          context.current_color,
-          Some(context.fonts()),
-        )? {
-          RenderedImage::Rasterized(buffer) => {
-            pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
-          }
-          RenderedImage::Sampled { .. } => None,
-        },
+        ImageSource::Svg(svg) => {
+          let buffer = svg.rasterize_cached(
+            SvgRaster::whole(image_size, tile_w, tile_h),
+            context.style.misc_inherited_data.image_rendering,
+            context,
+          )?;
+
+          Pixmap::try_from(buffer.as_ref())
+            .ok()
+            .map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
+        }
         _ => None,
       }
     }
@@ -690,6 +690,7 @@ pub(crate) fn tile_layers(
 
     let Some(tile) = render_tile(
       layer.image,
+      tiling.image_size,
       tiling.tile.width as u32,
       tiling.tile.height as u32,
       context,
@@ -791,6 +792,7 @@ fn rasterize_pattern(
     (None, image) => {
       let Some(tile) = render_tile(
         image,
+        tiling.image_size,
         tiling.tile.width.ceil() as u32,
         tiling.tile.height.ceil() as u32,
         context,
@@ -802,9 +804,9 @@ fn rasterize_pattern(
     }
   };
   let source = match &content {
-    BackgroundTile::SampledBitmap { source, algo, .. } => {
-      pixmap_ref_from_buffer(source).map(|source| (source, *algo))
-    }
+    BackgroundTile::SampledBitmap { source, algo, .. } => PixmapRef::try_from(source.as_ref())
+      .ok()
+      .map(|source| (source, *algo)),
     BackgroundTile::Pixmap(pixmap) => Some((
       pixmap.as_ref().as_ref(),
       context.style.misc_inherited_data.image_rendering,

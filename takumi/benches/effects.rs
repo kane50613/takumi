@@ -4,7 +4,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
   prelude::{
     BackgroundImages, BorderRadius, Color, ColorInput, Display, Filters, FlexWrap, Fonts,
-    FromCssStr, Length::Px, Node, RenderOptions, Style, StyleDeclaration, Viewport,
+    FromCssStr, LengthUnit, Node, RenderOptions, Style, Viewport,
   },
   render,
 };
@@ -31,29 +31,25 @@ fn backdrop_blur_cards() -> Node {
   let cards = (0..16).map(|_| {
     Node::container([]).with_style(
       Style::default()
-        .with(StyleDeclaration::width(Px(120.0)))
-        .with(StyleDeclaration::height(Px(120.0)))
-        .with(StyleDeclaration::margin_top(Px(4.0)))
-        .with(StyleDeclaration::margin_left(Px(4.0)))
-        .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
-        .with(StyleDeclaration::backdrop_filter(
-          Filters::from_css_str("blur(10px)").unwrap(),
-        ))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([255, 255, 255, 80]),
-        ))),
+        .width(120.0.px())
+        .height(120.0.px())
+        .margin_top(4.0.px())
+        .margin_left(4.0.px())
+        .border_radius(BorderRadius::from_css_str("24px").unwrap())
+        .backdrop_filter(Filters::from_css_str("blur(10px)").unwrap())
+        .background_color(ColorInput::Value(Color([255, 255, 255, 80]))),
     )
   });
 
   Node::container(cards.collect::<Vec<_>>()).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
-      .with(StyleDeclaration::width(Px(512.0)))
-      .with(StyleDeclaration::height(Px(512.0)))
-      .with(StyleDeclaration::background_image(Some(
+      .display(Display::Flex)
+      .flex_wrap(FlexWrap::Wrap)
+      .width(512.0.px())
+      .height(512.0.px())
+      .background_image(Some(
         BackgroundImages::from_css_str("linear-gradient(135deg, #ff0080, #4000ff)").unwrap(),
-      ))),
+      )),
   )
 }
 
@@ -73,11 +69,7 @@ fn svg_blur_node() -> Node {
 
 /// `svg` drawn as a 512px image.
 fn svg_node(svg: &'static str) -> Node {
-  Node::image(svg).with_style(
-    Style::default()
-      .with(StyleDeclaration::width(Px(512.0)))
-      .with(StyleDeclaration::height(Px(512.0))),
-  )
+  Node::image(svg).with_style(Style::default().width(512.0.px()).height(512.0.px()))
 }
 
 fn bench_effects(c: &mut Criterion) {

@@ -1,6 +1,6 @@
 //! Inline items flattened from a render subtree: text, spacers and boxes.
 
-use std::{borrow::Cow, iter::successors, ops::Range, ptr, rc::Rc, sync::Arc};
+use std::{borrow::Cow, iter::successors, ops::Range, rc::Rc, sync::Arc};
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -10,6 +10,7 @@ use super::{
   metrics::InlineBoxKind, outline::InlineOutline,
 };
 use crate::{
+  context::BoxId,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, node::Node, tree::RenderNode},
@@ -74,18 +75,6 @@ pub struct InlineBoxItem<'c> {
 }
 
 impl RenderNode {
-  /// Whether a float sits among the inline content this node lays out, found the way
-  /// [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines) walks it.
-  pub(crate) fn has_inline_floats(&self) -> bool {
-    self.children.iter().flatten().any(|child| {
-      if child.participates_as_inline_box() {
-        child.inline_box_kind() == InlineBoxKind::Float
-      } else {
-        !child.is_block_in_inline && child.has_inline_floats()
-      }
-    })
-  }
-
   /// Whether an out-of-flow box sits among the inline content this node lays out, found the way
   /// [`InlineNode::collect_inlines`](super::inline_node::InlineNode::collect_inlines) walks it.
   pub(crate) fn holds_inline_out_of_flow(&self) -> bool {
@@ -129,6 +118,36 @@ impl RenderNode {
     found
   }
 
+  /// Whether it is an atomic inline, a float, an outside marker, or a block-in-inline.
+  pub(crate) fn is_inline_content_box(&self) -> bool {
+    self.participates_as_inline_box() || self.is_block_in_inline
+  }
+
+  /// The child-index path from this node to each box among its inline content, through the inline
+  /// spans holding it.
+  pub(crate) fn inline_child_paths(&self) -> FxHashMap<BoxId, SmallVec<[usize; 2]>> {
+    let mut paths = FxHashMap::default();
+
+    self.collect_inline_child_paths(&mut SmallVec::new(), &mut paths);
+    paths
+  }
+
+  fn collect_inline_child_paths(
+    &self,
+    path: &mut SmallVec<[usize; 2]>,
+    paths: &mut FxHashMap<BoxId, SmallVec<[usize; 2]>>,
+  ) {
+    for (index, child) in self.children.iter().flatten().enumerate() {
+      path.push(index);
+      if child.is_inline_span() {
+        child.collect_inline_child_paths(path, paths);
+      } else {
+        paths.insert(child.context.box_id(), path.clone());
+      }
+      path.pop();
+    }
+  }
+
   /// Whether the node is an inline box whose content joins its parent's lines rather than an
   /// atomic box of its own.
   pub(crate) fn is_inline_span(&self) -> bool {
@@ -137,7 +156,7 @@ impl RenderNode {
 
   /// Whether this inline span is the containing block of fixed-position descendants, as Blink's
   /// `LayoutObject::ComputeIsFixedContainer` decides for a box that is not atomic.
-  fn contains_fixed_as_inline(&self) -> bool {
+  pub(crate) fn contains_fixed_as_inline(&self) -> bool {
     let style = &self.context.style;
 
     !style.misc1_data.filter.is_empty() || !style.misc1_data.backdrop_filter.is_empty()
@@ -145,7 +164,7 @@ impl RenderNode {
 
   /// Whether this inline span is the containing block of absolutely positioned descendants, as
   /// Blink's `LayoutObject::ComputeIsAbsoluteContainer` decides.
-  fn contains_absolute_as_inline(&self) -> bool {
+  pub(crate) fn contains_absolute_as_inline(&self) -> bool {
     self.context.style.base_data.position.is_positioned() || self.contains_fixed_as_inline()
   }
 
@@ -365,9 +384,9 @@ pub(crate) struct InlineSpans<'c> {
   pub(crate) item_spans: Vec<Option<usize>>,
   /// The first span of each node, for a fragment an item no longer holds, such as an ellipsis or
   /// a laid out atomic inline.
-  node_spans: FxHashMap<*const RenderNode, usize>,
+  node_spans: FxHashMap<BoxId, usize>,
   /// The decoration each inline box opens, by its node.
-  node_decorations: FxHashMap<*const RenderNode, Rc<DecorationLink<'c>>>,
+  node_decorations: FxHashMap<BoxId, Rc<DecorationLink<'c>>>,
 }
 
 impl<'c> InlineSpans<'c> {
@@ -380,7 +399,7 @@ impl<'c> InlineSpans<'c> {
     let mut links: Vec<Option<Arc<str>>> = vec![link_of(block)];
     let mut elements: Vec<Option<usize>> = vec![None];
     let mut next_span = 0;
-    let mut last_text: Option<(*const RenderNode, usize)> = None;
+    let mut last_text: Option<(BoxId, usize)> = None;
     let mut node_spans = FxHashMap::default();
     let mut node_decorations = FxHashMap::default();
 
@@ -406,7 +425,7 @@ impl<'c> InlineSpans<'c> {
             });
 
           if let Some(decoration) = &decoration {
-            node_decorations.insert(ptr::from_ref(node), Rc::clone(decoration));
+            node_decorations.insert(node.context.box_id(), Rc::clone(decoration));
           }
 
           chains.push(decoration.or(chain));
@@ -426,7 +445,7 @@ impl<'c> InlineSpans<'c> {
         InlineItemType::Text | InlineItemType::Control => {
           let range = item.start_offset()..item.end_offset();
           let span_index = match last_text {
-            Some((last_node, index)) if ptr::eq(last_node, node) => {
+            Some((last_node, index)) if last_node == node.context.box_id() => {
               if let Some(ProcessedInlineSpan::Text {
                 byte_range, text, ..
               }) = spans.get_mut(index)
@@ -453,13 +472,13 @@ impl<'c> InlineSpans<'c> {
                   .or_else(|| elements.last().copied().flatten()),
               });
               node_spans
-                .entry(ptr::from_ref(node))
+                .entry(node.context.box_id())
                 .or_insert(spans.len() - 1);
               spans.len() - 1
             }
           };
 
-          last_text = Some((ptr::from_ref(node), span_index));
+          last_text = Some((node.context.box_id(), span_index));
           Some(span_index)
         }
         InlineItemType::AtomicInline
@@ -478,7 +497,7 @@ impl<'c> InlineSpans<'c> {
             baseline_offset: None,
           }));
           node_spans
-            .entry(ptr::from_ref(node))
+            .entry(node.context.box_id())
             .or_insert(spans.len() - 1);
           Some(spans.len() - 1)
         }
@@ -498,12 +517,22 @@ impl<'c> InlineSpans<'c> {
 
   /// The decoration the inline box `node` opens.
   pub(crate) fn decoration_of(&self, node: &RenderNode) -> Option<&Rc<DecorationLink<'c>>> {
-    self.node_decorations.get(&ptr::from_ref(node))
+    self.node_decorations.get(&node.context.box_id())
+  }
+
+  /// The node of every inline box the spans open, by decoration id, including a box with no
+  /// content that no span lies inside.
+  pub(crate) fn owners(&self) -> FxHashMap<usize, &'c RenderNode> {
+    self
+      .node_decorations
+      .values()
+      .map(|link| (link.decoration.id, link.decoration.owner))
+      .collect()
   }
 
   /// The first span of `node`.
   pub(crate) fn span_of(&self, node: &RenderNode) -> Option<usize> {
-    self.node_spans.get(&ptr::from_ref(node)).copied()
+    self.node_spans.get(&node.context.box_id()).copied()
   }
 }
 

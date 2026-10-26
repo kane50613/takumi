@@ -7,29 +7,27 @@ use takumi_core::{
   context::RenderContext,
   geometry::{NodeId, Size},
   layout::{
+    layout_view::LayoutView,
     node::{Node, NodeKind},
-    tree::RenderNode,
+    paged_layout::PagedLayout,
+    tree::{LayoutResults, RenderNode},
   },
   painter::OwnContent,
   resources::image::ImageSource,
-  scene::{NodePaint, PaintItemKind, Scene},
+  scene::{Scene, SceneView},
   style::{
-    ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position, SizingContext,
-    Style, StyleDeclaration, StyleSheet, ZIndex,
+    ComputedStyle, Display, FontFamily, Lang, LengthUnit, Position, SizingContext, Style,
+    StyleSheet, ZIndex,
   },
   viewport::Viewport,
 };
 
 use crate::{
-  atoms::AtomCollector,
   bands::{FixedTemplate, Repeatable},
-  chunks::SceneChunks,
   counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
-  emitter::{DocumentState, Emitter},
-  inline::InlineCache,
   options::PdfError,
   page::PageFrame,
-  window::Window,
+  pagination::MAX_PAGES,
 };
 
 /// Shared inputs for laying out an independent node tree: the main content or
@@ -62,7 +60,7 @@ impl TreeInputs<'_> {
 
   pub(crate) fn prepare(&self, node: Node, viewport: Viewport) -> Result<PreparedTree, PdfError> {
     let node = fill_root(node, viewport);
-    let root = RenderNode::from_node(&self.context(viewport), node);
+    let root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
 
     PreparedTree::lay_out(root, viewport)
   }
@@ -85,22 +83,32 @@ impl TreeInputs<'_> {
     self.prepare(node, viewport)
   }
 
-  /// The content column, plus the `fixed` subtrees attached to the initial
-  /// containing block. Those repeat on every page, so they lay out against the
-  /// page area instead of the column.
+  /// The content laid out across pages, and the `fixed` subtrees attached to the initial
+  /// containing block.
   pub(crate) fn prepare_paged(
     &self,
     node: Node,
     frame: &PageFrame,
-  ) -> Result<(PreparedTree, Vec<Repeatable>), PdfError> {
+  ) -> Result<(PagedContent, Vec<Repeatable>), PdfError> {
+    let (root, repeated) = self.prepare_root(node, frame)?;
+
+    Ok((PagedContent::lay_out(root, frame.page_size())?, repeated))
+  }
+
+  /// The content tree to lay out across pages, and the `fixed` subtrees taken out of it. Those
+  /// repeat on every page, so they lay out against the page area on their own.
+  pub(crate) fn prepare_root(
+    &self,
+    node: Node,
+    frame: &PageFrame,
+  ) -> Result<(RenderNode, Vec<Repeatable>), PdfError> {
     let viewport = frame.column();
     let node = fill_root(node, viewport);
     // A repeated box holding a counter lays out again per page, from the subtree
     // its preorder position names in the tree it was taken from.
     let source = has_page_counters(&node).then(|| node.clone());
-    let mut root = RenderNode::from_node(&self.context(viewport), node);
+    let mut root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
     let repeated = take_repeating_fixed(&mut root);
-    let content = PreparedTree::lay_out(root, viewport)?;
     let page_context = self.context(frame.page_area);
     let repeated = repeated
       .into_iter()
@@ -121,7 +129,7 @@ impl TreeInputs<'_> {
       })
       .collect::<Result<Vec<_>, PdfError>>()?;
 
-    Ok((content, repeated))
+    Ok((root, repeated))
   }
 }
 
@@ -175,66 +183,53 @@ impl PreparedTree {
       )
   }
 
-  /// The scene's atom collector, for pagination.
-  pub(crate) fn atom_collector(&self) -> AtomCollector<'_> {
-    AtomCollector { scene: &self.scene }
-  }
-
-  /// Visits every node paint of the scene, in paint order.
-  pub(crate) fn for_each_paint(&self, mut visit: impl FnMut(&NodePaint)) {
-    fn walk(tree: &PreparedTree, id: usize, visit: &mut impl FnMut(&NodePaint)) {
-      let Some(context) = tree.scene.contexts.get(id) else {
-        return;
-      };
-
-      if let Some(paint) = context.root() {
-        visit(paint);
-      }
-      for bucket in context.in_paint_order() {
-        for item in bucket {
-          match &item.kind {
-            PaintItemKind::Node(paint) => visit(paint),
-            PaintItemKind::Context(child) => walk(tree, *child, visit),
-            PaintItemKind::Floats(_) | PaintItemKind::CollapsedBorders(_) => {}
-          }
-        }
-      }
-    }
-
-    walk(self, 0, &mut visit);
-  }
-
-  pub(crate) fn emitter<'a>(
-    &'a self,
-    state: &'a DocumentState<'a>,
-    inline: Option<&'a InlineCache<'a>>,
-    chunks: Option<&'a SceneChunks<'a>>,
-    tagged: bool,
-  ) -> Emitter<'a> {
-    Emitter {
-      scene: &self.scene,
-      document: state,
-      inline,
-      chunks,
-      window: Window::default(),
-      tagged: tagged && state.tags.is_some(),
-      tag_prefix: Vec::new(),
-      color_filter: None,
-    }
+  pub(crate) fn view(&self) -> SceneView<'_> {
+    self.scene.view()
   }
 }
 
-// The root fills the content box like a browser body: a fit-content root
-// resolves child percentages against a tentative width first and the final
-// width later, and taffy does not reconcile heights across those passes.
+pub(crate) struct PagedContent {
+  pub(crate) root: RenderNode,
+  results: LayoutResults,
+  pub(crate) page_size: Size<f32>,
+  pub(crate) page_count: usize,
+}
+
+impl PagedContent {
+  pub(crate) fn lay_out(root: RenderNode, page_size: Size<f32>) -> Result<Self, PdfError> {
+    let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
+
+    while layout.next_page()? {}
+
+    let page_count = layout.page_count();
+    let results = layout.into_results();
+
+    Ok(Self {
+      root,
+      results,
+      page_size,
+      page_count,
+    })
+  }
+
+  pub(crate) fn layout(&self) -> LayoutView<'_> {
+    self.results.view()
+  }
+
+  pub(crate) fn into_parts(self) -> (RenderNode, LayoutResults) {
+    (self.root, self.results)
+  }
+}
+
+// The root fills the content box like a browser body, and keeps the margins of what it holds
+// inside it.
 fn fill_root(node: Node, viewport: Viewport) -> Node {
   let mut style = Style::default()
-    .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-    .with(StyleDeclaration::width(Length::Percentage(100.0)));
+    .display(Display::FlowRoot)
+    .width(100.0.percent());
 
   if viewport.size.height.is_some() {
-    style = style.with(StyleDeclaration::height(Length::Percentage(100.0)));
+    style = style.height(100.0.percent());
   }
 
   Node::container([node]).with_style(style)
@@ -287,14 +282,13 @@ fn take_repeating_fixed(node: &mut RenderNode) -> Vec<(RenderNode, RenderContext
   repeating
 }
 
-/// The page area a repeated box positions against. Taffy gives a layout root
-/// the origin, so the box has to be a child of one to see its own insets.
+/// The page area a repeated box positions against, as a layout root ignores its own insets.
 pub(crate) fn page_root(context: &RenderContext, child: RenderNode) -> RenderNode {
   let area = Node::container([]).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Length::Percentage(100.0)))
-      .with(StyleDeclaration::height(Length::Percentage(100.0))),
+      .display(Display::Block)
+      .width(100.0.percent())
+      .height(100.0.percent()),
   );
   let mut root = RenderNode::from_node(context, area);
 

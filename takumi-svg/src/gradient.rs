@@ -4,6 +4,7 @@ use std::{f32::consts::TAU, io, sync::Arc};
 
 use takumi_core::{
   context::RenderContext,
+  geometry::Size,
   layout::background_image_geometry::{BackgroundLayer, ImageTiling},
   paint::{ConicGradientTile, SrgbStop},
   path_data::{APPROX_CHARS_PER_NUMBER, PathData},
@@ -84,10 +85,10 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
 
       if overflows {
         let token = self.doc.begin_clipped_group(&dest.path_data())?;
-        self.tile(image, rect)?;
+        self.tile(image, rect, tiling.image_size)?;
         return self.doc.end_group(token);
       }
-      return self.tile(image, rect);
+      return self.tile(image, rect, tiling.image_size);
     }
 
     let step = tiling.step();
@@ -97,24 +98,33 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       step.width,
       step.height,
     ))?;
-    self.tile(image, Frame::new(0.0, 0.0, tile.width, tile.height))?;
+    self.tile(
+      image,
+      Frame::new(0.0, 0.0, tile.width, tile.height),
+      tiling.image_size,
+    )?;
     self.doc.end_pattern(token)?;
     self.doc.rect_paint(dest, &pattern)
   }
 
-  /// Paints one tile of a layer into `rect`.
-  fn tile(&mut self, image: &BackgroundImage, rect: Frame) -> io::Result<()> {
+  /// Paints one tile of a layer into `rect`, an image rendered at `image_size` stretched over it.
+  fn tile(
+    &mut self,
+    image: &BackgroundImage,
+    rect: Frame,
+    image_size: Size<f32>,
+  ) -> io::Result<()> {
     match image {
       BackgroundImage::Linear(gradient) => self.linear(gradient, rect),
       BackgroundImage::Radial(gradient) => self.radial(gradient, rect),
       BackgroundImage::Conic(gradient) => self.conic(gradient, rect),
-      BackgroundImage::Url(url) => self.url(url, rect),
+      BackgroundImage::Url(url) => self.url(url, rect, image_size),
       BackgroundImage::None => Ok(()),
     }
   }
 
-  fn url(&mut self, url: &Arc<str>, rect: Frame) -> io::Result<()> {
-    let Some(drawing) = Drawing::of_url(url, rect, self.context, self.doc) else {
+  fn url(&mut self, url: &Arc<str>, rect: Frame, image_size: Size<f32>) -> io::Result<()> {
+    let Some(drawing) = Drawing::of_url(url, rect, image_size, self.context, self.doc) else {
       return Ok(());
     };
 

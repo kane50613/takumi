@@ -1,49 +1,43 @@
 use std::{
-  borrow::Cow,
-  cell::RefCell,
-  collections::{HashSet, VecDeque},
-  iter::Copied,
-  mem::{replace, take},
-  ptr,
-  rc::Rc,
-  slice,
-  sync::Arc,
+  borrow::Cow, cell::RefCell, collections::VecDeque, mem::take, rc::Rc, slice, sync::Arc,
   vec::IntoIter,
 };
+#[cfg(feature = "fragmentation")]
+use std::{num::NonZeroUsize, ops::Range};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
-use taffy::{
-  AvailableSpace as TaffyAvailableSpace, AxisStaticEdge, AxisStaticPosition, BlockContext,
-  BoxSizing, Cache, CacheTree, ContainingBlockClaims, CoreStyle, DetailedGridInfo,
-  DetailedLayoutInfo, Dimension, Display as TaffyDisplay, Layout, LayoutBlockContainer,
-  LayoutContainingBlock, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
-  LayoutPartialTree, LengthPercentage, Line, MaybeMath, MaybeResolve, NodeId as TaffyNodeId,
-  OofCandidate, OofPositioningArea, Position as TaffyPosition, Rect as TaffyRect, RequestedAxis,
-  ResolveOrZero, RoundTree, RunMode, Size as TaffySize, SizingMode, Style, TraversePartialTree,
-  TraverseTree, compute_block_layout, compute_cached_layout, compute_flexbox_layout,
-  compute_grid_layout, compute_hidden_layout, compute_leaf_layout, compute_oof_layout_for_area,
-  compute_root_layout,
+
+#[cfg(feature = "fragmentation")]
+use crate::layout::{
+  layout_result::LayoutResult,
+  layout_view::{HoistedBy, LiveLayout},
+  paged_layout::PagedLayout,
+  releases::{Finished, Releases},
 };
 
 use crate::{
-  Error,
-  context::RenderContext,
+  context::{BoxId, RenderContext},
   font_style::SizedFontStyle,
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
+    block_node::LayoutCache,
+    constraint_space::CacheSlot,
+    grid::grid_layout_algorithm::GridGeometry,
     inline::{
-      ContentBox, FragmentItems, InlineContentKind, InlineMeasurement, InlineOutOfFlow, PaddingBox,
-      StaticPosition,
-      inline_item::InlineItemType,
-      inline_item_result::{CollapsedMargins, LayoutResult},
+      ContentBox, FragmentItems, InlineContent, InlineContentKind, InlineOutOfFlow,
       inline_node::{InlineNode, ItemShapes},
       inline_node_data::InlineNodeData,
     },
+    layout_result::{OutOfFlowCandidate, StaticPosition},
+    layout_style::{LayoutLength, LayoutStyle},
+    layout_view::LayoutView,
+    length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
-    table::{ColumnConstraints, TableFragment, TableStructure},
+    out_of_flow::{ContainingBlock, ContainingBlockClaims, OutOfFlowLayoutPart},
+    table::{ColumnConstraints, HiddenParts, TableFragment, TableStructure},
   },
   layout_unit::{BoxStrut, LayoutUnit},
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
@@ -52,9 +46,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Display, Float, Length, LineHeight, ListStylePosition, MatchedStyleKey, Position,
-    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
-    StyleSheet, TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
+    Direction, Display, Float, FontUnits, LineHeight, MatchedStyleKey, Position, Registrations,
+    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+    WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -108,15 +102,15 @@ impl<P: Copy> ContainingBlocks<P> {
     self.content_boxes.insert(node_id, content_box);
   }
 
-  /// The placement and container size `child` resolves against: its containing block's when
-  /// hoisted, otherwise the parent's.
+  /// The placement and container size a child resolves against: its containing block's when
+  /// hoisted, else the parent's.
   pub fn base_for(
     &self,
-    child: &OrderedChild,
+    hoisted_cb: Option<NodeId>,
     parent_placement: P,
     parent_content_box: Size<Option<f32>>,
   ) -> (P, Size<Option<f32>>) {
-    match child.hoisted_cb {
+    match hoisted_cb {
       Some(cb) => (
         self
           .placements
@@ -133,14 +127,14 @@ impl<P: Copy> ContainingBlocks<P> {
     }
   }
 
-  /// The placement `child` resolves against, or `None` when it was hoisted to a containing block
-  /// none of the recorded nodes is.
+  /// The placement a child resolves against, or `None` when it was hoisted to the containing block
+  /// `hoisted_cb`, which none of the recorded nodes is.
   pub(crate) fn recorded_placement_for(
     &self,
-    child: &OrderedChild,
+    hoisted_cb: Option<NodeId>,
     parent_placement: P,
   ) -> Option<P> {
-    match child.hoisted_cb {
+    match hoisted_cb {
       Some(cb) => self.placements.get(&cb).copied(),
       None => Some(parent_placement),
     }
@@ -149,17 +143,19 @@ impl<P: Copy> ContainingBlocks<P> {
 
 /// Immutable per-node layout output after computing a tree.
 pub struct LayoutResults {
-  nodes: Vec<LayoutResultNode>,
+  pub(in crate::layout) nodes: Vec<LayoutResultNode>,
   /// Each laid-out table's paint data, by node.
-  tables: FxHashMap<usize, TableFragment>,
+  pub(in crate::layout) tables: FxHashMap<usize, Vec<TableFragment>>,
   /// The cells and rows layout hid, which paint nothing.
-  hidden: rustc_hash::FxHashSet<usize>,
+  pub(in crate::layout) hidden: FxHashSet<usize>,
+  /// The boxes each box positioned as their containing block.
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) hoisted_children: FxHashMap<NodeId, Vec<NodeId>>,
 }
 
-struct LayoutResultNode {
-  layout: Layout,
-  first_baseline_y: Option<f32>,
-  box_children: Box<[OrderedChild]>,
+pub(in crate::layout) struct LayoutResultNode {
+  pub(in crate::layout) fragments: Fragments,
+  pub(in crate::layout) box_children: Box<[OrderedChild]>,
 }
 
 impl LayoutResults {
@@ -169,13 +165,23 @@ impl LayoutResults {
     let mut results = Self::lay_out(root, available_space, false);
 
     if let Some(root) = results.nodes.first_mut() {
-      root.layout.location = taffy::Point::ZERO;
+      root.fragments[0].layout.location = Point::new(0.0, 0.0);
     }
     results
   }
 
-  /// [`Self::compute`] for paint: each inline formatting context keeps the fragment items it
-  /// lays out to, and lets go of the shaped text no other box shares.
+  /// [`Self::compute`] for the root of a document, whose initial containing block fits the root
+  /// when `available_space` leaves its width to the content.
+  pub fn compute_document(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
+    let mut results = Self::lay_out(root, available_space, true);
+
+    if let Some(root) = results.nodes.first_mut() {
+      root.fragments[0].layout.location = Point::new(0.0, 0.0);
+    }
+    results
+  }
+
+  /// [`Self::compute_document`] for paint, the root at its margin-offset location.
   pub(crate) fn compute_for_paint(
     root: &RenderNode,
     available_space: Size<AvailableSpace>,
@@ -183,112 +189,123 @@ impl LayoutResults {
     Self::lay_out(root, available_space, true)
   }
 
-  fn lay_out(
-    root: &RenderNode,
-    available_space: Size<AvailableSpace>,
-    keeps_fragment_items: bool,
-  ) -> Self {
+  fn lay_out(root: &RenderNode, available_space: Size<AvailableSpace>, is_document: bool) -> Self {
     let mut tree = LayoutTree::from_render_node(root);
+    let available_space = if is_document {
+      tree.initial_containing_block(available_space)
+    } else {
+      available_space
+    };
 
-    tree.keeps_fragment_items = keeps_fragment_items;
     tree.compute_layout(available_space);
     tree.into_results()
   }
 
+  /// The layout as a [`LayoutView`].
+  pub fn view(&self) -> LayoutView<'_> {
+    LayoutView::Final(self)
+  }
+
   /// Computed layout of a node.
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
-    self
-      .node(node_id)
-      .map(|node| ComputedLayout::from_taffy(&node.layout))
+    self.view().layout(node_id)
+  }
+
+  /// Computed layout of a node's fragment `fragment_index`.
+  pub fn fragment_layout(
+    &self,
+    node_id: NodeId,
+    fragment_index: usize,
+  ) -> crate::Result<ComputedLayout> {
+    self.view().fragment_layout(node_id, fragment_index)
   }
 
   /// Paint-ordered children of a node.
   pub fn box_children(&self, node_id: NodeId) -> crate::Result<&[OrderedChild]> {
-    self.node(node_id).map(|node| node.box_children.as_ref())
+    self.view().box_children(node_id)
   }
 
-  pub(crate) fn first_baseline_y(&self, node_id: NodeId) -> crate::Result<Option<f32>> {
-    self.node(node_id).map(|node| node.first_baseline_y)
+  /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn compute_pages(
+    root: &RenderNode,
+    page_size: Size<f32>,
+    max_pages: usize,
+  ) -> crate::Result<(Self, usize)> {
+    let mut layout = PagedLayout::new(root, page_size, max_pages);
+
+    while layout.next_page()? {}
+
+    let page_count = layout.page_count();
+
+    Ok((layout.into_results(), page_count))
   }
 
-  /// The paint data of the table `node_id`, when it is one.
-  pub fn table_fragment(&self, node_id: NodeId) -> Option<&TableFragment> {
-    self.tables.get(&usize::from(node_id))
+  #[cfg(all(test, feature = "fragmentation"))]
+  pub(crate) fn node_count(&self) -> usize {
+    self.nodes.len()
   }
 
-  /// Whether layout hid the box `node_id`, as Blink's `IsHiddenForPaint`: a cell in collapsed
-  /// columns or empty under `empty-cells: hide`, or a collapsed row.
-  pub fn is_hidden_for_paint(&self, node_id: NodeId) -> bool {
-    self.hidden.contains(&usize::from(node_id))
-  }
-
-  /// The root's border-box size, zero when the tree is empty.
-  pub(super) fn root_size(&self) -> Size<f32> {
-    self
-      .node(NodeId::ROOT)
-      .map_or(Size::ZERO, |node| Size::from_taffy(node.layout.size))
-  }
-
-  fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
-    self
-      .nodes
-      .get(usize::from(node_id))
-      .ok_or(Error::InvalidLayoutNode(node_id.into()))
+  #[cfg(all(test, feature = "fragmentation"))]
+  pub(crate) fn fragments(&self, node_id: NodeId) -> crate::Result<&[BoxFragment]> {
+    self.view().fragments(node_id)
   }
 }
 
-/// The lines a measurement lays out, as bits: the width they lay out at, then the available
-/// height as a kind and a size and the known height, left out unless `with_height`, then the edges
-/// its margins adjoin.
-fn inline_lines_bits(
-  line_width: f32,
-  available_height: AvailableSpace,
-  known_height: Option<f32>,
-  margins_adjoin: Line<bool>,
-  with_height: bool,
-) -> [u32; 5] {
-  let known_height = known_height.unwrap_or(f32::NAN).to_bits();
-  let (height_kind, height, known_height) = match available_height {
-    _ if !with_height => (u32::MAX, 0, 0),
-    AvailableSpace::Definite(value) => (0, value.to_bits(), known_height),
-    AvailableSpace::MinContent => (1, 0, known_height),
-    AvailableSpace::MaxContent => (2, 0, known_height),
-  };
-
-  [
-    line_width.to_bits(),
-    height_kind,
-    height,
-    known_height,
-    u32::from(margins_adjoin.start) | (u32::from(margins_adjoin.end) << 1),
-  ]
-}
-
-/// Mutable taffy tree wrapping render nodes during layout.
+/// The boxes of a render tree as layout lays them out.
 pub struct LayoutTree<'r> {
   nodes: Vec<LayoutNodeState>,
   render_nodes: Vec<&'r RenderNode>,
-  /// The nodes standing in for inline containing blocks.
-  inline_containing_blocks: Vec<TaffyNodeId>,
-  /// Each inline formatting context's lines measured per width they lay out at, which a measure
-  /// with a known width and one offered the same available width share. Only boxes inside see the
-  /// available height, so text alone is keyed on the width.
-  inline_measures: RefCell<FxHashMap<InlineMeasureKey, InlineMeasurement>>,
+  /// The inline box that is the containing block of each out-of-flow box an inline formatting
+  /// context holds, by node, when one is.
+  inline_containers: FxHashMap<usize, &'r RenderNode>,
   /// Each inline formatting context's prepared items, which every pass of one layout shares, as
-  /// Blink keeps them until `NeedsCollectInlines`.
+  /// Blink keeps them until `NeedsCollectInlines`. Unlike Blink, a streamed layout drops those of a
+  /// box it has not placed yet and prepares them again when it lays the box out.
   inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
-  /// Whether each inline formatting context keeps the fragment items it lays out to, as a layout
-  /// that paint reads does.
-  keeps_fragment_items: bool,
   /// Each table's parts, gathered when the tree is built.
   tables: FxHashMap<usize, Rc<TableStructure>>,
   /// Each table's column constraints, measured on its first layout.
   table_columns: FxHashMap<usize, Rc<ColumnConstraints>>,
-  /// Each table's paint data from its last full layout.
-  table_fragments: FxHashMap<usize, TableFragment>,
+  /// Each table's paint data from its last full layout, one per fragment.
+  table_fragments: FxHashMap<usize, Vec<TableFragment>>,
+  /// The cells and rows each table's layout hid, which every fragment of it shares.
+  table_hidden: FxHashMap<NodeId, HiddenParts>,
+  /// Every cell and row some table's layout hid.
+  hidden: FxHashSet<usize>,
+  /// Every (container, out-of-flow box) pair in some node's `hoisted_children`.
+  pub(in crate::layout) hoisted_pairs: FxHashSet<(NodeId, NodeId)>,
+  /// Which boxes positioned each out-of-flow box as their containing block.
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) hoisted_by: HoistedBy,
+  #[cfg(feature = "fragmentation")]
+  runs: u32,
+  #[cfg(feature = "fragmentation")]
+  running: Vec<PlacedBy>,
+  /// The layout styles the latest table parts took, which an equal part's shares.
+  table_part_styles: RecentStyles<LayoutStyle>,
+  /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
+  /// context lays out as, made the first time its line lays it out.
+  atomic_inlines: FxHashMap<BoxId, NodeId>,
+  /// Each inline formatting context's lines from its block layout, until it finishes.
+  pub(crate) inline_contents: FxHashMap<NodeId, InlineContent<'r>>,
+  /// The first layout of each repeated table header and footer, which every repetition reuses,
+  /// as Blink reads a repeated root's first layout result.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) repeated_roots: FxHashMap<NodeId, Rc<LayoutResult>>,
+  /// What a streamed layout frees once its pages are drawn, none for a layout that runs to the
+  /// end.
+  #[cfg(feature = "fragmentation")]
+  releases: Option<Releases>,
+  /// The boxes that measured or prepared inline items since `release_unplaced` last ran.
+  #[cfg(feature = "fragmentation")]
+  measured: RefCell<Vec<usize>>,
+  /// The boxes that ended and were released, whose inline items and table parts nothing may read.
+  #[cfg(all(feature = "fragmentation", debug_assertions))]
+  released_boxes: RefCell<FxHashSet<usize>>,
 }
 
-/// What a box's part in a table changes in the layout style it is laid out with.
+/// What a box's part in a table changes in the styles it is laid out with.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct TableBoxStyle {
   /// The border it lays out with in place of its own.
@@ -302,9 +319,6 @@ pub(crate) struct TableBoxStyle {
   pub(crate) hidden: bool,
   /// Whether it is a table, which a block container shrinks to fit rather than stretching.
   pub(crate) is_table: bool,
-  /// The top and bottom padding a cell lays out with to move its content down to align in its
-  /// row.
-  pub(crate) aligned_padding: Option<(f32, f32)>,
 }
 
 impl TableBoxStyle {
@@ -314,7 +328,6 @@ impl TableBoxStyle {
     sized_by_table: false,
     hidden: false,
     is_table: true,
-    aligned_padding: None,
   };
   pub(crate) const PART: Self = Self {
     border: Some(BoxStrut::ZERO),
@@ -333,83 +346,194 @@ impl TableBoxStyle {
     ..Self::TABLE
   };
 
-  /// `style` as this part of a table lays out with it.
-  fn apply(&self, style: &mut Style) {
+  /// `layout_style` as this part of a table lays out with it.
+  fn apply(&self, layout_style: &mut LayoutStyle) {
     if *self == Self::default() {
       return;
     }
     if self.hidden {
-      style.display = TaffyDisplay::None;
+      layout_style.display = Display::None;
       return;
     }
     if let Some(border) = self.border {
-      style.border = TaffyRect {
-        top: LengthPercentage::length(border.top.to_float()),
-        right: LengthPercentage::length(border.right.to_float()),
-        bottom: LengthPercentage::length(border.bottom.to_float()),
-        left: LengthPercentage::length(border.left.to_float()),
+      layout_style.border = Rect {
+        top: border.top.to_float(),
+        right: border.right.to_float(),
+        bottom: border.bottom.to_float(),
+        left: border.left.to_float(),
       };
     }
     if self.clears_padding {
-      style.padding = TaffyRect::zero();
+      layout_style.padding = Rect::all(LayoutLength::Fixed(0.0));
     }
     if self.sized_by_table {
-      style.size = TaffySize::auto();
-      style.min_size = TaffySize::auto();
-      style.max_size = TaffySize::auto();
-      style.margin = TaffyRect::zero();
-    }
-    style.item_is_table = self.is_table;
-    // A table establishes a formatting context of its own, and is not a block box a root or
-    // block container stretches.
-    if self.is_table {
-      style.display = TaffyDisplay::FlowRoot;
-    }
-    if let Some((top, bottom)) = self.aligned_padding {
-      style.padding.top = LengthPercentage::length(top);
-      style.padding.bottom = LengthPercentage::length(bottom);
+      layout_style.size = Size::all(LayoutLength::Auto);
+      layout_style.min_size = Size::all(LayoutLength::Auto);
+      layout_style.max_size = Size::all(LayoutLength::Auto);
+      layout_style.margin = Rect::all(LayoutLength::Fixed(0.0));
     }
   }
 }
 
-/// A node and the lines it measures, as bits.
-type InlineMeasureKey = (usize, [u32; 5]);
-
-struct LayoutNodeState {
-  /// Shared with the recent nodes whose style came out equal, as rows of a list do.
-  style: Rc<Style>,
-  /// Whether the style is the same whatever query container it resolves
-  /// against, so taffy's repeated passes can reuse it.
+/// A box as layout lays it out: its styles, what it keeps of its layouts, and where it went.
+pub(crate) struct LayoutNodeState {
+  /// The style it lays out with, shared with recent nodes whose style came out equal.
+  pub(crate) layout_style: Rc<LayoutStyle>,
+  /// Whether the styles are the same whatever query container they resolve against, so repeated
+  /// layouts can reuse them.
   container_independent: bool,
-  cache: Cache,
-  unrounded_layout: Layout,
-  final_layout: Layout,
-  first_baseline_y: Option<f32>,
-  is_inline_children: bool,
-  /// Whether the node is a flex or grid item, which its container may stretch.
-  flex_or_grid_item: bool,
-  /// What its part in a table changes in its layout style.
-  table_box: TableBoxStyle,
-  children: Box<[TaffyNodeId]>,
-  box_children: Box<[OrderedChild]>,
+  pub(crate) cache: LayoutCache,
+  /// Blink's `LayoutBox::layout_results_`: where each of its fragments went, by fragment index.
+  pub(crate) fragments: Fragments,
+  pub(crate) is_inline_children: bool,
+  /// Whether its inline formatting context lays it out as an atomic inline, float, list marker,
+  /// or block-in-inline.
+  pub(crate) is_atomic_inline: bool,
+  /// What its part in a table changes in its styles.
+  pub(crate) table_box: TableBoxStyle,
+  /// Its children in layout order, or for an inline formatting context the out-of-flow boxes in
+  /// its inline content.
+  pub(crate) children: Rc<[NodeId]>,
+  /// Its children in paint order, the boxes of its inline content among them.
+  pub(crate) box_children: Box<[OrderedChild]>,
   /// The out-of-flow boxes this node positioned as their containing block, from its last layout.
-  hoisted_children: Vec<TaffyNodeId>,
+  pub(crate) hoisted_children: Vec<NodeId>,
   /// The grid this node last laid out, which places its out-of-flow children in their areas.
-  detailed_layout_info: DetailedLayoutInfo<String>,
+  pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
   /// The out-of-flow boxes this node is the containing block for.
-  claims: ContainingBlockClaims,
+  pub(crate) claims: ContainingBlockClaims,
+  /// The pages laid out when its last fragment was placed, none while it has fragments to come
+  /// or when the layout does not release.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) ended_by: Option<NonZeroUsize>,
+  /// The box whose box children hold it, and its position among them.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) box_parent: Option<(u32, u32)>,
+  /// Which of its box children each of its fragments holds, once layout placed any.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) child_links: Option<Box<ChildLinks>>,
+}
+
+/// A box's fragments, one unless it fragmented.
+pub(crate) type Fragments = SmallVec<[BoxFragment; 1]>;
+
+/// Blink's `PhysicalBoxFragment` as takumi keeps it: where its parent placed one fragment of a box.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct BoxFragment {
+  pub(crate) layout: ComputedLayout,
+  /// Blink's `IsLineClampClippedFloat` of the layout that placed it.
+  pub(crate) is_line_clamp_clipped_float: bool,
+  /// Which of the parent's fragments holds it, as Blink's `PhysicalFragmentLink` in that
+  /// fragment's children says.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) container_fragment_index: usize,
+  /// Whether layout placed or hid the box, as a box the layout has not reached is not.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) is_laid_out: bool,
+  /// The run of the box's algorithm that made the layout this is the fragment of.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) run: u32,
+  /// The run of the container's algorithm that placed it. A later run placing the same container
+  /// fragment replaces this one.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) placed_by: PlacedBy,
+  /// Whether the fragment repeats an earlier one, as a table header does on each page.
+  pub(crate) is_repeated: bool,
+}
+
+/// A run of a box's layout algorithm: the box and which of its runs, counting from one.
+#[cfg(feature = "fragmentation")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PlacedBy {
+  pub(crate) node: u32,
+  pub(crate) run: u32,
+}
+
+#[cfg(feature = "fragmentation")]
+impl BoxFragment {
+  /// Where in `fragments`, a box's fragments in layout order, are the ones its parent's fragment
+  /// `container` holds. Layout places a box's fragments in its parent's fragments in order.
+  pub(crate) fn held_by(fragments: &[Self], container: usize) -> Range<usize> {
+    let start = fragments.partition_point(|fragment| fragment.container_fragment_index < container);
+    let len =
+      fragments[start..].partition_point(|fragment| fragment.container_fragment_index == container);
+
+    start..start + len
+  }
+}
+
+/// Blink's `PhysicalBoxFragment::Children` as a live layout logs them, by position among the box
+/// children. A later layout of a child can leave a link stale, so a reader checks each.
+#[cfg(feature = "fragmentation")]
+#[derive(Default)]
+pub(crate) struct ChildLinks {
+  by_fragment: Vec<Vec<u32>>,
+  /// Sorted.
+  hoisted: Vec<u32>,
+}
+
+#[cfg(feature = "fragmentation")]
+impl ChildLinks {
+  /// The positions logged as placed in fragment `fragment_index`, in any order and repeating.
+  pub(crate) fn placed_in(&self, fragment_index: usize) -> &[u32] {
+    self
+      .by_fragment
+      .get(fragment_index)
+      .map_or(&[], Vec::as_slice)
+  }
+
+  /// The positions logged as positioned by another box.
+  pub(crate) fn hoisted(&self) -> &[u32] {
+    &self.hoisted
+  }
+
+  fn link(&mut self, fragment_index: usize, position: u32) {
+    if self.by_fragment.len() <= fragment_index {
+      self.by_fragment.resize_with(fragment_index + 1, Vec::new);
+    }
+
+    let placed = &mut self.by_fragment[fragment_index];
+
+    if placed.last() != Some(&position) {
+      placed.push(position);
+    }
+  }
+
+  fn link_hoisted(&mut self, position: u32) {
+    if let Err(index) = self.hoisted.binary_search(&position) {
+      self.hoisted.insert(index, position);
+    }
+  }
+
+  /// Moves each position to `moved[position]`, as the box children reorder.
+  fn reorder(&mut self, moved: &[u32]) {
+    for position in self
+      .by_fragment
+      .iter_mut()
+      .flatten()
+      .chain(&mut self.hoisted)
+    {
+      *position = moved[*position as usize];
+    }
+    self.hoisted.sort_unstable();
+  }
 }
 
 /// The styles the latest nodes laid out with, which an equal style shares instead of a copy, as
 /// the inline layout cache shares faces.
-#[derive(Default)]
-struct RecentStyles(VecDeque<Rc<Style>>);
+struct RecentStyles<T>(VecDeque<Rc<T>>);
 
-impl RecentStyles {
+impl<T> Default for RecentStyles<T> {
+  fn default() -> Self {
+    Self(VecDeque::new())
+  }
+}
+
+impl<T: PartialEq> RecentStyles<T> {
   const LEN: usize = 8;
 
   /// `style`, or an equal one a recent node laid out with.
-  fn share(&mut self, style: Style) -> Rc<Style> {
+  fn share(&mut self, style: T) -> Rc<T> {
     if let Some(shared) = self.0.iter().find(|shared| ***shared == style) {
       return Rc::clone(shared);
     }
@@ -426,26 +550,30 @@ impl RecentStyles {
 
 impl LayoutNodeState {
   fn new(
-    style: Rc<Style>,
+    layout_style: Rc<LayoutStyle>,
     container_independent: bool,
     is_inline_children: bool,
     claims: ContainingBlockClaims,
   ) -> Self {
     Self {
-      style,
+      layout_style,
       container_independent,
-      cache: Cache::new(),
-      unrounded_layout: Layout::new(),
-      final_layout: Layout::new(),
-      first_baseline_y: None,
+      cache: LayoutCache::default(),
+      fragments: SmallVec::from_buf([BoxFragment::default()]),
       is_inline_children,
-      flex_or_grid_item: false,
+      is_atomic_inline: false,
       table_box: TableBoxStyle::default(),
-      children: Box::new([]),
+      children: Rc::new([]),
       box_children: Box::new([]),
       hoisted_children: Vec::new(),
-      detailed_layout_info: DetailedLayoutInfo::None,
+      grid_geometry: None,
       claims,
+      #[cfg(feature = "fragmentation")]
+      ended_by: None,
+      #[cfg(feature = "fragmentation")]
+      box_parent: None,
+      #[cfg(feature = "fragmentation")]
+      child_links: None,
     }
   }
 }
@@ -477,18 +605,17 @@ pub struct RenderNode {
   pub origin: NodeOrigin,
   /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
-  pub(crate) layout_style_override: Option<Rc<Style>>,
+  pub(crate) layout_style_override: Option<Rc<LayoutStyle>>,
   /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
-  /// Generated marker box, emitted before this box's own inline content.
-  pub(crate) marker: Option<Box<RenderNode>>,
   pub(crate) force_inline_layout: bool,
   /// Blink's `IsBlockInInline`: the anonymous block holding block-level children of an inline box.
   pub(crate) is_block_in_inline: bool,
+  /// Whether it is the root element, whose box always establishes an independent formatting
+  /// context, as Blink's `CreatesNewFormattingContext` reads `IsDocumentElement`.
+  pub(crate) is_root_element: bool,
   /// The fragment items its inline content last laid out to.
   pub(crate) fragment_items: FragmentItemsCache,
-  /// The layouts it took as an atomic inline or a block-in-inline, by available space.
-  atomic_inline_layouts: AtomicInlineCache,
   /// The shapes its inline items took when its inline content was last prepared.
   pub(crate) item_shapes: ItemShapes,
 }
@@ -502,9 +629,6 @@ impl Drop for RenderNode {
       if let Some(children) = node.children.take() {
         stack.extend(children.into_vec());
       }
-      if let Some(marker) = node.marker.take() {
-        stack.push(*marker);
-      }
     };
 
     collect(self, &mut stack);
@@ -514,14 +638,81 @@ impl Drop for RenderNode {
   }
 }
 
-/// The fragment items a node's inline content last laid out to. They belong to that node, so a
-/// clone, which may change its style or content, starts without them.
+/// The fragment items a node's inline content last laid out to, by fragment index. They belong to
+/// that node, so a clone, which may change its style or content, starts without them.
 #[derive(Default)]
-pub(crate) struct FragmentItemsCache(RefCell<Option<Rc<FragmentItems>>>);
+pub(crate) struct FragmentItemsCache {
+  fragments: RefCell<SmallVec<[Option<Rc<FragmentItems>>; 1]>>,
+  /// The fragments whose items were released, which nothing may read.
+  #[cfg(all(feature = "fragmentation", debug_assertions))]
+  released: RefCell<FxHashSet<usize>>,
+}
 
 impl FragmentItemsCache {
-  pub(crate) fn keep(&self, items: Rc<FragmentItems>) {
-    self.0.replace(Some(items));
+  /// Whether it kept items for fragment `fragment_index`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn has(&self, fragment_index: usize) -> bool {
+    self
+      .fragments
+      .borrow()
+      .get(fragment_index)
+      .is_some_and(Option::is_some)
+  }
+
+  /// Keeps `items` as fragment `fragment_index`'s.
+  pub(crate) fn keep(&self, fragment_index: usize, items: Rc<FragmentItems>) {
+    let mut fragments = self.fragments.borrow_mut();
+
+    if fragments.len() <= fragment_index {
+      fragments.resize(fragment_index + 1, None);
+    }
+    fragments[fragment_index] = Some(items);
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    self.released.borrow_mut().remove(&fragment_index);
+  }
+
+  /// Fragment `fragment_index`'s items, if it kept any.
+  fn get(&self, fragment_index: usize) -> Option<Rc<FragmentItems>> {
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    assert!(
+      !self.released.borrow().contains(&fragment_index),
+      "the fragment items of fragment {fragment_index} were read after they were released"
+    );
+
+    self
+      .fragments
+      .borrow()
+      .get(fragment_index)
+      .cloned()
+      .flatten()
+  }
+
+  /// Forgets what it kept.
+  pub(crate) fn clear(&self) {
+    self.fragments.borrow_mut().clear();
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    self.released.borrow_mut().clear();
+  }
+}
+
+#[cfg(feature = "fragmentation")]
+impl FragmentItemsCache {
+  /// Keeps fragment `source`'s items as fragment `target`'s too.
+  pub(crate) fn repeat(&self, source: usize, target: usize) {
+    let items = self.get(source);
+
+    if let Some(items) = items {
+      self.keep(target, items);
+    }
+  }
+
+  /// Drops fragment `fragment_index`'s items.
+  fn release(&self, fragment_index: usize) {
+    if let Some(items) = self.fragments.borrow_mut().get_mut(fragment_index) {
+      *items = None;
+    }
+    #[cfg(debug_assertions)]
+    self.released.borrow_mut().insert(fragment_index);
   }
 }
 
@@ -531,83 +722,22 @@ impl Clone for FragmentItemsCache {
   }
 }
 
-/// Blink's layout result cache for an atomic inline box: a line breaker and each ancestor's
-/// intrinsic sizing ask for the same few available spaces, and every miss lays the whole subtree
-/// out again, so nested inline blocks would cost exponential time.
-#[derive(Default)]
-struct AtomicInlineCache(RefCell<Vec<(Size<AvailableSpace>, AtomicInlineMetrics)>>);
-
-impl AtomicInlineCache {
-  fn get_or_insert_with(
-    &self,
-    available_space: Size<AvailableSpace>,
-    lay_out: impl FnOnce() -> AtomicInlineMetrics,
-  ) -> AtomicInlineMetrics {
-    let cached = self
-      .0
-      .borrow()
-      .iter()
-      .find(|(space, _)| *space == available_space)
-      .map(|&(_, metrics)| metrics);
-
-    if let Some(metrics) = cached {
-      return metrics;
-    }
-
-    let metrics = lay_out();
-
-    self.0.borrow_mut().push((available_space, metrics));
-    metrics
-  }
-}
-
-impl Clone for AtomicInlineCache {
-  fn clone(&self) -> Self {
-    Self::default()
-  }
-}
-
 thread_local! {
-  /// The layout an anonymous block box takes in place of a computed style, shared by all of them.
-  static BLOCK_STYLE: Rc<Style> = Rc::new(Style {
-    display: TaffyDisplay::Block,
-    ..Style::default()
-  });
+  /// The layout an anonymous block box takes in place of a computed style, shared by all of them
+  /// in each direction.
+  static BLOCK_STYLES: [Rc<LayoutStyle>; 2] = [Direction::Ltr, Direction::Rtl]
+    .map(|direction| Rc::new(LayoutStyle { direction, ..LayoutStyle::default() }));
 }
 
-fn block_style() -> Rc<Style> {
-  BLOCK_STYLE.with(Rc::clone)
+/// The layout of an anonymous block box in `context`, whose direction it inherits.
+fn block_style(context: &RenderContext) -> Rc<LayoutStyle> {
+  let index = usize::from(context.style.inherited_data.direction == Direction::Rtl);
+
+  BLOCK_STYLES.with(|styles| Rc::clone(&styles[index]))
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct AtomicInlineMetrics {
-  pub(crate) size: Size<f32>,
-  pub(crate) baseline_offset: Option<f32>,
-  /// A block-in-inline's margins, none for an atomic inline.
-  pub(crate) collapsed_margins: Option<CollapsedMargins>,
-}
-
-impl AtomicInlineMetrics {
-  /// The metrics as the line takes them, in layout units.
-  pub(crate) fn into_layout_result(self) -> LayoutResult {
-    LayoutResult {
-      inline_size: LayoutUnit::from_float(self.size.width),
-      block_size: LayoutUnit::from_float(self.size.height),
-      baseline: self.baseline_offset.map(LayoutUnit::from_float),
-      collapsed_margins: self.collapsed_margins,
-    }
-  }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum InlineBaselineSource {
-  InlineContentLastLine,
-  LayoutFirstBaseline,
-}
-
-/// An element's own important declarations by cascade tier.
+/// An element's own important declarations.
 struct ElementImportant {
-  tw: Option<Rc<TwBlocks>>,
   inline: Option<StyleDeclarationBlock>,
 }
 
@@ -646,12 +776,171 @@ fn active_registrations(stylesheets: &[StyleSheet], viewport: Viewport) -> Regis
   )
 }
 
-/// Whether a node claiming `claims` is the containing block of a box with `position`.
-fn claims_box(claims: ContainingBlockClaims, position: Position) -> bool {
-  match position {
-    Position::Absolute => claims.absolute,
-    Position::Fixed => claims.fixed,
-    Position::Static | Position::Relative => false,
+#[cfg(feature = "fragmentation")]
+impl LayoutTree<'_> {
+  /// Starts logging what the layout finishes with, for [`Self::release`] to free.
+  pub(crate) fn start_releases(&mut self) {
+    self.releases = Some(Releases::default());
+  }
+
+  /// Stamps what the page being laid out logs with `laid`, the pages laid out once it is.
+  pub(crate) fn begin_page(&mut self, laid: usize) {
+    if let Some(releases) = &mut self.releases {
+      releases.begin_page(laid);
+    }
+  }
+
+  /// Logs that `node`'s cached layouts are finished with, once the boxes that lay their children
+  /// out again as they continue have ended.
+  pub(crate) fn log_cache_finished(&mut self, node: NodeId, finished: Finished) {
+    let running = |index: usize| {
+      self
+        .running
+        .get(index)
+        .map(|run| NodeId::new(run.node as usize))
+    };
+    let holder = (0..self.running.len())
+      .filter_map(|index| Some((running(index)?, running(index + 1).unwrap_or(node))))
+      .find(|&(container, child)| {
+        container != node && self.relays_out_ended_child(container, child)
+      })
+      .map(|(container, _)| container);
+
+    if let Some(releases) = &mut self.releases {
+      match holder {
+        Some(holder) => releases.push_until_ended(holder, finished),
+        None => releases.push(finished),
+      }
+    }
+  }
+
+  /// Logs that the items of `node`'s fragment are placed, which its page frees once drawn.
+  pub(crate) fn log_items(&mut self, node: NodeId, fragment: usize) {
+    let holder = self.repeating_table();
+
+    if let Some(releases) = &mut self.releases {
+      releases.push_items(node, fragment, holder);
+    }
+  }
+
+  /// The table laying out a header or footer group now, whose content its later fragments copy.
+  fn repeating_table(&self) -> Option<NodeId> {
+    self
+      .running
+      .windows(2)
+      .find(|run| {
+        matches!(
+          self.layout_style(NodeId::new(run[1].node as usize)).display,
+          Display::TableHeaderGroup | Display::TableFooterGroup
+        )
+      })
+      .map(|run| NodeId::new(run[0].node as usize))
+  }
+
+  /// Notes whether the last fragment of `node` placed ends the box.
+  pub(crate) fn note_end(&mut self, node: NodeId, ends: bool) {
+    let Some(releases) = &self.releases else {
+      return;
+    };
+
+    self.nodes[usize::from(node)].ended_by = NonZeroUsize::new(releases.laid()).filter(|_| ends);
+    if ends {
+      self.log_cache_finished(node, Finished::Ended(node));
+    }
+  }
+
+  /// Whether the box `node` ended in the first `pages` pages.
+  pub(crate) fn ended_by(&self, node: NodeId, pages: usize) -> bool {
+    self.nodes[usize::from(node)]
+      .ended_by
+      .is_some_and(|ended| ended.get() <= pages)
+  }
+
+  /// Frees what the layout finished with in the first `pages` pages.
+  pub(crate) fn release(&mut self, pages: usize) {
+    let Some(mut releases) = self.releases.take() else {
+      return;
+    };
+
+    while let Some((laid, finished)) = releases.pop_up_to(pages) {
+      self.release_finished(&mut releases, laid, finished);
+    }
+    self.releases = Some(releases);
+    self.release_unplaced();
+  }
+
+  /// Drops the measures and inline items of the noted boxes that layout neither placed nor runs.
+  fn release_unplaced(&mut self) {
+    let mut measured = take(self.measured.get_mut());
+
+    measured.sort_unstable();
+    measured.dedup();
+    for index in measured {
+      let state = &mut self.nodes[index];
+
+      if state.fragments.iter().any(|fragment| fragment.is_laid_out)
+        || self.running.iter().any(|run| run.node as usize == index)
+      {
+        continue;
+      }
+      state.cache.release_measures();
+      self.inline_node_data.get_mut().remove(&index);
+      self.render_nodes[index].item_shapes.clear();
+    }
+  }
+
+  /// Notes that the box at `index` measured or prepared its inline items.
+  pub(crate) fn note_measured(&self, index: usize) {
+    if self.releases.is_some() {
+      self.measured.borrow_mut().push(index);
+    }
+  }
+
+  /// Runs `release_unplaced` once a batch of boxes is noted, as one page can measure a whole table.
+  pub(crate) fn release_unplaced_batch(&mut self) {
+    const BATCH: usize = 4096;
+
+    if self.measured.get_mut().len() >= BATCH {
+      self.release_unplaced();
+    }
+  }
+
+  fn release_finished(&mut self, releases: &mut Releases, laid: usize, finished: Finished) {
+    match finished {
+      Finished::Items { node, fragment } => {
+        if releases.take_placed_items(node, fragment, laid) {
+          self.render_nodes[usize::from(node)]
+            .fragment_items
+            .release(fragment);
+        }
+      }
+      Finished::LayoutsBefore { node, fragment } => {
+        self.nodes[usize::from(node)].cache.release_before(fragment);
+      }
+      Finished::Ended(node) => {
+        if self.nodes[usize::from(node)]
+          .ended_by
+          .map(NonZeroUsize::get)
+          != Some(laid)
+        {
+          return;
+        }
+
+        self.nodes[usize::from(node)].cache.release_all();
+        self
+          .inline_node_data
+          .borrow_mut()
+          .remove(&usize::from(node));
+        self.tables.remove(&usize::from(node));
+        self.table_columns.remove(&usize::from(node));
+        self.repeated_roots.remove(&node);
+        #[cfg(debug_assertions)]
+        self.released_boxes.borrow_mut().insert(usize::from(node));
+        for (laid, held) in releases.take_held(node) {
+          self.release_finished(releases, laid, held);
+        }
+      }
+    }
   }
 }
 
@@ -662,37 +951,165 @@ impl<'r> LayoutTree<'r> {
     let mut tree = Self {
       nodes: Vec::with_capacity(capacity),
       render_nodes: Vec::with_capacity(capacity),
-      inline_containing_blocks: Vec::new(),
-      inline_measures: RefCell::default(),
+      inline_containers: FxHashMap::default(),
       inline_node_data: RefCell::default(),
-      keeps_fragment_items: false,
       tables: FxHashMap::default(),
       table_columns: FxHashMap::default(),
       table_fragments: FxHashMap::default(),
+      table_hidden: FxHashMap::default(),
+      hidden: FxHashSet::default(),
+      hoisted_pairs: FxHashSet::default(),
+      #[cfg(feature = "fragmentation")]
+      hoisted_by: HoistedBy::default(),
+      #[cfg(feature = "fragmentation")]
+      runs: 0,
+      #[cfg(feature = "fragmentation")]
+      running: Vec::new(),
+      table_part_styles: RecentStyles::default(),
+      atomic_inlines: FxHashMap::default(),
+      inline_contents: FxHashMap::default(),
+      #[cfg(feature = "fragmentation")]
+      repeated_roots: FxHashMap::default(),
+      #[cfg(feature = "fragmentation")]
+      releases: None,
+      #[cfg(all(feature = "fragmentation", debug_assertions))]
+      released_boxes: RefCell::default(),
+      #[cfg(feature = "fragmentation")]
+      measured: RefCell::default(),
     };
-    let root_id = tree.push_subtree(render_root);
 
-    debug_assert_eq!(root_id, TaffyNodeId::from(0usize));
+    tree.push_subtree(render_root);
     tree.nodes.shrink_to_fit();
     tree.render_nodes.shrink_to_fit();
-    tree.prepare_tables();
+    tree.prepare_tables(0);
 
     tree
   }
 
+  /// Adds the atomic inline `child` its inline content placed to the boxes `parent` paints, at
+  /// `path` among `parent`'s render children, keeping them in tree order.
+  pub(crate) fn add_inline_box_children(
+    &mut self,
+    parent: NodeId,
+    children: Vec<(NodeId, SmallVec<[usize; 2]>)>,
+  ) {
+    let state = &mut self.nodes[usize::from(parent)];
+    let mut known: FxHashSet<NodeId> = state
+      .box_children
+      .iter()
+      .map(|known| known.node_id)
+      .collect();
+    let mut box_children: Vec<(OrderedChild, usize)> =
+      state.box_children.iter().cloned().zip(0..).collect();
+
+    for (child, path) in children {
+      let Some((&render_index, inline_path)) = path.split_first() else {
+        continue;
+      };
+
+      if known.insert(child) {
+        box_children.push((
+          OrderedChild {
+            render_index,
+            inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
+            node_id: child,
+            hoisted_cb: None,
+          },
+          box_children.len(),
+        ));
+      }
+    }
+    if box_children.len() == state.box_children.len() {
+      return;
+    }
+    box_children.sort_by(|(a, _), (b, _)| {
+      (a.render_index, a.inline_path.as_deref()).cmp(&(b.render_index, b.inline_path.as_deref()))
+    });
+    #[cfg(feature = "fragmentation")]
+    {
+      let known = self.nodes[usize::from(parent)].box_children.len();
+      let mut moved = vec![0; box_children.len()];
+
+      for (position, (child, previous)) in box_children.iter().enumerate() {
+        moved[*previous] = position as u32;
+        self.nodes[usize::from(child.node_id)].box_parent =
+          Some((usize::from(parent) as u32, position as u32));
+      }
+      if let Some(links) = &mut self.nodes[usize::from(parent)].child_links {
+        links.reorder(&moved);
+      }
+      // A box its inline content placed before it joined the box children.
+      for (child, _) in box_children
+        .iter()
+        .filter(|(_, previous)| *previous >= known)
+      {
+        let containers: SmallVec<[usize; 2]> = self.nodes[usize::from(child.node_id)]
+          .fragments
+          .iter()
+          .filter(|fragment| fragment.is_laid_out)
+          .map(|fragment| fragment.container_fragment_index)
+          .collect();
+
+        for container_fragment_index in containers {
+          self.link_child(child.node_id, container_fragment_index);
+        }
+      }
+    }
+    self.nodes[usize::from(parent)].box_children =
+      box_children.into_iter().map(|(child, _)| child).collect();
+  }
+
+  /// The node the box `render_node` of an inline formatting context lays out as, its subtree
+  /// appended to the tree the first time.
+  pub(crate) fn atomic_inline_node(&mut self, render_node: &'r RenderNode) -> NodeId {
+    if let Some(&node) = self.atomic_inlines.get(&render_node.context.box_id()) {
+      return node;
+    }
+
+    let start = self.nodes.len();
+    let node = NodeId::new(start);
+
+    self.push_subtree(render_node);
+    self.nodes[start].is_atomic_inline = true;
+    self.prepare_tables(start);
+    self
+      .atomic_inlines
+      .insert(render_node.context.box_id(), node);
+    node
+  }
+
+  /// Fails loudly in debug builds when `what` of the box at `index` is read after it was released.
+  #[cfg_attr(
+    not(all(feature = "fragmentation", debug_assertions)),
+    allow(unused_variables)
+  )]
+  fn assert_not_released(&self, index: usize, what: &str) {
+    #[cfg(all(feature = "fragmentation", debug_assertions))]
+    assert!(
+      !self.released_boxes.borrow().contains(&index),
+      "the {what} of box {index} were read after they were released"
+    );
+  }
+
   /// The prepared items of the inline formatting context the node at `index` establishes.
-  fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
+  pub(crate) fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
+    self.assert_not_released(index, "inline items");
+
     Rc::clone(
       self
         .inline_node_data
         .borrow_mut()
         .entry(index)
-        .or_insert_with(|| Rc::new(InlineNode::new(self.render_nodes[index]).prepare_layout())),
+        .or_insert_with(|| {
+          #[cfg(feature = "fragmentation")]
+          self.note_measured(index);
+          Rc::new(InlineNode::new(self.render_nodes[index]).prepare_layout())
+        }),
     )
   }
 
-  /// Appends the layout nodes of the subtree under `render_root`, returning its root id.
-  fn push_subtree(&mut self, render_root: &'r RenderNode) -> TaffyNodeId {
+  /// Appends the layout nodes of the subtree under `render_root`.
+  fn push_subtree(&mut self, render_root: &'r RenderNode) {
     /// What the walk descends into: a node's render children, or for an inline formatting
     /// context the out-of-flow boxes inside its inline content.
     enum PendingChildren<'r> {
@@ -721,114 +1138,75 @@ impl<'r> LayoutTree<'r> {
     }
 
     struct PendingNode<'r> {
-      node_id: TaffyNodeId,
-      render_node: &'r RenderNode,
+      node_id: NodeId,
       /// The path from its parent, as its parent's [`OrderedChild`] records it.
       render_path: SmallVec<[usize; 2]>,
-      /// The inline span containing it, when it is out of flow.
+      /// The inline box containing it, when it is out of flow.
       inline_container: Option<&'r RenderNode>,
-      /// For an inline formatting context, the node standing in for each inline span, or the
-      /// context itself, that contains out-of-flow boxes.
-      inline_containing_blocks: Vec<(&'r RenderNode, TaffyNodeId)>,
-      position: Position,
       next_child_index: usize,
       children: PendingChildren<'r>,
-      taffy_child_ids: Vec<TaffyNodeId>,
+      child_ids: Vec<NodeId>,
       box_children: Vec<OrderedChild>,
     }
 
     fn push_node_state<'r>(
       nodes: &mut Vec<LayoutNodeState>,
       render_nodes: &mut Vec<&'r RenderNode>,
-      recent_styles: &mut RecentStyles,
+      recent_styles: &mut RecentStyles<LayoutStyle>,
       InlineOutOfFlow {
         path: render_path,
         node: render_node,
         container: inline_container,
       }: InlineOutOfFlow<'r>,
     ) -> PendingNode<'r> {
-      let node_index = nodes.len();
-      let node_id = TaffyNodeId::from(node_index);
+      let node_id = NodeId::new(nodes.len());
       let is_inline_children = render_node.should_create_inline_layout();
       let children = if is_inline_children {
         PendingChildren::OutOfFlow(render_node.inline_out_of_flow())
       } else {
         PendingChildren::Render(render_node.children.as_deref().unwrap_or_default())
       };
-      let position = render_node.context.style.base_data.position;
-      let contains_fixed = render_node.context.style.contains_fixed_descendants();
-
       render_nodes.push(render_node);
 
-      let (style, container_independent) = {
+      let (layout_style, container_independent) = {
         let sizing = &render_node.context.sizing;
 
         // Resolution reports whether it read the query container, which is
         // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
         // agrees across two large containers and disagrees with a small one.
         sizing.container_read.set(false);
-        let style = render_node.layout_style(sizing);
+        let layout_style = render_node.layout_box_style(sizing);
         let independent = !sizing.container_read.get();
 
-        (style, independent)
+        (layout_style, independent)
       };
 
       nodes.push(LayoutNodeState::new(
-        recent_styles.share(style),
+        recent_styles.share(layout_style),
         container_independent,
         is_inline_children,
-        ContainingBlockClaims {
-          absolute: position.is_positioned() || contains_fixed,
-          fixed: contains_fixed,
-        },
+        ContainingBlockClaims::of(&render_node.context.style),
       ));
 
       let capacity = children.len();
       PendingNode {
         node_id,
-        render_node,
         render_path,
         inline_container,
-        inline_containing_blocks: Vec::new(),
-        position,
         next_child_index: 0,
         children,
-        taffy_child_ids: Vec::with_capacity(capacity),
+        child_ids: Vec::with_capacity(capacity),
         box_children: Vec::with_capacity(capacity),
       }
-    }
-
-    /// Appends a block standing in for `container`, laid out over the padding box its fragments
-    /// bound.
-    fn push_inline_containing_block<'r>(
-      nodes: &mut Vec<LayoutNodeState>,
-      render_nodes: &mut Vec<&'r RenderNode>,
-      container: &'r RenderNode,
-    ) -> TaffyNodeId {
-      let node_id = TaffyNodeId::from(nodes.len());
-
-      render_nodes.push(container);
-      nodes.push(LayoutNodeState::new(
-        Rc::new(Style {
-          display: TaffyDisplay::Block,
-          ..Style::DEFAULT
-        }),
-        true,
-        false,
-        ContainingBlockClaims::ALL,
-      ));
-      node_id
     }
 
     let Self {
       nodes,
       render_nodes,
-      inline_containing_blocks,
+      inline_containers,
       ..
     } = self;
-    let mut proxy_boxes: FxHashMap<TaffyNodeId, Vec<TaffyNodeId>> = FxHashMap::default();
     let mut recent_styles = RecentStyles::default();
-
     let root = push_node_state(
       nodes,
       render_nodes,
@@ -839,7 +1217,6 @@ impl<'r> LayoutTree<'r> {
         container: None,
       },
     );
-    let root_id = root.node_id;
     let mut stack = vec![root];
 
     while let Some(current) = stack.last_mut() {
@@ -854,486 +1231,342 @@ impl<'r> LayoutTree<'r> {
       let Some(finished) = stack.pop() else {
         break;
       };
-      let fid = finished.node_id;
+      let index = usize::from(finished.node_id);
+      let mut child_ids = finished.child_ids;
 
-      let mut taffy_children = finished.taffy_child_ids;
-      for &(_, proxy) in &finished.inline_containing_blocks {
-        nodes[usize::from(proxy)].children = proxy_boxes
-          .remove(&proxy)
-          .unwrap_or_default()
-          .into_boxed_slice();
-      }
-      let idx: usize = fid.into();
-      if matches!(
-        nodes[idx].style.display,
-        TaffyDisplay::Flex | TaffyDisplay::Grid
-      ) {
-        for &child in &taffy_children {
-          let child = &mut nodes[usize::from(child)];
+      let display = nodes[index].layout_style.display;
 
-          child.flex_or_grid_item = !child.style.position.is_out_of_flow();
-        }
-        sort_children_by_order(&mut taffy_children, |child_id| {
-          let child_idx: usize = child_id.into();
+      if display.is_flex() || display.is_grid() {
+        sort_children_by_order(&mut child_ids, |child_id| {
           render_nodes
-            .get(child_idx)
+            .get(usize::from(child_id))
             .map_or(0, |child| child.context.style.misc3_data.order.0)
         });
       }
-      nodes[idx].children = taffy_children.into_boxed_slice();
-      nodes[idx].box_children = finished.box_children.into_boxed_slice();
+      nodes[index].children = child_ids.into();
+      nodes[index].box_children = finished.box_children.into_boxed_slice();
 
       if let Some(parent) = stack.last_mut() {
-        let parent_state = &nodes[usize::from(parent.node_id)];
-        let inline_container = finished.inline_container.or_else(|| {
-          (parent_state.is_inline_children && claims_box(parent_state.claims, finished.position))
-            .then_some(parent.render_node)
-        });
-
-        // A box an inline span contains, or the inline formatting context it sits in, goes under
-        // a node standing in for that span, which the context lays out once its lines are known.
-        // Any other box an inline formatting context holds escapes it as a taffy candidate, and
-        // the rest stay with their parent while taffy carries them to their containing block.
-        if let Some(container) = inline_container {
-          let proxy = parent
-            .inline_containing_blocks
-            .iter()
-            .find(|(span, _)| ptr::eq(*span, container))
-            .map(|&(_, proxy)| proxy)
-            .unwrap_or_else(|| {
-              let proxy = push_inline_containing_block(nodes, render_nodes, container);
-
-              inline_containing_blocks.push(proxy);
-              parent.inline_containing_blocks.push((container, proxy));
-              parent.taffy_child_ids.push(proxy);
-              proxy
-            });
-
-          proxy_boxes.entry(proxy).or_default().push(fid);
-        } else if !parent_state.is_inline_children {
-          parent.taffy_child_ids.push(fid);
+        if let Some(container) = finished.inline_container {
+          inline_containers.insert(index, container);
         }
+        parent.child_ids.push(finished.node_id);
 
         let (&render_index, inline_path) = finished.render_path.split_first().unwrap_or((&0, &[]));
 
+        #[cfg(feature = "fragmentation")]
+        {
+          nodes[index].box_parent = Some((
+            usize::from(parent.node_id) as u32,
+            parent.box_children.len() as u32,
+          ));
+        }
         parent.box_children.push(OrderedChild {
           render_index,
           inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
-          node_id: NodeId::from_taffy(fid),
+          node_id: finished.node_id,
           hoisted_cb: None,
         });
       }
     }
-
-    root_id
   }
 
-  /// Computes the layout for the whole tree.
+  /// Computes the layout for the whole tree: the root at its margin edge's offset in
+  /// `available_space`, which is the initial containing block of the out-of-flow boxes no other
+  /// box contains.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
-    let root_node_id = NodeId::ROOT.into_taffy();
-
-    self.stretch_root(available_space.width);
-    compute_root_layout(
-      self,
-      root_node_id,
-      available_space.map(AvailableSpace::into_taffy).into_taffy(),
-    );
-    self.finalize_layout();
-  }
-
-  /// Gives a block-level flex, grid or flow-root root with an `auto` width the width a definite
-  /// `available_width` stretches it to, as CSS sizes every block-level box but a table. Taffy
-  /// stretches only a block root, and an atomic inline laid out as a root shrinks to fit.
-  fn stretch_root(&mut self, available_width: AvailableSpace) {
-    let AvailableSpace::Definite(available) = available_width else {
-      return;
+    let space = self.root_space(available_space);
+    let definite = |available: AvailableSpace| match available {
+      AvailableSpace::Definite(size) => LayoutUnit::from_float(size),
+      AvailableSpace::MinContent | AvailableSpace::MaxContent => LayoutUnit::ZERO,
     };
-    let stretches = self.render_nodes.first().is_some_and(|root| {
-      matches!(
-        root.context.style.base_data.display,
-        Display::Flex | Display::WebkitBox | Display::Grid | Display::FlowRoot
-      )
-    });
-    let style = &self.nodes[0].style;
-
-    if !stretches || !style.size.width.is_auto() {
-      return;
-    }
-
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-    let margin = style.margin.resolve_or_zero(Some(available), calc);
-    let mut width = available - margin.horizontal_axis_sum();
-
-    if style.box_sizing == BoxSizing::ContentBox {
-      width -= style
-        .padding
-        .resolve_or_zero(Some(available), calc)
-        .horizontal_axis_sum()
-        + style
-          .border
-          .resolve_or_zero(Some(available), calc)
-          .horizontal_axis_sum();
-    }
-    Rc::make_mut(&mut self.nodes[0].style).size.width = Dimension::length(width.max(0.0));
-  }
-
-  /// Places the out-of-flow boxes inside the inline formatting context `node` lays out as
-  /// `layout`: the ones an inline span or the context contains under the nodes standing in for
-  /// them, and the rest as candidates in `output` for taffy to carry to their containing block.
-  /// Kept out of the recursive layout closure, whose frame every level of the tree pays for.
-  #[inline(never)]
-  fn lay_out_inline_out_of_flow(
-    &mut self,
-    node: TaffyNodeId,
-    _available_space: Size<AvailableSpace>,
-    layout: ComputedLayout,
-    output: &mut LayoutOutput,
-  ) {
-    let state = &self.nodes[usize::from(node)];
-    let render_node = self.render_nodes[usize::from(node)];
-    let proxies = state.children.clone();
-    let boxes: Vec<TaffyNodeId> = state
-      .box_children
-      .iter()
-      .map(|child| child.node_id.into_taffy())
-      .collect();
-    let containers: Vec<&RenderNode> = proxies
-      .iter()
-      .map(|&proxy| self.render_nodes[usize::from(proxy)])
-      .collect();
-    let (positions, containing_blocks) =
-      render_node.inline_out_of_flow_geometry(layout, &containers);
-    // Static positions arrive in the content box; candidates sit in the border box.
-    let content = Point {
-      x: layout.border.left + layout.padding.left,
-      y: layout.border.top + layout.padding.top,
-    };
-    let positions: FxHashMap<TaffyNodeId, StaticPosition> = boxes
-      .iter()
-      .zip(positions)
-      .map(|(&node, position)| {
-        (
-          node,
-          StaticPosition {
-            point: content + position.point,
-            ..position
-          },
-        )
-      })
-      .collect();
-
-    for (&proxy, padding_box) in proxies.iter().zip(containing_blocks) {
-      self.lay_out_inline_containing_block(proxy, padding_box, &positions);
-    }
-
-    for (order, &node) in boxes.iter().enumerate() {
-      let held = proxies
-        .iter()
-        .any(|&proxy| self.nodes[usize::from(proxy)].children.contains(&node));
-
-      if let (false, Some(position)) = (held, positions.get(&node)) {
-        output.oof_candidates.push(self.out_of_flow_candidate(
-          node,
-          order,
-          position.point,
-          position.from_end,
-        ));
-      }
-    }
-  }
-
-  /// Lays out `proxy`, standing in for an inline containing block, over its padding box, and
-  /// positions the out-of-flow boxes it contains from their static positions in `positions`.
-  fn lay_out_inline_containing_block(
-    &mut self,
-    proxy: TaffyNodeId,
-    padding_box: PaddingBox,
-    positions: &FxHashMap<TaffyNodeId, StaticPosition>,
-  ) {
-    let PaddingBox { origin, size } = padding_box;
-    let candidates: Vec<OofCandidate> = self.nodes[usize::from(proxy)]
-      .children
-      .iter()
-      .enumerate()
-      .filter_map(|(order, &node)| {
-        let position = positions.get(&node)?;
-
-        Some(self.out_of_flow_candidate(node, order, position.point - origin, position.from_end))
-      })
-      .collect();
-    let direction = self.render_nodes[usize::from(proxy)]
-      .context
-      .style
-      .inherited_data
-      .direction
-      .into_taffy();
-    let result = compute_oof_layout_for_area(
-      self,
-      proxy,
-      &candidates,
-      OofPositioningArea {
-        size: size.into_taffy(),
-        offset: taffy::Point::ZERO,
-      },
-      direction,
-      ContainingBlockClaims::ALL,
-    );
-
-    self.clear_hoisted_children(proxy);
-    self.add_hoisted_children(proxy, &result.hoisted);
-    self.set_unrounded_layout(
-      proxy,
-      &Layout {
-        location: origin.into_taffy(),
-        size: size.into_taffy(),
-        ..Layout::new()
-      },
-    );
-  }
-
-  /// The taffy candidate the out-of-flow `node` is, its margin box's inline-start corner at
-  /// `point` in the border box of the node holding it.
-  fn out_of_flow_candidate(
-    &self,
-    node: TaffyNodeId,
-    order: usize,
-    point: Point<f32>,
-    from_end: bool,
-  ) -> OofCandidate {
-    OofCandidate {
-      node,
-      order: order as u32,
-      position: self.nodes[usize::from(node)].style.position,
-      static_position: taffy::Point {
-        x: AxisStaticPosition::from_edge(
-          point.x,
-          if from_end {
-            AxisStaticEdge::End
-          } else {
-            AxisStaticEdge::Start
-          },
-        ),
-        y: AxisStaticPosition::from_edge(point.y, AxisStaticEdge::Start),
-      },
-    }
-  }
-
-  /// Keeps every box where it laid out, unrounded: Blink holds layout in layout units and snaps a
-  /// box to pixels only as it paints it.
-  fn finalize_layout(&mut self) {
-    for node in &mut self.nodes {
-      node.final_layout = node.unrounded_layout;
-    }
-  }
-
-  /// The measurement of the inline formatting context the node at `idx` establishes or measures
-  /// as, its known border-box width less its laid-out padding and border `insets_width`, its lines
-  /// cached by the width they lay out at.
-  fn inline_measurement(
-    &self,
-    idx: usize,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
-    insets_width: f32,
-  ) -> InlineMeasurement {
-    let render_node = self.render_nodes[idx];
-    let items_data = self.inline_node_data(idx);
-    let node = InlineNode::new(render_node);
-    let known_width = known_dimensions
-      .width
-      .map(|width| node.content_width_of(width, Some(insets_width)));
-    let (width, line_width) = node.widths(&items_data, available_space, known_width);
-    let key = (
-      idx,
-      inline_lines_bits(
-        line_width,
-        available_space.height,
-        known_dimensions.height,
-        render_node.context.margins_adjoin(),
-        !items_data.holds_only_text(),
-      ),
-    );
-    let measured = self.inline_measures.borrow().get(&key).copied();
-    let measurement = measured.unwrap_or_else(|| {
-      let measurement = node.measure_lines(&items_data, width, line_width, available_space.height);
-
-      self.inline_measures.borrow_mut().insert(key, measurement);
-      measurement
-    });
-
-    InlineMeasurement {
-      size: Size {
-        width,
-        height: measurement.size.height,
-      },
-      ..measurement
-    }
-  }
-
-  /// The root laid out as an in-flow block of a block formatting context, an auto width filling a
-  /// definite `available_space`'s: its size leaves out the margins collapsing through its edges,
-  /// which the output carries.
-  pub(crate) fn lay_out_root_in_flow(
-    &mut self,
-    available_space: Size<AvailableSpace>,
-  ) -> LayoutOutput {
-    let available_space: TaffySize<TaffyAvailableSpace> =
-      available_space.map(AvailableSpace::into_taffy).into_taffy();
-
-    self.compute_child_layout(
-      NodeId::ROOT.into_taffy(),
-      LayoutInput {
-        run_mode: RunMode::PerformLayout,
-        sizing_mode: SizingMode::InherentSize,
-        axis: RequestedAxis::Both,
-        known_dimensions: TaffySize {
-          width: available_space.width.into_option(),
-          height: None,
-        },
-        known_dimensions_are_definite: TaffySize {
-          width: true,
-          height: true,
-        },
-        parent_size: available_space.into_options(),
-        available_space,
-        vertical_margins_are_collapsible: Line::TRUE,
-      },
-    )
-  }
-
-  /// The root's border-box min-content and max-content widths, sized without laying out its
-  /// height, as Blink's `ComputeMinMaxSizes` sizes a box's inline axis alone.
-  pub(crate) fn root_min_max_widths(&mut self) -> (f32, f32) {
-    let mut width = |available_width: TaffyAvailableSpace| {
-      let available_space = TaffySize {
-        width: available_width,
-        height: TaffyAvailableSpace::MaxContent,
+    let (location, result) = if self.layout_style(NodeId::ROOT).is_out_of_flow() {
+      // An out-of-flow root is positioned in the initial containing block.
+      let initial_containing_block = ContainingBlock {
+        origin: Point::new(LayoutUnit::ZERO, LayoutUnit::ZERO),
+        size: available_space.map(definite),
       };
 
-      self
-        .compute_child_layout(
-          NodeId::ROOT.into_taffy(),
-          LayoutInput {
-            run_mode: RunMode::ComputeSize,
-            sizing_mode: SizingMode::InherentSize,
-            axis: RequestedAxis::Horizontal,
-            known_dimensions: TaffySize::NONE,
-            known_dimensions_are_definite: TaffySize {
-              width: true,
-              height: true,
-            },
-            parent_size: available_space.into_options(),
-            available_space,
-            vertical_margins_are_collapsible: Line::FALSE,
-          },
-        )
-        .size
-        .width
+      self.lay_out_out_of_flow_box(
+        &OutOfFlowCandidate::new(NodeId::ROOT, StaticPosition::default()),
+        initial_containing_block,
+        &space,
+      )
+    } else {
+      let margins = margins_for(
+        self.layout_style(NodeId::ROOT),
+        space.percentage_resolution_inline_size,
+        Direction::Ltr,
+      );
+
+      (
+        Point::new(margins.inline_start, margins.block_start),
+        self.layout(NodeId::ROOT, &space),
+      )
     };
 
-    (
-      width(TaffyAvailableSpace::MinContent),
-      width(TaffyAvailableSpace::MaxContent),
-    )
+    self.place_child(NodeId::ROOT, 0, 0, location, &result);
+
+    if result.out_of_flow.is_empty() {
+      return;
+    }
+
+    // An indefinite axis of the initial containing block falls back to the root's padding box.
+    let root_padding_box = ContainingBlock::padding_box(
+      Size {
+        width: result.size.inline_size,
+        height: result.size.block_size,
+      },
+      result.border,
+    );
+    let viewport = |available: AvailableSpace,
+                    origin: LayoutUnit,
+                    fallback: (LayoutUnit, LayoutUnit)| match available {
+      AvailableSpace::Definite(size) => (LayoutUnit::ZERO - origin, LayoutUnit::from_float(size)),
+      AvailableSpace::MinContent | AvailableSpace::MaxContent => fallback,
+    };
+    let (x, width) = viewport(
+      available_space.width,
+      location.x,
+      (root_padding_box.origin.x, root_padding_box.size.width),
+    );
+    let (y, height) = viewport(
+      available_space.height,
+      location.y,
+      (root_padding_box.origin.y, root_padding_box.size.height),
+    );
+
+    self.lay_out_out_of_flow(
+      OutOfFlowLayoutPart::new(
+        (NodeId::ROOT, 0),
+        ContainingBlockClaims::ALL,
+        ContainingBlock {
+          origin: Point::new(x, y),
+          size: Size { width, height },
+        },
+        &space,
+      ),
+      result.out_of_flow.clone(),
+    );
+  }
+
+  /// The initial containing block of a document laid out in `available_space`: a min-content or
+  /// max-content width becomes the root's contribution and margins, which the root then fills.
+  fn initial_containing_block(
+    &mut self,
+    available_space: Size<AvailableSpace>,
+  ) -> Size<AvailableSpace> {
+    if let AvailableSpace::Definite(_) = available_space.width {
+      return available_space;
+    }
+
+    let (min_width, max_width) = self.root_min_max_widths(available_space.height);
+    let margins = margins_for(self.layout_style(NodeId::ROOT), None, Direction::Ltr);
+    let width = match available_space.width {
+      AvailableSpace::MinContent => min_width,
+      _ => max_width,
+    };
+
+    Size {
+      width: AvailableSpace::Definite(width + margins.inline_sum().to_float()),
+      ..available_space
+    }
+  }
+
+  /// The root's border-box min-content and max-content widths in a containing block
+  /// `available_height` tall, sized without laying out its height, as Blink's
+  /// `ComputeMinMaxSizes` sizes a box's inline axis alone.
+  pub(crate) fn root_min_max_widths(&mut self, available_height: AvailableSpace) -> (f32, f32) {
+    let mut space = self.root_space(Size {
+      width: AvailableSpace::MaxContent,
+      height: available_height,
+    });
+
+    space.available_inline_size = None;
+    space.cache_slot = CacheSlot::Measure;
+
+    let sizes = self
+      .min_and_max_content_contribution(NodeId::ROOT, &space)
+      .sizes;
+
+    (sizes.min_size.to_float(), sizes.max_size.to_float())
   }
 
   /// Consumes the tree into immutable per-node layout results.
   pub(crate) fn into_results(mut self) -> LayoutResults {
-    // A box an inline containing block holds is placed in the inline formatting context, its
-    // box-tree parent, rather than in the node standing in for the containing block.
-    for &proxy in &self.inline_containing_blocks {
-      let proxy = &self.nodes[usize::from(proxy)];
-      let (location, unrounded) = (proxy.final_layout.location, proxy.unrounded_layout.location);
-
-      for child in proxy.hoisted_children.clone() {
-        let child = &mut self.nodes[usize::from(child)];
-
-        child.final_layout.location = child.final_layout.location + location;
-        child.unrounded_layout.location = child.unrounded_layout.location + unrounded;
-      }
-    }
-
-    // A box another node than its box-tree parent positioned resolves against that containing
-    // block. Inline containing blocks are left out: their boxes now sit in their parent's space.
-    let mut containing_blocks: FxHashMap<TaffyNodeId, TaffyNodeId> = FxHashMap::default();
-    let proxies: HashSet<TaffyNodeId> = self.inline_containing_blocks.iter().copied().collect();
+    // The last box in layout order that positioned a box wins.
+    let mut containing_blocks = FxHashMap::default();
 
     for (index, node) in self.nodes.iter().enumerate() {
-      if !proxies.contains(&TaffyNodeId::from(index)) {
-        for &child in &node.hoisted_children {
-          containing_blocks.insert(child, TaffyNodeId::from(index));
-        }
+      for &child in &node.hoisted_children {
+        containing_blocks.insert(child, NodeId::new(index));
       }
     }
+    // A box another node than its box-tree parent positioned resolves against that containing
+    // block.
     for (index, node) in self.nodes.iter_mut().enumerate() {
       for child in node.box_children.iter_mut() {
         child.hoisted_cb = containing_blocks
-          .get(&child.node_id.into_taffy())
-          .filter(|&&cb| cb != TaffyNodeId::from(index))
-          .map(|&cb| NodeId::from_taffy(cb));
+          .get(&child.node_id)
+          .copied()
+          .filter(|&container| usize::from(container) != index);
       }
     }
+
+    #[cfg(feature = "fragmentation")]
+    let hoisted_children = self
+      .nodes
+      .iter()
+      .enumerate()
+      .filter(|(_, node)| !node.hoisted_children.is_empty())
+      .map(|(index, node)| (NodeId::new(index), node.hoisted_children.clone()))
+      .collect();
 
     // A fresh allocation: collecting in place keeps the node states' much larger one alive.
     let mut nodes = Vec::with_capacity(self.nodes.len());
 
     nodes.extend(self.nodes.into_iter().map(|node| LayoutResultNode {
-      layout: node.final_layout,
-      first_baseline_y: node.first_baseline_y,
+      fragments: node.fragments,
       box_children: node.box_children,
     }));
-    let hidden = self
-      .table_fragments
-      .values()
-      .flat_map(|fragment| &fragment.hidden)
-      .map(|&node| usize::from(node))
-      .collect();
-
     LayoutResults {
       nodes,
       tables: self.table_fragments,
-      hidden,
+      hidden: self.hidden,
+      #[cfg(feature = "fragmentation")]
+      hoisted_children,
     }
   }
 
-  fn get_layout_node_ref(&self, node_id: TaffyNodeId) -> Option<&LayoutNodeState> {
-    self.nodes.get(usize::from(node_id))
+  pub(in crate::layout) fn hidden_parts(&self, table: NodeId) -> Option<&HiddenParts> {
+    self.table_hidden.get(&table)
   }
 
-  fn get_layout_node_mut_ref(&mut self, node_id: TaffyNodeId) -> Option<&mut LayoutNodeState> {
-    self.nodes.get_mut(usize::from(node_id))
+  /// Keeps `parts` as the cells and rows the layout of the table `table` hid, in place of the ones
+  /// it hid before.
+  pub(in crate::layout) fn set_hidden_parts(&mut self, table: NodeId, parts: HiddenParts) {
+    let before = self.table_hidden.get(&table).map(|before| &before.nodes);
+
+    for &node in before.into_iter().flatten() {
+      self.hidden.remove(&usize::from(node));
+    }
+    self
+      .hidden
+      .extend(parts.nodes.iter().map(|&node| usize::from(node)));
+    self.table_hidden.insert(table, parts);
   }
 
-  fn update_node_style_for_available_space(
+  /// The layout so far, for reading while it lays out more pages.
+  #[cfg(feature = "fragmentation")]
+  pub fn view(&self) -> LayoutView<'_> {
+    LayoutView::Live(LiveLayout {
+      nodes: &self.nodes,
+      tables: &self.table_fragments,
+      hidden: &self.hidden,
+      hoisted_by: &self.hoisted_by,
+    })
+  }
+
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) fn begin_run(&mut self, node: NodeId) -> u32 {
+    self.runs += 1;
+    self.running.push(PlacedBy {
+      node: usize::from(node) as u32,
+      run: self.runs,
+    });
+    self.runs
+  }
+
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) fn end_run(&mut self) {
+    self.running.pop();
+  }
+
+  /// The run placing a fragment now: the innermost one, none when a page places the root.
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) fn running(&self) -> PlacedBy {
+    self.running.last().copied().unwrap_or_default()
+  }
+
+  pub(crate) fn node_state(&self, node: NodeId) -> &LayoutNodeState {
+    &self.nodes[usize::from(node)]
+  }
+
+  pub(crate) fn node_state_mut(&mut self, node: NodeId) -> &mut LayoutNodeState {
+    &mut self.nodes[usize::from(node)]
+  }
+
+  /// Resolves `node`'s styles again against a query container of `container_size`, unless they
+  /// read no query container.
+  pub(crate) fn restyle_for_container(
     &mut self,
-    node_id: TaffyNodeId,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
+    node: NodeId,
+    container_size: Size<Option<LayoutUnit>>,
   ) {
-    let idx = usize::from(node_id);
-    let (Some(node), Some(render_node)) = (self.nodes.get_mut(idx), self.render_nodes.get(idx))
-    else {
-      return;
-    };
+    let index = usize::from(node);
+    let render_node = self.render_nodes[index];
+    let state = &mut self.nodes[index];
 
-    if node.container_independent {
+    if state.container_independent {
       return;
     }
 
     let mut sizing = render_node.context.sizing.clone();
 
-    sizing.container_size = Size {
-      width: known_dimensions
-        .width
-        .or(available_space.width.into_option()),
-      height: known_dimensions
-        .height
-        .or(available_space.height.into_option()),
-    };
-    let mut style = render_node.layout_style(&sizing);
+    sizing.container_size = container_size.map(|size| size.map(LayoutUnit::to_float));
 
-    node.table_box.apply(&mut style);
-    node.style = Rc::new(style);
+    let mut layout_style = render_node.layout_box_style(&sizing);
+
+    state.table_box.apply(&mut layout_style);
+    state.layout_style = Rc::new(layout_style);
+  }
+
+  /// Blink's `LayoutBox::SetLayoutResult`: keeps `fragment` as `node`'s fragment
+  /// `fragment_index`.
+  pub(crate) fn set_fragment(
+    &mut self,
+    node: NodeId,
+    fragment_index: usize,
+    fragment: BoxFragment,
+  ) {
+    let fragments = &mut self.nodes[usize::from(node)].fragments;
+
+    if fragment_index < fragments.len() {
+      fragments[fragment_index] = fragment;
+    } else {
+      debug_assert_eq!(
+        fragment_index,
+        fragments.len(),
+        "a fragment follows the one before it"
+      );
+      fragments.push(fragment);
+    }
+    #[cfg(feature = "fragmentation")]
+    if fragment.is_laid_out {
+      self.link_child(node, fragment.container_fragment_index);
+    }
+  }
+
+  /// Logs that `child`'s box parent's fragment `container_fragment_index` holds it.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn link_child(&mut self, child: NodeId, container_fragment_index: usize) {
+    if let Some((parent, position)) = self.nodes[usize::from(child)].box_parent {
+      self.nodes[parent as usize]
+        .child_links
+        .get_or_insert_default()
+        .link(container_fragment_index, position);
+    }
+  }
+
+  /// Logs that a box other than its box parent may position `child`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn link_hoisted_child(&mut self, child: NodeId) {
+    if let Some((parent, position)) = self.nodes[usize::from(child)].box_parent {
+      self.nodes[parent as usize]
+        .child_links
+        .get_or_insert_default()
+        .link_hoisted(position);
+    }
   }
 
   /// The number of nodes in the tree.
@@ -1342,32 +1575,55 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// The render node `node` lays out.
-  pub(in crate::layout) fn render_node(&self, node: TaffyNodeId) -> &'r RenderNode {
-    self.render_nodes[usize::from(node)]
+  pub(in crate::layout) fn render_node(&self, node: impl Into<usize>) -> &'r RenderNode {
+    self.render_nodes[node.into()]
   }
 
   /// The children `node` lays out, in layout order.
-  pub(in crate::layout) fn layout_children(&self, node: TaffyNodeId) -> &[TaffyNodeId] {
-    self
-      .get_layout_node_ref(node)
-      .map_or(&[], |state| &state.children)
+  pub(crate) fn child_nodes(&self, node: NodeId) -> Rc<[NodeId]> {
+    Rc::clone(&self.node_state(node).children)
   }
 
-  /// The taffy style `node` lays out with.
-  pub(in crate::layout) fn layout_style(&self, node: TaffyNodeId) -> &Style {
-    self.get_core_container_style(node)
+  /// The style `node` lays out with.
+  pub(crate) fn layout_style(&self, node: NodeId) -> &LayoutStyle {
+    &self.node_state(node).layout_style
   }
 
-  pub(in crate::layout) fn table_structure(
-    &self,
-    table: TaffyNodeId,
-  ) -> Option<Rc<TableStructure>> {
+  pub(crate) fn layout_style_rc(&self, node: NodeId) -> &Rc<LayoutStyle> {
+    &self.node_state(node).layout_style
+  }
+
+  /// The inline box that is the containing block of the out-of-flow `node` in an inline
+  /// formatting context, if one is.
+  pub(crate) fn inline_container(&self, node: NodeId) -> Option<&'r RenderNode> {
+    self.inline_containers.get(&usize::from(node)).copied()
+  }
+
+  /// The inline spans containing any of `boxes`, each once, in the order `boxes` first meets them.
+  pub(crate) fn inline_containers_of(&self, boxes: &[NodeId]) -> Vec<&'r RenderNode> {
+    let mut containers: Vec<&'r RenderNode> = Vec::new();
+
+    for &child in boxes {
+      if let Some(container) = self.inline_container(child)
+        && !containers
+          .iter()
+          .any(|known| known.context.box_id() == container.context.box_id())
+      {
+        containers.push(container);
+      }
+    }
+
+    containers
+  }
+
+  pub(in crate::layout) fn table_structure(&self, table: NodeId) -> Option<Rc<TableStructure>> {
+    self.assert_not_released(table.into(), "table structure");
     self.tables.get(&usize::from(table)).cloned()
   }
 
   pub(in crate::layout) fn set_table_structure(
     &mut self,
-    table: TaffyNodeId,
+    table: NodeId,
     structure: TableStructure,
   ) {
     self.tables.insert(usize::from(table), Rc::new(structure));
@@ -1375,752 +1631,142 @@ impl<'r> LayoutTree<'r> {
 
   pub(in crate::layout) fn table_column_constraints(
     &self,
-    table: TaffyNodeId,
+    table: NodeId,
   ) -> Option<Rc<ColumnConstraints>> {
+    self.assert_not_released(table.into(), "column constraints");
     self.table_columns.get(&usize::from(table)).cloned()
   }
 
   pub(in crate::layout) fn set_table_column_constraints(
     &mut self,
-    table: TaffyNodeId,
+    table: NodeId,
     columns: Rc<ColumnConstraints>,
   ) {
     self.table_columns.insert(usize::from(table), columns);
   }
 
-  pub(in crate::layout) fn set_table_fragment(
+  /// Copies the table `table`'s paint data for fragment `source` to fragment `target`.
+  #[cfg(feature = "fragmentation")]
+  pub(in crate::layout) fn repeat_table_fragment(
     &mut self,
-    table: TaffyNodeId,
-    fragment: TableFragment,
+    table: NodeId,
+    source: usize,
+    target: usize,
   ) {
-    self.table_fragments.insert(usize::from(table), fragment);
+    let Some(fragments) = self.table_fragments.get_mut(&usize::from(table)) else {
+      return;
+    };
+    let Some(fragment) = fragments.get(source).cloned() else {
+      return;
+    };
+
+    if fragments.len() <= target {
+      fragments.resize_with(target + 1, TableFragment::default);
+    }
+    fragments[target] = fragment;
   }
 
-  /// Changes what `node`'s part in a table changes in its layout style.
-  pub(in crate::layout) fn set_table_box_style(
+  pub(in crate::layout) fn set_table_fragment(
     &mut self,
-    node: TaffyNodeId,
-    table_box: TableBoxStyle,
+    table: NodeId,
+    fragment_index: usize,
+    fragment: TableFragment,
   ) {
-    let Some(&render_node) = self.render_nodes.get(usize::from(node)) else {
-      return;
-    };
-    let Some(state) = self.nodes.get_mut(usize::from(node)) else {
-      return;
-    };
+    let fragments = self.table_fragments.entry(usize::from(table)).or_default();
 
-    let mut style = render_node.layout_style(&render_node.context.sizing);
+    fragments.truncate(fragment_index);
+    push_tight(fragments, fragment);
+  }
 
-    table_box.apply(&mut style);
+  /// Changes what `node`'s part in a table changes in its styles.
+  pub(in crate::layout) fn set_table_box_style(&mut self, node: NodeId, table_box: TableBoxStyle) {
+    let index = usize::from(node);
+    let render_node = self.render_nodes[index];
+    let sizing = &render_node.context.sizing;
+    let mut layout_style = render_node.layout_box_style(sizing);
+    let state = &mut self.nodes[index];
+
+    table_box.apply(&mut layout_style);
     state.table_box = table_box;
-    state.style = Rc::new(style);
+    state.layout_style = self.table_part_styles.share(layout_style);
     state.cache.clear();
   }
 
-  /// Lays a cell out with `padding` above and below its content to align it in its row, or with
-  /// its own padding.
-  pub(in crate::layout) fn set_table_cell_aligned_padding(
-    &mut self,
-    cell: TaffyNodeId,
-    padding: Option<(f32, f32)>,
-  ) {
-    let Some(state) = self.nodes.get(usize::from(cell)) else {
-      return;
-    };
-
-    if state.table_box.aligned_padding != padding {
-      self.set_table_box_style(
-        cell,
-        TableBoxStyle {
-          aligned_padding: padding,
-          ..state.table_box
-        },
-      );
-    }
-  }
-
-  /// Runs `measure` without keeping fragment items, as a measuring pass whose layout paint never
-  /// reads.
-  pub(in crate::layout) fn without_fragment_items<T>(
-    &mut self,
-    measure: impl FnOnce(&mut Self) -> T,
-  ) -> T {
-    let keeps_fragment_items = replace(&mut self.keeps_fragment_items, false);
-    let output = measure(self);
-
-    self.keeps_fragment_items = keeps_fragment_items;
-    output
-  }
-
-  /// The padding box of `node` laid out at `size`, as an out-of-flow positioning area.
-  pub(in crate::layout) fn padding_box_area(
+  /// `node`'s layout so far.
+  pub(in crate::layout) fn computed_layout(
     &self,
-    node: TaffyNodeId,
-    size: TaffySize<f32>,
-  ) -> taffy::OofPositioningArea {
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-    let border = self.layout_style(node).border.resolve_or_zero(None, calc);
-
-    taffy::OofPositioningArea {
-      size: TaffySize {
-        width: (size.width - border.left - border.right).max(0.0),
-        height: (size.height - border.top - border.bottom).max(0.0),
-      },
-      offset: taffy::Point {
-        x: border.left,
-        y: border.top,
-      },
-    }
+    node: NodeId,
+    fragment_index: usize,
+  ) -> ComputedLayout {
+    self.nodes[usize::from(node)].fragments[fragment_index].layout
   }
 }
 
-impl RenderNode {
-  // Taffy may inject a flex stretch-derived cross-size into leaf `known_dimensions`
-  // during intrinsic single-axis sizing (`ComputeSize` with `InherentSize` or `ContentSize`). For replaced
-  // elements, letting that value participate in aspect-ratio transfer can
-  // incorrectly inflate the measured main-size. Strip that hint at the leaf boundary.
-  fn should_strip_flex_intrinsic_stretch_known_dimension(
-    &self,
-    inputs: LayoutInput,
-    known_dimensions: Size<Option<f32>>,
-  ) -> bool {
-    if inputs.run_mode != RunMode::ComputeSize
-      || !matches!(
-        inputs.sizing_mode,
-        SizingMode::InherentSize | SizingMode::ContentSize
-      )
-    {
-      return false;
-    }
-
-    if !matches!(
-      inputs.axis,
-      RequestedAxis::Horizontal | RequestedAxis::Vertical
-    ) {
-      return false;
-    }
-
-    let Some(node) = self.node.as_ref() else {
-      return false;
-    };
-
-    if !node.is_replaced_element() {
-      return false;
-    }
-
-    match inputs.axis {
-      RequestedAxis::Horizontal => {
-        known_dimensions.width.is_none() && known_dimensions.height.is_some()
-      }
-      RequestedAxis::Vertical => {
-        known_dimensions.height.is_none() && known_dimensions.width.is_some()
-      }
-      RequestedAxis::Both => false,
-    }
+/// Pushes `item`, allocating room for only it when `entries` is empty: most boxes keep one entry
+/// per kind, where a first push would make room for four.
+pub(crate) fn push_tight<T>(entries: &mut Vec<T>, item: T) {
+  if entries.capacity() == 0 {
+    entries.reserve_exact(1);
   }
+  entries.push(item);
 }
 
 /// Stable-sorts flex/grid children by `order`, keeping source order for ties.
-fn sort_children_by_order(
-  children: &mut [TaffyNodeId],
-  mut child_order: impl FnMut(TaffyNodeId) -> i32,
-) {
+fn sort_children_by_order(children: &mut [NodeId], mut child_order: impl FnMut(NodeId) -> i32) {
   if children.iter().all(|&child_id| child_order(child_id) == 0) {
     return;
   }
-
   sort_by_key(children, |&child_id| child_order(child_id));
 }
 
-impl TraversePartialTree for LayoutTree<'_> {
-  type ChildIter<'a>
-    = Copied<slice::Iter<'a, TaffyNodeId>>
-  where
-    Self: 'a;
-
-  fn child_ids(&self, parent_node_id: TaffyNodeId) -> Self::ChildIter<'_> {
-    let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      return [].iter().copied();
-    };
-
-    node.children.iter().copied()
-  }
-
-  fn child_count(&self, parent_node_id: TaffyNodeId) -> usize {
-    let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      return 0;
-    };
-
-    node.children.len()
-  }
-
-  fn get_child_id(&self, parent_node_id: TaffyNodeId, child_index: usize) -> TaffyNodeId {
-    let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      return TaffyNodeId::from(0usize);
-    };
-
-    node.children[child_index]
-  }
-}
-
-impl TraverseTree for LayoutTree<'_> {}
-
-impl LayoutPartialTree for LayoutTree<'_> {
-  type CoreContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type CustomIdent = String;
-
-  fn get_core_container_style(&self, node_id: TaffyNodeId) -> Self::CoreContainerStyle<'_> {
-    if let Some(node) = self.get_layout_node_ref(node_id) {
-      return &node.style;
-    }
-    &self.nodes[0].style
-  }
-
-  fn set_unrounded_layout(&mut self, node_id: TaffyNodeId, layout: &Layout) {
-    let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      return;
-    };
-
-    node.unrounded_layout = *layout;
-
-    let index = usize::from(node_id);
-
-    if self.keeps_fragment_items
-      && let Some(render_node) = self.render_nodes.get(index)
-      && render_node.has_own_inline_content()
-    {
-      render_node.keep_fragment_items(
-        &self.inline_node_data(index),
-        ComputedLayout::from_taffy(layout),
-      );
-    }
-  }
-
-  fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
-    let Some(root) = self.render_nodes.first() else {
-      return 0.0;
-    };
-
-    root.context.sizing.resolve_calc(val, basis)
-  }
-
-  fn compute_child_layout(&mut self, node: TaffyNodeId, inputs: LayoutInput) -> LayoutOutput {
-    self.compute_child_layout_inner(node, inputs, None)
-  }
-}
-
-impl<'r> LayoutTree<'r> {
-  /// Positions the out-of-flow boxes `output` collected that `node` is the containing block for,
-  /// leaving the rest to bubble up. Claims follow takumi's style, which taffy's cannot express.
-  fn lay_out_out_of_flow(&mut self, node: TaffyNodeId, output: &mut LayoutOutput) {
-    let (Some(area), Some(claims)) = (
-      output.oof_positioning_area,
-      self.get_layout_node_ref(node).map(|state| state.claims),
-    ) else {
-      return;
-    };
-    let direction = self.get_core_container_style(node).direction();
-    let candidates = output.oof_candidates.take();
-    let result =
-      compute_oof_layout_for_area(self, node, candidates.as_slice(), area, direction, claims);
-
-    self.clear_hoisted_children(node);
-    self.add_hoisted_children(node, &result.hoisted);
-    output.oof_candidates = result.unclaimed;
-  }
-
-  /// `output` with the grid's first baseline its first row's first item's, which taffy takes from
-  /// the item's bottom edge unless the item aligns to the baseline.
-  /// <https://drafts.csswg.org/css-grid-2/#grid-baselines>
-  fn with_first_row_baseline(
-    &self,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-    mut output: LayoutOutput,
-  ) -> LayoutOutput {
-    if inputs.run_mode != RunMode::PerformLayout || output.baselines.first.is_none() {
-      return output;
-    }
-
-    let Some(state) = self.get_layout_node_ref(node) else {
-      return output;
-    };
-    let first_item = state
-      .children
-      .iter()
-      .filter_map(|&child| self.get_layout_node_ref(child))
-      .filter(|child| {
-        child.style.position != TaffyPosition::Absolute && child.style.display != TaffyDisplay::None
-      })
-      .min_by(|left, right| {
-        left
-          .unrounded_layout
-          .location
-          .y
-          .total_cmp(&right.unrounded_layout.location.y)
-      });
-
-    if let Some(item) = first_item
-      && let Some(baseline) = item.first_baseline_y
-    {
-      output.baselines.first = Some(item.unrounded_layout.location.y + baseline);
-    }
-
-    output
-  }
-
-  /// Lays `node` and every box under it out empty, as `display: none` leaves them, without
-  /// keeping fragment items no paint reads.
-  pub(in crate::layout) fn compute_hidden(&mut self, node: TaffyNodeId) -> LayoutOutput {
-    let keeps_fragment_items = replace(&mut self.keeps_fragment_items, false);
-    let output = compute_hidden_layout(self, node);
-
-    self.keeps_fragment_items = keeps_fragment_items;
-    output
-  }
-
-  fn compute_child_layout_inner(
-    &mut self,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-    block_ctx: Option<&mut BlockContext<'_>>,
-  ) -> LayoutOutput {
-    self.update_node_style_for_available_space(
-      node,
-      Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-      Size::from_taffy(inputs.known_dimensions),
-    );
-
-    if inputs.run_mode == RunMode::PerformHiddenLayout {
-      return self.compute_hidden(node);
-    }
-
-    let output = compute_cached_layout(self, node, inputs, |tree, node, inputs| {
-      let Some(node_data) = tree.get_layout_node_ref(node) else {
-        return tree.compute_hidden(node);
-      };
-
-      let display_mode = node_data.style.display;
-      // An inline formatting context's only children stand in for its inline containing blocks,
-      // which it lays out itself.
-      let has_children = !node_data.children.is_empty() && !node_data.is_inline_children;
-      let is_table = node_data.table_box.is_table;
-
-      let mut output = match (display_mode, has_children) {
-        (TaffyDisplay::None, _) => tree.compute_hidden(node),
-        _ if is_table => tree.compute_table_layout(node, inputs),
-        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs, block_ctx),
-        // A flow-root box is a block formatting context root, so it never joins
-        // its parent's context. <https://drafts.csswg.org/css-display-3/#valdef-display-flow-root>
-        (TaffyDisplay::FlowRoot, true) => compute_block_layout(tree, node, inputs, None),
-        (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
-        (TaffyDisplay::Grid, true) => {
-          let output = compute_grid_layout(tree, node, inputs);
-
-          tree.with_first_row_baseline(node, inputs, output)
-        }
-        (_, false) => {
-          let idx: usize = node.into();
-          let Some(&render_node) = tree.render_nodes.get(idx) else {
-            return tree.compute_hidden(node);
-          };
-
-          let stripped_known_dimensions = |known_dimensions: TaffySize<Option<f32>>| {
-            if render_node.should_strip_flex_intrinsic_stretch_known_dimension(
-              inputs,
-              Size::from_taffy(known_dimensions),
-            ) {
-              TaffySize::NONE
-            } else {
-              known_dimensions
-            }
-          };
-          let calc = |value, basis| tree.resolve_calc_value(value, basis);
-          let padding = node_data
-            .style
-            .padding
-            .resolve_or_zero(inputs.parent_size.width, calc);
-          let border = node_data
-            .style
-            .border
-            .resolve_or_zero(inputs.parent_size.width, calc);
-          let insets = padding.sum_axes() + border.sum_axes();
-          // The border-box size `compute_leaf_layout` gives the box before its content.
-          let fixed_size =
-            stripped_known_dimensions(inputs.known_dimensions).or(match inputs.sizing_mode {
-              SizingMode::InherentSize => node_data
-                .style
-                .size
-                .maybe_resolve(inputs.parent_size, calc)
-                .maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
-                .maybe_add(if node_data.style.box_sizing == BoxSizing::ContentBox {
-                  insets
-                } else {
-                  TaffySize::ZERO
-                }),
-              SizingMode::ContentSize => TaffySize::NONE,
-            });
-
-          render_node.context.set_definite_height(
-            fixed_size
-              .height
-              .map(|height| (height - insets.height).max(0.0)),
-          );
-
-          // taffy's `children_margins_adjoin_own_edges`, the end one for an auto height only.
-          if node_data.is_inline_children {
-            let collapsible = inputs.vertical_margins_are_collapsible;
-
-            render_node.context.set_margins_adjoin(Line {
-              start: collapsible.start && padding.top == 0.0 && border.top == 0.0,
-              end: collapsible.end
-                && padding.bottom == 0.0
-                && border.bottom == 0.0
-                && fixed_size.height.is_none(),
-            });
-          }
-
-          let mut output = compute_leaf_layout(
-            inputs,
-            &*node_data.style,
-            |val, basis| tree.resolve_calc_value(val, basis),
-            |known_dimensions, available_space| {
-              let known_dimensions = stripped_known_dimensions(known_dimensions);
-
-              if let TaffySize {
-                width: Some(width),
-                height: Some(height),
-              } = known_dimensions.maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
-              {
-                return TaffySize { width, height };
-              }
-
-              let available_space =
-                Size::from_taffy(available_space).map(AvailableSpace::from_taffy);
-              let known_dimensions = Size::from_taffy(known_dimensions);
-
-              // A width alone needs no line laid out, as Blink's `ComputeMinMaxSizes` lays out
-              // none.
-              if inputs.run_mode == RunMode::ComputeSize
-                && inputs.axis == RequestedAxis::Horizontal
-                && known_dimensions.width.is_none()
-                && (node_data.is_inline_children || render_node.measures_as_inline_content())
-              {
-                return TaffySize {
-                  width: InlineNode::new(render_node)
-                    .content_inline_size(&tree.inline_node_data(idx), available_space),
-                  height: 0.0,
-                };
-              }
-
-              if !node_data.is_inline_children && !render_node.measures_as_inline_content() {
-                return render_node
-                  .measure(available_space, known_dimensions, &node_data.style)
-                  .into_taffy();
-              }
-
-              tree
-                .inline_measurement(idx, available_space, known_dimensions, insets.width)
-                .size
-                .into_taffy()
-            },
-          );
-
-          // Margins of a block-in-inline at the content's edges collapse out through them.
-          if node_data.is_inline_children
-            && tree
-              .inline_node_data(idx)
-              .items
-              .iter()
-              .any(|item| item.item_type == InlineItemType::BlockInInline)
-          {
-            let margins = tree
-              .inline_measurement(
-                idx,
-                Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-                Size {
-                  width: Some(output.size.width),
-                  height: None,
-                },
-                insets.width,
-              )
-              .margins;
-
-            output.top_margin = margins.start;
-            output.bottom_margin = margins.end;
-          }
-
-          let lays_out_text = node_data.is_inline_children
-            || matches!(
-              render_node.node.as_ref().and_then(Node::inline_content),
-              Some(InlineContentKind::Text(_))
-            );
-
-          let border_box = || {
-            ComputedLayout::new(
-              Point::ZERO,
-              Size::from_taffy(output.size),
-              Rect::from_taffy(border),
-              Rect::from_taffy(padding),
-            )
-          };
-
-          // `compute_leaf_layout` reports no baseline, which leaves flexbox
-          // baseline alignment on its bottom margin edge fallback.
-          if lays_out_text && inputs.run_mode == RunMode::PerformLayout {
-            let kept = tree.keeps_fragment_items.then(border_box);
-
-            let items_data = tree.inline_node_data(idx);
-
-            if let Some(layout) = kept {
-              render_node.keep_fragment_items(&items_data, layout);
-            }
-            // The padding and border it lays out with, which its style alone does not say for a
-            // cell its table borders or a percentage its containing block resolves.
-            let laid_out_insets = Rect::from_taffy(padding + border);
-
-            output.baselines.first = render_node.inline_content_border_box_baseline(
-              &items_data,
-              Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-              Size::from_taffy(output.size),
-              false,
-              kept,
-              Some(laid_out_insets),
-            );
-          }
-
-          // A block-level box measured whole at a definite width lays out at that size, so its
-          // fragment items laid out now let its shaped text go before the boxes after it shape
-          // theirs. A flex or grid item is measured at sizes its container then changes.
-          if tree.keeps_fragment_items
-            && lays_out_text
-            && !node_data.flex_or_grid_item
-            && inputs.run_mode == RunMode::ComputeSize
-            && inputs.axis == RequestedAxis::Both
-            && matches!(
-              inputs.available_space.width,
-              TaffyAvailableSpace::Definite(_)
-            )
-          {
-            render_node.keep_fragment_items(&tree.inline_node_data(idx), border_box());
-          }
-
-          if node_data.is_inline_children
-            && !node_data.box_children.is_empty()
-            && inputs.run_mode == RunMode::PerformLayout
-          {
-            tree.lay_out_inline_out_of_flow(
-              node,
-              Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-              border_box(),
-              &mut output,
-            );
-          }
-
-          output
-        }
-      };
-
-      // Only a full layout writes the boxes it positions, which a later cache hit must still hold.
-      if inputs.run_mode == RunMode::PerformLayout {
-        tree.lay_out_out_of_flow(node, &mut output);
-      }
-
-      output
-    });
-
-    if let Some(node_data) = self.get_layout_node_mut_ref(node) {
-      node_data.first_baseline_y = output.baselines.first;
-    }
-
-    output
-  }
-}
-
-impl CacheTree for LayoutTree<'_> {
-  fn cache_get(&mut self, node_id: TaffyNodeId, input: &LayoutInput) -> Option<LayoutOutput> {
-    let node = self.get_layout_node_mut_ref(node_id)?;
-    node.cache.get(input)
-  }
-
-  fn cache_store(
-    &mut self,
-    node_id: TaffyNodeId,
-    input: &LayoutInput,
-    layout_output: LayoutOutput,
-  ) {
-    let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      return;
-    };
-
-    node.cache.store(input, layout_output);
-  }
-
-  fn cache_clear(&mut self, node_id: TaffyNodeId) {
-    let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      return;
-    };
-
-    node.cache.clear();
-  }
-}
-
-impl LayoutBlockContainer for LayoutTree<'_> {
-  type BlockContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type BlockItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_block_container_style(&self, node_id: TaffyNodeId) -> Self::BlockContainerStyle<'_> {
-    self.get_core_container_style(node_id)
-  }
-
-  fn get_block_child_style(&self, child_node_id: TaffyNodeId) -> Self::BlockItemStyle<'_> {
-    self.get_core_container_style(child_node_id)
-  }
-
-  fn compute_block_child_layout(
-    &mut self,
-    node: TaffyNodeId,
-    inputs: LayoutInput,
-    block_ctx: Option<&mut BlockContext<'_>>,
-  ) -> LayoutOutput {
-    self.compute_child_layout_inner(node, inputs, block_ctx)
-  }
-}
-
-impl LayoutFlexboxContainer for LayoutTree<'_> {
-  type FlexboxContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type FlexboxItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_flexbox_container_style(&self, node_id: TaffyNodeId) -> Self::FlexboxContainerStyle<'_> {
-    self.get_core_container_style(node_id)
-  }
-
-  fn get_flexbox_child_style(&self, child_node_id: TaffyNodeId) -> Self::FlexboxItemStyle<'_> {
-    self.get_core_container_style(child_node_id)
-  }
-}
-
-impl LayoutGridContainer for LayoutTree<'_> {
-  type GridContainerStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-  type GridItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_grid_container_style(&self, node_id: TaffyNodeId) -> Self::GridContainerStyle<'_> {
-    self.get_core_container_style(node_id)
-  }
-
-  fn get_grid_child_style(&self, child_node_id: TaffyNodeId) -> Self::GridItemStyle<'_> {
-    self.get_core_container_style(child_node_id)
-  }
-
-  fn set_detailed_grid_info(&mut self, node_id: TaffyNodeId, info: DetailedGridInfo<String>) {
-    if let Some(node) = self.get_layout_node_mut_ref(node_id) {
-      node.detailed_layout_info = DetailedLayoutInfo::Grid(Box::new(info));
-    }
-  }
-}
-
-impl LayoutContainingBlock for LayoutTree<'_> {
-  type OofItemStyle<'a>
-    = &'a Style
-  where
-    Self: 'a;
-
-  fn get_oof_item_style(&self, node_id: TaffyNodeId) -> Self::OofItemStyle<'_> {
-    self.get_core_container_style(node_id)
-  }
-
-  fn clear_hoisted_children(&mut self, node_id: TaffyNodeId) {
-    if let Some(node) = self.get_layout_node_mut_ref(node_id) {
-      node.hoisted_children.clear();
-    }
-  }
-
-  fn add_hoisted_children(&mut self, node_id: TaffyNodeId, hoisted: &[TaffyNodeId]) {
-    if let Some(node) = self.get_layout_node_mut_ref(node_id) {
-      node.hoisted_children.extend_from_slice(hoisted);
-    }
-  }
-
-  fn get_detailed_layout_info(&self, node_id: TaffyNodeId) -> &DetailedLayoutInfo<String> {
-    self
-      .get_layout_node_ref(node_id)
-      .map_or(&DetailedLayoutInfo::None, |node| &node.detailed_layout_info)
-  }
-}
-
-impl RoundTree for LayoutTree<'_> {
-  fn get_unrounded_layout(&self, node_id: TaffyNodeId) -> Layout {
-    let Some(node) = self.get_layout_node_ref(node_id) else {
-      return Layout::new();
-    };
-
-    node.unrounded_layout
-  }
-
-  fn set_final_layout(&mut self, node_id: TaffyNodeId, layout: &Layout) {
-    let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      return;
-    };
-
-    node.final_layout = *layout;
-  }
-
-  fn is_out_of_flow(&self, node_id: TaffyNodeId) -> bool {
-    self.get_layout_node_ref(node_id).is_some_and(|node| {
-      node.style.position.is_out_of_flow() && node.style.display != TaffyDisplay::None
+impl RenderNode {
+  /// Blink's `HasDescendantThatDependsOnPercentageBlockSize` of the box's layout: an in-flow box
+  /// inside it whose block size resolves a percentage, through anonymous and inline boxes, or a
+  /// relatively positioned one whose block insets do.
+  pub(crate) fn has_descendant_that_depends_on_percentage_block_size(&self) -> bool {
+    self.children.iter().flatten().any(|child| {
+      let style = child.layout_box_style(&child.context.sizing);
+
+      !style.is_out_of_flow()
+        && (child.depends_on_percentage_block_size(&style)
+          || (style.position == Position::Relative
+            && (style.inset.top.has_percent() || style.inset.bottom.has_percent())))
     })
   }
 
-  fn hoisted_child_count(&self, node_id: TaffyNodeId) -> usize {
-    self
-      .get_layout_node_ref(node_id)
-      .map_or(0, |node| node.hoisted_children.len())
-  }
+  /// Blink's `DependsOnPercentageBlockSize` of the box's fragment laid out with `style`: its block
+  /// size resolves a percentage, or the content of an inline or anonymous box does.
+  fn depends_on_percentage_block_size(&self, style: &LayoutStyle) -> bool {
+    if self.is_inline_span() {
+      return self.has_descendant_that_depends_on_percentage_block_size();
+    }
 
-  fn get_hoisted_child_id(&self, node_id: TaffyNodeId, index: usize) -> TaffyNodeId {
-    self
-      .get_layout_node_ref(node_id)
-      .and_then(|node| node.hoisted_children.get(index).copied())
-      // Taffy asks only below `hoisted_child_count`.
-      .unwrap_or(node_id)
+    style.size.height.may_have_percent_dependence()
+      || style.min_size.height.may_have_percent_dependence()
+      || style.max_size.height.may_have_percent_dependence()
+      || (self.origin == NodeOrigin::Anonymous
+        && self.has_descendant_that_depends_on_percentage_block_size())
   }
 }
 
 impl RenderNode {
-  /// The taffy style this node lays out with: its own override when it has one, otherwise
-  /// its computed style.
-  fn layout_style(&self, sizing: &SizingContext) -> taffy::Style {
+  /// The style the native layout lays this node out with: its own override when it has one,
+  /// otherwise its computed style.
+  pub(crate) fn layout_box_style(&self, sizing: &SizingContext) -> LayoutStyle {
     match self.layout_style_override.as_deref() {
-      Some(style) => style.clone(),
-      None => taffy::Style {
-        item_is_replaced: self.node.as_ref().is_some_and(Node::is_replaced_element),
-        ..self.context.style.to_taffy_style(sizing)
+      Some(style) => LayoutStyle {
+        is_replaced: self.is_replaced(),
+        ..style.clone()
       },
+      None => LayoutStyle::from_computed(&self.context.style, sizing, self.is_replaced()),
     }
   }
 
-  /// A box with no layout override or marker.
+  fn is_replaced(&self) -> bool {
+    self.node.as_ref().is_some_and(Node::is_replaced_element)
+  }
+
+  /// A box with no layout override.
   pub(super) fn new(
     context: RenderContext,
     origin: NodeOrigin,
@@ -2134,29 +1780,12 @@ impl RenderNode {
       children,
       layout_style_override: None,
       anonymous_text_content: None,
-      marker: None,
       force_inline_layout: false,
       is_block_in_inline: false,
+      is_root_element: false,
       fragment_items: FragmentItemsCache::default(),
-      atomic_inline_layouts: AtomicInlineCache::default(),
       item_shapes: ItemShapes::default(),
     }
-  }
-
-  /// Lays its inline content out to the fragment items it keeps, in the content box of `layout`,
-  /// unless it keeps ones for that content box already.
-  pub(crate) fn keep_fragment_items<'c>(
-    &'c self,
-    items_data: &InlineNodeData<'c>,
-    layout: ComputedLayout,
-  ) {
-    if self.fragment_items_in(layout).is_some() || !self.has_own_inline_content() {
-      return;
-    }
-
-    self.fragment_items.keep(Rc::new(
-      self.lay_out_fragment_items_from(items_data, layout),
-    ));
   }
 
   /// Whether it has inline content of its own to lay out.
@@ -2198,29 +1827,34 @@ impl RenderNode {
     count
   }
 
-  /// The fragment items its inline content laid out to in the content box of `layout`, if it
-  /// laid out there last.
+  /// The fragment items the fragment its scene paints laid out to in the content box of `layout`,
+  /// if that fragment laid out there last.
   pub(crate) fn fragment_items_in(&self, layout: ComputedLayout) -> Option<Rc<FragmentItems>> {
-    self
-      .fragment_items
-      .0
-      .borrow()
-      .as_ref()
-      .filter(|items| items.content_box == ContentBox::of(layout))
-      .map(Rc::clone)
+    self.fragment_items_of(self.context.fragment_index(), layout)
   }
 
-  /// Forgets the fragment items and atomic inline layouts it and the boxes under it took, which no
-  /// longer hold once the tree may have changed since.
+  /// The fragment items fragment `fragment_index` laid out to in the content box of `layout`, if
+  /// that fragment laid out there last.
+  pub(crate) fn fragment_items_of(
+    &self,
+    fragment_index: usize,
+    layout: ComputedLayout,
+  ) -> Option<Rc<FragmentItems>> {
+    self
+      .fragment_items
+      .get(fragment_index)
+      .filter(|items| items.content_box == ContentBox::of(layout))
+  }
+
+  /// Forgets the fragment items and item shapes it and the boxes under it took, which no longer
+  /// hold once the tree may have changed since.
   pub(crate) fn clear_layout_caches(&self) {
     let mut stack = vec![self];
 
     while let Some(node) = stack.pop() {
-      node.fragment_items.0.take();
-      node.atomic_inline_layouts.0.take();
+      node.fragment_items.clear();
       node.item_shapes.clear();
       stack.extend(node.children.iter().flatten());
-      stack.extend(node.marker.as_deref());
     }
   }
 
@@ -2229,7 +1863,7 @@ impl RenderNode {
     context: RenderContext,
     node: Option<Node>,
     children: Option<Box<[RenderNode]>>,
-    layout_style: Rc<Style>,
+    layout_style: Rc<LayoutStyle>,
   ) -> Self {
     let mut anonymous = Self::new(context, NodeOrigin::Anonymous, node, children);
 
@@ -2242,7 +1876,8 @@ impl RenderNode {
   }
 
   fn text_item(context: RenderContext, text: String) -> Self {
-    let mut item = Self::anonymous(context, None, None, block_style());
+    let layout_style = block_style(&context);
+    let mut item = Self::anonymous(context, None, None, layout_style);
 
     item.anonymous_text_content = Some(text);
     item.force_inline_layout = true;
@@ -2253,11 +1888,14 @@ impl RenderNode {
     parent_context: &RenderContext,
     children: Vec<RenderNode>,
   ) -> Self {
+    let context = RenderContext::for_anonymous(parent_context);
+    let layout_style = block_style(&context);
+
     Self::anonymous(
-      RenderContext::for_anonymous(parent_context),
+      context,
       None,
       Some(children.into_boxed_slice()),
-      block_style(),
+      layout_style,
     )
   }
 
@@ -2265,11 +1903,7 @@ impl RenderNode {
   /// direction for the blocks it holds.
   fn block_in_inline(parent_context: &RenderContext, children: Vec<RenderNode>) -> Self {
     let context = RenderContext::for_anonymous(parent_context);
-    let layout_style = Rc::new(Style {
-      display: TaffyDisplay::Block,
-      direction: context.style.inherited_data.direction.into_taffy(),
-      ..Style::default()
-    });
+    let layout_style = block_style(&context);
     let mut block = Self::anonymous(
       context,
       None,
@@ -2287,19 +1921,16 @@ impl RenderNode {
   ) -> Self {
     // Cap image content to the parent pseudo's box so explicit `width` / `height`
     // on the pseudo wins over intrinsic / default sizing.
-    let max_size = TaffySize {
-      width: taffy::LengthPercentageAuto::percent(1.0),
-      height: taffy::LengthPercentageAuto::percent(1.0),
-    };
+    let max_size = Size::all(LayoutLength::Percent(1.0));
 
     match image {
       BackgroundImage::Url(url) => Self::anonymous(
         RenderContext::for_anonymous(parent_context),
         Some(Node::image(url)),
         None,
-        Rc::new(Style {
+        Rc::new(LayoutStyle {
           max_size,
-          ..Style::default()
+          ..LayoutStyle::default()
         }),
       ),
       gradient => {
@@ -2312,13 +1943,13 @@ impl RenderNode {
           Some(Node::container([])),
           None,
           // css-images-3 §5.1 default object size when the parent is auto.
-          Rc::new(Style {
-            size: TaffySize {
-              width: taffy::Dimension::length(300.0),
-              height: taffy::Dimension::length(150.0),
+          Rc::new(LayoutStyle {
+            size: Size {
+              width: LayoutLength::Fixed(300.0),
+              height: LayoutLength::Fixed(150.0),
             },
             max_size,
-            ..Style::default()
+            ..LayoutStyle::default()
           }),
         )
       }
@@ -2410,19 +2041,12 @@ impl RenderNode {
     ))
   }
 
-  /// Blink positions an outside marker against the item's first line box, so the
-  /// marker goes on the box that establishes that line, however deep it sits. An
-  /// inside marker is the item's own content and stays on the item.
+  /// The marker is the item's first child, as Blink's `::marker` is. An outside marker beside
+  /// block content stays a child the item places against its first baseline, and an inside one
+  /// takes a line of its own.
   fn attach_marker(&mut self, marker: RenderNode) {
     if self.should_create_inline_layout() {
-      self.marker = Some(Box::new(marker));
-      return;
-    }
-
-    if marker.context.style.inherited_data.list_style_position == ListStylePosition::Outside
-      && let Some(block) = self.marker_host_child()
-    {
-      block.attach_marker(marker);
+      self.insert_first_child(marker);
       return;
     }
 
@@ -2435,46 +2059,43 @@ impl RenderNode {
     if !has_block_content {
       // Text of its own, or nothing at all: the marker shares that line.
       self.force_inline_layout = true;
-      self.marker = Some(Box::new(marker));
+      self.insert_first_child(marker);
       return;
     }
 
-    // Block-level content the marker may not join, so it gets a line of its own.
-    let mut line = RenderNode::anonymous_block_container(&self.context, Vec::new());
-    line.force_inline_layout = true;
-    line.marker = Some(Box::new(marker));
+    if marker.is_outside_list_marker() {
+      self.insert_first_child(marker);
+      return;
+    }
 
+    // Block-level content an inside marker may not join, so it gets a line of its own.
+    let mut line = RenderNode::anonymous_block_container(&self.context, vec![marker]);
+    line.force_inline_layout = true;
+
+    self.insert_first_child(line);
+  }
+
+  fn insert_first_child(&mut self, child: RenderNode) {
     let mut children = Vec::from(self.children.take().unwrap_or_default());
-    children.insert(0, line);
+
+    children.insert(0, child);
     self.children = Some(children.into_boxed_slice());
   }
 
-  /// The block box the marker travels into when this box has no line of its own.
-  fn marker_host_child(&mut self) -> Option<&mut RenderNode> {
-    let child = self
+  /// The generated `::marker` box, its first child as Blink's `::marker` pseudo-element is.
+  pub(crate) fn marker(&self) -> Option<&RenderNode> {
+    self
       .children
-      .as_deref_mut()?
-      .iter_mut()
-      .find(|child| !child.is_out_of_flow())?;
-
-    child.hosts_marker_line().then_some(child)
+      .as_deref()?
+      .first()
+      .filter(|child| child.origin == NodeOrigin::Marker)
   }
 
-  fn hosts_marker_line(&self) -> bool {
-    self.context.style.base_data.display == Display::Block
-      && self.context.style.base_data.float == Float::None
-      && self.leads_to_a_line()
-  }
+  /// Its children after the marker, which its own text comes between.
+  pub(crate) fn children_after_marker(&self) -> &[RenderNode] {
+    let children = self.children.as_deref().unwrap_or_default();
 
-  /// Whether this box, or the block chain below it, ends in a line the marker can share.
-  fn leads_to_a_line(&self) -> bool {
-    self.should_create_inline_layout()
-      || self.children.is_none()
-      || self
-        .children
-        .as_deref()
-        .and_then(|children| children.iter().find(|child| !child.is_out_of_flow()))
-        .is_some_and(RenderNode::hosts_marker_line)
+    &children[usize::from(self.marker().is_some())..]
   }
 
   fn is_anonymous_text_item(&self) -> bool {
@@ -2549,15 +2170,18 @@ impl RenderNode {
     self.context.style.base_data.display.is_inline_level()
   }
 
+  /// Blink's `IsAtomicInlineLevel` for an inline-level box: an inline replaced element, or an
+  /// inline-level container whose content lays out as a box of its own.
   pub(crate) fn is_inline_atomic_container(&self) -> bool {
-    matches!(
-      self.context.style.base_data.display,
+    match self.context.style.base_data.display {
       Display::InlineBlock
-        | Display::InlineFlex
-        | Display::InlineGrid
-        | Display::InlineTable
-        | Display::WebkitInlineBox
-    )
+      | Display::InlineFlex
+      | Display::InlineGrid
+      | Display::InlineTable
+      | Display::WebkitInlineBox => true,
+      Display::Inline => self.is_replaced(),
+      _ => false,
+    }
   }
 
   /// True if this node is laid out as an inline-level box (atomic inline or float).
@@ -2569,6 +2193,12 @@ impl RenderNode {
     self.is_inline_level()
       || self.is_inline_atomic_container()
       || self.anonymous_text_content.is_some()
+  }
+
+  /// Blink's `IsOriginalDisplayInlineType`: whether the box was inline-level before positioning or
+  /// floating blockified it.
+  pub(crate) fn is_original_display_inline_type(&self) -> bool {
+    self.context.style.original_display.is_inline_level()
   }
 
   pub(crate) fn participates_in_inline_formatting_context(&self) -> bool {
@@ -2593,35 +2223,63 @@ impl RenderNode {
           | Display::TableCell
           | Display::TableCaption
       ) && self.children.as_ref().is_some_and(|children| {
+        // `all` first: it stops at a block child, so a block container answers at once.
         children
           .iter()
-          .any(RenderNode::participates_in_inflow_inline_formatting_context)
+          .all(RenderNode::participates_in_inline_formatting_context)
           && children
             .iter()
-            .all(RenderNode::participates_in_inline_formatting_context)
+            .any(RenderNode::participates_in_inflow_inline_formatting_context)
       }))
   }
 
   /// Builds a render tree from a node under the given parent context.
   pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
+    Self::build(parent_context, node, false)
+  }
+
+  /// Builds a render tree from `initial_containing_block`, a box that stands in for the initial
+  /// containing block: each node it holds is a root element.
+  pub fn from_initial_containing_block(
+    parent_context: &RenderContext,
+    initial_containing_block: Node,
+  ) -> Self {
+    Self::build(parent_context, initial_containing_block, true)
+  }
+
+  fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
-      parent_context.stylesheet(),
+      &[parent_context.stylesheet()],
       parent_context.sizing.viewport,
     );
-    let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
+    let mut tree =
+      Self::from_node_iterative(parent_context, node, &matched_styles, blockifies_children);
 
-    if tree.is_inline_level() {
-      tree.context.blockify();
+    tree.make_root_element();
+    if blockifies_children {
+      for child in tree.children.iter_mut().flatten() {
+        child.make_root_element();
+      }
     }
-
     tree
+  }
+
+  /// [CSS Display §2.7](https://drafts.csswg.org/css-display/#transformations): the root element's
+  /// display type is always blockified, and its principal box always establishes an independent
+  /// formatting context.
+  fn make_root_element(&mut self) {
+    if self.is_inline_level() {
+      self.context.blockify();
+    }
+    self.is_root_element = true;
   }
 
   fn from_node_iterative(
     parent_context: &RenderContext,
     root: Node,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
+    root_blockifies_children: bool,
   ) -> Self {
     let mut source_cursor = 0;
     let mut root_counter = ListCounter::new(&root);
@@ -2636,6 +2294,7 @@ impl RenderNode {
     )];
 
     loop {
+      let at_root = stack.len() == 1;
       let Some(current) = stack.last_mut() else {
         return RenderNode::empty(parent_context);
       };
@@ -2648,12 +2307,13 @@ impl RenderNode {
           &mut source_cursor,
           &mut current.list_counter,
           current.inside_list,
-          current
-            .context
-            .style
-            .base_data
-            .display
-            .should_blockify_children(),
+          (root_blockifies_children && at_root)
+            || current
+              .context
+              .style
+              .base_data
+              .display
+              .should_blockify_children(),
         );
         stack.push(child_pending);
         continue;
@@ -2729,10 +2389,11 @@ impl RenderNode {
     .into_boxed_slice();
 
     // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
-    // must not be swept into an anonymous block box.
+    // must not be swept into an anonymous block box, nor floats, which Blink's
+    // `LayoutBlockFlow::AddChild` keeps among the block children.
     let has_inline = children
       .iter()
-      .any(|child| child.participates_in_inline_formatting_context() && !child.is_out_of_flow());
+      .any(RenderNode::participates_in_inflow_inline_formatting_context);
     let has_block = children
       .iter()
       .any(|child| !child.participates_in_inline_formatting_context());
@@ -2747,7 +2408,7 @@ impl RenderNode {
         return wrap_runs(
           children,
           |child| !child.participates_in_inline_formatting_context(),
-          |run| RenderNode::block_in_inline(context, run),
+          |run| vec![RenderNode::block_in_inline(context, run)],
         );
       }
 
@@ -2762,12 +2423,21 @@ impl RenderNode {
       return children;
     }
 
-    // An out-of-flow box stays in the run of inline content around it, as a placeholder
-    // marking its static position, rather than breaking the run into two lines.
+    // Blink's `MakeChildrenNonInline`: an out-of-flow box or float stays in the run of inline
+    // content around it, and a run of them alone stays among the block children.
     wrap_runs(
       children,
       RenderNode::participates_in_inline_formatting_context,
-      |run| RenderNode::anonymous_block_container(context, run),
+      |run| {
+        if run
+          .iter()
+          .any(RenderNode::participates_in_inflow_inline_formatting_context)
+        {
+          vec![RenderNode::anonymous_block_container(context, run)]
+        } else {
+          run
+        }
+      },
     )
   }
 
@@ -2787,6 +2457,11 @@ impl RenderNode {
       left: style.box_data.padding_left,
     }
     .map(|length| length.to_px(&self.context.sizing, containing_block_width))
+  }
+
+  /// The child-index path to `node` in this tree, `self` included.
+  pub fn path_to(&self, node: &RenderNode) -> Option<Vec<usize>> {
+    self.path_where(|candidate| candidate.context.box_id() == node.context.box_id())
   }
 
   /// The child-index path to the first node in preorder, `self` included, that `matches` accepts.
@@ -2848,249 +2523,6 @@ impl RenderNode {
     .map(|length| length.to_px(&self.context.sizing, 0.0))
   }
 
-  fn inline_content_baseline_offset(
-    &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-    use_last_line: bool,
-  ) -> Option<f32> {
-    let items_data = InlineNode::new(self).prepare_layout();
-    let baseline = self.inline_content_border_box_baseline(
-      &items_data,
-      available_space,
-      size,
-      use_last_line,
-      None,
-      None,
-    )?;
-
-    Some(self.margin_px().top + baseline)
-  }
-
-  /// Baseline of the first or last line box, measured from the border box top.
-  /// Reads the baseline from the fragment items it kept for `kept`, when it kept them, instead of
-  /// laying its content out again.
-  fn inline_content_border_box_baseline<'c>(
-    &'c self,
-    items_data: &InlineNodeData<'c>,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-    use_last_line: bool,
-    kept: Option<ComputedLayout>,
-    laid_out_insets: Option<Rect<f32>>,
-  ) -> Option<f32> {
-    if matches!(
-      self.node.as_ref().and_then(Node::inline_content),
-      Some(InlineContentKind::Box)
-    ) {
-      return None;
-    }
-
-    let content_top = laid_out_insets.map_or_else(|| self.content_top(), |insets| insets.top);
-
-    if let Some(baseline) = kept
-      .and_then(|layout| self.fragment_items_in(layout))
-      .and_then(|items| items.baseline(use_last_line))
-    {
-      return Some(content_top + baseline);
-    }
-
-    let baseline = self.inline_content_baseline(
-      items_data,
-      available_space,
-      size.width,
-      laid_out_insets.map(|insets| insets.left + insets.right),
-      use_last_line,
-    )?;
-
-    Some(content_top + baseline)
-  }
-
-  /// The top border and padding the baselines of its inline content sit below.
-  fn content_top(&self) -> f32 {
-    let sizing = &self.context.sizing;
-    let border_top = Length::from(self.context.style.box_data.border_top_width).to_px(sizing, 0.0);
-    let padding_top = self.context.style.box_data.padding_top.to_px(sizing, 0.0);
-
-    border_top + padding_top
-  }
-
-  fn layout_first_baseline_offset(&self, results: &LayoutResults) -> Option<f32> {
-    let baseline = results.first_baseline_y(NodeId::ROOT).ok().flatten()?;
-
-    Some(self.margin_px().top + baseline)
-  }
-
-  fn valid_baseline_offset(candidate: Option<f32>, box_height: f32) -> Option<f32> {
-    candidate
-      .filter(|baseline| baseline.is_finite() && *baseline >= 0.0 && *baseline <= box_height + 0.5)
-  }
-
-  /// Where an atomic inline box takes its baseline from, in order; an empty list, or no source
-  /// that resolves, falls back to the bottom margin edge.
-  fn inline_baseline_sources(&self) -> &'static [InlineBaselineSource] {
-    match self.context.style.base_data.display {
-      Display::InlineBlock if self.context.style.clips_overflow() => &[],
-      Display::InlineBlock => &[
-        InlineBaselineSource::InlineContentLastLine,
-        InlineBaselineSource::LayoutFirstBaseline,
-      ],
-      Display::InlineFlex
-      | Display::InlineGrid
-      | Display::InlineTable
-      | Display::WebkitInlineBox => &[InlineBaselineSource::LayoutFirstBaseline],
-      _ => &[],
-    }
-  }
-
-  fn resolve_inline_baseline_source(
-    &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-    source: InlineBaselineSource,
-    results: &LayoutResults,
-  ) -> Option<f32> {
-    match source {
-      InlineBaselineSource::InlineContentLastLine => {
-        self.inline_content_baseline_offset(available_space, size, true)
-      }
-      InlineBaselineSource::LayoutFirstBaseline => self.layout_first_baseline_offset(results),
-    }
-  }
-
-  fn resolve_inline_baseline_offset(
-    &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-    results: &LayoutResults,
-  ) -> Option<f32> {
-    let margin = self.margin_px();
-    let margin_box_height = size.height + margin.top + margin.bottom;
-
-    self.inline_baseline_sources().iter().find_map(|&source| {
-      let candidate = self.resolve_inline_baseline_source(available_space, size, source, results);
-
-      Self::valid_baseline_offset(candidate, margin_box_height)
-    })
-  }
-
-  pub(crate) fn measure_inline_box(
-    &self,
-    available_space: Size<AvailableSpace>,
-  ) -> AtomicInlineMetrics {
-    if self.participates_as_inline_box() {
-      return self.measure_atomic_subtree(available_space);
-    }
-
-    // Only an atomic box has a baseline of its own; a replaced one sits on its bottom margin edge.
-    AtomicInlineMetrics {
-      size: self.node.as_ref().map_or(Size::ZERO, |node| {
-        node.measure(
-          &self.context,
-          available_space,
-          Size::NONE,
-          &self.layout_style(&self.context.sizing),
-        )
-      }),
-      baseline_offset: None,
-      collapsed_margins: None,
-    }
-  }
-
-  /// Blink's `LayoutAtomicInline` sizing: an auto width shrinks to fit, and any other resolves
-  /// against the containing block, which `available_space` stands in for.
-  pub(crate) fn layout_atomic_inline(
-    &self,
-    available_space: Size<AvailableSpace>,
-  ) -> AtomicInlineMetrics {
-    self
-      .atomic_inline_layouts
-      .get_or_insert_with(available_space, || {
-        self.lay_out_atomic_inline(available_space)
-      })
-  }
-
-  fn lay_out_atomic_inline(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
-    if !self.participates_as_inline_box()
-      || self.layout_style(&self.context.sizing).size.width.is_auto()
-    {
-      return self.measure_inline_box(available_space);
-    }
-
-    let results = LayoutResults::compute(self, available_space);
-    let size = results.root_size();
-
-    AtomicInlineMetrics {
-      size,
-      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
-      collapsed_margins: None,
-    }
-  }
-
-  /// Blink's `BlockNode::Layout` of a block-in-inline: an auto width fills `available_space`'s,
-  /// and the margins of its first and last blocks collapse through it. Approximate: its first
-  /// baseline stands in for its last, which taffy does not give, and it collapses through when it
-  /// has no height, without Blink's check of its content.
-  pub(crate) fn layout_block_in_inline(
-    &self,
-    available_space: Size<AvailableSpace>,
-  ) -> AtomicInlineMetrics {
-    self
-      .atomic_inline_layouts
-      .get_or_insert_with(available_space, || {
-        let output = LayoutTree::from_render_node(self).lay_out_root_in_flow(available_space);
-
-        AtomicInlineMetrics {
-          size: Size::from_taffy(output.size),
-          baseline_offset: output.baselines.first,
-          collapsed_margins: Some(CollapsedMargins {
-            start: output.top_margin,
-            end: output.bottom_margin,
-            is_self_collapsing: output.size.height == 0.0,
-          }),
-        }
-      })
-  }
-
-  /// The border box's min-content and max-content widths, laid out as a tree's root.
-  pub(crate) fn min_max_widths(&self) -> (f32, f32) {
-    LayoutTree::from_render_node(self).root_min_max_widths()
-  }
-
-  /// An atomic inline box's shrink-to-fit size and baseline.
-  fn measure_atomic_subtree(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
-    let at_width = |width| Size {
-      width,
-      height: available_space.height,
-    };
-
-    // CSS shrink-to-fit for inline-level atomic boxes:
-    // width = min(max-content, max(min-content, available)).
-    // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
-    let (min_content, max_content) = self.min_max_widths();
-    let used_width = match available_space.width {
-      AvailableSpace::Definite(available) => max_content.min(min_content.max(available)),
-      AvailableSpace::MinContent => min_content,
-      AvailableSpace::MaxContent => max_content,
-    };
-    // Taffy lays a root out in the space beside its margins, so they go back around the border
-    // box shrink-to-fit sized.
-    let margin = self.margin_px();
-    let results = LayoutResults::compute(
-      self,
-      at_width(AvailableSpace::Definite(
-        used_width + margin.left + margin.right,
-      )),
-    );
-    let size = results.root_size();
-
-    AtomicInlineMetrics {
-      size,
-      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
-      collapsed_margins: None,
-    }
-  }
-
   /// Whether it measures as the inline content it holds: a text node, or an inline box that tree
   /// building left among block-level siblings, such as in a table row no table wraps, which lays
   /// out as the anonymous block CSS 2.2 §9.2.1.1 would wrap it in.
@@ -3100,34 +2532,13 @@ impl RenderNode {
         || self.context.style.base_data.display == Display::Inline
     })
   }
-
-  pub(crate) fn measure(
-    &self,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
-    style: &Style,
-  ) -> Size<f32> {
-    let Some(node) = &self.node else {
-      return Size::ZERO;
-    };
-
-    if self.measures_as_inline_content() {
-      let node = InlineNode::new(self);
-
-      return node
-        .measure(&node.prepare_layout(), available_space, known_dimensions)
-        .size;
-    }
-
-    node.measure(&self.context, available_space, known_dimensions, style)
-  }
 }
 
-/// `children` with each run of the ones `in_run` picks wrapped in the box `wrap` makes of it.
+/// `children` with each run of the ones `in_run` picks replaced by what `wrap` makes of it.
 fn wrap_runs(
   children: Box<[RenderNode]>,
   in_run: impl Fn(&RenderNode) -> bool,
-  wrap: impl Fn(Vec<RenderNode>) -> RenderNode,
+  wrap: impl Fn(Vec<RenderNode>) -> Vec<RenderNode>,
 ) -> Box<[RenderNode]> {
   let mut wrapped = Vec::new();
   let mut run = Vec::new();
@@ -3140,14 +2551,14 @@ fn wrap_runs(
     }
 
     if !run.is_empty() {
-      wrapped.push(wrap(take(&mut run)));
+      wrapped.extend(wrap(take(&mut run)));
     }
 
     wrapped.push(child);
   }
 
   if !run.is_empty() {
-    wrapped.push(wrap(run));
+    wrapped.extend(wrap(run));
   }
 
   wrapped.into_boxed_slice()
@@ -3229,10 +2640,18 @@ impl PendingRenderNode {
     let mut rendered_children = Vec::with_capacity(children.len() + 3);
     rendered_children.extend(pseudo_before);
 
-    // The inline collector emits an element's own text before any child, so
-    // an element that folded its text has to hand it back as a child for the
-    // generated content to come first.
-    if pseudo_before_present && let Some(text) = node.take_text() {
+    // As Blink's `CanHaveWhitespaceChildren` does, a flex or grid container drops white-space-only
+    // text that no text precedes, whatever its `white-space`. The element's own text comes first.
+    let drops_own_text =
+      context.style.base_data.display.should_blockify_children() && node.is_whitespace_only_text();
+
+    // An element that folded its text hands it back as a child beside its generated content:
+    // the inline collector emits its own text before any child, so `::before` could not come
+    // first, and a flex or grid container lays the text out as an item only as a child.
+    if (pseudo_before_present || pseudo_after.is_some())
+      && !drops_own_text
+      && let Some(text) = node.take_text()
+    {
       rendered_children.push(RenderNode::generated_sibling_text(&context, text));
     }
 
@@ -3360,36 +2779,24 @@ impl RenderContext {
   ) -> (NodeStyle, ElementImportant) {
     let mut style = NodeStyle::default();
 
-    // `tw` is the last declared layer, below unlayered author rules, so its
-    // important half goes last: the cascade reverses layer order for important
-    // declarations.
-    let tw = node_layers.author_tw.map(|author_tw| {
-      author_tw.declaration_blocks(
-        self.sizing.viewport,
-        &self.stylesheet().breakpoints,
-        self.tw_cache(),
-      )
-    });
-
     if let Some(preset) = node_layers.preset {
-      style.append_block(preset.declarations);
+      style.append_block(Arc::unwrap_or_clone(preset).declarations);
     }
 
     if let Some(dir) = node_layers.dir {
       style.push(StyleDeclaration::direction(dir), false);
     }
 
-    for &declarations in matched_declarations.layered_normal() {
+    // Blink's `StyleResolver::MatchPresentationalHints`.
+    if let Some(presentation) = node_layers.presentation {
+      style.append_block(presentation.declarations);
+    }
+
+    for declarations in matched_declarations.layered_normal() {
       style.merge_matched_block(declarations);
     }
 
-    // `tw` is the last declared layer, as Tailwind orders utilities: above every
-    // named `@layer`, below unlayered author rules.
-    if let Some(tw) = &tw {
-      style.append_block_cloned(&tw.normal);
-    }
-
-    for &declarations in matched_declarations.unlayered_normal() {
+    for declarations in matched_declarations.unlayered_normal() {
       style.merge_matched_block(declarations);
     }
 
@@ -3404,17 +2811,12 @@ impl RenderContext {
       style.append_block(inline_normal);
     }
 
-    // Important declarations reverse layer order, so `tw`, the last declared
-    // layer, sits above unlayered rules and below every named `@layer`.
-    for &declarations in matched_declarations.unlayered_important() {
+    // Important declarations reverse layer order.
+    for declarations in matched_declarations.unlayered_important() {
       style.merge_matched_block(declarations);
     }
 
-    if let Some(tw) = &tw {
-      style.append_block_cloned(&tw.important);
-    }
-
-    for &declarations in matched_declarations.layered_important() {
+    for declarations in matched_declarations.layered_important() {
       style.merge_matched_block(declarations);
     }
 
@@ -3425,7 +2827,6 @@ impl RenderContext {
     (
       style,
       ElementImportant {
-        tw,
         inline: inline_important,
       },
     )
@@ -3472,7 +2873,7 @@ impl RenderContext {
 
   /// Resolves a child's style and sizing from its matched declarations, sharing the style a box
   /// with the same preset resolved to from the same declarations under an equal parent.
-  fn resolve_child_style(
+  pub(crate) fn resolve_child_style(
     &self,
     node: &mut Node,
     source_order: usize,
@@ -3560,12 +2961,6 @@ impl RenderContext {
       .iter()
       .map(|declarations| declarations.iter())
       .chain(
-        element_important
-          .tw
-          .iter()
-          .map(|blocks| blocks.important.iter()),
-      )
-      .chain(
         matched
           .layered_important()
           .iter()
@@ -3617,6 +3012,10 @@ impl RenderContext {
       .primary_simple_font_data_with_digit_zero()
       .and_then(|font| font.font_metrics())
       .map_or(0.0, |metrics| metrics.zero_width);
+    // Blink's `FontSizes::Ex`: the x-height of the primary font, or half an em when it has none.
+    let ex = metrics
+      .and_then(|metrics| metrics.x_height)
+      .unwrap_or(font_size / 2.0);
     let normal_basis = match style.inherited_data.line_height {
       LineHeight::Normal => metrics.map_or(font_size, PrimaryFontMetrics::line_spacing),
       _ => 0.0,
@@ -3637,7 +3036,7 @@ impl RenderContext {
         .sizing
         .root_line_height
         .or_else(|| is_document_root.then_some(line_height)),
-      ch,
+      FontUnits { ch, ex },
     )
   }
 
@@ -3668,10 +3067,8 @@ impl RenderContext {
 mod tests {
   use std::str::FromStr;
 
-  use taffy::NodeId as TaffyNodeId;
-
   use super::{
-    NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
+    NodeId, NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
     sort_children_by_order,
   };
   use crate::{
@@ -3736,22 +3133,14 @@ mod tests {
 
   #[test]
   fn sort_children_by_order_keeps_source_order_for_equal_values() {
-    let mut children = vec![
-      TaffyNodeId::from(3usize),
-      TaffyNodeId::from(1usize),
-      TaffyNodeId::from(2usize),
-    ];
+    let mut children = vec![NodeId::new(3), NodeId::new(1), NodeId::new(2)];
     sort_children_by_order(&mut children, |child_id| match usize::from(child_id) {
       1 => -1,
       _ => 0,
     });
     assert_eq!(
       children,
-      vec![
-        TaffyNodeId::from(1usize),
-        TaffyNodeId::from(3usize),
-        TaffyNodeId::from(2usize)
-      ]
+      vec![NodeId::new(1), NodeId::new(3), NodeId::new(2)]
     );
   }
 
@@ -4056,6 +3445,59 @@ mod tests {
 
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(resolved.box_data.width, Length::Px(10.0).into());
+  }
+
+  /// `:dir()` matches HTML's directionality: the `dir` of the nearest element that sets one, and
+  /// left to right where none does.
+  #[test]
+  fn dir_pseudo_class_matches_the_nearest_dir_attribute() {
+    use std::sync::Arc;
+
+    use crate::{
+      context::RenderContext,
+      layout::{node::Node, tree::RenderNode},
+      resources::font::Fonts,
+      style::{Direction, SizingContext},
+    };
+
+    let stylesheet = StyleSheet::parse(
+      r#"
+        :dir(ltr) { width: 10px; }
+        :dir(rtl) { width: 20px; }
+        :dir(sideways) { height: 5px; }
+      "#,
+    )
+    .expect("stylesheet parses");
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([
+        Node::container([Node::text("inherits")]).with_dir(Direction::Rtl),
+        Node::container([Node::container([Node::text("deeper")])]).with_dir(Direction::Rtl),
+      ]),
+    );
+    let children = tree.children.as_deref().expect("block children");
+    let grandchild = &children[1].children.as_deref().expect("block children")[0];
+
+    assert_eq!(tree.context.style.box_data.width, Length::Px(10.0).into());
+    assert_eq!(
+      children[0].context.style.box_data.width,
+      Length::Px(20.0).into()
+    );
+    assert_eq!(
+      grandchild.context.style.box_data.width,
+      Length::Px(20.0).into()
+    );
+    assert_eq!(tree.context.style.box_data.height, Length::Auto.into());
   }
 
   #[test]

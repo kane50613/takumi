@@ -26,7 +26,7 @@ use std::{
   cell::RefCell,
   collections::{BTreeMap, HashMap},
   str::FromStr,
-  sync::LazyLock,
+  sync::{Arc, LazyLock},
 };
 
 use html5ever::{
@@ -34,6 +34,8 @@ use html5ever::{
   serialize::{SerializeOpts, TraversalScope, serialize},
   tendril::TendrilSink,
 };
+#[cfg(feature = "svg")]
+use takumi_core::resources::image::{ImageSource, SvgSource};
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   style::{
@@ -186,13 +188,13 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("col", "display:table-column"),
 ];
 
-static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {
+static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Arc<Style>>> = LazyLock::new(|| {
   DEFAULT_PRESETS
     .iter()
     .map(|&(tag, css)| {
       (
         tag.into(),
-        Style::from(StyleDeclarationBlock::parse_loosy(css)),
+        Arc::new(Style::from(StyleDeclarationBlock::parse_loosy(css))),
       )
     })
     .collect()
@@ -213,7 +215,7 @@ pub enum HtmlError {
 /// static at no allocation cost. Supply your own with [`From`]; disable presets
 /// with [`StylePresets::empty`].
 #[derive(Debug, Clone)]
-pub struct StylePresets(Cow<'static, HashMap<Box<str>, Style>>);
+pub struct StylePresets(Cow<'static, HashMap<Box<str>, Arc<Style>>>);
 
 impl StylePresets {
   /// Built-in Chromium element presets.
@@ -226,7 +228,8 @@ impl StylePresets {
     Self(Cow::Owned(HashMap::new()))
   }
 
-  fn get(&self, tag: &str) -> Option<&Style> {
+  /// The preset of `tag`, shared until an element changes its copy.
+  fn get(&self, tag: &str) -> Option<&Arc<Style>> {
     self.0.get(tag)
   }
 }
@@ -239,7 +242,12 @@ impl Default for StylePresets {
 
 impl From<HashMap<Box<str>, Style>> for StylePresets {
   fn from(presets: HashMap<Box<str>, Style>) -> Self {
-    Self(Cow::Owned(presets))
+    Self(Cow::Owned(
+      presets
+        .into_iter()
+        .map(|(tag, style)| (tag, Arc::new(style)))
+        .collect(),
+    ))
   }
 }
 
@@ -436,8 +444,8 @@ impl NodeBuilder<'_> {
       "img" => match handle.attribute("src").filter(|src| !src.trim().is_empty()) {
         Some(src) => Node::image(ImageData {
           src: ImageSourceInput::Url(src.into()),
-          width: dimension(handle, "width"),
-          height: dimension(handle, "height"),
+          width: pixels(handle, tag, "width"),
+          height: pixels(handle, tag, "height"),
         }),
         // Chrome draws an `<img>` without a source as an empty inline box its `width` and
         // `height` size.
@@ -445,9 +453,9 @@ impl NodeBuilder<'_> {
       },
       _ if UNRENDERED_TAGS.contains(&tag) => return Ok(None),
       "svg" => Node::image(ImageData {
-        src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
-        width: dimension(handle, "width"),
-        height: dimension(handle, "height"),
+        src: self.inline_svg(handle, depth)?,
+        width: pixels(handle, tag, "width"),
+        height: pixels(handle, tag, "height"),
       }),
       _ => match text_only_contents(handle) {
         Some(text) => Node::text(text),
@@ -468,8 +476,27 @@ impl NodeBuilder<'_> {
   fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
     node = node.with_tag_name(tag);
 
-    if let Some(preset) = self.presets.get(tag) {
-      node = node.with_preset(preset.clone());
+    let mut preset = self.presets.get(tag).cloned();
+
+    // A size in other units than pixels, which `ImageData` cannot hold, styles the image.
+    if matches!(node.kind, NodeKind::Image(_)) {
+      for (name, declaration) in [
+        (
+          "width",
+          StyleDeclaration::width as fn(Length) -> StyleDeclaration,
+        ),
+        ("height", StyleDeclaration::height),
+      ] {
+        if let Some(length) =
+          dimension(handle, tag, name).filter(|length| !matches!(length, Length::Px(_)))
+        {
+          Arc::make_mut(preset.get_or_insert_default()).push(declaration(length), false);
+        }
+      }
+    }
+
+    if let Some(preset) = preset {
+      node = node.with_preset(preset);
     }
 
     let NodeData::Element { attrs, .. } = handle.data() else {
@@ -522,6 +549,69 @@ impl NodeBuilder<'_> {
     node
   }
 
+  /// The source of an inline `<svg>`: its subtree as nodes, which the page's stylesheet reaches,
+  /// or its markup when the nodes do not form a document.
+  #[cfg(feature = "svg")]
+  fn inline_svg(&self, handle: NodeRef<'_>, depth: usize) -> Result<ImageSourceInput, HtmlError> {
+    let markup = serialize_outer_html(handle);
+    let root = self.svg_node(handle, depth)?;
+    let source = str::from_utf8(&markup)
+      .ok()
+      .zip(root)
+      .and_then(|(markup, root)| SvgSource::from_inline_element(&root, markup).ok());
+
+    Ok(match source {
+      Some(source) => ImageSourceInput::Loaded(ImageSource::from(source)),
+      None => ImageSourceInput::Buffer(markup),
+    })
+  }
+
+  #[cfg(not(feature = "svg"))]
+  fn inline_svg(&self, handle: NodeRef<'_>, _depth: usize) -> Result<ImageSourceInput, HtmlError> {
+    Ok(ImageSourceInput::Buffer(serialize_outer_html(handle)))
+  }
+
+  /// An element of an inline `<svg>` with every attribute in its attribute map under its
+  /// qualified name, or a text, none for other nodes. A subtree past the depth limit fails as the
+  /// rest of the document does.
+  #[cfg(feature = "svg")]
+  fn svg_node(&self, handle: NodeRef<'_>, depth: usize) -> Result<Option<Node>, HtmlError> {
+    if depth >= self.max_depth {
+      return Err(HtmlError::MaxDepthExceeded(self.max_depth));
+    }
+
+    Ok(match handle.data() {
+      NodeData::Text(contents) => Some(Node::text(contents.to_string())),
+      NodeData::Element { name, attrs, .. } => {
+        let attributes: BTreeMap<Box<str>, Box<str>> = attrs
+          .iter()
+          .map(|attr| {
+            let local = &*attr.name.local;
+            let name = match attr.name.ns {
+              ns!(xlink) => format!("xlink:{local}").into(),
+              ns!(xml) => format!("xml:{local}").into(),
+              _ => local.into(),
+            };
+
+            (name, attr.value.as_ref().into())
+          })
+          .collect();
+        let mut children = Vec::new();
+
+        for child in handle.children() {
+          children.extend(self.svg_node(child, depth + 1)?);
+        }
+
+        Some(
+          Node::container(children)
+            .with_tag_name(&*name.local)
+            .with_attributes(attributes),
+        )
+      }
+      _ => None,
+    })
+  }
+
   /// The style a `style` attribute of `css` sets.
   fn style(&self, css: &str) -> Style {
     if let Some(style) = self.styles.borrow().get(css) {
@@ -554,20 +644,63 @@ fn text_only_contents(handle: NodeRef<'_>) -> Option<String> {
     .then_some(text)
 }
 
-fn dimension(handle: NodeRef<'_>, name: &str) -> Option<f32> {
-  handle.attribute(name).and_then(|value| value.parse().ok())
+/// The `width` or `height` attribute of an `<img>` or `<svg>` as Blink maps it to style: an
+/// `<img>` takes HTML's rules for parsing dimension values, a number of pixels or a percentage,
+/// and an `<svg>` a CSS length, a number counting as pixels.
+/// <https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-dimension-values>
+fn dimension(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<Length> {
+  let value = handle.attribute(name)?.trim();
+
+  if tag == "svg" {
+    return Length::from_css_str(value)
+      .ok()
+      .or_else(|| value.parse().ok().map(Length::Px));
+  }
+
+  let digits_end = |start: usize| {
+    value[start..]
+      .find(|character: char| !character.is_ascii_digit())
+      .map_or(value.len(), |end| start + end)
+  };
+  let integer_end = digits_end(0);
+
+  if integer_end == 0 {
+    return None;
+  }
+  // A fraction needs a digit after its point; anything past the number is ignored.
+  let number_end = match value[integer_end..].strip_prefix('.') {
+    Some(fraction) if fraction.starts_with(|character: char| character.is_ascii_digit()) => {
+      digits_end(integer_end + 1)
+    }
+    _ => integer_end,
+  };
+  let number: f32 = value[..number_end].parse().ok()?;
+
+  Some(if value[number_end..].starts_with('%') {
+    Length::Percentage(number)
+  } else {
+    Length::Px(number)
+  })
+}
+
+/// [`dimension`] when it is a number of pixels, which `ImageData` holds.
+fn pixels(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<f32> {
+  match dimension(handle, tag, name)? {
+    Length::Px(pixels) => Some(pixels),
+    _ => None,
+  }
 }
 
 /// The style of an `<img>` without a source: an inline-block, sized by its `width` and `height`.
 fn empty_image_style(handle: NodeRef<'_>) -> Style {
-  let mut style = Style::default().with(StyleDeclaration::display(Display::InlineBlock));
+  let mut style = Style::default().display(Display::InlineBlock);
 
-  if let Some(width) = dimension(handle, "width") {
-    style = style.with(StyleDeclaration::width(Length::Px(width)));
+  if let Some(width) = dimension(handle, "img", "width") {
+    style = style.width(width);
   }
 
-  if let Some(height) = dimension(handle, "height") {
-    style = style.with(StyleDeclaration::height(Length::Px(height)));
+  if let Some(height) = dimension(handle, "img", "height") {
+    style = style.height(height);
   }
 
   style
@@ -595,6 +728,41 @@ mod tests {
 
   fn parse(source: &str) -> Node {
     from_html(source, FromHtmlOptions::default()).unwrap()
+  }
+
+  /// An `<img>` takes a percentage `width` the way HTML parses a dimension, and an `<svg>` any
+  /// CSS length, as Chrome maps them to style; a number of pixels stays in `ImageData`.
+  #[test]
+  fn image_size_attributes_in_other_units_style_the_image() {
+    let image = parse(r#"<img src="a.png" width="50%" height="20..5">"#);
+    let fraction_only = parse(r#"<img src="a.png" width=".5">"#);
+    let svg = parse(r#"<svg width="100%" height="2em" viewBox="0 0 1 1"></svg>"#);
+
+    assert!(matches!(
+      image.kind,
+      NodeKind::Image(ImageData {
+        width: None,
+        height: Some(20.0),
+        ..
+      })
+    ));
+    assert!(matches!(
+      fraction_only.kind,
+      NodeKind::Image(ImageData { width: None, .. })
+    ));
+    assert!(image.to_html().contains("width: 50%"));
+    assert!(svg.to_html().contains("width: 100%; height: 2em"));
+  }
+
+  /// A subtree of an inline `<svg>` past the depth limit fails as the rest of the document does,
+  /// rather than drawing without its deepest elements.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn an_inline_svg_past_the_depth_limit_fails() {
+    let options = FromHtmlOptions::builder().max_depth(2).build();
+    let result = from_html(r#"<svg><g><rect width="1" height="1"/></g></svg>"#, options);
+
+    assert!(matches!(result, Err(HtmlError::MaxDepthExceeded(2))));
   }
 
   /// A `style` attribute is a declaration list, and CSS drops only the declaration it

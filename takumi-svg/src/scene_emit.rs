@@ -9,7 +9,6 @@ use std::io;
 
 use takumi_core::{
   geometry::Point,
-  layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{BoxFrame, TableDecorations, TextClip, paint_collapsed_borders},
@@ -72,7 +71,11 @@ impl<'a> SceneEmitter<'a> {
   /// beyond a translation.
   fn place(&self, paint: &NodePaint, current: Affine) -> Option<(PlacedBox<'a>, Affine)> {
     let node = self.scene.root.node_at_path(&paint.path)?;
-    let layout = self.scene.results.layout(paint.node_id).ok()?;
+    let layout = self
+      .scene
+      .results
+      .fragment_layout(paint.node_id, paint.fragment_index)
+      .ok()?;
     let relative = current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
     let (origin, group_transform) = if relative.only_translation() {
       (
@@ -136,16 +139,16 @@ impl ChunkWriter<'_, '_, '_> {
       match chunk.part {
         ChunkPart::Decorations => {
           let scene = self.emitter.scene;
-          let text_clip =
-            TextClip::of(&scene.root, &scene.results, chunk.node).map_err(io::Error::other)?;
-
-          let table = TableDecorations::of(
+          let text_clip = TextClip::of(
             &scene.root,
-            &scene.results,
-            &chunk.node.path,
-            chunk.node.node_id,
+            scene.results.view(),
+            chunk.node,
+            &placed.node.context,
           )
           .map_err(io::Error::other)?;
+
+          let table = TableDecorations::of(&scene.root, scene.results.view(), chunk.node)
+            .map_err(io::Error::other)?;
 
           placed.emit_decorations(text_clip.as_ref(), table, doc)?;
         }
@@ -155,9 +158,8 @@ impl ChunkWriter<'_, '_, '_> {
 
           DocumentDevice::paint(doc, |device| {
             result = paint_collapsed_borders(
-              &scene.results,
-              chunk.node.node_id,
-              chunk.node.paint_offset,
+              scene.results.view(),
+              chunk.node,
               placed.frame.translation(),
               None,
               device,
@@ -166,8 +168,7 @@ impl ChunkWriter<'_, '_, '_> {
           result.map_err(io::Error::other)?;
         }
         ChunkPart::CollapsedBorders => {}
-        ChunkPart::Content => placed.emit_own_content(InlinePass::Content, doc)?,
-        ChunkPart::Floats => placed.emit_own_content(InlinePass::Floats, doc)?,
+        ChunkPart::Content => placed.emit_own_content(doc)?,
         ChunkPart::Outline => placed.emit_outline(doc)?,
       }
 

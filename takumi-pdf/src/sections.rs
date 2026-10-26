@@ -2,41 +2,48 @@
 
 use std::collections::HashMap;
 
-use takumi_core::style::Color;
+use takumi_core::page_stream::Settle;
 
 use crate::{
   Band, PageOptions, PageRules, PdfError, PdfSection,
   counters::{has_page_counters, has_target_counters},
-  emitter::DocumentState,
-  interactive::Interactive,
-  krilla::{Document, destination::XyzDestination},
+  interactive::{PageSummary, has_internal_links},
+  krilla::destination::XyzDestination,
   options::{PageBand, PageRange, PageSelection},
-  page::{PageBands, PagePlan},
-  pagination::{MAX_PAGES, PageCounters},
-  tree::TreeInputs,
+  page::{Destinations, PageBands, PageDrawing, PagePlan, Solved},
+  pagination::{Counted, MAX_PAGES, PageCounters},
 };
+
+/// How many times the sections lay out to settle the document's page numbers.
+const SECTION_PASSES: usize = 8;
 
 pub(crate) struct SectionPlan {
   pub(crate) sections: Vec<PagePlan>,
-  pub(crate) interactive: Interactive,
+  pub(crate) summary: PageSummary,
 }
 
 impl SectionPlan {
-  pub(crate) fn solve(
-    inputs: &TreeInputs<'_>,
+  /// Counts the pages of every section until the document's page numbers stop moving, then draws
+  /// each section's pages in order.
+  pub(crate) fn render(
+    drawing: &mut PageDrawing<'_, '_>,
     sources: &[PdfSection],
     page: PageOptions,
     rules: &PageRules,
     ranges: Option<&[PageRange]>,
     structural: bool,
+    settle: Settle<'_>,
   ) -> Result<Self, PdfError> {
     if sources.len() >= MAX_PAGES {
       return Err(PdfError::TooManyPages(sources.len()));
     }
+    let linked = sources
+      .iter()
+      .any(|source| has_target_counters(&source.node) || has_internal_links(&source.node));
     let mut counts = vec![1; sources.len()];
     let mut targets = HashMap::new();
 
-    for _ in 0..8 {
+    for _ in 0..SECTION_PASSES {
       let total = counts.iter().sum();
       let mut offset = 0;
       let mut next_total = 0;
@@ -78,53 +85,40 @@ impl SectionPlan {
               .flat_map(PageBand::nodes),
           )
           .any(|node| has_page_counters(node) || has_target_counters(node));
-        let mut plan = PagePlan::solve(
-          inputs,
+        let (solved, counted) = PageDrawing::count(
+          drawing.inputs,
           source.page.unwrap_or(page),
-          bands,
+          &bands,
           source.node.clone(),
-          structural,
+          settle,
           PageCounters {
             offset,
             total: Some(total),
-            targets: Some(&targets),
+            targets: linked.then_some(&targets),
           },
         )?;
 
-        next_total += plan.paginated.starts.len();
+        next_total += counted.pages();
         if next_total >= MAX_PAGES {
           return Err(PdfError::TooManyPages(next_total));
         }
-        plan.prefix = vec![index];
-        for (id, anchor) in &plan.paginated.interactive.anchors {
-          next_targets
-            .entry(id.clone())
-            .or_insert(offset + plan.paginated.page_index(anchor.top) + 1);
+        if linked {
+          for (id, anchor) in counted.anchors()? {
+            let page = offset + counted.starts().index_of(anchor.top) + 1;
+
+            next_targets.entry(id).or_insert(page);
+          }
         }
         offset += counts[index];
-        sections.push(plan);
+        sections.push((solved, counted));
       }
       let next_counts: Vec<_> = sections
         .iter()
-        .map(|plan| plan.paginated.starts.len())
+        .map(|(_, counted)| counted.pages())
         .collect();
 
       if !dynamic || (next_counts == counts && next_targets == targets) {
-        let selection = PageSelection::resolve(ranges, next_total)?;
-        let mut interactive = Interactive::default();
-        let mut offset = 0;
-
-        for (index, plan) in sections.iter_mut().enumerate() {
-          plan.offset = offset;
-          plan.total = next_total;
-          plan.selection = selection.section(offset, plan.paginated.starts.len());
-          interactive.append_section(&plan.paginated.interactive, index);
-          offset += plan.paginated.starts.len();
-        }
-        return Ok(Self {
-          sections,
-          interactive,
-        });
+        return Self::draw(drawing, sections, ranges, structural, settle, linked);
       }
       counts = next_counts;
       targets = next_targets;
@@ -132,36 +126,78 @@ impl SectionPlan {
     Err(PdfError::UnstableSections)
   }
 
+  /// Draws the counted sections in order, numbering their pages across the document.
+  fn draw(
+    drawing: &mut PageDrawing<'_, '_>,
+    sections: Vec<(Solved, Counted)>,
+    ranges: Option<&[PageRange]>,
+    structural: bool,
+    settle: Settle<'_>,
+    linked: bool,
+  ) -> Result<Self, PdfError> {
+    let total = sections.iter().map(|(_, counted)| counted.pages()).sum();
+    let selection = PageSelection::resolve(ranges, total)?;
+    let mut selections = Vec::with_capacity(sections.len());
+    let mut destinations = HashMap::new();
+    let mut offset = 0;
+
+    for (index, (solved, counted)) in sections.iter().enumerate() {
+      let section = selection.section(offset, counted.pages());
+
+      if linked {
+        let place = Destinations {
+          frame: &solved.frame,
+          selection: &section,
+          starts: counted.starts(),
+          structural,
+          prefix: &[index],
+        };
+
+        for (id, anchor) in counted.anchors()? {
+          if let Some(destination) = place.destination(anchor.top, &anchor.path) {
+            destinations.entry(id).or_insert(destination);
+          }
+        }
+      }
+      offset += counted.pages();
+      selections.push(section);
+    }
+
+    let mut plans = Vec::with_capacity(sections.len());
+    let mut summary = PageSummary::new(false);
+    let mut offset = 0;
+
+    for (index, ((solved, counted), selection)) in sections.into_iter().zip(selections).enumerate()
+    {
+      let pages = counted.pages();
+      let mut plan = PageDrawing {
+        pdf: &mut *drawing.pdf,
+        inputs: drawing.inputs,
+        state: drawing.state,
+        background: drawing.background,
+        counters: PageCounters {
+          offset,
+          total: Some(total),
+          targets: None,
+        },
+        destinations: Some(&destinations),
+      }
+      .draw(solved, counted, selection, structural, settle)?;
+
+      plan.prefix = vec![index];
+      summary.append_section(&plan.summary, index);
+      offset += pages;
+      plans.push(plan);
+    }
+    Ok(Self {
+      sections: plans,
+      summary,
+    })
+  }
+
   pub(crate) fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
     let (&index, path) = path.split_first()?;
 
     self.sections.get(index)?.destination(top, path)
-  }
-
-  pub(crate) fn compose(
-    &self,
-    pdf: &mut Document,
-    inputs: &TreeInputs<'_>,
-    state: &DocumentState<'_>,
-    background: Option<Color>,
-  ) -> Result<(), PdfError> {
-    let destinations = self
-      .interactive
-      .anchors
-      .iter()
-      .filter_map(|(id, anchor)| {
-        self
-          .destination(anchor.top, &anchor.path)
-          .map(|destination| (id.clone(), destination))
-      })
-      .collect();
-
-    for plan in &self.sections {
-      if let Some(tags) = &state.tags {
-        tags.borrow_mut().prefix.clone_from(&plan.prefix);
-      }
-      plan.compose(pdf, inputs, state, background, Some(&destinations))?;
-    }
-    Ok(())
   }
 }

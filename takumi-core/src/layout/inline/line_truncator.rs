@@ -452,16 +452,10 @@ fn truncate_text<'a, 'c>(
 #[cfg(test)]
 mod tests {
   use super::suppress_line_breaks;
-  use crate::{
-    layout::{
-      inline::{
-        inline_node::InlineNode,
-        testing::{TestAtomicInline, render_tree},
-      },
-      node::Node,
-      tree::RenderNode,
-    },
-    layout_unit::LayoutUnit,
+  use crate::layout::{
+    inline::testing::{read_lines, render_tree},
+    node::Node,
+    tree::RenderNode,
   };
 
   const ELLIPSIS: &str =
@@ -470,33 +464,26 @@ mod tests {
   /// The visible items of the line at `line_index`: each text, or ellipsis, with its inline
   /// offset and size.
   fn line_items(block: &RenderNode, available_width: f32, line_index: usize) -> Vec<String> {
-    let node = InlineNode::new(block);
-    let data = node.prepare_layout();
-    let mut atomic_inline = TestAtomicInline;
-    let lines = node.layout_lines(
-      &data,
-      LayoutUnit::from_float(available_width),
-      &mut atomic_inline,
-    );
+    read_lines(block, available_width, |data, lines| {
+      lines[line_index]
+        .items
+        .children
+        .iter()
+        .filter(|item| item.shape_result.is_some() && !item.is_hidden_due_to_layout)
+        .map(|item| {
+          let text = item
+            .text_content
+            .clone()
+            .unwrap_or_else(|| data.text_content[item.text_offset.clone()].to_owned());
 
-    lines[line_index]
-      .items
-      .children
-      .iter()
-      .filter(|item| item.shape_result.is_some() && !item.is_hidden_due_to_layout)
-      .map(|item| {
-        let text = item
-          .text_content
-          .clone()
-          .unwrap_or_else(|| data.text_content[item.text_offset.clone()].to_owned());
-
-        format!(
-          "{text}@{}+{}",
-          item.rect.offset.inline_offset.to_float(),
-          item.inline_size.to_float()
-        )
-      })
-      .collect()
+          format!(
+            "{text}@{}+{}",
+            item.rect.offset.inline_offset.to_float(),
+            item.inline_size.to_float()
+          )
+        })
+        .collect()
+    })
   }
 
   fn visible_items(block: &RenderNode, available_width: f32) -> Vec<String> {
@@ -526,17 +513,14 @@ mod tests {
       [Node::text("aaa bbb ccc ddd eee")],
       ".container { line-clamp: 2 }",
     );
-    let node = InlineNode::new(&block);
-    let data = node.prepare_layout();
-    let lines = node.layout_lines(&data, LayoutUnit::from_float(42.0), &mut TestAtomicInline);
-
-    assert_eq!(
+    let hidden = read_lines(&block, 42.0, |_, lines| {
       lines
         .iter()
         .map(|line| line.is_hidden_due_to_layout)
-        .collect::<Vec<_>>(),
-      [false, false, true]
-    );
+        .collect::<Vec<_>>()
+    });
+
+    assert_eq!(hidden, [false, false, true]);
   }
 
   /// A clamp line with no line after it keeps its text.

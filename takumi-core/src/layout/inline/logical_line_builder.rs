@@ -221,10 +221,22 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
           self.has_out_of_flow_positioned_items = true;
         }
         InlineItemType::Floating => {
-          line_box.add_child(match item_result.positioned_float {
-            Some(positioned_float) => LogicalLineItem::positioned_float(item, positioned_float),
-            None => LogicalLineItem::unpositioned_float(item),
-          });
+          // A float the page pushed to the next one is not on this line.
+          match &item_result.positioned_float {
+            Some(positioned_float) if positioned_float.is_pushed_to_next_page() => {}
+            Some(positioned_float) => {
+              line_box.add_child(LogicalLineItem::positioned_float(
+                item,
+                positioned_float.clone(),
+              ));
+            }
+            None => {
+              line_box.add_child(LogicalLineItem::unpositioned_float(
+                item,
+                item_result.start(),
+              ));
+            }
+          }
           self.has_floating_items = true;
           self.has_relative_positioned_items |= is_relative_positioned(item);
         }
@@ -338,8 +350,11 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
     item_result: &InlineItemResult<'a, 'c>,
     line_box: &mut LogicalLineItems<'a, 'c>,
   ) {
-    let (Some(object), Some(layout_result)) = (item.layout_object, item_result.layout_result)
-    else {
+    let (Some(object), Some(layout_result), Some(result)) = (
+      item.layout_object,
+      item_result.layout_result,
+      item_result.block_in_inline_result.clone(),
+    ) else {
       return;
     };
 
@@ -355,6 +370,7 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
       LineFragment::BlockInInline {
         node: object.node(),
         layout_result,
+        result,
       },
       LogicalOffset::default(),
       item_result.inline_size,
@@ -509,7 +525,7 @@ mod tests {
       node,
       &data,
       LineBreakerMode::Content,
-      space,
+      space.clone(),
       LineLayoutOpportunity::new(available_width),
       &LeadingFloats::default(),
       None,

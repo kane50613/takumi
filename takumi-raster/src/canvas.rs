@@ -26,11 +26,10 @@ use takumi_core::{
   resources::image_buffer::demultiply_pixel,
 };
 use tiny_skia::{
-  FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap, PixmapMut, PixmapPaint, PixmapRef,
-  Transform as TinyTransform,
+  BlendMode as TinyBlendMode, FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap,
+  PixmapMut, PixmapPaint, PixmapRef, Transform as TinyTransform,
 };
 
-use self::skia::to_tiny_blend_mode;
 use crate::{
   BackgroundTile, Bitmap, BorderProperties, Placement, Result,
   blend::*,
@@ -164,6 +163,12 @@ impl Canvas {
     })
   }
 
+  /// The canvas painting the area of a scene that starts at `origin`.
+  #[cfg(feature = "pages")]
+  pub(crate) fn with_origin(self, origin: Point<i32>) -> Self {
+    Self { origin, ..self }
+  }
+
   /// Test-only infallible constructor, falling back to 1x1 when `size` cannot be
   /// allocated. Production code uses [`Canvas::try_new`] and surfaces the error.
   #[cfg(test)]
@@ -286,7 +291,7 @@ impl Canvas {
       return;
     }
 
-    let Some(blend_mode) = to_tiny_blend_mode(mode) else {
+    let Ok(blend_mode) = TinyBlendMode::try_from(mode) else {
       let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
 
       for pixel in bytemuck::cast_slice_mut::<_, [u8; 4]>(isolated_image.data_mut()) {

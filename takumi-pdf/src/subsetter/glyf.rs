@@ -48,9 +48,7 @@ pub fn closure(face: &Face, glyph_remapper: &mut GlyphRemapper) -> Result<()> {
 pub fn subset(ctx: &mut Context) -> Result<()> {
   let table = Table::new(&ctx.face).ok_or(MalformedFont)?;
 
-  #[allow(unused_mut)]
   let mut maxp_data = MaxpData::default();
-  #[allow(unused_mut)]
   let mut hmtx_data = Vec::new();
 
   subset_with(ctx, |old_gid, ctx| {

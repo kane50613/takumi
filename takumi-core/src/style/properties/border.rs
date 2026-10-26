@@ -82,6 +82,11 @@ impl<'i> FromCss<'i> for LineWidth {
 }
 
 impl LineWidth {
+  /// Whether the width is authored as a negative length.
+  pub(crate) fn is_negative(self) -> bool {
+    matches!(self, Self::Length(length) if length.is_negative())
+  }
+
   /// The used width in device pixels, snapped as a border width.
   pub(crate) fn to_used_px(self, sizing: &SizingContext) -> f32 {
     Length::from(self).to_border_px(sizing, 0.0)

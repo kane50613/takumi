@@ -1,3 +1,289 @@
+## takumi-core@0.33.0
+
+### Align and decorate SVG text with the font metrics HTML text uses
+
+SVG `<text>` now places `dominant-baseline`, `alignment-baseline`, and text decorations from the same font metrics as HTML text. `baseline-shift="sub"` and `"super"` move text by half the font's height, as Chromium does, and decoration lines are a tenth of the font size thick.
+
+### Lay out SVG text as Chrome does
+
+SVG `<text>` now takes its font, size, spacing, and anchoring from the CSS cascade and lays out with Chrome's SVG text algorithm. Text without a `font-size` is 16px, as in Chrome, instead of 12px, and text without a `font-family` uses the same default font as the rest of the page.
+
+### Run `feMorphology` and `feConvolveMatrix` as Chrome does
+
+`feMorphology` now rounds its radius, reads transparent pixels past the filter region, and leaves an axis with a radius of zero as it is. `feConvolveMatrix` now adds its bias before premultiplying, tiles `duplicate` and `wrap` within the primitive's subregion, passes the source graphic on for a kernel over 256 cells, and falls back to the kernel's sum for a divisor of zero. Both also run several times faster on large images.
+
+### Support the `grid` and `grid-template` shorthands
+
+`grid-template` and `grid` now set the grid longhands as browsers do, including the areas form such as `grid-template: "head head" 40px "side main" 1fr / 120px 1fr`. Track sizes also accept `min-content`, `max-content`, and `fit-content()`. A `grid-template-areas` row must now be a quoted string, and a value whose named areas do not form rectangles is rejected, as in browsers.
+
+### Stack boxes inside inline blocks and inline floats as Chrome does
+
+A positioned box or a `z-index` inside an inline block or a float of a line now stacks with the rest of the page, as Chrome stacks it, and `measure` reports what an inline block holds.
+
+### Run arithmetic `feComposite` and `feDisplacementMap` as Chrome does
+
+The arithmetic operator of `feComposite` now saturates every channel and rounds its result as Skia does, instead of truncating. `feDisplacementMap` reads its map as straight colors in floats and samples the source pixel nearest each displaced pixel center. Arithmetic compositing also runs about 20% faster.
+
+### Size and place flex items where Chrome does
+
+Flex and `-webkit-box` containers now size, wrap, and align their items as Chrome does.
+
+### Match an SVG's `<style>` rules like the page's own CSS
+
+An SVG image's `<style>` sheet and `style` attributes now go through the selector engine takumi uses for HTML. Selectors such as `:nth-child()`, `:not()`, `:is()`, `:lang()`, and `~` now apply, where they used to drop the rule.
+
+An `@property` descriptor marked `!important` is now ignored, as in Chrome, where its value used to keep the annotation.
+
+### Support the `ex` length unit
+
+`ex` lengths now resolve to the x-height of the element's font, or half its font size when the font has none, as in Chrome.
+
+### Lay out a flex or grid container's text as an item beside its `::after`
+
+An element with its own text and an `::after` now lays the text out as an anonymous flex or grid item, as it already did beside a `::before`. Before, the text sat on the container itself, so `align-items` and `justify-content` ignored it and the `::after` box landed on top of it.
+
+### Draw SVG images at the size they take up
+
+An SVG in an `<img>`, a background, or an inline `<svg>` now lays out at the size it is drawn at, as in Chrome, instead of drawing at its own size and stretching. A `viewBox` keeps its `preserveAspectRatio` in a box of another shape, viewport units and percentages measure that box, and `object-fit: cover` crops the SVG instead of squeezing it. An SVG without a `viewBox` still stretches, as in Chrome.
+
+### Lay out `::before` and `::after` as flex and grid containers
+
+A `::before` or `::after` with `display: flex` or `display: grid` now lays its content out as items, so `align-items`, `justify-content`, and `place-items` center a generated number or icon. Before, the box became a block and ignored them. Adjacent strings and `attr()` values in `content` form one item, as in Chrome.
+
+### Size and place grid items where Chrome does
+
+Grid containers now place, size, and align their items as Chrome does, and an absolutely positioned child of a grid takes its grid area. Line names after the last track of a `repeat()` no longer drop.
+
+### Composite SVG layers faster
+
+An SVG image now composites its opacity, clip, and filter layers with integer source-over, and converts filter colors between sRGB and linearRGB in one pass. A 2000 by 2000 SVG with a filter renders 25 to 40 ms faster. Edges can shift by one level of a channel.
+
+### Style inline `<svg>` elements with the page's stylesheet
+
+An inline `<svg>` in HTML now inherits the style of the element it sits in, so `fill`, `stroke`, and font properties set on an ancestor reach its shapes and text. The page's stylesheet also matches the elements inside it, before the `<svg>`'s own `<style>` rules. Selectors that need an HTML ancestor of the `<svg>`, such as `.card path`, still do not match.
+
+### Light SVG filters as Chrome does
+
+`feDiffuseLighting` and `feSpecularLighting` now follow Skia's lighting shaders. Normals come from one Sobel kernel clamped at the primitive's edges, `surfaceScale` scales with the image, a spotlight fades in over Skia's narrow band past its cone, and a cone angle of zero or past 90 degrees widens to 90 as in Blink. They also run about 40% faster on large images.
+
+### Keep an inline box inline when it holds a block
+
+A block inside an inline box, such as a `<div>` in a `<span>`, now sits on a line of its own while the inline box keeps its lines before and after it, as in Chrome. The inline box used to turn into a block, so its background and border wrapped the whole thing.
+
+### Draw an outline that sets only `outline-style`
+
+An element with `outline-style: solid` and no `outline-width` now draws a `medium` (3px) outline, as browsers do. It used to draw no outline unless another outline longhand, such as `outline-color`, was also set.
+
+### Draw synthetic bold, synthetic italic, and color emoji in SVG text
+
+SVG `<text>` now draws the synthetic bold and italic HTML text gets for a face without that weight or style, and draws COLRv0 color glyphs such as Twemoji in color. These glyphs used to draw upright, at regular weight, or not at all.
+
+### Apply `unicode-bidi` and `direction` to SVG text
+
+SVG text now orders its characters with the `unicode-bidi` and `direction` of the `text` and of each `tspan`, `textPath`, and `a`, as in Chrome, so an override or an isolate takes effect and an RTL `text` starts its paragraph right to left.
+
+### Wrap text around floats outside its block
+
+Text now flows beside a float that an earlier block placed, as Chrome lays it out, instead of running over it. A `line-clamp` container sits beside such a float as a block formatting context of its own, and clips the floats inside it at its last shown line. A positioned box that was inline sits where Chrome puts it among blocks and floats, `text-align` and `text-indent` included.
+
+### Lay an SVG in an SVG `<image>` out at the image's size
+
+An SVG that an SVG `<image>` or `feImage` shows now lays out at the image's rectangle, as in Chrome, so its viewport units and percentages measure that rectangle.
+
+### Style SVG images with the full CSS cascade
+
+An SVG image now resolves its `<style>` rules, `style` attributes, and presentation attributes through takumi's CSS cascade, so selectors, `!important`, `@media`, and `var()` work as in Chrome, and CSS can set geometry such as `r` or `d`. `stroke-linejoin: miter-clip` and `arcs` are invalid, as in Chrome. SVG images that contain filters are still drawn as before.
+
+### Space SVG text as HTML text does
+
+SVG `<text>` now applies `letter-spacing` and `word-spacing` with the same rules as HTML text. Nonzero `letter-spacing` turns off ligatures, and the spacing also follows the last letter, which moves text centered with `text-anchor="middle"`. `word-spacing` now applies to a leading space too, as Chromium does in SVG.
+
+### Set overflow per logical axis with `overflow-inline` and `overflow-block`
+
+`overflow-inline` sets the horizontal overflow and `overflow-block` sets the vertical overflow, as Chrome maps them in horizontal text.
+
+### Lay out tables with Chromium's table algorithm
+
+Tables now follow Chromium's table layout instead of a grid approximation, so column widths, row heights, and collapsed borders match Chromium. `<col>` and `<colgroup>` size their columns and paint their backgrounds, and `visibility: collapse`, `empty-cells: hide`, and `display: inline-table` work. A `rowspan` now stops at the end of its row group.
+
+### Free the layout data of a page once it is drawn
+
+`render_pages` and `render` free the layout data a page held, such as its text lines and cached layouts, once the page is drawn and no later page paints from it. The source tree and the tree of boxes stay in memory for the whole render, so peak memory still grows with the size of the document. A document that lays out to its end before the first page is drawn frees nothing early. A page that would paint from a released page fails with `Error::PageReleased` instead.
+
+### Resolve conflicting `tw` utilities in Tailwind's order
+
+Two `tw` utilities or `@apply` entries that set the same property now resolve as Tailwind's compiled CSS does, whatever their order. `pt-2 p-4` and `p-4 pt-2` both pad the top by `pt-2`, where before the later class won. To keep the old behavior, merge the class list first with a tool such as `tailwind-merge`.
+
+### Support `text-decoration-inset`
+
+`text-decoration-inset` now pulls the ends of a decoration line in or pushes them out, as in Chrome. `auto` keeps adjacent decorations apart, a percentage measures the whole decorated run, and `box-decoration-break` decides whether each line of a wrapped run insets on its own.
+
+### Match and shape SVG text fonts as HTML text does
+
+SVG `<text>` now picks fonts with the CSS font matching HTML text uses, falls back per character through the same font list, and shapes through the same shaper. `font-variant="small-caps"` now synthesizes small capitals for a font without them. `font-weight`, `font-style`, and `font-stretch` pick faces and variation axes as CSS does.
+
+### Run SVG filters in takumi
+
+SVG `filter` elements and `filter` functions on SVG elements now resolve through the CSS cascade and run in takumi, and the `resvg`, `usvg`, and `svgtypes` dependencies are gone. Text in an SVG image that uses a filter is drawn again. `feGaussianBlur` blurs like CSS `blur()`, `feDisplacementMap` moves pixels by its `scale` instead of its square, and `saturate()` and `contrast()` use the Filter Effects coefficients, so filtered pixels can differ by a few levels.
+
+### Style `::before` and `::after` from `tw` with `before:`, `after:`, and `content-[…]`
+
+The `tw` prop now takes `before:` and `after:` variants, which style the element's `::before` and `::after`, and `content-['…']`, `content-[attr(…)]`, and `content-none` set what they show. They combine with structural variants and breakpoints, as in `first:before:content-['→']`. Like Tailwind, a `before:` or `after:` utility makes the box even without `content-*`.
+
+### Isolate an SVG group with `isolation: isolate`
+
+A `<g style="isolation: isolate">` inside an SVG image or inline `<svg>` now composites its content as one group, as in Chrome, so a descendant's `mix-blend-mode` blends only with what the group paints instead of with the page behind it.
+
+### Resolve `inherit`, `initial`, and `unset` on custom properties
+
+A custom property set to `inherit`, `initial`, or `unset` now takes the value the keyword names, as in Chrome. `inherit` takes the parent's value, `initial` takes the `@property` initial value or leaves the property unset so `var()` uses its fallback, and `unset` acts as `inherit` or `initial` by whether the property inherits. Before, `var()` substituted the keyword itself, so `--w: inherit; width: var(--w)` became `width: inherit`.
+
+### Repeat a fixed box from the page it starts on
+
+In paged output, a `position: fixed` box now repeats on the page that holds its static position and on every page after it, no longer on the pages before.
+
+### Draw inline boxes that have no content
+
+An inline element with no content, such as `<span style="padding: 0 10px; background: red"></span>`, now paints its background, border, and outline, as browsers do. It used to take its space on the line but paint nothing.
+
+### Style list rows with `first:`, `odd:`, and other structural variants in `tw`
+
+The `tw` prop now applies structural variants, which match the element's place in the tree or, for `empty:`, its contents. They are `first:`, `last:`, `only:`, `odd:`, `even:`, the `*-of-type:` forms, `empty:`, `nth-3:` and its relatives, `nth-[2n+1]:`, `not-*:`, and arbitrary variants on the element such as `[&:nth-child(3)]:`. They combine with breakpoints, as in `md:first:mt-0`. Before, a class with one of these variants was ignored.
+
+`:empty` in a stylesheet now also matches an element whose only children are text nodes with no characters, as in Chrome.
+
+### Center a block's content with `align-content`
+
+`align-content: center` and `end` now move the content of a block container with a fixed height, as Chrome does, and `space-around` and `space-evenly` center it. Content that overflows stays at the top unless the value says `unsafe`, as in `unsafe end`. A container with an `align-content` other than `normal` becomes a block formatting context. `align-content` and `justify-content` now keep `unsafe` and accept `flow-start` and `flow-end`. Table cells honor `unsafe` too.
+
+### Paint outside list markers as boxes of the page
+
+An outside list marker now paints and stacks as Chrome paints it. In a tagged PDF, the text of a list item stays in one marked-content region instead of being split around its marker.
+
+### Pick an inline block's baseline with `baseline-source`
+
+`baseline-source: first` lines an inline block up by its first line, and `last` by its last line. `auto` keeps the default, which is the last line of an inline block and the first baseline of an inline flex or grid container. A `vertical-align` declared after `baseline-source` resets it to `auto`, as Chrome does.
+
+### Line up inline blocks and inline images where Chrome does
+
+An inline block now sits on the baseline of its last line as Chrome places it, also when its `height` cuts that line off, and a percentage size inside an inline box resolves against its containing block as Chrome resolves it.
+
+### Draw `feTurbulence` noise as Chrome does
+
+`feTurbulence` now follows Skia's Perlin noise. It samples pixel centers without the specification's lattice offset, looks the lattice up once per corner, stores gradients in 16 bits, stitches tiles at the primitive subregion's whole size, and caps octaves at 9 as Blink does. Its noise now matches Chrome's to within rounding, where it used to differ visibly, and it runs about a third faster.
+
+### Break boxes inside a positioned inline box across pages
+
+In paged output, an absolutely positioned box whose containing block is a `position: relative` inline box now moves to the next page when it starts past the page end, and breaks across pages when it is taller than the space left.
+
+### Expose `rgba_len` for sizing RGBA buffers
+
+`resources::image_buffer::rgba_len` returns the byte length of a `width` by `height` RGBA buffer, or `None` when it overflows `usize`, so backends check sizes the same way the core does.
+
+### Parse every `break-before`, `break-after`, and `break-inside` keyword
+
+`break-before` and `break-after` now accept `avoid`, `avoid-page`, `avoid-column`, `column`, `recto`, and `verso`, and keep `left` and `right` as their own values. `break-inside` accepts `avoid-page` and `avoid-column`. In a PDF, `recto` and `verso` force a page break, and `break-inside: avoid-page` keeps a box on one page as `avoid` does. A PDF does not yet avoid a break between boxes for `break-before` or `break-after`.
+
+### Apply the dimension limit to each GIF frame
+
+A GIF frame wider or taller than 8192 pixels now fails to decode, as a GIF whose canvas is that large already does.
+
+### Start a step animation at its first step
+
+An animation at the very start of an iteration now samples the interval from its first keyframe, as in Chrome, so `steps(n, start)` shows its first step at time zero instead of the starting keyframe.
+
+### Draw disc, circle, square, and disclosure list markers as shapes
+
+These markers are now filled or stroked shapes sized from the marker's font, as Chrome draws them, in raster, SVG, PDF, and paint-tree output. They used to be text glyphs, so their size and position followed whichever font had the bullet character. An outside marker now sits as far from its item's text as it does in Chrome.
+
+### Break positioned boxes across the pages of flex, grid and table containers
+
+In paged output, an absolutely positioned box in a flex, grid or table container now breaks across pages with its container, and one placed in a grid area that starts on a later page lands on that page.
+
+### Paint a block inside an inline box as Chrome does
+
+A block inside an inline box, such as a `<div>` in a `<span>`, now paints its background before the line's inline boxes, and its positioned boxes stack with the rest of the page. A percentage height inside it now resolves against its containing block.
+
+### Decode images without the `image` crate
+
+PNG and JPEG images now decode straight into RGBA through `png` and `zune-jpeg`, so `takumi-core` no longer depends on `image`. A 16-bit PNG channel now keeps its high byte instead of rounding to the nearest 8-bit value, and decode errors read differently. Raw bitmaps that SVG output embeds as PNG now compress with `png`'s fast setting, trading some size for encode time.
+
+### Parse `filter` as Chrome does
+
+`filter` now accepts `url(#id)`, which an HTML element ignores. A filter function with no argument uses its default amount, a negative amount is invalid, `hue-rotate()` takes only an angle with a unit or `0`, and `blur()` takes only a length.
+
+### Run SVG color filters in floats as Chrome does
+
+`feColorMatrix`, `feComponentTransfer`, and the conversions between sRGB and linearRGB now run as Skia's color filters do, in floats on unpremultiplied colors with Skia's `approx_powf`. A run of them stores bytes once instead of after each step. `saturate` above 1 now oversaturates, a `values` list of the wrong length leaves the colors as they are, and `feComponentTransfer` truncates its tables as Blink does. A chain of these filters now matches Chrome to within a level of rounding.
+
+### Set any style property with a builder method
+
+`Style` now has one builder per longhand and shorthand, so `Style::default().font_size(32.0.px())` replaces `Style::default().with(StyleDeclaration::font_size(...))`. The `LengthUnit` trait adds `px`, `percent`, `em`, `rem`, `vw`, and `vh` to `f32`, each returning a `Length`. The `Style::with_<shorthand>` methods are deprecated in favor of the shorthand's builder of the same name.
+
+### Collect images from Tailwind `list-image-*` and `content-*`
+
+`Node::image_urls` now returns the images that `list-image-[url(...)]` and `content-[url(...)]` reference, as it does when the same properties are set in `style`. Before, it returned only the images from Tailwind `bg-*` and `mask-*`.
+
+### Size tables inside flex and grid containers as Chrome does
+
+A table that is a flex or grid item now takes the size its container gives it.
+
+### Rasterize SVG images from the same ops as PDF
+
+takumi-core now rasterizes an SVG from the `SvgOp` list with tiny-skia, so resvg's renderer is gone and the raster, PDF, and SVG backends draw one flattened tree. `SvgOp` gains anti-aliasing, the radial focal radius, and a `miter-clip` join, which resvg drew and the ops had dropped. `BlendMode::to_tiny_skia` replaces takumi-raster's private conversion.
+
+### Place outside list markers outside the list item's border box, as Chrome does
+
+An outside marker now hangs from the list item's border edge, so padding or a border on the item moves the text but not the marker. A marker taller than the first line, such as a large `list-style-image`, now pushes the content down so the two share a baseline.
+
+### Draw an SVG's bitmaps and filtered groups in a PDF without rasterizing
+
+takumi-pdf embeds the PNG, JPEG, and WebP images inside an SVG as PDF images, and draws an SVG group without its filter. A CSS color `filter` on an SVG `<img>` or `background-image` recolors the SVG instead of rasterizing it, and takumi-svg writes an SVG's bitmaps as `<image>` elements. `SvgOp::Image` and `SvgOp::PushFilter` replace `SvgOp::Raster`, `SvgSource::vector_ops` no longer takes a raster scale, and resvg's renderer moves behind the `svg-raster` feature, on by default.
+
+### Unset a property whose `var()` substitutes to nothing valid
+
+A declaration such as `width: var(--missing)` now resets the property as `unset` does when the variable is missing or substitutes to an invalid value, as in Chrome. It used to be skipped, so an earlier value for the same property stayed in effect.
+
+### Place margins, floats, and positioned boxes where Chrome does
+
+Block layout now collapses margins and places floats, cleared boxes, and positioned boxes as Chrome does. Positions round to 1/64px, so text can move by up to 0.01px.
+
+### Draw bitmap emoji in SVG text
+
+SVG `<text>` now draws bitmap glyphs, such as Noto Color Emoji's, in their own colors and the text's `fill-opacity`, as HTML text does. These glyphs used to be left out.
+
+### Style SVG with `fill`, `stroke`, and the other SVG properties
+
+Stylesheets now parse `fill`, `stroke` and its longhands, `marker`, `paint-order`, `stop-color`, `flood-color`, `lighting-color`, `text-anchor`, `dominant-baseline`, `baseline-shift`, `vector-effect`, `mask-type`, and the shape properties `x`, `y`, `cx`, `cy`, `r`, `rx`, `ry`, and `d`. `color-rendering` and `buffered-rendering` are not parsed. A `clip-path: path()` whose string is not valid path data is now an invalid declaration, as in Chrome. Code that builds a `ComputedStyle` with a full struct literal must add the new fields or end with `..Default::default()`.
+
+### Apply effects to inline images
+
+An `<img>` or `<svg>` that sits in a line now paints as an atomic inline, as in Chrome, so its `opacity`, `filter`, `transform`, `clip-path`, `mask`, and `mix-blend-mode` take effect. They were ignored before unless the element was `inline-block` or a block.
+
+### Lay out and paint a document a page at a time
+
+`PagedLayout` lays a render tree out one `next_page` call at a time, `LayoutView` reads it while it goes on, and `PageStream` hands out the scene of each page once no later page can paint onto it. `Scene::enter`, `PagedScene::page_origin` and the `LayoutResults` methods `is_repeated_fragment`, `table_fragment`, `is_hidden_for_paint` and `is_line_clamp_clipped_float` are gone, in favor of `Scene::view`, `SceneRef::page_origin` and the same methods on `LayoutView`. `TextClip::of`, `TableDecorations::of` and `paint_collapsed_borders` read a `LayoutView`, and the last two take the `NodePaint`.
+
+### Support `:dir()`
+
+The `:dir(ltr)` and `:dir(rtl)` selectors now match an element by its directionality, taken from the `dir` attribute on the element or its nearest ancestor, and `ltr` when none sets one.
+
+### Support `vector-effect: non-scaling-stroke`
+
+An SVG shape with `vector-effect: non-scaling-stroke` now strokes its outline in the space of the SVG's viewport, as in Chrome, so the stroke keeps its width however the shape is transformed, and its markers scale with that width.
+
+### Apply `opacity` to SVG text spans
+
+The `opacity` of a `tspan`, `textPath`, or `a` in SVG text now fades the characters it holds, as in Chrome. It was ignored before.
+
+### Support the `all` shorthand
+
+`all: initial`, `all: inherit`, and `all: unset` now set every property except `direction`, `unicode-bidi`, and custom properties, as in Chrome. `all: revert` is ignored, as `revert` is on every other property.
+
+### Share a shaped run's font bytes without copying them
+
+`ShapedRun::font_blob` is now public, and `FontBlob::shared_data` returns the font's bytes as a shared `Arc`, so a backend can keep them without copying the file.
+
 ## takumi-core@0.32.0
 
 ### Match fonts once per style in a render

@@ -5,21 +5,22 @@ use std::{
   cell::{Cell, OnceCell, RefCell},
   fmt::{self, Debug, Formatter},
   ops::Range,
-  ptr,
   rc::Rc,
 };
 
 use rustc_hash::FxHashMap;
 
 use super::{
+  inline_break_token::BreakTokenStyle,
   inline_item::{InlineItem, InlineItemType, InlineItems, LayoutObject},
   inline_item_segment::InlineItemSegments,
-  min_max_sizes::MinMaxSizes,
 };
 use crate::{
+  context::BoxId,
   context::RenderContext,
   font_style::SizedFontStyle,
   fonts::{font::Font, font_description::FontDescription},
+  layout::min_max_sizes::MinMaxSizes,
   style::Direction as TextDirection,
   text::{
     bidi_paragraph::BidiParagraph,
@@ -53,6 +54,10 @@ pub(crate) struct InlineNodeData<'c> {
   /// The min-content and max-content sizes, kept once no box inside can make them depend on the
   /// available space.
   pub(crate) min_max_sizes: Cell<Option<MinMaxSizes>>,
+  /// The first item each inline box's style belongs to, which names it in a break token.
+  pub(crate) break_token_styles: OnceCell<FxHashMap<BoxId, usize>>,
+  /// The open tag of the box enclosing each close tag's box, absent for the block's own children.
+  pub(crate) close_tag_parents: OnceCell<FxHashMap<usize, usize>>,
 }
 
 impl<'c> InlineNodeData<'c> {
@@ -120,26 +125,76 @@ impl<'c> InlineNodeData<'c> {
     self.has_floats || self.has_out_of_flow_positioned
   }
 
+  /// How a break token names `context`, the style of `block` or of an inline box inside.
+  pub(crate) fn break_token_style(
+    &self,
+    context: &RenderContext,
+    block: &RenderContext,
+  ) -> BreakTokenStyle {
+    if context.box_id() == block.box_id() {
+      return BreakTokenStyle::Block;
+    }
+
+    let styles = self.break_token_styles.get_or_init(|| {
+      let mut styles = FxHashMap::default();
+
+      for (index, item) in self.items.iter().enumerate() {
+        if let Some(layout_object) = item.layout_object {
+          styles
+            .entry(layout_object.context().box_id())
+            .or_insert(index);
+        }
+      }
+      styles
+    });
+
+    styles
+      .get(&context.box_id())
+      .map_or(BreakTokenStyle::Block, |&index| {
+        BreakTokenStyle::Item(index)
+      })
+  }
+
+  /// The style a break token's `style` names, inside `block`.
+  pub(crate) fn break_token_context(
+    &self,
+    style: BreakTokenStyle,
+    block: &'c RenderContext,
+  ) -> &'c RenderContext {
+    match style {
+      BreakTokenStyle::Block => block,
+      BreakTokenStyle::Item(index) => self.items[index]
+        .layout_object
+        .map_or(block, LayoutObject::context),
+    }
+  }
+
   /// The style an item after the close tag at `index` takes: the box enclosing that tag's box,
   /// else `block`, as Blink reads `LayoutObject::Parent`.
   pub(crate) fn parent_context(&self, index: usize, block: &'c RenderContext) -> &'c RenderContext {
-    let mut depth = 0_isize;
+    let parents = self.close_tag_parents.get_or_init(|| {
+      let mut open_tags = Vec::new();
+      let mut parents = FxHashMap::default();
 
-    for item in self.items[..=index].iter().rev() {
-      match item.item_type {
-        InlineItemType::CloseTag => depth += 1,
-        InlineItemType::OpenTag => {
-          depth -= 1;
-
-          if depth < 0 {
-            return item.layout_object.map_or(block, LayoutObject::context);
+      for (index, item) in self.items.iter().enumerate() {
+        match item.item_type {
+          InlineItemType::OpenTag => open_tags.push(index),
+          InlineItemType::CloseTag => {
+            open_tags.pop();
+            if let Some(&parent) = open_tags.last() {
+              parents.insert(index, parent);
+            }
           }
+          _ => {}
         }
-        _ => {}
       }
-    }
+      parents
+    });
 
-    block
+    parents
+      .get(&index)
+      .and_then(|&parent| self.items[parent].layout_object)
+      .map_or(block, LayoutObject::context)
   }
 
   /// Blink's `GetOpenTagItems`: the tags `items[range]` leaves open.
@@ -163,13 +218,13 @@ impl<'c> InlineNodeData<'c> {
 /// The font of each style the context shapes with: Blink's `ComputedStyle::GetFont`.
 #[derive(Default)]
 pub(crate) struct StyleFonts {
-  fonts: RefCell<FxHashMap<*const RenderContext, Rc<Font>>>,
+  fonts: RefCell<FxHashMap<BoxId, Rc<Font>>>,
 }
 
 impl StyleFonts {
   pub(crate) fn get(&self, context: &RenderContext) -> Rc<Font> {
     let mut fonts = self.fonts.borrow_mut();
-    let font = fonts.entry(ptr::from_ref(context)).or_insert_with(|| {
+    let font = fonts.entry(context.box_id()).or_insert_with(|| {
       let description = FontDescription::new(&SizedFontStyle::from_style(&context.style, context));
 
       Rc::new(context.font(description))

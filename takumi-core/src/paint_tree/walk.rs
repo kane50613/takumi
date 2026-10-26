@@ -1,7 +1,7 @@
 //! Walks the stacking-context scene in paint order, recording each node and the steps that
 //! paint it.
 
-use std::{collections::HashMap, ptr};
+use std::collections::HashMap;
 
 use super::{
   document::{
@@ -19,8 +19,8 @@ use crate::{
   geometry::{ComputedLayout, Point, Size},
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
-    inline::{InlinePass, ProcessedInlineSpan},
-    inline_box::{InlineBoxPaint, resolve_inline_box},
+    inline::{InlineBoxKind, ProcessedInlineSpan},
+    inline_box::{ReplacedInlineBox, resolve_inline_box},
     node::{ImageData, ImageSourceInput},
     tree::RenderNode,
   },
@@ -30,7 +30,7 @@ use crate::{
     BackgroundClipArea, BoxFrame, BoxPainter, CellBackground, FillShape, OverflowClip, OwnContent,
     PaintDevice, PaintedInline, TableDecorations, TextClip, paint_collapsed_borders,
   },
-  resources::image::{sniff_mime, to_data_url},
+  resources::image::{ImageSource as LoadedImage, sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
   sort_key::sort_by_key,
   style::{Affine, BackgroundImage, Filter, Isolation, TextAlign, ToCss},
@@ -175,14 +175,14 @@ impl Walker {
   }
 
   /// Records the text or image the node lays out.
-  fn own_content(&mut self, placed: Placed<'_>, pass: InlinePass) -> Result<()> {
+  fn own_content(&mut self, placed: Placed<'_>) -> Result<()> {
     match OwnContent::of(placed.node) {
-      OwnContent::Inline(_) => self.inline(placed, pass),
-      OwnContent::Image(image) if pass == InlinePass::Content => {
+      OwnContent::Inline(_) => self.inline(placed),
+      OwnContent::Image(image) => {
         self.image(image, placed);
         Ok(())
       }
-      OwnContent::Image(_) | OwnContent::None => Ok(()),
+      OwnContent::None => Ok(()),
     }
   }
 
@@ -209,6 +209,10 @@ impl Walker {
     let src = match &image.src {
       ImageSourceInput::Url(url) => url.to_string(),
       ImageSourceInput::Buffer(bytes) => to_data_url(sniff_mime(bytes), bytes),
+      #[cfg(feature = "svg-sizing")]
+      ImageSourceInput::Loaded(LoadedImage::Svg(svg)) => {
+        to_data_url("image/svg+xml", svg.source().as_bytes())
+      }
       _ => return,
     };
     let intrinsic = image
@@ -276,7 +280,7 @@ impl Walker {
   }
 
   /// Records the node's inline content: its text, then its inline boxes.
-  fn inline(&mut self, placed: Placed<'_>, pass: InlinePass) -> Result<()> {
+  fn inline(&mut self, placed: Placed<'_>) -> Result<()> {
     let Placed {
       node,
       layout,
@@ -291,97 +295,81 @@ impl Walker {
     };
     let painted = painted?;
 
-    if pass == InlinePass::Content {
-      self.text(placed, &painted, &font_style);
-    }
+    self.text(placed, &painted, &font_style);
 
     for inline_box in painted
       .runs
       .inline_boxes
       .iter()
-      .filter(|inline_box| pass.paints(inline_box))
+      .filter(|inline_box| inline_box.kind == InlineBoxKind::InFlow)
     {
       let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(inline_box.id as usize) else {
         continue;
       };
-      let Some((offset, paint)) = resolve_inline_box(inline_box, item, layout) else {
+      let Some(relative) = node.path_to(item.render_node) else {
         continue;
       };
-      let Some(relative) =
-        node.path_where(or_marker(|candidate| ptr::eq(candidate, item.render_node)))
+      let Some(ReplacedInlineBox { node, layout }) = resolve_inline_box(inline_box, item, layout)
       else {
         continue;
       };
       let box_path = [path, &relative].concat();
 
-      match paint {
-        InlineBoxPaint::Container(subtree) => {
-          let at = subtree.border_box_origin(offset);
-          let scene = subtree.into_scene(transform * Affine::translation(at.x, at.y), false)?;
+      let local = node.context.style.local_transform(
+        layout.size.width,
+        layout.size.height,
+        &node.context.sizing,
+      );
+      let placed = transform * Affine::translation(layout.location.x, layout.location.y) * local;
+      let id = self.record_box(
+        node,
+        layout,
+        placed,
+        box_path.clone(),
+        None,
+        &TableDecorations::None,
+      )?;
+      let (group, clip, outline) = match &self.nodes[id].kind {
+        NodeKind::Box {
+          effects,
+          overflow_clip,
+          outline,
+          ..
+        } => (
+          effects.is_some(),
+          overflow_clip.is_some(),
+          !outline.is_empty(),
+        ),
+        _ => (false, false, false),
+      };
 
-          self.scene(&scene, &box_path)?;
-        }
-        InlineBoxPaint::Replaced { node, layout } => {
-          let local = node.context.style.local_transform(
-            layout.size.width,
-            layout.size.height,
-            &node.context.sizing,
-          );
-          let placed = transform * Affine::translation(offset.x, offset.y) * local;
-          let id = self.record_box(
-            node,
-            layout,
-            placed,
-            box_path.clone(),
-            None,
-            &TableDecorations::None,
-          )?;
-          let (group, clip, outline) = match &self.nodes[id].kind {
-            NodeKind::Box {
-              effects,
-              overflow_clip,
-              outline,
-              ..
-            } => (
-              effects.is_some(),
-              overflow_clip.is_some(),
-              !outline.is_empty(),
-            ),
-            _ => (false, false, false),
-          };
-
-          if group {
-            self.steps.push(PaintStep::BeginGroup { node: id });
-          }
-          if !self.nodes[id].drawables.is_empty() {
-            self.draw(id);
-          }
-          if clip {
-            self.steps.push(PaintStep::BeginClip { node: id });
-          }
-          self.own_content(
-            Placed {
-              node,
-              layout,
-              transform: placed,
-              path: &box_path,
-              parent: id,
-            },
-            InlinePass::Content,
-          )?;
-          if clip {
-            self.steps.push(PaintStep::EndClip { node: id });
-          }
-          if outline {
-            self.steps.push(PaintStep::Draw {
-              node: id,
-              part: DrawPart::Outline,
-            });
-          }
-          if group {
-            self.steps.push(PaintStep::EndGroup { node: id });
-          }
-        }
+      if group {
+        self.steps.push(PaintStep::BeginGroup { node: id });
+      }
+      if !self.nodes[id].drawables.is_empty() {
+        self.draw(id);
+      }
+      if clip {
+        self.steps.push(PaintStep::BeginClip { node: id });
+      }
+      self.own_content(Placed {
+        node,
+        layout,
+        transform: placed,
+        path: &box_path,
+        parent: id,
+      })?;
+      if clip {
+        self.steps.push(PaintStep::EndClip { node: id });
+      }
+      if outline {
+        self.steps.push(PaintStep::Draw {
+          node: id,
+          part: DrawPart::Outline,
+        });
+      }
+      if group {
+        self.steps.push(PaintStep::EndGroup { node: id });
       }
     }
     Ok(())
@@ -632,8 +620,8 @@ impl StepWriter<'_, '_> {
         let Some((node, layout)) = recorded else {
           return Ok(None);
         };
-        let text_clip = TextClip::of(&scene.root, &scene.results, paint)?;
-        let table = TableDecorations::of(&scene.root, &scene.results, &paint.path, paint.node_id)?;
+        let text_clip = TextClip::of(&scene.root, scene.results.view(), paint, &node.context)?;
+        let table = TableDecorations::of(&scene.root, scene.results.view(), paint)?;
 
         self
           .walker
@@ -673,27 +661,19 @@ impl StepWriter<'_, '_> {
           walker.draw(node);
         }
       }
-      ChunkPart::Content | ChunkPart::Floats => {
-        let pass = if chunk.part == ChunkPart::Floats {
-          InlinePass::Floats
-        } else {
-          InlinePass::Content
-        };
+      ChunkPart::Content => {
         let result = recorded(self.scene, chunk.node).and_then(|recorded| {
           let Some((render_node, layout)) = recorded else {
             return Ok(());
           };
 
-          walker.own_content(
-            Placed {
-              node: render_node,
-              layout,
-              transform: chunk.node.transform,
-              path: &[self.prefix, &chunk.node.path].concat(),
-              parent: node,
-            },
-            pass,
-          )
+          walker.own_content(Placed {
+            node: render_node,
+            layout,
+            transform: chunk.node.transform,
+            path: &[self.prefix, &chunk.node.path].concat(),
+            parent: node,
+          })
         });
 
         if let Err(error) = result {
@@ -711,9 +691,8 @@ impl StepWriter<'_, '_> {
         }
         let mut recorder = Recorder::new(chunk.node.transform);
         let result = paint_collapsed_borders(
-          &self.scene.results,
-          chunk.node.node_id,
-          chunk.node.paint_offset,
+          self.scene.results.view(),
+          chunk.node,
           Affine::IDENTITY,
           None,
           &mut recorder,
@@ -795,7 +774,9 @@ pub(super) fn recorded<'s>(
   let Some(node) = scene.root.node_at_path(&paint.path) else {
     return Ok(None);
   };
-  let layout = scene.results.layout(paint.node_id)?;
+  let layout = scene
+    .results
+    .fragment_layout(paint.node_id, paint.fragment_index)?;
 
   Ok(
     (!node.context.style.is_invisible() && paint.transform.is_invertible())
@@ -1075,10 +1056,4 @@ impl ElementInfo {
 
     Self::of(root.node_at_path(&relative)?, [path, &relative].concat())
   }
-}
-
-/// Accepts a node when `matches` accepts it or its marker, so a list item's marker sits at the
-/// item's path.
-fn or_marker(matches: impl Fn(&RenderNode) -> bool + Copy) -> impl Fn(&RenderNode) -> bool + Copy {
-  move |node| matches(node) || node.marker.as_deref().is_some_and(matches)
 }

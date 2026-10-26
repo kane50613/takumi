@@ -129,9 +129,28 @@ impl TailwindPropertyParser for VerticalAlign {
   }
 }
 
+/// Keyword values for the CSS `baseline-source` property.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum BaselineSource {
+  /// The last baseline for an inline-block, the first for every other box.
+  #[default]
+  Auto,
+  /// The first baseline.
+  First,
+  /// The last baseline.
+  Last,
+}
+
+impl_css_enum!(
+  BaselineSource,
+  "auto" => BaselineSource::Auto,
+  "first" => BaselineSource::First,
+  "last" => BaselineSource::Last
+);
+
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
 
   use super::*;
   use crate::{geometry::Size, viewport::Viewport};
@@ -152,7 +171,7 @@ mod tests {
       line_height: 0.0,
       root_line_height: None,
       ch: 16.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
+      ex: 16.0 / 2.0,
     }
   }
 
@@ -198,5 +217,22 @@ mod tests {
         ResolvedVerticalAlign::Keyword(keyword)
       );
     }
+  }
+
+  #[test]
+  fn parses_baseline_source() {
+    assert_eq!(
+      BaselineSource::from_css_str("auto"),
+      Ok(BaselineSource::Auto)
+    );
+    assert_eq!(
+      BaselineSource::from_css_str("first"),
+      Ok(BaselineSource::First)
+    );
+    assert_eq!(
+      BaselineSource::from_css_str("last"),
+      Ok(BaselineSource::Last)
+    );
+    assert!(BaselineSource::from_css_str("middle").is_err());
   }
 }

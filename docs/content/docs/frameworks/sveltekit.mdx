@@ -1,0 +1,86 @@
+---
+title: SvelteKit
+description: Render Svelte components and their CSS as Open Graph images in SvelteKit server routes.
+---
+
+Render a Svelte component to HTML on the server. Then pass that HTML and its CSS to `ImageResponse`.
+
+<Steps>
+  <Step>
+    ### Install Takumi
+
+    ```npm
+    npm i takumi-js
+    ```
+
+  </Step>
+  <Step>
+    ### Make a Svelte component
+
+    <Callout type="warn">Set `css="injected"` so the component's `<style>` block lands in the server-rendered HTML.</Callout>
+
+    ```svelte title="src/lib/components/OgImage.svelte"
+    <script lang="ts">
+      let { name = "Goo goo gaga" } = $props();
+    </script>
+
+    <!-- [!code highlight] -->
+    <svelte:options css="injected" />
+
+    <div
+      id="og-image"
+      class="w-full h-full flex items-center justify-center p-12 flex-col gap-4"
+    >
+      <div class="text-center whitespace-pre-wrap leading-normal text-7xl font-semibold text-black">
+        Welcome {name} to
+        <span class="font-bold">Svelte</span> world
+      </div>
+    </div>
+
+    <style>
+      #og-image {
+        background-image: linear-gradient(to bottom right, var(--color-orange-50), var(--color-red-200));
+      }
+    </style>
+    ```
+
+  </Step>
+  <Step>
+    ### Render the component on a server route
+
+    Render the component with `render` from `svelte/server`, then return an `ImageResponse`. If you use Tailwind, import `app.css` with `?inline` and pass it as `css`.
+
+    The example imports through `#lib/*`. Map it to `./src/lib/*` in the `imports` field of `package.json`.
+
+    ```ts title="src/routes/+server.ts"
+    import { render } from "svelte/server";
+    import style from "../app.css?inline";
+    import ImageResponse from "takumi-js/response";
+    import OgImage from "#lib/components/OgImage.svelte";
+    import type { RequestEvent } from "./$types";
+
+    export async function GET({ url }: RequestEvent) {
+      const { body, head } = await render(OgImage, {
+        props: {
+          name: url.searchParams.get("name") ?? "Goo goo gaga",
+        },
+      });
+
+      return new ImageResponse(`${head}${body}`, {
+        width: 1200,
+        height: 630,
+        // [!code highlight]
+        css: style,
+        fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
+      });
+    }
+    ```
+
+    `head` carries the injected `<style>`, and `body` carries the markup. `fonts` takes a font URL, which Takumi fetches on demand.
+
+  </Step>
+</Steps>
+
+## Next steps
+
+See [`ImageResponse`](/docs/reference/image-response) for every option, [Styles](/docs/styles) for the CSS Takumi supports, and [Fonts](/docs/fonts) for loading them.

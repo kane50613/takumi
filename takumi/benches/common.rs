@@ -9,9 +9,7 @@ use criterion::Criterion;
 use takumi::prelude::{
   AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, Color,
   ColorInput, Display, FontOverride, FontResource, FontWeight, Fonts, FromCssStr, GenericFamily,
-  ImageSource, JustifyContent,
-  Length::{Percentage, Px},
-  Node, PositionValues, Style, StyleDeclaration,
+  ImageSource, JustifyContent, LengthUnit, Node, PositionValues, Style,
 };
 
 /// The `src` the fixtures use for their bitmap; `images()` resolves it.
@@ -70,34 +68,24 @@ pub fn gradient_clip_text_fixture() -> Node {
   Node::container([
     Node::text("Gradient Text Benchmark".to_string()).with_style(
       Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::background_image(Some(gradient)))
-        .with(StyleDeclaration::background_size(
-          BackgroundSizes::from_css_str("100% 100%").unwrap(),
-        ))
-        .with(StyleDeclaration::background_position(
-          PositionValues::from_css_str("0 0").unwrap(),
-        ))
-        .with(StyleDeclaration::background_repeat(
-          BackgroundRepeats::from_css_str("no-repeat").unwrap(),
-        ))
-        .with(StyleDeclaration::background_clip(BackgroundClip::Text))
-        .with(StyleDeclaration::color(ColorInput::Value(
-          Color::transparent(),
-        ))),
+        .display(Display::Flex)
+        .background_image(Some(gradient))
+        .background_size(BackgroundSizes::from_css_str("100% 100%").unwrap())
+        .background_position(PositionValues::from_css_str("0 0").unwrap())
+        .background_repeat(BackgroundRepeats::from_css_str("no-repeat").unwrap())
+        .background_clip(BackgroundClip::Text)
+        .color(ColorInput::Value(Color::transparent())),
     ),
   ])
   .with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color([242, 242, 242, 255]),
-      )))
-      .with(StyleDeclaration::font_size(Px(72.0).into()))
-      .with(StyleDeclaration::font_weight(FontWeight::from(800.0)))
-      .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with(StyleDeclaration::justify_content(JustifyContent::Center)),
+      .display(Display::Flex)
+      .width(100.0.percent())
+      .height(100.0.percent())
+      .background_color(ColorInput::Value(Color([242, 242, 242, 255])))
+      .font_size(72.0.px())
+      .font_weight(FontWeight::from(800.0))
+      .align_items(AlignItems::Center)
+      .justify_content(JustifyContent::Center),
   )
 }

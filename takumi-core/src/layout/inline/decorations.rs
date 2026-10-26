@@ -1,6 +1,7 @@
 //! Text decoration lines and where skip-ink cuts them.
 
 use crate::{
+  context::BoxId,
   context::RenderContext,
   geometry::{ComputedLayout, Point},
   layout::intercept::{Spans, skip_ink_ranges},
@@ -10,8 +11,9 @@ use crate::{
     glyph::{ResolvedGlyph, ResolvedGlyphs, ResolvedOutlineGlyph},
   },
   style::{
-    Affine, Color, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
-    TextDecorationStyle, TextUnderlinePosition,
+    Affine, AppliedTextDecoration, AppliedTextDecorations, BoxDecorationBreak, Color,
+    SizedTextDecorationInset, SizedTextDecorationThickness, TextDecorationLines,
+    TextDecorationSkipInk, TextDecorationStyle, TextUnderlinePosition,
   },
 };
 use std::iter::repeat_n;
@@ -61,6 +63,213 @@ pub struct DecorationLine {
   pub style: TextDecorationStyle,
   /// The x-ranges `skip-ink` cuts out, sorted.
   pub skips: Spans,
+}
+
+/// How far a run's line of one decoration pulls in at its line-left and line-right ends, as
+/// Blink's `TextDecorationInfo::ResolveDecorationInsets` resolves `text-decoration-inset`.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) enum DecorationInset {
+  /// Neither end pulls in.
+  #[default]
+  None,
+  /// `auto` at the ends the run holds of its fragment, which the line's thickness sizes.
+  Auto { left: bool, right: bool },
+  /// Lengths in pixels.
+  Edges { left: f32, right: f32 },
+}
+
+impl DecorationInset {
+  /// The insets of a line `thickness` thick. Overflow keeps only the ends that push out, as Blink's
+  /// conservative bounds do, since a positive end applies to some fragments only.
+  fn edges(self, thickness: f32, for_overflow: bool) -> (f32, f32) {
+    match self {
+      Self::None => (0.0, 0.0),
+      Self::Auto { left, right } => {
+        let inset = SizedTextDecorationInset::auto_inset(thickness);
+
+        (
+          if left { inset } else { 0.0 },
+          if right { inset } else { 0.0 },
+        )
+      }
+      Self::Edges { left, right } if for_overflow => (left.min(0.0), right.min(0.0)),
+      Self::Edges { left, right } => (left, right),
+    }
+  }
+
+  /// The inset of a run that holds the line-left end of its fragment when `left` and the
+  /// line-right end when `right`.
+  pub(crate) fn for_run(self, left: bool, right: bool) -> Self {
+    match self {
+      Self::None => Self::None,
+      Self::Auto {
+        left: fragment_left,
+        right: fragment_right,
+      } => Self::Auto {
+        left: fragment_left && left,
+        right: fragment_right && right,
+      },
+      Self::Edges {
+        left: left_inset,
+        right: right_inset,
+      } => Self::Edges {
+        left: if left { left_inset } else { 0.0 },
+        right: if right { right_inset } else { 0.0 },
+      },
+    }
+  }
+}
+
+/// A leaf of an inline formatting context, in the order Blink's `InlineCursor` visits leaves.
+pub(crate) struct DecoratedLeaf {
+  /// The line it sits on.
+  pub(crate) line: usize,
+  /// Whether it is text; an atomic inline is not.
+  pub(crate) text: bool,
+  /// Whether it is a forced line break.
+  pub(crate) line_break: bool,
+  pub(crate) width: f32,
+  pub(crate) decorations: AppliedTextDecorations,
+  /// The box whose text it holds, which its other fragments share.
+  pub(crate) object: Option<BoxId>,
+  /// Whether its text runs right to left, which swaps its start and end.
+  pub(crate) rtl: bool,
+}
+
+/// The leaves of an inline formatting context, which `text-decoration-inset` measures runs across.
+pub(crate) struct DecoratedLeaves(pub(crate) Vec<DecoratedLeaf>);
+
+impl DecoratedLeaves {
+  /// The insets of each decoration of each leaf.
+  pub(crate) fn insets(&self) -> Vec<Vec<DecorationInset>> {
+    self
+      .0
+      .iter()
+      .enumerate()
+      .map(|(index, leaf)| {
+        if !leaf.text {
+          return Vec::new();
+        }
+
+        (0..leaf.decorations.as_slice().len())
+          .map(|decoration| self.inset(index, decoration))
+          .collect()
+      })
+      .collect()
+  }
+
+  /// Blink's `ResolveDecorationInsets` for the decoration at `decoration` of the leaf at `index`.
+  fn inset(&self, index: usize, decoration: usize) -> DecorationInset {
+    let leaf = &self.0[index];
+    let applied = leaf.decorations.as_slice()[decoration];
+    let (start, end) = match applied.inset {
+      SizedTextDecorationInset::Auto => {
+        return DecorationInset::Auto {
+          left: true,
+          right: true,
+        };
+      }
+      inset if inset.is_zero() => return DecorationInset::None,
+      SizedTextDecorationInset::Edges(start, end) => (start, end),
+    };
+    let (start, end) = if applied.box_decoration_break == BoxDecorationBreak::Slice {
+      let (before, after) = self.run_metrics(index, decoration, &applied);
+      let total = before + leaf.width + after;
+
+      (
+        inset_for_fragment(start.resolve(total), before),
+        inset_for_fragment(end.resolve(total), after),
+      )
+    } else {
+      let has_previous = self.same_on_line(index.checked_sub(1), leaf.line, decoration, &applied);
+      let has_next = self.same_on_line(Some(index + 1), leaf.line, decoration, &applied);
+
+      if has_previous && has_next {
+        return DecorationInset::None;
+      }
+
+      (
+        if has_previous {
+          0.0
+        } else {
+          start.resolve(leaf.width)
+        },
+        if has_next {
+          0.0
+        } else {
+          end.resolve(leaf.width)
+        },
+      )
+    };
+    let (left, right) = if leaf.rtl { (end, start) } else { (start, end) };
+
+    DecorationInset::Edges { left, right }
+  }
+
+  /// Blink's `ComputeDecoratedRunMetrics`: the widths of the decorated run before and after the
+  /// leaf at `index`, and at least of its box's other fragments before and after it.
+  fn run_metrics(
+    &self,
+    index: usize,
+    decoration: usize,
+    applied: &AppliedTextDecoration,
+  ) -> (f32, f32) {
+    let continues = |leaf: &&DecoratedLeaf| leaf.continues(decoration, applied);
+    let before: f32 = self.0[..index]
+      .iter()
+      .rev()
+      .take_while(continues)
+      .map(|leaf| leaf.width)
+      .sum();
+    let after: f32 = self.0[index + 1..]
+      .iter()
+      .take_while(continues)
+      .map(|leaf| leaf.width)
+      .sum();
+    let object = self.0[index].object;
+    let in_node = |leaves: &[DecoratedLeaf]| -> f32 {
+      leaves
+        .iter()
+        .filter(|leaf| object.is_some() && leaf.object == object)
+        .map(|leaf| leaf.width)
+        .sum()
+    };
+
+    (
+      before.max(in_node(&self.0[..index])),
+      after.max(in_node(&self.0[index + 1..])),
+    )
+  }
+
+  /// Blink's `HasSameDecorationAtIndexOnLine` for the text leaf at `index`, when it is on `line`.
+  fn same_on_line(
+    &self,
+    index: Option<usize>,
+    line: usize,
+    decoration: usize,
+    applied: &AppliedTextDecoration,
+  ) -> bool {
+    index
+      .and_then(|index| self.0.get(index))
+      .filter(|leaf| leaf.line == line && leaf.text && !leaf.line_break)
+      .is_some_and(|leaf| leaf.continues(decoration, applied) && leaf.width > 0.0)
+  }
+}
+
+impl DecoratedLeaf {
+  /// Blink's `ContinuesDecoratedRun`: whether it is text decorated by `applied` at `decoration`.
+  fn continues(&self, decoration: usize, applied: &AppliedTextDecoration) -> bool {
+    self.text && self.decorations.as_slice().get(decoration) == Some(applied)
+  }
+}
+
+/// Blink's `ResolveInsetForFragment`: what of an inset is left past `preceding` of the run.
+fn inset_for_fragment(inset: f32, preceding: f32) -> f32 {
+  if inset <= 0.0 {
+    return if preceding == 0.0 { inset } else { 0.0 };
+  }
+
+  (inset - preceding).max(0.0)
 }
 
 /// Where a run's decoration lines paint: the border box's transform into the device's drawing
@@ -214,6 +423,8 @@ pub(crate) struct DecorationPlacement {
   width: f32,
   /// The box each of the run's decorations sits against, outermost first.
   boxes: Vec<DecoratingBox>,
+  /// How far each of the run's decorations pulls in at its ends, outermost first.
+  insets: Vec<DecorationInset>,
 }
 
 impl DecorationPlacement {
@@ -228,6 +439,7 @@ impl DecorationPlacement {
     (text_font, scale): (BoxFont, f32),
     (root_font, line_baseline): (BoxFont, f32),
     spans: &[(BoxFont, f32)],
+    insets: Vec<DecorationInset>,
   ) -> Self {
     let decorations = run.brush.decorations.as_slice();
 
@@ -258,6 +470,7 @@ impl DecorationPlacement {
       boxes: repeat_n(root, decorations.len().saturating_sub(spans.len()))
         .chain(spans)
         .collect(),
+      insets,
     }
   }
 }
@@ -304,7 +517,13 @@ impl ShapedRun {
       paint_offset,
     } = space;
     let content = layout.content_box_offset();
-    let mut lines = self.decoration_lines(placement, transform, device * transform, paint_offset);
+    let mut lines = self.decoration_lines(
+      placement,
+      transform,
+      device * transform,
+      paint_offset,
+      false,
+    );
 
     if self.brush.decoration_skip_ink == TextDecorationSkipInk::None {
       return lines;
@@ -335,13 +554,14 @@ impl ShapedRun {
     lines
   }
 
-  /// The run's decoration lines at `placement`, uncut.
+  /// The run's decoration lines at `placement`, uncut, or the reach of their ink for overflow.
   pub(crate) fn decoration_lines(
     &self,
     placement: &DecorationPlacement,
     transform: Affine,
     output: Affine,
     paint_offset: Point<f32>,
+    for_overflow: bool,
   ) -> Vec<DecorationLine> {
     if self.advance <= 0.0 {
       return Vec::new();
@@ -353,8 +573,15 @@ impl ShapedRun {
       .as_slice()
       .iter()
       .zip(&placement.boxes)
-      .flat_map(|(decoration, decorating)| {
+      .enumerate()
+      .flat_map(move |(index, (decoration, decorating))| {
         let thickness = decorating.font.thickness(decoration.thickness);
+        let (left_inset, right_inset) = placement
+          .insets
+          .get(index)
+          .copied()
+          .unwrap_or_default()
+          .edges(thickness, for_overflow);
 
         [
           (TextDecorationLines::UNDERLINE, false),
@@ -373,10 +600,10 @@ impl ShapedRun {
 
           DecorationLine {
             origin: Point {
-              x: placement.left,
+              x: placement.left + left_inset,
               y: top,
             },
-            width: placement.width,
+            width: (placement.width - left_inset - right_inset).max(0.0),
             thickness,
             color: decoration.color,
             transform,
@@ -396,7 +623,11 @@ impl ShapedRun {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::resources::font::{ExactFontMetrics, FontUnderline};
+  use crate::{
+    resources::font::{ExactFontMetrics, FontUnderline},
+    style::{Length, SizingContext, TextDecorationInset},
+    viewport::Viewport,
+  };
 
   fn font(scale: f32) -> DecorationFont {
     DecorationFont {
@@ -419,6 +650,98 @@ mod tests {
       size: 100.0,
       scale,
     }
+  }
+
+  fn leaf(line: usize, width: f32, decoration: Option<AppliedTextDecoration>) -> DecoratedLeaf {
+    DecoratedLeaf {
+      line,
+      text: true,
+      line_break: false,
+      width,
+      decorations: decoration.into_iter().collect(),
+      object: None,
+      rtl: false,
+    }
+  }
+
+  fn underline(
+    inset: TextDecorationInset,
+    box_decoration_break: BoxDecorationBreak,
+  ) -> AppliedTextDecoration {
+    AppliedTextDecoration {
+      line: TextDecorationLines::UNDERLINE,
+      style: TextDecorationStyle::default(),
+      color: Color::black(),
+      thickness: SizedTextDecorationThickness::Auto,
+      underline_offset: None,
+      underline_position: TextUnderlinePosition::Auto,
+      inset: inset.sized(
+        &SizingContext::builder()
+          .viewport(Viewport::new((100, 100)))
+          .build(),
+      ),
+      box_decoration_break,
+    }
+  }
+
+  /// A sliced run resolves a percentage against its whole length and trims only its outer ends,
+  /// as Blink's `ResolveDecorationInsets` does across fragments.
+  #[test]
+  fn a_sliced_run_insets_its_outer_ends_against_its_whole_length() {
+    let decoration = underline(
+      TextDecorationInset::Edges(Length::Percentage(25.0), Length::Percentage(25.0)),
+      BoxDecorationBreak::Slice,
+    );
+    let leaves = DecoratedLeaves(vec![
+      leaf(0, 40.0, Some(decoration)),
+      leaf(0, 40.0, Some(decoration)),
+      leaf(1, 80.0, Some(decoration)),
+    ]);
+
+    assert_eq!(
+      leaves.insets(),
+      [
+        vec![DecorationInset::Edges {
+          left: 40.0,
+          right: 0.0
+        }],
+        vec![DecorationInset::Edges {
+          left: 0.0,
+          right: 0.0
+        }],
+        vec![DecorationInset::Edges {
+          left: 0.0,
+          right: 40.0
+        }],
+      ]
+    );
+  }
+
+  /// A cloned run insets each line's fragment against its own length.
+  #[test]
+  fn a_cloned_run_insets_each_line_on_its_own() {
+    let decoration = underline(
+      TextDecorationInset::Edges(Length::Px(5.0), Length::Px(5.0)),
+      BoxDecorationBreak::Clone,
+    );
+    let leaves = DecoratedLeaves(vec![
+      leaf(0, 40.0, Some(decoration)),
+      leaf(1, 40.0, Some(decoration)),
+    ]);
+
+    assert_eq!(
+      leaves.insets(),
+      [
+        vec![DecorationInset::Edges {
+          left: 5.0,
+          right: 5.0
+        }],
+        vec![DecorationInset::Edges {
+          left: 5.0,
+          right: 5.0
+        }],
+      ]
+    );
   }
 
   #[test]

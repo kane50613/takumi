@@ -1,8 +1,8 @@
-use std::{cell::Cell, rc::Rc};
+use std::cell::Cell;
 
 use typed_builder::TypedBuilder;
 
-use crate::{geometry::Size, style::CalcArena, viewport::Viewport};
+use crate::{geometry::Size, viewport::Viewport};
 
 /// The sizing context used for length value resolving.
 #[derive(Clone, TypedBuilder)]
@@ -36,9 +36,17 @@ pub struct SizingContext {
   /// `FontSizes::Ch` reads it from `PrimaryFontWithDigitZero`.
   #[builder(default = viewport.to_device(viewport.font_size) / 2.0)]
   pub(crate) ch: f32,
-  /// The calc arena shared by the current layout tree.
-  #[builder(default, setter(skip))]
-  pub(crate) calc_arena: Rc<CalcArena>,
+  /// Pixel basis for the `ex` unit: the x-height of the primary font, or half the font size when
+  /// it has none, as Blink's `FontSizes::Ex`.
+  #[builder(default = viewport.to_device(viewport.font_size) / 2.0)]
+  pub(crate) ex: f32,
+}
+
+/// The pixel bases the `ch` and `ex` units read from the primary font.
+#[derive(Clone, Copy)]
+pub(crate) struct FontUnits {
+  pub(crate) ch: f32,
+  pub(crate) ex: f32,
 }
 
 impl SizingContext {
@@ -56,7 +64,6 @@ impl SizingContext {
   }
 
   /// Whether lengths resolve the same against both, whatever either read of a query container.
-  /// Both must come from one render, whose contexts all share its calc arena.
   pub(crate) fn resolves_like(&self, other: &Self) -> bool {
     self.viewport == other.viewport
       && self.container_size == other.container_size
@@ -65,31 +72,27 @@ impl SizingContext {
       && self.line_height == other.line_height
       && self.root_line_height == other.root_line_height
       && self.ch == other.ch
+      && self.ex == other.ex
   }
 
-  /// Returns a copy with the font and line-height metrics overridden, inheriting
-  /// the viewport, container size, and shared calc arena.
+  /// A copy with its font and line-height metrics replaced, keeping its viewport and container.
   pub(crate) fn with_font_metrics(
     &self,
     font_size: f32,
     root_font_size: Option<f32>,
     line_height: f32,
     root_line_height: Option<f32>,
-    ch: f32,
+    units: FontUnits,
   ) -> Self {
     Self {
       font_size,
       root_font_size,
       line_height,
       root_line_height,
-      ch,
+      ch: units.ch,
+      ex: units.ex,
       ..self.clone()
     }
-  }
-
-  /// Resolves an interned `calc(...)` handle against this context's arena.
-  pub(crate) fn resolve_calc(&self, value: *const (), basis: f32) -> f32 {
-    self.calc_arena.resolve_calc_value(value, basis)
   }
 
   /// Device-pixel basis for the `rem` unit.

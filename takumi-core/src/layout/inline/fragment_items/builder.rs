@@ -15,8 +15,10 @@ use crate::{
     inline::{
       atomic_inline::BoxAtomicInline,
       background::{SpanFragment, resolve_span_fragments},
-      decorations::{BoxFont, DecorationPlacement},
-      inline_item::InlineItem,
+      decorations::{
+        BoxFont, DecoratedLeaf, DecoratedLeaves, DecorationInset, DecorationPlacement,
+      },
+      inline_item::{InlineItem, LayoutObject},
       inline_layout_algorithm::LineBoxFragment,
       inline_node_data::InlineNodeData,
       items::{DecorationLink, InlineSpans, ProcessedInlineSpan},
@@ -73,6 +75,7 @@ impl FragmentItems {
     spans: &mut InlineSpans<'c>,
     layout: ComputedLayout,
     context: &RenderContext,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) -> Self {
     let mut items = Self {
       content_box: ContentBox::of(layout),
@@ -85,6 +88,7 @@ impl FragmentItems {
       span_ink_reach: 0.0,
       text_items: Vec::new(),
       faces: Vec::new(),
+      face_indices: FxHashMap::default(),
       face_glyphs: Vec::new(),
       glyphs: GlyphStore::default(),
       inline_boxes: Vec::new(),
@@ -96,8 +100,10 @@ impl FragmentItems {
     let mut last_baseline = None;
     let content = layout.content_box_offset();
     let root_font = BoxFont::of(context);
+    let (leaves, leaf_indices) = DecoratedLeaves::of_lines(lines);
+    let insets = leaves.insets();
 
-    for line in lines {
+    for (line_index, line) in lines.iter().enumerate() {
       // Blink's `PropagateBaselineFromLineBox` skips a line past the clamp point, and its items
       // are hidden.
       if line.is_hidden_due_to_layout {
@@ -128,7 +134,7 @@ impl FragmentItems {
         last_baseline = Some(line_baseline);
       }
 
-      for child in &line.items.children {
+      for (child_index, child) in line.items.children.iter().enumerate() {
         // Blink's `PhysicalFragment::IsHiddenDueToLayout` also reads the `IsTruncated` that
         // `LineTruncator::HideChild` sets on an atomic inline's layout object.
         if child.is_hidden_due_to_layout || child.is_truncated {
@@ -165,6 +171,7 @@ impl FragmentItems {
             | LineFragment::BlockInInline {
               node,
               layout_result,
+              ..
             },
           ) => {
             let Some(span) = spans.span_of(node) else {
@@ -203,8 +210,8 @@ impl FragmentItems {
             let Some(ProcessedInlineSpan::Box(item)) = spans.spans.get_mut(span) else {
               continue;
             };
-            let result = positioned_float.layout_result;
-            let size = item.paint_border_box(result.inline_size, result.block_size);
+            let result = &positioned_float.layout_result;
+            let size = item.paint_border_box(result.size.inline_size, result.size.block_size);
             let margin = item.margin;
 
             items.push_inline_box(
@@ -253,7 +260,10 @@ impl FragmentItems {
                 context,
               };
 
-              items.push_text(&source, child, origin, &text_line, &mut ink);
+              let child_insets = leaf_indices[line_index][child_index]
+                .map_or(&[][..], |leaf| insets[leaf].as_slice());
+
+              items.push_text(&source, child, origin, &text_line, child_insets, &mut ink);
             }
           }
         }
@@ -266,6 +276,7 @@ impl FragmentItems {
       spans,
       (layout, context.style.inherited_data.direction),
       &mut ink.content,
+      atomic_inline,
     );
     let span_fragments = line_span_fragments(lines, spans, content);
 
@@ -307,6 +318,7 @@ impl FragmentItems {
     child: &LogicalLineItem<'_, 'c>,
     origin: Point<f32>,
     line: &TextLine<'_>,
+    insets: &[DecorationInset],
     ink: &mut Ink,
   ) {
     let TextSource {
@@ -524,6 +536,11 @@ impl FragmentItems {
         (text_font, scale),
         (line.root_font, line.baseline),
         &decorating,
+        // The fragment's ends pull in, which its first and last runs hold.
+        insets
+          .iter()
+          .map(|inset| inset.for_run(start_x <= 0.0, end_x >= total_advance))
+          .collect(),
       );
 
       if !run.brush.decorations.is_empty() {
@@ -532,6 +549,7 @@ impl FragmentItems {
           Affine::IDENTITY,
           Affine::IDENTITY,
           Point::ZERO,
+          true,
         ) {
           let area = decoration_line.bounds();
 
@@ -581,6 +599,72 @@ impl FragmentItems {
 /// `ink` grown to take the ink of `run`'s glyphs, placed by `scaled` and sized by `scale`: what
 /// the run's metrics box misses, such as synthetic-italic skew, faux-bold outset, negative
 /// bearings, and glyphs taller than the font's metrics.
+impl DecoratedLeaves {
+  /// The leaves of `lines` in order, and the leaf each line's child is, by line and child.
+  fn of_lines(lines: &[LineBoxFragment<'_, '_>]) -> (Self, Vec<Vec<Option<usize>>>) {
+    let mut leaves = Vec::new();
+    let indices = lines
+      .iter()
+      .enumerate()
+      .map(|(line_index, line)| {
+        line
+          .items
+          .children
+          .iter()
+          .map(|child| {
+            let leaf = DecoratedLeaf::of(child, line_index)?;
+
+            leaves.push(leaf);
+            Some(leaves.len() - 1)
+          })
+          .collect()
+      })
+      .collect();
+
+    (Self(leaves), indices)
+  }
+}
+
+impl DecoratedLeaf {
+  /// `child` of the line at `line` as a leaf of Blink's `InlineCursor`, none for a box that is not
+  /// one: an inline box, a float, an out-of-flow box, or one a line hides.
+  fn of(child: &LogicalLineItem<'_, '_>, line: usize) -> Option<Self> {
+    if child.is_hidden_due_to_layout
+      || child.is_truncated
+      || child.out_of_flow_positioned_box.is_some()
+      || child.unpositioned_float.is_some()
+    {
+      return None;
+    }
+
+    let line_break = child
+      .inline_item
+      .is_some_and(InlineItem::is_forced_line_break);
+    let text = match &child.layout_result {
+      Some(LineFragment::InlineBox(_) | LineFragment::Float { .. }) => return None,
+      Some(_) => false,
+      None if child.shape_result.is_some() || line_break => true,
+      None => return None,
+    };
+    let object = child
+      .layout_object
+      .or_else(|| child.inline_item?.layout_object);
+    let context = object.map(LayoutObject::context);
+
+    Some(Self {
+      line,
+      text,
+      line_break,
+      width: child.inline_size.to_float(),
+      decorations: context
+        .map(|context| context.text_decorations.clone())
+        .unwrap_or_default(),
+      object: context.map(RenderContext::box_id),
+      rtl: context.is_some_and(|context| context.style.inherited_data.direction == Direction::Rtl),
+    })
+  }
+}
+
 fn include_glyph_ink(
   ink: &mut Option<InkBox>,
   run: &ShapedRun,
@@ -639,6 +723,7 @@ impl FragmentItems {
     spans: &mut InlineSpans<'c>,
     (layout, direction): (ComputedLayout, Direction),
     ink: &mut Option<InkBox>,
+    atomic_inline: &mut BoxAtomicInline<'_, 'c>,
   ) {
     let Some(marker) = UnpositionedListMarker::of(items_data) else {
       return;
@@ -652,13 +737,12 @@ impl FragmentItems {
     let Some(ProcessedInlineSpan::Box(item)) = spans.spans.get_mut(span) else {
       return;
     };
-    let mut atomic_inline = BoxAtomicInline {
-      available_space: Size {
-        width: AvailableSpace::Definite(self.content_box.size.width),
-        height: AvailableSpace::MaxContent,
-      },
+    atomic_inline.available_space = Size {
+      width: AvailableSpace::Definite(self.content_box.size.width),
+      height: AvailableSpace::MaxContent,
     };
-    let result = marker.layout(&mut atomic_inline);
+
+    let result = marker.layout(atomic_inline);
     let size = item.paint_border_box(result.inline_size, result.block_size);
     let offset = marker.offset(&result, line, layout, direction);
 

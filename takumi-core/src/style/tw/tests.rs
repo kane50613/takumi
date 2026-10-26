@@ -1,37 +1,74 @@
-use std::{assert_matches, sync::Arc};
+use std::{assert_matches, collections::HashMap, sync::Arc};
 
-use super::*;
+use super::{builder::TailwindDeclarationBuilder, parser::*, *};
 use crate::style::{ComputedStyle, LonghandId, PropertyRule, Style, properties::BackgroundImage};
 
-/// The declarations a utility produces without any variable defined, which is
-/// what these assertions are about.
+/// The declarations a utility emits with no variable defined, which is what these assertions are
+/// about.
 fn parse_property(token: &str) -> Option<Vec<StyleDeclaration>> {
-  TailwindProperty::parse(token).map(builtin_declarations)
+  let mut builder = TailwindDeclarationBuilder::default();
+
+  utility::emit(token, &mut builder)?;
+
+  Some(builtin_declarations(&builder.finish()))
 }
 
-fn builtin_declarations(property: TailwindProperty) -> Vec<StyleDeclaration> {
-  match property {
-    TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
-    property => expand(property),
-  }
+/// Each declaration, with a theme variable's read replaced by the built-in value it falls back to.
+fn builtin_declarations(declarations: &StyleDeclarationBlock) -> Vec<StyleDeclaration> {
+  declarations
+    .iter()
+    .filter_map(|declaration| match declaration {
+      StyleDeclaration::VarRef(var_ref) => var_ref.fallback.as_deref().cloned(),
+      declaration => Some(declaration.clone()),
+    })
+    .collect()
 }
 
-fn expect(property: TailwindProperty) -> Option<Vec<StyleDeclaration>> {
-  Some(expand(property))
+/// `declarations` finished as a utility's are, so a border width carries the style it draws in.
+fn finished(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Vec<StyleDeclaration> {
+  let mut builder = TailwindDeclarationBuilder::default();
+
+  builder.push_all(declarations);
+  builder.finish().iter().cloned().collect()
 }
 
-fn expand(property: TailwindProperty) -> Vec<StyleDeclaration> {
-  property.expand_targets().into_vec()
+fn expect(
+  declarations: impl IntoIterator<Item = StyleDeclaration>,
+) -> Option<Vec<StyleDeclaration>> {
+  Some(finished(declarations))
 }
 
-/// The declarations a value's property produces, paired with its variant.
+/// The declarations a `border-*` style utility writes.
+fn border_style(style: BorderStyle) -> Vec<StyleDeclaration> {
+  vec![
+    StyleDeclaration::CustomProperty("--tw-border-style".to_owned(), style.to_css_string()),
+    StyleDeclaration::border_top_style(style),
+    StyleDeclaration::border_right_style(style),
+    StyleDeclaration::border_bottom_style(style),
+    StyleDeclaration::border_left_style(style),
+  ]
+}
+
+/// The declarations a `rounded` utility writes for `radius`.
+fn rounded(radius: Length) -> Vec<StyleDeclaration> {
+  let radius = SpacePair::from_single(radius);
+
+  vec![
+    StyleDeclaration::border_top_left_radius(radius),
+    StyleDeclaration::border_top_right_radius(radius),
+    StyleDeclaration::border_bottom_right_radius(radius),
+    StyleDeclaration::border_bottom_left_radius(radius),
+  ]
+}
+
+/// The rule's declarations with theme reads replaced by their fallbacks, paired with its variant.
 fn parse_value(token: &str) -> Option<(Vec<StyleDeclaration>, Option<Breakpoint>, bool)> {
-  let value = TailwindValue::parse(token)?;
+  let rule = TwRule::parse(token)?;
 
   Some((
-    builtin_declarations(value.property),
-    value.breakpoint,
-    value.important,
+    builtin_declarations(&rule.declarations),
+    rule.breakpoint.clone(),
+    rule.important,
   ))
 }
 
@@ -39,7 +76,7 @@ fn parse_value(token: &str) -> Option<(Vec<StyleDeclaration>, Option<Breakpoint>
 fn test_box_sizing() {
   assert_eq!(
     parse_property("box-border"),
-    expect(TailwindProperty::BoxSizing(BoxSizing::BorderBox))
+    expect(vec![StyleDeclaration::box_sizing(BoxSizing::BorderBox)])
   );
 }
 
@@ -47,15 +84,19 @@ fn test_box_sizing() {
 fn test_parse_width() {
   assert_eq!(
     parse_property("w-64"),
-    expect(TailwindProperty::Width(Length::from_spacing(64.0).into()))
+    expect(vec![StyleDeclaration::width(Size::Length(
+      Length::from_spacing(64.0)
+    ))])
   );
   assert_eq!(
     parse_property("h-32"),
-    expect(TailwindProperty::Height(Length::from_spacing(32.0).into()))
+    expect(vec![StyleDeclaration::height(Size::Length(
+      Length::from_spacing(32.0)
+    ))])
   );
   assert_eq!(
     parse_property("justify-self-center"),
-    expect(TailwindProperty::JustifySelf(AlignItems::Center))
+    expect(vec![StyleDeclaration::justify_self(AlignItems::Center)])
   );
 }
 
@@ -63,33 +104,49 @@ fn test_parse_width() {
 fn test_parse_color() {
   assert_eq!(
     parse_property("text-black/30"),
-    expect(TailwindProperty::Color(ColorInput::Value(Color([
+    expect(vec![StyleDeclaration::color(ColorInput::Value(Color([
       0,
       0,
       0,
       (0.3_f32 * 255.0).round() as u8
-    ]))))
+    ])))])
   );
 }
 
 #[test]
 fn test_parse_red_500_color_utilities() {
-  let cases: &[(&str, TailwindProperty)] = &[
+  let cases: &[(&str, Vec<StyleDeclaration>)] = &[
     (
       "shadow-red-500",
-      TailwindProperty::ShadowColor(TwVarColor::parse_tw("red-500").expect("palette colour")),
+      vec![StyleDeclaration::CustomProperty(
+        "--tw-shadow-color".to_owned(),
+        TwVarColor::parse_tw("red-500")
+          .expect("palette colour")
+          .0
+          .to_string(),
+      )],
     ),
     (
       "text-shadow-red-500",
-      TailwindProperty::TextShadowColor(TwVarColor::parse_tw("red-500").expect("palette colour")),
+      vec![StyleDeclaration::CustomProperty(
+        "--tw-text-shadow-color".to_owned(),
+        TwVarColor::parse_tw("red-500")
+          .expect("palette colour")
+          .0
+          .to_string(),
+      )],
     ),
     (
       "decoration-red-500",
-      TailwindProperty::TextDecorationColor(ColorInput::Value(Color([251, 44, 54, 255]))),
+      vec![StyleDeclaration::text_decoration_color(ColorInput::Value(
+        Color([251, 44, 54, 255]),
+      ))],
     ),
     (
       "bg-red-500",
-      TailwindProperty::BackgroundColor(ColorInput::Value(Color([251, 44, 54, 255]))),
+      vec![StyleDeclaration::background_color(ColorInput::Value(
+        Color([251, 44, 54, 255]),
+      ))],
     ),
   ];
   for (input, expected) in cases {
@@ -101,15 +158,15 @@ fn test_parse_red_500_color_utilities() {
 fn test_parse_text_decoration_lines() {
   assert_eq!(
     parse_property("underline"),
-    expect(TailwindProperty::TextDecorationLine(
+    expect(vec![StyleDeclaration::text_decoration_line(Some(
       TextDecorationLines::UNDERLINE
-    ))
+    ))])
   );
   assert_eq!(
     parse_property("no-underline"),
-    expect(TailwindProperty::TextDecorationLine(
+    expect(vec![StyleDeclaration::text_decoration_line(Some(
       TextDecorationLines::empty()
-    ))
+    ))])
   );
 }
 
@@ -117,29 +174,10 @@ fn test_parse_text_decoration_lines() {
 fn test_parse_arbitrary_color() {
   assert_eq!(
     parse_property("text-[rgb(0, 191, 255)]"),
-    expect(TailwindProperty::Color(ColorInput::Value(Color([
+    expect(vec![StyleDeclaration::color(ColorInput::Value(Color([
       0, 191, 255, 255
-    ]))))
+    ])))])
   );
-}
-
-#[test]
-fn test_split_variant_ignores_colons_in_arbitrary_values() {
-  assert_eq!(split_variant("sm:mt-0"), Some(("sm", "mt-0")));
-  assert_eq!(split_variant("sm:hover:mt-0"), Some(("sm", "hover:mt-0")));
-  assert_eq!(split_variant("mt-0"), None);
-  assert_eq!(
-    split_variant("mask-[url('https://example.com/a.svg')]"),
-    None
-  );
-  assert_eq!(split_variant("grid-cols-[repeat(2,minmax(0,1fr))]"), None);
-  assert_eq!(split_variant("[mask:foo]"), None);
-  assert_eq!(
-    split_variant("md:mask-[url('https://example.com/a.svg')]"),
-    Some(("md", "mask-[url('https://example.com/a.svg')]"))
-  );
-  assert_eq!(split_variant(r#"content-['a:b]']"#), None);
-  assert_eq!(split_variant(r#"content-["a\":b"]"#), None);
 }
 
 #[test]
@@ -165,17 +203,20 @@ fn test_decode_arbitrary_value() {
 fn test_extract_arbitrary_value_preserves_url_underscores() {
   assert_eq!(
     parse_property("mask-[url('https://example.com/my_logo.svg')]"),
-    expect(TailwindProperty::MaskImage(BackgroundImage::Url(
-      "https://example.com/my_logo.svg".into()
-    )))
+    expect(vec![StyleDeclaration::mask_image(Some(
+      [BackgroundImage::Url(
+        "https://example.com/my_logo.svg".into()
+      )]
+      .into()
+    ))])
   );
 }
 
 #[test]
 fn test_parse_value_arbitrary_url_with_scheme_colon() {
-  let url_image = expand(TailwindProperty::MaskImage(BackgroundImage::Url(
-    "https://example.com/a.svg".into(),
-  )));
+  let url_image = finished(vec![StyleDeclaration::mask_image(Some(
+    [BackgroundImage::Url("https://example.com/a.svg".into())].into(),
+  ))]);
 
   assert_eq!(
     parse_value("mask-[url('https://example.com/a.svg')]"),
@@ -192,7 +233,7 @@ fn test_parse_value_arbitrary_url_with_scheme_colon() {
 fn test_parse_arbitrary_flex_with_spaces() {
   assert_eq!(
     parse_property("flex-[3_1_auto]"),
-    expect(TailwindProperty::Flex(Flex {
+    expect(StyleDeclaration::expand_flex(Flex {
       grow: 3.0,
       shrink: 1.0,
       basis: FlexBasis::default(),
@@ -203,8 +244,8 @@ fn test_parse_arbitrary_flex_with_spaces() {
 #[test]
 fn test_parse_tailwind_animation_preset() {
   assert_matches!(
-    TailwindProperty::parse("animate-spin"),
-    Some(TailwindProperty::Animation(tw_animation))
+    TwAnimation::parse_tw("spin"),
+    Some(tw_animation)
       if tw_animation.token.as_deref() == Some("spin")
         && tw_animation.animations.as_ref() == [Animation {
           duration: AnimationTime::from_milliseconds(1000.0),
@@ -219,8 +260,8 @@ fn test_parse_tailwind_animation_preset() {
 #[test]
 fn test_parse_tailwind_animation_arbitrary_value() {
   assert_matches!(
-    TailwindProperty::parse("animate-[wiggle_1s_ease-in-out_infinite]"),
-    Some(TailwindProperty::Animation(tw_animation))
+    TwAnimation::parse_tw_with_arbitrary("[wiggle_1s_ease-in-out_infinite]"),
+    Some(tw_animation)
       if tw_animation.token.is_none()
         && tw_animation.animations.as_ref() == [Animation {
           duration: AnimationTime::from_milliseconds(1000.0),
@@ -236,7 +277,9 @@ fn test_parse_tailwind_animation_arbitrary_value() {
 fn test_parse_negative_margin() {
   assert_eq!(
     parse_property("-ml-4"),
-    expect(TailwindProperty::MarginLeft(Length::from_spacing(-4.0)))
+    expect(vec![StyleDeclaration::margin_left(Length::from_spacing(
+      -4.0
+    ))])
   );
 }
 
@@ -244,11 +287,11 @@ fn test_parse_negative_margin() {
 fn test_parse_border_radius() {
   assert_eq!(
     parse_property("rounded-xs"),
-    expect(TailwindProperty::Rounded(TwRounded(Length::Rem(0.125))))
+    expect(rounded(Length::Rem(0.125)))
   );
   assert_eq!(
     parse_property("rounded-full"),
-    expect(TailwindProperty::Rounded(TwRounded(Length::Px(9999.0))))
+    expect(rounded(Length::Px(9999.0)))
   );
 }
 
@@ -256,10 +299,10 @@ fn test_parse_border_radius() {
 fn test_parse_font_size_with_arbitrary_line_height() {
   assert_eq!(
     parse_property("text-base/[12.34]"),
-    expect(TailwindProperty::FontSize(TwFontSize {
-      font_size: (Length::Rem(1.0).into()),
-      line_height: Some(LineHeight::Unitless(12.34)),
-    }))
+    expect([
+      StyleDeclaration::font_size(Length::Rem(1.0).into()),
+      StyleDeclaration::line_height(LineHeight::Unitless(12.34)),
+    ])
   );
 }
 
@@ -267,47 +310,54 @@ fn test_parse_font_size_with_arbitrary_line_height() {
 fn test_parse_border_width() {
   assert_eq!(
     parse_property("border"),
-    expect(TailwindProperty::BorderDefault)
+    expect(vec![
+      StyleDeclaration::border_top_width(LineWidth::Length(Length::Px(1.0))),
+      StyleDeclaration::border_right_width(LineWidth::Length(Length::Px(1.0))),
+      StyleDeclaration::border_bottom_width(LineWidth::Length(Length::Px(1.0))),
+      StyleDeclaration::border_left_width(LineWidth::Length(Length::Px(1.0)))
+    ])
   );
   assert_eq!(
     parse_property("border-b"),
-    expect(TailwindProperty::BorderBottomWidth(LineWidth::Length(
-      Length::Px(1.0)
-    )))
+    expect(vec![StyleDeclaration::border_bottom_width(
+      LineWidth::Length(Length::Px(1.0))
+    )])
   );
   assert_eq!(
     parse_property("border-y"),
-    expect(TailwindProperty::BorderYWidth(LineWidth::Length(
-      Length::Px(1.0)
-    )))
+    expect(vec![
+      StyleDeclaration::border_top_width(LineWidth::Length(Length::Px(1.0))),
+      StyleDeclaration::border_bottom_width(LineWidth::Length(Length::Px(1.0)))
+    ])
   );
   assert_eq!(
     parse_property("border-t-2"),
-    expect(TailwindProperty::BorderTopWidth(LineWidth::Length(
+    expect(vec![StyleDeclaration::border_top_width(LineWidth::Length(
       Length::Px(2.0)
-    )))
+    ))])
   );
   assert_eq!(
     parse_property("border-x-4"),
-    expect(TailwindProperty::BorderXWidth(LineWidth::Length(
-      Length::Px(4.0)
-    )))
+    expect(vec![
+      StyleDeclaration::border_left_width(LineWidth::Length(Length::Px(4.0))),
+      StyleDeclaration::border_right_width(LineWidth::Length(Length::Px(4.0)))
+    ])
   );
   assert_eq!(
     parse_property("border-solid"),
-    expect(TailwindProperty::BorderStyle(BorderStyle::Solid))
+    expect(border_style(BorderStyle::Solid))
   );
   assert_eq!(
     parse_property("border-dashed"),
-    expect(TailwindProperty::BorderStyle(BorderStyle::Dashed))
+    expect(border_style(BorderStyle::Dashed))
   );
   assert_eq!(
     parse_property("border-dotted"),
-    expect(TailwindProperty::BorderStyle(BorderStyle::Dotted))
+    expect(border_style(BorderStyle::Dotted))
   );
   assert_eq!(
     parse_property("border-none"),
-    expect(TailwindProperty::BorderStyle(BorderStyle::None))
+    expect(border_style(BorderStyle::None))
   );
 }
 
@@ -315,37 +365,40 @@ fn test_parse_border_width() {
 fn test_parse_outline() {
   assert_eq!(
     parse_property("outline"),
-    expect(TailwindProperty::OutlineDefault)
+    expect(vec![
+      StyleDeclaration::outline_width(LineWidth::Length(Length::Px(1.0))),
+      StyleDeclaration::outline_style(BorderStyle::Solid)
+    ])
   );
   assert_eq!(
     parse_property("outline-2"),
-    expect(TailwindProperty::OutlineWidth(LineWidth::Length(
+    expect(vec![StyleDeclaration::outline_width(LineWidth::Length(
       Length::Px(2.0)
-    )))
+    ))])
   );
   assert_eq!(
     parse_property("outline-red-500"),
-    expect(TailwindProperty::OutlineColor(ColorInput::Value(Color([
-      251, 44, 54, 255
-    ]))))
+    expect(vec![StyleDeclaration::outline_color(ColorInput::Value(
+      Color([251, 44, 54, 255])
+    ))])
   );
   assert_eq!(
     parse_property("outline-solid"),
-    expect(TailwindProperty::OutlineStyle(BorderStyle::Solid))
+    expect(vec![StyleDeclaration::outline_style(BorderStyle::Solid)])
   );
   assert_eq!(
     parse_property("outline-dashed"),
-    expect(TailwindProperty::OutlineStyle(BorderStyle::Dashed))
+    expect(vec![StyleDeclaration::outline_style(BorderStyle::Dashed)])
   );
   assert_eq!(
     parse_property("outline-offset-4"),
-    expect(TailwindProperty::OutlineOffset(LineWidth::Length(
-      Length::Px(4.0)
-    )))
+    expect(vec![StyleDeclaration::outline_offset(Length::from(
+      LineWidth::Length(Length::Px(4.0))
+    ))])
   );
   assert_eq!(
     parse_property("outline-none"),
-    expect(TailwindProperty::OutlineStyle(BorderStyle::None))
+    expect(vec![StyleDeclaration::outline_style(BorderStyle::None)])
   );
 }
 
@@ -353,7 +406,9 @@ fn test_parse_outline() {
 fn test_parse_col_end() {
   assert_eq!(
     parse_property("col-end-1"),
-    expect(TailwindProperty::GridColumnEnd(GridPlacement::Line(1)))
+    expect(vec![StyleDeclaration::grid_column_end(
+      GridPlacement::Line(1)
+    )])
   );
 }
 
@@ -397,15 +452,21 @@ fn test_grid_longhand_importance_is_tracked_per_side() {
 
 #[test]
 fn test_parse_overflow_clip() {
-  let cases: &[(&str, TailwindProperty)] = &[
-    ("overflow-clip", TailwindProperty::Overflow(Overflow::Clip)),
+  let cases: &[(&str, Vec<StyleDeclaration>)] = &[
+    (
+      "overflow-clip",
+      vec![
+        StyleDeclaration::overflow_x(Overflow::Clip),
+        StyleDeclaration::overflow_y(Overflow::Clip),
+      ],
+    ),
     (
       "overflow-x-clip",
-      TailwindProperty::OverflowX(Overflow::Clip),
+      vec![StyleDeclaration::overflow_x(Overflow::Clip)],
     ),
     (
       "overflow-y-clip",
-      TailwindProperty::OverflowY(Overflow::Clip),
+      vec![StyleDeclaration::overflow_y(Overflow::Clip)],
     ),
   ];
   for (input, expected) in cases {
@@ -534,28 +595,32 @@ fn test_value_parsing() {
   assert_eq!(
     parse_value("md:!mt-4"),
     Some((
-      expand(TailwindProperty::MarginTop(Length::Rem(1.0))),
+      finished(vec![StyleDeclaration::margin_top(Length::Rem(1.0))]),
       Breakpoint::parse("md"),
       true
     ))
   );
 }
 
+/// The cascade applies the normal rules, then the `!important` ones, each with its breakpoint
+/// variant after the plain utility, as Tailwind sorts them.
 #[test]
 fn test_values_sorting() {
   let values = TailwindValues::from_str("md:!mt-4 sm:mt-8 !mt-12 mt-16")
     .expect("tailwind values should parse");
+  let order = cascade_order(values.inner.iter().map(Arc::as_ref))
+    .into_iter()
+    .map(|rule| {
+      let declarations = rule
+        .declarations
+        .iter()
+        .map(|declaration| match declaration {
+          StyleDeclaration::VarRef(var_ref) => *var_ref.fallback.clone().unwrap(),
+          declaration => declaration.clone(),
+        })
+        .collect::<Vec<_>>();
 
-  let order = values
-    .inner
-    .iter()
-    .map(|value| {
-      let declarations = match &value.property {
-        TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
-        property => expand(property.clone()),
-      };
-
-      (declarations, value.breakpoint.clone(), value.important)
+      (declarations, rule.breakpoint.clone(), rule.important)
     })
     .collect::<Vec<_>>();
 
@@ -564,25 +629,25 @@ fn test_values_sorting() {
     vec![
       // mt-16
       (
-        expand(TailwindProperty::MarginTop(Length::Rem(4.0))),
+        finished(vec![StyleDeclaration::margin_top(Length::Rem(4.0))]),
         None,
         false
       ),
       // sm:mt-8
       (
-        expand(TailwindProperty::MarginTop(Length::Rem(2.0))),
+        finished(vec![StyleDeclaration::margin_top(Length::Rem(2.0))]),
         Breakpoint::parse("sm"),
         false
       ),
       // !mt-12
       (
-        expand(TailwindProperty::MarginTop(Length::Rem(3.0))),
+        finished(vec![StyleDeclaration::margin_top(Length::Rem(3.0))]),
         None,
         true
       ),
       // md:!mt-4
       (
-        expand(TailwindProperty::MarginTop(Length::Rem(1.0))),
+        finished(vec![StyleDeclaration::margin_top(Length::Rem(1.0))]),
         Breakpoint::parse("md"),
         true
       ),
@@ -637,11 +702,13 @@ fn test_transform_utilities_resolve_to_standard_longhands() {
 fn test_parse_blend_mode() {
   assert_eq!(
     parse_property("mix-blend-multiply"),
-    expect(TailwindProperty::MixBlendMode(BlendMode::Multiply))
+    expect(vec![StyleDeclaration::mix_blend_mode(BlendMode::Multiply)])
   );
   assert_eq!(
     parse_property("bg-blend-screen"),
-    expect(TailwindProperty::BackgroundBlendMode(BlendMode::Screen))
+    expect(vec![StyleDeclaration::background_blend_mode(
+      [BlendMode::Screen].into()
+    )])
   );
 }
 #[test]
@@ -659,28 +726,30 @@ fn test_parse_vertical_align() {
   for (input, kw) in keywords {
     assert_eq!(
       parse_property(input),
-      expect(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(*kw))),
+      expect(vec![StyleDeclaration::vertical_align(
+        VerticalAlign::Keyword(*kw)
+      )]),
       "{input}"
     );
   }
   // Arbitrary-value lengths
   assert_eq!(
     parse_property("align-[10px]"),
-    expect(TailwindProperty::VerticalAlign(VerticalAlign::Length(
-      Length::Px(10.0)
-    )))
+    expect(vec![StyleDeclaration::vertical_align(
+      VerticalAlign::Length(Length::Px(10.0))
+    )])
   );
   assert_eq!(
     parse_property("align-[25%]"),
-    expect(TailwindProperty::VerticalAlign(VerticalAlign::Length(
-      Length::Percentage(25.0)
-    )))
+    expect(vec![StyleDeclaration::vertical_align(
+      VerticalAlign::Length(Length::Percentage(25.0))
+    )])
   );
   assert_eq!(
     parse_property("align-[-0.5em]"),
-    expect(TailwindProperty::VerticalAlign(VerticalAlign::Length(
-      Length::Em(-0.5)
-    )))
+    expect(vec![StyleDeclaration::vertical_align(
+      VerticalAlign::Length(Length::Em(-0.5))
+    )])
   );
 }
 
@@ -688,15 +757,15 @@ fn test_parse_vertical_align() {
 fn test_parse_decoration_style() {
   assert_eq!(
     parse_property("decoration-wavy"),
-    expect(TailwindProperty::TextDecorationStyle(
+    expect(vec![StyleDeclaration::text_decoration_style(
       TextDecorationStyle::Wavy
-    ))
+    )])
   );
   assert_eq!(
     parse_property("decoration-dotted"),
-    expect(TailwindProperty::TextDecorationStyle(
+    expect(vec![StyleDeclaration::text_decoration_style(
       TextDecorationStyle::Dotted
-    ))
+    )])
   );
 }
 
@@ -704,27 +773,27 @@ fn test_parse_decoration_style() {
 fn test_parse_decoration_thickness() {
   assert_eq!(
     parse_property("decoration-4"),
-    expect(TailwindProperty::TextDecorationThickness(
+    expect(vec![StyleDeclaration::text_decoration_thickness(
       TextDecorationThickness::Length(Length::Px(4.0))
-    ))
+    )])
   );
   assert_eq!(
     parse_property("decoration-auto"),
-    expect(TailwindProperty::TextDecorationThickness(
+    expect(vec![StyleDeclaration::text_decoration_thickness(
       TextDecorationThickness::Length(Length::Auto)
-    ))
+    )])
   );
   assert_eq!(
     parse_property("decoration-from-font"),
-    expect(TailwindProperty::TextDecorationThickness(
+    expect(vec![StyleDeclaration::text_decoration_thickness(
       TextDecorationThickness::FromFont
-    ))
+    )])
   );
   assert_eq!(
     parse_property("decoration-[3px]"),
-    expect(TailwindProperty::TextDecorationThickness(
+    expect(vec![StyleDeclaration::text_decoration_thickness(
       TextDecorationThickness::Length(Length::Px(3.0))
-    ))
+    )])
   );
 }
 
@@ -848,7 +917,7 @@ fn test_text_shadow_color_overrides_preset_in_any_order() {
 fn test_bare_rounded_is_radius_sm() {
   assert_eq!(
     parse_property("rounded"),
-    expect(TailwindProperty::Rounded(TwRounded(Length::Rem(0.25))))
+    expect(rounded(Length::Rem(0.25)))
   );
 }
 
@@ -862,7 +931,9 @@ fn test_negative_color_is_rejected() {
 fn test_negative_grid_line() {
   assert_eq!(
     parse_property("-col-start-1"),
-    expect(TailwindProperty::GridColumnStart(GridPlacement::Line(-1)))
+    expect(vec![StyleDeclaration::grid_column_start(
+      GridPlacement::Line(-1)
+    )])
   );
 }
 
@@ -878,18 +949,23 @@ fn test_logical_resolves_to_physical_ltr() {
   assert_eq!(style.box_data.padding_right, Length::from_spacing(1.0));
 }
 
+/// Tailwind sorts `margin-inline-start` before `margin-left`, so `ml-*` wins whatever the class
+/// order.
 #[test]
 fn test_logical_physical_cascade_order_ltr() {
   let viewport = Viewport::new((100, 100));
-  let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
-  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
-    .inherit(&ComputedStyle::default());
-  assert_eq!(style.box_data.margin_left, Length::from_spacing(4.0));
 
-  let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
-  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
-    .inherit(&ComputedStyle::default());
-  assert_eq!(style.box_data.margin_left, Length::from_spacing(2.0));
+  for classes in ["ms-2 ml-4", "ml-4 ms-2"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.margin_left,
+      Length::from_spacing(4.0),
+      "{classes}"
+    );
+  }
 }
 
 #[test]
@@ -934,7 +1010,7 @@ fn test_filter_none_clears_previous_filters() {
 fn test_font_numeric_weight() {
   assert_eq!(
     parse_property("font-700"),
-    expect(TailwindProperty::FontWeight(FontWeight::from(700.0)))
+    expect(vec![StyleDeclaration::font_weight(FontWeight::from(700.0))])
   );
 }
 
@@ -942,7 +1018,7 @@ fn test_font_numeric_weight() {
 fn test_line_clamp_none() {
   assert_eq!(
     parse_property("line-clamp-none"),
-    expect(TailwindProperty::LineClamp(LineClamp::default()))
+    expect(StyleDeclaration::expand_line_clamp(LineClamp::default()))
   );
 }
 
@@ -950,10 +1026,13 @@ fn test_line_clamp_none() {
 fn test_bg_auto() {
   assert_eq!(
     parse_property("bg-auto"),
-    expect(TailwindProperty::BackgroundSize(BackgroundSize::Explicit {
-      width: Length::Auto,
-      height: Length::Auto,
-    }))
+    expect(vec![StyleDeclaration::background_size(
+      [BackgroundSize::Explicit {
+        width: Length::Auto,
+        height: Length::Auto,
+      }]
+      .into()
+    )])
   );
 }
 
@@ -961,11 +1040,15 @@ fn test_bg_auto() {
 fn test_bg_repeat_v4_names() {
   assert_eq!(
     parse_property("bg-repeat-round"),
-    expect(TailwindProperty::BackgroundRepeat(BackgroundRepeat::round()))
+    expect(vec![StyleDeclaration::background_repeat(
+      [BackgroundRepeat::round()].into()
+    )])
   );
   assert_eq!(
     parse_property("bg-repeat-space"),
-    expect(TailwindProperty::BackgroundRepeat(BackgroundRepeat::space()))
+    expect(vec![StyleDeclaration::background_repeat(
+      [BackgroundRepeat::space()].into()
+    )])
   );
 }
 
@@ -973,9 +1056,9 @@ fn test_bg_repeat_v4_names() {
 fn test_grid_cols_none() {
   assert_eq!(
     parse_property("grid-cols-none"),
-    expect(TailwindProperty::GridTemplateColumns(TwGridTemplate(
+    expect([StyleDeclaration::grid_template_columns(Some(
       GridTemplateComponents::default()
-    )))
+    ))])
   );
 }
 
@@ -983,14 +1066,14 @@ fn test_grid_cols_none() {
 fn test_col_auto_row_auto() {
   assert_eq!(
     parse_property("col-auto"),
-    expect(TailwindProperty::GridColumn(GridLine {
+    expect(StyleDeclaration::expand_grid_column(GridLine {
       start: GridPlacement::auto(),
       end: GridPlacement::auto(),
     }))
   );
   assert_eq!(
     parse_property("row-auto"),
-    expect(TailwindProperty::GridRow(GridLine {
+    expect(StyleDeclaration::expand_grid_row(GridLine {
       start: GridPlacement::auto(),
       end: GridPlacement::auto(),
     }))
@@ -1012,7 +1095,10 @@ fn test_shadow_none_overrides_color_in_either_order() {
 fn test_bg_conic_standalone() {
   assert_eq!(
     parse_property("bg-conic"),
-    expect(TailwindProperty::BgConicAngle(Angle::zero()))
+    expect([StyleDeclaration::Deferred(DeferredDeclaration {
+      property: PropertyId::Longhand(LonghandId::BackgroundImage),
+      specified_value: "conic-gradient(in oklab, var(--tw-gradient-stops))".to_owned(),
+    })])
   );
 }
 
@@ -1075,9 +1161,9 @@ fn test_border_width_implies_solid_and_per_side_color() {
 
   assert_eq!(
     parse_property("border-t-blue-500"),
-    expect(TailwindProperty::BorderTopColor(ColorInput::Value(Color(
-      [43, 127, 255, 255]
-    ))))
+    expect([StyleDeclaration::border_top_color(ColorInput::Value(
+      Color([43, 127, 255, 255])
+    ))])
   );
 
   let bar = computed("border-t-8 border-t-blue-500");
@@ -1096,20 +1182,28 @@ fn test_border_width_implies_solid_and_per_side_color() {
 #[test]
 fn test_parse_sizing_keyword_utilities() {
   for (token, expected) in [
-    ("w-min", TailwindProperty::Width(Size::MinContent)),
-    ("w-max", TailwindProperty::Width(Size::MaxContent)),
-    ("w-fit", TailwindProperty::Width(Size::FitContent)),
-    ("h-min", TailwindProperty::Height(Size::MinContent)),
-    ("h-max", TailwindProperty::Height(Size::MaxContent)),
-    ("h-fit", TailwindProperty::Height(Size::FitContent)),
-    ("size-fit", TailwindProperty::Size(Size::FitContent)),
+    ("w-min", vec![StyleDeclaration::width(Size::MinContent)]),
+    ("w-max", vec![StyleDeclaration::width(Size::MaxContent)]),
+    ("w-fit", vec![StyleDeclaration::width(Size::FitContent)]),
+    ("h-min", vec![StyleDeclaration::height(Size::MinContent)]),
+    ("h-max", vec![StyleDeclaration::height(Size::MaxContent)]),
+    ("h-fit", vec![StyleDeclaration::height(Size::FitContent)]),
+    (
+      "size-fit",
+      vec![
+        StyleDeclaration::width(Size::FitContent),
+        StyleDeclaration::height(Size::FitContent),
+      ],
+    ),
     (
       "basis-content",
-      TailwindProperty::FlexBasis(FlexBasis::Content),
+      vec![StyleDeclaration::flex_basis(Some(FlexBasis::Content))],
     ),
     (
       "basis-full",
-      TailwindProperty::FlexBasis(FlexBasis::Size(Size::Length(Length::Percentage(100.0)))),
+      vec![StyleDeclaration::flex_basis(Some(FlexBasis::Size(
+        Size::Length(Length::Percentage(100.0)),
+      )))],
     ),
   ] {
     assert_eq!(
@@ -1132,7 +1226,7 @@ fn test_parse_contain_utilities() {
   ] {
     assert_eq!(
       parse_property(token),
-      expect(TailwindProperty::Contain(expected)),
+      expect(vec![StyleDeclaration::contain(expected)]),
       "failed for {token}"
     );
   }
@@ -1143,7 +1237,7 @@ fn test_parse_contain_utilities() {
 fn test_parse_flow_root_utility() {
   assert_eq!(
     parse_property("flow-root"),
-    expect(TailwindProperty::Display(Display::FlowRoot))
+    expect(vec![StyleDeclaration::display(Display::FlowRoot)])
   );
 }
 
@@ -1151,34 +1245,41 @@ fn test_parse_flow_root_utility() {
 #[test]
 fn test_parse_list_utilities() {
   for (token, expected) in [
-    ("list-item", TailwindProperty::Display(Display::ListItem)),
+    (
+      "list-item",
+      vec![StyleDeclaration::display(Display::ListItem)],
+    ),
     (
       "list-disc",
-      TailwindProperty::ListStyleType(ListStyleType::Disc),
+      vec![StyleDeclaration::list_style_type(ListStyleType::Disc)],
     ),
     (
       "list-decimal",
-      TailwindProperty::ListStyleType(ListStyleType::Decimal),
+      vec![StyleDeclaration::list_style_type(ListStyleType::Decimal)],
     ),
     (
       "list-none",
-      TailwindProperty::ListStyleType(ListStyleType::None),
+      vec![StyleDeclaration::list_style_type(ListStyleType::None)],
     ),
     (
       "list-[upper-roman]",
-      TailwindProperty::ListStyleType(ListStyleType::UpperRoman),
+      vec![StyleDeclaration::list_style_type(ListStyleType::UpperRoman)],
     ),
     (
       "list-inside",
-      TailwindProperty::ListStylePosition(ListStylePosition::Inside),
+      vec![StyleDeclaration::list_style_position(
+        ListStylePosition::Inside,
+      )],
     ),
     (
       "list-outside",
-      TailwindProperty::ListStylePosition(ListStylePosition::Outside),
+      vec![StyleDeclaration::list_style_position(
+        ListStylePosition::Outside,
+      )],
     ),
     (
       "list-image-none",
-      TailwindProperty::ListStyleImage(ListStyleImage::default()),
+      vec![StyleDeclaration::list_style_image(ListStyleImage::default())],
     ),
   ] {
     assert_eq!(
@@ -1189,8 +1290,8 @@ fn test_parse_list_utilities() {
   }
 
   assert_matches!(
-    TailwindProperty::parse("list-image-[url(marker.png)]"),
-    Some(TailwindProperty::ListStyleImage(image))
+    parse_property("list-image-[url(marker.png)]").as_deref(),
+    Some([StyleDeclaration::ListStyleImage(image)])
       if matches!(image.image(), Some(BackgroundImage::Url(url)) if &**url == "marker.png")
   );
 }
@@ -1785,93 +1886,116 @@ fn test_class_list_parsing_shares_storage() {
 }
 
 #[test]
-fn test_expansion_cache_keeps_class_lists_distinct() {
-  let first = TailwindValues::parse("w-1");
-  let second = TailwindValues::parse("w-2");
-  let viewport = Viewport::new((100, 100));
-  let breakpoints = BreakpointOverrides::default();
-  let cache = TwCache::default();
-  let first_blocks = first.declaration_blocks(viewport, &breakpoints, &cache);
-  let second_blocks = second.declaration_blocks(viewport, &breakpoints, &cache);
-
-  assert!(!Rc::ptr_eq(&first_blocks, &second_blocks));
-  assert_ne!(first_blocks.normal, second_blocks.normal);
-  assert!(Rc::ptr_eq(
-    &second_blocks,
-    &second.declaration_blocks(viewport, &breakpoints, &cache),
-  ));
-  assert_eq!(
-    first_blocks.normal,
-    first
-      .declaration_blocks(viewport, &breakpoints, &cache)
-      .normal,
-  );
-}
-
-#[test]
-fn test_expansion_cache_retains_its_key() {
-  let values = TailwindValues::parse("w-3");
-  let weak = Arc::downgrade(&values.inner);
-  let cache = TwCache::default();
-  values.declaration_blocks(Viewport::new((100, 100)), &Default::default(), &cache);
-  drop(values);
-  assert!(weak.upgrade().is_some());
-  drop(cache);
-  assert!(weak.upgrade().is_none());
-}
-
-#[test]
-fn test_expansion_cache_stops_retaining_unique_lists_when_full() {
-  let cache = TwCache::default();
-  let viewport = Viewport::new((100, 100));
-  let breakpoints = BreakpointOverrides::default();
-  let first = TailwindValues::parse("w-1");
-  let blocks = first.declaration_blocks(viewport, &breakpoints, &cache);
-  for _ in 1..EXPANSION_CACHE_MAX_ENTRIES {
-    TailwindValues::parse("w-1").declaration_blocks(viewport, &breakpoints, &cache);
-  }
-
-  let overflow = TailwindValues::parse("w-2");
-  let weak = Arc::downgrade(&overflow.inner);
-  let expanded = overflow.declaration_blocks(viewport, &breakpoints, &cache);
-  assert_eq!(cache.blocks.borrow().len(), EXPANSION_CACHE_MAX_ENTRIES);
-  assert_eq!(
-    expanded.normal,
-    overflow
-      .clone()
-      .into_declaration_block(viewport, &breakpoints)
-      .split_importance()
-      .0,
-  );
-  drop(overflow);
-  assert!(weak.upgrade().is_none());
-  assert!(Rc::ptr_eq(
-    &blocks,
-    &first.declaration_blocks(viewport, &breakpoints, &cache),
-  ));
-}
-
-#[test]
-fn test_expansion_cache_tracks_breakpoint_inputs() {
+fn test_breakpoints_follow_the_viewport_and_theme() {
   let values: TailwindValues = "w-1 sm:w-2".parse().unwrap();
   let viewport = Viewport::new((800, 100));
-  let cache = TwCache::default();
   let breakpoints = BreakpointOverrides::default();
-  let active = values.declaration_blocks(viewport, &breakpoints, &cache);
+  let active = values
+    .clone()
+    .into_declaration_block(viewport, &breakpoints);
 
   for inactive_viewport in [
     Viewport::new((400, 100)),
     viewport.with_font_size(32.0),
     viewport.with_device_pixel_ratio(2.0),
   ] {
-    let inactive = values.declaration_blocks(inactive_viewport, &breakpoints, &cache);
-    assert_ne!(active.normal, inactive.normal);
+    let inactive = values
+      .clone()
+      .into_declaration_block(inactive_viewport, &breakpoints);
+    assert_ne!(active, inactive);
   }
 
-  let themed = values.declaration_blocks(
+  let themed = values.into_declaration_block(
     viewport,
     &HashMap::from([("sm".to_owned(), Length::Px(900.0))]),
-    &TwCache::default(),
   );
-  assert_ne!(active.normal, themed.normal);
+  assert_ne!(active, themed);
+}
+
+/// A utility for one side sorts after one for every side, as Tailwind orders `padding-top` after
+/// `padding`, whatever the class order.
+#[test]
+fn a_side_utility_beats_an_every_side_one() {
+  let viewport = Viewport::new((100, 100));
+
+  for classes in ["pt-2 p-4", "p-4 pt-2"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.padding_top,
+      Length::from_spacing(2.0),
+      "{classes}"
+    );
+    assert_eq!(
+      style.box_data.padding_left,
+      Length::from_spacing(4.0),
+      "{classes}"
+    );
+  }
+}
+
+/// Tailwind sorts `margin`, `margin-inline`, then `margin-inline-start`, so `m-4 mx-2 ms-1` gives
+/// the left margin to `ms-1` and the right to `mx-2`, whatever the class order.
+#[test]
+fn logical_side_utilities_sort_as_tailwind_writes_them() {
+  let viewport = Viewport::new((100, 100));
+
+  for classes in ["m-4 mx-2 ms-1", "ms-1 mx-2 m-4", "mx-2 ms-1 m-4"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.margin_top,
+      Length::from_spacing(4.0),
+      "{classes}"
+    );
+    assert_eq!(
+      style.box_data.margin_right,
+      Length::from_spacing(2.0),
+      "{classes}"
+    );
+    assert_eq!(
+      style.box_data.margin_left,
+      Length::from_spacing(1.0),
+      "{classes}"
+    );
+  }
+
+  for classes in ["px-4 pe-1", "pe-1 px-4"] {
+    let values = TailwindValues::from_str(classes).unwrap();
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+    assert_eq!(
+      style.box_data.padding_right,
+      Length::from_spacing(1.0),
+      "{classes}"
+    );
+  }
+}
+
+/// Tailwind registers `odd:` after `first:`, so `odd:` wins whatever the class order.
+#[test]
+fn structural_variants_cascade_as_tailwind_registers_them() {
+  let order = |classes: &str| {
+    let values = TailwindValues::from_str(classes).unwrap();
+
+    cascade_order(values.inner.iter().map(Arc::as_ref))
+      .into_iter()
+      .map(|rule| rule.order.clone())
+      .collect::<Vec<_>>()
+  };
+
+  assert_eq!(order("odd:mt-2 first:mt-4"), order("first:mt-4 odd:mt-2"));
+
+  let values = TailwindValues::from_str("odd:mt-2 first:mt-4").unwrap();
+  let last = cascade_order(values.inner.iter().map(Arc::as_ref))
+    .pop()
+    .unwrap()
+    .id;
+
+  assert_eq!(last, TwRule::parse("odd:mt-2").unwrap().id);
 }

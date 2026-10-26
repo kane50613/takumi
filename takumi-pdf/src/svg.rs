@@ -1,14 +1,16 @@
-//! Draws flattened SVG vector ops onto a krilla surface, so SVG image sources
-//! embed as real paths and gradients instead of bitmaps.
+//! Draws flattened SVG ops onto a krilla surface, leaving out a group's SVG filters.
 
 use takumi_core::{
   geometry::Point,
   resources::image::{
-    SvgFill, SvgGradient, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
+    SvgFill, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
+    SvgSpreadMethod, SvgStrokeStyle,
   },
+  style::Color,
 };
 
 use crate::{
+  filter::{ColorFilter, filtered},
   krilla::{
     color::rgb,
     geom::{Size as KrillaSize, Transform},
@@ -20,167 +22,230 @@ use crate::{
     },
     surface::Surface,
   },
-  paint::{draw_stream, krilla_blend, krilla_path, krilla_transform, normalized},
+  paint::{bitmap_image, draw_stream, krilla_path, normalized},
+  raster::embedded_image,
 };
 
-/// Draws `ops` onto `surface` in the current coordinate space and resets the
-/// fill/stroke state afterwards.
-pub(crate) fn draw_svg_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
-  draw_ops(surface, ops);
-  surface.set_fill(None);
-  surface.set_stroke(None);
+/// Draws SVG ops in the colors a CSS `filter` leaves them.
+pub(crate) struct SvgPainter<'a> {
+  filter: Option<&'a ColorFilter>,
 }
 
-fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
-  for op in ops {
-    match op {
-      SvgOp::PushTransform(transform) => surface.push_transform(&krilla_transform(transform)),
-      SvgOp::PushClip { path, evenodd } => match krilla_path(&path, Point::ZERO) {
-        Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
-        // The matching `Pop` still comes; keep the layer stack balanced.
-        None => surface.push_transform(&Transform::identity()),
+impl<'a> SvgPainter<'a> {
+  pub(crate) const fn new(filter: Option<&'a ColorFilter>) -> Self {
+    Self { filter }
+  }
+
+  /// Draws `ops` onto `surface`, then resets its fill and stroke.
+  pub(crate) fn draw(&self, surface: &mut Surface, ops: Vec<SvgOp>) {
+    self.draw_ops(surface, ops);
+    surface.set_fill(None);
+    surface.set_stroke(None);
+  }
+
+  fn draw_ops(&self, surface: &mut Surface, ops: Vec<SvgOp>) {
+    for op in ops {
+      match op {
+        SvgOp::PushTransform(transform) => surface.push_transform(&transform.into()),
+        SvgOp::PushClip { path, evenodd } => match krilla_path(&path, Point::ZERO) {
+          Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
+          // The matching `Pop` still comes; keep the layer stack balanced.
+          None => surface.push_transform(&Transform::identity()),
+        },
+        SvgOp::PushBlend(blend) => surface.push_blend_mode(blend.into()),
+        SvgOp::PushIsolation => surface.push_isolated(),
+        SvgOp::PushOpacity(opacity) => surface.push_opacity(normalized(opacity)),
+        SvgOp::PushMask { ops, luminance } => {
+          // CSS filters the element after masking, so the mask's own colors stay as drawn.
+          let stream = draw_stream(surface, |mask| SvgPainter::new(None).draw_ops(mask, ops));
+          let kind = if luminance {
+            MaskType::Luminosity
+          } else {
+            MaskType::Alpha
+          };
+
+          surface.push_mask(Mask::new(stream, kind));
+        }
+        SvgOp::PushFilter(_) => surface.push_transform(&Transform::identity()),
+        SvgOp::Pop => surface.pop(),
+        SvgOp::Draw {
+          path, fill, stroke, ..
+        } => {
+          let Some(path) = krilla_path(&path, Point::ZERO) else {
+            continue;
+          };
+          let fill = fill.map(|fill| self.fill(fill, surface));
+          let stroke = stroke.map(|stroke| self.stroke(stroke, surface));
+
+          surface.set_fill(fill);
+          surface.set_stroke(stroke);
+          surface.draw_path(&path);
+        }
+        SvgOp::Image {
+          data,
+          width,
+          height,
+          ..
+        } => {
+          let Some(size) = KrillaSize::from_wh(width, height) else {
+            continue;
+          };
+          let Some(image) = self.image(&data) else {
+            continue;
+          };
+
+          surface.draw_image(image, size);
+        }
+      }
+    }
+  }
+
+  /// An encoded bitmap embeds as it came, unless the filter recolors it or it does not embed.
+  fn image(&self, data: &SvgImageData) -> Option<KrillaImage> {
+    if let (SvgImageData::Encoded(bytes), None) = (data, self.filter)
+      && let Some(image) = embedded_image(bytes)
+    {
+      return Some(image);
+    }
+
+    Some(bitmap_image(&data.decode()?, self.filter))
+  }
+
+  fn fill(&self, fill: SvgFill, surface: &mut Surface) -> Fill {
+    let (paint, opacity) = self.paint(fill.paint, fill.opacity, surface);
+
+    Fill {
+      paint,
+      opacity: normalized(opacity),
+      rule: fill_rule(fill.evenodd),
+    }
+  }
+
+  fn stroke(&self, stroke: SvgStrokeStyle, surface: &mut Surface) -> Stroke {
+    let (paint, opacity) = self.paint(stroke.paint, stroke.opacity, surface);
+
+    Stroke {
+      paint,
+      width: stroke.width,
+      miter_limit: stroke.miter_limit,
+      line_cap: match stroke.cap {
+        SvgLineCap::Butt => LineCap::Butt,
+        SvgLineCap::Round => LineCap::Round,
+        SvgLineCap::Square => LineCap::Square,
       },
-      SvgOp::PushBlend(blend) => surface.push_blend_mode(krilla_blend(blend)),
-      SvgOp::PushOpacity(opacity) => surface.push_opacity(normalized(opacity)),
-      SvgOp::PushMask { ops, luminance } => {
-        let stream = draw_stream(surface, |mask| draw_ops(mask, ops));
-        let kind = if luminance {
-          MaskType::Luminosity
-        } else {
-          MaskType::Alpha
-        };
+      line_join: match stroke.join {
+        SvgLineJoin::Miter => LineJoin::Miter,
+        SvgLineJoin::Round => LineJoin::Round,
+        SvgLineJoin::Bevel => LineJoin::Bevel,
+      },
+      opacity: normalized(opacity),
+      dash: stroke
+        .dash
+        .map(|(array, offset)| StrokeDash { array, offset }),
+    }
+  }
 
-        surface.push_mask(Mask::new(stream, kind));
-      }
-      SvgOp::Pop => surface.pop(),
-      SvgOp::Draw { path, fill, stroke } => {
-        let Some(path) = krilla_path(&path, Point::ZERO) else {
-          continue;
-        };
-        let fill = fill.map(|fill| svg_fill(fill, surface));
-        let stroke = stroke.map(|stroke| svg_stroke(stroke, surface));
+  /// `color` and `opacity` as the filter leaves them.
+  fn filtered_color(&self, color: Color, opacity: f32) -> (rgb::Color, f32) {
+    let [red, green, blue, alpha] = filtered(self.filter, color);
 
-        surface.set_fill(fill);
-        surface.set_stroke(stroke);
-        surface.draw_path(&path);
+    (
+      rgb::Color::new(red, green, blue),
+      opacity * f32::from(alpha) / 255.0,
+    )
+  }
+
+  /// `paint` for a fill or stroke of `opacity`, with the opacity the filter leaves it.
+  fn paint(&self, paint: SvgOpPaint, opacity: f32, surface: &mut Surface) -> (Paint, f32) {
+    match paint {
+      SvgOpPaint::Color(color) => {
+        let (color, opacity) = self.filtered_color(color, opacity);
+
+        (color.into(), opacity)
       }
-      SvgOp::Raster {
-        rgba,
+      SvgOpPaint::Linear {
+        start,
+        end,
+        gradient,
+      } => (
+        LinearGradient {
+          x1: start.x,
+          y1: start.y,
+          x2: end.x,
+          y2: end.y,
+          transform: gradient.transform.into(),
+          spread_method: gradient.spread.into(),
+          stops: self.gradient_stops(&gradient),
+          anti_alias: false,
+        }
+        .into(),
+        opacity,
+      ),
+      SvgOpPaint::Radial {
+        center,
+        radius,
+        focal,
+        focal_radius,
+        gradient,
+      } => (
+        RadialGradient {
+          cx: center.x,
+          cy: center.y,
+          cr: radius,
+          fx: focal.x,
+          fy: focal.y,
+          fr: focal_radius,
+          transform: gradient.transform.into(),
+          spread_method: gradient.spread.into(),
+          stops: self.gradient_stops(&gradient),
+          anti_alias: false,
+        }
+        .into(),
+        opacity,
+      ),
+      SvgOpPaint::Pattern {
+        ops,
+        transform,
         width,
         height,
-        rect: (x, y, dest_width, dest_height),
-      } => {
-        let Some(size) = KrillaSize::from_wh(dest_width, dest_height) else {
-          continue;
-        };
-
-        surface.push_transform(&Transform::from_translate(x, y));
-        surface.draw_image(KrillaImage::from_rgba8(rgba, width, height), size);
-        surface.pop();
-      }
+      } => (
+        Pattern {
+          stream: draw_stream(surface, |tile| self.draw_ops(tile, ops)),
+          transform: transform.into(),
+          width,
+          height,
+        }
+        .into(),
+        opacity,
+      ),
     }
   }
-}
 
-fn svg_fill(fill: SvgFill, surface: &mut Surface) -> Fill {
-  Fill {
-    paint: svg_paint(fill.paint, surface),
-    opacity: normalized(fill.opacity),
-    rule: fill_rule(fill.evenodd),
+  fn gradient_stops(&self, gradient: &SvgGradient) -> Vec<Stop> {
+    gradient
+      .stops
+      .iter()
+      .map(|stop| {
+        let (color, opacity) = self.filtered_color(stop.color, stop.opacity);
+
+        Stop {
+          offset: normalized(stop.offset),
+          color: color.into(),
+          opacity: normalized(opacity),
+        }
+      })
+      .collect()
   }
 }
 
-fn svg_stroke(stroke: SvgStrokeStyle, surface: &mut Surface) -> Stroke {
-  Stroke {
-    paint: svg_paint(stroke.paint, surface),
-    width: stroke.width,
-    miter_limit: stroke.miter_limit,
-    line_cap: match stroke.cap {
-      SvgLineCap::Butt => LineCap::Butt,
-      SvgLineCap::Round => LineCap::Round,
-      SvgLineCap::Square => LineCap::Square,
-    },
-    line_join: match stroke.join {
-      SvgLineJoin::Miter => LineJoin::Miter,
-      SvgLineJoin::Round => LineJoin::Round,
-      SvgLineJoin::Bevel => LineJoin::Bevel,
-    },
-    opacity: normalized(stroke.opacity),
-    dash: stroke
-      .dash
-      .map(|(array, offset)| StrokeDash { array, offset }),
-  }
-}
-
-fn svg_paint(paint: SvgPaint, surface: &mut Surface) -> Paint {
-  match paint {
-    SvgPaint::Color([red, green, blue]) => rgb::Color::new(red, green, blue).into(),
-    SvgPaint::Linear {
-      start,
-      end,
-      gradient,
-    } => LinearGradient {
-      x1: start.x,
-      y1: start.y,
-      x2: end.x,
-      y2: end.y,
-      transform: krilla_transform(gradient.transform),
-      spread_method: spread_method(gradient.spread),
-      stops: gradient_stops(&gradient),
-      anti_alias: false,
+impl From<SvgSpreadMethod> for SpreadMethod {
+  fn from(spread: SvgSpreadMethod) -> Self {
+    match spread {
+      SvgSpreadMethod::Pad => Self::Pad,
+      SvgSpreadMethod::Reflect => Self::Reflect,
+      SvgSpreadMethod::Repeat => Self::Repeat,
     }
-    .into(),
-    SvgPaint::Radial {
-      center,
-      radius,
-      focal,
-      gradient,
-    } => RadialGradient {
-      cx: center.x,
-      cy: center.y,
-      cr: radius,
-      fx: focal.x,
-      fy: focal.y,
-      fr: 0.0,
-      transform: krilla_transform(gradient.transform),
-      spread_method: spread_method(gradient.spread),
-      stops: gradient_stops(&gradient),
-      anti_alias: false,
-    }
-    .into(),
-    SvgPaint::Pattern {
-      ops,
-      transform,
-      width,
-      height,
-    } => Pattern {
-      stream: draw_stream(surface, |tile| draw_ops(tile, ops)),
-      transform: krilla_transform(transform),
-      width,
-      height,
-    }
-    .into(),
   }
-}
-
-const fn spread_method(spread: SvgSpreadMethod) -> SpreadMethod {
-  match spread {
-    SvgSpreadMethod::Pad => SpreadMethod::Pad,
-    SvgSpreadMethod::Reflect => SpreadMethod::Reflect,
-    SvgSpreadMethod::Repeat => SpreadMethod::Repeat,
-  }
-}
-
-fn gradient_stops(gradient: &SvgGradient) -> Vec<Stop> {
-  gradient
-    .stops
-    .iter()
-    .map(|stop| Stop {
-      offset: normalized(stop.offset),
-      color: rgb::Color::new(stop.color[0], stop.color[1], stop.color[2]).into(),
-      opacity: normalized(stop.opacity),
-    })
-    .collect()
 }
 
 const fn fill_rule(evenodd: bool) -> FillRule {

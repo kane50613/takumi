@@ -19,4 +19,4 @@ export function GET() {
 }
 ```
 
-For existing code, change the import path. The options stay the same. See the [v1 upgrade guide](https://takumi.kane.tw/docs/upgrade/v1#unified-runtime-detection-and-fallback) and the [`ImageResponse` reference](https://takumi.kane.tw/docs/image-response).
+For existing code, change the import path. The options stay the same. See the [v1 upgrade guide](https://takumi.kane.tw/docs/migration/v1#unified-runtime-detection-and-fallback) and the [`ImageResponse` reference](https://takumi.kane.tw/docs/reference/image-response).

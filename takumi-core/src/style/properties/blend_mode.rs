@@ -1,4 +1,5 @@
 use cssparser::Parser;
+use tiny_skia::BlendMode as TinyBlendMode;
 
 use crate::style::{
   Animatable, FromCss, ListInterpolationStrategy, ParseResult, impl_css_enum, parse_comma_list,
@@ -59,6 +60,34 @@ pub enum BlendMode {
   PlusDarker,
 }
 
+/// The tiny-skia mode, or the unchanged mode for the dodge, burn, and plus-darker modes the canvas blends.
+impl TryFrom<BlendMode> for TinyBlendMode {
+  type Error = BlendMode;
+
+  fn try_from(mode: BlendMode) -> Result<Self, Self::Error> {
+    use TinyBlendMode as T;
+
+    Ok(match mode {
+      BlendMode::Normal => T::SourceOver,
+      BlendMode::Multiply => T::Multiply,
+      BlendMode::Screen => T::Screen,
+      BlendMode::Overlay => T::Overlay,
+      BlendMode::Darken => T::Darken,
+      BlendMode::Lighten => T::Lighten,
+      BlendMode::HardLight => T::HardLight,
+      BlendMode::SoftLight => T::SoftLight,
+      BlendMode::Difference => T::Difference,
+      BlendMode::Exclusion => T::Exclusion,
+      BlendMode::Hue => T::Hue,
+      BlendMode::Saturation => T::Saturation,
+      BlendMode::Color => T::Color,
+      BlendMode::Luminosity => T::Luminosity,
+      BlendMode::PlusLighter => T::Plus,
+      _ => return Err(mode),
+    })
+  }
+}
+
 impl_css_enum!(
   custom_animatable BlendMode,
   "normal" => BlendMode::Normal,
@@ -93,6 +122,12 @@ impl Animatable for BlendMode {
 mod tests {
   use super::*;
   use crate::style::{FromCssStr, ToCss};
+
+  #[test]
+  fn color_dodge_and_color_burn_stay_off_the_approximate_reciprocal() {
+    assert!(TinyBlendMode::try_from(BlendMode::ColorDodge).is_err());
+    assert!(TinyBlendMode::try_from(BlendMode::ColorBurn).is_err());
+  }
 
   #[test]
   fn test_parse_blend_mode() {

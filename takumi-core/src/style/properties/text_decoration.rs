@@ -5,9 +5,9 @@ use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, ColorInput, ComputedStyle, Float, FromCss, FromCssStr, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, discrete, impl_css_enum, tw::TailwindPropertyParser,
-  unexpected_token, write_keywords,
+  Animatable, BoxDecorationBreak, Color, ColorInput, ComputedStyle, Float, FromCss, FromCssStr,
+  Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete, impl_css_enum,
+  tw::TailwindPropertyParser, unexpected_token, write_keywords,
 };
 
 bitflags! {
@@ -115,6 +115,154 @@ impl Animatable for TextDecorationThickness {
   }
 }
 
+/// `text-decoration-inset`: how far each end of a decoration line pulls in from its text.
+/// <https://drafts.csswg.org/css-text-decor-4/#text-decoration-inset-property>
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TextDecorationInset {
+  /// A small inset from the line's thickness that keeps adjacent lines apart.
+  Auto,
+  /// The insets of the start and the end.
+  Edges(Length, Length),
+}
+
+impl Default for TextDecorationInset {
+  fn default() -> Self {
+    Self::Edges(Length::zero(), Length::zero())
+  }
+}
+
+impl MakeComputed for TextDecorationInset {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    if let Self::Edges(start, end) = self {
+      start.make_computed(sizing);
+      end.make_computed(sizing);
+    }
+  }
+}
+
+impl Animatable for TextDecorationInset {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    *self = match (*from, *to) {
+      (Self::Edges(from_start, from_end), Self::Edges(to_start, to_end)) => Self::Edges(
+        Length::interpolated(&from_start, &to_start, progress, sizing, current_color),
+        Length::interpolated(&from_end, &to_end, progress, sizing, current_color),
+      ),
+      _ => discrete(from, to, progress),
+    };
+  }
+}
+
+impl<'i> FromCss<'i> for TextDecorationInset {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("auto"))
+      .is_ok()
+    {
+      return Ok(Self::Auto);
+    }
+
+    let start = Length::from_css(input)?;
+    let end = input.try_parse(Length::from_css).unwrap_or(start);
+
+    if matches!(start, Length::Auto) || matches!(end, Length::Auto) {
+      return Err(input.new_error_for_next_token());
+    }
+
+    Ok(Self::Edges(start, end))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "<length>", "<percentage>"];
+}
+
+impl ToCss for TextDecorationInset {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Auto => dest.write_str("auto"),
+      Self::Edges(start, end) => {
+        start.to_css(dest)?;
+
+        if end != start {
+          dest.write_char(' ')?;
+          end.to_css(dest)?;
+        }
+
+        Ok(())
+      }
+    }
+  }
+}
+
+/// A `text-decoration-inset` resolved for rendering: each edge a fixed length plus a fraction of
+/// the length of the decorated run.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SizedTextDecorationInset {
+  /// A small inset from the line's thickness.
+  Auto,
+  /// The start and end insets.
+  Edges(SizedInsetLength, SizedInsetLength),
+}
+
+/// A `<length-percentage>` resolved but for its percentage, which a run's length settles.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SizedInsetLength {
+  fixed: f32,
+  fraction: f32,
+}
+
+impl SizedInsetLength {
+  /// `length` resolved against `sizing`, its percentage kept.
+  fn new(length: Length, sizing: &SizingContext) -> Self {
+    let fixed = length.to_px(sizing, 0.0);
+
+    Self {
+      fixed,
+      fraction: length.to_px(sizing, 1.0) - fixed,
+    }
+  }
+
+  /// The length against a run `reference` long.
+  pub(crate) fn resolve(self, reference: f32) -> f32 {
+    self.fixed + self.fraction * reference
+  }
+
+  /// Whether it is zero whatever the run.
+  pub(crate) fn is_zero(self) -> bool {
+    self.fixed == 0.0 && self.fraction == 0.0
+  }
+}
+
+impl SizedTextDecorationInset {
+  /// Blink's `TextDecorationInset::ResolveAutoInset`: half the thickness, from one to two pixels.
+  pub(crate) fn auto_inset(thickness: f32) -> f32 {
+    (thickness / 2.0).clamp(1.0, 2.0)
+  }
+
+  /// Whether it pulls no end in.
+  pub(crate) fn is_zero(self) -> bool {
+    matches!(self, Self::Edges(start, end) if start.is_zero() && end.is_zero())
+  }
+}
+
+impl TextDecorationInset {
+  /// The inset resolved against `sizing`.
+  pub(crate) fn sized(self, sizing: &SizingContext) -> SizedTextDecorationInset {
+    match self {
+      Self::Auto => SizedTextDecorationInset::Auto,
+      Self::Edges(start, end) => SizedTextDecorationInset::Edges(
+        SizedInsetLength::new(start, sizing),
+        SizedInsetLength::new(end, sizing),
+      ),
+    }
+  }
+}
+
 /// Decoration thickness resolved for rendering.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SizedTextDecorationThickness {
@@ -142,6 +290,10 @@ pub struct AppliedTextDecoration {
   pub underline_offset: Option<f32>,
   /// Which baseline the underline is measured from.
   pub underline_position: TextUnderlinePosition,
+  /// How far each end of its lines pulls in.
+  pub inset: SizedTextDecorationInset,
+  /// Whether its insets apply to each fragment of the decorating box or to the box as a whole.
+  pub box_decoration_break: BoxDecorationBreak,
 }
 
 /// The decorations a box's text paints, outermost decorating box first, as Blink's
@@ -189,6 +341,8 @@ impl AppliedTextDecorations {
         .text_underline_offset
         .resolve_px(sizing),
       underline_position: style.misc_inherited_data.text_underline_position,
+      inset: style.misc3_data.text_decoration_inset.sized(sizing),
+      box_decoration_break: style.box_data.box_decoration_break,
     };
 
     inherited.as_slice().iter().copied().chain([own]).collect()
@@ -472,6 +626,30 @@ impl<'i> FromCss<'i> for TextDecoration {
 mod tests {
   use super::*;
   use crate::style::properties::Color;
+
+  /// `text-decoration-inset` takes `auto` or one or two lengths, a lone length for both ends.
+  #[test]
+  fn text_decoration_inset_parses_one_or_two_lengths() {
+    assert_eq!(
+      TextDecorationInset::from_css_str("auto"),
+      Ok(TextDecorationInset::Auto)
+    );
+    assert_eq!(
+      TextDecorationInset::from_css_str("10px"),
+      Ok(TextDecorationInset::Edges(
+        Length::Px(10.0),
+        Length::Px(10.0)
+      ))
+    );
+    assert_eq!(
+      TextDecorationInset::from_css_str("10% -2px"),
+      Ok(TextDecorationInset::Edges(
+        Length::Percentage(10.0),
+        Length::Px(-2.0)
+      ))
+    );
+    assert!(TextDecorationInset::from_css_str("10px auto").is_err());
+  }
 
   #[test]
   fn test_parse_text_decoration_none() {

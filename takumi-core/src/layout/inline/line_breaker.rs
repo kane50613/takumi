@@ -1,6 +1,6 @@
 //! Blink's [`LineBreaker`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/line_breaker.cc),
-//! without ruby, SVG text, block-in-inline, initial letters, `text-combine-upright`, hyphenation
-//! dictionaries, `word-break: auto-phrase`, block fragmentation, or `::first-line`.
+//! without ruby, SVG text, initial letters, `text-combine-upright`, hyphenation dictionaries,
+//! `word-break: auto-phrase`, or `::first-line`.
 
 use std::rc::Rc;
 
@@ -36,6 +36,8 @@ use crate::{
     floats_utils::{
       UnpositionedFloat, compute_margin_box_inline_size_for_unpositioned_float, position_float,
     },
+    fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
+    layout_result::{LayoutResult as BoxLayoutResult, LayoutStatus},
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
@@ -117,8 +119,33 @@ pub(crate) trait AtomicInlineLayout<'c> {
   /// The box laid out in the line's available space.
   fn layout(&mut self, node: &'c RenderNode) -> LayoutResult;
 
-  /// The block-in-inline laid out in the containing block's available space.
-  fn layout_block_in_inline(&mut self, node: &'c RenderNode) -> LayoutResult;
+  /// The float laid out in `space`, which Blink's `CreateConstraintSpaceForFloat` builds, resumed
+  /// as `input` says.
+  fn layout_float(
+    &mut self,
+    node: &'c RenderNode,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> Rc<BoxLayoutResult>;
+
+  /// Gives a float of a line laid out in `space` the pages it breaks across, resumed as `input`
+  /// says. Nothing breaks by default.
+  fn setup_float_for_fragmentation(
+    &mut self,
+    _unpositioned_float: &mut UnpositionedFloat<'c>,
+    _space: &ConstraintSpace,
+    _input: &FragmentationLayoutInput,
+  ) {
+  }
+
+  /// The block-in-inline laid out in its line's `space`, resumed as `input` says, as Blink's
+  /// `BlockNode::Layout`.
+  fn layout_block_in_inline(
+    &mut self,
+    node: &'c RenderNode,
+    space: &ConstraintSpace,
+    input: &FragmentationLayoutInput,
+  ) -> Rc<BoxLayoutResult>;
 
   /// The box's min-content and max-content contributions, without margins.
   fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit);
@@ -359,7 +386,11 @@ pub(crate) struct LineBreaker<'a, 'b, 'c> {
   is_forced_break: bool,
   previous_line_had_forced_break: bool,
   end_item_index: usize,
-  break_token: Option<InlineBreakToken<'c>>,
+  break_token: Option<InlineBreakToken>,
+  /// Blink's `resume_block_in_inline_in_same_flow_`: the line's block-in-inline broke inside, and
+  /// the next line resumes it.
+  #[cfg(feature = "fragmentation")]
+  resume_block_in_inline_in_same_flow: bool,
   current_style: Option<&'c RenderContext>,
   break_iterator: Rc<LineBreakIterator<'a>>,
   shaper: Rc<HarfBuzzShaper<'a>>,
@@ -385,7 +416,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     constraint_space: ConstraintSpace,
     line_opportunity: LineLayoutOpportunity,
     leading_floats: &'b LeadingFloats,
-    break_token: Option<InlineBreakToken<'c>>,
+    break_token: Option<InlineBreakToken>,
     atomic_inline: &'b mut dyn AtomicInlineLayout<'c>,
     exclusion_space: &'b mut ExclusionSpace,
   ) -> Self {
@@ -423,6 +454,8 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       previous_line_had_forced_break: false,
       end_item_index: items_data.items.len(),
       break_token,
+      #[cfg(feature = "fragmentation")]
+      resume_block_in_inline_in_same_flow: false,
       current_style: None,
       break_iterator,
       shaper: Rc::new(HarfBuzzShaper::new(&items_data.text_content)),
@@ -441,12 +474,12 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
     line_breaker.update_available_width();
 
-    if let Some(break_token) = break_token
+    if let Some(break_token) = &line_breaker.break_token
       && let Some(style) = break_token.style
     {
       line_breaker.current = break_token.start;
       line_breaker.is_forced_break = break_token.is_forced_break;
-      line_breaker.set_current_style(style);
+      line_breaker.set_current_style(items_data.break_token_context(style, &node.block.context));
     }
 
     line_breaker
@@ -747,6 +780,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       // Past the line the break token resumed at, this is past the first formatted line.
       if self
         .break_token
+        .as_ref()
         .is_none_or(|break_token| self.current != break_token.start)
       {
         self.is_first_formatted_line = false;
@@ -805,6 +839,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
     if self
       .break_token
+      .as_ref()
       .is_some_and(|break_token| break_token.has_cloned_box_decorations)
       || self.cloned_box_decorations_count != 0
     {
@@ -812,11 +847,20 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     }
 
     self.last_rewind = None;
+    #[cfg(feature = "fragmentation")]
+    {
+      self.resume_block_in_inline_in_same_flow = false;
+    }
   }
 
   /// Blink's `NextLine`: the next line's break point and item results.
   pub(crate) fn next_line(&mut self, line_info: &mut LineInfo<'a, 'c>) {
     self.prepare_next_line(line_info);
+
+    if self.resumes_parallel_flow(line_info) {
+      return;
+    }
+
     self.break_line(line_info);
 
     if self.hyphen_index.is_some() {
@@ -949,7 +993,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
           continue;
         }
         InlineItemType::Floating => {
-          self.handle_float(item_index, line_info);
+          self.handle_float(item_index, FragmentationLayoutInput::default(), line_info);
 
           continue;
         }
@@ -959,7 +1003,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
           continue;
         }
         InlineItemType::BlockInInline => {
-          self.handle_block_in_inline(item_index, line_info);
+          self.handle_block_in_inline(item_index, self.block_in_inline_layout_input(), line_info);
 
           continue;
         }
@@ -1885,7 +1929,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     if line_info
       .results
       .last()
-      .is_none_or(|result| !std::ptr::eq(result.item, item))
+      .is_none_or(|result| result.item_index != item_index)
     {
       self.add_empty_item(item_index, line_info);
     }
@@ -2465,7 +2509,12 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
   /// Blink's `HandleBlockInInline`: the block takes a line of its own, a forced break before and
   /// after it.
-  fn handle_block_in_inline(&mut self, item_index: usize, line_info: &mut LineInfo<'a, 'c>) {
+  fn handle_block_in_inline(
+    &mut self,
+    item_index: usize,
+    input: FragmentationLayoutInput,
+    line_info: &mut LineInfo<'a, 'c>,
+  ) {
     if !line_info.results.is_empty() {
       self.force_non_empty_if_last_line = false;
       self.handle_forced_line_break(None, line_info);
@@ -2477,16 +2526,34 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       return;
     };
     let result_index = self.add_item(item_index, line_info);
+    let mut move_past_block = true;
 
     if self.mode == LineBreakerMode::Content {
-      let layout_result = self.atomic_inline.layout_block_in_inline(object.node());
+      // The block sees the floats the line placed so far.
+      let mut child_space = self.constraint_space.clone();
+
+      child_space.exclusion_space = self.exclusion_space.clone().into_rc();
+
+      let result = self
+        .atomic_inline
+        .layout_block_in_inline(object.node(), &child_space, &input);
       let item_result = &mut line_info.results[result_index];
 
-      item_result.inline_size = layout_result.inline_size;
-      item_result.should_create_line_box = !layout_result
-        .collapsed_margins
-        .is_some_and(|margins| margins.is_self_collapsing);
-      item_result.layout_result = Some(layout_result);
+      item_result.inline_size = result.size.inline_size;
+      item_result.should_create_line_box = !result.is_self_collapsing;
+      item_result.layout_result = Some(LayoutResult::of_block_in_inline(&result, &child_space));
+
+      let status = result.status;
+
+      item_result.block_in_inline_result = Some(Rc::clone(&result));
+
+      // Blink stops the line where the block's layout did not succeed.
+      if status != LayoutStatus::Success {
+        self.state = LineBreakState::Done;
+
+        return;
+      }
+      move_past_block = self.propagate_block_in_inline_break(&result, line_info);
     } else {
       // Blink's `ComputeMinMaxContentSizeForBlockChild`.
       let (min_size, max_size) = self.atomic_inline.min_max_sizes(object.node());
@@ -2503,7 +2570,9 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     line_info.has_forced_break = true;
     self.is_forced_break = true;
     self.trailing_whitespace = WhitespaceState::None;
-    self.move_to_next_of_item(item_index);
+    if move_past_block {
+      self.move_to_next_of_item(item_index);
+    }
     self.state = LineBreakState::Done;
   }
 
@@ -2511,11 +2580,17 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   fn should_push_float_after_line(
     &mut self,
     unpositioned_float: &mut UnpositionedFloat<'c>,
+    input: &FragmentationLayoutInput,
     line_info: &mut LineInfo<'a, 'c>,
   ) -> bool {
+    // A float resumed after a break goes where its line starts.
+    if !input.is_fresh() {
+      return false;
+    }
+
     let inline_margin_size = compute_margin_box_inline_size_for_unpositioned_float(
       unpositioned_float,
-      &mut *self.atomic_inline,
+      &mut |node, space| self.atomic_inline.layout_float(node, space, input),
     );
     let used_size = self.position
       + inline_margin_size
@@ -2565,9 +2640,15 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
   /// Blink's `HandleFloat`: places the float on this line when it fits, and narrows the line by
   /// it; otherwise it goes below the line.
-  fn handle_float(&mut self, item_index: usize, line_info: &mut LineInfo<'a, 'c>) {
+  fn handle_float(
+    &mut self,
+    item_index: usize,
+    input: FragmentationLayoutInput,
+    line_info: &mut LineInfo<'a, 'c>,
+  ) {
     let item = &self.items()[item_index];
     let result_index = self.add_item(item_index, line_info);
+    let index_before_float = self.current;
     let item_result = &mut line_info.results[result_index];
 
     // Out-of-flow boxes take no part in text processing.
@@ -2590,11 +2671,17 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     if self.current.item_index <= self.leading_floats.handled_index
       && !self.leading_floats.floats.is_empty()
     {
-      let positioned_float = self.leading_floats.floats[self.leading_floats_index];
+      let leading_float = self.leading_floats.floats[self.leading_floats_index].clone();
+
+      #[cfg(feature = "fragmentation")]
+      line_info
+        .parallel_flow_break_tokens
+        .extend(leading_float.parallel_flow_break_token);
+
       let item_result = &mut line_info.results[result_index];
 
       self.leading_floats_index += 1;
-      item_result.positioned_float = Some(positioned_float);
+      item_result.positioned_float = Some(leading_float.positioned_float);
       // Kept even though a leading float leaves the space as it is; see `rewind_floats`.
       item_result.exclusion_space_before_position_float = Some(self.exclusion_space.clone());
 
@@ -2604,16 +2691,15 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     let Some(object) = item.layout_object else {
       return;
     };
-    let mut unpositioned_float = UnpositionedFloat::new(
+    let mut unpositioned_float = UnpositionedFloat::in_line(
       object.node(),
-      self.constraint_space.inline_size(),
-      BfcOffset::new(
-        self.constraint_space.bfc_offset.line_offset,
-        self.line_opportunity.bfc_block_offset,
-      ),
-      self.constraint_space.direction,
+      &self.constraint_space,
+      self.line_opportunity.bfc_block_offset,
+      &input,
+      &mut *self.atomic_inline,
     );
-    let float_after_line = self.should_push_float_after_line(&mut unpositioned_float, line_info);
+    let float_after_line =
+      self.should_push_float_after_line(&mut unpositioned_float, &input, line_info);
 
     // A float sits no higher than one before it.
     if line_info.results[result_index].has_unpositioned_floats || float_after_line {
@@ -2626,13 +2712,20 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     let positioned_float = position_float(
       &mut unpositioned_float,
       self.exclusion_space,
-      &mut *self.atomic_inline,
+      &mut |node, space| self.atomic_inline.layout_float(node, space, &input),
     );
+    let is_pushed_to_next_page = positioned_float.is_pushed_to_next_page();
+
+    line_info.propagate_float_break(&positioned_float, index_before_float);
+
     let item_result = &mut line_info.results[result_index];
 
     item_result.exclusion_space_before_position_float = Some(exclusion_space_before);
     item_result.positioned_float = Some(positioned_float);
-    self.update_line_opportunity();
+    // A float the page pushed to the next one leaves this line as wide as it was.
+    if !is_pushed_to_next_page {
+      self.update_line_opportunity();
+    }
   }
 
   /// Blink's `ComputeFloatOffset`: how far the floats on the line's start side move it from the
@@ -2682,7 +2775,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   }
 
   /// Blink's `RewindFloats`: the exclusion space before the first float in the rewound results.
-  fn rewind_floats(&mut self, new_end: usize, line_info: &LineInfo<'a, 'c>) {
+  fn rewind_floats(&mut self, new_end: usize, line_info: &mut LineInfo<'a, 'c>) {
     let Some(item_result) = line_info.results[new_end..]
       .iter()
       .find(|result| result.positioned_float.is_some())
@@ -2690,13 +2783,19 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       return;
     };
 
+    // Blink's `RemoveParallelFlowBreakToken`: the floats rewound resume nowhere.
+    #[cfg(feature = "fragmentation")]
+    line_info
+      .parallel_flow_break_tokens
+      .retain(|token| token.start.item_index < item_result.item_index);
+
     // A leading float is handed out again.
     if item_result.item_index < self.leading_floats.handled_index
       && let Some(index) = self
         .leading_floats
         .floats
         .iter()
-        .position(|leading_float| Some(*leading_float) == item_result.positioned_float)
+        .position(|leading_float| leading_float.item_index == item_result.item_index)
     {
       self.leading_floats_index = index;
     }
@@ -3343,15 +3442,20 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     // The style at the line's start.
     self
       .break_token
+      .as_ref()
       .and_then(|break_token| break_token.style)
-      .unwrap_or(line_info.line_style)
+      .map_or(line_info.line_style, |style| {
+        self
+          .items_data
+          .break_token_context(style, self.block_context())
+      })
   }
 
   /// Blink's `SetCurrentStyle`.
   fn set_current_style(&mut self, style: &'c RenderContext) {
     if self
       .current_style
-      .is_some_and(|current_style| std::ptr::eq(current_style, style))
+      .is_some_and(|current_style| current_style.box_id() == style.box_id())
     {
       return;
     }
@@ -3760,20 +3864,147 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   }
 
   /// Blink's `CreateBreakToken`: where the next line starts, none at the end.
-  fn create_break_token(&self, line_info: &LineInfo<'a, 'c>) -> Option<InlineBreakToken<'c>> {
+  fn create_break_token(&self, line_info: &LineInfo<'a, 'c>) -> Option<InlineBreakToken> {
     if self.is_at_end() {
       return None;
     }
 
     Some(InlineBreakToken {
-      style: self.current_style,
+      style: self.current_style.map(|context| {
+        self
+          .items_data
+          .break_token_style(context, self.block_context())
+      }),
       start: self.current,
       is_forced_break: self.is_forced_break,
       has_cloned_box_decorations: self.cloned_box_decorations_count != 0,
       is_past_first_formatted_line: !self.is_first_formatted_line || !line_info.is_empty_line,
       is_line_clamp_displaced_line: self.line_clamp_ellipsis_width != LayoutUnit::ZERO
         && line_info.results.is_empty(),
+      is_in_parallel_block_flow: false,
+      block_break_token: self.block_in_inline_break_token_after(line_info)?,
     })
+  }
+}
+
+/// The block fragmentation of blocks-in-inline, which breaks them inside their line.
+#[cfg(feature = "fragmentation")]
+impl<'a, 'c> LineBreaker<'a, '_, 'c> {
+  /// Blink's `NextLine` for a break token in a parallel flow: the line resumes the float or the
+  /// block-in-inline a page broke, and holds nothing else.
+  fn resumes_parallel_flow(&mut self, line_info: &mut LineInfo<'a, 'c>) -> bool {
+    let Some(block_break_token) = self
+      .break_token
+      .as_ref()
+      .filter(|break_token| break_token.is_in_parallel_block_flow)
+      .and_then(|break_token| break_token.block_break_token.clone())
+    else {
+      return false;
+    };
+
+    let input = FragmentationLayoutInput {
+      break_token: Some(block_break_token),
+      early_break: None,
+    };
+    let item_index = self.current.item_index;
+
+    if self.items()[item_index].item_type == InlineItemType::Floating {
+      self.handle_float(item_index, input, line_info);
+    } else {
+      self.handle_block_in_inline(item_index, input, line_info);
+    }
+    self.state = LineBreakState::Done;
+    line_info.is_empty_line = true;
+    true
+  }
+
+  /// Blink's `FragmentationLayoutInput` for the block-in-inline the line starts at: where it
+  /// resumes.
+  fn block_in_inline_layout_input(&self) -> FragmentationLayoutInput {
+    FragmentationLayoutInput {
+      break_token: self
+        .break_token
+        .as_ref()
+        .and_then(|break_token| break_token.block_break_token.clone()),
+      early_break: None,
+    }
+  }
+
+  /// The block-in-inline part of Blink's `HandleBlockInInline` after the block laid out as
+  /// `result`: whether the next line moves past it. A block that broke inside resumes in the next
+  /// line; one whose content overflowed its end resumes in a parallel flow, beside the lines after
+  /// it.
+  fn propagate_block_in_inline_break(
+    &mut self,
+    result: &BoxLayoutResult,
+    line_info: &mut LineInfo<'a, 'c>,
+  ) -> bool {
+    let Some(block_break_token) = &result.break_info.break_token else {
+      return true;
+    };
+
+    if block_break_token.is_at_block_end
+      || self
+        .break_token
+        .as_ref()
+        .is_some_and(|break_token| break_token.is_in_parallel_block_flow)
+    {
+      line_info
+        .parallel_flow_break_tokens
+        .push(InlineBreakToken::for_parallel_block_flow(
+          self.current,
+          Rc::clone(block_break_token),
+        ));
+      return true;
+    }
+
+    self.resume_block_in_inline_in_same_flow = true;
+    false
+  }
+
+  /// The block-in-inline part of Blink's `CreateBreakToken`: where the line's block-in-inline
+  /// resumes when it broke inside, none for a token when its layout did not succeed.
+  fn block_in_inline_break_token_after(
+    &self,
+    line_info: &LineInfo<'a, 'c>,
+  ) -> Option<ChildBreakToken> {
+    if !self.resume_block_in_inline_in_same_flow {
+      return Some(None);
+    }
+
+    let result = line_info.block_in_inline_result()?;
+
+    if result.status != LayoutStatus::Success {
+      return None;
+    }
+    Some(result.break_info.break_token.clone())
+  }
+}
+
+/// The block fragmentation hooks without the `fragmentation` feature, where nothing breaks.
+#[cfg(not(feature = "fragmentation"))]
+impl<'a, 'c> LineBreaker<'a, '_, 'c> {
+  fn resumes_parallel_flow(&mut self, _line_info: &mut LineInfo<'a, 'c>) -> bool {
+    false
+  }
+
+  fn block_in_inline_layout_input(&self) -> FragmentationLayoutInput {
+    FragmentationLayoutInput::default()
+  }
+
+  fn propagate_block_in_inline_break(
+    &mut self,
+    _result: &BoxLayoutResult,
+    _line_info: &mut LineInfo<'a, 'c>,
+  ) -> bool {
+    true
+  }
+
+  fn block_in_inline_break_token_after(
+    &self,
+    _line_info: &LineInfo<'a, 'c>,
+  ) -> Option<ChildBreakToken> {
+    Some(())
   }
 }
 
@@ -3855,7 +4086,7 @@ mod tests {
         broken.first_hang_width = line_info.hang_width();
       }
 
-      break_token = line_info.break_token;
+      break_token = line_info.break_token.clone();
       broken.widths.push(line_info.width());
       broken
         .flags

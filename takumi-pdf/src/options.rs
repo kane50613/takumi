@@ -49,7 +49,7 @@ pub enum PdfError {
   /// An XMP schema carries a prefix, property name or namespace URI that
   /// cannot be written into XML.
   InvalidXmpSchema(String),
-  /// The content would cut into more pages than one render may produce.
+  /// The content would lay out on more pages than one render may produce.
   TooManyPages(usize),
   /// A `filter` function a PDF cannot express, named as a stylesheet writes
   /// it. It would silently drop the effect, so the render stops instead.
@@ -142,7 +142,10 @@ impl Error for PdfError {
 
 impl From<TakumiError> for PdfError {
   fn from(error: TakumiError) -> Self {
-    Self::Render(error)
+    match error {
+      TakumiError::TooManyPages(pages) => Self::TooManyPages(pages),
+      error => Self::Render(error),
+    }
   }
 }
 
@@ -306,38 +309,60 @@ impl Display for PageRange {
 
 /// Which of the document's pages the render keeps, each mapped to its index in
 /// the output.
-pub(crate) struct PageSelection(Vec<Option<usize>>);
+pub(crate) struct PageSelection {
+  ranges: Option<Vec<PageRange>>,
+  emitted: Vec<Option<usize>>,
+  kept: usize,
+}
 
 impl PageSelection {
-  /// Resolves the ranges against the page count. No ranges keeps every page;
-  /// ranges that keep none are an error, like Chromium's "Page range exceeds
-  /// page count".
-  pub(crate) fn resolve(ranges: Option<&[PageRange]>, pages: usize) -> Result<Self, PdfError> {
-    let Some(ranges) = ranges else {
-      return Ok(Self((0..pages).map(Some).collect()));
-    };
-
-    for range in ranges {
+  /// A selection of no pages yet, which [`Self::push_page`] adds the document's pages to.
+  pub(crate) fn new(ranges: Option<&[PageRange]>) -> Result<Self, PdfError> {
+    for range in ranges.unwrap_or_default() {
       range.validate()?;
     }
-    let mut kept = 0;
-    let map = (0..pages)
-      .map(|index| {
-        ranges
-          .iter()
-          .any(|range| range.contains(index + 1))
-          .then(|| {
-            kept += 1;
+    Ok(Self {
+      ranges: ranges.map(<[PageRange]>::to_vec),
+      emitted: Vec::new(),
+      kept: 0,
+    })
+  }
 
-            kept - 1
-          })
-      })
-      .collect();
+  /// Resolves the ranges against the page count. Ranges that keep no page are an
+  /// error, like Chromium's "Page range exceeds page count".
+  pub(crate) fn resolve(ranges: Option<&[PageRange]>, pages: usize) -> Result<Self, PdfError> {
+    Self::new(ranges)?.with_pages(pages)
+  }
 
-    if kept == 0 {
-      return Err(PdfError::PageRangesOutOfBounds(pages));
+  /// Adds `pages` pages to the selection and checks the ranges keep one.
+  pub(crate) fn with_pages(mut self, pages: usize) -> Result<Self, PdfError> {
+    for _ in 0..pages {
+      self.push_page();
     }
-    Ok(Self(map))
+    self.finish()?;
+    Ok(self)
+  }
+
+  /// Adds the next page of the document, and returns its index in the output when it is kept.
+  pub(crate) fn push_page(&mut self) -> Option<usize> {
+    let page = self.emitted.len() + 1;
+    let keeps = self
+      .ranges
+      .as_ref()
+      .is_none_or(|ranges| ranges.iter().any(|range| range.contains(page)));
+    let emitted = keeps.then_some(self.kept);
+
+    self.kept += usize::from(keeps);
+    self.emitted.push(emitted);
+    emitted
+  }
+
+  /// Checks the ranges keep a page once every page is added.
+  pub(crate) fn finish(&self) -> Result<(), PdfError> {
+    if self.ranges.is_some() && self.kept == 0 {
+      return Err(PdfError::PageRangesOutOfBounds(self.emitted.len()));
+    }
+    Ok(())
   }
 
   pub(crate) fn keeps(&self, index: usize) -> bool {
@@ -346,11 +371,18 @@ impl PageSelection {
 
   /// The output index of source page `index`, or `None` when it is dropped.
   pub(crate) fn emitted(&self, index: usize) -> Option<usize> {
-    self.0.get(index).copied().flatten()
+    self.emitted.get(index).copied().flatten()
   }
 
+  /// The pages `offset..offset + pages` of the document, mapped to their places in the output.
   pub(crate) fn section(&self, offset: usize, pages: usize) -> Self {
-    Self(self.0[offset..offset + pages].to_vec())
+    let emitted = self.emitted[offset..offset + pages].to_vec();
+
+    Self {
+      ranges: None,
+      kept: emitted.iter().flatten().count(),
+      emitted,
+    }
   }
 }
 
@@ -874,6 +906,11 @@ impl PageMargins {
     }
   }
 
+  /// Whether a band's height can move a margin, which is when an `auto` margin sits under one.
+  pub(crate) fn follow_bands(self) -> bool {
+    matches!(self.top, PageMargin::Auto) || matches!(self.bottom, PageMargin::Auto)
+  }
+
   /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.
   pub(crate) fn resolve(
     self,
@@ -1033,7 +1070,15 @@ pub struct MeasuredSize {
 
 #[cfg(test)]
 mod tests {
-  use super::PdfError;
+  use super::{PdfError, TakumiError};
+
+  #[test]
+  fn a_page_limit_from_layout_reads_as_too_many_pages() {
+    assert!(matches!(
+      PdfError::from(TakumiError::TooManyPages(20_000)),
+      PdfError::TooManyPages(20_000)
+    ));
+  }
 
   #[test]
   fn error_messages_read_as_sentences() {

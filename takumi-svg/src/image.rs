@@ -39,13 +39,6 @@ pub(crate) fn emit_image(
   let intrinsic = source
     .as_ref()
     .and_then(|source| intrinsic_size(source, context));
-  let vector = match (&source, intrinsic) {
-    (Some(ImageSource::Svg(svg)), Some(_)) => vector_ops(svg, context),
-    _ => None,
-  };
-  let Some(drawing) = vector.or_else(|| raster(&image.src, source.as_ref(), context, doc)) else {
-    return Ok(());
-  };
   let replaced = painter.replaced_content(intrinsic.map_or(
     Size {
       width: content.w,
@@ -65,6 +58,13 @@ pub(crate) fn emit_image(
       PRESERVE_ASPECT_NONE,
     ),
     None => (content, "xMidYMid meet"),
+  };
+  let vector = match (&source, intrinsic) {
+    (Some(ImageSource::Svg(svg)), Some(_)) => vector_ops(svg, context, replaced.container),
+    _ => None,
+  };
+  let Some(drawing) = vector.or_else(|| raster(&image.src, source.as_ref(), context, doc)) else {
+    return Ok(());
   };
 
   DocumentDevice::paint(doc, |device| {
@@ -95,11 +95,13 @@ pub(crate) enum Drawing {
 }
 
 impl Drawing {
-  /// What a `background-image: url(...)` draws in a `tile`, or `None` if it cannot be resolved
-  /// (usually no resource map was supplied) or, as in raster output, drawn at that size.
+  /// What a `background-image: url(...)` draws in a `tile`, rendered at `image_size`, or `None`
+  /// if it cannot be resolved (usually no resource map was supplied) or, as in raster output,
+  /// drawn at that size.
   pub(crate) fn of_url(
     url: &Arc<str>,
     tile: Frame,
+    image_size: Size<f32>,
     context: &RenderContext,
     doc: &mut SvgDocument,
   ) -> Option<Self> {
@@ -110,7 +112,7 @@ impl Drawing {
     }
 
     let vector = match &source {
-      ImageSource::Svg(svg) => vector_ops(svg, context),
+      ImageSource::Svg(svg) => vector_ops(svg, context, image_size),
       _ => None,
     };
 
@@ -175,15 +177,14 @@ fn pixel_size(source: &ImageSource) -> Option<(f32, f32)> {
   (width > 0.0 && height > 0.0).then_some((width, height))
 }
 
-/// `svg`'s ops, when SVG elements can express every op.
-fn vector_ops(svg: &SvgSource, context: &RenderContext) -> Option<Drawing> {
-  let (width, height) = svg.dimensions();
-  // Ops that need a raster discard it for the original markup, so its scale does not matter.
-  let ops = svg.vector_ops(1.0, context.current_color, Some(context.fonts()));
+/// `svg`'s ops laid out at `viewport`, Blink's container size, when SVG elements can express every
+/// op.
+fn vector_ops(svg: &SvgSource, context: &RenderContext, viewport: Size<f32>) -> Option<Drawing> {
+  let ops = svg.vector_ops(context, viewport);
 
-  (width > 0.0 && height > 0.0 && is_vector(&ops)).then(|| Drawing::Ops {
+  (viewport.width > 0.0 && viewport.height > 0.0 && is_vector(&ops)).then(|| Drawing::Ops {
     ops,
-    canvas: Frame::new(0.0, 0.0, width, height),
+    canvas: Frame::new(0.0, 0.0, viewport.width, viewport.height),
   })
 }
 

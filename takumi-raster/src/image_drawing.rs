@@ -3,11 +3,13 @@ use takumi_core::{
   layout::{decoration::ClipBox, replaced::ReplacedPlacement},
   painter::{FillShape, PaintDevice},
 };
+use tiny_skia::PixmapRef;
 
+#[cfg(feature = "svg")]
+use crate::resources::image::SvgRaster;
 use crate::{
   BorderProperties, Canvas, CanvasDevice, PaintSource, RenderContext, Result, SamplingOptions,
   painter::BoxPainter,
-  pixmap_ref_from_buffer,
   resources::image::{ImageSource, RenderedImage},
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
@@ -19,11 +21,12 @@ struct PreparedImage {
 }
 
 /// Renders the part of an image at `placement`, relative to the content box, that lands inside
-/// the `crop` rectangle at `crop_origin` from the content box.
+/// the `crop` rectangle at `crop_origin` from the content box. An SVG lays out at `container`.
 fn process_image_for_object_fit(
   image: &ImageSource,
   context: &RenderContext,
   placement: ReplacedPlacement,
+  #[cfg_attr(not(feature = "svg"), allow(unused_variables))] container: Size<f32>,
   crop_origin: Point<f32>,
   crop: Size<f32>,
 ) -> Result<Option<PreparedImage>> {
@@ -54,13 +57,46 @@ fn process_image_for_object_fit(
     return Ok(None);
   }
 
+  // An SVG lays out at the size it is drawn at, Blink's container size, so only the crop draws.
+  #[cfg(feature = "svg")]
+  if let ImageSource::Svg(svg) = image {
+    // The placement snapped to pixels, while the SVG lays out at the size before snapping.
+    let scale = |point: Point<f32>| Point {
+      x: point.x * container.width / placement.size.width,
+      y: point.y * container.height / placement.size.height,
+    };
+    let size = scale(Point {
+      x: clipped.size.width,
+      y: clipped.size.height,
+    });
+    let raster = SvgRaster::cropped(
+      container,
+      scale(clipped.crop),
+      Size {
+        width: size.x,
+        height: size.y,
+      },
+      width,
+      height,
+    );
+
+    return Ok(Some(PreparedImage {
+      image: RenderedImage::Rasterized(svg.rasterize_cached(
+        raster,
+        context.style.misc_inherited_data.image_rendering,
+        context,
+      )?),
+      logical_to_source: Affine::IDENTITY,
+      offset: crop_origin + clipped.origin,
+    }));
+  }
+
   let rendered = image.render_for_layout(
     width,
     height,
     context.style.misc_inherited_data.image_rendering,
     context.time_ms(),
-    context.current_color,
-    Some(context.fonts()),
+    context,
   )?;
   let logical_to_source = if placement.size.width == 0.0 || placement.size.height == 0.0 {
     Affine::IDENTITY
@@ -93,8 +129,14 @@ pub(crate) fn draw_image(
     Some(clip) => (clip.offset - content_offset, clip.size),
     None => (replaced.placement.offset, replaced.placement.size),
   };
-  let Some(prepared) =
-    process_image_for_object_fit(image, context, replaced.placement, crop_origin, crop)?
+  let Some(prepared) = process_image_for_object_fit(
+    image,
+    context,
+    replaced.placement,
+    replaced.container,
+    crop_origin,
+    crop,
+  )?
   else {
     return Ok(());
   };
@@ -104,7 +146,7 @@ pub(crate) fn draw_image(
 
   match prepared.image {
     RenderedImage::Rasterized(rendered) => {
-      let Some(pixmap) = pixmap_ref_from_buffer(rendered.as_ref()) else {
+      let Ok(pixmap) = PixmapRef::try_from(rendered.as_ref()) else {
         return Ok(());
       };
 
@@ -136,7 +178,7 @@ pub(crate) fn draw_image(
       algorithm,
       source_scale,
     } => {
-      let Some(pixmap) = pixmap_ref_from_buffer(source.as_ref()) else {
+      let Ok(pixmap) = PixmapRef::try_from(source.as_ref()) else {
         return Ok(());
       };
       let logical_to_source =

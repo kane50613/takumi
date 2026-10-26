@@ -1,3 +1,57 @@
+## takumi-pdf@0.18.2
+
+### Draw SVG images at the size they take up
+
+An SVG in an `<img>`, a background, or an inline `<svg>` now lays out at the size it is drawn at, as in Chrome, instead of drawing at its own size and stretching. A `viewBox` keeps its `preserveAspectRatio` in a box of another shape, viewport units and percentages measure that box, and `object-fit: cover` crops the SVG instead of squeezing it. An SVG without a `viewBox` still stretches, as in Chrome.
+
+### Lean a synthesized italic right and keep it where its advance puts it
+
+A run slanted for a face with no italic of its own leaned left, and was drawn about a quarter of an em to the right, into the next word in LTR text and into the previous word in RTL text. It now leans right about its own baseline, as in PNG output.
+
+### Lay out tables with Chromium's table algorithm
+
+Tables now follow Chromium's table layout instead of a grid approximation, so column widths, row heights, and collapsed borders match Chromium. `<col>` and `<colgroup>` size their columns and paint their backgrounds, and `visibility: collapse`, `empty-cells: hide`, and `display: inline-table` work. A `rowspan` now stops at the end of its row group.
+
+### Free the layout data of a page once it is drawn
+
+`render_pages` and `render` free the layout data a page held, such as its text lines and cached layouts, once the page is drawn and no later page paints from it. The source tree and the tree of boxes stay in memory for the whole render, so peak memory still grows with the size of the document. A document that lays out to its end before the first page is drawn frees nothing early. A page that would paint from a released page fails with `Error::PageReleased` instead.
+
+### Isolate an SVG group with `isolation: isolate`
+
+A `<g style="isolation: isolate">` inside an SVG image or inline `<svg>` now composites its content as one group, as in Chrome, so a descendant's `mix-blend-mode` blends only with what the group paints instead of with the page behind it.
+
+### Repeat a fixed box from the page it starts on
+
+In paged output, a `position: fixed` box now repeats on the page that holds its static position and on every page after it, no longer on the pages before.
+
+### Stream PDF documents with page counters, page-number bands or internal links
+
+`render` now draws a page at a time for documents whose header, footer or content shows `pageNumber`, `totalPages` or `targetPageNumber`, or links to an element with `href="#id"`. Passes that only lay the pages out count them and find the targets first, so the output is unchanged and peak memory drops, at the cost of laying the content out once more. A counter that is still moving after three passes lays the document out to its end before the first page is drawn.
+
+### Paint outside list markers as boxes of the page
+
+An outside list marker now paints and stacks as Chrome paints it. In a tagged PDF, the text of a list item stays in one marked-content region instead of being split around its marker.
+
+### Break boxes inside a positioned inline box across pages
+
+In paged output, an absolutely positioned box whose containing block is a `position: relative` inline box now moves to the next page when it starts past the page end, and breaks across pages when it is taller than the space left.
+
+### Parse every `break-before`, `break-after`, and `break-inside` keyword
+
+`break-before` and `break-after` now accept `avoid`, `avoid-page`, `avoid-column`, `column`, `recto`, and `verso`, and keep `left` and `right` as their own values. `break-inside` accepts `avoid-page` and `avoid-column`. In a PDF, `recto` and `verso` force a page break, and `break-inside: avoid-page` keeps a box on one page as `avoid` does. A PDF does not yet avoid a break between boxes for `break-before` or `break-after`.
+
+### Break positioned boxes across the pages of flex, grid and table containers
+
+In paged output, an absolutely positioned box in a flex, grid or table container now breaks across pages with its container, and one placed in a grid area that starts on a later page lands on that page.
+
+### Draw an SVG's bitmaps and filtered groups in a PDF without rasterizing
+
+takumi-pdf embeds the PNG, JPEG, and WebP images inside an SVG as PDF images, and draws an SVG group without its filter. A CSS color `filter` on an SVG `<img>` or `background-image` recolors the SVG instead of rasterizing it, and takumi-svg writes an SVG's bitmaps as `<image>` elements. `SvgOp::Image` and `SvgOp::PushFilter` replace `SvgOp::Raster`, `SvgSource::vector_ops` no longer takes a raster scale, and resvg's renderer moves behind the `svg-raster` feature, on by default.
+
+### Compose PDF pages while later pages still lay out
+
+`render` draws a page as soon as no page still to lay out can paint onto it, so a long document holds one page's scene at a time. Layout errors, including `TooManyPages`, can now arrive after earlier pages were composed, so an error from drawing a page can come before one from laying out a later page.
+
 ## takumi-pdf@0.18.0
 
 ### Shape with HarfBuzz 14.5.1

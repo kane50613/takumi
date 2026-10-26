@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "waku build",
+    "build": "waku build && bun redirects.ts",
     "dev": "portless run --name takumi waku dev",
     "start": "waku start",
     "test": "bun test app/playground",

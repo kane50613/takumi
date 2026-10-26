@@ -1,10 +1,7 @@
-//! Blink's [`InlineNode::ComputeMinMaxSizes`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_node.cc)
-//! and [`MinMaxSizes`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/min_max_sizes.h),
+//! Blink's [`InlineNode::ComputeMinMaxSizes`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_node.cc),
 //! without initial letters, ruby, SVG text, or `max-content-sizing`. The max-content size takes a
 //! second pass where Blink derives it from the min-content pass, which it checks gives the same
 //! size.
-
-use taffy::{Clear, Float};
 
 use super::{
   inline_item::{InlineItemType, LayoutObject},
@@ -19,18 +16,13 @@ use crate::{
   layout::{
     constraint_space::ConstraintSpace,
     exclusions::{exclusion_space::ExclusionSpace, layout_opportunity::LineLayoutOpportunity},
+    floats_utils::{Clear, Float},
+    min_max_sizes::MinMaxSizes,
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
   style::Direction as TextDirection,
 };
-
-/// Blink's `MinMaxSizes`: the min-content and max-content inline sizes.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct MinMaxSizes {
-  pub(crate) min_size: LayoutUnit,
-  pub(crate) max_size: LayoutUnit,
-}
 
 /// Blink's `InlineNode::FloatingObject`: a float on a line, by its margin box's max-content size.
 struct FloatingObject {
@@ -207,7 +199,7 @@ fn float_inline_margins(node: &RenderNode, direction: TextDirection) -> LayoutUn
 
 #[cfg(test)]
 mod tests {
-  use super::MinMaxSizes;
+  use crate::layout::min_max_sizes::MinMaxSizes;
   use crate::layout::{
     inline::{
       inline_node::InlineNode,

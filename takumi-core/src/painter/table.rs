@@ -11,10 +11,12 @@ use crate::{
   geometry::{ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     border::BorderSide,
+    layout_view::LayoutView,
     table::{TableBorders, TableFragment, style_rank},
-    tree::{LayoutResults, RenderNode},
+    tree::RenderNode,
   },
   layout_unit::LayoutUnit,
+  scene::NodePaint,
   style::{Affine, BorderStyle, Display},
 };
 
@@ -111,23 +113,24 @@ pub enum TableDecorations {
 }
 
 impl TableDecorations {
-  /// How the box at `path` with `node_id` paints its decorations.
-  pub fn of(
-    root: &RenderNode,
-    results: &LayoutResults,
-    path: &[usize],
-    node_id: NodeId,
-  ) -> Result<Self> {
+  /// How the box `paint` paints its decorations.
+  pub fn of(root: &RenderNode, results: LayoutView<'_>, paint: &NodePaint) -> Result<Self> {
+    let NodePaint {
+      node_id,
+      fragment_index,
+      ref path,
+      ..
+    } = *paint;
     let Some(node) = root.node_at_path(path) else {
       return Ok(Self::None);
     };
 
     Ok(match node.context.style.base_data.display {
       Display::Table | Display::InlineTable => {
-        let Some(fragment) = results.table_fragment(node_id) else {
+        let Some(fragment) = results.table_fragment(node_id, fragment_index) else {
           return Ok(Self::None);
         };
-        let layout = results.layout(node_id)?;
+        let layout = results.fragment_layout(node_id, fragment_index)?;
         let (grid_offset, grid_size) = fragment.grid_rect;
 
         Self::Table {
@@ -148,7 +151,7 @@ impl TableDecorations {
             y: grid_offset,
           },
           paints_border: fragment.borders.is_none(),
-          columns: column_backgrounds(node, node_id, results, fragment)?,
+          columns: column_backgrounds(node, node_id, fragment_index, results, fragment)?,
         }
       }
       Display::TableHeaderGroup
@@ -162,8 +165,11 @@ impl TableDecorations {
       Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup => {
         let mut cells = Vec::new();
 
-        for row in results.box_children(node_id)? {
-          let row_layout = results.layout(row.node_id)?;
+        for row in results.ordered_children_in(node_id, fragment_index)? {
+          let Some(row_fragment) = results.fragment_in(row.node_id, fragment_index) else {
+            continue;
+          };
+          let row_layout = results.fragment_layout(row.node_id, row_fragment)?;
           let Some(row_node) = child(node, row.render_index) else {
             continue;
           };
@@ -172,6 +178,7 @@ impl TableDecorations {
             row_node,
             results,
             row.node_id,
+            row_fragment,
             row_layout.location,
             node.has_layer() || row_node.has_layer(),
             |_| true,
@@ -180,7 +187,10 @@ impl TableDecorations {
         }
 
         Self::Part {
-          cells: part_backgrounds(results.layout(node_id)?.size, cells),
+          cells: part_backgrounds(
+            results.fragment_layout(node_id, fragment_index)?.size,
+            cells,
+          ),
         }
       }
       Display::TableRow => {
@@ -194,13 +204,17 @@ impl TableDecorations {
           node,
           results,
           node_id,
+          fragment_index,
           Point::ZERO,
           section_has_layer || node.has_layer(),
           |_| true,
           &mut cells,
         )?;
         Self::Part {
-          cells: part_backgrounds(results.layout(node_id)?.size, cells),
+          cells: part_backgrounds(
+            results.fragment_layout(node_id, fragment_index)?.size,
+            cells,
+          ),
         }
       }
       Display::TableCell => {
@@ -211,7 +225,7 @@ impl TableDecorations {
             .and_then(|end| root.node_at_path(&path[..end]))
             .is_some_and(RenderNode::has_layer)
         });
-        let layout = results.layout(node_id)?;
+        let layout = results.fragment_layout(node_id, fragment_index)?;
 
         Self::Cell {
           paints_border: !node.context.collapsed_borders,
@@ -244,12 +258,15 @@ fn child(node: &RenderNode, index: usize) -> Option<&RenderNode> {
   node.children.as_deref()?.get(index)
 }
 
-/// The cells of the row `row` that `includes`, layout did not hide, and are visible, at `offset`
-/// from the part painting into them, `parent_has_layer` when the row or its row group has one.
+/// The cells in the fragment `row_fragment_index` of the row `row` that `includes`, layout did not
+/// hide, and are visible, at `offset` from the part painting into them, `parent_has_layer` when the
+/// row or its row group has one.
+#[allow(clippy::too_many_arguments)]
 fn collect_cells(
   row: &RenderNode,
-  results: &LayoutResults,
+  results: LayoutView<'_>,
   row_id: NodeId,
+  row_fragment_index: usize,
   offset: Point<f32>,
   parent_has_layer: bool,
   includes: impl Fn(NodeId) -> bool,
@@ -269,7 +286,10 @@ fn collect_cells(
       continue;
     }
 
-    let layout = results.layout(cell.node_id)?;
+    let Some(cell_fragment) = results.fragment_in(cell.node_id, row_fragment_index) else {
+      continue;
+    };
+    let layout = results.fragment_layout(cell.node_id, cell_fragment)?;
     let area = CellArea {
       offset: offset + layout.location,
       size: layout.size,
@@ -291,7 +311,8 @@ fn collect_cells(
 fn column_backgrounds(
   table: &RenderNode,
   table_id: NodeId,
-  results: &LayoutResults,
+  table_fragment_index: usize,
+  results: LayoutView<'_>,
   fragment: &TableFragment,
 ) -> Result<Vec<ColumnBackground>> {
   let mut backgrounds = Vec::new();
@@ -336,18 +357,26 @@ fn column_backgrounds(
       let Some(section_node) = child(table, section.render_index) else {
         continue;
       };
-      let section_layout = results.layout(section.node_id)?;
+      let Some(section_fragment) = results.fragment_in(section.node_id, table_fragment_index)
+      else {
+        continue;
+      };
+      let section_layout = results.fragment_layout(section.node_id, section_fragment)?;
 
-      for row in results.box_children(section.node_id)? {
+      for row in results.ordered_children_in(section.node_id, section_fragment)? {
         let Some(row_node) = child(section_node, row.render_index) else {
           continue;
         };
-        let row_layout = results.layout(row.node_id)?;
+        let Some(row_fragment) = results.fragment_in(row.node_id, section_fragment) else {
+          continue;
+        };
+        let row_layout = results.fragment_layout(row.node_id, row_fragment)?;
 
         collect_cells(
           row_node,
           results,
           row.node_id,
+          row_fragment,
           section_layout.location + row_layout.location,
           section_node.has_layer() || row_node.has_layer(),
           |cell| {
@@ -360,9 +389,9 @@ fn column_backgrounds(
       }
     }
 
-    let mut context = column.context.clone();
+    let context = column.context.clone();
 
-    context.paint_offset = table.context.paint_offset;
+    context.enter_fragment(table.context.paint_offset(), context.fragment_index());
     backgrounds.push(ColumnBackground {
       path: geometry
         .path
@@ -651,19 +680,23 @@ impl EdgeJoints {
   }
 }
 
-/// Blink's `TablePainter::PaintCollapsedBorders`: every collapsed edge of the table `node_id`, as
-/// a box side under `transform`, the table's border-box top-left at the origin and at
-/// `paint_offset` in the space paint snaps to pixels in. With `visible`, a block range of the
-/// table's border box, only the rows near it paint, as Blink paints one table fragment per page.
+/// Blink's `TablePainter::PaintCollapsedBorders` for the table `paint` paints, under `transform`.
+/// With `visible`, a block range of the table's border box, only the rows near it paint, as Blink
+/// paints one table fragment per page.
 pub fn paint_collapsed_borders(
-  results: &LayoutResults,
-  node_id: NodeId,
-  paint_offset: Point<f32>,
+  results: LayoutView<'_>,
+  paint: &NodePaint,
   transform: Affine,
   visible: Option<(f32, f32)>,
   device: &mut dyn PaintDevice,
 ) -> Result<()> {
-  let Some(fragment) = results.table_fragment(node_id) else {
+  let NodePaint {
+    node_id,
+    fragment_index,
+    paint_offset,
+    ..
+  } = *paint;
+  let Some(fragment) = results.table_fragment(node_id, fragment_index) else {
     return Ok(());
   };
   let Some(borders) = fragment.borders.as_ref() else {
@@ -683,10 +716,13 @@ pub fn paint_collapsed_borders(
     let Some(&section) = fragment.sections.get(section_index) else {
       continue;
     };
-    let section_layout = results.layout(section)?;
+    let Some(section_fragment) = results.fragment_in(section, fragment_index) else {
+      continue;
+    };
+    let section_layout = results.fragment_layout(section, section_fragment)?;
     let section_width = LayoutUnit::from_float(section_layout.size.width);
     let rows = visible.map_or(0..row_offsets.len(), |(top, bottom)| {
-      let reach = fragment.max_border_width;
+      let reach = borders.max_border_width;
       let section_top = LayoutUnit::from_float(section_layout.location.y);
       let top = LayoutUnit::from_float(top) - section_top - reach;
       let bottom = LayoutUnit::from_float(bottom) - section_top + reach;

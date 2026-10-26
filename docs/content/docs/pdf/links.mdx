@@ -1,0 +1,128 @@
+---
+title: Links, outline & metadata
+description: Add clickable links, a table of contents, heading bookmarks, and document properties to a PDF.
+---
+
+Add links with `<a href>`, bookmarks with `outline`, and document properties with `metadata`.
+
+## Hyperlinks
+
+An `<a>` with an `href` becomes a clickable link on every page its box touches:
+
+```tsx twoslash title="Link to a website"
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <p>
+    {/* [!code highlight] */}
+    Pay online at <a href="https://example.com/pay/1042">example.com/pay/1042</a>.
+  </p>,
+);
+```
+
+An inline link is clickable on each line it wraps across, while a block-level link covers its whole box.
+
+`http`, `https`, `mailto`, and `tel` links open outside the document. An `href` that starts with `#` jumps to the element with that `id`:
+
+```tsx twoslash title="Link within the document"
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <div>
+    {/* [!code highlight:2] */}
+    <a href="#appendix">Jump to the appendix</a>
+    <h1 id="appendix">Appendix</h1>
+  </div>,
+);
+```
+
+A link to a missing `id` or with another URL scheme gets no annotation.
+
+## Table of contents
+
+`<TargetPageNumber />` prints the page number of an internal link's target. Put it inside an `<a href="#id">`, or pass `href` so it renders its own link. In HTML input, put an element with the `targetPageNumber` class inside the link.
+
+```tsx twoslash title="Build a table of contents"
+import { render } from "takumi-pdf";
+import { TargetPageNumber } from "takumi-pdf/primitives";
+
+const pdf = await render(
+  <div>
+    <a href="#results" tw="flex items-baseline gap-2">
+      <span>Results</span>
+      <span tw="flex-1 border-b border-dotted border-gray-400" />
+      {/* [!code highlight] */}
+      <TargetPageNumber tw="w-8 shrink-0 text-right" />
+    </a>
+    <h1 id="results" style={{ breakBefore: "page" }}>
+      Results
+    </h1>
+  </div>,
+);
+```
+
+The stretched span draws the dot leader. `format` takes any [counter style](/docs/pdf/headers#counter-styles), so `format="upper-roman"` prints `IV` for page 4.
+
+A fragment that names no element prints nothing, the same rule links follow.
+
+### Reserve space for page numbers
+
+A page number exists only after pagination. Takumi paginates, fills the numbers in, and lays the document out again. A number that widens its line can move a page break, and the moved break can renumber the entry. The render repeats this up to three times, then keeps the last result.
+
+The example reserves width with `w-8 shrink-0 text-right`, so a number cannot change the entry's width. Widen it if your document needs more digits.
+
+<Callout type="warn">
+  Headers and footers are laid out per page, outside this loop. A `<TargetPageNumber />` in a band
+  renders nothing.
+</Callout>
+
+## Outline
+
+Set `outline: true` to build PDF bookmarks from `h1`–`h6`. A deeper heading nests under the shallower heading before it. `tagged: "ua1"` and `"ua2"` turn the outline on, since PDF/UA requires one:
+
+```tsx twoslash title="Generate PDF bookmarks"
+import type { ReactNode } from "react";
+declare const report: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+// [!code highlight]
+const pdf = await render(report, { outline: true });
+```
+
+Clicking a bookmark jumps to the page and position of its heading.
+
+## Document metadata
+
+`metadata` fills the PDF document properties. `lang` also sets the document language:
+
+```tsx twoslash title="Set document metadata"
+import type { ReactNode } from "react";
+declare const report: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(report, {
+  lang: "en",
+  // [!code highlight]
+  metadata: {
+    title: "Annual report 2026",
+    description: "Consolidated results for fiscal year 2026",
+    authors: ["Acme Inc."],
+    keywords: ["annual report", "2026"],
+    creator: "acme-reporting",
+  },
+});
+```
+
+| Field          | Written as                                               |
+| -------------- | -------------------------------------------------------- |
+| `title`        | Document title                                           |
+| `description`  | Subject                                                  |
+| `authors`      | Author                                                   |
+| `keywords`     | Keywords                                                 |
+| `creator`      | The tool that made the source                            |
+| `creationDate` | Creation date, UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS` |
+| `xmp`          | Custom XMP schemas, such as Factur-X's `fx:` block       |
+
+Every field is optional for plain PDF output. [PDF/A & PDF/UA](/docs/pdf/conformance#required-inputs) require some of them. Set a fixed `creationDate` for reproducible output.

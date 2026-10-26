@@ -36,7 +36,7 @@ struct LineBreakResults<'s, 'a, 'c> {
   space: &'s ConstraintSpace,
   atomic_inline: &'s mut dyn AtomicInlineLayout<'c>,
   line_widths: Vec<LayoutUnit>,
-  break_token: Option<InlineBreakToken<'c>>,
+  break_token: Option<InlineBreakToken>,
 }
 
 impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
@@ -75,7 +75,7 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
     &mut self,
     available_width: LayoutUnit,
     mut max_lines: usize,
-    stop_at: Option<InlineBreakToken<'c>>,
+    stop_at: Option<&InlineBreakToken>,
   ) -> Status {
     debug_assert!(self.line_widths.is_empty());
 
@@ -89,10 +89,10 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
         self.node,
         self.items_data,
         LineBreakerMode::Content,
-        *self.space,
+        self.space.clone(),
         line_opportunity,
         &leading_floats,
-        self.break_token,
+        self.break_token.clone(),
         &mut *self.atomic_inline,
         &mut exclusion_space,
       );
@@ -106,10 +106,10 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
         return Status::NotApplicable;
       }
 
-      self.break_token = line_info.break_token;
       self.line_widths.push(line_info.width());
+      self.break_token = line_info.break_token;
 
-      let Some(break_token) = self.break_token else {
+      let Some(break_token) = &self.break_token else {
         return Status::Finished;
       };
 
@@ -132,7 +132,7 @@ impl<'s, 'a, 'c> LineBreakResults<'s, 'a, 'c> {
     min_available_width: LayoutUnit,
     epsilon: LayoutUnit,
     num_lines: usize,
-    stop_at: Option<InlineBreakToken<'c>>,
+    stop_at: Option<&InlineBreakToken>,
   ) -> LayoutUnit {
     debug_assert!(epsilon > LayoutUnit::ZERO);
     debug_assert!(num_lines > 0);
@@ -191,6 +191,7 @@ impl<'c> InlineNode<'c> {
     let block_context = &self.block.context;
     let mut normal_lines = LineBreakResults::new(self, items_data, space, &mut *atomic_inline);
     let lines_until_clamp = space
+      .line_clamp_data
       .lines_until_clamp
       .and_then(|lines| usize::try_from(lines).ok())
       .filter(|&lines| lines > 0 && lines <= MAX_LINES_FOR_BALANCE);
@@ -231,7 +232,7 @@ impl<'c> InlineNode<'c> {
     // From the average line width, less a fifth for edge cases.
     let avg_line_width = normal_lines.line_width_sum() / num_lines as i32;
     let min_available_width = LayoutUnit::from_float_round(avg_line_width.to_float() * 0.8);
-    let stop_at = normal_lines.break_token;
+    let stop_at = normal_lines.break_token.clone();
 
     drop(normal_lines);
 
@@ -241,7 +242,7 @@ impl<'c> InlineNode<'c> {
         min_available_width,
         epsilon,
         num_lines,
-        stop_at,
+        stop_at.as_ref(),
       ),
     )
   }

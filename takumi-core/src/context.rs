@@ -1,7 +1,17 @@
-use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{
+  cell::Cell,
+  collections::HashMap,
+  rc::Rc,
+  sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+  },
+};
 
-use taffy::Line;
 use typed_builder::TypedBuilder;
+
+#[cfg(test)]
+use crate::{resources::font::Fonts, viewport::Viewport};
 
 use crate::{
   font_style::ExpandedFamilies,
@@ -19,7 +29,7 @@ use crate::{
   },
   style::{
     Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, SizingContext,
-    StyleSheet, TwCache,
+    StyleSheet,
   },
 };
 
@@ -32,7 +42,6 @@ struct RenderShared {
   font_families: ExpandedFamilies,
   font_fallback_map: FontFallbackMap,
   inline_cache: InlineLayoutCache,
-  tw_cache: TwCache,
   matched_styles: MatchedStyleCache,
   time_ms: u64,
   draw_debug_border: bool,
@@ -82,7 +91,6 @@ impl From<RenderContextInit> for RenderContext {
         font_families: ExpandedFamilies::default(),
         font_fallback_map: FontFallbackMap::default(),
         inline_cache: InlineLayoutCache::default(),
-        tw_cache: TwCache::default(),
         matched_styles: MatchedStyleCache::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
@@ -90,14 +98,37 @@ impl From<RenderContextInit> for RenderContext {
       }),
       sizing: init.sizing,
       transform: init.transform,
-      paint_offset: Point::ZERO,
+      paint_offset: Cell::new(Point::ZERO),
+      fragment_index: Cell::new(0),
       current_color: init.current_color,
       style: init.style,
       text_decorations: AppliedTextDecorations::default(),
       collapsed_borders: init.collapsed_borders,
-      definite_height: Cell::new(None),
-      margins_adjoin: Cell::new(Line::FALSE),
+      identity: BoxIdentity::new(),
     }
+  }
+}
+
+/// Which box a context belongs to, compared where Blink compares `LayoutObject` or
+/// `ComputedStyle` pointers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BoxId(u64);
+
+/// The [`BoxId`] a context holds. A clone is another box's context, so it takes a new id, as a
+/// copy at another address would compare unequal by pointer.
+struct BoxIdentity(BoxId);
+
+impl BoxIdentity {
+  fn new() -> Self {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    Self(BoxId(NEXT.fetch_add(1, Ordering::Relaxed)))
+  }
+}
+
+impl Clone for BoxIdentity {
+  fn clone(&self) -> Self {
+    Self::new()
   }
 }
 
@@ -111,8 +142,11 @@ pub struct RenderContext {
   /// The scale factor for the image renderer.
   pub transform: Affine,
   /// Blink's paint offset of the space the box's layout location is measured in: where that space
-  /// sits in the space Blink snaps paint to pixels in.
-  pub paint_offset: Point<f32>,
+  /// sits in the space Blink snaps paint to pixels in. A painter sets it for each fragment it
+  /// enters, through a scene it shares.
+  paint_offset: Cell<Point<f32>>,
+  /// Which of the box's fragments the painter entered, as [`Self::paint_offset`] is.
+  fragment_index: Cell<usize>,
   /// What the `currentColor` value is resolved to.
   pub current_color: Color,
   /// The style after inheritance.
@@ -121,12 +155,7 @@ pub struct RenderContext {
   pub(crate) text_decorations: AppliedTextDecorations,
   /// Whether this box is a cell of a table that collapses its borders.
   pub(crate) collapsed_borders: bool,
-  /// The content height the box's last layout fixed before its content, Blink's definite block
-  /// size.
-  definite_height: Cell<Option<f32>>,
-  /// Whether its children's margins adjoin its block-start and block-end edges in its last layout,
-  /// so they collapse through it.
-  margins_adjoin: Cell<Line<bool>>,
+  identity: BoxIdentity,
 }
 
 /// A [`RenderContextBuilder`] with nothing set yet.
@@ -139,9 +168,31 @@ impl RenderContext {
     RenderContextInit::builder()
   }
 
+  /// The box this context belongs to.
+  pub fn box_id(&self) -> BoxId {
+    self.identity.0
+  }
+
+  /// Blink's paint offset of the space the box's layout location is measured in.
+  pub fn paint_offset(&self) -> Point<f32> {
+    self.paint_offset.get()
+  }
+
+  /// Which of the box's fragments the painter entered.
+  pub fn fragment_index(&self) -> usize {
+    self.fragment_index.get()
+  }
+
+  /// Sets the box to paint its fragment `fragment_index`, its layout location measured from
+  /// `paint_offset`.
+  pub(crate) fn enter_fragment(&self, paint_offset: Point<f32>, fragment_index: usize) {
+    self.paint_offset.set(paint_offset);
+    self.fragment_index.set(fragment_index);
+  }
+
   /// Blink's paint offset of the border box at `layout`, the box this context styles.
   pub fn box_paint_offset(&self, layout: ComputedLayout) -> Point<f32> {
-    self.paint_offset + layout.location
+    self.paint_offset() + layout.location
   }
 
   /// The font snapshot this render draws with.
@@ -187,11 +238,6 @@ impl RenderContext {
     &self.shared.font_families
   }
 
-  /// Per-render cache of expanded Tailwind class lists.
-  pub(crate) fn tw_cache(&self) -> &TwCache {
-    &self.shared.tw_cache
-  }
-
   /// Per-render cache of the styles boxes resolved from the declarations they matched.
   pub(crate) fn matched_styles(&self) -> &MatchedStyleCache {
     &self.shared.matched_styles
@@ -217,13 +263,13 @@ impl RenderContext {
       shared: parent.shared.clone(),
       sizing: parent.sizing.clone(),
       transform: parent.transform,
-      paint_offset: parent.paint_offset,
+      paint_offset: parent.paint_offset.clone(),
+      fragment_index: parent.fragment_index.clone(),
       current_color: parent.current_color,
       style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
-      definite_height: Cell::new(None),
-      margins_adjoin: Cell::new(Line::FALSE),
+      identity: BoxIdentity::new(),
     }
   }
 
@@ -245,31 +291,13 @@ impl RenderContext {
       ),
       sizing,
       transform: parent.transform,
-      paint_offset: parent.paint_offset,
+      paint_offset: parent.paint_offset.clone(),
+      fragment_index: parent.fragment_index.clone(),
       current_color,
       style,
       collapsed_borders: false,
-      definite_height: Cell::new(None),
-      margins_adjoin: Cell::new(Line::FALSE),
+      identity: BoxIdentity::new(),
     }
-  }
-
-  /// The content height the box's last layout fixed before its content.
-  pub(crate) fn definite_height(&self) -> Option<f32> {
-    self.definite_height.get()
-  }
-
-  pub(crate) fn set_definite_height(&self, height: Option<f32>) {
-    self.definite_height.set(height);
-  }
-
-  /// Whether its children's margins adjoin its block-start and block-end edges in its last layout.
-  pub(crate) fn margins_adjoin(&self) -> Line<bool> {
-    self.margins_adjoin.get()
-  }
-
-  pub(crate) fn set_margins_adjoin(&self, margins_adjoin: Line<bool>) {
-    self.margins_adjoin.set(margins_adjoin);
   }
 
   /// The style to change in place, copied first when another box shares it.
@@ -284,5 +312,21 @@ impl RenderContext {
     if display != self.style.base_data.display {
       self.style_mut().base_data_mut().display = display;
     }
+  }
+}
+
+#[cfg(test)]
+impl RenderContext {
+  /// A context with no registered fonts whose `color` is `current_color`.
+  pub(crate) fn with_current_color(current_color: Color) -> Self {
+    Self::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((800, 600)))
+          .build(),
+      )
+      .current_color(current_color)
+      .build()
   }
 }

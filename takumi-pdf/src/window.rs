@@ -22,13 +22,9 @@ pub(crate) struct Window {
   /// skipped, so clipped-away content never reaches the content stream (or
   /// text extraction).
   pub(crate) y: Option<(f32, f32)>,
-  /// Horizontal paint window `[left, right)`: a repeated table section replays
-  /// only its own table's column of the scene.
-  pub(crate) x: Option<(f32, f32)>,
-  /// Text-line ownership window `[this page's cut, next page's cut)`. Wider
-  /// than `y` at the edges (first page reaches up to −∞, last to +∞) and
-  /// narrower at the bottom when a cut lands above the page's full height, so
-  /// every line is emitted on exactly one page, save the items taller than a
+  /// Text-line ownership window `[this page's start, next page's start)`. A
+  /// line's ink can reach into the next page, which paints it clipped, but
+  /// its text is emitted on one page alone, save the items taller than a
   /// page, which every page they cross shows.
   pub(crate) lines: Option<(f32, f32)>,
 }
@@ -39,12 +35,7 @@ impl Window {
   }
 
   pub(crate) fn excludes_bounds(&self, bounds: Option<SceneBounds>) -> bool {
-    bounds.is_some_and(|b| {
-      self.excludes(b.top as f32, b.bottom as f32)
-        || self
-          .x
-          .is_some_and(|(x0, x1)| b.right as f32 <= x0 || b.left as f32 >= x1)
-    })
+    bounds.is_some_and(|b| self.excludes(b.top as f32, b.bottom as f32))
   }
 
   /// Whether this page draws a line's item spanning `top` to `bottom` on the line at `baseline`:
@@ -60,23 +51,11 @@ impl Window {
 
   /// Whether a text line at `baseline` belongs to another page. Ownership is
   /// keyed on the baseline (always inside the line's own box, unlike the font
-  /// ascent band, which can poke above the container a forced break cut at) and
-  /// half-open, so each line is emitted exactly once.
+  /// ascent band) and half-open, so each line is emitted exactly once.
   pub(crate) fn disowns_line(&self, baseline: f32) -> bool {
     self
       .lines
       .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
-  }
-
-  /// The window in the space of a subtree whose origin sits at `origin`.
-  pub(crate) fn within(self, origin: Point<f32>) -> Self {
-    let shift = |window: Option<(f32, f32)>, by: f32| window.map(|(from, to)| (from - by, to - by));
-
-    Self {
-      y: shift(self.y, origin.y),
-      x: shift(self.x, origin.x),
-      lines: shift(self.lines, origin.y),
-    }
   }
 
   /// Narrows both vertical windows to a box that clips its overflow. A clip

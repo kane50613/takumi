@@ -14,13 +14,12 @@ pub use self::image::resolve_image;
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
-  geometry::{AvailableSpace, Size},
-  layout::inline::InlineContentKind,
+  layout::{inline::InlineContentKind, length_utils::NaturalSize},
   resources::{
     image::{ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss},
+  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule},
   viewport::Viewport,
 };
 
@@ -40,7 +39,10 @@ pub(crate) struct NodeMetadata {
   /// Additional element attributes for selector matching and serialization.
   pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
   /// Default style presets from HTML element type (lowest priority).
-  pub preset: Option<Box<Style>>,
+  pub preset: Option<Arc<Style>>,
+  /// Presentation attributes as declarations, which the cascade places between the preset and
+  /// author rules, as Blink's presentational hints.
+  pub presentation: Option<Box<Style>>,
   /// The styling properties for this node.
   pub style: Option<Box<Style>>,
   /// The tailwind properties for this node.
@@ -330,6 +332,25 @@ impl Node {
     }
   }
 
+  /// A copy with what styles the node and none of its children or selector attributes.
+  #[cfg(feature = "svg")]
+  pub(crate) fn styling_clone(&self) -> Self {
+    Self {
+      metadata: NodeMetadata {
+        tag_name: self.metadata.tag_name.clone(),
+        preset: self.metadata.preset.clone(),
+        presentation: self.metadata.presentation.clone(),
+        style: self.metadata.style.clone(),
+        dir: self.metadata.dir,
+        lang: self.metadata.lang,
+        ..NodeMetadata::default()
+      },
+      kind: NodeKind::Container {
+        children: Vec::new(),
+      },
+    }
+  }
+
   /// Takes the node's own text, leaving an empty container behind.
   pub(crate) fn take_text(&mut self) -> Option<String> {
     let NodeKind::Text(data) = &mut self.kind else {
@@ -407,8 +428,8 @@ impl Node {
   }
 
   /// Sets the preset style and returns the updated node.
-  pub fn with_preset(mut self, preset: Style) -> Self {
-    self.metadata.preset = Some(Box::new(preset));
+  pub fn with_preset(mut self, preset: impl Into<Arc<Style>>) -> Self {
+    self.metadata.preset = Some(preset.into());
     self
   }
 
@@ -544,7 +565,7 @@ impl Node {
 
     NodeStyleLayers {
       preset,
-      author_tw: self.metadata.tw.take(),
+      presentation: self.metadata.presentation.take(),
       inline: self.metadata.style.take(),
       dir: self.metadata.dir.take(),
       lang: self.metadata.lang.take(),
@@ -559,16 +580,11 @@ impl Node {
     }
   }
 
-  pub(crate) fn measure(
-    &self,
-    context: &RenderContext,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
-    style: &taffy::Style,
-  ) -> Size<f32> {
+  /// The natural size of the replaced content it lays out, none for other content.
+  pub(crate) fn natural_size(&self, context: &RenderContext) -> NaturalSize {
     match &self.kind {
-      NodeKind::Image(image) => image.measure(context, available_space, known_dimensions, style),
-      NodeKind::Container { .. } | NodeKind::Text(_) => Size::ZERO,
+      NodeKind::Image(image) => image.natural_size(context),
+      NodeKind::Container { .. } | NodeKind::Text(_) => NaturalSize::default(),
     }
   }
 
@@ -667,9 +683,9 @@ impl Node {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
-  pub(crate) preset: Option<Box<Style>>,
-  /// Tailwind-derived author style for the element.
-  pub(crate) author_tw: Option<TailwindValues>,
+  pub(crate) preset: Option<Arc<Style>>,
+  /// Presentation attributes, which author rules outrank.
+  pub(crate) presentation: Option<Box<Style>>,
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Box<Style>>,
   pub(crate) dir: Option<Direction>,
@@ -679,7 +695,10 @@ pub(crate) struct NodeStyleLayers {
 impl NodeStyleLayers {
   /// Whether nothing but the preset styles the element beyond its matched rules.
   pub(crate) fn is_preset_only(&self) -> bool {
-    self.author_tw.is_none() && self.inline.is_none() && self.dir.is_none() && self.lang.is_none()
+    self.presentation.is_none()
+      && self.inline.is_none()
+      && self.dir.is_none()
+      && self.lang.is_none()
   }
 }
 
@@ -698,6 +717,11 @@ impl Node {
   /// The element's `class` attribute, space-separated.
   pub fn class_name(&self) -> Option<&str> {
     self.metadata.class_name.as_deref()
+  }
+
+  /// The rules the element's `tw` utilities compile to, in the order they were written.
+  pub(crate) fn tw_rules(&self) -> impl Iterator<Item = &Arc<TwRule>> {
+    self.metadata.tw.iter().flat_map(|tw| tw.rules().iter())
   }
 }
 
@@ -821,6 +845,24 @@ mod tests {
 
     assert_eq!(urls.into_iter().collect::<Vec<_>>(), vec![mask_url]);
   }
+
+  #[test]
+  fn collect_style_fetch_tasks_collects_tailwind_list_and_content_image_urls() {
+    let Ok(tw) =
+      TailwindValues::from_str("list-image-[url(/marker.svg)] before:content-[url(/icon.png)]")
+    else {
+      return;
+    };
+    let node = Node::container([]).with_tw(tw);
+
+    let mut urls = Xxh3HashSet::default();
+    node.style_image_urls(&mut urls);
+
+    let mut urls = urls.into_iter().collect::<Vec<_>>();
+
+    urls.sort_unstable();
+    assert_eq!(urls, vec!["/icon.png", "/marker.svg"]);
+  }
 }
 
 #[cfg(test)]
@@ -840,7 +882,7 @@ mod matching_tests {
 
   fn computed_style_from_matches(matches: &MatchedDeclarationsView<'_>) -> ComputedStyle {
     let mut style = Style::default();
-    for &declarations in matches
+    for declarations in matches
       .layered_normal()
       .iter()
       .chain(matches.unlayered_normal())
@@ -849,7 +891,7 @@ mod matching_tests {
         style.push(declaration.clone(), false);
       }
     }
-    for &declarations in matches.important() {
+    for declarations in matches.important() {
       for declaration in declarations.iter() {
         style.push(declaration.clone(), false);
       }
@@ -891,7 +933,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -914,7 +956,7 @@ mod matching_tests {
     );
 
     for (viewport, width) in [((400, 300), 10.0), ((800, 600), 20.0), ((400, 300), 10.0)] {
-      let matched = match_stylesheets_view(&root, &stylesheet, Viewport::new(viewport));
+      let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::new(viewport));
       assert_eq!(
         computed_style_from_matches(matched[0].element())
           .box_data
@@ -938,7 +980,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
       computed_style_from_matches(matched[1].element())
@@ -964,7 +1006,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -979,7 +1021,7 @@ mod matching_tests {
     let root = container_with_class("card");
     let stylesheet = parse_stylesheet(".card { width: 10px; } .card { width: 20px; }");
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1006,7 +1048,7 @@ mod matching_tests {
       "#,
     ]);
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1027,7 +1069,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1054,7 +1096,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 5);
     assert_eq!(
       computed_style_from_matches(matched[2].element())
@@ -1103,7 +1145,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
       computed_style_from_matches(matched[1].element())
@@ -1123,7 +1165,7 @@ mod matching_tests {
   fn test_repro_mixed_importance_bug() {
     let stylesheet = parse_stylesheet(".test { width: 10px; height: 20px !important; }");
     let root = Node::container([]).with_class_name("test");
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
 
     assert_eq!(matched[0].element().unlayered_normal()[0].len(), 1);
     assert!(
@@ -1137,6 +1179,22 @@ mod matching_tests {
   }
 
   #[test]
+  fn empty_ignores_text_without_characters() {
+    let stylesheet = parse_stylesheet(".box:empty { width: 10px; }");
+    let root = Node::container([
+      Node::container([Node::text("")]).with_class_name("box"),
+      Node::container([Node::text("x")]).with_class_name("box"),
+      Node::container([Node::container([])]).with_class_name("box"),
+    ]);
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matches_empty = |index: usize| !matched[index].element().unlayered_normal().is_empty();
+
+    assert!(matches_empty(1));
+    assert!(!matches_empty(3));
+    assert!(!matches_empty(5));
+  }
+
+  #[test]
   fn pseudo_element_rules_land_in_before_after_buckets() {
     let root = Node::container([]).with_class_name("card");
     let stylesheet = parse_stylesheet(
@@ -1147,7 +1205,7 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
 
     assert!(!matched[0].element().unlayered_normal().is_empty());
@@ -1160,7 +1218,7 @@ mod matching_tests {
     let root = Node::image("data:image/png;base64,iVBOR").with_class_name("logo");
     let stylesheet = parse_stylesheet(r#".logo::before { content: "x"; }"#);
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert!(matched[0].before().is_none());
     assert!(matched[0].after().is_none());
@@ -1171,7 +1229,7 @@ mod matching_tests {
     let root = Node::container([]).with_class_name("card");
     let stylesheet = parse_stylesheet(r#".card::placeholder { color: red; }"#);
 
-    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
     assert_eq!(matched.len(), 1);
     assert!(matched[0].before().is_none());
     assert!(matched[0].after().is_none());

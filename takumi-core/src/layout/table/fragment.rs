@@ -2,7 +2,9 @@
 //! from its captions, which cells and rows layout hid, the geometry of its columns and column
 //! groups, and its collapsed borders with the rows and columns they run along.
 
-use taffy::{NodeId as TaffyNodeId, RoundTree};
+use std::rc::Rc;
+
+use rustc_hash::FxHashMap;
 
 use crate::{
   geometry::{NodeId, Point, Size},
@@ -10,7 +12,7 @@ use crate::{
     table::{
       borders::TableBorders,
       columns::{ColumnLocation, ColumnVisitor, visit_columns},
-      layout::TableStructure,
+      layout::{PlacedSection, TableStructure},
     },
     tree::{LayoutTree, RenderNode},
   },
@@ -35,17 +37,22 @@ pub struct ColumnGeometry {
 /// table row it starts at, and each row's block-start edge then the last row's block-end edge.
 pub(crate) type SectionRowOffsets = (usize, usize, Vec<LayoutUnit>);
 
+/// The cells and rows a table's layout hid: collapsed, in collapsed columns, or empty with
+/// `empty-cells: hide`.
+pub(crate) struct HiddenParts {
+  /// Which columns were collapsed, the only input that can differ between the table's layouts.
+  pub(crate) collapsed_columns: Vec<bool>,
+  pub(crate) nodes: Vec<NodeId>,
+}
+
 /// A laid-out table's paint data.
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct TableFragment {
   /// The block offset and size of the table box in the table's border box: everything but its
   /// captions, Blink's `TableGridRect`.
   pub(crate) grid_rect: (f32, f32),
-  /// The cells and rows layout hid: collapsed, in collapsed columns, or empty with
-  /// `empty-cells: hide`.
-  pub(crate) hidden: Vec<TaffyNodeId>,
   /// Each cell's first column.
-  pub(crate) cell_columns: Vec<(TaffyNodeId, usize)>,
+  pub(crate) cell_columns: Rc<FxHashMap<NodeId, usize>>,
   pub(crate) section_row_offsets: Vec<SectionRowOffsets>,
   /// The sections, in layout order.
   pub(crate) sections: Vec<NodeId>,
@@ -57,36 +64,31 @@ pub struct TableFragment {
   /// sections.
   pub(crate) column_edges: Vec<LayoutUnit>,
   /// The collapsed borders, when the table collapses them.
-  pub(crate) borders: Option<TableBorders>,
-  /// The widest collapsed border.
-  pub(crate) max_border_width: LayoutUnit,
+  pub(crate) borders: Option<Rc<TableBorders>>,
   pub(crate) rtl: bool,
 }
 
 impl TableFragment {
-  /// Gathers the column geometry and collapsed-border grid of a table laid out with
-  /// `column_locations`.
-  pub(crate) fn finish(
+  /// Gathers the column geometry and collapsed-border grid of a table fragment laid out with
+  /// `column_locations` and holding `sections`.
+  pub(super) fn finish(
     &mut self,
     tree: &LayoutTree<'_>,
     table: &RenderNode,
     structure: &TableStructure,
+    sections: &[PlacedSection],
     column_locations: &[ColumnLocation],
     rtl: bool,
   ) {
     self.rtl = rtl;
-    self.sections = structure
-      .sections
-      .iter()
-      .map(|section| NodeId::from_taffy(section.node))
-      .collect();
+    self.sections = sections.iter().map(|section| section.node).collect();
 
     let mut union: Option<(Point<f32>, Size<f32>)> = None;
 
-    for section in &structure.sections {
-      let layout = tree.get_unrounded_layout(section.node);
-      let origin = Point::from_taffy(layout.location);
-      let size = Size::from_taffy(layout.size);
+    for section in sections {
+      let layout = tree.computed_layout(section.node, section.fragment_index);
+      let origin = layout.location;
+      let size = layout.size;
 
       union = Some(match union {
         None => (origin, size),
@@ -129,28 +131,13 @@ impl TableFragment {
         .map(|location| location.offset)
         .chain(column_locations.last().map(|last| last.offset + last.size))
         .collect();
-      self.max_border_width = (0..structure.borders.edges.len())
-        .map(|index| structure.borders.border_width(index))
-        .max()
-        .unwrap_or(LayoutUnit::ZERO);
-      self.borders = Some(structure.borders.clone());
+      self.borders = Some(Rc::clone(&structure.borders));
     }
-  }
-
-  /// Whether layout hid the cell or row `node`, which then paints nothing.
-  pub fn hides(&self, node: NodeId) -> bool {
-    self.hidden.contains(&node.into_taffy())
   }
 
   /// The first column of the cell `node`.
   pub(crate) fn cell_column(&self, node: NodeId) -> Option<usize> {
-    let node = node.into_taffy();
-
-    self
-      .cell_columns
-      .iter()
-      .find(|(cell, _)| *cell == node)
-      .map(|&(_, column)| column)
+    self.cell_columns.get(&node).copied()
   }
 }
 

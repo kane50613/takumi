@@ -109,12 +109,6 @@ impl BidiParagraph {
     (run.end, run.level)
   }
 
-  #[cfg(test)]
-  /// Blink's `GetLogicalRuns`.
-  pub(crate) fn get_logical_runs(&self) -> &[Run] {
-    &self.runs
-  }
-
   /// Blink's `GetVisualRuns`.
   pub(crate) fn get_visual_runs(&self) -> Vec<Run> {
     let levels: Vec<u8> = self.runs.iter().map(|run| run.level).collect();
@@ -248,6 +242,13 @@ mod tests {
 
   fn is_line_feed(character: char) -> bool {
     character == '\n'
+  }
+
+  impl BidiParagraph {
+    /// Blink's `GetLogicalRuns`.
+    fn get_logical_runs(&self) -> &[Run] {
+      &self.runs
+    }
   }
 
   #[test]

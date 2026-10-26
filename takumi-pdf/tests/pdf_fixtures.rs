@@ -13,6 +13,7 @@ use std::{
   sync::Arc,
 };
 
+use base64::{Engine, prelude::BASE64_STANDARD};
 use flate2::read::ZlibDecoder;
 use takumi_core::{
   Fonts,
@@ -999,6 +1000,38 @@ fn legacy_page_break_properties_split_the_page() {
   });
 }
 
+/// css-break-3 §3.1: a sided break such as `recto` forces a page break, and
+/// `avoid-page` keeps a box on one page as `avoid` does.
+#[test]
+fn sided_and_page_avoiding_breaks_split_the_page() {
+  run_pdf_fixture("sided-avoid-page-breaks", |fonts| {
+    let filler: String = (1..=8)
+      .map(|i| format!("<p style=\"margin: 0\">line {i}</p>"))
+      .collect();
+    let html = format!(
+      r#"<div style="font-size: 12px; color: #141414">
+        <div>first page</div>
+        <div style="break-before: recto">{filler}</div>
+        <div style="break-inside: avoid-page; background: #e2e8f0; padding: 8px">
+          <p style="margin: 0">kept together</p>
+          <p style="margin: 0">across the break</p>
+          <p style="margin: 0">by avoid-page</p>
+        </div>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse sided page breaks"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. Each
 /// segment of a line resolves on its own, so the 4px border under one column
@@ -1293,6 +1326,56 @@ fn a_repeated_table_header_replays_as_an_artifact() {
   );
 }
 
+/// An image on a repeated header's line stays inside the artifact: only the page where the table
+/// begins marks it as the header's `Figure`.
+#[test]
+fn an_image_in_a_repeated_table_header_is_tagged_once() {
+  let rows: String = (1..=30)
+    .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+    .collect();
+  let html = format!(
+    r#"<table style="width: 100%; font-size: 12px; color: #141414">
+      <thead><tr><th>Name <img src="pixel" alt="logo" style="width: 8px; height: 8px" /></th><th>Qty</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"#
+  );
+  let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render tagged table");
+
+  // An image drawn after a `BDC` sits in tagged content, after a `BMC` in the artifact.
+  let (tagged_images, _) = content_lines(&pdf).fold((0, false), |(count, in_tagged), line| {
+    let in_tagged = if find(&line, b"BDC").is_some() {
+      true
+    } else {
+      in_tagged && find(&line, b"BMC").is_none()
+    };
+
+    (
+      count + usize::from(in_tagged && line.ends_with(b" Do")),
+      in_tagged,
+    )
+  });
+
+  assert!(page_count(&pdf) > 1, "the table did not paginate");
+  assert_eq!(tagged_images, 1, "a repeated header tagged its image again");
+}
+
 /// A footer narrow enough that three-digit counters wrap it to a second line.
 /// The band re-measures with the real page count, so the `auto` margin
 /// reserves one line, not a wrapped stand-in's two.
@@ -1552,28 +1635,34 @@ fn a_forced_break_on_a_node_that_opens_a_page_adds_no_empty_page() {
     "the second keep opens page 2 on its own"
   );
 
-  for (spacer, list, first, second) in [
-    (235, "gap: 16px;", "", "break-before: page;"),
-    (235, "", "", "margin-top: 16px; break-before: page;"),
-    (245, "padding-top: 16px;", "break-before: page;", ""),
+  for (list, second) in [
+    ("gap: 16px;", "break-before: page;"),
+    ("", "margin-top: 16px; break-before: page;"),
   ] {
-    let forced = render_with(&document(spacer, list, first, second));
+    let forced = render_with(&document(235, list, "", second));
 
     assert_eq!(
       page_count(&forced),
       2,
-      "a forced break at the top of page 2 opened an empty page ({list} {first} {second})"
+      "a forced break at the top of page 2 opened an empty page ({list} {second})"
     );
   }
+  // Blink's column flex counts the list's padding as separation from its first item, so the
+  // forced break before that item leaves the padding alone on page 2.
   assert_eq!(
-    render_with(&document(235, "gap: 16px;", "", "break-before: page;")),
-    plain,
-    "a forced break at the top of page 2 changed the document"
+    page_count(&render_with(&document(
+      245,
+      "padding-top: 16px;",
+      "break-before: page;",
+      ""
+    ))),
+    3,
+    "a forced break after the list's padding did not break"
   );
 }
 
 #[test]
-fn forced_breaks_beside_spacing_alone_open_no_page() {
+fn forced_breaks_beside_spacing_break_as_blink_separates_them() {
   let fonts = fonts();
   let render_with = |source: &str| render(a4_options(source, &fonts)).expect("render the doc");
   let leading = render_with(
@@ -1593,10 +1682,12 @@ fn forced_breaks_beside_spacing_alone_open_no_page() {
     </div>"#,
   );
 
+  // The item's margin separates it from the start of its column flex container, so Blink honors
+  // the break and leaves the margin alone on page 1.
   assert_eq!(
     page_count(&leading),
-    1,
-    "a leading break opened an empty page"
+    2,
+    "a break after the item's margin did not break"
   );
   assert_eq!(
     page_count(&trailing),
@@ -1610,8 +1701,10 @@ fn forced_breaks_beside_spacing_alone_open_no_page() {
   );
 }
 
+/// The block-end padding is unbreakable, so padding that does not fit the page goes to the next,
+/// as Blink's `FinishFragmentation` breaks before it.
 #[test]
-fn trailing_spacing_opens_no_page() {
+fn trailing_padding_past_the_page_end_goes_to_the_next_page() {
   let fonts = fonts();
   let page = PageOptions {
     width: 400.0,
@@ -1635,7 +1728,7 @@ fn trailing_spacing_opens_no_page() {
   )
   .expect("render the doc");
 
-  assert_eq!(page_count(&pdf), 1, "trailing padding opened an empty page");
+  assert_eq!(page_count(&pdf), 2, "the trailing padding stayed on page 1");
 }
 
 /// A table of contents whose entries carry `targetPageNumber` hooks. Each
@@ -1834,6 +1927,36 @@ fn an_inline_page_counter_follows_the_flow_that_precedes_it() {
   assert_eq!(
     pdf, expected,
     "a transformed block moved the page the counter after it names"
+  );
+}
+
+/// A header that repeats down a table leaves the flow where its first occurrence ends, so a
+/// counter in the first row names the table's first page.
+#[test]
+fn a_repeated_table_header_does_not_move_the_counters_after_it() {
+  let document = |page: &str| {
+    let rows: String = (2..=60)
+      .map(|i| format!("<tr><td>Item {i}</td></tr>"))
+      .collect();
+
+    format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead><tr><th>Name</th></tr></thead>
+        <tbody><tr><td>Page <span>{page}</span></td></tr>{rows}</tbody>
+      </table>"#
+    )
+  };
+  let pdf = render(a4_options(
+    &document(r#"<span class="pageNumber"></span>"#),
+    &fonts(),
+  ))
+  .expect("render the hooked table");
+  let expected = render(a4_options(&document("1"), &fonts())).expect("render the numbered table");
+
+  assert!(page_count(&pdf) > 1, "the table did not paginate");
+  assert_eq!(
+    pdf, expected,
+    "the counter took the page the header last repeats on"
   );
 }
 
@@ -2048,10 +2171,9 @@ fn svg_singular_gradient_transform() {
   });
 }
 
-/// Filters rasterize, luminance masks become soft masks, and pattern fills
-/// become tiling patterns.
+/// SVG filters drop out, luminance masks become soft masks, and patterns become tiling patterns.
 #[test]
-fn svg_fallback_and_masks() {
+fn svg_filters_masks_and_patterns() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
   <defs>
     <filter id="b"><feGaussianBlur stdDeviation="1"/></filter>
@@ -2066,7 +2188,7 @@ fn svg_fallback_and_masks() {
   <rect x="18" y="4" width="12" height="16" fill="#33a" mask="url(#m)"/>
   <rect x="34" y="4" width="12" height="16" fill="url(#p)"/>
 </svg>"##;
-  let pdf = run_pdf_fixture("svg-fallback-and-masks", |fonts| {
+  let pdf = run_pdf_fixture("svg-filters-masks-and-patterns", |fonts| {
     let image = Node::image(ImageData {
       src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
       width: Some(48.0),
@@ -2088,13 +2210,176 @@ fn svg_fallback_and_masks() {
   let text = String::from_utf8_lossy(&pdf);
 
   assert!(
-    text.contains("/Subtype/Image"),
-    "filtered subtree should rasterize"
+    !text.contains("/Subtype/Image"),
+    "filtered subtree should not rasterize"
   );
   assert!(text.contains("/SMask"), "mask lost its soft mask");
   assert!(
     text.contains("/PatternType 1"),
     "pattern fill lost its tiling pattern"
+  );
+}
+
+fn svg_image_node(svg: &str, width: f32, height: f32) -> Node {
+  Node::image(ImageData {
+    src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+    width: Some(width),
+    height: Some(height),
+  })
+}
+
+fn data_url(mime: &str, bytes: &[u8]) -> String {
+  format!("data:{mime};base64,{}", BASE64_STANDARD.encode(bytes))
+}
+
+fn read_asset(name: &str) -> Vec<u8> {
+  fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/images")
+      .join(name),
+  )
+  .expect("read asset image")
+}
+
+/// A PNG inside an SVG embeds as an image XObject, not a rasterized group.
+#[test]
+fn svg_embedded_png() {
+  let svg = format!(
+    r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 48 24" width="48" height="24">
+  <defs><clipPath id="c"><circle cx="12" cy="12" r="10"/></clipPath></defs>
+  <image x="2" y="2" width="20" height="20" clip-path="url(#c)" xlink:href="{}"/>
+  <image x="26" y="2" width="20" height="20" transform="rotate(8 36 12)" opacity="0.6" xlink:href="{}"/>
+</svg>"##,
+    data_url("image/png", &read_asset("yeecord.png")),
+    data_url("image/png", &read_asset("yeecord.png")),
+  );
+  let pdf = run_pdf_fixture("svg-embedded-png", |fonts| {
+    PdfOptions::builder()
+      .node(Node::container(vec![svg_image_node(&svg, 96.0, 48.0)]))
+      .viewport(Viewport::new((120, 60)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    text.contains("/Subtype/Image"),
+    "embedded bitmap was dropped"
+  );
+  assert!(
+    text.contains("/Filter/FlateDecode"),
+    "bitmap lost its stream"
+  );
+}
+
+/// A JPEG inside an SVG passes through to the PDF undecoded.
+#[test]
+fn svg_embedded_jpeg_passes_through() {
+  let svg = format!(
+    r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
+  <image x="0" y="0" width="48" height="24" href="{}"/>
+</svg>"##,
+    data_url(
+      "image/jpeg",
+      &read_asset("luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg")
+    ),
+  );
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(Node::container(vec![svg_image_node(&svg, 96.0, 48.0)]))
+      .viewport(Viewport::new((120, 60)))
+      .fonts(&fonts())
+      .build(),
+  );
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(text.contains("DCTDecode"), "jpeg was re-encoded");
+}
+
+/// A color-matrix `filter` on an SVG image recolors its paints and bitmaps without rasterizing.
+#[test]
+fn svg_with_color_filter() {
+  let svg = format!(
+    r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ff0044"/><stop offset="1" stop-color="#0044ff"/>
+  </linearGradient></defs>
+  <rect width="24" height="24" fill="url(#g)"/>
+  <rect x="26" width="10" height="10" fill="#e11d48"/>
+  <image x="38" y="0" width="10" height="10" href="{}"/>
+</svg>"##,
+    data_url("image/png", &read_asset("yeecord.png")),
+  );
+  let html = format!(
+    r##"<div style="padding: 8px;"><img src="{}" style="width: 96px; height: 48px; filter: grayscale(1);"></div>"##,
+    data_url("image/svg+xml", svg.as_bytes()),
+  );
+  let pdf = run_pdf_fixture("svg-with-color-filter", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse svg filter fixture"))
+      .viewport(Viewport::new((120, 70)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = inflated_text(&pdf);
+
+  assert!(text.contains("/Shading"), "gradient lost its shading");
+  assert!(
+    !text.contains("0.8824 0.1137 0.2824 rg"),
+    "the filtered fill kept its original color"
+  );
+}
+
+/// A CSS `filter` on an SVG image leaves the SVG's mask content as drawn.
+#[test]
+fn svg_color_filter_leaves_masks_alone() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs><mask id="m"><rect width="24" height="24" fill="#ffffff"/></mask></defs>
+  <rect width="24" height="24" fill="#e11d48" mask="url(#m)"/>
+</svg>"##;
+  let html = format!(
+    r##"<img src="{}" style="width: 48px; height: 48px; filter: invert(1);">"##,
+    data_url("image/svg+xml", svg.as_bytes()),
+  );
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse svg mask fixture"))
+      .viewport(Viewport::new((64, 64)))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render svg mask fixture");
+
+  assert!(
+    inflated_text(&pdf).contains("1 1 1 rg"),
+    "the filter inverted the mask"
+  );
+}
+
+/// An SVG `background-image` draws as ops like an `<img>` does.
+#[test]
+fn svg_background_image() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <circle cx="12" cy="12" r="10" fill="#16a34a"/>
+</svg>"##;
+  let pdf = run_pdf_fixture("svg-background-image", |fonts| {
+    let html = format!(
+      r##"<div style="width: 80px; height: 40px; background-image: url('{url}'); background-size: 100% 100%;"></div>
+      <div style="font-size: 28px; background-image: url('{url}'); background-clip: text; color: transparent;">Clip</div>"##,
+      url = data_url("image/svg+xml", svg.as_bytes()),
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse svg background fixture"))
+      .viewport(Viewport::new((100, 100)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    !text.contains("/Subtype/Image"),
+    "svg background should not rasterize"
   );
 }
 
@@ -2945,12 +3230,14 @@ fn text_shadow_and_stroke() {
     contains(b"/Pattern cs"),
     "expected a gradient fill on the clip-text glyphs"
   );
-  // An image layer has no paint of its own. Without a pattern carrying it, the
-  // layer is dropped and the transparent text comes out invisible, taking the
-  // embedded image with it.
+  // The SVG tile reaches the file as a fill under the glyph clip, not as an image.
   assert!(
-    find(&pdf, b"/Subtype /Image").is_some() || find(&pdf, b"/Subtype/Image").is_some(),
+    contains(b"0.0863 0.6392 0.2902 rg"),
     "the image layer left the clip-text glyphs with nothing to fill them"
+  );
+  assert!(
+    find(&pdf, b"/Subtype/Image").is_none() && find(&pdf, b"/Subtype /Image").is_none(),
+    "the SVG layer rasterized"
   );
   // A stroke colour keeps its alpha: the quarter-opaque outline reaches the
   // file as a stroking alpha, not as a solid line. The value is the alpha byte
@@ -3097,10 +3384,10 @@ fn paged_clone_decorations() {
   });
 }
 
-/// Transformed subtrees become unsplittable atoms: the rotated card near a cut
-/// moves whole to the next page; the skewed divider stays intact.
+/// A transformed box breaks across pages like any other, each fragment transformed about its own
+/// border box as Blink's `ComputeReferenceBox` takes it: the rotated card splits at the page end.
 #[test]
-fn paged_transform_atoms() {
+fn paged_transforms() {
   run_pdf_fixture("paged-transforms", |fonts| {
     let source = r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 10px;">
       <div style="height: 150px; background-color: #dbeafe;"></div>
@@ -4159,12 +4446,12 @@ fn a_programmatic_list_item_reads_its_marker_first() {
   );
 }
 
-/// A float's band is one atom: a page cut may not slice through it, so a
-/// float crossing the would-be cut pushes the cut past its bottom edge.
+/// A float breaks across pages as Blink's floats do: one that fits stays whole on its page, and a
+/// taller one goes on where the page ends.
 #[test]
-fn a_page_cut_does_not_slice_a_float() {
+fn a_float_breaks_only_when_it_does_not_fit_its_page() {
   let fonts = fonts();
-  let window = |height: u32| {
+  let float_heights = |height: u32| {
     let doc = format!(
       r#"<p style="font-size:16px;line-height:20px;margin:0;"><span style="float:right;width:40px;height:{height}px;background:#f00;"></span>one<br>two<br>three<br>four<br>five<br>six</p>"#
     );
@@ -4182,44 +4469,26 @@ fn a_page_cut_does_not_slice_a_float() {
     )
     .expect("render float doc");
 
-    first_page_window(&pdf)
+    page_fill_heights(&pdf)
   };
-  // 65px in page units; a float this tall spans the cut a short one permits.
-  let float_bottom = 65.0 * 0.75;
 
-  assert!(
-    window(10) < float_bottom,
-    "the short-float cut no longer lands where a tall float would sit"
-  );
-  assert!(
-    window(65) >= float_bottom,
-    "the page cut sliced through the float"
-  );
+  assert_eq!(float_heights(65), [65.0]);
+  assert_eq!(float_heights(120), [75.0, 45.0]);
 }
 
-/// The height of the first page's window clip: how much of the document the
-/// first page shows, i.e. where the first page cut landed.
-fn first_page_window(pdf: &[u8]) -> f32 {
-  let lines: Vec<Vec<u8>> = content_lines(pdf).collect();
-
-  for pair in lines.windows(2) {
-    if !pair[0].ends_with(b" re") || !pair[1].starts_with(b"W") {
-      continue;
-    }
-    // The clip line reads `x y width height re`: the height sits second from
-    // the end.
-    let text = String::from_utf8_lossy(&pair[0]);
-    let height = text
-      .split_whitespace()
-      .rev()
-      .nth(1)
-      .and_then(|token| token.parse::<f32>().ok());
-
-    if let Some(height) = height {
-      return height.abs();
-    }
-  }
-  panic!("no page window clip found");
+/// The height of the first rectangle inside the page clip on each page that draws one, in CSS
+/// pixels.
+fn page_fill_heights(pdf: &[u8]) -> Vec<f32> {
+  content_streams(pdf)
+    .iter()
+    .filter_map(|stream| {
+      stream
+        .split(|byte| *byte == b'\n')
+        .filter_map(|line| operands(line, "re"))
+        .skip(1)
+        .find_map(|operands| operands.get(3).map(|height| height.abs()))
+    })
+    .collect()
 }
 
 /// The report renders tagged under PDF/UA-1 and PDF/A-2a: heading structure,
@@ -4949,6 +5218,48 @@ fn measure_reports_content_width() {
   assert_eq!((at_viewport.width, at_viewport.height), (100.0, 100.0));
 }
 
+/// The node a render starts from is the document's root element, which CSS blockifies, so a
+/// container left `display: inline` still measures at its own width and height.
+#[test]
+fn measure_blockifies_the_root_node() {
+  let node = Node::container([text("Hello PDF", 16.0)]).with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(100.0))),
+  );
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((600, Some(300))))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("measure the inline root");
+
+  assert_eq!((size.width, size.height), (200.0, 100.0));
+}
+
+/// The root element's box establishes an independent formatting context, so a node holding only a
+/// float measures tall enough to enclose it.
+#[test]
+fn measure_encloses_a_float_in_the_root_node() {
+  let node = from_html(
+    r#"<div><div style="float: left; width: 50px; height: 80px"></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse node");
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((600, Some(300))))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("measure the floating content");
+
+  assert_eq!(size.height, 80.0);
+}
+
 /// Without a page, measurement uses the viewport; omitting both is an error.
 #[test]
 fn measure_viewport_and_missing_viewport() {
@@ -5081,14 +5392,9 @@ fn font_format_standards() {
   }
 }
 
-/// An inline box carries its own language, and the text around it goes back to
-/// the paragraph's when the box ends. Both sit on a path of their own: the box
-/// is tagged where the inline run places it, not where a block would be, and
-/// the owner reopens after it.
-///
-/// The box's own subtree is a separate matter. It renders through a nested
-/// emitter that tags nothing at all, so the Hindi word inside it reaches the
-/// page unmarked.
+/// An inline box carries its own language, and the text around it keeps the
+/// paragraph's. The box paints as a box of the page's own scene, so its text is
+/// tagged in its own language too.
 #[test]
 fn inline_box_language() {
   let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
@@ -5120,8 +5426,8 @@ fn inline_box_language() {
   let haystack = inflated_text(&pdf);
 
   assert!(
-    haystack.matches("/Lang(ar)").count() >= 2,
-    "the paragraph's language stops at the inline box instead of resuming after it"
+    haystack.contains("/Lang(ar)"),
+    "the paragraph's text does not carry its language"
   );
   assert!(
     haystack.contains("/Lang(hi)"),
@@ -6494,4 +6800,216 @@ fn synthesized_italic_leans_right_about_the_baseline() {
   }
 
   assert_eq!(sheared, 2, "expected one sheared run per paragraph");
+}
+
+/// 320x240 pages with 24px margins, so a few lines fill one.
+const STREAM_PAGE: PageOptions = PageOptions {
+  width: 320.0,
+  height: 240.0,
+  margin: PageMargins::uniform(24.0),
+};
+
+fn stream_options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+  PdfOptions::builder()
+    .node(from_html(source, FromHtmlOptions::default()).expect("parse the streaming fixture"))
+    .page(STREAM_PAGE)
+    .fonts(fonts)
+    .build()
+}
+
+/// A section on a page of its own, with a heading and a few lines.
+fn stream_section(id: &str, title: &str, lines: usize) -> String {
+  let body: String = (1..=lines)
+    .map(|line| format!("<div>{title}, line {line}</div>"))
+    .collect();
+
+  format!(
+    r#"<div id="{id}" style="display: flex; flex-direction: column; break-before: page;"><h2 style="font-size: 18px; margin: 0;">{title}</h2>{body}</div>"#
+  )
+}
+
+fn stream_document(head: &str, sections: &[(&str, &str, usize)], tail: &str) -> String {
+  let sections: String = sections
+    .iter()
+    .map(|&(id, title, lines)| stream_section(id, title, lines))
+    .collect();
+
+  format!(
+    r#"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">{head}{sections}{tail}</div>"#
+  )
+}
+
+/// A link on the first page names a section on the fourth, and a link to a missing id loses its
+/// annotation.
+#[test]
+fn stream_forward_link() {
+  let source = stream_document(
+    r##"<a href="#last" style="display: flex;">Jump to the last section</a>
+      <a href="#missing" style="display: flex;">Nowhere</a>
+      <h1 id="first" style="font-size: 22px; margin: 0;">First</h1>"##,
+    &[
+      ("middle", "Middle", 4),
+      ("later", "Later", 4),
+      ("last", "Last", 4),
+    ],
+    r##"<a href="#first" style="display: flex;">Back to the top</a>"##,
+  );
+
+  let pdf = run_pdf_fixture("stream-forward-link", |fonts| {
+    let mut options = stream_options(&source, fonts);
+
+    options.outline = true;
+    options
+  });
+
+  assert_eq!(page_count(&pdf), 4);
+  assert_eq!(
+    String::from_utf8_lossy(&pdf)
+      .matches("/Subtype/Link")
+      .count(),
+    2,
+    "the link to a missing id is dropped"
+  );
+}
+
+/// A header and a repeated fixed box read the page count, and the header is taller than the margin.
+#[test]
+fn stream_total_pages_band() {
+  let source = stream_document(
+    r#"<div class="fixed-count" style="position: fixed; right: 4px; bottom: 4px; font-size: 10px;">of <span class="totalPages"></span></div>"#,
+    &[("a", "Alpha", 6), ("b", "Beta", 6), ("c", "Gamma", 6)],
+    "",
+  );
+
+  let pdf = run_pdf_fixture("stream-total-pages-band", |fonts| {
+    let mut options = stream_options(&source, fonts);
+
+    options.page = Some(PageOptions {
+      margin: PageMargins {
+        top: PageMargin::Auto,
+        ..PageMargins::uniform(24.0)
+      },
+      ..STREAM_PAGE
+    });
+    options.header = Some(
+      from_html(
+        r#"<div style="font-size: 30px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+        FromHtmlOptions::default(),
+      )
+      .expect("parse the header"),
+    );
+    options
+  });
+
+  assert!(page_count(&pdf) >= 3);
+}
+
+/// Page, total and target counters in the content, read after a pass of layout.
+#[test]
+fn stream_content_counters() {
+  let source = stream_document(
+    r##"<a href="#c" style="display: flex; column-gap: 4px;">Chapter <span class="targetPageNumber"></span></a>
+      <div>This report has <span class="totalPages"></span> pages, and this is page <span class="pageNumber"></span>.</div>"##,
+    &[("a", "Alpha", 5), ("b", "Beta", 5), ("c", "Gamma", 5)],
+    r#"<div>End of page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+  );
+
+  let pdf = run_pdf_fixture("stream-content-counters", |fonts| {
+    stream_options(&source, fonts)
+  });
+
+  assert_eq!(page_count(&pdf), 4);
+}
+
+/// Pages 1, 3 and 5 of five are kept, and the outline still reads the dropped pages' headings.
+#[test]
+fn stream_page_ranges_drop_middle_pages() {
+  let source = stream_document(
+    r#"<h1 id="top" style="font-size: 22px; margin: 0;">Report</h1>"#,
+    &[
+      ("b", "Beta", 4),
+      ("c", "Gamma", 4),
+      ("d", "Delta", 4),
+      ("e", "Epsilon", 4),
+    ],
+    "",
+  );
+
+  let pdf = run_pdf_fixture("stream-page-ranges-middle", |fonts| {
+    let mut options = stream_options(&source, fonts);
+
+    options.outline = true;
+    options.page_ranges = Some(vec![
+      PageRange::single(1),
+      PageRange::single(3),
+      PageRange::single(5),
+    ]);
+    options
+  });
+
+  assert_eq!(page_count(&pdf), 3);
+}
+
+/// A tagged document with an outline and links out of the document over several pages.
+#[test]
+fn stream_tagged_outline() {
+  let source = stream_document(
+    r##"<h1 style="font-size: 22px; margin: 0;">Report</h1>
+      <a href="https://example.com/report" style="display: flex;">Online</a>
+      <a href="mailto:report@example.com" style="display: flex;">Write to us</a>"##,
+    &[("one", "One", 6), ("two", "Two", 6), ("three", "Three", 6)],
+    r#"<a href="https://example.com/end" style="display: flex;">The end</a>"#,
+  );
+
+  let pdf = run_pdf_fixture("stream-tagged-outline", |fonts| {
+    let mut options = stream_options(&source, fonts);
+
+    options.outline = true;
+    options.tagged = Tagging::On;
+    options
+  });
+
+  assert!(String::from_utf8_lossy(&pdf).contains("/StructTreeRoot"));
+}
+
+/// A box on the fourth page with a transform paints on the first, three pages back.
+#[test]
+fn stream_transform_paints_three_pages_back() {
+  let source = stream_document(
+    "",
+    &[
+      ("a", "Alpha", 3),
+      ("b", "Beta", 3),
+      ("c", "Gamma", 3),
+      ("d", "Delta", 3),
+    ],
+    "",
+  )
+  .replace(
+    "Delta, line 3</div>",
+    r#"Delta, line 3</div><div style="width: 120px; height: 30px; background-color: rgb(200, 40, 40); transform: translateY(-576px);"></div>"#,
+  );
+
+  let pdf = run_pdf_fixture("stream-transform-three-pages-back", |fonts| {
+    stream_options(&source, fonts)
+  });
+
+  assert_eq!(page_count(&pdf), 4);
+}
+
+/// A `position: relative` root with a `bottom: 0` child, held back to its last fragment.
+#[test]
+fn stream_relative_body_with_bottom_child() {
+  let source = format!(
+    r#"<div style="position: relative; display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">{}<div style="position: absolute; bottom: 0; left: 0; height: 24px; width: 160px; background-color: rgb(40, 120, 200);">Watermark</div></div>"#,
+    (1..=40)
+      .map(|line| format!("<div>Line {line}</div>"))
+      .collect::<String>()
+  );
+
+  let pdf = run_pdf_fixture("stream-relative-body-bottom", |fonts| {
+    stream_options(&source, fonts)
+  });
+
+  assert!(page_count(&pdf) >= 3);
 }

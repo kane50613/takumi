@@ -521,6 +521,14 @@ impl BoxStrut {
     left: LayoutUnit::ZERO,
   };
 
+  pub(crate) fn horizontal_sum(self) -> LayoutUnit {
+    self.left + self.right
+  }
+
+  pub(crate) fn vertical_sum(self) -> LayoutUnit {
+    self.top + self.bottom
+  }
+
   /// Whether every side is zero.
   pub fn is_zero(self) -> bool {
     self == Self::default()
@@ -531,6 +539,17 @@ impl BoxStrut {
     UnitOffset {
       left: self.left,
       top: self.top,
+    }
+  }
+}
+
+impl From<Rect<LayoutUnit>> for BoxStrut {
+  fn from(rect: Rect<LayoutUnit>) -> Self {
+    Self {
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left,
     }
   }
 }

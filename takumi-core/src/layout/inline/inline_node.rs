@@ -1,6 +1,6 @@
 //! Blink's [`InlineNode`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_node.cc).
 
-use std::{cell::RefCell, ptr, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use icu_properties::props::Script;
 
@@ -60,7 +60,7 @@ impl<'c> Frame<'c> {
     Self::with_children(node, parent, is_inline, true)
   }
 
-  /// The frame of the context's block, whose children taffy lays out when one is block-level.
+  /// The frame of the context's block, whose block-level children the block algorithm lays out.
   fn root(block: &'c RenderNode) -> Self {
     let has_inline_children = block.force_inline_layout
       || block
@@ -78,12 +78,12 @@ impl<'c> Frame<'c> {
     is_inline: bool,
     has_inline_children: bool,
   ) -> Self {
-    let mut children: Vec<Child<'c>> = node.marker.as_deref().map(Child::Box).into_iter().collect();
+    let mut children: Vec<Child<'c>> = node.marker().map(Child::Box).into_iter().collect();
 
     children.push(Child::OwnText);
 
     if has_inline_children {
-      children.extend(node.children.iter().flatten().map(Child::Box));
+      children.extend(node.children_after_marker().iter().map(Child::Box));
     }
 
     children.reverse();
@@ -110,9 +110,8 @@ impl<'c> Frame<'c> {
 }
 
 /// The shape results a block's inline items took, which a later preparation of the same items
-/// takes instead of shaping again: an atomic inline is laid out at several available widths,
-/// each in a layout tree of its own. Kept from the second preparation on, so a block prepared
-/// once allocates nothing.
+/// takes instead of shaping again, as each layout tree holding the block prepares them. Kept from
+/// the second preparation on, so a block prepared once allocates nothing.
 #[derive(Default)]
 pub(crate) struct ItemShapes(RefCell<KeptShapes>);
 
@@ -640,7 +639,7 @@ fn should_break_shaping_before_text(
     .map(|object| &object.node().context);
 
   if let Some(context) = context
-    && !start_context.is_some_and(|start_context| ptr::eq(context, start_context))
+    && !start_context.is_some_and(|start_context| context.box_id() == start_context.box_id())
   {
     let font = fonts.get(context);
 
@@ -715,7 +714,7 @@ impl RenderNode {
   }
 
   /// Blink's `IsLayoutOutsideListMarker`.
-  fn is_outside_list_marker(&self) -> bool {
+  pub(crate) fn is_outside_list_marker(&self) -> bool {
     self.origin == NodeOrigin::Marker
       && self.context.style.inherited_data.list_style_position == ListStylePosition::Outside
   }
@@ -1147,7 +1146,7 @@ mod tests {
     let list = Node::container([Node::text("a").with_class_name("item")]).with_class_name("list");
     let tree = render_tree(list, "");
     let item = &tree.children.as_deref().expect("children")[0];
-    let marker = item.marker.as_deref().expect("marker");
+    let marker = item.marker().expect("marker");
     let data = InlineNode::new(marker).collect_inlines();
 
     assert_eq!(data.text_content, "\u{2022}");
@@ -1442,7 +1441,7 @@ mod tests {
         &format!(".list {{ list-style: inside {list_style_type}; font: 16px Geist }}"),
       );
       let item = &tree.children.as_deref().expect("children")[0];
-      let marker = item.marker.as_deref().expect("marker");
+      let marker = item.marker().expect("marker");
       let content = &marker.children.as_deref().expect("marker content")[0];
 
       SymbolMarker::of(&content.context).expect("a symbol marker")

@@ -1,6 +1,6 @@
 [package]
 name = "takumi-core"
-version = "0.32.0"
+version = "0.33.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Backend-agnostic layout, style, and resource core for takumi."
@@ -24,7 +24,6 @@ skrifa.workspace = true
 xxhash-rust.workspace = true
 quick_cache.workspace = true
 smallvec.workspace = true
-taffy.workspace = true
 bitflags.workspace = true
 cssparser.workspace = true
 kurbo.workspace = true
@@ -83,23 +82,6 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.svgtypes]
-workspace = true
-optional = true
-
-[dependencies.siphasher]
-workspace = true
-optional = true
-
-[dependencies.strict-num]
-workspace = true
-optional = true
-
-
-[dependencies.tiny-skia-path]
-workspace = true
-optional = true
-
 [dependencies.harfrust]
 workspace = true
 
@@ -123,19 +105,24 @@ workspace = true
 optional = true
 
 [features]
-default = ["woff2", "woff", "svg", "image-decoding"]
+default = ["woff2", "woff", "svg-raster", "image-decoding"]
 image-decoding = ["png", "jpeg", "webp", "gif"]
 png = ["dep:png"]
 jpeg = ["dep:zune-jpeg", "dep:zune-core"]
 webp = ["dep:image-webp", "dep:libwebp-sys"]
 gif = ["dep:gif"]
-svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
-svg = ["svg-sizing", "dep:siphasher", "dep:strict-num", "dep:tiny-skia-path"]
+svg-sizing = ["dep:roxmltree"]
+svg = ["svg-sizing"]
+# Rasterizing an SVG: the filter pipeline and `SvgSource::rasterize_cached`. A backend that does not rasterize goes without.
+svg-raster = ["svg"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
 rayon = ["dep:rayon"]
 # The paint tree: what the backends paint, as data. Off by default; `takumi-paint` turns it on.
 paint-tree = []
+# Blink's block fragmentation, which lays content out across pages. Off by default; `takumi-pdf`
+# turns it on.
+fragmentation = []
 
 [dev-dependencies]
 serde_json.workspace = true

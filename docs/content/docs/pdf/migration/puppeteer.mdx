@@ -1,0 +1,113 @@
+---
+title: From Puppeteer
+description: Move a Puppeteer PDF script to takumi-pdf by mapping each page.pdf() option, fetching images yourself, and checking for browser-only features.
+---
+
+Start with the HTML you pass to `page.setContent()`. Pass the same string to `render()`, and translate the `page.pdf()` options with the [option map](#option-map). Headers and footers use the same `pageNumber` and `totalPages` class hooks.
+
+<Callout type="warn">
+  Takumi does not load a page or run its scripts. Generate dynamic content and fetch document images
+  before you render.
+</Callout>
+
+## Before and after
+
+```ts title="Before: Puppeteer"
+// Puppeteer
+const browser = await puppeteer.launch();
+const page = await browser.newPage();
+await page.setContent(html, { waitUntil: "networkidle0" });
+
+const pdf = await page.pdf({
+  format: "A4",
+  margin: { top: "48px", bottom: "64px", left: "48px", right: "48px" },
+  displayHeaderFooter: true,
+  footerTemplate: `<div style="font-size:10px;width:100%;text-align:center">
+    Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+  </div>`,
+  printBackground: true,
+});
+
+await browser.close();
+```
+
+```tsx twoslash title="After: takumi-pdf"
+declare const html: string;
+// ---cut---
+// takumi-pdf
+import { googleFonts } from "@takumi-rs/helpers";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
+
+const pdf = await render(html, {
+  size: "a4",
+  margin: { top: 48, bottom: 64, left: 48, right: 48 },
+  footer: (
+    <div tw="flex w-full justify-center text-[10px]">
+      Page <PageNumber /> of <TotalPages />
+    </div>
+  ),
+  fonts: await googleFonts(["Inter"]),
+});
+```
+
+`render()` parses HTML strings, including `<style>` tags. It also takes JSX and node trees, and so do `header` and `footer`.
+
+## Option map
+
+| `page.pdf()`                             | `takumi-pdf`                               |
+| ---------------------------------------- | ------------------------------------------ |
+| `format: "A4"`                           | `size: "a4"`                               |
+| `width`, `height`                        | `size: { width, height }`                  |
+| `landscape`                              | `landscape`                                |
+| `margin`                                 | `margin`, in CSS px                        |
+| `displayHeaderFooter` + `headerTemplate` | `header`                                   |
+| `footerTemplate`                         | `footer`                                   |
+| `pageNumber`, `totalPages` classes       | the same classes                           |
+| `date`, `title`, `url` classes           | interpolate the value yourself             |
+| `tagged` (default on)                    | `tagged` (default on)                      |
+| `outline`                                | `outline`                                  |
+| `printBackground`                        | always on                                  |
+| `path`                                   | write the returned `Uint8Array`            |
+| `timeout`, `waitForFonts`                | not needed, since there is no page to load |
+| `scale`                                  | not supported, so scale the CSS instead    |
+| `pageRanges`                             | `pageRanges: [1, { from: 4, to: 8 }]`      |
+| `preferCSSPageSize`, `@page`             | not supported, so set `size` and `margin`  |
+| `omitBackground`                         | not supported                              |
+
+Margins take numbers in CSS px, not length strings. For Chromium's `"0.5in"`, pass `48`.
+
+## Fetching moves to your code
+
+Takumi does not fetch images for you. Use `prepareImages()` to fetch document images before rendering. Parse the HTML first, so the helper can find its image references:
+
+```tsx twoslash title="Pass fetched image bytes"
+declare const html: string;
+// ---cut---
+import { prepareImages } from "@takumi-rs/helpers";
+import { fromHtml } from "@takumi-rs/helpers/html";
+import { render } from "takumi-pdf";
+
+const { node, css } = fromHtml(html);
+// [!code highlight]
+const images = await prepareImages({ node });
+
+const pdf = await render(node, { images, css }); // [!code highlight]
+```
+
+`prepareImages()` walks the tree and fetches every remote `http` or `https` URL in `<img src>`, `background-image`, `mask-image`, and `list-style-image`. It returns the entries for `images`.
+
+- It reads inline styles and `tw` classes. URLs inside `<style>` rules are not collected, so pass those images through `images` yourself.
+- It takes `timeout`, `maxBytes`, an `allowUrl` predicate, and a `fetchCache` that reuses bytes across renders.
+
+Fonts come from the `fonts` option, not from CSS `@font-face` rules. See [Fonts & images](/docs/pdf/assets). Font URL loaders and `googleFonts()` make their own requests, so give them their own fetch limits.
+
+## Known gaps
+
+Takumi supports a subset of browser CSS. Check these differences before you replace Puppeteer.
+
+- Scripts do not run, so charts and diagrams have to arrive as markup, SVG, or images. A client-side chart library does not work.
+- PDF output rejects `filter: blur()` and `drop-shadow()`, and does not draw `backdrop-filter`. Blurred `box-shadow` and `text-shadow` are approximated with bands. Grid, flexbox, transforms, gradients, masks, and clip paths all work.
+- `@page` is not supported, so page geometry comes from the options.
+
+Keep Puppeteer to reproduce a live web page as a browser shows it. Use `takumi-pdf` for documents written for print. See [Comparison](/docs/pdf/comparison) for measured numbers.

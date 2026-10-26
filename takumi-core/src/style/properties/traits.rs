@@ -23,6 +23,13 @@ pub(crate) enum ValueError<'i> {
   },
 }
 
+impl<'i> ValueError<'i> {
+  /// The parse error that says `message`.
+  pub(crate) fn invalid(message: &'static str) -> CssParseError<Self> {
+    CssParseError::custom(Self::Message(Cow::Borrowed(message)))
+  }
+}
+
 impl fmt::Display for ValueError<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
@@ -444,25 +451,37 @@ fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>>(
       ))
     }
     ListInterpolationStrategy::RepeatToLcm => {
-      if from.is_empty() || to.is_empty() {
-        return None;
-      }
-
-      let output_len = lcm(from.len(), to.len()).min(MAX_INTERPOLATED_LIST_LEN);
-
-      Some(interpolate_pairwise_list(
-        from,
-        to,
-        output_len,
-        progress,
-        sizing,
-        current_color,
-      ))
+      interpolate_repeated_list(from, to, progress, sizing, current_color)
     }
     ListInterpolationStrategy::PadToLongestWithNeutral => {
       interpolate_neutral_padded_list(from, to, progress, sizing, current_color)
     }
   }
+}
+
+/// The lists repeated to their least common multiple and interpolated item by item, none when
+/// either is empty.
+pub(crate) fn interpolate_repeated_list<T: Animatable + Clone>(
+  from: &[T],
+  to: &[T],
+  progress: f32,
+  sizing: &SizingContext,
+  current_color: Color,
+) -> Option<Vec<T>> {
+  if from.is_empty() || to.is_empty() {
+    return None;
+  }
+
+  let output_len = lcm(from.len(), to.len()).min(MAX_INTERPOLATED_LIST_LEN);
+
+  Some(interpolate_pairwise_list(
+    from,
+    to,
+    output_len,
+    progress,
+    sizing,
+    current_color,
+  ))
 }
 
 fn interpolate_pairwise_list<T: Animatable + Clone>(
@@ -663,21 +682,6 @@ impl ToCss for Arc<str> {
   }
 }
 
-/// Macro to implement a `pub(crate)` conversion method into a foreign (taffy) enum.
-macro_rules! impl_from_taffy_enum {
-  ($from_ty:ty, $method:ident -> $to_ty:ty, $($variant:ident),*) => {
-    impl $from_ty {
-      pub(crate) fn $method(self) -> $to_ty {
-        match self {
-          $(<$from_ty>::$variant => <$to_ty>::$variant,)*
-        }
-      }
-    }
-  };
-}
-
-pub(crate) use impl_from_taffy_enum;
-
 /// Implements `FromCss` for a `Box<[$elem]>` list as a comma-separated list of `$elem`.
 macro_rules! impl_comma_list_from_css {
   ($list:ty, $elem:ty) => {
@@ -810,7 +814,7 @@ pub(crate) use impl_css_enum;
 macro_rules! declare_box_alignment_enum_impl {
   (
     $enum_type:ty,
-    safe { $($safe_css:literal => $base_variant:ident / $safe_variant:ident),+ $(,)? },
+    safe { $($safe_css:literal => $base_variant:ident / $safe_variant:ident $(/ $unsafe_variant:ident)?),+ $(,)? },
     plain { $($plain_css:literal => $plain_variant:ident),* $(,)? }
   ) => {
     impl crate::style::MakeComputed for $enum_type {}
@@ -839,7 +843,11 @@ macro_rules! declare_box_alignment_enum_impl {
                 return Err($crate::style::unexpected_token!(token));
               }
             },
-            $($safe_css => return Ok(if overflow_position.unwrap_or(false) { Self::$safe_variant } else { Self::$base_variant }),)*
+            $($safe_css => return Ok(match overflow_position {
+              Some(true) => Self::$safe_variant,
+              $(Some(false) => Self::$unsafe_variant,)?
+              _ => Self::$base_variant,
+            }),)*
             $($plain_css => return if overflow_position.unwrap_or(false) {
               Err($crate::style::unexpected_token!(token))
             } else {
@@ -860,6 +868,10 @@ macro_rules! declare_box_alignment_enum_impl {
             dest.write_str("safe ")?;
             dest.write_str($safe_css)
           })*
+          $($(Self::$unsafe_variant => {
+            dest.write_str("unsafe ")?;
+            dest.write_str($safe_css)
+          })?)*
         }
       }
     }

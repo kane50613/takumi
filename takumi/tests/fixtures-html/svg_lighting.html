@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_lighting</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 600px; height: 240px">
+    <svg width="600" height="240" style="display: block; background: white">
+      <defs>
+        <filter id="distant">
+          <feGaussianBlur stdDeviation="3" />
+          <feDiffuseLighting surfaceScale="4" lighting-color="rgb(254, 240, 138)">
+            <feDistantLight azimuth="225" elevation="40" />
+          </feDiffuseLighting>
+        </filter>
+        <filter id="point">
+          <feGaussianBlur stdDeviation="2" />
+          <feDiffuseLighting surfaceScale="6" diffuseConstant="1.3">
+            <fePointLight x="200" y="30" z="60" />
+          </feDiffuseLighting>
+        </filter>
+        <filter id="spot">
+          <feGaussianBlur stdDeviation="2" />
+          <feSpecularLighting
+            surfaceScale="5"
+            specularConstant="1.2"
+            specularExponent="12"
+            lighting-color="rgb(147, 197, 253)"
+          >
+            <feSpotLight
+              x="300"
+              y="20"
+              z="120"
+              pointsAtX="340"
+              pointsAtY="80"
+              limitingConeAngle="30"
+              specularExponent="3"
+            />
+          </feSpecularLighting>
+        </filter>
+        <filter id="shine">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="bump" />
+          <feSpecularLighting in="bump" surfaceScale="3" specularExponent="30" result="light">
+            <fePointLight x="40" y="20" z="80" />
+          </feSpecularLighting>
+          <feComposite in="light" in2="SourceAlpha" operator="in" result="lit" />
+          <feComposite in="SourceGraphic" in2="lit" operator="arithmetic" k2="1" k3="1" />
+        </filter>
+      </defs>
+      <circle cx="70" cy="70" r="50" fill="black" filter="url(#distant)" />
+      <rect x="150" y="20" width="100" height="100" rx="20" filter="url(#point)" />
+      <path d="M290 30h100v100h-100z M310 50h60v60h-60z" fill-rule="evenodd" filter="url(#spot)" />
+      <g transform="translate(420 20) scale(1.5)">
+        <rect
+          x="0"
+          y="0"
+          width="100"
+          height="60"
+          rx="14"
+          fill="rgb(220, 38, 38)"
+          filter="url(#shine)"
+        />
+      </g>
+      <path
+        d="M20 160h40v20h-20v40h-20z M80 160h60l-30 60z"
+        fill="rgb(22, 163, 74)"
+        filter="url(#shine)"
+      />
+    </svg>
+  </body>
+</html>

@@ -320,8 +320,7 @@ fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
   assert!(fit.children[0].height > no_fit.children[0].height);
 }
 
-/// taffy subtracts the content-box inset without a floor, so the available
-/// width reaching the text can be negative.
+/// Padding wider than the box leaves the text a negative available width.
 #[test]
 fn test_measure_padding_wider_than_the_box_does_not_panic() {
   let node = Node::from_html(
@@ -334,8 +333,7 @@ fn test_measure_padding_wider_than_the_box_does_not_panic() {
   assert_close(out.width, 40.0);
 }
 
-/// taffy hands the measure function a border-box width whatever `box-sizing`
-/// says, so a content-box box used to wrap against its border-box width.
+/// A content-box box once wrapped its text against its border-box width.
 #[test]
 fn test_measure_content_box_wraps_inside_its_padding() {
   let text = "aa bb cc dd ee ff gg hh";
@@ -1316,13 +1314,13 @@ fn test_measure_inline_atomic_containers_fixture() {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(display))
-        .with_padding(Sides([Px(8.0); 4]))
+        .padding(Sides([Px(8.0); 4]))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           bg_color,
         )))
-        .with_border_width(Sides([Px(5.0).into(); 4]))
-        .with_border_style(Sides([BorderStyle::Solid; 4]))
-        .with_border_color(Sides([ColorInput::Value(border_color); 4])),
+        .border_width(Sides([Px(5.0).into(); 4]))
+        .border_style(Sides([BorderStyle::Solid; 4]))
+        .border_color(Sides([ColorInput::Value(border_color); 4])),
     )
   };
 
@@ -1357,9 +1355,9 @@ fn test_measure_inline_atomic_containers_fixture() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with_border_width(Sides([Px(6.0).into(); 4]))
-      .with_border_style(Sides([BorderStyle::Solid; 4]))
-      .with_border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
+      .border_width(Sides([Px(6.0).into(); 4]))
+      .border_style(Sides([BorderStyle::Solid; 4]))
+      .border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
   )])
   .with_style(
     Style::default()
@@ -1371,7 +1369,7 @@ fn test_measure_inline_atomic_containers_fixture() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       )))
-      .with_white_space(WhiteSpace::pre()),
+      .white_space(WhiteSpace::pre()),
   );
 
   let result = measure(node, create_test_viewport());
@@ -1399,9 +1397,7 @@ fn test_measure_auto_sized_replaced_element_keeps_its_natural_size() {
   let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACWCAYAAACb3McZAAAAHUlEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAB4DSMgAAGIL7gAAAAAAElFTkSuQmCC";
 
   // css 2.1 10.3.2 gives a replaced element with no `width` or `height` its natural size,
-  // which Chrome measures as 200x150 here. A block-level box still stretches instead: taffy
-  // stretches every auto-width block child to its container and reads the width off the
-  // style rather than off the measure, so takumi cannot state the exception yet.
+  // which Chrome measures as 200x150 here.
   let html = format!(
     r#"<div style="display:block;width:600px"><img style="display:inline" src="{png}"></div>"#
   );
@@ -1529,9 +1525,9 @@ fn test_measure_inline_image_uses_replaced_baseline_fallback() {
         .with(StyleDeclaration::box_sizing(BoxSizing::ContentBox))
         .with(StyleDeclaration::width(Px(20.0)))
         .with(StyleDeclaration::height(Px(20.0)))
-        .with_padding(Sides([Px(4.0); 4]))
-        .with_border_width(Sides([Px(2.0).into(); 4]))
-        .with_border_style(Sides([BorderStyle::Solid; 4])),
+        .padding(Sides([Px(4.0); 4]))
+        .border_width(Sides([Px(2.0).into(); 4]))
+        .border_style(Sides([BorderStyle::Solid; 4])),
     ),
     Node::text("world".to_string())
       .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
@@ -1564,8 +1560,8 @@ fn test_measure_inline_image_respects_box_sizing_with_border() {
       .with(StyleDeclaration::box_sizing(box_sizing))
       .with(StyleDeclaration::width(Px(20.0)))
       .with(StyleDeclaration::height(Px(20.0)))
-      .with_border_width(Sides([Px(2.0).into(); 4]))
-      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .border_width(Sides([Px(2.0).into(); 4]))
+      .border_style(Sides([BorderStyle::Solid; 4]))
   };
 
   let build = |box_sizing| {
@@ -1595,7 +1591,7 @@ fn test_measure_inline_image_border_box_single_axis_preserves_aspect_ratio() {
       .with(StyleDeclaration::display(Display::Inline))
       .with(StyleDeclaration::box_sizing(BoxSizing::BorderBox))
       .with(StyleDeclaration::width(Px(48.0)))
-      .with_padding_inline(SpacePair::from_single(Px(4.0))),
+      .padding_inline(SpacePair::from_single(Px(4.0))),
   )])
   .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
 
@@ -1803,7 +1799,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::position(Position::Absolute))
-        .with_inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
+        .inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
         .with(StyleDeclaration::display(Display::Flex)),
     )])
   .with_style(
@@ -1843,7 +1839,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::position(Position::Absolute))
-      .with_inset(Sides([Auto, Px(60.0), Px(60.0), Auto]))
+      .inset(Sides([Auto, Px(60.0), Px(60.0), Auto]))
       .with(StyleDeclaration::display(Display::Flex)),
   )])
   .with_style(
@@ -1855,7 +1851,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with_padding(Sides([Px(60.0); 4])),
+      .padding(Sides([Px(60.0); 4])),
   );
 
   let result = measure(node, create_test_viewport());
@@ -2492,8 +2488,7 @@ fn test_measure_replaced_element_reads_its_insets_the_way_box_sizing_states_them
 
   // A 200x150 picture with 20px of padding and a 5px border, in a 600px container. Chrome
   // measures the border box of each of these, and the box type never changes the answer.
-  // An auto width is left to the inline cases: a block-level box stretches to its
-  // container before any of this applies, which taffy decides and takumi cannot override.
+  // An auto width is left to the inline cases.
   for (width, sizing, displays, expected) in [
     ("", "content-box", &["inline"][..], (250.0, 200.0)),
     ("", "border-box", &["inline"][..], (250.0, 200.0)),
@@ -2620,21 +2615,33 @@ fn run_tops(node: &MeasuredNode) -> Vec<(String, f32)> {
 }
 
 /// Blink moves each baseline-aligned cell's content down to the deepest first baseline in its row,
-/// whether a cell's padding or a border it collapsed to pushed that baseline down.
+/// whether a cell's padding or a border it collapsed to pushed that baseline down. A run starts at
+/// its cell's content box, which sits `content_tops` below the cell's border box: the padding, or
+/// the half of a collapsed border inside the cell.
 #[test]
 fn test_table_baseline_cells_share_their_rows_baseline() {
-  for table in [
-    r#"<table style="border-spacing:0"><tr style="vertical-align:baseline"><td style="padding:10px 0 0">padded</td><td style="padding:0">flush</td></tr></table>"#,
-    r#"<table style="border-collapse:collapse"><tr style="vertical-align:baseline"><td style="padding:0; border-top:6px solid black">heavy</td><td style="padding:0; border-top:1px solid black">light</td></tr></table>"#,
+  for (table, content_tops) in [
+    (
+      r#"<table style="border-spacing:0"><tr style="vertical-align:baseline"><td style="padding:10px 0 0">padded</td><td style="padding:0">flush</td></tr></table>"#,
+      [10.0, 0.0],
+    ),
+    (
+      r#"<table style="border-collapse:collapse"><tr style="vertical-align:baseline"><td style="padding:0; border-top:6px solid black">heavy</td><td style="padding:0; border-top:1px solid black">light</td></tr></table>"#,
+      [3.0, 0.5],
+    ),
   ] {
     let out = measure(
       Node::from_html(table, FromHtmlOptions::default()).expect("parse"),
       create_test_viewport(),
     );
-    let tops = run_tops(&out);
+    let tops: Vec<f32> = run_tops(&out)
+      .into_iter()
+      .zip(content_tops)
+      .map(|((_, top), content_top)| top + content_top)
+      .collect();
 
     assert_eq!(tops.len(), 2, "{tops:?}");
-    assert_within(tops[0].1, tops[1].1, 0.01);
+    assert_within(tops[0], tops[1], 0.01);
   }
 }
 
@@ -2907,4 +2914,129 @@ fn ch_matches_the_advance_of_zero() {
     (box_width - zeros_width).abs() < 0.5,
     "10ch is {box_width}px, ten zeros {zeros_width}px"
   );
+}
+
+/// `ex` is the x-height of the primary font, which Geist sets apart from half an em.
+#[test]
+fn ex_is_the_x_height_of_the_font() {
+  let root = Node::container([Node::container([]).with_class_name("box")]).with_class_name("root");
+  let result = measure_with_css(
+    root,
+    ".root { display: block; font: 100px Geist; } .box { display: block; width: 1ex; height: 1px; }",
+  );
+  let width = result.children[0].width;
+
+  assert!((width - 53.0).abs() < 0.5, "1ex is {width}px");
+}
+
+#[test]
+fn test_measure_default_object_size_scales_with_device_pixel_ratio() {
+  // An SVG with no size and no viewBox has no natural size, so it takes the 300x150 default
+  // object size in CSS pixels.
+  let node = Node::from_html(
+    r#"<div style="display:flex"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg=="></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let image = &measure(node, create_measure_viewport_with_dpr(2.0)).children[0];
+
+  assert_close(image.width, 600.0);
+  assert_close(image.height, 300.0);
+}
+
+#[test]
+fn test_measure_float_lays_out_its_content_in_its_own_direction() {
+  let node = Node::from_html(
+    r#"<div style="display:block;width:400px"><div style="float:left;width:100px;direction:rtl"><div style="width:20px;height:10px"></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let measured = measure(node, create_test_viewport());
+  let float = &measured.children[0];
+
+  assert_close(float.children[0].transform[4] - float.transform[4], 80.0);
+}
+
+#[test]
+fn test_measure_root_without_a_viewport_size_fits_its_content() {
+  let node = Node::from_html(
+    r#"<div style="width:100%;height:100%;gap:24px;background-color:white"><img width="96" height="96" style="border-radius:50%" src="assets/images/yeecord.png"><span>Remote</span></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let measured = measure(node, Viewport::default());
+
+  assert!(
+    measured.width > 96.0 && measured.width < 400.0,
+    "{}",
+    measured.width
+  );
+  assert!(
+    measured.height > 96.0 && measured.height < 400.0,
+    "{}",
+    measured.height
+  );
+}
+
+#[test]
+fn test_measure_inline_block_reports_its_own_content() {
+  let node = Node::from_html(
+    r#"<div style="display:block;width:400px;font-size:20px">a <span style="display:inline-block;padding:4px">inner</span></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let measured = measure(node, create_test_viewport());
+  let inline_block = &measured.children[0];
+
+  assert_eq!(measured.children.len(), 1);
+  assert_eq!(inline_block.runs.len(), 1);
+  assert_eq!(inline_block.runs[0].text, "inner");
+}
+
+fn measure_html(html: &str) -> MeasuredNode {
+  measure(
+    Node::from_html(html, FromHtmlOptions::default()).expect("parse"),
+    create_test_viewport(),
+  )
+}
+
+/// A block inside an inline box collapses its margins through the anonymous block around it with
+/// the sibling before, as Blink lays a block-in-inline out in its line's constraint space.
+#[test]
+fn test_measure_block_in_inline_margins_collapse_with_the_block_before() {
+  let out = measure_html(
+    r#"<div style="width:300px; line-height:20px"><div style="height:10px; margin-bottom:25px"></div><span><div style="margin-top:20px"><div style="margin-top:30px; height:10px"></div></div></span></div>"#,
+  );
+
+  assert_close(out.children[1].transform[5], 40.0);
+  assert_close(out.height, 50.0);
+}
+
+/// A block-in-inline's own margins collapse through its parent's block start.
+#[test]
+fn test_measure_block_in_inline_margins_collapse_through_the_parent() {
+  let out = measure_html(
+    r#"<div style="width:300px; padding-top:1px; line-height:20px"><div style="margin-top:10px"><span><div style="margin-top:30px; height:10px"></div></span></div></div>"#,
+  );
+
+  assert_close(out.children[0].transform[5], 31.0);
+}
+
+/// The lines inside a block-in-inline go beside a float placed before it, and a formatting
+/// context root inside it narrows beside the float.
+#[test]
+fn test_measure_block_in_inline_content_goes_beside_a_float() {
+  let lines = measure_html(
+    r#"<div style="width:300px; line-height:20px"><div style="float:left; width:100px; height:100px"></div><span><div>inside</div></span></div>"#,
+  );
+
+  assert_close(lines.children[1].children[0].runs[0].x, 100.0);
+
+  let root = measure_html(
+    r#"<div style="width:300px; line-height:20px"><div style="float:left; width:100px; height:100px"></div><span><div style="overflow:hidden; height:20px"></div></span></div>"#,
+  );
+  let narrowed = &root.children[1].children[0];
+
+  assert_close(narrowed.transform[4], 100.0);
+  assert_close(narrowed.width, 200.0);
 }

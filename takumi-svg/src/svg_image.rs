@@ -1,29 +1,34 @@
 //! An SVG image written as the vector ops takumi-core flattens it to, so its text draws in the
 //! fonts the render registered instead of whatever the viewer falls back to.
 
-use std::{borrow::Cow, io};
+use std::{
+  borrow::Cow,
+  hash::{DefaultHasher, Hash, Hasher},
+  io,
+};
 
 use takumi_core::{
   path_data::path_data,
   resources::image::{
-    SvgGradient, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
+    SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint, SvgSpreadMethod,
+    SvgStrokeStyle, sniff_mime, to_data_url,
   },
-  style::{Affine, FillRule, ToCss},
+  style::{Affine, FillRule, ImageScalingAlgorithm, ToCss},
 };
 
-use crate::{GradientStop, Rgba, SvgDocument, matrix_attr, num, push_opacity};
+use crate::{Frame, GradientStop, ImageKey, Rgba, SvgDocument, matrix_attr, num, push_opacity};
 
-/// Whether `ops` draw without a rasterized subtree, so SVG elements can express all of them.
+/// Whether SVG elements can express all of `ops`, which leaves out filters.
 pub(crate) fn is_vector(ops: &[SvgOp]) -> bool {
   ops.iter().all(|op| match op {
-    SvgOp::Raster { .. } => false,
+    SvgOp::PushFilter(_) => false,
     SvgOp::PushMask { ops, .. } => is_vector(ops),
     SvgOp::Draw { fill, stroke, .. } => fill
       .iter()
       .map(|fill| &fill.paint)
       .chain(stroke.iter().map(|stroke| &stroke.paint))
       .all(|paint| match paint {
-        SvgPaint::Pattern { ops, .. } => is_vector(ops),
+        SvgOpPaint::Pattern { ops, .. } => is_vector(ops),
         _ => true,
       }),
     _ => true,
@@ -31,14 +36,14 @@ pub(crate) fn is_vector(ops: &[SvgOp]) -> bool {
 }
 
 impl SvgDocument {
-  /// Writes `ops`, each `Push*` as a `<g>` its `Pop` closes. `is_vector` keeps rasters out.
+  /// Writes `ops`, each `Push*` as a `<g>` its `Pop` closes.
   pub(crate) fn svg_ops(&mut self, ops: &[SvgOp]) -> io::Result<()> {
     let mut groups = Vec::new();
 
     for op in ops {
       match op {
         SvgOp::PushTransform(transform) => {
-          groups.push(self.begin_group(affine(*transform), 1.0, None, None)?);
+          groups.push(self.begin_group(*transform, 1.0, None, None)?);
         }
         SvgOp::PushClip { path, evenodd } => {
           let clip = self.clip_path(
@@ -50,6 +55,7 @@ impl SvgDocument {
           groups.push(self.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)?);
         }
         SvgOp::PushBlend(blend) => groups.push(self.begin_blend_group(&blend.to_css_string())?),
+        SvgOp::PushIsolation => groups.push(self.begin_isolate_group()?),
         SvgOp::PushOpacity(opacity) => {
           groups.push(self.begin_group(Affine::IDENTITY, *opacity, None, None)?);
         }
@@ -65,7 +71,9 @@ impl SvgDocument {
             self.end_group(group)?;
           }
         }
-        SvgOp::Draw { path, fill, stroke } => {
+        SvgOp::Draw {
+          path, fill, stroke, ..
+        } => {
           let mut attrs: Vec<(&str, Cow<'_, str>)> =
             vec![("d", path_data(path, Affine::IDENTITY).into())];
 
@@ -84,7 +92,32 @@ impl SvgDocument {
           }
           self.empty("path", &attrs)?;
         }
-        SvgOp::Raster { .. } => {}
+        // `is_vector` keeps filters out, but the matching `Pop` still closes a group.
+        SvgOp::PushFilter(_) => {
+          groups.push(self.begin_group(Affine::IDENTITY, 1.0, None, None)?);
+        }
+        SvgOp::Image {
+          data,
+          width,
+          height,
+          rendering,
+        } => {
+          let key = ImageKey::SvgBitmap(digest(data));
+          let Some(href) = self.image_href(&key, || image_href(data)) else {
+            continue;
+          };
+          let rect = Frame::new(0.0, 0.0, *width, *height);
+
+          if *rendering == ImageScalingAlgorithm::Pixelated {
+            let mut attrs = rect.attrs();
+
+            attrs.push(("href", href.as_ref().into()));
+            attrs.push(("image-rendering", "pixelated".into()));
+            self.empty("image", &attrs)?;
+          } else {
+            self.image_use(&key, &href, (*width, *height), rect)?;
+          }
+        }
       }
     }
 
@@ -123,10 +156,10 @@ impl SvgDocument {
   }
 
   /// The `fill` or `stroke` value for `paint`, defining its gradient or pattern first.
-  fn svg_paint(&mut self, paint: &SvgPaint) -> io::Result<String> {
+  fn svg_paint(&mut self, paint: &SvgOpPaint) -> io::Result<String> {
     match paint {
-      SvgPaint::Color([red, green, blue]) => Ok(Rgba([*red, *green, *blue, 255]).hex()),
-      SvgPaint::Linear {
+      SvgOpPaint::Color(color) => Ok(Rgba(color.0).hex()),
+      SvgOpPaint::Linear {
         start,
         end,
         gradient,
@@ -141,24 +174,27 @@ impl SvgDocument {
         ],
         gradient,
       ),
-      SvgPaint::Radial {
+      SvgOpPaint::Radial {
         center,
         radius,
         focal,
+        focal_radius,
         gradient,
-      } => self.svg_gradient(
-        "radialGradient",
-        "rg",
-        vec![
+      } => {
+        let mut geometry = vec![
           ("cx", num(center.x).into()),
           ("cy", num(center.y).into()),
           ("r", num(*radius).into()),
           ("fx", num(focal.x).into()),
           ("fy", num(focal.y).into()),
-        ],
-        gradient,
-      ),
-      SvgPaint::Pattern {
+        ];
+
+        if *focal_radius != 0.0 {
+          geometry.push(("fr", num(*focal_radius).into()));
+        }
+        self.svg_gradient("radialGradient", "rg", geometry, gradient)
+      }
+      SvgOpPaint::Pattern {
         ops,
         transform,
         width,
@@ -171,7 +207,7 @@ impl SvgDocument {
           &[
             ("id", id.into()),
             ("patternUnits", "userSpaceOnUse".into()),
-            ("patternTransform", matrix(*transform).into()),
+            ("patternTransform", matrix_attr(*transform).into()),
             ("width", num(*width).into()),
             ("height", num(*height).into()),
           ],
@@ -192,12 +228,12 @@ impl SvgDocument {
     mut geometry: Vec<(&str, Cow<'_, str>)>,
     gradient: &SvgGradient,
   ) -> io::Result<String> {
-    let transform = affine(gradient.transform);
+    let transform = gradient.transform;
     let stops: Vec<GradientStop> = gradient
       .stops
       .iter()
       .map(|stop| {
-        let [red, green, blue] = stop.color;
+        let [red, green, blue, _] = stop.color.0;
 
         GradientStop {
           offset: stop.offset,
@@ -223,13 +259,27 @@ impl SvgDocument {
   }
 }
 
-/// `matrix(...)` for an op's `(sx, ky, kx, sy, tx, ty)` transform.
-fn matrix(transform: [f32; 6]) -> String {
-  matrix_attr(affine(transform))
+/// The `data:` URL of an image op's pixels.
+/// A digest of `data`'s bytes or pixels, which keys its one encoding.
+fn digest(data: &SvgImageData) -> u64 {
+  let mut hasher = DefaultHasher::new();
+
+  match data {
+    SvgImageData::Encoded(bytes) => bytes.hash(&mut hasher),
+    SvgImageData::Bitmap(buffer) => {
+      (buffer.width(), buffer.height(), buffer.data()).hash(&mut hasher)
+    }
+  }
+  hasher.finish()
 }
 
-fn affine([a, b, c, d, x, y]: [f32; 6]) -> Affine {
-  Affine { a, b, c, d, x, y }
+fn image_href(data: &SvgImageData) -> Option<String> {
+  match data {
+    SvgImageData::Encoded(bytes) => Some(to_data_url(sniff_mime(bytes), bytes)),
+    SvgImageData::Bitmap(buffer) => buffer
+      .encode_png()
+      .map(|png| to_data_url("image/png", &png)),
+  }
 }
 
 fn fill_rule(evenodd: bool) -> FillRule {

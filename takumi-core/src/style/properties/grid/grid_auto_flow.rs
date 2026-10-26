@@ -28,15 +28,6 @@ pub struct GridAutoFlow {
 impl MakeComputed for GridAutoFlow {}
 
 impl GridAutoFlow {
-  pub(crate) fn into_taffy(self) -> taffy::GridAutoFlow {
-    match (self.direction, self.dense) {
-      (GridDirection::Row, false) => taffy::GridAutoFlow::Row,
-      (GridDirection::Column, false) => taffy::GridAutoFlow::Column,
-      (GridDirection::Row, true) => taffy::GridAutoFlow::RowDense,
-      (GridDirection::Column, true) => taffy::GridAutoFlow::ColumnDense,
-    }
-  }
-
   /// The grid auto flow is in the row direction.
   pub const fn row() -> Self {
     Self {

@@ -4,8 +4,6 @@
 
 use std::{ops::Range, rc::Rc};
 
-use taffy::CollapsibleMarginSet;
-
 use super::{
   inline_item::{InlineItem, InlineItemType},
   inline_item_text_index::InlineItemTextIndex,
@@ -22,7 +20,11 @@ use crate::{
     },
   },
   geometry::Rect,
-  layout::{exclusions::exclusion_space::ExclusionSpace, floats_utils::PositionedFloat},
+  layout::{
+    exclusions::exclusion_space::ExclusionSpace, floats_utils::PositionedFloat,
+    layout_result::LayoutResult as BoxLayoutResult, logical_rect::LogicalBoxStrut,
+    margin_strut::MarginStrut,
+  },
   layout_unit::LayoutUnit,
   style::{Direction as TextDirection, HyphenateCharacter},
   text::character::{HYPHEN, HYPHEN_MINUS},
@@ -65,14 +67,26 @@ impl LineBoxStrut {
   }
 }
 
+/// Blink's `LineBoxStrut(BoxStrut, is_flipped_lines)` for horizontal, unflipped lines.
+impl From<LogicalBoxStrut> for LineBoxStrut {
+  fn from(strut: LogicalBoxStrut) -> Self {
+    Self {
+      inline_start: strut.inline_start,
+      inline_end: strut.inline_end,
+      line_over: strut.block_start,
+      line_under: strut.block_end,
+    }
+  }
+}
+
 /// The margins collapsing through a block-in-inline's anonymous block, which its border box leaves
 /// out: what Blink's `LayoutResult` keeps of its margin struts.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct CollapsedMargins {
   /// The margins adjoining its block start.
-  pub(crate) start: CollapsibleMarginSet,
+  pub(crate) start: MarginStrut,
   /// Blink's `EndMarginStrut`.
-  pub(crate) end: CollapsibleMarginSet,
+  pub(crate) end: MarginStrut,
   /// Blink's `IsSelfCollapsing`.
   pub(crate) is_self_collapsing: bool,
 }
@@ -98,19 +112,13 @@ impl LayoutResult {
     let Some(margins) = self.collapsed_margins else {
       return (LayoutUnit::ZERO, self.block_size);
     };
-    let start = LayoutUnit::from_float(margins.start.resolve());
+    let start = margins.start.sum();
 
     if margins.is_self_collapsing {
-      return (
-        start,
-        LayoutUnit::from_float(margins.start.collapse_with_set(margins.end).resolve()),
-      );
+      return (start, margins.start.collapse_with(margins.end).sum());
     }
 
-    (
-      start,
-      start + self.block_size + LayoutUnit::from_float(margins.end.resolve()),
-    )
+    (start, start + self.block_size + margins.end.sum())
   }
 
   /// Blink's `LogicalBoxFragment::BaselineMetrics` for the alphabetic baseline: the margin box
@@ -178,6 +186,9 @@ pub(crate) struct InlineItemResult<'a, 'c> {
   pub(crate) hyphen: Option<HyphenResult>,
   pub(crate) text_fit_scale: Option<TextFitScale>,
   pub(crate) layout_result: Option<LayoutResult>,
+  /// Blink's `layout_result` of a block-in-inline, which its line takes its offset and margins
+  /// from.
+  pub(crate) block_in_inline_result: Option<Rc<BoxLayoutResult>>,
   pub(crate) positioned_float: Option<PositionedFloat>,
   /// The exclusion space before the float was placed, which a rewind restores.
   pub(crate) exclusion_space_before_position_float: Option<ExclusionSpace>,
@@ -213,6 +224,7 @@ impl<'a, 'c> InlineItemResult<'a, 'c> {
       hyphen: None,
       text_fit_scale: None,
       layout_result: None,
+      block_in_inline_result: None,
       positioned_float: None,
       exclusion_space_before_position_float: None,
       margins: LineBoxStrut::default(),

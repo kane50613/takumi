@@ -1,0 +1,72 @@
+---
+title: TanStack Start
+description: Generate Open Graph images from React components in TanStack Start server file routes.
+---
+
+Add a server file route that returns an `ImageResponse`. The example reads the title and description from the query string.
+
+<Steps>
+  <Step>
+    ### Install Takumi
+
+    ```npm
+    npm i takumi-js
+    ```
+
+  </Step>
+  <Step>
+    ### Create a server file route
+
+    A file route defines HTTP handlers under `server.handlers`.
+
+    ```tsx title="src/routes/og-image.tsx"
+    import { createFileRoute } from "@tanstack/react-router";
+    import ImageResponse from "takumi-js/response";
+
+    export const Route = createFileRoute("/og-image")({
+      server: {
+        handlers: {
+          GET({ request }) {
+            const url = new URL(request.url);
+            const title = url.searchParams.get("title") ?? "Takumi + TanStack Start";
+            const description =
+              url.searchParams.get("description") ?? "Render OG images from a route handler.";
+
+            return new ImageResponse(
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  padding: "64px",
+                  backgroundImage: "linear-gradient(to bottom right, #eff6ff, #dbeafe)",
+                }}
+              >
+                <p style={{ fontSize: 72, fontWeight: 700, color: "#111827" }}>{title}</p>
+                <p style={{ fontSize: 42, fontWeight: 500, color: "#4b5563" }}>{description}</p>
+              </div>,
+              {
+                width: 1200,
+                height: 630,
+              },
+            );
+          },
+        },
+      },
+    });
+    ```
+
+  </Step>
+  <Step>
+    ### Request the endpoint
+
+    Visit `/og-image?title=Hello&description=From%20TanStack%20Start`.
+
+  </Step>
+</Steps>
+
+## Next steps
+
+Style the layout with [Styles](/docs/styles), load fonts with [Fonts](/docs/fonts), and see [`ImageResponse`](/docs/reference/image-response) for every option.

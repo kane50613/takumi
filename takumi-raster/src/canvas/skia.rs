@@ -2,8 +2,8 @@
 
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{
-  FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, Paint as TinyPaint,
-  Path as TinyPath, Pattern as TinyPattern, PixmapPaint, SpreadMode as TinySpreadMode,
+  BlendMode as TinyBlendMode, FillRule as TinyFillRule, Paint as TinyPaint, Path as TinyPath,
+  Pattern as TinyPattern, PixmapPaint, SpreadMode as TinySpreadMode,
 };
 
 use super::{DrawTarget, PaintSource};
@@ -31,36 +31,6 @@ pub(crate) struct FillColorOptions<'a> {
   pub mode: BlendMode,
 }
 
-pub(crate) fn to_tiny_blend_mode(mode: BlendMode) -> Option<tiny_skia::BlendMode> {
-  use tiny_skia::BlendMode as T;
-
-  Some(match mode {
-    BlendMode::Normal => T::SourceOver,
-    BlendMode::Multiply => T::Multiply,
-    BlendMode::Screen => T::Screen,
-    BlendMode::Overlay => T::Overlay,
-    BlendMode::Darken => T::Darken,
-    BlendMode::Lighten => T::Lighten,
-    BlendMode::HardLight => T::HardLight,
-    BlendMode::SoftLight => T::SoftLight,
-    BlendMode::Difference => T::Difference,
-    BlendMode::Exclusion => T::Exclusion,
-    BlendMode::Hue => T::Hue,
-    BlendMode::Saturation => T::Saturation,
-    BlendMode::Color => T::Color,
-    BlendMode::Luminosity => T::Luminosity,
-    BlendMode::PlusLighter => T::Plus,
-    _ => return None,
-  })
-}
-
-pub(crate) fn to_tiny_filter_quality(algorithm: ImageScalingAlgorithm) -> TinyFilterQuality {
-  match algorithm {
-    ImageScalingAlgorithm::Pixelated => TinyFilterQuality::Nearest,
-    _ => TinyFilterQuality::Bilinear,
-  }
-}
-
 pub(crate) fn try_draw_image_with_tiny_skia(
   target: &mut DrawTarget,
   image: PaintSource<'_>,
@@ -68,14 +38,14 @@ pub(crate) fn try_draw_image_with_tiny_skia(
   algorithm: ImageScalingAlgorithm,
   mode: BlendMode,
 ) -> bool {
-  let Some(blend_mode) = to_tiny_blend_mode(mode) else {
+  let Ok(blend_mode) = TinyBlendMode::try_from(mode) else {
     return false;
   };
 
   let paint = PixmapPaint {
     opacity: 1.0,
     blend_mode,
-    quality: to_tiny_filter_quality(algorithm),
+    quality: algorithm.into(),
   };
   let resolved_mask = target.resolve_combined_mask();
   let combined_mask = resolved_mask.as_deref();
@@ -94,7 +64,7 @@ pub(crate) fn try_fill_color_with_tiny_skia(
   target: &mut DrawTarget,
   options: FillColorOptions<'_>,
 ) -> bool {
-  let Some(blend_mode) = to_tiny_blend_mode(options.mode) else {
+  let Ok(blend_mode) = TinyBlendMode::try_from(options.mode) else {
     return false;
   };
   let Some(path) = build_border_path(options.border, options.content_size) else {
@@ -124,7 +94,7 @@ pub(crate) fn try_fill_image_path_with_tiny_skia(
   image: PaintSource<'_>,
   options: ImagePathFillOptions,
 ) -> bool {
-  let Some(blend_mode) = to_tiny_blend_mode(options.mode) else {
+  let Ok(blend_mode) = TinyBlendMode::try_from(options.mode) else {
     return false;
   };
   let Some(path) = build_border_path(options.border, options.content_size) else {
@@ -139,7 +109,7 @@ pub(crate) fn try_fill_image_path_with_tiny_skia(
         shader: TinyPattern::new(
           source_pixmap,
           TinySpreadMode::Pad,
-          to_tiny_filter_quality(options.algorithm),
+          options.algorithm.into(),
           1.0,
           options.source_to_canvas.into(),
         ),
@@ -165,16 +135,4 @@ fn build_border_path(border: BorderProperties, size: Size<u32>) -> Option<TinyPa
   let mut commands = Vec::new();
   border.append_mask_commands(&mut commands, size.map(|v| v as f32), Point::ZERO);
   Command::build_path(&commands)
-}
-
-#[cfg(test)]
-mod tests {
-  use super::to_tiny_blend_mode;
-  use crate::style::BlendMode;
-
-  #[test]
-  fn color_dodge_and_color_burn_stay_off_the_approximate_reciprocal() {
-    assert!(to_tiny_blend_mode(BlendMode::ColorDodge).is_none());
-    assert!(to_tiny_blend_mode(BlendMode::ColorBurn).is_none());
-  }
 }

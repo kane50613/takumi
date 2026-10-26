@@ -1,4 +1,3 @@
-use std::array;
 use tiny_skia::PremultipliedColorU8;
 
 use crate::{div_255, mul_div_255, resources::image_buffer::premultiply_pixel, style::BlendMode};
@@ -438,24 +437,6 @@ pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
   pixel.map(|channel| mul_div_255(channel, alpha))
 }
 
-/// [`composite_premultiplied_over`] for each pixel of `src` over `dst`, for every input, with
-/// selects instead of branches so it vectorizes.
-#[inline(always)]
-pub(crate) fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
-  for (dst, &src) in dst.iter_mut().zip(src) {
-    let inverse = u8::MAX - src[3];
-    let over = array::from_fn(|lane| src[lane].saturating_add(mul_div_255(dst[lane], inverse)));
-
-    *dst = if src[3] == 0 {
-      *dst
-    } else if dst[3] == 0 {
-      src
-    } else {
-      over
-    };
-  }
-}
-
 #[inline(always)]
 pub(crate) fn composite_premultiplied_over(dst: &mut [u8; 4], src: [u8; 4]) {
   let src_alpha = src[3];
@@ -595,7 +576,8 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 mod tests {
 
   use crate::{
-    blend::{blend_pixel, composite_premultiplied_over, composite_premultiplied_over_row},
+    blend::{blend_pixel, composite_premultiplied_over},
+    resources::image_buffer::composite_premultiplied_over_row,
     style::BlendMode,
   };
 

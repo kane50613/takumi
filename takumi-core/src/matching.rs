@@ -4,8 +4,9 @@
 //! takumi's public API. Callers pass a node tree and receive back the
 //! declaration blocks that apply to each node.
 
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 
+use rustc_hash::FxHashMap;
 use selectors::{
   Element, OpaqueElement, SelectorImpl as SelectorImplTrait,
   attr::{CaseSensitivity, NamespaceConstraint},
@@ -19,7 +20,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    LonghandId, MediaQueryList, StyleDeclarationBlock,
+    BreakpointOverrides, Direction, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -179,6 +180,23 @@ impl<'a> ArenaElement<'a> {
     &self.tree.nodes[self.index]
   }
 
+  /// HTML's directionality: the `dir` of the nearest element that sets one, left to right when
+  /// none does.
+  /// <https://html.spec.whatwg.org/multipage/dom.html#the-directionality>
+  fn directionality(&self) -> Direction {
+    let mut current = Some(*self);
+
+    while let Some(element) = current {
+      if let Some(direction) = element.style_node().node.metadata.dir {
+        return direction;
+      }
+
+      current = element.parent_element();
+    }
+
+    Direction::Ltr
+  }
+
   fn at(&self, index: Option<usize>) -> Option<Self> {
     index.map(|index| ArenaElement {
       tree: self.tree,
@@ -196,14 +214,21 @@ impl<'a> ArenaElement<'a> {
     while let Some(current) = index {
       let style_node = &self.tree.nodes[current];
 
-      if style_node.node.tag_name().is_some() || !matches!(style_node.node.kind, NodeKind::Text(_))
-      {
+      if text_of(style_node.node).is_none() {
         return self.at(Some(current));
       }
       index = next(style_node);
     }
 
     None
+  }
+}
+
+/// The text of a text node, which selectors do not count as an element; `None` for an element.
+fn text_of(node: &Node) -> Option<&str> {
+  match &node.kind {
+    NodeKind::Text(data) if node.tag_name().is_none() => Some(&data.text),
+    _ => None,
   }
 }
 
@@ -288,8 +313,20 @@ impl Element for ArenaElement<'_> {
     false
   }
 
+  /// Blink's `:empty`: no element child, and no text with a character in it.
   fn is_empty(&self) -> bool {
-    self.style_node().first_child.is_none()
+    let mut index = self.style_node().first_child;
+
+    while let Some(current) = index {
+      let style_node = &self.tree.nodes[current];
+
+      if text_of(style_node.node).is_none_or(|text| !text.is_empty()) {
+        return false;
+      }
+      index = style_node.next_sibling;
+    }
+
+    true
   }
 
   fn is_root(&self) -> bool {
@@ -325,8 +362,16 @@ impl Element for ArenaElement<'_> {
     pc: &<Self::Impl as SelectorImplTrait>::NonTSPseudoClass,
     _context: &mut MatchingContext<'_, Self::Impl>,
   ) -> bool {
-    let PseudoClass::Lang(ranges) = pc else {
-      return false;
+    let ranges = match pc {
+      PseudoClass::Lang(ranges) => ranges,
+      PseudoClass::Dir(direction) => {
+        return *direction
+          == match self.directionality() {
+            Direction::Ltr => "ltr",
+            Direction::Rtl => "rtl",
+          };
+      }
+      PseudoClass::Other(_) => return false,
     };
 
     // `lang` is inherited: walk up from this element to the nearest ancestor-or-self that
@@ -361,52 +406,77 @@ impl Element for ArenaElement<'_> {
   }
 }
 
+/// A matched declaration block: a stylesheet rule's, or the rule a `tw` utility compiles to.
+#[derive(Debug, Clone)]
+pub(crate) enum MatchedBlock<'a> {
+  Sheet(&'a StyleDeclarationBlock),
+  Tw(Arc<TwRule>),
+}
+
+impl Deref for MatchedBlock<'_> {
+  type Target = StyleDeclarationBlock;
+
+  fn deref(&self) -> &StyleDeclarationBlock {
+    match self {
+      Self::Sheet(declarations) => declarations,
+      Self::Tw(rule) => &rule.declarations,
+    }
+  }
+}
+
+/// Names a matched rule the same on every element of a render: a stylesheet rule by its position,
+/// a `tw` rule by its utility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum RuleId {
+  Sheet(usize),
+  Tw(u64),
+}
+
 /// Declaration blocks that apply to one element, split by `!important`.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct MatchedDeclarationsView<'a> {
-  normal: SmallVec<[&'a StyleDeclarationBlock; 4]>,
-  important: SmallVec<[&'a StyleDeclarationBlock; 4]>,
-  /// Where unlayered blocks begin in `normal`. The `tw` layer slots in here:
-  /// above every named `@layer`, below unlayered rules.
+  normal: SmallVec<[MatchedBlock<'a>; 4]>,
+  /// A `Vec`, as `!important` is rare and every node of the tree holds this.
+  important: Vec<MatchedBlock<'a>>,
+  /// Where unlayered blocks begin in `normal`, after every named `@layer` and then the `tw` layer,
+  /// which is declared last.
   unlayered_start: usize,
-  /// Where named-layer blocks begin in `important`, which reverses layer
-  /// order. The `tw` layer slots in here: above unlayered rules, below every
-  /// named `@layer`.
+  /// Where layered blocks begin in `important`, which reverses layer order: the `tw` layer first,
+  /// then every named `@layer`.
   layered_important_start: usize,
-  /// The stylesheet position of the rule each block came from and whether it is the `!important`
-  /// block, in cascade order.
-  rules: SmallVec<[(usize, bool); 8]>,
+  /// The rule each block came from and whether it is the `!important` block, in cascade order.
+  rules: SmallVec<[(RuleId, bool); 4]>,
 }
 
 impl<'a> MatchedDeclarationsView<'a> {
-  /// Matched blocks without `!important` from named layers, in cascade order.
-  pub fn layered_normal(&self) -> &[&'a StyleDeclarationBlock] {
+  /// Matched blocks without `!important` from named layers and the `tw` layer, in cascade order.
+  pub fn layered_normal(&self) -> &[MatchedBlock<'a>] {
     &self.normal[..self.unlayered_start]
   }
 
   /// Matched unlayered blocks without `!important`, in cascade order.
-  pub fn unlayered_normal(&self) -> &[&'a StyleDeclarationBlock] {
+  pub fn unlayered_normal(&self) -> &[MatchedBlock<'a>] {
     &self.normal[self.unlayered_start..]
   }
 
   /// Matched declaration blocks marked `!important`, in cascade order.
   #[cfg(test)]
-  pub(crate) fn important(&self) -> &[&'a StyleDeclarationBlock] {
+  pub(crate) fn important(&self) -> &[MatchedBlock<'a>] {
     &self.important
   }
 
   /// Matched unlayered blocks marked `!important`, in cascade order.
-  pub(crate) fn unlayered_important(&self) -> &[&'a StyleDeclarationBlock] {
+  pub(crate) fn unlayered_important(&self) -> &[MatchedBlock<'a>] {
     &self.important[..self.layered_important_start]
   }
 
-  /// Matched blocks marked `!important` from named layers, in cascade order.
-  pub(crate) fn layered_important(&self) -> &[&'a StyleDeclarationBlock] {
+  /// Matched blocks marked `!important` from the `tw` layer and named layers, in cascade order.
+  pub(crate) fn layered_important(&self) -> &[MatchedBlock<'a>] {
     &self.important[self.layered_important_start..]
   }
 
   /// The rules the blocks came from, which name the same blocks on every element of the render.
-  pub(crate) fn rules(&self) -> &[(usize, bool)] {
+  pub(crate) fn rules(&self) -> &[(RuleId, bool)] {
     &self.rules
   }
 
@@ -425,8 +495,9 @@ impl<'a> MatchedDeclarationsView<'a> {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeMatchedDeclarations<'a> {
   element: MatchedDeclarationsView<'a>,
-  before: Option<MatchedDeclarationsView<'a>>,
-  after: Option<MatchedDeclarationsView<'a>>,
+  /// Boxed, as few elements have one and every node of the tree holds this.
+  before: Option<Box<MatchedDeclarationsView<'a>>>,
+  after: Option<Box<MatchedDeclarationsView<'a>>>,
 }
 
 impl<'a> NodeMatchedDeclarations<'a> {
@@ -437,22 +508,25 @@ impl<'a> NodeMatchedDeclarations<'a> {
 
   /// Declarations matching the element's `::before`, if any rule targeted it.
   pub fn before(&self) -> Option<&MatchedDeclarationsView<'a>> {
-    self.before.as_ref()
+    self.before.as_deref()
   }
 
   /// Declarations matching the element's `::after`, if any rule targeted it.
   pub fn after(&self) -> Option<&MatchedDeclarationsView<'a>> {
-    self.after.as_ref()
+    self.after.as_deref()
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct MatchedRule<'a> {
   important: bool,
   layer_order: usize,
   specificity: u32,
+  /// A stylesheet rule's position, or a `tw` rule's place in Tailwind's sort of this render's
+  /// utilities.
   source_order: usize,
-  declarations: &'a StyleDeclarationBlock,
+  id: RuleId,
+  declarations: MatchedBlock<'a>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -598,28 +672,60 @@ impl RuleIndex {
   }
 }
 
-/// Matches every rule in `stylesheet` against the tree rooted at `root`,
-/// returning the declaration blocks that apply to each node in tree order.
+/// A stylesheet among those a tree matches, with where its rules and named layers sit among them.
+struct SheetPlacement<'a> {
+  sheet: &'a StyleSheet,
+  matching_media: Vec<bool>,
+  rule_offset: usize,
+  layer_offset: usize,
+}
+
+/// Matches every rule in `stylesheets`, which cascade in order, against the tree rooted at
+/// `root`, returning the declaration blocks that apply to each node in tree order. Approximate:
+/// the named layers of different sheets stay apart where CSS merges those with the same name.
 pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
-  stylesheet: &'a StyleSheet,
+  stylesheets: &[&'a StyleSheet],
   viewport: Viewport,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
-  let index = stylesheet.rule_index();
-  let matching_media = index.matching_media(viewport);
+  let mut placements = Vec::with_capacity(stylesheets.len());
+  let (mut rule_offset, mut layer_offset) = (0, 0);
+
+  for &sheet in stylesheets {
+    placements.push(SheetPlacement {
+      sheet,
+      matching_media: sheet.rule_index().matching_media(viewport),
+      rule_offset,
+      layer_offset,
+    });
+    rule_offset += sheet.rules().len();
+    layer_offset += sheet.layer_count;
+  }
+
+  let no_breakpoints = BreakpointOverrides::default();
+  let breakpoints = stylesheets
+    .last()
+    .map_or(&no_breakpoints, |sheet| &sheet.breakpoints);
 
   let arena = StyleArena::new(root);
   let node_count = arena.nodes.len();
   let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
+  let tw_order = tw_rule_order(&arena);
+  // The named layers, then the `tw` layer, declared last.
+  let layers = layer_offset + 1;
 
   // Every distinct media query list gates some rule, so none matching means no
-  // rule applies. Skip the per-node match buckets and the matching walk.
-  if !matching_media.contains(&true) {
+  // stylesheet rule applies. Without utilities either, skip the matching walk.
+  if placements
+    .iter()
+    .all(|placement| !placement.matching_media.contains(&true))
+    && tw_order.is_empty()
+  {
     return per_node;
   }
 
-  // Indexed by `SelectorTarget`.
-  let mut matched_rules: Vec<[Vec<MatchedRule<'a>>; 3]> = vec![Default::default(); node_count];
+  // Indexed by `SelectorTarget`, each emptied into the node's view once it is matched.
+  let mut node_rules: [Vec<MatchedRule<'a>>; 3] = Default::default();
 
   let mut ancestor_bloom_filter = BloomFilter::new();
   let mut ancestor_stack: Vec<usize> = Vec::new();
@@ -634,7 +740,7 @@ pub(crate) fn match_stylesheets_view<'a>(
   // ancestor chain replaces a per-node filter copy: pop-and-remove until the
   // stack top is this node's parent, match against strict-ancestor hashes
   // only, then push self before descending.
-  for (i, node_rules) in matched_rules.iter_mut().enumerate() {
+  for (i, matched) in per_node.iter_mut().enumerate() {
     while ancestor_stack.last().copied() != arena.nodes[i].parent {
       let Some(left) = ancestor_stack.pop() else {
         break;
@@ -665,62 +771,96 @@ pub(crate) fn match_stylesheets_view<'a>(
       MatchingForInvalidation::No,
     );
 
-    index.candidates(arena.nodes[i].node, &matching_media, &mut candidates);
+    for placement in &placements {
+      placement.sheet.rule_index().candidates(
+        arena.nodes[i].node,
+        &placement.matching_media,
+        &mut candidates,
+      );
 
-    for &source_order in &candidates {
-      let rule = &stylesheet.rules()[source_order];
-      let mut best_specificities: [Option<u32>; 3] = [None; 3];
+      for &rule_index in &candidates {
+        let rule = &placement.sheet.rules()[rule_index];
+        let source_order = placement.rule_offset + rule_index;
+        let mut best_specificities: [Option<u32>; 3] = [None; 3];
 
-      for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
-        let Some(target) = selector_target(selector) else {
-          continue;
-        };
-        if is_replaced && target != SelectorTarget::Element {
-          continue;
+        for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
+          let Some(target) = selector_target(selector) else {
+            continue;
+          };
+          if is_replaced && target != SelectorTarget::Element {
+            continue;
+          }
+
+          let selector_key = (source_order, selector_index);
+          let ancestor_hashes = selector_ancestor_hashes_cache
+            .entry(selector_key)
+            .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks));
+
+          if early_reject_by_local_name(selector, 0, &element) {
+            continue;
+          }
+
+          let ctx = if target == SelectorTarget::Element {
+            &mut element_ctx
+          } else {
+            &mut pseudo_ctx
+          };
+
+          if matches_selector(selector, 0, Some(ancestor_hashes), &element, ctx) {
+            let specificity = selector.specificity();
+            let slot = &mut best_specificities[target as usize];
+
+            *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
+          }
         }
 
-        let selector_key = (source_order, selector_index);
-        let ancestor_hashes = selector_ancestor_hashes_cache
-          .entry(selector_key)
-          .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks));
-
-        if early_reject_by_local_name(selector, 0, &element) {
-          continue;
-        }
-
-        let ctx = if target == SelectorTarget::Element {
-          &mut element_ctx
-        } else {
-          &mut pseudo_ctx
-        };
-
-        if matches_selector(selector, 0, Some(ancestor_hashes), &element, ctx) {
-          let specificity = selector.specificity();
-          let slot = &mut best_specificities[target as usize];
-
-          *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
+        for (best_specificity, bucket) in best_specificities.into_iter().zip(node_rules.iter_mut())
+        {
+          record_matches(
+            rule,
+            source_order,
+            placement.layer_offset,
+            layers,
+            best_specificity,
+            bucket,
+          );
         }
       }
+    }
 
-      for (best_specificity, bucket) in best_specificities.into_iter().zip(node_rules.iter_mut()) {
-        record_matches(
+    for rule in arena.nodes[i].node.tw_rules() {
+      let target = match &rule.pseudo_element {
+        None => SelectorTarget::Element,
+        Some(PseudoElement::Before) => SelectorTarget::Before,
+        Some(_) => SelectorTarget::After,
+      };
+      let applies = (!is_replaced || target == SelectorTarget::Element)
+        && rule
+          .breakpoint
+          .as_ref()
+          .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
+        && rule
+          .condition
+          .as_ref()
+          .is_none_or(|condition| matches_selector(condition, 0, None, &element, &mut element_ctx));
+
+      if applies {
+        record_tw_match(
           rule,
-          source_order,
-          stylesheet.layer_count,
-          best_specificity,
-          bucket,
+          tw_order[&rule.id],
+          layers,
+          &mut node_rules[target as usize],
         );
       }
     }
 
+    let [element_rules, before, after] = &mut node_rules;
+
+    finalize_bucket(element_rules, layers, &mut matched.element);
+    matched.before = take_pseudo_bucket(before, layers).map(Box::new);
+    matched.after = take_pseudo_bucket(after, layers).map(Box::new);
     ancestor_stack.push(i);
     add_node_unique_hashes_to_filter(arena.nodes[i].node, &mut ancestor_bloom_filter);
-  }
-
-  for (matched, [element, before, after]) in per_node.iter_mut().zip(&mut matched_rules) {
-    finalize_bucket(element, stylesheet.layer_count, &mut matched.element);
-    matched.before = take_pseudo_bucket(before, stylesheet.layer_count);
-    matched.after = take_pseudo_bucket(after, stylesheet.layer_count);
   }
 
   per_node
@@ -735,41 +875,75 @@ fn selector_target(selector: &Selector<SelectorImpl>) -> Option<SelectorTarget> 
   }
 }
 
+/// Records `rule`'s blocks in `bucket` when one of its selectors matched, at `best_specificity`;
+/// its sheet's named layers start at `layer_offset`, and `layers` counts every named layer and the
+/// `tw` layer after them.
 fn record_matches<'a>(
   rule: &'a CssRule,
   source_order: usize,
-  layer_count: usize,
+  layer_offset: usize,
+  layers: usize,
   best_specificity: Option<u32>,
   bucket: &mut Vec<MatchedRule<'a>>,
 ) {
   let Some(specificity) = best_specificity else {
     return;
   };
+  let layer = rule.layer_order.map(|layer| layer_offset + layer);
+
   if !rule.normal_declarations.is_empty() {
-    let normal_layer_order = rule.layer_order.unwrap_or(layer_count);
     bucket.push(MatchedRule {
       important: false,
-      layer_order: normal_layer_order,
+      layer_order: layer_order(layer, false, layers),
       specificity,
       source_order,
-      declarations: &rule.normal_declarations,
+      id: RuleId::Sheet(source_order),
+      declarations: MatchedBlock::Sheet(&rule.normal_declarations),
     });
   }
   if !rule.important_declarations.is_empty() {
-    let important_layer_order = rule.layer_order.map_or(0, |order| layer_count - order);
     bucket.push(MatchedRule {
       important: true,
-      layer_order: important_layer_order,
+      layer_order: layer_order(layer, true, layers),
       specificity,
       source_order,
-      declarations: &rule.important_declarations,
+      id: RuleId::Sheet(source_order),
+      declarations: MatchedBlock::Sheet(&rule.important_declarations),
     });
   }
 }
 
+/// Where a block of `layer`, or of no layer, sorts among `layers`: layers in declaration order
+/// and unlayered last, or for `!important` blocks the reverse.
+fn layer_order(layer: Option<usize>, important: bool, layers: usize) -> usize {
+  match (layer, important) {
+    (Some(layer), false) => layer,
+    (None, false) => layers,
+    (Some(layer), true) => layers - layer,
+    (None, true) => 0,
+  }
+}
+
+/// Records the rule `tw_rule` compiles to in `bucket`, in the `tw` layer, the last of `layers`.
+fn record_tw_match<'a>(
+  tw_rule: &Arc<TwRule>,
+  source_order: usize,
+  layers: usize,
+  bucket: &mut Vec<MatchedRule<'a>>,
+) {
+  bucket.push(MatchedRule {
+    important: tw_rule.important,
+    layer_order: layer_order(Some(layers - 1), tw_rule.important, layers),
+    specificity: tw_rule.specificity,
+    source_order,
+    id: RuleId::Tw(tw_rule.id),
+    declarations: MatchedBlock::Tw(Arc::clone(tw_rule)),
+  });
+}
+
 fn finalize_bucket<'a>(
   rules: &mut Vec<MatchedRule<'a>>,
-  layer_count: usize,
+  layers: usize,
   matched: &mut MatchedDeclarationsView<'a>,
 ) {
   sort_by_key(rules, |rule| {
@@ -781,7 +955,7 @@ fn finalize_bucket<'a>(
     )
   });
   for rule in rules.drain(..) {
-    matched.rules.push((rule.source_order, rule.important));
+    matched.rules.push((rule.id, rule.important));
 
     if rule.important {
       if rule.layer_order == 0 {
@@ -789,7 +963,7 @@ fn finalize_bucket<'a>(
       }
       matched.important.push(rule.declarations);
     } else {
-      if rule.layer_order < layer_count {
+      if rule.layer_order < layers {
         matched.unlayered_start += 1;
       }
       matched.normal.push(rule.declarations);
@@ -799,7 +973,7 @@ fn finalize_bucket<'a>(
 
 fn take_pseudo_bucket<'a>(
   rules: &mut Vec<MatchedRule<'a>>,
-  layer_count: usize,
+  layers: usize,
 ) -> Option<MatchedDeclarationsView<'a>> {
   // `content` does not inherit, and its initial `normal` computes to `none` on these pseudo-elements.
   let sets_content = rules.iter().any(|rule| {
@@ -815,8 +989,29 @@ fn take_pseudo_bucket<'a>(
     return None;
   }
   let mut view = MatchedDeclarationsView::default();
-  finalize_bucket(rules, layer_count, &mut view);
+  finalize_bucket(rules, layers, &mut view);
   Some(view)
+}
+
+/// The places of the rules `tw` utilities in `arena` compile to, in Tailwind's sort of them: the
+/// stylesheet a render's utilities would compile to.
+fn tw_rule_order(arena: &StyleArena<'_>) -> FxHashMap<u64, usize> {
+  let mut rules: FxHashMap<u64, &TwRule> = FxHashMap::default();
+
+  for style_node in &arena.nodes {
+    for rule in style_node.node.tw_rules() {
+      rules.entry(rule.id).or_insert(rule);
+    }
+  }
+
+  let mut sorted: Vec<&TwRule> = rules.into_values().collect();
+
+  sorted.sort_unstable_by(|left, right| left.order.cmp(&right.order));
+  sorted
+    .into_iter()
+    .enumerate()
+    .map(|(place, rule)| (rule.id, place))
+    .collect()
 }
 
 /// RFC 4647 basic filtering, as `:lang()` uses: `range` matches `lang` if they're equal

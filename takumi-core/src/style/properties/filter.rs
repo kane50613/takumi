@@ -8,24 +8,17 @@ use std::{borrow::Cow, sync::Arc};
 #[cfg(feature = "svg")]
 use crate::style::{ValueError, properties::filter_reference::FilterReference};
 use crate::{
+  filter::TransferFunction,
   scene::SceneBounds,
   style::{
     Affine, Angle, Animatable, Color, CssExpectedMessage, FromCss, Length,
     ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
-    TextShadow, ToCss, discrete, tw::TailwindPropertyParser, unexpected_token,
+    SvgResource, TextShadow, ToCss, discrete, tw::TailwindPropertyParser, unexpected_token,
   },
 };
 
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
-
-pub(crate) fn build_transfer_table<F: Fn(usize) -> f32>(f: F) -> TransferTable {
-  let mut table = [0u8; 256];
-  for (i, entry) in table.iter_mut().enumerate() {
-    *entry = f(i).clamp(0.0, 255.0) as u8;
-  }
-  table
-}
 
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, PartialEq)]
@@ -54,6 +47,9 @@ pub enum Filter {
   /// An SVG filter referenced with `url(data:image/svg+xml,...)`
   #[cfg(feature = "svg")]
   Reference(Arc<FilterReference>),
+  /// A `url()` naming a filter element of the document, which only SVG content has, so it has no
+  /// effect on HTML.
+  Url(SvgResource),
 }
 
 /// Rec. 709 luma weights for the red, green, and blue channels. The CSS
@@ -236,6 +232,7 @@ impl Animatable for Filter {
       Filter::DropShadow(shadow) => Filter::DropShadow(TextShadow::neutral_value_like(shadow)?),
       #[cfg(feature = "svg")]
       Filter::Reference(_) => return None,
+      Filter::Url(_) => return None,
     })
   }
 
@@ -316,32 +313,28 @@ impl Filter {
       Filter::Blur(_) | Filter::DropShadow(_) => FilterCategory::Complex(self),
       #[cfg(feature = "svg")]
       Filter::Reference(_) => FilterCategory::Complex(self),
+      Filter::Url(_) => FilterCategory::Pixel(self),
       _ => FilterCategory::Pixel(self),
     }
   }
 
   /// Returns the 1D channel transfer table for this filter, if any.
   pub fn transfer_table(&self) -> Option<TransferChannel> {
+    let linear = |slope, intercept| TransferFunction::Linear { slope, intercept }.table();
+
     match *self {
-      Filter::Brightness(PercentageNumber(v)) => {
-        Some(TransferChannel::Rgb(build_transfer_table(|i| i as f32 * v)))
-      }
-      Filter::Contrast(PercentageNumber(v)) => {
-        Some(TransferChannel::Rgb(build_transfer_table(|i| {
-          (i as f32 - 128.0) * v + 128.0
-        })))
-      }
+      Filter::Brightness(PercentageNumber(v)) => linear(v, 0.0).map(TransferChannel::Rgb),
+      Filter::Contrast(PercentageNumber(v)) => linear(v, 0.5 - 0.5 * v).map(TransferChannel::Rgb),
       Filter::Invert(PercentageNumber(v)) => {
-        Some(TransferChannel::Rgb(build_transfer_table(|i| {
-          let inverted = 255 - i as u8;
-          (i as f32 * (1.0 - v)) + (inverted as f32 * v)
-        })))
+        let v = v.clamp(0.0, 1.0);
+
+        TransferFunction::Table(vec![v, 1.0 - v])
+          .table()
+          .map(TransferChannel::Rgb)
       }
-      Filter::Opacity(PercentageNumber(v)) => {
-        Some(TransferChannel::Alpha(build_transfer_table(|i| {
-          i as f32 * v
-        })))
-      }
+      Filter::Opacity(PercentageNumber(v)) => TransferFunction::Table(vec![0.0, v.clamp(0.0, 1.0)])
+        .table()
+        .map(TransferChannel::Alpha),
       _ => None,
     }
   }
@@ -390,51 +383,103 @@ impl<'i> FromCss<'i> for Filters {
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 }
 
-#[cfg(feature = "svg")]
-fn parse_filter_reference<'i>(url: &str) -> ParseResult<'i, Filter> {
-  FilterReference::from_url(url)
-    .map(|reference| Filter::Reference(Arc::new(reference)))
-    .map_err(|error| CssParseError::custom(ValueError::from(Cow::<str>::Owned(error.to_string()))))
+/// The filter a `url()` names: a document inline in a `data:` URI, or an element by its fragment.
+fn parse_filter_url<'i>(url: &str) -> ParseResult<'i, Filter> {
+  #[cfg(feature = "svg")]
+  if url.starts_with("data:") {
+    return FilterReference::from_url(url)
+      .map(|reference| Filter::Reference(Arc::new(reference)))
+      .map_err(|error| {
+        CssParseError::custom(ValueError::from(Cow::<str>::Owned(error.to_string())))
+      });
+  }
+
+  Ok(Filter::Url(SvgResource::new(url)))
+}
+
+/// The amount of a filter function: a number or a percentage that is not negative, `1` when it is
+/// left out.
+fn parse_amount<'i>(input: &mut Parser<'i>) -> ParseResult<'i, PercentageNumber> {
+  if input.is_exhausted() {
+    return Ok(PercentageNumber(1.0));
+  }
+
+  let start = input.state();
+  let token = input.next()?.clone();
+
+  input.reset(&start);
+
+  let amount = PercentageNumber::from_css(input)?;
+
+  if amount.0 < 0.0 {
+    return Err(unexpected_token!(PercentageNumber, &token));
+  }
+
+  Ok(amount)
 }
 
 impl<'i> FromCss<'i> for Filter {
   fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 
-    #[cfg(feature = "svg")]
     if let Token::UnquotedUrl(url) = token {
-      return parse_filter_reference(url);
+      return parse_filter_url(url);
     }
 
     let Token::Function(function) = token else {
       return Err(CssParseError::unexpected_token());
     };
 
-    #[cfg(feature = "svg")]
     if function.eq_ignore_ascii_case("url") {
       return parser.parse_nested_block(|input| {
         let url = input.expect_string()?.clone();
-        parse_filter_reference(&url)
+
+        parse_filter_url(&url)
       });
     }
 
     match_ignore_ascii_case! {function,
-      "brightness" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Brightness)),
-      "opacity" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Opacity)),
-      "contrast" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Contrast)),
-      "grayscale" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Grayscale)),
-      "hue-rotate" => parser.parse_nested_block(|input| Angle::from_css(input).map(Filter::HueRotate)),
-      "invert" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Invert)),
-      "saturate" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Saturate)),
-      "sepia" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Sepia)),
+      "brightness" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Brightness)),
+      "opacity" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Opacity)),
+      "contrast" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Contrast)),
+      "grayscale" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Grayscale)),
+      "hue-rotate" => parser.parse_nested_block(|input| {
+        // hue-rotate() takes an angle, which only zero may write without a unit.
+        if input.is_exhausted() {
+          return Ok(Filter::HueRotate(Angle::zero()));
+        }
+
+        let start = input.state();
+        let token = input.next()?.clone();
+
+        match token {
+          Token::Number { value: 0.0, .. } => Ok(Filter::HueRotate(Angle::zero())),
+          Token::Number { .. } => Err(unexpected_token!(&token)),
+          _ => {
+            input.reset(&start);
+            Angle::from_css(input).map(Filter::HueRotate)
+          }
+        }
+      }),
+      "invert" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Invert)),
+      "saturate" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Saturate)),
+      "sepia" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Sepia)),
       "blur" => parser.parse_nested_block(|input| {
-        // blur() radius is optional and defaults to 0; a present argument must be a valid length.
-        let radius = if input.is_exhausted() {
-          Length::zero()
-        } else {
-          Length::from_css(input)?
-        };
-        Ok(Filter::Blur(radius))
+        // blur() radius is optional and defaults to 0; a present argument must be a valid length,
+        // which takes no percentage.
+        if input.is_exhausted() {
+          return Ok(Filter::Blur(Length::zero()));
+        }
+
+        let start = input.state();
+        let token = input.next()?.clone();
+
+        if matches!(token, Token::Percentage { .. }) {
+          return Err(unexpected_token!(&token));
+        }
+
+        input.reset(&start);
+        Length::from_css(input).map(Filter::Blur)
       }),
       "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css(input).map(Filter::DropShadow)),
       _ => Err(unexpected_token!(token)),
@@ -452,7 +497,6 @@ impl<'i> FromCss<'i> for Filter {
     "<sepia()>",
     "<blur()>",
     "<drop-shadow()>",
-    #[cfg(feature = "svg")]
     "<url()>",
   ];
 }
@@ -481,6 +525,7 @@ impl ToCss for Filter {
       Self::Opacity(v) => write_fn!("opacity", v),
       Self::Blur(v) => write_fn!("blur", v),
       Self::DropShadow(v) => write_fn!("drop-shadow", v),
+      Self::Url(resource) => resource.to_css(dest),
       #[cfg(feature = "svg")]
       // A minimal data URI rebuilt from the extracted markup, shorter than the
       // author's original. Only characters that would break the CSS string or
@@ -504,12 +549,11 @@ impl ToCss for Filter {
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
 
   use super::*;
   use crate::{
     geometry::Size,
-    style::{CalcArena, Color, ColorInput, FromCssStr, Length::Px},
+    style::{Color, ColorInput, FromCssStr, Length::Px},
     viewport::Viewport,
   };
 
@@ -523,7 +567,7 @@ mod tests {
       line_height: 0.0,
       root_line_height: None,
       ch: 16.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
+      ex: 16.0 / 2.0,
     }
   }
 
@@ -693,6 +737,45 @@ mod tests {
         blur_radius: Length::zero(),
         color: ColorInput::CurrentColor,
       }))
+    );
+  }
+
+  #[test]
+  fn a_function_without_an_amount_takes_its_default() {
+    assert_eq!(
+      Filter::from_css_str("grayscale()"),
+      Ok(Filter::Grayscale(PercentageNumber(1.0)))
+    );
+    assert_eq!(
+      Filter::from_css_str("brightness()"),
+      Ok(Filter::Brightness(PercentageNumber(1.0)))
+    );
+    assert_eq!(
+      Filter::from_css_str("hue-rotate()"),
+      Ok(Filter::HueRotate(Angle::zero()))
+    );
+    assert_eq!(Filter::from_css_str("blur()"), Ok(Filter::Blur(Px(0.0))));
+  }
+
+  #[test]
+  fn an_amount_that_is_negative_or_an_angle_without_a_unit_is_invalid() {
+    assert!(Filter::from_css_str("brightness(-1)").is_err());
+    assert!(Filter::from_css_str("hue-rotate(45)").is_err());
+    assert!(Filter::from_css_str("blur(50%)").is_err());
+    assert_eq!(
+      Filter::from_css_str("hue-rotate(0)"),
+      Ok(Filter::HueRotate(Angle::zero()))
+    );
+  }
+
+  #[test]
+  fn a_fragment_url_names_a_filter_of_the_document() {
+    let filter = Filter::from_css_str("url(#blur)");
+
+    assert_eq!(filter, Ok(Filter::Url(SvgResource::new("#blur"))));
+    assert_eq!(
+      filter.map(|filter| filter.to_css_string()),
+      Ok("url(\"#blur\")".to_owned())
     );
   }
 }

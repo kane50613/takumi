@@ -9,6 +9,7 @@ use std::{
 use super::{
   inline_item::{InlineItem, LayoutObject},
   inline_item_result::{InlineItemResult, LayoutResult, LineBoxStrut},
+  inline_item_text_index::InlineItemTextIndex,
   text_fit_scale::TextFitScale,
 };
 use crate::{
@@ -16,6 +17,7 @@ use crate::{
   layout::{
     bfc_rect::BfcOffset,
     floats_utils::PositionedFloat,
+    layout_result::LayoutResult as BoxLayoutResult,
     logical_rect::{LogicalOffset, LogicalRect, LogicalSize},
     tree::RenderNode,
   },
@@ -62,10 +64,11 @@ pub(crate) enum LineFragment<'c> {
     node: &'c RenderNode,
     layout_result: LayoutResult,
   },
-  /// A block-in-inline, laid out.
+  /// A block-in-inline, laid out in its line's space to `result`.
   BlockInInline {
     node: &'c RenderNode,
     layout_result: LayoutResult,
+    result: Rc<BoxLayoutResult>,
   },
   /// A float placed with the line.
   Float {
@@ -100,7 +103,8 @@ pub(crate) struct LogicalLineItem<'a, 'c> {
   /// The box an ellipsis belongs to, which has no item.
   pub(crate) layout_object: Option<LayoutObject<'c>>,
   pub(crate) out_of_flow_positioned_box: Option<&'c RenderNode>,
-  pub(crate) unpositioned_float: Option<&'c RenderNode>,
+  /// A float the line places after it, and where its item starts.
+  pub(crate) unpositioned_float: Option<(&'c RenderNode, InlineItemTextIndex)>,
   /// The border box, at first in this child's own coordinates; `ComputeInlinePositions` makes it
   /// the line box's.
   pub(crate) rect: LogicalRect,
@@ -309,20 +313,25 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
     positioned_float: PositionedFloat,
   ) -> Self {
     Self {
+      bfc_offset: positioned_float.bfc_offset,
       layout_result: inline_item.layout_object.map(|object| LineFragment::Float {
         node: object.node(),
         positioned_float,
       }),
-      bfc_offset: positioned_float.bfc_offset,
       bidi_level: inline_item.bidi_level(),
       ..Self::default()
     }
   }
 
   /// Blink's `UnpositionedFloat`.
-  pub(crate) fn unpositioned_float(inline_item: &InlineItem<'c>) -> Self {
+  pub(crate) fn unpositioned_float(
+    inline_item: &InlineItem<'c>,
+    start: InlineItemTextIndex,
+  ) -> Self {
     Self {
-      unpositioned_float: inline_item.layout_object.map(LayoutObject::node),
+      unpositioned_float: inline_item
+        .layout_object
+        .map(|layout_object| (layout_object.node(), start)),
       bidi_level: inline_item.bidi_level(),
       ..Self::default()
     }

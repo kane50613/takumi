@@ -109,17 +109,20 @@ impl PrecomputedHash for Ident {
 }
 
 /// Selector type bindings for the `selectors` crate.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SelectorImpl;
 
 // Most pseudo-classes are parsed but never matched, so rules with `:hover`, `::before`,
 // etc. survive alongside their sibling selectors instead of getting dropped wholesale.
-// `:lang()` is matched for real (see `crate::matching`) — it needs no live/interactive
-// state, just the `lang` attribute inherited up the tree, which a static render has.
+// `:lang()` and `:dir()` are matched for real (see `crate::matching`) — they need no
+// live/interactive state, just the `lang` and `dir` attributes inherited up the tree, which a
+// static render has.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PseudoClass {
   /// `:lang(en, fr, ...)` — one or more comma-separated BCP-47 basic-filtering ranges.
   Lang(Vec<Box<str>>),
+  /// `:dir(ltr)` or `:dir(rtl)`, by the keyword it names; any other keyword matches nothing.
+  Dir(Ident),
   /// Any other pseudo-class, parsed but never matched.
   Other(Ident),
 }
@@ -138,6 +141,11 @@ impl ToCss for PseudoClass {
           }
           dest.write_str(range)?;
         }
+        dest.write_char(')')
+      }
+      Self::Dir(direction) => {
+        dest.write_str(":dir(")?;
+        direction.to_css(dest)?;
         dest.write_char(')')
       }
       Self::Other(name) => {
@@ -254,6 +262,14 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
         }
       })?;
       return Ok(PseudoClass::Lang(ranges));
+    }
+
+    if name.eq_ignore_ascii_case("dir") {
+      let direction = parser.expect_ident()?;
+
+      return Ok(PseudoClass::Dir(Ident::from(
+        &*direction.to_ascii_lowercase(),
+      )));
     }
 
     while parser.next_including_whitespace_and_comments().is_ok() {}

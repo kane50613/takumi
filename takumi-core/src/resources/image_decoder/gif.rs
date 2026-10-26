@@ -35,6 +35,11 @@ fn read_gif(options: DecodeOptions, bytes: &[u8]) -> DecodeResult<GifDecoder<Cur
   Ok(decoder)
 }
 
+/// Rejects a frame over the dimension limit, which the logical screen's check does not cover.
+fn check_frame_size(frame: &Frame) -> DecodeResult<()> {
+  check_dimensions(u32::from(frame.width), u32::from(frame.height))
+}
+
 /// The frame's rectangle within the logical screen.
 fn frame_rect(frame: &Frame) -> Rect<u32> {
   Rect {
@@ -70,6 +75,13 @@ pub(crate) fn gif_frame_infos(bytes: &[u8]) -> DecodeResult<Box<[FrameInfo]>> {
 
     match decoder.read_next_frame() {
       Ok(Some(frame)) => {
+        if let Err(error) = check_frame_size(frame) {
+          if frames.is_empty() {
+            return Err(error);
+          }
+          break;
+        }
+
         total_pixels += frame_pixels;
         if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
           break;
@@ -179,6 +191,13 @@ pub(crate) fn decode_gif_frames(
     let current = index;
     index += 1;
 
+    if let Err(error) = check_frame_size(frame) {
+      if current == 0 {
+        return Err(error);
+      }
+      return Ok(true);
+    }
+
     total_pixels += width as u64 * height as u64;
     if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
       return Ok(true);
@@ -263,7 +282,10 @@ pub(crate) fn decode_gif_frame_alone(
     decoder.next_frame_info().ok()??;
   }
 
-  let rect = frame_rect(decoder.next_frame_info().ok()??);
+  let frame = decoder.next_frame_info().ok()??;
+  check_frame_size(frame).ok()?;
+
+  let rect = frame_rect(frame);
 
   let mut pixels = vec![0; decoder.buffer_size()];
   decoder.read_into_buffer(&mut pixels).ok()?;
@@ -302,6 +324,29 @@ mod tests {
     clear_rect(&mut canvas, (4, 4), rect);
     blit_frame(&mut canvas, (4, 4), rect, &[0; 2 * 2 * 4]);
     assert!(canvas.iter().all(|byte| *byte == 255));
+  }
+
+  /// A 1x1 logical screen holding one 65535x65535 frame.
+  fn oversized_frame_gif() -> Vec<u8> {
+    let mut bytes = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff".to_vec();
+
+    bytes.extend_from_slice(b"\x2c\x00\x00\x00\x00\xff\xff\xff\xff\x00\x02\x02\x44\x01\x00\x3b");
+    bytes
+  }
+
+  #[test]
+  fn frames_over_the_dimension_limit_fail_before_decoding() {
+    let bytes = oversized_frame_gif();
+
+    assert!(matches!(
+      decode_gif_frames(&bytes, 0, None, None, |_| {}),
+      Err(DecodeError::OverBudget(65535, 65535))
+    ));
+    assert!(matches!(
+      gif_frame_infos(&bytes),
+      Err(DecodeError::OverBudget(65535, 65535))
+    ));
+    assert!(decode_gif_frame_alone(&bytes, 0, None).is_none());
   }
 
   fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {

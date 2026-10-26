@@ -3,20 +3,22 @@
 
 use std::{
   cell::RefCell,
-  collections::{HashMap, HashSet},
+  collections::{HashMap, HashSet, hash_map::Entry},
   str::from_utf8,
 };
 
 use takumi_core::{
+  context::BoxId,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
-  layout::tree::RenderNode,
+  layout::{layout_view::LayoutView, node::Node, tree::RenderNode},
   painter::OwnContent,
-  scene::NodePaint,
+  scene::{NodePaint, PageWindows, SceneRef, SceneView},
   style::{Affine, Position},
 };
 
 use crate::{
+  counters::any_node,
   krilla::{
     action::{Action, LinkAction},
     annotation::{Annotation, LinkAnnotation, Target},
@@ -25,34 +27,44 @@ use crate::{
     outline::{Outline, OutlineNode},
     page::Page,
   },
-  options::PT_PER_PX,
+  options::{PT_PER_PX, PdfError},
   tags::{TagCollector, tag_id, text_content},
   tree::PreparedTree,
-  window::Window,
 };
 
 /// A hyperlink box in content coordinates.
 pub(crate) struct LinkTarget {
   uri: String,
   rect: KrillaRect,
-  /// Source-node path, so the annotation can join that node's `Link` element.
-  path: Vec<usize>,
+  /// The source node's box, so the annotation can join that node's `Link` element.
+  node: BoxId,
+  /// Whether a repeated fragment, such as a table header on a later page, paints this link.
+  repeated: bool,
 }
 
 /// Link, heading and anchor targets collected from one tree.
-#[derive(Default)]
 pub(crate) struct Interactive {
   pub(crate) links: Vec<LinkTarget>,
-  pub(crate) headings: Vec<HeadingTarget>,
+  pub(crate) summary: PageSummary,
+}
+
+/// The anchors, headings and box extents of the boxes a scene paints, which the outline, the
+/// links and the page counters read. The summaries of a document's pages add up to that of its
+/// whole scene.
+#[derive(Debug, PartialEq)]
+pub(crate) struct PageSummary {
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
+  pub(crate) headings: Vec<HeadingTarget>,
   /// Where every box layout gave a position sits, by the source order of its
-  /// node. A node laid out inline has no box of its own, so it has no entry
-  /// here and takes its page from the boxes around it.
-  pub(crate) extents: HashMap<usize, BoxExtent>,
+  /// node, when the caller asked for them. A node laid out inline has no box
+  /// of its own, so it has no entry here and takes its page from the boxes
+  /// around it.
+  pub(crate) extents: Option<HashMap<usize, BoxExtent>>,
 }
 
 /// A laid-out box's vertical extent in content coordinates.
+#[derive(Debug, PartialEq)]
 pub(crate) struct BoxExtent {
   pub(crate) top: f32,
   /// The bottom the flow continues from, absent for an out-of-flow box, whose
@@ -60,8 +72,19 @@ pub(crate) struct BoxExtent {
   pub(crate) flow_bottom: Option<f32>,
 }
 
+impl BoxExtent {
+  /// Adds another fragment of the box: it starts where its first fragment does, and its flow goes
+  /// on where its last one ends.
+  fn extend(&mut self, flow_bottom: Option<f32>) {
+    self.flow_bottom = match (self.flow_bottom, flow_bottom) {
+      (Some(bottom), Some(next)) => Some(bottom.max(next)),
+      (bottom, next) => bottom.or(next),
+    };
+  }
+}
+
 /// An element carrying an `id`, in content coordinates.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct AnchorTarget {
   pub(crate) top: f32,
   /// Path of the element, so a destination can name its structure element.
@@ -69,7 +92,7 @@ pub(crate) struct AnchorTarget {
 }
 
 /// A heading in content coordinates, for the outline.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HeadingTarget {
   level: u8,
   text: String,
@@ -124,6 +147,70 @@ fn heading_level(tag: &str) -> Option<u8> {
 }
 
 impl Interactive {
+  /// Collects hyperlinks and headings from the prepared scene, in paint order.
+  pub(crate) fn collect(tree: &PreparedTree) -> Self {
+    let scene = tree.view();
+
+    Self {
+      links: collect_links(scene),
+      summary: PageSummary::collect(scene, false).finished(),
+    }
+  }
+}
+
+impl PageSummary {
+  /// A summary of no page, which pages are added to with [`Self::absorb`].
+  pub(crate) fn new(extents: bool) -> Self {
+    Self {
+      anchors: HashMap::new(),
+      headings: Vec::new(),
+      extents: extents.then(HashMap::new),
+    }
+  }
+
+  /// The summary of the boxes `scene` paints, in paint order, with the headings not yet sorted.
+  pub(crate) fn collect(scene: SceneView<'_>, extents: bool) -> Self {
+    let mut summary = Self::new(extents);
+
+    scene.for_each_paint(|paint| summary.add_paint(scene, paint));
+    summary
+  }
+
+  /// The summary of the root fragment of one page and the fragments `pages` names.
+  pub(crate) fn of_page(
+    root: &RenderNode,
+    layout: LayoutView<'_>,
+    page_size: Size<f32>,
+    pages: &[usize],
+    extents: bool,
+  ) -> Result<Self, PdfError> {
+    let scene = SceneRef::window(root, layout, page_size, pages, false)?;
+
+    Ok(Self::collect(scene.view(), extents))
+  }
+
+  /// The summary of a laid-out document: those of its pages, in page order.
+  pub(crate) fn of_pages(
+    root: &RenderNode,
+    layout: LayoutView<'_>,
+    page_size: Size<f32>,
+    windows: &PageWindows,
+    extents: bool,
+  ) -> Result<Self, PdfError> {
+    let mut summary = Self::new(extents);
+
+    for page in 0..windows.page_count() {
+      summary.absorb(Self::of_page(
+        root,
+        layout,
+        page_size,
+        &windows.pages_of(page),
+        extents,
+      )?);
+    }
+    Ok(summary.finished())
+  }
+
   pub(crate) fn append_section(&mut self, section: &Self, index: usize) {
     self
       .headings
@@ -139,18 +226,109 @@ impl Interactive {
     }
   }
 
-  /// Collects hyperlinks and headings from the prepared scene, in paint order.
-  pub(crate) fn collect(tree: &PreparedTree) -> Self {
-    let mut collected = Self {
-      links: Vec::new(),
-      headings: Vec::new(),
-      anchors: HashMap::new(),
-      extents: HashMap::new(),
+  /// Adds the summary of the next page. An anchor, a heading or a box seen on an earlier page
+  /// keeps its place, as the first paint of a whole scene does.
+  pub(crate) fn absorb(&mut self, page: Self) {
+    for (id, anchor) in page.anchors {
+      self.anchors.entry(id).or_insert(anchor);
+    }
+    for heading in page.headings {
+      if !self
+        .headings
+        .iter()
+        .any(|collected| collected.path == heading.path)
+      {
+        self.headings.push(heading);
+      }
+    }
+    if let (Some(extents), Some(page)) = (self.extents.as_mut(), page.extents) {
+      for (index, extent) in page {
+        match extents.entry(index) {
+          Entry::Occupied(mut entry) => entry.get_mut().extend(extent.flow_bottom),
+          Entry::Vacant(entry) => {
+            entry.insert(extent);
+          }
+        }
+      }
+    }
+  }
+
+  pub(crate) fn finished(mut self) -> Self {
+    self.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
+    self
+  }
+
+  fn add_paint(&mut self, scene: SceneView<'_>, paint: &NodePaint) {
+    let Some(painted) = PaintedBox::of(scene, paint) else {
+      return;
+    };
+    let PaintedBox {
+      node,
+      source,
+      layout,
+      rect,
+      repeated,
+    } = painted;
+
+    // A repeated fragment, such as a table header on a later page, leaves no flow of its own.
+    if let Some(extents) = self.extents.as_mut()
+      && let Some(index) = node.source_order().filter(|_| !repeated)
+    {
+      // `transform` moves where a box paints without moving the flow it left
+      // behind, so the flow edge is measured with the box's own transform undone.
+      let in_flow = !matches!(
+        node.context.style.base_data.position,
+        Position::Absolute | Position::Fixed
+      );
+      let flow_bottom = in_flow
+        .then(|| {
+          node
+            .context
+            .style
+            .local_transform(layout.size.width, layout.size.height, &node.context.sizing)
+            .invert()
+        })
+        .flatten()
+        .and_then(|undo| transformed_rect(paint.transform * undo, CorePoint::ZERO, layout.size))
+        .map(|flow| flow.bottom());
+
+      extents
+        .entry(index)
+        .and_modify(|extent| extent.extend(flow_bottom))
+        .or_insert(BoxExtent {
+          top: rect.top(),
+          flow_bottom,
+        });
+    }
+
+    if let Some(id) = source.id() {
+      // The first box wins: a duplicated id is invalid HTML, and the earlier one
+      // is what a browser would scroll to.
+      self.anchors.entry(id.into()).or_insert(AnchorTarget {
+        top: rect.top(),
+        path: paint.path.clone(),
+      });
+    }
+
+    // The heading itself paints only when it holds the text directly; markup
+    // like `<h1>Plain <strong>bold</strong></h1>` paints the children instead.
+    let Some((path, heading, level)) = heading_ancestor(scene, &paint.path) else {
+      return;
     };
 
-    tree.for_each_paint(|paint| collect_interactive_paint(tree, paint, &mut collected));
-    collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
-    collected
+    if self.headings.iter().any(|collected| collected.path == path) {
+      return;
+    }
+    let text = text_content(heading);
+
+    if !text.is_empty() {
+      self.headings.push(HeadingTarget {
+        level,
+        text,
+        top: rect.top(),
+        path,
+      });
+    }
   }
 
   /// The element paths a destination can point at: every anchor and every
@@ -213,104 +391,75 @@ impl Interactive {
   }
 }
 
-fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: &mut Interactive) {
-  let Some(node) = tree.scene.root.node_at_path(&paint.path) else {
-    return;
-  };
-  let Ok(layout) = tree.scene.results.layout(paint.node_id) else {
-    return;
-  };
-  let Some(source) = node.node.as_ref() else {
-    return;
-  };
-  let Some(rect) = transformed_rect(paint.transform, CorePoint::ZERO, layout.size) else {
-    return;
-  };
+struct PaintedBox<'s> {
+  node: &'s RenderNode,
+  source: &'s Node,
+  layout: Layout,
+  rect: KrillaRect,
+  /// Whether a repeated fragment, such as a table header on a later page, paints it.
+  repeated: bool,
+}
 
-  if let Some(index) = node.source_order() {
-    // `transform` moves where a box paints without moving the flow it left
-    // behind, so the flow edge is measured with the box's own transform undone.
-    let in_flow = !matches!(
-      node.context.style.base_data.position,
-      Position::Absolute | Position::Fixed
-    );
-    let flow_bottom = in_flow
-      .then(|| {
-        node
-          .context
-          .style
-          .local_transform(layout.size.width, layout.size.height, &node.context.sizing)
-          .invert()
-      })
-      .flatten()
-      .and_then(|undo| transformed_rect(paint.transform * undo, CorePoint::ZERO, layout.size))
-      .map(|flow| flow.bottom());
+impl<'s> PaintedBox<'s> {
+  fn of(scene: SceneView<'s>, paint: &NodePaint) -> Option<Self> {
+    let node = scene.root.node_at_path(&paint.path)?;
+    let layout = scene.enter(paint).ok()?;
+    let source = node.node.as_ref()?;
+    let rect = transformed_rect(paint.transform, CorePoint::ZERO, layout.size)?;
+    let repeated = scene
+      .results
+      .is_repeated_fragment(paint.node_id, paint.fragment_index);
 
-    collected.extents.entry(index).or_insert(BoxExtent {
-      top: rect.top(),
-      flow_bottom,
-    });
-  }
-
-  if let Some(id) = source.id() {
-    // The first box wins: a duplicated id is invalid HTML, and the earlier one
-    // is what a browser would scroll to.
-    collected.anchors.entry(id.into()).or_insert(AnchorTarget {
-      top: rect.top(),
-      path: paint.path.clone(),
-    });
-  }
-
-  match source.href().filter(|uri| allowed_link_uri(uri)) {
-    // The whole box is one link; per-run collection would double-annotate it.
-    Some(uri) => collected.links.push(LinkTarget {
-      uri: uri.to_string(),
+    Some(Self {
+      node,
+      source,
+      layout,
       rect,
-      path: paint.path.clone(),
+      repeated,
+    })
+  }
+}
+
+pub(crate) fn collect_links(scene: SceneView<'_>) -> Vec<LinkTarget> {
+  let mut links = Vec::new();
+
+  scene.for_each_paint(|paint| collect_paint_links(scene, paint, &mut links));
+  links
+}
+
+fn collect_paint_links(scene: SceneView<'_>, paint: &NodePaint, links: &mut Vec<LinkTarget>) {
+  let Some(painted) = PaintedBox::of(scene, paint) else {
+    return;
+  };
+
+  match painted.source.href().filter(|uri| allowed_link_uri(uri)) {
+    // The whole box is one link; per-run collection would double-annotate it.
+    Some(uri) => links.push(LinkTarget {
+      uri: uri.to_string(),
+      rect: painted.rect,
+      node: painted.node.context.box_id(),
+      repeated: painted.repeated,
     }),
-    None if node.should_create_inline_layout() => {
+    None if painted.node.should_create_inline_layout() => {
       collect_inline_links(
-        node,
-        layout,
+        painted.node,
+        painted.layout,
         paint.transform,
-        &paint.path,
-        &mut collected.links,
+        painted.repeated,
+        links,
       );
     }
     None => {}
   }
-  // The heading itself paints only when it holds the text directly; markup
-  // like `<h1>Plain <strong>bold</strong></h1>` paints the children instead.
-  let Some((path, heading, level)) = heading_ancestor(tree, &paint.path) else {
-    return;
-  };
-
-  if collected
-    .headings
-    .iter()
-    .any(|collected| collected.path == path)
-  {
-    return;
-  }
-  let text = text_content(heading);
-
-  if !text.is_empty() {
-    collected.headings.push(HeadingTarget {
-      level,
-      text,
-      top: rect.top(),
-      path,
-    });
-  }
 }
 
 /// The nearest heading at or above `path`, with its own path and level.
-fn heading_ancestor<'t>(
-  tree: &'t PreparedTree,
+fn heading_ancestor<'s>(
+  scene: SceneView<'s>,
   path: &[usize],
-) -> Option<(Vec<usize>, &'t RenderNode, u8)> {
+) -> Option<(Vec<usize>, &'s RenderNode, u8)> {
   for length in (0..=path.len()).rev() {
-    let ancestor = tree.scene.root.node_at_path(&path[..length])?;
+    let ancestor = scene.root.node_at_path(&path[..length])?;
     let Some(source) = ancestor.node.as_ref() else {
       continue;
     };
@@ -320,6 +469,20 @@ fn heading_ancestor<'t>(
     }
   }
   None
+}
+
+/// Whether a tree links to an element inside the document, whose page the link needs to know.
+pub(crate) fn has_internal_links(node: &Node) -> bool {
+  any_node(node, &|node| {
+    node.href().is_some_and(|href| href.starts_with('#'))
+  })
+}
+
+/// Whether a tree holds an element a [`PageSummary`] collects: one with an `id`, or a heading.
+pub(crate) fn has_summary_targets(node: &Node) -> bool {
+  any_node(node, &|node| {
+    node.id().is_some() || node.tag_name().and_then(heading_level).is_some()
+  })
 }
 
 /// Decodes the percent escapes an `id` fragment carries in a URL, so
@@ -373,7 +536,7 @@ fn collect_inline_links(
   node: &RenderNode,
   layout: Layout,
   transform: Affine,
-  path: &[usize],
+  repeated: bool,
   links: &mut Vec<LinkTarget>,
 ) {
   let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
@@ -400,38 +563,33 @@ fn collect_inline_links(
     links.push(LinkTarget {
       uri: uri.to_string(),
       rect,
-      path: path.to_vec(),
+      node: node.context.box_id(),
+      repeated,
     });
   }
 }
 
-/// Adds this page's slice of every link as annotations. `window` is the page's
-/// content window in content coordinates, narrowed horizontally for a
-/// replayed table header; `offset` maps content to page coordinates.
+/// Adds this page's slice of every link as annotations. `(y0, y1)` is the page's span in content
+/// coordinates; `offset` maps content to page coordinates.
 pub(crate) fn add_link_annotations<'l>(
   page: &mut Page,
   links: impl IntoIterator<Item = &'l LinkTarget>,
-  window: Window,
+  (y0, y1): (f32, f32),
   offset: CorePoint<f32>,
   tags: Option<&RefCell<TagCollector>>,
   anchor: impl Fn(&str) -> Option<XyzDestination>,
 ) {
-  let (y0, y1) = window.y.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
-  let (x0, x1) = window.x.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
-
   for link in links {
     let top = link.rect.top().max(y0);
     let bottom = link.rect.bottom().min(y1);
-    let left = link.rect.left().max(x0);
-    let right = link.rect.right().min(x1);
 
-    if bottom <= top || right <= left {
+    if bottom <= top {
       continue;
     }
     let Some(rect) = KrillaRect::from_ltrb(
-      (left + offset.x) * PT_PER_PX,
+      (link.rect.left() + offset.x) * PT_PER_PX,
       (top - y0 + offset.y) * PT_PER_PX,
-      (right + offset.x) * PT_PER_PX,
+      (link.rect.right() + offset.x) * PT_PER_PX,
       (bottom - y0 + offset.y) * PT_PER_PX,
     ) else {
       continue;
@@ -446,6 +604,8 @@ pub(crate) fn add_link_annotations<'l>(
       },
       None => Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
     };
+    // A repeated fragment is an artifact, and its paths do not join the tag tree.
+    let tags = tags.filter(|_| !link.repeated);
     let annotation = Annotation::new_link(
       LinkAnnotation::new(rect, target),
       // Tagged output requires alt text on link annotations; the target URI
@@ -457,7 +617,7 @@ pub(crate) fn add_link_annotations<'l>(
       Some(tags) => {
         let identifier = page.add_tagged_annotation(annotation);
 
-        tags.borrow_mut().record_annotation(&link.path, identifier);
+        tags.borrow_mut().record_annotation(link.node, identifier);
       }
       None => page.add_annotation(annotation),
     }

@@ -1,9 +1,9 @@
 //! The scene walker that emits boxes, text and images onto a krilla surface.
 
-use std::{cell::RefCell, collections::HashMap, ptr, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[cfg(all(feature = "images", feature = "svg"))]
-use takumi_core::resources::image::ImageSource;
+use takumi_core::resources::image::{ImageSource, SvgSource};
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
@@ -17,8 +17,8 @@ use takumi_core::{
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers, ImageTiling},
     border::BorderProperties,
-    inline::{InlinePass, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
-    inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
+    inline::{InlineBoxKind, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
+    inline_box::resolve_inline_box,
     tree::{NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
@@ -30,11 +30,11 @@ use takumi_core::{
     PendingOutline, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip,
     UNBOUNDED, paint_collapsed_borders,
   },
-  scene::{NodePaint, Scene},
+  scene::{NodePaint, SceneView},
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display,
-    FillRule as CoreFillRule, Filter, Isolation, Lang, ResolvedGradientStop,
+    Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule as CoreFillRule,
+    Filter, Isolation, Lang, ResolvedGradientStop,
   },
 };
 
@@ -43,7 +43,7 @@ use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
 #[cfg(all(feature = "svg", feature = "images"))]
-use crate::svg;
+use crate::svg::SvgPainter;
 use crate::{
   chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
@@ -65,9 +65,8 @@ use crate::{
   },
   options::{PT_PER_PX, PdfError},
   paint::{
-    core_transform, draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend,
-    krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized,
-    pop_transforms, rect_path, shape_path, spread,
+    draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_path, krilla_stop,
+    krilla_stops, normalized, pop_transforms, rect_path, shape_path, spread,
   },
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
@@ -84,7 +83,7 @@ type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 type FontMap = HashMap<FontKey, Font>;
 
 pub(crate) struct Emitter<'a> {
-  pub(crate) scene: &'a Scene,
+  pub(crate) scene: SceneView<'a>,
   pub(crate) document: &'a DocumentState<'a>,
   /// The content tree's inline layouts; band trees build theirs on the fly.
   pub(crate) inline: Option<&'a InlineCache<'a>>,
@@ -94,8 +93,6 @@ pub(crate) struct Emitter<'a> {
   pub(crate) window: Window,
   /// Whether this walk records marked content for the structure tree.
   pub(crate) tagged: bool,
-  /// Path from the document root to this emitter's own root.
-  pub(crate) tag_prefix: Vec<usize>,
   /// Color transform from the `filter` properties of the enclosing stacking contexts, applied to
   /// every color this subtree paints.
   pub(crate) color_filter: Option<Rc<ColorFilter>>,
@@ -141,6 +138,26 @@ impl<'a> DocumentState<'a> {
     let issues = self.issues.into_inner();
 
     issues.failure.or_else(|| issues.uncovered.into_error())
+  }
+}
+
+impl<'a> Emitter<'a> {
+  pub(crate) fn new(
+    scene: SceneView<'a>,
+    document: &'a DocumentState<'a>,
+    inline: Option<&'a InlineCache<'a>>,
+    chunks: Option<&'a SceneChunks<'a>>,
+    tagged: bool,
+  ) -> Self {
+    Self {
+      scene,
+      document,
+      inline,
+      chunks,
+      window: Window::default(),
+      tagged: tagged && document.tags.is_some(),
+      color_filter: None,
+    }
   }
 }
 
@@ -212,7 +229,7 @@ impl Emitter<'_> {
     };
     let visible = chunks.visible(self.window);
     let mut conversion = ConversionContext::new(
-      &scene.properties,
+      scene.properties,
       ChunkWriter {
         emitter: self,
         surface,
@@ -229,37 +246,6 @@ impl Emitter<'_> {
     }
 
     conversion.finish().error.map_or(Ok(()), Err)
-  }
-
-  /// `box-decoration-break: clone`: the fragment of the box on this page
-  /// paints its own complete decorations (paint-only; cloned padding does not
-  /// reserve layout space). `slice` needs nothing: the page window slices the
-  /// full-box decorations, which is exactly the sliced rendering.
-  fn decoration_frame(&self, style: &ComputedStyle, frame: BoxFrame) -> BoxFrame {
-    let BoxFrame {
-      layout,
-      origin: CorePoint { x, y },
-    } = frame;
-
-    if style.box_data.box_decoration_break == BoxDecorationBreak::Clone
-      && let Some((window_top, window_bottom)) = self.window.y
-    {
-      let top = y.max(window_top);
-      let bottom = (y + layout.size.height).min(window_bottom);
-
-      return BoxFrame::new(
-        Layout {
-          size: Size {
-            width: layout.size.width,
-            height: (bottom - top).max(0.0),
-          },
-          ..layout
-        },
-        CorePoint { x, y: top },
-      );
-    }
-
-    frame
   }
 
   /// Pushes the box's mask and `clip-path`, returning how many states went on.
@@ -285,7 +271,7 @@ impl Emitter<'_> {
       let path = shape_path(&shape, frame.origin).or_else(|| empty_path(frame.origin));
 
       if let Some(path) = path {
-        surface.push_clip_path(&path, &krilla_fill_rule(shape.rule()));
+        surface.push_clip_path(&path, &shape.rule().into());
         pushed += 1;
       }
     }
@@ -457,16 +443,31 @@ impl Emitter<'_> {
     content: &OwnContent<'_>,
     paint: &NodePaint,
     frame: BoxFrame,
-    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let tagged = self.tagged && pass == InlinePass::Content && draws(content);
+    // A repeated table header is an artifact: the occurrence where the table begins carries the
+    // tags, and a second marked one would double the reading order.
+    let is_repeated = self
+      .scene
+      .results
+      .is_repeated_fragment(paint.node_id, paint.fragment_index);
+    let tagged = self.tagged && draws(content) && !is_repeated;
+    let artifact = self.tagged && is_repeated;
 
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
+    } else if artifact {
+      surface.start_tagged(ARTIFACT);
     }
-    self.emit_own_content(node, content, paint.node_id, frame, pass, surface)?;
-    if tagged {
+    // Nothing inside the artifact is tagged, the replaced boxes on its lines included.
+    let tagging = self.tagged;
+
+    self.tagged = tagging && !is_repeated;
+    let emitted = self.emit_own_content(node, content, paint.node_id, frame, surface);
+
+    self.tagged = tagging;
+    emitted?;
+    if tagged || artifact {
       surface.end_tagged();
     }
 
@@ -506,7 +507,7 @@ impl Emitter<'_> {
 
           surface.push_mask(Mask::new(stream, MaskType::Alpha));
         }
-        (None, Some(clip)) => surface.push_clip_path(clip, &krilla_fill_rule(shape.rule())),
+        (None, Some(clip)) => surface.push_clip_path(clip, &shape.rule().into()),
         (None, None) => return,
       }
       self.paint_background_layers(node, background, frame, surface);
@@ -552,7 +553,7 @@ impl Emitter<'_> {
       self.background_layer(
         image,
         node,
-        tiling.tile,
+        tiling,
         origin + CorePoint { x: *x, y: *y },
         surface,
         Transform::identity(),
@@ -564,7 +565,7 @@ impl Emitter<'_> {
     }
 
     let stream = draw_stream(surface, |tile| {
-      self.background_layer(image, node, tiling.tile, CorePoint::ZERO, tile, tile_space);
+      self.background_layer(image, node, tiling, CorePoint::ZERO, tile, tile_space);
     });
     let step = tiling.step();
 
@@ -586,29 +587,30 @@ impl Emitter<'_> {
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
-    size: Size<f32>,
+    tiling: &ImageTiling,
     at: CorePoint<f32>,
     surface: &mut Surface,
     pattern_space: Transform,
   ) {
+    let size = tiling.tile;
     let (w, h) = (size.width, size.height);
 
-    // A url() layer draws as an image tile; the transform applies to pixels,
-    // so it goes through the same rasterization as a filtered <img>.
     #[cfg(feature = "images")]
     if let BackgroundImage::Url(url) = image {
       let Ok(source) = resolve_image(url, &node.context) else {
         return;
       };
+      #[cfg(feature = "svg")]
+      if let ImageSource::Svg(svg) = &source {
+        self.draw_svg(svg, &node.context, at, tiling.image_size, size, surface);
+        return;
+      }
       let Some(krilla_image) = self.drawable(
         url,
-        self.document.images.get(
-          url,
-          &source,
-          &node.context,
-          size,
-          self.color_filter.as_deref(),
-        ),
+        self
+          .document
+          .images
+          .get(url, &source, &node.context, self.color_filter.as_deref()),
       ) else {
         return;
       };
@@ -841,7 +843,7 @@ impl Emitter<'_> {
       let blended = layer.blend_mode != BlendMode::Normal;
 
       if blended {
-        surface.push_blend_mode(krilla_blend(layer.blend_mode));
+        surface.push_blend_mode(layer.blend_mode.into());
       }
       self.layer(
         layer.image,
@@ -893,13 +895,12 @@ impl Emitter<'_> {
     content: &OwnContent<'_>,
     node_id: NodeId,
     frame: BoxFrame,
-    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     match *content {
-      OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, pass, surface),
+      OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, surface),
       #[cfg(feature = "images")]
-      OwnContent::Image(image) if pass == InlinePass::Content => {
+      OwnContent::Image(image) => {
         self.emit_image(image, &node.context, frame, surface);
         Ok(())
       }
@@ -943,45 +944,25 @@ impl Emitter<'_> {
     });
     let placement = replaced.placement;
     let (dw, dh) = (placement.size.width, placement.size.height);
-    // SVG sources embed as vector ops; everything else rasterizes. A color
-    // filter rasterizes them too, since the transform applies to pixels.
     #[cfg(feature = "svg")]
-    let vector = if let (ImageSource::Svg(svg), None) = (&source, &self.color_filter) {
-      let (svg_width, svg_height) = svg.dimensions();
-      if svg_width <= 0.0 || svg_height <= 0.0 {
-        return;
-      }
-      // Fallback rasters (filters, embedded bitmaps) keep the old 2x density.
-      let raster_scale = 2.0 * (dw / svg_width).max(dh / svg_height);
-
-      Some((
-        svg.vector_ops(raster_scale, context.current_color, Some(context.fonts())),
-        svg_width,
-        svg_height,
-      ))
-    } else {
-      None
+    let svg = match &source {
+      ImageSource::Svg(svg) => Some(svg),
+      _ => None,
     };
     #[cfg(not(feature = "svg"))]
-    let vector: Option<((), f32, f32)> = None;
+    let svg: Option<()> = None;
 
-    let krilla_image = if vector.is_none() {
+    let krilla_image = if svg.is_none() {
       let Some(image) = self.drawable(
         image_label(&image.src),
         match &image.src {
-          ImageSourceInput::Url(src) => self.document.images.get(
-            src,
-            &source,
-            context,
-            placement.size,
-            self.color_filter.as_deref(),
-          ),
-          _ => rasterized_image(
-            &source,
-            context,
-            placement.size,
-            self.color_filter.as_deref(),
-          ),
+          ImageSourceInput::Url(src) => {
+            self
+              .document
+              .images
+              .get(src, &source, context, self.color_filter.as_deref())
+          }
+          _ => rasterized_image(&source, context, self.color_filter.as_deref()),
         },
       ) else {
         return;
@@ -1009,25 +990,20 @@ impl Emitter<'_> {
       surface.push_clip_path(path, &FillRule::NonZero);
     }
     #[cfg(feature = "svg")]
-    if let Some((ops, svg_width, svg_height)) = vector {
-      let canvas = KrillaRect::from_xywh(0.0, 0.0, svg_width, svg_height).and_then(rect_path);
+    if let Some(svg) = svg {
+      let size = Size {
+        width: dw,
+        height: dh,
+      };
 
-      surface.push_transform(&Transform::from_row(
-        dw / svg_width,
-        0.0,
-        0.0,
-        dh / svg_height,
-        ix,
-        iy,
-      ));
-      if let Some(canvas) = &canvas {
-        surface.push_clip_path(canvas, &FillRule::NonZero);
-      }
-      svg::draw_svg_ops(surface, ops);
-      if canvas.is_some() {
-        surface.pop();
-      }
-      surface.pop();
+      self.draw_svg(
+        svg,
+        context,
+        CorePoint { x: ix, y: iy },
+        size,
+        size,
+        surface,
+      );
     }
     if let Some(krilla_image) = krilla_image {
       surface.push_transform(&Transform::from_translate(ix, iy));
@@ -1039,6 +1015,43 @@ impl Emitter<'_> {
     }
   }
 
+  #[cfg(all(feature = "svg", feature = "images"))]
+  /// Draws `svg` laid out at `viewport`, Blink's container size, stretched over `size` at `at` and
+  /// clipped to its canvas.
+  fn draw_svg(
+    &self,
+    svg: &SvgSource,
+    context: &RenderContext,
+    at: CorePoint<f32>,
+    viewport: Size<f32>,
+    size: Size<f32>,
+    surface: &mut Surface,
+  ) {
+    if viewport.width <= 0.0 || viewport.height <= 0.0 {
+      return;
+    }
+    let ops = svg.vector_ops(context, viewport);
+    let canvas =
+      KrillaRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
+
+    surface.push_transform(&Transform::from_row(
+      size.width / viewport.width,
+      0.0,
+      0.0,
+      size.height / viewport.height,
+      at.x,
+      at.y,
+    ));
+    if let Some(canvas) = &canvas {
+      surface.push_clip_path(canvas, &FillRule::NonZero);
+    }
+    SvgPainter::new(self.color_filter.as_deref()).draw(surface, ops);
+    if canvas.is_some() {
+      surface.pop();
+    }
+    surface.pop();
+  }
+
   /// Draws a text-bearing box's runs, from the pre-built inline map when the node is in it (content
   /// tree) or built on the fly (band trees).
   fn emit_node_text(
@@ -1046,7 +1059,6 @@ impl Emitter<'_> {
     node: &RenderNode,
     node_id: NodeId,
     frame: BoxFrame,
-    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     visit_inline_layout(
@@ -1054,10 +1066,7 @@ impl Emitter<'_> {
       node,
       node_id,
       frame.layout,
-      |painted, font_style| match pass {
-        InlinePass::Content => self.draw_runs(node, painted, frame, font_style, surface),
-        InlinePass::Floats => self.emit_inline_boxes(node, painted, frame, pass, surface),
-      },
+      |painted, font_style| self.draw_runs(node, painted, frame, font_style, surface),
     )?;
     Ok(())
   }
@@ -1085,16 +1094,15 @@ impl Emitter<'_> {
     };
 
     lines.paint(&painted.spans, font_style, frame, &mut device);
-    self.emit_inline_boxes(node, painted, frame, InlinePass::Content, surface);
+    self.emit_inline_boxes(node, painted, frame, surface);
   }
 
-  /// Paints the inline layout's replaced boxes and nested container subtrees.
+  /// Paints the inline layout's replaced boxes.
   fn emit_inline_boxes(
     &mut self,
     owner: &RenderNode,
     painted: &PaintedInline<'_>,
     frame: BoxFrame,
-    pass: InlinePass,
     surface: &mut Surface,
   ) {
     let BoxFrame {
@@ -1105,13 +1113,13 @@ impl Emitter<'_> {
     // The caller opened a marked-content region for the text around these
     // boxes. Marked content does not nest, so each box closes it, takes a
     // region of its own, and hands it back.
-    let owner_tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(owner));
+    let owner_tagged = self.tagged && draws(&OwnContent::of(owner));
 
     for positioned in painted
       .runs
       .inline_boxes
       .iter()
-      .filter(|positioned| pass.paints(positioned))
+      .filter(|positioned| positioned.kind == InlineBoxKind::InFlow)
     {
       let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(positioned.id as usize) else {
         continue;
@@ -1132,40 +1140,25 @@ impl Emitter<'_> {
       }) {
         continue;
       }
-      let Some((offset, paint)) = resolve_inline_box(positioned, item, layout) else {
+      let Some(replaced) = resolve_inline_box(positioned, item, layout) else {
         continue;
       };
-      let marker_target = (self.tagged && node.origin == NodeOrigin::Marker)
-        .then(|| self.marker_tag_target(owner))
-        .flatten();
-      let marker_tagged = marker_target.is_some();
 
       // The box never reaches `emit_box`, so the state that would paint it
       // there is applied here: its own opacity, and its `filter` composed onto
       // the one the enclosing stacking contexts left.
       let opacity = node.context.style.svg_data.opacity.0;
       let faded = opacity < 1.0;
-      // A container box runs its own emitter, which tags every node it walks.
-      // A replaced one paints here. Its decorations are artifacts and marked
-      // content cannot nest within one stream, so the box's region wraps the
-      // whole box only when opacity moves it into a group of its own, and
-      // wraps just the content otherwise.
-      let box_tagged = cfg!(feature = "images")
-        && self.tagged
-        && !marker_tagged
-        && matches!(paint, InlineBoxPaint::Replaced { .. });
+      // Its decorations are artifacts and marked content cannot nest within
+      // one stream, so the box's region wraps the whole box only when opacity
+      // moves it into a group of its own, and wraps just the content otherwise.
+      let box_tagged = cfg!(feature = "images") && self.tagged;
       let box_wrapped = box_tagged && faded;
 
       if owner_tagged {
         surface.end_tagged();
       }
-      if let Some(path) = marker_target.as_ref() {
-        let identifier = surface.start_tagged(self.content_tag(node));
-
-        if let Some(tags) = self.tags() {
-          tags.borrow_mut().record_label(path, identifier);
-        }
-      } else if box_wrapped {
+      if box_wrapped {
         self.start_tagged_node(node, surface);
       }
 
@@ -1178,30 +1171,21 @@ impl Emitter<'_> {
         &node.context.style.misc1_data.filter,
       );
 
-      let origin = frame.origin + offset;
+      #[cfg(feature = "images")]
+      self.emit_inline_replaced(
+        replaced.node,
+        BoxFrame::new(replaced.layout, frame.origin + replaced.layout.location),
+        box_tagged && !box_wrapped,
+        surface,
+      );
+      #[cfg(not(feature = "images"))]
+      let _ = replaced;
 
-      match paint {
-        #[cfg(feature = "images")]
-        InlineBoxPaint::Replaced {
-          node,
-          layout: box_layout,
-        } => self.emit_inline_replaced(
-          node,
-          BoxFrame::new(box_layout, origin),
-          box_tagged && !box_wrapped,
-          surface,
-        ),
-        #[cfg(not(feature = "images"))]
-        InlineBoxPaint::Replaced { .. } => {}
-        InlineBoxPaint::Container(subtree) => {
-          self.emit_inline_subtree(subtree, node, origin, surface)
-        }
-      }
       self.color_filter = outer_filter;
       if faded {
         surface.pop();
       }
-      if marker_tagged || box_wrapped {
+      if box_wrapped {
         surface.end_tagged();
       }
       if owner_tagged {
@@ -1238,38 +1222,6 @@ impl Emitter<'_> {
     );
   }
 
-  /// Paints an inline-level container from the scene it carries.
-  fn emit_inline_subtree(
-    &mut self,
-    subtree: Box<InlineSubtree>,
-    node: &RenderNode,
-    origin: CorePoint<f32>,
-    surface: &mut Surface,
-  ) {
-    let at = subtree.border_box_origin(origin);
-    let Ok(scene) = subtree.into_scene(Affine::IDENTITY, true) else {
-      return;
-    };
-    // The subtree root is a clone of `node`, so the box's own path is the
-    // prefix that puts the subtree's nodes back on the document tree.
-    let box_path = self.tagged.then(|| self.path_of(node)).flatten();
-    let tagged = box_path.is_some();
-    let tag_prefix = self.tag_path(box_path.as_deref().unwrap_or_default());
-    let mut emitter = Emitter {
-      scene: &scene,
-      document: self.document,
-      inline: None,
-      chunks: None,
-      window: self.window.within(at),
-      tagged,
-      tag_prefix,
-      color_filter: self.color_filter.clone(),
-    };
-    surface.push_transform(&Transform::from_translate(at.x, at.y));
-    let _ = emitter.emit(surface);
-    surface.pop();
-  }
-
   /// Opens the marked-content region a node's own content draws in: an
   /// artifact for a decorative image, otherwise a region recorded at `path`.
   fn start_node_region(&self, node: &RenderNode, path: Option<&[usize]>, surface: &mut Surface) {
@@ -1279,56 +1231,59 @@ impl Emitter<'_> {
     }
     let identifier = surface.start_tagged(self.content_tag(node));
 
-    if let Some(tags) = self.tags()
-      && let Some(path) = path
+    let Some(tags) = self.tags() else {
+      return;
+    };
+    let Some(path) = path else {
+      return;
+    };
+
+    if node.origin == NodeOrigin::Marker
+      && let Some((_, owner_path)) = path.split_last()
     {
-      tags.borrow_mut().record(&self.tag_path(path), identifier);
+      if let Some(owner) = self
+        .scene
+        .root
+        .node_at_path(self.marker_tag_target(owner_path))
+      {
+        tags
+          .borrow_mut()
+          .record_label(owner.context.box_id(), identifier);
+      }
+    } else {
+      tags.borrow_mut().record(node.context.box_id(), identifier);
     }
   }
 
   /// Opens the region for a node the paint list never visited, so its content
   /// still reaches the structure tree.
   fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
-    self.start_node_region(node, self.path_of(node).as_deref(), surface);
+    self.start_node_region(node, self.scene.root.path_to(node).as_deref(), surface);
   }
 
-  /// The path of `node` on this emitter's tree, when it lies there.
-  fn path_of(&self, node: &RenderNode) -> Option<Vec<usize>> {
-    self
-      .scene
-      .root
-      .path_where(|candidate| ptr::eq(candidate, node))
-  }
-
-  /// The document-rooted path of a node this emitter reached at `path`.
-  fn tag_path(&self, path: &[usize]) -> Vec<usize> {
-    if self.tag_prefix.is_empty() {
-      return path.to_vec();
-    }
-    let mut full = self.tag_prefix.clone();
-
-    full.extend_from_slice(path);
-    full
-  }
-
-  /// Tag target for a generated marker: its nearest `display: list-item` ancestor, whose `Lbl`
-  /// holds the label.
-  fn marker_tag_target(&self, owner: &RenderNode) -> Option<Vec<usize>> {
-    let owner_path = self.path_of(owner)?;
-    let mut current = &self.scene.root;
+  /// The nearest list item holding the box at `owner_path`, whose `Lbl` holds its marker.
+  fn marker_tag_target<'p>(&self, owner_path: &'p [usize]) -> &'p [usize] {
+    let mut current: &RenderNode = self.scene.root;
     let mut length = owner_path.len();
 
     for (depth, index) in owner_path.iter().enumerate() {
       if current.context.style.base_data.display == Display::ListItem {
         length = depth;
       }
-      current = current.children.as_deref()?.get(*index)?;
+      let Some(child) = current
+        .children
+        .as_deref()
+        .and_then(|children| children.get(*index))
+      else {
+        break;
+      };
+      current = child;
     }
     if current.context.style.base_data.display == Display::ListItem {
       length = owner_path.len();
     }
 
-    Some(self.tag_path(&owner_path[..length]))
+    &owner_path[..length]
   }
 
   /// One layer as a pattern glyphs can be filled with, over a box whose border box sits at
@@ -1361,7 +1316,7 @@ impl Emitter<'_> {
       self.background_layer(
         image,
         node,
-        tiling.tile,
+        tiling,
         CorePoint::ZERO,
         inner,
         Transform::from_scale(PT_PER_PX, PT_PER_PX),
@@ -1551,15 +1506,15 @@ struct ChunkWriter<'w, 'a, 's> {
 
 impl<'a> ChunkWriter<'_, 'a, '_> {
   /// The box `paint` names and where it sits relative to the pushed transforms, pushing a
-  /// transform when it needs more than a translation. Returns how many states went on.
+  /// transform when it needs more than a translation, with the box set to paint the fragment
+  /// `paint` names. Returns how many states went on.
   fn place(
     &mut self,
     node: Option<&'a RenderNode>,
     paint: &NodePaint,
   ) -> Option<(&'a RenderNode, BoxFrame, usize)> {
-    let scene = self.emitter.scene;
     let node = node?;
-    let layout = scene.results.layout(paint.node_id).ok()?;
+    let layout = self.emitter.scene.enter(paint).ok()?;
     let relative = self.current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
 
     if relative.only_translation() {
@@ -1571,9 +1526,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
       return Some((node, BoxFrame::new(layout, origin), 0));
     }
 
-    self
-      .surface
-      .push_transform(&krilla_transform(relative.to_cols_array()));
+    self.surface.push_transform(&relative.into());
     Some((node, BoxFrame::new(layout, CorePoint::ZERO), 1))
   }
 
@@ -1592,21 +1545,15 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
     };
     let emitter = &mut *self.emitter;
     let surface = &mut *self.surface;
-    let decoration_frame = emitter.decoration_frame(&node.context.style, frame);
     let result = match chunk.part {
       ChunkPart::Decorations => {
         let scene = emitter.scene;
 
-        TextClip::of(&scene.root, &scene.results, chunk.node)
+        TextClip::of(scene.root, scene.results, chunk.node, &node.context)
           .and_then(|text_clip| {
-            let table = TableDecorations::of(
-              &scene.root,
-              &scene.results,
-              &chunk.node.path,
-              chunk.node.node_id,
-            )?;
+            let table = TableDecorations::of(scene.root, scene.results, chunk.node)?;
 
-            emitter.emit_decorations(node, decoration_frame, text_clip.as_ref(), table, surface);
+            emitter.emit_decorations(node, frame, text_clip.as_ref(), table, surface);
             Ok(())
           })
           .map_err(PdfError::from)
@@ -1619,9 +1566,8 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
           .map(|(top, bottom)| (top - frame.origin.y, bottom - frame.origin.y));
 
         paint_collapsed_borders(
-          &emitter.scene.results,
-          chunk.node.node_id,
-          chunk.node.paint_offset,
+          emitter.scene.results,
+          chunk.node,
           frame.translation(),
           visible,
           &mut emitter.device(surface, emitter.tagged),
@@ -1629,25 +1575,11 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
         .map_err(PdfError::from)
       }
       ChunkPart::CollapsedBorders => Ok(()),
-      ChunkPart::Content => emitter.emit_tagged_content(
-        node,
-        &resolved.content,
-        chunk.node,
-        frame,
-        InlinePass::Content,
-        surface,
-      ),
-      ChunkPart::Floats => emitter.emit_tagged_content(
-        node,
-        &resolved.content,
-        chunk.node,
-        frame,
-        InlinePass::Floats,
-        surface,
-      ),
+      ChunkPart::Content => {
+        emitter.emit_tagged_content(node, &resolved.content, chunk.node, frame, surface)
+      }
       ChunkPart::Outline => {
-        let outline = BoxPainter::new(&node.context, decoration_frame.layout)
-          .pending_outline(decoration_frame.origin);
+        let outline = BoxPainter::new(&node.context, frame.layout).pending_outline(frame.origin);
 
         emitter.paint_outline(outline.as_ref(), surface);
         Ok(())
@@ -1704,9 +1636,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
         y: relative.y,
       }
     } else {
-      self
-        .surface
-        .push_transform(&krilla_transform(relative.to_cols_array()));
+      self.surface.push_transform(&relative.into());
       pushed += 1;
       self.current = clip.transform;
       CorePoint::ZERO
@@ -1726,7 +1656,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
     if let Some(path) = shape_path(&clip.shape, origin) {
       self
         .surface
-        .push_clip_path(&path, &krilla_fill_rule(clip.shape.rule()));
+        .push_clip_path(&path, &clip.shape.rule().into());
       pushed += 1;
     }
 
@@ -1789,7 +1719,7 @@ fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
   let mut pushed = 0;
 
   if style.misc_data.mix_blend_mode != BlendMode::Normal {
-    surface.push_blend_mode(krilla_blend(style.misc_data.mix_blend_mode));
+    surface.push_blend_mode(style.misc_data.mix_blend_mode.into());
     pushed += 1;
   }
   if style.misc_data.isolation == Isolation::Isolate {
@@ -1839,7 +1769,7 @@ impl SurfaceDevice<'_, '_> {
     self.open(saved);
 
     if let Some(path) = path {
-      self.surface.push_clip_path(&path, &krilla_fill_rule(rule));
+      self.surface.push_clip_path(&path, &rule.into());
     }
   }
 
@@ -1894,9 +1824,7 @@ impl SurfaceDevice<'_, '_> {
     let artifact = self.artifact && self.stack.is_empty();
 
     if !flat {
-      self
-        .surface
-        .push_transform(&krilla_transform(transform.to_cols_array()));
+      self.surface.push_transform(&transform.into());
     }
     if artifact {
       self.surface.start_tagged(ARTIFACT);
@@ -1974,7 +1902,7 @@ impl SurfaceDevice<'_, '_> {
     for background in fills {
       self.within(background, |device| {
         let fill = Fill {
-          rule: krilla_fill_rule(shape.rule()),
+          rule: shape.rule().into(),
           ..background.fill.clone()
         };
 
@@ -2041,12 +1969,12 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
 
   fn transform(&self) -> Affine {
     Affine::scale(PT_PER_PX.recip(), PT_PER_PX.recip())
-      * core_transform(self.surface.page_transform())
+      * Affine::from(self.surface.page_transform())
   }
 
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let fill = Fill {
-      rule: krilla_fill_rule(shape.rule()),
+      rule: shape.rule().into(),
       ..fill_from_rgba(filtered(self.filter, color), 1.0)
     };
 
@@ -2148,7 +2076,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     for band in bands {
       let band_shape = shape.spread(band.spread).fill_shape();
       let fill = Fill {
-        rule: krilla_fill_rule(band_shape.rule()),
+        rule: band_shape.rule().into(),
         ..fill_from_rgba(band_color, band.alpha)
       };
 
@@ -2421,11 +2349,11 @@ impl GlyphDevice for TextDevice<'_, '_, '_, '_> {
     frame: BoxFrame,
   ) {
     let (fills, with_paint) = match (fill, &self.through) {
-      (GlyphFill::Mask, Some(through)) => (through.clone(), false),
-      (GlyphFill::Text | GlyphFill::Mask, _) => (Rc::from([]), true),
+      (GlyphFill::Mask, Some(through)) => (Some(Rc::clone(through)), false),
+      (GlyphFill::Text | GlyphFill::Mask, _) => (None, true),
     };
 
-    self.paint_glyph_run(run, frame, &fills, with_paint);
+    self.paint_glyph_run(run, frame, fills.as_deref().unwrap_or_default(), with_paint);
   }
 
   /// Approximate: PDF viewers disagree on where the patterns inside a soft-mask group land, so each
@@ -2693,7 +2621,7 @@ fn draw_alpha(
     })
     .collect();
 
-  surface.push_transform(&krilla_transform(transform.to_cols_array()));
+  surface.push_transform(&transform.into());
   surface.draw_image(KrillaImage::from_rgba8(data, width, height), size);
   surface.pop();
 }

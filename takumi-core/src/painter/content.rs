@@ -45,11 +45,11 @@ impl<'n> OwnContent<'n> {
     if node.should_create_inline_layout() {
       return Self::Inline(node);
     }
-    if node.has_anonymous_text_item_child() {
-      return Self::None;
-    }
 
     match node.node.as_ref().map(|input| &input.kind) {
+      Some(NodeKind::Text(_) | NodeKind::Image(_)) if node.has_anonymous_text_item_child() => {
+        Self::None
+      }
       Some(NodeKind::Text(_)) => Self::Inline(node),
       Some(NodeKind::Image(image)) if node.context.style.is_visible() => Self::Image(image),
       _ => Self::None,
@@ -86,12 +86,7 @@ impl<'n> OwnContent<'n> {
       return None;
     }
 
-    Some(node.fragment_items_in(layout).unwrap_or_else(|| {
-      let items = Rc::new(node.lay_out_fragment_items(layout));
-
-      node.fragment_items.keep(Rc::clone(&items));
-      items
-    }))
+    node.fragment_items_in(layout)
   }
 
   /// The inline content laid out in the content box of `layout`, styled by `font_style`, its
@@ -114,7 +109,11 @@ impl<'n> OwnContent<'n> {
     Some(
       items
         .resolve_runs(&spans, &node.context, layout)
-        .map(|runs| PaintedInline { spans, runs, items }),
+        .map(|runs| PaintedInline {
+          spans: spans.spans,
+          runs,
+          items,
+        }),
     )
   }
 }

@@ -239,7 +239,6 @@ impl<'a> Program<'a> {
   }
 }
 
-#[allow(dead_code)]
 pub mod operators {
   use crate::subsetter::cff::operator::Operator;
 
@@ -263,7 +262,6 @@ pub mod operators {
   pub const LINE_CURVE: Operator = Operator::from_one_byte(25);
   pub const VV_CURVE_TO: Operator = Operator::from_one_byte(26);
   pub const HH_CURVE_TO: Operator = Operator::from_one_byte(27);
-  pub const SHORT_INT: Operator = Operator::from_one_byte(28);
   pub const CALL_GLOBAL_SUBROUTINE: Operator = Operator::from_one_byte(29);
   pub const VH_CURVE_TO: Operator = Operator::from_one_byte(30);
   pub const HV_CURVE_TO: Operator = Operator::from_one_byte(31);
@@ -271,5 +269,4 @@ pub mod operators {
   pub const FLEX: Operator = Operator::from_two_byte(35);
   pub const HFLEX1: Operator = Operator::from_two_byte(36);
   pub const FLEX1: Operator = Operator::from_two_byte(37);
-  pub const FIXED_16_16: Operator = Operator::from_one_byte(255);
 }

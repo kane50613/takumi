@@ -1,55 +1,9 @@
-use std::cell::RefCell;
-
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Length, ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
   ParseResult, SizingContext, length_from_dimension_unit, unexpected_token,
 };
-
-/// Interns `calc(...)` linear values so `CompactLength` can reference them by id.
-#[derive(Default)]
-pub(crate) struct CalcArena {
-  linear_values: RefCell<Vec<CalcLinear>>,
-}
-
-impl CalcArena {
-  pub(crate) fn register_linear(&self, linear: CalcLinear) -> *const () {
-    let mut linear_values = self.linear_values.borrow_mut();
-
-    linear_values.push(linear);
-    encode_linear_id(linear_values.len())
-  }
-
-  /// Resolves an interned `calc(...)` value against a percentage basis.
-  pub(crate) fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
-    let Some(id) = decode_linear_id(val) else {
-      return 0.0;
-    };
-
-    let linear_values = self.linear_values.borrow();
-    linear_values
-      .get(id - 1)
-      .map(|linear| linear.resolve(basis))
-      .unwrap_or(0.0)
-  }
-}
-
-fn encode_linear_id(id: usize) -> *const () {
-  // The low 3 bits are reserved because aligned pointers keep them as zero.
-  (id << 3) as *const ()
-}
-
-fn decode_linear_id(ptr: *const ()) -> Option<usize> {
-  let raw = ptr as usize;
-  // Reject pointers that `encode_linear_id` could not have produced: the low 3
-  // bits must be clear and the 1-based id must be non-zero.
-  if raw & 0b111 != 0 {
-    return None;
-  }
-  let id = raw >> 3;
-  (id != 0).then_some(id)
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Internal linear form of a `calc(...)` expression: `px + percent * basis`.
@@ -79,6 +33,7 @@ pub struct CalcFormula {
   pub(crate) lh: f32,
   pub(crate) rlh: f32,
   pub(crate) ch: f32,
+  pub(crate) ex: f32,
   pub(crate) vh: f32,
   pub(crate) vw: f32,
   pub(crate) cqh: f32,
@@ -106,6 +61,7 @@ pub(crate) enum CalcUnit {
   Lh,
   Rlh,
   Ch,
+  Ex,
   Vh,
   Vw,
   Cqh,
@@ -126,6 +82,7 @@ impl CalcUnit {
       Self::Lh => "lh",
       Self::Rlh => "rlh",
       Self::Ch => "ch",
+      Self::Ex => "ex",
       Self::Vh => "vh",
       Self::Vw => "vw",
       Self::Cqh => "cqh",
@@ -207,6 +164,7 @@ impl CalcTerms {
         CalcUnit::Lh => px += value * sizing.line_height,
         CalcUnit::Rlh => px += value * sizing.root_line_height_basis(),
         CalcUnit::Ch => px += value * sizing.ch,
+        CalcUnit::Ex => px += value * sizing.ex,
         CalcUnit::Vh => px += value * viewport_height / 100.0,
         CalcUnit::Vw => px += value * viewport_width / 100.0,
         CalcUnit::Cqh => px += value * container_height / 100.0,
@@ -229,8 +187,8 @@ impl CalcTerms {
 macro_rules! for_each_unit {
   ($callback:ident) => {
     $callback!(
-      px, percent, rem, em, lh, rlh, ch, vh, vw, cqh, cqw, cqmin, cqmax, vmin, vmax, cm, mm, inch,
-      q, pt, pc
+      px, percent, rem, em, lh, rlh, ch, ex, vh, vw, cqh, cqw, cqmin, cqmax, vmin, vmax, cm, mm,
+      inch, q, pt, pc
     );
   };
 }
@@ -297,6 +255,7 @@ impl CalcFormula {
       Length::Lh(v) => Self::lh(v),
       Length::Rlh(v) => Self::rlh(v),
       Length::Ch(v) => Self::ch(v),
+      Length::Ex(v) => Self::ex(v),
       Length::Vw(v) => Self::vw(v),
       Length::CqW(v) => Self::cqw(v),
       Length::Vh(v) => Self::vh(v),
@@ -334,6 +293,7 @@ impl CalcFormula {
       (CalcUnit::Lh, self.lh),
       (CalcUnit::Rlh, self.rlh),
       (CalcUnit::Ch, self.ch),
+      (CalcUnit::Ex, self.ex),
       (CalcUnit::Vh, self.vh),
       (CalcUnit::Vw, self.vw),
       (CalcUnit::Cqh, self.cqh),

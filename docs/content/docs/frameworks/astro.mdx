@@ -1,0 +1,81 @@
+---
+title: Astro
+description: Generate Open Graph images for every static Astro page at build time with astro-takumi.
+---
+
+[astro-takumi](https://github.com/vikas5914/astro-takumi) renders an Open Graph image for every page of an Astro site. During the build, it reads each emitted page and renders a React component or a [built-in preset](https://github.com/vikas5914/astro-takumi#presets) with Takumi. It writes each image next to its HTML file.
+
+<Steps>
+  <Step>
+    ### Add the integration
+
+    `astro add` adds the integration to your config. Also install React and a font. React describes the layout and never ships to the client. System fonts are unavailable, so declare every font yourself.
+
+    ```npm
+    npx astro add astro-takumi
+    ```
+
+    ```npm
+    npm i -D react @fontsource/roboto
+    ```
+
+  </Step>
+  <Step>
+    ### Configure the integration
+
+    Pass the fonts and a `render` function. The presets cover common layouts. Set `site` so the integration can build absolute image URLs.
+
+    <Callout>astro-takumi runs in `astro:build:done`, so it only covers statically rendered pages.</Callout>
+
+    ```js title="astro.config.mjs"
+    import { defineConfig } from "astro/config";
+    import * as fs from "node:fs";
+    import { fileURLToPath } from "node:url";
+    import astroTakumi, { presets } from "astro-takumi";
+
+    export default defineConfig({
+      site: "https://example.com",
+      integrations: [
+        astroTakumi({
+          options: {
+            fonts: [fs.readFileSync(fileURLToPath(import.meta.resolve("@fontsource/roboto/files/roboto-latin-400-normal.woff")))],
+          },
+          render: presets.blackAndWhite,
+        }),
+      ],
+    });
+    ```
+
+  </Step>
+  <Step>
+    ### Reference the image from your layout
+
+    `getImagePath` returns the URL of the current page's image.
+
+    <Callout type="warn">The build fails if `og:title`, `og:type`, or `og:image` is missing, or if `og:image` does not match that URL.</Callout>
+
+    ```astro title="src/layouts/Layout.astro"
+    ---
+    import { getImagePath } from "astro-takumi";
+
+    const { title } = Astro.props;
+    const { url, site } = Astro;
+
+    const openGraphImageUrl = getImagePath({ url, site });
+    ---
+
+    <head>
+      <title>{title}</title>
+      <meta property="og:title" content={title} />
+      <meta property="og:type" content="website" />
+      <meta property="og:url" content={url.href} />
+      <meta property="og:image" content={openGraphImageUrl} />
+    </head>
+    ```
+
+  </Step>
+</Steps>
+
+## Next steps
+
+Load more fonts with [Fonts](/docs/fonts). Style the layout with [Styles](/docs/styles).

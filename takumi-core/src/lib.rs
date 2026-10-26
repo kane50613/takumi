@@ -2,8 +2,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
 //! The layout engine shared by every takumi output. It holds the node tree, the CSS cascade,
-//! layout, text shaping, and font and image resources. Text and inline layout port Chromium's
-//! Blink. Flexbox, grid, and block layout run on Taffy.
+//! layout, text shaping, and font and image resources. Its block, inline, flexbox, grid, and
+//! table layout port Chromium's Blink.
 //!
 //! Each backend builds on these types: [`takumi-raster`](https://docs.rs/takumi-raster) for
 //! images, [`takumi-svg`](https://docs.rs/takumi-svg) for SVG, and the PDF and paint-tree
@@ -40,6 +40,9 @@ pub(crate) mod layout_unit;
 pub(crate) mod matching;
 /// Deterministic float math shared by the painting paths.
 pub mod math;
+/// A render tree laid out a page at a time, painted from the pages that settle.
+#[cfg(feature = "fragmentation")]
+pub mod page_stream;
 pub mod paint_chunk;
 pub mod paint_property;
 #[cfg(feature = "paint-tree")]
@@ -56,18 +59,11 @@ pub mod units;
 /// Viewport dimensions and device-pixel-ratio resolution.
 pub mod viewport;
 
-/// Vendored resvg 0.48.1 (see `resvg/mod.rs` for provenance and stripped features).
+/// SVG documents laid out through the CSS cascade.
 #[cfg(feature = "svg")]
-#[allow(
-  clippy::unwrap_used,
-  clippy::expect_used,
-  clippy::panic,
-  clippy::all,
-  missing_docs,
-  dead_code,
-  deprecated
-)]
-mod resvg;
+pub(crate) mod svg;
+#[cfg(feature = "svg-raster")]
+mod svg_drawing;
 #[cfg(feature = "svg")]
 mod svg_vector;
 

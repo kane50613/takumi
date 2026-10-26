@@ -15,7 +15,7 @@ use takumi_core::{
 
 use crate::{
   counters::{has_page_counters, substitute_page_counters},
-  emitter::DocumentState,
+  emitter::{DocumentState, Emitter},
   interactive::{Interactive, LinkTarget},
   krilla::surface::Surface,
   options::{BAND_EDGE_PADDING, PageBand, PdfError},
@@ -273,6 +273,9 @@ impl RepeatablePage<'_> {
       window: Window::default(),
       artifact: state.tags.is_some(),
     }
-    .emit(self.tree().emitter(state, None, None, false), surface)
+    .emit(
+      Emitter::new(self.tree().view(), state, None, None, false),
+      surface,
+    )
   }
 }

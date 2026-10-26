@@ -37,6 +37,24 @@ impl PropertyMask {
     }
   }
 
+  pub(crate) fn difference(&mut self, other: &Self) {
+    for (word, other_word) in self.words.iter_mut().zip(other.words) {
+      *word &= !other_word;
+    }
+  }
+
+  pub(crate) fn contains_all(&self, other: &Self) -> bool {
+    self
+      .words
+      .iter()
+      .zip(other.words)
+      .all(|(word, other_word)| word & other_word == other_word)
+  }
+
+  pub(crate) fn is_empty(&self) -> bool {
+    self.words.iter().all(|word| *word == 0)
+  }
+
   pub fn iter(&self) -> PropertyMaskIter<'_> {
     PropertyMaskIter {
       mask: self,

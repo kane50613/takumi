@@ -12,8 +12,6 @@ use std::borrow::Cow;
 #[cfg(feature = "svg-sizing")]
 use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, Weak};
-#[cfg(feature = "svg")]
-use std::sync::{Mutex, atomic::Ordering};
 
 use quick_cache::{
   DefaultHashBuilder, OptionsBuilder, Weighter,
@@ -22,43 +20,47 @@ use quick_cache::{
 use serde::Deserialize;
 use thiserror::Error;
 #[cfg(feature = "svg")]
+#[cfg(feature = "svg-raster")]
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(feature = "svg-raster")]
+use crate::geometry::Point;
 #[cfg(feature = "svg")]
-use crate::resources::font::Fonts;
+use crate::geometry::Size;
+#[cfg(feature = "svg")]
+use crate::layout::node::Node;
 #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
-#[cfg(feature = "svg-sizing")]
+#[cfg(all(feature = "svg-sizing", any(test, not(feature = "svg"))))]
 use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
-use crate::resources::svg_size::parse_svg_document;
+use crate::style::Color;
 #[cfg(feature = "svg")]
-use crate::resvg::{
-  apply_filters_to_layer, render as render_svg_tree,
-  usvg::{Options, Transform, Tree, filters_from_markup},
-};
-#[cfg(feature = "svg")]
-use crate::svg_vector::flatten;
+use crate::svg::{SvgDocument, SvgHost};
+#[cfg(feature = "svg-raster")]
+use crate::svg_drawing;
 #[cfg(feature = "svg")]
 pub use crate::svg_vector::{
-  SvgFill, SvgGradient, SvgGradientStop, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
-  SvgStrokeStyle,
+  SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
+  SvgOpPaint, SvgSpreadMethod, SvgStrokeStyle,
 };
 use crate::{
+  context::RenderContext,
   resources::{
-    font::FontsSnapshot,
     image_buffer::ImageBuffer,
     image_decoder::{DecodeTarget, bitmap_dimensions, decode_bitmap_scaled, decode_image},
   },
-  style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
+  style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
+#[cfg(feature = "svg-raster")]
+use tiny_skia::Transform;
 
-#[cfg(feature = "svg")]
-const MAX_RASTER_PIXELS: u64 = 64 << 20;
+#[cfg(feature = "svg-raster")]
+pub(crate) const MAX_RASTER_PIXELS: u64 = 64 << 20;
 
-#[cfg(feature = "svg")]
-fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
+#[cfg(feature = "svg-raster")]
+pub(crate) fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
   u64::from(width) * u64::from(height) <= MAX_RASTER_PIXELS
 }
 
@@ -89,24 +91,26 @@ pub struct SvgSource {
   /// Original SVG source, for embedding directly in a vector backend.
   source: Box<str>,
   /// Canvas size and CSS intrinsic sizing read from the root element.
+  #[cfg(not(feature = "svg"))]
   sizing: SvgSize,
-  /// Parsed SVG tree used for size and initial metadata.
-  #[cfg(feature = "svg")]
-  pub(crate) tree: Tree,
   /// Whether rendering depends on the host `color`: the markup references
   /// `currentColor` and the root element sets no `color` of its own.
   #[cfg(feature = "svg")]
   uses_current_color: bool,
-  /// Whether the markup contains `<text`, so rendering re-parses with fonts.
+  /// The document, drawn through the CSS cascade.
   #[cfg(feature = "svg")]
+  document: Arc<SvgDocument>,
+  /// Whether the document is an inline `svg` element, which draws in the style of its box.
+  #[cfg(feature = "svg")]
+  inline: bool,
+  /// Whether the markup contains `<text`, so rendering depends on the registered fonts.
+  #[cfg(feature = "svg-raster")]
   has_text: bool,
-  /// Text-capable re-parse of `source`, keyed by the font registry revision
-  /// it was converted with; a registration re-converts on the next render.
   #[cfg(feature = "svg")]
-  text_tree: Mutex<Option<(u64, Arc<Tree>)>>,
-  #[cfg(feature = "svg")]
+  #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
   hash: u64,
   #[cfg(feature = "svg")]
+  #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
   cache: Weak<SharedResourceCache>,
 }
 
@@ -116,8 +120,7 @@ impl SvgSource {
   /// `viewBox`.
   #[cfg(feature = "svg")]
   pub fn dimensions(&self) -> (f32, f32) {
-    let size = self.tree.size();
-    (size.width(), size.height())
+    self.document.canvas_size()
   }
 
   /// The SVG canvas dimensions in pixels, from the root `width`/`height` or
@@ -127,9 +130,25 @@ impl SvgSource {
     (self.sizing.width, self.sizing.height)
   }
 
+  #[cfg(not(feature = "svg"))]
+  fn document_bytes(&self) -> usize {
+    0
+  }
+
   /// The original SVG markup, for embedding directly in a vector backend.
   pub fn source(&self) -> &str {
     &self.source
+  }
+
+  fn intrinsic_sizing(&self) -> IntrinsicSizing {
+    #[cfg(feature = "svg")]
+    {
+      self.document.intrinsic_sizing()
+    }
+    #[cfg(not(feature = "svg"))]
+    {
+      self.sizing.intrinsic
+    }
   }
 }
 
@@ -141,16 +160,6 @@ impl SvgSource {
       sizing: SvgSize::parse(src).map_err(ImageError::svg_parse)?,
     })
   }
-}
-
-/// Parse options for untrusted SVG markup: the string href resolver is
-/// disabled so `<image>`/`<feImage href>` cannot read local files. `data:`
-/// URIs still resolve through the default data resolver.
-#[cfg(feature = "svg")]
-fn svg_parse_options() -> Options<'static> {
-  let mut options = Options::default();
-  options.image_href_resolver.resolve_string = Box::new(|_, _| None);
-  options
 }
 
 #[cfg(feature = "svg")]
@@ -186,136 +195,88 @@ impl SvgSource {
     Cow::Owned(markup)
   }
 
-  /// Flattens the SVG into backend-agnostic vector drawing ops in SVG canvas
-  /// coordinates. `raster_scale` is the device-pixels-per-user-unit factor
-  /// used when a subtree (filters, embedded bitmaps) has to fall back to
-  /// rasterization.
-  pub fn vector_ops(
-    &self,
-    raster_scale: f32,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
-  ) -> Vec<SvgOp> {
-    match self.tree_with_current_color(current_color, fonts) {
-      Some(tree) => flatten(&tree, raster_scale),
-      None => {
-        let text_tree = self.text_tree(fonts);
+  /// What the document retains, estimated from its node count.
+  fn document_bytes(&self) -> usize {
+    self.document.node_count() * size_of::<Node>()
+  }
 
-        flatten(text_tree.as_deref().unwrap_or(&self.tree), raster_scale)
+  /// The SVG's drawing ops laid out at `viewport`, the size it is drawn at in CSS pixels, in the
+  /// box `host` styles.
+  pub fn vector_ops(&self, host: &RenderContext, viewport: Size<f32>) -> Vec<SvgOp> {
+    let host = if self.inline {
+      SvgHost::Inline(host)
+    } else {
+      SvgHost::Image {
+        current_color: host.current_color,
+        fonts: Some(host.fonts()),
       }
-    }
+    };
+
+    self.document.ops(host, viewport).unwrap_or_default()
   }
 
-  /// Re-parses the markup with `configure` applied to the parse options.
-  fn reparse(
-    &self,
-    fonts: Option<&FontsSnapshot>,
-    configure: impl FnOnce(&mut Options),
-  ) -> Option<Tree> {
-    let document = parse_svg_document(&self.source).ok()?;
-    let mut options = svg_parse_options();
+  /// An inline `svg` element of an HTML document and its subtree, every attribute kept in the
+  /// attribute maps, with `markup` its serialization for vector backends to embed.
+  pub fn from_inline_element(root: &Node, markup: &str) -> Result<Self, ImageError> {
+    let document = SvgDocument::from_element(root)?;
 
-    if let Some(fonts) = fonts.filter(|_| self.has_text) {
-      options.fonts = Fonts::clone(fonts);
-    }
-
-    configure(&mut options);
-    Tree::from_xmltree(&document, &options).ok()
-  }
-
-  /// Re-parses the markup with `current_color` as the `currentColor` fallback.
-  /// `None` when rendering does not depend on the host color.
-  fn tree_with_current_color(
-    &self,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
-  ) -> Option<Tree> {
-    if !self.uses_current_color {
-      return None;
-    }
-
-    let [red, green, blue, alpha] = current_color.0;
-
-    self.reparse(fonts, |options| {
-      options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
+    Ok(Self {
+      inline: true,
+      cache: Weak::new(),
+      hash: xxh3_64(markup.as_bytes()),
+      ..Self::from_document(document, markup)
     })
   }
 
   /// Parses SVG markup; rasterized pixmaps go into `cache` while it is alive,
   /// keyed by content hash and target size. A dead handle rasterizes per call.
   fn parse(src: &str, hash: u64, cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
-    // One parse, shared with usvg via `from_xmltree` (what `from_str` does
-    // internally). No text stripping: usvg drops `<text>`/`<tspan>` with its
-    // `text` feature off.
-    let document = parse_svg_document(src).map_err(ImageError::svg_parse)?;
-
-    let options = svg_parse_options();
-    let tree = Tree::from_xmltree(&document, &options).map_err(ImageError::svg_parse)?;
-    let sizing = SvgSize::from_root(document.root_element()).map_err(ImageError::svg_parse)?;
-    // Set during parsing whenever a `currentColor` finds no `color` attribute
-    // on its ancestors, so it also catches entity-encoded values a source-text
-    // scan would miss.
-    let uses_current_color = options.current_color_used.load(Ordering::Relaxed);
-
-    Ok(SvgSource {
-      has_text: document
-        .descendants()
-        .any(|node| node.tag_name().name() == "text"),
-      source: Box::from(src),
-      sizing,
-      tree,
-      uses_current_color,
-      text_tree: Mutex::new(None),
+    Ok(Self {
       hash,
       cache,
+      ..Self::from_document(SvgDocument::parse(src)?, src)
     })
   }
 
-  /// The text-capable re-parse for the snapshot's font revision when the
-  /// markup holds `<text>`, or `None` to use the parse-time tree.
-  fn text_tree(&self, fonts: Option<&FontsSnapshot>) -> Option<Arc<Tree>> {
-    let fonts = fonts.filter(|_| self.has_text)?;
-    let revision = fonts.revision();
-    let mut cached = self.text_tree.lock().ok()?;
-
-    if let Some((cached_revision, tree)) = cached.as_ref()
-      && *cached_revision == revision
-    {
-      return Some(tree.clone());
+  /// The source of `document`, parsed from `src`, as an image that no cache holds.
+  fn from_document(document: SvgDocument, src: &str) -> Self {
+    Self {
+      #[cfg(feature = "svg-raster")]
+      has_text: document.has_text(),
+      uses_current_color: document.uses_current_color(),
+      document: Arc::new(document),
+      inline: false,
+      source: Box::from(src),
+      hash: 0,
+      cache: Weak::new(),
     }
-
-    let tree = Arc::new(self.reparse(Some(fonts), |_| {})?);
-
-    *cached = Some((revision, tree.clone()));
-    Some(tree)
   }
 
+  #[cfg(feature = "svg-raster")]
   fn rasterize(
     &self,
-    width: u32,
-    height: u32,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
+    raster: SvgRaster,
+    host: &RenderContext,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
-    if !within_raster_pixel_budget(width, height) {
+    let SvgRaster {
+      viewport,
+      origin,
+      size,
+      width,
+      height,
+    } = raster;
+
+    if !within_raster_pixel_budget(width, height) || size.width <= 0.0 || size.height <= 0.0 {
       return Err(ImageError::InvalidPixmapSize);
     }
 
     let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
+    let sx = width as f32 / size.width;
+    let sy = height as f32 / size.height;
 
-    let original_size = self.tree.size();
-    let sx = width as f32 / original_size.width();
-    let sy = height as f32 / original_size.height();
-
-    let recolored = self.tree_with_current_color(current_color, fonts);
-    let text_tree = recolored.is_none().then(|| self.text_tree(fonts)).flatten();
-
-    render_svg_tree(
-      recolored
-        .as_ref()
-        .or(text_tree.as_deref())
-        .unwrap_or(&self.tree),
-      Transform::from_scale(sx, sy),
+    svg_drawing::draw(
+      &self.vector_ops(host, viewport),
+      Transform::from_row(sx, 0.0, 0.0, sy, -origin.x * sx, -origin.y * sy),
       &mut pixmap.as_mut(),
     );
 
@@ -324,32 +285,96 @@ impl SvgSource {
       .ok_or(ImageError::InvalidPixmapSize)
   }
 
-  fn rasterize_cached(
+  /// The pixels of `raster`, from the cache when an image drew them before.
+  #[cfg(feature = "svg-raster")]
+  pub fn rasterize_cached(
     &self,
-    width: u32,
-    height: u32,
+    raster: SvgRaster,
     image_rendering: ImageScalingAlgorithm,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
+    host: &RenderContext,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
+    // An inline `svg` draws in the style of its box, which the key cannot hold.
+    if self.inline {
+      return self.rasterize(raster, host);
+    }
+
     let mut hash = if self.uses_current_color {
-      self.hash ^ xxh3_64(&current_color.0)
+      self.hash ^ xxh3_64(&host.current_color.0)
     } else {
       self.hash
     };
 
     // Text rasterization depends on which fonts are registered.
-    if self.has_text
-      && let Some(fonts) = fonts
-    {
-      hash ^= xxh3_64(&fonts.revision().to_le_bytes());
+    if self.has_text {
+      hash ^= xxh3_64(&host.fonts().revision().to_le_bytes());
     }
 
-    let key = ResourceCacheKey::sized(hash, width, height, image_rendering);
+    hash ^= raster.hash();
 
-    cached_sized(&self.cache, key, || {
-      self.rasterize(width, height, current_color, fonts)
-    })
+    let key = ResourceCacheKey::sized(hash, raster.width, raster.height, image_rendering);
+
+    cached_sized(&self.cache, key, || self.rasterize(raster, host))
+  }
+}
+
+/// The part of an SVG laid out at `viewport` that a `width` by `height` bitmap covers: `size` from
+/// `origin`, both in the viewport's CSS pixels.
+#[cfg(feature = "svg-raster")]
+#[derive(Debug, Clone, Copy)]
+pub struct SvgRaster {
+  viewport: Size<f32>,
+  origin: Point<f32>,
+  size: Size<f32>,
+  width: u32,
+  height: u32,
+}
+
+#[cfg(feature = "svg-raster")]
+impl SvgRaster {
+  /// The whole SVG laid out at `viewport`, Blink's container size, over a `width` by `height`
+  /// bitmap.
+  pub fn whole(viewport: Size<f32>, width: u32, height: u32) -> Self {
+    Self {
+      viewport,
+      origin: Point::ZERO,
+      size: viewport,
+      width,
+      height,
+    }
+  }
+
+  /// The `size` from `origin` of the SVG laid out at `viewport`, over a `width` by `height` bitmap.
+  pub fn cropped(
+    viewport: Size<f32>,
+    origin: Point<f32>,
+    size: Size<f32>,
+    width: u32,
+    height: u32,
+  ) -> Self {
+    Self {
+      viewport,
+      origin,
+      size,
+      width,
+      height,
+    }
+  }
+
+  /// What sets it apart from another raster of the same bitmap size.
+  fn hash(self) -> u64 {
+    xxh3_64(
+      &[
+        self.viewport.width,
+        self.viewport.height,
+        self.origin.x,
+        self.origin.y,
+        self.size.width,
+        self.size.height,
+      ]
+      .map(f32::to_bits)
+      .map(u32::to_le_bytes)
+      .concat(),
+    )
   }
 }
 
@@ -481,14 +506,14 @@ impl ImageSource {
       // Markup plus a parsed-tree estimate; rasterized pixmaps are weighted
       // separately as their own sized entries.
       #[cfg(feature = "svg-sizing")]
-      Self::Svg(svg) => svg.source.len() * 3,
+      Self::Svg(svg) => svg.source.len() * 3 + svg.document_bytes(),
     }
   }
 
   /// Load an image source from raw bytes.
   ///
   /// - When the `svg` feature is enabled and the bytes look like SVG XML, they
-  ///   are parsed as an SVG using `resvg::usvg`.
+  ///   are parsed as an SVG document.
   /// - Otherwise, the bytes are decoded as a raster image.
   pub fn from_bytes(bytes: &[u8]) -> ImageResult {
     Self::from_svg_or_animated_bytes(bytes, || xxh3_64(bytes), &Weak::new())
@@ -575,7 +600,7 @@ impl ImageSource {
     }
 
     match self {
-      #[cfg(feature = "svg")]
+      #[cfg(feature = "svg-raster")]
       ImageSource::Svg(_) => within_raster_pixel_budget(width, height),
       _ => true,
     }
@@ -595,8 +620,7 @@ impl ImageSource {
       allow(unused_variables)
     )]
     time_ms: u64,
-    #[cfg_attr(not(feature = "svg"), allow(unused_variables))] current_color: Color,
-    #[cfg_attr(not(feature = "svg"), allow(unused_variables))] fonts: Option<&FontsSnapshot>,
+    #[cfg_attr(not(feature = "svg-raster"), allow(unused_variables))] host: &RenderContext,
   ) -> Result<RenderedImage, ImageError> {
     match self {
       ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Sampled {
@@ -631,15 +655,20 @@ impl ImageSource {
           source_scale,
         })
       }
-      #[cfg(feature = "svg")]
+      #[cfg(feature = "svg-raster")]
       ImageSource::Svg(svg) => Ok(RenderedImage::Rasterized(svg.rasterize_cached(
-        width,
-        height,
+        SvgRaster::whole(
+          Size {
+            width: width as f32,
+            height: height as f32,
+          },
+          width,
+          height,
+        ),
         image_rendering,
-        current_color,
-        fonts,
+        host,
       )?)),
-      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
+      #[cfg(all(feature = "svg-sizing", not(feature = "svg-raster")))]
       ImageSource::Svg(_) => Err(ImageError::SvgParseNotSupported),
     }
   }
@@ -669,7 +698,7 @@ impl ImageSource {
   pub fn intrinsic_sizing(&self) -> IntrinsicSizing {
     match self {
       #[cfg(feature = "svg-sizing")]
-      ImageSource::Svg(svg) => svg.sizing.intrinsic,
+      ImageSource::Svg(svg) => svg.intrinsic_sizing(),
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
@@ -724,12 +753,12 @@ pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError>
   Ok(DecodedDataUri { mime, bytes })
 }
 
-/// Applies SVG `<filter>` markup (carrying `id="{filter_id}"`) to a
-/// premultiplied-RGBA layer in place through the resvg filter pipeline.
+/// Applies SVG `<filter>` markup (carrying `id="{filter_id}"`) to a premultiplied-RGBA layer in
+/// place.
 ///
-/// The markup is resolved against the layer bounds and applied straight to
-/// the layer pixels; no render tree is built and nothing is re-encoded.
-#[cfg(feature = "svg")]
+/// The markup is resolved against the layer bounds and applied straight to the layer pixels; no
+/// render tree is built and nothing is re-encoded.
+#[cfg(feature = "svg-raster")]
 pub fn apply_svg_filter(
   layer: &mut [u8],
   width: u32,
@@ -737,22 +766,20 @@ pub fn apply_svg_filter(
   markup: &str,
   filter_id: &str,
 ) -> Result<(), ImageError> {
-  let filters = filters_from_markup(
-    markup,
-    filter_id,
-    width as f32,
-    height as f32,
-    &svg_parse_options(),
-  )
-  .map_err(ImageError::svg_parse)?;
+  // The markup may come out of a document that declared `xlink` on an outer element.
+  let document = SvgDocument::parse(&format!(
+    r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">{markup}</svg>"#
+  ))?;
 
-  let Some(filters) = filters else {
+  let Some(filter) = document.filter(filter_id, width as f32, height as f32) else {
     // An invalid filter reference hides the element.
     layer.fill(0);
     return Ok(());
   };
 
-  apply_filters_to_layer(&filters, layer, width, height).ok_or(ImageError::InvalidPixmapSize)
+  filter
+    .apply_to_layer(layer, width, height)
+    .ok_or(ImageError::InvalidPixmapSize)
 }
 
 /// The MIME type encoded image `bytes` announce, `application/octet-stream` when none matches.
@@ -841,7 +868,7 @@ pub enum ImageError {
   #[error("An error occurred while parsing an SVG image: {0}")]
   SvgParseError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
   /// SVG rendering is not supported in this build
-  #[cfg(not(feature = "svg"))]
+  #[cfg(not(feature = "svg-raster"))]
   #[error("SVG rendering is not supported in this build")]
   SvgParseNotSupported,
   /// The image source is unknown
@@ -866,7 +893,7 @@ impl ImageError {
   }
 
   /// Wraps an SVG parse error opaquely so takumi's public API stays independent
-  /// of the `resvg`/`usvg` version.
+  /// of the XML parser.
   #[cfg(feature = "svg-sizing")]
   pub(crate) fn svg_parse(err: impl std::error::Error + Send + Sync + 'static) -> Self {
     Self::SvgParseError(Box::new(err))
@@ -1092,6 +1119,7 @@ mod resource_cache_tests {
     CacheEntry, ImageCacheMode, RenderedImage, ResourceCache, ResourceCacheKey, ResourceWeighter,
   };
   use crate::{
+    context::RenderContext,
     resources::{image::ImageSource, image_buffer::ImageBuffer},
     style::{Color, ImageScalingAlgorithm},
   };
@@ -1147,8 +1175,7 @@ mod resource_cache_tests {
         height,
         ImageScalingAlgorithm::Auto,
         0,
-        Color::black(),
-        None,
+        &RenderContext::with_current_color(Color::black()),
       )
       .unwrap()
     {
@@ -1241,8 +1268,7 @@ mod resource_cache_tests {
         height,
         ImageScalingAlgorithm::Auto,
         0,
-        Color::black(),
-        None,
+        &RenderContext::with_current_color(Color::black()),
       )
       .unwrap()
     {
@@ -1326,24 +1352,206 @@ mod resource_cache_tests {
 mod tests {
   use std::assert_matches;
 
-  #[cfg(feature = "svg")]
-  use crate::geometry::Size;
   #[cfg(feature = "png")]
   use crate::resources::animated::AnimatedFormat;
   #[cfg(any(feature = "png", feature = "webp"))]
   use crate::resources::image_decoder::DecodeTarget;
+  use crate::style::Color;
 
   use super::*;
 
-  /// `SvgSize` reads the root element only; usvg's size and the intrinsic
+  #[cfg(feature = "svg-raster")]
+  fn filtered_layer(filter: &str, size: u32) -> Vec<u8> {
+    let mut layer = vec![255u8; (size * size * 4) as usize];
+
+    apply_svg_filter(&mut layer, size, size, filter, "f").expect("the filter runs");
+    layer
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn lighting_a_layer_larger_than_the_filter_region_stays_in_bounds() {
+    for light in [
+      r#"<feDiffuseLighting in="SourceGraphic"><feDistantLight azimuth="45" elevation="45"/></feDiffuseLighting>"#,
+      r#"<feSpecularLighting in="SourceAlpha" specularExponent="2"><fePointLight x="3" y="3" z="4"/></feSpecularLighting>"#,
+    ] {
+      let document = SvgDocument::parse(&format!(
+        r#"<svg><filter id="f" filterUnits="userSpaceOnUse" x="2" y="2" width="5" height="5">{light}</filter></svg>"#
+      ))
+      .expect("a document");
+      let filter = document.filter("f", 12.0, 12.0).expect("a filter");
+      let mut layer = tiny_skia::Pixmap::new(12, 12).expect("a pixmap");
+
+      layer.fill(tiny_skia::Color::BLACK);
+      filter.apply(tiny_skia::Transform::identity(), &mut layer);
+    }
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_filter_region_of_a_million_units_allocates_only_the_layer() {
+    filtered_layer(
+      r#"<filter id="f" filterUnits="userSpaceOnUse" x="-1000000" y="-1000000" width="2000000" height="2000000"><feGaussianBlur stdDeviation="2"/></filter>"#,
+      8,
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_filter_keeping_thousands_of_results_alive_ends() {
+    let flood = (0..2000).fold(String::new(), |mut markup, index| {
+      markup.push_str(&format!(r#"<feFlood result="r{index}"/>"#));
+      markup
+    });
+    let nodes = (0..2000).fold(String::new(), |mut markup, index| {
+      markup.push_str(&format!(r#"<feMergeNode in="r{index}"/>"#));
+      markup
+    });
+
+    filtered_layer(
+      &format!(r#"<filter id="f">{flood}<feMerge>{nodes}</feMerge></filter>"#),
+      1024,
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_convolution_of_a_million_cells_is_invalid() {
+    let kernel = "0 ".repeat(1_000_000);
+
+    filtered_layer(
+      &format!(
+        r#"<filter id="f"><feConvolveMatrix order="1000" kernelMatrix="{kernel}"/></filter>"#
+      ),
+      64,
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_morphology_radius_past_the_layer_costs_the_layer_once() {
+    filtered_layer(
+      r#"<filter id="f"><feMorphology radius="100000" operator="dilate"/></filter>"#,
+      2000,
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_billion_octaves_of_noise_end() {
+    filtered_layer(
+      r#"<filter id="f"><feTurbulence baseFrequency="0.05" numOctaves="1000000000"/></filter>"#,
+      16,
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  fn pixel(layer: &[u8], size: u32, x: u32, y: u32) -> [u8; 4] {
+    let start = ((y * size + x) * 4) as usize;
+
+    [
+      layer[start],
+      layer[start + 1],
+      layer[start + 2],
+      layer[start + 3],
+    ]
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn filter_markup_may_use_xlink_without_declaring_it() {
+    let mut layer = vec![255u8; 16 * 16 * 4];
+
+    assert!(
+      apply_svg_filter(
+        &mut layer,
+        16,
+        16,
+        r##"<filter id="f"><feImage xlink:href="#missing"/></filter>"##,
+        "f"
+      )
+      .is_ok()
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_tiled_linear_rgb_result_converts_back_to_srgb() {
+    let layer = filtered_layer(
+      r#"<filter id="f"><feFlood flood-color="rgb(200, 100, 50)"/><feGaussianBlur stdDeviation="1" result="a"/><feTile in="a"/></filter>"#,
+      20,
+    );
+    let [red, green, blue, alpha] = pixel(&layer, 20, 10, 10);
+
+    assert!(
+      red.abs_diff(200) <= 2 && green.abs_diff(100) <= 2 && blue.abs_diff(50) <= 2 && alpha == 255,
+      "{:?}",
+      [red, green, blue, alpha]
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_lighting_color_lights_in_its_own_color() {
+    let layer = filtered_layer(
+      r#"<filter id="f"><feDiffuseLighting lighting-color="rgb(200, 100, 50)"><feDistantLight elevation="90"/></feDiffuseLighting></filter>"#,
+      16,
+    );
+    let [red, green, blue, _] = pixel(&layer, 16, 8, 8);
+
+    assert!(
+      red.abs_diff(200) <= 2 && green.abs_diff(100) <= 2 && blue.abs_diff(50) <= 2,
+      "{:?}",
+      [red, green, blue]
+    );
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_specular_exponent_past_128_clamps_instead_of_clearing() {
+    let layer = filtered_layer(
+      r#"<filter id="f"><feSpecularLighting specularExponent="200"><feDistantLight elevation="90"/></feSpecularLighting></filter>"#,
+      16,
+    );
+
+    assert_ne!(pixel(&layer, 16, 8, 8), [0, 0, 0, 0]);
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_background_image_input_reads_the_result_before() {
+    let layer = filtered_layer(
+      r#"<filter id="f"><feFlood flood-color="rgb(0, 0, 255)"/><feComposite in="BackgroundImage" in2="BackgroundImage"/></filter>"#,
+      16,
+    );
+    let [red, _, blue, _] = pixel(&layer, 16, 8, 8);
+
+    assert!(blue > 200 && red < 50, "{:?}", pixel(&layer, 16, 8, 8));
+  }
+
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_bounding_box_subregion_is_a_fraction_of_the_box() {
+    let layer = filtered_layer(
+      r#"<filter id="f" primitiveUnits="objectBoundingBox"><feColorMatrix type="saturate" values="1" x="0.25" width="0.5"/></filter>"#,
+      40,
+    );
+
+    assert_eq!(pixel(&layer, 40, 20, 20), [255, 255, 255, 255]);
+    assert_eq!(pixel(&layer, 40, 4, 20), [0, 0, 0, 0]);
+  }
+
+  /// `SvgSize` reads the root element only; the canvas of the laid out document and the intrinsic
   /// rules the backends used before must agree with it on every SVG in the repo.
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_size_matches_usvg_across_the_corpus() {
+  fn svg_size_matches_the_canvas_across_the_corpus() {
     use std::{
       fs,
       path::{Path, PathBuf},
     };
+
+    use crate::resources::svg_size::parse_svg_document;
 
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
       for entry in fs::read_dir(dir).unwrap().flatten() {
@@ -1403,7 +1611,7 @@ mod tests {
         SvgSize::parse(&markup).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
       let document = parse_svg_document(&markup).unwrap();
       let root = document.root_element();
-      let usvg_size = source.dimensions();
+      let canvas = source.dimensions();
 
       let percent = |name| {
         root
@@ -1413,16 +1621,16 @@ mod tests {
       if root.attribute("viewBox").is_some() || !(percent("width") || percent("height")) {
         let close = |a: f32, b: f32| (a - b).abs() <= 1e-3 * b.abs().max(1.0);
         assert!(
-          close(size.width, usvg_size.0) && close(size.height, usvg_size.1),
-          "{}: {:?} vs usvg {:?}",
+          close(size.width, canvas.0) && close(size.height, canvas.1),
+          "{}: {:?} vs canvas {:?}",
           path.display(),
           (size.width, size.height),
-          usvg_size
+          canvas
         );
       }
       assert_eq!(
         size.intrinsic,
-        previous_intrinsic(root, usvg_size),
+        previous_intrinsic(root, canvas),
         "{}",
         path.display()
       );
@@ -1440,7 +1648,7 @@ mod tests {
       let Ok(source) = svg.parse::<SvgSource>() else {
         unreachable!("valid svg");
       };
-      source.sizing.intrinsic
+      source.intrinsic_sizing()
     }
     let ns = r#"xmlns="http://www.w3.org/2000/svg""#;
 
@@ -1943,7 +2151,7 @@ mod tests {
     assert_eq!(to_data_url("x", b"foobar"), "data:x;base64,Zm9vYmFy");
   }
 
-  // usvg accepts a namespace-less root, so markup without `xmlns` is still
+  // A namespace-less root is accepted, so markup without `xmlns` is still
   // detected and rendered as SVG.
   #[cfg(feature = "svg")]
   #[test]
@@ -1952,8 +2160,13 @@ mod tests {
     let image = ImageSource::from_bytes(svg.as_bytes())?;
 
     assert!(matches!(image, ImageSource::Svg(_)));
-    let rendered =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, Color::black(), None)?;
+    let rendered = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      &RenderContext::with_current_color(Color::black()),
+    )?;
     assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
     Ok(())
   }
@@ -1971,8 +2184,7 @@ mod tests {
       4,
       ImageScalingAlgorithm::Auto,
       0,
-      Color([255, 0, 0, 255]),
-      None,
+      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
     )?;
 
     assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
@@ -1992,8 +2204,7 @@ mod tests {
       4,
       ImageScalingAlgorithm::Auto,
       0,
-      Color([255, 0, 0, 255]),
-      None,
+      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
     )?;
 
     assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
@@ -2013,8 +2224,7 @@ mod tests {
       4,
       ImageScalingAlgorithm::Auto,
       0,
-      Color([255, 0, 0, 255]),
-      None,
+      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
     )?;
 
     assert_eq!(premul_at(&rendered, 2, 2), [0, 255, 0, 255]);
@@ -2060,8 +2270,13 @@ mod tests {
     let buffer = ImageBuffer::from_rgba_bytes(bitmap, 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
-    let rendered =
-      image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, 0, Color::black(), None)?;
+    let rendered = image.render_for_layout(
+      2,
+      2,
+      ImageScalingAlgorithm::Auto,
+      0,
+      &RenderContext::with_current_color(Color::black()),
+    )?;
 
     assert!(matches!(rendered, RenderedImage::Sampled { .. }));
     Ok(())
@@ -2084,8 +2299,7 @@ mod tests {
       4,
       ImageScalingAlgorithm::Pixelated,
       0,
-      Color::black(),
-      None,
+      &RenderContext::with_current_color(Color::black()),
     )?;
     let RenderedImage::Sampled {
       width,
@@ -2116,8 +2330,7 @@ mod tests {
       8192,
       ImageScalingAlgorithm::Auto,
       0,
-      Color::black(),
-      None,
+      &RenderContext::with_current_color(Color::black()),
     );
 
     assert_matches!(result, Err(ImageError::InvalidPixmapSize));
@@ -2235,7 +2448,7 @@ mod tests {
       .unwrap()
       .encode_png()
       .unwrap();
-    let path = std::env::temp_dir().join(format!("takumi_lfi_{}.png", std::process::id()));
+    let path = std::env::temp_dir().join(format!("takumi_lfi_image_{}.png", std::process::id()));
     std::fs::write(&path, &opaque_red).unwrap();
 
     let ns = r#"xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink""#;
@@ -2244,7 +2457,19 @@ mod tests {
       path.display()
     );
     let source = svg.parse::<SvgSource>().unwrap();
-    let rasterized = source.rasterize(8, 8, Color::black(), None).unwrap();
+    let rasterized = source
+      .rasterize(
+        SvgRaster::whole(
+          Size {
+            width: 8.0,
+            height: 8.0,
+          },
+          8,
+          8,
+        ),
+        &RenderContext::with_current_color(Color::black()),
+      )
+      .unwrap();
 
     std::fs::remove_file(&path).ok();
 

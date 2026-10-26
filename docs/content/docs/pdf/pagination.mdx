@@ -1,15 +1,9 @@
 ---
 title: Pagination
-description: Control PDF page breaks, keep related content together, and set paragraph widows and orphans with CSS.
-icon: Scissors
+description: Start pages where you want, keep related content together, and control how paragraphs and tables split across PDF pages.
 ---
 
-Content lays out at the width inside the margins, then flows across pages. Use CSS break properties to start chapters, keep related content together, and control how paragraphs split.
-
-<Callout type="warn">
-  The content has no fixed height, so percentage heights do not resolve. Viewport units do. `vh` is
-  the height of the page area inside the margins, as in print.
-</Callout>
+Content lays out at the width inside the margins, then flows across pages. CSS break properties start chapters on a new page, keep related content together, and control how paragraphs split. The content has no fixed height, so percentage heights do not resolve, but viewport units do. `vh` is the height of the page area inside the margins, as in print.
 
 ## Mixed page sizes
 
@@ -64,13 +58,11 @@ const pdf = await render(
 | `break-inside: avoid`         | Keeps the element on one page when it fits.             |
 | `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
 
-`break-inside: avoid` applies only when the box fits on a page. A taller box still splits.
-
-A text line, an image, or a transformed subtree never splits unless it is taller than a page.
+`break-inside: avoid` applies only when the box fits on a page. A taller box still splits. Boxes, floats, flex and grid items, and table rows break across pages, as Chromium prints them. A text line or an image never splits. It moves to the next page, and when it is taller than a page it runs on over the pages after it.
 
 ## Full-page boxes
 
-A `100vh` box fills the page area, so the next box starts on the following page. Use it for a cover or any page laid out by hand:
+A `100vh` box fills the page area, so the next box starts on the following page. That suits a cover or any page laid out by hand:
 
 ```tsx twoslash title="Full-page cover"
 import { render } from "takumi-pdf";
@@ -87,7 +79,7 @@ const pdf = await render(
 );
 ```
 
-`vw`, `vmin`, and `vmax` resolve against the same page area. In the `header` and `footer` bands, viewport units resolve against the full page.
+Like `vh`, `vw`, `vmin`, and `vmax` resolve against the page area. In the `header` and `footer` bands, viewport units resolve against the full page.
 
 ## Widows and orphans
 
@@ -111,7 +103,7 @@ const pdf = await render(
 
 ## Split decorations
 
-A box that crosses a page break slices its border and background by default. Set `box-decoration-break: clone` to give each fragment complete decorations:
+A box that crosses a page break slices its border and background by default, but `box-decoration-break: clone` gives each fragment complete decorations:
 
 ```tsx twoslash title="Split decorations"
 import { render } from "takumi-pdf";
@@ -180,9 +172,7 @@ const pdf = await render(<main>{rows}</main>, {
 });
 ```
 
-An unset `from` starts at the first page. An unset `to` runs to the last. The render fails if a range names page 0, runs backwards, or keeps no page.
-
-Layout and page counters still run over the whole document. A kept page shows the numbers it has in full output, so page 4 of 12 still reads "Page 4 of 12". Links and outline entries that point at a dropped page are dropped with it.
+An unset `from` starts at the first page, and an unset `to` runs to the last. The render fails if a range names page 0, runs backwards, or keeps no page. Layout and page counters still run over the whole document, so a kept page shows the numbers it has in full output, so page 4 of 12 still reads "Page 4 of 12". Links and outline entries that point at a dropped page are dropped with it.
 
 ## Watermarks
 

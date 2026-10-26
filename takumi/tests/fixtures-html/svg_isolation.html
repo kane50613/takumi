@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>svg_isolation</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 400px; height: 160px">
+    <svg width="400" height="160" style="display: block; background: white">
+      <rect width="400" height="160" fill="rgb(250, 204, 21)" />
+      <g style="isolation: isolate">
+        <rect x="20" y="20" width="80" height="120" fill="rgb(37, 99, 235)" />
+        <g style="mix-blend-mode: multiply">
+          <rect x="60" y="40" width="120" height="80" fill="rgb(220, 38, 38)" />
+        </g>
+      </g>
+      <g>
+        <rect x="220" y="20" width="80" height="120" fill="rgb(37, 99, 235)" />
+        <g style="mix-blend-mode: multiply">
+          <rect x="260" y="40" width="120" height="80" fill="rgb(220, 38, 38)" />
+        </g>
+      </g>
+    </svg>
+  </body>
+</html>

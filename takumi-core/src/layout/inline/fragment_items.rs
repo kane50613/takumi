@@ -10,18 +10,18 @@ pub(super) use builder::line_span_fragments;
 use std::{mem::take, ops::Range, rc::Rc};
 
 use rustc_hash::FxHashMap;
-
 use skrifa::FontRef;
+use smallvec::SmallVec;
 
 use super::{
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationPlacement,
-  items::ProcessedInlineSpan,
+  items::{InlineSpans, ProcessedInlineSpan},
   metrics::VisualInlineBox,
   outline::InlineOutlineRect,
   runs::{
-    InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
-    ShapedRun, slice_text_at_char_boundaries,
+    FaceKey, InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph,
+    PositionedInlineRun, ShapedRun, slice_text_at_char_boundaries,
   },
   text_fit::LineScaleState,
 };
@@ -56,6 +56,8 @@ pub struct FragmentItems {
   /// The runs' fonts, metrics and brushes, which every run one span shapes in one face shares:
   /// each a run holding no glyphs at no place.
   faces: Vec<Rc<ShapedRun>>,
+  /// The indices in [`Self::faces`], in order, of the faces sharing each key.
+  face_indices: FxHashMap<FaceKey, SmallVec<[u32; 1]>>,
   /// The outlines of the glyphs each of [`Self::faces`] draws, resolved once for ink and paint.
   face_glyphs: Vec<ResolvedGlyphs>,
   glyphs: GlyphStore,
@@ -383,6 +385,13 @@ impl GlyphStore {
 }
 
 impl FragmentItems {
+  /// The items placed in the content box of `layout`, the box they were laid out in once its
+  /// block size is known.
+  pub(crate) fn in_content_box_of(mut self, layout: ComputedLayout) -> Self {
+    self.content_box = ContentBox::of(layout);
+    self
+  }
+
   /// Frees the room its lists grew past their items, since a node keeps them for the render.
   fn shrink_to_fit(&mut self) {
     self.text.shrink_to_fit();
@@ -405,10 +414,14 @@ impl FragmentItems {
     placement: RunPlacement,
     ink: impl FnOnce(&ShapedRun, &ResolvedGlyphs),
   ) {
-    let existing = self
-      .faces
-      .iter()
-      .rposition(|existing| existing.same_face(&run));
+    let key = run.face_key();
+    let existing = self.face_indices.get(&key).and_then(|indices| {
+      indices
+        .iter()
+        .rev()
+        .map(|&index| index as usize)
+        .find(|&index| self.faces[index].same_face(&run))
+    });
     let face = existing.unwrap_or_else(|| {
       self.face_glyphs.push(ResolvedGlyphs::default());
       self.face_glyphs.len() - 1
@@ -433,6 +446,7 @@ impl FragmentItems {
     let text_range = take(&mut shaped_face.text_range);
 
     if existing.is_none() {
+      self.face_indices.entry(key).or_default().push(face as u32);
       self
         .faces
         .push(context.inline_cache().share_face(shaped_face));
@@ -459,15 +473,6 @@ impl FragmentItems {
     &self.line_boxes
   }
 
-  /// The first line's baseline, or the last's with `use_last_line`, below the content box's top;
-  /// `None` without a run or inline box, which content laid out from no items never has.
-  pub(crate) fn baseline(&self, use_last_line: bool) -> Option<f32> {
-    self
-      .baselines
-      .filter(|_| !self.text_items.is_empty() || !self.inline_boxes.is_empty())
-      .map(|(first, last)| if use_last_line { last } else { first })
-  }
-
   /// The in-flow and out-of-flow inline boxes, sorted by id.
   pub fn inline_boxes(&self) -> &[VisualInlineBox] {
     &self.inline_boxes
@@ -487,7 +492,7 @@ impl FragmentItems {
       let span = face
         .brush
         .source_span_id
-        .and_then(|id| spans.get(id as usize));
+        .and_then(|id| spans.spans.get(id as usize));
       let text_range = match span {
         Some(ProcessedInlineSpan::Text { byte_range, .. })
           if item.text_range.start < self.generated_text_start =>
@@ -521,9 +526,16 @@ impl FragmentItems {
       });
     }
 
+    // An atomic inline container measures as a box of the layout tree.
     let inline_boxes = self
       .inline_boxes
       .iter()
+      .filter(|inline_box| {
+        !matches!(
+          spans.spans.get(inline_box.id as usize),
+          Some(ProcessedInlineSpan::Box(item)) if item.render_node.is_inline_content_box()
+        )
+      })
       .map(|inline_box| MeasuredInlineBox {
         x: inline_box.x,
         y: inline_box.y,
@@ -539,7 +551,7 @@ impl FragmentItems {
   /// outlines, the paint offset of the box they paint in, and the nodes of their spans.
   pub(crate) fn resolve_runs<'c>(
     &self,
-    spans: &[ProcessedInlineSpan<'c>],
+    spans: &InlineSpans<'c>,
     context: &RenderContext,
     layout: ComputedLayout,
   ) -> Result<InlineRunLayout<'c>, FontError> {
@@ -575,7 +587,7 @@ impl FragmentItems {
     let background_fragments = if self.backgrounds.is_empty() {
       Vec::new()
     } else {
-      let owners = span_owners(spans);
+      let owners = spans.owners();
 
       self
         .backgrounds
@@ -593,12 +605,45 @@ impl FragmentItems {
   }
 }
 
-/// The node of every span `spans` open, by decoration id.
-fn span_owners<'c>(spans: &[ProcessedInlineSpan<'c>]) -> FxHashMap<usize, &'c RenderNode> {
-  spans
-    .iter()
-    .filter_map(ProcessedInlineSpan::chain)
-    .flat_map(|link| link.ancestors())
-    .map(|link| (link.decoration.id, link.decoration.owner))
-    .collect()
+#[cfg(test)]
+mod tests {
+  use crate::{
+    geometry::{AvailableSpace, NodeId, Size},
+    layout::{
+      inline::testing::{render_tree, span},
+      tree::LayoutResults,
+    },
+  };
+
+  #[test]
+  fn spans_share_a_face_only_when_their_runs_draw_alike() {
+    let mut spans: Vec<_> = (0..40).map(|_| span("a ")).collect();
+
+    spans.push(span("aa bb cc dd ee ff"));
+
+    let block = render_tree(spans, ".container { width: 60px }");
+    let results = LayoutResults::compute_document(
+      &block,
+      Size {
+        width: AvailableSpace::Definite(60.0),
+        height: AvailableSpace::MaxContent,
+      },
+    );
+    let layout = results.layout(NodeId::ROOT).expect("the root's layout");
+    let items = block.fragment_items_in(layout).expect("the root's lines");
+
+    assert_eq!(items.faces.len(), 41);
+    assert!(items.text_items.len() > 41);
+    assert_eq!(items.faces.len(), items.face_glyphs.len());
+    for (index, face) in items.faces.iter().enumerate() {
+      assert!(
+        items.faces[..index]
+          .iter()
+          .all(|other| !other.same_face(face))
+      );
+    }
+    for item in &items.text_items {
+      assert!((item.face as usize) < items.faces.len());
+    }
+  }
 }

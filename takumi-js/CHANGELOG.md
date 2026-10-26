@@ -1,3 +1,9 @@
+## takumi-js@2.18.1
+
+### Render without the images that fail to fetch
+
+The `images` option of `render()` and `ImageResponse` now takes `throwOnError`. Set it to `false` and an image that fails to fetch, such as an emoji Twemoji has no image for, is left out instead of rejecting the whole render. It defaults to `true`, so existing renders behave as before.
+
 ## takumi-js@2.15.0
 
 ### Measure elements with `measure()`

@@ -2,6 +2,8 @@
 //! and [`BfcRect`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/geometry/bfc_rect.h):
 //! positions in a block formatting context's line-relative coordinates.
 
+use std::ops::{Add, Neg};
+
 use crate::layout_unit::LayoutUnit;
 
 /// Blink's `BfcOffset`.
@@ -17,6 +19,25 @@ impl BfcOffset {
       line_offset,
       block_offset,
     }
+  }
+}
+
+impl Add for BfcOffset {
+  type Output = Self;
+
+  fn add(self, other: Self) -> Self {
+    Self::new(
+      self.line_offset + other.line_offset,
+      self.block_offset + other.block_offset,
+    )
+  }
+}
+
+impl Neg for BfcOffset {
+  type Output = Self;
+
+  fn neg(self) -> Self {
+    Self::new(-self.line_offset, -self.block_offset)
   }
 }
 

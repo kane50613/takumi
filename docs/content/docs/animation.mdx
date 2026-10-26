@@ -1,0 +1,201 @@
+---
+title: Animation
+description: Render CSS keyframe animations as animated WebP, APNG, GIF, a single frame, or raw frames for ffmpeg.
+---
+
+Takumi samples CSS animations at a point in time. The output you need decides which call to use.
+
+| Output                      | Call                                         |
+| :-------------------------- | :------------------------------------------- |
+| Animated WebP, APNG, or GIF | `renderAnimation()`                          |
+| One frame at a given time   | `render()` with `timeMs`                     |
+| Video through ffmpeg        | `render()` with `timeMs` and `format: "raw"` |
+
+This video was rendered frame by frame and encoded with ffmpeg, and its code is highlighted with shiki.
+
+<Video
+  src="https://raw.githubusercontent.com/kane50613/takumi/master/example/ffmpeg-keyframe-animation/output/animation.mp4"
+  width={1200}
+  height={630}
+/>
+
+## Define an animation
+
+### With a stylesheet
+
+Write `@keyframes` in a `<style>` tag inside the tree. `render()` and `renderAnimation()` both pick it up, so the animation travels with the component.
+
+```tsx twoslash title="scene.tsx"
+// @noErrors
+export function Scene() {
+  return (
+    <div tw="flex w-full h-full items-center justify-center">
+      <style>{`
+        @keyframes move {
+          from {
+            transform: translateX(0);
+          }
+
+          to {
+            transform: translateX(60px);
+          }
+        }
+      `}</style>
+      <div tw="w-10 h-10 bg-red-500 animate-[move_1s_ease-in-out_infinite_alternate]" />
+    </div>
+  );
+}
+```
+
+The next examples render this `Scene`.
+
+### As an object
+
+When the values come from application data, pass the animation as a `css` entry. Takumi checks every value before parsing, so no value is concatenated into a CSS string.
+
+```tsx twoslash title="render.tsx"
+// @noErrors
+import { render } from "takumi-js";
+
+const frame = await render(<div tw="animate-[move_1s_ease-in-out_infinite_alternate]" />, {
+  width: 100,
+  height: 100,
+  timeMs: 500,
+  css: {
+    keyframes: "move",
+    steps: [
+      { offset: "from", style: { transform: "translateX(0)" } },
+      { offset: "50%", style: { transform: "translateX(60px)" } },
+      { offset: "to", style: { transform: "translateX(120px)" } },
+    ],
+  },
+});
+```
+
+Each step takes an `offset` with one of these values.
+
+| Offset   | Position                             |
+| -------- | ------------------------------------ |
+| `from`   | Start of the animation               |
+| `to`     | End of the animation                 |
+| `"<n>%"` | A percentage offset, such as `"50%"` |
+
+<Callout type="info">
+  The `keyframes` render option takes the same animation as a nested record. It is deprecated and
+  will be removed in v3.
+</Callout>
+
+### With Tailwind utilities
+
+Takumi supports these Tailwind presets.
+
+| Preset           | Effect                                |
+| ---------------- | ------------------------------------- |
+| `animate-none`   | No animation                          |
+| `animate-spin`   | Continuous rotation                   |
+| `animate-ping`   | Scale and fade out, like a radar ping |
+| `animate-pulse`  | Fade opacity in and out               |
+| `animate-bounce` | Bounce up and down                    |
+
+An arbitrary value turns each `_` into a space, so `animate-[move_1s_ease-in-out_infinite_alternate]` becomes this declaration:
+
+```css title="Generated declaration"
+animation: move 1s ease-in-out infinite alternate;
+```
+
+A named utility reads its theme variable, as in Tailwind. `animate-wiggle` reads `var(--animate-wiggle)`, so declare that variable and its `@keyframes`. See [Design tokens](/docs/styles#design-tokens).
+
+<Callout type="warning">
+  Takumi does not parse the `animate-(--my-animation)` form. Use a named utility with its
+  `--animate-*` variable instead.
+</Callout>
+
+## Render the animation
+
+### One frame with `render()`
+
+Pass `timeMs` to render the frame at that point of the timeline.
+
+```tsx twoslash title="render.tsx"
+// @noErrors
+import { render } from "takumi-js";
+import { Scene } from "./scene";
+
+const frame = await render(<Scene />, {
+  width: 100,
+  height: 100,
+  timeMs: 500,
+});
+```
+
+### An animated image with `renderAnimation()`
+
+`renderAnimation()` samples each scene at `fps` and encodes the frames. It converts each scene's JSX, HTML string, or node tree, extracts its `<style>` tags, and fetches images once across every scene.
+
+```tsx twoslash title="render.tsx"
+// @noErrors
+import { renderAnimation } from "takumi-js";
+import { Scene } from "./scene";
+
+const webp = await renderAnimation({
+  width: 100,
+  height: 100,
+  fps: 30,
+  format: "webp",
+  scenes: [{ durationMs: 1000, node: <Scene /> }],
+});
+```
+
+`scenes` plays several scenes in a row. Each scene starts its own timeline at 0, and Takumi does not tween between scenes.
+
+### Video with ffmpeg
+
+Render each frame with `format: "raw"` and pipe the RGBA bytes into ffmpeg. The [`ffmpeg-keyframe-animation` example](https://github.com/kane50613/takumi/blob/master/example/ffmpeg-keyframe-animation/) is a complete version.
+
+```tsx twoslash title="render.tsx"
+// @noErrors
+import { render } from "takumi-js";
+import { spawn } from "bun";
+import { Scene } from "./scene";
+
+const fps = 30;
+const durationSeconds = 4;
+const width = 1200;
+const height = 630;
+const totalFrames = fps * durationSeconds;
+
+const ffmpeg = spawn(
+  [
+    "ffmpeg",
+    "-y",
+    "-f",
+    "rawvideo",
+    "-pixel_format",
+    "rgba",
+    "-video_size",
+    `${width}x${height}`,
+    "-framerate",
+    `${fps}`,
+    "-i",
+    "pipe:0",
+    "output.mp4",
+  ],
+  { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
+);
+
+const scene = <Scene />;
+
+for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+  const frame = await render(scene, {
+    width,
+    height,
+    format: "raw",
+    timeMs: (frameIndex / fps) * 1000,
+  });
+
+  ffmpeg.stdin.write(frame);
+}
+
+ffmpeg.stdin.end();
+await ffmpeg.exited;
+```

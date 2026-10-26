@@ -19,3 +19,7 @@ workspace = true
 [features]
 default = ["svg"]
 svg = ["takumi-core/svg"]
+
+[dev-dependencies.wuff]
+workspace = true
+features = ["brotli"]

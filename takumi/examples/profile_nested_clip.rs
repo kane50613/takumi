@@ -1,9 +1,6 @@
 use std::hint::black_box;
 
-use takumi::{
-  prelude::{Length::*, *},
-  render,
-};
+use takumi::{prelude::*, render};
 
 const ITERS: usize = 100;
 
@@ -11,14 +8,12 @@ fn nested_clip_masks_fixture() -> Node {
   let leaf = |radius: &str| {
     Node::container([]).with_style(
       Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
-        .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
-        .with_overflow(SpacePair::from_single(Overflow::Clip))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([200, 30, 30, 255]),
-        ))),
+        .display(Display::Flex)
+        .width(100.0.percent())
+        .height(100.0.percent())
+        .border_radius(BorderRadius::from_css_str(radius).unwrap())
+        .overflow(SpacePair::from_single(Overflow::Clip))
+        .background_color(ColorInput::Value(Color([200, 30, 30, 255]))),
     )
   };
 
@@ -26,27 +21,23 @@ fn nested_clip_masks_fixture() -> Node {
   for radius in ["24px", "32px", "40px", "48px", "56px"] {
     current = Node::container([current]).with_style(
       Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(95.0)))
-        .with(StyleDeclaration::height(Percentage(95.0)))
-        .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
-        .with_overflow(SpacePair::from_single(Overflow::Clip))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([30, 30, 200, 255]),
-        ))),
+        .display(Display::Flex)
+        .width(95.0.percent())
+        .height(95.0.percent())
+        .border_radius(BorderRadius::from_css_str(radius).unwrap())
+        .overflow(SpacePair::from_single(Overflow::Clip))
+        .background_color(ColorInput::Value(Color([30, 30, 200, 255]))),
     );
   }
 
   Node::container([current]).with_style(
     Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color::white(),
-      ))),
+      .display(Display::Flex)
+      .width(100.0.percent())
+      .height(100.0.percent())
+      .align_items(AlignItems::Center)
+      .justify_content(JustifyContent::Center)
+      .background_color(ColorInput::Value(Color::white())),
   )
 }
 

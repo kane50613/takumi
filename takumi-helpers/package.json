@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/helpers",
-  "version": "2.17.1",
+  "version": "2.18.1",
   "description": "Convert JSX and HTML to Takumi node trees. Load fonts and emoji.",
   "keywords": [
     "emoji",
@@ -11,7 +11,7 @@
     "react",
     "tailwind"
   ],
-  "homepage": "https://takumi.kane.tw/docs/helpers#parsing-templates",
+  "homepage": "https://takumi.kane.tw/docs/reference/helpers#parsing-templates",
   "bugs": {
     "url": "https://github.com/kane50613/takumi/issues"
   },

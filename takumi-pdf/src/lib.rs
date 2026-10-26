@@ -11,10 +11,11 @@
 //!
 //! # Pagination
 //!
-//! With [`PdfOptions::page`] set, content lays out at the page's content width with unbounded
-//! height, then slices into pages. Text lines, images, and transformed subtrees move the cut
-//! point up so no page cuts them in half. One taller than a page runs on over the next pages.
-//! Each page walks the scene again through a vertical window (clip and translate).
+//! With [`PdfOptions::page`] set, content lays out on pages through takumi-core's block
+//! fragmentation, as Chromium lays out a printed document. Boxes, lines, flex and grid items,
+//! and table rows break across pages. Content that cannot break, such as an image, moves to the
+//! next page, and runs on over the pages after it when it is taller than one. Each page paints
+//! from the scene of the pages that reach it, as soon as no page still to lay out can.
 //!
 //! Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and the
 //! `widows` and `orphans` minimums, which default to 2 as in Chromium. A table header or footer
@@ -51,7 +52,6 @@
 
 use std::{mem::take, rc::Rc};
 
-mod atoms;
 mod bands;
 mod chunks;
 mod counters;
@@ -62,6 +62,8 @@ mod filter;
 mod glyph;
 mod inline;
 mod interactive;
+#[cfg(test)]
+mod memory_tests;
 mod options;
 mod page;
 mod pagination;
@@ -70,9 +72,13 @@ mod paint;
 mod raster;
 mod sections;
 mod shadow;
+#[cfg(test)]
+mod streaming_tests;
 #[cfg(all(feature = "svg", feature = "images"))]
 mod svg;
 mod tags;
+#[cfg(test)]
+mod test_support;
 mod tree;
 mod window;
 
@@ -100,6 +106,7 @@ mod subsetter;
 use takumi_core::{
   geometry::Point as CorePoint,
   layout::tree::RenderNode,
+  page_stream::{SETTLED_PAGES, Settle},
   style::{Color, Lang},
   viewport::MediaTarget,
 };
@@ -113,10 +120,10 @@ pub use crate::options::{
   PdfOptions, PdfSection, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
 };
 use crate::{
-  emitter::DocumentState,
+  emitter::{DocumentState, Emitter},
   glyph::Uncovered,
   inline::{InlineCache, TextBox},
-  interactive::{Interactive, add_link_annotations, xyz_destination},
+  interactive::{Interactive, PageSummary, add_link_annotations, xyz_destination},
   krilla::{
     Document, SerializeSettings,
     configure::ConfigurationBuilder,
@@ -125,12 +132,11 @@ use crate::{
     page::PageSettings,
   },
   options::{PT_PER_PX, PageSelection},
-  page::{PageBands, PagePlan, band_viewport},
+  page::{PageBands, PageDrawing, PagePlan, band_viewport},
   pagination::PageCounters,
   paint::paint_page_background,
   sections::SectionPlan,
   tree::{PreparedTree, TreeInputs},
-  window::Window,
 };
 
 /// Lays out a node tree without rendering and returns its size.
@@ -169,7 +175,13 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
 
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged
 /// when [`PdfOptions::page`] is set.
-pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
+pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
+  render_settling(options, SETTLED_PAGES)
+}
+
+/// [`render`] with `settle`, given the layout, saying how many of the first pages of a document
+/// that streams are safe to draw.
+fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Vec<u8>, PdfError> {
   if !options.sections.is_empty() && options.page.is_none() {
     return Err(PdfError::SectionsNeedPages);
   }
@@ -201,17 +213,23 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut sources = vec![first];
 
       sources.append(&mut options.sections);
-      let plan = SectionPlan::solve(
-        &inputs,
+      let plan = SectionPlan::render(
+        &mut PageDrawing {
+          pdf: &mut pdf,
+          inputs: &inputs,
+          state: &state,
+          background: options.background_color,
+          counters: PageCounters::default(),
+          destinations: None,
+        },
         &sources,
         page,
         &options.pages,
         options.page_ranges.as_deref(),
         structural,
+        settle,
       )?;
 
-      drop(sources);
-      plan.compose(&mut pdf, &inputs, &state, options.background_color)?;
       Rendered::Sections(Box::new(plan))
     }
     Some(page) => {
@@ -220,16 +238,16 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         footer: options.pages.footer_band(options.footer.as_ref()),
         page_ranges: options.page_ranges.as_deref(),
       };
-      let plan = PagePlan::solve(
-        &inputs,
-        page,
-        bands,
-        options.node,
-        structural,
-        PageCounters::default(),
-      )?;
+      let plan = PageDrawing {
+        pdf: &mut pdf,
+        inputs: &inputs,
+        state: &state,
+        background: options.background_color,
+        counters: PageCounters::default(),
+        destinations: None,
+      }
+      .render(page, bands, options.node, structural, settle)?;
 
-      plan.compose(&mut pdf, &inputs, &state, options.background_color, None)?;
       Rendered::Paged(Box::new(plan))
     }
     None => {
@@ -253,11 +271,11 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   };
 
   if (options.outline || options.tagged.requires_outline())
-    && !rendered.interactive().headings.is_empty()
+    && !rendered.summary().headings.is_empty()
   {
     pdf.set_outline(
       rendered
-        .interactive()
+        .summary()
         .outline(|heading| rendered.destination(heading.top, &heading.path)),
     );
   }
@@ -265,9 +283,11 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     pdf.set_tag_tree(collector.borrow_mut().build_tree(
       rendered.roots(),
       state.lang,
-      &rendered.interactive().destination_targets(),
+      &rendered.summary().destination_targets(),
     ));
   }
+  // The layout and scene are done with; serializing the fonts and objects needs neither.
+  drop(rendered);
   if let Some(error) = state.into_error() {
     return Err(error);
   }
@@ -347,26 +367,21 @@ struct SinglePage {
 impl Rendered {
   fn roots(&self) -> Vec<(&RenderNode, Vec<usize>)> {
     match self {
-      Self::Paged(plan) => vec![(&plan.paginated.content.scene.root, Vec::new())],
+      Self::Paged(plan) => vec![(&plan.root, Vec::new())],
       Self::Sections(plan) => plan
         .sections
         .iter()
-        .map(|section| {
-          (
-            &section.paginated.content.scene.root,
-            section.prefix.clone(),
-          )
-        })
+        .map(|section| (&section.root, section.prefix.clone()))
         .collect(),
       Self::Single(page) => vec![(&page.content.scene.root, Vec::new())],
     }
   }
 
-  fn interactive(&self) -> &Interactive {
+  fn summary(&self) -> &PageSummary {
     match self {
-      Self::Paged(plan) => &plan.paginated.interactive,
-      Self::Sections(plan) => &plan.interactive,
-      Self::Single(page) => &page.interactive,
+      Self::Paged(plan) => &plan.summary,
+      Self::Sections(plan) => &plan.summary,
+      Self::Single(page) => &page.interactive.summary,
     }
   }
 
@@ -393,7 +408,7 @@ impl SinglePage {
       content.scene.size.height * PT_PER_PX,
     )
     .ok_or(PdfError::InvalidPageSize)?;
-    let text_boxes = TextBox::collect(&content);
+    let text_boxes = TextBox::collect(content.view());
     let inline = InlineCache::new(&text_boxes);
     let mut page = pdf.start_page_with(PageSettings::new(page_size));
     let mut surface = page.surface();
@@ -401,7 +416,7 @@ impl SinglePage {
     surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
     paint_page_background(background, content.scene.size, &mut surface);
 
-    let mut emitter = content.emitter(state, Some(&inline), None, true);
+    let mut emitter = Emitter::new(content.view(), state, Some(&inline), None, true);
 
     emitter.emit(&mut surface)?;
     surface.pop();
@@ -415,15 +430,13 @@ impl SinglePage {
     add_link_annotations(
       &mut page,
       &rendered.interactive.links,
-      Window {
-        y: Some((0.0, rendered.content.scene.size.height)),
-        ..Window::default()
-      },
+      (0.0, rendered.content.scene.size.height),
       CorePoint::ZERO,
       state.tags.as_ref(),
       |id| {
         rendered
           .interactive
+          .summary
           .anchors
           .get(id)
           .map(|anchor| rendered.destination(anchor.top, &anchor.path))
@@ -448,21 +461,7 @@ mod tests {
   use takumi_core::{geometry::Size, units::ONE_IN_PX};
 
   use super::*;
-  use crate::{
-    atoms::Atoms,
-    options::BAND_EDGE_PADDING,
-    pagination::{Atom, MAX_PAGES, Paragraph},
-  };
-
-  fn atoms(extents: &[Atom], forced: &[f32], paragraphs: Vec<Paragraph>) -> Atoms {
-    Atoms {
-      extents: extents.to_vec(),
-      forced: forced.to_vec(),
-      paragraphs,
-      content: vec![(0.0, f32::INFINITY)],
-      ..Atoms::default()
-    }
-  }
+  use crate::options::BAND_EDGE_PADDING;
 
   const A4: Size<f32> = PageOptions::A4.size();
 
@@ -520,178 +519,6 @@ mod tests {
       ),
       Err(PdfError::PageRangesOutOfBounds(5))
     ));
-  }
-
-  #[test]
-  fn content_taller_than_a_render_allows_stops_counting() {
-    let starts = atoms(&[], &[], Vec::new()).page_starts(&[], 2_000_000.0, 10.0);
-
-    assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
-  }
-
-  #[test]
-  fn page_starts_without_atoms_cuts_at_window() {
-    assert_eq!(
-      atoms(&[], &[], Vec::new()).page_starts(&[], 250.0, 100.0),
-      vec![0.0, 100.0, 200.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_pushes_straddling_atom_to_next_page() {
-    assert_eq!(
-      atoms(&[(90.0, 110.0)], &[], Vec::new()).page_starts(&[], 250.0, 100.0),
-      vec![0.0, 90.0, 190.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_hard_cuts_atom_taller_than_window() {
-    assert_eq!(
-      atoms(&[(0.0, 300.0)], &[], Vec::new()).page_starts(&[], 300.0, 100.0),
-      vec![0.0, 100.0, 200.0]
-    );
-  }
-
-  /// Six 10pt lines from y=50: the window cut at 100 would leave a lone line
-  /// on the next page, so the solver moves it up to keep two.
-  #[test]
-  fn page_starts_keeps_widows_together() {
-    let lines: Vec<Atom> = (0..6)
-      .map(|i| (50.0 + i as f32 * 10.0, 60.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 2,
-      after: 2,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
-      vec![0.0, 90.0],
-      "the cut moves from 100 to 90 so two lines reach the next page"
-    );
-  }
-
-  /// The cut at 100 would strand one line at the bottom of the page, so the
-  /// whole paragraph moves over.
-  #[test]
-  fn page_starts_keeps_orphans_together() {
-    let lines: Vec<Atom> = (0..4)
-      .map(|i| (90.0 + i as f32 * 10.0, 100.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 2,
-      after: 2,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 140.0, 100.0),
-      vec![0.0, 90.0],
-      "one line before the cut violates orphans, so the paragraph starts the next page"
-    );
-  }
-
-  /// Three lines with 2/2 minimums cannot satisfy both sides. Blink keeps the
-  /// orphans and accepts the widow violation, and so does the solver.
-  #[test]
-  fn page_starts_prefers_orphans_over_widows() {
-    let lines: Vec<Atom> = (0..3)
-      .map(|i| (80.0 + i as f32 * 10.0, 90.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 2,
-      after: 2,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
-      vec![0.0, 100.0],
-      "backing up past the orphans floor is worse than a lone widow"
-    );
-  }
-
-  /// Minimums that cannot fit the current page are dropped rather than looping.
-  #[test]
-  fn page_starts_drops_unsatisfiable_minimums() {
-    let lines: Vec<Atom> = (0..30)
-      .map(|i| (i as f32 * 10.0, 10.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 20,
-      after: 20,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 300.0, 100.0),
-      vec![0.0, 100.0, 200.0],
-      "a paragraph that can never satisfy 20/20 still paginates at the window"
-    );
-  }
-
-  /// `widows` past the paragraph's line count resolves to the orphans floor,
-  /// like any other unsatisfiable widows value, instead of underflowing.
-  #[test]
-  fn page_starts_floors_widows_past_the_line_count() {
-    let lines: Vec<Atom> = (0..3)
-      .map(|i| (80.0 + i as f32 * 10.0, 90.0 + i as f32 * 10.0))
-      .collect();
-    let paragraphs = vec![Paragraph {
-      lines: lines.clone(),
-      before: 1,
-      after: 5,
-    }];
-
-    assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
-      vec![0.0, 90.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_honors_forced_cuts() {
-    assert_eq!(
-      atoms(&[], &[40.0, 150.0], Vec::new()).page_starts(&[], 250.0, 100.0),
-      vec![0.0, 40.0, 140.0, 150.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_drops_forced_cuts_beside_spacing_alone() {
-    let atoms = Atoms {
-      forced: vec![40.0, 110.0],
-      content: vec![(0.0, 20.0), (60.0, 80.0)],
-      ..Atoms::default()
-    };
-
-    assert_eq!(atoms.page_starts(&[], 120.0, 30.0), vec![0.0, 30.0, 60.0]);
-  }
-
-  #[test]
-  fn page_starts_keeps_forced_cuts_under_content() {
-    let atoms = Atoms {
-      forced: vec![40.0],
-      content: vec![(0.0, 20.0), (30.0, 35.0), (60.0, 80.0)],
-      ..Atoms::default()
-    };
-
-    assert_eq!(
-      atoms.page_starts(&[], 120.0, 30.0),
-      vec![0.0, 30.0, 40.0, 70.0]
-    );
-  }
-
-  #[test]
-  fn page_starts_ends_at_the_last_content_box() {
-    let atoms = Atoms {
-      content: vec![(0.0, 90.0)],
-      ..Atoms::default()
-    };
-
-    assert_eq!(atoms.page_starts(&[], 250.0, 100.0), vec![0.0]);
   }
 
   #[test]

@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_decoration_inset</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: block;
+        padding: 16px 24px;
+        font-size: 32px;
+        line-height: 1.5;
+        background-color: rgb(255, 255, 255);
+      }
+      u {
+        text-decoration-line: underline;
+        text-decoration-thickness: 3px;
+        text-decoration-color: rgb(37, 99, 235);
+      }
+      .wrap {
+        width: 220px;
+      }
+    </style>
+  </head>
+  <body style="width: 720px; height: 480px">
+    <div class="row">
+      <u style="text-decoration-inset: 12px">fixed</u>
+      <u style="text-decoration-inset: auto">auto</u
+      ><u style="text-decoration-inset: auto">joined</u>
+      <u style="text-decoration-inset: -8px -8px">wider</u>
+    </div>
+    <div class="row">
+      <u style="text-decoration-inset: 25%">A<span>B</span><span>C</span>D</u>
+    </div>
+    <div class="row wrap">
+      <u style="text-decoration-inset: 20px; box-decoration-break: slice">slice across lines</u>
+    </div>
+    <div class="row wrap">
+      <u style="text-decoration-inset: 20px; box-decoration-break: clone">clone across lines</u>
+    </div>
+  </body>
+</html>

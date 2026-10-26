@@ -74,6 +74,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
           }
 
           let Ok(size) = input.try_parse(GridTrackSize::from_css) else {
+            pending_leading_names = names;
             break;
           };
 
@@ -115,66 +116,13 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
 impl<'i> FromCss<'i> for GridTemplateComponents {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut components = Vec::new();
-    while let Ok(component) = GridTemplateComponent::from_css(input) {
+    while let Ok(component) = input.try_parse(GridTemplateComponent::from_css) {
       components.push(component);
     }
     Ok(components)
   }
 
   const VALID_TOKENS: &'static [&'static str] = GridTemplateComponent::VALID_TOKENS;
-}
-
-pub(crate) fn collect_components_and_names(
-  components: &[GridTemplateComponent],
-  sizing: &SizingContext,
-) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>) {
-  let mut track_components = Vec::new();
-  let mut line_name_sets = Vec::new();
-  let mut pending_line_names = Vec::new();
-
-  for component in components {
-    match component {
-      GridTemplateComponent::LineNames(names) => {
-        pending_line_names.extend_from_slice(names);
-      }
-      GridTemplateComponent::Single(track_size) => {
-        line_name_sets.push(take(&mut pending_line_names));
-        track_components.push(taffy::GridTemplateComponent::Single(
-          track_size.to_min_max(sizing),
-        ));
-      }
-      GridTemplateComponent::Repeat(repetition, tracks) => {
-        line_name_sets.push(take(&mut pending_line_names));
-
-        let track_sizes = tracks
-          .iter()
-          .map(|track| track.size.to_min_max(sizing))
-          .collect();
-        let mut inner_line_names = tracks
-          .iter()
-          .map(|track| track.names.clone())
-          .collect::<Vec<_>>();
-        inner_line_names.push(
-          tracks
-            .last()
-            .and_then(|track| track.end_names.clone())
-            .unwrap_or_default(),
-        );
-
-        track_components.push(taffy::GridTemplateComponent::Repeat(
-          taffy::GridTemplateRepetition {
-            count: repetition.into_taffy(),
-            tracks: track_sizes,
-            line_names: inner_line_names,
-          },
-        ));
-      }
-    }
-  }
-
-  line_name_sets.push(pending_line_names);
-
-  (track_components, line_name_sets)
 }
 
 impl ToCss for GridTemplateComponent {
@@ -234,6 +182,21 @@ mod tests {
             end_names: None
           }
         ]
+      ))
+    );
+  }
+
+  #[test]
+  fn test_parse_template_component_repeat_end_names() {
+    assert_eq!(
+      GridTemplateComponent::from_css_str("repeat(2, 1fr [a b])"),
+      Ok(GridTemplateComponent::Repeat(
+        GridRepetitionCount::Count(2),
+        vec![GridRepeatTrack {
+          names: Vec::new(),
+          size: GridTrackSize::Fixed(GridLength::Fr(1.0)),
+          end_names: Some(vec!["a".to_string(), "b".to_string()])
+        }]
       ))
     );
   }

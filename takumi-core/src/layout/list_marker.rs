@@ -1,11 +1,10 @@
 use std::rc::Rc;
 
-use taffy::Size as TaffySize;
-
 use crate::{
   context::RenderContext,
-  geometry::Point,
+  geometry::{Point, Size},
   layout::{
+    layout_style::LayoutLength,
     node::{Node, resolve_image},
     tree::{NodeOrigin, RenderNode},
   },
@@ -272,7 +271,7 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage) -> RenderNo
   let mut item = RenderNode::anonymous_image_item(context, image);
 
   if let Some(layout_style) = &mut item.layout_style_override {
-    Rc::make_mut(layout_style).max_size = TaffySize::auto();
+    Rc::make_mut(layout_style).max_size = Size::all(LayoutLength::Auto);
   }
 
   item
@@ -327,7 +326,7 @@ mod tests {
     context::RenderContext,
     layout::{
       node::{Node, NodeKind},
-      tree::RenderNode,
+      tree::{NodeOrigin, RenderNode},
     },
     resources::font::Fonts,
     style::{SizingContext, StyleSheet},
@@ -369,8 +368,9 @@ mod tests {
 
   /// Every marker in the tree, in document order.
   fn collect_markers(node: &RenderNode, collected: &mut Vec<String>) {
-    if let Some(marker) = &node.marker {
-      collected.extend(text_runs(marker));
+    if node.origin == NodeOrigin::Marker {
+      collected.extend(text_runs(node));
+      return;
     }
 
     for child in node.children.iter().flat_map(|children| children.iter()) {
@@ -389,7 +389,7 @@ mod tests {
   }
 
   fn marker_of(node: &RenderNode) -> &RenderNode {
-    node.marker.as_deref().expect("marker")
+    node.marker().expect("marker")
   }
 
   fn item(children: impl Into<Vec<Node>>) -> Node {
@@ -462,9 +462,10 @@ mod tests {
     assert_eq!(markers(list, &css), ["1. ", "2. "]);
   }
 
-  /// A block chain leads to the item's first line, wherever that line sits.
+  /// The outside marker stays the item's first child however deep its first line sits, as
+  /// Blink's `::marker` does; the item places it beside that line.
   #[test]
-  fn a_nested_block_chain_hosts_the_marker() {
+  fn a_nested_block_chain_leaves_the_marker_on_the_item() {
     let paragraph = Node::container([Node::text("hello")]).with_class_name("block");
     let list = Node::container([item(
       [Node::container([paragraph]).with_class_name("block")],
@@ -473,12 +474,13 @@ mod tests {
     let css = format!("{LIST_CSS} .block {{ display: block }}");
 
     let tree = render_tree(list, &css);
-    let paragraph = first_child(first_child(first_child(&tree)));
+    let item = first_child(&tree);
 
-    assert_eq!(
-      text_runs(marker_of(paragraph)),
-      ["1. "],
-      "the marker did not reach the paragraph"
+    assert_eq!(text_runs(marker_of(item)), ["1. "]);
+    assert!(
+      first_child(&item.children.as_deref().expect("children")[1])
+        .marker()
+        .is_none()
     );
   }
 
@@ -519,14 +521,14 @@ mod tests {
     render_tree(list, css)
   }
 
-  /// Blink puts an outside marker on the item's first line, which for
-  /// block-level content lives inside the first block.
+  /// An outside marker beside block-level content is the item's own child, which the item places
+  /// against its first block's baseline.
   #[test]
-  fn a_block_only_item_hosts_the_marker_in_its_first_block() {
+  fn a_block_only_item_keeps_its_outside_marker() {
     let tree = block_only_item(&format!("{LIST_CSS} .block {{ display: block }}"));
-    let block = first_child(first_child(&tree));
+    let item = first_child(&tree);
 
-    assert_eq!(text_runs(marker_of(block)), ["1. "]);
+    assert_eq!(text_runs(marker_of(item)), ["1. "]);
   }
 
   /// An inside marker is the item's own content, so it keeps its place before
@@ -538,7 +540,10 @@ mod tests {
     ));
     let item = first_child(&tree);
 
-    assert!(item.marker.is_none(), "the marker joined the block's line");
+    assert!(
+      item.marker().is_none(),
+      "the marker joined the block's line"
+    );
     assert_eq!(text_runs(marker_of(first_child(item))), ["1. "]);
   }
 

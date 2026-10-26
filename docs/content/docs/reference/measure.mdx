@@ -1,0 +1,112 @@
+---
+title: measure()
+description: Measure the size, position, and text runs of laid-out nodes with measure() without painting.
+---
+
+`measure()` lays out a tree and returns each box's size and position without painting it. Use it to fit a headline into a fixed width, or to place a badge next to a measured box.
+
+```tsx twoslash title="Measure an element"
+import { measure } from "takumi-js";
+
+const { width, height } = await measure(<span tw="text-xl">I'm a text node</span>); // [!code highlight]
+//      ^?
+```
+
+`measure()` takes the same input and options as `render()`: JSX, an HTML string, or a node tree, with `css`, `fonts`, and `images`. It runs on the same default renderer, so fonts loaded for rendering measure the same way. Without `width` and `height`, the root sizes to its content.
+
+To measure on a renderer you manage, pass it a node tree:
+
+```tsx twoslash tab="takumi-js/node" title="Measure with the native renderer"
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
+
+const renderer = new Renderer();
+const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
+
+const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
+//      ^?
+```
+
+```tsx twoslash tab="takumi-js/wasm" title="Measure with WebAssembly"
+import wasm, { init, Renderer } from "takumi-js/wasm";
+import { fromJsx } from "takumi-js/helpers/jsx";
+
+await init({ module_or_path: wasm });
+
+const renderer = new Renderer();
+const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
+
+const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
+//      ^?
+```
+
+Use `measure()` for sizes and positions. To draw the laid-out boxes and text yourself, use [`takumi-paint`](/docs/paint), which returns the shapes, text runs, and images to draw, in order, with every CSS value resolved.
+
+## Returned fields
+
+`measure()` resolves to a `MeasuredNode`.
+
+<TypeTable
+  type={{
+    width: {
+      type: "number",
+      description: "Laid-out width",
+    },
+    height: {
+      type: "number",
+      description: "Laid-out height",
+    },
+    transform: {
+      type: "[number, number, number, number, number, number]",
+      description: "Matrix that places the box in the image",
+    },
+    children: {
+      type: "MeasuredNode[]",
+      description: "Measured child nodes",
+    },
+    runs: {
+      type: "MeasuredTextRun[]",
+      description: "Text runs the node lays out",
+      typeDescriptionLink: "#text-runs",
+    },
+  }}
+/>
+
+<Callout type="info">
+  Lengths are in device pixels. A `20px` box measures `40` with a `devicePixelRatio` of `2`.
+</Callout>
+
+## Text runs
+
+A node that lays out text reports one `MeasuredTextRun` per shaped run.
+
+<TypeTable
+  type={{
+    text: {
+      type: "string",
+      description: "The run's text",
+    },
+    x: {
+      type: "number",
+      description: "Left edge, from the content box of the node that owns the run",
+    },
+    y: {
+      type: "number",
+      description: "Top edge, from the content box of the node that owns the run",
+    },
+    width: {
+      type: "number",
+      description: "Run width",
+    },
+    height: {
+      type: "number",
+      description: "Run height",
+    },
+  }}
+/>
+
+## Coordinates
+
+`transform` is absolute and places the box in the image. Every node has one, including the boxes Takumi generates to lay out inline content.
+
+A run's `x` and `y` are not absolute. They start at the content box of the node that owns the run. To place a run in the image, add that node's `padding` and `border` to the run's `x` and `y`, then apply the node's `transform`.

@@ -1,12 +1,8 @@
 use std::{assert_matches, fs, sync::Arc};
 
-use resvg::{
-  tiny_skia::{Pixmap, Transform},
-  usvg::{Options, Tree},
-};
 use takumi::{prelude::*, render, render_svg};
 
-use crate::test_utils::repo_base_path;
+use crate::test_utils::{rasterize_svg, repo_base_path};
 
 fn read_font(path: &str) -> Vec<u8> {
   fs::read(repo_base_path("assets/fonts").join(path)).unwrap()
@@ -187,13 +183,9 @@ fn a_bitmap_glyph_casts_a_text_shadow() {
       .build(),
   )
   .unwrap();
-  let tree = Tree::from_str(&svg, &Options::default()).unwrap();
-  let mut pixmap = Pixmap::new(120, 200).unwrap();
-
-  resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
-
+  let rasterized = rasterize_svg(svg, 120, 200);
   let raster = red_rows_below_100(bitmap.as_raw().as_chunks::<4>().0, 120);
-  let vector = red_rows_below_100(pixmap.data().as_chunks::<4>().0, 120);
+  let vector = red_rows_below_100(rasterized.as_raw().as_chunks::<4>().0, 120);
 
   assert!(
     raster > 500,

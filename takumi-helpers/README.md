@@ -2,7 +2,7 @@
 
 **Turn JSX and HTML into Takumi node trees, and load the fonts, images, and emoji a render needs.**
 
-[Documentation](https://takumi.kane.tw/docs/helpers) · [GitHub](https://github.com/kane50613/takumi)
+[Documentation](https://takumi.kane.tw/docs/reference/helpers) · [GitHub](https://github.com/kane50613/takumi)
 
 `takumi-js`, `takumi-pdf`, and `takumi-paint` call these helpers for you. Install this package when you use the [`@takumi-rs/core`](https://www.npmjs.com/package/@takumi-rs/core) or [`@takumi-rs/wasm`](https://www.npmjs.com/package/@takumi-rs/wasm) bindings directly, or to load fonts for `takumi-pdf`. With `takumi-js`, import the same helpers from `takumi-js/helpers`.
 

@@ -10,7 +10,7 @@ use super::{
 use crate::{
   geometry::Size,
   style::{
-    CalcArena, ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style,
+    ComputedStyle, CssInput, CustomProperties, DeferredDeclaration, SizingContext, Style,
     StyleBaseData, StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
   },
   viewport::Viewport,
@@ -161,6 +161,23 @@ fn inline_important_marks_the_declaration() -> Result<(), serde_json::Error> {
   );
   assert_eq!(
     importance_split(json!({ "width": "var(--w) !important" }))?,
+    (0, 1)
+  );
+  Ok(())
+}
+
+#[test]
+fn grid_shorthands_end_before_important() -> Result<(), serde_json::Error> {
+  assert_eq!(
+    importance_split(json!({ "grid": "10px / auto-flow 20px !important" }))?,
+    (0, 6)
+  );
+  assert_eq!(
+    importance_split(json!({ "gridTemplate": "\"a\" 10px / 20px !important" }))?,
+    (0, 3)
+  );
+  assert_eq!(
+    importance_split(json!({ "gridTemplateAreas": "\"a\" !important" }))?,
     (0, 1)
   );
   Ok(())
@@ -427,7 +444,7 @@ fn webkit_line_clamp_needs_a_vertical_webkit_box() {
       line_height: 0.0,
       root_line_height: None,
       ch: 16.0 / 2.0,
-      calc_arena: Rc::new(CalcArena::default()),
+      ex: 16.0 / 2.0,
     });
     computed
   };
@@ -1038,7 +1055,7 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     line_height: 0.0,
     root_line_height: None,
     ch: 16.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
+    ex: 16.0 / 2.0,
   };
   let border_box = Size {
     width: 100.0,
@@ -1115,12 +1132,37 @@ fn test_position_absolute_blockifies_inline_display() {
     line_height: 0.0,
     root_line_height: None,
     ch: 16.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
+    ex: 16.0 / 2.0,
   };
 
   style.make_computed(&sizing);
 
   assert_eq!(style.base_data.display, Display::Block);
+}
+
+#[test]
+fn test_outline_style_alone_keeps_the_initial_outline_width() {
+  let mut style = style_with([StyleDeclaration::outline_style(BorderStyle::Solid)])
+    .inherit(&ComputedStyle::default());
+
+  let sizing = SizingContext {
+    viewport: Viewport::new((1200, 630)),
+    container_size: Size::NONE,
+    container_read: Default::default(),
+    font_size: 16.0,
+    root_font_size: None,
+    line_height: 0.0,
+    root_line_height: None,
+    ch: 16.0 / 2.0,
+    ex: 16.0 / 2.0,
+  };
+
+  style.make_computed(&sizing);
+
+  assert_ne!(
+    style.misc3_data.outline_width,
+    LineWidth::Length(Length::zero())
+  );
 }
 
 #[test]
@@ -1140,7 +1182,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     line_height: 0.0,
     root_line_height: None,
     ch: 32.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
+    ex: 32.0 / 2.0,
   });
 
   let inherited_child = Style::default().inherit(&parent);
@@ -1153,7 +1195,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     line_height: 0.0,
     root_line_height: None,
     ch: 32.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
+    ex: 32.0 / 2.0,
   };
   let inherited_font_size = inherited_child
     .inherited_data
@@ -1172,7 +1214,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     line_height: 0.0,
     root_line_height: None,
     ch: 10.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
+    ex: 10.0 / 2.0,
   };
 
   let inherited_letter_spacing = child_with_own_font_size
@@ -1458,7 +1500,7 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     line_height: 0.0,
     root_line_height: None,
     ch: 16.0 / 2.0,
-    calc_arena: Rc::new(CalcArena::default()),
+    ex: 16.0 / 2.0,
   };
   let radius = style.surround_data.border_top_left_radius.x.to_px(
     &sizing,
@@ -1584,15 +1626,14 @@ fn shorthands_take_css_wide_keywords() {
   );
 }
 
-/// Inline-axis logical properties follow `direction`; block-axis and size ones map as in
-/// `horizontal-tb`.
+/// Inline-start and inline-end properties follow `direction`; the rest map as in `horizontal-tb`.
 #[test]
 fn logical_properties_map_to_physical_sides() {
   let style = style_with(
     StyleDeclarationBlock::parse_loosy(
       "direction: rtl; inset-inline-start: 10px; border-inline-end-width: 3px; \
        border-start-start-radius: 4px; margin-block-start: 5px; inline-size: 20px; \
-       border-block-end: 2px solid red",
+       border-block-end: 2px solid red; overflow-inline: hidden; overflow-block: clip",
     )
     .declarations,
   )
@@ -1613,6 +1654,8 @@ fn logical_properties_map_to_physical_sides() {
     style.box_data.border_bottom_width,
     LineWidth::Length(Length::Px(2.0))
   );
+  assert_eq!(style.base_data.overflow_x, Overflow::Hidden);
+  assert_eq!(style.base_data.overflow_y, Overflow::Clip);
 }
 
 /// Padding and sizes reject a negative value, which leaves the earlier declaration in place, while
@@ -1629,6 +1672,8 @@ fn negative_padding_and_sizes_are_invalid() {
     "min-width: -1px",
     "max-height: -1em",
     "inline-size: -1px",
+    "border-bottom-width: -1ex",
+    "border-left-width: -1px",
   ] {
     assert!(
       StyleDeclarationBlock::parse_loosy(css).is_empty(),
@@ -1780,4 +1825,297 @@ fn a_var_fallback_still_applies() {
   );
 
   assert_eq!(style.box_data.width, Length::Px(6.0).into());
+}
+
+/// `vertical-align` resets an earlier `baseline-source`, as Chrome treats it as the shorthand it is
+/// to become, while a later `baseline-source` still applies.
+#[test]
+fn vertical_align_resets_an_earlier_baseline_source() {
+  let baseline_source = |css: &str| {
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+      .inherit(&ComputedStyle::default())
+      .box_data
+      .baseline_source
+  };
+
+  assert_eq!(
+    baseline_source("baseline-source: first; vertical-align: baseline"),
+    BaselineSource::Auto
+  );
+  assert_eq!(
+    baseline_source("vertical-align: middle; baseline-source: last"),
+    BaselineSource::Last
+  );
+  assert_eq!(
+    baseline_source("baseline-source: last; vertical-align: inherit"),
+    BaselineSource::Auto
+  );
+}
+
+#[test]
+fn builder_methods_match_declarations() {
+  assert_eq!(
+    Style::default().font_size(32.0.px()),
+    Style::default().with(StyleDeclaration::font_size(Length::Px(32.0).into())),
+  );
+  assert_eq!(
+    Style::default().width(50.0.percent()).height(8.0.px()),
+    Style::default()
+      .with(StyleDeclaration::width(Length::Percentage(50.0)))
+      .with(StyleDeclaration::height(Length::Px(8.0))),
+  );
+  assert_eq!(
+    Style::default().margin_inline_start(4.0.px()),
+    Style::default().with(StyleDeclaration::margin_inline_start(Length::Px(4.0))),
+  );
+  assert_eq!(
+    Style::default().padding_block_start(4.0.px()),
+    Style::default().with(StyleDeclaration::padding_top(Length::Px(4.0))),
+  );
+}
+
+#[test]
+fn length_unit_returns_matching_lengths() {
+  assert_eq!(1.0.px(), Length::Px(1.0));
+  assert_eq!(2.0.percent(), Length::Percentage(2.0));
+  assert_eq!(3.0.em(), Length::Em(3.0));
+  assert_eq!(4.0.rem(), Length::Rem(4.0));
+  assert_eq!(5.0.vw(), Length::Vw(5.0));
+  assert_eq!(6.0.vh(), Length::Vh(6.0));
+}
+
+fn svg_style(name: &'static str, value: &'static str) -> ComputedStyle {
+  inherited_style_from_pairs([(name, value)], &ComputedStyle::default())
+}
+
+#[test]
+fn svg_properties_start_at_their_initial_values() {
+  let style = ComputedStyle::default();
+
+  assert_eq!(
+    style.svg_fill_data.fill,
+    SvgPaint::Color(ColorInput::Value(Color::black()))
+  );
+  assert_eq!(style.svg_stroke_data.stroke, SvgPaint::None);
+  assert_eq!(style.svg_stroke_data.stroke_width, Length::Px(1.0));
+  assert_eq!(
+    style.svg_stroke_data.stroke_miterlimit,
+    StrokeMiterlimit::new(4.0)
+  );
+  assert_eq!(style.svg_stroke_data.stroke_linecap, LineCap::Butt);
+  assert_eq!(style.svg_geometry_data.rx, Length::Auto);
+  assert!(style.svg_geometry_data.d.is_empty());
+  assert_eq!(
+    style.svg_inherited_data.color_interpolation_filters,
+    ColorInterpolation::LinearRgb
+  );
+  assert_eq!(
+    style.svg_inherited_data.color_interpolation,
+    ColorInterpolation::Srgb
+  );
+  assert_eq!(
+    style.svg_stop_data.stop_color,
+    ColorInput::Value(Color::black())
+  );
+  assert_eq!(
+    style.svg_misc_data.lighting_color,
+    ColorInput::Value(Color::white())
+  );
+  assert_eq!(style.svg_misc_data.baseline_shift, BaselineShift::default());
+}
+
+#[test]
+fn svg_paint_parses_urls_with_fallbacks_and_context_keywords() {
+  let red = ColorInput::Value(Color([255, 0, 0, 255]));
+
+  assert_eq!(
+    svg_style("fill", "url(#g) red").svg_fill_data.fill,
+    SvgPaint::Url(SvgResource::new("#g"), Some(red))
+  );
+  assert_eq!(
+    svg_style("fill", "url(#g) none").svg_fill_data.fill,
+    SvgPaint::Url(SvgResource::new("#g"), None)
+  );
+  assert_eq!(
+    svg_style("stroke", "context-stroke").svg_stroke_data.stroke,
+    SvgPaint::ContextStroke
+  );
+  assert_eq!(
+    svg_style("stroke", "currentcolor").svg_stroke_data.stroke,
+    SvgPaint::Color(ColorInput::CurrentColor)
+  );
+  assert_eq!(SvgResource::new("#g").fragment(), Some("g"));
+}
+
+#[test]
+fn svg_paint_serializes_back_to_css() {
+  for css in ["none", "context-fill", "url(\"#g\") rgb(255, 0, 0)"] {
+    let parsed = SvgPaint::from_css_str(css);
+
+    assert_eq!(
+      parsed.map(|paint| paint.to_css_string()),
+      Ok(css.to_owned()),
+      "{css}"
+    );
+  }
+}
+
+#[test]
+fn stroke_dasharray_takes_commas_and_spaces_but_no_negatives() {
+  let style = svg_style("stroke-dasharray", "1, 2 3");
+  let dashes = style
+    .svg_stroke_data
+    .stroke_dasharray
+    .as_ref()
+    .map(|dasharray| dasharray.lengths().len());
+
+  assert_eq!(dashes, Some(3));
+  assert!(parse_declarations_is_err("stroke-dasharray", "-1"));
+  assert!(
+    PropertyId::from_kebab_case("stroke-dasharray")
+      .parse_css_input_declarations(CssInput::Str("1,".into()))
+      .is_err()
+  );
+  assert!(parse_declarations_is_err("stroke-width", "-1"));
+  assert!(parse_declarations_is_err("stroke-miterlimit", "-1"));
+}
+
+#[test]
+fn paint_order_completes_the_phases_it_names() {
+  assert_eq!(
+    svg_style("paint-order", "stroke")
+      .svg_inherited_data
+      .paint_order,
+    PaintOrder::StrokeFillMarkers
+  );
+  assert_eq!(
+    svg_style("paint-order", "markers fill")
+      .svg_inherited_data
+      .paint_order,
+    PaintOrder::MarkersFillStroke
+  );
+  assert!(parse_declarations_is_err("paint-order", "fill fill"));
+  assert_eq!(PaintOrder::StrokeFillMarkers.to_css_string(), "stroke");
+  assert_eq!(PaintOrder::MarkersFillStroke.to_css_string(), "markers");
+  assert_eq!(
+    PaintOrder::FillMarkersStroke.to_css_string(),
+    "fill markers"
+  );
+  assert_eq!(
+    PaintOrder::StrokeMarkersFill.to_css_string(),
+    "stroke markers"
+  );
+  assert_eq!(
+    PaintOrder::MarkersFillStroke.phases(),
+    [PaintPhase::Markers, PaintPhase::Fill, PaintPhase::Stroke]
+  );
+}
+
+#[test]
+fn d_takes_complete_path_data_only() {
+  let style = svg_style("d", "path(\"M0 0 L 10 10\")");
+
+  assert_eq!(style.svg_geometry_data.d.commands().len(), 2);
+  assert!(parse_declarations_is_err("d", "path(\"M0 0 X\")"));
+  assert!(svg_style("d", "none").svg_geometry_data.d.is_empty());
+  assert!(svg_style("d", "path(\"\")").svg_geometry_data.d.is_empty());
+  assert_eq!(
+    SvgPath::from_css_str("path(\"M0 0 L 10 10 Z\")").map(|path| path.to_css_string()),
+    Ok("path(\"M 0 0 L 10 10 Z\")".to_owned())
+  );
+}
+
+#[test]
+fn marker_sets_the_three_longhands() {
+  let style = svg_style("marker", "url(#m)");
+  let marker = Some(SvgResource::new("#m"));
+
+  assert_eq!(style.svg_resources_data.marker_start, marker);
+  assert_eq!(style.svg_resources_data.marker_mid, marker);
+  assert_eq!(style.svg_resources_data.marker_end, marker);
+}
+
+#[test]
+fn baseline_shift_takes_keywords_and_lengths() {
+  assert_eq!(
+    svg_style("baseline-shift", "super")
+      .svg_misc_data
+      .baseline_shift,
+    BaselineShift::Super
+  );
+  assert_eq!(
+    svg_style("baseline-shift", "baseline")
+      .svg_misc_data
+      .baseline_shift,
+    BaselineShift::default()
+  );
+  assert_eq!(
+    svg_style("baseline-shift", "3px")
+      .svg_misc_data
+      .baseline_shift,
+    BaselineShift::Length(Length::Px(3.0))
+  );
+}
+
+#[test]
+fn inherited_svg_properties_pass_down_and_the_rest_do_not() {
+  let parent = svg_style("fill", "red");
+  let child = inherited_style_from_pairs([], &parent);
+
+  assert_eq!(child.svg_fill_data.fill, parent.svg_fill_data.fill);
+
+  let stopped = svg_style("stop-color", "red");
+  let child = inherited_style_from_pairs([], &stopped);
+
+  assert_eq!(
+    child.svg_stop_data.stop_color,
+    ColorInput::Value(Color::black())
+  );
+}
+
+fn round_trip<T: FromCssStr + ToCss>(css: &str) -> Option<String> {
+  T::from_css_str(css).ok().map(|value| value.to_css_string())
+}
+
+#[test]
+fn svg_keywords_round_trip() {
+  assert_eq!(
+    round_trip::<ShapeRendering>("crispedges").as_deref(),
+    Some("crispEdges")
+  );
+  assert_eq!(
+    round_trip::<ColorInterpolation>("LINEARRGB").as_deref(),
+    Some("linearRGB")
+  );
+  assert_eq!(
+    round_trip::<TextAnchor>("middle").as_deref(),
+    Some("middle")
+  );
+  assert_eq!(
+    round_trip::<DominantBaseline>("text-after-edge").as_deref(),
+    Some("text-after-edge")
+  );
+  assert_eq!(
+    round_trip::<AlignmentBaseline>("before-edge").as_deref(),
+    Some("before-edge")
+  );
+  assert_eq!(
+    round_trip::<VectorEffect>("non-scaling-stroke").as_deref(),
+    Some("non-scaling-stroke")
+  );
+  assert_eq!(round_trip::<MaskType>("alpha").as_deref(), Some("alpha"));
+  assert_eq!(round_trip::<LineCap>("square").as_deref(), Some("square"));
+  assert_eq!(
+    round_trip::<StrokeDasharray>("1px, 2px 3px").as_deref(),
+    Some("1px, 2px, 3px")
+  );
+}
+
+#[test]
+fn clip_path_with_incomplete_path_data_is_invalid() {
+  assert!(parse_declarations_is_err("clip-path", "path('M0 0 X')"));
+  assert!(!parse_declarations_is_err(
+    "clip-path",
+    "path('M0 0 L 10 10')"
+  ));
 }

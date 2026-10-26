@@ -1,13 +1,11 @@
 use std::fmt;
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
-use taffy::Dimension;
-
 use crate::style::{
   Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 /// Represents a `width`/`height` value: a `<length-percentage>`, `auto`, or a CSS Sizing Level 3
 /// keyword. `fit-content(<length-percentage>)` is invalid here, as Chrome leaves it to grid tracks.
@@ -58,17 +56,6 @@ impl Size {
     match self {
       Self::Length(length) => Some(length),
       _ => None,
-    }
-  }
-
-  /// Resolves to a taffy `Dimension`.
-  pub(crate) fn resolve_to_dimension(self, sizing: &SizingContext) -> Dimension {
-    match self {
-      Self::Length(length) => length.resolve_to_dimension(sizing),
-      Self::MinContent => Dimension::min_content(),
-      Self::MaxContent => Dimension::max_content(),
-      Self::FitContent => Dimension::fit_content(),
-      Self::Stretch => Dimension::stretch(),
     }
   }
 }
@@ -206,26 +193,6 @@ mod tests {
     assert!(Size::from_css_str("fit-content(20rem)").is_err());
     assert!(Size::from_css_str("fit-content(50%)").is_err());
     assert!(Size::from_css_str("content").is_err());
-  }
-
-  #[test]
-  fn resolves_the_sizing_keywords_to_taffy() {
-    let sizing = SizingContext::builder()
-      .viewport(crate::viewport::Viewport::default())
-      .build();
-
-    assert_eq!(
-      Size::MinContent.resolve_to_dimension(&sizing),
-      Dimension::min_content()
-    );
-    assert_eq!(
-      Size::MaxContent.resolve_to_dimension(&sizing),
-      Dimension::max_content()
-    );
-    assert_eq!(
-      Size::Stretch.resolve_to_dimension(&sizing),
-      Dimension::stretch()
-    );
   }
 
   #[test]
