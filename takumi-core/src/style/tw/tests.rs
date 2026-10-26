@@ -242,6 +242,18 @@ fn test_parse_arbitrary_flex_with_spaces() {
 }
 
 #[test]
+fn test_parse_flex_number() {
+  assert_eq!(
+    parse_property("flex-1"),
+    expect(StyleDeclaration::expand_flex(Flex {
+      grow: 1.0,
+      shrink: 1.0,
+      basis: FlexBasis::ZERO_PERCENT,
+    }))
+  );
+}
+
+#[test]
 fn test_parse_tailwind_animation_preset() {
   assert_matches!(
     TwAnimation::parse_tw("spin"),

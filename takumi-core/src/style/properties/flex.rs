@@ -28,6 +28,9 @@ impl Default for FlexBasis {
 }
 
 impl FlexBasis {
+  /// The `0%` basis Chromium gives a `flex` shorthand that omits one.
+  pub(crate) const ZERO_PERCENT: Self = Self::Size(Size::Length(Length::Percentage(0.0)));
+
   /// An automatic basis.
   pub const fn auto() -> Self {
     Self::Size(Size::auto())
@@ -311,7 +314,7 @@ impl Flex {
     Self {
       grow: number,
       shrink: 1.0,
-      basis: FlexBasis::zero(),
+      basis: FlexBasis::ZERO_PERCENT,
     }
   }
 }
@@ -409,7 +412,7 @@ impl<'i> FromCss<'i> for Flex {
     Ok(Flex {
       grow: grow.unwrap_or(1.0),
       shrink: shrink.unwrap_or(1.0),
-      basis: basis.unwrap_or_else(FlexBasis::zero),
+      basis: basis.unwrap_or(FlexBasis::ZERO_PERCENT),
     })
   }
 
@@ -449,7 +452,7 @@ mod tests {
       Ok(Flex {
         grow: 2.0,
         shrink: 1.0,
-        basis: FlexBasis::zero()
+        basis: FlexBasis::ZERO_PERCENT
       })
     );
   }
@@ -529,8 +532,23 @@ mod tests {
       Ok(Flex {
         grow: 2.0,
         shrink: 2.0,
-        basis: FlexBasis::zero()
+        basis: FlexBasis::ZERO_PERCENT
       })
     );
+  }
+
+  #[test]
+  fn test_flex_explicit_zero_basis() {
+    for css in ["1 1 0px", "1 1 0"] {
+      assert_eq!(
+        Flex::from_css_str(css),
+        Ok(Flex {
+          grow: 1.0,
+          shrink: 1.0,
+          basis: FlexBasis::zero()
+        }),
+        "{css}"
+      );
+    }
   }
 }
