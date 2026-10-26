@@ -104,13 +104,11 @@ fn strip_trailing_whitespace_and_comments(text: &str) -> &str {
     if state == State::Default && matches!(ch, ' ' | '\t' | '\n' | '\r' | '\u{0C}') {
       continue;
     }
-    if ch == '\\' {
-      if let Some((escaped_index, escaped)) = chars.next() {
-        if state == State::Default {
-          end = escaped_index + escaped.len_utf8();
-        }
-        continue;
+    if ch == '\\' && let Some((escaped_index, escaped)) = chars.next() {
+      if state == State::Default {
+        end = escaped_index + escaped.len_utf8();
       }
+      continue;
     }
     if state == State::Default && ch == '/' && chars.next_if(|(_, next)| *next == '*').is_some() {
       state = State::Comment;
