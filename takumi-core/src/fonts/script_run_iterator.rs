@@ -8,7 +8,7 @@ use icu_properties::{
   script::ScriptWithExtensions,
 };
 
-use crate::text::character::LEFT_CORNER_BRACKET;
+use crate::text::character::{LEFT_CORNER_BRACKET, script};
 
 /// Blink's `kMaxUnicodeScriptExtensions`.
 pub(crate) const MAX_UNICODE_SCRIPT_EXTENSIONS: usize = 23;
@@ -47,7 +47,7 @@ pub(crate) struct IcuScriptData;
 impl IcuScriptData {
   /// Blink's `GetScriptForOpenType`.
   fn get_script_for_open_type(ch: char) -> Script {
-    match CodePointMapData::<Script>::new().get(ch) {
+    match script(ch) {
       Script::Katakana | Script::KatakanaOrHiragana => Script::Hiragana,
       script => script,
     }

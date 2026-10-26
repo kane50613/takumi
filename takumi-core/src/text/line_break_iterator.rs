@@ -3,13 +3,12 @@
 
 use std::{ops::RangeInclusive, rc::Rc};
 
-use icu_properties::{CodePointMapData, props::LineBreak};
 use icu_segmenter::{
   GraphemeClusterSegmenter, LineSegmenter,
   options::{LineBreakOptions, LineBreakStrictness as IcuStrictness, LineBreakWordOption},
 };
 
-use crate::text::character::SOFT_HYPHEN;
+use crate::text::character::{SOFT_HYPHEN, is_mandatory_break};
 
 /// Whether a line breaks between two ASCII characters where a table overrides UAX #14.
 struct AsciiLineBreakTable {
@@ -242,16 +241,6 @@ impl<'a> LineBreakIterator<'a> {
       let line_break_override = |before_before, before, after| {
         chromium_line_break_override(before_before, before, after)
           .filter(|&opportunity| opportunity || break_type != LineBreakType::BreakAll)
-      };
-      let line_break = CodePointMapData::<LineBreak>::new();
-      let is_mandatory_break = |character: char| {
-        matches!(
-          line_break.get(character),
-          LineBreak::MandatoryBreak
-            | LineBreak::CarriageReturn
-            | LineBreak::LineFeed
-            | LineBreak::NextLine
-        )
       };
       let mut previous: Option<(char, Option<char>)> = None;
 
