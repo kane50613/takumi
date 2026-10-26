@@ -454,8 +454,9 @@ fn build_layers(
 
         (visit.base, visit.container_size) =
           containing_blocks.base_for(Some(cb), visit.base, visit.container_size);
-        properties.release_escaped_effects(visit.state.effect, container);
-        visit.state.clip = container.clip;
+        let clip = properties.positioned_clip(visit.state.clip, container.clip);
+        properties.release_escaped_effects(visit.state.effect, container, clip);
+        visit.state.clip = clip;
         visits.push(visit);
       }
     }
@@ -695,8 +696,9 @@ fn build_layers(
           containing_blocks.base_for(hoisted_cb, child_base, child_container_size);
         let clip = match hoisted_cb.and_then(|cb| contents.get(&cb)) {
           Some(container) => {
-            properties.release_escaped_effects(node_properties.contents.effect, container);
-            container.clip
+            let clip = properties.positioned_clip(node_properties.contents.clip, container.clip);
+            properties.release_escaped_effects(node_properties.contents.effect, container, clip);
+            clip
           }
           None => node_properties.contents.clip,
         };

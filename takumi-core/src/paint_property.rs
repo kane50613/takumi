@@ -295,16 +295,44 @@ impl PropertyTrees {
     &mut self,
     effect: Option<EffectId>,
     container: &ContainerContents,
+    clip: Option<ClipId>,
   ) {
     let escaped: Vec<EffectId> = self
       .effect_chain(effect)
       .take_while(|&id| !container.path.starts_with(&self.effect(id).owner))
-      .filter(|&id| self.effect(id).output_clip != container.clip)
+      .filter(|&id| self.effect(id).output_clip != clip)
       .collect();
 
     for id in escaped {
       self.effects[id.0].output_clip = None;
     }
+  }
+
+  /// Preserves clip paths when a positioned descendant escapes overflow clips.
+  pub(crate) fn positioned_clip(
+    &mut self,
+    current: Option<ClipId>,
+    container: Option<ClipId>,
+  ) -> Option<ClipId> {
+    let common = self.common_clip(current, container);
+    let paths: Vec<ClipId> = self
+      .clip_chain(current)
+      .take_while(|&id| Some(id) != common)
+      .filter(|&id| matches!(self.clip(id).kind, ClipKind::ClipPath(_)))
+      .collect();
+    let mut clip = container;
+
+    for id in paths.into_iter().rev() {
+      if self.clip(id).parent == clip {
+        clip = Some(id);
+      } else {
+        let mut node = self.clip(id).clone();
+        node.parent = clip;
+        clip = Some(self.add_clip(node));
+      }
+    }
+
+    clip
   }
 
   /// Whether `ancestor` is `clip` or contains it.
