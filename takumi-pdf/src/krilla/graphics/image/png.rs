@@ -1,6 +1,7 @@
 //! Reads a PNG's chunks to decide whether its IDAT stream can be embedded as
 //! is. See the PNG spec: https://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
 
+use flate2::Crc;
 use png::chunk;
 
 pub(super) struct PngData {
@@ -141,10 +142,11 @@ struct PngChunk<'a> {
 
 impl PngChunk<'_> {
   fn has_valid_crc(&self) -> bool {
-    let mut hasher = crc32fast::Hasher::new();
+    let mut hasher = Crc::new();
+
     hasher.update(&self.kind.0);
     hasher.update(self.data);
-    hasher.finalize() == self.crc
+    hasher.sum() == self.crc
   }
 }
 
