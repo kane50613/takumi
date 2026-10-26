@@ -230,7 +230,8 @@ dependencies = [
 [[package]]
 name = "crc32fast"
 version = "1.5.3"
-source = "git+https://github.com/kane50613/rust-crc32fast?rev=af25a08a9bfc9fd3afca1ccdf4fe92be0cba67ed#af25a08a9bfc9fd3afca1ccdf4fe92be0cba67ed"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ba106e844045ddc02c20768ac4b0b7cb45f2cc2ecbd833ac9f5dacb183c2055"
 dependencies = [
  "cfg-if",
 ]
@@ -1175,11 +1176,9 @@ dependencies = [
 [[package]]
 name = "png"
 version = "0.18.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60769b8b31b2a9f263dae2776c37b1b28ae246943cf719eb6946a1db05128a61"
+source = "git+https://github.com/kane50613/image-png?rev=3be6b60681d502e035ef2cd6c5726d7f5a952a0e#3be6b60681d502e035ef2cd6c5726d7f5a952a0e"
 dependencies = [
  "bitflags",
- "crc32fast",
  "fdeflate",
  "flate2",
  "miniz_oxide",
@@ -1621,7 +1620,6 @@ dependencies = [
 name = "takumi-bindings-common"
 version = "0.0.0"
 dependencies = [
- "crc32fast",
  "serde",
  "serde_bytes",
  "takumi-core",

@@ -295,7 +295,7 @@ opt-level = "z"
 # `OutlineGlyph::draw` so every pen type shares one instantiation of the
 # scalers.
 [patch.crates-io]
-crc32fast = { git = "https://github.com/kane50613/rust-crc32fast", rev = "af25a08a9bfc9fd3afca1ccdf4fe92be0cba67ed" }
+png = { git = "https://github.com/kane50613/image-png", rev = "3be6b60681d502e035ef2cd6c5726d7f5a952a0e" }
 skrifa = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
 read-fonts = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
 font-types = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
