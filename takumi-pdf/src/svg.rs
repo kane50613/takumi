@@ -47,7 +47,7 @@ impl<'a> SvgPainter<'a> {
     for op in ops {
       match op {
         SvgOp::PushTransform(transform) => surface.push_transform(&transform.into()),
-        SvgOp::PushClip { path, evenodd } => match krilla_path(&path, Point::ZERO) {
+        SvgOp::PushClip { path, evenodd, .. } => match krilla_path(&path, Point::ZERO) {
           Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
           // The matching `Pop` still comes; keep the layer stack balanced.
           None => surface.push_transform(&Transform::identity()),
