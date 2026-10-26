@@ -181,7 +181,7 @@ impl ChunkWriter<'_, '_, '_> {
     self.record(result);
   }
 
-  /// Opens the groups of the effect `paint` owns, after its filtered backdrop.
+  /// Emits the backdrop before opening effect groups, which SVG does not apply to it.
   fn open_effect(&mut self, paint: &NodePaint, kind: EffectKind) -> io::Result<Vec<GroupToken>> {
     let Some((placed, group_transform)) = self.emitter.place(paint, self.current()) else {
       return Ok(Vec::new());
