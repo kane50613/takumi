@@ -11,4 +11,8 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # Pinned forks for font feature gates and shared PNG checksums.
-allow-git = ["https://github.com/kane50613/fontations", "https://github.com/kane50613/harfrust", "https://github.com/kane50613/image-png"]
+allow-git = [
+  "https://github.com/kane50613/fontations",
+  "https://github.com/kane50613/harfrust",
+  "https://github.com/kane50613/image-png",
+]
