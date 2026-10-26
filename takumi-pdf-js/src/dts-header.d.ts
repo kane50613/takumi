@@ -66,6 +66,16 @@ export type PageSizeName =
 /** A page size: a preset name or explicit {@link Dimensions}. */
 export type PageSize = PageSizeName | Dimensions;
 
+/** Additional content starting on a new page; omitted fields inherit document options. */
+export type PdfSection = {
+  node: Node;
+  size?: PageSize;
+  landscape?: boolean;
+  margin?: PageMargin;
+  header?: Band;
+  footer?: Band;
+};
+
 /**
  * One side of a page margin: a length in CSS px, or `"auto"` to fit the band
  * that draws on that side. `"auto"` never goes below the 37.8 a page starts with, and the
@@ -147,7 +157,7 @@ export type Tagged = boolean | "ua1" | "ua2";
 export type PdfRenderOptions = {
   /**
    * Fixed viewport for single-page output. Mutually exclusive with the paged
-   * fields (`size`, `landscape`, `margin`, `header`, `footer`, `pages`, `pageRanges`).
+   * fields (`size`, `landscape`, `margin`, `header`, `footer`, `pages`, nonempty `sections`, `pageRanges`).
    */
   viewport?: ViewportInput;
   /** Page size for paged output. Defaults to A4. */
@@ -165,6 +175,8 @@ export type PdfRenderOptions = {
   footer?: Band;
   /** What some pages draw differently from the rest. */
   pages?: PageRules;
+  /** Additional sections in the same document, each starting on a new page. */
+  sections?: PdfSection[];
   /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`. Page counters
    * keep their full-output numbers.

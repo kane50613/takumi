@@ -25,7 +25,7 @@ use takumi_core::{
     unicode_range::{UnicodeRange, UnicodeRangeSet},
   },
   style::{
-    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, LineHeight,
+    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Lang, Length::*, LineHeight,
     ListStyleType, ObjectFit, Style, StyleDeclaration, StyleSheet,
   },
   viewport::Viewport,
@@ -34,7 +34,7 @@ use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
   Attachment, AttachmentRelationship, Band, MeasureOptions, PageBand, PageMargin, PageMargins,
   PageOptions, PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata, PdfOptions,
-  PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema, measure, render,
+  PdfSection, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema, measure, render,
 };
 
 fn latin_font() -> Fonts {
@@ -478,6 +478,343 @@ fn paged_footer_counters() {
       .fonts(fonts)
       .build()
   });
+}
+
+fn mixed_section_options(fonts: &Fonts, hooks: bool) -> PdfOptions<'_> {
+  let parse = |html: &str| from_html(html, FromHtmlOptions::default()).expect("parse section");
+  let counter = |class: &str, value: usize| {
+    if hooks {
+      format!(r#"<span class="{class}"></span>"#)
+    } else {
+      format!("<span>{value}</span>")
+    }
+  };
+  let page = |title: &str, id: &str, number: usize, target: &str, target_page: usize| {
+    let current = counter("pageNumber", number);
+    let total = counter("totalPages", 4);
+    let reference = counter("targetPageNumber", target_page);
+
+    format!(
+      r##"<section style="height:100vh; font-size:16px; color:#141414;">
+      <h1 id="{id}" style="margin:0; font-size:24px;">{title}</h1>
+      <p>Content page {current} of {total}</p>
+      <p><a href="#{target}">See page {reference}</a></p>
+      <div style="width:100%; height:20px; background:#38bdf8;"></div>
+    </section>"##
+    )
+  };
+  let ledger = page("Landscape ledger", "ledger", 2, "closing", 4);
+  let continuation = page("Ledger continuation", "continuation", 3, "report", 1);
+  let mut options = PdfOptions::builder()
+    .fonts(fonts)
+    .node(parse(&page("Portrait report", "report", 1, "ledger", 2)))
+    .page(PageOptions::A4.with_margin(40.0))
+    .sections(vec![
+      PdfSection::builder()
+        .node(parse(&format!("<main>{ledger}{continuation}</main>")))
+        .page(PageOptions::A4.landscape().with_margin(48.0))
+        .build(),
+      PdfSection::builder()
+        .node(parse(&page("Closing note", "closing", 4, "continuation", 3)))
+        .page(PageOptions { width:420.0, height:610.0, margin:PageMargins::uniform(48.0) })
+        .footer(Band::Off)
+        .build(),
+    ])
+    .header(parse(r#"<div style="font-size:12px; padding:10px;">Mixed-size report</div>"#))
+    .footer(parse(r#"<div style="display:flex; gap:4px; font-size:12px; padding:10px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#))
+    .outline(true)
+    .build();
+
+  if !hooks {
+    let footer = |number| PageOverride {
+      footer: Some(Band::from(parse(&format!(
+        r#"<div style="display:flex; gap:4px; font-size:12px; padding:10px;">Page <span>{number}</span> of <span>4</span></div>"#
+      )))),
+      ..PageOverride::default()
+    };
+
+    options.pages = PageRules {
+      first: footer(1),
+      even: footer(2),
+      odd: footer(3),
+      last: PageOverride {
+        footer: Some(Band::Off),
+        ..PageOverride::default()
+      },
+    };
+  }
+  options
+}
+
+#[test]
+fn mixed_page_sections() {
+  let pdf = run_pdf_fixture("mixed-page-sections", |fonts| {
+    mixed_section_options(fonts, true)
+  });
+  let expected = render_pinned(mixed_section_options(&fonts(), false));
+
+  assert_eq!(
+    pdf, expected,
+    "content and cross-section counters must match hand-written numbers"
+  );
+  assert_eq!(
+    page_count(&pdf),
+    4,
+    "section boundaries must not add blank pages"
+  );
+  let raw = String::from_utf8_lossy(&pdf);
+  let sizes: Vec<Vec<f32>> = raw
+    .split("/MediaBox")
+    .skip(1)
+    .map(|rest| {
+      rest
+        .trim_start()
+        .trim_start_matches('[')
+        .split(']')
+        .next()
+        .unwrap()
+        .split_whitespace()
+        .map(|number| number.parse().unwrap())
+        .collect()
+    })
+    .collect();
+
+  assert_eq!(sizes.len(), 4);
+  for (actual, (width, height)) in sizes.iter().zip([
+    (595.28, 841.89),
+    (841.89, 595.28),
+    (841.89, 595.28),
+    (315.0, 457.5),
+  ]) {
+    assert!(
+      (actual[2] - width).abs() < 0.02 && (actual[3] - height).abs() < 0.02,
+      "wrong MediaBox: {actual:?}"
+    );
+  }
+  assert!(!raw.contains("/Rotate"));
+  let inflated = inflated_text(&pdf);
+
+  assert!(
+    inflated.matches("/Subtype/Link").count() >= 4,
+    "each cross-section link must have annotations"
+  );
+  assert_eq!(inflated.matches("/Title(").count(), 4);
+  assert!(inflated.contains("/StructTreeRoot"));
+}
+
+#[test]
+fn mixed_section_standards() {
+  for (name, standard, tagged) in [
+    ("mixed-sections-ua1", PdfStandard::A2a, Tagging::Ua1),
+    ("mixed-sections-ua2", PdfStandard::A4, Tagging::Ua2),
+  ] {
+    let pdf = run_pdf_fixture(name, |fonts| {
+      let mut options = mixed_section_options(fonts, true);
+
+      options.standard = standard;
+      options.tagged = tagged;
+      options.lang = Some(Lang::parse("en").expect("lang"));
+      options.metadata = Some(PdfMetadata {
+        title: Some("Mixed-size report".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 10,
+          day: 15,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      });
+      options
+    });
+
+    assert_eq!(page_count(&pdf), 4);
+  }
+}
+
+#[test]
+fn mixed_sections_keep_global_ranges_and_destinations() {
+  let fonts = fonts();
+  let mut options = mixed_section_options(&fonts, true);
+
+  options.page_ranges = Some(vec![PageRange::single(1), PageRange::single(4)]);
+  let pdf = render(options).expect("render selected mixed pages");
+  let inflated = inflated_text(&pdf);
+
+  assert_eq!(page_count(&pdf), 2);
+  assert_eq!(
+    inflated.matches("/Subtype/Link").count(),
+    0,
+    "both targets were dropped"
+  );
+  assert_eq!(inflated.matches("/Title(").count(), 2);
+  let mut kept = mixed_section_options(&fonts, true);
+  let mut numbered = mixed_section_options(&fonts, false);
+
+  kept.page_ranges = Some(vec![PageRange::single(2), PageRange::single(4)]);
+  numbered.page_ranges.clone_from(&kept.page_ranges);
+  let pdf = render_pinned(kept);
+
+  assert_eq!(page_count(&pdf), 2);
+  assert!(inflated_text(&pdf).contains("/Subtype/Link"));
+  assert_eq!(
+    pdf,
+    render_pinned(numbered),
+    "static and counter-driven plans must retain the same destination after earlier pages are removed"
+  );
+  let mut empty = mixed_section_options(&fonts, true);
+
+  empty.page_ranges = Some(vec![PageRange::single(9)]);
+  assert!(matches!(
+    render(empty),
+    Err(PdfError::PageRangesOutOfBounds(4))
+  ));
+  let mut viewport = mixed_section_options(&fonts, true);
+
+  viewport.page = None;
+  viewport.viewport = Some(Viewport::new((400, 300)));
+  assert!(matches!(render(viewport), Err(PdfError::SectionsNeedPages)));
+}
+
+#[test]
+fn mixed_sections_stop_at_the_document_page_limit() {
+  let fonts = latin_font();
+  let node = from_html(
+    "<div style=\"height:20000px;background:white;\"></div>",
+    FromHtmlOptions::default(),
+  )
+  .expect("parse tall content");
+  let page = PageOptions {
+    width: 100.0,
+    height: 2.0,
+    margin: PageMargins::uniform(0.0),
+  };
+  let options = PdfOptions::builder()
+    .fonts(&fonts)
+    .node(node.clone())
+    .page(page)
+    .sections(vec![
+      PdfSection::builder().node(node.clone()).build(),
+      PdfSection::builder()
+        .node(node)
+        .page(PageOptions { width: 0.0, ..page })
+        .build(),
+    ])
+    .build();
+
+  let error = render(options).expect_err("the page limit precedes the invalid third section");
+
+  assert!(matches!(error, PdfError::TooManyPages(20000)), "{error:?}");
+}
+
+#[test]
+fn mixed_sections_settle_when_total_digits_wrap_an_auto_band() {
+  let fonts = latin_font();
+  let parse = |html: &str| from_html(html, FromHtmlOptions::default()).expect("parse document");
+  let options = |counter: &str| {
+    PdfOptions::builder()
+      .fonts(&fonts)
+      .node(parse("<div style=\"height:300px;background:white;\"></div>"))
+      .page(PageOptions {
+        width: 200.0,
+        height: 200.0,
+        margin: PageMargins {
+          top: PageMargin::Px(0.0),
+          bottom: PageMargin::Auto,
+          left: PageMargin::Px(0.0),
+          right: PageMargin::Px(0.0),
+        },
+      })
+      .sections((0..8).map(|_| PdfSection::builder()
+        .node(parse("<div style=\"height:150px;background:white;\"></div>"))
+        .build()).collect())
+      .footer(parse(&format!(
+        "<div style=\"display:flex;flex-wrap:wrap;width:100px;font-size:14px;line-height:20px;\"><span style=\"width:92px;\">Total</span>{counter}</div>"
+      )))
+      .build()
+  };
+  let pdf = render_pinned(options("<span class=\"totalPages\"></span>"));
+  let expected = render_pinned(options("<span>19</span>"));
+
+  assert_eq!(page_count(&pdf), 19);
+  assert_eq!(
+    pdf, expected,
+    "a two-digit total must change the band height and page count"
+  );
+}
+
+#[test]
+fn mixed_sections_auto_margins_ignore_unreachable_page_rules() {
+  fn band(name: &str, height: f32) -> Node {
+    text(name, 10.0).with_style(
+      Style::default()
+        .with(StyleDeclaration::font_size(FontSize::Length(Px(10.0))))
+        .with(StyleDeclaration::height(Px(height))),
+    )
+  }
+
+  fn options(fonts: &Fonts) -> PdfOptions<'_> {
+    PdfOptions::builder()
+      .fonts(fonts)
+      .node(text("Cover", 16.0))
+      .page(PageOptions {
+        width: 300.0,
+        height: 300.0,
+        margin: PageMargins::AUTO,
+      })
+      .header(band("Running header", 10.0))
+      .footer(band("Running footer", 10.0))
+      .sections(vec![
+        PdfSection::builder()
+          .node(column(
+            (1..=6)
+              .map(|row| {
+                text(&format!("Middle row {row}"), 16.0).with_style(
+                  Style::default()
+                    .with(StyleDeclaration::height(Px(30.0)))
+                    .with(StyleDeclaration::font_size(FontSize::Length(Px(16.0)))),
+                )
+              })
+              .collect(),
+          ))
+          .build(),
+        PdfSection::builder().node(text("Closing", 16.0)).build(),
+      ])
+      .pages(PageRules {
+        first: PageOverride {
+          header: Some(band("First header", 100.0).into()),
+          footer: Some(band("First footer", 70.0).into()),
+        },
+        last: PageOverride {
+          header: Some(band("Last header", 50.0).into()),
+          footer: Some(band("Last footer", 80.0).into()),
+        },
+        ..PageRules::default()
+      })
+      .build()
+  }
+
+  let fonts = fonts();
+  let pdf = run_pdf_fixture_with("mixed-sections-auto-bands", &fonts, options);
+
+  assert_eq!(page_count(&pdf), 3, "each section fits on one page");
+
+  let mut expected = options(&fonts);
+
+  expected.pages = PageRules::default();
+  expected.header = Some(band("First header", 100.0));
+  expected.footer = Some(band("First footer", 70.0));
+  expected.sections[0].header = Some(band("Running header", 10.0).into());
+  expected.sections[0].footer = Some(band("Running footer", 10.0).into());
+  expected.sections[1].header = Some(band("Last header", 50.0).into());
+  expected.sections[1].footer = Some(band("Last footer", 80.0).into());
+
+  assert_eq!(
+    pdf,
+    render_pinned(expected),
+    "global first/last rules must match explicit section-local bands"
+  );
 }
 
 /// `page_ranges` keeps pages 1 and 3 of a three-page report. The footer

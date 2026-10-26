@@ -86,6 +86,14 @@ impl Prepared {
   }
 }
 
+/// Document-wide counters supplied when laying out one section.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PageCounters<'a> {
+  pub(crate) offset: usize,
+  pub(crate) total: Option<usize>,
+  pub(crate) targets: Option<&'a HashMap<Box<str>, usize>>,
+}
+
 /// What the passes that count a document leave for drawing it.
 pub(crate) struct Counts {
   pub(crate) starts: PageStarts,
@@ -115,8 +123,9 @@ impl Counted {
     inputs: &TreeInputs<'_>,
     frame: &PageFrame,
     settle: Settle<'_>,
+    counters: PageCounters<'_>,
   ) -> Result<Self, PdfError> {
-    let links = has_internal_links(&node);
+    let links = has_internal_links(&node) || counters.targets.is_some();
     let collect = Collect::of(&node, links);
 
     let numbered = collect == Collect::Extents || has_target_counters(&node);
@@ -131,7 +140,7 @@ impl Counted {
       let pass = CountingPass::run(node.clone(), inputs, frame, settle, collect)?;
       let mut written = Vec::new();
 
-      pass.substitute_counters(&mut node, &mut written);
+      pass.substitute_counters(&mut node, &mut written, counters);
       if written == previous {
         // The pass was laid out with the numbers it wrote.
         return Ok(pass.into_counted(links));
@@ -146,9 +155,21 @@ impl Counted {
   }
 
   pub(crate) fn pages(&self) -> usize {
+    self.starts().len()
+  }
+
+  pub(crate) fn starts(&self) -> &PageStarts {
     match self {
-      Self::Pages { counts, .. } => counts.starts.len(),
-      Self::Laid(paginated) => paginated.starts.len(),
+      Self::Pages { counts, .. } => &counts.starts,
+      Self::Laid(paginated) => &paginated.starts,
+    }
+  }
+
+  /// Where the elements with an `id` are, when a link or a section reads them.
+  pub(crate) fn anchors(&self) -> Result<HashMap<Box<str>, AnchorTarget>, PdfError> {
+    match self {
+      Self::Pages { counts, .. } => Ok(counts.anchors.clone()),
+      Self::Laid(paginated) => Ok(paginated.summary()?.anchors),
     }
   }
 }
@@ -233,12 +254,17 @@ impl CountingPass {
 
   /// Fills both kinds of counter from this pass, collecting what it wrote so the caller can see
   /// whether the numbers moved.
-  fn substitute_counters(&self, node: &mut Node, written: &mut Vec<String>) {
+  fn substitute_counters(
+    &self,
+    node: &mut Node,
+    written: &mut Vec<String>,
+    counters: PageCounters<'_>,
+  ) {
     let Some(summary) = &self.summary else {
       return;
     };
-    let pages = self.starts.len();
-    let page_at = |top: &f32| self.starts.index_of(*top) + 1;
+    let pages = counters.total.unwrap_or(self.starts.len());
+    let page_at = |top: &f32| counters.offset + self.starts.index_of(*top) + 1;
     let page_of = summary
       .extents
       .iter()
@@ -263,7 +289,10 @@ impl CountingPass {
 
     FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
 
-    let target_page = |id: &str| summary.anchors.get(id).map(|anchor| page_at(&anchor.top));
+    let target_page = |id: &str| match counters.targets {
+      Some(targets) => targets.get(id).copied(),
+      None => summary.anchors.get(id).map(|anchor| page_at(&anchor.top)),
+    };
 
     substitute_target_counters(node, None, &target_page, written);
   }

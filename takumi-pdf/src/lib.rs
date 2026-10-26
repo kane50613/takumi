@@ -70,6 +70,7 @@ mod pagination;
 mod paint;
 #[cfg(feature = "images")]
 mod raster;
+mod sections;
 mod shadow;
 #[cfg(test)]
 mod streaming_tests;
@@ -116,7 +117,7 @@ pub const PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
 pub use crate::options::{
   Attachment, AttachmentRelationship, Band, MeasureOptions, MeasuredSize, PageBand, PageMargin,
   PageMargins, PageOptions, PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata,
-  PdfOptions, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
+  PdfOptions, PdfSection, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
 };
 use crate::{
   emitter::{DocumentState, Emitter},
@@ -132,7 +133,9 @@ use crate::{
   },
   options::{PT_PER_PX, PageSelection},
   page::{PageBands, PageDrawing, PagePlan, band_viewport},
+  pagination::PageCounters,
   paint::paint_page_background,
+  sections::SectionPlan,
   tree::{PreparedTree, TreeInputs},
 };
 
@@ -179,6 +182,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 /// [`render`] with `settle`, given the layout, saying how many of the first pages of a document
 /// that streams are safe to draw.
 fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Vec<u8>, PdfError> {
+  if !options.sections.is_empty() && options.page.is_none() {
+    return Err(PdfError::SectionsNeedPages);
+  }
   let attachments = take(&mut options.attachments);
   let mut pdf = open_document(&options, attachments)?;
   let tagged = options.writes_structure();
@@ -199,6 +205,33 @@ fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Ve
   let state = DocumentState::new(tagged, inputs.lang.as_ref().map(Lang::as_str), uncovered);
   let structural = options.tagged.names_structure_destinations();
   let rendered = match options.page {
+    Some(page) if !options.sections.is_empty() => {
+      let mut first = PdfSection::builder().node(options.node).build();
+
+      first.header = options.header.take().map(Band::from);
+      first.footer = options.footer.take().map(Band::from);
+      let mut sources = vec![first];
+
+      sources.append(&mut options.sections);
+      let plan = SectionPlan::render(
+        &mut PageDrawing {
+          pdf: &mut pdf,
+          inputs: &inputs,
+          state: &state,
+          background: options.background_color,
+          counters: PageCounters::default(),
+          destinations: None,
+        },
+        &sources,
+        page,
+        &options.pages,
+        options.page_ranges.as_deref(),
+        structural,
+        settle,
+      )?;
+
+      Rendered::Sections(Box::new(plan))
+    }
     Some(page) => {
       let bands = PageBands {
         header: options.pages.header_band(options.header.as_ref()),
@@ -210,6 +243,8 @@ fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Ve
         inputs: &inputs,
         state: &state,
         background: options.background_color,
+        counters: PageCounters::default(),
+        destinations: None,
       }
       .render(page, bands, options.node, structural, settle)?;
 
@@ -246,7 +281,7 @@ fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Ve
   }
   if let Some(collector) = &state.tags {
     pdf.set_tag_tree(collector.borrow_mut().build_tree(
-      rendered.root(),
+      rendered.roots(),
       state.lang,
       &rendered.summary().destination_targets(),
     ));
@@ -318,6 +353,7 @@ fn open_document(
 /// after them.
 enum Rendered {
   Paged(Box<PagePlan>),
+  Sections(Box<SectionPlan>),
   Single(Box<SinglePage>),
 }
 
@@ -329,16 +365,22 @@ struct SinglePage {
 }
 
 impl Rendered {
-  fn root(&self) -> &RenderNode {
+  fn roots(&self) -> Vec<(&RenderNode, Vec<usize>)> {
     match self {
-      Self::Paged(plan) => &plan.root,
-      Self::Single(page) => &page.content.scene.root,
+      Self::Paged(plan) => vec![(&plan.root, Vec::new())],
+      Self::Sections(plan) => plan
+        .sections
+        .iter()
+        .map(|section| (&section.root, section.prefix.clone()))
+        .collect(),
+      Self::Single(page) => vec![(&page.content.scene.root, Vec::new())],
     }
   }
 
   fn summary(&self) -> &PageSummary {
     match self {
       Self::Paged(plan) => &plan.summary,
+      Self::Sections(plan) => &plan.summary,
       Self::Single(page) => &page.interactive.summary,
     }
   }
@@ -346,6 +388,7 @@ impl Rendered {
   fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
     match self {
       Self::Paged(plan) => plan.destination(top, path),
+      Self::Sections(plan) => plan.destination(top, path),
       Self::Single(page) => Some(page.destination(top, path)),
     }
   }

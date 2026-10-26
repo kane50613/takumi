@@ -71,6 +71,10 @@ pub enum PdfError {
   InvalidPageRange(String),
   /// The page ranges select none of the document's pages.
   PageRangesOutOfBounds(usize),
+  /// Additional sections need paged output.
+  SectionsNeedPages,
+  /// Section counters and pagination did not converge.
+  UnstableSections,
 }
 
 impl Display for PdfError {
@@ -80,6 +84,8 @@ impl Display for PdfError {
       Self::Font(error) => write!(f, "Font error: {error}"),
       Self::Krilla(error) => write!(f, "Writing the PDF failed: {error}"),
       Self::InvalidPageSize => f.write_str("Page size must be finite and larger than zero"),
+      Self::SectionsNeedPages => f.write_str("Sections require paged output, not a viewport"),
+      Self::UnstableSections => f.write_str("Section pagination did not stabilize"),
       Self::MissingViewport => {
         f.write_str("Single-page output needs a viewport. Pass `viewport` or `size`.")
       }
@@ -367,6 +373,34 @@ impl PageSelection {
   pub(crate) fn emitted(&self, index: usize) -> Option<usize> {
     self.emitted.get(index).copied().flatten()
   }
+
+  /// The pages `offset..offset + pages` of the document, mapped to their places in the output.
+  pub(crate) fn section(&self, offset: usize, pages: usize) -> Self {
+    let emitted = self.emitted[offset..offset + pages].to_vec();
+
+    Self {
+      ranges: None,
+      kept: emitted.iter().flatten().count(),
+      emitted,
+    }
+  }
+}
+
+/// Content starting on a new page with its own geometry and optional bands.
+#[derive(Clone, TypedBuilder)]
+#[non_exhaustive]
+pub struct PdfSection {
+  /// The section's root node.
+  pub node: Node,
+  /// Page geometry; unset inherits the document's geometry.
+  #[builder(default, setter(strip_option))]
+  pub page: Option<PageOptions>,
+  /// Header override; unset inherits the document header.
+  #[builder(default, setter(strip_option))]
+  pub header: Option<Band>,
+  /// Footer override; unset inherits the document footer.
+  #[builder(default, setter(strip_option))]
+  pub footer: Option<Band>,
 }
 
 /// Inputs for [`crate::render`], built with [`PdfOptions::builder`].
@@ -380,6 +414,9 @@ pub struct PdfOptions<'g> {
   pub fonts: &'g Fonts,
   /// The root node to render.
   pub node: Node,
+  /// Additional sections in the same document, each starting on a new page.
+  #[builder(default)]
+  pub sections: Vec<PdfSection>,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub stylesheet: Arc<StyleSheet>,
