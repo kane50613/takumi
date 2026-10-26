@@ -1,5 +1,5 @@
-//! Draws flattened SVG ops onto a tiny-skia pixmap. A layer covers the whole pixmap, except a
-//! filter layer, which covers its filter region.
+//! Draws flattened SVG ops onto a tiny-skia pixmap. A layer covers its supplied paint bounds, or a
+//! filter layer's region when it has none.
 
 use std::slice::Iter;
 
@@ -11,7 +11,7 @@ use tiny_skia::{
 };
 
 use crate::{
-  geometry::PathCommand,
+  geometry::{PathCommand, Rect as ScopeRect},
   resources::{image::within_raster_pixel_budget, image_buffer::composite_premultiplied_over_row},
   style::{BlendMode, Color, ImageScalingAlgorithm, math::mul_div_255},
   svg_vector::{
@@ -47,8 +47,18 @@ impl<'a, 'b> Target<'a, 'b> {
     })
   }
 
-  /// Where a layer sits, a filter's region within `limit` and the raster budget.
-  fn layer_bounds(&self, filters: Option<&SvgFilters>) -> Option<IntRect> {
+  /// Where a layer sits, from its paint bounds or a filter region within `limit` and the raster budget.
+  fn layer_bounds(
+    &self,
+    scope: Option<ScopeRect<f32>>,
+    filters: Option<&SvgFilters>,
+  ) -> Option<IntRect> {
+    if let Some(scope) = scope
+      && let Some(bounds) = self.scope_bounds(scope)
+    {
+      return Some(bounds);
+    }
+
     let (width, height) = (self.pixmap.width(), self.pixmap.height());
 
     let Some(filters) = filters else {
@@ -95,6 +105,7 @@ impl<'a, 'b> Target<'a, 'b> {
             opacity: Some(*opacity),
             ..Composite::default()
           },
+          None,
         ),
         SvgOp::PushBlend(blend) => self.layer(
           ops,
@@ -102,8 +113,9 @@ impl<'a, 'b> Target<'a, 'b> {
             blend: Some(tiny_blend_mode(*blend)),
             ..Composite::default()
           },
+          None,
         ),
-        SvgOp::PushIsolation => self.layer(ops, Composite::default()),
+        SvgOp::PushIsolation { bounds } => self.layer(ops, Composite::default(), *bounds),
         SvgOp::PushMask {
           ops: mask_ops,
           luminance,
@@ -114,6 +126,7 @@ impl<'a, 'b> Target<'a, 'b> {
               mask: Some(mask),
               ..Composite::default()
             },
+            None,
           ),
           None => skip_scope(ops),
         },
@@ -123,6 +136,7 @@ impl<'a, 'b> Target<'a, 'b> {
             filters: Some(filters),
             ..Composite::default()
           },
+          None,
         ),
         SvgOp::Draw {
           path,
@@ -141,8 +155,13 @@ impl<'a, 'b> Target<'a, 'b> {
   }
 
   /// Draws the scope that follows into a fresh layer and composites it onto this target.
-  fn layer(&mut self, ops: &mut Iter<'_, SvgOp>, composite: Composite) {
-    let Some(bounds) = self.layer_bounds(composite.filters) else {
+  fn layer(
+    &mut self,
+    ops: &mut Iter<'_, SvgOp>,
+    composite: Composite,
+    scope: Option<ScopeRect<f32>>,
+  ) {
+    let Some(bounds) = self.layer_bounds(scope, composite.filters) else {
       skip_scope(ops);
       return;
     };
@@ -215,6 +234,17 @@ impl<'a, 'b> Target<'a, 'b> {
         MaskType::Alpha
       },
     ))
+  }
+
+  fn scope_bounds(&self, scope: ScopeRect<f32>) -> Option<IntRect> {
+    let bounds = Rect::from_ltrb(scope.left, scope.top, scope.right, scope.bottom)?;
+    let bounds = bounds
+      .transform(self.transform)?
+      .outset(2.0, 2.0)?
+      .round_out()?;
+    let canvas = IntRect::from_xywh(0, 0, self.pixmap.width(), self.pixmap.height())?;
+
+    bounds.intersect(&canvas)
   }
 
   fn draw_path(
@@ -485,7 +515,7 @@ fn skip_scope(ops: &mut Iter<'_, SvgOp>) {
       | SvgOp::PushClip { .. }
       | SvgOp::PushOpacity(_)
       | SvgOp::PushBlend(_)
-      | SvgOp::PushIsolation
+      | SvgOp::PushIsolation { .. }
       | SvgOp::PushMask { .. }
       | SvgOp::PushFilter(_) => depth += 1,
       SvgOp::Draw { .. } | SvgOp::Image { .. } => {}
@@ -610,7 +640,7 @@ mod tests {
 
   use tiny_skia::{IntRect, Pixmap, Transform};
 
-  use super::Target;
+  use super::{ScopeRect, Target};
   use crate::{
     context::RenderContext,
     geometry::Size,
@@ -713,6 +743,29 @@ mod tests {
   }
 
   #[test]
+  fn clip_applies_to_a_direct_group() {
+    let image = draw(
+      r##"<defs><clipPath id="c"><rect width="4" height="8"/></clipPath></defs>
+      <g clip-path="url(#c)"><rect width="8" height="8" fill="#0000ff"/></g>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(6, 4), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(2, 4), [0, 0, 255, 255]);
+  }
+
+  #[test]
+  fn isolation_applies_to_a_solid_group() {
+    let image = draw(
+      r##"<g style="isolation:isolate"><rect x="2" y="3" width="4" height="2" fill="#0000ff"/></g>"##,
+      8,
+    );
+
+    assert_eq!(image.pixel(1, 4), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(3, 4), [0, 0, 255, 255]);
+  }
+
+  #[test]
   fn luminance_mask_cuts_by_brightness() {
     let image = draw(
       r##"<defs><mask id="m"><rect width="4" height="8" fill="#fff"/><rect x="4" width="4" height="8" fill="#000"/></mask></defs>
@@ -769,7 +822,7 @@ mod tests {
     let mut root = Pixmap::new(10, 10).unwrap();
     let mut root_view = root.as_mut();
     let root_target = Target::root(&mut root_view, Transform::identity()).unwrap();
-    let bounds = root_target.layer_bounds(Some(filters)).unwrap();
+    let bounds = root_target.layer_bounds(None, Some(filters)).unwrap();
 
     assert_eq!(bounds, IntRect::from_xywh(-20, -20, 50, 50).unwrap());
 
@@ -783,8 +836,25 @@ mod tests {
     };
 
     assert_eq!(
-      nested.layer_bounds(Some(filters)),
+      nested.layer_bounds(None, Some(filters)),
       IntRect::from_xywh(0, 0, 50, 50)
+    );
+  }
+
+  #[test]
+  fn an_isolation_layer_covers_its_paint_bounds() {
+    let mut pixmap = Pixmap::new(100, 100).unwrap();
+    let mut view = pixmap.as_mut();
+    let target = Target::root(&mut view, Transform::identity()).unwrap();
+
+    assert_eq!(
+      target.scope_bounds(ScopeRect {
+        left: 20.0,
+        top: 30.0,
+        right: 30.0,
+        bottom: 50.0,
+      }),
+      IntRect::from_xywh(18, 28, 14, 24)
     );
   }
 

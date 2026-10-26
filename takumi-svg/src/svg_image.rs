@@ -55,7 +55,7 @@ impl SvgDocument {
           groups.push(self.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)?);
         }
         SvgOp::PushBlend(blend) => groups.push(self.begin_blend_group(&blend.to_css_string())?),
-        SvgOp::PushIsolation => groups.push(self.begin_isolate_group()?),
+        SvgOp::PushIsolation { .. } => groups.push(self.begin_isolate_group()?),
         SvgOp::PushOpacity(opacity) => {
           groups.push(self.begin_group(Affine::IDENTITY, *opacity, None, None)?);
         }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 #[cfg(feature = "svg-raster")]
 use crate::svg::filter::SvgFilter;
 use crate::{
-  geometry::{PathCommand, Point},
+  geometry::{PathCommand, Point, Rect},
   resources::{image_buffer::ImageBuffer, image_decoder::decode_image},
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
@@ -25,7 +25,10 @@ pub enum SvgOp {
   /// Blends nested ops onto the backdrop with a blend mode.
   PushBlend(BlendMode),
   /// Composites nested ops as one isolated group, so their blend modes stop at its backdrop.
-  PushIsolation,
+  PushIsolation {
+    /// Conservative bounds of the nested paint in the group's coordinate space.
+    bounds: Option<Rect<f32>>,
+  },
   /// Applies uniform opacity to nested ops as one isolated group.
   PushOpacity(f32),
   /// Masks nested ops with the rendering of `ops` (an alpha or luminance soft mask).

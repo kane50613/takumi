@@ -1,7 +1,7 @@
 pre-commit:
   piped: true
   jobs:
-    - run: cargo fmt --all
+    - run: bun fmt
       stage_fixed: true
 
     - run: |
@@ -13,5 +13,4 @@ pre-commit:
               git add "$dir/README.md"
             done
 
-    - run: bun run lint:fix
-      stage_fixed: true
+    - run: bun lint

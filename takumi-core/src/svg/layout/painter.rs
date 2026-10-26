@@ -13,8 +13,8 @@ use super::{
 #[cfg(feature = "svg-raster")]
 use crate::resources::image::SvgFilters;
 use crate::{
-  geometry::{PathCommand, Point},
-  resources::image::{SvgFill, SvgImageData, SvgOp, SvgStrokeStyle},
+  geometry::{PathCommand, Point, Rect},
+  resources::image::{SvgFill, SvgImageData, SvgLineCap, SvgOp, SvgStrokeStyle},
   style::{Affine, BlendMode},
 };
 
@@ -36,6 +36,9 @@ impl<'b> SvgPainter<'b> {
     };
 
     painter.container(root);
+    if has_isolation(&painter.ops) {
+      annotate_isolation_bounds(&mut painter.ops);
+    }
     (!painter.exhausted).then_some(painter.ops)
   }
 
@@ -44,7 +47,13 @@ impl<'b> SvgPainter<'b> {
     let outer = mem::take(&mut self.ops);
 
     fill(self);
-    mem::replace(&mut self.ops, outer)
+    let mut nested = mem::replace(&mut self.ops, outer);
+
+    if has_isolation(&nested) {
+      annotate_isolation_bounds(&mut nested);
+    }
+
+    nested
   }
 
   /// Appends an op, charging the budget for it and the path it carries.
@@ -101,7 +110,7 @@ impl<'b> SvgPainter<'b> {
       self.push(SvgOp::PushBlend(container.blend_mode));
       pop_count += 1;
     } else if container.isolate && container.opacity >= 1.0 {
-      self.push(SvgOp::PushIsolation);
+      self.push(SvgOp::PushIsolation { bounds: None });
       pop_count += 1;
     }
 
@@ -344,6 +353,154 @@ impl<'b> SvgPainter<'b> {
       luminance: mask.luminance,
     }
   }
+}
+
+#[derive(Clone, Copy)]
+enum ScopeBounds {
+  Empty,
+  Known(Rect<f32>),
+  Unknown,
+}
+
+impl ScopeBounds {
+  fn union(self, other: Self) -> Self {
+    match (self, other) {
+      (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
+      (Self::Empty, bounds) | (bounds, Self::Empty) => bounds,
+      (Self::Known(first), Self::Known(second)) => Self::Known(first.union(&second)),
+    }
+  }
+
+  fn transformed(self, transform: Affine) -> Self {
+    match self {
+      Self::Empty => Self::Empty,
+      Self::Known(bounds) => bounds
+        .transformed(transform)
+        .map_or(Self::Unknown, Self::Known),
+      Self::Unknown => Self::Unknown,
+    }
+  }
+
+  fn clipped(self, clip: Option<Rect<f32>>) -> Self {
+    match (self, clip) {
+      (Self::Known(bounds), Some(clip)) => Rect::from_ltrb(
+        bounds.left.max(clip.left),
+        bounds.top.max(clip.top),
+        bounds.right.min(clip.right),
+        bounds.bottom.min(clip.bottom),
+      )
+      .filter(Rect::has_area)
+      .map_or(Self::Empty, Self::Known),
+      (Self::Empty, _) => Self::Empty,
+      (_, None) => Self::Unknown,
+      (Self::Unknown, _) => Self::Unknown,
+    }
+  }
+
+  fn rect(self) -> Option<Rect<f32>> {
+    match self {
+      Self::Known(bounds) => Some(bounds),
+      Self::Empty | Self::Unknown => None,
+    }
+  }
+}
+
+fn annotate_isolation_bounds(ops: &mut [SvgOp]) {
+  let mut index = 0;
+
+  let _ = scope_bounds(ops, &mut index);
+}
+
+fn has_isolation(ops: &[SvgOp]) -> bool {
+  ops.iter().any(|op| match op {
+    SvgOp::PushIsolation { .. } => true,
+    SvgOp::PushMask { ops, .. } => has_isolation(ops),
+    _ => false,
+  })
+}
+
+fn scope_bounds(ops: &mut [SvgOp], index: &mut usize) -> ScopeBounds {
+  let mut bounds = ScopeBounds::Empty;
+
+  while *index < ops.len() {
+    let op_index = *index;
+
+    *index += 1;
+    let current = match &ops[op_index] {
+      SvgOp::Pop => return bounds,
+      SvgOp::PushTransform(_) => {
+        let transform = match &ops[op_index] {
+          SvgOp::PushTransform(transform) => *transform,
+          _ => unreachable!(),
+        };
+
+        scope_bounds(ops, index).transformed(transform)
+      }
+      SvgOp::PushClip { .. } => {
+        let child = scope_bounds(ops, index);
+        let clip = match &ops[op_index] {
+          SvgOp::PushClip { path, .. } => PathCommand::normalize(path).map(|path| path.bounds),
+          _ => unreachable!(),
+        };
+
+        child.clipped(clip)
+      }
+      SvgOp::PushBlend(_) | SvgOp::PushOpacity(_) => scope_bounds(ops, index),
+      SvgOp::PushIsolation { .. } => {
+        let child = scope_bounds(ops, index);
+
+        if let SvgOp::PushIsolation { bounds } = &mut ops[op_index] {
+          *bounds = child.rect();
+        }
+
+        child
+      }
+      SvgOp::PushMask { .. } => {
+        if let SvgOp::PushMask { ops: mask_ops, .. } = &mut ops[op_index] {
+          annotate_isolation_bounds(mask_ops);
+        }
+        let _ = scope_bounds(ops, index);
+
+        ScopeBounds::Unknown
+      }
+      SvgOp::PushFilter(_) => {
+        let _ = scope_bounds(ops, index);
+
+        ScopeBounds::Unknown
+      }
+      SvgOp::Draw { path, stroke, .. } => draw_bounds(path, stroke.as_ref()),
+      SvgOp::Image { width, height, .. } => Rect::positive_from_xywh(0.0, 0.0, *width, *height)
+        .map_or(ScopeBounds::Empty, ScopeBounds::Known),
+    };
+
+    bounds = bounds.union(current);
+  }
+
+  bounds
+}
+
+fn draw_bounds(path: &[PathCommand], stroke: Option<&SvgStrokeStyle>) -> ScopeBounds {
+  let Some(path) = PathCommand::normalize(path) else {
+    return ScopeBounds::Empty;
+  };
+  let bounds = if let Some(stroke) = stroke {
+    let cap_reach = match stroke.cap {
+      SvgLineCap::Square => std::f32::consts::SQRT_2,
+      SvgLineCap::Butt | SvgLineCap::Round => 1.0,
+    };
+    let reach = stroke.width * stroke.miter_limit.max(cap_reach) * 0.5;
+
+    Rect::from_ltrb(
+      path.control_bounds.left - reach,
+      path.control_bounds.top - reach,
+      path.control_bounds.right + reach,
+      path.control_bounds.bottom + reach,
+    )
+  } else {
+    Some(path.bounds)
+  };
+
+  bounds.map_or(ScopeBounds::Unknown, ScopeBounds::Known)
 }
 
 impl Container {

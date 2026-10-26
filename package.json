@@ -15,6 +15,7 @@
   "scripts": {
     "test": "bun --filter '*' test --silent",
     "build": "bun --filter '*' run build",
+    "fmt": "cargo fmt --all && oxfmt --write",
     "lint": "oxlint --format=github && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt --write",
     "tegami": "bun scripts/tegami.mts",
