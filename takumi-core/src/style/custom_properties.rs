@@ -37,6 +37,14 @@ impl CustomProperties {
     Arc::make_mut(&mut self.values).insert(name, value);
   }
 
+  pub(crate) fn values(&self) -> &HashMap<String, String> {
+    &self.values
+  }
+
+  pub(crate) fn replace_values(&mut self, values: HashMap<String, String>) {
+    self.values = Arc::new(values);
+  }
+
   /// Sets `name` as a declaration specifies it. A CSS-wide keyword resolves here, as the cascade
   /// resolves it for a custom property: `inherit` takes `parent`'s value, `initial` the registered
   /// initial value or none, and `unset` either one as the property inherits.
