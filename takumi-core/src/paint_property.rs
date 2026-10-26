@@ -13,9 +13,9 @@ use std::iter::successors;
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, Point, Size},
-  painter::{FillShape, OverflowClip, UNBOUNDED},
+  painter::{BoxPainter, FillShape, OverflowClip, UNBOUNDED},
   scene::SceneBounds,
-  style::Affine,
+  style::{Affine, Filter},
 };
 
 /// A clip in [`PropertyTrees`].
@@ -33,7 +33,7 @@ impl EffectId {
   }
 }
 
-/// A region later draws stay inside.
+/// A geometric clip or a filter input boundary.
 #[derive(Debug, Clone)]
 pub struct ClipNode {
   /// The clip this one sits inside, or `None` under the root.
@@ -41,14 +41,27 @@ pub struct ClipNode {
   /// Where the shape sits.
   pub transform: Affine,
   /// The region.
-  pub shape: FillShape,
-  /// Child-index path from the root to the box whose `overflow` the clip is.
+  pub kind: ClipKind,
+  /// Child-index path from the root to the box that owns the clip.
   pub owner: Vec<usize>,
+}
+
+/// A geometric clip or Blink's input boundary for a pixel-moving filter.
+#[derive(Debug, Clone)]
+pub enum ClipKind {
+  /// Clips to a geometric shape.
+  Shape(FillShape),
+  /// Clips the element and its descendants to its clip-path.
+  ClipPath(FillShape),
+  /// Marks a pixel-moving filter boundary without applying a geometric clip.
+  PixelMovingFilter(EffectId),
 }
 
 /// A group composited as one, such as `opacity` or `filter`.
 #[derive(Debug, Clone)]
 pub struct EffectNode {
+  /// Which stage the effect applies.
+  pub kind: EffectKind,
   /// The effect this one composites into, or `None` under the root.
   pub parent: Option<EffectId>,
   /// The clip the group composites under, or `None` when a descendant escapes the clips the
@@ -58,6 +71,15 @@ pub struct EffectNode {
   pub owner: Vec<usize>,
   /// Device-space bounds of what the group paints, filters included, or `None` when unknown.
   pub bounds: Option<SceneBounds>,
+}
+
+/// Blink's separate normal and filter effects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectKind {
+  /// Opacity, blending, backdrop filters, and masks.
+  Group,
+  /// The element's foreground filter.
+  Filter,
 }
 
 /// The clip and effect a draw paints under.
@@ -79,9 +101,7 @@ pub struct NodeProperties {
 }
 
 impl NodeProperties {
-  /// Adds the effect and overflow clip of the box at `path` to `trees`, starting from `state`, as
-  /// Blink's `UpdateForSelf` and `UpdateForChildren` do. Its whole paint composites as one group
-  /// when it needs one.
+  /// Adds the box's clip and effect stages in Blink's self and children order.
   pub(crate) fn build(
     trees: &mut PropertyTrees,
     state: PropertyState,
@@ -91,32 +111,73 @@ impl NodeProperties {
     transform: Affine,
     paint_offset: Point<f32>,
   ) -> Self {
-    let effect = if context.style.needs_offscreen_compositing() {
+    let output_clip = BoxPainter::new(context, layout)
+      .clip_path()
+      .map(|shape| {
+        trees.add_clip(ClipNode {
+          parent: state.clip,
+          transform,
+          kind: ClipKind::ClipPath(shape),
+          owner: path.to_vec(),
+        })
+      })
+      .or(state.clip);
+    let effect = if context.style.needs_effect_group() {
       Some(trees.add_effect(EffectNode {
+        kind: EffectKind::Group,
         parent: state.effect,
-        output_clip: state.clip,
+        output_clip,
         owner: path.to_vec(),
         bounds: None,
       }))
     } else {
       state.effect
     };
+    let effect = if context.style.misc1_data.filter.is_empty() {
+      effect
+    } else {
+      Some(trees.add_effect(EffectNode {
+        kind: EffectKind::Filter,
+        parent: effect,
+        output_clip,
+        owner: path.to_vec(),
+        bounds: None,
+      }))
+    };
+    let input_clip = if let Some(effect) = effect
+      && trees.effect(effect).kind == EffectKind::Filter
+      && context
+        .style
+        .misc1_data
+        .filter
+        .iter()
+        .any(Filter::moves_pixels)
+    {
+      Some(trees.add_clip(ClipNode {
+        parent: output_clip,
+        transform,
+        kind: ClipKind::PixelMovingFilter(effect),
+        owner: path.to_vec(),
+      }))
+    } else {
+      output_clip
+    };
     let clip = OverflowClip::of(context, layout, paint_offset)
       .map(|clip| {
         let (shape, origin) = clip.shape();
 
         trees.add_clip(ClipNode {
-          parent: state.clip,
+          parent: input_clip,
           transform: transform * Affine::translation(origin.x, origin.y),
-          shape,
+          kind: ClipKind::Shape(shape),
           owner: path.to_vec(),
         })
       })
-      .or(state.clip);
+      .or(input_clip);
 
     Self {
       border_box: PropertyState {
-        clip: state.clip,
+        clip: input_clip,
         effect,
       },
       contents: PropertyState { clip, effect },
@@ -158,10 +219,10 @@ impl LineClampFloatClip {
     let clip = trees.add_clip(ClipNode {
       parent: state.clip,
       transform: self.transform * Affine::translation(-UNBOUNDED, -UNBOUNDED),
-      shape: FillShape::Rect(Size {
+      kind: ClipKind::Shape(FillShape::Rect(Size {
         width: 2.0 * UNBOUNDED,
         height: UNBOUNDED + self.block_end,
-      }),
+      })),
       owner: owner.to_vec(),
     });
 
@@ -234,16 +295,44 @@ impl PropertyTrees {
     &mut self,
     effect: Option<EffectId>,
     container: &ContainerContents,
+    clip: Option<ClipId>,
   ) {
     let escaped: Vec<EffectId> = self
       .effect_chain(effect)
       .take_while(|&id| !container.path.starts_with(&self.effect(id).owner))
-      .filter(|&id| self.effect(id).output_clip != container.clip)
+      .filter(|&id| self.effect(id).output_clip != clip)
       .collect();
 
     for id in escaped {
       self.effects[id.0].output_clip = None;
     }
+  }
+
+  /// Preserves clip paths when a positioned descendant escapes overflow clips.
+  pub(crate) fn positioned_clip(
+    &mut self,
+    current: Option<ClipId>,
+    container: Option<ClipId>,
+  ) -> Option<ClipId> {
+    let common = self.common_clip(current, container);
+    let paths: Vec<ClipId> = self
+      .clip_chain(current)
+      .take_while(|&id| Some(id) != common)
+      .filter(|&id| matches!(self.clip(id).kind, ClipKind::ClipPath(_)))
+      .collect();
+    let mut clip = container;
+
+    for id in paths.into_iter().rev() {
+      if self.clip(id).parent == clip {
+        clip = Some(id);
+      } else {
+        let mut node = self.clip(id).clone();
+        node.parent = clip;
+        clip = Some(self.add_clip(node));
+      }
+    }
+
+    clip
   }
 
   /// Whether `ancestor` is `clip` or contains it.
@@ -287,7 +376,7 @@ impl PropertyTrees {
 mod tests {
   use std::sync::Arc;
 
-  use super::NodeProperties;
+  use super::{ClipKind, EffectKind, NodeProperties};
   use crate::{
     context::RenderContext,
     layout::{node::Node, tree::RenderNode},
@@ -303,6 +392,9 @@ mod tests {
     #clip { overflow: hidden; }
     #positioned-clip { position: relative; overflow: hidden; }
     #faded { opacity: 0.5; }
+    #filtered { opacity: 0.5; filter: blur(4px); }
+    #color-filtered { filter: brightness(0.5); }
+    #shaped-filter { clip-path: inset(5px); filter: blur(4px); }
     #absolute { position: absolute; }
   "#;
 
@@ -404,5 +496,62 @@ mod tests {
       output_clip(&contained),
       properties(&contained, &[0]).contents.clip
     );
+  }
+
+  #[test]
+  fn filter_has_its_own_effect_and_pixel_moving_clip() {
+    let scene = scene(div(
+      "root",
+      [div("clip", [div("filtered", [div("child", [])])])],
+    ));
+    let output_clip = properties(&scene, &[0]).contents.clip;
+    let filtered = properties(&scene, &[0, 0]).border_box;
+    let filter_id = filtered.effect.expect("filter effect");
+    let filter = scene.properties.effect(filter_id);
+    let group = scene
+      .properties
+      .effect(filter.parent.expect("opacity effect"));
+    let input = scene
+      .properties
+      .clip(filtered.clip.expect("filter input clip"));
+
+    assert_eq!(filter.kind, EffectKind::Filter);
+    assert_eq!(group.kind, EffectKind::Group);
+    assert_eq!(filter.output_clip, output_clip);
+    assert_eq!(group.output_clip, output_clip);
+    assert_eq!(input.parent, output_clip);
+    assert!(matches!(input.kind, ClipKind::PixelMovingFilter(id) if id == filter_id));
+    assert_eq!(
+      properties(&scene, &[0, 0, 0]).border_box.clip,
+      filtered.clip
+    );
+  }
+
+  #[test]
+  fn color_filter_has_no_pixel_moving_clip() {
+    let scene = scene(div("root", [div("clip", [div("color-filtered", [])])]));
+    let output_clip = properties(&scene, &[0]).contents.clip;
+    let filtered = properties(&scene, &[0, 0]).border_box;
+
+    assert_eq!(filtered.clip, output_clip);
+    assert_eq!(
+      scene.properties.effect(filtered.effect.unwrap()).kind,
+      EffectKind::Filter
+    );
+  }
+
+  #[test]
+  fn clip_path_is_the_filter_output_clip() {
+    let scene = scene(div("root", [div("clip", [div("shaped-filter", [])])]));
+    let ancestor = properties(&scene, &[0]).contents.clip;
+    let state = properties(&scene, &[0, 0]).border_box;
+    let filter = scene.properties.effect(state.effect.unwrap());
+    let output = scene.properties.clip(filter.output_clip.unwrap());
+    let input = scene.properties.clip(state.clip.unwrap());
+
+    assert!(matches!(output.kind, ClipKind::ClipPath(_)));
+    assert_eq!(output.parent, ancestor);
+    assert_eq!(input.parent, filter.output_clip);
+    assert!(matches!(input.kind, ClipKind::PixelMovingFilter(_)));
   }
 }

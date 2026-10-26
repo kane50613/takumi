@@ -1,15 +1,15 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
-  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
+  paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
   painter::{TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene, SceneBounds, SceneView},
 };
 use tiny_skia::PixmapMut;
 
 use crate::{
-  BorderProperties, Canvas, CanvasDevice, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error,
-  NodeMasks, PlacedMask, RenderContext, Result, apply_backdrop_filter, apply_filters_to_pixmap,
+  Backdrop, BorderProperties, Canvas, CanvasDevice, CanvasSubcanvas, CanvasViewport,
+  DeferredOutline, Error, NodeMasks, PlacedMask, RenderContext, Result, apply_filters_to_pixmap,
   draw_debug_border, draw_table_box_shell,
   inline_drawing::draw_own_content,
   layout::tree::RenderNode,
@@ -63,15 +63,18 @@ impl<'s> ScenePaint<'s> {
 }
 
 /// An effect group open on the canvas.
-struct OpenEffect {
-  /// The group's layer, when it has one.
-  layer: Option<Box<CanvasSubcanvas>>,
-  /// How many `clip-path` and `mask-image` masks it pushed.
+enum OpenEffect {
+  Hidden,
+  Group(Box<EffectGroup>),
+}
+
+struct EffectGroup {
+  layer: CanvasSubcanvas,
+  /// Keeps nested effects from sampling the already filtered backdrop.
+  content_layer: Option<CanvasSubcanvas>,
   masks: usize,
-  /// Whether one of those masks hides everything.
-  hidden: bool,
-  /// The context its owner paints under, which its filters and compositing read.
-  context: Option<RenderContext>,
+  context: RenderContext,
+  kind: EffectKind,
   filter_bounds: Option<SceneBounds>,
 }
 
@@ -87,7 +90,12 @@ struct ScenePainter<'s, 'c> {
 impl ScenePainter<'_, '_> {
   /// Draws one chunk under the clips and effects already entered.
   fn paint(&mut self, chunk: &PaintChunk<'_>) {
-    if self.error.is_some() || self.effects.iter().any(|effect| effect.hidden) {
+    if self.error.is_some()
+      || self
+        .effects
+        .iter()
+        .any(|effect| matches!(effect, OpenEffect::Hidden))
+    {
       return;
     }
     if let Some(bounds) = chunk.node.paint_bounds
@@ -142,114 +150,151 @@ impl ScenePainter<'_, '_> {
     }
   }
 
-  /// Opens the group of `effect` owned by `paint`: its filtered backdrop, its layer, then its
-  /// `clip-path` and `mask-image` masks.
+  /// Opens the group's source layer inside its output clips and masks.
   fn open_effect(&mut self, paint: &NodePaint, effect: &EffectNode) -> Result<OpenEffect> {
     // The masks read the owner's paint offset, which differs between its fragments.
     let (_, layout, context) = placed(self.scene, paint)?;
     let canvas = &mut *self.canvas;
     let style = &context.style;
 
-    if !style.misc1_data.backdrop_filter.is_empty() {
-      let shell_mask = if style.has_shape_mask() {
-        match NodeMasks::of(&context, layout, paint.transform, canvas.viewport())? {
-          Some(masks) => masks.into_shell_mask(),
-          None => return Ok(OpenEffect::hidden(None)),
-        }
+    let backdrop =
+      if effect.kind == EffectKind::Group && !style.misc1_data.backdrop_filter.is_empty() {
+        let border = BorderProperties::from_context(&context, layout.size, layout.border);
+
+        Backdrop::new(canvas, border, layout.size, paint.transform, &context)?
       } else {
         None
       };
-      let border = BorderProperties::from_context(&context, layout.size, layout.border);
-
-      apply_backdrop_filter(
-        canvas,
-        border,
-        layout.size,
-        paint.transform,
-        &context,
-        shell_mask.as_ref(),
-      )?;
-    }
 
     let viewport = canvas.viewport();
     let placement = effect
       .bounds
-      .and_then(|bounds| layer_placement(viewport, bounds, &context, paint.transform))
+      .and_then(|bounds| {
+        if effect.kind == EffectKind::Filter {
+          layer_placement(viewport, bounds, &context, paint.transform)
+        } else {
+          viewport.clamp_bounds(bounds, 2)
+        }
+      })
       .unwrap_or_else(|| viewport.placement());
-    let layer = Box::new(canvas.begin_subcanvas(placement)?);
-    let Some(masks) = NodeMasks::of(&context, layout, paint.transform, canvas.viewport())? else {
-      return Ok(OpenEffect::hidden(Some(layer)));
-    };
-    let count = masks.len();
+    let mut count = 0;
 
-    for mask in masks.shell {
-      canvas.push_mask(PlacedMask::covering(canvas.viewport(), mask));
+    if effect.kind == EffectKind::Group {
+      let Some(masks) = NodeMasks::of(&context, layout, paint.transform, viewport)? else {
+        return Ok(OpenEffect::Hidden);
+      };
+      count = masks.len();
+      for mask in masks.shell {
+        canvas.push_mask(PlacedMask::covering(viewport, mask));
+      }
     }
 
-    Ok(OpenEffect {
-      layer: Some(layer),
+    let layer = match canvas.begin_effect_subcanvas(placement) {
+      Ok(layer) => layer,
+      Err(error) => {
+        for _ in 0..count {
+          canvas.pop_mask();
+        }
+
+        return Err(error);
+      }
+    };
+
+    let content_layer = if let Some(backdrop) = backdrop {
+      backdrop.paint(canvas);
+
+      match canvas.begin_effect_subcanvas(placement) {
+        Ok(content) => Some(content),
+        Err(error) => {
+          canvas.composite_subcanvas(layer, BlendMode::Normal, 0.0);
+          for _ in 0..count {
+            canvas.pop_mask();
+          }
+
+          return Err(error);
+        }
+      }
+    } else {
+      None
+    };
+
+    Ok(OpenEffect::Group(Box::new(EffectGroup {
+      layer,
+      content_layer,
       masks: count,
-      hidden: false,
-      context: Some(context),
+      context,
+      kind: effect.kind,
       filter_bounds: effect.bounds,
-    })
+    })))
   }
 
-  /// Filters, unmasks and composites the most recent group.
+  /// Filters the source before compositing it through the group's output masks.
   fn close_effect(&mut self, effect: OpenEffect) -> Result<()> {
     let canvas = &mut *self.canvas;
 
-    for _ in 0..effect.masks {
+    let OpenEffect::Group(group) = effect else {
+      return Ok(());
+    };
+    let EffectGroup {
+      layer,
+      content_layer,
+      masks,
+      context,
+      kind,
+      filter_bounds,
+    } = *group;
+    if let Some(content) = content_layer {
+      canvas.composite_subcanvas(content, BlendMode::Normal, 1.0);
+    }
+    let result = if kind == EffectKind::Filter {
+      apply_filters(canvas, &context, filter_bounds)
+    } else {
+      Ok(())
+    };
+    let opacity = if result.is_err() {
+      0.0
+    } else if kind == EffectKind::Group {
+      context.style.svg_data.opacity.0
+    } else {
+      1.0
+    };
+    let blend = if kind == EffectKind::Group {
+      context.style.misc_data.mix_blend_mode
+    } else {
+      BlendMode::Normal
+    };
+
+    canvas.composite_subcanvas(layer, blend, opacity);
+
+    for _ in 0..masks {
       canvas.pop_mask();
     }
 
-    let Some(layer) = effect.layer else {
-      return Ok(());
-    };
-    let Some(context) = effect.context.as_ref().filter(|_| !effect.hidden) else {
-      canvas.composite_subcanvas(*layer, BlendMode::Normal, 0.0);
-      return Ok(());
-    };
-
-    if !context.style.misc1_data.filter.is_empty() {
-      apply_filters(canvas, context, effect.filter_bounds)?;
-    }
-
-    canvas.composite_subcanvas(
-      *layer,
-      context.style.misc_data.mix_blend_mode,
-      context.style.svg_data.opacity.0,
-    );
-
-    Ok(())
-  }
-}
-
-impl OpenEffect {
-  /// A group that shows nothing it paints, over `layer` when it opened one.
-  fn hidden(layer: Option<Box<CanvasSubcanvas>>) -> Self {
-    Self {
-      layer,
-      masks: 0,
-      hidden: true,
-      context: None,
-      filter_bounds: None,
-    }
+    result
   }
 }
 
 impl PropertySink for ScenePainter<'_, '_> {
   fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
+    if matches!(clip.kind, ClipKind::PixelMovingFilter(_)) {
+      return;
+    }
     let viewport = self.canvas.viewport();
 
     match PlacedMask::of_clip(clip, viewport) {
-      Some(mask) => self.canvas.push_mask(mask),
-      None => self.record(Err(Error::InvalidViewport)),
+      Some(mask) => {
+        self.canvas.push_mask(mask);
+      }
+      None => {
+        self.record(Err(Error::InvalidViewport));
+      }
     }
   }
 
-  fn pop_clip(&mut self) {
-    self.canvas.pop_mask();
+  fn pop_clip(&mut self, clip: &ClipNode) {
+    if !matches!(clip.kind, ClipKind::PixelMovingFilter(_)) {
+      self.canvas.pop_mask();
+    }
   }
 
   fn begin_effect(&mut self, id: EffectId, effect: &EffectNode) {
@@ -261,7 +306,7 @@ impl PropertySink for ScenePainter<'_, '_> {
     match opened {
       Ok(open) => self.effects.push(open),
       Err(error) => {
-        self.effects.push(OpenEffect::hidden(None));
+        self.effects.push(OpenEffect::Hidden);
         self.record(Err(error));
       }
     }

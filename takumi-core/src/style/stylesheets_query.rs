@@ -263,9 +263,13 @@ impl ComputedStyle {
 
   /// Whether the element must render to an offscreen layer before compositing.
   pub fn needs_offscreen_compositing(&self) -> bool {
+    self.needs_effect_group() || !self.misc1_data.filter.is_empty()
+  }
+
+  /// Whether opacity, blending, masking, or a backdrop needs an effect group.
+  pub(crate) fn needs_effect_group(&self) -> bool {
     self.misc_data.isolation == Isolation::Isolate
       || *self.svg_data.opacity < 1.0
-      || !self.misc1_data.filter.is_empty()
       || !self.misc1_data.backdrop_filter.is_empty()
       || self.misc_data.mix_blend_mode != BlendMode::Normal
       || self.has_shape_mask()

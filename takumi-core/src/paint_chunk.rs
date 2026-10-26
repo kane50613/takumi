@@ -47,9 +47,11 @@ impl<'s> PaintChunk<'s> {
     let mut owners = vec![None; trees.effect_count()];
 
     for chunk in chunks {
-      if let Some(id) = chunk.node.properties.border_box.effect
-        && trees.effect(id).owner == chunk.node.path
-      {
+      for id in trees.effect_chain(chunk.node.properties.border_box.effect) {
+        if trees.effect(id).owner != chunk.node.path {
+          break;
+        }
+
         owners[id.index()] = Some(chunk.node);
       }
     }
@@ -121,7 +123,7 @@ pub trait PropertySink {
   fn push_clip(&mut self, id: ClipId, clip: &ClipNode);
 
   /// Removes the most recent clip.
-  fn pop_clip(&mut self);
+  fn pop_clip(&mut self, clip: &ClipNode);
 
   /// Draws what follows into the group `effect` composites.
   fn begin_effect(&mut self, id: EffectId, effect: &EffectNode);
@@ -133,6 +135,7 @@ pub trait PropertySink {
 /// What entering a clip or an effect replaced.
 enum Entered {
   Clip {
+    id: ClipId,
     previous: Option<ClipId>,
   },
   Effect {
@@ -178,7 +181,7 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
   pub fn finish(mut self) -> S {
     while let Some(entered) = self.stack.pop() {
       match entered {
-        Entered::Clip { .. } => self.sink.pop_clip(),
+        Entered::Clip { id, .. } => self.sink.pop_clip(self.trees.clip(id)),
         Entered::Effect { .. } => self.sink.end_effect(),
       }
     }
@@ -212,6 +215,7 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
     for id in pending.into_iter().rev() {
       self.sink.push_clip(id, self.trees.clip(id));
       self.stack.push(Entered::Clip {
+        id,
         previous: self.clip,
       });
       self.clip = Some(id);
@@ -266,8 +270,8 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
   }
 
   fn end_clip(&mut self) {
-    if let Some(Entered::Clip { previous }) = self.stack.pop() {
-      self.sink.pop_clip();
+    if let Some(Entered::Clip { id, previous }) = self.stack.pop() {
+      self.sink.pop_clip(self.trees.clip(id));
       self.clip = previous;
     }
   }
@@ -378,7 +382,9 @@ mod tests {
   use super::{ConversionContext, HeightIndex, PropertySink};
   use crate::{
     geometry::Size,
-    paint_property::{ClipId, ClipNode, EffectId, EffectNode, PropertyState, PropertyTrees},
+    paint_property::{
+      ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode, PropertyState, PropertyTrees,
+    },
     painter::FillShape,
     scene::SceneBounds,
     style::Affine,
@@ -393,7 +399,7 @@ mod tests {
       self.0.push(format!("clip {id:?}"));
     }
 
-    fn pop_clip(&mut self) {
+    fn pop_clip(&mut self, _clip: &ClipNode) {
       self.0.push("pop".into());
     }
 
@@ -410,10 +416,10 @@ mod tests {
     trees.add_clip(ClipNode {
       parent,
       transform: Affine::IDENTITY,
-      shape: FillShape::Rect(Size {
+      kind: ClipKind::Shape(FillShape::Rect(Size {
         width: 1.0,
         height: 1.0,
-      }),
+      })),
       owner: Vec::new(),
     })
   }
@@ -424,6 +430,7 @@ mod tests {
     output_clip: Option<ClipId>,
   ) -> EffectId {
     trees.add_effect(EffectNode {
+      kind: EffectKind::Group,
       parent,
       output_clip,
       owner: Vec::new(),

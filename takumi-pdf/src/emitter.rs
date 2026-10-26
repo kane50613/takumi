@@ -23,7 +23,7 @@ use takumi_core::{
   },
   paint::ConicGradientTile,
   paint_chunk::{ChunkPart, ConversionContext, PropertySink},
-  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
+  paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
   painter::{
     BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, CellArea, CellBackground, FillShape,
     GlyphDevice, GlyphFill, LayerBounds, LineItem, OwnContent, PaintDevice, PaintedInline,
@@ -248,35 +248,14 @@ impl Emitter<'_> {
     conversion.finish().error.map_or(Ok(()), Err)
   }
 
-  /// Pushes the box's mask and `clip-path`, returning how many states went on.
-  /// The mask covers the element and its descendants; `clip-path` clips the
-  /// element itself, decorations included, so both go on before any paint.
-  fn push_mask_and_clip(
-    &mut self,
-    node: &RenderNode,
-    frame: BoxFrame,
-    surface: &mut Surface,
-  ) -> usize {
-    let BoxFrame { layout, .. } = frame;
-    let mut pushed = 0;
-
+  /// Pushes the box's mask, returning how many states went on.
+  fn push_mask(&mut self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) -> usize {
     if let Some(mask) = self.mask(node, frame, surface) {
       surface.push_mask(mask);
-      pushed += 1;
+      1
+    } else {
+      0
     }
-
-    if let Some(shape) = BoxPainter::new(&node.context, layout).clip_path() {
-      // A shape that resolves to no area clips everything away, so a missing
-      // path becomes an empty region rather than no clip at all.
-      let path = shape_path(&shape, frame.origin).or_else(|| empty_path(frame.origin));
-
-      if let Some(path) = path {
-        surface.push_clip_path(&path, &shape.rule().into());
-        pushed += 1;
-      }
-    }
-
-    pushed
   }
 
   /// Paints shadows, backgrounds, and borders in CSS order.
@@ -1630,6 +1609,9 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
     );
     let relative = current.invert().unwrap_or(Affine::IDENTITY) * clip.transform;
     let mut pushed = 0;
+    let (ClipKind::Shape(shape) | ClipKind::ClipPath(shape)) = &clip.kind else {
+      return;
+    };
     let origin = if relative.only_translation() {
       CorePoint {
         x: relative.x,
@@ -1646,28 +1628,28 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
     // never be emitted; only a clip in page space maps onto the window's axis.
     if current == Affine::IDENTITY
       && relative.only_translation()
-      && let Some((top, bottom)) = vertical_extent(&clip.shape)
+      && let Some((top, bottom)) = vertical_extent(shape)
     {
       self
         .emitter
         .window
         .narrow(origin.y + top, origin.y + bottom);
     }
-    if let Some(path) = shape_path(&clip.shape, origin) {
-      self
-        .surface
-        .push_clip_path(&path, &clip.shape.rule().into());
+    if let Some(path) = shape_path(shape, origin).or_else(|| empty_path(origin)) {
+      self.surface.push_clip_path(&path, &shape.rule().into());
       pushed += 1;
     }
 
     self.enter(pushed, current, window, color_filter);
   }
 
-  fn pop_clip(&mut self) {
-    self.leave();
+  fn pop_clip(&mut self, clip: &ClipNode) {
+    if !matches!(clip.kind, ClipKind::PixelMovingFilter(_)) {
+      self.leave();
+    }
   }
 
-  fn begin_effect(&mut self, id: EffectId, _effect: &EffectNode) {
+  fn begin_effect(&mut self, id: EffectId, effect: &EffectNode) {
     let (current, window, color_filter) = (
       self.current,
       self.emitter.window,
@@ -1680,18 +1662,20 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
     {
       let style = &node.context.style;
 
-      pushed += push_compositing(style, self.surface);
+      if effect.kind == EffectKind::Group {
+        pushed += push_compositing(style, self.surface);
 
-      if let Some((_, frame, transformed)) = self.place(Some(node), owner) {
-        if transformed > 0 {
-          self.current = owner.transform;
+        if let Some((_, frame, transformed)) = self.place(Some(node), owner) {
+          if transformed > 0 {
+            self.current = owner.transform;
+          }
+          pushed += transformed + self.emitter.push_mask(node, frame, self.surface);
         }
-        pushed += transformed + self.emitter.push_mask_and_clip(node, frame, self.surface);
+      } else {
+        self.emitter.color_filter = self
+          .emitter
+          .composed_filter(color_filter.as_deref(), &style.misc1_data.filter);
       }
-
-      self.emitter.color_filter = self
-        .emitter
-        .composed_filter(color_filter.as_deref(), &style.misc1_data.filter);
     }
 
     self.enter(pushed, current, window, color_filter);

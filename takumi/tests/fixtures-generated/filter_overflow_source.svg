@@ -1,0 +1,269 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="600" viewBox="0 0 680 600">
+  <rect x="0" y="0" width="680" height="600" fill="#888"/>
+  <rect x="0" y="20" width="200" height="160" fill="#000"/>
+  <clipPath id="cp0">
+    <path d="M0 20h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+  </g>
+  <clipPath id="cp1">
+    <path d="M0 20h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp1)">
+    <filter id="ft2" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="f0"/>
+    </filter>
+    <g filter="url(#ft2)">
+      <rect x="-60" y="40" width="120" height="120" fill="#000" fill-opacity="0"/>
+      <path d="M0 40c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z" fill="#fff"/>
+    </g>
+  </g>
+  <path d="M250 20h140c16.57 0 30 13.43 30 30v100c0 16.57-13.43 30-30 30h-140c-16.57 0-30-13.43-30-30v-100c0-16.57 13.43-30 30-30Z" fill="#000"/>
+  <clipPath id="cp3">
+    <path d="M250 20h140c16.57 0 30 13.43 30 30v100c0 16.57-13.43 30-30 30h-140c-16.57 0-30-13.43-30-30v-100c0-16.57 13.43-30 30-30Z"/>
+  </clipPath>
+  <g clip-path="url(#cp3)">
+  </g>
+  <clipPath id="cp4">
+    <path d="M250 20h140c16.57 0 30 13.43 30 30v100c0 16.57-13.43 30-30 30h-140c-16.57 0-30-13.43-30-30v-100c0-16.57 13.43-30 30-30Z"/>
+  </clipPath>
+  <g clip-path="url(#cp4)">
+    <filter id="ft5" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="f0"/>
+    </filter>
+    <g filter="url(#ft5)">
+      <rect x="160" y="40" width="120" height="120" fill="#000" fill-opacity="0"/>
+      <path d="M220 40c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z" fill="#fff"/>
+    </g>
+  </g>
+  <g opacity=".6">
+    <rect x="440" y="20" width="200" height="160" fill="#000"/>
+    <clipPath id="cp6">
+      <path d="M440 20h200v160h-200v-160Z"/>
+    </clipPath>
+    <g clip-path="url(#cp6)">
+      <filter id="ft7" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="f0"/>
+      </filter>
+      <g filter="url(#ft7)">
+        <rect x="380" y="40" width="120" height="120" fill="#000" fill-opacity="0"/>
+        <path d="M440 40c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z" fill="#fff"/>
+      </g>
+    </g>
+  </g>
+  <rect x="0" y="220" width="200" height="160" fill="#000"/>
+  <clipPath id="cp8">
+    <path d="M0 220h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp8)">
+  </g>
+  <clipPath id="cp9">
+    <path d="M0 220h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp9)">
+    <filter id="ft10" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="12" result="dsb"/>
+      <feOffset in="dsb" dx="50" dy="0" result="dso"/>
+      <feFlood flood-color="#fff" flood-opacity="1" result="dsc"/>
+      <feComposite in="dsc" in2="dso" operator="in" result="dss"/>
+      <feMerge result="f0">
+        <feMergeNode in="dss"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <g filter="url(#ft10)">
+      <rect x="-60" y="240" width="120" height="120" fill="#000" fill-opacity="0"/>
+      <path d="M0 240c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z" fill="#fff"/>
+    </g>
+  </g>
+  <rect x="220" y="220" width="200" height="160" fill="#000"/>
+  <clipPath id="cp11">
+    <path d="M220 220h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp11)">
+  </g>
+  <clipPath id="cp12">
+    <path d="M220 220h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp12)">
+    <g opacity=".6">
+      <filter id="ft13" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="f0"/>
+      </filter>
+      <g filter="url(#ft13)">
+        <rect x="160" y="240" width="120" height="120" fill="#000" fill-opacity="0"/>
+        <path d="M220 240c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z" fill="#fff"/>
+      </g>
+    </g>
+  </g>
+  <rect x="440" y="220" width="200" height="160" fill="#000"/>
+  <clipPath id="cp14">
+    <path d="M440 220h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp14)">
+  </g>
+  <clipPath id="cp15">
+    <path d="M440 220h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp15)">
+    <filter id="ft16" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="f0"/>
+    </filter>
+    <g filter="url(#ft16)">
+      <rect x="380" y="240" width="120" height="120" fill="#000" fill-opacity="0"/>
+      <clipPath id="cp17">
+        <path d="M420 240h60v120h-60v-120Z"/>
+      </clipPath>
+      <g clip-path="url(#cp17)">
+      </g>
+      <clipPath id="cp18">
+        <path d="M420 240h60v120h-60v-120Z"/>
+      </clipPath>
+      <g clip-path="url(#cp18)">
+        <rect x="380" y="240" width="120" height="120" fill="#fff"/>
+      </g>
+    </g>
+  </g>
+  <rect x="0" y="420" width="200" height="160" fill="#000"/>
+  <clipPath id="cp19">
+    <path d="M0 420h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp19)">
+  </g>
+  <clipPath id="cp20">
+    <path d="M0 420h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp20)">
+    <clipPath id="cp21">
+      <path d="M0 440h60v120h-60v-120Z"/>
+    </clipPath>
+    <g clip-path="url(#cp21)">
+      <filter id="ft22" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="f0"/>
+      </filter>
+      <g filter="url(#ft22)">
+        <rect x="-60" y="440" width="120" height="120" fill="#000" fill-opacity="0"/>
+        <path d="M0 440c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z" fill="#fff"/>
+      </g>
+    </g>
+  </g>
+  <rect x="220" y="420" width="200" height="160" fill="#000"/>
+  <clipPath id="cp23">
+    <path d="M220 420h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp23)">
+  </g>
+  <clipPath id="cp24">
+    <path d="M220 420h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp24)">
+    <mask id="mk25" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="680" height="600">
+      <clipPath id="cp26">
+        <path d="M220 440c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z"/>
+      </clipPath>
+      <g clip-path="url(#cp26)">
+        <linearGradient id="lg27" gradientUnits="userSpaceOnUse" x1="160" y1="500" x2="280" y2="500">
+          <stop offset="0" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".016" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".032" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".048" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".063" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".079" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".095" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".111" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".127" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".143" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".159" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".175" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".19" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".206" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".222" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".238" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".254" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".27" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".286" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".302" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".317" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".333" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".349" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".365" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".381" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".397" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".413" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".429" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".444" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".46" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".476" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".5" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".5" stop-color="#000"/>
+          <stop offset=".524" stop-color="#000"/>
+          <stop offset=".54" stop-color="#000"/>
+          <stop offset=".556" stop-color="#000"/>
+          <stop offset=".571" stop-color="#000"/>
+          <stop offset=".587" stop-color="#000"/>
+          <stop offset=".603" stop-color="#000"/>
+          <stop offset=".619" stop-color="#000"/>
+          <stop offset=".635" stop-color="#000"/>
+          <stop offset=".651" stop-color="#000"/>
+          <stop offset=".667" stop-color="#000"/>
+          <stop offset=".683" stop-color="#000"/>
+          <stop offset=".698" stop-color="#000"/>
+          <stop offset=".714" stop-color="#000"/>
+          <stop offset=".73" stop-color="#000"/>
+          <stop offset=".746" stop-color="#000"/>
+          <stop offset=".762" stop-color="#000"/>
+          <stop offset=".778" stop-color="#000"/>
+          <stop offset=".794" stop-color="#000"/>
+          <stop offset=".81" stop-color="#000"/>
+          <stop offset=".825" stop-color="#000"/>
+          <stop offset=".841" stop-color="#000"/>
+          <stop offset=".857" stop-color="#000"/>
+          <stop offset=".873" stop-color="#000"/>
+          <stop offset=".889" stop-color="#000"/>
+          <stop offset=".905" stop-color="#000"/>
+          <stop offset=".921" stop-color="#000"/>
+          <stop offset=".937" stop-color="#000"/>
+          <stop offset=".952" stop-color="#000"/>
+          <stop offset=".968" stop-color="#000"/>
+          <stop offset=".984" stop-color="#000"/>
+          <stop offset="1" stop-color="#000"/>
+        </linearGradient>
+        <rect x="160" y="440" width="120" height="120" fill="url(#lg27)"/>
+      </g>
+    </mask>
+    <g mask="url(#mk25)">
+      <filter id="ft28" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="f0"/>
+      </filter>
+      <g filter="url(#ft28)">
+        <rect x="160" y="440" width="120" height="120" fill="#000" fill-opacity="0"/>
+        <path d="M220 440c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z" fill="#fff"/>
+      </g>
+    </g>
+  </g>
+  <rect x="440" y="420" width="200" height="160" fill="#000"/>
+  <clipPath id="cp29">
+    <path d="M440 420h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp29)">
+  </g>
+  <clipPath id="cp30">
+    <path d="M440 420h200v160h-200v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp30)">
+    <clipPath id="cp31">
+      <path d="M440 440h60v120h-60v-120Z"/>
+    </clipPath>
+    <g clip-path="url(#cp31)">
+      <g opacity=".6">
+        <filter id="ft32" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="f0"/>
+        </filter>
+        <g filter="url(#ft32)">
+          <rect x="380" y="440" width="120" height="120" fill="#000" fill-opacity="0"/>
+          <path d="M440 440c33.14 0 60 26.86 60 60s-26.86 60-60 60-60-26.86-60-60 26.86-60 60-60Z" fill="#fff"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

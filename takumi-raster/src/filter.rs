@@ -1,4 +1,4 @@
-use std::{array, iter::successors};
+use std::iter::successors;
 
 use smallvec::SmallVec;
 #[cfg(feature = "svg")]
@@ -8,13 +8,13 @@ use takumi_core::{
   geometry::{Point, Size},
   paint::compose_transfer_table,
 };
-use tiny_skia::{Mask as TinyMask, PixmapMut};
+use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapPaint, Transform as TinyTransform};
 
 use crate::{
   BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
   apply_blur_alpha_bytes, apply_blur_rgba_bytes,
   canvas::demultiply_rgba_in_place,
-  checked_area, div_255, intersect_alpha_masks, mul_div_255, render_mask,
+  checked_area, mul_div_255, render_mask,
   resources::image_buffer::premultiply_pixel,
   style::{Affine, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable},
 };
@@ -266,34 +266,16 @@ impl MirroredRegion {
   }
 }
 
-fn composite_backdrop_with_mask(
-  canvas_row: &mut [u8],
-  backdrop_row: &[u8],
-  mask_row: &[u8],
-  mask_start_x: usize,
-  region_width: usize,
-) {
-  let mask_end_x = (mask_start_x + region_width).min(mask_row.len());
-  let pixels = canvas_row
+fn mask_backdrop_row(output_row: &mut [u8], backdrop_row: &[u8], mask_row: &[u8]) {
+  let pixels = output_row
     .as_chunks_mut::<4>()
     .0
     .iter_mut()
     .zip(backdrop_row.as_chunks::<4>().0)
-    .zip(&mask_row[mask_start_x..mask_end_x]);
+    .zip(mask_row);
 
-  // Branch-free so the row vectorizes: a zero alpha weighs the canvas by 255, which divides back
-  // to itself.
   for ((dst, src), &alpha) in pixels {
-    // The filtered backdrop composites over what it came from, masked by the element's shape.
-    let inverse = u8::MAX - mul_div_255(src[3], alpha);
-
-    *dst = array::from_fn(|channel| {
-      let sum =
-        u32::from(src[channel]) * u32::from(alpha) + u32::from(dst[channel]) * u32::from(inverse);
-
-      // The weights can sum past 255, but every sum from 255 * 255 up divides to 255.
-      div_255(sum.min(255 * 255) as u16)
-    });
+    *dst = (*src).map(|channel| mul_div_255(channel, alpha));
   }
 }
 
@@ -366,93 +348,88 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
   Ok(())
 }
 
-/// Filters the canvas behind an element and composites it back through the element's shape.
-pub(crate) fn apply_backdrop_filter(
-  canvas: &mut Canvas,
-  border: BorderProperties,
-  layout_size: Size<f32>,
-  transform: Affine,
-  context: &RenderContext,
-  node_mask: Option<&TinyMask>,
-) -> Result<()> {
-  let filters = &context.style.misc1_data.backdrop_filter;
+/// A filtered backdrop ready to paint inside its effect layer.
+pub(crate) struct Backdrop {
+  image: Pixmap,
+  origin: Point<i32>,
+}
 
-  if filters.iter().all(Filter::is_drop_shadow) {
-    return Ok(());
-  }
+impl Backdrop {
+  /// Filters the parent canvas through the element's border box.
+  pub(crate) fn new(
+    canvas: &Canvas,
+    border: BorderProperties,
+    layout_size: Size<f32>,
+    transform: Affine,
+    context: &RenderContext,
+  ) -> Result<Option<Self>> {
+    let filters = &context.style.misc1_data.backdrop_filter;
 
-  let canvas_size = canvas.size();
-  if canvas_size.width == 0 || canvas_size.height == 0 {
-    return Ok(());
-  }
+    if filters.iter().all(Filter::is_drop_shadow) {
+      return Ok(None);
+    }
 
-  let mut paths = Vec::new();
-  border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
+    let canvas_size = canvas.size();
+    if canvas_size.width == 0 || canvas_size.height == 0 {
+      return Ok(None);
+    }
 
-  let (mut mask_data, mut placement) =
-    render_mask(&paths, Some(transform), None, Some(canvas.viewport()));
+    let mut paths = Vec::new();
+    border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
 
-  if placement.width == 0 || placement.height == 0 {
-    return Ok(());
-  }
+    let (mask_data, placement) =
+      render_mask(&paths, Some(transform), None, Some(canvas.viewport()));
 
-  if let Some(node_mask) = node_mask {
-    let node_placement = Placement {
-      left: 0,
-      top: 0,
-      width: node_mask.width(),
-      height: node_mask.height(),
+    if placement.width == 0 || placement.height == 0 {
+      return Ok(None);
+    }
+
+    let Some(mask_bounds) = mask_bounds(&mask_data, placement.width, placement.height) else {
+      return Ok(None);
     };
-    let intersected =
-      intersect_alpha_masks(&mask_data, placement, node_mask.data(), node_placement);
-    let Some(intersected) = intersected else {
-      return Ok(());
+
+    let Some(region) = mask_bounds
+      .translate(placement.left, placement.top)
+      .clamp_to(canvas_size)
+    else {
+      return Ok(None);
     };
-    (mask_data, placement) = intersected;
-  }
 
-  let Some(mask_bounds) = mask_bounds(&mask_data, placement.width, placement.height) else {
-    return Ok(());
-  };
+    let region_row_bytes = region.width as usize * 4;
+    // Padding past the canvas only mirrors the same pixels again, as reading past it used to stop.
+    let padding = backdrop_filter_padding(filters, &context.sizing)
+      .clamp(0, canvas_size.width.max(canvas_size.height) as i32) as u32;
+    let Some(mut padded) = MirroredRegion::of(&canvas.read_region(region), region, padding) else {
+      return Ok(None);
+    };
+    let Some(mut backdrop_pixmap) =
+      PixmapMut::from_bytes(&mut padded.raw, padded.width, padded.height)
+    else {
+      return Ok(None);
+    };
 
-  let Some(region) = mask_bounds
-    .translate(placement.left, placement.top)
-    .clamp_to(canvas_size)
-  else {
-    return Ok(());
-  };
+    apply_filters_to_pixmap(
+      &mut backdrop_pixmap,
+      &context.sizing,
+      context.current_color,
+      filters.iter().filter(|filter| !filter.is_drop_shadow()),
+    )?;
 
-  let region_row_bytes = region.width as usize * 4;
-  // Padding past the canvas only mirrors the same pixels again, as reading past it used to stop.
-  let padding = backdrop_filter_padding(filters, &context.sizing)
-    .clamp(0, canvas_size.width.max(canvas_size.height) as i32) as u32;
-  let Some(mut padded) = MirroredRegion::of(&canvas.read_region(region), region, padding) else {
-    return Ok(());
-  };
-  let Some(mut backdrop_pixmap) =
-    PixmapMut::from_bytes(&mut padded.raw, padded.width, padded.height)
-  else {
-    return Ok(());
-  };
+    let mask_offset_x = region.left - placement.left;
+    let mask_offset_y = region.top - placement.top;
+    let x_start = (-mask_offset_x).max(0) as usize;
+    let x_end = (placement.width as i32 - mask_offset_x)
+      .min(region.width as i32)
+      .max(0) as usize;
+    let visible_width = x_end.saturating_sub(x_start);
 
-  apply_filters_to_pixmap(
-    &mut backdrop_pixmap,
-    &context.sizing,
-    context.current_color,
-    filters.iter().filter(|filter| !filter.is_drop_shadow()),
-  )?;
-
-  let mask_offset_x = region.left - placement.left;
-  let mask_offset_y = region.top - placement.top;
-  let x_start = (-mask_offset_x).max(0) as usize;
-  let x_end = (placement.width as i32 - mask_offset_x)
-    .min(region.width as i32)
-    .max(0) as usize;
-  let visible_width = x_end.saturating_sub(x_start);
-
-  canvas.with_pixmap(|pixmap| {
-    let canvas_width = pixmap.width() as usize;
-    let canvas_raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+    let Some(size) = IntSize::from_wh(region.width, region.height) else {
+      return Ok(None);
+    };
+    let Some(len) = checked_area(region.width, region.height, 4) else {
+      return Ok(None);
+    };
+    let mut raw = vec![0; len];
 
     for y in 0..region.height {
       let mask_y = mask_offset_y + y as i32;
@@ -463,24 +440,48 @@ pub(crate) fn apply_backdrop_filter(
         break;
       }
 
-      let canvas_y = region.top as usize + y as usize;
-      let canvas_start = (canvas_y * canvas_width + region.left as usize) * 4;
-      let canvas_row = &mut canvas_raw[canvas_start..canvas_start + region_row_bytes];
+      let start = y as usize * region_row_bytes;
+      let output_row = &mut raw[start..start + region_row_bytes];
 
       let backdrop_row = padded.inner_row(y);
       let mask_row_start = mask_y as usize * placement.width as usize;
-      let mask_row = &mask_data[mask_row_start..mask_row_start + placement.width as usize];
-      composite_backdrop_with_mask(
-        &mut canvas_row[x_start * 4..(x_start + visible_width) * 4],
+      let mask_start = mask_row_start + (mask_offset_x + x_start as i32) as usize;
+
+      mask_backdrop_row(
+        &mut output_row[x_start * 4..(x_start + visible_width) * 4],
         &backdrop_row[x_start * 4..(x_start + visible_width) * 4],
-        mask_row,
-        (mask_offset_x + x_start as i32) as usize,
-        visible_width,
+        &mask_data[mask_start..mask_start + visible_width],
       );
     }
-  });
+    let Some(image) = Pixmap::from_vec(raw, size) else {
+      return Ok(None);
+    };
+    let viewport = canvas.viewport();
 
-  Ok(())
+    Ok(Some(Self {
+      image,
+      origin: Point {
+        x: viewport.origin.x + region.left,
+        y: viewport.origin.y + region.top,
+      },
+    }))
+  }
+
+  /// Paints the filtered backdrop into its source layer.
+  pub(crate) fn paint(self, canvas: &mut Canvas) {
+    let viewport = canvas.viewport();
+
+    canvas.with_pixmap(|pixmap| {
+      pixmap.draw_pixmap(
+        self.origin.x - viewport.origin.x,
+        self.origin.y - viewport.origin.y,
+        self.image.as_ref(),
+        &PixmapPaint::default(),
+        TinyTransform::identity(),
+        None,
+      );
+    });
+  }
 }
 
 /// Applies a `drop-shadow()` filter to an image. Its blur length is the Gaussian's standard
@@ -577,13 +578,6 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
 
 #[cfg(test)]
 mod tests {
-  #[test]
-  fn a_byte_weighed_by_255_divides_back_to_itself() {
-    for byte in 0..=u8::MAX {
-      assert_eq!(super::div_255(u16::from(byte) * 255), byte);
-    }
-  }
-
   use crate::Bitmap;
   use tiny_skia::PixmapMut;
 

@@ -209,66 +209,74 @@
     <use href="#g18" x="963.23" y="409"/>
     <use href="#g8" x="969.38" y="409"/>
   </g>
-  <filter id="ft0" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="f0"/>
-    <feColorMatrix in="f0" type="matrix" values=".606 .358 .036 0 0 .106 .858 .036 0 0 .106 .358 .536 0 0 0 0 0 1 0" result="f1"/>
-  </filter>
-  <g transform="matrix(1.35 0 0 1.35 49.5 202)" filter="url(#ft0)">
-    <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
-    <use href="#i0" transform="matrix(1.094 0 0 1.094 0 0)"/>
-  </g>
-  <filter id="ft1" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-    <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="dsb"/>
-    <feOffset in="dsb" dx="5" dy="5" result="dso"/>
-    <feFlood flood-color="#000" flood-opacity="1" result="dsc"/>
-    <feComposite in="dsc" in2="dso" operator="in" result="dss"/>
-    <feMerge result="f0">
-      <feMergeNode in="dss"/>
-      <feMergeNode in="SourceGraphic"/>
-    </feMerge>
-    <feComponentTransfer in="f0" result="f1">
-      <feFuncR type="linear" slope="1.2"/>
-      <feFuncG type="linear" slope="1.2"/>
-      <feFuncB type="linear" slope="1.2"/>
-    </feComponentTransfer>
-  </filter>
-  <g transform="matrix(.927 .375 -.375 .927 409.32 194.875)" filter="url(#ft1)">
-    <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
-    <use href="#i0" transform="matrix(1.094 0 0 1.094 0 0)"/>
-  </g>
-  <filter id="ft2" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-    <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="f0"/>
-    <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="dsb"/>
-    <feOffset in="dsb" dx="3" dy="3" result="dso"/>
-    <feFlood flood-color="#f00" flood-opacity="1" result="dsc"/>
-    <feComposite in="dsc" in2="dso" operator="in" result="dss"/>
-    <feMerge result="f1">
-      <feMergeNode in="dss"/>
-      <feMergeNode in="f0"/>
-    </feMerge>
-  </filter>
-  <g transform="matrix(1.141 -.371 .371 1.141 646.154 232.069)" filter="url(#ft2)">
-    <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
+  <g transform="matrix(1.35 0 0 1.35 49.5 202)">
+    <filter id="ft0" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="f0"/>
+      <feColorMatrix in="f0" type="matrix" values=".606 .358 .036 0 0 .106 .858 .036 0 0 .106 .358 .536 0 0 0 0 0 1 0" result="f1"/>
+    </filter>
+    <g filter="url(#ft0)">
+      <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
       <use href="#i0" transform="matrix(1.094 0 0 1.094 0 0)"/>
     </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
   </g>
-  <filter id="ft3" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-    <feColorMatrix in="SourceGraphic" type="saturate" values="1.5" result="f0"/>
-    <feGaussianBlur in="f0" stdDeviation="1" result="f1"/>
-  </filter>
-  <g transform="matrix(1.076 .229 -.229 1.076 996.692 194.673)" filter="url(#ft3)">
-    <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
+  <g transform="matrix(.927 .375 -.375 .927 409.32 194.875)">
+    <filter id="ft1" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="dsb"/>
+      <feOffset in="dsb" dx="5" dy="5" result="dso"/>
+      <feFlood flood-color="#000" flood-opacity="1" result="dsc"/>
+      <feComposite in="dsc" in2="dso" operator="in" result="dss"/>
+      <feMerge result="f0">
+        <feMergeNode in="dss"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+      <feComponentTransfer in="f0" result="f1">
+        <feFuncR type="linear" slope="1.2"/>
+        <feFuncG type="linear" slope="1.2"/>
+        <feFuncB type="linear" slope="1.2"/>
+      </feComponentTransfer>
+    </filter>
+    <g filter="url(#ft1)">
+      <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
       <use href="#i0" transform="matrix(1.094 0 0 1.094 0 0)"/>
     </g>
-    <g transform="matrix(1 0 0 1 0 0)">
+  </g>
+  <g transform="matrix(1.141 -.371 .371 1.141 646.154 232.069)">
+    <filter id="ft2" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="f0"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="dsb"/>
+      <feOffset in="dsb" dx="3" dy="3" result="dso"/>
+      <feFlood flood-color="#f00" flood-opacity="1" result="dsc"/>
+      <feComposite in="dsc" in2="dso" operator="in" result="dss"/>
+      <feMerge result="f1">
+        <feMergeNode in="dss"/>
+        <feMergeNode in="f0"/>
+      </feMerge>
+    </filter>
+    <g filter="url(#ft2)">
+      <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
+      <g transform="matrix(1 0 0 1 0 0)">
+      </g>
+      <g transform="matrix(1 0 0 1 0 0)">
+        <use href="#i0" transform="matrix(1.094 0 0 1.094 0 0)"/>
+      </g>
+      <g transform="matrix(1 0 0 1 0 0)">
+      </g>
+    </g>
+  </g>
+  <g transform="matrix(1.076 .229 -.229 1.076 996.692 194.673)">
+    <filter id="ft3" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feColorMatrix in="SourceGraphic" type="saturate" values="1.5" result="f0"/>
+      <feGaussianBlur in="f0" stdDeviation="1" result="f1"/>
+    </filter>
+    <g filter="url(#ft3)">
+      <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
+      <g transform="matrix(1 0 0 1 0 0)">
+      </g>
+      <g transform="matrix(1 0 0 1 0 0)">
+        <use href="#i0" transform="matrix(1.094 0 0 1.094 0 0)"/>
+      </g>
+      <g transform="matrix(1 0 0 1 0 0)">
+      </g>
     </g>
   </g>
   <defs>
