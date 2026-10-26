@@ -1293,12 +1293,9 @@ fn test_var_inherits_custom_properties_from_parent() {
   assert_eq!(child.box_data.width, Length::Px(320.0).into());
 }
 
-/// The shadcn `@theme inline` pattern: a `:root` token aliases another
-/// variable, a subtree overrides the alias target. Custom properties inherit
-/// as specified text and substitute at the consuming element, so the override
-/// reaches the utility without Tailwind's `inline` compilation.
+/// Chromium computes custom properties on the declaring element before inheritance.
 #[test]
-fn test_var_chain_resolves_at_consuming_element() {
+fn test_var_alias_inherits_the_parent_computed_value() {
   let root = inherited_style_from_pairs(
     [
       ("--background", "10px"),
@@ -1309,7 +1306,57 @@ fn test_var_chain_resolves_at_consuming_element() {
   let dark = inherited_style_from_pairs([("--background", "20px")], &root);
   let child = inherited_style_from_pairs([("width", "var(--panel-width)")], &dark);
 
-  assert_eq!(child.box_data.width, Length::Px(20.0).into());
+  assert_eq!(child.box_data.width, Length::Px(10.0).into());
+}
+
+#[test]
+fn test_var_does_not_parse_an_unused_invalid_fallback() {
+  let style = inherited_style_from_pairs(
+    [("--ok", "10px"), ("width", "var(--ok, var(--missing))")],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(style.box_data.width, Length::Px(10.0).into());
+}
+
+#[test]
+fn test_var_cycle_members_are_invalid_but_dependent_fallbacks_resolve() {
+  let style = inherited_style_from_pairs(
+    [
+      ("--a", "var(--a, 10px)"),
+      ("--b", "var(--a, 30px)"),
+      ("width", "var(--b, 20px)"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(style.box_data.width, Length::Px(30.0).into());
+}
+
+#[test]
+fn test_var_does_not_evaluate_fallback_references_when_primary_is_valid() {
+  let style = inherited_style_from_pairs(
+    [
+      ("--b", "10px"),
+      ("--a", "var(--b, var(--a))"),
+      ("width", "var(--a, 20px)"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(style.box_data.width, Length::Px(10.0).into());
+}
+
+#[test]
+fn test_var_substitution_preserves_adjacent_token_boundaries() {
+  let resolved = resolve_var("var(--n)px", [("--n", "10")]);
+
+  assert_eq!(resolved.as_deref(), Some("10/**/px"));
+  let style = inherited_style_from_pairs(
+    [("--n", "10"), ("width", "var(--n)px")],
+    &ComputedStyle::default(),
+  );
+  assert_eq!(style.box_data.width, Length::Auto.into());
 }
 
 #[test]

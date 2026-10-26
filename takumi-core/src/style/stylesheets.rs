@@ -35,7 +35,10 @@ mod stylesheets_values;
 #[path = "stylesheets_vars.rs"]
 mod stylesheets_vars;
 
-use self::{stylesheets_helpers::*, stylesheets_vars::apply_deferred_declaration};
+use self::{
+  stylesheets_helpers::*,
+  stylesheets_vars::{apply_deferred_declaration, resolve_custom_properties},
+};
 pub(crate) use self::{stylesheets_mask::PropertyMask, stylesheets_values::ParsedValues};
 
 /// Whether a longhand declared `where inherit = true` inherits.
@@ -875,6 +878,14 @@ macro_rules! define_style {
               }
               declaration => declarations.push(declaration),
             }
+          }
+
+          if let Some(resolved_custom_properties) =
+            resolve_custom_properties(style.custom_properties.values())
+          {
+            style
+              .custom_properties
+              .replace_values(resolved_custom_properties);
           }
 
           // Pre-resolve `direction` so logical-axis applies below see the
