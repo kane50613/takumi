@@ -1716,7 +1716,6 @@ version = "0.18.3"
 dependencies = [
  "base64",
  "bumpalo",
- "crc32fast",
  "criterion",
  "flate2",
  "float-cmp",
