@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 use super::{SvgDocument, SvgHost};
 use crate::{
   fonts::shaping::testing::{GEIST, register},
-  geometry::Point,
+  geometry::{Point, Rect},
   resources::{
     font::{Fonts, FontsSnapshot},
     image::{SvgFill, SvgOp, SvgOpPaint},
@@ -925,7 +925,7 @@ fn an_isolated_group_contains_its_blend_modes() {
   let isolations = |body: &str| {
     ops(body)
       .iter()
-      .filter(|op| matches!(op, SvgOp::PushIsolation))
+      .filter(|op| matches!(op, SvgOp::PushIsolation { .. }))
       .count()
   };
 
@@ -942,4 +942,25 @@ fn an_isolated_group_contains_its_blend_modes() {
     0
   );
   assert_eq!(isolations(r#"<g><rect width="10" height="10"/></g>"#), 0);
+}
+
+#[test]
+fn an_isolated_group_carries_its_paint_bounds() {
+  let bounds =
+    ops(r#"<g style="isolation:isolate"><rect x="20" y="30" width="10" height="20"/></g>"#)
+      .into_iter()
+      .find_map(|op| match op {
+        SvgOp::PushIsolation { bounds } => bounds,
+        _ => None,
+      });
+
+  assert_eq!(
+    bounds,
+    Some(Rect {
+      left: 20.0,
+      top: 30.0,
+      right: 30.0,
+      bottom: 50.0,
+    })
+  );
 }
