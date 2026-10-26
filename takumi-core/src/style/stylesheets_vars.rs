@@ -82,7 +82,11 @@ fn strip_trailing_whitespace_and_comments(text: &str) -> &str {
     Comment,
   }
 
-  if !text.as_bytes().contains(&b'/') {
+  if !text
+    .as_bytes()
+    .iter()
+    .any(|byte| matches!(byte, b'/' | b'\\'))
+  {
     return text.trim_end_matches([' ', '\t', '\n', '\r', '\u{0C}']);
   }
 
@@ -100,11 +104,13 @@ fn strip_trailing_whitespace_and_comments(text: &str) -> &str {
     if state == State::Default && matches!(ch, ' ' | '\t' | '\n' | '\r' | '\u{0C}') {
       continue;
     }
-    if ch == '\\' && chars.next().is_some() {
-      if state == State::Default {
-        end = index + ch.len_utf8();
+    if ch == '\\' {
+      if let Some((escaped_index, escaped)) = chars.next() {
+        if state == State::Default {
+          end = escaped_index + escaped.len_utf8();
+        }
+        continue;
       }
-      continue;
     }
     if state == State::Default && ch == '/' && chars.next_if(|(_, next)| *next == '*').is_some() {
       state = State::Comment;
@@ -201,7 +207,9 @@ impl<'a> Resolver<'a> {
     };
 
     self.cycles.push(name);
+    let saved_budget = std::mem::replace(&mut self.budget, MAX_VAR_OUTPUT_BYTES);
     let value = self.resolve_value(specified, depth + 1);
+    self.budget = saved_budget;
     let in_cycle = self.cycles.in_cycle();
     self.cycles.pop();
 
@@ -384,7 +392,6 @@ pub(crate) fn resolve_custom_properties(
   let mut resolver = Resolver::new(specified);
   let mut resolved = HashMap::new();
   for name in specified.keys() {
-    resolver.budget = MAX_VAR_OUTPUT_BYTES;
     if let Some(value) = resolver.resolve_property(name, 0) {
       resolved.insert(name.clone(), value);
     }
@@ -473,6 +480,10 @@ mod tests {
     assert_eq!(
       strip_trailing_whitespace_and_comments("value /* unfinished"),
       "value"
+    );
+    assert_eq!(
+      strip_trailing_whitespace_and_comments("foo\\  \t"),
+      "foo\\ "
     );
   }
 
