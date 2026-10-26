@@ -229,9 +229,9 @@ dependencies = [
 
 [[package]]
 name = "crc32fast"
-version = "1.5.2"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01a7799fd6b852db0e61728dde9a204c423b44d689dbd432522543614b490e78"
+checksum = "0ba106e844045ddc02c20768ac4b0b7cb45f2cc2ecbd833ac9f5dacb183c2055"
 dependencies = [
  "cfg-if",
 ]
@@ -1176,11 +1176,9 @@ dependencies = [
 [[package]]
 name = "png"
 version = "0.18.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60769b8b31b2a9f263dae2776c37b1b28ae246943cf719eb6946a1db05128a61"
+source = "git+https://github.com/kane50613/image-png?rev=3be6b60681d502e035ef2cd6c5726d7f5a952a0e#3be6b60681d502e035ef2cd6c5726d7f5a952a0e"
 dependencies = [
  "bitflags",
- "crc32fast",
  "fdeflate",
  "flate2",
  "miniz_oxide",
