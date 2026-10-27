@@ -6,10 +6,11 @@ use std::collections::BTreeSet;
 use crate::{
   context::RenderContext,
   layout::{
+    inline::{inline_item::InlineItemType, inline_node::InlineNode},
     node::{NodeKind, is_remote_url},
     tree::RenderNode,
   },
-  style::{BackgroundImage, ComputedStyle, Display, TextTransform, find_keyframes},
+  style::{BackgroundImage, ComputedStyle, Display, find_keyframes},
 };
 
 /// The remote images a render tree draws and the characters its text shapes.
@@ -18,11 +19,8 @@ pub struct RenderNeeds {
   /// The `http:` and `https:` URLs of image elements, of computed `background-image` and
   /// `mask-image` values, and of list items' `list-style-image`.
   pub images: BTreeSet<String>,
-  /// Every character the tree's text, generated content and list markers included, shapes.
-  ///
-  /// Approximate: `capitalize` contributes both the text and the text with its first letters
-  /// capitalized as if each run started a word, since the character before a run is only known
-  /// during inline layout.
+  /// Every character the tree's text, generated content and list markers included, shapes, after
+  /// `text-transform` as inline layout applies it.
   pub characters: BTreeSet<char>,
 }
 
@@ -36,9 +34,9 @@ impl RenderNode {
       return needs;
     }
 
-    let mut stack = vec![self];
+    let mut stack = vec![(self, false)];
 
-    while let Some(node) = stack.pop() {
+    while let Some((node, in_inline_context)) = stack.pop() {
       needs.add_style(&node.context.style);
       needs.add_keyframes(&node.context);
 
@@ -48,11 +46,20 @@ impl RenderNode {
         needs.images.insert(url.to_owned());
       }
 
-      if let Some(text) = node.own_text() {
-        needs.add_text(&node.context.style, text);
+      let creates_inline_context = node.should_create_inline_layout();
+
+      // A text laid out as a block, such as a flex item, collects its own inline content.
+      if creates_inline_context || (!in_inline_context && node.own_text().is_some()) {
+        needs.add_inline_text(node);
       }
 
-      stack.extend(node.children.iter().flat_map(|children| children.iter()));
+      stack.extend(
+        node
+          .children
+          .iter()
+          .flat_map(|children| children.iter())
+          .map(|child| (child, creates_inline_context)),
+      );
     }
 
     needs
@@ -103,13 +110,17 @@ impl RenderNeeds {
     }
   }
 
-  fn add_text(&mut self, style: &ComputedStyle, text: &str) {
-    self.characters.extend(text.chars());
+  /// Adds the text inline layout shapes in the inline formatting context `root` establishes,
+  /// collected as layout collects it, `text-transform` applied with the character before each run.
+  fn add_inline_text(&mut self, root: &RenderNode) {
+    let data = InlineNode::new(root).collect_inlines();
 
-    if style.inherited_data.text_transform != TextTransform::default() {
-      self
-        .characters
-        .extend(style.apply_text_transform(text, ' ').chars());
+    for item in &data.items {
+      if item.item_type == InlineItemType::Text {
+        self
+          .characters
+          .extend(data.text_content[item.start_offset()..item.end_offset()].chars());
+      }
     }
   }
 }
@@ -117,7 +128,10 @@ impl RenderNeeds {
 #[cfg(test)]
 mod tests {
   use super::RenderNeeds;
-  use crate::layout::{inline::testing::render_tree, node::Node};
+  use crate::layout::{
+    inline::testing::{render_tree, span},
+    node::Node,
+  };
 
   const CSS: &str = "
     .hidden { display: none; background-image: url(https://example.com/hidden.png) }
@@ -163,6 +177,17 @@ mod tests {
   }
 
   #[test]
+  fn capitalizes_only_where_a_word_starts() {
+    let needs = render_tree(
+      [span("ab"), span("cd"), span(" ef")],
+      ".span { text-transform: capitalize }",
+    )
+    .needs();
+
+    assert_eq!(needs.characters.into_iter().collect::<String>(), " AEbcdf");
+  }
+
+  #[test]
   fn reads_full_width_transforms() {
     let needs = render_tree(
       [Node::text("A").with_class_name("wide")],
@@ -202,7 +227,7 @@ mod tests {
     );
     assert_eq!(
       needs.characters.into_iter().collect::<String>(),
-      " .1ABabcx"
+      " .1ABcx"
     );
   }
 }
