@@ -102,6 +102,7 @@ function fetchSharedImageData(
   let pending = cache.get(url);
 
   if (!pending) {
+    options.signal?.throwIfAborted();
     pending = fetchBytes(url, { fetch: options.fetch, maxBytes: maxSharedImageBytes });
     cache.set(url, pending);
   }

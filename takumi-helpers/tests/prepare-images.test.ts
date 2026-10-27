@@ -67,6 +67,18 @@ describe("prepareImages", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test("an aborted caller starts no shared emoji fetch", async () => {
+    const fetchMock = mock((url: string) => Promise.resolve(ok(url)));
+    const node = imageTree(
+      "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f4a9.svg",
+    );
+
+    await expect(
+      prepareImages({ node, fetch: fetchMock, signal: AbortSignal.abort() }),
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("a failed shared emoji fetch leaves the cache", async () => {
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 404 })));
     const node = imageTree(
