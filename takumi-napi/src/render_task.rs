@@ -1,16 +1,16 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::{device_pixel_ratio, parse_lang, stylesheet, time_ms};
+use takumi_bindings_common::{device_pixel_ratio, parse_lang, time_ms};
 use takumi_core::{
   Fonts,
-  style::{FontFamily, Lang, StyleSheet},
+  style::{FontFamily, Lang},
   viewport::Viewport,
 };
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{
-  JsBytes, NodeSource, map_error,
+  JsBytes, NodeSource, RenderInput, map_error,
   renderer::{
     ImageCacheMode, OutputFormat, RenderOptions, RendererState, collect_images, decode_images,
     deserialize_css, deserialize_keyframes,
@@ -19,7 +19,7 @@ use crate::{
 
 pub struct RenderTask {
   pub(crate) draw_debug_border: bool,
-  pub(crate) node: Option<NodeSource>,
+  pub(crate) input: Option<RenderInput>,
   pub(crate) state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
@@ -29,7 +29,6 @@ pub struct RenderTask {
   pub(crate) lossless: Option<bool>,
   pub(crate) dithering: DitheringAlgorithm,
   pub(crate) time_ms: u64,
-  pub(crate) stylesheet: Arc<StyleSheet>,
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
@@ -38,19 +37,16 @@ pub struct RenderTask {
 impl RenderTask {
   pub(crate) fn from_options(
     env: Env,
-    node: NodeSource,
+    source: NodeSource,
     options: RenderOptions,
     state: Arc<RendererState>,
   ) -> Result<Self> {
-    let stylesheet = stylesheet(
-      &state.resource_cache,
-      deserialize_css(options.css, options.stylesheets)?,
-      deserialize_keyframes(options.keyframes)?,
-    )
-    .map_err(map_error)?;
-
     Ok(RenderTask {
-      node: Some(node),
+      input: Some(RenderInput {
+        source,
+        css: deserialize_css(options.css, options.stylesheets)?,
+        keyframes: deserialize_keyframes(options.keyframes)?,
+      }),
       fonts: state.fonts_for_render(options.font_families.as_deref())?,
       state,
       viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
@@ -62,7 +58,6 @@ impl RenderTask {
       dithering: options.dithering.map(Into::into).unwrap_or_default(),
       time_ms: time_ms(options.time_ms),
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
-      stylesheet,
       images: collect_images(env, options.images)?,
       font_families: options.font_families.map(FontFamily::from_names),
       lang: parse_lang(options.lang.as_deref()).map_err(map_error)?,
@@ -75,10 +70,10 @@ impl Task for RenderTask {
   type JsValue = Buffer;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    let Some(node) = self.node.take() else {
+    let Some(input) = self.input.take() else {
       unreachable!()
     };
-    let node = node.into_node()?;
+    let (node, stylesheet) = input.resolve(&self.state.resource_cache)?;
 
     let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
 
@@ -87,7 +82,7 @@ impl Task for RenderTask {
         .viewport(self.viewport)
         .images(initialized_images)
         .resource_cache(self.state.resource_cache.clone())
-        .stylesheet(take(&mut self.stylesheet))
+        .stylesheet(stylesheet)
         .time_ms(self.time_ms)
         .dithering(self.dithering)
         .node(node)

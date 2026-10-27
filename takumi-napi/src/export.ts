@@ -43,21 +43,21 @@ export class Renderer {
     this.fonts = new FontRegistry(this.inner);
   }
 
-  render(node: Node, options?: RenderOptions): Promise<Buffer<ArrayBuffer>> {
-    return withRenderInput(this.fonts, options ?? {}, node, (opts, signal) =>
-      this.inner.render(toNativeSource(node), opts, signal),
+  render(source: Node | string, options?: RenderOptions): Promise<Buffer<ArrayBuffer>> {
+    return withRenderInput(this.fonts, options ?? {}, source, (opts, signal) =>
+      this.inner.render(toNativeSource(source), opts, signal),
     );
   }
 
-  renderSvg(node: Node, options?: SvgRenderOptions): Promise<string> {
-    return withRenderInput(this.fonts, options ?? {}, node, (opts, signal) =>
-      this.inner.renderSvg(toNativeSource(node), opts, signal),
+  renderSvg(source: Node | string, options?: SvgRenderOptions): Promise<string> {
+    return withRenderInput(this.fonts, options ?? {}, source, (opts, signal) =>
+      this.inner.renderSvg(toNativeSource(source), opts, signal),
     );
   }
 
-  measure(node: Node, options?: RenderOptions): Promise<MeasuredNode> {
-    return withRenderInput(this.fonts, options ?? {}, node, (opts, signal) =>
-      this.inner.measure(toNativeSource(node), opts, signal),
+  measure(source: Node | string, options?: RenderOptions): Promise<MeasuredNode> {
+    return withRenderInput(this.fonts, options ?? {}, source, (opts, signal) =>
+      this.inner.measure(toNativeSource(source), opts, signal),
     );
   }
 

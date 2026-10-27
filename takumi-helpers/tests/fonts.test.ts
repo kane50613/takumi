@@ -399,6 +399,14 @@ describe("subsetFonts", () => {
     ]);
   });
 
+  test("keeps the subsets HTML character references decode to", async () => {
+    const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
+
+    expect(
+      subsetFonts({ fonts, source: "<p>&#x41F;&#1088;&Gamma;</p>" }).map(subsetLabel).sort(),
+    ).toEqual(["Inter cyrillic", "Inter greek", "Inter latin"]);
+  });
+
   test("scans a node tree for codepoints", async () => {
     const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
     const node: Node = {

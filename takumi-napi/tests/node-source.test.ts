@@ -44,8 +44,7 @@ describe("toNativeSource", () => {
   test("passes a plain tree as JSON, with undefined kept as null", () => {
     const source = toNativeSource(card);
 
-    expect(typeof source).toBe("string");
-    expect(source).toContain('"fontFamily":null');
+    expect(source).toHaveProperty("json", expect.stringContaining('"fontFamily":null'));
   });
 
   test.each([
@@ -64,7 +63,7 @@ describe("toNativeSource", () => {
     const deeper = nested(64, { fontSize: 12 });
     const source = toNativeSource(deepest);
 
-    expect(typeof source).toBe("string");
+    expect(source).toHaveProperty("json");
     expect(
       Buffer.compare(
         await renderer.render(source, options),
@@ -72,7 +71,7 @@ describe("toNativeSource", () => {
       ),
     ).toBe(0);
     expect(toNativeSource(deeper)).toBe(deeper);
-    await expect(renderer.render(JSON.stringify(deeper), options)).rejects.toThrow(
+    await expect(renderer.render({ json: JSON.stringify(deeper) }, options)).rejects.toThrow(
       "recursion limit exceeded",
     );
   });
@@ -107,7 +106,7 @@ describe("a JSON source", () => {
     ["no type", { text: "x" } as unknown as Node],
     ["nesting past the limit", nested(513)],
   ])("fails on %s with the tree's message", async (_, node) => {
-    const message = (source: Node | string) =>
+    const message = (source: Node | string | { json: string }) =>
       Promise.resolve()
         .then(() => renderer.render(source, options))
         .then(

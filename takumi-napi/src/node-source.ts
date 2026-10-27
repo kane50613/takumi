@@ -5,33 +5,42 @@ const LONE_SURROGATE = /\p{Cs}/u;
 /** The most arrays and objects `serde_json` reads nested inside each other. */
 const MAX_DEPTH = 127;
 
+/** JSON text the native side reads in place of a node tree, so it parses off the main thread. */
+export type JsonSource = { json: string };
+
 /**
- * `node` as JSON, which the native side parses off the main thread, when JSON keeps every value
- * in it within {@link MAX_DEPTH}; `node` itself otherwise.
+ * A node tree as {@link JsonSource} when JSON keeps every value in it within {@link MAX_DEPTH}, the
+ * tree itself otherwise, and HTML as is.
  */
-export function toNativeSource(node: Node): Node | string {
+export function toNativeSource(source: Node | string): Node | string | JsonSource {
+  if (typeof source === "string") {
+    return source;
+  }
+
   const depths = new WeakMap<object, number>();
 
   try {
-    return JSON.stringify(node, function (this: Record<string, unknown>, key, value: unknown) {
-      if (this[key] !== value || LONE_SURROGATE.test(key) || !isJsonValue(value)) {
-        throw node;
-      }
-
-      if (typeof value === "object" && value !== null) {
-        const depth = (depths.get(this) ?? 0) + 1;
-
-        if (depth > MAX_DEPTH) {
-          throw node;
+    return {
+      json: JSON.stringify(source, function (this: Record<string, unknown>, key, value: unknown) {
+        if (this[key] !== value || LONE_SURROGATE.test(key) || !isJsonValue(value)) {
+          throw source;
         }
 
-        depths.set(value, depth);
-      }
+        if (typeof value === "object" && value !== null) {
+          const depth = (depths.get(this) ?? 0) + 1;
 
-      return value ?? null;
-    });
+          if (depth > MAX_DEPTH) {
+            throw source;
+          }
+
+          depths.set(value, depth);
+        }
+
+        return value ?? null;
+      }),
+    };
   } catch {
-    return node;
+    return source;
   }
 }
 
