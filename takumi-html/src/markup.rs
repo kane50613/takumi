@@ -26,6 +26,7 @@ pub(crate) fn parse(source: &str, document: bool) -> Dom {
     open: Vec::new(),
     templates: Vec::new(),
     document,
+    quirks: document,
     html: None,
     head: None,
     body: None,
@@ -33,6 +34,10 @@ pub(crate) fn parse(source: &str, document: bool) -> Dom {
 
   while !parser.rest.is_empty() {
     parser.step();
+  }
+
+  if document {
+    parser.body(Vec::new());
   }
 
   parser.dom
@@ -73,6 +78,10 @@ struct Parser<'a> {
   /// itself empty as the tree builder does.
   templates: Vec<(NodeId, NodeId)>,
   document: bool,
+  /// Whether the tree builder is in quirks mode, as a document without an `html` doctype puts
+  /// it. Approximate: legacy public identifiers that also select quirks mode are not recognized.
+  /// <https://html.spec.whatwg.org/multipage/parsing.html#the-initial-insertion-mode>
+  quirks: bool,
   html: Option<NodeId>,
   head: Option<NodeId>,
   body: Option<NodeId>,
@@ -165,6 +174,10 @@ impl<'a> Parser<'a> {
       .next()
       .unwrap_or_default()
       .to_ascii_lowercase();
+    if self.html.is_none() {
+      self.quirks = name != "html";
+    }
+
     let doctype = self.dom.push(NodeData::Doctype { name: name.into() });
 
     self.dom.append_node(Dom::DOCUMENT, doctype);
@@ -226,7 +239,7 @@ impl<'a> Parser<'a> {
       };
 
       if !attrs.iter().any(|(existing, _)| *existing == name) {
-        attrs.push((name, entities::decode(value).into_owned()));
+        attrs.push((name, entities::decode_attribute(value).into_owned()));
       }
     }
 
@@ -541,7 +554,7 @@ impl<'a> Parser<'a> {
         .filter(|open| open.ns == Namespace::Html)
     {
       let closes = match &*open.local {
-        "p" => ENDS_P.contains(&name),
+        "p" => ENDS_P.contains(&name) || (name == "table" && !self.quirks),
         "li" => name == "li",
         "dt" | "dd" => matches!(name, "dt" | "dd"),
         "option" => matches!(name, "option" | "optgroup"),
@@ -673,8 +686,8 @@ const HEAD_ELEMENTS: [&str; 7] = [
   "base", "link", "meta", "noscript", "script", "style", "title",
 ];
 
-/// Start tags that end an open `<p>`, except `table`, which ends it only outside quirks mode, which
-/// the parser does not track. <https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody>
+/// Start tags that end an open `<p>`, except `table`, which ends it only outside quirks mode.
+/// <https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody>
 const ENDS_P: [&str; 40] = [
   "address",
   "article",
@@ -838,10 +851,39 @@ mod tests {
   }
 
   #[test]
-  fn decodes_references_that_end_in_a_semicolon() {
+  fn decodes_references_as_the_tokenizer_does() {
     assert_eq!(
       fragment("<p>&lt;a&gt; &amp; &#169;&#xA9; &unknown; &amp</p>"),
-      "<p>&lt;a&gt; &amp; ©© &amp;unknown; &amp;amp</p>"
+      "<p>&lt;a&gt; &amp; ©© &amp;unknown; &amp;</p>"
+    );
+    assert_eq!(
+      fragment("<p>a&Tab;b&NewLine;c&nbspd&notit; &#65&#x42 &#0; &#x110000; &#128;</p>"),
+      "<p>a\tb\nc&nbsp;d¬it; AB \u{fffd} \u{fffd} €</p>"
+    );
+    assert_eq!(
+      fragment(r#"<a title="&amp=&ampx&amp;x&amp">"#),
+      r#"<a title="&amp;amp=&amp;ampx&amp;x&amp;"></a>"#
+    );
+  }
+
+  #[test]
+  fn a_table_ends_a_paragraph_outside_quirks_mode() {
+    assert_eq!(fragment("<p>a<table></table>"), "<p>a</p><table></table>");
+    assert_eq!(
+      document("<!DOCTYPE html><p>a<table></table>"),
+      "<!DOCTYPE html><html><head></head><body><p>a</p><table></table></body></html>"
+    );
+    assert_eq!(
+      document("<html><p>a<table></table>"),
+      "<html><head></head><body><p>a<table></table></p></body></html>"
+    );
+  }
+
+  #[test]
+  fn a_document_without_content_has_a_body() {
+    assert_eq!(
+      document("<!DOCTYPE html><title>t</title>"),
+      "<!DOCTYPE html><html><head><title>t</title></head><body></body></html>"
     );
   }
 

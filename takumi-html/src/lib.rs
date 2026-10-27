@@ -22,6 +22,7 @@
 mod dom;
 mod entities;
 mod markup;
+mod named_references;
 
 use std::{
   borrow::Cow,
@@ -287,8 +288,7 @@ impl Default for FromHtmlOptions {
 ///
 /// The parser covers the tokenizer but only part of the tree builder's error recovery: it
 /// closes `p`, `li`, `dt`, `dd`, `option`, and table rows and cells implicitly, but does not
-/// reconstruct misnested formatting elements or foster-parent table content, and it decodes
-/// HTML4's named character references plus `&apos;`, each ending in `;`.
+/// reconstruct misnested formatting elements or foster-parent table content.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
   // Decoding drops a leading byte order mark: https://encoding.spec.whatwg.org/#decode
   let source = source.strip_prefix('\u{feff}').unwrap_or(source);

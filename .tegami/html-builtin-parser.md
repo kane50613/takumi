@@ -3,6 +3,6 @@ packages:
   takumi-html: minor
 ---
 
-# `from_html` keeps unterminated character references as written
+# `takumi-html` parses with its own parser instead of html5ever
 
-Character references now decode only when they end in `;` and name an HTML4 entity or `&apos;`, as the JS `fromHtml` decodes them, so `&amp` and `&copy` stay as written. `takumi-html` parses with its own parser instead of html5ever, which recovers from less malformed markup: it implies `<html>`, `<head>`, `<body>`, `<tbody>`, and the end tags of `p`, `li`, `dt`, `dd`, `option`, and table rows and cells.
+It recovers from less malformed markup than html5ever. It implies `<html>`, `<head>`, `<body>`, `<tbody>`, and the end tags of `p`, `li`, `dt`, `dd`, `option`, and table rows and cells, but does not reconstruct misnested formatting elements or move stray table content out of the table.
