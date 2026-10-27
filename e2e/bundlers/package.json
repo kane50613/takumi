@@ -1,0 +1,29 @@
+{
+  "name": "takumi-bundler-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pack": "bun pack.ts",
+    "test": "bun run.ts"
+  },
+  "dependencies": {
+    "@cloudflare/vite-plugin": "1.65.0",
+    "@types/node": "^26.4.1",
+    "@types/react": "19.2.18",
+    "esbuild": "0.28.2",
+    "miniflare": "4.20260730.0",
+    "next": "16.4.3",
+    "nitro": "3.0.260903-beta",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "takumi-js": "file:.packs/takumi-js.tgz",
+    "typescript": "^7.0.2",
+    "vite": "8.3.5",
+    "wrangler": "4.153.0"
+  },
+  "overrides": {
+    "@takumi-rs/core": "file:.packs/core.tgz",
+    "@takumi-rs/helpers": "file:.packs/helpers.tgz",
+    "@takumi-rs/wasm": "file:.packs/wasm.tgz"
+  }
+}
