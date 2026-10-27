@@ -2,7 +2,7 @@ import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-c
 import type { Node } from "./types";
 import type { FetchOptions } from "./fetch";
 import { fetchBytes } from "./fetch/bytes";
-import { FontStylesheetCache } from "./fonts/cache";
+import { loadFontStylesheet } from "./fonts/cache";
 import { unicodeRangeOf } from "./unicode-range";
 
 type FontStyle = "normal" | "italic";
@@ -404,7 +404,7 @@ export async function googleFonts(
     return [];
   }
 
-  const css = await FontStylesheetCache.load(buildUrl(options), options);
+  const css = await loadFontStylesheet(buildUrl(options), options);
 
   // Google's css2 response orders `@font-face` blocks by its own logic, not by the `family=`
   // query order — the caller's declared priority survives only if we restore it here. A render
