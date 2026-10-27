@@ -9,7 +9,6 @@ readme = "README.md"
 rust-version = "1.91"
 
 [dependencies]
-html5ever.workspace = true
 thiserror.workspace = true
 typed-builder.workspace = true
 

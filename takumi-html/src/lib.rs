@@ -20,6 +20,8 @@
 //! ```
 
 mod dom;
+mod entities;
+mod markup;
 
 use std::{
   borrow::Cow,
@@ -29,11 +31,6 @@ use std::{
   sync::{Arc, LazyLock},
 };
 
-use html5ever::{
-  ParseOpts, QualName, local_name, ns, parse_document, parse_fragment,
-  serialize::{SerializeOpts, TraversalScope, serialize},
-  tendril::TendrilSink,
-};
 #[cfg(feature = "svg")]
 use takumi_core::resources::image::{ImageSource, SvgSource};
 use takumi_core::{
@@ -45,7 +42,9 @@ use takumi_core::{
 };
 use typed_builder::TypedBuilder;
 
-use crate::dom::{DomSink, NodeData, NodeRef};
+#[cfg(feature = "svg")]
+use crate::dom::AttributeNamespace;
+use crate::dom::{NodeData, NodeRef};
 
 /// Tags whose entire subtree is dropped, matching the JS markup walker.
 /// Deliberately distinct from the `display:none` presets (`title`,
@@ -285,6 +284,11 @@ impl Default for FromHtmlOptions {
 /// document, so the tree has an `<html>` root along with `<head>` and `<body>`,
 /// as a browser builds them. Anything else is parsed as a fragment and gains no
 /// wrappers of its own.
+///
+/// The parser covers the tokenizer but only part of the tree builder's error recovery: it
+/// closes `p`, `li`, `dt`, `dd`, `option`, and table rows and cells implicitly, but does not
+/// reconstruct misnested formatting elements or foster-parent table content, and it decodes
+/// HTML4's named character references plus `&apos;`, each ending in `;`.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
   // Decoding drops a leading byte order mark: https://encoding.spec.whatwg.org/#decode
   let source = source.strip_prefix('\u{feff}').unwrap_or(source);
@@ -294,31 +298,10 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
     max_depth: options.max_depth,
     styles: RefCell::default(),
   };
+  let dom = markup::parse(source, is_document(source));
   let mut nodes = Vec::new();
 
-  if is_document(source) {
-    let dom = parse_document(DomSink::default(), ParseOpts::default()).one(source);
-
-    builder.build_nodes(dom.document(), 0, &mut nodes)?;
-  } else {
-    let context = QualName::new(None, ns!(html), local_name!("body"));
-    let dom = parse_fragment(
-      DomSink::default(),
-      ParseOpts::default(),
-      context,
-      vec![],
-      false,
-    )
-    .one(source);
-
-    // `parse_fragment` wraps the roots in a synthetic context element, the
-    // document's only child.
-    if let Some(context) = dom.document().children().next() {
-      for child in context.children() {
-        builder.build_nodes(child, 0, &mut nodes)?;
-      }
-    }
-  }
+  builder.build_nodes(dom.document(), 0, &mut nodes)?;
 
   Ok(collapse(nodes))
 }
@@ -408,7 +391,7 @@ impl NodeBuilder<'_> {
     out: &mut Vec<Node>,
   ) -> Result<(), HtmlError> {
     match handle.data() {
-      NodeData::Comment(_) | NodeData::Doctype { .. } | NodeData::ProcessingInstruction { .. } => {}
+      NodeData::Comment(_) | NodeData::Doctype { .. } => {}
       NodeData::Document => {
         for child in handle.children() {
           self.build_nodes(child, depth, out)?;
@@ -416,7 +399,7 @@ impl NodeBuilder<'_> {
       }
       NodeData::Text(contents) => {
         if !contents.is_empty() {
-          out.push(Node::text(contents.to_string()));
+          out.push(Node::text(contents.clone()));
         }
       }
       NodeData::Element { name, .. } => {
@@ -505,8 +488,8 @@ impl NodeBuilder<'_> {
 
     let mut attributes = BTreeMap::new();
     for attr in attrs {
-      let name = &*attr.name.local;
-      let value = attr.value.as_ref();
+      let name = &*attr.local;
+      let value = &*attr.value;
 
       // Read Tailwind independently of reserved names so it can alias `class`
       // without dropping the class name.
@@ -553,7 +536,7 @@ impl NodeBuilder<'_> {
   /// or its markup when the nodes do not form a document.
   #[cfg(feature = "svg")]
   fn inline_svg(&self, handle: NodeRef<'_>, depth: usize) -> Result<ImageSourceInput, HtmlError> {
-    let markup = serialize_outer_html(handle);
+    let markup = handle.outer_html();
     let root = self.svg_node(handle, depth)?;
     let source = str::from_utf8(&markup)
       .ok()
@@ -568,7 +551,7 @@ impl NodeBuilder<'_> {
 
   #[cfg(not(feature = "svg"))]
   fn inline_svg(&self, handle: NodeRef<'_>, _depth: usize) -> Result<ImageSourceInput, HtmlError> {
-    Ok(ImageSourceInput::Buffer(serialize_outer_html(handle)))
+    Ok(ImageSourceInput::Buffer(handle.outer_html()))
   }
 
   /// An element of an inline `<svg>` with every attribute in its attribute map under its
@@ -581,19 +564,19 @@ impl NodeBuilder<'_> {
     }
 
     Ok(match handle.data() {
-      NodeData::Text(contents) => Some(Node::text(contents.to_string())),
+      NodeData::Text(contents) => Some(Node::text(contents.clone())),
       NodeData::Element { name, attrs, .. } => {
         let attributes: BTreeMap<Box<str>, Box<str>> = attrs
           .iter()
           .map(|attr| {
-            let local = &*attr.name.local;
-            let name = match attr.name.ns {
-              ns!(xlink) => format!("xlink:{local}").into(),
-              ns!(xml) => format!("xml:{local}").into(),
-              _ => local.into(),
+            let local = &*attr.local;
+            let name = match attr.ns {
+              AttributeNamespace::Xlink => format!("xlink:{local}").into(),
+              AttributeNamespace::Xml => format!("xml:{local}").into(),
+              AttributeNamespace::None | AttributeNamespace::Xmlns => local.into(),
             };
 
-            (name, attr.value.as_ref().into())
+            (name, attr.value.clone())
           })
           .collect();
         let mut children = Vec::new();
@@ -704,22 +687,6 @@ fn empty_image_style(handle: NodeRef<'_>) -> Style {
   }
 
   style
-}
-
-/// Serialize an element including its own tag (outer HTML), used to round-trip
-/// `<svg>` subtrees into an image source.
-fn serialize_outer_html(handle: NodeRef<'_>) -> Vec<u8> {
-  let mut buffer = Vec::new();
-  let opts = SerializeOpts {
-    traversal_scope: TraversalScope::IncludeNode,
-    ..SerializeOpts::default()
-  };
-
-  if serialize(&mut buffer, &handle, opts).is_err() {
-    return Vec::new();
-  }
-
-  buffer
 }
 
 #[cfg(test)]
