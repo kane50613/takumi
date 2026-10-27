@@ -4,7 +4,10 @@
 use std::collections::BTreeSet;
 
 use crate::{
-  layout::{node::NodeKind, tree::RenderNode},
+  layout::{
+    node::{NodeKind, is_remote_url},
+    tree::RenderNode,
+  },
   style::{BackgroundImage, ComputedStyle, Display, TextTransform},
 };
 
@@ -71,7 +74,7 @@ impl RenderNeeds {
 
     for image in images {
       if let BackgroundImage::Url(url) = image
-        && (url.starts_with("https://") || url.starts_with("http://"))
+        && is_remote_url(url)
       {
         self.images.insert(url.to_string());
       }
@@ -143,6 +146,7 @@ mod tests {
         Node::container([Node::text("c")]).with_class_name("item"),
         Node::image("https://example.com/img.png"),
         Node::image("data:image/png;base64,AA"),
+        Node::image("HTTPS://example.com/upper.png"),
       ],
       CSS,
     )
@@ -151,6 +155,7 @@ mod tests {
     assert_eq!(
       needs.images.into_iter().collect::<Vec<_>>(),
       [
+        "HTTPS://example.com/upper.png",
         "https://example.com/before.png",
         "https://example.com/bg.png",
         "https://example.com/img.png",
