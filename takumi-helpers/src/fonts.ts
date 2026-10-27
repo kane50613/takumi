@@ -3,6 +3,7 @@ import type { Node } from "./types";
 import type { FetchOptions } from "./fetch";
 import { fetchBytes } from "./fetch/bytes";
 import { FontStylesheetCache } from "./fonts/cache";
+import { decodeHtmlEntities } from "./html/entities";
 import { unicodeRangeOf } from "./unicode-range";
 
 type FontStyle = "normal" | "italic";
@@ -284,8 +285,9 @@ function mergeVariableFaces(faces: SubsetFace[]): SubsetFace[] {
 }
 
 /**
- * A codepoint source: content trees, plus loose strings for text a backend injects that no
- * node carries, such as the digits a PDF page counter fills in.
+ * A codepoint source: content trees, HTML markup, plus loose strings for text a backend injects
+ * that no node carries, such as the digits a PDF page counter fills in. A string counts both as
+ * written and with its character references decoded.
  */
 export type CodepointSource = string | Node | (string | Node)[];
 
@@ -310,6 +312,7 @@ export function collectCodepoints(source: CodepointSource): Set<number> {
   const walk = (node: string | Node) => {
     if (typeof node === "string") {
       add(node);
+      add(decodeHtmlEntities(node));
     } else if (node.type === "text") {
       add(node.text);
     } else if (node.type === "container") {
