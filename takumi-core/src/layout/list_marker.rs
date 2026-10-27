@@ -408,6 +408,22 @@ mod tests {
     assert_eq!(markers(list, LIST_CSS), ["1. ", "2. ", "3. "]);
   }
 
+  /// Blink's `ListItemOrdinal::IsListItem` counts an item only with a layout object, which
+  /// nothing inside `display: none` gets.
+  #[test]
+  fn an_item_inside_a_hidden_element_takes_no_number() {
+    let list = Node::container([
+      item([]),
+      Node::container([item([])]).with_class_name("hidden"),
+      item([]),
+    ])
+    .with_class_name("list")
+    .with_tag_name("ol");
+    let css = format!("{LIST_CSS} .hidden {{ display: none }}");
+
+    assert_eq!(markers(list, &css), ["1. ", "2. "]);
+  }
+
   #[test]
   fn a_nested_list_restarts_at_one() {
     let list = Node::container([

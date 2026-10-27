@@ -1,4 +1,4 @@
-import * as wasm from "@takumi-rs/wasm";
+import initBindings, { Renderer, setGlyphCacheMaxBytes } from "@takumi-rs/wasm";
 import type { Backend, BackendModule } from "./types";
 
 /**
@@ -15,7 +15,7 @@ export async function initWasm(module?: BackendModule, fallback?: BackendModule)
       ? resolved.default
       : resolved;
 
-  await wasm.default(input ? { module_or_path: input } : undefined);
+  await initBindings(input ? { module_or_path: input } : undefined);
 
-  return wasm;
+  return { Renderer, setGlyphCacheMaxBytes };
 }

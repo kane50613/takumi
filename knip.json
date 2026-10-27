@@ -1,7 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreWorkspaces": ["example/*"],
-  "ignoreBinaries": ["jq", "wasm-pack"],
+  "ignore": ["e2e/**"],
+  "ignoreBinaries": ["jq", "wasm-opt", "wasm-pack"],
   "rules": {
     "duplicates": "warn"
   },

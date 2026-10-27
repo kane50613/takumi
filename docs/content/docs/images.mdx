@@ -36,6 +36,8 @@ const image = await render(element, {
 
 `fetchCache` takes a `Map<string, Promise<ArrayBuffer>>` or any object with the same `get`, `set`, and `delete` methods. Values are promises, not raw buffers.
 
+Emoji images from the [`emoji`](/docs/reference/image-response) option are cached across renders without a `fetchCache`, up to 8 MB per `fetch` function.
+
 <Callout type="warn">
   A plain `Map` never evicts entries. If each render uses a different URL, pass a bounded cache such
   as an LRU, or leave `fetchCache` out.
@@ -109,15 +111,15 @@ Set `premultiplied` when the bytes already have premultiplied alpha. Takumi then
 
 Set `emoji` to choose the set. `render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take it, and the CDN values match satori's. Each emoji's SVG comes from jsDelivr, at the version the table lists:
 
-| Value               | Emoji set                         | Fetched from                                                                                |
-| :------------------ | :-------------------------------- | :------------------------------------------------------------------------------------------ |
-| `twemoji` (default) | Twemoji                           | [jdecked/twemoji](https://github.com/jdecked/twemoji) 17.0.2                                |
-| `blobmoji`          | Blobmoji                          | [`@svgmoji/blob`](https://www.npmjs.com/package/@svgmoji/blob) 2.0.0                        |
-| `noto`              | Noto Emoji                        | [googlefonts/noto-emoji](https://github.com/googlefonts/noto-emoji) v2.051                  |
-| `openmoji`          | OpenMoji                          | [`@svgmoji/openmoji`](https://www.npmjs.com/package/@svgmoji/openmoji) 2.0.0                |
-| `fluent`            | Fluent Emoji, color               | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode), latest |
-| `fluentFlat`        | Fluent Emoji, flat                | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode), latest |
-| `from-font`         | Glyphs from a color font you load | No fetch. See [COLR / bitmap fonts](#colr--bitmap-fonts)                                    |
+| Value               | Emoji set                         | Fetched from                                                                                  |
+| :------------------ | :-------------------------------- | :-------------------------------------------------------------------------------------------- |
+| `twemoji` (default) | Twemoji                           | [jdecked/twemoji](https://github.com/jdecked/twemoji) 17.0.2                                  |
+| `blobmoji`          | Blobmoji                          | [`@svgmoji/blob`](https://www.npmjs.com/package/@svgmoji/blob) 2.0.0                          |
+| `noto`              | Noto Emoji                        | [googlefonts/noto-emoji](https://github.com/googlefonts/noto-emoji) v2.051                    |
+| `openmoji`          | OpenMoji                          | [`@svgmoji/openmoji`](https://www.npmjs.com/package/@svgmoji/openmoji) 2.0.0                  |
+| `fluent`            | Fluent Emoji, color               | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode) `7a40f1a` |
+| `fluentFlat`        | Fluent Emoji, flat                | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode) `7a40f1a` |
+| `from-font`         | Glyphs from a color font you load | No fetch. See [COLR / bitmap fonts](#colr--bitmap-fonts)                                      |
 
 ```tsx twoslash title="Fetch emoji images"
 import { ImageResponse } from "takumi-js/response";
