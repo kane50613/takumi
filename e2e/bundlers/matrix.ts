@@ -97,7 +97,6 @@ export const cells: Cell[] = [
     env: { NITRO_PRESET: "node-server", NITRO_EXPORT_CONDITIONS: "!unwasm" },
     entry: "server/index.mjs",
     backend: "native",
-    expectedFailure: "TypeError: __exportAll is not a function (fixed by PR #2369, not merged yet)",
   }),
   nitro("bun", {
     runtime: "bun",
