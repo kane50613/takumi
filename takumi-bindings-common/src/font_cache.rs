@@ -30,8 +30,8 @@ struct CachedFamily {
 pub struct FontCache {
   max_bytes: u64,
   by_key: HashMap<String, Vec<RegisteredFamily>>,
-  /// The key of a registration of each font content; see [`FontOptions::content_hash`].
-  by_content: HashMap<u64, String>,
+  /// The keys whose registrations hold each font content; see [`FontOptions::content_hash`].
+  by_content: HashMap<u64, Vec<String>>,
   families: HashMap<String, CachedFamily>,
   clock: u64,
 }
@@ -72,14 +72,15 @@ impl FontCache {
     key: Option<&str>,
     pin: bool,
   ) -> Option<Vec<RegisteredFamily>> {
-    let held = self.by_content.get(&content)?.clone();
-    let Some(registered) = self.lookup(&held, pin) else {
+    let holders = self.by_content.get(&content)?.clone();
+    let Some(registered) = holders.iter().find_map(|held| self.lookup(held, pin)) else {
       self.by_content.remove(&content);
       return None;
     };
 
-    if let Some(key) = key.filter(|key| *key != held) {
+    if let Some(key) = key.filter(|key| !holders.iter().any(|held| held == key)) {
       self.record(Some(key), &registered, 0, pin);
+      self.remember_content(content, Some(key));
     }
 
     Some(registered)
@@ -88,7 +89,11 @@ impl FontCache {
   /// Remembers that the registration under `key` holds `content`.
   pub fn remember_content(&mut self, content: u64, key: Option<&str>) {
     if let Some(key) = key {
-      self.by_content.insert(content, key.to_owned());
+      let holders = self.by_content.entry(content).or_default();
+
+      if !holders.iter().any(|held| held == key) {
+        holders.push(key.to_owned());
+      }
     }
   }
 
@@ -251,7 +256,10 @@ impl FontCache {
 
   /// Forgets the registration under `key` and the content it held, returning what it registered.
   fn forget_key(&mut self, key: &str) -> Vec<RegisteredFamily> {
-    self.by_content.retain(|_, held| held != key);
+    self.by_content.retain(|_, holders| {
+      holders.retain(|held| held != key);
+      !holders.is_empty()
+    });
     self.by_key.remove(key).unwrap_or_default()
   }
 
@@ -422,5 +430,19 @@ mod tests {
     cache.forget("A");
 
     assert!(cache.by_content.is_empty());
+  }
+
+  #[test]
+  fn a_copy_outlives_the_key_it_was_copied_from() {
+    let (mut fonts, mut cache) = fitting(4);
+
+    register_under(&mut fonts, &mut cache, "K", "A", false);
+    cache.remember_content(1, Some("K"));
+    cache.lookup_content(1, Some("L"), false).unwrap();
+    register_under(&mut fonts, &mut cache, "K", "B", false);
+
+    let copy = cache.lookup_content(1, Some("M"), false).unwrap();
+
+    assert_eq!(copy[0].name, "A");
   }
 }
