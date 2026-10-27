@@ -78,6 +78,35 @@ const emojiImageCache = perFetch(
     }),
 );
 
+function withinMaxBytes(data: ArrayBuffer, maxBytes: number): ArrayBuffer {
+  if (data.byteLength > maxBytes) {
+    throw new Error(`Response exceeds ${maxBytes} bytes`);
+  }
+
+  return data;
+}
+
+/**
+ * Fetches `url` through a cache other callers share. The shared request carries no caller's
+ * `signal` or `timeout`, so a caller that gives up ends only its own wait.
+ */
+function fetchSharedImageData(
+  url: string,
+  options: FetchOptions,
+  cache: ImageFetchCache,
+): Promise<ArrayBuffer> {
+  let pending = cache.get(url);
+
+  if (!pending) {
+    pending = fetchBytes(url, { fetch: options.fetch });
+    cache.set(url, pending);
+  }
+
+  const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
+
+  return new FetchDeadline(options).waitFor(pending).then((data) => withinMaxBytes(data, maxBytes));
+}
+
 function fetchImageData(
   url: string,
   options: FetchOptions,
@@ -92,10 +121,7 @@ function fetchImageData(
         throw new Error(`URL blocked by allowUrl policy: ${url}`);
       }
 
-      if (data.byteLength > maxBytes) {
-        throw new Error(`Response exceeds ${maxBytes} bytes`);
-      }
-      return data;
+      return withinMaxBytes(data, maxBytes);
     });
   }
 
@@ -152,11 +178,10 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
 
   const tasks = urls.map(async (src): Promise<FetchedImage> => ({
     src,
-    data: await fetchImageData(
-      src,
-      fetchOptions,
-      fetchCache ?? (isEmojiImageUrl(src) ? emojiImageCache(fetch ?? globalThis.fetch) : undefined),
-    ),
+    data:
+      !fetchCache && !allowUrl && isEmojiImageUrl(src)
+        ? await fetchSharedImageData(src, fetchOptions, emojiImageCache(fetch ?? globalThis.fetch))
+        : await fetchImageData(src, fetchOptions, fetchCache),
   }));
   const fetched = throwOnError
     ? await Promise.all(tasks)

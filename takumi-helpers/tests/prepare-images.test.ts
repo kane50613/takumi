@@ -49,6 +49,24 @@ describe("prepareImages", () => {
     expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual([emoji, other, other]);
   });
 
+  test("a caller aborting leaves another waiting on the same emoji its image", async () => {
+    let respond: (response: Response) => void = () => {};
+    const fetchMock = mock(() => new Promise<Response>((resolve) => (respond = resolve)));
+    const node = imageTree(
+      "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f680.svg",
+    );
+    const controller = new AbortController();
+    const aborted = prepareImages({ node, fetch: fetchMock, signal: controller.signal });
+    const waiting = prepareImages({ node, fetch: fetchMock });
+
+    controller.abort();
+    respond(ok("emoji"));
+
+    await expect(aborted).rejects.toThrow();
+    expect(await waiting).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   test("a rejected fetch is evicted so a later call retries", async () => {
     let attempt = 0;
     const fetchMock = mock((url: string) =>
