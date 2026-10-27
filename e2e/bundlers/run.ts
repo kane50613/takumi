@@ -240,7 +240,7 @@ const chosen =
   selected.length > 0
     ? cells.filter((cell) => selected.some((name) => cell.name.includes(name)))
     : cells;
-const rows: string[] = [];
+const lines: string[] = [];
 let unexpected = 0;
 const started = performance.now();
 
@@ -251,38 +251,38 @@ for (const cell of chosen) {
   const begin = performance.now();
   const outcome = await check(cell);
   const seconds = ((performance.now() - begin) / 1000).toFixed(1);
-  let status = outcome.failure ? "FAIL" : "pass";
+  const backend =
+    outcome.backend && outcome.backend !== cell.backend
+      ? `${cell.backend}, found ${outcome.backend}`
+      : cell.backend;
+  const [mark, note] = cell.expectedFailure
+    ? outcome.failure
+      ? ["○", `fails as expected: ${cell.expectedFailure}`]
+      : ["✗", `passes, but expected to fail: ${cell.expectedFailure}`]
+    : outcome.failure
+      ? ["✗", outcome.failure]
+      : ["✓", undefined];
 
-  if (cell.expectedFailure) {
-    status = outcome.failure ? "expected failure" : "UNEXPECTED PASS";
-  }
-
-  if (status === "FAIL" || status === "UNEXPECTED PASS") {
+  if (mark === "✗") {
     unexpected += 1;
   }
 
-  const detail = cell.expectedFailure
-    ? `${cell.expectedFailure} / ${outcome.failure ?? "passed"}`
-    : (outcome.failure ?? "");
+  const line = `${mark} ${cell.name} (${cell.runtime}, ${backend}) ${seconds}s`;
+  const entry = note ? `${line}\n    ${note}` : line;
 
-  rows.push(
-    `| ${cell.name} | ${cell.runtime} | ${cell.backend} | ${outcome.backend ?? "-"} | ${status} | ${seconds}s | ${detail.replaceAll("|", "\\|")} |`,
-  );
-  console.log(rows.at(-1));
+  lines.push(entry);
+  console.log(entry);
 }
 
-const table = [
-  "| cell | runtime | expected | found | result | time | detail |",
-  "| --- | --- | --- | --- | --- | --- | --- |",
-  ...rows,
-].join("\n");
+const summary = `${chosen.length} cells in ${((performance.now() - started) / 1000).toFixed(0)}s, ${unexpected} unexpected`;
 
-console.log(
-  `\n${table}\n\ntotal ${((performance.now() - started) / 1000).toFixed(0)}s, ${unexpected} unexpected`,
-);
+console.log(`\n${summary}`);
 
 if (Bun.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(Bun.env.GITHUB_STEP_SUMMARY, `${table}\n`);
+  appendFileSync(
+    Bun.env.GITHUB_STEP_SUMMARY,
+    `\`\`\`\n${lines.join("\n")}\n\n${summary}\n\`\`\`\n`,
+  );
 }
 
 process.exit(unexpected > 0 ? 1 : 0);
