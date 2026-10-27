@@ -296,11 +296,18 @@ export type CodepointSource = string | Node | (string | Node)[];
  * generated content no node carries, so subsetting counts these as always
  * used. Mirrors `MARKER_CHARACTERS` in takumi-core, whose coverage test is the
  * source of truth. `list-style-type: "…"` strings are not covered.
+ *
+ * @deprecated `Renderer.needs` reports the characters markers generate.
  */
 export const LIST_MARKER_CHARACTERS =
   "•◦■▪▸◂▾ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-/** Collect every codepoint the content will render. */
+/**
+ * Collect every codepoint the content will render.
+ *
+ * @deprecated `Renderer.needs` reads the characters after the cascade, so stylesheet content and
+ * `text-transform` count.
+ */
 export function collectCodepoints(source: CodepointSource): Set<number> {
   const codepoints = new Set<number>();
 
@@ -333,6 +340,8 @@ export function collectCodepoints(source: CodepointSource): Set<number> {
  * Keep the subsets `source` renders, dropping the rest. Range-less fallbacks (a full font or a
  * `text=` subset) always stay. Runs without network, so a renderer can apply it to the final
  * node tree. Works on any descriptor carrying `unicodeRange`; entries without it are kept.
+ *
+ * @deprecated A renderer picks subsets from the characters `Renderer.needs` reads after the cascade.
  */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
   return fontsCovering(fonts, collectCodepoints(source));
