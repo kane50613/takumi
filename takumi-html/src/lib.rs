@@ -336,11 +336,7 @@ fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
       continue;
     };
 
-    if name.ns != Namespace::Html {
-      continue;
-    }
-
-    if &*name.local == "style" {
+    if name.ns == Namespace::Html && &*name.local == "style" {
       if !node
         .attribute("type")
         .is_none_or(|kind| kind.is_empty() || kind.eq_ignore_ascii_case("text/css"))
@@ -1030,6 +1026,17 @@ mod tests {
     .unwrap();
 
     assert_eq!(parsed.css, ["@media print {a{}}", "b{}"]);
+  }
+
+  #[test]
+  fn a_style_inside_an_svg_integration_point_becomes_css() {
+    let parsed = parse_html(
+      "<svg><style>a{}</style><foreignObject><div><style>b{}</style></div></foreignObject><desc><style>c{}</style></desc></svg>",
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["b{}", "c{}"]);
   }
 
   #[test]
