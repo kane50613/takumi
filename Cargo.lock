@@ -1526,7 +1526,6 @@ dependencies = [
  "takumi-html",
  "wasm-bindgen",
  "wuff",
- "xxhash-rust",
 ]
 
 [[package]]

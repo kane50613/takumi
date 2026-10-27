@@ -4,23 +4,22 @@
 use std::sync::{Arc, Mutex};
 
 use takumi_core::layout::node::Node;
-use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 /// What a source text holds: the node tree, and the CSS of its `<style>` elements.
 pub type ParsedSource = (Node, Vec<String>);
 
 /// How a source text reads, which keeps the same text read two ways apart.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SourceKind {
   /// HTML markup.
-  Html = 1,
+  Html,
   /// A node tree as JSON.
-  Json = 2,
+  Json,
 }
 
-/// The one source text a renderer parsed last, by a hash of its kind and text.
+/// The one source text a renderer parsed last, with its kind and what it parsed to.
 #[derive(Default)]
-pub struct SourceCache(Mutex<Option<(u64, Arc<ParsedSource>)>>);
+pub struct SourceCache(Mutex<Option<(SourceKind, Box<str>, Arc<ParsedSource>)>>);
 
 impl SourceCache {
   /// `text` read as `kind`, parsed with `parse` unless it is the text parsed last.
@@ -30,12 +29,11 @@ impl SourceCache {
     text: &str,
     parse: impl FnOnce(&str) -> Result<ParsedSource, E>,
   ) -> Result<ParsedSource, E> {
-    let key = xxh3_64_with_seed(text.as_bytes(), kind as u64);
     let cached = self.0.lock().ok().and_then(|last| {
       last
         .as_ref()
-        .filter(|(held, _)| *held == key)
-        .map(|(_, parsed)| Arc::clone(parsed))
+        .filter(|(held_kind, held_text, _)| *held_kind == kind && **held_text == *text)
+        .map(|(_, _, parsed)| Arc::clone(parsed))
     });
 
     if let Some(parsed) = cached {
@@ -45,7 +43,7 @@ impl SourceCache {
     let parsed = parse(text)?;
 
     if let Ok(mut last) = self.0.lock() {
-      *last = Some((key, Arc::new(parsed.clone())));
+      *last = Some((kind, text.into(), Arc::new(parsed.clone())));
     }
 
     Ok(parsed)
