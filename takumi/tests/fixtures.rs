@@ -10,6 +10,8 @@ pub mod animation;
 pub mod deep_nesting;
 #[path = "fixtures/html_byte_order_mark.rs"]
 pub mod html_byte_order_mark;
+#[path = "fixtures/html_parser_recovery.rs"]
+pub mod html_parser_recovery;
 #[path = "fixtures/jpeg_output.rs"]
 pub mod jpeg_output;
 #[path = "fixtures/paint_bounds_ink_reach.rs"]
