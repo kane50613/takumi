@@ -138,7 +138,7 @@
     }
   },
   "scripts": {
-    "build": "wasm-pack build . --no-pack --release --out-dir pkg --target web -- --locked --config 'profile.release.package.takumi-core.opt-level=\"z\"' && bun build:js",
+    "build": "wasm-pack build . --no-pack --release --out-dir pkg --target web -- --locked --config 'profile.release.package.takumi-core.opt-level=\"z\"' && bun ../scripts/wasm-opt.mts pkg/takumi_pdf_wasm_bg.wasm --enable-simd --enable-nontrapping-float-to-int && bun build:js",
     "build:js": "tsdown",
     "publish-lint": "attw --pack . && publint --strict .",
     "typecheck": "tsc --noEmit"
