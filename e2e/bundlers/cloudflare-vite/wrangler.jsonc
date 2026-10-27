@@ -1,0 +1,1 @@
+{ "name": "e2e", "main": "../src/worker.ts", "compatibility_date": "2025-10-30" }

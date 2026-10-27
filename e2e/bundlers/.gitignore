@@ -1,0 +1,10 @@
+node_modules
+bun.lock
+.packs
+.logs
+out
+.output
+.next
+next-env.d.ts
+next-*/tsconfig.json
+.wrangler

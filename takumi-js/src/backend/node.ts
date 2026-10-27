@@ -1,4 +1,5 @@
 import type { LoadBackend } from "./types";
+import { loadBackend as loadWasm } from "./wasm-node";
 
 // Dynamic import so bundlers don't inline the native addon — its `.node` binary
 // must resolve from node_modules at runtime, which a bundled-in copy breaks.
@@ -16,11 +17,9 @@ const loadNative: LoadBackend = () =>
 // so the `node` condition lands here even when the host set `unwasm`. Detect it
 // (the same signal Next.js and SvelteKit use) and reroute to the WASM backend.
 //
-// Lazy so the WASM glue stays out of every Node bundle that never runs in a
-// WebContainer.
-const loadWasm: LoadBackend = (module) =>
-  import("./wasm-node").then((backend) => backend.loadBackend(module));
-
+// `loadWasm` is imported statically: Nitro inlines a lazily imported chunk and can
+// place the helper that builds its namespace in a chunk importing this one, which
+// then throws `__exportAll is not a function` when it loads.
 export const loadBackend: LoadBackend = (module) =>
   typeof process !== "undefined" && process.versions?.webcontainer
     ? loadWasm(module)
