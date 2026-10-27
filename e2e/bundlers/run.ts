@@ -134,7 +134,9 @@ async function serve(cell: Cell, directory: string, log: string): Promise<string
   try {
     while (Date.now() < deadline && server.exitCode === null) {
       try {
-        const response = await fetch(`http://127.0.0.1:${port}${cell.path ?? "/"}`);
+        const response = await fetch(`http://127.0.0.1:${port}${cell.path ?? "/"}`, {
+          signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
+        });
         const body = Buffer.from(await response.arrayBuffer());
 
         return response.status === 200
