@@ -138,11 +138,11 @@
     },
     "./vite": {
       "browser": {
-        "types": "./bundlers/vite.d.ts",
+        "types": "./bundlers/vite-entry.d.ts",
         "default": "./bundlers/browser.mjs"
       },
       "default": {
-        "types": "./bundlers/vite.d.ts",
+        "types": "./bundlers/vite-entry.d.ts",
         "default": "./bundlers/vite.mjs"
       }
     }
