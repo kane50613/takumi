@@ -14,13 +14,20 @@ use crate::{
   style::{Length, Style, StyleDeclaration},
 };
 
+/// Whether `url` is fetched over HTTP(S), its scheme matched without regard to case.
+pub(crate) fn is_remote_url(url: &str) -> bool {
+  ["https://", "http://"].iter().any(|scheme| {
+    url
+      .get(..scheme.len())
+      .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme))
+  })
+}
+
 impl ImageData {
   /// The source URL when it is fetched over HTTP(S).
   pub(crate) fn url(&self) -> Option<&str> {
     match &self.src {
-      ImageSourceInput::Url(src) if src.starts_with("https://") || src.starts_with("http://") => {
-        Some(src.as_ref())
-      }
+      ImageSourceInput::Url(src) if is_remote_url(src) => Some(src.as_ref()),
       _ => None,
     }
   }
