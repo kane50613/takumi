@@ -2315,6 +2315,19 @@ impl RenderNode {
               .display
               .should_blockify_children(),
         );
+
+        // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box, so its
+        // descendants are never styled or counted, though their source order is still passed.
+        if child_pending.context.style.base_data.display == Display::None {
+          source_cursor += child_pending
+            .pending_children
+            .as_slice()
+            .iter()
+            .map(Node::subtree_len)
+            .sum::<usize>();
+          continue;
+        }
+
         stack.push(child_pending);
         continue;
       }
@@ -2335,10 +2348,7 @@ impl RenderNode {
         return render_node;
       };
 
-      // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box.
-      if render_node.context.style.base_data.display != Display::None {
-        parent.rendered_children.push(render_node);
-      }
+      parent.rendered_children.push(render_node);
     }
   }
 

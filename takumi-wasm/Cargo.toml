@@ -37,20 +37,8 @@ features = ["svg"]
 [dependencies.takumi-svg]
 path = "../takumi-svg"
 
-# https://github.com/rust-lang/rust/issues/93294
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = [
-  '-Oz',
-  '--converge',
-  '--code-folding',
-  '--enable-bulk-memory',
-  '--enable-mutable-globals',
-  '--enable-sign-ext',
-  '--strip-debug',
-  '--strip-dwarf',
-  '--strip-producers',
-  '--strip-target-features',
-]
+wasm-opt = false
 
 [lints]
 workspace = true

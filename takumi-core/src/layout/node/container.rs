@@ -11,6 +11,19 @@ impl Node {
     (!children.is_empty()).then_some(children.as_slice())
   }
 
+  /// How many nodes this one and its descendants hold, counted iteratively for deep trees.
+  pub(crate) fn subtree_len(&self) -> usize {
+    let mut len = 0;
+    let mut pending = vec![self];
+
+    while let Some(node) = pending.pop() {
+      len += 1;
+      pending.extend(node.children().into_iter().flatten());
+    }
+
+    len
+  }
+
   pub(crate) fn take_children(&mut self) -> Option<Box<[Node]>> {
     let NodeKind::Container { children } = &mut self.kind else {
       return None;
