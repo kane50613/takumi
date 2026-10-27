@@ -1519,6 +1519,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_bytes",
+ "serde_json",
  "takumi-core",
  "wuff",
 ]
@@ -1587,7 +1588,6 @@ dependencies = [
  "napi-derive",
  "rayon",
  "serde",
- "serde_json",
  "takumi-bindings-common",
  "takumi-core",
  "takumi-html",

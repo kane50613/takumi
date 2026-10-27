@@ -7,6 +7,8 @@ import {
 } from "./fonts";
 import { unicodeRangeOf } from "./unicode-range";
 
+export { type JsonSource, toNativeSource } from "./node-source";
+
 /**
  * Shared wrapper primitives for the `@takumi-rs/core` (napi) and `@takumi-rs/wasm` renderer
  * bindings. Both backends compose their public `Renderer` from these so the two surfaces cannot

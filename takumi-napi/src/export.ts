@@ -12,8 +12,7 @@ import { Renderer as RendererInternal } from "../index";
 
 export { setGlyphCacheMaxBytes } from "../index";
 
-import { FontRegistry, withRenderInput } from "@takumi-rs/helpers/renderer";
-import { toNativeSource } from "./node-source";
+import { FontRegistry, toNativeSource, withRenderInput } from "@takumi-rs/helpers/renderer";
 import type {
   BackendAnimationOptions,
   BackendRenderOptions,

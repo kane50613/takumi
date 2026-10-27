@@ -12,7 +12,7 @@ import {
 export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
-import { FontRegistry, withRenderInput } from "@takumi-rs/helpers/renderer";
+import { FontRegistry, toNativeSource, withRenderInput } from "@takumi-rs/helpers/renderer";
 import type {
   BackendAnimationOptions,
   BackendRenderOptions,
@@ -44,25 +44,25 @@ export class Renderer {
 
   render(source: Node | string, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>> {
     return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
-      this.inner.render(source, opts),
+      this.inner.render(toNativeSource(source), opts),
     );
   }
 
   renderAsDataUrl(source: Node | string, options?: RenderOptions): Promise<string> {
     return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
-      this.inner.renderAsDataUrl(source, opts),
+      this.inner.renderAsDataUrl(toNativeSource(source), opts),
     );
   }
 
   renderSvg(source: Node | string, options?: SvgRenderOptions): Promise<string> {
     return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
-      this.inner.renderSvg(source, opts),
+      this.inner.renderSvg(toNativeSource(source), opts),
     );
   }
 
   measure(source: Node | string, options?: RenderOptions): Promise<MeasuredNode> {
     return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
-      this.inner.measure(source, opts),
+      this.inner.measure(toNativeSource(source), opts),
     );
   }
 
