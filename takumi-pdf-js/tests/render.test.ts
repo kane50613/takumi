@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { expect, spyOn, test } from "bun:test";
+import { join } from "node:path";
+import { expect, mock, spyOn, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { PageNumber, PdfRenderer, TotalPages } from "takumi-pdf";
 
@@ -436,4 +437,27 @@ test("rejects a pages value that is not an object", async () => {
   await expect(
     renderer.render(doc, { pages: { nope: {} } as unknown as Record<string, never> }),
   ).rejects.toThrow("unknown page rule: nope");
+});
+
+test("loads font subsets for characters only a stylesheet adds", async () => {
+  const bytes = readFileSync(join(import.meta.dir, "../../assets/fonts/geist/Geist[wght].woff2"));
+  const subset = (key: string, range: [number, number]) => ({
+    name: "Subset",
+    key,
+    unicodeRange: [range],
+    data: mock(() => bytes),
+  });
+  const latin = subset("latin", [0x20, 0x7f]);
+  const cyrillic = subset("cyrillic", [0x400, 0x4ff]);
+  const greek = subset("greek", [0x370, 0x3ff]);
+
+  await new PdfRenderer().render(container({ tagName: "div", children: [text("a")] }), {
+    viewport: { width: 100, height: 100 },
+    css: ["div::before { content: 'Ж' }"],
+    fonts: [latin, cyrillic, greek],
+  });
+
+  expect(latin.data).toHaveBeenCalledTimes(1);
+  expect(cyrillic.data).toHaveBeenCalledTimes(1);
+  expect(greek.data).not.toHaveBeenCalled();
 });

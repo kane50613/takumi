@@ -11,7 +11,7 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore,
+  FontCacheOptions, FontStore, NeedsOutput,
   input::{Font, decode_images},
   parse_lang, stylesheet,
 };
@@ -22,8 +22,8 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_pdf::{
-  Attachment, Band, MeasureOptions, PageOptions, PageRange, PageRules, PdfMetadata, PdfOptions,
-  PdfStandard, Tagging, UncoveredText,
+  Attachment, Band, MeasureOptions, PageOptions, PageRange, PageRules, PdfError, PdfMetadata,
+  PdfOptions, PdfStandard, Tagging, UncoveredText,
 };
 use wasm_bindgen::prelude::*;
 
@@ -65,6 +65,10 @@ extern "C" {
   /// JavaScript object representing a measured size.
   #[wasm_bindgen(typescript_type = "MeasuredSize")]
   pub type MeasuredSizeType;
+
+  /// JavaScript object listing what a node tree needs fetched.
+  #[wasm_bindgen(typescript_type = "RenderNeeds")]
+  pub type RenderNeedsType;
 }
 
 /// The size returned by [`PdfRenderer::measure`].
@@ -118,6 +122,39 @@ impl PdfRenderer {
       images,
       lang,
     })
+  }
+
+  /// Calls `run` with the measure options `node` and `options` describe.
+  fn with_measure_options<T>(
+    &self,
+    node: NodeType,
+    options: Option<MeasureOptionsType>,
+    run: impl FnOnce(MeasureOptions<'_>) -> Result<T, PdfError>,
+  ) -> Result<T, js_sys::Error> {
+    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let options: PdfRenderOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+    let Layout {
+      viewport,
+      page,
+      images,
+      lang,
+    } = self.layout(&options)?;
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
+
+    run(MeasureOptions {
+      viewport,
+      fonts: &fonts,
+      node,
+      stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
+      images,
+      page,
+      font_families: options.font_families.map(FontFamily::from_names),
+      lang,
+    })
+    .map_err(map_error)
   }
 
   fn load_font(
@@ -264,29 +301,7 @@ impl PdfRenderer {
     node: NodeType,
     options: Option<MeasureOptionsType>,
   ) -> Result<MeasuredSizeType, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PdfRenderOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
-    let Layout {
-      viewport,
-      page,
-      images,
-      lang,
-    } = self.layout(&options)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
-    let measured = takumi_pdf::measure(MeasureOptions {
-      viewport,
-      fonts: &fonts,
-      node,
-      stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
-      images,
-      page,
-      font_families: options.font_families.map(FontFamily::from_names),
-      lang,
-    })
-    .map_err(map_error)?;
+    let measured = self.with_measure_options(node, options, takumi_pdf::measure)?;
 
     Ok(
       to_value(&MeasuredSizeOutput {
@@ -295,6 +310,22 @@ impl PdfRenderer {
       })
       .map_err(map_error)?
       .unchecked_into(),
+    )
+  }
+
+  /// Reads the remote images a node tree draws and the characters its text shapes, after the
+  /// cascade, laid out as `measure` lays it out.
+  pub fn needs(
+    &self,
+    node: NodeType,
+    options: Option<MeasureOptionsType>,
+  ) -> Result<RenderNeedsType, js_sys::Error> {
+    let needs = self.with_measure_options(node, options, takumi_pdf::needs)?;
+
+    Ok(
+      to_value(&NeedsOutput::from(needs))
+        .map_err(map_error)?
+        .unchecked_into(),
     )
   }
 }

@@ -104,7 +104,7 @@ mod subsetter;
 
 use takumi_core::{
   geometry::Point as CorePoint,
-  layout::tree::RenderNode,
+  layout::{needs::RenderNeeds, tree::RenderNode},
   page_stream::{SETTLED_PAGES, Settle},
   style::{Color, Lang},
   viewport::MediaTarget,
@@ -168,6 +168,25 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     width: size.width,
     height: size.height,
   })
+}
+
+/// What a node tree needs fetched before it renders, read after the cascade as [`measure`] lays it
+/// out; see [`RenderNode::needs`]. Page counters a band fills in at render time are not in it.
+pub fn needs(options: MeasureOptions<'_>) -> Result<RenderNeeds, PdfError> {
+  let inputs = TreeInputs {
+    fonts: options.fonts,
+    stylesheet: options.stylesheet,
+    images: Rc::new(options.images),
+    font_families: options.font_families,
+    lang: options.lang,
+  };
+  let viewport = match (options.page, options.viewport) {
+    (Some(page), _) => band_viewport(&page),
+    (None, Some(viewport)) => viewport.with_media_target(MediaTarget::Print),
+    (None, None) => return Err(PdfError::MissingViewport),
+  };
+
+  Ok(RenderNode::from_initial_containing_block(&inputs.context(viewport), options.node).needs())
 }
 
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged

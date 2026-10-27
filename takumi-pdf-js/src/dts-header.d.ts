@@ -217,6 +217,12 @@ export type MeasureOptions = (
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };
 
+/** The remote images a node tree draws and the characters its text shapes, read after the cascade. */
+export type RenderNeeds = {
+  images: string[];
+  characters: string;
+};
+
 export type FontCacheOptions = {
   /**
    * Bytes of decoded fonts that renders' `fonts` lists may keep registered. Past it, the least

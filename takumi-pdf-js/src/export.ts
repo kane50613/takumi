@@ -2,13 +2,8 @@ import type { CssInput } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
-import { FontRegistry } from "@takumi-rs/helpers/renderer";
-import {
-  LIST_MARKER_CHARACTERS,
-  type Node,
-  type ReactElementLike,
-  subsetFonts,
-} from "@takumi-rs/helpers";
+import { FontRegistry, fontsFor } from "@takumi-rs/helpers/renderer";
+import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import {
   counterCharacters,
@@ -476,19 +471,10 @@ export class PdfRenderer {
       ...(pagesResult?.css ?? []),
     ];
 
+    const layout = { ...rest, css: sheets.length > 0 ? sheets : undefined };
+
     return this.fonts.resolveResources(
-      fonts &&
-        subsetFonts({
-          fonts,
-          // Page counters and list markers render characters no node in the
-          // tree carries, so the renderer says which ones.
-          source: [
-            main.node,
-            ...bands,
-            LIST_MARKER_CHARACTERS,
-            counterCharacters([main.node, ...bands].flatMap((tree) => classNames(tree))),
-          ],
-        }),
+      fonts && (await fontsFor(fonts, () => this.characters([main.node, ...bands], layout))),
       images,
       fontFamilies,
       (resources) =>
@@ -497,7 +483,7 @@ export class PdfRenderer {
           header: headerResult?.node,
           footer: footerResult?.node,
           pages: pagesResult?.pages,
-          css: sheets.length > 0 ? sheets : undefined,
+          ...layout,
           ...resources,
         }),
     );
@@ -519,21 +505,25 @@ export class PdfRenderer {
     const main = await resolveNode(node);
     const sheets = [...ownCss(css, stylesheets), ...main.css];
 
+    const layout = { ...rest, css: sheets.length > 0 ? sheets : undefined };
+
     // The tree measured may itself be a band, so its counters are always in play.
     return this.fonts.resolveResources(
-      fonts &&
-        subsetFonts({
-          fonts,
-          source: [main.node, LIST_MARKER_CHARACTERS, counterCharacters(classNames(main.node))],
-        }),
+      fonts && (await fontsFor(fonts, () => this.characters([main.node], layout))),
       images,
       fontFamilies,
-      (resources) =>
-        this.inner.measure(main.node, {
-          ...rest,
-          css: sheets.length > 0 ? sheets : undefined,
-          ...resources,
-        }),
+      (resources) => this.inner.measure(main.node, { ...layout, ...resources }),
+    );
+  }
+
+  /**
+   * The characters `trees` shape after the cascade, plus those the page counters they reference
+   * render, which only exist once pages are numbered.
+   */
+  private characters(trees: Node[], options: Parameters<PdfRendererInternal["needs"]>[1]): string {
+    return (
+      trees.map((tree) => this.inner.needs(tree, options).characters).join("") +
+      counterCharacters(trees.flatMap((tree) => classNames(tree)))
     );
   }
 
