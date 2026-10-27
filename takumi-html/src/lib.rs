@@ -742,7 +742,8 @@ fn empty_image_style(handle: NodeRef<'_>) -> Style {
   style
 }
 
-/// An attribute's name as SVG markup writes it, its namespace prefix included.
+/// An attribute's name as SVG markup writes it, its namespace prefix included, as fragment
+/// serialization names it. <https://html.spec.whatwg.org/multipage/parsing.html#attribute's-serialized-name>
 #[cfg(feature = "svg")]
 fn qualified_name(attr: &Attribute) -> Box<str> {
   let local = &*attr.local;
