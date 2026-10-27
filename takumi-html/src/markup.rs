@@ -673,18 +673,21 @@ const HEAD_ELEMENTS: [&str; 7] = [
   "base", "link", "meta", "noscript", "script", "style", "title",
 ];
 
-/// Start tags that end an open `<p>`.
-const ENDS_P: [&str; 32] = [
+/// Start tags that end an open `<p>`, except `table`, which ends it only outside quirks mode, which
+/// the parser does not track. <https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody>
+const ENDS_P: [&str; 40] = [
   "address",
   "article",
   "aside",
   "blockquote",
   "center",
+  "dd",
   "details",
   "dialog",
   "dir",
   "div",
   "dl",
+  "dt",
   "fieldset",
   "figcaption",
   "figure",
@@ -699,14 +702,20 @@ const ENDS_P: [&str; 32] = [
   "header",
   "hgroup",
   "hr",
+  "li",
+  "listing",
   "main",
   "menu",
   "nav",
   "ol",
   "p",
+  "plaintext",
   "pre",
+  "search",
   "section",
+  "summary",
   "ul",
+  "xmp",
 ];
 
 const XLINK_ATTRIBUTES: [&str; 7] = [
@@ -873,6 +882,10 @@ mod tests {
     assert_eq!(
       fragment("<p>a<div>b</div><ul><li>c<li>d</ul>"),
       "<p>a</p><div>b</div><ul><li>c</li><li>d</li></ul>"
+    );
+    assert_eq!(
+      fragment("<ul><li><p>a<li>b</ul><dl><dt><p>c<dd>d</dl><details><p>e<summary>f</details>"),
+      "<ul><li><p>a</p></li><li>b</li></ul><dl><dt><p>c</p></dt><dd>d</dd></dl><details><p>e</p><summary>f</summary></details>"
     );
   }
 
