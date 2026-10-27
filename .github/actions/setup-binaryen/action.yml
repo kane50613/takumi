@@ -1,0 +1,21 @@
+name: Setup binaryen
+description: Install a pinned binaryen release and verify its checksum
+
+runs:
+  using: composite
+  steps:
+    - name: Install binaryen
+      shell: bash
+      env:
+        VERSION: version_133
+        TARGET: x86_64-linux
+        SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
+      run: |
+        set -euo pipefail
+        archive="binaryen-$VERSION-$TARGET.tar.gz"
+        curl -sSfL -o "$RUNNER_TEMP/$archive" \
+          "https://github.com/WebAssembly/binaryen/releases/download/$VERSION/$archive"
+        echo "$SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+        tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" \
+          --strip-components 2 "binaryen-$VERSION/bin/wasm-opt"
+        install -D -m 755 "$RUNNER_TEMP/wasm-opt" "$HOME/.cargo/bin/wasm-opt"

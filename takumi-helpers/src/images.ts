@@ -3,6 +3,8 @@ import type { Node } from "./types";
 import { defaultMaxFetchBytes, type FetchOptions } from "./fetch";
 import { fetchBytes } from "./fetch/bytes";
 import { FetchDeadline } from "./fetch/deadline";
+import { BoundedCache, perFetch } from "./fetch/cache";
+import { isEmojiImageUrl } from "./emoji";
 
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
@@ -66,6 +68,50 @@ export interface ImageFetchCache {
   delete(url: string): unknown;
 }
 
+/** The most a shared emoji fetch downloads, whatever the caller allows; emoji SVGs run a few KB. */
+const maxSharedImageBytes = 1024 * 1024;
+
+/** Emoji SVGs fetched without a `fetchCache`, which providers serve at stable URLs. */
+const emojiImageCache = perFetch(
+  () =>
+    new BoundedCache<ArrayBuffer>({
+      maxBytes: 8 * 1024 * 1024,
+      maxEntries: 1024,
+      sizeOf: (data) => data.byteLength,
+    }),
+);
+
+function withinMaxBytes(data: ArrayBuffer, maxBytes: number): ArrayBuffer {
+  if (data.byteLength > maxBytes) {
+    throw new Error(`Response exceeds ${maxBytes} bytes`);
+  }
+
+  return data;
+}
+
+/**
+ * Fetches `url` through a cache other callers share. The shared request carries no caller's
+ * `signal` or `timeout`, so a caller that gives up ends only its own wait; it stops at the default
+ * timeout and {@link maxSharedImageBytes}, and leaves the cache when it fails.
+ */
+function fetchSharedImageData(
+  url: string,
+  options: FetchOptions,
+  cache: ImageFetchCache,
+): Promise<ArrayBuffer> {
+  let pending = cache.get(url);
+
+  if (!pending) {
+    options.signal?.throwIfAborted();
+    pending = fetchBytes(url, { fetch: options.fetch, maxBytes: maxSharedImageBytes });
+    cache.set(url, pending);
+  }
+
+  const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
+
+  return new FetchDeadline(options).waitFor(pending).then((data) => withinMaxBytes(data, maxBytes));
+}
+
 function fetchImageData(
   url: string,
   options: FetchOptions,
@@ -80,10 +126,7 @@ function fetchImageData(
         throw new Error(`URL blocked by allowUrl policy: ${url}`);
       }
 
-      if (data.byteLength > maxBytes) {
-        throw new Error(`Response exceeds ${maxBytes} bytes`);
-      }
-      return data;
+      return withinMaxBytes(data, maxBytes);
     });
   }
 
@@ -140,7 +183,10 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
 
   const tasks = urls.map(async (src): Promise<FetchedImage> => ({
     src,
-    data: await fetchImageData(src, fetchOptions, fetchCache),
+    data:
+      !fetchCache && !allowUrl && isEmojiImageUrl(src)
+        ? await fetchSharedImageData(src, fetchOptions, emojiImageCache(fetch ?? globalThis.fetch))
+        : await fetchImageData(src, fetchOptions, fetchCache),
   }));
   const fetched = throwOnError
     ? await Promise.all(tasks)

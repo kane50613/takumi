@@ -63,6 +63,10 @@
       }
     },
     "./auto": {
+      "unwasm": {
+        "types": "./bundlers/wasm-module.d.ts",
+        "default": "./bundlers/next.mjs"
+      },
       "bun": {
         "types": "./bundlers/bun.d.ts",
         "default": "./bundlers/bun.mjs"
@@ -72,10 +76,6 @@
         "default": "./bundlers/workerd.js"
       },
       "edge-light": {
-        "types": "./bundlers/wasm-module.d.ts",
-        "default": "./bundlers/next.mjs"
-      },
-      "unwasm": {
         "types": "./bundlers/wasm-module.d.ts",
         "default": "./bundlers/next.mjs"
       },
@@ -148,7 +148,7 @@
     }
   },
   "scripts": {
-    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web -- --locked --config 'profile.release.package.takumi-core.opt-level=\"z\"' && bun build:js",
+    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web -- --locked --config 'profile.release.package.takumi-core.opt-level=\"z\"' && bun ../scripts/wasm-opt.mts pkg/takumi_wasm_bg.wasm && bun build:js",
     "build:js": "tsdown",
     "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web -- --locked && bun build:js",
     "publish-lint": "attw --pack . && publint --strict .",

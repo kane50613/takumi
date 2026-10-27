@@ -32,17 +32,4 @@ path = "../takumi-pdf"
 workspace = true
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = [
-  '-Oz',
-  '--converge',
-  '--code-folding',
-  '--enable-bulk-memory',
-  '--enable-simd',
-  '--enable-nontrapping-float-to-int',
-  '--enable-mutable-globals',
-  '--enable-sign-ext',
-  '--strip-debug',
-  '--strip-dwarf',
-  '--strip-producers',
-  '--strip-target-features',
-]
+wasm-opt = false

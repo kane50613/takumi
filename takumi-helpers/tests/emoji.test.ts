@@ -115,12 +115,12 @@ describe("emoji", () => {
         {
           type: "fluent",
           expectedSrc:
-            "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/1f600_color.svg",
+            "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode@7a40f1a2d064d76e436813edc0f09b6c8cde5da8/assets/1f600_color.svg",
         },
         {
           type: "fluentFlat",
           expectedSrc:
-            "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/1f600_flat.svg",
+            "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode@7a40f1a2d064d76e436813edc0f09b6c8cde5da8/assets/1f600_flat.svg",
         },
       ] as const;
 

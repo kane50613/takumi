@@ -20,23 +20,50 @@ function getIconCode(char: string) {
   return [...c].map((ch) => ch.codePointAt(0)?.toString(16)).join("-");
 }
 
-const apis = {
-  twemoji: (code: string) =>
-    `https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/${code.toLowerCase()}.svg`,
-  openmoji: "https://cdn.jsdelivr.net/npm/@svgmoji/openmoji@2.0.0/svg/",
-  blobmoji: "https://cdn.jsdelivr.net/npm/@svgmoji/blob@2.0.0/svg/",
-  noto: (code: string) =>
-    `https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.051/svg/emoji_u${code.toLowerCase().replaceAll("-", "_")}.svg`,
-  fluent: (code: string) =>
-    `https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/${code.toLowerCase()}_color.svg`,
-  fluentFlat: (code: string) =>
-    `https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/${code.toLowerCase()}_flat.svg`,
+/** Where each provider keeps its SVGs, and the file it names an emoji's code with. */
+const providers: Record<EmojiType, { base: string; file: (code: string) => string }> = {
+  twemoji: {
+    base: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/",
+    file: (code) => `${code.toLowerCase()}.svg`,
+  },
+  openmoji: {
+    base: "https://cdn.jsdelivr.net/npm/@svgmoji/openmoji@2.0.0/svg/",
+    file: (code) => `${code.toUpperCase()}.svg`,
+  },
+  blobmoji: {
+    base: "https://cdn.jsdelivr.net/npm/@svgmoji/blob@2.0.0/svg/",
+    file: (code) => `${code.toUpperCase()}.svg`,
+  },
+  noto: {
+    base: "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.051/svg/",
+    file: (code) => `emoji_u${code.toLowerCase().replaceAll("-", "_")}.svg`,
+  },
+  fluent: {
+    base: "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode@7a40f1a2d064d76e436813edc0f09b6c8cde5da8/assets/",
+    file: (code) => `${code.toLowerCase()}_color.svg`,
+  },
+  fluentFlat: {
+    base: "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode@7a40f1a2d064d76e436813edc0f09b6c8cde5da8/assets/",
+    file: (code) => `${code.toLowerCase()}_flat.svg`,
+  },
 };
 
 function getEmojiUrl(icon: string, type: EmojiType) {
-  const code = getIconCode(icon);
-  const api = apis[type];
-  return typeof api === "function" ? api(code) : `${api}${code.toUpperCase()}.svg`;
+  const { base, file } = providers[type];
+
+  return `${base}${file(getIconCode(icon))}`;
+}
+
+/**
+ * Whether `url` is an emoji SVG one of the providers serves at a stable URL. A URL that parsing
+ * would rewrite, such as one with `..` segments, is not one, since it can resolve outside `base`.
+ */
+export function isEmojiImageUrl(url: string): boolean {
+  return (
+    URL.canParse(url) &&
+    new URL(url).href === url &&
+    Object.values(providers).some(({ base }) => url.startsWith(base))
+  );
 }
 
 const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
