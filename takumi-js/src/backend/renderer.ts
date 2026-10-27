@@ -2,6 +2,7 @@ import { loadBackend } from "#backend";
 import { applyGlyphCacheMaxBytes } from "../glyph-cache";
 import type { Backend, BackendModule, LoadBackend } from "./types";
 
+/** A native or WASM renderer, as accepted by the `renderer` option. */
 export type Renderer = InstanceType<Backend["Renderer"]>;
 
 export class RendererProvider {
