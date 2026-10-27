@@ -15,7 +15,7 @@ export interface Cell {
   /** Runs from a copy of `out` with no parent node_modules. Off for outputs that import their dependencies. */
   isolated: boolean;
   backend: "native" | "wasm";
-  /** Known to fail on master. The cell must fail, and a pass fails the job so the marker gets removed. */
+  /** Why the cell fails. A cell that passes while it has one fails the job. */
   expectedFailure?: string;
 }
 
@@ -101,7 +101,7 @@ export const cells: Cell[] = [
   nitro("bun", {
     runtime: "bun",
     entry: "server/index.mjs",
-    expectedFailure: "bun preset fails at runtime (fix in progress)",
+    expectedFailure: "unwasm inlines the wasm as base64 into a JS file over 3MB",
   }),
   nitro("cloudflare-module", {
     runtime: "workerd",
