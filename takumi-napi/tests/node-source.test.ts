@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { container, type Declarations, image, text } from "@takumi-rs/helpers";
 import { type Node, Renderer } from "../index";
-import { toNativeSource } from "../src/node-source";
+import { toNativeSource } from "@takumi-rs/helpers/renderer";
 
 const renderer = new Renderer();
 

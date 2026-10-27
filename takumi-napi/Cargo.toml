@@ -14,10 +14,6 @@ napi.workspace = true
 napi-derive.workspace = true
 arc-swap.workspace = true
 
-[dependencies.serde_json]
-workspace = true
-features = ["float_roundtrip"]
-
 [dependencies.takumi-bindings-common]
 path = "../takumi-bindings-common"
 
