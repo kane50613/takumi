@@ -4,7 +4,7 @@ import type { FetchOptions } from "./fetch";
 import { fetchBytes } from "./fetch/bytes";
 import { loadFontStylesheet } from "./fonts/cache";
 import { decodeHtmlEntities } from "./html/entities";
-import { unicodeRangeOf } from "./unicode-range";
+import { fontsCovering } from "./fonts/subset";
 
 type FontStyle = "normal" | "italic";
 
@@ -329,45 +329,13 @@ export function collectCodepoints(source: CodepointSource): Set<number> {
   return codepoints;
 }
 
-/** Whether any of the ascending `codepoints` falls in `ranges`; no ranges covers everything. */
-function rangesCover(ranges: [number, number][], codepoints: Uint32Array): boolean {
-  return (
-    ranges.length === 0 ||
-    ranges.some(([lo, hi]) => {
-      const first = codepoints[lowerBound(codepoints, lo)];
-
-      return first !== undefined && first <= hi;
-    })
-  );
-}
-
-/** The index of the first of the ascending `values` at or above `target`. */
-function lowerBound(values: Uint32Array, target: number): number {
-  let low = 0;
-  let high = values.length;
-
-  while (low < high) {
-    const middle = (low + high) >>> 1;
-
-    if ((values[middle] ?? target) < target) {
-      low = middle + 1;
-    } else {
-      high = middle;
-    }
-  }
-
-  return low;
-}
-
 /**
  * Keep the subsets `source` renders, dropping the rest. Range-less fallbacks (a full font or a
  * `text=` subset) always stay. Runs without network, so a renderer can apply it to the final
  * node tree. Works on any descriptor carrying `unicodeRange`; entries without it are kept.
  */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
-  const codepoints = Uint32Array.from(collectCodepoints(source)).sort();
-
-  return fonts.filter((font) => rangesCover(unicodeRangeOf(font), codepoints));
+  return fontsCovering(fonts, collectCodepoints(source));
 }
 
 /**

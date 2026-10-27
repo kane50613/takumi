@@ -5,6 +5,7 @@ import {
   LIST_MARKER_CHARACTERS,
   subsetFonts,
 } from "./fonts";
+import { fontsCovering } from "./fonts/subset";
 import { unicodeRangeOf } from "./unicode-range";
 
 export { type JsonSource, toNativeSource } from "./node-source";
@@ -320,7 +321,8 @@ export type ResolvedRenderOptions<TOptions> = Omit<
 };
 
 /**
- * Shared body for every backend render entry point: subsets and registers `fonts` against `source`,
+ * Shared body for every backend render entry point: subsets `fonts` against the `characters` the
+ * backend reads after the cascade, or against `source` without it, and registers them;
  * resolves `images`/`fontFamilies`, and enforces one abort policy: `signal` is checked before and
  * after the (network-bound) resource resolution. Then calls `call` with the binding options and the
  * `signal` for the backend to forward into a native call when it supports cancellation.
@@ -337,24 +339,30 @@ export async function withRenderInput<
     options: ResolvedRenderOptions<TOptions>,
     signal: AbortSignal | undefined,
   ) => Awaitable<TResult>,
+  characters?: (options: Omit<TOptions, keyof RenderExtras | "fontFamilies">) => Awaitable<string>,
 ): Promise<TResult> {
   const { fonts, fontFamilies, signal, images, ...rest } = options;
   signal?.throwIfAborted();
 
   const resolvedFonts = await fonts;
+  const subset =
+    resolvedFonts && characters && resolvedFonts.some((font) => unicodeRangeOf(font).length > 0)
+      ? fontsCovering(resolvedFonts, codepointsOf(await characters(rest)))
+      : resolvedFonts &&
+        subsetFonts({
+          fonts: resolvedFonts,
+          source: [...(Array.isArray(source) ? source : [source]), LIST_MARKER_CHARACTERS],
+        });
 
-  return registry.resolveResources(
-    resolvedFonts &&
-      subsetFonts({
-        fonts: resolvedFonts,
-        source: [...(Array.isArray(source) ? source : [source]), LIST_MARKER_CHARACTERS],
-      }),
-    images,
-    fontFamilies,
-    (resolved) => {
-      signal?.throwIfAborted();
+  return registry.resolveResources(subset, images, fontFamilies, (resolved) => {
+    signal?.throwIfAborted();
 
-      return call({ ...rest, ...resolved }, signal);
-    },
-  );
+    return call({ ...rest, ...resolved }, signal);
+  });
+}
+
+function* codepointsOf(text: string): Generator<number> {
+  for (const character of text) {
+    yield character.codePointAt(0) ?? 0;
+  }
 }

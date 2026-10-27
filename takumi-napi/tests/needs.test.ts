@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Renderer } from "../src/export";
 
 const renderer = new Renderer();
@@ -35,5 +37,42 @@ describe("needs", () => {
     );
 
     expect(needs).toEqual({ images: ["https://example.com/a.png"], characters: "hi" });
+  });
+});
+
+describe("font subsets", () => {
+  test("load for characters only a stylesheet adds", async () => {
+    const bytes = await readFile(
+      join(import.meta.dir, "../../assets/fonts/geist/Geist[wght].woff2"),
+    );
+    const latin = {
+      name: "Subset",
+      key: "latin",
+      unicodeRange: [[0x20, 0x7f]] as [number, number][],
+      data: mock(() => bytes),
+    };
+    const cyrillic = {
+      name: "Subset",
+      key: "cyrillic",
+      unicodeRange: [[0x400, 0x4ff]] as [number, number][],
+      data: mock(() => bytes),
+    };
+    const greek = {
+      name: "Subset",
+      key: "greek",
+      unicodeRange: [[0x370, 0x3ff]] as [number, number][],
+      data: mock(() => bytes),
+    };
+
+    await new Renderer().render("<div>a</div>", {
+      width: 20,
+      height: 20,
+      css: ["div::before { content: 'Ж' }"],
+      fonts: [latin, cyrillic, greek],
+    });
+
+    expect(latin.data).toHaveBeenCalledTimes(1);
+    expect(cyrillic.data).toHaveBeenCalledTimes(1);
+    expect(greek.data).not.toHaveBeenCalled();
   });
 });

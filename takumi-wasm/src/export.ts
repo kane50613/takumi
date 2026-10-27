@@ -44,32 +44,54 @@ export class Renderer {
   }
 
   render(source: Node | string, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>> {
-    return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
-      this.inner.render(toNativeSource(source), opts),
+    return withRenderInput(
+      this.fonts,
+      options ?? {},
+      source,
+      (opts) => this.inner.render(toNativeSource(source), opts),
+      this.characters(source),
     );
   }
 
   renderAsDataUrl(source: Node | string, options?: RenderOptions): Promise<string> {
-    return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
-      this.inner.renderAsDataUrl(toNativeSource(source), opts),
+    return withRenderInput(
+      this.fonts,
+      options ?? {},
+      source,
+      (opts) => this.inner.renderAsDataUrl(toNativeSource(source), opts),
+      this.characters(source),
     );
   }
 
   renderSvg(source: Node | string, options?: SvgRenderOptions): Promise<string> {
-    return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
-      this.inner.renderSvg(toNativeSource(source), opts),
+    return withRenderInput(
+      this.fonts,
+      options ?? {},
+      source,
+      (opts) => this.inner.renderSvg(toNativeSource(source), opts),
+      this.characters(source),
     );
   }
 
   measure(source: Node | string, options?: RenderOptions): Promise<MeasuredNode> {
-    return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
-      this.inner.measure(toNativeSource(source), opts),
+    return withRenderInput(
+      this.fonts,
+      options ?? {},
+      source,
+      (opts) => this.inner.measure(toNativeSource(source), opts),
+      this.characters(source),
     );
   }
 
   /** The remote images `source` draws and the characters its text shapes, read after the cascade. */
   async needs(source: Node | string, options?: RenderOptionsInternal): Promise<RenderNeeds> {
     return this.inner.needs(toNativeSource(source), options);
+  }
+
+  /** Reads the characters `source` shapes, for `withRenderInput` to pick font subsets by. */
+  private characters(source: Node | string) {
+    return async (options: RenderOptionsInternal) =>
+      (await this.inner.needs(toNativeSource(source), options)).characters;
   }
 
   renderAnimation(options: RenderAnimationOptions): Promise<Uint8Array<ArrayBuffer>> {
