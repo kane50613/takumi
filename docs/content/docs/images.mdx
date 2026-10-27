@@ -133,29 +133,30 @@ export function GET() {
 
 Emoji detection follows the Unicode presentation rules. A pictograph that defaults to text presentation, such as `‼` or `▶`, stays text and renders with your fonts. Add `U+FE0F` after it to force the emoji image. Add `U+FE0E` after an emoji to keep the text glyph.
 
-#### Manual extraction
+#### On your own renderer
 
-The `extractEmojis` helper does the splitting. It replaces each emoji with an image node that points at the CDN. Call it yourself to fetch emoji with your other images on your own renderer.
+A renderer takes the same `emoji` option and replaces each emoji with an image that points at the CDN. Ask it for the images a render needs, then fetch them with your other images:
 
-```tsx twoslash title="Extract emoji before rendering"
-import { extractEmojis } from "takumi-js/helpers/emoji";
+```tsx twoslash title="Fetch emoji on your own renderer"
 import { fromJsx } from "takumi-js/helpers/jsx";
 import { prepareImages } from "takumi-js/helpers";
 import { Renderer } from "takumi-js/node";
 
-let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
-node = extractEmojis(node, "twemoji");
+const { node } = await fromJsx(
+  <div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>,
+);
 
 const renderer = new Renderer();
-const { images: urls } = await renderer.needs(node);
+const { images: urls } = await renderer.needs(node, { emoji: "twemoji" });
 const images = await prepareImages({ urls });
 
 const image = await renderer.render(node, {
+  emoji: "twemoji",
   images,
 });
 ```
 
-`renderer.needs` reports the remote images a tree draws once its styles apply, including those a stylesheet or a `::before` rule names. `prepareImages` fetches the URLs missing from `sources`. It returns the supplied `sources` and the fetched entries together. It takes the same [fetch cache](#external-images) and [limits](#fetch-limits).
+`renderer.needs` reports the remote images a tree draws once its styles apply, the emoji images and those a stylesheet or a `::before` rule names included. `prepareImages` fetches the URLs missing from `sources`. It returns the supplied `sources` and the fetched entries together. It takes the same [fetch cache](#external-images) and [limits](#fetch-limits).
 
 ### COLR / bitmap fonts
 
