@@ -4,11 +4,12 @@
 use std::collections::BTreeSet;
 
 use crate::{
+  context::RenderContext,
   layout::{
     node::{NodeKind, is_remote_url},
     tree::RenderNode,
   },
-  style::{BackgroundImage, ComputedStyle, Display, TextTransform},
+  style::{BackgroundImage, ComputedStyle, Display, TextTransform, find_keyframes},
 };
 
 /// The remote images a render tree draws and the characters its text shapes.
@@ -39,6 +40,7 @@ impl RenderNode {
 
     while let Some(node) = stack.pop() {
       needs.add_style(&node.context.style);
+      needs.add_keyframes(&node.context);
 
       if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|node| &node.kind)
         && let Some(url) = image.url()
@@ -77,6 +79,26 @@ impl RenderNeeds {
         && is_remote_url(url)
       {
         self.images.insert(url.to_string());
+      }
+    }
+  }
+
+  /// Adds the images the `@keyframes` rules the box animates with switch to, which only show at
+  /// later frames.
+  fn add_keyframes(&mut self, context: &RenderContext) {
+    for name in context.style.misc1_data.animation_name.iter().flatten() {
+      let Some(rule) = find_keyframes(context.stylesheet(), name, context.sizing.viewport) else {
+        continue;
+      };
+
+      for keyframe in &rule.keyframes {
+        self.images.extend(
+          keyframe
+            .declarations
+            .image_urls()
+            .filter(|url| is_remote_url(url))
+            .map(str::to_owned),
+        );
       }
     }
   }
@@ -122,6 +144,22 @@ mod tests {
     .needs();
 
     assert!(needs.images.is_empty());
+  }
+
+  #[test]
+  fn reads_images_an_animation_switches_to() {
+    let needs = render_tree(
+      [Node::container([]).with_class_name("spin")],
+      "@keyframes swap { to { background-image: url(https://example.com/later.png) } }
+       @keyframes unused { to { background-image: url(https://example.com/unused.png) } }
+       .spin { animation: swap 1s }",
+    )
+    .needs();
+
+    assert_eq!(
+      needs.images.into_iter().collect::<Vec<_>>(),
+      ["https://example.com/later.png"]
+    );
   }
 
   #[test]

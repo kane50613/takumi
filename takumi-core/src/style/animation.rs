@@ -119,7 +119,7 @@ pub(crate) fn apply_stylesheet_animations(
   base_style
 }
 
-fn find_keyframes<'a>(
+pub(crate) fn find_keyframes<'a>(
   stylesheet: &'a StyleSheet,
   name: &str,
   viewport: Viewport,
