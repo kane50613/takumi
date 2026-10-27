@@ -298,7 +298,8 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
 pub struct ParsedHtml {
   /// The node tree, as [`from_html`] returns it.
   pub node: Node,
-  /// The text of each `<style>` element outside `<svg>` and `<math>`, in document order.
+  /// The text of each `<style>` element outside `<svg>` and `<math>`, in document order, inside an
+  /// `@media` rule when the element has a `media` attribute.
   pub css: Vec<String>,
 }
 
@@ -324,7 +325,8 @@ pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, 
   })
 }
 
-/// The non-empty text of every HTML `<style>` element under `document`, in document order.
+/// The non-empty text of every HTML `<style>` element under `document`, in document order, inside
+/// an `@media` rule when the element has a `media` attribute.
 fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
   let mut css = Vec::new();
   let mut pending: Vec<_> = document.children().rev().collect();
@@ -339,10 +341,21 @@ fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
     }
 
     if &*name.local == "style" {
-      css.extend(node.children().filter_map(|child| match child.data() {
-        NodeData::Text(text) if !text.is_empty() => Some(text.clone()),
-        _ => None,
-      }));
+      let text: String = node
+        .children()
+        .filter_map(|child| match child.data() {
+          NodeData::Text(text) => Some(&**text),
+          _ => None,
+        })
+        .collect();
+
+      if !text.is_empty() {
+        css.push(match node.attribute("media").map(str::trim) {
+          Some(media) if !media.is_empty() => format!("@media {media} {{{text}}}"),
+          _ => text,
+        });
+      }
+
       continue;
     }
 
@@ -999,6 +1012,17 @@ mod tests {
     .unwrap();
 
     assert_eq!(parsed.css, ["a{}", "b{}"]);
+  }
+
+  #[test]
+  fn a_style_media_attribute_becomes_a_media_rule() {
+    let parsed = parse_html(
+      r#"<style media=" print ">a{}</style><style media="">b{}</style>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["@media print {a{}}", "b{}"]);
   }
 
   #[test]
