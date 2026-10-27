@@ -363,7 +363,11 @@ export async function withRenderInput<
 
 /**
  * The `fonts` a render uses: every one when none declares a `unicodeRange`, otherwise the subsets
- * that cover one of the `characters` it shapes, read only then.
+ * that cover one of the `characters` it shapes, read only then, as a browser loads only the
+ * `unicode-range` faces its text uses. <https://drafts.csswg.org/css-fonts-4/#unicode-range-desc>
+ *
+ * Approximate: a browser matches each family's faces to the text that family styles, while this
+ * keeps a subset of any family when the document uses a character in its range.
  */
 export async function fontsFor<T>(fonts: T[], characters: () => Awaitable<string>): Promise<T[]> {
   if (!fonts.some((font) => unicodeRangeOf(font).length > 0)) {
