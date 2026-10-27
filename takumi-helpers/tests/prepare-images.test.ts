@@ -67,6 +67,32 @@ describe("prepareImages", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test("a failed shared emoji fetch leaves the cache", async () => {
+    const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 404 })));
+    const node = imageTree(
+      "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f4a5.svg",
+    );
+
+    for (let call = 0; call < 2; call++) {
+      await expect(prepareImages({ node, fetch: fetchMock })).rejects.toThrow();
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("a provider URL that resolves elsewhere is not shared", async () => {
+    const fetchMock = mock((url: string) => Promise.resolve(ok(url)));
+    const node = imageTree(
+      "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/../../../other/repo/a.svg",
+    );
+
+    for (let call = 0; call < 2; call++) {
+      await prepareImages({ node, fetch: fetchMock });
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   test("a rejected fetch is evicted so a later call retries", async () => {
     let attempt = 0;
     const fetchMock = mock((url: string) =>

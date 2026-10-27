@@ -54,9 +54,16 @@ function getEmojiUrl(icon: string, type: EmojiType) {
   return `${base}${file(getIconCode(icon))}`;
 }
 
-/** Whether `url` is an emoji SVG one of the providers serves at a stable URL. */
+/**
+ * Whether `url` is an emoji SVG one of the providers serves at a stable URL. A URL that parsing
+ * would rewrite, such as one with `..` segments, is not one, since it can resolve outside `base`.
+ */
 export function isEmojiImageUrl(url: string): boolean {
-  return Object.values(providers).some(({ base }) => url.startsWith(base));
+  return (
+    URL.canParse(url) &&
+    new URL(url).href === url &&
+    Object.values(providers).some(({ base }) => url.startsWith(base))
+  );
 }
 
 const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });

@@ -68,6 +68,9 @@ export interface ImageFetchCache {
   delete(url: string): unknown;
 }
 
+/** The most a shared emoji fetch downloads, whatever the caller allows; emoji SVGs run a few KB. */
+const maxSharedImageBytes = 1024 * 1024;
+
 /** Emoji SVGs fetched without a `fetchCache`, which providers serve at stable URLs. */
 const emojiImageCache = perFetch(
   () =>
@@ -88,7 +91,8 @@ function withinMaxBytes(data: ArrayBuffer, maxBytes: number): ArrayBuffer {
 
 /**
  * Fetches `url` through a cache other callers share. The shared request carries no caller's
- * `signal` or `timeout`, so a caller that gives up ends only its own wait.
+ * `signal` or `timeout`, so a caller that gives up ends only its own wait; it stops at the default
+ * timeout and {@link maxSharedImageBytes}, and leaves the cache when it fails.
  */
 function fetchSharedImageData(
   url: string,
@@ -98,7 +102,7 @@ function fetchSharedImageData(
   let pending = cache.get(url);
 
   if (!pending) {
-    pending = fetchBytes(url, { fetch: options.fetch });
+    pending = fetchBytes(url, { fetch: options.fetch, maxBytes: maxSharedImageBytes });
     cache.set(url, pending);
   }
 
