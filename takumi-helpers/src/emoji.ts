@@ -39,11 +39,11 @@ const providers: Record<EmojiType, { base: string; file: (code: string) => strin
     file: (code) => `emoji_u${code.toLowerCase().replaceAll("-", "_")}.svg`,
   },
   fluent: {
-    base: "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/",
+    base: "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode@7a40f1a2d064d76e436813edc0f09b6c8cde5da8/assets/",
     file: (code) => `${code.toLowerCase()}_color.svg`,
   },
   fluentFlat: {
-    base: "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/",
+    base: "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode@7a40f1a2d064d76e436813edc0f09b6c8cde5da8/assets/",
     file: (code) => `${code.toLowerCase()}_flat.svg`,
   },
 };
