@@ -17,9 +17,16 @@ pub enum SourceKind {
   Json,
 }
 
-/// The one source text a renderer parsed last, with its kind and what it parsed to.
+/// A source text, how it reads, and what it parsed to.
+struct CachedSource {
+  kind: SourceKind,
+  text: Box<str>,
+  parsed: Arc<ParsedSource>,
+}
+
+/// The one source text a renderer parsed last.
 #[derive(Default)]
-pub struct SourceCache(Mutex<Option<(SourceKind, Box<str>, Arc<ParsedSource>)>>);
+pub struct SourceCache(Mutex<Option<CachedSource>>);
 
 impl SourceCache {
   /// `text` read as `kind`, parsed with `parse` unless it is the text parsed last.
@@ -32,8 +39,8 @@ impl SourceCache {
     let cached = self.0.lock().ok().and_then(|last| {
       last
         .as_ref()
-        .filter(|(held_kind, held_text, _)| *held_kind == kind && **held_text == *text)
-        .map(|(_, _, parsed)| Arc::clone(parsed))
+        .filter(|held| held.kind == kind && *held.text == *text)
+        .map(|held| Arc::clone(&held.parsed))
     });
 
     if let Some(parsed) = cached {
@@ -43,7 +50,11 @@ impl SourceCache {
     let parsed = parse(text)?;
 
     if let Ok(mut last) = self.0.lock() {
-      *last = Some((kind, text.into(), Arc::new(parsed.clone())));
+      *last = Some(CachedSource {
+        kind,
+        text: text.into(),
+        parsed: Arc::new(parsed.clone()),
+      });
     }
 
     Ok(parsed)
