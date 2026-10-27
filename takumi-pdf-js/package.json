@@ -43,6 +43,10 @@
   "types": "./dist/export.d.mts",
   "exports": {
     ".": {
+      "unwasm": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/next.mjs"
+      },
       "bun": {
         "types": "./bundlers/node.d.ts",
         "default": "./bundlers/bun.mjs"
@@ -52,10 +56,6 @@
         "default": "./bundlers/workerd.mjs"
       },
       "edge-light": {
-        "types": "./bundlers/node.d.ts",
-        "default": "./bundlers/next.mjs"
-      },
-      "unwasm": {
         "types": "./bundlers/node.d.ts",
         "default": "./bundlers/next.mjs"
       },
