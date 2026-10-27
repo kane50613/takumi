@@ -122,7 +122,7 @@ impl FontCache {
     let now = self.tick();
 
     if let Some(key) = key {
-      for previous in self.by_key.remove(key).into_iter().flatten() {
+      for previous in self.forget_key(key) {
         if let Some(cached) = self.families.get_mut(&fold(&previous.name)) {
           cached.keys.retain(|each| each != key);
         }
@@ -244,9 +244,15 @@ impl FontCache {
   pub fn forget(&mut self, family: &str) {
     if let Some(cached) = self.families.remove(&fold(family)) {
       for key in cached.keys {
-        self.by_key.remove(&key);
+        self.forget_key(&key);
       }
     }
+  }
+
+  /// Forgets the registration under `key` and the content it held, returning what it registered.
+  fn forget_key(&mut self, key: &str) -> Vec<RegisteredFamily> {
+    self.by_content.retain(|_, held| held != key);
+    self.by_key.remove(key).unwrap_or_default()
   }
 
   /// Forgets every registration.
@@ -394,5 +400,27 @@ mod tests {
     cache.forget("alpha");
 
     assert!(cache.lookup("Alpha", false).is_none());
+  }
+
+  #[test]
+  fn a_key_registered_again_forgets_the_content_it_held() {
+    let (mut fonts, mut cache) = fitting(4);
+
+    register_under(&mut fonts, &mut cache, "K", "A", false);
+    cache.remember_content(1, Some("K"));
+    register_under(&mut fonts, &mut cache, "K", "B", false);
+
+    assert!(cache.lookup_content(1, Some("L"), false).is_none());
+  }
+
+  #[test]
+  fn a_released_family_forgets_its_content() {
+    let (mut fonts, mut cache) = fitting(4);
+
+    register_under(&mut fonts, &mut cache, "K", "A", false);
+    cache.remember_content(1, Some("K"));
+    cache.forget("A");
+
+    assert!(cache.by_content.is_empty());
   }
 }
