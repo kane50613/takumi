@@ -298,7 +298,7 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
 pub struct ParsedHtml {
   /// The node tree, as [`from_html`] returns it.
   pub node: Node,
-  /// The text of each `<style>` element outside `<svg>` and `<math>`, in document order, inside an
+  /// The text of each CSS `<style>` element outside `<svg>` and `<math>`, in document order, inside an
   /// `@media` rule when the element has a `media` attribute.
   pub css: Vec<String>,
 }
@@ -325,8 +325,8 @@ pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, 
   })
 }
 
-/// The non-empty text of every HTML `<style>` element under `document`, in document order, inside
-/// an `@media` rule when the element has a `media` attribute.
+/// The non-empty text of every HTML `<style>` element with no type or `text/css` under `document`,
+/// in document order, inside an `@media` rule when the element has a `media` attribute.
 fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
   let mut css = Vec::new();
   let mut pending: Vec<_> = document.children().rev().collect();
@@ -341,6 +341,13 @@ fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
     }
 
     if &*name.local == "style" {
+      if !node
+        .attribute("type")
+        .is_none_or(|kind| kind.is_empty() || kind.eq_ignore_ascii_case("text/css"))
+      {
+        continue;
+      }
+
       let text: String = node
         .children()
         .filter_map(|child| match child.data() {
@@ -1023,6 +1030,17 @@ mod tests {
     .unwrap();
 
     assert_eq!(parsed.css, ["@media print {a{}}", "b{}"]);
+  }
+
+  #[test]
+  fn a_style_of_another_type_holds_no_css() {
+    let parsed = parse_html(
+      r#"<style type="text/plain">a{}</style><style type="TEXT/CSS">b{}</style><style type="">c{}</style>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["b{}", "c{}"]);
   }
 
   #[test]
