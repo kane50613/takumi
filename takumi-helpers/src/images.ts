@@ -146,8 +146,15 @@ export interface FetchedImage {
 }
 
 export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = FetchOptions & {
-  /** The node tree(s) whose remote images to fetch. */
-  node: Node | Node[];
+  /** The remote image URLs to fetch, such as `Renderer.needs` reports. */
+  urls?: Iterable<string>;
+  /**
+   * The node tree(s) whose remote images to fetch.
+   *
+   * @deprecated Pass the `urls` `Renderer.needs` reads after the cascade, which also counts
+   * stylesheet and generated-content images.
+   */
+  node?: Node | Node[];
   /** Pre-fetched entries; their URLs are not re-fetched. */
   sources?: T[];
   /** Single-flight byte cache shared across renders. */
@@ -161,6 +168,7 @@ export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = Fet
  * and returns them as entries ready to hand to a renderer.
  */
 export async function prepareImages<T extends { src: string } = FetchedImage>({
+  urls,
   node,
   sources = [],
   fetchCache,
@@ -172,16 +180,16 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
   throwOnError = true,
 }: PrepareImagesOptions<T>): Promise<(T | FetchedImage)[]> {
   const provided = new Map(sources.map((image) => [image.src, image]));
-  const referenced = new Set<string>();
+  const referenced = new Set(urls);
 
-  for (const root of Array.isArray(node) ? node : [node]) {
+  for (const root of node === undefined ? [] : Array.isArray(node) ? node : [node]) {
     collectImageUrls(root, referenced);
   }
 
-  const urls = [...referenced].filter((url) => !provided.has(url));
+  const missing = [...referenced].filter((url) => !provided.has(url));
   const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
 
-  const tasks = urls.map(async (src): Promise<FetchedImage> => ({
+  const tasks = missing.map(async (src): Promise<FetchedImage> => ({
     src,
     data:
       !fetchCache && !allowUrl && isEmojiImageUrl(src)

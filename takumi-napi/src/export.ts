@@ -74,8 +74,10 @@ export class Renderer {
   }
 
   /** The remote images `source` draws and the characters its text shapes, read after the cascade. */
-  needs(source: Node | string, options?: RenderOptionsInternal): Promise<RenderNeeds> {
-    return this.inner.needs(toNativeSource(source), options);
+  needs(source: Node | string, options?: RenderOptions): Promise<RenderNeeds> {
+    const { fonts: _fonts, images: _images, signal, ...rest } = options ?? {};
+
+    return this.inner.needs(toNativeSource(source), rest, signal);
   }
 
   /** Reads the characters `source` shapes, for `withRenderInput` to pick font subsets by. */
