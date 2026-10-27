@@ -7,12 +7,12 @@ use std::mem::take;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore, NeedsOutput,
+  FontCacheOptions, FontStore, NeedsOutput, append_css,
   input::{Font, ImageSource, decode_images},
+  source::{read_source, split_emojis},
   stylesheet,
 };
 use takumi_core::{
-  layout::node::Node,
   paint_tree::{PaintTree, PaintTreeOptions, paint_tree, paint_tree_needs},
   resources::image::ResourceCache,
   style::{CssSource, FontFamily, Lang},
@@ -29,8 +29,8 @@ const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
 
 #[wasm_bindgen]
 extern "C" {
-  /// JavaScript object representing a layout node.
-  #[wasm_bindgen(typescript_type = "Node")]
+  /// A layout node, the `{ json }` text of one, or HTML markup to parse in its place.
+  #[wasm_bindgen(typescript_type = "Node | string | { json: string }")]
   pub type NodeType;
   /// JavaScript type for font input (details object or raw buffer).
   #[wasm_bindgen(typescript_type = "FontInput")]
@@ -63,6 +63,7 @@ struct RenderOptions {
   css: Option<Vec<CssSource>>,
   font_families: Option<Vec<String>>,
   lang: Option<String>,
+  emoji: Option<String>,
 }
 
 /// A renderer holding registered fonts and a decoded-resource cache.
@@ -96,11 +97,14 @@ impl Painter {
     options: Option<RenderOptionsType>,
     run: impl FnOnce(PaintTreeOptions<'_>) -> T,
   ) -> Result<T, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: RenderOptions = options
+    let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
+    let (mut node, document_css) = read_source(node.into())?;
+
+    split_emojis(&mut node, options.emoji.as_deref())?;
+    options.css = append_css(options.css.take(), document_css);
     let images = decode_images(
       &self.resource_cache,
       options.images.as_deref().unwrap_or_default(),

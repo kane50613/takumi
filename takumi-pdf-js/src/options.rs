@@ -209,6 +209,9 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) font_families: Option<Vec<String>>,
   /// Default BCP-47 language tag applied to the root.
   pub(crate) lang: Option<String>,
+  /// Draws each emoji, bands included, as an SVG image from this CDN; `from-font`, or none, draws
+  /// them from the fonts.
+  pub(crate) emoji: Option<String>,
   /// Document metadata written to the PDF's info dictionary.
   pub(crate) metadata: Option<MetadataInput>,
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
@@ -303,6 +306,31 @@ pub(crate) struct PageRulesInput {
   last: Option<PageOverrideInput>,
   odd: Option<PageOverrideInput>,
   even: Option<PageOverrideInput>,
+}
+
+impl PdfRenderOptions {
+  /// The node trees of every band, the page rules' included.
+  pub(crate) fn bands_mut(&mut self) -> impl Iterator<Item = &mut Node> {
+    let rules = self.pages.iter_mut().flat_map(|pages| {
+      [
+        &mut pages.first,
+        &mut pages.last,
+        &mut pages.odd,
+        &mut pages.even,
+      ]
+      .into_iter()
+      .flatten()
+      .flat_map(|rule| [&mut rule.header, &mut rule.footer])
+    });
+
+    [&mut self.header, &mut self.footer]
+      .into_iter()
+      .chain(rules)
+      .filter_map(|band| match band {
+        Some(BandInput::Node(node)) => Some(&mut **node),
+        _ => None,
+      })
+  }
 }
 
 impl From<PageRulesInput> for PageRules {

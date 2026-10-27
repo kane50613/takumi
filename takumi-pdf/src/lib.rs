@@ -104,7 +104,11 @@ mod subsetter;
 
 use takumi_core::{
   geometry::Point as CorePoint,
-  layout::{needs::RenderNeeds, tree::RenderNode},
+  layout::{
+    needs::RenderNeeds,
+    node::{Node, NodeKind},
+    tree::RenderNode,
+  },
   page_stream::{SETTLED_PAGES, Settle},
   style::{Color, Lang},
   viewport::MediaTarget,
@@ -171,7 +175,7 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
 }
 
 /// What a node tree needs fetched before it renders, read after the cascade as [`measure`] lays it
-/// out; see [`RenderNode::needs`]. Page counters a band fills in at render time are not in it.
+/// out, with the characters the page counters its classes hook render; see [`RenderNode::needs`].
 pub fn needs(options: MeasureOptions<'_>) -> Result<RenderNeeds, PdfError> {
   let inputs = TreeInputs {
     fonts: options.fonts,
@@ -186,7 +190,34 @@ pub fn needs(options: MeasureOptions<'_>) -> Result<RenderNeeds, PdfError> {
     (None, None) => return Err(PdfError::MissingViewport),
   };
 
-  Ok(RenderNode::from_initial_containing_block(&inputs.context(viewport), options.node).needs())
+  let counters = counter_characters(class_names(&options.node));
+  let mut needs =
+    RenderNode::from_initial_containing_block(&inputs.context(viewport), options.node).needs();
+
+  needs.characters.extend(counters.chars());
+
+  Ok(needs)
+}
+
+/// Every class name in `node`'s tree.
+fn class_names(node: &Node) -> Vec<&str> {
+  let mut names = Vec::new();
+  let mut stack = vec![node];
+
+  while let Some(node) = stack.pop() {
+    names.extend(
+      node
+        .class_name()
+        .into_iter()
+        .flat_map(str::split_whitespace),
+    );
+
+    if let NodeKind::Container { children } = &node.kind {
+      stack.extend(children);
+    }
+  }
+
+  names
 }
 
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged

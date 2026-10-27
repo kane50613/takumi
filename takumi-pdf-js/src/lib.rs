@@ -11,9 +11,11 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore, NeedsOutput,
+  FontCacheOptions, FontStore, NeedsOutput, append_css,
   input::{Font, decode_images},
-  parse_lang, stylesheet,
+  parse_lang,
+  source::{read_source, split_emojis},
+  stylesheet,
 };
 use takumi_core::{
   layout::node::Node,
@@ -38,8 +40,8 @@ const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
 
 #[wasm_bindgen]
 extern "C" {
-  /// JavaScript object representing a layout node.
-  #[wasm_bindgen(typescript_type = "Node")]
+  /// A layout node, the `{ json }` text of one, or HTML markup to parse in its place.
+  #[wasm_bindgen(typescript_type = "Node | string | { json: string }")]
   pub type NodeType;
 
   /// JavaScript type for font input (details object or raw buffer).
@@ -106,6 +108,30 @@ pub struct PdfRenderer {
   resource_cache: ResourceCache,
 }
 
+/// The document `node` describes and the options it renders with, its emoji split out, bands
+/// included, and the CSS of its `<style>` elements appended.
+fn read_document(
+  node: NodeType,
+  options: Option<JsValue>,
+) -> Result<(Node, PdfRenderOptions), js_sys::Error> {
+  let mut options: PdfRenderOptions = options
+    .map(|options| from_value(options).map_err(map_error))
+    .transpose()?
+    .unwrap_or_default();
+  let (mut node, document_css) = read_source(node.into())?;
+  let emoji = options.emoji.take();
+
+  split_emojis(&mut node, emoji.as_deref())?;
+
+  for band in options.bands_mut() {
+    split_emojis(band, emoji.as_deref())?;
+  }
+
+  options.css = append_css(options.css.take(), document_css);
+
+  Ok((node, options))
+}
+
 impl PdfRenderer {
   fn layout(&self, options: &PdfRenderOptions) -> Result<Layout, js_sys::Error> {
     let images = decode_images(
@@ -131,11 +157,7 @@ impl PdfRenderer {
     options: Option<MeasureOptionsType>,
     run: impl FnOnce(MeasureOptions<'_>) -> Result<T, PdfError>,
   ) -> Result<T, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PdfRenderOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
+    let (node, options) = read_document(node, options.map(Into::into))?;
     let Layout {
       viewport,
       page,
@@ -244,11 +266,7 @@ impl PdfRenderer {
     node: NodeType,
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PdfRenderOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
+    let (node, options) = read_document(node, options.map(Into::into))?;
     let Layout {
       viewport,
       page,

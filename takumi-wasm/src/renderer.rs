@@ -3,12 +3,13 @@
 use std::{collections::HashMap, sync::Arc};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
-use js_sys::Reflect;
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontStore, NeedsOutput, append_css, css_or_stylesheets, device_pixel_ratio,
-  input::{decode_images, node_from_json},
-  parse_emoji, parse_lang, stylesheet, time_ms,
+  input::decode_images,
+  parse_lang,
+  source::{read_source, split_emojis},
+  stylesheet, time_ms,
 };
 use takumi_core::{
   Fonts,
@@ -17,7 +18,6 @@ use takumi_core::{
   style::FontFamily,
   viewport::Viewport,
 };
-use takumi_html::{FromHtmlOptions, parse_html};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, SequentialScene,
   measure, needs, render, write_animation, write_image,
@@ -37,15 +37,6 @@ pub struct Renderer {
   resource_cache: ResourceCache,
 }
 
-/// Splits each emoji in `node` out as an image from the CDN `emoji` names.
-fn extract_emojis(node: &mut Node, emoji: Option<&str>) -> Result<(), js_sys::Error> {
-  if let Some(provider) = parse_emoji(emoji).map_err(map_error)? {
-    node.extract_emojis(provider);
-  }
-
-  Ok(())
-}
-
 fn raster_options<'fonts>(
   resource_cache: &ResourceCache,
   fonts: &'fonts Fonts,
@@ -53,7 +44,7 @@ fn raster_options<'fonts>(
   options: RenderOptions,
   images: HashMap<Arc<str>, LoadedImageSource>,
 ) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
-  extract_emojis(&mut node, options.emoji.as_deref())?;
+  split_emojis(&mut node, options.emoji.as_deref())?;
 
   let stylesheet = stylesheet(
     resource_cache,
@@ -177,7 +168,7 @@ impl Renderer {
     source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<Vec<u8>, JsValue> {
-    let (node, document_css) = read_source(source)?;
+    let (node, document_css) = read_source(source.into())?;
     let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -229,13 +220,13 @@ impl Renderer {
     source: SourceType,
     options: Option<SvgRenderOptionsType>,
   ) -> Result<String, JsValue> {
-    let (mut node, document_css) = read_source(source)?;
+    let (mut node, document_css) = read_source(source.into())?;
     let mut options: SvgRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
 
-    extract_emojis(&mut node, options.emoji.as_deref())?;
+    split_emojis(&mut node, options.emoji.as_deref())?;
 
     options.css = append_css(
       css_or_stylesheets(options.css.take(), options.stylesheets.take()),
@@ -277,7 +268,7 @@ impl Renderer {
     source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<MeasuredNodeType, JsValue> {
-    let (node, document_css) = read_source(source)?;
+    let (node, document_css) = read_source(source.into())?;
     let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -305,7 +296,7 @@ impl Renderer {
     source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<RenderNeedsType, JsValue> {
-    let (node, document_css) = read_source(source)?;
+    let (node, document_css) = read_source(source.into())?;
     let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -336,7 +327,7 @@ impl Renderer {
     source: SourceType,
     options: RenderOptionsType,
   ) -> Result<String, js_sys::Error> {
-    let (node, document_css) = read_source(source)?;
+    let (node, document_css) = read_source(source.into())?;
     let mut options: RenderOptions = from_value(options.into()).map_err(map_error)?;
 
     options.css = append_css(
@@ -408,7 +399,7 @@ impl Renderer {
     .map_err(map_error)?;
     let fonts = self.fonts.for_render(font_families.as_deref());
     for scene in &mut scenes {
-      extract_emojis(&mut scene.node, emoji.as_deref())?;
+      split_emojis(&mut scene.node, emoji.as_deref())?;
     }
 
     let scene_options = scenes
@@ -445,28 +436,4 @@ impl Renderer {
 
     Ok(buffer)
   }
-}
-
-/// The node tree `source` describes, and the CSS of its `<style>` elements when it is HTML.
-fn read_source(source: SourceType) -> Result<(Node, Vec<String>), js_sys::Error> {
-  let source: JsValue = source.into();
-
-  if let Some(html) = source.as_string() {
-    let parsed = parse_html(&html, FromHtmlOptions::default()).map_err(map_error)?;
-
-    return Ok((parsed.node, parsed.css));
-  }
-
-  if let Some(json) = Reflect::get(&source, &JsValue::from_str("json"))
-    .ok()
-    .and_then(|json| json.as_string())
-  {
-    // The object path's errors come from `serde_wasm_bindgen`, which starts them with `Error: `.
-    return Ok((
-      node_from_json(&json).map_err(|message| map_error(format!("Error: {message}")))?,
-      Vec::new(),
-    ));
-  }
-
-  Ok((from_value(source).map_err(map_error)?, Vec::new()))
 }

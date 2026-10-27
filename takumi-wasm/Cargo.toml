@@ -15,6 +15,7 @@ js-sys.workspace = true
 
 [dependencies.takumi-bindings-common]
 path = "../takumi-bindings-common"
+features = ["wasm"]
 
 [dependencies.serde]
 workspace = true
