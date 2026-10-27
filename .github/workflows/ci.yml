@@ -566,7 +566,7 @@ jobs:
 
       - name: Build and run each bundler
         working-directory: e2e/bundlers
-        run: bun run matrix
+        run: bun run test
 
   build-image-response:
     name: Build @takumi-rs/image-response
