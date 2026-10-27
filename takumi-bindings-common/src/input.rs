@@ -13,6 +13,7 @@ use takumi_core::{
   },
   style::{FontStyle as CssFontStyle, FromCssStr},
 };
+use xxhash_rust::xxh3::Xxh3;
 
 /// How to register a font's bytes, each field overriding what the file says.
 #[derive(Deserialize, Default)]
@@ -33,6 +34,34 @@ pub struct FontOptions {
 }
 
 impl FontOptions {
+  /// A hash of `bytes` registered with these options, equal for the same file registered the
+  /// same way.
+  pub fn content_hash(&self, bytes: &[u8]) -> u64 {
+    let mut hasher = Xxh3::new();
+
+    hasher.update(bytes);
+
+    for field in [
+      self.name.as_deref(),
+      self.subset_of.as_deref(),
+      self.style.as_ref().map(|style| &*style.css),
+      self.generic.as_deref(),
+    ] {
+      hasher.update(&[u8::from(field.is_some())]);
+      hasher.update(field.unwrap_or_default().as_bytes());
+      hasher.update(&[0xff]);
+    }
+
+    hasher.update(&self.weight.map_or(u64::MAX, f64::to_bits).to_le_bytes());
+
+    for &(from, to) in self.unicode_range.iter().flatten() {
+      hasher.update(&from.to_le_bytes());
+      hasher.update(&to.to_le_bytes());
+    }
+
+    hasher.digest()
+  }
+
   /// A font resource over `bytes` with these overrides applied.
   pub fn resource<'a>(&self, bytes: &'a [u8]) -> Result<FontResource<'a>, FontError> {
     let resource = FontResource::new(bytes)
@@ -43,7 +72,7 @@ impl FontOptions {
           .or(self.name.as_deref())
           .map(Into::into),
         weight: self.weight.map(|weight| weight as f32),
-        style: self.style.map(|style| style.0),
+        style: self.style.as_ref().map(|style| style.parsed),
         ..Default::default()
       })
       .unicode_range(
@@ -82,19 +111,35 @@ pub enum Font {
   Buffer(ByteBuf),
 }
 
-/// A `font-style` value parsed from its CSS text.
-#[derive(Clone, Copy)]
-struct FontStyle(CssFontStyle);
+impl Font {
+  /// See [`FontOptions::content_hash`].
+  pub fn content_hash(&self) -> u64 {
+    match self {
+      Self::Object(details) => details.options.content_hash(&details.data),
+      Self::Buffer(buffer) => FontOptions::default().content_hash(buffer),
+    }
+  }
+}
+
+/// A `font-style` value parsed from its CSS text, which it keeps for [`FontOptions::content_hash`].
+#[derive(Clone)]
+struct FontStyle {
+  css: Box<str>,
+  parsed: CssFontStyle,
+}
 
 impl<'de> Deserialize<'de> for FontStyle {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
   where
     D: Deserializer<'de>,
   {
-    let value = String::deserialize(deserializer)?;
-    Ok(Self(
-      CssFontStyle::from_css_str(&value).map_err(D::Error::custom)?,
-    ))
+    let css = String::deserialize(deserializer)?;
+    let parsed = CssFontStyle::from_css_str(&css).map_err(D::Error::custom)?;
+
+    Ok(Self {
+      css: css.into(),
+      parsed,
+    })
   }
 }
 
@@ -144,4 +189,39 @@ pub fn decode_images(
       Ok((source.src.clone(), image))
     })
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn content_hash_tells_registrations_apart() {
+    let bytes = b"font";
+    let named = |name: &str| FontOptions {
+      name: Some(name.into()),
+      ..FontOptions::default()
+    };
+
+    assert_eq!(
+      named("A").content_hash(bytes),
+      named("A").content_hash(bytes)
+    );
+    assert_ne!(
+      named("A").content_hash(bytes),
+      named("B").content_hash(bytes)
+    );
+    assert_ne!(
+      named("A").content_hash(bytes),
+      named("A").content_hash(b"other")
+    );
+    assert_ne!(
+      FontOptions::default().content_hash(bytes),
+      FontOptions {
+        weight: Some(700.0),
+        ..FontOptions::default()
+      }
+      .content_hash(bytes)
+    );
+  }
 }

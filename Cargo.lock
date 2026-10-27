@@ -1624,6 +1624,7 @@ dependencies = [
  "serde_bytes",
  "takumi-core",
  "wuff",
+ "xxhash-rust",
 ]
 
 [[package]]

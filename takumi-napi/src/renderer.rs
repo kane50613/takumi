@@ -95,7 +95,7 @@ pub(crate) struct RendererState {
 }
 
 impl RendererState {
-  fn font_cache(&self) -> Result<MutexGuard<'_, FontCache>> {
+  pub(crate) fn font_cache(&self) -> Result<MutexGuard<'_, FontCache>> {
     self
       .font_cache
       .lock()

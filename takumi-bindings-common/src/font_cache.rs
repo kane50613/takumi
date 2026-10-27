@@ -8,6 +8,8 @@ use takumi_core::{
   resources::font::{FontError, RegisteredFamily},
 };
 
+#[cfg(doc)]
+use crate::input::FontOptions;
 use crate::register_embedded;
 
 /// A family as the registry matches its name: each character lowercased on its own.
@@ -28,6 +30,8 @@ struct CachedFamily {
 pub struct FontCache {
   max_bytes: u64,
   by_key: HashMap<String, Vec<RegisteredFamily>>,
+  /// The key of a registration of each font content; see [`FontOptions::content_hash`].
+  by_content: HashMap<u64, String>,
   families: HashMap<String, CachedFamily>,
   clock: u64,
 }
@@ -38,6 +42,7 @@ impl FontCache {
     Self {
       max_bytes: max_bytes.unwrap_or(u64::MAX),
       by_key: HashMap::new(),
+      by_content: HashMap::new(),
       families: HashMap::new(),
       clock: 0,
     }
@@ -57,6 +62,34 @@ impl FontCache {
     }
 
     Some(registered)
+  }
+
+  /// The families a registration of the same `content` added, now also under `key`, so a copy of
+  /// a font the renderer holds is not parsed again; `None` once that registration was released.
+  pub fn lookup_content(
+    &mut self,
+    content: u64,
+    key: Option<&str>,
+    pin: bool,
+  ) -> Option<Vec<RegisteredFamily>> {
+    let held = self.by_content.get(&content)?.clone();
+    let Some(registered) = self.lookup(&held, pin) else {
+      self.by_content.remove(&content);
+      return None;
+    };
+
+    if let Some(key) = key.filter(|key| *key != held) {
+      self.record(Some(key), &registered, 0, pin);
+    }
+
+    Some(registered)
+  }
+
+  /// Remembers that the registration under `key` holds `content`.
+  pub fn remember_content(&mut self, content: u64, key: Option<&str>) {
+    if let Some(key) = key {
+      self.by_content.insert(content, key.to_owned());
+    }
   }
 
   /// Records a registration, then for a font that is not pinned releases what the budget no
@@ -219,6 +252,7 @@ impl FontCache {
   /// Forgets every registration.
   pub fn clear(&mut self) {
     self.by_key.clear();
+    self.by_content.clear();
     self.families.clear();
   }
 

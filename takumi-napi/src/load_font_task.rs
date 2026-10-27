@@ -20,6 +20,17 @@ impl Task for LoadFontTask {
   type JsValue = Vec<RegisteredFamily>;
 
   fn compute(&mut self) -> Result<Self::Output> {
+    let content = self.info.content_hash(self.buffer.as_ref());
+
+    if let Some(registered) =
+      self
+        .state
+        .font_cache()?
+        .lookup_content(content, self.key.as_deref(), self.pinned)
+    {
+      return Ok(registered);
+    }
+
     let resource = self
       .info
       .resource(self.buffer.as_ref())
@@ -34,6 +45,7 @@ impl Task for LoadFontTask {
         .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))?;
 
       cache.record(self.key.as_deref(), &registered, bytes, self.pinned);
+      cache.remember_content(content, self.key.as_deref());
 
       Ok(registered)
     })?;
