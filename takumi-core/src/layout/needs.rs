@@ -10,7 +10,7 @@ use crate::{
     node::{NodeKind, is_remote_url},
     tree::RenderNode,
   },
-  style::{BackgroundImage, ComputedStyle, Display, find_keyframes},
+  style::{BackgroundImage, ComputedStyle, Display, Float, find_keyframes},
 };
 
 /// The remote images a render tree draws and the characters its text shapes.
@@ -25,6 +25,14 @@ pub struct RenderNeeds {
 }
 
 impl RenderNode {
+  /// Whether an inline walk passes this box without reading its content, which lays out on its own.
+  fn lays_out_apart(&self) -> bool {
+    self.is_out_of_flow()
+      || self.context.style.base_data.float != Float::None
+      || self.is_atomic_inline()
+      || self.is_block_in_inline
+  }
+
   /// What this render tree needs before it renders.
   pub fn needs(&self) -> RenderNeeds {
     let mut needs = RenderNeeds::default();
@@ -36,7 +44,9 @@ impl RenderNode {
 
     let mut stack = vec![(self, false)];
 
-    while let Some((node, in_inline_context)) = stack.pop() {
+    // Whether an ancestor's inline walk reads the node's text, which then reads its children's too,
+    // except a box it passes because that box lays out on its own.
+    while let Some((node, walked)) = stack.pop() {
       needs.add_style(&node.context.style);
       needs.add_keyframes(&node.context);
 
@@ -48,17 +58,19 @@ impl RenderNode {
 
       let creates_inline_context = node.should_create_inline_layout();
 
-      // A text laid out as a block, such as a flex item, collects its own inline content.
-      if creates_inline_context || (!in_inline_context && node.own_text().is_some()) {
+      // A text laid out on its own, such as a flex item or a float, collects its own content.
+      if !walked && (creates_inline_context || node.own_text().is_some()) {
         needs.add_inline_text(node);
       }
+
+      let walks_children = walked || creates_inline_context;
 
       stack.extend(
         node
           .children
           .iter()
           .flat_map(|children| children.iter())
-          .map(|child| (child, creates_inline_context)),
+          .map(|child| (child, walks_children && !child.lays_out_apart())),
       );
     }
 
@@ -185,6 +197,31 @@ mod tests {
     .needs();
 
     assert_eq!(needs.characters.into_iter().collect::<String>(), " AEbcdf");
+  }
+
+  #[test]
+  fn reads_a_nested_inline_with_the_context_around_it() {
+    let needs = render_tree(
+      [
+        span("ab"),
+        Node::container([Node::text("cd")]).with_class_name("span"),
+      ],
+      ".span { text-transform: capitalize }",
+    )
+    .needs();
+
+    assert_eq!(needs.characters.into_iter().collect::<String>(), "Abcd");
+  }
+
+  #[test]
+  fn reads_a_floated_text_in_an_inline_context() {
+    let needs = render_tree(
+      [span("a"), Node::text("q").with_class_name("float")],
+      ".float { float: left }",
+    )
+    .needs();
+
+    assert_eq!(needs.characters.into_iter().collect::<String>(), "aq");
   }
 
   #[test]
