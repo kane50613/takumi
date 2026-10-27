@@ -143,6 +143,15 @@ impl Renderer {
       .transpose()
   }
 
+  /// The key a font is cached under when its loader gives none, the same for the same bytes and
+  /// options.
+  #[wasm_bindgen(js_name = fontKey)]
+  pub fn font_key(&self, font: FontType) -> Result<String, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(map_error)?;
+
+    Ok(font.cache_key())
+  }
+
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
   #[wasm_bindgen(js_name = unregisterFont)]

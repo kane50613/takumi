@@ -34,9 +34,9 @@ pub struct FontOptions {
 }
 
 impl FontOptions {
-  /// A hash of `bytes` registered with these options, equal for the same file registered the
-  /// same way.
-  pub fn content_hash(&self, bytes: &[u8]) -> u64 {
+  /// The key `bytes` registered with these options are cached under when their loader gives none,
+  /// equal for the same file registered the same way.
+  pub fn cache_key(&self, bytes: &[u8]) -> String {
     let mut hasher = Xxh3::new();
 
     hasher.update(bytes);
@@ -59,7 +59,7 @@ impl FontOptions {
       hasher.update(&to.to_le_bytes());
     }
 
-    hasher.digest()
+    format!("content:{:016x}", hasher.digest())
   }
 
   /// A font resource over `bytes` with these overrides applied.
@@ -112,16 +112,16 @@ pub enum Font {
 }
 
 impl Font {
-  /// See [`FontOptions::content_hash`].
-  pub fn content_hash(&self) -> u64 {
+  /// See [`FontOptions::cache_key`].
+  pub fn cache_key(&self) -> String {
     match self {
-      Self::Object(details) => details.options.content_hash(&details.data),
-      Self::Buffer(buffer) => FontOptions::default().content_hash(buffer),
+      Self::Object(details) => details.options.cache_key(&details.data),
+      Self::Buffer(buffer) => FontOptions::default().cache_key(buffer),
     }
   }
 }
 
-/// A `font-style` value parsed from its CSS text, which it keeps for [`FontOptions::content_hash`].
+/// A `font-style` value parsed from its CSS text, which it keeps for [`FontOptions::cache_key`].
 #[derive(Clone)]
 struct FontStyle {
   css: Box<str>,
@@ -196,32 +196,23 @@ mod tests {
   use super::*;
 
   #[test]
-  fn content_hash_tells_registrations_apart() {
+  fn cache_key_tells_registrations_apart() {
     let bytes = b"font";
     let named = |name: &str| FontOptions {
       name: Some(name.into()),
       ..FontOptions::default()
     };
 
-    assert_eq!(
-      named("A").content_hash(bytes),
-      named("A").content_hash(bytes)
-    );
+    assert_eq!(named("A").cache_key(bytes), named("A").cache_key(bytes));
+    assert_ne!(named("A").cache_key(bytes), named("B").cache_key(bytes));
+    assert_ne!(named("A").cache_key(bytes), named("A").cache_key(b"other"));
     assert_ne!(
-      named("A").content_hash(bytes),
-      named("B").content_hash(bytes)
-    );
-    assert_ne!(
-      named("A").content_hash(bytes),
-      named("A").content_hash(b"other")
-    );
-    assert_ne!(
-      FontOptions::default().content_hash(bytes),
+      FontOptions::default().cache_key(bytes),
       FontOptions {
         weight: Some(700.0),
         ..FontOptions::default()
       }
-      .content_hash(bytes)
+      .cache_key(bytes)
     );
   }
 }

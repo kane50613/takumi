@@ -20,6 +20,31 @@ describe("FontRegistry", () => {
     expect(backend.cacheFont).toHaveBeenCalledTimes(1);
   });
 
+  test("keys a font passed as a new buffer on each render by its bytes", async () => {
+    const { held, backend, fonts } = fontBackend();
+
+    for (let render = 0; render < 3; render++) {
+      await families(fonts, [
+        new Uint8Array([1, 2, 3]),
+        { name: "Inter", data: new Uint8Array([4]) },
+      ]);
+    }
+
+    expect(backend.cacheFont).toHaveBeenCalledTimes(2);
+    expect(held.size).toBe(2);
+  });
+
+  test("keys one buffer passed under two names apart", async () => {
+    const data = new Uint8Array([1]);
+
+    expect(
+      await families(fontBackend().fonts, [
+        { name: "A", data },
+        { name: "B", data },
+      ]),
+    ).toEqual(["A", "B"]);
+  });
+
   test("loads a font once for renders that ask at the same time", async () => {
     const { backend, fonts } = fontBackend();
     const inter = font("Inter");
@@ -96,14 +121,16 @@ describe("FontRegistry", () => {
     expect(backend.cacheFont).toHaveBeenCalledTimes(3);
   });
 
-  test("keys a buffer by its identity", async () => {
+  test("keys a buffer by its bytes", async () => {
     const { backend, fonts } = fontBackend();
     const buffer = new Uint8Array([1]);
 
     await fonts.register(buffer);
     await fonts.register(buffer);
     await fonts.register(new Uint8Array([1]));
+    await fonts.register(new Uint8Array([2]));
 
     expect(backend.registerFont).toHaveBeenCalledTimes(2);
+    expect(backend.fontKey).toHaveBeenCalledTimes(3);
   });
 });

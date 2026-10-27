@@ -8,8 +8,6 @@ use takumi_core::{
   resources::font::{FontError, RegisteredFamily},
 };
 
-#[cfg(doc)]
-use crate::input::FontOptions;
 use crate::register_embedded;
 
 /// A family as the registry matches its name: each character lowercased on its own.
@@ -30,8 +28,6 @@ struct CachedFamily {
 pub struct FontCache {
   max_bytes: u64,
   by_key: HashMap<String, Vec<RegisteredFamily>>,
-  /// The keys whose registrations hold each font content; see [`FontOptions::content_hash`].
-  by_content: HashMap<u64, Vec<String>>,
   families: HashMap<String, CachedFamily>,
   clock: u64,
 }
@@ -42,7 +38,6 @@ impl FontCache {
     Self {
       max_bytes: max_bytes.unwrap_or(u64::MAX),
       by_key: HashMap::new(),
-      by_content: HashMap::new(),
       families: HashMap::new(),
       clock: 0,
     }
@@ -62,39 +57,6 @@ impl FontCache {
     }
 
     Some(registered)
-  }
-
-  /// The families a registration of the same `content` added, now also under `key`, so a copy of
-  /// a font the renderer holds is not parsed again; `None` once that registration was released.
-  pub fn lookup_content(
-    &mut self,
-    content: u64,
-    key: Option<&str>,
-    pin: bool,
-  ) -> Option<Vec<RegisteredFamily>> {
-    let holders = self.by_content.get(&content)?.clone();
-    let Some(registered) = holders.iter().find_map(|held| self.lookup(held, pin)) else {
-      self.by_content.remove(&content);
-      return None;
-    };
-
-    if let Some(key) = key.filter(|key| !holders.iter().any(|held| held == key)) {
-      self.record(Some(key), &registered, 0, pin);
-      self.remember_content(content, Some(key));
-    }
-
-    Some(registered)
-  }
-
-  /// Remembers that the registration under `key` holds `content`.
-  pub fn remember_content(&mut self, content: u64, key: Option<&str>) {
-    if let Some(key) = key {
-      let holders = self.by_content.entry(content).or_default();
-
-      if !holders.iter().any(|held| held == key) {
-        holders.push(key.to_owned());
-      }
-    }
   }
 
   /// Records a registration, then for a font that is not pinned releases what the budget no
@@ -127,7 +89,7 @@ impl FontCache {
     let now = self.tick();
 
     if let Some(key) = key {
-      for previous in self.forget_key(key) {
+      for previous in self.by_key.remove(key).into_iter().flatten() {
         if let Some(cached) = self.families.get_mut(&fold(&previous.name)) {
           cached.keys.retain(|each| each != key);
         }
@@ -249,24 +211,14 @@ impl FontCache {
   pub fn forget(&mut self, family: &str) {
     if let Some(cached) = self.families.remove(&fold(family)) {
       for key in cached.keys {
-        self.forget_key(&key);
+        self.by_key.remove(&key);
       }
     }
-  }
-
-  /// Forgets the registration under `key` and the content it held, returning what it registered.
-  fn forget_key(&mut self, key: &str) -> Vec<RegisteredFamily> {
-    self.by_content.retain(|_, holders| {
-      holders.retain(|held| held != key);
-      !holders.is_empty()
-    });
-    self.by_key.remove(key).unwrap_or_default()
   }
 
   /// Forgets every registration.
   pub fn clear(&mut self) {
     self.by_key.clear();
-    self.by_content.clear();
     self.families.clear();
   }
 
@@ -408,41 +360,5 @@ mod tests {
     cache.forget("alpha");
 
     assert!(cache.lookup("Alpha", false).is_none());
-  }
-
-  #[test]
-  fn a_key_registered_again_forgets_the_content_it_held() {
-    let (mut fonts, mut cache) = fitting(4);
-
-    register_under(&mut fonts, &mut cache, "K", "A", false);
-    cache.remember_content(1, Some("K"));
-    register_under(&mut fonts, &mut cache, "K", "B", false);
-
-    assert!(cache.lookup_content(1, Some("L"), false).is_none());
-  }
-
-  #[test]
-  fn a_released_family_forgets_its_content() {
-    let (mut fonts, mut cache) = fitting(4);
-
-    register_under(&mut fonts, &mut cache, "K", "A", false);
-    cache.remember_content(1, Some("K"));
-    cache.forget("A");
-
-    assert!(cache.by_content.is_empty());
-  }
-
-  #[test]
-  fn a_copy_outlives_the_key_it_was_copied_from() {
-    let (mut fonts, mut cache) = fitting(4);
-
-    register_under(&mut fonts, &mut cache, "K", "A", false);
-    cache.remember_content(1, Some("K"));
-    cache.lookup_content(1, Some("L"), false).unwrap();
-    register_under(&mut fonts, &mut cache, "K", "B", false);
-
-    let copy = cache.lookup_content(1, Some("M"), false).unwrap();
-
-    assert_eq!(copy[0].name, "A");
   }
 }

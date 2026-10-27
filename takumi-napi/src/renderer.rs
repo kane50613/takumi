@@ -95,7 +95,7 @@ pub(crate) struct RendererState {
 }
 
 impl RendererState {
-  pub(crate) fn font_cache(&self) -> Result<MutexGuard<'_, FontCache>> {
+  fn font_cache(&self) -> Result<MutexGuard<'_, FontCache>> {
     self
       .font_cache
       .lock()
@@ -534,6 +534,15 @@ impl Renderer {
       },
       signal,
     ))
+  }
+
+  /// The key a font is cached under when its loader gives none, the same for the same bytes and
+  /// options.
+  #[napi(js_name = "fontKey", ts_args_type = "font: Font")]
+  pub fn font_key(&self, env: Env, font: Object) -> Result<String> {
+    let (info, buffer) = parse_font_input(env, font)?;
+
+    Ok(info.cache_key(buffer.as_ref()))
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning

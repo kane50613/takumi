@@ -161,6 +161,13 @@ function extractFontBuffer(font: Exclude<FontLoader, string>) {
   return font.data();
 }
 
+/** The font a backend registers from `loader` once its bytes are `data`. */
+function fontInput(loader: Exclude<FontLoader, string>, data: ByteBuf): Font {
+  const view = asView(data);
+
+  return isBuffer(loader) ? view : { ...loader, unicodeRange: unicodeRangeOf(loader), data: view };
+}
+
 const toLoader = (font: FontLoader) => (typeof font === "string" ? fontFromUrl(font) : font);
 
 function createFontKey(font: Exclude<FontLoader, string>): string | ByteBuf {
@@ -204,6 +211,8 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
   cacheFont(font: Font, key: string): Awaitable<TFamily[]>;
   /** The families a registration under `key` added while the backend holds them; `pin` keeps them. */
   cachedFonts(key: string, pin: boolean): TFamily[] | null | undefined;
+  /** The key for a font whose loader gives none, the same for the same bytes and options. */
+  fontKey(font: Font): string;
 };
 
 /**
@@ -214,9 +223,8 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
  */
 export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly loading = new Map<string, Promise<TFamily[]>>();
-  /** A key for each buffer passed as a font, since the backend only takes string keys. */
-  private readonly bufferKeys = new WeakMap<ByteBuf, string>();
-  private buffers = 0;
+  /** The backend's key for each loader without one of its own, so one passed again is not hashed again. */
+  private readonly contentKeys = new WeakMap<Exclude<FontLoader, string>, string>();
 
   constructor(private readonly backend: FontBackend<TFamily>) {}
 
@@ -243,10 +251,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
     const load = Promise.resolve(extractFontBuffer(loader))
       .then((data) => {
-        const view = asView(data);
-        const input = isBuffer(loader)
-          ? view
-          : { ...loader, unicodeRange: unicodeRangeOf(loader), data: view };
+        const input = fontInput(loader, data);
 
         return pinned ? this.backend.registerFont(input, key) : this.backend.cacheFont(input, key);
       })
@@ -264,17 +269,17 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       return key;
     }
 
-    const known = this.bufferKeys.get(key);
+    const known = this.contentKeys.get(loader);
 
     if (known) {
       return known;
     }
 
-    const assigned = `buffer:${++this.buffers}`;
+    const content = this.backend.fontKey(fontInput(loader, key));
 
-    this.bufferKeys.set(key, assigned);
+    this.contentKeys.set(loader, content);
 
-    return assigned;
+    return content;
   }
 
   /**

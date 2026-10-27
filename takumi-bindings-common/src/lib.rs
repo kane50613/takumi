@@ -103,18 +103,13 @@ impl FontStore {
     key: Option<&str>,
     pinned: bool,
   ) -> Result<Vec<RegisteredFamily>, FontError> {
-    let content = font.content_hash();
-
-    if let Some(registered) = self.cache.borrow_mut().lookup_content(content, key, pinned) {
-      return Ok(registered);
-    }
-
     let mut fonts = Fonts::clone(&self.current());
     let (registered, bytes) = register_font(&mut fonts, font)?;
-    let mut cache = self.cache.borrow_mut();
 
-    cache.admit(&mut fonts, key, &registered, bytes, pinned)?;
-    cache.remember_content(content, key);
+    self
+      .cache
+      .borrow_mut()
+      .admit(&mut fonts, key, &registered, bytes, pinned)?;
     *self.fonts.borrow_mut() = Rc::new(fonts);
 
     Ok(registered)
@@ -198,56 +193,4 @@ pub fn stylesheet(
   let mut extended = (*sheet).clone();
   extended.extend_keyframes(keyframes);
   Ok(Arc::new(extended))
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-  use std::fs;
-
-  use serde_bytes::ByteBuf;
-
-  use super::*;
-  use crate::input::Font;
-
-  fn geist() -> Font {
-    Font::Buffer(ByteBuf::from(
-      fs::read(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../assets/fonts/geist/Geist[wght].woff2"
-      ))
-      .unwrap(),
-    ))
-  }
-
-  fn names(families: &[RegisteredFamily]) -> Vec<&str> {
-    families.iter().map(|family| &*family.name).collect()
-  }
-
-  #[test]
-  fn a_copy_of_a_held_font_registers_without_parsing() {
-    let store = FontStore::new(None).unwrap();
-    let first = store.register(geist(), Some("a"), false).unwrap();
-    let registry = store.current();
-    let second = store.register(geist(), Some("b"), false).unwrap();
-
-    assert!(Rc::ptr_eq(&registry, &store.current()));
-    assert_eq!(names(&first), names(&second));
-    assert!(store.cached("b", false).is_some());
-  }
-
-  #[test]
-  fn a_copy_of_a_released_font_is_parsed_again() {
-    let store = FontStore::new(None).unwrap();
-
-    store.register(geist(), Some("a"), false).unwrap();
-    store.reset().unwrap();
-
-    let registry = store.current();
-
-    store.register(geist(), Some("b"), false).unwrap();
-
-    assert!(!Rc::ptr_eq(&registry, &store.current()));
-    assert!(store.cached("b", false).is_some());
-  }
 }

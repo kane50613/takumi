@@ -11,6 +11,7 @@ export const fontBackend = (): {
     registerFont: Mock<(font: Font, key: string) => HeldFamily[]>;
     cacheFont: Mock<(font: Font, key: string) => HeldFamily[]>;
     cachedFonts: Mock<(key: string, _pin: boolean) => HeldFamily[] | undefined>;
+    fontKey: Mock<(font: Font) => string>;
   };
   fonts: FontRegistry<HeldFamily>;
 } => {
@@ -26,6 +27,9 @@ export const fontBackend = (): {
     registerFont: mock(load),
     cacheFont: mock(load),
     cachedFonts: mock((key: string, _pin: boolean) => held.get(key)),
+    fontKey: mock((font: Font) =>
+      "data" in font ? `${font.name}:${font.data.toString()}` : `:${font.toString()}`,
+    ),
   };
 
   return { held, backend, fonts: new FontRegistry(backend) };
