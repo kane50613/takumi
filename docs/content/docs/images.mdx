@@ -146,16 +146,16 @@ import { Renderer } from "takumi-js/node";
 let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
 node = extractEmojis(node, "twemoji");
 
-const images = await prepareImages({ node });
-
 const renderer = new Renderer();
+const { images: urls } = await renderer.needs(node);
+const images = await prepareImages({ urls });
 
 const image = await renderer.render(node, {
   images,
 });
 ```
 
-`prepareImages` fetches the remote URLs missing from `sources`. It returns the supplied `sources` and the fetched entries together. It takes the same [fetch cache](#external-images) and [limits](#fetch-limits).
+`renderer.needs` reports the remote images a tree draws once its styles apply, including those a stylesheet or a `::before` rule names. `prepareImages` fetches the URLs missing from `sources`. It returns the supplied `sources` and the fetched entries together. It takes the same [fetch cache](#external-images) and [limits](#fetch-limits).
 
 ### COLR / bitmap fonts
 

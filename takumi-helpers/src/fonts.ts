@@ -337,11 +337,10 @@ export function collectCodepoints(source: CodepointSource): Set<number> {
 }
 
 /**
- * Keep the subsets `source` renders, dropping the rest. Range-less fallbacks (a full font or a
- * `text=` subset) always stay. Runs without network, so a renderer can apply it to the final
- * node tree. Works on any descriptor carrying `unicodeRange`; entries without it are kept.
- *
- * @deprecated A renderer picks subsets from the characters `Renderer.needs` reads after the cascade.
+ * Keep the subsets that cover the characters in `source`, dropping the rest. Range-less fallbacks
+ * (a full font or a `text=` subset) and entries without a `unicodeRange` always stay. A renderer
+ * picks subsets for what it lays out itself, so this is for text it cannot see, such as the labels
+ * inside a chart drawn as an SVG image.
  */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
   return fontsCovering(fonts, collectCodepoints(source));

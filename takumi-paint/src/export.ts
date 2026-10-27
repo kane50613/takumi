@@ -11,6 +11,7 @@ import initWasm, {
   initSync as initWasmSync,
   Painter as PainterInternal,
   type RegisteredFamily,
+  type RenderNeeds,
   type SyncInitInput,
 } from "../pkg/takumi_paint_wasm";
 import { type PaintTree, PaintTreeView } from "./tree";
@@ -33,6 +34,7 @@ export type {
   Rect,
   RegisteredFace,
   RegisteredFamily,
+  RenderNeeds,
   Rgba,
   Role,
   Sampling,
@@ -131,6 +133,19 @@ export class Painter {
     );
 
     return new PaintTreeView(painted.tree(), painted);
+  }
+
+  /**
+   * The remote images a node tree, JSX, or HTML string draws and the characters its text shapes,
+   * read after the cascade, so a caller can fetch the images before {@link paint}.
+   */
+  async needs(node: NodeInput, options: PaintOptions = {}): Promise<RenderNeeds> {
+    const { fonts: _fonts, images: _images, css, fontFamilies: _fontFamilies, ...rest } = options;
+    const main = await resolveNode(node);
+    const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
+    const sheets = [...own, ...main.css];
+
+    return this.#inner.needs(main.node, { ...rest, css: sheets.length > 0 ? sheets : undefined });
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
