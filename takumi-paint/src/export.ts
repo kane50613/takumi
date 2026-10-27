@@ -1,8 +1,13 @@
 import type { CssInput } from "@takumi-rs/helpers";
-import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
-import { FontRegistry, fontsFor } from "@takumi-rs/helpers/renderer";
+import {
+  FontRegistry,
+  fontsFor,
+  type JsonSource,
+  toNativeSource,
+} from "@takumi-rs/helpers/renderer";
+import type { EmojiType } from "@takumi-rs/helpers/emoji";
 import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import initWasm, {
@@ -77,6 +82,11 @@ export type PaintOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
+  /**
+   * Draws each emoji as an SVG image from this CDN, fetched as one of `images`. `from-font`, or no
+   * value, draws emoji from the fonts.
+   */
+  emoji?: EmojiType | "from-font";
 };
 
 function isNode(value: NodeInput): value is Node {
@@ -87,14 +97,19 @@ function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInpu
   return Array.isArray(css);
 }
 
-async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[] }> {
-  if (isNode(input)) {
+/** What the wasm side reads `input` as: HTML as written, a tree as JSON when it can, or JSX rendered. */
+async function resolveNode(
+  input: NodeInput,
+): Promise<{ node: Node | string | JsonSource; css: string[] }> {
+  if (typeof input === "string") {
     return { node: input, css: [] };
   }
-  if (typeof input === "string") {
-    return fromHtml(input);
-  }
-  return fromJsx(input as ReactNode);
+
+  const { node, css } = isNode(input)
+    ? { node: input, css: [] }
+    : await fromJsx(input as ReactNode);
+
+  return { node: toNativeSource(node), css };
 }
 
 /** Loads the wasm module for `takumi-paint/no-init`. The other entries load it on import. */

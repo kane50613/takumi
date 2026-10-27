@@ -29,7 +29,7 @@ use takumi_pdf::{
 };
 use wasm_bindgen::prelude::*;
 
-use crate::options::{PdfRenderOptions, page_background, resolve_geometry};
+use crate::options::{BandInput, PdfRenderOptions, page_background, resolve_geometry};
 
 pub(crate) fn map_error(error: impl Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
@@ -80,15 +80,6 @@ struct MeasuredSizeOutput {
   height: f32,
 }
 
-/// The characters the page counters named by these class names can produce.
-///
-/// A counter's characters appear nowhere in the document, so a caller choosing
-/// which faces to load has no other way to learn it needs, say, Thai digits.
-#[wasm_bindgen(js_name = counterCharacters)]
-pub fn counter_characters(classes: Vec<String>) -> String {
-  takumi_pdf::counter_characters(classes.iter().map(String::as_str))
-}
-
 /// The layout inputs [`PdfRenderer::render`] and [`PdfRenderer::measure`] share.
 struct Layout {
   viewport: Option<Viewport>,
@@ -108,8 +99,8 @@ pub struct PdfRenderer {
   resource_cache: ResourceCache,
 }
 
-/// The document `node` describes and the options it renders with, its emoji split out, bands
-/// included, and the CSS of its `<style>` elements appended.
+/// The document `node` describes and the options it renders with, its HTML bands parsed, its
+/// emoji split out, bands included, and the CSS of every `<style>` element appended.
 fn read_document(
   node: NodeType,
   options: Option<JsValue>,
@@ -118,13 +109,22 @@ fn read_document(
     .map(|options| from_value(options).map_err(map_error))
     .transpose()?
     .unwrap_or_default();
-  let (mut node, document_css) = read_source(node.into())?;
+  let (mut node, mut document_css) = read_source(node.into())?;
   let emoji = options.emoji.take();
 
   split_emojis(&mut node, emoji.as_deref())?;
 
   for band in options.bands_mut() {
-    split_emojis(band, emoji.as_deref())?;
+    if let BandInput::Html(html) = band {
+      let (parsed, css) = read_source(JsValue::from_str(html))?;
+
+      document_css.extend(css);
+      *band = BandInput::Node(Box::new(parsed));
+    }
+
+    if let BandInput::Node(node) = band {
+      split_emojis(node, emoji.as_deref())?;
+    }
   }
 
   options.css = append_css(options.css.take(), document_css);

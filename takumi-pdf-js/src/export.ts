@@ -1,12 +1,16 @@
 import type { CssInput } from "@takumi-rs/helpers";
-import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
-import { FontRegistry, fontsFor } from "@takumi-rs/helpers/renderer";
+import {
+  FontRegistry,
+  fontsFor,
+  type JsonSource,
+  toNativeSource,
+} from "@takumi-rs/helpers/renderer";
+import type { EmojiType } from "@takumi-rs/helpers/emoji";
 import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import {
-  counterCharacters,
   type FontCacheOptions,
   type PageOverride,
   type PageRules,
@@ -20,30 +24,6 @@ export type { FontCacheOptions, RenderNeeds } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";
-
-/** Every class name in a tree, so the renderer can say what its counters draw. */
-function classNames(node: unknown): string[] {
-  const into: string[] = [];
-
-  collectClassNames(node, into);
-  return into;
-}
-
-function collectClassNames(node: unknown, into: string[]): void {
-  if (typeof node !== "object" || node === null) {
-    return;
-  }
-  const { className, children } = node as { className?: unknown; children?: unknown };
-
-  if (typeof className === "string") {
-    into.push(...className.split(/\s+/).filter(Boolean));
-  }
-  if (Array.isArray(children)) {
-    for (const child of children) {
-      collectClassNames(child, into);
-    }
-  }
-}
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
@@ -187,6 +167,11 @@ export type MeasureOptions = (
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
+  /**
+   * Draws each emoji, bands included, as an SVG image from this CDN, fetched as one of `images`.
+   * `from-font`, or no value, draws emoji from the fonts.
+   */
+  emoji?: EmojiType | "from-font";
 };
 
 /** A node tree's laid-out size in CSS px. */
@@ -320,6 +305,11 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     fontFamilies?: string[];
     /** Default BCP-47 language tag applied to the root. */
     lang?: string;
+    /**
+     * Draws each emoji, bands included, as an SVG image from this CDN, fetched as one of `images`.
+     * `from-font`, or no value, draws emoji from the fonts.
+     */
+    emoji?: EmojiType | "from-font";
     /** Document metadata; `lang` doubles as the metadata language. */
     metadata?: PdfMetadata;
     /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
@@ -380,7 +370,7 @@ const PAGE_RULES = ["first", "last", "odd", "even"] as const;
 const PAGE_OVERRIDE_FIELDS = ["header", "footer"] as const;
 
 /** Page rules with every document input resolved to a node tree. */
-type ResolvedRules = { pages: PageRules; nodes: Node[]; css: string[] };
+type ResolvedRules = { pages: PageRules; nodes: (Node | string)[]; css: string[] };
 
 function rejectNonObject(value: unknown, what: string): void {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -418,7 +408,7 @@ async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
         page[band] = false;
         continue;
       }
-      const { node, css } = await resolveNode(value);
+      const { node, css } = await resolveBand(value);
 
       page[band] = node;
       resolved.nodes.push(node);
@@ -429,13 +419,19 @@ async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
   return resolved;
 }
 
-async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[] }> {
-  if (isNode(input)) {
-    return { node: input, css: [] };
-  }
+/** What the wasm side reads a document as: HTML as written, a tree as JSON when it can, or JSX rendered. */
+async function resolveNode(
+  input: NodeInput,
+): Promise<{ node: Node | string | JsonSource; css: string[] }> {
+  const { node, css } = await resolveBand(input);
 
-  if (typeof input === "string") {
-    return fromHtml(input);
+  return { node: typeof node === "string" ? node : toNativeSource(node), css };
+}
+
+/** What the wasm side reads a band as: HTML as written, a tree, or JSX rendered. */
+async function resolveBand(input: NodeInput): Promise<{ node: Node | string; css: string[] }> {
+  if (typeof input === "string" || isNode(input)) {
+    return { node: input, css: [] };
   }
 
   return fromJsx(input as ReactNode);
@@ -457,8 +453,8 @@ export class PdfRenderer {
       options;
     const [main, headerResult, footerResult, pagesResult] = await Promise.all([
       resolveNode(node),
-      header == null || header === false ? undefined : resolveNode(header),
-      footer == null || footer === false ? undefined : resolveNode(footer),
+      header == null || header === false ? undefined : resolveBand(header),
+      footer == null || footer === false ? undefined : resolveBand(footer),
       pages == null ? undefined : resolveRules(pages),
     ]);
     const bands = [headerResult?.node, footerResult?.node, ...(pagesResult?.nodes ?? [])].filter(
@@ -517,15 +513,12 @@ export class PdfRenderer {
     );
   }
 
-  /**
-   * The characters `trees` shape after the cascade, plus those the page counters they reference
-   * render, which only exist once pages are numbered.
-   */
-  private characters(trees: Node[], options: Parameters<PdfRendererInternal["needs"]>[1]): string {
-    return (
-      trees.map((tree) => this.inner.needs(tree, options).characters).join("") +
-      counterCharacters(trees.flatMap((tree) => classNames(tree)))
-    );
+  /** The characters `trees` shape after the cascade, page counters their classes hook included. */
+  private characters(
+    trees: (Node | string | JsonSource)[],
+    options: Parameters<PdfRendererInternal["needs"]>[1],
+  ): string {
+    return trees.map((tree) => this.inner.needs(tree, options).characters).join("");
   }
 
   /**

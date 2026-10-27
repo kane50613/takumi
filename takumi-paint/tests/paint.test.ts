@@ -282,3 +282,13 @@ describe("Painter.needs", () => {
     expect(needs.characters).toContain("x");
   });
 });
+
+describe("emoji", () => {
+  it("draws each emoji as an image from the CDN emoji names", async () => {
+    const needs = await painter.needs("<p>Hi 😀</p>", { width: 100, height: 100, emoji: "noto" });
+
+    expect(needs.images).toEqual([
+      "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.051/svg/emoji_u1f600.svg",
+    ]);
+  });
+});

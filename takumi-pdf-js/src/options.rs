@@ -248,12 +248,13 @@ impl From<UncoveredTextInput> for UncoveredText {
   }
 }
 
-/// A band as the caller writes it: a node, or `false` for none.
+/// A band as the caller writes it: a node, HTML, or `false` for none.
 #[derive(Deserialize)]
 #[serde(untagged)]
 pub(crate) enum BandInput {
   Off(False),
   Node(Box<Node>),
+  Html(String),
 }
 
 /// The one boolean a band takes.
@@ -267,7 +268,7 @@ impl TryFrom<bool> for False {
   fn try_from(value: bool) -> Result<Self, Self::Error> {
     match value {
       false => Ok(Self),
-      true => Err("a band is a node or false; true names nothing".into()),
+      true => Err("a band is a node, HTML, or false; true names nothing".into()),
     }
   }
 }
@@ -277,6 +278,8 @@ impl From<BandInput> for Band {
     match input {
       BandInput::Off(False) => Self::Off,
       BandInput::Node(node) => Self::from(*node),
+      // `read_document` parses every HTML band into a node before the options convert.
+      BandInput::Html(_) => unreachable!(),
     }
   }
 }
@@ -309,8 +312,8 @@ pub(crate) struct PageRulesInput {
 }
 
 impl PdfRenderOptions {
-  /// The node trees of every band, the page rules' included.
-  pub(crate) fn bands_mut(&mut self) -> impl Iterator<Item = &mut Node> {
+  /// Every band, the page rules' included.
+  pub(crate) fn bands_mut(&mut self) -> impl Iterator<Item = &mut BandInput> {
     let rules = self.pages.iter_mut().flat_map(|pages| {
       [
         &mut pages.first,
@@ -326,10 +329,7 @@ impl PdfRenderOptions {
     [&mut self.header, &mut self.footer]
       .into_iter()
       .chain(rules)
-      .filter_map(|band| match band {
-        Some(BandInput::Node(node)) => Some(&mut **node),
-        _ => None,
-      })
+      .flatten()
   }
 }
 
