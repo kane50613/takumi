@@ -24,6 +24,9 @@ pub fn split_emojis(node: &mut Node, emoji: Option<&str>) -> Result<(), Error> {
 
 /// The node tree `source` describes, and the CSS of its `<style>` elements when it is HTML. HTML
 /// and JSON come from `sources` when they are the text it parsed last.
+///
+/// HTML parses with `takumi_html`, which recovers from less malformed markup than a browser: it
+/// does not reconstruct misnested formatting elements or move stray table content out of a table.
 pub fn read_source(source: JsValue, sources: &SourceCache) -> Result<ParsedSource, Error> {
   if let Some(html) = source.as_string() {
     return sources.parse(SourceKind::Html, &html, |html| {
