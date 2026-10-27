@@ -162,15 +162,35 @@ async function resolveContent(element: RenderInput, options?: PipelineOptions) {
   return { node, css };
 }
 
+/** A render's options without the ones this pipeline reads itself, with `css` merged. */
+function bindingOptions(options: PipelineOptions | undefined, css: CssInput[]): NeedsOptions {
+  const {
+    renderer: _renderer,
+    jsx: _jsx,
+    module: _module,
+    emoji: _emoji,
+    images: _images,
+    signal: _signal,
+    css: _css,
+    stylesheets: _stylesheets,
+    ...rest
+  } = options ?? {};
+
+  return { ...rest, css };
+}
+
+/** The binding options `needs` reads, the same ones a render passes on. */
+type NeedsOptions = Parameters<Extract<Renderer, { needs: unknown }>["needs"]>[1];
+
 /**
- * Fetches the remote images `renderer` reports `nodes` need, styled with `css`, via
- * {@link prepareImages}. A renderer without `needs`, from an older binding, gets them from the
+ * Fetches the remote images `renderer` reports `nodes` need under the binding options `layout`,
+ * via {@link prepareImages}. A renderer without `needs`, from an older binding, gets them from the
  * node trees instead.
  */
 async function collectImages(
   renderer: Renderer,
   nodes: Node[],
-  css: CssInput[],
+  layout: NeedsOptions,
   options?: PipelineOptions,
 ): Promise<ImageLoader[]> {
   const images = options?.images;
@@ -179,11 +199,7 @@ async function collectImages(
 
   const needs =
     "needs" in renderer
-      ? await Promise.all(
-          nodes.map((node) =>
-            renderer.needs(node, { width: options?.width, height: options?.height, css }),
-          ),
-        )
+      ? await Promise.all(nodes.map((node) => renderer.needs(node, layout)))
       : undefined;
   const prepared = await prepareImages({
     urls: needs?.flatMap((scene) => scene.images),
@@ -246,7 +262,7 @@ async function prepareScene<T extends PipelineOptions>(element: RenderInput, opt
   const { node, css } = await resolveContent(element, options);
   const { css: _, stylesheets: _alias, ...forward } = options ?? {};
   const sceneCss = mergeCss(options, css);
-  const images = await collectImages(renderer, [node], sceneCss, options);
+  const images = await collectImages(renderer, [node], bindingOptions(options, sceneCss), options);
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
   // abort that happened during the async font and image loading before the blocking call.
@@ -380,7 +396,15 @@ export async function renderAnimation(
   const images = await collectImages(
     renderer,
     scenes.map((scene) => scene.node),
-    css,
+    {
+      width: options.width,
+      height: options.height,
+      devicePixelRatio: options.devicePixelRatio,
+      fontFamilies: options.fontFamilies,
+      lang: options.lang,
+      keyframes: options.keyframes,
+      css,
+    },
     options,
   );
 
