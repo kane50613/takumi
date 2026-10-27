@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "pack": "bun pack.ts",
-    "test": "bun run.ts"
+    "test": "bun run.ts",
+    "matrix": "bun run.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.65.0",

@@ -562,11 +562,11 @@ jobs:
       # Packs the built packages into tarballs and installs them into the fixtures.
       - name: Install fixtures
         working-directory: e2e/bundlers
-        run: bun pack.ts
+        run: bun run pack
 
       - name: Build and run each bundler
         working-directory: e2e/bundlers
-        run: bun run.ts
+        run: bun run matrix
 
   build-image-response:
     name: Build @takumi-rs/image-response
