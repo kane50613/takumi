@@ -257,7 +257,7 @@ for (const cell of chosen) {
       : cell.backend;
   const [mark, note] = cell.expectedFailure
     ? outcome.failure
-      ? ["○", `fails as expected: ${cell.expectedFailure}`]
+      ? ["○", `fails as expected: ${cell.expectedFailure}\n    found: ${outcome.failure}`]
       : ["✗", `passes, but expected to fail: ${cell.expectedFailure}`]
     : outcome.failure
       ? ["✗", outcome.failure]
