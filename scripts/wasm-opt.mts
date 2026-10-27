@@ -6,20 +6,16 @@ const flags = [
   "-Oz",
   "--converge",
   "--code-folding",
-  // https://github.com/rust-lang/rust/issues/93294
-  "--enable-bulk-memory",
-  "--enable-mutable-globals",
-  "--enable-sign-ext",
   "--strip-debug",
   "--strip-dwarf",
   "--strip-producers",
   "--strip-target-features",
 ];
 
-const [wasmFile, ...extraFlags] = process.argv.slice(2);
+const [wasmFile] = process.argv.slice(2);
 
 if (!wasmFile) {
-  throw new Error("usage: bun scripts/wasm-opt.mts <file.wasm> [extra wasm-opt flags]");
+  throw new Error("usage: bun scripts/wasm-opt.mts <file.wasm>");
 }
 
 const version = await $`wasm-opt --version`.nothrow().quiet();
@@ -31,4 +27,4 @@ if (!version.stdout.toString().includes(`version ${BINARYEN_VERSION}`)) {
   );
 }
 
-await $`wasm-opt ${flags} ${extraFlags} ${wasmFile} -o ${wasmFile}`;
+await $`wasm-opt ${flags} ${wasmFile} -o ${wasmFile}`;
