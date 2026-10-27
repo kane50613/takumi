@@ -13,10 +13,11 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use font_cache::FontCache;
 use input::{Font, register_font};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use takumi_core::{
   Error as CoreError, Fonts,
+  layout::needs::RenderNeeds,
   resources::{
     font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
     image::ResourceCache,
@@ -205,4 +206,20 @@ pub fn stylesheet(
   let mut extended = (*sheet).clone();
   extended.extend_keyframes(keyframes);
   Ok(Arc::new(extended))
+}
+
+/// What a node tree needs fetched, as a wasm binding hands it to JavaScript.
+#[derive(Serialize)]
+pub struct NeedsOutput {
+  images: Vec<String>,
+  characters: String,
+}
+
+impl From<RenderNeeds> for NeedsOutput {
+  fn from(needs: RenderNeeds) -> Self {
+    Self {
+      images: needs.images.into_iter().collect(),
+      characters: needs.characters.into_iter().collect(),
+    }
+  }
 }

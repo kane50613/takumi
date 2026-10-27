@@ -1,4 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { container, image, text } from "@takumi-rs/helpers";
 import {
   type BoxNode,
@@ -238,5 +240,33 @@ describe("Painter.paint", () => {
       { type: "fill", paint: { type: "color", color: [255, 0, 0, 255] } },
       { type: "fill", blendMode: "multiply" },
     ]);
+  });
+});
+
+describe("font subsets", () => {
+  it("load for characters only a stylesheet adds", async () => {
+    const bytes = await readFile(
+      join(import.meta.dir, "../../assets/fonts/geist/Geist[wght].woff2"),
+    );
+    const subset = (key: string, range: [number, number]) => ({
+      name: "Subset",
+      key,
+      unicodeRange: [range],
+      data: mock(() => bytes),
+    });
+    const latin = subset("latin", [0x20, 0x7f]);
+    const cyrillic = subset("cyrillic", [0x400, 0x4ff]);
+    const greek = subset("greek", [0x370, 0x3ff]);
+
+    await new Painter().paint(container({ tagName: "div", children: [text("a")] }), {
+      width: 20,
+      height: 20,
+      css: ["div::before { content: 'Ж' }"],
+      fonts: [latin, cyrillic, greek],
+    });
+
+    expect(latin.data).toHaveBeenCalledTimes(1);
+    expect(cyrillic.data).toHaveBeenCalledTimes(1);
+    expect(greek.data).not.toHaveBeenCalled();
   });
 });

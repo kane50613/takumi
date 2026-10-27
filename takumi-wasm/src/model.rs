@@ -1,6 +1,6 @@
 //! Data models and types for the WebAssembly bindings.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 pub use takumi_bindings_common::input::{Font, ImageSource};
 use takumi_core::{
   keyframes::deserialize_optional_keyframes,
@@ -48,22 +48,6 @@ extern "C" {
   /// JavaScript object listing what a node tree needs fetched.
   #[wasm_bindgen(typescript_type = "RenderNeeds")]
   pub type RenderNeedsType;
-}
-
-/// What a node tree needs fetched, as JavaScript reads it.
-#[derive(Serialize)]
-pub struct RenderNeeds {
-  images: Vec<String>,
-  characters: String,
-}
-
-impl From<takumi_raster::RenderNeeds> for RenderNeeds {
-  fn from(needs: takumi_raster::RenderNeeds) -> Self {
-    Self {
-      images: needs.images.into_iter().collect(),
-      characters: needs.characters.into_iter().collect(),
-    }
-  }
 }
 
 /// Options for constructing a `Renderer`.

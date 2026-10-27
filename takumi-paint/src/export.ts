@@ -2,13 +2,8 @@ import type { CssInput } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
-import { FontRegistry } from "@takumi-rs/helpers/renderer";
-import {
-  LIST_MARKER_CHARACTERS,
-  type Node,
-  type ReactElementLike,
-  subsetFonts,
-} from "@takumi-rs/helpers";
+import { FontRegistry, fontsFor } from "@takumi-rs/helpers/renderer";
+import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import initWasm, {
   type FontCacheOptions,
@@ -127,16 +122,12 @@ export class Painter {
     const main = await resolveNode(node);
     const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
     const sheets = [...own, ...main.css];
+    const layout = { ...rest, css: sheets.length > 0 ? sheets : undefined };
     const painted = await this.#fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: [main.node, LIST_MARKER_CHARACTERS] }),
+      fonts && (await fontsFor(fonts, () => this.#inner.needs(main.node, layout).characters)),
       images,
       fontFamilies,
-      (resources) =>
-        this.#inner.paint(main.node, {
-          ...rest,
-          css: sheets.length > 0 ? sheets : undefined,
-          ...resources,
-        }),
+      (resources) => this.#inner.paint(main.node, { ...layout, ...resources }),
     );
 
     return new PaintTreeView(painted.tree(), painted);

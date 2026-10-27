@@ -6,7 +6,7 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use js_sys::Reflect;
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontStore, append_css, css_or_stylesheets, device_pixel_ratio,
+  FontStore, NeedsOutput, append_css, css_or_stylesheets, device_pixel_ratio,
   input::{decode_images, node_from_json},
   parse_lang, stylesheet, time_ms,
 };
@@ -308,7 +308,7 @@ impl Renderer {
       raster_options(&self.resource_cache, &fonts, node, options, HashMap::new())?;
 
     Ok(
-      to_value(&RenderNeeds::from(needs(render_options)))
+      to_value(&NeedsOutput::from(needs(render_options)))
         .map_err(map_error)?
         .into(),
     )

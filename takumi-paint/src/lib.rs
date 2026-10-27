@@ -7,13 +7,13 @@ use std::mem::take;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore,
+  FontCacheOptions, FontStore, NeedsOutput,
   input::{Font, ImageSource, decode_images},
   stylesheet,
 };
 use takumi_core::{
   layout::node::Node,
-  paint_tree::{PaintTree, PaintTreeOptions, paint_tree},
+  paint_tree::{PaintTree, PaintTreeOptions, paint_tree, paint_tree_needs},
   resources::image::ResourceCache,
   style::{CssSource, FontFamily, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
@@ -44,6 +44,9 @@ extern "C" {
   /// JavaScript object representing render options.
   #[wasm_bindgen(typescript_type = "PaintOptions")]
   pub type RenderOptionsType;
+  /// JavaScript object listing what a node tree needs fetched.
+  #[wasm_bindgen(typescript_type = "RenderNeeds")]
+  pub type RenderNeedsType;
   /// JavaScript object representing a painted tree.
   #[wasm_bindgen(typescript_type = "RawPaintTree")]
   pub type RawPaintTreeType;
@@ -84,6 +87,49 @@ impl Painter {
     let registered = self.fonts.register(font, key, pinned).map_err(map_error)?;
 
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+  }
+
+  /// Calls `run` with the paint options `node` and `options` describe.
+  fn with_tree_options<T>(
+    &self,
+    node: NodeType,
+    options: Option<RenderOptionsType>,
+    run: impl FnOnce(PaintTreeOptions<'_>) -> T,
+  ) -> Result<T, js_sys::Error> {
+    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let options: RenderOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+    let images = decode_images(
+      &self.resource_cache,
+      options.images.as_deref().unwrap_or_default(),
+    )
+    .map_err(map_error)?;
+    let lang = options
+      .lang
+      .as_deref()
+      .map(Lang::parse)
+      .transpose()
+      .map_err(map_error)?;
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    Ok(run(
+      PaintTreeOptions::builder()
+        .viewport(
+          Viewport::new((options.width, options.height)).with_device_pixel_ratio(
+            options
+              .device_pixel_ratio
+              .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
+          ),
+        )
+        .fonts(&fonts)
+        .node(node)
+        .images(images)
+        .stylesheet(stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?)
+        .font_families(options.font_families.map(FontFamily::from_names))
+        .lang(lang)
+        .build(),
+    ))
   }
 }
 
@@ -159,46 +205,30 @@ impl Painter {
     node: NodeType,
     options: Option<RenderOptionsType>,
   ) -> Result<RenderedPaint, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: RenderOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
-    let images = decode_images(
-      &self.resource_cache,
-      options.images.as_deref().unwrap_or_default(),
-    )
-    .map_err(map_error)?;
-    let lang = options
-      .lang
-      .as_deref()
-      .map(Lang::parse)
-      .transpose()
+    let mut tree = self
+      .with_tree_options(node, options, paint_tree)?
       .map_err(map_error)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
-    let mut tree = paint_tree(
-      PaintTreeOptions::builder()
-        .viewport(
-          Viewport::new((options.width, options.height)).with_device_pixel_ratio(
-            options
-              .device_pixel_ratio
-              .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-          ),
-        )
-        .fonts(&fonts)
-        .node(node)
-        .images(images)
-        .stylesheet(stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?)
-        .font_families(options.font_families.map(FontFamily::from_names))
-        .lang(lang)
-        .build(),
-    )
-    .map_err(map_error)?;
     let raw = take(&mut tree.document)
       .serialize(&Serializer::json_compatible())
       .map_err(map_error)?;
 
     Ok(RenderedPaint { tree, raw })
+  }
+
+  /// Reads the remote images a node tree draws and the characters its text shapes, after the
+  /// cascade.
+  pub fn needs(
+    &self,
+    node: NodeType,
+    options: Option<RenderOptionsType>,
+  ) -> Result<RenderNeedsType, js_sys::Error> {
+    let needs = self.with_tree_options(node, options, paint_tree_needs)?;
+
+    Ok(
+      to_value(&NeedsOutput::from(needs))
+        .map_err(map_error)?
+        .unchecked_into(),
+    )
   }
 }
 

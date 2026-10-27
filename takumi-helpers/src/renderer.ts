@@ -346,19 +346,31 @@ export async function withRenderInput<
 
   const resolvedFonts = await fonts;
   const subset =
-    resolvedFonts && characters && resolvedFonts.some((font) => unicodeRangeOf(font).length > 0)
-      ? fontsCovering(resolvedFonts, codepointsOf(await characters(rest)))
-      : resolvedFonts &&
-        subsetFonts({
+    resolvedFonts &&
+    (characters
+      ? await fontsFor(resolvedFonts, () => characters(rest))
+      : subsetFonts({
           fonts: resolvedFonts,
           source: [...(Array.isArray(source) ? source : [source]), LIST_MARKER_CHARACTERS],
-        });
+        }));
 
   return registry.resolveResources(subset, images, fontFamilies, (resolved) => {
     signal?.throwIfAborted();
 
     return call({ ...rest, ...resolved }, signal);
   });
+}
+
+/**
+ * The `fonts` a render uses: every one when none declares a `unicodeRange`, otherwise the subsets
+ * that cover one of the `characters` it shapes, read only then.
+ */
+export async function fontsFor<T>(fonts: T[], characters: () => Awaitable<string>): Promise<T[]> {
+  if (!fonts.some((font) => unicodeRangeOf(font).length > 0)) {
+    return fonts;
+  }
+
+  return fontsCovering(fonts, codepointsOf(await characters()));
 }
 
 function* codepointsOf(text: string): Generator<number> {

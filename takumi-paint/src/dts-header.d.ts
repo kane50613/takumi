@@ -388,6 +388,12 @@ export type RawPaintStep =
     };
 
 /** The tree as the wasm module serializes it, nodes and runs named by index. */
+/** The remote images a node tree draws and the characters its text shapes, read after the cascade. */
+export type RenderNeeds = {
+  images: string[];
+  characters: string;
+};
+
 export type RawPaintTree = {
   readonly width: number;
   readonly height: number;
