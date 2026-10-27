@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // The `#backend` import map must hand each bundler/runtime the right backend by
@@ -71,32 +71,9 @@ function bundle(opts: { target?: string; conditions?: string[] }): string {
   return result.stdout.toString();
 }
 
-/** Splitting build to a dir; returns the entry chunk and the other (lazy) chunks. */
-function bundleSplit(opts: { target: string }): { entry: string; chunks: string } {
-  const outdir = mkdtempSync(join(import.meta.dir, "..", "node_modules", ".bundler-out-"));
-  const args = ["build", entry, `--target=${opts.target}`, "--splitting", `--outdir=${outdir}`];
-
-  for (const pkg of external) {
-    args.push(`--external=${pkg}`);
-  }
-
-  const result = Bun.spawnSync(["bun", ...args]);
-  expect(result.exitCode).toBe(0);
-
-  const entryChunk = readFileSync(join(outdir, "entry.js"), "utf8");
-  const chunks = readdirSync(outdir)
-    .filter((file) => file !== "entry.js")
-    .map((file) => readFileSync(join(outdir, file), "utf8"))
-    .join("\n");
-
-  rmSync(outdir, { recursive: true, force: true });
-
-  return { entry: entryChunk, chunks };
-}
-
 describe("#backend resolution by import condition", () => {
-  // node/bun select napi as the primary backend; the WASM backend is still
-  // reachable as the `module` escape hatch (a lazy chunk), so it may appear too.
+  // node/bun select napi as the primary backend. The WASM backend is still
+  // reachable as the `module` escape hatch, so it may appear too.
   test("bun → native core", () => {
     const code = bundle({ target: "bun" });
 
@@ -121,9 +98,6 @@ describe("#backend resolution by import condition", () => {
     expect(code).not.toContain("@takumi-rs/core");
   });
 
-  // The WASM backend is the `module` escape hatch, reached through a dynamic
-  // import. On a node target it must stay out of the eager entry (napi only) and
-  // live in a split chunk that loads only when a caller passes `module`.
   // Only the native addon needs externalizing: its `.node` binary must resolve
   // from node_modules. Every other import takumi-js pulls in — including the
   // WebContainer fallback's WASM loader — has to survive a real bundle, so a
@@ -137,11 +111,13 @@ describe("#backend resolution by import condition", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  test("node WASM escape hatch is a lazy chunk, not in the eager entry", () => {
-    const { entry: entryChunk, chunks } = bundleSplit({ target: "node" });
+  // `@takumi-rs/wasm/node` reads and instantiates the binary when evaluated, and
+  // a bundler that inlines lazy chunks would evaluate it in every Node bundle.
+  test("node reaches the WASM binary only through its URL", () => {
+    const code = bundle({ target: "node" });
 
-    expect(entryChunk).toContain("@takumi-rs/core");
-    expect(entryChunk).not.toContain("@takumi-rs/wasm");
-    expect(chunks).toContain("@takumi-rs/wasm");
+    expect(code).toContain("@takumi-rs/core");
+    expect(code).toContain("@takumi-rs/wasm/wasm-url");
+    expect(code).not.toContain("@takumi-rs/wasm/node");
   });
 });
