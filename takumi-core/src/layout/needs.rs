@@ -225,9 +225,6 @@ mod tests {
         "https://example.com/mask.png",
       ]
     );
-    assert_eq!(
-      needs.characters.into_iter().collect::<String>(),
-      " .1ABcx"
-    );
+    assert_eq!(needs.characters.into_iter().collect::<String>(), " .1ABcx");
   }
 }
