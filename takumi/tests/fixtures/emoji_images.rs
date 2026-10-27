@@ -3,8 +3,6 @@ use takumi::unstable::base::layout::node::EmojiProvider;
 
 use crate::test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, write_goldens};
 
-/// Each emoji becomes an inline image a little wider than the text's em box, with the provider's
-/// URL as its source. A test image stands in for the CDN file.
 #[test]
 fn emoji_images() {
   let mut node = Node::from_html(
