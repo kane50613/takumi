@@ -1,4 +1,4 @@
-//! The font and image inputs a binding deserializes from JS before handing them to takumi.
+//! The node, font, and image inputs a binding deserializes from JS before handing them to takumi.
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -6,6 +6,7 @@ use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
 use takumi_core::{
   Fonts,
+  layout::node::Node,
   resources::{
     font::{FontError, FontOverride, FontResource, RegisteredFamily},
     image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache},
@@ -13,6 +14,19 @@ use takumi_core::{
   },
   style::{FontStyle as CssFontStyle, FromCssStr},
 };
+
+/// The node tree in `json`, failing with the message reading the tree from an object reports,
+/// which carries no line and column.
+pub fn node_from_json(json: &str) -> Result<Node, String> {
+  serde_json::from_str(json).map_err(|error| {
+    let message = error.to_string();
+    let position = format!(" at line {} column {}", error.line(), error.column());
+
+    message
+      .strip_suffix(&position)
+      .map_or(message.clone(), str::to_owned)
+  })
+}
 
 /// How to register a font's bytes, each field overriding what the file says.
 #[derive(Deserialize, Default)]

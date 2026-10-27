@@ -3,10 +3,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
+use js_sys::Reflect;
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontStore, append_css, css_or_stylesheets, device_pixel_ratio, input::decode_images, parse_lang,
-  stylesheet, time_ms,
+  FontStore, append_css, css_or_stylesheets, device_pixel_ratio,
+  input::{decode_images, node_from_json},
+  parse_lang, stylesheet, time_ms,
 };
 use takumi_core::{
   Fonts,
@@ -406,6 +408,17 @@ fn read_source(source: SourceType) -> Result<(Node, Vec<String>), js_sys::Error>
     let parsed = parse_html(&html, FromHtmlOptions::default()).map_err(map_error)?;
 
     return Ok((parsed.node, parsed.css));
+  }
+
+  if let Some(json) = Reflect::get(&source, &JsValue::from_str("json"))
+    .ok()
+    .and_then(|json| json.as_string())
+  {
+    // The object path's errors come from `serde_wasm_bindgen`, which starts them with `Error: `.
+    return Ok((
+      node_from_json(&json).map_err(|message| map_error(format!("Error: {message}")))?,
+      Vec::new(),
+    ));
   }
 
   Ok((from_value(source).map_err(map_error)?, Vec::new()))

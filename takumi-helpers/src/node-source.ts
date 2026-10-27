@@ -1,11 +1,11 @@
-import type { Node } from "../index";
+import type { Node } from "./types";
 
 const LONE_SURROGATE = /\p{Cs}/u;
 
 /** The most arrays and objects `serde_json` reads nested inside each other. */
 const MAX_DEPTH = 127;
 
-/** JSON text the native side reads in place of a node tree, so it parses off the main thread. */
+/** JSON text a binding reads in place of a node tree, faster than the tree, and off the main thread in napi. */
 export type JsonSource = { json: string };
 
 /**

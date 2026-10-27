@@ -18,7 +18,11 @@ use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
 pub use renderer::Renderer;
 use serde::de::DeserializeOwned;
-use takumi_bindings_common::{append_css, input::FontOptions, stylesheet};
+use takumi_bindings_common::{
+  append_css,
+  input::{FontOptions, node_from_json},
+  stylesheet,
+};
 use takumi_core::{
   layout::node::Node,
   resources::{glyph_cache, image::ResourceCache},
@@ -169,13 +173,8 @@ impl NodeSource {
       }
     };
 
-    let node = serde_json::from_str(&json).map_err(|error| {
-      let message = error.to_string();
-      let position = format!(" at line {} column {}", error.line(), error.column());
-      let message = message.strip_suffix(&position).unwrap_or(&message);
-
-      Error::from_reason(format!("{}, {message}", Status::InvalidArg))
-    })?;
+    let node = node_from_json(&json)
+      .map_err(|message| Error::from_reason(format!("{}, {message}", Status::InvalidArg)))?;
 
     Ok((node, Vec::new()))
   }
