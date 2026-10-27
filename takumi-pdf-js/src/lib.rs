@@ -15,6 +15,7 @@ use takumi_bindings_common::{
   input::{Font, decode_images},
   parse_lang,
   source::{read_source, split_emojis},
+  source_cache::SourceCache,
   stylesheet,
 };
 use takumi_core::{
@@ -97,42 +98,44 @@ struct Layout {
 pub struct PdfRenderer {
   fonts: FontStore,
   resource_cache: ResourceCache,
-}
-
-/// The document `node` describes and the options it renders with, its HTML bands parsed, its
-/// emoji split out, bands included, and the CSS of every `<style>` element appended.
-fn read_document(
-  node: NodeType,
-  options: Option<JsValue>,
-) -> Result<(Node, PdfRenderOptions), js_sys::Error> {
-  let mut options: PdfRenderOptions = options
-    .map(|options| from_value(options).map_err(map_error))
-    .transpose()?
-    .unwrap_or_default();
-  let (mut node, mut document_css) = read_source(node.into())?;
-  let emoji = options.emoji.take();
-
-  split_emojis(&mut node, emoji.as_deref())?;
-
-  for band in options.bands_mut() {
-    if let BandInput::Html(html) = band {
-      let (parsed, css) = read_source(JsValue::from_str(html))?;
-
-      document_css.extend(css);
-      *band = BandInput::Node(Box::new(parsed));
-    }
-
-    if let BandInput::Node(node) = band {
-      split_emojis(node, emoji.as_deref())?;
-    }
-  }
-
-  options.css = append_css(options.css.take(), document_css);
-
-  Ok((node, options))
+  sources: SourceCache,
 }
 
 impl PdfRenderer {
+  /// The document `node` describes and the options it renders with, its HTML bands parsed, its
+  /// emoji split out, bands included, and the CSS of every `<style>` element appended.
+  fn read_document(
+    &self,
+    node: NodeType,
+    options: Option<JsValue>,
+  ) -> Result<(Node, PdfRenderOptions), js_sys::Error> {
+    let mut options: PdfRenderOptions = options
+      .map(|options| from_value(options).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+    let (mut node, mut document_css) = read_source(node.into(), &self.sources)?;
+    let emoji = options.emoji.take();
+
+    split_emojis(&mut node, emoji.as_deref())?;
+
+    for band in options.bands_mut() {
+      if let BandInput::Html(html) = band {
+        let (parsed, css) = read_source(JsValue::from_str(html), &SourceCache::default())?;
+
+        document_css.extend(css);
+        *band = BandInput::Node(Box::new(parsed));
+      }
+
+      if let BandInput::Node(node) = band {
+        split_emojis(node, emoji.as_deref())?;
+      }
+    }
+
+    options.css = append_css(options.css.take(), document_css);
+
+    Ok((node, options))
+  }
+
   fn layout(&self, options: &PdfRenderOptions) -> Result<Layout, js_sys::Error> {
     let images = decode_images(
       &self.resource_cache,
@@ -157,7 +160,7 @@ impl PdfRenderer {
     options: Option<MeasureOptionsType>,
     run: impl FnOnce(MeasureOptions<'_>) -> Result<T, PdfError>,
   ) -> Result<T, js_sys::Error> {
-    let (node, options) = read_document(node, options.map(Into::into))?;
+    let (node, options) = self.read_document(node, options.map(Into::into))?;
     let Layout {
       viewport,
       page,
@@ -205,6 +208,7 @@ impl PdfRenderer {
     Ok(PdfRenderer {
       fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
       resource_cache: ResourceCache::default(),
+      sources: SourceCache::default(),
     })
   }
 
@@ -266,7 +270,7 @@ impl PdfRenderer {
     node: NodeType,
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
-    let (node, options) = read_document(node, options.map(Into::into))?;
+    let (node, options) = self.read_document(node, options.map(Into::into))?;
     let Layout {
       viewport,
       page,

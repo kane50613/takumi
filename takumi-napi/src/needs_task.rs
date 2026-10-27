@@ -59,7 +59,7 @@ impl Task for NeedsTask {
     let Some(input) = self.input.take() else {
       unreachable!()
     };
-    let (node, stylesheet) = input.resolve(&self.state.resource_cache)?;
+    let (node, stylesheet) = input.resolve(&self.state)?;
 
     let options = takumi_raster::RenderOptions::builder()
       .viewport(self.viewport)

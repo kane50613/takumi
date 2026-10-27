@@ -7,7 +7,9 @@ use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Deserialize;
-use takumi_bindings_common::{css_or_stylesheets, default_fonts, font_cache::FontCache};
+use takumi_bindings_common::{
+  css_or_stylesheets, default_fonts, font_cache::FontCache, source_cache::SourceCache,
+};
 use takumi_core::{
   Fonts,
   resources::image::{
@@ -113,6 +115,7 @@ pub(crate) struct RendererState {
   pub(crate) fonts: ArcSwap<Fonts>,
   pub(crate) font_cache: Mutex<FontCache>,
   pub(crate) resource_cache: ResourceCache,
+  pub(crate) sources: SourceCache,
 }
 
 impl RendererState {
@@ -496,6 +499,7 @@ impl Renderer {
           Some(bytes) => ResourceCache::new(bytes.max(0.0) as u64),
           None => ResourceCache::default(),
         },
+        sources: SourceCache::default(),
       }),
     })
   }

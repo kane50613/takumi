@@ -18,16 +18,18 @@ use std::{fmt::Display, sync::Arc};
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
 pub use renderer::Renderer;
-use renderer::{deserialize_css, deserialize_keyframes};
+use renderer::{RendererState, deserialize_css, deserialize_keyframes};
 use serde::de::DeserializeOwned;
 use takumi_bindings_common::{
   append_css,
   input::{FontOptions, node_from_json},
-  parse_emoji, stylesheet,
+  parse_emoji,
+  source_cache::{ParsedSource, SourceCache, SourceKind},
+  stylesheet,
 };
 use takumi_core::{
   layout::node::{EmojiProvider, Node},
-  resources::{glyph_cache, image::ResourceCache},
+  resources::glyph_cache,
   style::{CssSource, KeyframesRule, StyleSheet},
 };
 use takumi_html::{FromHtmlOptions, parse_html};
@@ -164,21 +166,22 @@ impl NodeSource {
 
   /// The node tree and the CSS of an HTML source's `<style>` elements. JSON fails with the
   /// message the object path reports for the same input.
-  pub(crate) fn into_parts(self) -> Result<(Node, Vec<String>)> {
-    let json = match self {
-      Self::Json(json) => json,
-      Self::Tree(node) => return Ok((*node, Vec::new())),
-      Self::Html(html) => {
-        let parsed = parse_html(&html, FromHtmlOptions::default()).map_err(map_error)?;
+  /// HTML and JSON come from `sources` when they are the text it parsed last.
+  pub(crate) fn into_parts(self, sources: &SourceCache) -> Result<ParsedSource> {
+    match self {
+      Self::Tree(node) => Ok((*node, Vec::new())),
+      Self::Html(html) => sources.parse(SourceKind::Html, &html, |html| {
+        let parsed = parse_html(html, FromHtmlOptions::default()).map_err(map_error)?;
 
-        return Ok((parsed.node, parsed.css));
-      }
-    };
+        Ok((parsed.node, parsed.css))
+      }),
+      Self::Json(json) => sources.parse(SourceKind::Json, &json, |json| {
+        let node = node_from_json(json)
+          .map_err(|message| Error::from_reason(format!("{}, {message}", Status::InvalidArg)))?;
 
-    let node = node_from_json(&json)
-      .map_err(|message| Error::from_reason(format!("{}, {message}", Status::InvalidArg)))?;
-
-    Ok((node, Vec::new()))
+        Ok((node, Vec::new()))
+      }),
+    }
   }
 }
 
@@ -209,15 +212,19 @@ impl RenderInput {
 
   /// The node tree, its emoji split out, and the stylesheet the render uses, `<style>` elements of
   /// HTML included.
-  pub(crate) fn resolve(self, cache: &ResourceCache) -> Result<(Node, Arc<StyleSheet>)> {
-    let (mut node, document_css) = self.source.into_parts()?;
+  pub(crate) fn resolve(self, state: &RendererState) -> Result<(Node, Arc<StyleSheet>)> {
+    let (mut node, document_css) = self.source.into_parts(&state.sources)?;
 
     if let Some(provider) = self.emoji {
       node.extract_emojis(provider);
     }
 
-    let stylesheet =
-      stylesheet(cache, append_css(self.css, document_css), self.keyframes).map_err(map_error)?;
+    let stylesheet = stylesheet(
+      &state.resource_cache,
+      append_css(self.css, document_css),
+      self.keyframes,
+    )
+    .map_err(map_error)?;
 
     Ok((node, stylesheet))
   }

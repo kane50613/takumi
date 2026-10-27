@@ -10,6 +10,7 @@ use takumi_bindings_common::{
   FontCacheOptions, FontStore, NeedsOutput, append_css,
   input::{Font, ImageSource, decode_images},
   source::{read_source, split_emojis},
+  source_cache::SourceCache,
   stylesheet,
 };
 use takumi_core::{
@@ -75,6 +76,7 @@ struct RenderOptions {
 pub struct Painter {
   fonts: FontStore,
   resource_cache: ResourceCache,
+  sources: SourceCache,
 }
 
 impl Painter {
@@ -101,7 +103,7 @@ impl Painter {
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
-    let (mut node, document_css) = read_source(node.into())?;
+    let (mut node, document_css) = read_source(node.into(), &self.sources)?;
 
     split_emojis(&mut node, options.emoji.as_deref())?;
     options.css = append_css(options.css.take(), document_css);
@@ -150,6 +152,7 @@ impl Painter {
     Ok(Painter {
       fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
       resource_cache: ResourceCache::default(),
+      sources: SourceCache::default(),
     })
   }
 

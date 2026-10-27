@@ -74,7 +74,7 @@ impl Task for RenderTask {
     let Some(input) = self.input.take() else {
       unreachable!()
     };
-    let (node, stylesheet) = input.resolve(&self.state.resource_cache)?;
+    let (node, stylesheet) = input.resolve(&self.state)?;
 
     let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
 

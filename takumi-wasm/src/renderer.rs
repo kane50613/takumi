@@ -9,6 +9,7 @@ use takumi_bindings_common::{
   input::decode_images,
   parse_lang,
   source::{read_source, split_emojis},
+  source_cache::SourceCache,
   stylesheet, time_ms,
 };
 use takumi_core::{
@@ -35,6 +36,7 @@ use crate::{helper::map_error, model::*};
 pub struct Renderer {
   fonts: FontStore,
   resource_cache: ResourceCache,
+  sources: SourceCache,
 }
 
 fn raster_options<'fonts>(
@@ -109,6 +111,7 @@ impl Renderer {
         Some(bytes) => ResourceCache::new(bytes),
         None => ResourceCache::default(),
       },
+      sources: SourceCache::default(),
     })
   }
 
@@ -168,7 +171,7 @@ impl Renderer {
     source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<Vec<u8>, JsValue> {
-    let (node, document_css) = read_source(source.into())?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -220,7 +223,7 @@ impl Renderer {
     source: SourceType,
     options: Option<SvgRenderOptionsType>,
   ) -> Result<String, JsValue> {
-    let (mut node, document_css) = read_source(source.into())?;
+    let (mut node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: SvgRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -268,7 +271,7 @@ impl Renderer {
     source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<MeasuredNodeType, JsValue> {
-    let (node, document_css) = read_source(source.into())?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -296,7 +299,7 @@ impl Renderer {
     source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<RenderNeedsType, JsValue> {
-    let (node, document_css) = read_source(source.into())?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -327,7 +330,7 @@ impl Renderer {
     source: SourceType,
     options: RenderOptionsType,
   ) -> Result<String, js_sys::Error> {
-    let (node, document_css) = read_source(source.into())?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: RenderOptions = from_value(options.into()).map_err(map_error)?;
 
     options.css = append_css(
