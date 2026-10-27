@@ -21,8 +21,9 @@ use takumi_raster::{
 
 use crate::{
   De, JsBytes, NodeSource, RegisteredFamily, load_font_task::LoadFontTask, map_error,
-  measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
-  render_task::RenderTask, svg_render_task::SvgRenderTask,
+  measure_task::MeasureTask, needs_task::NeedsTask, parse_font_input,
+  render_animation_task::RenderAnimationTask, render_task::RenderTask,
+  svg_render_task::SvgRenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -76,6 +77,26 @@ impl From<takumi_raster::MeasuredNode> for MeasuredNode {
       transform: node.transform.iter().map(|&x| x as f64).collect(),
       children: node.children.into_iter().map(Into::into).collect(),
       runs: node.runs.into_iter().map(Into::into).collect(),
+    }
+  }
+}
+
+/// The remote images a node tree draws and the characters its text shapes, read after the cascade.
+#[napi(object)]
+pub struct RenderNeeds {
+  /// The `http:` and `https:` URLs of image elements and computed background, mask, and list
+  /// marker images, sorted.
+  pub images: Vec<String>,
+  /// Every character the text shapes once, sorted, generated content and `text-transform`
+  /// included.
+  pub characters: String,
+}
+
+impl From<takumi_raster::RenderNeeds> for RenderNeeds {
+  fn from(needs: takumi_raster::RenderNeeds) -> Self {
+    Self {
+      images: needs.images.into_iter().collect(),
+      characters: needs.characters.into_iter().collect(),
     }
   }
 }
@@ -626,6 +647,27 @@ impl Renderer {
       MeasureTask::from_options(
         env,
         node,
+        options.unwrap_or_default(),
+        Arc::clone(&self.state),
+      )?,
+      signal,
+    ))
+  }
+
+  /// Reads what a node tree, or HTML, needs fetched before it renders, asynchronously.
+  #[napi(
+    ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, signal?: AbortSignal",
+    ts_return_type = "Promise<RenderNeeds>"
+  )]
+  pub fn needs(
+    &self,
+    source: Either<String, Object>,
+    options: Option<RenderOptions>,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<NeedsTask>> {
+    Ok(AsyncTask::with_optional_signal(
+      NeedsTask::from_options(
+        NodeSource::from_js(source)?,
         options.unwrap_or_default(),
         Arc::clone(&self.state),
       )?,

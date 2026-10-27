@@ -3,6 +3,7 @@ import {
   type MeasuredNode,
   type Node,
   type RegisteredFamily,
+  type RenderNeeds,
   type RendererOptions,
   type RenderAnimationOptions as RenderAnimationOptionsInternal,
   type RenderOptions as RenderOptionsInternal,
@@ -64,6 +65,11 @@ export class Renderer {
     return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
       this.inner.measure(toNativeSource(source), opts),
     );
+  }
+
+  /** The remote images `source` draws and the characters its text shapes, read after the cascade. */
+  async needs(source: Node | string, options?: RenderOptionsInternal): Promise<RenderNeeds> {
+    return this.inner.needs(toNativeSource(source), options);
   }
 
   renderAnimation(options: RenderAnimationOptions): Promise<Uint8Array<ArrayBuffer>> {

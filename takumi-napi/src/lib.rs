@@ -6,6 +6,7 @@
 
 mod load_font_task;
 mod measure_task;
+mod needs_task;
 mod pool;
 mod render_animation_task;
 mod render_task;

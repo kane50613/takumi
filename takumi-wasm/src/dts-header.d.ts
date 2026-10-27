@@ -270,6 +270,14 @@ export type MeasuredNode = {
   runs: MeasuredTextRun[];
 };
 
+/** The remote images a node tree draws and the characters its text shapes, read after the cascade. */
+export type RenderNeeds = {
+  /** The `http:` and `https:` URLs of image elements and computed background, mask, and list marker images, sorted. */
+  images: string[];
+  /** Every character the text shapes once, sorted, generated content and `text-transform` included. */
+  characters: string;
+};
+
 export type AnimationScene = {
   node: Node;
   durationMs: number;

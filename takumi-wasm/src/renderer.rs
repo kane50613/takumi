@@ -20,7 +20,7 @@ use takumi_core::{
 use takumi_html::{FromHtmlOptions, parse_html};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, SequentialScene,
-  measure, render, write_animation, write_image,
+  measure, needs, render, write_animation, write_image,
 };
 use wasm_bindgen::prelude::*;
 
@@ -283,6 +283,35 @@ impl Renderer {
     let layout = measure(render_options).map_err(map_error)?;
 
     Ok(to_value(&layout).map_err(map_error)?.into())
+  }
+
+  /// Reads what a node tree, or HTML, needs fetched before it renders.
+  #[wasm_bindgen(js_name = needs)]
+  pub fn needs(
+    &self,
+    source: SourceType,
+    options: Option<RenderOptionsType>,
+  ) -> Result<RenderNeedsType, JsValue> {
+    let (node, document_css) = read_source(source)?;
+    let mut options: RenderOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+
+    options.css = append_css(
+      css_or_stylesheets(options.css.take(), options.stylesheets.take()),
+      document_css,
+    );
+
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let render_options =
+      raster_options(&self.resource_cache, &fonts, node, options, HashMap::new())?;
+
+    Ok(
+      to_value(&RenderNeeds::from(needs(render_options)))
+        .map_err(map_error)?
+        .into(),
+    )
   }
 
   /// Renders a node tree, or HTML, into a data URL.
