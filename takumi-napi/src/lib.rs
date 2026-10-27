@@ -12,14 +12,23 @@ mod render_task;
 pub(crate) mod renderer;
 mod svg_render_task;
 
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
 pub use renderer::Renderer;
 use serde::de::DeserializeOwned;
-use takumi_bindings_common::input::FontOptions;
-use takumi_core::{layout::node::Node, resources::glyph_cache};
+use takumi_bindings_common::{
+  append_css,
+  input::{FontOptions, node_from_json},
+  stylesheet,
+};
+use takumi_core::{
+  layout::node::Node,
+  resources::{glyph_cache, image::ResourceCache},
+  style::{CssSource, KeyframesRule, StyleSheet},
+};
+use takumi_html::{FromHtmlOptions, parse_html};
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
 /// `0` stops caching. Defaults to 8 MiB.
@@ -128,35 +137,64 @@ pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Re
   T::deserialize(&mut de).map_err(|e| Error::from_reason(e.to_string()))
 }
 
-/// A node tree from JS: JSON text, parsed on the worker thread, or a tree read from an object.
+/// A node tree from JS: JSON text from a `{ json }` object or HTML from a string, both parsed on
+/// the worker thread, or a tree read from an object.
 pub(crate) enum NodeSource {
   Json(String),
   Tree(Box<Node>),
+  Html(String),
 }
 
 impl NodeSource {
-  /// Reads `source`, leaving JSON text for [`NodeSource::into_node`] to parse.
+  /// Reads `source`, leaving JSON text and HTML for [`NodeSource::into_parts`] to parse.
   pub(crate) fn from_js(source: Either<String, Object>) -> Result<Self> {
-    match source {
-      Either::A(json) => Ok(Self::Json(json)),
-      Either::B(object) => deserialize_with_tracing(object).map(|node| Self::Tree(Box::new(node))),
-    }
-  }
-
-  /// The node tree, failing with the message the object path reports for the same input.
-  pub(crate) fn into_node(self) -> Result<Node> {
-    let json = match self {
-      Self::Json(json) => json,
-      Self::Tree(node) => return Ok(*node),
+    let object = match source {
+      Either::A(html) => return Ok(Self::Html(html)),
+      Either::B(object) => object,
     };
 
-    serde_json::from_str(&json).map_err(|error| {
-      let message = error.to_string();
-      let position = format!(" at line {} column {}", error.line(), error.column());
-      let message = message.strip_suffix(&position).unwrap_or(&message);
+    if let Some(json) = object.get::<String>("json")? {
+      return Ok(Self::Json(json));
+    }
 
-      Error::from_reason(format!("{}, {message}", Status::InvalidArg))
-    })
+    deserialize_with_tracing(object).map(|node| Self::Tree(Box::new(node)))
+  }
+
+  /// The node tree and the CSS of an HTML source's `<style>` elements. JSON fails with the
+  /// message the object path reports for the same input.
+  pub(crate) fn into_parts(self) -> Result<(Node, Vec<String>)> {
+    let json = match self {
+      Self::Json(json) => json,
+      Self::Tree(node) => return Ok((*node, Vec::new())),
+      Self::Html(html) => {
+        let parsed = parse_html(&html, FromHtmlOptions::default()).map_err(map_error)?;
+
+        return Ok((parsed.node, parsed.css));
+      }
+    };
+
+    let node = node_from_json(&json)
+      .map_err(|message| Error::from_reason(format!("{}, {message}", Status::InvalidArg)))?;
+
+    Ok((node, Vec::new()))
+  }
+}
+
+/// A render's source and the CSS that styles it, read on the main thread and parsed on the worker.
+pub(crate) struct RenderInput {
+  pub(crate) source: NodeSource,
+  pub(crate) css: Option<Vec<CssSource>>,
+  pub(crate) keyframes: Vec<KeyframesRule>,
+}
+
+impl RenderInput {
+  /// The node tree and the stylesheet the render uses, `<style>` elements of HTML included.
+  pub(crate) fn resolve(self, cache: &ResourceCache) -> Result<(Node, Arc<StyleSheet>)> {
+    let (node, document_css) = self.source.into_parts()?;
+    let stylesheet =
+      stylesheet(cache, append_css(self.css, document_css), self.keyframes).map_err(map_error)?;
+
+    Ok((node, stylesheet))
   }
 }
 

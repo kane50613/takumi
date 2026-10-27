@@ -558,9 +558,9 @@ impl Renderer {
     })
   }
 
-  /// Renders a node tree into an image buffer asynchronously.
+  /// Renders a node tree, or HTML, into an image buffer asynchronously.
   #[napi(
-    ts_args_type = "source: Node | string, options?: RenderOptions, signal?: AbortSignal",
+    ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<Buffer<ArrayBuffer>>"
   )]
   pub fn render(
@@ -583,9 +583,9 @@ impl Renderer {
     ))
   }
 
-  /// Renders a node tree into an SVG document string asynchronously.
+  /// Renders a node tree, or HTML, into an SVG document string asynchronously.
   #[napi(
-    ts_args_type = "source: Node | string, options?: SvgRenderOptions, signal?: AbortSignal",
+    ts_args_type = "source: Node | string | { json: string }, options?: SvgRenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<string>"
   )]
   pub fn render_svg(
@@ -608,9 +608,9 @@ impl Renderer {
     ))
   }
 
-  /// Measures a node tree and returns layout information asynchronously.
+  /// Measures a node tree, or HTML, and returns layout information asynchronously.
   #[napi(
-    ts_args_type = "source: Node | string, options?: RenderOptions, signal?: AbortSignal",
+    ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<MeasuredNode>"
   )]
   pub fn measure(

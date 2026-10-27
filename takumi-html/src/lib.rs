@@ -20,6 +20,9 @@
 //! ```
 
 mod dom;
+mod entities;
+mod markup;
+mod named_references;
 
 use std::{
   borrow::Cow,
@@ -29,11 +32,6 @@ use std::{
   sync::{Arc, LazyLock},
 };
 
-use html5ever::{
-  ParseOpts, QualName, local_name, ns, parse_document, parse_fragment,
-  serialize::{SerializeOpts, TraversalScope, serialize},
-  tendril::TendrilSink,
-};
 #[cfg(feature = "svg")]
 use takumi_core::resources::image::{ImageSource, SvgSource};
 use takumi_core::{
@@ -45,7 +43,9 @@ use takumi_core::{
 };
 use typed_builder::TypedBuilder;
 
-use crate::dom::{DomSink, NodeData, NodeRef};
+#[cfg(feature = "svg")]
+use crate::dom::AttributeNamespace;
+use crate::dom::{Namespace, NodeData, NodeRef};
 
 /// Tags whose entire subtree is dropped, matching the JS markup walker.
 /// Deliberately distinct from the `display:none` presets (`title`,
@@ -278,14 +278,34 @@ impl Default for FromHtmlOptions {
 ///
 /// `tw`, `style`, `class`, `id`, `dir`, and `lang` attributes become the
 /// corresponding node styling and metadata; `<style>` blocks and other
-/// unrendered elements are dropped. A single root element is returned as-is; multiple
+/// unrendered elements are dropped, and [`parse_html`] returns the CSS they hold. A single root element is returned as-is; multiple
 /// roots are wrapped in a full-size container.
 ///
 /// A source that starts with a doctype or an `<html>` element is parsed as a
 /// document, so the tree has an `<html>` root along with `<head>` and `<body>`,
 /// as a browser builds them. Anything else is parsed as a fragment and gains no
 /// wrappers of its own.
+///
+/// The parser covers the tokenizer but only part of the tree builder's error recovery: it
+/// closes `p`, `li`, `dt`, `dd`, `option`, and table rows and cells implicitly, but does not
+/// reconstruct misnested formatting elements or foster-parent table content.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
+  parse_html(source, options).map(|parsed| parsed.node)
+}
+
+/// A node tree and the CSS of its `<style>` elements.
+#[derive(Debug, Clone)]
+pub struct ParsedHtml {
+  /// The node tree, as [`from_html`] returns it.
+  pub node: Node,
+  /// The text of each CSS `<style>` element outside `<svg>` and `<math>`, in document order, inside an
+  /// `@media` rule when the element has a `media` attribute.
+  pub css: Vec<String>,
+}
+
+/// Parse HTML markup into a node tree and the CSS its `<style>` elements hold, as the JS
+/// `fromHtml` does. See [`from_html`].
+pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, HtmlError> {
   // Decoding drops a leading byte order mark: https://encoding.spec.whatwg.org/#decode
   let source = source.strip_prefix('\u{feff}').unwrap_or(source);
   let builder = NodeBuilder {
@@ -294,33 +314,58 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
     max_depth: options.max_depth,
     styles: RefCell::default(),
   };
+  let dom = markup::parse(source, is_document(source));
   let mut nodes = Vec::new();
 
-  if is_document(source) {
-    let dom = parse_document(DomSink::default(), ParseOpts::default()).one(source);
+  builder.build_nodes(dom.document(), 0, &mut nodes)?;
 
-    builder.build_nodes(dom.document(), 0, &mut nodes)?;
-  } else {
-    let context = QualName::new(None, ns!(html), local_name!("body"));
-    let dom = parse_fragment(
-      DomSink::default(),
-      ParseOpts::default(),
-      context,
-      vec![],
-      false,
-    )
-    .one(source);
+  Ok(ParsedHtml {
+    node: collapse(nodes),
+    css: stylesheets(dom.document()),
+  })
+}
 
-    // `parse_fragment` wraps the roots in a synthetic context element, the
-    // document's only child.
-    if let Some(context) = dom.document().children().next() {
-      for child in context.children() {
-        builder.build_nodes(child, 0, &mut nodes)?;
+/// The non-empty text of every HTML `<style>` element with no type or `text/css` under `document`,
+/// in document order, inside an `@media` rule when the element has a `media` attribute.
+fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
+  let mut css = Vec::new();
+  let mut pending: Vec<_> = document.children().rev().collect();
+
+  while let Some(node) = pending.pop() {
+    let NodeData::Element { name, .. } = node.data() else {
+      continue;
+    };
+
+    if name.ns == Namespace::Html && &*name.local == "style" {
+      if !node
+        .attribute("type")
+        .is_none_or(|kind| kind.is_empty() || kind.eq_ignore_ascii_case("text/css"))
+      {
+        continue;
       }
+
+      let text: String = node
+        .children()
+        .filter_map(|child| match child.data() {
+          NodeData::Text(text) => Some(&**text),
+          _ => None,
+        })
+        .collect();
+
+      if !text.is_empty() {
+        css.push(match node.attribute("media").map(str::trim) {
+          Some(media) if !media.is_empty() => format!("@media {media} {{{text}}}"),
+          _ => text,
+        });
+      }
+
+      continue;
     }
+
+    pending.extend(node.children().rev());
   }
 
-  Ok(collapse(nodes))
+  css
 }
 
 /// Whether the source is a document: it opens with a doctype or an `<html>` tag, ignoring
@@ -408,7 +453,7 @@ impl NodeBuilder<'_> {
     out: &mut Vec<Node>,
   ) -> Result<(), HtmlError> {
     match handle.data() {
-      NodeData::Comment(_) | NodeData::Doctype { .. } | NodeData::ProcessingInstruction { .. } => {}
+      NodeData::Comment(_) | NodeData::Doctype { .. } => {}
       NodeData::Document => {
         for child in handle.children() {
           self.build_nodes(child, depth, out)?;
@@ -416,7 +461,7 @@ impl NodeBuilder<'_> {
       }
       NodeData::Text(contents) => {
         if !contents.is_empty() {
-          out.push(Node::text(contents.to_string()));
+          out.push(Node::text(contents.clone()));
         }
       }
       NodeData::Element { name, .. } => {
@@ -505,8 +550,8 @@ impl NodeBuilder<'_> {
 
     let mut attributes = BTreeMap::new();
     for attr in attrs {
-      let name = &*attr.name.local;
-      let value = attr.value.as_ref();
+      let name = &*attr.local;
+      let value = &*attr.value;
 
       // Read Tailwind independently of reserved names so it can alias `class`
       // without dropping the class name.
@@ -553,7 +598,7 @@ impl NodeBuilder<'_> {
   /// or its markup when the nodes do not form a document.
   #[cfg(feature = "svg")]
   fn inline_svg(&self, handle: NodeRef<'_>, depth: usize) -> Result<ImageSourceInput, HtmlError> {
-    let markup = serialize_outer_html(handle);
+    let markup = handle.outer_html();
     let root = self.svg_node(handle, depth)?;
     let source = str::from_utf8(&markup)
       .ok()
@@ -568,7 +613,7 @@ impl NodeBuilder<'_> {
 
   #[cfg(not(feature = "svg"))]
   fn inline_svg(&self, handle: NodeRef<'_>, _depth: usize) -> Result<ImageSourceInput, HtmlError> {
-    Ok(ImageSourceInput::Buffer(serialize_outer_html(handle)))
+    Ok(ImageSourceInput::Buffer(handle.outer_html()))
   }
 
   /// An element of an inline `<svg>` with every attribute in its attribute map under its
@@ -581,19 +626,19 @@ impl NodeBuilder<'_> {
     }
 
     Ok(match handle.data() {
-      NodeData::Text(contents) => Some(Node::text(contents.to_string())),
+      NodeData::Text(contents) => Some(Node::text(contents.clone())),
       NodeData::Element { name, attrs, .. } => {
         let attributes: BTreeMap<Box<str>, Box<str>> = attrs
           .iter()
           .map(|attr| {
-            let local = &*attr.name.local;
-            let name = match attr.name.ns {
-              ns!(xlink) => format!("xlink:{local}").into(),
-              ns!(xml) => format!("xml:{local}").into(),
-              _ => local.into(),
+            let local = &*attr.local;
+            let name = match attr.ns {
+              AttributeNamespace::Xlink => format!("xlink:{local}").into(),
+              AttributeNamespace::Xml => format!("xml:{local}").into(),
+              AttributeNamespace::None | AttributeNamespace::Xmlns => local.into(),
             };
 
-            (name, attr.value.as_ref().into())
+            (name, attr.value.clone())
           })
           .collect();
         let mut children = Vec::new();
@@ -704,22 +749,6 @@ fn empty_image_style(handle: NodeRef<'_>) -> Style {
   }
 
   style
-}
-
-/// Serialize an element including its own tag (outer HTML), used to round-trip
-/// `<svg>` subtrees into an image source.
-fn serialize_outer_html(handle: NodeRef<'_>) -> Vec<u8> {
-  let mut buffer = Vec::new();
-  let opts = SerializeOpts {
-    traversal_scope: TraversalScope::IncludeNode,
-    ..SerializeOpts::default()
-  };
-
-  if serialize(&mut buffer, &handle, opts).is_err() {
-    return Vec::new();
-  }
-
-  buffer
 }
 
 #[cfg(test)]
@@ -975,6 +1004,50 @@ mod tests {
       from_html(&src, opts),
       Err(HtmlError::MaxDepthExceeded(2)),
     ));
+  }
+
+  #[test]
+  fn style_elements_become_css_in_document_order() {
+    let parsed = parse_html(
+      "<!doctype html><head><style>a{}</style></head><body><style></style><div><style>b{}</style></div><svg><style>c{}</style></svg></body>",
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["a{}", "b{}"]);
+  }
+
+  #[test]
+  fn a_style_media_attribute_becomes_a_media_rule() {
+    let parsed = parse_html(
+      r#"<style media=" print ">a{}</style><style media="">b{}</style>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["@media print {a{}}", "b{}"]);
+  }
+
+  #[test]
+  fn a_style_inside_an_svg_integration_point_becomes_css() {
+    let parsed = parse_html(
+      "<svg><style>a{}</style><foreignObject><div><style>b{}</style></div></foreignObject><desc><style>c{}</style></desc></svg>",
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["b{}", "c{}"]);
+  }
+
+  #[test]
+  fn a_style_of_another_type_holds_no_css() {
+    let parsed = parse_html(
+      r#"<style type="text/plain">a{}</style><style type="TEXT/CSS">b{}</style><style type="">c{}</style>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["b{}", "c{}"]);
   }
 
   #[test]
