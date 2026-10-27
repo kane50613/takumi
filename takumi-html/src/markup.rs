@@ -54,6 +54,16 @@ struct Tag {
   self_closing: bool,
 }
 
+impl Tag {
+  fn empty(name: &str) -> Self {
+    Self {
+      name: name.into(),
+      attrs: Vec::new(),
+      self_closing: false,
+    }
+  }
+}
+
 struct Parser<'a> {
   rest: &'a str,
   dom: Dom,
@@ -103,7 +113,7 @@ impl<'a> Parser<'a> {
       self.rest = rest;
       self.insert_comment(contents);
     } else if let Some(rest) = rest.strip_prefix("<![CDATA[")
-      && self.in_foreign_content()
+      && self.child_namespace() != Namespace::Html
     {
       let (text, rest) = rest.split_once("]]>").unwrap_or((rest, ""));
 
@@ -301,11 +311,7 @@ impl<'a> Parser<'a> {
       _ => return,
     };
 
-    self.start_tag(Tag {
-      name: implied.into(),
-      attrs: Vec::new(),
-      self_closing: false,
-    });
+    self.start_tag(Tag::empty(implied));
     self.open_implied_table_parents(name);
   }
 
@@ -313,7 +319,7 @@ impl<'a> Parser<'a> {
     self
       .open
       .last()
-      .and_then(|&top| element_name(&self.dom, top))
+      .and_then(|&top| self.dom.element_name(top))
       .filter(|name| name.ns == Namespace::Html)
       .map(|name| &*name.local)
   }
@@ -321,18 +327,16 @@ impl<'a> Parser<'a> {
   fn end_tag(&mut self, name: &str) {
     // An end `</br>` is a `<br>`.
     if name == "br" {
-      self.start_tag(Tag {
-        name: name.into(),
-        attrs: Vec::new(),
-        self_closing: false,
-      });
+      self.start_tag(Tag::empty(name));
       return;
     }
 
     let dom = &self.dom;
 
     if let Some(index) = self.open.iter().rposition(|&id| {
-      element_name(dom, id).is_some_and(|open| open.local.eq_ignore_ascii_case(name))
+      dom
+        .element_name(id)
+        .is_some_and(|open| open.local.eq_ignore_ascii_case(name))
     }) {
       self.open.truncate(index);
     }
@@ -341,7 +345,7 @@ impl<'a> Parser<'a> {
   /// The text of a raw text element up to its end tag, which it consumes.
   fn raw_text(&mut self, element: NodeId) -> &'a str {
     let rest = self.rest;
-    let Some(name) = element_name(&self.dom, element) else {
+    let Some(name) = self.dom.element_name(element) else {
       return "";
     };
     let close = format!("</{}", name.local);
@@ -372,43 +376,24 @@ impl<'a> Parser<'a> {
   /// `<html>`, `<head>`, or `<body>` in a document: the first adds the element, a later one
   /// adds the attributes it lacks.
   fn document_element(&mut self, tag: Tag) {
-    let existing = match tag.name.as_str() {
-      "html" => self.html,
-      "head" => self.head.or(self.body),
-      _ => self.body,
-    };
-
-    if let Some(existing) = existing {
-      if tag.name != "head" {
-        self.add_missing_attributes(existing, tag.attrs);
-      }
-      return;
-    }
-
-    let name = tag.name.clone();
-    let element = self.element(Namespace::Html, tag);
-
-    match name.as_str() {
+    match tag.name.as_str() {
       "html" => {
-        self.dom.append_node(Dom::DOCUMENT, element);
-        self.html = Some(element);
+        self.html(tag.attrs);
       }
       "head" => {
-        let html = self.html();
+        if self.head.is_none() && self.body.is_none() {
+          let head = self.head(tag.attrs);
 
-        self.dom.append_node(html, element);
-        self.head = Some(element);
-        self.open.push(element);
+          self.open.push(head);
+        }
       }
       _ => {
-        self.close_head();
-        self.head();
+        let written = self.body.is_none();
+        let body = self.body(tag.attrs);
 
-        let html = self.html();
-
-        self.dom.append_node(html, element);
-        self.body = Some(element);
-        self.open.push(element);
+        if written {
+          self.open.push(body);
+        }
       }
     }
   }
@@ -430,66 +415,57 @@ impl<'a> Parser<'a> {
     }
   }
 
-  fn html(&mut self) -> NodeId {
+  fn html(&mut self, attrs: Vec<(String, String)>) -> NodeId {
     if let Some(html) = self.html {
+      self.add_missing_attributes(html, attrs);
       return html;
     }
 
-    let html = self.element(
-      Namespace::Html,
-      Tag {
-        name: "html".into(),
-        attrs: Vec::new(),
-        self_closing: false,
-      },
-    );
+    let html = self.html_element("html", attrs);
 
     self.dom.append_node(Dom::DOCUMENT, html);
     self.html = Some(html);
     html
   }
 
-  fn head(&mut self) -> NodeId {
+  fn head(&mut self, attrs: Vec<(String, String)>) -> NodeId {
     if let Some(head) = self.head {
       return head;
     }
 
-    let html = self.html();
-    let head = self.element(
-      Namespace::Html,
-      Tag {
-        name: "head".into(),
-        attrs: Vec::new(),
-        self_closing: false,
-      },
-    );
+    let html = self.html(Vec::new());
+    let head = self.html_element("head", attrs);
 
     self.dom.append_node(html, head);
     self.head = Some(head);
     head
   }
 
-  fn body(&mut self) -> NodeId {
+  fn body(&mut self, attrs: Vec<(String, String)>) -> NodeId {
     if let Some(body) = self.body {
+      self.add_missing_attributes(body, attrs);
       return body;
     }
 
     self.close_head();
-    self.head();
+    self.head(Vec::new());
 
-    let html = self.html();
-    let body = self.element(
-      Namespace::Html,
-      Tag {
-        name: "body".into(),
-        attrs: Vec::new(),
-        self_closing: false,
-      },
-    );
+    let html = self.html(Vec::new());
+    let body = self.html_element("body", attrs);
 
     self.dom.append_node(html, body);
     self.body = Some(body);
     body
+  }
+
+  fn html_element(&mut self, name: &str, attrs: Vec<(String, String)>) -> NodeId {
+    self.element(
+      Namespace::Html,
+      Tag {
+        attrs,
+        ..Tag::empty(name)
+      },
+    )
   }
 
   /// Pops a written `<head>` still open, as content that belongs in `<body>` does.
@@ -512,8 +488,8 @@ impl<'a> Parser<'a> {
       Some(top) if !self.document || (Some(top) != self.html && Some(top) != self.head) => top,
       Some(top) if Some(top) == self.head && head_content => top,
       _ if !self.document => Dom::DOCUMENT,
-      _ if head_content && self.body.is_none() => self.head(),
-      _ => self.body(),
+      _ if head_content && self.body.is_none() => self.head(Vec::new()),
+      _ => self.body(Vec::new()),
     }
   }
 
@@ -559,7 +535,10 @@ impl<'a> Parser<'a> {
   /// <https://html.spec.whatwg.org/multipage/syntax.html#optional-tags>
   fn close_implied_by(&mut self, name: &str) {
     while let Some(&top) = self.open.last()
-      && let Some(open) = element_name(&self.dom, top).filter(|open| open.ns == Namespace::Html)
+      && let Some(open) = self
+        .dom
+        .element_name(top)
+        .filter(|open| open.ns == Namespace::Html)
     {
       let closes = match &*open.local {
         "p" => ENDS_P.contains(&name),
@@ -582,11 +561,7 @@ impl<'a> Parser<'a> {
   /// The namespace of an element opened at the current position, before the `svg` and `math`
   /// tags switch it.
   fn child_namespace(&self) -> Namespace {
-    let Some(parent) = self
-      .open
-      .last()
-      .and_then(|&top| element_name(&self.dom, top))
-    else {
+    let Some(parent) = self.open.last().and_then(|&top| self.dom.element_name(top)) else {
       return Namespace::Html;
     };
     let integration_point = match parent.ns {
@@ -600,10 +575,6 @@ impl<'a> Parser<'a> {
     } else {
       parent.ns
     }
-  }
-
-  fn in_foreign_content(&self) -> bool {
-    self.child_namespace() != Namespace::Html
   }
 
   /// A new element in `ns`, its names cased as the tree builder adjusts them in foreign content.
@@ -650,34 +621,31 @@ fn split_attribute_value(source: &str) -> (&str, &str) {
   }
 }
 
-fn element_name(dom: &Dom, id: NodeId) -> Option<&ElementName> {
-  match dom.data(id) {
-    NodeData::Element { name, .. } => Some(name),
-    _ => None,
-  }
-}
-
 /// An attribute of an element in `ns`, with the namespace and casing the tree builder gives it.
 /// <https://html.spec.whatwg.org/multipage/parsing.html#adjust-foreign-attributes>
 fn foreign_attribute(ns: Namespace, name: String, value: String) -> Attribute {
-  let xlink = name
+  let (attribute_ns, local) = if ns == Namespace::Html {
+    (AttributeNamespace::None, name)
+  } else if let Some(local) = name
     .strip_prefix("xlink:")
-    .filter(|local| XLINK_ATTRIBUTES.contains(local));
-  let xml = name
+    .filter(|local| XLINK_ATTRIBUTES.contains(local))
+  {
+    (AttributeNamespace::Xlink, local.into())
+  } else if let Some(local) = name
     .strip_prefix("xml:")
-    .filter(|local| matches!(*local, "lang" | "space"));
-  let (attribute_ns, local) = match (ns, xlink, xml) {
-    (Namespace::Html, ..) => (AttributeNamespace::None, name.clone()),
-    (_, Some(local), _) => (AttributeNamespace::Xlink, local.into()),
-    (_, _, Some(local)) => (AttributeNamespace::Xml, local.into()),
-    _ if name == "xmlns:xlink" => (AttributeNamespace::Xmlns, "xlink".into()),
-    _ if name == "xmlns" => (AttributeNamespace::Xmlns, name.clone()),
-    (Namespace::Svg, ..) => (
-      AttributeNamespace::None,
-      adjust_case(&SVG_ATTRIBUTES, name.clone()),
-    ),
-    _ if name == "definitionurl" => (AttributeNamespace::None, "definitionURL".into()),
-    _ => (AttributeNamespace::None, name.clone()),
+    .filter(|local| matches!(*local, "lang" | "space"))
+  {
+    (AttributeNamespace::Xml, local.into())
+  } else if name == "xmlns:xlink" {
+    (AttributeNamespace::Xmlns, "xlink".into())
+  } else if name == "xmlns" {
+    (AttributeNamespace::Xmlns, name)
+  } else if ns == Namespace::Svg {
+    (AttributeNamespace::None, adjust_case(&SVG_ATTRIBUTES, name))
+  } else if name == "definitionurl" {
+    (AttributeNamespace::None, "definitionURL".into())
+  } else {
+    (AttributeNamespace::None, name)
   };
 
   Attribute {

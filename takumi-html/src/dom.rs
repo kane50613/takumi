@@ -81,6 +81,14 @@ impl Dom {
     &self.nodes[id].data
   }
 
+  /// The name of `id` when it is an element.
+  pub(crate) fn element_name(&self, id: NodeId) -> Option<&ElementName> {
+    match self.data(id) {
+      NodeData::Element { name, .. } => Some(name),
+      _ => None,
+    }
+  }
+
   pub(crate) fn data_mut(&mut self, id: NodeId) -> &mut NodeData {
     &mut self.nodes[id].data
   }
@@ -203,7 +211,7 @@ impl<'a> NodeRef<'a> {
           }
           NodeData::Text(contents) => {
             if parent.is_some_and(|parent| {
-              parent.ns == Namespace::Html && RAW_TEXT_ELEMENTS.contains(&&*parent.local)
+              parent.ns == Namespace::Html && UNESCAPED_TEXT_ELEMENTS.contains(&&*parent.local)
             }) {
               out.extend_from_slice(contents.as_bytes());
             } else {
@@ -235,7 +243,7 @@ pub(crate) const VOID_ELEMENTS: [&str; 18] = [
 ];
 
 /// HTML elements whose text serialization writes unescaped, with scripting disabled.
-const RAW_TEXT_ELEMENTS: [&str; 8] = [
+const UNESCAPED_TEXT_ELEMENTS: [&str; 8] = [
   "style",
   "script",
   "xmp",
