@@ -1,5 +1,9 @@
 //! Emoji drawn as images from a CDN, split out of text before the cascade as the JavaScript
 //! `extractEmojis` helper splits them.
+//!
+//! Not what a browser does: Chromium draws emoji with a color font its font fallback picks. This
+//! replaces each emoji cluster with an inline image sized to the em box instead, so it never needs
+//! an emoji font and looks the same everywhere.
 
 use std::{mem::take, sync::LazyLock};
 
