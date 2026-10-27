@@ -3,7 +3,6 @@
 use std::{collections::HashMap, sync::Arc};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
-use js_sys::Reflect;
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontStore, append_css, css_or_stylesheets, device_pixel_ratio, input::decode_images, parse_lang,
@@ -399,14 +398,11 @@ impl Renderer {
   }
 }
 
-/// The node tree `source` describes, and the CSS of its `<style>` elements when it is `{ html }`.
+/// The node tree `source` describes, and the CSS of its `<style>` elements when it is HTML.
 fn read_source(source: SourceType) -> Result<(Node, Vec<String>), js_sys::Error> {
   let source: JsValue = source.into();
 
-  if let Some(html) = Reflect::get(&source, &JsValue::from_str("html"))
-    .ok()
-    .and_then(|html| html.as_string())
-  {
+  if let Some(html) = source.as_string() {
     let parsed = parse_html(&html, FromHtmlOptions::default()).map_err(map_error)?;
 
     return Ok((parsed.node, parsed.css));

@@ -1,5 +1,4 @@
 import type {
-  HtmlSource,
   MeasuredNode,
   Node,
   RegisteredFamily,
@@ -44,19 +43,19 @@ export class Renderer {
     this.fonts = new FontRegistry(this.inner);
   }
 
-  render(source: Node | HtmlSource, options?: RenderOptions): Promise<Buffer<ArrayBuffer>> {
+  render(source: Node | string, options?: RenderOptions): Promise<Buffer<ArrayBuffer>> {
     return withRenderInput(this.fonts, options ?? {}, source, (opts, signal) =>
       this.inner.render(toNativeSource(source), opts, signal),
     );
   }
 
-  renderSvg(source: Node | HtmlSource, options?: SvgRenderOptions): Promise<string> {
+  renderSvg(source: Node | string, options?: SvgRenderOptions): Promise<string> {
     return withRenderInput(this.fonts, options ?? {}, source, (opts, signal) =>
       this.inner.renderSvg(toNativeSource(source), opts, signal),
     );
   }
 
-  measure(source: Node | HtmlSource, options?: RenderOptions): Promise<MeasuredNode> {
+  measure(source: Node | string, options?: RenderOptions): Promise<MeasuredNode> {
     return withRenderInput(this.fonts, options ?? {}, source, (opts, signal) =>
       this.inner.measure(toNativeSource(source), opts, signal),
     );

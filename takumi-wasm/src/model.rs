@@ -13,7 +13,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 extern "C" {
   /// A layout node, or HTML markup to parse in its place.
-  #[wasm_bindgen(typescript_type = "Node | HtmlSource")]
+  #[wasm_bindgen(typescript_type = "Node | string")]
   #[derive(Debug)]
   pub type SourceType;
 

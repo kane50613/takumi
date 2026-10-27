@@ -5,7 +5,7 @@ describe("HTML sources", () => {
   const renderer = new Renderer();
 
   const firstPixel = async (html: string, css: string[]) => {
-    const raw = await renderer.render({ html }, { width: 4, height: 4, format: "raw", css });
+    const raw = await renderer.render(html, { width: 4, height: 4, format: "raw", css });
 
     return Array.from(raw.subarray(0, 4));
   };
@@ -20,18 +20,15 @@ describe("HTML sources", () => {
   });
 
   it("keeps the deprecated stylesheets option", async () => {
-    const measured = await renderer.measure(
-      { html: "<div></div>" },
-      { stylesheets: ["div { width: 20px; height: 10px }"] },
-    );
+    const measured = await renderer.measure("<div></div>", {
+      stylesheets: ["div { width: 20px; height: 10px }"],
+    });
 
     expect([measured.width, measured.height]).toEqual([20, 10]);
   });
 
   it("parses inline styles and attributes", async () => {
-    const measured = await renderer.measure({
-      html: '<div style="width: 30px; height: 12px">&amp;</div>',
-    });
+    const measured = await renderer.measure('<div style="width: 30px; height: 12px">&amp;</div>');
 
     expect([measured.width, measured.height]).toEqual([30, 12]);
   });

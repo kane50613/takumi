@@ -129,8 +129,8 @@ pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Re
   T::deserialize(&mut de).map_err(|e| Error::from_reason(e.to_string()))
 }
 
-/// A node tree from JS: JSON text, parsed on the worker thread, a tree read from an object, or
-/// HTML from a `{ html }` object, parsed with the CSS of its `<style>` elements.
+/// A node tree from JS: JSON text from a `{ json }` object, parsed on the worker thread, a tree
+/// read from an object, or HTML from a string, parsed with the CSS of its `<style>` elements.
 pub(crate) enum NodeSource {
   Json(String),
   Tree(Box<Node>),
@@ -141,14 +141,16 @@ impl NodeSource {
   /// Reads `source`, leaving JSON text for [`NodeSource::into_node`] to parse.
   pub(crate) fn from_js(source: Either<String, Object>) -> Result<Self> {
     let object = match source {
-      Either::A(json) => return Ok(Self::Json(json)),
+      Either::A(html) => {
+        return parse_html(&html, FromHtmlOptions::default())
+          .map(|parsed| Self::Html(Box::new(parsed)))
+          .map_err(map_error);
+      }
       Either::B(object) => object,
     };
 
-    if let Some(html) = object.get::<String>("html")? {
-      return parse_html(&html, FromHtmlOptions::default())
-        .map(|parsed| Self::Html(Box::new(parsed)))
-        .map_err(map_error);
+    if let Some(json) = object.get::<String>("json")? {
+      return Ok(Self::Json(json));
     }
 
     deserialize_with_tracing(object).map(|node| Self::Tree(Box::new(node)))
