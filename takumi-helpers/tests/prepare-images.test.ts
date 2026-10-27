@@ -37,6 +37,18 @@ describe("prepareImages", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test("keeps emoji images across calls without a fetchCache", async () => {
+    const fetchMock = mock((url: string) => Promise.resolve(ok(url)));
+    const emoji = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg";
+    const other = "https://example.com/x.png";
+
+    for (let call = 0; call < 2; call++) {
+      await prepareImages({ node: imageTree(emoji, other), fetch: fetchMock });
+    }
+
+    expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual([emoji, other, other]);
+  });
+
   test("a rejected fetch is evicted so a later call retries", async () => {
     let attempt = 0;
     const fetchMock = mock((url: string) =>

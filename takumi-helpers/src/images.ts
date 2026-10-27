@@ -3,6 +3,8 @@ import type { Node } from "./types";
 import { defaultMaxFetchBytes, type FetchOptions } from "./fetch";
 import { fetchBytes } from "./fetch/bytes";
 import { FetchDeadline } from "./fetch/deadline";
+import { BoundedCache, perFetch } from "./fetch/cache";
+import { isEmojiImageUrl } from "./emoji";
 
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
@@ -65,6 +67,16 @@ export interface ImageFetchCache {
   set(url: string, data: Promise<ArrayBuffer>): unknown;
   delete(url: string): unknown;
 }
+
+/** Emoji SVGs fetched without a `fetchCache`, which providers serve at stable URLs. */
+const emojiImageCache = perFetch(
+  () =>
+    new BoundedCache<ArrayBuffer>({
+      maxBytes: 8 * 1024 * 1024,
+      maxEntries: 1024,
+      sizeOf: (data) => data.byteLength,
+    }),
+);
 
 function fetchImageData(
   url: string,
@@ -140,7 +152,11 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
 
   const tasks = urls.map(async (src): Promise<FetchedImage> => ({
     src,
-    data: await fetchImageData(src, fetchOptions, fetchCache),
+    data: await fetchImageData(
+      src,
+      fetchOptions,
+      fetchCache ?? (isEmojiImageUrl(src) ? emojiImageCache(fetch ?? globalThis.fetch) : undefined),
+    ),
   }));
   const fetched = throwOnError
     ? await Promise.all(tasks)

@@ -36,6 +36,8 @@ const image = await render(element, {
 
 `fetchCache` takes a `Map<string, Promise<ArrayBuffer>>` or any object with the same `get`, `set`, and `delete` methods. Values are promises, not raw buffers.
 
+Emoji images from the [`emoji`](/docs/reference/image-response) option are cached across renders without a `fetchCache`, up to 8 MB per `fetch` function.
+
 <Callout type="warn">
   A plain `Map` never evicts entries. If each render uses a different URL, pass a bounded cache such
   as an LRU, or leave `fetchCache` out.
