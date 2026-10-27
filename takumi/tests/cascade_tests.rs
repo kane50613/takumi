@@ -53,6 +53,18 @@ fn descendant_selector_matches_after_sibling_subtrees() {
   assert_eq!(result.children[2].children[0].width, default_width);
 }
 
+/// A `display: none` subtree is skipped without styling, and rules still reach the nodes after it.
+#[test]
+fn rules_match_the_nodes_after_a_hidden_subtree() {
+  let hidden = Node::container([block("probe"), block_of([block("probe"), Node::text("x")])])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::None)));
+  let root = Node::container([hidden, block("after")]);
+  let result = measure_with_css(root, ".probe { width: 10px } .after { width: 150px }");
+
+  assert_eq!(result.children.len(), 1);
+  assert_eq!(result.children[0].width, 150.0);
+}
+
 /// A block container of `children`.
 fn block_of(children: impl Into<Vec<Node>>) -> Node {
   Node::container(children)
