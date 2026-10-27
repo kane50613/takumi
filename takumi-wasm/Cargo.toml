@@ -31,10 +31,6 @@ path = "../takumi-raster"
 default-features = false
 features = ["svg"]
 
-[dependencies.takumi-html]
-path = "../takumi-html"
-features = ["svg"]
-
 [dependencies.takumi-svg]
 path = "../takumi-svg"
 

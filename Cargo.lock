@@ -1702,7 +1702,6 @@ dependencies = [
  "serde-wasm-bindgen",
  "takumi-bindings-common",
  "takumi-core",
- "takumi-html",
  "takumi-raster",
  "takumi-svg",
  "wasm-bindgen",
