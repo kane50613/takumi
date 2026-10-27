@@ -1,4 +1,5 @@
 mod container;
+mod emoji;
 mod image;
 mod input;
 
@@ -10,6 +11,7 @@ use std::{
 
 use serde::Deserialize;
 
+pub use self::emoji::EmojiProvider;
 pub use self::image::resolve_image;
 use crate::{
   Xxh3HashSet,

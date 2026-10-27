@@ -1,7 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::{device_pixel_ratio, parse_lang, stylesheet};
+use takumi_bindings_common::{device_pixel_ratio, parse_emoji, parse_lang, stylesheet};
 use takumi_core::{
   Fonts,
   layout::node::Node,
@@ -61,10 +61,20 @@ impl RenderAnimationTask {
       device_pixel_ratio: dpr,
       font_families,
       lang,
+      emoji,
     } = options;
+    let emoji = parse_emoji(emoji.as_deref()).map_err(map_error)?;
     let scenes = scenes
       .into_iter()
-      .map(|scene| Ok((deserialize_with_tracing(scene.node)?, scene.duration_ms)))
+      .map(|scene| {
+        let mut node: Node = deserialize_with_tracing(scene.node)?;
+
+        if let Some(provider) = emoji {
+          node.extract_emojis(provider);
+        }
+
+        Ok((node, scene.duration_ms))
+      })
       .collect::<Result<Vec<(Node, u32)>>>()?;
 
     if scenes.is_empty() {

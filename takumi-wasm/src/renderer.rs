@@ -8,7 +8,7 @@ use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontStore, NeedsOutput, append_css, css_or_stylesheets, device_pixel_ratio,
   input::{decode_images, node_from_json},
-  parse_lang, stylesheet, time_ms,
+  parse_emoji, parse_lang, stylesheet, time_ms,
 };
 use takumi_core::{
   Fonts,
@@ -37,13 +37,24 @@ pub struct Renderer {
   resource_cache: ResourceCache,
 }
 
+/// Splits each emoji in `node` out as an image from the CDN `emoji` names.
+fn extract_emojis(node: &mut Node, emoji: Option<&str>) -> Result<(), js_sys::Error> {
+  if let Some(provider) = parse_emoji(emoji).map_err(map_error)? {
+    node.extract_emojis(provider);
+  }
+
+  Ok(())
+}
+
 fn raster_options<'fonts>(
   resource_cache: &ResourceCache,
   fonts: &'fonts Fonts,
-  node: Node,
+  mut node: Node,
   options: RenderOptions,
   images: HashMap<Arc<str>, LoadedImageSource>,
 ) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
+  extract_emojis(&mut node, options.emoji.as_deref())?;
+
   let stylesheet = stylesheet(
     resource_cache,
     css_or_stylesheets(options.css, options.stylesheets),
@@ -218,11 +229,13 @@ impl Renderer {
     source: SourceType,
     options: Option<SvgRenderOptionsType>,
   ) -> Result<String, JsValue> {
-    let (node, document_css) = read_source(source)?;
+    let (mut node, document_css) = read_source(source)?;
     let mut options: SvgRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
+
+    extract_emojis(&mut node, options.emoji.as_deref())?;
 
     options.css = append_css(
       css_or_stylesheets(options.css.take(), options.stylesheets.take()),
@@ -357,7 +370,7 @@ impl Renderer {
   #[wasm_bindgen(js_name = renderAnimation, unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render_animation(&self, options: RenderAnimationOptionsType) -> Result<Vec<u8>, JsValue> {
     let RenderAnimationOptions {
-      scenes,
+      mut scenes,
       width,
       height,
       format,
@@ -370,6 +383,7 @@ impl Renderer {
       fps,
       font_families,
       lang,
+      emoji,
     } = from_value(options.into()).map_err(map_error)?;
 
     let lang = parse_lang(lang.as_deref()).map_err(map_error)?;
@@ -393,6 +407,10 @@ impl Renderer {
     )
     .map_err(map_error)?;
     let fonts = self.fonts.for_render(font_families.as_deref());
+    for scene in &mut scenes {
+      extract_emojis(&mut scene.node, emoji.as_deref())?;
+    }
+
     let scene_options = scenes
       .into_iter()
       .map(|scene| {

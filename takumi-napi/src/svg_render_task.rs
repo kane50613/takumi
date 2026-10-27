@@ -10,10 +10,7 @@ use takumi_core::{
 
 use crate::{
   JsBytes, NodeSource, RenderInput, map_error,
-  renderer::{
-    ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images,
-    deserialize_css, deserialize_keyframes,
-  },
+  renderer::{ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images},
 };
 
 pub struct SvgRenderTask {
@@ -36,11 +33,13 @@ impl SvgRenderTask {
     state: Arc<RendererState>,
   ) -> Result<Self> {
     Ok(SvgRenderTask {
-      input: Some(RenderInput {
+      input: Some(RenderInput::new(
         source,
-        css: deserialize_css(options.css, options.stylesheets)?,
-        keyframes: deserialize_keyframes(options.keyframes)?,
-      }),
+        options.css,
+        options.stylesheets,
+        options.keyframes,
+        options.emoji.as_deref(),
+      )?),
       fonts: state.fonts_for_render(options.font_families.as_deref())?,
       state,
       viewport: Viewport::new((options.width, options.height)),

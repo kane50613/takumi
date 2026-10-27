@@ -1,4 +1,5 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
+import type { EmojiType } from "@takumi-rs/helpers/emoji";
 import type { Properties } from "csstype";
 
 export type {
@@ -9,7 +10,7 @@ export type {
   TextNode,
 } from "@takumi-rs/helpers";
 
-export type { CssInput, Node };
+export type { CssInput, EmojiType, Node };
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 

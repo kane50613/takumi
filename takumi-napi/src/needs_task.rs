@@ -11,7 +11,7 @@ use takumi_raster::needs;
 
 use crate::{
   NodeSource, RenderInput, map_error,
-  renderer::{RenderNeeds, RenderOptions, RendererState, deserialize_css, deserialize_keyframes},
+  renderer::{RenderNeeds, RenderOptions, RendererState},
 };
 
 pub struct NeedsTask {
@@ -32,11 +32,13 @@ impl NeedsTask {
     state: Arc<RendererState>,
   ) -> Result<Self> {
     Ok(NeedsTask {
-      input: Some(RenderInput {
+      input: Some(RenderInput::new(
         source,
-        css: deserialize_css(options.css, options.stylesheets)?,
-        keyframes: deserialize_keyframes(options.keyframes)?,
-      }),
+        options.css,
+        options.stylesheets,
+        options.keyframes,
+        options.emoji.as_deref(),
+      )?),
       fonts: state.fonts_for_render(options.font_families.as_deref())?,
       state,
       viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
