@@ -3,10 +3,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
+use js_sys::Reflect;
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontStore, css_or_stylesheets, device_pixel_ratio, input::decode_images, parse_lang, stylesheet,
-  time_ms,
+  FontStore, append_css, css_or_stylesheets, device_pixel_ratio, input::decode_images, parse_lang,
+  stylesheet, time_ms,
 };
 use takumi_core::{
   Fonts,
@@ -15,6 +16,7 @@ use takumi_core::{
   style::FontFamily,
   viewport::Viewport,
 };
+use takumi_html::{FromHtmlOptions, parse_html};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, SequentialScene,
   measure, render, write_animation, write_image,
@@ -156,18 +158,23 @@ impl Renderer {
     self.fonts.reset().map_err(map_error)
   }
 
-  /// Renders a node tree into an image buffer.
+  /// Renders a node tree, or HTML, into an image buffer.
   #[wasm_bindgen(unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render(
     &self,
-    node: NodeType,
+    source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<Vec<u8>, JsValue> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: RenderOptions = options
+    let (node, document_css) = read_source(source)?;
+    let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
+
+    options.css = append_css(
+      css_or_stylesheets(options.css.take(), options.stylesheets.take()),
+      document_css,
+    );
 
     let images = self.images_map(options.images.as_deref())?;
     let fonts = self.fonts.for_render(options.font_families.as_deref());
@@ -203,18 +210,23 @@ impl Renderer {
     Ok(buffer)
   }
 
-  /// Renders a node tree into an SVG document string.
+  /// Renders a node tree, or HTML, into an SVG document string.
   #[wasm_bindgen(js_name = renderSvg)]
   pub fn render_svg(
     &self,
-    node: NodeType,
+    source: SourceType,
     options: Option<SvgRenderOptionsType>,
   ) -> Result<String, JsValue> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: SvgRenderOptions = options
+    let (node, document_css) = read_source(source)?;
+    let mut options: SvgRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
+
+    options.css = append_css(
+      css_or_stylesheets(options.css.take(), options.stylesheets.take()),
+      document_css,
+    );
 
     let images = self.images_map(options.images.as_deref())?;
     let stylesheet = stylesheet(
@@ -244,18 +256,23 @@ impl Renderer {
     Ok(svg)
   }
 
-  /// Measures a node tree and returns layout information.
+  /// Measures a node tree, or HTML, and returns layout information.
   #[wasm_bindgen(js_name = measure)]
   pub fn measure(
     &self,
-    node: NodeType,
+    source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<MeasuredNodeType, JsValue> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: RenderOptions = options
+    let (node, document_css) = read_source(source)?;
+    let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
+
+    options.css = append_css(
+      css_or_stylesheets(options.css.take(), options.stylesheets.take()),
+      document_css,
+    );
 
     let images = self.images_map(options.images.as_deref())?;
 
@@ -267,17 +284,22 @@ impl Renderer {
     Ok(to_value(&layout).map_err(map_error)?.into())
   }
 
-  /// Renders a node tree into a data URL.
+  /// Renders a node tree, or HTML, into a data URL.
   ///
   /// `raw` format is not supported for data URL.
   #[wasm_bindgen(js_name = "renderAsDataUrl")]
   pub fn render_as_data_url(
     &self,
-    node: NodeType,
+    source: SourceType,
     options: RenderOptionsType,
   ) -> Result<String, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: RenderOptions = from_value(options.into()).map_err(map_error)?;
+    let (node, document_css) = read_source(source)?;
+    let mut options: RenderOptions = from_value(options.into()).map_err(map_error)?;
+
+    options.css = append_css(
+      css_or_stylesheets(options.css.take(), options.stylesheets.take()),
+      document_css,
+    );
 
     let format = options.format.unwrap_or(OutputFormat::Png);
 
@@ -375,4 +397,20 @@ impl Renderer {
 
     Ok(buffer)
   }
+}
+
+/// The node tree `source` describes, and the CSS of its `<style>` elements when it is `{ html }`.
+fn read_source(source: SourceType) -> Result<(Node, Vec<String>), js_sys::Error> {
+  let source: JsValue = source.into();
+
+  if let Some(html) = Reflect::get(&source, &JsValue::from_str("html"))
+    .ok()
+    .and_then(|html| html.as_string())
+  {
+    let parsed = parse_html(&html, FromHtmlOptions::default()).map_err(map_error)?;
+
+    return Ok((parsed.node, parsed.css));
+  }
+
+  Ok((from_value(source).map_err(map_error)?, Vec::new()))
 }

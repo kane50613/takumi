@@ -12,7 +12,7 @@ mod render_task;
 pub(crate) mod renderer;
 mod svg_render_task;
 
-use std::fmt::Display;
+use std::{fmt::Display, mem::take};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
@@ -20,6 +20,7 @@ pub use renderer::Renderer;
 use serde::de::DeserializeOwned;
 use takumi_bindings_common::input::FontOptions;
 use takumi_core::{layout::node::Node, resources::glyph_cache};
+use takumi_html::{FromHtmlOptions, ParsedHtml, parse_html};
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
 /// `0` stops caching. Defaults to 8 MiB.
@@ -128,18 +129,36 @@ pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Re
   T::deserialize(&mut de).map_err(|e| Error::from_reason(e.to_string()))
 }
 
-/// A node tree from JS: JSON text, parsed on the worker thread, or a tree read from an object.
+/// A node tree from JS: JSON text, parsed on the worker thread, a tree read from an object, or
+/// HTML from a `{ html }` object, parsed with the CSS of its `<style>` elements.
 pub(crate) enum NodeSource {
   Json(String),
   Tree(Box<Node>),
+  Html(Box<ParsedHtml>),
 }
 
 impl NodeSource {
   /// Reads `source`, leaving JSON text for [`NodeSource::into_node`] to parse.
   pub(crate) fn from_js(source: Either<String, Object>) -> Result<Self> {
-    match source {
-      Either::A(json) => Ok(Self::Json(json)),
-      Either::B(object) => deserialize_with_tracing(object).map(|node| Self::Tree(Box::new(node))),
+    let object = match source {
+      Either::A(json) => return Ok(Self::Json(json)),
+      Either::B(object) => object,
+    };
+
+    if let Some(html) = object.get::<String>("html")? {
+      return parse_html(&html, FromHtmlOptions::default())
+        .map(|parsed| Self::Html(Box::new(parsed)))
+        .map_err(map_error);
+    }
+
+    deserialize_with_tracing(object).map(|node| Self::Tree(Box::new(node)))
+  }
+
+  /// The CSS of an HTML source's `<style>` elements, leaving none behind.
+  pub(crate) fn take_css(&mut self) -> Vec<String> {
+    match self {
+      Self::Html(parsed) => take(&mut parsed.css),
+      _ => Vec::new(),
     }
   }
 
@@ -148,6 +167,7 @@ impl NodeSource {
     let json = match self {
       Self::Json(json) => json,
       Self::Tree(node) => return Ok(*node),
+      Self::Html(parsed) => return Ok(parsed.node),
     };
 
     serde_json::from_str(&json).map_err(|error| {

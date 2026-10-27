@@ -12,10 +12,10 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {
-  /// JavaScript object representing a layout node.
-  #[wasm_bindgen(typescript_type = "Node")]
+  /// A layout node, or HTML markup to parse in its place.
+  #[wasm_bindgen(typescript_type = "Node | HtmlSource")]
   #[derive(Debug)]
-  pub type NodeType;
+  pub type SourceType;
 
   /// JavaScript object representing renderer construction options.
   #[wasm_bindgen(typescript_type = "RendererOptions")]

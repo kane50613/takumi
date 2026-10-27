@@ -44,7 +44,7 @@ use typed_builder::TypedBuilder;
 
 #[cfg(feature = "svg")]
 use crate::dom::AttributeNamespace;
-use crate::dom::{NodeData, NodeRef};
+use crate::dom::{Namespace, NodeData, NodeRef};
 
 /// Tags whose entire subtree is dropped, matching the JS markup walker.
 /// Deliberately distinct from the `display:none` presets (`title`,
@@ -277,7 +277,7 @@ impl Default for FromHtmlOptions {
 ///
 /// `tw`, `style`, `class`, `id`, `dir`, and `lang` attributes become the
 /// corresponding node styling and metadata; `<style>` blocks and other
-/// unrendered elements are dropped. A single root element is returned as-is; multiple
+/// unrendered elements are dropped, and [`parse_html`] returns the CSS they hold. A single root element is returned as-is; multiple
 /// roots are wrapped in a full-size container.
 ///
 /// A source that starts with a doctype or an `<html>` element is parsed as a
@@ -290,6 +290,21 @@ impl Default for FromHtmlOptions {
 /// reconstruct misnested formatting elements or foster-parent table content, and it decodes
 /// HTML4's named character references plus `&apos;`, each ending in `;`.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
+  parse_html(source, options).map(|parsed| parsed.node)
+}
+
+/// A node tree and the CSS of its `<style>` elements.
+#[derive(Debug, Clone)]
+pub struct ParsedHtml {
+  /// The node tree, as [`from_html`] returns it.
+  pub node: Node,
+  /// The text of each `<style>` element outside `<svg>` and `<math>`, in document order.
+  pub css: Vec<String>,
+}
+
+/// Parse HTML markup into a node tree and the CSS its `<style>` elements hold, as the JS
+/// `fromHtml` does. See [`from_html`].
+pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, HtmlError> {
   // Decoding drops a leading byte order mark: https://encoding.spec.whatwg.org/#decode
   let source = source.strip_prefix('\u{feff}').unwrap_or(source);
   let builder = NodeBuilder {
@@ -303,7 +318,38 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
 
   builder.build_nodes(dom.document(), 0, &mut nodes)?;
 
-  Ok(collapse(nodes))
+  Ok(ParsedHtml {
+    node: collapse(nodes),
+    css: stylesheets(dom.document()),
+  })
+}
+
+/// The non-empty text of every HTML `<style>` element under `document`, in document order.
+fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
+  let mut css = Vec::new();
+  let mut pending: Vec<_> = document.children().rev().collect();
+
+  while let Some(node) = pending.pop() {
+    let NodeData::Element { name, .. } = node.data() else {
+      continue;
+    };
+
+    if name.ns != Namespace::Html {
+      continue;
+    }
+
+    if &*name.local == "style" {
+      css.extend(node.children().filter_map(|child| match child.data() {
+        NodeData::Text(text) if !text.is_empty() => Some(text.clone()),
+        _ => None,
+      }));
+      continue;
+    }
+
+    pending.extend(node.children().rev());
+  }
+
+  css
 }
 
 /// Whether the source is a document: it opens with a doctype or an `<html>` tag, ignoring
@@ -942,6 +988,17 @@ mod tests {
       from_html(&src, opts),
       Err(HtmlError::MaxDepthExceeded(2)),
     ));
+  }
+
+  #[test]
+  fn style_elements_become_css_in_document_order() {
+    let parsed = parse_html(
+      "<!doctype html><head><style>a{}</style></head><body><style></style><div><style>b{}</style></div><svg><style>c{}</style></svg></body>",
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["a{}", "b{}"]);
   }
 
   #[test]

@@ -1,5 +1,6 @@
 import {
   Renderer as RendererInternal,
+  type HtmlSource,
   type MeasuredNode,
   type Node,
   type RegisteredFamily,
@@ -42,27 +43,27 @@ export class Renderer {
     this.fonts = new FontRegistry(this.inner);
   }
 
-  render(node: Node, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>> {
-    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
-      this.inner.render(node, opts),
+  render(source: Node | HtmlSource, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>> {
+    return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
+      this.inner.render(source, opts),
     );
   }
 
-  renderAsDataUrl(node: Node, options?: RenderOptions): Promise<string> {
-    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
-      this.inner.renderAsDataUrl(node, opts),
+  renderAsDataUrl(source: Node | HtmlSource, options?: RenderOptions): Promise<string> {
+    return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
+      this.inner.renderAsDataUrl(source, opts),
     );
   }
 
-  renderSvg(node: Node, options?: SvgRenderOptions): Promise<string> {
-    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
-      this.inner.renderSvg(node, opts),
+  renderSvg(source: Node | HtmlSource, options?: SvgRenderOptions): Promise<string> {
+    return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
+      this.inner.renderSvg(source, opts),
     );
   }
 
-  measure(node: Node, options?: RenderOptions): Promise<MeasuredNode> {
-    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
-      this.inner.measure(node, opts),
+  measure(source: Node | HtmlSource, options?: RenderOptions): Promise<MeasuredNode> {
+    return withRenderInput(this.fonts, options ?? {}, source, (opts) =>
+      this.inner.measure(source, opts),
     );
   }
 

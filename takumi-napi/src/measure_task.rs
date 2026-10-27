@@ -1,7 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::{device_pixel_ratio, parse_lang, stylesheet, time_ms};
+use takumi_bindings_common::{append_css, device_pixel_ratio, parse_lang, stylesheet, time_ms};
 use takumi_core::{
   Fonts,
   style::{FontFamily, Lang, StyleSheet},
@@ -33,13 +33,16 @@ pub struct MeasureTask {
 impl MeasureTask {
   pub(crate) fn from_options(
     env: Env,
-    node: NodeSource,
+    mut node: NodeSource,
     options: RenderOptions,
     state: Arc<RendererState>,
   ) -> Result<Self> {
     let stylesheet = stylesheet(
       &state.resource_cache,
-      deserialize_css(options.css, options.stylesheets)?,
+      append_css(
+        deserialize_css(options.css, options.stylesheets)?,
+        node.take_css(),
+      ),
       deserialize_keyframes(options.keyframes)?,
     )
     .map_err(map_error)?;

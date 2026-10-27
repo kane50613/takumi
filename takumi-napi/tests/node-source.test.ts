@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { container, type Declarations, image, text } from "@takumi-rs/helpers";
-import { type Node, Renderer } from "../index";
+import { type HtmlSource, type Node, Renderer } from "../index";
 import { toNativeSource } from "../src/node-source";
 
 const renderer = new Renderer();
@@ -107,7 +107,7 @@ describe("a JSON source", () => {
     ["no type", { text: "x" } as unknown as Node],
     ["nesting past the limit", nested(513)],
   ])("fails on %s with the tree's message", async (_, node) => {
-    const message = (source: Node | string) =>
+    const message = (source: Node | HtmlSource | string) =>
       Promise.resolve()
         .then(() => renderer.render(source, options))
         .then(

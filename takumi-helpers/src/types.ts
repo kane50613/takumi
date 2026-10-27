@@ -89,6 +89,9 @@ export type NodeMetadata = {
 
 export type Node = ContainerNode | TextNode | ImageNode;
 
+/** HTML markup a renderer parses in place of a node tree, its `<style>` elements adding CSS. */
+export type HtmlSource = { html: string };
+
 export type ContainerNode = NodeMetadata & {
   type: "container";
   children?: Node[];

@@ -3,6 +3,7 @@ import type { Properties } from "csstype";
 
 export {
   ContainerNode,
+  HtmlSource,
   ImageNode,
   Node,
   NodeMetadata,

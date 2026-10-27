@@ -1,5 +1,5 @@
 import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-catalog";
-import type { Node } from "./types";
+import type { HtmlSource, Node } from "./types";
 import type { FetchOptions } from "./fetch";
 import { fetchBytes } from "./fetch/bytes";
 import { FontStylesheetCache } from "./fonts/cache";
@@ -287,7 +287,7 @@ function mergeVariableFaces(faces: SubsetFace[]): SubsetFace[] {
  * A codepoint source: content trees, plus loose strings for text a backend injects that no
  * node carries, such as the digits a PDF page counter fills in.
  */
-export type CodepointSource = string | Node | (string | Node)[];
+export type CodepointSource = string | Node | HtmlSource | (string | Node | HtmlSource)[];
 
 /**
  * Every character the predefined list marker styles can generate. Markers are
@@ -307,9 +307,11 @@ export function collectCodepoints(source: CodepointSource): Set<number> {
       codepoints.add(ch.codePointAt(0) as number);
     }
   };
-  const walk = (node: string | Node) => {
+  const walk = (node: string | Node | HtmlSource) => {
     if (typeof node === "string") {
       add(node);
+    } else if ("html" in node) {
+      add(node.html);
     } else if (node.type === "text") {
       add(node.text);
     } else if (node.type === "container") {

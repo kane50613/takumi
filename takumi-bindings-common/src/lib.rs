@@ -170,6 +170,18 @@ pub fn css_or_stylesheets(
   css.or_else(|| stylesheets.map(|sheets| sheets.into_iter().map(CssSource::Text).collect()))
 }
 
+/// The CSS for a render followed by `document`, the CSS of an HTML source's `<style>` elements.
+pub fn append_css(css: Option<Vec<CssSource>>, document: Vec<String>) -> Option<Vec<CssSource>> {
+  if document.is_empty() {
+    return css;
+  }
+
+  let mut css = css.unwrap_or_default();
+
+  css.extend(document.into_iter().map(CssSource::Text));
+  Some(css)
+}
+
 /// The stylesheet for a render: the loose-parsed sheet list with its keyframes.
 /// Parsed sheets are cached by source text in `cache`; per-render keyframes are
 /// grafted onto a copy so the cached parse stays pristine.
