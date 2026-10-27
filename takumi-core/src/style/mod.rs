@@ -14,8 +14,8 @@ mod stylesheets;
 mod supports;
 mod tw;
 
-pub(crate) use animation::apply_stylesheet_animations;
 pub use animation::{KeyframeRule, KeyframesRule};
+pub(crate) use animation::{apply_stylesheet_animations, find_keyframes};
 pub(crate) use calc::parse_calc_number_expression;
 pub(crate) use css_input::{CssInput, CssNumber, CssUnexpected, CssValueSeed};
 pub use css_source::{

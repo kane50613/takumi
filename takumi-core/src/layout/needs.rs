@@ -4,8 +4,13 @@
 use std::collections::BTreeSet;
 
 use crate::{
-  layout::{node::NodeKind, tree::RenderNode},
-  style::{BackgroundImage, ComputedStyle, Display, TextTransform},
+  context::RenderContext,
+  layout::{
+    inline::{inline_item::InlineItemType, inline_node::InlineNode},
+    node::{NodeKind, is_remote_url},
+    tree::RenderNode,
+  },
+  style::{BackgroundImage, ComputedStyle, Display, find_keyframes},
 };
 
 /// The remote images a render tree draws and the characters its text shapes.
@@ -14,11 +19,8 @@ pub struct RenderNeeds {
   /// The `http:` and `https:` URLs of image elements, of computed `background-image` and
   /// `mask-image` values, and of list items' `list-style-image`.
   pub images: BTreeSet<String>,
-  /// Every character the tree's text, generated content and list markers included, shapes.
-  ///
-  /// Approximate: `capitalize` contributes both the text and the text with its first letters
-  /// capitalized as if each run started a word, since the character before a run is only known
-  /// during inline layout.
+  /// Every character the tree's text, generated content and list markers included, shapes, after
+  /// `text-transform` as inline layout applies it.
   pub characters: BTreeSet<char>,
 }
 
@@ -32,10 +34,11 @@ impl RenderNode {
       return needs;
     }
 
-    let mut stack = vec![self];
+    let mut stack = vec![(self, false)];
 
-    while let Some(node) = stack.pop() {
+    while let Some((node, in_inline_context)) = stack.pop() {
       needs.add_style(&node.context.style);
+      needs.add_keyframes(&node.context);
 
       if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|node| &node.kind)
         && let Some(url) = image.url()
@@ -43,11 +46,20 @@ impl RenderNode {
         needs.images.insert(url.to_owned());
       }
 
-      if let Some(text) = node.own_text() {
-        needs.add_text(&node.context.style, text);
+      let creates_inline_context = node.should_create_inline_layout();
+
+      // A text laid out as a block, such as a flex item, collects its own inline content.
+      if creates_inline_context || (!in_inline_context && node.own_text().is_some()) {
+        needs.add_inline_text(node);
       }
 
-      stack.extend(node.children.iter().flat_map(|children| children.iter()));
+      stack.extend(
+        node
+          .children
+          .iter()
+          .flat_map(|children| children.iter())
+          .map(|child| (child, creates_inline_context)),
+      );
     }
 
     needs
@@ -71,20 +83,44 @@ impl RenderNeeds {
 
     for image in images {
       if let BackgroundImage::Url(url) = image
-        && (url.starts_with("https://") || url.starts_with("http://"))
+        && is_remote_url(url)
       {
         self.images.insert(url.to_string());
       }
     }
   }
 
-  fn add_text(&mut self, style: &ComputedStyle, text: &str) {
-    self.characters.extend(text.chars());
+  /// Adds the images the `@keyframes` rules the box animates with switch to, which only show at
+  /// later frames.
+  fn add_keyframes(&mut self, context: &RenderContext) {
+    for name in context.style.misc1_data.animation_name.iter().flatten() {
+      let Some(rule) = find_keyframes(context.stylesheet(), name, context.sizing.viewport) else {
+        continue;
+      };
 
-    if style.inherited_data.text_transform != TextTransform::default() {
-      self
-        .characters
-        .extend(style.apply_text_transform(text, ' ').chars());
+      for keyframe in &rule.keyframes {
+        self.images.extend(
+          keyframe
+            .declarations
+            .image_urls()
+            .filter(|url| is_remote_url(url))
+            .map(str::to_owned),
+        );
+      }
+    }
+  }
+
+  /// Adds the text inline layout shapes in the inline formatting context `root` establishes,
+  /// collected as layout collects it, `text-transform` applied with the character before each run.
+  fn add_inline_text(&mut self, root: &RenderNode) {
+    let data = InlineNode::new(root).collect_inlines();
+
+    for item in &data.items {
+      if item.item_type == InlineItemType::Text {
+        self
+          .characters
+          .extend(data.text_content[item.start_offset()..item.end_offset()].chars());
+      }
     }
   }
 }
@@ -92,7 +128,10 @@ impl RenderNeeds {
 #[cfg(test)]
 mod tests {
   use super::RenderNeeds;
-  use crate::layout::{inline::testing::render_tree, node::Node};
+  use crate::layout::{
+    inline::testing::{render_tree, span},
+    node::Node,
+  };
 
   const CSS: &str = "
     .hidden { display: none; background-image: url(https://example.com/hidden.png) }
@@ -122,6 +161,33 @@ mod tests {
   }
 
   #[test]
+  fn reads_images_an_animation_switches_to() {
+    let needs = render_tree(
+      [Node::container([]).with_class_name("spin")],
+      "@keyframes swap { to { background-image: url(https://example.com/later.png) } }
+       @keyframes unused { to { background-image: url(https://example.com/unused.png) } }
+       .spin { animation: swap 1s }",
+    )
+    .needs();
+
+    assert_eq!(
+      needs.images.into_iter().collect::<Vec<_>>(),
+      ["https://example.com/later.png"]
+    );
+  }
+
+  #[test]
+  fn capitalizes_only_where_a_word_starts() {
+    let needs = render_tree(
+      [span("ab"), span("cd"), span(" ef")],
+      ".span { text-transform: capitalize }",
+    )
+    .needs();
+
+    assert_eq!(needs.characters.into_iter().collect::<String>(), " AEbcdf");
+  }
+
+  #[test]
   fn reads_full_width_transforms() {
     let needs = render_tree(
       [Node::text("A").with_class_name("wide")],
@@ -143,6 +209,7 @@ mod tests {
         Node::container([Node::text("c")]).with_class_name("item"),
         Node::image("https://example.com/img.png"),
         Node::image("data:image/png;base64,AA"),
+        Node::image("HTTPS://example.com/upper.png"),
       ],
       CSS,
     )
@@ -151,6 +218,7 @@ mod tests {
     assert_eq!(
       needs.images.into_iter().collect::<Vec<_>>(),
       [
+        "HTTPS://example.com/upper.png",
         "https://example.com/before.png",
         "https://example.com/bg.png",
         "https://example.com/img.png",
@@ -159,7 +227,7 @@ mod tests {
     );
     assert_eq!(
       needs.characters.into_iter().collect::<String>(),
-      " .1ABabcx"
+      " .1ABcx"
     );
   }
 }
