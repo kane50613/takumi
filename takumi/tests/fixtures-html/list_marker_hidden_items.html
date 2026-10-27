@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>list_marker_hidden_items</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .list {
+        display: block;
+        margin: 0;
+        padding: 12px 20px;
+        background: white;
+        font-family: "Geist";
+        font-size: 24px;
+        color: rgb(15, 23, 42);
+        list-style-type: decimal;
+        list-style-position: inside;
+      }
+      .item {
+        display: list-item;
+      }
+      .hidden {
+        display: none;
+      }
+      .hidden + .item {
+        color: rgb(37, 99, 235);
+      }
+    </style>
+  </head>
+  <body style="width: 320px; height: 160px">
+    <ol class="list">
+      <li class="item">first item</li>
+      <li class="item hidden">hidden item</li>
+      <div class="hidden"><li class="item">hidden inside</li></div>
+      <li class="item">second item</li>
+      <li class="item">third item</li>
+    </ol>
+  </body>
+</html>
