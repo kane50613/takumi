@@ -335,7 +335,7 @@ impl PdfRenderer {
     )
   }
 
-  /// Reads the remote images a node tree draws and the characters its text shapes, after the
+  /// Reads the images a node tree looks up by URL and the characters its text shapes, after the
   /// cascade, laid out as `measure` lays it out.
   pub fn needs(
     &self,

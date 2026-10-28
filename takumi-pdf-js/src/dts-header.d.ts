@@ -223,7 +223,7 @@ export type MeasureOptions = (
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };
 
-/** The remote images a node tree draws and the characters its text shapes, read after the cascade. */
+/** The images a node tree looks up by URL and the characters its text shapes, read after the cascade. */
 export type RenderNeeds = {
   images: string[];
   characters: string;

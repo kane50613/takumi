@@ -9,7 +9,7 @@ import { isEmojiImageUrl } from "./emoji";
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
 function isRemoteUrl(value: string): boolean {
-  return value.startsWith("https://") || value.startsWith("http://");
+  return /^https?:\/\//i.test(value);
 }
 
 function collectCssUrls(value: unknown, urls: Set<string>) {
@@ -146,7 +146,7 @@ export interface FetchedImage {
 }
 
 export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = FetchOptions & {
-  /** Remote image URLs to fetch. */
+  /** Image URLs to fetch. A relative one is fetched only through a custom `fetch`, which can resolve it. */
   urls?: Iterable<string>;
   /**
    * The node tree(s) whose remote images to fetch, read from `src`, inline styles, and `tw`
@@ -184,7 +184,9 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
     collectImageUrls(root, referenced);
   }
 
-  const missing = [...referenced].filter((url) => !provided.has(url));
+  const missing = [...referenced].filter(
+    (url) => !provided.has(url) && (fetch !== undefined || isRemoteUrl(url)),
+  );
   const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
 
   const tasks = missing.map(async (src): Promise<FetchedImage> => ({

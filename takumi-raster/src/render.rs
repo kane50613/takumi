@@ -153,7 +153,7 @@ pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
   MeasuredNode::of(&mut root, &layout_results, options.viewport.size.into())
 }
 
-/// What a node needs fetched before it renders: the remote images and the characters it draws.
+/// What a node needs fetched before it renders: the images it looks up by URL and the characters it draws.
 pub fn needs(mut options: RenderOptions<'_>) -> RenderNeeds {
   let render_context = options.take_render_context();
 

@@ -222,7 +222,7 @@ impl Painter {
     Ok(RenderedPaint { tree, raw })
   }
 
-  /// Reads the remote images a node tree draws and the characters its text shapes, after the
+  /// Reads the images a node tree looks up by URL and the characters its text shapes, after the
   /// cascade.
   pub fn needs(
     &self,

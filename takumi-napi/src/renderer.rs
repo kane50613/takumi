@@ -83,11 +83,11 @@ impl From<takumi_raster::MeasuredNode> for MeasuredNode {
   }
 }
 
-/// The remote images a node tree draws and the characters its text shapes, read after the cascade.
+/// The images a node tree looks up by URL and the characters its text shapes, read after the cascade.
 #[napi(object)]
 pub struct RenderNeeds {
-  /// The `http:` and `https:` URLs of image elements and computed background, mask, and list
-  /// marker images, sorted.
+  /// The URLs of image elements and computed background, mask, and list marker images, except
+  /// `data:` URIs and inline SVG, sorted.
   pub images: Vec<String>,
   /// Every character the text shapes once, sorted, generated content and `text-transform`
   /// included.

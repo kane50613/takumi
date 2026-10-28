@@ -7,17 +7,17 @@ use crate::{
   context::RenderContext,
   layout::{
     inline::{inline_item::InlineItemType, inline_node::InlineNode},
-    node::{NodeKind, is_remote_url},
+    node::{NodeKind, is_image_reference},
     tree::RenderNode,
   },
   style::{BackgroundImage, ComputedStyle, Display, Float, find_keyframes},
 };
 
-/// The remote images a render tree draws and the characters its text shapes.
+/// The images a render tree looks up by URL and the characters its text shapes.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RenderNeeds {
-  /// The `http:` and `https:` URLs of image elements, of computed `background-image` and
-  /// `mask-image` values, and of list items' `list-style-image`.
+  /// The URLs of image elements, of computed `background-image` and `mask-image` values, and of
+  /// list items' `list-style-image`, except `data:` URIs and inline SVG the render decodes itself.
   pub images: BTreeSet<String>,
   /// Every character the tree's text, generated content and list markers included, shapes, after
   /// `text-transform` as inline layout applies it.
@@ -95,7 +95,7 @@ impl RenderNeeds {
 
     for image in images {
       if let BackgroundImage::Url(url) = image
-        && is_remote_url(url)
+        && is_image_reference(url)
       {
         self.images.insert(url.to_string());
       }
@@ -115,7 +115,7 @@ impl RenderNeeds {
           keyframe
             .declarations
             .image_urls()
-            .filter(|url| is_remote_url(url))
+            .filter(|url| is_image_reference(url))
             .map(str::to_owned),
         );
       }
@@ -247,6 +247,8 @@ mod tests {
         Node::image("https://example.com/img.png"),
         Node::image("data:image/png;base64,AA"),
         Node::image("HTTPS://example.com/upper.png"),
+        Node::image("/local.png"),
+        Node::image("<svg xmlns='http://www.w3.org/2000/svg'/>"),
       ],
       CSS,
     )
@@ -255,6 +257,7 @@ mod tests {
     assert_eq!(
       needs.images.into_iter().collect::<Vec<_>>(),
       [
+        "/local.png",
         "HTTPS://example.com/upper.png",
         "https://example.com/before.png",
         "https://example.com/bg.png",
