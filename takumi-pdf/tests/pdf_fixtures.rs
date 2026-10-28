@@ -3100,6 +3100,33 @@ fn paged_overflow_clip_spans_the_stitched_box() {
   assert!(second_page.contains("0 150 150 -150 re"), "{second_page}");
 }
 
+/// A box clipping to rounded corners across four pages curves its first page by its whole height,
+/// though the stream reaches that page before the box ends.
+#[test]
+fn paged_rounded_clip_waits_for_the_whole_box() {
+  let pdf = run_pdf_fixture("paged-rounded-clip-stitched", |fonts| {
+    let source = r#"<div style="height: 400px; overflow: hidden; border-radius: 50%">
+      <div style="height: 400px; background-color: #ffee00"></div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse rounded clip fixture"))
+      .page(PageOptions {
+        width: 200.0,
+        height: 100.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let streams = content_streams(&pdf);
+  let first_page = String::from_utf8_lossy(&streams[0]);
+
+  assert_eq!(page_count(&pdf), 4);
+  // The ellipse runs from the box's top to its bottom 300pt below, three pages under the first.
+  assert!(first_page.contains("75 -225 c"), "{first_page}");
+}
+
 /// A line taller than a page moves to the next page, as content precedes it, then runs on over the
 /// page after it, where its text and the lines after it follow.
 #[test]

@@ -1726,6 +1726,29 @@ fn content_clip_extents(scene: &Scene, id: &str) -> Vec<(f32, f32)> {
     .collect()
 }
 
+/// A box clipping to rounded corners keeps its pages open until it ends, since its whole height
+/// shapes the corners on every page. A square clip leaves them alone.
+#[test]
+fn a_rounded_clip_keeps_its_pages_open_until_it_ends() {
+  for (container, finalized) in [
+    ("clipping rounded", [0, 0, 0, 4]),
+    ("clipping", [1, 2, 3, 4]),
+  ] {
+    let tree = render(
+      root([
+        Node::container([block("child", "tall")]).with_class_name(format!("block {container}"))
+      ]),
+      ".clipping { overflow: hidden } .rounded { border-radius: 50% } .tall { height: 400px }",
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "{container}"
+    );
+  }
+}
+
 #[test]
 fn a_broken_overflow_clip_spans_the_stitched_box() {
   for (child, container) in [
