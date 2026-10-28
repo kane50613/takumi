@@ -1112,7 +1112,7 @@ dependencies = [
 [[package]]
 name = "png"
 version = "0.18.1"
-source = "git+https://github.com/kane50613/image-png?rev=3be6b60681d502e035ef2cd6c5726d7f5a952a0e#3be6b60681d502e035ef2cd6c5726d7f5a952a0e"
+source = "git+https://github.com/kane50613/image-png?rev=666af62f375c853e3890f8f41075804ca2ee3597#666af62f375c853e3890f8f41075804ca2ee3597"
 dependencies = [
  "bitflags",
  "fdeflate",
