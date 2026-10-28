@@ -4,9 +4,13 @@ use std::{ops::Range, sync::Arc};
 
 use super::outlines::{OutlineGlyph, RunOutline};
 use crate::{
+  Fonts,
   geometry::{ComputedLayout, PathCommand, Point},
   layout::inline::{PositionedInlineRun, ProcessedInlineSpan},
-  resources::glyph::{ResolvedBitmapGlyph, ResolvedGlyph},
+  resources::{
+    font::ImageGlyph,
+    glyph::{ResolvedBitmapGlyph, ResolvedGlyph},
+  },
   style::{Affine, Color},
 };
 
@@ -98,6 +102,30 @@ impl PositionedInlineRun {
         paint,
       })
     })
+  }
+
+  /// The run's image glyphs (see [`Fonts::image_glyph`]) in the block at `layout`, each with the
+  /// transform that maps its em box, from the glyph's origin, into the block's border box.
+  pub(super) fn image_glyphs<'f>(
+    &self,
+    layout: ComputedLayout,
+    fonts: &'f Fonts,
+  ) -> Vec<(ImageGlyph<'f>, Affine)> {
+    let run_transform = self.transform(Affine::IDENTITY);
+    let glyph_offset = self.glyph_offset(layout);
+    let shaped = &self.glyph_run;
+
+    shaped
+      .glyphs
+      .iter()
+      .filter_map(|glyph| {
+        let image_glyph = fonts.image_glyph(shaped.font_id(), glyph.id, shaped.font_size)?;
+        let transform =
+          run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
+
+        Some((image_glyph, transform))
+      })
+      .collect()
   }
 
   /// The glyphs the run's colour fills, one entry per glyph of the run.

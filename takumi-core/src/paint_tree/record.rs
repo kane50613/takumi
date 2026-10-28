@@ -2,17 +2,13 @@
 
 use std::mem;
 
-#[cfg(feature = "png")]
-use super::document::{ImageSource, Sampling};
 use super::{
   document::{
-    Drawable, FillRuleName, LineCapName, LineJoinName, Paint, PaintPoint, PaintRect, Role,
-    ShadowSide, Shape, Stroke,
+    Drawable, FillRuleName, ImageSource, LineCapName, LineJoinName, Paint, PaintPoint, PaintRect,
+    Role, Sampling, ShadowSide, Shape, Stroke,
   },
   runs::GlyphPaint,
 };
-#[cfg(feature = "png")]
-use crate::resources::image::to_data_url;
 use crate::{
   font_style::SizedFontStyle,
   geometry::{PathCommand, Point, Size},
@@ -22,7 +18,11 @@ use crate::{
     PaintRole, ShadowShape, StripBackground, StrokeStyle,
   },
   path_data::path_data,
-  resources::glyph::ResolvedBitmapGlyph,
+  resources::{
+    font::{FontsSnapshot, ImageGlyph},
+    glyph::ResolvedBitmapGlyph,
+    image::{ImageSource as LoadedImage, sniff_mime, to_data_url},
+  },
   shadow::SizedShadow,
   style::{Affine, Color, LineJoin},
 };
@@ -52,6 +52,8 @@ pub(super) struct Recorder {
   shadow: Option<SizedShadow>,
   /// Whether the recorder records a text node, which alone draws glyph runs.
   text_node: bool,
+  /// The fonts a text node's runs shaped with, whose image glyphs draw their images.
+  fonts: Option<FontsSnapshot>,
   /// Maps the node's space onto the page.
   transform: Affine,
 }
@@ -67,13 +69,16 @@ impl Recorder {
       layers: Vec::new(),
       shadow: None,
       text_node: false,
+      fonts: None,
     }
   }
 
-  /// A recorder for a text node, its space mapped onto the page by `transform`.
-  pub(super) fn text(transform: Affine) -> Self {
+  /// A recorder for a text node shaped with `fonts`, its space mapped onto the page by
+  /// `transform`.
+  pub(super) fn text(transform: Affine, fonts: FontsSnapshot) -> Self {
     Self {
       text_node: true,
+      fonts: Some(fonts),
       ..Self::new(transform)
     }
   }
@@ -502,6 +507,10 @@ impl Recorder {
       }
     }
 
+    if self.record_image_glyphs(run, frame) {
+      return;
+    }
+
     for glyph in run.placed_glyphs(frame.layout) {
       match glyph.paint {
         GlyphPaint::Outline { .. } => {}
@@ -597,6 +606,38 @@ impl Recorder {
     }
   }
 
+  /// Records the image of each of `run`'s image glyphs over its em box, as the image it arrived
+  /// as rather than its bitmap; false when an image glyph face did not shape the run.
+  fn record_image_glyphs(&mut self, run: &PositionedInlineRun, frame: BoxFrame) -> bool {
+    let Some(fonts) = self.fonts.clone() else {
+      return false;
+    };
+    let image_glyphs = run.image_glyphs(frame.layout, &fonts);
+
+    if image_glyphs.is_empty() {
+      return false;
+    }
+
+    for (ImageGlyph { image, em_box }, transform) in image_glyphs {
+      let Some(src) = image_url(image) else {
+        continue;
+      };
+      let (width, height) = (em_box.right - em_box.left, em_box.bottom - em_box.top);
+      let placed = frame.place(transform) * Affine::translation(em_box.left, em_box.top);
+      let rect = PaintRect::bounding(width, height, placed);
+
+      self.drawables.push(Drawable::Image {
+        role: self.role,
+        image: ImageSource { src, width, height },
+        rect,
+        clip: Shape::Rect { rect },
+        sampling: Sampling::Smooth,
+      });
+    }
+
+    true
+  }
+
   /// Records a bitmap glyph placed by `transform`.
   #[cfg(feature = "png")]
   fn record_bitmap(&mut self, bitmap: &ResolvedBitmapGlyph, transform: Affine) {
@@ -642,5 +683,21 @@ impl Recorder {
         )
       })
       .zip(self.visible(brush.stroke_color))
+  }
+}
+
+/// `image` as a data URL: an SVG's markup, or the bytes a bitmap arrived in.
+fn image_url(image: &LoadedImage) -> Option<String> {
+  match image {
+    #[cfg(feature = "svg-sizing")]
+    LoadedImage::Svg(svg) => Some(to_data_url("image/svg+xml", svg.source().as_bytes())),
+    LoadedImage::Encoded(encoded) => {
+      Some(to_data_url(sniff_mime(encoded.bytes()), encoded.bytes()))
+    }
+    #[cfg(feature = "png")]
+    LoadedImage::Bitmap(bitmap) => bitmap
+      .encode_png()
+      .map(|png| to_data_url("image/png", &png)),
+    _ => None,
   }
 }

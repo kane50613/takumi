@@ -387,7 +387,7 @@ impl Walker {
     let PaintedInline { spans, runs, .. } = painted;
     let text = painted.text();
     let context = &node.context;
-    let mut recorder = Recorder::text(transform);
+    let mut recorder = Recorder::text(transform, context.fonts().clone());
 
     runs.paint(
       spans,

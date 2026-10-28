@@ -1,9 +1,12 @@
 use std::fs::{create_dir_all, write};
 
 use takumi::prelude::*;
-use takumi_core::paint_tree::{
-  Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTree,
-  PaintTreeOptions, Role, Shape, Spread, TextRun, paint_tree,
+use takumi_core::{
+  paint_tree::{
+    Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTree,
+    PaintTreeOptions, Role, Shape, Spread, TextRun, paint_tree,
+  },
+  resources::font::ImageFontFace,
 };
 
 use crate::test_utils::{CONTEXT, TEST_IMAGES, format_generated};
@@ -488,4 +491,45 @@ fn run_outlines_write_each_glyph() {
       .is_some_and(|outline| outline.starts_with('M'))
   }));
   assert_eq!(tree.run_outlines(node, usize::MAX), None);
+}
+
+#[test]
+fn an_image_glyph_draws_its_svg_over_the_em_box() {
+  let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>"#;
+  let mut fonts = CONTEXT.clone();
+
+  fonts.register_image_face(
+    ImageFontFace::new("Emoji Images")
+      .glyph("😀", ImageSource::from_bytes(svg.as_bytes()).unwrap()),
+  );
+
+  let document = paint_tree(
+    PaintTreeOptions::builder()
+      .viewport(Viewport::new((200, 100)))
+      .node(Node::container([Node::text("a😀")]).with_id("line"))
+      .fonts(&fonts)
+      .stylesheet(StyleSheet::parse_loosy("#line { font-family: Geist; font-size: 32px }").into())
+      .build(),
+  )
+  .unwrap()
+  .document;
+  let images: Vec<_> = document
+    .nodes
+    .iter()
+    .flat_map(|node| &node.drawables)
+    .filter_map(|drawable| match drawable {
+      Drawable::Image {
+        role, image, rect, ..
+      } => Some((*role, image, rect)),
+      _ => None,
+    })
+    .collect();
+
+  let [(role, image, rect)] = images.as_slice() else {
+    panic!("expected one image glyph, got {}", images.len());
+  };
+
+  assert_eq!(*role, Role::Text);
+  assert!(image.src.starts_with("data:image/svg+xml"));
+  assert_eq!((rect.width, rect.height), (32.0, 32.0));
 }
