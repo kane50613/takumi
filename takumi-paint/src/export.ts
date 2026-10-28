@@ -177,7 +177,7 @@ export class Painter {
       main.node,
       layout,
       { fonts, images, signal, fontFamilies },
-      () => this.#inner.needs(main.node, layout),
+      (svgs) => this.#inner.needs(main.node, { ...layout, images: svgs }),
     );
   }
 
@@ -198,8 +198,8 @@ export class Painter {
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
 
-    return readSource(main.node, layout, { fonts, images, fontFamilies }, () =>
-      this.#inner.needs(main.node, layout),
+    return readSource(main.node, layout, { fonts, images, fontFamilies }, (svgs) =>
+      this.#inner.needs(main.node, { ...layout, images: svgs }),
     );
   }
 

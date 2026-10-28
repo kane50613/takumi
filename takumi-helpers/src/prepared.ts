@@ -51,6 +51,12 @@ export type BackendPreparedRenderOptions<TInternal> = Pick<
 /** What a render reads from a source before it lays it out. */
 export type SourceNeeds = { images: string[]; characters: string };
 
+/**
+ * Reads what a source needs after the cascade. Given `images`, the SVG ones a render will draw, it
+ * counts the characters their `text` elements draw too.
+ */
+export type SourceReader = (images?: ImageSource[]) => Awaitable<SourceNeeds>;
+
 /** What a render of several sources, such as a PDF's bands or an animation's scenes, needs. */
 export function joinNeeds(reads: SourceNeeds[]): SourceNeeds {
   return {
@@ -103,7 +109,7 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
   source: TSource,
   layout: TLayout,
   extras: PrepareExtras & { fontFamilies?: string[] },
-  needs: () => Awaitable<SourceNeeds>,
+  needs: SourceReader,
 ): Promise<Prepared<TSource, TLayout>> {
   const state = await collect(source, layout, extras, needs, true);
 
@@ -121,7 +127,7 @@ export async function readSource<TSource, TLayout>(
   source: TSource,
   layout: TLayout,
   extras: PrepareExtras & { fontFamilies?: string[] },
-  needs: () => Awaitable<SourceNeeds>,
+  needs: SourceReader,
 ): Promise<Prepared<TSource, TLayout>> {
   return createPrepared(await collect(source, layout, extras, needs, false));
 }
@@ -130,7 +136,7 @@ async function collect<TSource, TLayout>(
   source: TSource,
   layout: TLayout,
   extras: PrepareExtras & { fontFamilies?: string[] },
-  needs: () => Awaitable<SourceNeeds>,
+  needs: SourceReader,
   fetchMissing: boolean,
 ): Promise<PreparedState<TSource, TLayout>> {
   const { fonts, fontFamilies, images = [], signal } = extras;
@@ -139,9 +145,6 @@ async function collect<TSource, TLayout>(
 
   let pending: Promise<SourceNeeds> | undefined;
   const read = () => (pending ??= Promise.resolve(needs()));
-  const resolvedFonts = await fonts;
-  const subset =
-    resolvedFonts && (await fontsFor(resolvedFonts, async () => (await read()).characters));
   const {
     sources = [],
     cache,
@@ -150,7 +153,7 @@ async function collect<TSource, TLayout>(
     ...fetchOptions
   } = Array.isArray(images) ? { sources: images } : images;
   const provided = await resolveImageLoaders({ sources, cache });
-  const fetched = fetchMissing
+  const loaded = fetchMissing
     ? await prepareImages({
         ...fetchOptions,
         urls: (await read()).images,
@@ -160,14 +163,27 @@ async function collect<TSource, TLayout>(
         signal,
       })
     : provided;
+  const entries: ImageSource[] = loaded.map((image) => ({ cache, ...image }));
+  const svgs = entries.filter((image) => isSvg(image.data));
+  const resolvedFonts = await fonts;
+  const subset =
+    resolvedFonts &&
+    (await fontsFor(
+      resolvedFonts,
+      async () => (await (svgs.length > 0 ? needs(svgs) : read())).characters,
+    ));
 
-  return {
-    source,
-    layout,
-    fonts: subset,
-    fontFamilies,
-    images: fetched.map((image) => ({ cache, ...image })),
-  };
+  return { source, layout, fonts: subset, fontFamilies, images: entries };
+}
+
+/**
+ * Whether `data` holds SVG markup, whose `text` elements draw with the render's fonts. Approximate:
+ * it looks for `<svg` in the first 4 KiB only, so a document with a longer prolog reads as raster.
+ */
+function isSvg(data: ImageSource["data"]): boolean {
+  const view = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+
+  return new TextDecoder().decode(view.subarray(0, 4096)).includes("<svg");
 }
 
 /**

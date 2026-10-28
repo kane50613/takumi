@@ -338,9 +338,10 @@ export function collectCodepoints(source: CodepointSource): Set<number> {
 
 /**
  * Keep the subsets that cover the characters in `source`, dropping the rest. Range-less fallbacks
- * (a full font or a `text=` subset) and entries without a `unicodeRange` always stay. A renderer
- * picks subsets for what it lays out itself, so this is for text it cannot see, such as the labels
- * inside a chart drawn as an SVG image.
+ * (a full font or a `text=` subset) and entries without a `unicodeRange` always stay.
+ *
+ * @deprecated Pass the fonts to a render. A renderer picks the subsets its text uses after the
+ * cascade, the text inside its SVG images included.
  */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
   return fontsCovering(fonts, collectCodepoints(source));
@@ -366,7 +367,7 @@ export function fontFromUrl(
  * under its family name with its `unicode-range`, so a codepoint routes to the subset that
  * declares it, as in a browser.
  * Subsets download lazily. Hand the result to `render`, which registers only the subsets the
- * content uses; or trim them first with {@link subsetFonts}.
+ * content uses.
  *
  * @example
  * const fonts = await googleFonts(["Inter", "Noto Sans JP"]);

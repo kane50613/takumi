@@ -63,30 +63,20 @@ For PDF output, see [Charts in PDF](/docs/pdf/charts).
 
 ## Fonts for chart labels
 
-Register fonts that cover every label, tick, and legend entry. Set the chart's font family to the same name.
-
-<Callout type="warn">
-  The `fonts` render option keeps only the subsets that the document's text uses. Text inside an SVG
-  image does not count, so chart labels can lose their font.
-</Callout>
-
-Fonts registered with `registerFont`, as above, stay on the renderer for every render. For a large family, keep only the subsets the chart text needs. Include generated numeric ticks and punctuation as well as your data labels:
+Pass fonts that cover every label, tick, and legend entry through `fonts`. Takumi reads the text inside the SVG, so the `googleFonts` subsets that only chart labels use still load:
 
 ```tsx twoslash title="Load chart label fonts"
-import { googleFonts, subsetFonts } from "takumi-js/helpers";
-import { Renderer } from "takumi-js/node";
+import { render } from "takumi-js";
+import { googleFonts } from "takumi-js/helpers";
 
-const renderer = new Renderer();
-const chartText = "一月二月三月四月營收0123456789.,−-%";
-const fonts = subsetFonts({
+declare const chart: string;
+// ---cut---
+const image = await render(<img src={chart} width={600} height={400} />, {
   fonts: await googleFonts(["Noto Sans TC"]),
-  source: chartText,
 });
-
-await Promise.all(fonts.map((font) => renderer.registerFont(font)));
 ```
 
-Then set ECharts `textStyle.fontFamily` to `"Noto Sans TC"` and pass `renderer` to `render()`. For offline output, load bundled font bytes instead. See [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders).
+Then set ECharts `textStyle.fontFamily` to `"Noto Sans TC"`. For offline output, load bundled font bytes instead. See [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders).
 
 ## Use another chart library
 

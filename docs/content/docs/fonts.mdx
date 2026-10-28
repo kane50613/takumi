@@ -168,7 +168,7 @@ CJK families can have many coverage subsets. Takumi downloads only the subsets y
 | Ranged subsets (from `googleFonts`) | Kept only when the text uses their range. |
 | Whole files (URL string, raw bytes) | No `unicode-range`, so they always load.  |
 
-Takumi reads the text after styles apply, so generated content and `text-transform` count. Text inside an SVG image does not, since Takumi draws the SVG as a picture. To keep the subsets such text needs, call `subsetFonts({ fonts, source })` from `takumi-js/helpers` with that text as `source`.
+Takumi reads the text after styles apply, so generated content and `text-transform` count, and so does the text inside SVG images, such as chart labels.
 
 ### Preloading with `registerFont`
 

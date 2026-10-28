@@ -2,6 +2,7 @@ import type { CssInput } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type {
   FontLoader,
+  ImageSource,
   ImagesInput,
   PrepareImagesInput,
   RegisteredFamilyLike,
@@ -526,7 +527,7 @@ export class PdfRenderer {
       document.node,
       layout,
       { fonts, images, signal, fontFamilies },
-      () => this.needs(document.trees, layout),
+      (svgs) => this.needs(document.trees, layout, svgs),
     );
   }
 
@@ -571,8 +572,8 @@ export class PdfRenderer {
     const layout = { ...rest, css: sheets.length > 0 ? sheets : undefined };
 
     // The tree measured may itself be a band, so its counters are always in play.
-    const prepared = await readSource(main.node, layout, { fonts, images, fontFamilies }, () =>
-      this.needs([main.node], layout),
+    const prepared = await readSource(main.node, layout, { fonts, images, fontFamilies }, (svgs) =>
+      this.needs([main.node], layout, svgs),
     );
 
     return renderPrepared(this.fonts, prepared, {}, (native, opts) =>
@@ -587,8 +588,9 @@ export class PdfRenderer {
   private needs(
     trees: (Node | string | JsonSource)[],
     options: Parameters<PdfRendererInternal["needs"]>[1],
+    svgs?: ImageSource[],
   ): SourceNeeds {
-    return joinNeeds(trees.map((tree) => this.inner.needs(tree, options)));
+    return joinNeeds(trees.map((tree) => this.inner.needs(tree, { ...options, images: svgs })));
   }
 
   /** A document and its bands read under `options` without fetching, for {@link render}. */
@@ -597,8 +599,8 @@ export class PdfRenderer {
     const document = await resolveDocument(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
-    return readSource(document.node, layout, { fonts, images, signal, fontFamilies }, () =>
-      this.needs(document.trees, layout),
+    return readSource(document.node, layout, { fonts, images, signal, fontFamilies }, (svgs) =>
+      this.needs(document.trees, layout, svgs),
     );
   }
 

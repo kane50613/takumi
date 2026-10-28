@@ -16,6 +16,7 @@ export {
   readSource,
   renderPrepared,
   type SourceNeeds,
+  type SourceReader,
 } from "./prepared";
 
 /**

@@ -73,8 +73,12 @@ export class Renderer {
     const { fonts, images, signal, fontFamilies, ...layout } = options ?? {};
     const native = toNativeSource(source);
 
-    return prepareSource(this.fonts, native, layout, { fonts, images, signal, fontFamilies }, () =>
-      this.inner.needs(native, layout),
+    return prepareSource(
+      this.fonts,
+      native,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      (svgs) => this.inner.needs(native, { ...layout, images: svgs }),
     );
   }
 
@@ -155,8 +159,8 @@ export class Renderer {
     const { fonts, images, signal, fontFamilies, ...layout } = options;
     const native = toNativeSource(source);
 
-    return readSource(native, layout, { fonts, images, signal, fontFamilies }, () =>
-      this.inner.needs(native, layout),
+    return readSource(native, layout, { fonts, images, signal, fontFamilies }, (svgs) =>
+      this.inner.needs(native, { ...layout, images: svgs }),
     );
   }
 
@@ -169,9 +173,11 @@ export class Renderer {
       sources,
       layout,
       { fonts, images, signal, fontFamilies },
-      async () =>
+      async (svgs) =>
         joinNeeds(
-          await Promise.all(sources.map((scene) => this.inner.needs(scene.node, sceneLayout))),
+          await Promise.all(
+            sources.map((scene) => this.inner.needs(scene.node, { ...sceneLayout, images: svgs })),
+          ),
         ),
     );
 

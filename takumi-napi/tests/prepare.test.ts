@@ -11,6 +11,18 @@ const png = await renderer.render(
   { width: 2, height: 2 },
 );
 
+const fontBytes = await readFile(
+  join(import.meta.dir, "../../assets/fonts/geist/Geist[wght].woff2"),
+);
+
+/** A lazily loaded face of the `Prepared` family covering `range`. */
+const subset = (key: string, range: [number, number]) => ({
+  name: "Prepared",
+  key: `prepare-${key}`,
+  unicodeRange: [range],
+  data: mock(() => fontBytes),
+});
+
 afterEach(() => {
   mock.restore();
 });
@@ -60,15 +72,6 @@ describe("prepare", () => {
   });
 
   test("loads the font subsets the text uses, again only on a renderer without them", async () => {
-    const bytes = await readFile(
-      join(import.meta.dir, "../../assets/fonts/geist/Geist[wght].woff2"),
-    );
-    const subset = (key: string, range: [number, number]) => ({
-      name: "Prepared",
-      key: `prepare-${key}`,
-      unicodeRange: [range],
-      data: mock(() => bytes),
-    });
     const latin = subset("latin", [0x20, 0x7f]);
     const greek = subset("greek", [0x370, 0x3ff]);
     const own = new Renderer();
@@ -86,6 +89,27 @@ describe("prepare", () => {
     await new Renderer().render(prepared);
 
     expect(latin.data).toHaveBeenCalledTimes(2);
+  });
+
+  test("loads the font subset a fetched SVG image's text needs", async () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><text y="15">Ж</text></svg>`;
+    const fetch = mock(async (_url: string) => new Response(svg));
+    const latin = subset("svg-latin", [0x20, 0x7f]);
+    const cyrillic = subset("svg-cyrillic", [0x400, 0x4ff]);
+    const greek = subset("svg-greek", [0x370, 0x3ff]);
+
+    await new Renderer().prepare(
+      '<img src="https://example.com/chart.svg" width="20" height="20">',
+      {
+        width: 20,
+        height: 20,
+        fonts: [latin, cyrillic, greek],
+        images: { fetch },
+      },
+    );
+
+    expect(cyrillic.data).toHaveBeenCalledTimes(1);
+    expect(greek.data).not.toHaveBeenCalled();
   });
 
   test("stops when its signal aborts", async () => {
