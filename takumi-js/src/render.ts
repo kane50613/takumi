@@ -177,15 +177,6 @@ async function resolveContent(
     return { node: element, css: [] };
   }
 
-  return resolveTree(element, renderer, options);
-}
-
-/** {@link resolveContent} for a renderer call that only takes node trees, such as an animation scene. */
-async function resolveTree(
-  element: RenderInput,
-  renderer: Renderer,
-  options?: PipelineOptions,
-): Promise<{ node: Node; css: string[] }> {
   const { node, css } = await transformElement(element, options);
   const emojiType = options?.emoji ?? "twemoji";
 
@@ -439,7 +430,7 @@ export async function renderAnimation(
   const renderer = await resolveRenderer(options);
   const scenes = await Promise.all(
     options.scenes.map(async (scene) => {
-      const { node, css } = await resolveTree(scene.node, renderer, options);
+      const { node, css } = await resolveContent(scene.node, renderer, options);
       return { node, durationMs: scene.durationMs, css };
     }),
   );

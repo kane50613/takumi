@@ -290,6 +290,6 @@ export type RenderNeeds = {
 };
 
 export type AnimationScene = {
-  node: Node;
+  node: Node | string | { json: string };
   durationMs: number;
 };

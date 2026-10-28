@@ -17,10 +17,10 @@ import {
   FontRegistry,
   Prepared,
   prepareSource,
+  joinNeeds,
   readSource,
   renderPrepared,
   toNativeSource,
-  withRenderInput,
 } from "@takumi-rs/helpers/renderer";
 import type {
   BackendAnimationOptions,
@@ -144,11 +144,25 @@ export class Renderer {
     );
   }
 
-  renderAnimation(options: RenderAnimationOptions): Promise<Buffer<ArrayBuffer>> {
-    const nodes = options.scenes.map((scene) => scene.node);
+  async renderAnimation(options: RenderAnimationOptions): Promise<Buffer<ArrayBuffer>> {
+    const { fonts, images, signal, fontFamilies, scenes, ...layout } = options;
+    const sources = scenes.map((scene) => ({ ...scene, node: toNativeSource(scene.node) }));
+    const { width, height, css, keyframes, devicePixelRatio, lang, emoji } = layout;
+    const sceneLayout = { width, height, css, keyframes, devicePixelRatio, lang, emoji };
+    const prepared = await readSource(
+      sources,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      async () =>
+        joinNeeds(
+          await Promise.all(
+            sources.map((scene) => this.inner.needs(scene.node, sceneLayout, signal)),
+          ),
+        ),
+    );
 
-    return withRenderInput(this.fonts, options, nodes, (opts, signal) =>
-      this.inner.renderAnimation(opts, signal),
+    return renderPrepared(this.fonts, prepared, { signal }, (sources, opts, signal) =>
+      this.inner.renderAnimation({ ...opts, scenes: sources }, signal),
     );
   }
 

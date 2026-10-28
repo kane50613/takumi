@@ -1,10 +1,12 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::{device_pixel_ratio, parse_emoji, parse_lang, stylesheet};
+use takumi_bindings_common::{
+  append_css, device_pixel_ratio, parse_emoji, parse_lang, source_cache::SourceCache, stylesheet,
+};
 use takumi_core::{
   Fonts,
-  layout::node::Node,
+  layout::node::{EmojiProvider, Node},
   style::{CssSource, FontFamily, KeyframesRule, Lang},
   viewport::Viewport,
 };
@@ -14,7 +16,7 @@ use takumi_raster::{
 };
 
 use crate::{
-  JsBytes, deserialize_with_tracing, map_error,
+  JsBytes, NodeSource, map_error,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
     decode_images, deserialize_css, deserialize_keyframes, webp_lossless,
@@ -22,7 +24,8 @@ use crate::{
 };
 
 pub struct RenderAnimationTask {
-  pub(crate) scenes: Option<Vec<(Node, u32)>>,
+  pub(crate) scenes: Option<Vec<(NodeSource, u32)>>,
+  pub(crate) emoji: Option<EmojiProvider>,
   pub(crate) state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
@@ -63,19 +66,10 @@ impl RenderAnimationTask {
       lang,
       emoji,
     } = options;
-    let emoji = parse_emoji(emoji.as_deref()).map_err(map_error)?;
     let scenes = scenes
       .into_iter()
-      .map(|scene| {
-        let mut node: Node = deserialize_with_tracing(scene.node)?;
-
-        if let Some(provider) = emoji {
-          node.extract_emojis(provider);
-        }
-
-        Ok((node, scene.duration_ms))
-      })
-      .collect::<Result<Vec<(Node, u32)>>>()?;
+      .map(|scene| Ok((NodeSource::from_js(scene.node)?, scene.duration_ms)))
+      .collect::<Result<Vec<_>>>()?;
 
     if scenes.is_empty() {
       return Err(Error::new(
@@ -93,6 +87,7 @@ impl RenderAnimationTask {
 
     Ok(Self {
       scenes: Some(scenes),
+      emoji: parse_emoji(emoji.as_deref()).map_err(map_error)?,
       fonts: state.fonts_for_render(font_families.as_deref())?,
       state,
       viewport: Viewport::new((width, height))
@@ -121,9 +116,11 @@ impl Task for RenderAnimationTask {
         unreachable!()
       };
       let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
+      let mut document_css = Vec::new();
+      let scenes = read_scenes(scenes, self.emoji, &mut document_css)?;
       let stylesheet = stylesheet(
         &self.state.resource_cache,
-        take(&mut self.css),
+        append_css(take(&mut self.css), document_css),
         take(&mut self.keyframes),
       )
       .map_err(map_error)?;
@@ -171,4 +168,27 @@ impl Task for RenderAnimationTask {
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
     Ok(output.into())
   }
+}
+
+/// Each scene's node tree with its emoji split out, adding every HTML scene's `<style>` CSS to
+/// `document_css`.
+fn read_scenes(
+  scenes: Vec<(NodeSource, u32)>,
+  emoji: Option<EmojiProvider>,
+  document_css: &mut Vec<String>,
+) -> Result<Vec<(Node, u32)>> {
+  scenes
+    .into_iter()
+    .map(|(source, duration_ms)| {
+      let (mut node, css) = source.into_parts(&SourceCache::default())?;
+
+      if let Some(provider) = emoji {
+        node.extract_emojis(provider);
+      }
+
+      document_css.extend(css);
+
+      Ok((node, duration_ms))
+    })
+    .collect()
 }

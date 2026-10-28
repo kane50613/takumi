@@ -1,12 +1,8 @@
-import {
-  type CodepointSource,
-  fontFromUrl,
-  type GenericFontFamily,
-  LIST_MARKER_CHARACTERS,
-  subsetFonts,
-} from "./fonts";
+import { fontFromUrl, type GenericFontFamily } from "./fonts";
 import { fontsCovering } from "./fonts/subset";
 import { unicodeRangeOf } from "./unicode-range";
+
+import type { JsonSource } from "./node-source";
 
 export { type JsonSource, toNativeSource } from "./node-source";
 export {
@@ -15,6 +11,7 @@ export {
   Prepared,
   type PrepareExtras,
   type PrepareImagesInput,
+  joinNeeds,
   prepareSource,
   readSource,
   renderPrepared,
@@ -140,11 +137,15 @@ export type BackendRenderOptions<TInternal> = Omit<
   RenderExtras;
 
 /** Public `renderAnimation` options for a backend whose binding options are {@link TInternal}. */
-export type BackendAnimationOptions<TInternal> = Omit<
+export type BackendAnimationOptions<TInternal extends { scenes: { node: unknown }[] }> = Omit<
   TInternal,
-  "images" | "format" | "quality" | "lossless"
-> &
-  AnimationOutputFormatOptions &
+  "images" | "format" | "quality" | "lossless" | "scenes"
+> & {
+  /** The scenes to render in order, each a node tree or HTML markup. */
+  scenes: (Omit<TInternal["scenes"][number], "node"> & {
+    node: Exclude<TInternal["scenes"][number]["node"], JsonSource>;
+  })[];
+} & AnimationOutputFormatOptions &
   RenderExtras;
 
 /** Public `renderSvg` options for a backend whose binding options are {@link TInternal}. */
@@ -320,52 +321,6 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       }
     }
   }
-}
-
-/** The binding options {@link withRenderInput} passes on: extras stripped, resolved resources merged in. */
-export type ResolvedRenderOptions<TOptions> = Omit<
-  TOptions,
-  keyof RenderExtras | "fontFamilies"
-> & {
-  images?: ImageSource[];
-  fontFamilies?: string[];
-};
-
-/**
- * Shared body for the animation entry points: subsets `fonts` against the text in `source` and
- * registers them, resolves `images`/`fontFamilies`, and checks `signal` before and after that
- * resource resolution. Then calls `call` with the binding options and the `signal` for the backend
- * to forward into a native call when it supports cancellation.
- */
-export async function withRenderInput<
-  TOptions extends RenderExtras & { fontFamilies?: string[] },
-  TFamily extends RegisteredFamilyLike,
-  TResult,
->(
-  registry: FontRegistry<TFamily>,
-  options: TOptions,
-  source: CodepointSource,
-  call: (
-    options: ResolvedRenderOptions<TOptions>,
-    signal: AbortSignal | undefined,
-  ) => Awaitable<TResult>,
-): Promise<TResult> {
-  const { fonts, fontFamilies, signal, images, ...rest } = options;
-  signal?.throwIfAborted();
-
-  const resolvedFonts = await fonts;
-  const subset =
-    resolvedFonts &&
-    subsetFonts({
-      fonts: resolvedFonts,
-      source: [...(Array.isArray(source) ? source : [source]), LIST_MARKER_CHARACTERS],
-    });
-
-  return registry.resolveResources(subset, images, fontFamilies, (resolved) => {
-    signal?.throwIfAborted();
-
-    return call({ ...rest, ...resolved }, signal);
-  });
 }
 
 /**

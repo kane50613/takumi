@@ -364,7 +364,7 @@ impl Renderer {
   #[wasm_bindgen(js_name = renderAnimation, unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render_animation(&self, options: RenderAnimationOptionsType) -> Result<Vec<u8>, JsValue> {
     let RenderAnimationOptions {
-      mut scenes,
+      scenes,
       width,
       height,
       format,
@@ -394,29 +394,37 @@ impl Renderer {
 
     let viewport = Viewport::new((width, height)).with_device_pixel_ratio(device_pixel_ratio(dpr));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
+    let mut document_css = Vec::new();
+    let mut nodes = Vec::with_capacity(scenes.len());
+
+    for scene in scenes {
+      let (mut node, css) = read_source(scene.node, &SourceCache::default())?;
+
+      split_emojis(&mut node, emoji.as_deref())?;
+      document_css.extend(css);
+      nodes.push((node, scene.duration_ms));
+    }
+
     let stylesheet = stylesheet(
       &self.resource_cache,
-      css_or_stylesheets(css, stylesheets),
+      append_css(css_or_stylesheets(css, stylesheets), document_css),
       keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
     let fonts = self.fonts.for_render(font_families.as_deref());
-    for scene in &mut scenes {
-      split_emojis(&mut scene.node, emoji.as_deref())?;
-    }
 
-    let scene_options = scenes
+    let scene_options = nodes
       .into_iter()
-      .map(|scene| {
+      .map(|(node, duration_ms)| {
         SequentialScene::builder()
-          .duration_ms(scene.duration_ms)
+          .duration_ms(duration_ms)
           .options(
             takumi_raster::RenderOptions::builder()
               .viewport(viewport)
               .images(images.clone())
               .resource_cache(self.resource_cache.clone())
               .stylesheet(stylesheet.clone())
-              .node(scene.node)
+              .node(node)
               .fonts(&fonts)
               .font_families(font_families.clone().map(FontFamily::from_names))
               .lang(lang)

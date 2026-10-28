@@ -9,6 +9,7 @@ import type {
 } from "@takumi-rs/helpers/renderer";
 import {
   FontRegistry,
+  joinNeeds,
   type JsonSource,
   Prepared,
   prepareSource,
@@ -643,12 +644,7 @@ export class PdfRenderer {
     trees: (Node | string | JsonSource)[],
     options: Parameters<PdfRendererInternal["needs"]>[1],
   ): SourceNeeds {
-    const reads = trees.map((tree) => this.inner.needs(tree, options));
-
-    return {
-      images: reads.flatMap((read) => read.images),
-      characters: reads.map((read) => read.characters).join(""),
-    };
+    return joinNeeds(trees.map((tree) => this.inner.needs(tree, options)));
   }
 
   /** A document and its bands read under `options` without fetching, for {@link render}. */

@@ -1,6 +1,6 @@
 import { expect, mock, spyOn, test } from "bun:test";
 import { Renderer } from "@takumi-rs/core";
-import { render } from "../src";
+import { render, renderAnimation } from "../src";
 
 const raw = { width: 10, height: 10, format: "raw" } as const;
 
@@ -26,4 +26,21 @@ test("fetches the emoji and stylesheet images HTML draws", async () => {
     "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
     "https://example.com/bg.png",
   ]);
+});
+
+test("hands an HTML scene to the renderer as written", async () => {
+  const renderer = new Renderer();
+  const call = spyOn(renderer, "renderAnimation");
+  const html = "<style>p { color: red }</style><p>a</p>";
+
+  await renderAnimation({
+    renderer,
+    width: 10,
+    height: 10,
+    fps: 1,
+    format: "gif",
+    scenes: [{ node: html, durationMs: 1000 }],
+  });
+
+  expect(call.mock.calls[0]?.[0].scenes[0]?.node).toBe(html);
 });

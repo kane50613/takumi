@@ -32,4 +32,20 @@ describe("HTML sources", () => {
 
     expect([measured.width, measured.height]).toEqual([30, 12]);
   });
+
+  it("renders an HTML animation scene as its tree with the same CSS", async () => {
+    const options = { width: 8, height: 8, fps: 1, format: "gif" } as const;
+    const css = "div { width: 8px; height: 8px; background: red }";
+    const html = await renderer.renderAnimation({
+      ...options,
+      scenes: [{ node: `<style>${css}</style><div></div>`, durationMs: 1000 }],
+    });
+    const tree = await renderer.renderAnimation({
+      ...options,
+      css: [css],
+      scenes: [{ node: { type: "container", tagName: "div", children: [] }, durationMs: 1000 }],
+    });
+
+    expect(Buffer.compare(html, tree)).toBe(0);
+  });
 });

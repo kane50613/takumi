@@ -320,9 +320,9 @@ impl From<DitheringAlgorithm> for CoreDitheringAlgorithm {
 /// Represents a single scene in a sequential animation timeline.
 #[napi(object)]
 pub struct AnimationScene<'ctx> {
-  /// The node tree to render for this scene.
-  #[napi(ts_type = "Node")]
-  pub node: Object<'ctx>,
+  /// The node tree to render for this scene, the `{ json }` text of one, or HTML markup.
+  #[napi(ts_type = "Node | string | { json: string }")]
+  pub node: Either<String, Object<'ctx>>,
   /// The duration of this scene in milliseconds.
   pub duration_ms: u32,
 }

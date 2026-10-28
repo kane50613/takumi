@@ -4,7 +4,6 @@ use serde::Deserialize;
 pub use takumi_bindings_common::input::{Font, ImageSource};
 use takumi_core::{
   keyframes::deserialize_optional_keyframes,
-  layout::node::Node,
   style::{CssSource, KeyframesRule},
 };
 use takumi_raster::DitheringAlgorithm;
@@ -218,8 +217,9 @@ pub enum AnimationOutputFormat {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnimationScene {
-  /// The node tree to render for this scene.
-  pub node: Node,
+  /// The node tree to render for this scene, the `{ json }` text of one, or HTML markup.
+  #[serde(with = "serde_wasm_bindgen::preserve")]
+  pub node: JsValue,
   /// The duration of this scene in milliseconds.
   pub duration_ms: u32,
 }

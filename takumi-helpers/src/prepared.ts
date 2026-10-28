@@ -51,6 +51,14 @@ export type BackendPreparedRenderOptions<TInternal> = Pick<
 /** What a render reads from a source before it lays it out. */
 export type SourceNeeds = { images: string[]; characters: string };
 
+/** What a render of several sources, such as a PDF's bands or an animation's scenes, needs. */
+export function joinNeeds(reads: SourceNeeds[]): SourceNeeds {
+  return {
+    images: reads.flatMap((read) => read.images),
+    characters: reads.map((read) => read.characters).join(""),
+  };
+}
+
 type PreparedState<TSource, TLayout> = {
   source: TSource;
   layout: TLayout;
