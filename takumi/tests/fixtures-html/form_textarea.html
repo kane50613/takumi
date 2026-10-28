@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="takumi-presets" content="chromium" />
+    <title>form_textarea</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 16px 24px 0;
+        font-family: Archivo;
+        font-size: 16px;
+      }
+      textarea {
+        font-family: "Geist Mono";
+        box-sizing: content-box;
+      }
+      .styled {
+        width: 200px;
+        height: 40px;
+        padding: 6px 10px;
+        border: 1px solid rgb(203, 213, 225);
+        border-radius: 6px;
+        background-color: rgb(248, 250, 252);
+        color: rgb(15, 23, 42);
+        font-family: Archivo;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body style="width: 800px; height: 300px">
+    <div class="row">
+      <textarea>
+Two lines
+of text</textarea
+      ><textarea rows="3" cols="12">A long line that wraps inside the narrow field</textarea
+      ><textarea disabled>Disabled</textarea>
+    </div>
+    <div class="row">
+      <textarea class="styled" style="overflow-y: hidden">
+line1
+line2
+line3
+line4
+line5</textarea
+      ><textarea class="styled">
+v1
+v2
+v3
+v4
+v5</textarea
+      ><textarea class="styled">
+Ends with a break
+</textarea>
+    </div>
+  </body>
+</html>

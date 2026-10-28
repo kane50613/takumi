@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use takumi::prelude::*;
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_texts};
@@ -156,4 +158,96 @@ fn a_hidden_input_takes_no_box() {
 
   assert!(run_texts(&measured).is_empty());
   assert_eq!(measured.height, 0.0);
+}
+
+/// The content box of a `<textarea>` box with `html.css`'s 1px border and 2px padding.
+fn content_size(textarea: &MeasuredNode) -> (f32, f32) {
+  (textarea.width - 6.0, textarea.height - 6.0)
+}
+
+#[test]
+fn rows_and_cols_size_a_textarea() {
+  let [default, tall, wide, hidden] = inputs(concat!(
+    "<textarea></textarea>",
+    r#"<textarea rows="4"></textarea>"#,
+    r#"<textarea cols="40" rows="0"></textarea>"#,
+    r#"<textarea style="overflow: hidden"></textarea>"#,
+  ))
+  .try_into()
+  .unwrap();
+  let (default_width, default_height) = content_size(&default);
+
+  // `rows="0"` is invalid, so the default of two rows stands.
+  assert_eq!(content_size(&tall).1, default_height * 2.0);
+  assert_eq!(content_size(&wide).1, default_height);
+  // A textarea that may scroll keeps room for a 15px scrollbar beside its columns.
+  assert_within(
+    content_size(&wide).0 - 15.0,
+    (default_width - 15.0) * 2.0,
+    1.0,
+  );
+  assert_eq!(content_size(&hidden).0, default_width - 15.0);
+}
+
+#[test]
+fn a_textarea_shows_its_text_with_line_breaks_normalized() {
+  let [textarea] = inputs("<textarea>one&#13;&#10;two&#13;three</textarea>")
+    .try_into()
+    .unwrap();
+
+  assert_eq!(run_texts(&textarea), ["one", "two", "three"]);
+}
+
+#[test]
+fn a_final_line_break_opens_a_line() {
+  let [ending, plain] = inputs("<textarea>a&#10;</textarea><textarea>a</textarea>")
+    .try_into()
+    .unwrap();
+
+  assert_eq!(editor(&ending).height, editor(&plain).height * 2.0);
+}
+
+#[test]
+fn a_textarea_clips_its_text_even_when_its_overflow_is_visible() {
+  let node = Node::from_html(
+    concat!(
+      r#"<div style="background-color: white; width: 100px; height: 100px">"#,
+      r#"<textarea style="display: block; overflow: visible; height: 20px; padding: 0; "#,
+      r#"border: 0; background-color: white; color: black; font: 20px Geist; "#,
+      r#"white-space: pre">"#,
+      "MMM&#10;MMM&#10;MMM&#10;MMM</textarea></div>",
+    ),
+    FromHtmlOptions::default(),
+  )
+  .unwrap();
+  let image = takumi::render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((100, 100)))
+      .node(node)
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+  let (pixels, _) = image.as_raw().as_chunks::<4>();
+  let inked = |rows: Range<usize>| {
+    pixels[rows.start * 100..rows.end * 100]
+      .iter()
+      .any(|pixel| pixel[..3] != [255, 255, 255])
+  };
+
+  assert!(inked(0..20));
+  assert!(!inked(20..100));
+}
+
+#[test]
+fn an_editable_textarea_keeps_its_white_space() {
+  let [editable, read_only] = inputs(concat!(
+    r#"<textarea style="white-space: normal">a    b</textarea>"#,
+    r#"<textarea readonly style="white-space: normal">a    b</textarea>"#,
+  ))
+  .try_into()
+  .unwrap();
+
+  assert_eq!(run_texts(&editable), ["a    b"]);
+  assert_eq!(run_texts(&read_only), ["a b"]);
 }

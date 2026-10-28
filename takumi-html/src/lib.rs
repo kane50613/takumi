@@ -197,6 +197,14 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ),
   // HTML's rendering section hides a hidden input, which Blink gives no box.
   ("input[type=hidden]", "display:none"),
+  (
+    "textarea",
+    "margin:0;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.333333px;font-family:monospace;color:#000;letter-spacing:0;word-spacing:0;line-height:normal;text-transform:none;text-indent:0;text-shadow:none;display:inline-block;text-align:start;box-sizing:content-box;white-space:pre-wrap;overflow-wrap:break-word;border:1px solid #767676;background-color:#fff;padding:2px",
+  ),
+  (
+    "textarea:disabled",
+    "background-color:rgba(239,239,239,0.3);color:#545454;border-color:rgba(118,118,118,0.3)",
+  ),
 ];
 
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Arc<Style>>> = LazyLock::new(|| {
@@ -561,21 +569,29 @@ impl NodeBuilder<'_> {
     Ok(children)
   }
 
-  /// The presets of an `<input>`, which `html.css` picks by its `type` and whether it is
-  /// disabled: those of a text field, or of a hidden input. Other types take none yet.
-  fn input_preset(&self, handle: NodeRef<'_>) -> Option<Arc<Style>> {
-    let input_type = InputType::parse(handle.attribute("type"));
-    let keys: &[&str] = match input_type {
-      InputType::Hidden => &["input[type=hidden]"],
-      InputType::Search => &["input", "input[type=search]"],
-      InputType::Tel => &["input", "input[type=tel]"],
-      _ if input_type.is_text_field() => &["input"],
-      _ => &[],
+  /// The presets of an `<input>` or `<textarea>`, which `html.css` picks by its `type` and
+  /// whether it is disabled: those of a text field, a hidden input, or a textarea. Other input
+  /// types take none yet.
+  fn form_control_preset(&self, handle: NodeRef<'_>, tag: &str) -> Option<Arc<Style>> {
+    let (keys, disabled_key): (&[&str], _) = if tag == "textarea" {
+      (&["textarea"], Some("textarea:disabled"))
+    } else {
+      let input_type = InputType::parse(handle.attribute("type"));
+      let keys: &[&str] = match input_type {
+        InputType::Hidden => &["input[type=hidden]"],
+        InputType::Search => &["input", "input[type=search]"],
+        InputType::Tel => &["input", "input[type=tel]"],
+        _ if input_type.is_text_field() => &["input"],
+        _ => &[],
+      };
+
+      (keys, input_type.is_text_field().then_some("input:disabled"))
     };
     let is_disabled = self.disabling_fieldsets.get() > 0 || handle.attribute("disabled").is_some();
     let mut presets = keys
       .iter()
-      .chain((is_disabled && input_type.is_text_field()).then_some(&"input:disabled"))
+      .copied()
+      .chain(disabled_key.filter(|_| is_disabled))
       .filter_map(|key| self.presets.get(key));
     let mut preset = presets.next()?.clone();
 
@@ -593,8 +609,8 @@ impl NodeBuilder<'_> {
   fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
     node = node.with_tag_name(tag);
 
-    let mut preset = if tag == "input" {
-      self.input_preset(handle)
+    let mut preset = if matches!(tag, "input" | "textarea") {
+      self.form_control_preset(handle, tag)
     } else {
       self.presets.get(tag).cloned()
     };
@@ -1090,8 +1106,8 @@ mod tests {
     assert!(html.contains("color"));
   }
 
-  /// `html.css` styles a text field, hides a hidden input, and greys a disabled text field,
-  /// including one inside a disabled fieldset outside its first legend.
+  /// `html.css` styles a text field and a textarea, hides a hidden input, and greys a disabled
+  /// one, including one inside a disabled fieldset outside its first legend.
   #[test]
   fn inputs_take_the_presets_of_their_type_and_state() {
     let node = parse(concat!(
@@ -1104,7 +1120,9 @@ mod tests {
       r#"<legend><input id="in-legend"></legend>"#,
       r#"<legend><input id="in-second-legend"></legend>"#,
       r#"<input id="in-fieldset">"#,
+      r#"<textarea id="textarea-in-fieldset"></textarea>"#,
       "</fieldset>",
+      r#"<textarea id="textarea">x</textarea>"#,
       "</div>",
     ));
     let html = node.to_html();
@@ -1125,6 +1143,9 @@ mod tests {
     assert!(!style_of("in-legend").contains(disabled_color));
     assert!(style_of("in-second-legend").contains(disabled_color));
     assert!(style_of("in-fieldset").contains(disabled_color));
+    assert!(style_of("textarea").contains("white-space-collapse: preserve"));
+    assert!(!style_of("textarea").contains(disabled_color));
+    assert!(style_of("textarea-in-fieldset").contains(disabled_color));
   }
 
   #[test]

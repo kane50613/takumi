@@ -2799,7 +2799,9 @@ impl PendingRenderNode {
 
   /// Closes a text control, which Blink lays out as a block container whatever its `display`, and
   /// whose inner editor stands in for its generated content.
-  fn finish_text_control(mut self, control: TextControl) -> RenderNode {
+  fn finish_text_control(mut self, mut control: TextControl) -> RenderNode {
+    control.adjust_host_style(self.context.style_mut());
+
     let display = self.context.style.base_data.display;
 
     if display != Display::None {
