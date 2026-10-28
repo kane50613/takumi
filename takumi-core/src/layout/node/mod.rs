@@ -719,6 +719,14 @@ impl Node {
     self.metadata.class_name.as_deref()
   }
 
+  /// The element's classes, split on ASCII whitespace as the HTML `class` attribute is.
+  pub fn classes(&self) -> impl Iterator<Item = &str> {
+    self
+      .class_name()
+      .into_iter()
+      .flat_map(str::split_ascii_whitespace)
+  }
+
   /// The rules the element's `tw` utilities compile to, in the order they were written.
   pub(crate) fn tw_rules(&self) -> impl Iterator<Item = &Arc<TwRule>> {
     self.metadata.tw.iter().flat_map(|tw| tw.rules().iter())
