@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::{
   font_custom_platform_data::FontPlatformData,
   font_description::FontSelectionDescription,
-  font_face::FontFace,
+  font_face::{FaceData, FontFace},
   font_selection_types::{BOLD_THRESHOLD, FontSelectionCapabilities, ITALIC_SLOPE_VALUE},
 };
 use crate::resources::unicode_range::UnicodeRangeSet;
@@ -20,6 +20,16 @@ use crate::resources::unicode_range::UnicodeRangeSet;
 pub(crate) struct FontPlatformDataForRangeSet {
   pub(crate) font_platform_data: FontPlatformData,
   pub(crate) range_set: UnicodeRangeSet,
+}
+
+impl FaceData<FontPlatformDataForRangeSet> {
+  /// Blink's `FontDataForRangeSet::Ranges`.
+  pub(crate) fn range_set(&self) -> &UnicodeRangeSet {
+    match self {
+      Self::Loaded(face) => &face.range_set,
+      Self::Pending(face) => &face.range_set,
+    }
+  }
 }
 
 /// Blink's `CSSSegmentedFontFace`.
@@ -72,7 +82,7 @@ impl CssSegmentedFontFace {
   pub(crate) fn get_font_data(
     &self,
     font_description: &FontSelectionDescription,
-  ) -> Option<Vec<FontPlatformDataForRangeSet>> {
+  ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
     let mut requested_font_description = font_description.clone();
     let font_selection_request = font_description.font_selection_request;
     let capabilities = self.font_selection_capabilities;
@@ -85,13 +95,17 @@ impl CssSegmentedFontFace {
       && font_selection_request.slope >= ITALIC_SLOPE_VALUE
       && font_description.synthetic_italic_allowed;
 
-    let created_font_data: Vec<FontPlatformDataForRangeSet> = self
+    let created_font_data: Vec<FaceData<FontPlatformDataForRangeSet>> = self
       .font_faces
       .iter()
       .rev()
-      .map(|font_face| FontPlatformDataForRangeSet {
-        font_platform_data: font_face.get_font_data(&requested_font_description),
-        range_set: font_face.ranges().clone(),
+      .map(|font_face| {
+        font_face
+          .get_font_data(&requested_font_description)
+          .map(|font_platform_data| FontPlatformDataForRangeSet {
+            font_platform_data,
+            range_set: font_face.ranges().clone(),
+          })
       })
       .collect();
 

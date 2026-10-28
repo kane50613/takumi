@@ -140,19 +140,6 @@ impl SvgSource {
     &self.source
   }
 
-  /// The characters the document's `text` elements draw with the render's fonts. Approximate: white
-  /// space comes as written, where layout collapses it to spaces.
-  pub(crate) fn text(&self) -> String {
-    #[cfg(feature = "svg")]
-    {
-      self.document.text()
-    }
-    #[cfg(not(feature = "svg"))]
-    {
-      String::new()
-    }
-  }
-
   fn intrinsic_sizing(&self) -> IntrinsicSizing {
     #[cfg(feature = "svg")]
     {
@@ -216,16 +203,29 @@ impl SvgSource {
   /// The SVG's drawing ops laid out at `viewport`, the size it is drawn at in CSS pixels, in the
   /// box `host` styles.
   pub fn vector_ops(&self, host: &RenderContext, viewport: Size<f32>) -> Vec<SvgOp> {
-    let host = if self.inline {
+    self
+      .document
+      .ops(self.host(host), viewport)
+      .unwrap_or_default()
+  }
+
+  /// The box the document draws in when the box `host` styles shows it.
+  fn host<'a>(&self, host: &'a RenderContext) -> SvgHost<'a> {
+    if self.inline {
       SvgHost::Inline(host)
     } else {
       SvgHost::Image {
         current_color: host.current_color,
         fonts: Some(host.fonts()),
       }
-    };
+    }
+  }
 
-    self.document.ops(host, viewport).unwrap_or_default()
+  /// The characters the document's `text` elements draw, each element's with the context it is
+  /// styled in, when the box `host` styles shows it. Approximate: white space comes as written,
+  /// where layout collapses it to spaces.
+  pub(crate) fn text_runs(&self, host: &RenderContext) -> Vec<(RenderContext, &str)> {
+    self.document.text_runs(self.host(host))
   }
 
   /// An inline `svg` element of an HTML document and its subtree, every attribute kept in the

@@ -1,9 +1,16 @@
 //! Blink's [`FontFallbackIterator`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc).
+//!
+//! A pending face stands for Blink's custom font that is loading: [`FontFallbackIterator::next`]
+//! records one that contributes for the hint list, as Blink calls `BeginLoadIfNeeded`, and goes on
+//! past it. Approximate: a pending face is never a `data:` URL font, which Blink loads whenever it
+//! contributes, and the system font stages record pending faces of the fallback families too; see
+//! [`FontCache::pending_fallback_font_for_character`](super::font_cache::FontCache::pending_fallback_font_for_character).
 
 use std::{collections::HashSet, rc::Rc};
 
 use super::{
   font_data_for_range_set::FontDataForRangeSet,
+  font_face::PendingFace,
   font_fallback_list::{FontData, FontFallbackList},
   font_fallback_priority::FontFallbackPriority,
   simple_font_data::SimpleFontData,
@@ -35,6 +42,8 @@ pub(crate) struct FontFallbackIterator<'a> {
   /// The faces returned whole, by font blob id and face index: Blink's typeface ids.
   unique_font_data_for_range_sets_returned: HashSet<(u64, u32)>,
   first_candidate: Option<FontDataForRangeSet>,
+  /// Blink's `tracked_loading_range_sets_`.
+  tracked_loading_range_sets: Vec<PendingFace>,
 }
 
 impl<'a> FontFallbackIterator<'a> {
@@ -51,6 +60,7 @@ impl<'a> FontFallbackIterator<'a> {
       previously_asked_for_hint: HashSet::new(),
       unique_font_data_for_range_sets_returned: HashSet::new(),
       first_candidate: None,
+      tracked_loading_range_sets: Vec::new(),
     }
   }
 
@@ -62,6 +72,20 @@ impl<'a> FontFallbackIterator<'a> {
     self.previously_asked_for_hint.clear();
     self.unique_font_data_for_range_sets_returned.clear();
     self.first_candidate = None;
+    self.tracked_loading_range_sets.clear();
+  }
+
+  /// The pending faces the iterator has passed, in the order it met them.
+  pub(crate) fn tracked_loading_faces(&self) -> impl Iterator<Item = &PendingFace> {
+    self.tracked_loading_range_sets.iter()
+  }
+
+  /// Blink's `AlreadyLoadingRangeForHintChar`.
+  fn already_loading_range_for_hint_char(&self, hint_char: char) -> bool {
+    self
+      .tracked_loading_range_sets
+      .iter()
+      .any(|range| range.range_set.contains(u32::from(hint_char)))
   }
 
   /// Blink's `HasNext`.
@@ -81,12 +105,40 @@ impl<'a> FontFallbackIterator<'a> {
     }
   }
 
-  /// Blink's `RangeSetContributesForHint`.
+  /// Blink's `RangeSetContributesForHint`: a pending face contributes only for a character no
+  /// face already passed as pending covers.
   fn range_set_contributes_for_hint(
+    &self,
     hint_list: &[char],
     segmented_face: &FontDataForRangeSet,
   ) -> bool {
-    hint_list.iter().any(|&hint| segmented_face.contains(hint))
+    hint_list.iter().any(|&hint| {
+      segmented_face.contains(hint)
+        && (segmented_face.pending_face().is_none()
+          || !self.already_loading_range_for_hint_char(hint))
+    })
+  }
+
+  /// Records the pending face of the fallback families system fallback would pick for `hint`
+  /// once it loads.
+  fn track_pending_fallback_font(
+    &mut self,
+    hint: char,
+    font_fallback_priority: FontFallbackPriority,
+  ) {
+    if !self.font_fallback_list.has_pending_faces()
+      || self.already_loading_range_for_hint_char(hint)
+    {
+      return;
+    }
+
+    if let Some(face) = self
+      .font_fallback_list
+      .font_cache
+      .pending_fallback_font_for_character(hint, font_fallback_priority)
+    {
+      self.tracked_loading_range_sets.push(face.clone());
+    }
   }
 
   /// Blink's `UniqueOrNext`.
@@ -126,6 +178,10 @@ impl<'a> FontFallbackIterator<'a> {
       FallbackStage::OutOfLuck => return FontDataForRangeSet::default(),
       FallbackStage::FallbackPriorityFonts => {
         self.fallback_stage = FallbackStage::SystemFonts;
+
+        if let Some(&hint) = hint_list.first() {
+          self.track_pending_fallback_font(hint, self.font_fallback_priority);
+        }
 
         return match hint_list
           .first()
@@ -195,8 +251,12 @@ impl<'a> FontFallbackIterator<'a> {
       self.current_font_data_index += 1;
     }
 
-    if Self::range_set_contributes_for_hint(hint_list, &current_segmented_face) {
-      return self.unique_or_next(current_segmented_face, hint_list);
+    if self.range_set_contributes_for_hint(hint_list, &current_segmented_face) {
+      let Some(pending_face) = current_segmented_face.pending_face() else {
+        return self.unique_or_next(current_segmented_face, hint_list);
+      };
+
+      self.tracked_loading_range_sets.push(pending_face.clone());
     }
 
     self.next(hint_list)
@@ -234,6 +294,8 @@ impl<'a> FontFallbackIterator<'a> {
     if hint == '\0' || !self.previously_asked_for_hint.insert(hint) {
       return None;
     }
+
+    self.track_pending_fallback_font(hint, FontFallbackPriority::Text);
 
     self
       .font_fallback_list

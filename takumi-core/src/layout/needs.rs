@@ -1,10 +1,16 @@
 //! What a render tree needs from outside before it renders, read after the cascade so stylesheet
 //! rules, `display: none`, generated content, and `text-transform` count as they will render.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, rc::Rc};
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
   context::RenderContext,
+  fonts::{
+    font::Font, font_fallback_list::FontFallbackList, font_fallback_priority::FontFallbackPriority,
+    symbols_iterator::SymbolsIterator,
+  },
   layout::{
     inline::{inline_item::InlineItemType, inline_node::InlineNode},
     node::{ImageSourceInput, NodeKind, is_image_reference, resolve_image},
@@ -13,6 +19,8 @@ use crate::{
   resources::image::{ImageSource, is_svg_like},
   style::{BackgroundImage, Display, Float, find_keyframes},
 };
+#[cfg(feature = "svg")]
+use crate::{font_style::SizedFontStyle, fonts::font_description::FontDescription};
 
 /// The images a render tree looks up by URL and the characters its text shapes.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -24,7 +32,27 @@ pub struct RenderNeeds {
   /// `text-transform` as inline layout applies it, and the characters the `text` elements of the
   /// SVG images it can read without fetching draw.
   pub characters: BTreeSet<char>,
+  /// The ids of the pending faces (see [`Fonts::register_pending`](crate::Fonts::register_pending))
+  /// the render would load: for each of those characters, the first pending face the fallback of
+  /// the font it is drawn in meets before a loaded font with its glyph, which Blink's
+  /// `FontFallbackIterator` begins loading.
+  pub faces: BTreeSet<usize>,
 }
+
+/// The needs a walk collects, with the characters each fallback list has looked up.
+#[derive(Default)]
+struct NeedsCollector {
+  needs: RenderNeeds,
+  /// Each fallback list by address, kept alive so no other list takes the address, with the
+  /// characters and priorities walked through it.
+  walked: FxHashMap<*const FontFallbackList, WalkedCharacters>,
+}
+
+/// A fallback list and the characters it has walked, each at a fallback priority.
+type WalkedCharacters = (
+  Rc<FontFallbackList>,
+  FxHashSet<(char, FontFallbackPriority)>,
+);
 
 impl RenderNode {
   /// Whether an inline walk passes this box without reading its content, which lays out on its own.
@@ -37,11 +65,11 @@ impl RenderNode {
 
   /// What this render tree needs before it renders.
   pub fn needs(&self) -> RenderNeeds {
-    let mut needs = RenderNeeds::default();
+    let mut needs = NeedsCollector::default();
 
     // The tree builder drops hidden children but keeps a hidden root.
     if self.context.style.base_data.display == Display::None {
-      return needs;
+      return needs.needs;
     }
 
     let mut stack = vec![(self, false)];
@@ -54,10 +82,10 @@ impl RenderNode {
 
       if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|node| &node.kind) {
         if let Some(url) = image.url() {
-          needs.images.insert(url.to_owned());
+          needs.needs.images.insert(url.to_owned());
         }
 
-        needs.add_svg_text(svg_image(&image.src, &node.context));
+        needs.add_svg_text(svg_image(&image.src, &node.context), &node.context);
       }
 
       let creates_inline_context = node.should_create_inline_layout();
@@ -78,11 +106,11 @@ impl RenderNode {
       );
     }
 
-    needs
+    needs.needs
   }
 }
 
-impl RenderNeeds {
+impl NeedsCollector {
   fn add_style(&mut self, context: &RenderContext) {
     let style = &context.style;
     let images = [
@@ -101,10 +129,10 @@ impl RenderNeeds {
     for image in images {
       if let BackgroundImage::Url(url) = image {
         if is_image_reference(url) {
-          self.images.insert(url.to_string());
+          self.needs.images.insert(url.to_string());
         }
 
-        self.add_svg_text(svg_url(url, context));
+        self.add_svg_text(svg_url(url, context), context);
       }
     }
   }
@@ -123,22 +151,30 @@ impl RenderNeeds {
         .flat_map(|keyframe| keyframe.declarations.image_urls())
       {
         if is_image_reference(url) {
-          self.images.insert(url.to_owned());
+          self.needs.images.insert(url.to_owned());
         }
 
-        self.add_svg_text(svg_url(url, context));
+        self.add_svg_text(svg_url(url, context), context);
       }
     }
   }
 
-  /// Adds the characters an SVG image's `text` elements draw with the render's fonts.
-  fn add_svg_text(&mut self, image: Option<ImageSource>) {
-    #[cfg(feature = "svg-sizing")]
+  /// Adds the characters an SVG image's `text` elements draw with the render's fonts, shown in the
+  /// box `context` styles, and the pending faces their fonts would load.
+  fn add_svg_text(&mut self, image: Option<ImageSource>, context: &RenderContext) {
+    #[cfg(feature = "svg")]
     if let Some(ImageSource::Svg(svg)) = image {
-      self.characters.extend(svg.text().chars());
+      for (context, text) in svg.text_runs(context) {
+        let font = context.font(FontDescription::new(&SizedFontStyle::from_style(
+          &context.style,
+          &context,
+        )));
+
+        self.add_text(&font, text);
+      }
     }
-    #[cfg(not(feature = "svg-sizing"))]
-    let _ = image;
+    #[cfg(not(feature = "svg"))]
+    let _ = (image, context);
   }
 
   /// Adds the text inline layout shapes in the inline formatting context `root` establishes,
@@ -147,11 +183,51 @@ impl RenderNeeds {
     let data = InlineNode::new(root).collect_inlines();
 
     for item in &data.items {
-      if item.item_type == InlineItemType::Text {
-        self
-          .characters
-          .extend(data.text_content[item.start_offset()..item.end_offset()].chars());
+      if item.item_type != InlineItemType::Text {
+        continue;
       }
+
+      let Some(object) = item.layout_object else {
+        continue;
+      };
+
+      self.add_text(
+        &data.fonts.get(object.context()),
+        &data.text_content[item.start_offset()..item.end_offset()],
+      );
+    }
+  }
+
+  /// Adds the characters of `text`, and the pending faces `font` would load to draw them, each
+  /// character looked up at the fallback priority Blink's `SymbolsIterator` gives its run.
+  fn add_text(&mut self, font: &Font, text: &str) {
+    self.needs.characters.extend(text.chars());
+
+    let list = &font.fallback_list;
+
+    if !list.has_pending_faces() {
+      return;
+    }
+
+    let (_, walked) = self
+      .walked
+      .entry(Rc::as_ptr(list))
+      .or_insert_with(|| (Rc::clone(list), FxHashSet::default()));
+    let mut symbols = SymbolsIterator::new(text);
+    let mut start = 0;
+
+    while let Some((end, priority)) = symbols.consume() {
+      for character in text[start..end].chars() {
+        if !walked.insert((character, priority)) {
+          continue;
+        }
+
+        if let Some(id) = list.pending_face_for_character(character, priority) {
+          self.needs.faces.insert(id);
+        }
+      }
+
+      start = end;
     }
   }
 }
@@ -186,10 +262,188 @@ fn svg_image(src: &ImageSourceInput, context: &RenderContext) -> Option<ImageSou
 #[cfg(test)]
 mod tests {
   use super::RenderNeeds;
-  use crate::layout::{
-    inline::testing::{render_tree, span},
-    node::Node,
+  use crate::{
+    fonts::shaping::testing::{GEIST_MONO, register},
+    layout::{
+      inline::testing::{render_tree, render_with_fonts, span},
+      node::Node,
+    },
+    resources::{
+      font::{Fonts, PendingFontFace},
+      unicode_range::{UnicodeRange, UnicodeRangeSet},
+    },
   };
+
+  const POPPINS_REGULAR: &str =
+    "../assets/fonts/poppins/poppins-v24-devanagari_latin-regular.woff2";
+  const LATIN: UnicodeRange = UnicodeRange::new(0x0, 0xFF);
+  const CYRILLIC: UnicodeRange = UnicodeRange::new(0x400, 0x4FF);
+  const CJK: UnicodeRange = UnicodeRange::new(0x4E00, 0x9FFF);
+
+  /// A pending face of `family` at `weight` serving `range`.
+  fn pending(id: usize, family: &str, weight: f32, range: UnicodeRange) -> PendingFontFace {
+    PendingFontFace::new(id, family)
+      .weight(weight, weight)
+      .unicode_range(UnicodeRangeSet::from_iter([range]))
+  }
+
+  /// The ids of the pending faces `children` request in a block styled by `css`, with Geist Mono
+  /// registered ahead of `faces`.
+  fn requested(
+    faces: impl IntoIterator<Item = PendingFontFace>,
+    children: impl Into<Vec<Node>>,
+    css: &str,
+  ) -> Vec<usize> {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, GEIST_MONO, "Geist Mono");
+    requested_with(fonts, faces, children, css)
+  }
+
+  /// [`requested`] with `fonts` registered ahead of `faces`.
+  fn requested_with(
+    mut fonts: Fonts,
+    faces: impl IntoIterator<Item = PendingFontFace>,
+    children: impl Into<Vec<Node>>,
+    css: &str,
+  ) -> Vec<usize> {
+    for face in faces {
+      fonts.register_pending(face);
+    }
+
+    render_with_fonts(
+      &fonts,
+      Node::container(children).with_class_name("container"),
+      css,
+    )
+    .needs()
+    .faces
+    .into_iter()
+    .collect()
+  }
+
+  #[test]
+  fn requests_only_the_first_family_covering_a_character() {
+    let faces = requested(
+      [pending(0, "A", 400.0, LATIN), pending(1, "B", 400.0, LATIN)],
+      [Node::text("Hello")],
+      ".container { font-family: A, B }",
+    );
+
+    assert_eq!(faces, [0]);
+  }
+
+  #[test]
+  fn requests_a_later_family_for_a_character_only_it_covers() {
+    let faces = requested(
+      [
+        pending(0, "A", 400.0, LATIN),
+        pending(1, "B", 400.0, CYRILLIC),
+      ],
+      [Node::text("HiЖ")],
+      ".container { font-family: A, B }",
+    );
+
+    assert_eq!(faces, [0, 1]);
+  }
+
+  #[test]
+  fn requests_the_weight_the_text_matches() {
+    let faces = [pending(0, "A", 400.0, LATIN), pending(1, "A", 700.0, LATIN)];
+
+    assert_eq!(
+      requested(
+        faces.clone(),
+        [Node::text("a")],
+        ".container { font-family: A }"
+      ),
+      [0]
+    );
+    assert_eq!(
+      requested(
+        faces,
+        [Node::text("a"), Node::text("b").with_class_name("bold")],
+        ".container { font-family: A } .bold { font-weight: 700 }",
+      ),
+      [0, 1]
+    );
+  }
+
+  #[test]
+  fn a_pending_weight_competes_with_a_registered_one() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, POPPINS_REGULAR, "A");
+
+    assert_eq!(
+      requested_with(
+        fonts,
+        [pending(0, "A", 700.0, LATIN)],
+        [Node::text("a"), Node::text("b").with_class_name("bold")],
+        ".container { font-family: A } .bold { font-weight: 700 }",
+      ),
+      [0]
+    );
+  }
+
+  #[test]
+  fn requests_nothing_a_loaded_font_earlier_in_the_stack_draws() {
+    let faces = requested(
+      [pending(0, "A", 400.0, LATIN)],
+      [Node::text("Hello")],
+      ".container { font-family: 'Geist Mono', A }",
+    );
+
+    assert!(faces.is_empty());
+  }
+
+  #[test]
+  fn requests_the_unicode_range_subsets_the_text_falls_in() {
+    let faces = || {
+      [
+        pending(0, "A", 400.0, LATIN),
+        pending(1, "A", 400.0, CYRILLIC),
+      ]
+    };
+    let css = ".container { font-family: A }";
+
+    assert_eq!(requested(faces(), [Node::text("Ж")], css), [1]);
+    assert_eq!(requested(faces(), [Node::text("Hi Ж")], css), [0, 1]);
+  }
+
+  #[test]
+  fn requests_a_fallback_family_s_face_after_the_stack() {
+    let faces = requested(
+      [pending(0, "A", 400.0, CJK)],
+      [Node::text("a中")],
+      ".container { font-family: 'Geist Mono' }",
+    );
+
+    assert_eq!(faces, [0]);
+  }
+
+  #[test]
+  fn requests_the_face_of_an_svg_image_s_text_font() {
+    let faces = requested(
+      [
+        pending(0, "A", 400.0, CYRILLIC),
+        pending(1, "B", 400.0, CYRILLIC),
+      ],
+      [Node::image(
+        "<svg xmlns='http://www.w3.org/2000/svg'><text font-family='B'>Ж</text></svg>",
+      )],
+      ".container { font-family: A }",
+    );
+
+    assert_eq!(faces, [1]);
+  }
+
+  #[test]
+  fn requests_nothing_without_pending_faces() {
+    let needs = render_tree([Node::text("Hello Ж")], "").needs();
+
+    assert!(needs.faces.is_empty());
+  }
 
   const CSS: &str = "
     .hidden { display: none; background-image: url(https://example.com/hidden.png) }
