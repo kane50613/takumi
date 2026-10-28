@@ -69,10 +69,11 @@ export class Renderer {
    * and encode it.
    */
   prepare(source: Node | string, options?: PrepareOptions): Promise<PreparedSource> {
+    const { fonts, images, signal, fontFamilies, ...layout } = options ?? {};
     const native = toNativeSource(source);
 
-    return prepareSource(this.fonts, native, options ?? {}, (layout) =>
-      this.inner.needs(native, layout, options?.signal),
+    return prepareSource(this.fonts, native, layout, { fonts, images, signal, fontFamilies }, () =>
+      this.inner.needs(native, layout, signal),
     );
   }
 

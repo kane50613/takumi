@@ -86,25 +86,22 @@ export class Prepared<TSource = unknown, TLayout = unknown> {
 }
 
 /**
- * Reads what `source` needs under `options`, then loads the font subsets its text uses and fetches
- * the images it draws that `options.images` does not supply. `needs` reads the source after the
- * cascade.
+ * Reads what `source` needs, then loads the font subsets its text uses and fetches the images it
+ * draws that `extras.images` does not supply. `needs` reads the source after the cascade under
+ * `layout`, the binding options it will render with.
  */
-export async function prepareSource<
-  TFamily extends RegisteredFamilyLike,
-  TSource,
-  TOptions extends PrepareExtras & { fontFamilies?: string[] },
->(
+export async function prepareSource<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   registry: FontRegistry<TFamily>,
   source: TSource,
-  options: TOptions,
-  needs: (layout: Omit<TOptions, keyof PrepareExtras | "fontFamilies">) => Awaitable<SourceNeeds>,
-): Promise<Prepared<TSource, Omit<TOptions, keyof PrepareExtras | "fontFamilies">>> {
-  const { fonts, fontFamilies, images = [], signal, ...layout } = options;
+  layout: TLayout,
+  extras: PrepareExtras & { fontFamilies?: string[] },
+  needs: () => Awaitable<SourceNeeds>,
+): Promise<Prepared<TSource, TLayout>> {
+  const { fonts, fontFamilies, images = [], signal } = extras;
 
   signal?.throwIfAborted();
 
-  const read = await needs(layout);
+  const read = await needs();
   const resolvedFonts = await fonts;
   const subset = resolvedFonts && (await fontsFor(resolvedFonts, () => read.characters));
   const {
