@@ -3,7 +3,7 @@ title: Image loading & emoji
 description: Load remote, pre-fetched, and raw-pixel images, render emoji, and tune fetch limits and caches in Takumi.
 ---
 
-Takumi fetches the remote images your markup references, accepts images you fetch or decode yourself, and turns emoji into images. Fetch limits, retries, caches, and decode limits come after these, at the end of the page.
+Takumi fetches the remote images your markup references, accepts images you fetch or decode yourself, and draws emoji from images. Fetch limits, retries, caches, and decode limits come after these, at the end of the page.
 
 ## External images
 
@@ -104,7 +104,7 @@ Set `premultiplied` when the bytes already have premultiplied alpha. Takumi then
 
 ## Emoji
 
-`takumi-js` turns emoji into images by default. It splits each emoji out of the text and fetches its SVG from a CDN, using Twemoji unless you pick another set.
+`takumi-js` draws emoji from SVGs on a CDN by default, using Twemoji unless you pick another set. Each emoji is still a glyph of the text: it sits on the baseline, one em wide, and takes `letter-spacing`, `line-height`, and `text-decoration` like the letters around it. In a PDF, copying the text gives back the emoji.
 
 ### Dynamic fetching
 
@@ -132,7 +132,47 @@ export function GET() {
 
 Emoji detection follows the Unicode presentation rules. A pictograph that defaults to text presentation, such as `‼` or `▶`, stays text and renders with your fonts. Add `U+FE0F` after it to force the emoji image. Add `U+FE0E` after an emoji to keep the text glyph.
 
-On your own renderer, [`prepare()`](#prepare-on-your-own-renderer) splits emoji and fetches their images the same way.
+Takumi fetches only the emoji the text draws. An emoji the set has no SVG for draws from your other fonts instead of failing the render.
+
+### Image fonts
+
+The `emoji` option is a shortcut for an image font: a font whose glyphs are images, one per emoji or other grapheme cluster. On your own renderer, pass image fonts to [`prepare()`](#prepare-on-your-own-renderer) in `imageFonts`. `emojiImageFont` builds the one `takumi-js` uses for a set:
+
+```tsx twoslash title="Draw emoji from an image font"
+import { Renderer } from "takumi-js/node";
+import { emojiImageFont } from "takumi-js/helpers/emoji";
+
+declare const html: string;
+// ---cut---
+const renderer = new Renderer();
+
+const prepared = await renderer.prepare(html, {
+  imageFonts: [emojiImageFont("noto")], // [!code highlight]
+});
+```
+
+An image font has a `name`, the `glyphs` it already holds, and a `load` function. `prepare` calls `load` with each emoji the source draws from the font that `glyphs` lacks. `load` returns the image's URL, which `prepare` fetches with the [fetch limits](#fetch-limits) of `images`, or the image's bytes. An emoji without one draws from the next font.
+
+```tsx twoslash title="Load emoji images yourself"
+import { Renderer } from "takumi-js/node";
+
+declare const html: string;
+declare const logo: Uint8Array;
+// ---cut---
+const renderer = new Renderer();
+
+const prepared = await renderer.prepare(html, {
+  imageFonts: [
+    {
+      name: "Brand Emoji",
+      glyphs: [{ cluster: "⭐", data: logo }],
+      load: (cluster) => `https://emoji.example.com/${encodeURIComponent(cluster)}.svg`,
+    },
+  ],
+});
+```
+
+`render`, `renderSvg`, and `measure` take `imageFonts` too, with every image in `glyphs` as SVG markup or raster bytes. Fallback reaches image fonts before any other font, so they draw every emoji they hold an image for unless a font named earlier in `font-family` has the emoji.
 
 ### COLR / bitmap fonts
 
@@ -141,7 +181,7 @@ Takumi draws emoji from color fonts, either COLR fonts such as `Twemoji-COLR` or
 To use a color font, do both of these:
 
 - Register the font through [`fonts`](/docs/fonts#the-fonts-option).
-- Set `emoji: "from-font"`.
+- Set `emoji: "from-font"`, so no image font comes before it.
 
 Variation selectors take priority over font order. A code point followed by `U+FE0F` renders as a color emoji, even when a text font comes first in the stack. A code point followed by `U+FE0E` renders as a monochrome glyph, even when a color font comes first. Bare code points follow stack order, as in browsers.
 
@@ -151,6 +191,7 @@ A renderer you create yourself fetches nothing on its own. Its `prepare()` does 
 
 ```tsx twoslash title="Prepare, then render"
 import { Renderer } from "takumi-js/node";
+import { emojiImageFont } from "takumi-js/helpers/emoji";
 
 declare const html: string;
 // ---cut---
@@ -160,14 +201,14 @@ const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 const prepared = await renderer.prepare(html, {
   width: 1200,
   height: 630,
-  emoji: "twemoji",
+  imageFonts: [emojiImageFont("twemoji")],
   images: { fetchCache },
 });
 
 const image = await renderer.render(prepared, { format: "webp" });
 ```
 
-- `prepare` takes the layout options of `render`, such as the size, `css`, `lang`, `emoji`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits). Rendering a prepared source takes only the output options, so the layout cannot change between the two calls.
+- `prepare` takes the layout options of `render`, such as the size, `css`, `lang`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits) and [`imageFonts`](#image-fonts). Rendering a prepared source takes only the output options, so the layout cannot change between the two calls.
 - With your own `fetch`, a relative URL such as `/logo.png` reaches it, so it can resolve the path and apply its own checks. Without one, only `http://` and `https://` URLs are fetched.
 - A prepared source renders on any renderer from the same package. A renderer that no longer holds its fonts loads them again.
 
@@ -215,7 +256,7 @@ A custom `fetch` must honor the abort signal it receives.
 
 ### Failed fetches
 
-By default, one image that fails to fetch rejects the whole render. Set `throwOnError: false` to leave that image out and draw the rest. An emoji with no Twemoji image counts as a failed fetch too.
+By default, one image that fails to fetch rejects the whole render. Set `throwOnError: false` to leave that image out and draw the rest. An emoji that fails to fetch never rejects the render: it draws from your other fonts.
 
 ```tsx twoslash title="Render without the images that failed"
 import { render } from "takumi-js";

@@ -63,9 +63,10 @@ Length and color shorthands return CSS strings. `vw` and `vh` are viewport units
 
 ## Images & emoji
 
-| Helper                           | Import                    | Use                                                                                         |
-| :------------------------------- | :------------------------ | :------------------------------------------------------------------------------------------ |
-| `prepareImages(options)`         | `takumi-js/helpers`       | Deprecated. A renderer's `prepare` reads the images a document draws and fetches them.      |
-| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Deprecated. A renderer's `prepare` takes `emoji` and replaces emoji with CDN images itself. |
+| Helper                           | Import                    | Use                                                                                     |
+| :------------------------------- | :------------------------ | :-------------------------------------------------------------------------------------- |
+| `prepareImages(options)`         | `takumi-js/helpers`       | Deprecated. A renderer's `prepare` reads the images a document draws and fetches them.  |
+| `emojiImageFont(emojiType)`      | `takumi-js/helpers/emoji` | An image font that draws emoji from a CDN set, for a renderer's `prepare`.              |
+| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Deprecated. Pass `emojiImageFont(emojiType)` to a renderer's `prepare` in `imageFonts`. |
 
-`emojiType` takes the CDN values of the `emoji` option listed in [Image loading & emoji](/docs/images#dynamic-fetching). It does not take `from-font`, which fetches nothing.
+`emojiType` takes the CDN values of the `emoji` option listed in [Image loading & emoji](/docs/images#dynamic-fetching). It does not take `from-font`, which fetches nothing. See [Image fonts](/docs/images#image-fonts).

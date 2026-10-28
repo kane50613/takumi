@@ -100,4 +100,4 @@ Every node has these fields.
 
 - `filter: url(#id)` arrives as `{ type: "unsupported", css }`.
 - `backdrop-filter` needs what is already drawn behind the node. Targets such as PPTX cannot read that.
-- `run.outlines()` holds `null` for glyphs the run's color does not fill. These are color font layers, which arrive as their own drawables, and bitmap glyphs such as some emoji.
+- `run.outlines()` holds `null` for glyphs the run's color does not fill. These are color font layers, which arrive as their own drawables, bitmap glyphs such as some emoji, and the glyphs of an image font, which arrive as image drawables.
