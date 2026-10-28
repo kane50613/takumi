@@ -13,6 +13,7 @@ use std::iter::successors;
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, Point, Size},
+  layout::tree::StitchedFragment,
   painter::{BoxPainter, FillShape, OverflowClip, UNBOUNDED},
   scene::SceneBounds,
   style::{Affine, Filter},
@@ -107,11 +108,11 @@ impl NodeProperties {
     state: PropertyState,
     path: &[usize],
     context: &RenderContext,
-    layout: ComputedLayout,
+    fragment: StitchedFragment,
     transform: Affine,
     paint_offset: Point<f32>,
   ) -> Self {
-    let output_clip = BoxPainter::new(context, layout)
+    let output_clip = BoxPainter::new(context, fragment.layout)
       .clip_path()
       .map(|shape| {
         trees.add_clip(ClipNode {
@@ -162,9 +163,13 @@ impl NodeProperties {
     } else {
       output_clip
     };
-    let clip = OverflowClip::of(context, layout, paint_offset)
+    // Blink's `PhysicalBoxFragment::OverflowClipRect` when printing, and its
+    // `UpdateInnerBorderRadiusClip`, clip a fragment to the stitched box.
+    let stitched_offset = Point::new(0.0, fragment.block_offset);
+    let clip = OverflowClip::of(context, fragment.stitched, paint_offset - stitched_offset)
       .map(|clip| {
         let (shape, origin) = clip.shape();
+        let origin = origin - stitched_offset;
 
         trees.add_clip(ClipNode {
           parent: input_clip,

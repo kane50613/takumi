@@ -505,7 +505,7 @@ fn build_layers(
       state,
       &visit.path,
       &current.context,
-      layout,
+      layout_results.stitched_fragment(visit.node_id, visit.fragment_index)?,
       current_transform,
       child_base.paint_offset,
     );

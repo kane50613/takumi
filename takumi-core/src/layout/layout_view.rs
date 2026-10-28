@@ -12,7 +12,7 @@ use crate::{
   geometry::{ComputedLayout, NodeId},
   layout::{
     table::TableFragment,
-    tree::{Fragments, LayoutResults, OrderedChild},
+    tree::{Fragments, LayoutResults, OrderedChild, StitchedFragment},
   },
 };
 
@@ -88,6 +88,24 @@ impl<'a> LayoutView<'a> {
       .get(fragment_index)
       .map(|fragment| fragment.layout)
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
+  }
+
+  /// `node_id`'s fragment `fragment_index` placed in its stitched box.
+  pub(crate) fn stitched_fragment(
+    self,
+    node_id: NodeId,
+    fragment_index: usize,
+  ) -> Result<StitchedFragment> {
+    let (fragments, _) = self.parts(node_id)?;
+
+    if fragment_index >= fragments.len() {
+      return Err(Error::InvalidLayoutNode(node_id.into()));
+    }
+
+    #[cfg(feature = "fragmentation")]
+    return Ok(BoxFragment::stitched(fragments, fragment_index));
+    #[cfg(not(feature = "fragmentation"))]
+    return Ok(StitchedFragment::unbroken(fragments[fragment_index].layout));
   }
 
   /// Whether the fragment repeats an earlier one, as a table header does on each page.

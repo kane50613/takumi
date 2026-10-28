@@ -10,6 +10,7 @@ use smallvec::SmallVec;
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::{
+  block_break_token::BlockBreakToken,
   layout_result::LayoutResult,
   layout_view::{HoistedBy, LiveLayout},
   paged_layout::PagedLayout,
@@ -437,8 +438,51 @@ pub(crate) struct BoxFragment {
   /// fragment replaces this one.
   #[cfg(feature = "fragmentation")]
   pub(crate) placed_by: PlacedBy,
+  /// Blink's `PhysicalBoxFragment::GetBreakToken`, none once the box ended.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) break_token: Option<FragmentBreak>,
   /// Whether the fragment repeats an earlier one, as a table header does on each page.
   pub(crate) is_repeated: bool,
+}
+
+/// The parts of a fragment's `BlockBreakToken` that stitch its box's fragments together.
+#[cfg(feature = "fragmentation")]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FragmentBreak {
+  pub(crate) consumed_block_size: LayoutUnit,
+  pub(crate) is_repeated: bool,
+  pub(crate) is_at_block_end: bool,
+}
+
+#[cfg(feature = "fragmentation")]
+impl From<&BlockBreakToken> for FragmentBreak {
+  fn from(token: &BlockBreakToken) -> Self {
+    Self {
+      consumed_block_size: token.consumed_block_size,
+      is_repeated: token.is_repeated,
+      is_at_block_end: token.is_at_block_end,
+    }
+  }
+}
+
+/// A fragment, the box it belongs to as if no page broke it, and where it starts in that box.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct StitchedFragment {
+  pub(crate) layout: ComputedLayout,
+  /// The first fragment's layout, grown to the stitched block size and the box's block-end edge.
+  pub(crate) stitched: ComputedLayout,
+  pub(crate) block_offset: f32,
+}
+
+impl StitchedFragment {
+  /// A fragment of a box no page broke.
+  pub(crate) fn unbroken(layout: ComputedLayout) -> Self {
+    Self {
+      layout,
+      stitched: layout,
+      block_offset: 0.0,
+    }
+  }
 }
 
 /// A run of a box's layout algorithm: the box and which of its runs, counting from one.
@@ -459,6 +503,49 @@ impl BoxFragment {
       fragments[start..].partition_point(|fragment| fragment.container_fragment_index == container);
 
     start..start + len
+  }
+
+  /// `fragments[index]` placed in its stitched box, `fragments` a box's fragments in layout order.
+  ///
+  /// Blink's `LayoutBox::ComputeSize` sizes the stitched box and `OffsetInStitchedFragments` places
+  /// the fragment in it. A repeated box, as a table header, is not stitched.
+  pub(crate) fn stitched(fragments: &[Self], index: usize) -> StitchedFragment {
+    let fragment = fragments[index].layout;
+    let first = &fragments[0];
+
+    if first.break_token.is_none_or(|token| token.is_repeated) {
+      return StitchedFragment::unbroken(fragment);
+    }
+
+    let mut stitched = ComputedLayout {
+      location: fragment.location,
+      ..first.layout
+    };
+    let mut previous_token: Option<FragmentBreak> = None;
+    let mut last = first;
+
+    for current in fragments {
+      last = current;
+      stitched.size.height = current.layout.size.height
+        + previous_token.map_or(0.0, |token| token.consumed_block_size.to_float());
+      previous_token = current.break_token;
+
+      if previous_token.is_none_or(|token| token.is_repeated || token.is_at_block_end) {
+        break;
+      }
+    }
+
+    stitched.border.bottom = last.layout.border.bottom;
+    stitched.padding.bottom = last.layout.padding.bottom;
+
+    StitchedFragment {
+      layout: fragment,
+      stitched,
+      block_offset: index
+        .checked_sub(1)
+        .and_then(|previous| fragments[previous].break_token)
+        .map_or(0.0, |token| token.consumed_block_size.to_float()),
+    }
   }
 }
 
