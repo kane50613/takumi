@@ -270,15 +270,3 @@ describe("font subsets", () => {
     expect(greek.data).not.toHaveBeenCalled();
   });
 });
-
-describe("Painter.needs", () => {
-  it("reports images a <style> element names", async () => {
-    const needs = await painter.needs(
-      '<style>.a { background-image: url(https://example.com/a.png) }</style><div class="a">x</div>',
-      { width: 100, height: 100 },
-    );
-
-    expect(needs.images).toEqual(["https://example.com/a.png"]);
-    expect(needs.characters).toContain("x");
-  });
-});

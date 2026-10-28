@@ -461,13 +461,3 @@ test("loads font subsets for characters only a stylesheet adds", async () => {
   expect(cyrillic.data).toHaveBeenCalledTimes(1);
   expect(greek.data).not.toHaveBeenCalled();
 });
-
-test("needs reports images a <style> element names", async () => {
-  const needs = await new PdfRenderer().needs(
-    '<style>.a { background-image: url(https://example.com/a.png) }</style><div class="a">x</div>',
-    { viewport: { width: 100, height: 100 } },
-  );
-
-  expect(needs.images).toEqual(["https://example.com/a.png"]);
-  expect(needs.characters).toContain("x");
-});

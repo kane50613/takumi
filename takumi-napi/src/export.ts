@@ -73,7 +73,11 @@ export class Renderer {
     );
   }
 
-  /** The remote images `source` draws and the characters its text shapes, read after the cascade. */
+  /**
+   * The remote images `source` draws and the characters its text shapes, read after the cascade.
+   *
+   * @internal For `takumi-js`, which fetches the images before rendering. Not a stable API.
+   */
   needs(source: Node | string, options?: RenderOptions): Promise<RenderNeeds> {
     const { fonts: _fonts, images: _images, signal, ...rest } = options ?? {};
 
