@@ -8,10 +8,10 @@ import type {
 } from "@takumi-rs/helpers/renderer";
 import {
   FontRegistry,
-  fontsFor,
   type JsonSource,
   Prepared,
   prepareSource,
+  readSource,
   renderPrepared,
   toNativeSource,
 } from "@takumi-rs/helpers/renderer";
@@ -185,26 +185,21 @@ export class Painter {
   paint(document: PreparedDocument): Promise<PaintTree>;
   paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
   async paint(node: PreparedDocument | NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
-    const painted =
-      node instanceof Prepared
-        ? await renderPrepared(this.#fonts, node, {}, (native, opts) =>
-            this.#inner.paint(native, opts),
-          )
-        : await this.#paintNode(node, options);
+    const prepared = node instanceof Prepared ? node : await this.#read(node, options);
+    const painted = await renderPrepared(this.#fonts, prepared, {}, (native, opts) =>
+      this.#inner.paint(native, opts),
+    );
 
     return new PaintTreeView(painted.tree(), painted);
   }
 
-  async #paintNode(node: NodeInput, options: PaintOptions) {
+  async #read(node: NodeInput, options: PaintOptions): Promise<PreparedDocument> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
 
-    return this.#fonts.resolveResources(
-      fonts && (await fontsFor(fonts, () => this.#inner.needs(main.node, layout).characters)),
-      images,
-      fontFamilies,
-      (resources) => this.#inner.paint(main.node, { ...layout, ...resources }),
+    return readSource(main.node, layout, { fonts, images, fontFamilies }, () =>
+      this.#inner.needs(main.node, layout),
     );
   }
 

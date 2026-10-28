@@ -17,6 +17,7 @@ import {
   FontRegistry,
   Prepared,
   prepareSource,
+  readSource,
   renderPrepared,
   toNativeSource,
   withRenderInput,
@@ -79,85 +80,57 @@ export class Renderer {
 
   render(source: PreparedSource, options?: PreparedRenderOptions): Promise<Uint8Array<ArrayBuffer>>;
   render(source: Node | string, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>>;
-  render(
+  async render(
     source: PreparedSource | Node | string,
-    options?: RenderOptions | PreparedRenderOptions,
+    options: RenderOptions = {},
   ): Promise<Uint8Array<ArrayBuffer>> {
-    if (source instanceof Prepared) {
-      return renderPrepared(this.fonts, source, options ?? {}, (native, opts) =>
-        this.inner.render(native, opts),
-      );
-    }
-
-    return withRenderInput(
+    return renderPrepared(
       this.fonts,
-      options ?? {},
-      source,
-      (opts) => this.inner.render(toNativeSource(source), opts),
-      this.characters(source),
+      source instanceof Prepared ? source : await this.read(source, options),
+      source instanceof Prepared ? options : { signal: options.signal },
+      (native, opts) => this.inner.render(native, opts),
     );
   }
 
   renderAsDataUrl(source: PreparedSource, options?: PreparedRenderOptions): Promise<string>;
   renderAsDataUrl(source: Node | string, options?: RenderOptions): Promise<string>;
-  renderAsDataUrl(
+  async renderAsDataUrl(
     source: PreparedSource | Node | string,
-    options?: RenderOptions | PreparedRenderOptions,
+    options: RenderOptions = {},
   ): Promise<string> {
-    if (source instanceof Prepared) {
-      return renderPrepared(this.fonts, source, options ?? {}, (native, opts) =>
-        this.inner.renderAsDataUrl(native, opts),
-      );
-    }
-
-    return withRenderInput(
+    return renderPrepared(
       this.fonts,
-      options ?? {},
-      source,
-      (opts) => this.inner.renderAsDataUrl(toNativeSource(source), opts),
-      this.characters(source),
+      source instanceof Prepared ? source : await this.read(source, options),
+      source instanceof Prepared ? options : { signal: options.signal },
+      (native, opts) => this.inner.renderAsDataUrl(native, opts),
     );
   }
 
   renderSvg(source: PreparedSource, options?: { signal?: AbortSignal }): Promise<string>;
   renderSvg(source: Node | string, options?: SvgRenderOptions): Promise<string>;
-  renderSvg(
+  async renderSvg(
     source: PreparedSource | Node | string,
-    options?: SvgRenderOptions | { signal?: AbortSignal },
+    options: SvgRenderOptions = {},
   ): Promise<string> {
-    if (source instanceof Prepared) {
-      return renderPrepared(this.fonts, source, options ?? {}, (native, opts) =>
-        this.inner.renderSvg(native, opts),
-      );
-    }
-
-    return withRenderInput(
+    return renderPrepared(
       this.fonts,
-      options ?? {},
-      source,
-      (opts) => this.inner.renderSvg(toNativeSource(source), opts),
-      this.characters(source),
+      source instanceof Prepared ? source : await this.read(source, options),
+      source instanceof Prepared ? options : { signal: options.signal },
+      (native, opts) => this.inner.renderSvg(native, opts),
     );
   }
 
   measure(source: PreparedSource, options?: { signal?: AbortSignal }): Promise<MeasuredNode>;
   measure(source: Node | string, options?: RenderOptions): Promise<MeasuredNode>;
-  measure(
+  async measure(
     source: PreparedSource | Node | string,
-    options?: RenderOptions | { signal?: AbortSignal },
+    options: RenderOptions = {},
   ): Promise<MeasuredNode> {
-    if (source instanceof Prepared) {
-      return renderPrepared(this.fonts, source, options ?? {}, (native, opts) =>
-        this.inner.measure(native, opts),
-      );
-    }
-
-    return withRenderInput(
+    return renderPrepared(
       this.fonts,
-      options ?? {},
-      source,
-      (opts) => this.inner.measure(toNativeSource(source), opts),
-      this.characters(source),
+      source instanceof Prepared ? source : await this.read(source, options),
+      source instanceof Prepared ? options : { signal: options.signal },
+      (native, opts) => this.inner.measure(native, opts),
     );
   }
 
@@ -174,10 +147,17 @@ export class Renderer {
     return this.inner.needs(toNativeSource(source), rest);
   }
 
-  /** Reads the characters `source` shapes, for `withRenderInput` to pick font subsets by. */
-  private characters(source: Node | string) {
-    return async (options: RenderOptionsInternal) =>
-      (await this.inner.needs(toNativeSource(source), options)).characters;
+  /** `source` read under `options` without fetching, for {@link render} and its siblings. */
+  private read(
+    source: Node | string,
+    options: RenderOptions | SvgRenderOptions,
+  ): Promise<PreparedSource> {
+    const { fonts, images, signal, fontFamilies, ...layout } = options;
+    const native = toNativeSource(source);
+
+    return readSource(native, layout, { fonts, images, signal, fontFamilies }, () =>
+      this.inner.needs(native, layout),
+    );
   }
 
   renderAnimation(options: RenderAnimationOptions): Promise<Uint8Array<ArrayBuffer>> {

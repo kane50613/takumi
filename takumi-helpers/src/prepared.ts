@@ -97,13 +97,43 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
   extras: PrepareExtras & { fontFamilies?: string[] },
   needs: () => Awaitable<SourceNeeds>,
 ): Promise<Prepared<TSource, TLayout>> {
+  const state = await collect(source, layout, extras, needs, true);
+
+  await registry.resolveResources(state.fonts, undefined, state.fontFamilies, () => undefined);
+  extras.signal?.throwIfAborted();
+
+  return createPrepared(state);
+}
+
+/**
+ * {@link prepareSource} without fetching: the images are the ones `extras.images` supplies, and
+ * `needs` runs only when a font subset depends on the characters.
+ */
+export async function readSource<TSource, TLayout>(
+  source: TSource,
+  layout: TLayout,
+  extras: PrepareExtras & { fontFamilies?: string[] },
+  needs: () => Awaitable<SourceNeeds>,
+): Promise<Prepared<TSource, TLayout>> {
+  return createPrepared(await collect(source, layout, extras, needs, false));
+}
+
+async function collect<TSource, TLayout>(
+  source: TSource,
+  layout: TLayout,
+  extras: PrepareExtras & { fontFamilies?: string[] },
+  needs: () => Awaitable<SourceNeeds>,
+  fetchMissing: boolean,
+): Promise<PreparedState<TSource, TLayout>> {
   const { fonts, fontFamilies, images = [], signal } = extras;
 
   signal?.throwIfAborted();
 
-  const read = await needs();
+  let pending: Promise<SourceNeeds> | undefined;
+  const read = () => (pending ??= Promise.resolve(needs()));
   const resolvedFonts = await fonts;
-  const subset = resolvedFonts && (await fontsFor(resolvedFonts, () => read.characters));
+  const subset =
+    resolvedFonts && (await fontsFor(resolvedFonts, async () => (await read()).characters));
   const {
     sources = [],
     cache,
@@ -112,25 +142,24 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
     ...fetchOptions
   } = Array.isArray(images) ? { sources: images } : images;
   const provided = await resolveImageLoaders({ sources, cache });
-  const fetched = await prepareImages({
-    ...fetchOptions,
-    urls: read.images,
-    sources: provided,
-    fetchCache,
-    throwOnError,
-    signal,
-  });
+  const fetched = fetchMissing
+    ? await prepareImages({
+        ...fetchOptions,
+        urls: (await read()).images,
+        sources: provided,
+        fetchCache,
+        throwOnError,
+        signal,
+      })
+    : provided;
 
-  await registry.resolveResources(subset, undefined, fontFamilies, () => undefined);
-  signal?.throwIfAborted();
-
-  return createPrepared({
+  return {
     source,
     layout,
     fonts: subset,
     fontFamilies,
     images: fetched.map((image) => ({ cache, ...image })),
-  });
+  };
 }
 
 /**

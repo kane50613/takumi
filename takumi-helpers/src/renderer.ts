@@ -16,6 +16,7 @@ export {
   type PrepareExtras,
   type PrepareImagesInput,
   prepareSource,
+  readSource,
   renderPrepared,
   type SourceNeeds,
 } from "./prepared";
@@ -331,11 +332,10 @@ export type ResolvedRenderOptions<TOptions> = Omit<
 };
 
 /**
- * Shared body for every backend render entry point: subsets `fonts` against the `characters` the
- * backend reads after the cascade, or against `source` without it, and registers them;
- * resolves `images`/`fontFamilies`, and enforces one abort policy: `signal` is checked before and
- * after the (network-bound) resource resolution. Then calls `call` with the binding options and the
- * `signal` for the backend to forward into a native call when it supports cancellation.
+ * Shared body for the animation entry points: subsets `fonts` against the text in `source` and
+ * registers them, resolves `images`/`fontFamilies`, and checks `signal` before and after that
+ * resource resolution. Then calls `call` with the binding options and the `signal` for the backend
+ * to forward into a native call when it supports cancellation.
  */
 export async function withRenderInput<
   TOptions extends RenderExtras & { fontFamilies?: string[] },
@@ -349,7 +349,6 @@ export async function withRenderInput<
     options: ResolvedRenderOptions<TOptions>,
     signal: AbortSignal | undefined,
   ) => Awaitable<TResult>,
-  characters?: (options: Omit<TOptions, keyof RenderExtras | "fontFamilies">) => Awaitable<string>,
 ): Promise<TResult> {
   const { fonts, fontFamilies, signal, images, ...rest } = options;
   signal?.throwIfAborted();
@@ -357,12 +356,10 @@ export async function withRenderInput<
   const resolvedFonts = await fonts;
   const subset =
     resolvedFonts &&
-    (characters
-      ? await fontsFor(resolvedFonts, () => characters(rest))
-      : subsetFonts({
-          fonts: resolvedFonts,
-          source: [...(Array.isArray(source) ? source : [source]), LIST_MARKER_CHARACTERS],
-        }));
+    subsetFonts({
+      fonts: resolvedFonts,
+      source: [...(Array.isArray(source) ? source : [source]), LIST_MARKER_CHARACTERS],
+    });
 
   return registry.resolveResources(subset, images, fontFamilies, (resolved) => {
     signal?.throwIfAborted();

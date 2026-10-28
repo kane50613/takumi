@@ -9,10 +9,10 @@ import type {
 } from "@takumi-rs/helpers/renderer";
 import {
   FontRegistry,
-  fontsFor,
   type JsonSource,
   Prepared,
   prepareSource,
+  readSource,
   renderPrepared,
   toNativeSource,
 } from "@takumi-rs/helpers/renderer";
@@ -576,7 +576,7 @@ export class PdfRenderer {
       document.node,
       layout,
       { fonts, images, signal, fontFamilies },
-      () => this.read(document.trees, layout),
+      () => this.needs(document.trees, layout),
     );
   }
 
@@ -587,32 +587,11 @@ export class PdfRenderer {
     node: PreparedDocument | NodeInput,
     options: RenderOptions & { signal?: AbortSignal } = {},
   ): Promise<Uint8Array> {
-    if (node instanceof Prepared) {
-      return renderPrepared(this.fonts, node, options, (native, opts) =>
-        this.inner.render(native, opts),
-      );
-    }
-
-    const {
-      fonts,
-      images,
-      header,
-      footer,
-      pages,
-      css,
-      stylesheets,
-      fontFamilies,
-      signal: _signal,
-      ...rest
-    } = options;
-    const document = await resolveDocument(node, { header, footer, pages, css, stylesheets });
-    const layout = { ...rest, ...document.layout };
-
-    return this.fonts.resolveResources(
-      fonts && (await fontsFor(fonts, () => this.read(document.trees, layout).characters)),
-      images,
-      fontFamilies,
-      (resources) => this.inner.render(document.node, { ...layout, ...resources }),
+    return renderPrepared(
+      this.fonts,
+      node instanceof Prepared ? node : await this.read(node, options),
+      node instanceof Prepared ? options : { signal: options.signal },
+      (native, opts) => this.inner.render(native, opts),
     );
   }
 
@@ -642,15 +621,15 @@ export class PdfRenderer {
     const { fonts, images, css, stylesheets, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
     const sheets = [...ownCss(css, stylesheets), ...main.css];
-
     const layout = { ...rest, css: sheets.length > 0 ? sheets : undefined };
 
     // The tree measured may itself be a band, so its counters are always in play.
-    return this.fonts.resolveResources(
-      fonts && (await fontsFor(fonts, () => this.read([main.node], layout).characters)),
-      images,
-      fontFamilies,
-      (resources) => this.inner.measure(main.node, { ...layout, ...resources }),
+    const prepared = await readSource(main.node, layout, { fonts, images, fontFamilies }, () =>
+      this.needs([main.node], layout),
+    );
+
+    return renderPrepared(this.fonts, prepared, {}, (native, opts) =>
+      this.inner.measure(native, opts),
     );
   }
 
@@ -658,7 +637,7 @@ export class PdfRenderer {
    * The images `trees` look up by URL and the characters they shape after the cascade, page
    * counters their classes hook included.
    */
-  private read(
+  private needs(
     trees: (Node | string | JsonSource)[],
     options: Parameters<PdfRendererInternal["needs"]>[1],
   ): SourceNeeds {
@@ -668,6 +647,18 @@ export class PdfRenderer {
       images: reads.flatMap((read) => read.images),
       characters: reads.map((read) => read.characters).join(""),
     };
+  }
+
+  /** A document and its bands read under `options` without fetching, for {@link render}. */
+  private async read(node: NodeInput, options: RenderOptions): Promise<PreparedDocument> {
+    const { fonts, images, header, footer, pages, css, stylesheets, fontFamilies, ...rest } =
+      options;
+    const document = await resolveDocument(node, { header, footer, pages, css, stylesheets });
+    const layout = { ...rest, ...document.layout };
+
+    return readSource(document.node, layout, { fonts, images, fontFamilies }, () =>
+      this.needs(document.trees, layout),
+    );
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */

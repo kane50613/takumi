@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Renderer as RendererInternal } from "../index";
 import { Renderer } from "../src/export";
 
 const renderer = new Renderer();
@@ -95,5 +96,13 @@ describe("prepare", () => {
     await expect(
       renderer.prepare("<p>hi</p>", { width: 8, height: 8, signal: controller.signal }),
     ).rejects.toThrow();
+  });
+
+  test("leaves a render without font subsets to read nothing ahead", async () => {
+    const needs = spyOn(RendererInternal.prototype, "needs");
+
+    await renderer.render("<p>hi</p>", { width: 8, height: 8 });
+
+    expect(needs).not.toHaveBeenCalled();
   });
 });
