@@ -9,7 +9,7 @@ use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
   FontCacheOptions, FontStore, NeedsOutput, append_css,
   input::{Font, ImageSource, decode_images},
-  source::{read_source, split_emojis},
+  source::read_source,
   stylesheet,
 };
 use takumi_core::{
@@ -63,7 +63,6 @@ struct RenderOptions {
   css: Option<Vec<CssSource>>,
   font_families: Option<Vec<String>>,
   lang: Option<String>,
-  emoji: Option<String>,
 }
 
 /// A renderer holding registered fonts and a decoded-resource cache.
@@ -101,9 +100,8 @@ impl Painter {
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
-    let (mut node, document_css) = read_source(node.into())?;
+    let (node, document_css) = read_source(node.into())?;
 
-    split_emojis(&mut node, options.emoji.as_deref())?;
     options.css = append_css(options.css.take(), document_css);
     let images = decode_images(
       &self.resource_cache,

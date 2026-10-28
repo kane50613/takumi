@@ -6,17 +6,7 @@ use takumi_core::layout::node::Node;
 use takumi_html::{FromHtmlOptions, parse_html};
 use wasm_bindgen::JsValue;
 
-use crate::{input::node_from_json, parse_emoji};
-
-/// Splits each emoji in `node` out as an image from the CDN `emoji` names; `from-font` or none
-/// leaves them as text.
-pub fn split_emojis(node: &mut Node, emoji: Option<&str>) -> Result<(), Error> {
-  if let Some(provider) = parse_emoji(emoji).map_err(error)? {
-    node.extract_emojis(provider);
-  }
-
-  Ok(())
-}
+use crate::input::node_from_json;
 
 /// The node tree `source` describes, and the CSS of its `<style>` elements when it is HTML.
 ///

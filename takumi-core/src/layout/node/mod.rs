@@ -1,5 +1,4 @@
 mod container;
-mod emoji;
 mod image;
 mod input;
 
@@ -11,7 +10,6 @@ use std::{
 
 use serde::Deserialize;
 
-pub use self::emoji::EmojiProvider;
 pub(crate) use self::image::is_remote_url;
 pub use self::image::resolve_image;
 use crate::{

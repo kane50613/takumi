@@ -23,10 +23,10 @@ use serde::de::DeserializeOwned;
 use takumi_bindings_common::{
   append_css,
   input::{FontOptions, node_from_json},
-  parse_emoji, stylesheet,
+  stylesheet,
 };
 use takumi_core::{
-  layout::node::{EmojiProvider, Node},
+  layout::node::Node,
   resources::{glyph_cache, image::ResourceCache},
   style::{CssSource, KeyframesRule, StyleSheet},
 };
@@ -187,7 +187,6 @@ pub(crate) struct RenderInput {
   source: NodeSource,
   css: Option<Vec<CssSource>>,
   keyframes: Vec<KeyframesRule>,
-  emoji: Option<EmojiProvider>,
 }
 
 impl RenderInput {
@@ -197,25 +196,17 @@ impl RenderInput {
     css: Option<Object>,
     stylesheets: Option<Vec<String>>,
     keyframes: Option<Object>,
-    emoji: Option<&str>,
   ) -> Result<Self> {
     Ok(Self {
       source,
       css: deserialize_css(css, stylesheets)?,
       keyframes: deserialize_keyframes(keyframes)?,
-      emoji: parse_emoji(emoji).map_err(map_error)?,
     })
   }
 
-  /// The node tree, its emoji split out, and the stylesheet the render uses, `<style>` elements of
-  /// HTML included.
+  /// The node tree and the stylesheet the render uses, `<style>` elements of HTML included.
   pub(crate) fn resolve(self, cache: &ResourceCache) -> Result<(Node, Arc<StyleSheet>)> {
-    let (mut node, document_css) = self.source.into_parts()?;
-
-    if let Some(provider) = self.emoji {
-      node.extract_emojis(provider);
-    }
-
+    let (node, document_css) = self.source.into_parts()?;
     let stylesheet =
       stylesheet(cache, append_css(self.css, document_css), self.keyframes).map_err(map_error)?;
 
