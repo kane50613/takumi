@@ -1,10 +1,18 @@
 import type { CssInput } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
+import type {
+  FontLoader,
+  ImagesInput,
+  PrepareImagesInput,
+  RegisteredFamilyLike,
+} from "@takumi-rs/helpers/renderer";
 import {
   FontRegistry,
   fontsFor,
   type JsonSource,
+  Prepared,
+  prepareSource,
+  renderPrepared,
   toNativeSource,
 } from "@takumi-rs/helpers/renderer";
 import type { EmojiType } from "@takumi-rs/helpers/emoji";
@@ -20,7 +28,8 @@ import initWasm, {
 } from "../pkg/takumi_paint_wasm";
 import { type PaintTree, PaintTreeView } from "./tree";
 
-export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
+export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/helpers/renderer";
+export { Prepared } from "@takumi-rs/helpers/renderer";
 export type {
   BlendMode,
   ColorStop,
@@ -87,12 +96,35 @@ export type PaintOptions = {
   emoji?: EmojiType | "from-font";
 };
 
+/** Options for {@link Painter.prepare}: everything {@link PaintOptions} lays out with. */
+export type PrepareOptions = Omit<PaintOptions, "images"> & {
+  /** Images to use as they are, and how to fetch the rest the document draws. */
+  images?: PrepareImagesInput;
+  signal?: AbortSignal;
+};
+
+/** A document {@link Painter.prepare} readied, with its fonts and images loaded. */
+export type PreparedDocument = Prepared<
+  Node | string | JsonSource,
+  Omit<PaintOptions, "fonts" | "images" | "fontFamilies" | "css"> & { css?: CssInput[] }
+>;
+
 function isNode(value: NodeInput): value is Node {
   return typeof value === "object" && value !== null && "type" in value && !("$$typeof" in value);
 }
 
 function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
   return Array.isArray(css);
+}
+
+/** The `css` option followed by the sheets a document brings, or `undefined` for none. */
+function sheetsOf(
+  css: CssInput | readonly CssInput[] | undefined,
+  documentCss: string[],
+): CssInput[] | undefined {
+  const sheets = [...(css === undefined ? [] : isCssList(css) ? css : [css]), ...documentCss];
+
+  return sheets.length > 0 ? sheets : undefined;
 }
 
 /** What the wasm side reads `input` as: HTML as written, a tree as JSON when it can, or JSX rendered. */
@@ -131,21 +163,49 @@ export class Painter {
     this.#fonts = new FontRegistry(this.#inner);
   }
 
-  /** Lays out a node tree, JSX, or an HTML string and returns what painting it would draw. */
-  async paint(node: NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
+  /**
+   * Reads what a node tree, JSX, or an HTML string needs under `options`, then loads the font
+   * subsets its text uses and fetches the images it draws, so {@link paint} only lays it out.
+   */
+  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedDocument> {
+    const { fonts, images, signal, fontFamilies, css, ...rest } = options;
+    const main = await resolveNode(node);
+    const layout = { ...rest, css: sheetsOf(css, main.css) };
+
+    return prepareSource(
+      this.#fonts,
+      main.node,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      () => this.#inner.needs(main.node, layout),
+    );
+  }
+
+  /** Lays out a node tree, JSX, an HTML string, or a prepared document and returns what painting it would draw. */
+  paint(document: PreparedDocument): Promise<PaintTree>;
+  paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
+  async paint(node: PreparedDocument | NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
+    const painted =
+      node instanceof Prepared
+        ? await renderPrepared(this.#fonts, node, {}, (native, opts) =>
+            this.#inner.paint(native, opts),
+          )
+        : await this.#paintNode(node, options);
+
+    return new PaintTreeView(painted.tree(), painted);
+  }
+
+  async #paintNode(node: NodeInput, options: PaintOptions) {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
-    const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
-    const sheets = [...own, ...main.css];
-    const layout = { ...rest, css: sheets.length > 0 ? sheets : undefined };
-    const painted = await this.#fonts.resolveResources(
+    const layout = { ...rest, css: sheetsOf(css, main.css) };
+
+    return this.#fonts.resolveResources(
       fonts && (await fontsFor(fonts, () => this.#inner.needs(main.node, layout).characters)),
       images,
       fontFamilies,
       (resources) => this.#inner.paint(main.node, { ...layout, ...resources }),
     );
-
-    return new PaintTreeView(painted.tree(), painted);
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
@@ -175,8 +235,19 @@ export class Painter {
 
 let shared: Painter | undefined;
 
-/** Paints with a lazily created shared {@link Painter}. */
-export function paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree> {
+/** Prepares with a lazily created shared {@link Painter}. */
+export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedDocument> {
   shared ??= new Painter();
-  return shared.paint(node, options);
+  return shared.prepare(node, options);
+}
+
+/** Paints with a lazily created shared {@link Painter}. */
+export function paint(document: PreparedDocument): Promise<PaintTree>;
+export function paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
+export function paint(
+  node: PreparedDocument | NodeInput,
+  options?: PaintOptions,
+): Promise<PaintTree> {
+  shared ??= new Painter();
+  return node instanceof Prepared ? shared.paint(node) : shared.paint(node, options);
 }

@@ -151,6 +151,9 @@ export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = Fet
   /**
    * The node tree(s) whose remote images to fetch, read from `src`, inline styles, and `tw`
    * classes. Images a stylesheet or a `<style>` element names are not collected.
+   *
+   * @deprecated Use a renderer's `prepare`, which reads the images after the cascade and fetches
+   * them.
    */
   node?: Node | Node[];
   /** Pre-fetched entries; their URLs are not re-fetched. */

@@ -147,7 +147,7 @@ Variation selectors take priority over font order. A code point followed by `U+F
 
 ## Prepare on your own renderer
 
-A `Renderer` from `takumi-js/node` or `@takumi-rs/wasm` fetches nothing on its own. `renderer.prepare()` does what `render()` does before drawing. It styles the source, fetches the images it draws, emoji included, and loads the font subsets its text uses. Pass the result to `render`, `renderSvg`, or `measure`:
+A renderer you create yourself fetches nothing on its own. Its `prepare()` does what `render()` does before drawing. It styles the source, fetches the images it draws, emoji included, and loads the font subsets its text uses. Pass the result to the renderer's `render`, `renderSvg`, or `measure`:
 
 ```tsx twoslash title="Prepare, then render"
 import { Renderer } from "takumi-js/node";
@@ -167,25 +167,11 @@ const prepared = await renderer.prepare(html, {
 const image = await renderer.render(prepared, { format: "webp" });
 ```
 
-- `prepare` takes the layout options of `render`, such as the size, `css`, `lang`, `emoji`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits). Rendering a prepared source takes only the output format, so the layout cannot change between the two calls.
+- `prepare` takes the layout options of `render`, such as the size, `css`, `lang`, `emoji`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits). Rendering a prepared source takes only the output options, so the layout cannot change between the two calls.
 - With your own `fetch`, a relative URL such as `/logo.png` reaches it, so it can resolve the path and apply its own checks. Without one, only `http://` and `https://` URLs are fetched.
 - A prepared source renders on any renderer from the same package. A renderer that no longer holds its fonts loads them again.
 
-`takumi-pdf` and `takumi-paint` have no `prepare` yet. For them, call `extractEmojis` and `prepareImages` before rendering:
-
-```tsx twoslash title="Fetch images for takumi-pdf"
-import { prepareImages } from "@takumi-rs/helpers";
-import { extractEmojis } from "@takumi-rs/helpers/emoji";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import { render } from "takumi-pdf";
-
-let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
-node = extractEmojis(node, "twemoji");
-
-const pdf = await render(node, { images: await prepareImages({ node }) });
-```
-
-`prepareImages` reads `src`, inline styles, and `tw` classes, so pass images that a stylesheet or a `<style>` element names through `sources` yourself. It returns the supplied `sources` and the fetched entries together.
+`PdfRenderer` from `takumi-pdf` and `Painter` from `takumi-paint` have the same `prepare`. A PDF's header, footer, and page bands count as part of the document, and rendering a prepared PDF takes the file options such as `metadata`, `outline`, and `pdfa`.
 
 ## Fetch limits
 

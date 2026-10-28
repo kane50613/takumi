@@ -286,3 +286,21 @@ describe("emoji", () => {
     expect(picture?.type === "image" && picture.image.src).toBe(src);
   });
 });
+
+describe("Painter.prepare", () => {
+  it("fetches the images a <style> element names and paints them", async () => {
+    const src = "https://example.com/a.svg";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>`;
+    const fetch = mock(async (_url: string) => new Response(svg));
+    const prepared = await painter.prepare(
+      `<style>.a { width: 4px; height: 4px; background-image: url(${src}) }</style><div class="a"></div>`,
+      { width: 10, height: 10, images: { fetch } },
+    );
+
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([src]);
+
+    const tree = await painter.paint(prepared);
+
+    expect(JSON.stringify(tree.toJSON())).toContain(src);
+  });
+});
