@@ -1,19 +1,25 @@
 //! The node, font, and image inputs a binding deserializes from JS before handing them to takumi.
 
+#[cfg(feature = "wasm")]
+use std::rc::Rc;
 use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
+#[cfg(feature = "wasm")]
+use serde_wasm_bindgen::from_value;
 use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::{
-    font::{FontError, FontOverride, FontResource, RegisteredFamily},
+    font::{FontError, FontOverride, FontResource, PendingFontFace, RegisteredFamily},
     image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache},
     unicode_range::UnicodeRange,
   },
   style::{FontStyle as CssFontStyle, FromCssStr},
 };
+#[cfg(feature = "wasm")]
+use wasm_bindgen::JsValue;
 
 /// The node tree in `json`, failing with the message reading the tree from an object reports,
 /// which carries no line and column.
@@ -26,6 +32,71 @@ pub fn node_from_json(json: &str) -> Result<Node, String> {
       .strip_suffix(&position)
       .map_or(message.clone(), str::to_owned)
   })
+}
+
+/// A font a render may load, described as `fonts` describes it before its bytes arrive, which a
+/// needs pass reports by `id` when the render would load it.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingFont {
+  id: usize,
+  name: String,
+  weight: Option<f64>,
+  style: Option<FontStyle>,
+  unicode_range: Option<Vec<(u32, u32)>>,
+}
+
+impl PendingFont {
+  /// The face font matching takes this font for while it loads.
+  fn face(self) -> PendingFontFace {
+    let mut face = PendingFontFace::new(self.id, self.name);
+
+    if let Some(weight) = self.weight {
+      face = face.weight(weight as f32, weight as f32);
+    }
+
+    if let Some(FontStyle(style)) = self.style {
+      face = face.style(style);
+    }
+
+    if let Some(ranges) = self.unicode_range {
+      face = face.unicode_range(
+        ranges
+          .into_iter()
+          .map(|(from, to)| UnicodeRange::new(from, to))
+          .collect(),
+      );
+    }
+
+    face
+  }
+}
+
+/// `fonts` with `pending` registered as faces still loading.
+pub fn with_pending(fonts: &Fonts, pending: Vec<PendingFont>) -> Fonts {
+  let mut fonts = fonts.clone();
+
+  for font in pending {
+    fonts.register_pending(font.face());
+  }
+
+  fonts
+}
+
+/// `fonts` with the pending fonts a wasm binding's `pending` list describes, or `fonts` itself
+/// without one.
+#[cfg(feature = "wasm")]
+pub fn with_pending_value(
+  fonts: Rc<Fonts>,
+  pending: Option<JsValue>,
+) -> Result<Rc<Fonts>, js_sys::Error> {
+  let Some(pending) = pending else {
+    return Ok(fonts);
+  };
+  let pending: Vec<PendingFont> =
+    from_value(pending).map_err(|error| js_sys::Error::new(&error.to_string()))?;
+
+  Ok(Rc::new(with_pending(&fonts, pending)))
 }
 
 /// How to register a font's bytes, each field overriding what the file says.

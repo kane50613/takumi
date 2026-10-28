@@ -227,6 +227,7 @@ pub fn stylesheet(
 pub struct NeedsOutput {
   images: Vec<String>,
   characters: String,
+  faces: Vec<usize>,
 }
 
 impl From<RenderNeeds> for NeedsOutput {
@@ -234,6 +235,7 @@ impl From<RenderNeeds> for NeedsOutput {
     Self {
       images: needs.images.into_iter().collect(),
       characters: needs.characters.into_iter().collect(),
+      faces: needs.faces.into_iter().collect(),
     }
   }
 }

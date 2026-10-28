@@ -1,5 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
 import type { EmojiType } from "@takumi-rs/helpers/emoji";
+import type { PendingFont } from "@takumi-rs/helpers/renderer";
 import type { Properties } from "csstype";
 
 export {
@@ -287,6 +288,8 @@ export type RenderNeeds = {
   images: string[];
   /** Every character the text shapes once, sorted, generated content and `text-transform` included. */
   characters: string;
+  /** The ids of the pending fonts the render would load, sorted. */
+  faces: number[];
 };
 
 export type AnimationScene = {

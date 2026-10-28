@@ -1,5 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
 import type { EmojiType } from "@takumi-rs/helpers/emoji";
+import type { PendingFont } from "@takumi-rs/helpers/renderer";
 import type { Properties } from "csstype";
 
 export type {

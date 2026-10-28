@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
   FontCacheOptions, FontStore, NeedsOutput, append_css,
-  input::{Font, ImageSource, decode_images},
+  input::{Font, ImageSource, decode_images, with_pending_value},
   source::{read_source, split_emojis},
   source_cache::SourceCache,
   stylesheet,
@@ -48,6 +48,9 @@ extern "C" {
   /// JavaScript object listing what a node tree needs fetched.
   #[wasm_bindgen(typescript_type = "RenderNeeds")]
   pub type RenderNeedsType;
+  /// JavaScript list of fonts a render may load, described before their bytes arrive.
+  #[wasm_bindgen(typescript_type = "PendingFont[]")]
+  pub type PendingFontsType;
   /// JavaScript object representing a painted tree.
   #[wasm_bindgen(typescript_type = "RawPaintTree")]
   pub type RawPaintTreeType;
@@ -97,6 +100,7 @@ impl Painter {
     &self,
     node: NodeType,
     options: Option<RenderOptionsType>,
+    pending_fonts: Option<PendingFontsType>,
     run: impl FnOnce(PaintTreeOptions<'_>) -> T,
   ) -> Result<T, js_sys::Error> {
     let mut options: RenderOptions = options
@@ -118,7 +122,10 @@ impl Painter {
       .map(Lang::parse)
       .transpose()
       .map_err(map_error)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = with_pending_value(
+      self.fonts.for_render(options.font_families.as_deref()),
+      pending_fonts.map(Into::into),
+    )?;
     Ok(run(
       PaintTreeOptions::builder()
         .viewport(
@@ -213,7 +220,7 @@ impl Painter {
     options: Option<RenderOptionsType>,
   ) -> Result<RenderedPaint, js_sys::Error> {
     let mut tree = self
-      .with_tree_options(node, options, paint_tree)?
+      .with_tree_options(node, options, None, paint_tree)?
       .map_err(map_error)?;
     let raw = take(&mut tree.document)
       .serialize(&Serializer::json_compatible())
@@ -228,8 +235,9 @@ impl Painter {
     &self,
     node: NodeType,
     options: Option<RenderOptionsType>,
+    pending_fonts: Option<PendingFontsType>,
   ) -> Result<RenderNeedsType, js_sys::Error> {
-    let needs = self.with_tree_options(node, options, paint_tree_needs)?;
+    let needs = self.with_tree_options(node, options, pending_fonts, paint_tree_needs)?;
 
     Ok(
       to_value(&NeedsOutput::from(needs))

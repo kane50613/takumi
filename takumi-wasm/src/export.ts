@@ -18,6 +18,7 @@ import {
   Prepared,
   prepareSource,
   joinNeeds,
+  needsArgs,
   readSource,
   renderPrepared,
   toNativeSource,
@@ -78,7 +79,7 @@ export class Renderer {
       native,
       layout,
       { fonts, images, signal, fontFamilies },
-      (svgs) => this.inner.needs(native, { ...layout, images: svgs }),
+      (request) => this.inner.needs(native, ...needsArgs(layout, request)),
     );
   }
 
@@ -159,8 +160,12 @@ export class Renderer {
     const { fonts, images, signal, fontFamilies, ...layout } = options;
     const native = toNativeSource(source);
 
-    return readSource(native, layout, { fonts, images, signal, fontFamilies }, (svgs) =>
-      this.inner.needs(native, { ...layout, images: svgs }),
+    return readSource(
+      this.fonts,
+      native,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      (request) => this.inner.needs(native, ...needsArgs(layout, request)),
     );
   }
 
@@ -170,13 +175,16 @@ export class Renderer {
     const { width, height, css, keyframes, devicePixelRatio, lang, emoji } = layout;
     const sceneLayout = { width, height, css, keyframes, devicePixelRatio, lang, emoji };
     const prepared = await readSource(
+      this.fonts,
       sources,
       layout,
       { fonts, images, signal, fontFamilies },
-      async (svgs) =>
+      async (request) =>
         joinNeeds(
           await Promise.all(
-            sources.map((scene) => this.inner.needs(scene.node, { ...sceneLayout, images: svgs })),
+            sources.map((scene) =>
+              this.inner.needs(scene.node, ...needsArgs(sceneLayout, request)),
+            ),
           ),
         ),
     );

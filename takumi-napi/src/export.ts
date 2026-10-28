@@ -18,6 +18,7 @@ import {
   Prepared,
   prepareSource,
   joinNeeds,
+  needsArgs,
   readSource,
   renderPrepared,
   toNativeSource,
@@ -78,7 +79,7 @@ export class Renderer {
       native,
       layout,
       { fonts, images, signal, fontFamilies },
-      (svgs) => this.inner.needs(native, { ...layout, images: svgs }, signal),
+      (request) => this.inner.needs(native, ...needsArgs(layout, request), signal),
     );
   }
 
@@ -132,7 +133,7 @@ export class Renderer {
   needs(source: Node | string, options?: RenderOptions): Promise<RenderNeeds> {
     const { fonts: _fonts, images: _images, signal, ...rest } = options ?? {};
 
-    return this.inner.needs(toNativeSource(source), rest, signal);
+    return this.inner.needs(toNativeSource(source), rest, undefined, signal);
   }
 
   /** `source` read under `options` without fetching, for {@link render} and its siblings. */
@@ -143,8 +144,12 @@ export class Renderer {
     const { fonts, images, signal, fontFamilies, ...layout } = options;
     const native = toNativeSource(source);
 
-    return readSource(native, layout, { fonts, images, signal, fontFamilies }, (svgs) =>
-      this.inner.needs(native, { ...layout, images: svgs }, signal),
+    return readSource(
+      this.fonts,
+      native,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      (request) => this.inner.needs(native, ...needsArgs(layout, request), signal),
     );
   }
 
@@ -154,14 +159,15 @@ export class Renderer {
     const { width, height, css, keyframes, devicePixelRatio, lang, emoji } = layout;
     const sceneLayout = { width, height, css, keyframes, devicePixelRatio, lang, emoji };
     const prepared = await readSource(
+      this.fonts,
       sources,
       layout,
       { fonts, images, signal, fontFamilies },
-      async (svgs) =>
+      async (request) =>
         joinNeeds(
           await Promise.all(
             sources.map((scene) =>
-              this.inner.needs(scene.node, { ...sceneLayout, images: svgs }, signal),
+              this.inner.needs(scene.node, ...needsArgs(sceneLayout, request), signal),
             ),
           ),
         ),

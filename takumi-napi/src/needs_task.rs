@@ -1,7 +1,11 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::{device_pixel_ratio, parse_lang, time_ms};
+use takumi_bindings_common::{
+  device_pixel_ratio,
+  input::{PendingFont, with_pending},
+  parse_lang, time_ms,
+};
 use takumi_core::{
   Fonts,
   style::{FontFamily, Lang},
@@ -33,8 +37,11 @@ impl NeedsTask {
     env: Env,
     source: NodeSource,
     options: RenderOptions,
+    pending_fonts: Option<Vec<PendingFont>>,
     state: Arc<RendererState>,
   ) -> Result<Self> {
+    let fonts = state.fonts_for_render(options.font_families.as_deref())?;
+
     Ok(NeedsTask {
       input: Some(RenderInput::new(
         source,
@@ -43,7 +50,10 @@ impl NeedsTask {
         options.keyframes,
         options.emoji.as_deref(),
       )?),
-      fonts: state.fonts_for_render(options.font_families.as_deref())?,
+      fonts: match pending_fonts {
+        Some(pending) => Arc::new(with_pending(&fonts, pending)),
+        None => fonts,
+      },
       state,
       viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
         device_pixel_ratio(options.device_pixel_ratio.map(|ratio| ratio as f32)),

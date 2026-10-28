@@ -22,9 +22,9 @@ use takumi_raster::{
 };
 
 use crate::{
-  De, JsBytes, NodeSource, RegisteredFamily, load_font_task::LoadFontTask, map_error,
-  measure_task::MeasureTask, needs_task::NeedsTask, parse_font_input,
-  render_animation_task::RenderAnimationTask, render_task::RenderTask,
+  De, JsBytes, NodeSource, RegisteredFamily, deserialize_with_tracing,
+  load_font_task::LoadFontTask, map_error, measure_task::MeasureTask, needs_task::NeedsTask,
+  parse_font_input, render_animation_task::RenderAnimationTask, render_task::RenderTask,
   svg_render_task::SvgRenderTask,
 };
 
@@ -92,6 +92,8 @@ pub struct RenderNeeds {
   /// Every character the text shapes once, sorted, generated content and `text-transform`
   /// included.
   pub characters: String,
+  /// The ids of the pending fonts the render would load, sorted.
+  pub faces: Vec<u32>,
 }
 
 impl From<takumi_raster::RenderNeeds> for RenderNeeds {
@@ -99,6 +101,7 @@ impl From<takumi_raster::RenderNeeds> for RenderNeeds {
     Self {
       images: needs.images.into_iter().collect(),
       characters: needs.characters.into_iter().collect(),
+      faces: needs.faces.into_iter().map(|id| id as u32).collect(),
     }
   }
 }
@@ -672,7 +675,7 @@ impl Renderer {
 
   /// Reads what a node tree, or HTML, needs fetched before it renders, asynchronously.
   #[napi(
-    ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, signal?: AbortSignal",
+    ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, pendingFonts?: PendingFont[], signal?: AbortSignal",
     ts_return_type = "Promise<RenderNeeds>"
   )]
   pub fn needs(
@@ -680,6 +683,7 @@ impl Renderer {
     env: Env,
     source: Either<String, Object>,
     options: Option<RenderOptions>,
+    pending_fonts: Option<Object>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<NeedsTask>> {
     Ok(AsyncTask::with_optional_signal(
@@ -687,6 +691,7 @@ impl Renderer {
         env,
         NodeSource::from_js(source)?,
         options.unwrap_or_default(),
+        pending_fonts.map(deserialize_with_tracing).transpose()?,
         Arc::clone(&self.state),
       )?,
       signal,

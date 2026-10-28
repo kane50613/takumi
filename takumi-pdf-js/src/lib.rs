@@ -12,7 +12,7 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontCacheOptions, FontStore, NeedsOutput, append_css,
-  input::{Font, decode_images},
+  input::{Font, decode_images, with_pending_value},
   parse_lang,
   source::{read_source, split_emojis},
   source_cache::SourceCache,
@@ -72,6 +72,9 @@ extern "C" {
   /// JavaScript object listing what a node tree needs fetched.
   #[wasm_bindgen(typescript_type = "RenderNeeds")]
   pub type RenderNeedsType;
+  /// JavaScript list of fonts a render may load, described before their bytes arrive.
+  #[wasm_bindgen(typescript_type = "PendingFont[]")]
+  pub type PendingFontsType;
 }
 
 /// The size returned by [`PdfRenderer::measure`].
@@ -158,6 +161,7 @@ impl PdfRenderer {
     &self,
     node: NodeType,
     options: Option<MeasureOptionsType>,
+    pending_fonts: Option<PendingFontsType>,
     run: impl FnOnce(MeasureOptions<'_>) -> Result<T, PdfError>,
   ) -> Result<T, js_sys::Error> {
     let (node, options) = self.read_document(node, options.map(Into::into))?;
@@ -167,7 +171,10 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = with_pending_value(
+      self.fonts.for_render(options.font_families.as_deref()),
+      pending_fonts.map(Into::into),
+    )?;
 
     run(MeasureOptions {
       viewport,
@@ -323,7 +330,7 @@ impl PdfRenderer {
     node: NodeType,
     options: Option<MeasureOptionsType>,
   ) -> Result<MeasuredSizeType, js_sys::Error> {
-    let measured = self.with_measure_options(node, options, takumi_pdf::measure)?;
+    let measured = self.with_measure_options(node, options, None, takumi_pdf::measure)?;
 
     Ok(
       to_value(&MeasuredSizeOutput {
@@ -341,8 +348,9 @@ impl PdfRenderer {
     &self,
     node: NodeType,
     options: Option<MeasureOptionsType>,
+    pending_fonts: Option<PendingFontsType>,
   ) -> Result<RenderNeedsType, js_sys::Error> {
-    let needs = self.with_measure_options(node, options, takumi_pdf::needs)?;
+    let needs = self.with_measure_options(node, options, pending_fonts, takumi_pdf::needs)?;
 
     Ok(
       to_value(&NeedsOutput::from(needs))

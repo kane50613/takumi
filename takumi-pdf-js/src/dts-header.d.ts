@@ -1,5 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
 import type { EmojiType } from "@takumi-rs/helpers/emoji";
+import type { PendingFont } from "@takumi-rs/helpers/renderer";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
@@ -223,6 +224,8 @@ export type MeasuredSize = { width: number; height: number };
 export type RenderNeeds = {
   images: string[];
   characters: string;
+  /** The ids of the pending fonts the render would load, sorted. */
+  faces: number[];
 };
 
 export type FontCacheOptions = {

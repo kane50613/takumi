@@ -6,7 +6,7 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontStore, NeedsOutput, append_css, css_or_stylesheets, device_pixel_ratio,
-  input::decode_images,
+  input::{decode_images, with_pending_value},
   parse_lang,
   source::{read_source, split_emojis},
   source_cache::SourceCache,
@@ -298,6 +298,7 @@ impl Renderer {
     &self,
     source: SourceType,
     options: Option<RenderOptionsType>,
+    pending_fonts: Option<PendingFontsType>,
   ) -> Result<RenderNeedsType, JsValue> {
     let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: RenderOptions = options
@@ -311,7 +312,10 @@ impl Renderer {
     );
 
     let images = self.images_map(options.images.take().as_deref())?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = with_pending_value(
+      self.fonts.for_render(options.font_families.as_deref()),
+      pending_fonts.map(Into::into),
+    )?;
     let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
 
     Ok(

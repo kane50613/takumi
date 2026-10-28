@@ -47,6 +47,9 @@ extern "C" {
   /// JavaScript object listing what a node tree needs fetched.
   #[wasm_bindgen(typescript_type = "RenderNeeds")]
   pub type RenderNeedsType;
+  /// JavaScript list of fonts a render may load, described before their bytes arrive.
+  #[wasm_bindgen(typescript_type = "PendingFont[]")]
+  pub type PendingFontsType;
 }
 
 /// Options for constructing a `Renderer`.
