@@ -677,12 +677,14 @@ impl Renderer {
   )]
   pub fn needs(
     &self,
+    env: Env,
     source: Either<String, Object>,
     options: Option<RenderOptions>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<NeedsTask>> {
     Ok(AsyncTask::with_optional_signal(
       NeedsTask::from_options(
+        env,
         NodeSource::from_js(source)?,
         options.unwrap_or_default(),
         Arc::clone(&self.state),

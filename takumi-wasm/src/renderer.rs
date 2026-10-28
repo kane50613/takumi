@@ -310,9 +310,9 @@ impl Renderer {
       document_css,
     );
 
+    let images = self.images_map(options.images.take().as_deref())?;
     let fonts = self.fonts.for_render(options.font_families.as_deref());
-    let render_options =
-      raster_options(&self.resource_cache, &fonts, node, options, HashMap::new())?;
+    let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
 
     Ok(
       to_value(&NeedsOutput::from(needs(render_options)))

@@ -7,10 +7,11 @@ use crate::{
   context::RenderContext,
   layout::{
     inline::{inline_item::InlineItemType, inline_node::InlineNode},
-    node::{NodeKind, is_image_reference},
+    node::{ImageSourceInput, NodeKind, is_image_reference, resolve_image},
     tree::RenderNode,
   },
-  style::{BackgroundImage, ComputedStyle, Display, Float, find_keyframes},
+  resources::image::{ImageSource, is_svg_like},
+  style::{BackgroundImage, Display, Float, find_keyframes},
 };
 
 /// The images a render tree looks up by URL and the characters its text shapes.
@@ -20,7 +21,8 @@ pub struct RenderNeeds {
   /// list items' `list-style-image`, except `data:` URIs and inline SVG the render decodes itself.
   pub images: BTreeSet<String>,
   /// Every character the tree's text, generated content and list markers included, shapes, after
-  /// `text-transform` as inline layout applies it.
+  /// `text-transform` as inline layout applies it, and the characters the `text` elements of the
+  /// SVG images it can read without fetching draw.
   pub characters: BTreeSet<char>,
 }
 
@@ -47,13 +49,15 @@ impl RenderNode {
     // Whether an ancestor's inline walk reads the node's text, which then reads its children's too,
     // except a box it passes because that box lays out on its own.
     while let Some((node, walked)) = stack.pop() {
-      needs.add_style(&node.context.style);
+      needs.add_style(&node.context);
       needs.add_keyframes(&node.context);
 
-      if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|node| &node.kind)
-        && let Some(url) = image.url()
-      {
-        needs.images.insert(url.to_owned());
+      if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|node| &node.kind) {
+        if let Some(url) = image.url() {
+          needs.images.insert(url.to_owned());
+        }
+
+        needs.add_svg_text(svg_image(&image.src, &node.context));
       }
 
       let creates_inline_context = node.should_create_inline_layout();
@@ -79,7 +83,8 @@ impl RenderNode {
 }
 
 impl RenderNeeds {
-  fn add_style(&mut self, style: &ComputedStyle) {
+  fn add_style(&mut self, context: &RenderContext) {
+    let style = &context.style;
     let images = [
       style.background_data.background_image.as_ref(),
       style.misc2_data.mask_image.as_ref(),
@@ -94,10 +99,12 @@ impl RenderNeeds {
     );
 
     for image in images {
-      if let BackgroundImage::Url(url) = image
-        && is_image_reference(url)
-      {
-        self.images.insert(url.to_string());
+      if let BackgroundImage::Url(url) = image {
+        if is_image_reference(url) {
+          self.images.insert(url.to_string());
+        }
+
+        self.add_svg_text(svg_url(url, context));
       }
     }
   }
@@ -110,16 +117,28 @@ impl RenderNeeds {
         continue;
       };
 
-      for keyframe in &rule.keyframes {
-        self.images.extend(
-          keyframe
-            .declarations
-            .image_urls()
-            .filter(|url| is_image_reference(url))
-            .map(str::to_owned),
-        );
+      for url in rule
+        .keyframes
+        .iter()
+        .flat_map(|keyframe| keyframe.declarations.image_urls())
+      {
+        if is_image_reference(url) {
+          self.images.insert(url.to_owned());
+        }
+
+        self.add_svg_text(svg_url(url, context));
       }
     }
+  }
+
+  /// Adds the characters an SVG image's `text` elements draw with the render's fonts.
+  fn add_svg_text(&mut self, image: Option<ImageSource>) {
+    #[cfg(feature = "svg-sizing")]
+    if let Some(ImageSource::Svg(svg)) = image {
+      self.characters.extend(svg.text().chars());
+    }
+    #[cfg(not(feature = "svg-sizing"))]
+    let _ = image;
   }
 
   /// Adds the text inline layout shapes in the inline formatting context `root` establishes,
@@ -134,6 +153,33 @@ impl RenderNeeds {
           .extend(data.text_content[item.start_offset()..item.end_offset()].chars());
       }
     }
+  }
+}
+
+/// The image `src` names when it is one the render can read without fetching: an entry of its
+/// `images`, inline markup, or a `data:` URI. A raster `data:` URI stays undecoded, since only an
+/// SVG draws text.
+fn svg_url(src: &str, context: &RenderContext) -> Option<ImageSource> {
+  if is_image_reference(src) {
+    return context.images().get(src).cloned();
+  }
+
+  let svg_data_uri = src
+    .get(..DATA_SVG_PREFIX.len())
+    .is_some_and(|prefix| prefix.eq_ignore_ascii_case(DATA_SVG_PREFIX));
+
+  (is_svg_like(src) || svg_data_uri)
+    .then(|| resolve_image(src, context).ok())
+    .flatten()
+}
+
+const DATA_SVG_PREFIX: &str = "data:image/svg+xml";
+
+/// [`svg_url`] for an image element's source, which bytes or a loaded image can also give.
+fn svg_image(src: &ImageSourceInput, context: &RenderContext) -> Option<ImageSource> {
+  match src {
+    ImageSourceInput::Url(url) => svg_url(url, context),
+    other => other.resolve(context).ok(),
   }
 }
 
@@ -266,5 +312,30 @@ mod tests {
       ]
     );
     assert_eq!(needs.characters.into_iter().collect::<String>(), " .1ABcx");
+  }
+
+  #[test]
+  fn reads_the_text_an_inline_svg_draws() {
+    let needs = render_tree(
+      [Node::image(
+        "<svg xmlns='http://www.w3.org/2000/svg'><title>Q</title><text>Ж<tspan>Ω</tspan></text></svg>",
+      )],
+      "",
+    )
+    .needs();
+
+    assert_eq!(needs.characters.into_iter().collect::<String>(), "ΩЖ");
+  }
+
+  #[test]
+  fn reads_the_text_an_svg_data_uri_draws() {
+    let needs = render_tree(
+      [Node::container([]).with_class_name("chart")],
+      ".chart { width: 10px; height: 10px; background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text>Ж</text></svg>\") }",
+    )
+    .needs();
+
+    assert!(needs.characters.contains(&'Ж'));
+    assert!(needs.images.is_empty());
   }
 }

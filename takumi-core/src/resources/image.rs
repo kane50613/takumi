@@ -140,6 +140,19 @@ impl SvgSource {
     &self.source
   }
 
+  /// The characters the document's `text` elements draw with the render's fonts. Approximate: white
+  /// space comes as written, where layout collapses it to spaces.
+  pub(crate) fn text(&self) -> String {
+    #[cfg(feature = "svg")]
+    {
+      self.document.text()
+    }
+    #[cfg(not(feature = "svg"))]
+    {
+      String::new()
+    }
+  }
+
   fn intrinsic_sizing(&self) -> IntrinsicSizing {
     #[cfg(feature = "svg")]
     {

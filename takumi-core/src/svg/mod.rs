@@ -162,6 +162,37 @@ impl SvgDocument {
       .any(|element| element.kind == SvgElementKind::Text)
   }
 
+  /// The text inside the document's `text` elements, each one's character data in document order.
+  pub(crate) fn text(&self) -> String {
+    let nodes = self.nodes();
+
+    self
+      .elements
+      .iter()
+      .zip(nodes)
+      .filter(|(element, _)| {
+        element.kind == SvgElementKind::CharacterData && self.inside_text(element.parent)
+      })
+      .filter_map(|(_, node)| match &node.kind {
+        NodeKind::Text(data) => Some(data.text.as_str()),
+        _ => None,
+      })
+      .collect()
+  }
+
+  /// Whether the element at `index` or one of its ancestors is a `text` element.
+  fn inside_text(&self, mut index: Option<usize>) -> bool {
+    while let Some(current) = index {
+      if self.elements[current].kind == SvgElementKind::Text {
+        return true;
+      }
+
+      index = self.elements[current].parent;
+    }
+
+    false
+  }
+
   /// Every node in the preorder the selector matcher numbers them by.
   fn nodes(&self) -> Vec<&Node> {
     let mut nodes = Vec::with_capacity(self.elements.len());

@@ -1,4 +1,4 @@
-use std::{mem::take, sync::Arc};
+use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use takumi_bindings_common::{device_pixel_ratio, parse_lang, time_ms};
@@ -10,8 +10,10 @@ use takumi_core::{
 use takumi_raster::needs;
 
 use crate::{
-  NodeSource, RenderInput, map_error,
-  renderer::{RenderNeeds, RenderOptions, RendererState},
+  JsBytes, NodeSource, RenderInput, map_error,
+  renderer::{
+    ImageCacheMode, RenderNeeds, RenderOptions, RendererState, collect_images, decode_images,
+  },
 };
 
 pub struct NeedsTask {
@@ -23,10 +25,12 @@ pub struct NeedsTask {
   pub(crate) time_ms: u64,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
+  pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
 }
 
 impl NeedsTask {
   pub(crate) fn from_options(
+    env: Env,
     source: NodeSource,
     options: RenderOptions,
     state: Arc<RendererState>,
@@ -47,6 +51,7 @@ impl NeedsTask {
       time_ms: time_ms(options.time_ms),
       font_families: options.font_families.map(FontFamily::from_names),
       lang: parse_lang(options.lang.as_deref()).map_err(map_error)?,
+      images: collect_images(env, options.images)?,
     })
   }
 }
@@ -60,9 +65,12 @@ impl Task for NeedsTask {
       unreachable!()
     };
     let (node, stylesheet) = input.resolve(&self.state)?;
+    let images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
 
     let options = takumi_raster::RenderOptions::builder()
       .viewport(self.viewport)
+      .images(images)
+      .resource_cache(self.state.resource_cache.clone())
       .stylesheet(stylesheet)
       .time_ms(self.time_ms)
       .node(node)
