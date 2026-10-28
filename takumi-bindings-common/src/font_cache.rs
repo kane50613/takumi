@@ -1,7 +1,10 @@
 //! What each font registration added, by the key its loader gives, so a renderer can skip loading a
 //! font it still holds and release the families renders used least recently past a byte budget.
 
-use std::collections::HashMap;
+use std::{
+  collections::HashMap,
+  sync::atomic::{AtomicU64, Ordering},
+};
 
 use takumi_core::{
   Fonts,
@@ -20,16 +23,43 @@ struct CachedFamily {
   bytes: u64,
   /// Added to by an explicit registration, so never released for space.
   pinned: bool,
-  last_used: u64,
+  /// Stamped through a shared reference, so renders mark use without a lock.
+  last_used: AtomicU64,
   keys: Vec<String>,
 }
 
+impl Clone for CachedFamily {
+  fn clone(&self) -> Self {
+    Self {
+      bytes: self.bytes,
+      pinned: self.pinned,
+      last_used: AtomicU64::new(self.last_used.load(Ordering::Relaxed)),
+      keys: self.keys.clone(),
+    }
+  }
+}
+
 /// The registrations of a renderer's fonts, and the budget that bounds the unpinned ones.
+///
+/// Marking use takes `&self`, so a renderer can share one copy with its renders and change a
+/// clone. A use marked on the old copy while a change is made is lost, which only ages that
+/// family for eviction.
 pub struct FontCache {
   max_bytes: u64,
   by_key: HashMap<String, Vec<RegisteredFamily>>,
   families: HashMap<String, CachedFamily>,
-  clock: u64,
+  clock: AtomicU64,
+}
+
+impl Clone for FontCache {
+  fn clone(&self) -> Self {
+    Self {
+      max_bytes: self.max_bytes,
+      by_key: self.by_key.clone(),
+      families: self.families.clone(),
+      clock: AtomicU64::new(self.clock.load(Ordering::Relaxed)),
+    }
+  }
 }
 
 impl FontCache {
@@ -39,21 +69,34 @@ impl FontCache {
       max_bytes: max_bytes.unwrap_or(u64::MAX),
       by_key: HashMap::new(),
       families: HashMap::new(),
-      clock: 0,
+      clock: AtomicU64::new(0),
     }
   }
 
-  /// The families `key` registered, marked used and pinned when `pin` is set; `None` once any of
-  /// them was released.
-  pub fn lookup(&mut self, key: &str, pin: bool) -> Option<Vec<RegisteredFamily>> {
+  /// The families `key` registered, marked used; `None` once any of them was released.
+  pub fn lookup(&self, key: &str) -> Option<Vec<RegisteredFamily>> {
     let registered = self.by_key.get(key)?.clone();
     let now = self.tick();
 
     for family in &registered {
-      let cached = self.families.get_mut(&fold(&family.name))?;
+      self
+        .families
+        .get(&fold(&family.name))?
+        .last_used
+        .store(now, Ordering::Relaxed);
+    }
 
-      cached.last_used = now;
-      cached.pinned |= pin;
+    Some(registered)
+  }
+
+  /// [`Self::lookup`], also pinning the families so they are never released for space.
+  pub fn pin(&mut self, key: &str) -> Option<Vec<RegisteredFamily>> {
+    let registered = self.lookup(key)?;
+
+    for family in &registered {
+      if let Some(cached) = self.families.get_mut(&fold(&family.name)) {
+        cached.pinned = true;
+      }
     }
 
     Some(registered)
@@ -103,13 +146,13 @@ impl FontCache {
         .or_insert_with(|| CachedFamily {
           bytes: 0,
           pinned,
-          last_used: now,
+          last_used: AtomicU64::new(now),
           keys: Vec::new(),
         });
 
       cached.bytes += bytes;
       cached.pinned |= pinned;
-      cached.last_used = now;
+      *cached.last_used.get_mut() = now;
       cached.keys.extend(key.map(str::to_owned));
     }
 
@@ -119,12 +162,12 @@ impl FontCache {
   }
 
   /// Marks `families` used now, as a render that names them starts.
-  pub fn touch(&mut self, families: &[String]) {
+  pub fn touch(&self, families: &[String]) {
     let now = self.tick();
 
     for family in families {
-      if let Some(cached) = self.families.get_mut(&fold(family)) {
-        cached.last_used = now;
+      if let Some(cached) = self.families.get(&fold(family)) {
+        cached.last_used.store(now, Ordering::Relaxed);
       }
     }
   }
@@ -150,7 +193,7 @@ impl FontCache {
         .families
         .iter()
         .filter(|(folded, family)| !family.pinned && !keep.contains(folded))
-        .min_by_key(|(_, family)| family.last_used)
+        .min_by_key(|(_, family)| family.last_used.load(Ordering::Relaxed))
         .map(|(folded, _)| folded.clone())
       else {
         return Ok(());
@@ -222,9 +265,8 @@ impl FontCache {
     self.families.clear();
   }
 
-  fn tick(&mut self) -> u64 {
-    self.clock += 1;
-    self.clock
+  fn tick(&self) -> u64 {
+    self.clock.fetch_add(1, Ordering::Relaxed) + 1
   }
 }
 
@@ -286,9 +328,9 @@ mod tests {
     register(&mut fonts, &mut cache, "A", false);
     register(&mut fonts, &mut cache, "B", false);
 
-    assert!(cache.lookup("A", false).is_none());
+    assert!(cache.lookup("A").is_none());
     assert!(!fonts.unregister_family("A"), "A left the registry");
-    assert!(cache.lookup("B", false).is_some());
+    assert!(cache.lookup("B").is_some());
   }
 
   #[test]
@@ -297,11 +339,11 @@ mod tests {
 
     register(&mut fonts, &mut cache, "A", false);
     register(&mut fonts, &mut cache, "B", false);
-    cache.lookup("A", false);
+    cache.lookup("A");
     register(&mut fonts, &mut cache, "C", false);
 
-    assert!(cache.lookup("A", false).is_some());
-    assert!(cache.lookup("B", false).is_none());
+    assert!(cache.lookup("A").is_some());
+    assert!(cache.lookup("B").is_none());
   }
 
   #[test]
@@ -310,11 +352,11 @@ mod tests {
 
     register(&mut fonts, &mut cache, "Pinned", true);
     register(&mut fonts, &mut cache, "A", false);
-    cache.lookup("A", true);
+    cache.pin("A");
     register(&mut fonts, &mut cache, "B", false);
 
-    assert!(cache.lookup("Pinned", false).is_some());
-    assert!(cache.lookup("A", false).is_some());
+    assert!(cache.lookup("Pinned").is_some());
+    assert!(cache.lookup("A").is_some());
   }
 
   #[test]
@@ -323,7 +365,7 @@ mod tests {
 
     register(&mut fonts, &mut cache, "A", false);
 
-    assert!(cache.lookup("A", false).is_some());
+    assert!(cache.lookup("A").is_some());
   }
 
   #[test]
@@ -334,7 +376,7 @@ mod tests {
     register(&mut fonts, &mut cache, "Geist", false);
     register(&mut fonts, &mut cache, "A", false);
 
-    assert!(cache.lookup("Geist", false).is_none());
+    assert!(cache.lookup("Geist").is_none());
     assert!(
       fonts.unregister_family("Geist"),
       "the embedded Geist is back"
@@ -349,7 +391,7 @@ mod tests {
     register_under(&mut fonts, &mut cache, "K", "B", false);
     register(&mut fonts, &mut cache, "C", false);
 
-    assert!(cache.lookup("K", false).is_some());
+    assert!(cache.lookup("K").is_some());
   }
 
   #[test]
@@ -359,6 +401,6 @@ mod tests {
     register(&mut fonts, &mut cache, "Alpha", false);
     cache.forget("alpha");
 
-    assert!(cache.lookup("Alpha", false).is_none());
+    assert!(cache.lookup("Alpha").is_none());
   }
 }

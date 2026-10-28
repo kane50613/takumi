@@ -41,7 +41,7 @@ impl SvgRenderTask {
         css: deserialize_css(options.css, options.stylesheets)?,
         keyframes: deserialize_keyframes(options.keyframes)?,
       }),
-      fonts: state.fonts_for_render(options.font_families.as_deref())?,
+      fonts: state.fonts_for_render(options.font_families.as_deref()),
       state,
       viewport: Viewport::new((options.width, options.height)),
       time_ms: time_ms(options.time_ms),

@@ -83,7 +83,7 @@ impl FontStore {
 
   /// The registry for a render that names `families`, which are marked used.
   pub fn for_render(&self, families: Option<&[String]>) -> Rc<Fonts> {
-    self.cache.borrow_mut().touch(families.unwrap_or_default());
+    self.cache.borrow().touch(families.unwrap_or_default());
     self.current()
   }
 
@@ -91,9 +91,14 @@ impl FontStore {
     self.fonts.borrow().clone()
   }
 
-  /// The families a registration under `key` added, marked used; see [`FontCache::lookup`].
+  /// The families a registration under `key` added, marked used and pinned when `pin` is set; see
+  /// [`FontCache::lookup`] and [`FontCache::pin`].
   pub fn cached(&self, key: &str, pin: bool) -> Option<Vec<RegisteredFamily>> {
-    self.cache.borrow_mut().lookup(key, pin)
+    if pin {
+      self.cache.borrow_mut().pin(key)
+    } else {
+      self.cache.borrow().lookup(key)
+    }
   }
 
   /// Registers `font` under `key`; one that is not `pinned` can be released for space.
