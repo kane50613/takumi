@@ -15,10 +15,6 @@ export type FontDetails = {
    * subset of a family under the same `name` with its own ranges.
    */
   unicodeRange?: [number, number][];
-  /** @deprecated Register under `name` with `unicodeRange` instead. */
-  subsetOf?: string;
-  /** @deprecated Ignored; `unicodeRange` decides which subset serves a codepoint. */
-  subsetRank?: number;
   /** CSS generic family keyword this font resolves for. */
   generic?: string;
 };

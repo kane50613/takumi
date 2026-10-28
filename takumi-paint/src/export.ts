@@ -104,7 +104,7 @@ export type PrepareOptions = Omit<PaintOptions, "images"> & {
 };
 
 /** A document {@link Painter.prepare} readied, with its fonts and images loaded. */
-export type PreparedDocument = Prepared<
+export type PreparedSource = Prepared<
   Node | string | JsonSource,
   Omit<PaintOptions, "fonts" | "images" | "fontFamilies" | "css"> & { css?: CssInput[] }
 >;
@@ -167,7 +167,7 @@ export class Painter {
    * Reads what a node tree, JSX, or an HTML string needs under `options`, then loads the font
    * subsets its text uses and fetches the images it draws, so {@link paint} only lays it out.
    */
-  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedDocument> {
+  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
     const { fonts, images, signal, fontFamilies, css, ...rest } = options;
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
@@ -182,9 +182,9 @@ export class Painter {
   }
 
   /** Lays out a node tree, JSX, an HTML string, or a prepared document and returns what painting it would draw. */
-  paint(document: PreparedDocument): Promise<PaintTree>;
+  paint(document: PreparedSource): Promise<PaintTree>;
   paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
-  async paint(node: PreparedDocument | NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
+  async paint(node: PreparedSource | NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
     const prepared = node instanceof Prepared ? node : await this.#read(node, options);
     const painted = await renderPrepared(this.#fonts, prepared, {}, (native, opts) =>
       this.#inner.paint(native, opts),
@@ -193,7 +193,7 @@ export class Painter {
     return new PaintTreeView(painted.tree(), painted);
   }
 
-  async #read(node: NodeInput, options: PaintOptions): Promise<PreparedDocument> {
+  async #read(node: NodeInput, options: PaintOptions): Promise<PreparedSource> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
@@ -231,16 +231,16 @@ export class Painter {
 let shared: Painter | undefined;
 
 /** Prepares with a lazily created shared {@link Painter}. */
-export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedDocument> {
+export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedSource> {
   shared ??= new Painter();
   return shared.prepare(node, options);
 }
 
 /** Paints with a lazily created shared {@link Painter}. */
-export function paint(document: PreparedDocument): Promise<PaintTree>;
+export function paint(document: PreparedSource): Promise<PaintTree>;
 export function paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
 export function paint(
-  node: PreparedDocument | NodeInput,
+  node: PreparedSource | NodeInput,
   options?: PaintOptions,
 ): Promise<PaintTree> {
   shared ??= new Painter();

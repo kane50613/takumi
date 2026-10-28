@@ -84,33 +84,13 @@ test("object stylesheet rules match CSS strings in render and measure", async ()
   );
 });
 
-test("stylesheets warns once", async () => {
-  const warn = spyOn(console, "warn").mockImplementation(() => {});
-  const options = { viewport: { width: 600, height: 300 }, stylesheets: ["div {}"] };
-
-  await renderer.render(`<div>Hello</div>`, options);
-  await renderer.render(`<div>Hello</div>`, options);
-
-  expect(warn.mock.calls).toHaveLength(1);
-  expect(warn.mock.calls[0]?.[0]).toContain("`stylesheets` option is deprecated");
-  warn.mockRestore();
-});
-
-test("css takes one string and rejects the stylesheets alias next to it", async () => {
+test("css takes one string", async () => {
   const pdf = await renderer.render(`<div class="title">Hello PDF</div>`, {
     viewport: { width: 600, height: 300 },
     css: ".title { font-size: 32px }",
   });
 
   expect(pdfHeader(pdf)).toBe("%PDF-");
-
-  await expect(
-    renderer.render(`<div>Hello</div>`, {
-      viewport: { width: 600, height: 300 },
-      css: "div {}",
-      stylesheets: ["div {}"],
-    }),
-  ).rejects.toThrow("pass either `css` or `stylesheets`, not both");
 });
 
 test("paginates and substitutes footer counters", async () => {

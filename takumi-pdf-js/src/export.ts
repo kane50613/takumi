@@ -168,11 +168,6 @@ export type MeasureOptions = (
   images?: ImagesInput;
   /** CSS to apply before layout, one string or a list cascading in order. */
   css?: CssInput | readonly CssInput[];
-  /**
-   * CSS stylesheets to apply before layout.
-   * @deprecated Use `css` instead. Will be removed in v3.
-   */
-  stylesheets?: string[];
   /** Per-render font stack: ordered family names used as the fallback chain. */
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
@@ -306,11 +301,6 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     images?: ImagesInput;
     /** CSS to apply before layout, one string or a list cascading in order. */
     css?: CssInput | readonly CssInput[];
-    /**
-     * CSS stylesheets to apply before layout.
-     * @deprecated Use `css` instead. Will be removed in v3.
-     */
-    stylesheets?: string[];
     /** Per-render font stack: ordered family names used as the fallback chain. */
     fontFamilies?: string[];
     /** Default BCP-47 language tag applied to the root. */
@@ -362,7 +352,7 @@ export type PrepareOptions = DistributiveOmit<RenderOptions, OutputOnly | "image
   signal?: AbortSignal;
 };
 
-/** Options for rendering a {@link PreparedDocument}: how its pages are written to the file. */
+/** Options for rendering a {@link PreparedSource}: how its pages are written to the file. */
 export type PreparedRenderOptions = ConformanceOptions &
   Pick<
     PagedOptions & RenderOptions,
@@ -372,20 +362,12 @@ export type PreparedRenderOptions = ConformanceOptions &
   };
 
 /** A document {@link PdfRenderer.prepare} readied, with its fonts and images loaded. */
-export type PreparedDocument = Prepared<Node | string | JsonSource, DocumentLayout>;
+export type PreparedSource = Prepared<Node | string | JsonSource, DocumentLayout>;
 
 /** The binding options a document lays out with, its bands resolved to what the wasm side reads. */
 type DocumentLayout = DistributiveOmit<
   PrepareOptions,
-  | "fonts"
-  | "images"
-  | "signal"
-  | "fontFamilies"
-  | "css"
-  | "stylesheets"
-  | "header"
-  | "footer"
-  | "pages"
+  "fonts" | "images" | "signal" | "fontFamilies" | "css" | "header" | "footer" | "pages"
 > & {
   header?: Node | string;
   footer?: Node | string;
@@ -397,36 +379,13 @@ function isNode(value: NodeInput): value is Node {
   return typeof value === "object" && value !== null && "type" in value && !("$$typeof" in value);
 }
 
-let warnedStylesheets = false;
-
-function warnStylesheetsDeprecated(): void {
-  if (warnedStylesheets) return;
-  warnedStylesheets = true;
-  console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
-}
-
 /** Narrows the `css` option, which takes one entry or a list of them. */
 function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
   return Array.isArray(css);
 }
 
-function ownCss(
-  css: CssInput | readonly CssInput[] | undefined,
-  stylesheets: string[] | undefined,
-): CssInput[] {
-  if (css !== undefined && stylesheets !== undefined) {
-    throw new Error("pass either `css` or `stylesheets`, not both");
-  }
-
-  if (css !== undefined) {
-    return isCssList(css) ? [...css] : [css];
-  }
-
-  if (stylesheets !== undefined) {
-    warnStylesheetsDeprecated();
-  }
-
-  return stylesheets ?? [];
+function ownCss(css: CssInput | readonly CssInput[] | undefined): CssInput[] {
+  return css === undefined ? [] : isCssList(css) ? [...css] : [css];
 }
 
 const PAGE_RULES = ["first", "last", "odd", "even"] as const;
@@ -511,8 +470,7 @@ async function resolveDocument(
     footer,
     pages,
     css,
-    stylesheets,
-  }: Pick<RenderOptions & PagedOptions, "header" | "footer" | "pages" | "css" | "stylesheets">,
+  }: Pick<RenderOptions & PagedOptions, "header" | "footer" | "pages" | "css">,
 ) {
   const [main, headerResult, footerResult, pagesResult] = await Promise.all([
     resolveNode(node),
@@ -524,7 +482,7 @@ async function resolveDocument(
     (band) => band !== undefined,
   );
   const sheets = [
-    ...ownCss(css, stylesheets),
+    ...ownCss(css),
     ...main.css,
     ...(headerResult?.css ?? []),
     ...(footerResult?.css ?? []),
@@ -558,20 +516,9 @@ export class PdfRenderer {
    * text uses and fetches the images they draw, so {@link render} and {@link measure} only lay the
    * document out and write it.
    */
-  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedDocument> {
-    const {
-      fonts,
-      images,
-      signal,
-      fontFamilies,
-      header,
-      footer,
-      pages,
-      css,
-      stylesheets,
-      ...rest
-    } = options;
-    const document = await resolveDocument(node, { header, footer, pages, css, stylesheets });
+  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
+    const { fonts, images, signal, fontFamilies, header, footer, pages, css, ...rest } = options;
+    const document = await resolveDocument(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
     return prepareSource(
@@ -584,12 +531,9 @@ export class PdfRenderer {
   }
 
   /** Renders a node tree, JSX, an HTML string, or a prepared document to PDF bytes. */
-  render(document: PreparedDocument, options?: PreparedRenderOptions): Promise<Uint8Array>;
+  render(document: PreparedSource, options?: PreparedRenderOptions): Promise<Uint8Array>;
   render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
-  async render(
-    node: PreparedDocument | NodeInput,
-    options: RenderOptions = {},
-  ): Promise<Uint8Array> {
+  async render(node: PreparedSource | NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
     return renderPrepared(
       this.fonts,
       node instanceof Prepared ? node : await this.read(node, options),
@@ -609,10 +553,10 @@ export class PdfRenderer {
    * The returned size is the tree's own, not the space it was laid out
    * against: a box with `width: 100px` measures 100 wide on any page.
    */
-  measure(document: PreparedDocument): Promise<MeasuredSize>;
+  measure(document: PreparedSource): Promise<MeasuredSize>;
   measure(node: NodeInput, options?: MeasureOptions): Promise<MeasuredSize>;
   async measure(
-    node: PreparedDocument | NodeInput,
+    node: PreparedSource | NodeInput,
     options: MeasureOptions = {},
   ): Promise<MeasuredSize> {
     if (node instanceof Prepared) {
@@ -621,9 +565,9 @@ export class PdfRenderer {
       );
     }
 
-    const { fonts, images, css, stylesheets, fontFamilies, ...rest } = options;
+    const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
-    const sheets = [...ownCss(css, stylesheets), ...main.css];
+    const sheets = [...ownCss(css), ...main.css];
     const layout = { ...rest, css: sheets.length > 0 ? sheets : undefined };
 
     // The tree measured may itself be a band, so its counters are always in play.
@@ -648,20 +592,9 @@ export class PdfRenderer {
   }
 
   /** A document and its bands read under `options` without fetching, for {@link render}. */
-  private async read(node: NodeInput, options: RenderOptions): Promise<PreparedDocument> {
-    const {
-      fonts,
-      images,
-      header,
-      footer,
-      pages,
-      css,
-      stylesheets,
-      fontFamilies,
-      signal,
-      ...rest
-    } = options;
-    const document = await resolveDocument(node, { header, footer, pages, css, stylesheets });
+  private async read(node: NodeInput, options: RenderOptions): Promise<PreparedSource> {
+    const { fonts, images, header, footer, pages, css, fontFamilies, signal, ...rest } = options;
+    const document = await resolveDocument(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
     return readSource(document.node, layout, { fonts, images, signal, fontFamilies }, () =>
@@ -697,19 +630,19 @@ export class PdfRenderer {
 let shared: PdfRenderer | undefined;
 
 /** Prepares with a lazily created shared {@link PdfRenderer}. */
-export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedDocument> {
+export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedSource> {
   shared ??= new PdfRenderer();
   return shared.prepare(node, options);
 }
 
 /** Renders with a lazily created shared {@link PdfRenderer}. */
 export function render(
-  document: PreparedDocument,
+  document: PreparedSource,
   options?: PreparedRenderOptions,
 ): Promise<Uint8Array>;
 export function render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
 export function render(
-  node: PreparedDocument | NodeInput,
+  node: PreparedSource | NodeInput,
   options?: RenderOptions,
 ): Promise<Uint8Array> {
   shared ??= new PdfRenderer();
@@ -717,10 +650,10 @@ export function render(
 }
 
 /** Measures with a lazily created shared {@link PdfRenderer}. */
-export function measure(document: PreparedDocument): Promise<MeasuredSize>;
+export function measure(document: PreparedSource): Promise<MeasuredSize>;
 export function measure(node: NodeInput, options?: MeasureOptions): Promise<MeasuredSize>;
 export function measure(
-  node: PreparedDocument | NodeInput,
+  node: PreparedSource | NodeInput,
   options?: MeasureOptions,
 ): Promise<MeasuredSize> {
   shared ??= new PdfRenderer();
