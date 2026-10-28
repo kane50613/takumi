@@ -48,3 +48,18 @@ test("stops when its signal aborts", async () => {
 
   await expect(renderer.prepare("<p>hi</p>", { signal: controller.signal })).rejects.toThrow();
 });
+
+test("a render stops when its signal aborts before reading the document", async () => {
+  const data = mock(() => png);
+  const controller = new AbortController();
+
+  controller.abort();
+
+  await expect(
+    renderer.render("<p>hi</p>", {
+      signal: controller.signal,
+      images: [{ src: "https://example.com/a.jpeg", data }],
+    }),
+  ).rejects.toThrow();
+  expect(data).not.toHaveBeenCalled();
+});

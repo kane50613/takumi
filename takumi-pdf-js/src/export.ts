@@ -337,6 +337,8 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
      * `"ua2"`, which forbid glyph 0.
      */
     uncoveredText?: UncoveredText;
+    /** Stops the render before it reads the document or draws it. */
+    signal?: AbortSignal;
   };
 
 /** The render options that only change how laid-out pages are written to the file. */
@@ -585,7 +587,7 @@ export class PdfRenderer {
   render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
   async render(
     node: PreparedDocument | NodeInput,
-    options: RenderOptions & { signal?: AbortSignal } = {},
+    options: RenderOptions = {},
   ): Promise<Uint8Array> {
     return renderPrepared(
       this.fonts,
@@ -651,12 +653,22 @@ export class PdfRenderer {
 
   /** A document and its bands read under `options` without fetching, for {@link render}. */
   private async read(node: NodeInput, options: RenderOptions): Promise<PreparedDocument> {
-    const { fonts, images, header, footer, pages, css, stylesheets, fontFamilies, ...rest } =
-      options;
+    const {
+      fonts,
+      images,
+      header,
+      footer,
+      pages,
+      css,
+      stylesheets,
+      fontFamilies,
+      signal,
+      ...rest
+    } = options;
     const document = await resolveDocument(node, { header, footer, pages, css, stylesheets });
     const layout = { ...rest, ...document.layout };
 
-    return readSource(document.node, layout, { fonts, images, fontFamilies }, () =>
+    return readSource(document.node, layout, { fonts, images, signal, fontFamilies }, () =>
       this.needs(document.trees, layout),
     );
   }
@@ -702,7 +714,7 @@ export function render(
 export function render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
 export function render(
   node: PreparedDocument | NodeInput,
-  options?: RenderOptions & { signal?: AbortSignal },
+  options?: RenderOptions,
 ): Promise<Uint8Array> {
   shared ??= new PdfRenderer();
   return node instanceof Prepared ? shared.render(node, options) : shared.render(node, options);
