@@ -268,7 +268,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
  * A URL fetches with `fetchOptions`, and a cluster whose fetch fails is left out, so it draws from
  * the next font.
  */
-async function loadImageFonts(
+export async function loadImageFonts(
   imageFonts: ImageFontLoader[],
   needs: ImageFontNeeds[],
   fetchOptions: Omit<PrepareImagesOptions, "urls" | "node" | "sources" | "throwOnError">,

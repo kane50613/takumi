@@ -1,6 +1,7 @@
 import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
-import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
+import { emojiImageFont, extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
+import { type ImageFont, type ImageFontLoader, loadImageFonts } from "@takumi-rs/helpers/renderer";
 import {
   prepareImages,
   type CssInput,
@@ -153,20 +154,28 @@ async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
   return defaultRenderer.get(options?.module);
 }
 
-/** The `emoji` option a current renderer splits emoji by, which defaults to Twemoji here. */
-function emojiOption(renderer: Renderer, options?: PipelineOptions) {
-  return isCurrent(renderer) ? { emoji: options?.emoji ?? "twemoji" } : {};
+/**
+ * The image fonts a current renderer draws emoji with: the CDN set `emoji` names, which defaults
+ * to Twemoji here, or none for `from-font`.
+ */
+function emojiImageFonts(
+  renderer: Renderer,
+  options?: PipelineOptions,
+): ImageFontLoader[] | undefined {
+  const emoji = options?.emoji ?? "twemoji";
+
+  return isCurrent(renderer) && emoji !== "from-font" ? [emojiImageFont(emoji)] : undefined;
 }
 
-/** Whether `renderer` parses HTML, splits emoji, and reads what a source needs itself, as bindings with `prepare` do. */
+/** Whether `renderer` parses HTML, draws image fonts, and reads what a source needs itself, as bindings with `prepare` do. */
 function isCurrent(renderer: Renderer): boolean {
   return "prepare" in renderer;
 }
 
 /**
  * Turns an input into what `renderer` takes: HTML as is and a node tree with its emoji in place
- * for a current renderer, which handles both itself, and a node tree with its emoji split out as
- * images for an older one.
+ * for a current renderer, which draws them with an image font, and a node tree with its emoji
+ * split out as images for an older one.
  */
 async function resolveContent(
   element: RenderInput,
@@ -208,22 +217,27 @@ type NeedsOptions = Parameters<Extract<Renderer, { needs: unknown }>["needs"]>[1
 
 /**
  * Fetches the images `renderer` reports `nodes` need under the binding options `layout`, via
- * {@link prepareImages}. A renderer without `needs`, from an older binding, gets them from the node
- * trees instead.
+ * {@link prepareImages}, and loads the clusters each of `imageFonts` lacks. A renderer without
+ * `needs`, from an older binding, gets the images from the node trees instead.
  */
 async function collectImages(
   renderer: Renderer,
   nodes: (Node | string)[],
   layout: NeedsOptions,
   options?: PipelineOptions,
-): Promise<ImageLoader[]> {
+  imageFonts?: ImageFontLoader[],
+): Promise<{ images: ImageLoader[]; imageFonts?: ImageFont[] }> {
   const images = options?.images;
   const { sources, fetchCache, fetch, timeout, maxBytes, allowUrl, cache, throwOnError } =
     Array.isArray(images) ? { sources: images } : (images ?? {});
+  const signal = options?.signal;
+  const needsLayout = imageFonts
+    ? { ...layout, imageFonts: imageFonts.map(({ name }) => ({ name })) }
+    : layout;
 
   const needs =
     "needs" in renderer
-      ? await Promise.all(nodes.map((node) => renderer.needs(node, layout)))
+      ? await Promise.all(nodes.map((node) => renderer.needs(node, needsLayout)))
       : undefined;
   const prepared = await prepareImages({
     urls: needs?.flatMap((scene) => scene.images),
@@ -235,15 +249,26 @@ async function collectImages(
     maxBytes,
     allowUrl,
     throwOnError,
-    signal: options?.signal,
+    signal,
   });
+  const loadedImageFonts =
+    imageFonts &&
+    needs &&
+    (await loadImageFonts(
+      imageFonts,
+      needs.flatMap((scene) => scene.glyphs),
+      { fetchCache, fetch, timeout, maxBytes, allowUrl, signal },
+    ));
 
-  return cache
-    ? prepared.map((image) => ({
-        ...image,
-        cache: ("cache" in image ? image.cache : undefined) ?? cache,
-      }))
-    : prepared;
+  return {
+    images: cache
+      ? prepared.map((image) => ({
+          ...image,
+          cache: ("cache" in image ? image.cache : undefined) ?? cache,
+        }))
+      : prepared,
+    imageFonts: loadedImageFonts,
+  };
 }
 
 let warnedStylesheets = false;
@@ -293,7 +318,7 @@ async function prepareScene<T extends PipelineOptions>(element: RenderInput, opt
     const layout = bindingOptions(options, sceneCss);
     const prepared = await renderer.prepare(node, {
       ...layout,
-      ...emojiOption(renderer, options),
+      imageFonts: emojiImageFonts(renderer, options),
       images: options?.images,
       signal: options?.signal,
     });
@@ -302,7 +327,12 @@ async function prepareScene<T extends PipelineOptions>(element: RenderInput, opt
   }
 
   const { css: _, stylesheets: _alias, ...forward } = options ?? {};
-  const images = await collectImages(renderer, [node], bindingOptions(options, sceneCss), options);
+  const { images } = await collectImages(
+    renderer,
+    [node],
+    bindingOptions(options, sceneCss),
+    options,
+  );
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
   // abort that happened during the async font and image loading before the blocking call.
@@ -425,7 +455,7 @@ export async function renderAnimation(
 ): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
   options.signal?.throwIfAborted();
 
-  const { css: _, stylesheets: _alias, ...forward } = options;
+  const { css: _, stylesheets: _alias, emoji: _emoji, ...forward } = options;
 
   const renderer = await resolveRenderer(options);
   const scenes = await Promise.all(
@@ -439,7 +469,7 @@ export async function renderAnimation(
     options,
     scenes.flatMap((scene) => scene.css),
   );
-  const images = await collectImages(
+  const { images, imageFonts } = await collectImages(
     renderer,
     scenes.map((scene) => scene.node),
     {
@@ -450,18 +480,18 @@ export async function renderAnimation(
       lang: options.lang,
       keyframes: options.keyframes,
       css,
-      ...emojiOption(renderer, options),
     },
     options,
+    emojiImageFonts(renderer, options),
   );
 
   options.signal?.throwIfAborted();
 
   return renderer.renderAnimation({
     ...forward,
-    ...emojiOption(renderer, options),
     scenes: scenes.map(({ node, durationMs }) => ({ node, durationMs })),
     images,
     css,
+    ...(imageFonts && { imageFonts }),
   });
 }

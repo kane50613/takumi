@@ -1,4 +1,5 @@
 import { container, image, text } from "./helpers";
+import type { ImageFontLoader } from "./prepared";
 import type { Node, TextNode } from "./types";
 
 export type EmojiType = "twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat";
@@ -52,6 +53,15 @@ function getEmojiUrl(icon: string, type: EmojiType) {
   const { base, file } = providers[type];
 
   return `${base}${file(getIconCode(icon))}`;
+}
+
+/**
+ * An image font that draws each emoji as the SVG the `type` CDN serves for it. A renderer's
+ * `prepare` fetches the SVGs of the emoji a source draws, and an emoji the CDN has no SVG for
+ * draws from the next font.
+ */
+export function emojiImageFont(type: EmojiType): ImageFontLoader {
+  return { name: `takumi-emoji-${type}`, load: (cluster) => getEmojiUrl(cluster, type) };
 }
 
 /**
@@ -128,8 +138,8 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
 /**
  * Replaces each emoji in a node tree with an image node that points at the `emojiType` CDN.
  *
- * @deprecated Pass `emoji` to a renderer's `prepare`, which splits emoji the same way, in HTML too,
- * and fetches their images.
+ * @deprecated Pass an {@link emojiImageFont} in `imageFonts` to a renderer's `prepare`, which draws
+ * emoji as glyphs, in HTML too, and fetches their images.
  */
 export function extractEmojis(node: Node, emojiType: EmojiType): Node {
   if (node.type === "text") {

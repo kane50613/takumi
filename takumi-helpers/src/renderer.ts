@@ -10,6 +10,7 @@ export {
   type BackendPrepareOptions,
   type ImageFontLoader,
   type ImageFontNeeds,
+  loadImageFonts,
   Prepared,
   type PrepareExtras,
   needsArgs,

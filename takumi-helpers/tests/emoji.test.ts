@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { extractEmojis } from "../src/emoji";
+import { emojiImageFont, extractEmojis } from "../src/emoji";
 import { container, image, text } from "../src/helpers";
 
 const emojiImage = (src: string) =>
@@ -212,5 +212,16 @@ describe("emoji", () => {
         }),
       );
     });
+  });
+});
+
+describe("emojiImageFont", () => {
+  it("loads each cluster from the CDN file extractEmojis names", async () => {
+    const font = emojiImageFont("noto");
+
+    expect(font.name).toBe("takumi-emoji-noto");
+    expect(await font.load?.("👨‍👩‍👧")).toBe(
+      "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.051/svg/emoji_u1f468_200d_1f469_200d_1f467.svg",
+    );
   });
 });
