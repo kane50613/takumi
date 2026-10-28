@@ -6,4 +6,4 @@ packages:
 
 # `render` fetches the images a stylesheet names
 
-`render`, `measure`, `renderSvg`, and `renderAnimation` now fetch the remote images `Renderer.needs` reports after the cascade, so a `background-image`, `mask-image`, or `list-style-image` from `css`, a `<style>` element, or a `::before` rule renders instead of being left out, and an image under `display: none` is no longer fetched. A custom `renderer` without `needs` keeps the node-tree lookup. `prepareImages` takes `urls`, and its `node` option is deprecated.
+`render`, `measure`, `renderSvg`, and `renderAnimation` now ask the renderer which remote images the styled tree draws, then fetch those. A `background-image`, `mask-image`, or `list-style-image` set by `css`, a `<style>` element, or a `::before` rule now renders instead of being left out. An image under `display: none` is no longer fetched. A custom `renderer` from an older binding keeps the node-tree lookup. `prepareImages` also takes a `urls` list to fetch.

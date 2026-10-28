@@ -146,13 +146,11 @@ export interface FetchedImage {
 }
 
 export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = FetchOptions & {
-  /** The remote image URLs to fetch, such as `Renderer.needs` reports. */
+  /** Remote image URLs to fetch. */
   urls?: Iterable<string>;
   /**
-   * The node tree(s) whose remote images to fetch.
-   *
-   * @deprecated Pass the `urls` `Renderer.needs` reads after the cascade, which also counts
-   * stylesheet and generated-content images.
+   * The node tree(s) whose remote images to fetch, read from `src`, inline styles, and `tw`
+   * classes. Images a stylesheet or a `<style>` element names are not collected.
    */
   node?: Node | Node[];
   /** Pre-fetched entries; their URLs are not re-fetched. */

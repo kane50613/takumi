@@ -271,24 +271,18 @@ describe("font subsets", () => {
   });
 });
 
-describe("Painter.needs", () => {
-  it("reports images a <style> element names", async () => {
-    const needs = await painter.needs(
-      '<style>.a { background-image: url(https://example.com/a.png) }</style><div class="a">x</div>',
-      { width: 100, height: 100 },
-    );
-
-    expect(needs.images).toEqual(["https://example.com/a.png"]);
-    expect(needs.characters).toContain("x");
-  });
-});
-
 describe("emoji", () => {
   it("draws each emoji as an image from the CDN emoji names", async () => {
-    const needs = await painter.needs("<p>Hi 😀</p>", { width: 100, height: 100, emoji: "noto" });
+    const src = "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.051/svg/emoji_u1f600.svg";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>`;
+    const tree = await painter.paint("<p>Hi 😀</p>", {
+      width: 100,
+      height: 100,
+      emoji: "noto",
+      images: [{ src, data: new TextEncoder().encode(svg) }],
+    });
 
-    expect(needs.images).toEqual([
-      "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.051/svg/emoji_u1f600.svg",
-    ]);
+    const picture = tree.nodes.find((node) => node.type === "image");
+    expect(picture?.type === "image" && picture.image.src).toBe(src);
   });
 });

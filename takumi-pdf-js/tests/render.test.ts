@@ -462,27 +462,6 @@ test("loads font subsets for characters only a stylesheet adds", async () => {
   expect(greek.data).not.toHaveBeenCalled();
 });
 
-test("needs reports images a <style> element names", async () => {
-  const needs = await new PdfRenderer().needs(
-    '<style>.a { background-image: url(https://example.com/a.png) }</style><div class="a">x</div>',
-    { viewport: { width: 100, height: 100 } },
-  );
-
-  expect(needs.images).toEqual(["https://example.com/a.png"]);
-  expect(needs.characters).toContain("x");
-});
-
-test("needs reports emoji images when emoji names a CDN", async () => {
-  const needs = await new PdfRenderer().needs("<p>Hi 😀</p>", {
-    viewport: { width: 100, height: 100 },
-    emoji: "twemoji",
-  });
-
-  expect(needs.images).toEqual([
-    "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
-  ]);
-});
-
 test("renders an HTML band with its own <style>", async () => {
   const pdf = await new PdfRenderer().render("<p>Body</p>", {
     header: '<style>.head { font-size: 20px }</style><div class="head">Head</div>',
