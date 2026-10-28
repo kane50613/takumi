@@ -131,7 +131,7 @@ impl CounterStyle {
   /// The style a hook's class list names, `decimal` when none does.
   fn from_classes(classes: &str) -> Self {
     classes
-      .split_whitespace()
+      .split_ascii_whitespace()
       .find_map(Self::from_name)
       .unwrap_or(Self::Decimal)
   }
@@ -379,7 +379,7 @@ pub(crate) fn any_node(node: &Node, matches: &impl Fn(&Node) -> bool) -> bool {
 }
 
 fn has_class(classes: &str, class: &str) -> bool {
-  classes.split_whitespace().any(|name| name == class)
+  classes.split_ascii_whitespace().any(|name| name == class)
 }
 
 /// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,

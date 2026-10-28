@@ -149,12 +149,7 @@ fn node_unique_hashes(node: &Node) -> impl Iterator<Item = u32> {
     .tag_name()
     .into_iter()
     .chain(node.id())
-    .chain(
-      node
-        .class_name()
-        .into_iter()
-        .flat_map(str::split_whitespace),
-    )
+    .chain(node.classes())
     .map(hash_ascii_case_insensitive)
 }
 
@@ -298,11 +293,7 @@ impl Element for ArenaElement<'_> {
   }
 
   fn has_class(&self, name: &Ident, _case_sensitivity: CaseSensitivity) -> bool {
-    self
-      .style_node()
-      .node
-      .class_name()
-      .is_some_and(|classes| classes.split_whitespace().any(|c| c == *name))
+    self.style_node().node.classes().any(|class| class == *name)
   }
 
   fn imported_part(&self, _name: &Ident) -> Option<Ident> {
@@ -652,11 +643,9 @@ impl RuleIndex {
       out.extend_from_slice(rules);
     }
 
-    if let Some(classes) = node.class_name() {
-      for class in classes.split_ascii_whitespace() {
-        if let Some(rules) = self.by_class.get(class) {
-          out.extend_from_slice(rules);
-        }
+    for class in node.classes() {
+      if let Some(rules) = self.by_class.get(class) {
+        out.extend_from_slice(rules);
       }
     }
 
@@ -1026,4 +1015,48 @@ pub(crate) fn lang_matches(lang: &str, range: &str) -> bool {
       .get(..range.len())
       .is_some_and(|prefix| prefix.eq_ignore_ascii_case(range))
       && lang.as_bytes().get(range.len()) == Some(&b'-')
+}
+
+#[cfg(test)]
+mod tests {
+  use std::sync::Arc;
+
+  use crate::{
+    context::RenderContext,
+    layout::{node::Node, tree::RenderNode},
+    resources::font::Fonts,
+    style::{SizingContext, StyleSheet},
+    viewport::Viewport,
+  };
+
+  #[test]
+  fn a_class_splits_on_ascii_whitespace_only() {
+    let stylesheet = StyleSheet::parse(".a > .c { display: none }").expect("stylesheet parses");
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let parent = |class_name: &str| {
+      Node::container([Node::container([]).with_class_name("c")]).with_class_name(class_name)
+    };
+    let root = RenderNode::from_node(
+      &context,
+      Node::container([parent("x\ta\n"), parent("a\u{a0}x")]),
+    );
+    let kept: Vec<_> = root
+      .children
+      .as_deref()
+      .expect("children")
+      .iter()
+      .map(|parent| parent.children.as_deref().map_or(0, <[_]>::len))
+      .collect();
+
+    // U+00A0 is not ASCII whitespace, so `a\u{a0}x` is one class and its child stays.
+    assert_eq!(kept, [0, 1]);
+  }
 }
