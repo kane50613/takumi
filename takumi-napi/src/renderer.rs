@@ -1,7 +1,4 @@
-use std::{
-  collections::HashMap,
-  sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
@@ -94,26 +91,19 @@ pub(crate) struct FontState {
 }
 
 pub(crate) struct RendererState {
-  /// Read without waiting through `font_state.load()`, so renders never block. A change publishes
-  /// a new state, and renders in flight keep the one they started with.
+  /// Read without waiting through `font_state.load()`, so renders never block. Every change runs
+  /// on the JS thread that owns the renderer, so changes never race, and renders in flight keep
+  /// the state they started with.
   font_state: ArcSwap<FontState>,
-  /// Lets one font change at a time read, change, and publish the state. Renders never take it.
-  /// Changes retrying on a lost race instead would register a font again for each retry, as
-  /// `prepare` loads many fonts at once.
-  font_writer: Mutex<()>,
   pub(crate) resource_cache: ResourceCache,
 }
 
 impl RendererState {
-  /// Applies `change` to a copy of the fonts and publishes it, one change at a time.
+  /// Applies `change` to a copy of the fonts and publishes it. Call it on the JS thread only.
   pub(crate) fn update_fonts<T>(
     &self,
     change: impl FnOnce(&mut Fonts, &mut FontCache) -> Result<T>,
   ) -> Result<T> {
-    let _writer = self
-      .font_writer
-      .lock()
-      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
     let mut state = FontState::clone(&self.font_state.load());
     let changed = change(Arc::make_mut(&mut state.fonts), &mut state.cache)?;
 
@@ -469,7 +459,6 @@ impl Renderer {
               .map(|bytes| bytes.max(0.0) as u64),
           ),
         }),
-        font_writer: Mutex::new(()),
         resource_cache: match options.cache_max_bytes {
           Some(bytes) => ResourceCache::new(bytes.max(0.0) as u64),
           None => ResourceCache::default(),

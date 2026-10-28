@@ -3,7 +3,7 @@ use std::sync::Arc;
 use napi::bindgen_prelude::*;
 
 use takumi_bindings_common::input::FontOptions;
-use takumi_core::resources::font;
+use takumi_core::resources::font::FontResource;
 
 use crate::{JsBytes, RegisteredFamily, map_error, renderer::RendererState};
 
@@ -16,41 +16,39 @@ pub struct LoadFontTask {
 }
 
 impl Task for LoadFontTask {
-  type Output = Vec<font::RegisteredFamily>;
+  type Output = FontResource<'static>;
   type JsValue = Vec<RegisteredFamily>;
 
+  /// Decompresses the font off the JS thread, the costly part of loading it.
   fn compute(&mut self) -> Result<Self::Output> {
-    let resource = self
+    self
       .info
-      .resource(self.buffer.as_ref())
+      .resource(self.buffer.as_ref().to_vec())
       .map_err(map_error)?
       .into_resolved()
-      .map_err(map_error)?;
+      .map_err(map_error)
+  }
 
+  /// Registers the font on the JS thread, where every font change runs, then releases fonts past
+  /// the budget there too, so nothing is released between a render checking its fonts and
+  /// starting.
+  fn resolve(&mut self, _env: Env, resource: Self::Output) -> Result<Self::JsValue> {
     let bytes = resource.byte_len() as u64;
     let registered = self.state.update_fonts(|fonts, cache| {
       let registered = fonts
         .register(resource)
         .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))?;
 
-      cache.record(self.key.as_deref(), &registered, bytes, self.pinned);
+      if self.pinned {
+        cache.record(self.key.as_deref(), &registered, bytes, true);
+      } else {
+        cache
+          .admit(fonts, self.key.as_deref(), &registered, bytes, false)
+          .map_err(map_error)?;
+      }
 
       Ok(registered)
     })?;
-
-    Ok(registered)
-  }
-
-  /// Releases fonts past the budget on the JS thread, where renders take their fonts, so nothing
-  /// is released between a render checking its fonts and starting.
-  fn resolve(&mut self, _env: Env, registered: Self::Output) -> Result<Self::JsValue> {
-    if !self.pinned {
-      self.state.update_fonts(|fonts, cache| {
-        cache
-          .release_past_budget(fonts, &registered)
-          .map_err(map_error)
-      })?;
-    }
 
     Ok(registered.into_iter().map(Into::into).collect())
   }

@@ -8,7 +8,7 @@ use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::{
-    font::{FontError, FontOverride, FontResource, RegisteredFamily},
+    font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
     image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache},
     unicode_range::UnicodeRange,
   },
@@ -48,7 +48,10 @@ pub struct FontOptions {
 
 impl FontOptions {
   /// A font resource over `bytes` with these overrides applied.
-  pub fn resource<'a>(&self, bytes: &'a [u8]) -> Result<FontResource<'a>, FontError> {
+  pub fn resource<'a>(
+    &self,
+    bytes: impl Into<FontSource<'a>>,
+  ) -> Result<FontResource<'a>, FontError> {
     let resource = FontResource::new(bytes)
       .override_info(FontOverride {
         family_name: self
@@ -131,7 +134,9 @@ pub fn register_font(
 ) -> Result<(Vec<RegisteredFamily>, u64), FontError> {
   match font {
     Font::Buffer(buffer) => register_resource(fonts, FontResource::new(buffer.into_vec())),
-    Font::Object(details) => register_resource(fonts, details.options.resource(&details.data)?),
+    Font::Object(details) => {
+      register_resource(fonts, details.options.resource(details.data.as_slice())?)
+    }
   }
 }
 
