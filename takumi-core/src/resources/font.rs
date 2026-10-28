@@ -566,6 +566,11 @@ impl Fonts {
     self.registry.selector.has_pending_faces()
   }
 
+  /// Whether an image glyph face is registered.
+  pub(crate) fn has_image_faces(&self) -> bool {
+    self.registry.selector.has_image_faces()
+  }
+
   /// The images of the image glyph face whose synthesized font `font_id` names.
   pub(crate) fn image_glyphs(&self, font_id: u64) -> Option<&Arc<ImageGlyphs>> {
     self.registry.selector.image_glyphs(font_id)
@@ -583,7 +588,8 @@ impl Fonts {
   /// lacks.
   pub fn register_image_face(&mut self, face: ImageFontFace) {
     let ImageFontFace { family, glyphs } = face;
-    let Some(platform_data) = FontCustomPlatformData::create_image_face(ImageGlyphs::new(glyphs))
+    let Some(platform_data) =
+      FontCustomPlatformData::create_image_face(ImageGlyphs::new(Arc::clone(&family), glyphs))
     else {
       return;
     };

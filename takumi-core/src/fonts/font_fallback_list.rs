@@ -1,16 +1,21 @@
 //! Blink's [`FontFallbackList`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_list.cc), resolving every family up front; approximate, see #2001.
 
-use std::{cell::OnceCell, rc::Rc};
+use std::{cell::OnceCell, rc::Rc, sync::Arc};
 
 use super::{
-  font_cache::FontCache, font_data_for_range_set::FontDataForRangeSet,
-  font_description::FontFallbackKey, font_face::FaceData,
-  font_fallback_iterator::FontFallbackIterator, font_fallback_priority::FontFallbackPriority,
-  shaping::shape_cache::ShapeCache, simple_font_data::SimpleFontData,
+  font_cache::FontCache,
+  font_data_for_range_set::FontDataForRangeSet,
+  font_description::FontFallbackKey,
+  font_face::FaceData,
+  font_fallback_iterator::FontFallbackIterator,
+  font_fallback_priority::FontFallbackPriority,
+  shaping::{harfbuzz_shaper::is_unmatched_variation_sequence, shape_cache::ShapeCache},
+  simple_font_data::SimpleFontData,
 };
 use crate::{
   resources::font::{Fonts, MatchedFace},
   style::{FontFamilyToken, GenericFamilyType},
+  text::character::is_default_ignorable,
 };
 
 /// Blink's `FontData`.
@@ -62,6 +67,8 @@ pub(crate) struct FontFallbackList {
   primary_with_digit_zero: OnceCell<Option<Rc<SimpleFontData>>>,
   /// Whether the registry the list resolved from holds a pending face.
   has_pending_faces: bool,
+  /// Whether the registry the list resolved from holds an image glyph face.
+  has_image_faces: bool,
 }
 
 impl FontFallbackList {
@@ -118,6 +125,7 @@ impl FontFallbackList {
       primary_with_space: OnceCell::new(),
       primary_with_digit_zero: OnceCell::new(),
       has_pending_faces: fonts.has_pending_faces(),
+      has_image_faces: fonts.has_image_faces(),
     }
   }
 
@@ -125,6 +133,12 @@ impl FontFallbackList {
   /// [`Self::pending_face_for_character`] find.
   pub(crate) fn has_pending_faces(&self) -> bool {
     self.has_pending_faces
+  }
+
+  /// Whether the registry the list resolved from holds an image glyph face, which only then can
+  /// [`Self::image_face_lacking`] find.
+  pub(crate) fn has_image_faces(&self) -> bool {
+    self.has_image_faces
   }
 
   /// Blink's `FontDataAt`.
@@ -205,4 +219,49 @@ impl FontFallbackList {
 
     None
   }
+
+  /// The family of the image glyph face a render would draw the emoji presentation `cluster` from
+  /// that has no image for it: walking the fonts as shaping does, the first image glyph face
+  /// before a loaded font that shapes the whole cluster. Approximate: shaping hints with every
+  /// character a font left unshaped, here with the cluster's first, and system fallback takes
+  /// only image glyph faces and color fonts, as Blink's emoji fallback priority prefers them.
+  pub(crate) fn image_face_lacking(&self, cluster: &str) -> Option<&Arc<str>> {
+    let hint = cluster.chars().next()?;
+    let family_fonts = self.font_list.iter().flat_map(|font_data| match font_data {
+      FontData::Simple(font_data) => vec![font_data],
+      FontData::Segmented(faces) => faces
+        .iter()
+        .filter(|face| face.contains(hint))
+        .filter_map(FontDataForRangeSet::font_data)
+        .collect(),
+    });
+    let fallback_fonts = self
+      .font_cache
+      .loaded_fonts()
+      .filter(|font_data| font_data.face.typeface.is_color);
+
+    for font_data in family_fonts.chain(fallback_fonts) {
+      if let Some(image_glyphs) = &font_data.face.typeface.image_glyphs {
+        return image_glyphs
+          .glyph(cluster)
+          .is_none()
+          .then(|| image_glyphs.family());
+      }
+
+      if shapes_cluster(font_data, cluster) {
+        return None;
+      }
+    }
+
+    None
+  }
+}
+
+/// Whether `font_data` shapes `cluster` without `.notdef`: it has every character that is not
+/// default ignorable, and the variation sequence it starts with in the presentation asked for.
+fn shapes_cluster(font_data: &SimpleFontData, cluster: &str) -> bool {
+  cluster
+    .chars()
+    .all(|character| is_default_ignorable(character) || font_data.has_glyph(character))
+    && !is_unmatched_variation_sequence(font_data, cluster)
 }

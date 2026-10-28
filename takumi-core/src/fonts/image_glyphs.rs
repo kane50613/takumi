@@ -49,6 +49,7 @@ const UNDERLINE: (i16, i16) = (-37, 25);
 /// The images of a face, by glyph: glyph `i + 1` draws the image at `i`, and glyph 0 is
 /// `.notdef`.
 pub(crate) struct ImageGlyphs {
+  family: Arc<str>,
   glyphs: Vec<(Box<str>, ImageSource)>,
   glyph_ids: FxHashMap<Box<str>, u32>,
   /// The first character of every cluster, which matching takes as the characters the face has.
@@ -56,8 +57,8 @@ pub(crate) struct ImageGlyphs {
 }
 
 impl ImageGlyphs {
-  /// The images of the clusters of `glyphs`, the first image of a cluster winning.
-  pub(crate) fn new(glyphs: Vec<(Box<str>, ImageSource)>) -> Self {
+  /// `family`'s images for the clusters of `glyphs`, the first image of a cluster winning.
+  pub(crate) fn new(family: Arc<str>, glyphs: Vec<(Box<str>, ImageSource)>) -> Self {
     let mut unique: Vec<(Box<str>, ImageSource)> = Vec::with_capacity(glyphs.len());
     let mut glyph_ids = FxHashMap::default();
 
@@ -76,10 +77,16 @@ impl ImageGlyphs {
       .collect();
 
     Self {
+      family,
       glyphs: unique,
       glyph_ids,
       first_characters,
     }
+  }
+
+  /// The family the face registered under.
+  pub(crate) fn family(&self) -> &Arc<str> {
+    &self.family
   }
 
   /// The glyph that draws `cluster`, none when the face has no image for it.

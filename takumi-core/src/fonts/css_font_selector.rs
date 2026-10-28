@@ -190,6 +190,11 @@ impl CssFontSelector {
       .as_ref()
   }
 
+  /// Whether an image glyph face is registered.
+  pub(crate) fn has_image_faces(&self) -> bool {
+    !self.image_families.is_empty()
+  }
+
   /// Whether a pending face is registered.
   pub(crate) fn has_pending_faces(&self) -> bool {
     self

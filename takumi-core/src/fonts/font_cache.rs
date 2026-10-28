@@ -33,7 +33,7 @@ impl FontCache {
   }
 
   /// The loaded faces, in fallback order.
-  fn loaded_fonts(&self) -> impl Iterator<Item = &Rc<SimpleFontData>> {
+  pub(crate) fn loaded_fonts(&self) -> impl Iterator<Item = &Rc<SimpleFontData>> {
     self.fallback_fonts.iter().filter_map(FaceData::loaded)
   }
 

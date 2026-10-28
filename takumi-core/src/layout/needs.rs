@@ -1,8 +1,12 @@
 //! What a render tree needs from outside before it renders, read after the cascade so stylesheet
 //! rules, `display: none`, generated content, and `text-transform` count as they will render.
 
-use std::{collections::BTreeSet, rc::Rc};
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  rc::Rc,
+};
 
+use icu_segmenter::GraphemeClusterSegmenter;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
@@ -37,22 +41,29 @@ pub struct RenderNeeds {
   /// the font it is drawn in meets before a loaded font with its glyph, which Blink's
   /// `FontFallbackIterator` begins loading.
   pub faces: BTreeSet<usize>,
+  /// For each image glyph face (see [`Fonts::register_image_face`](crate::Fonts::register_image_face))
+  /// by family, the grapheme clusters of emoji presentation text the render would draw from it
+  /// that it has no image for.
+  pub glyphs: BTreeMap<String, BTreeSet<String>>,
 }
 
-/// The needs a walk collects, with the characters each fallback list has looked up.
+/// The needs a walk collects, with the text each fallback list has looked up.
 #[derive(Default)]
 struct NeedsCollector {
   needs: RenderNeeds,
-  /// Each fallback list by address, kept alive so no other list takes the address, with the
-  /// characters and priorities walked through it.
-  walked: FxHashMap<*const FontFallbackList, WalkedCharacters>,
+  /// Each fallback list by address, kept alive so no other list takes the address, with the text
+  /// walked through it.
+  walked: FxHashMap<*const FontFallbackList, Walked>,
 }
 
-/// A fallback list and the characters it has walked, each at a fallback priority.
-type WalkedCharacters = (
-  Rc<FontFallbackList>,
-  FxHashSet<(char, FontFallbackPriority)>,
-);
+/// A fallback list and the text it has walked.
+struct Walked {
+  _list: Rc<FontFallbackList>,
+  /// Each character at a fallback priority.
+  characters: FxHashSet<(char, FontFallbackPriority)>,
+  /// Each emoji presentation grapheme cluster.
+  clusters: FxHashSet<Box<str>>,
+}
 
 impl RenderNode {
   /// Whether an inline walk passes this box without reading its content, which lays out on its own.
@@ -198,36 +209,75 @@ impl NeedsCollector {
     }
   }
 
-  /// Adds the characters of `text`, and the pending faces `font` would load to draw them, each
-  /// character looked up at the fallback priority Blink's `SymbolsIterator` gives its run.
+  /// Adds the characters of `text`, the pending faces `font` would load to draw them, and the
+  /// emoji presentation clusters it would draw from an image glyph face without an image for
+  /// them, each character looked up at the fallback priority Blink's `SymbolsIterator` gives its
+  /// run.
   fn add_text(&mut self, font: &Font, text: &str) {
     self.needs.characters.extend(text.chars());
 
     let list = &font.fallback_list;
+    let (has_pending_faces, has_image_faces) = (list.has_pending_faces(), list.has_image_faces());
 
-    if !list.has_pending_faces() {
+    if !has_pending_faces && !has_image_faces {
       return;
     }
 
-    let (_, walked) = self
+    let walked = self
       .walked
       .entry(Rc::as_ptr(list))
-      .or_insert_with(|| (Rc::clone(list), FxHashSet::default()));
+      .or_insert_with(|| Walked {
+        _list: Rc::clone(list),
+        characters: FxHashSet::default(),
+        clusters: FxHashSet::default(),
+      });
     let mut symbols = SymbolsIterator::new(text);
     let mut start = 0;
 
     while let Some((end, priority)) = symbols.consume() {
-      for character in text[start..end].chars() {
-        if !walked.insert((character, priority)) {
-          continue;
-        }
+      let run = &text[start..end];
 
-        if let Some(id) = list.pending_face_for_character(character, priority) {
-          self.needs.faces.insert(id);
+      start = end;
+
+      if has_pending_faces {
+        for character in run.chars() {
+          if !walked.characters.insert((character, priority)) {
+            continue;
+          }
+
+          if let Some(id) = list.pending_face_for_character(character, priority) {
+            self.needs.faces.insert(id);
+          }
         }
       }
 
-      start = end;
+      if !has_image_faces
+        || !matches!(
+          priority,
+          FontFallbackPriority::Emoji | FontFallbackPriority::EmojiBySelector
+        )
+      {
+        continue;
+      }
+
+      let boundaries: Vec<usize> = GraphemeClusterSegmenter::new().segment_str(run).collect();
+
+      for bounds in boundaries.windows(2) {
+        let cluster = &run[bounds[0]..bounds[1]];
+
+        if !walked.clusters.insert(cluster.into()) {
+          continue;
+        }
+
+        if let Some(family) = list.image_face_lacking(cluster) {
+          self
+            .needs
+            .glyphs
+            .entry(family.to_string())
+            .or_default()
+            .insert(cluster.to_owned());
+        }
+      }
     }
   }
 }
@@ -263,13 +313,15 @@ fn svg_image(src: &ImageSourceInput, context: &RenderContext) -> Option<ImageSou
 mod tests {
   use super::RenderNeeds;
   use crate::{
-    fonts::shaping::testing::{GEIST_MONO, register},
+    fonts::shaping::testing::{GEIST, GEIST_MONO, TWEMOJI, register},
     layout::{
       inline::testing::{render_tree, render_with_fonts, span},
       node::Node,
     },
     resources::{
-      font::{Fonts, PendingFontFace},
+      font::{Fonts, ImageFontFace, PendingFontFace},
+      image::ImageSource,
+      image_buffer::ImageBuffer,
       unicode_range::{UnicodeRange, UnicodeRangeSet},
     },
   };
@@ -591,5 +643,52 @@ mod tests {
 
     assert!(needs.characters.contains(&'Ж'));
     assert!(needs.images.is_empty());
+  }
+
+  /// The clusters each image glyph face lacks for `text` in a block styled by `css`, with Geist
+  /// and Twemoji Mozilla registered ahead of an image face with an image for 😀.
+  fn requested_glyphs(text: &str, css: &str) -> Vec<(String, Vec<String>)> {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, GEIST, "Geist");
+    register(&mut fonts, TWEMOJI, "Twemoji Mozilla");
+    fonts.register_image_face(ImageFontFace::new("Emoji Images").glyph(
+      "😀",
+      ImageSource::from(ImageBuffer::from_rgba_bytes(vec![0; 4], 1, 1).unwrap()),
+    ));
+
+    render_with_fonts(
+      &fonts,
+      Node::container([Node::text(text)]).with_class_name("container"),
+      css,
+    )
+    .needs()
+    .glyphs
+    .into_iter()
+    .map(|(family, clusters)| (family, clusters.into_iter().collect()))
+    .collect()
+  }
+
+  #[test]
+  fn requests_the_emoji_clusters_an_image_face_lacks() {
+    assert_eq!(
+      requested_glyphs("Hi 😀 🚀 👨‍👩‍👧 1️⃣ ❤ ❤️", ".container { font-family: Geist }"),
+      [(
+        "Emoji Images".to_owned(),
+        vec![
+          "1️⃣".to_owned(),
+          "❤️".to_owned(),
+          "👨‍👩‍👧".to_owned(),
+          "🚀".to_owned(),
+        ]
+      )]
+    );
+  }
+
+  #[test]
+  fn requests_no_cluster_a_color_font_earlier_in_the_stack_draws() {
+    assert!(
+      requested_glyphs("🚀", ".container { font-family: 'Twemoji Mozilla', Geist }").is_empty()
+    );
   }
 }

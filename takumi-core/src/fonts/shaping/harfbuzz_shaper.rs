@@ -383,7 +383,7 @@ fn queue_characters(
 /// ask for, Blink's `HarfBuzzGetGlyph` answering `kUnmatchedVSGlyphId`. Approximate: Blink marks
 /// the glyph in a HarfBuzz callback, which harfrust lacks, so the cluster is checked after shaping
 /// with the same rules.
-fn is_unmatched_variation_sequence(font: &SimpleFontData, text: &str) -> bool {
+pub(crate) fn is_unmatched_variation_sequence(font: &SimpleFontData, text: &str) -> bool {
   let mut characters = text.chars();
   let (Some(character), Some(selector)) = (characters.next(), characters.next()) else {
     return false;
