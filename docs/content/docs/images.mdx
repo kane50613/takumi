@@ -132,7 +132,23 @@ export function GET() {
 
 Emoji detection follows the Unicode presentation rules. A pictograph that defaults to text presentation, such as `‼` or `▶`, stays text and renders with your fonts. Add `U+FE0F` after it to force the emoji image. Add `U+FE0E` after an emoji to keep the text glyph.
 
-On your own renderer, [`prepare()`](#prepare-on-your-own-renderer) splits emoji and fetches their images the same way.
+#### Manual extraction
+
+The `extractEmojis` helper does the splitting. It replaces each emoji with an image node that points at the CDN. On your own renderer, call it before [`prepare()`](#prepare-on-your-own-renderer), which then fetches the emoji with your other images.
+
+```tsx twoslash title="Extract emoji before rendering"
+import { extractEmojis } from "takumi-js/helpers/emoji";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { Renderer } from "takumi-js/node";
+
+let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
+node = extractEmojis(node, "twemoji");
+
+const renderer = new Renderer();
+const prepared = await renderer.prepare(node, { width: 1200, height: 630 });
+
+const image = await renderer.render(prepared, { format: "webp" });
+```
 
 ### COLR / bitmap fonts
 
@@ -147,7 +163,7 @@ Variation selectors take priority over font order. A code point followed by `U+F
 
 ## Prepare on your own renderer
 
-A renderer you create yourself fetches nothing on its own. Its `prepare()` does what `render()` does before drawing. It styles the source, fetches the images it draws, emoji included, and loads the font subsets its text uses. Pass the result to the renderer's `render`, `renderSvg`, or `measure`:
+A renderer you create yourself fetches nothing on its own. Its `prepare()` does what `render()` does before drawing. It styles the source, fetches the images it draws, and loads the font subsets its text uses. Pass the result to the renderer's `render`, `renderSvg`, or `measure`:
 
 ```tsx twoslash title="Prepare, then render"
 import { Renderer } from "takumi-js/node";
@@ -160,14 +176,13 @@ const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 const prepared = await renderer.prepare(html, {
   width: 1200,
   height: 630,
-  emoji: "twemoji",
   images: { fetchCache },
 });
 
 const image = await renderer.render(prepared, { format: "webp" });
 ```
 
-- `prepare` takes the layout options of `render`, such as the size, `css`, `lang`, `emoji`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits). Rendering a prepared source takes only the output options, so the layout cannot change between the two calls.
+- `prepare` takes the layout options of `render`, such as the size, `css`, `lang`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits). Rendering a prepared source takes only the output options, so the layout cannot change between the two calls.
 - With your own `fetch`, a relative URL such as `/logo.png` reaches it, so it can resolve the path and apply its own checks. Without one, only `http://` and `https://` URLs are fetched.
 - A prepared source renders on any renderer from the same package. A renderer that no longer holds its fonts loads them again.
 

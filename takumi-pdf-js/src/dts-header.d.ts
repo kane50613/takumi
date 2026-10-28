@@ -1,5 +1,4 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
-import type { EmojiType } from "@takumi-rs/helpers/emoji";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
@@ -184,11 +183,6 @@ export type PdfRenderOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
-  /**
-   * Draws each emoji, bands included, as an SVG image from this CDN, fetched as one of `images`.
-   * `from-font`, or no value, draws emoji from the fonts.
-   */
-  emoji?: EmojiType | "from-font";
   /** Document metadata written to the PDF's info dictionary. */
   metadata?: PdfMetadata;
   /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
@@ -218,7 +212,7 @@ export type MeasureOptions = (
   | { size?: PageSize; landscape?: boolean; viewport?: never }
   | { viewport: ViewportInput; size?: never; landscape?: never }
 ) &
-  Pick<PdfRenderOptions, "images" | "css" | "cssVariables" | "fontFamilies" | "lang" | "emoji">;
+  Pick<PdfRenderOptions, "images" | "css" | "cssVariables" | "fontFamilies" | "lang">;
 
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };
