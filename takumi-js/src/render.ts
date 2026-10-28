@@ -158,9 +158,9 @@ function emojiOption(renderer: Renderer, options?: PipelineOptions) {
   return isCurrent(renderer) ? { emoji: options?.emoji ?? "twemoji" } : {};
 }
 
-/** Whether `renderer` parses HTML and splits emoji itself, as bindings with `needs` do. */
+/** Whether `renderer` parses HTML, splits emoji, and reads what a source needs itself, as bindings with `prepare` do. */
 function isCurrent(renderer: Renderer): boolean {
-  return "needs" in renderer;
+  return "prepare" in renderer;
 }
 
 /**
@@ -216,9 +216,9 @@ function bindingOptions(options: PipelineOptions | undefined, css: CssInput[]): 
 type NeedsOptions = Parameters<Extract<Renderer, { needs: unknown }>["needs"]>[1];
 
 /**
- * Fetches the remote images `renderer` reports `nodes` need under the binding options `layout`,
- * via {@link prepareImages}. A renderer without `needs`, from an older binding, gets them from the
- * node trees instead.
+ * Fetches the images `renderer` reports `nodes` need under the binding options `layout`, via
+ * {@link prepareImages}. A renderer without `needs`, from an older binding, gets them from the node
+ * trees instead.
  */
 async function collectImages(
   renderer: Renderer,
@@ -287,30 +287,37 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInp
   return [...own, ...extra];
 }
 
-/** Resolves the renderer, node tree, and backend options, images and CSS merged in, a single scene needs. */
+/**
+ * Readies a single scene for its render: a current renderer prepares it, fetching what it reads
+ * after the cascade, and an older one gets the node tree with its images fetched.
+ */
 async function prepareScene<T extends PipelineOptions>(element: RenderInput, options?: T) {
   options?.signal?.throwIfAborted();
 
   const renderer = await resolveRenderer(options);
   const { node, css } = await resolveContent(element, renderer, options);
-  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
   const sceneCss = mergeCss(options, css);
-  const images = await collectImages(
-    renderer,
-    [node],
-    { ...bindingOptions(options, sceneCss), ...emojiOption(renderer, options) },
-    options,
-  );
+
+  if (isCurrent(renderer)) {
+    const layout = bindingOptions(options, sceneCss);
+    const prepared = await renderer.prepare(node, {
+      ...layout,
+      ...emojiOption(renderer, options),
+      images: options?.images,
+      signal: options?.signal,
+    });
+
+    return { renderer, prepared, output: { ...layout, signal: options?.signal } };
+  }
+
+  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
+  const images = await collectImages(renderer, [node], bindingOptions(options, sceneCss), options);
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
   // abort that happened during the async font and image loading before the blocking call.
   options?.signal?.throwIfAborted();
 
-  return {
-    renderer,
-    node,
-    options: { ...forward, ...emojiOption(renderer, options), images, css: sceneCss },
-  };
+  return { renderer, node, options: { ...forward, images, css: sceneCss } };
 }
 
 /**
@@ -339,7 +346,9 @@ export async function render(
 ): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
   const scene = await prepareScene(element, options);
 
-  return scene.renderer.render(scene.node, scene.options);
+  return scene.prepared
+    ? scene.renderer.render(scene.prepared, scene.output)
+    : scene.renderer.render(scene.node, scene.options);
 }
 
 /**
@@ -363,7 +372,9 @@ export async function measure(
 ): Promise<napi.MeasuredNode> {
   const scene = await prepareScene(element, options);
 
-  return scene.renderer.measure(scene.node, scene.options);
+  return scene.prepared
+    ? scene.renderer.measure(scene.prepared, { signal: options?.signal })
+    : scene.renderer.measure(scene.node, scene.options);
 }
 
 /**
@@ -389,7 +400,9 @@ export async function measure(
 export async function renderSvg(element: RenderInput, options?: RenderSvgOptions): Promise<string> {
   const scene = await prepareScene(element, options);
 
-  return scene.renderer.renderSvg(scene.node, scene.options);
+  return scene.prepared
+    ? scene.renderer.renderSvg(scene.prepared, { signal: options?.signal })
+    : scene.renderer.renderSvg(scene.node, scene.options);
 }
 
 /**

@@ -13,12 +13,22 @@ import {
 export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
-import { FontRegistry, toNativeSource, withRenderInput } from "@takumi-rs/helpers/renderer";
+import {
+  FontRegistry,
+  Prepared,
+  prepareSource,
+  renderPrepared,
+  toNativeSource,
+  withRenderInput,
+} from "@takumi-rs/helpers/renderer";
 import type {
   BackendAnimationOptions,
+  BackendPreparedRenderOptions,
+  BackendPrepareOptions,
   BackendRenderOptions,
   BackendSvgOptions,
   FontLoader,
+  JsonSource,
   RegisteredFamilyLike,
 } from "@takumi-rs/helpers/renderer";
 
@@ -28,11 +38,21 @@ export type {
   ImageLoader,
   ImagesInput,
   OutputFormatOptions,
+  PrepareImagesInput,
 } from "@takumi-rs/helpers/renderer";
+export { Prepared } from "@takumi-rs/helpers/renderer";
 
 export type RenderOptions = BackendRenderOptions<RenderOptionsInternal>;
 export type RenderAnimationOptions = BackendAnimationOptions<RenderAnimationOptionsInternal>;
 export type SvgRenderOptions = BackendSvgOptions<SvgRenderOptionsInternal>;
+export type PrepareOptions = BackendPrepareOptions<RenderOptionsInternal>;
+export type PreparedRenderOptions = BackendPreparedRenderOptions<RenderOptionsInternal>;
+
+/** A source {@link Renderer.prepare} readied, with its fonts and images loaded. */
+export type PreparedSource = Prepared<
+  Node | string | JsonSource,
+  Omit<RenderOptionsInternal, "images" | "fontFamilies">
+>;
 
 export class Renderer {
   private inner: RendererInternal;
@@ -43,7 +63,31 @@ export class Renderer {
     this.fonts = new FontRegistry(this.inner);
   }
 
-  render(source: Node | string, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>> {
+  /**
+   * Reads what `source` needs under `options`, then loads the font subsets its text uses and fetches
+   * the images it draws, so {@link render}, {@link renderSvg}, and {@link measure} only lay it out
+   * and encode it.
+   */
+  prepare(source: Node | string, options?: PrepareOptions): Promise<PreparedSource> {
+    const native = toNativeSource(source);
+
+    return prepareSource(this.fonts, native, options ?? {}, (layout) =>
+      this.inner.needs(native, layout),
+    );
+  }
+
+  render(source: PreparedSource, options?: PreparedRenderOptions): Promise<Uint8Array<ArrayBuffer>>;
+  render(source: Node | string, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>>;
+  render(
+    source: PreparedSource | Node | string,
+    options?: RenderOptions | PreparedRenderOptions,
+  ): Promise<Uint8Array<ArrayBuffer>> {
+    if (source instanceof Prepared) {
+      return renderPrepared(this.fonts, source, options ?? {}, (native, opts) =>
+        this.inner.render(native, opts),
+      );
+    }
+
     return withRenderInput(
       this.fonts,
       options ?? {},
@@ -53,7 +97,18 @@ export class Renderer {
     );
   }
 
-  renderAsDataUrl(source: Node | string, options?: RenderOptions): Promise<string> {
+  renderAsDataUrl(source: PreparedSource, options?: PreparedRenderOptions): Promise<string>;
+  renderAsDataUrl(source: Node | string, options?: RenderOptions): Promise<string>;
+  renderAsDataUrl(
+    source: PreparedSource | Node | string,
+    options?: RenderOptions | PreparedRenderOptions,
+  ): Promise<string> {
+    if (source instanceof Prepared) {
+      return renderPrepared(this.fonts, source, options ?? {}, (native, opts) =>
+        this.inner.renderAsDataUrl(native, opts),
+      );
+    }
+
     return withRenderInput(
       this.fonts,
       options ?? {},
@@ -63,7 +118,18 @@ export class Renderer {
     );
   }
 
-  renderSvg(source: Node | string, options?: SvgRenderOptions): Promise<string> {
+  renderSvg(source: PreparedSource, options?: { signal?: AbortSignal }): Promise<string>;
+  renderSvg(source: Node | string, options?: SvgRenderOptions): Promise<string>;
+  renderSvg(
+    source: PreparedSource | Node | string,
+    options?: SvgRenderOptions | { signal?: AbortSignal },
+  ): Promise<string> {
+    if (source instanceof Prepared) {
+      return renderPrepared(this.fonts, source, options ?? {}, (native, opts) =>
+        this.inner.renderSvg(native, opts),
+      );
+    }
+
     return withRenderInput(
       this.fonts,
       options ?? {},
@@ -73,7 +139,18 @@ export class Renderer {
     );
   }
 
-  measure(source: Node | string, options?: RenderOptions): Promise<MeasuredNode> {
+  measure(source: PreparedSource, options?: { signal?: AbortSignal }): Promise<MeasuredNode>;
+  measure(source: Node | string, options?: RenderOptions): Promise<MeasuredNode>;
+  measure(
+    source: PreparedSource | Node | string,
+    options?: RenderOptions | { signal?: AbortSignal },
+  ): Promise<MeasuredNode> {
+    if (source instanceof Prepared) {
+      return renderPrepared(this.fonts, source, options ?? {}, (native, opts) =>
+        this.inner.measure(native, opts),
+      );
+    }
+
     return withRenderInput(
       this.fonts,
       options ?? {},
@@ -84,7 +161,7 @@ export class Renderer {
   }
 
   /**
-   * The remote images `source` draws and the characters its text shapes, read after the cascade.
+   * The images `source` looks up by URL and the characters its text shapes, read after the cascade.
    *
    * @internal For `takumi-js`, which fetches the images before rendering. Not a stable API.
    */

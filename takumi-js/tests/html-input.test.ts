@@ -6,7 +6,7 @@ const raw = { width: 10, height: 10, format: "raw" } as const;
 
 test("hands HTML to the renderer as written", async () => {
   const renderer = new Renderer();
-  const call = spyOn(renderer, "render");
+  const call = spyOn(renderer, "prepare");
   const html = "<div>a</div>";
 
   await render(html, { ...raw, renderer });

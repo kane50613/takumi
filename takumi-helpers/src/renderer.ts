@@ -9,6 +9,16 @@ import { fontsCovering } from "./fonts/subset";
 import { unicodeRangeOf } from "./unicode-range";
 
 export { type JsonSource, toNativeSource } from "./node-source";
+export {
+  type BackendPreparedRenderOptions,
+  type BackendPrepareOptions,
+  Prepared,
+  type PrepareExtras,
+  type PrepareImagesInput,
+  prepareSource,
+  renderPrepared,
+  type SourceNeeds,
+} from "./prepared";
 
 /**
  * Shared wrapper primitives for the `@takumi-rs/core` (napi) and `@takumi-rs/wasm` renderer
