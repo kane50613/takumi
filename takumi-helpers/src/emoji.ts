@@ -125,9 +125,6 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
   return nodes;
 }
 
-/**
- * Replaces each emoji in a node tree with an image node that points at the `emojiType` CDN.
- */
 export function extractEmojis(node: Node, emojiType: EmojiType): Node {
   if (node.type === "text") {
     const hasEmoji =

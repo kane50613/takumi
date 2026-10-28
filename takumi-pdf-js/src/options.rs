@@ -209,9 +209,6 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) font_families: Option<Vec<String>>,
   /// Default BCP-47 language tag applied to the root.
   pub(crate) lang: Option<String>,
-  /// Draws each emoji, bands included, as an SVG image from this CDN; `from-font`, or none, draws
-  /// them from the fonts.
-  pub(crate) emoji: Option<String>,
   /// Document metadata written to the PDF's info dictionary.
   pub(crate) metadata: Option<MetadataInput>,
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.

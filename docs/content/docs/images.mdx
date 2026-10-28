@@ -135,7 +135,7 @@ Emoji detection follows the Unicode presentation rules. A pictograph that defaul
 
 #### Manual extraction
 
-On your own renderer, call `extractEmojis` before rendering. It replaces each emoji with an image node that points at the CDN, so `prepareImages` fetches the emoji with your other images.
+The `extractEmojis` helper does the splitting. It replaces each emoji with an image node that points at the CDN. Call it yourself to fetch emoji with your other images on your own renderer.
 
 ```tsx twoslash title="Extract emoji before rendering"
 import { extractEmojis } from "takumi-js/helpers/emoji";
