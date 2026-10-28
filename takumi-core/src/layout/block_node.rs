@@ -38,7 +38,7 @@ use crate::{
 use crate::{
   layout::{
     block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder,
-    fragmentation_utils::fragment_index, releases::Finished,
+    fragmentation_utils::fragment_index, releases::Finished, tree::FragmentBreak,
   },
   style::Overflow,
 };
@@ -691,6 +691,12 @@ impl<'r> LayoutTree<'r> {
         run: result.run,
         #[cfg(feature = "fragmentation")]
         placed_by: self.running(),
+        #[cfg(feature = "fragmentation")]
+        break_token: result
+          .break_info
+          .break_token
+          .as_deref()
+          .map(FragmentBreak::from),
         is_repeated: result.is_repeated(),
       },
     );
