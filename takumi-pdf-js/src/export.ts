@@ -17,7 +17,6 @@ import {
   renderPrepared,
   toNativeSource,
 } from "@takumi-rs/helpers/renderer";
-import type { EmojiType } from "@takumi-rs/helpers/emoji";
 import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import {
@@ -177,11 +176,6 @@ export type MeasureOptions = (
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
-  /**
-   * Draws each emoji, bands included, as an SVG image from this CDN, fetched as one of `images`.
-   * `from-font`, or no value, draws emoji from the fonts.
-   */
-  emoji?: EmojiType | "from-font";
 };
 
 /** A node tree's laid-out size in CSS px. */
@@ -315,11 +309,6 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     fontFamilies?: string[];
     /** Default BCP-47 language tag applied to the root. */
     lang?: string;
-    /**
-     * Draws each emoji, bands included, as an SVG image from this CDN, fetched as one of `images`.
-     * `from-font`, or no value, draws emoji from the fonts.
-     */
-    emoji?: EmojiType | "from-font";
     /** Document metadata; `lang` doubles as the metadata language. */
     metadata?: PdfMetadata;
     /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
