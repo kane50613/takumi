@@ -15,12 +15,11 @@ import {
   type PageOverride,
   type PageRules,
   PdfRenderer as PdfRendererInternal,
-  type RenderNeeds,
   type RegisteredFamily,
 } from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
-export type { FontCacheOptions, RenderNeeds } from "../pkg/takumi_pdf_wasm";
+export type { FontCacheOptions } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";
@@ -519,18 +518,6 @@ export class PdfRenderer {
     options: Parameters<PdfRendererInternal["needs"]>[1],
   ): string {
     return trees.map((tree) => this.inner.needs(tree, options).characters).join("");
-  }
-
-  /**
-   * The remote images a node tree, JSX, or HTML string draws and the characters its text shapes,
-   * read after the cascade, so a caller can fetch the images before {@link render}.
-   */
-  async needs(node: NodeInput, options: MeasureOptions = {}): Promise<RenderNeeds> {
-    const { fonts: _fonts, images: _images, css, stylesheets, ...rest } = options;
-    const main = await resolveNode(node);
-    const sheets = [...ownCss(css, stylesheets), ...main.css];
-
-    return this.inner.needs(main.node, { ...rest, css: sheets.length > 0 ? sheets : undefined });
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */

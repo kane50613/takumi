@@ -79,24 +79,25 @@ Margins take numbers in CSS px, not length strings. For Chromium's `"0.5in"`, pa
 
 ## Fetching moves to your code
 
-Takumi does not fetch images for you. Ask the renderer which images the document draws, then fetch them with `prepareImages()` before rendering:
+Takumi does not fetch images for you. Use `prepareImages()` to fetch document images before rendering. Parse the HTML first, so the helper can find its image references:
 
 ```tsx twoslash title="Pass fetched image bytes"
 declare const html: string;
 // ---cut---
 import { prepareImages } from "@takumi-rs/helpers";
-import { PdfRenderer } from "takumi-pdf";
+import { fromHtml } from "@takumi-rs/helpers/html";
+import { render } from "takumi-pdf";
 
-const renderer = new PdfRenderer();
+const { node, css } = fromHtml(html);
 // [!code highlight]
-const { images: urls } = await renderer.needs(html);
-const images = await prepareImages({ urls });
+const images = await prepareImages({ node });
 
-const pdf = await renderer.render(html, { images }); // [!code highlight]
+const pdf = await render(node, { images, css }); // [!code highlight]
 ```
 
-`renderer.needs()` styles the document as `render()` would and reports every remote `http` or `https` URL in `<img src>`, `background-image`, `mask-image`, and `list-style-image`, including those `<style>` rules set. `prepareImages()` fetches them and returns the entries for `images`.
+`prepareImages()` walks the tree and fetches every remote `http` or `https` URL in `<img src>`, `background-image`, `mask-image`, and `list-style-image`. It returns the entries for `images`.
 
+- It reads inline styles and `tw` classes. URLs inside `<style>` rules are not collected, so pass those images through `images` yourself.
 - It takes `timeout`, `maxBytes`, an `allowUrl` predicate, and a `fetchCache` that reuses bytes across renders.
 
 Fonts come from the `fonts` option, not from CSS `@font-face` rules. See [Fonts & images](/docs/pdf/assets). Font URL loaders and `googleFonts()` make their own requests, so give them their own fetch limits.

@@ -297,7 +297,7 @@ export type CodepointSource = string | Node | (string | Node)[];
  * used. Mirrors `MARKER_CHARACTERS` in takumi-core, whose coverage test is the
  * source of truth. `list-style-type: "…"` strings are not covered.
  *
- * @deprecated `Renderer.needs` reports the characters markers generate.
+ * @deprecated Renderers read the characters markers generate themselves.
  */
 export const LIST_MARKER_CHARACTERS =
   "•◦■▪▸◂▾ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -305,7 +305,7 @@ export const LIST_MARKER_CHARACTERS =
 /**
  * Collect every codepoint the content will render.
  *
- * @deprecated `Renderer.needs` reads the characters after the cascade, so stylesheet content and
+ * @deprecated Renderers pick font subsets from the text they lay out, so stylesheet content and
  * `text-transform` count.
  */
 export function collectCodepoints(source: CodepointSource): Set<number> {
