@@ -14,6 +14,8 @@ pub mod emoji_images;
 pub mod html_byte_order_mark;
 #[path = "fixtures/html_parser_recovery.rs"]
 pub mod html_parser_recovery;
+#[path = "fixtures/image_glyph_faces.rs"]
+pub mod image_glyph_faces;
 #[path = "fixtures/jpeg_output.rs"]
 pub mod jpeg_output;
 #[path = "fixtures/paint_bounds_ink_reach.rs"]

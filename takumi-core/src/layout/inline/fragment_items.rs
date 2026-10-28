@@ -428,7 +428,14 @@ impl FragmentItems {
     });
     let resolved = &mut self.face_glyphs[face];
 
-    if let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) {
+    if let Some(image_glyphs) = context.fonts().image_glyphs(run.font_id()) {
+      image_glyphs.resolve_glyphs_into(
+        resolved,
+        run.font_size,
+        run.glyphs.iter().map(|glyph| glyph.id),
+        context,
+      );
+    } else if let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) {
       context.fonts().resolve_glyphs_into(
         resolved,
         run.face(),

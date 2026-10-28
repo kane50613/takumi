@@ -19,6 +19,7 @@ pub(crate) mod font_fallback_priority;
 pub(crate) mod font_height;
 pub(crate) mod font_selection_algorithm;
 pub(crate) mod font_selection_types;
+pub(crate) mod image_glyphs;
 pub(crate) mod open_type_caps_support;
 pub(crate) mod script_run_iterator;
 pub(crate) mod shaping;

@@ -91,8 +91,11 @@ impl FontCache {
     }
   }
 
-  /// Blink's `GetLastResortFallbackFont`.
+  /// Blink's `GetLastResortFallbackFont`, never an image glyph face, which draws no character.
   pub(crate) fn last_resort_fallback_font(&self) -> Option<Rc<SimpleFontData>> {
-    self.loaded_fonts().next().cloned()
+    self
+      .loaded_fonts()
+      .find(|font| font.face.typeface.image_glyphs.is_none())
+      .cloned()
   }
 }

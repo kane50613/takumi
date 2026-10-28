@@ -7,6 +7,7 @@ use harfrust::{
   ShaperFont, shape,
 };
 use icu_properties::{PropertyNamesShort, props::Script};
+use icu_segmenter::GraphemeClusterSegmenter;
 use skrifa::MetadataProvider;
 
 use super::{
@@ -21,6 +22,7 @@ use crate::{
     font_data_for_range_set::FontDataForRangeSet,
     font_fallback_iterator::{FontFallbackIterator, HintCharList},
     font_fallback_priority::FontFallbackPriority,
+    image_glyphs::ImageGlyphs,
     open_type_caps_support::OpenTypeCapsSupport,
     simple_font_data::SimpleFontData,
     small_caps_iterator::{SmallCapsBehavior, SmallCapsIterator},
@@ -261,6 +263,55 @@ fn shape_range(
     positions,
     direction,
   })
+}
+
+/// Shapes `start..end` of `text` in an image glyph face, standing in for HarfBuzz: in an emoji
+/// presentation run, a glyph an em wide for each grapheme cluster the face has an image for,
+/// `.notdef` for every other cluster, which the next font then shapes.
+fn shape_image_range(
+  text: &str,
+  start: usize,
+  end: usize,
+  image_glyphs: &ImageGlyphs,
+  font_size: f32,
+  font_fallback_priority: FontFallbackPriority,
+  direction: HbDirection,
+) -> HarfBuzzBuffer {
+  let draws_images = matches!(
+    font_fallback_priority,
+    FontFallbackPriority::Emoji | FontFallbackPriority::EmojiBySelector
+  );
+  let advance = (f64::from(font_size) * 65536.0).round() as i32;
+  let boundaries: Vec<usize> = GraphemeClusterSegmenter::new()
+    .segment_str(&text[start..end])
+    .collect();
+  let mut infos = Vec::with_capacity(boundaries.len());
+  let mut positions = Vec::with_capacity(boundaries.len());
+
+  for bounds in boundaries.windows(2) {
+    let glyph_id = draws_images
+      .then(|| image_glyphs.glyph(&text[start + bounds[0]..start + bounds[1]]))
+      .flatten();
+    let mut info = GlyphInfo::default();
+    let mut position = GlyphPosition::default();
+
+    info.glyph_id = glyph_id.unwrap_or(0);
+    info.cluster = (start + bounds[0]) as u32;
+    position.x_advance = if glyph_id.is_some() { advance } else { 0 };
+    infos.push(info);
+    positions.push(position);
+  }
+
+  if direction == HbDirection::RightToLeft {
+    infos.reverse();
+    positions.reverse();
+  }
+
+  HarfBuzzBuffer {
+    infos,
+    positions,
+    direction,
+  }
 }
 
 /// Blink's `ComputeSlice`.
@@ -613,14 +664,26 @@ impl<'t> HarfBuzzShaper<'t> {
           .collect()
       };
 
-      let Some(buffer) = shape_range(
-        buffer,
-        &font_features,
-        &adjusted_font,
-        segment.script,
-        range_data.harfbuzz_direction(),
-        shaping_language.as_ref(),
-      ) else {
+      let buffer = match &adjusted_font.face.typeface.image_glyphs {
+        Some(image_glyphs) => Some(shape_image_range(
+          self.text,
+          shape_start,
+          shape_end,
+          image_glyphs,
+          adjusted_font.size,
+          segment.font_fallback_priority,
+          range_data.harfbuzz_direction(),
+        )),
+        None => shape_range(
+          buffer,
+          &font_features,
+          &adjusted_font,
+          segment.script,
+          range_data.harfbuzz_direction(),
+          shaping_language.as_ref(),
+        ),
+      };
+      let Some(buffer) = buffer else {
         continue;
       };
 

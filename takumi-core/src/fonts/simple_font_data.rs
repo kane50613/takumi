@@ -199,8 +199,13 @@ impl SimpleFontData {
     self.face.typeface.font_ref()
   }
 
-  /// Whether the face maps `ch` to a glyph, within its `unicode-range`.
+  /// Whether the face maps `ch` to a glyph, within its `unicode-range`; for an image glyph face,
+  /// whether a cluster it has an image for starts with `ch`.
   pub(crate) fn has_glyph(&self, ch: char) -> bool {
+    if let Some(image_glyphs) = &self.face.typeface.image_glyphs {
+      return image_glyphs.has_glyph(ch);
+    }
+
     self
       .font_ref()
       .is_some_and(|font| font.charmap().map(ch).is_some())

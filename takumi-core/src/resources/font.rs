@@ -37,11 +37,13 @@ use crate::{
     font_description::FontSelectionDescription,
     font_face::{FaceData, FontFaceDescriptors},
     font_height::FontHeight,
+    image_glyphs::ImageGlyphs,
   },
   layout_unit::LayoutUnit,
   resources::{
     glyph::{GlyphResolveContext, ResolvedGlyphs},
     glyph_cache::resolved_glyph,
+    image::ImageSource,
     unicode_range::UnicodeRangeSet,
   },
   style::{FontFamily, FontFamilyToken, FontStyle as CssFontStyle, GenericFamilyType},
@@ -345,15 +347,18 @@ impl Fonts {
       .collect()
   }
 
-  /// The faces system font fallback picks from: the fallback families, the last-resort families
-  /// last, each by its best match for `description`.
+  /// The faces system font fallback picks from: the fallback families, the image glyph faces
+  /// first and the last-resort families last, each by its best match for `description`.
   pub(crate) fn fallback_bucket(
     &self,
     description: &FontSelectionDescription,
   ) -> Vec<FaceData<MatchedFace>> {
     let families: Vec<&Arc<str>> = match &self.fallback_families {
-      Some(families) => families
-        .iter()
+      Some(families) => self
+        .registry
+        .selector
+        .image_families()
+        .chain(families)
         .chain(self.registry.selector.last_resort_families())
         .collect(),
       None => self.registry.selector.fallback_families().collect(),
@@ -559,6 +564,35 @@ impl Fonts {
   /// Whether a pending face is registered.
   pub(crate) fn has_pending_faces(&self) -> bool {
     self.registry.selector.has_pending_faces()
+  }
+
+  /// The images of the image glyph face whose synthesized font `font_id` names.
+  pub(crate) fn image_glyphs(&self, font_id: u64) -> Option<&Arc<ImageGlyphs>> {
+    self.registry.selector.image_glyphs(font_id)
+  }
+
+  /// The image glyph `glyph_id` of the font `font_id` names draws, when an image glyph face
+  /// shaped it; see [`Fonts::register_image_face`].
+  pub fn image_glyph(&self, font_id: u64, glyph_id: u32) -> Option<&ImageSource> {
+    self.image_glyphs(font_id)?.image(glyph_id)
+  }
+
+  /// Registers a face whose glyphs are `face`'s images. System fallback walks it before every
+  /// other family, so emoji presentation text draws a cluster it has an image for from it, and
+  /// [`RenderNeeds::glyphs`](crate::layout::needs::RenderNeeds::glyphs) reports the clusters it
+  /// lacks.
+  pub fn register_image_face(&mut self, face: ImageFontFace) {
+    let ImageFontFace { family, glyphs } = face;
+    let Some(platform_data) = FontCustomPlatformData::create_image_face(ImageGlyphs::new(glyphs))
+    else {
+      return;
+    };
+    let registry = Arc::make_mut(&mut self.registry);
+
+    registry.revise();
+    registry
+      .selector
+      .register_image_face(family, Arc::new(platform_data));
   }
 
   /// Removes every face registered under `family`, from each source and `unicode-range` subset
@@ -1005,6 +1039,30 @@ impl PendingFontFace {
   /// Limits the codepoints the face serves, as `@font-face` `unicode-range` does.
   pub fn unicode_range(mut self, unicode_range: UnicodeRangeSet) -> Self {
     self.descriptors.unicode_range = unicode_range;
+    self
+  }
+}
+
+/// A face whose glyphs are images, one per grapheme cluster, such as a set of emoji SVGs. See
+/// [`Fonts::register_image_face`].
+#[derive(Debug, Clone)]
+pub struct ImageFontFace {
+  family: Arc<str>,
+  glyphs: Vec<(Box<str>, ImageSource)>,
+}
+
+impl ImageFontFace {
+  /// A face of `family` with no images yet.
+  pub fn new(family: impl Into<Arc<str>>) -> Self {
+    Self {
+      family: family.into(),
+      glyphs: Vec::new(),
+    }
+  }
+
+  /// Draws the grapheme cluster `cluster` as `image`; the first image of a cluster wins.
+  pub fn glyph(mut self, cluster: impl Into<Box<str>>, image: ImageSource) -> Self {
+    self.glyphs.push((cluster.into(), image));
     self
   }
 }

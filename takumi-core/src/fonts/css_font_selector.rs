@@ -5,7 +5,8 @@
 //! `GenericFontFamilySettings` and looks it up among system fonts. takumi has no system fonts,
 //! so a generic family lists registered families, in registration order, looked up among the
 //! registered faces. System font fallback becomes [`CssFontSelector::fallback_families`]: every
-//! registered family in registration order, last-resort families last, for every script.
+//! registered family in registration order, image glyph faces first and last-resort families
+//! last, for every script.
 //! A clone is a render's snapshot, keeping every face it holds, and the bytes behind it, alive
 //! after the registry lets go.
 
@@ -19,6 +20,7 @@ use super::{
   font_description::FontSelectionDescription,
   font_face::{FaceData, FontFace, FontFaceDescriptors},
   font_face_cache::{FontFaceCache, fold_family_name},
+  image_glyphs::ImageGlyphs,
 };
 use crate::resources::font::SharedBytes;
 
@@ -34,6 +36,8 @@ pub(crate) struct CssFontSelector {
   fallback_families: Vec<Arc<str>>,
   /// Families registered as a last resort, which fallback walks after every other.
   last_resort_families: Vec<Arc<str>>,
+  /// Families of image glyph faces, which fallback walks before every other.
+  image_families: Vec<Arc<str>>,
 }
 
 /// A registered face, and whether it registered as a last resort.
@@ -151,6 +155,41 @@ impl CssFontSelector {
     insert_family(&mut self.fallback_families, &family);
   }
 
+  /// Registers an image glyph face of `family`, every descriptor `normal`.
+  pub(crate) fn register_image_face(
+    &mut self,
+    family: Arc<str>,
+    platform_data: Arc<FontCustomPlatformData>,
+  ) {
+    let font_face = Arc::new(FontFace::new(
+      Arc::clone(&family),
+      FontFaceDescriptors::default(),
+      platform_data,
+    ));
+
+    self.font_face_cache.add_font_face(Arc::clone(&font_face));
+    self.font_faces.push(RegisteredFontFace {
+      font_face,
+      last_resort: false,
+    });
+    insert_family(&mut self.image_families, &family);
+  }
+
+  /// The images of the image glyph face whose synthesized font `id` names.
+  pub(crate) fn image_glyphs(&self, id: u64) -> Option<&Arc<ImageGlyphs>> {
+    if self.image_families.is_empty() {
+      return None;
+    }
+
+    self
+      .font_faces
+      .iter()
+      .filter_map(|registered| registered.font_face.custom_platform_data())
+      .find(|typeface| typeface.id == id)?
+      .image_glyphs
+      .as_ref()
+  }
+
   /// Whether a pending face is registered.
   pub(crate) fn has_pending_faces(&self) -> bool {
     self
@@ -200,6 +239,7 @@ impl CssFontSelector {
     self
       .last_resort_families
       .retain(|family| has_faces(family, Some(true)));
+    self.image_families.retain(|family| has_faces(family, None));
     self.generic_font_family_settings.retain(|_, families| {
       families.retain(|family| has_faces(family, None));
       !families.is_empty()
@@ -259,11 +299,17 @@ impl CssFontSelector {
     self.last_resort_families.iter()
   }
 
+  /// The families of image glyph faces, which fallback walks before every other.
+  pub(crate) fn image_families(&self) -> impl Iterator<Item = &Arc<str>> + '_ {
+    self.image_families.iter()
+  }
+
   /// The families system fallback walks, in order.
   pub(crate) fn fallback_families(&self) -> impl Iterator<Item = &Arc<str>> + '_ {
     self
-      .fallback_families
+      .image_families
       .iter()
+      .chain(&self.fallback_families)
       .chain(&self.last_resort_families)
   }
 

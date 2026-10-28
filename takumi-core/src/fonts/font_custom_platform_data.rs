@@ -27,6 +27,7 @@ use super::{
     BOLD_THRESHOLD, FontSelectionCapabilities, FontSelectionRange, FontSelectionValue,
     ITALIC_SLOPE_VALUE, NORMAL_SLOPE_VALUE, NORMAL_WEIGHT_VALUE,
   },
+  image_glyphs::ImageGlyphs,
 };
 use crate::{
   resources::font::{FontBlob, SharedBytes, has_color_table},
@@ -100,8 +101,10 @@ pub(crate) struct FontCustomPlatformData {
   pub(crate) axes: Vec<VariationAxis>,
   /// The default instance's weight, width, and slope, as Skia's `SkTypeface::fontStyle`.
   pub(crate) attributes: Attributes,
-  /// Whether the face has a color glyph table Blink's `ColorTableLookup` accepts.
+  /// Whether the face has a color glyph table Blink's `ColorTableLookup` accepts, or draws images.
   pub(crate) is_color: bool,
+  /// The images an image glyph face draws in place of its empty glyphs.
+  pub(crate) image_glyphs: Option<Arc<ImageGlyphs>>,
   /// The default instance harfrust shapes with, built once, so every size, variation, and render
   /// of the face shares its layout tables.
   shaping_font: OnceLock<Option<ShapingFont>>,
@@ -143,7 +146,20 @@ impl FontCustomPlatformData {
       axes,
       attributes,
       is_color,
+      image_glyphs: None,
       shaping_font: OnceLock::new(),
+    })
+  }
+
+  /// The face that draws `image_glyphs`, over the sfnt they synthesize.
+  pub(crate) fn create_image_face(image_glyphs: ImageGlyphs) -> Option<Self> {
+    let (data, id) = image_glyphs.sfnt_with_id();
+    let platform_data = Self::create(Arc::new(data), id, 0)?;
+
+    Some(Self {
+      is_color: true,
+      image_glyphs: Some(Arc::new(image_glyphs)),
+      ..platform_data
     })
   }
 
