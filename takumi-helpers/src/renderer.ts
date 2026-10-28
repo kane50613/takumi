@@ -8,6 +8,8 @@ export { type JsonSource, toNativeSource } from "./node-source";
 export {
   type BackendPreparedRenderOptions,
   type BackendPrepareOptions,
+  type ImageFontLoader,
+  type ImageFontNeeds,
   Prepared,
   type PrepareExtras,
   needsArgs,
@@ -69,6 +71,27 @@ export type ImageSource = {
   src: string;
   data: ByteBuf;
   cache?: ImageCacheMode;
+};
+
+/** The image an {@link ImageFont} draws for a grapheme cluster, matching each backend's `ImageGlyph`. */
+export type ImageGlyph = {
+  /** The grapheme cluster, such as an emoji. */
+  cluster: string;
+  /** SVG markup or a raster image. */
+  data: ByteBuf;
+  cache?: ImageCacheMode;
+};
+
+/**
+ * A face whose glyphs are images, one per grapheme cluster, matching each backend's `ImageFont`.
+ * System fallback walks it before every other family, and emoji presentation text draws each
+ * cluster it has an image for from it.
+ */
+export type ImageFont = {
+  /** The family the face registers under. */
+  name: string;
+  /** The image of each grapheme cluster the face draws. */
+  glyphs?: ImageGlyph[];
 };
 
 /** A font family produced by `registerFont`. Only `name` is read here; backends keep the full type. */

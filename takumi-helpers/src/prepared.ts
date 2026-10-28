@@ -1,10 +1,12 @@
 import type { FetchOptions } from "./fetch";
-import { type ImageFetchCache, prepareImages } from "./images";
+import { type ImageFetchCache, prepareImages, type PrepareImagesOptions } from "./images";
 import {
+  type ByteBuf,
   type FontDetails,
   type FontLoader,
   type FontRegistry,
   fontsToLoad,
+  type ImageFont,
   type ImageLoader,
   type ImageSource,
   type OutputFormatOptions,
@@ -31,15 +33,32 @@ export type PrepareImagesInput =
       throwOnError?: boolean;
     });
 
+/**
+ * An {@link ImageFont} as `prepare` loads it: the images of the clusters the source draws from it
+ * that `glyphs` lacks come from `load`.
+ */
+export type ImageFontLoader = ImageFont & {
+  /**
+   * The image of `cluster`: a URL, which `prepare` fetches with the fetch options of `images`, or
+   * its bytes. A cluster without one, or whose fetch fails, draws from the next font.
+   */
+  load?: (cluster: string) => Awaitable<string | ByteBuf | undefined>;
+};
+
 /** What `prepare` takes on top of the layout options. */
 export type PrepareExtras = {
   fonts?: FontLoader[] | Promise<FontLoader[]>;
   images?: PrepareImagesInput;
+  /** Faces whose glyphs are images, one per grapheme cluster. */
+  imageFonts?: ImageFontLoader[];
   signal?: AbortSignal;
 };
 
 /** Public `prepare` options for a backend whose binding options are {@link TInternal}. */
-export type BackendPrepareOptions<TInternal> = Omit<TInternal, "images" | OutputOnly> &
+export type BackendPrepareOptions<TInternal> = Omit<
+  TInternal,
+  "images" | "imageFonts" | OutputOnly
+> &
   PrepareExtras;
 
 /** Public options for rendering a {@link Prepared} on a backend whose binding options are {@link TInternal}. */
@@ -49,8 +68,16 @@ export type BackendPreparedRenderOptions<TInternal> = Pick<
 > &
   OutputFormatOptions & { signal?: AbortSignal };
 
+/** The grapheme clusters a render would draw from an image font that has no image for them. */
+export type ImageFontNeeds = { name: string; clusters: string[] };
+
 /** What a render reads from a source before it lays it out. */
-export type SourceNeeds = { images: string[]; characters: string; faces: number[] };
+export type SourceNeeds = {
+  images: string[];
+  characters: string;
+  faces: number[];
+  glyphs: ImageFontNeeds[];
+};
 
 /**
  * A font a render may load, described before its bytes arrive. Font matching takes it as a face
@@ -69,6 +96,8 @@ export type NeedsRequest = {
   pending?: PendingFont[];
   /** The font stack the render falls back through. */
   fontFamilies?: string[];
+  /** The image fonts the render registers, whose missing clusters it reports. */
+  imageFonts?: ImageFont[];
 };
 
 /** Reads what a source needs after the cascade. */
@@ -77,9 +106,12 @@ export type SourceReader = (request: NeedsRequest) => Awaitable<SourceNeeds>;
 /** The options and pending fonts a binding's `needs` takes for `request` on top of `layout`. */
 export function needsArgs<TLayout>(
   layout: TLayout,
-  { images, pending, fontFamilies }: NeedsRequest,
-): [TLayout & { images?: ImageSource[]; fontFamilies?: string[] }, PendingFont[] | undefined] {
-  return [{ ...layout, images, fontFamilies }, pending];
+  { images, pending, fontFamilies, imageFonts }: NeedsRequest,
+): [
+  TLayout & { images?: ImageSource[]; fontFamilies?: string[]; imageFonts?: ImageFont[] },
+  PendingFont[] | undefined,
+] {
+  return [{ ...layout, images, fontFamilies, ...(imageFonts && { imageFonts }) }, pending];
 }
 
 /** What a render of several sources, such as a PDF's bands or an animation's scenes, needs. */
@@ -88,6 +120,7 @@ export function joinNeeds(reads: SourceNeeds[]): SourceNeeds {
     images: reads.flatMap((read) => read.images),
     characters: reads.map((read) => read.characters).join(""),
     faces: reads.flatMap((read) => read.faces),
+    glyphs: reads.flatMap((read) => read.glyphs),
   };
 }
 
@@ -97,6 +130,7 @@ type PreparedState<TSource, TLayout> = {
   fonts: FontLoader[] | undefined;
   fontFamilies: string[] | undefined;
   images: ImageSource[];
+  imageFonts: ImageFont[] | undefined;
 };
 
 let createPrepared: <TSource, TLayout>(
@@ -167,7 +201,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   needs: SourceReader,
   fetchMissing: boolean,
 ): Promise<PreparedState<TSource, TLayout>> {
-  const { fonts, fontFamilies, images = [], signal } = extras;
+  const { fonts, fontFamilies, images = [], imageFonts, signal } = extras;
 
   signal?.throwIfAborted();
 
@@ -176,6 +210,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   const request: NeedsRequest = {
     pending,
     fontFamilies: fontFamilies ?? (pending && resolvedFonts && registry.familiesOf(resolvedFonts)),
+    imageFonts: imageFonts?.map(({ name }) => ({ name })),
   };
   let first: Promise<SourceNeeds> | undefined;
   const read = () => (first ??= Promise.resolve(needs(request)));
@@ -198,6 +233,15 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       })
     : provided;
   const entries: ImageSource[] = loaded.map((image) => ({ cache, ...image }));
+  const loadedImageFonts =
+    imageFonts &&
+    (fetchMissing && imageFonts.some((imageFont) => imageFont.load)
+      ? await loadImageFonts(imageFonts, (await read()).glyphs, {
+          ...fetchOptions,
+          fetchCache,
+          signal,
+        })
+      : imageFonts.map(({ name, glyphs }) => ({ name, glyphs })));
   const svgs = entries.filter((image) => isSvg(image.data));
   const subset =
     resolvedFonts &&
@@ -209,7 +253,61 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
         )
       : resolvedFonts);
 
-  return { source, layout, fonts: subset, fontFamilies, images: entries };
+  return {
+    source,
+    layout,
+    fonts: subset,
+    fontFamilies,
+    images: entries,
+    imageFonts: loadedImageFonts,
+  };
+}
+
+/**
+ * Each of `imageFonts` with the images of the clusters `needs` reports it lacks, from its `load`.
+ * A URL fetches with `fetchOptions`, and a cluster whose fetch fails is left out, so it draws from
+ * the next font.
+ */
+async function loadImageFonts(
+  imageFonts: ImageFontLoader[],
+  needs: ImageFontNeeds[],
+  fetchOptions: Omit<PrepareImagesOptions, "urls" | "node" | "sources" | "throwOnError">,
+): Promise<ImageFont[]> {
+  return Promise.all(
+    imageFonts.map(async ({ name, glyphs = [], load }) => {
+      const held = new Set(glyphs.map((glyph) => glyph.cluster));
+      const clusters = new Set(
+        needs
+          .filter((needed) => needed.name === name)
+          .flatMap((needed) => needed.clusters)
+          .filter((cluster) => !held.has(cluster)),
+      );
+
+      if (!load || clusters.size === 0) {
+        return { name, glyphs };
+      }
+
+      const sources = await Promise.all(
+        [...clusters].map(async (cluster) => ({ cluster, source: await load(cluster) })),
+      );
+      const fetched = new Map(
+        (
+          await prepareImages({
+            ...fetchOptions,
+            urls: sources.flatMap(({ source }) => (typeof source === "string" ? [source] : [])),
+            throwOnError: false,
+          })
+        ).map((image) => [image.src, image.data]),
+      );
+      const loaded = sources.flatMap(({ cluster, source }) => {
+        const data = typeof source === "string" ? fetched.get(source) : source;
+
+        return data ? [{ cluster, data }] : [];
+      });
+
+      return { name, glyphs: [...glyphs, ...loaded] };
+    }),
+  );
 }
 
 /**
@@ -239,7 +337,11 @@ export function renderPrepared<
   call: (
     source: TSource,
     options: TLayout &
-      Omit<TOutput, "signal"> & { images?: ImageSource[]; fontFamilies?: string[] },
+      Omit<TOutput, "signal"> & {
+        images?: ImageSource[];
+        fontFamilies?: string[];
+        imageFonts?: ImageFont[];
+      },
     signal: AbortSignal | undefined,
   ) => Awaitable<TResult>,
 ): Promise<TResult> {
@@ -251,6 +353,15 @@ export function renderPrepared<
   return registry.resolveResources(state.fonts, state.images, state.fontFamilies, (resolved) => {
     signal?.throwIfAborted();
 
-    return call(state.source, { ...encoding, ...state.layout, ...resolved }, signal);
+    return call(
+      state.source,
+      {
+        ...encoding,
+        ...state.layout,
+        ...resolved,
+        ...(state.imageFonts && { imageFonts: state.imageFonts }),
+      },
+      signal,
+    );
   });
 }

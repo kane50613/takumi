@@ -1,12 +1,12 @@
 //! The main renderer for Takumi image rendering engine.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontStore, NeedsOutput, append_css, css_or_stylesheets, device_pixel_ratio,
-  input::{decode_images, with_pending_value},
+  input::{decode_images, with_image_fonts, with_pending_value},
   parse_lang,
   source::{read_source, split_emojis},
   source_cache::SourceCache,
@@ -88,6 +88,20 @@ impl Renderer {
     let registered = self.fonts.register(font, key, pinned).map_err(map_error)?;
 
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+  }
+
+  /// The fonts a render falls back through `families` with, `image_fonts` registered.
+  fn fonts_for_render(
+    &self,
+    families: Option<&[String]>,
+    image_fonts: Option<&[ImageFont]>,
+  ) -> Result<Rc<Fonts>, js_sys::Error> {
+    with_image_fonts(
+      self.fonts.for_render(families),
+      image_fonts.unwrap_or_default(),
+      &self.resource_cache,
+    )
+    .map_err(map_error)
   }
 
   fn images_map(
@@ -183,7 +197,10 @@ impl Renderer {
     );
 
     let images = self.images_map(options.images.as_deref())?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts_for_render(
+      options.font_families.as_deref(),
+      options.image_fonts.as_deref(),
+    )?;
     self.render_internal(&fonts, node, options, images)
   }
 
@@ -243,7 +260,10 @@ impl Renderer {
       options.keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts_for_render(
+      options.font_families.as_deref(),
+      options.image_fonts.as_deref(),
+    )?;
 
     let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
 
@@ -284,7 +304,10 @@ impl Renderer {
 
     let images = self.images_map(options.images.as_deref())?;
 
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts_for_render(
+      options.font_families.as_deref(),
+      options.image_fonts.as_deref(),
+    )?;
     let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
 
     let layout = measure(render_options).map_err(map_error)?;
@@ -313,7 +336,10 @@ impl Renderer {
 
     let images = self.images_map(options.images.take().as_deref())?;
     let fonts = with_pending_value(
-      self.fonts.for_render(options.font_families.as_deref()),
+      self.fonts_for_render(
+        options.font_families.as_deref(),
+        options.image_fonts.as_deref(),
+      )?,
       pending_fonts.map(Into::into),
     )?;
     let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
@@ -351,7 +377,10 @@ impl Renderer {
     }
 
     let images = self.images_map(options.images.as_deref())?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts_for_render(
+      options.font_families.as_deref(),
+      options.image_fonts.as_deref(),
+    )?;
     let buffer = self.render_internal(&fonts, node, options, images)?;
 
     let mut data_uri = String::new();
@@ -382,6 +411,7 @@ impl Renderer {
       font_families,
       lang,
       emoji,
+      image_fonts,
     } = from_value(options.into()).map_err(map_error)?;
 
     let lang = parse_lang(lang.as_deref()).map_err(map_error)?;
@@ -415,7 +445,7 @@ impl Renderer {
       keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let fonts = self.fonts.for_render(font_families.as_deref());
+    let fonts = self.fonts_for_render(font_families.as_deref(), image_fonts.as_deref())?;
 
     let scene_options = nodes
       .into_iter()

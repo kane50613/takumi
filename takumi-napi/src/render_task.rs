@@ -12,7 +12,8 @@ use takumi_raster::{DitheringAlgorithm, render, write_image};
 use crate::{
   JsBytes, NodeSource, RenderInput, map_error,
   renderer::{
-    ImageCacheMode, OutputFormat, RenderOptions, RendererState, collect_images, decode_images,
+    ImageCacheMode, ImageFonts, OutputFormat, RenderOptions, RendererState, collect_images,
+    decode_images,
   },
 };
 
@@ -22,6 +23,8 @@ pub struct RenderTask {
   pub(crate) state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
+  /// The image fonts the render registers on top of `fonts`.
+  pub(crate) image_fonts: ImageFonts,
   pub(crate) viewport: Viewport,
   pub(crate) format: OutputFormat,
   pub(crate) quality: Option<u8>,
@@ -49,6 +52,7 @@ impl RenderTask {
         options.emoji.as_deref(),
       )?),
       fonts: state.fonts_for_render(options.font_families.as_deref())?,
+      image_fonts: ImageFonts::collect(env, options.image_fonts)?,
       state,
       viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
         device_pixel_ratio(options.device_pixel_ratio.map(|ratio| ratio as f32)),
@@ -77,6 +81,8 @@ impl Task for RenderTask {
     let (node, stylesheet) = input.resolve(&self.state)?;
 
     let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
+    let fonts =
+      take(&mut self.image_fonts).register(Arc::clone(&self.fonts), &self.state.resource_cache)?;
 
     let image = render(
       takumi_raster::RenderOptions::builder()
@@ -87,7 +93,7 @@ impl Task for RenderTask {
         .time_ms(self.time_ms)
         .dithering(self.dithering)
         .node(node)
-        .fonts(&self.fonts)
+        .fonts(&fonts)
         .font_families(take(&mut self.font_families))
         .lang(take(&mut self.lang))
         .draw_debug_border(self.draw_debug_border)

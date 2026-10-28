@@ -7,18 +7,19 @@ mod date;
 mod metadata;
 mod options;
 
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::HashMap, fmt::Display, rc::Rc, sync::Arc};
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontCacheOptions, FontStore, NeedsOutput, append_css,
-  input::{Font, decode_images, with_pending_value},
+  input::{Font, decode_images, with_image_fonts, with_pending_value},
   parse_lang,
   source::{read_source, split_emojis},
   source_cache::SourceCache,
   stylesheet,
 };
 use takumi_core::{
+  Fonts,
   layout::node::Node,
   resources::image::{ImageSource, ResourceCache},
   style::{FontFamily, Lang},
@@ -139,6 +140,16 @@ impl PdfRenderer {
     Ok((node, options))
   }
 
+  /// The fonts the render `options` describes falls back through, its image fonts registered.
+  fn fonts_for_render(&self, options: &PdfRenderOptions) -> Result<Rc<Fonts>, js_sys::Error> {
+    with_image_fonts(
+      self.fonts.for_render(options.font_families.as_deref()),
+      options.image_fonts.as_deref().unwrap_or_default(),
+      &self.resource_cache,
+    )
+    .map_err(map_error)
+  }
+
   fn layout(&self, options: &PdfRenderOptions) -> Result<Layout, js_sys::Error> {
     let images = decode_images(
       &self.resource_cache,
@@ -172,7 +183,7 @@ impl PdfRenderer {
       lang,
     } = self.layout(&options)?;
     let fonts = with_pending_value(
-      self.fonts.for_render(options.font_families.as_deref()),
+      self.fonts_for_render(&options)?,
       pending_fonts.map(Into::into),
     )?;
 
@@ -284,7 +295,7 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts_for_render(&options)?;
 
     takumi_pdf::render(PdfOptions {
       viewport,

@@ -18,8 +18,8 @@ use takumi_raster::{
 use crate::{
   JsBytes, NodeSource, map_error,
   renderer::{
-    AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
-    decode_images, deserialize_css, deserialize_keyframes, webp_lossless,
+    AnimationOutputFormat, ImageCacheMode, ImageFonts, RenderAnimationOptions, RendererState,
+    collect_images, decode_images, deserialize_css, deserialize_keyframes, webp_lossless,
   },
 };
 
@@ -29,6 +29,8 @@ pub struct RenderAnimationTask {
   pub(crate) state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
+  /// The image fonts the render registers on top of `fonts`.
+  pub(crate) image_fonts: ImageFonts,
   pub(crate) viewport: Viewport,
   pub(crate) format: AnimationOutputFormat,
   pub(crate) quality: Option<u8>,
@@ -65,6 +67,7 @@ impl RenderAnimationTask {
       font_families,
       lang,
       emoji,
+      image_fonts,
     } = options;
     let scenes = scenes
       .into_iter()
@@ -89,6 +92,7 @@ impl RenderAnimationTask {
       scenes: Some(scenes),
       emoji: parse_emoji(emoji.as_deref()).map_err(map_error)?,
       fonts: state.fonts_for_render(font_families.as_deref())?,
+      image_fonts: ImageFonts::collect(env, image_fonts)?,
       state,
       viewport: Viewport::new((width, height))
         .with_device_pixel_ratio(device_pixel_ratio(dpr.map(|ratio| ratio as f32))),
@@ -116,6 +120,8 @@ impl Task for RenderAnimationTask {
         unreachable!()
       };
       let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
+      let fonts = take(&mut self.image_fonts)
+        .register(Arc::clone(&self.fonts), &self.state.resource_cache)?;
       let mut document_css = Vec::new();
       let scenes = read_scenes(scenes, self.emoji, &mut document_css)?;
       let stylesheet = stylesheet(
@@ -136,7 +142,7 @@ impl Task for RenderAnimationTask {
                 .resource_cache(self.state.resource_cache.clone())
                 .stylesheet(stylesheet.clone())
                 .node(node)
-                .fonts(&self.fonts)
+                .fonts(&fonts)
                 .font_families(self.font_families.clone())
                 .lang(self.lang)
                 .draw_debug_border(self.draw_debug_border)

@@ -1,5 +1,5 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
-import type { PendingFont } from "@takumi-rs/helpers/renderer";
+import type { ImageFont, ImageFontNeeds, PendingFont } from "@takumi-rs/helpers/renderer";
 
 export type ByteBuf = Uint8Array | ArrayBuffer;
 
@@ -56,6 +56,8 @@ export type PaintOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
+  /** Faces whose glyphs are images, one per grapheme cluster. */
+  imageFonts?: ImageFont[];
 };
 
 /** `[r, g, b, a]`, each `0..=255`, in sRGB. */
@@ -391,6 +393,8 @@ export type RenderNeeds = {
   characters: string;
   /** The ids of the pending fonts the render would load, sorted. */
   faces: number[];
+  /** For each image font, the grapheme clusters the render would draw from it that it has no image for. */
+  glyphs: ImageFontNeeds[];
 };
 
 export type RawPaintTree = {

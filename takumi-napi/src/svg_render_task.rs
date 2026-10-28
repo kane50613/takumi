@@ -10,7 +10,9 @@ use takumi_core::{
 
 use crate::{
   JsBytes, NodeSource, RenderInput, map_error,
-  renderer::{ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images},
+  renderer::{
+    ImageCacheMode, ImageFonts, RendererState, SvgRenderOptions, collect_images, decode_images,
+  },
 };
 
 pub struct SvgRenderTask {
@@ -18,6 +20,8 @@ pub struct SvgRenderTask {
   pub(crate) state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
+  /// The image fonts the render registers on top of `fonts`.
+  pub(crate) image_fonts: ImageFonts,
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
@@ -41,6 +45,7 @@ impl SvgRenderTask {
         options.emoji.as_deref(),
       )?),
       fonts: state.fonts_for_render(options.font_families.as_deref())?,
+      image_fonts: ImageFonts::collect(env, options.image_fonts)?,
       state,
       viewport: Viewport::new((options.width, options.height)),
       time_ms: time_ms(options.time_ms),
@@ -62,6 +67,8 @@ impl Task for SvgRenderTask {
     let (node, stylesheet) = input.resolve(&self.state)?;
 
     let images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
+    let fonts =
+      take(&mut self.image_fonts).register(Arc::clone(&self.fonts), &self.state.resource_cache)?;
 
     takumi_svg::render(
       takumi_svg::SvgOptions::builder()
@@ -70,7 +77,7 @@ impl Task for SvgRenderTask {
         .stylesheet(stylesheet)
         .time_ms(self.time_ms)
         .node(node)
-        .fonts(&self.fonts)
+        .fonts(&fonts)
         .font_families(take(&mut self.font_families))
         .lang(take(&mut self.lang))
         .build(),

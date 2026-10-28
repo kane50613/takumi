@@ -1,7 +1,7 @@
 //! Data models and types for the WebAssembly bindings.
 
 use serde::Deserialize;
-pub use takumi_bindings_common::input::{Font, ImageSource};
+pub use takumi_bindings_common::input::{Font, ImageFont, ImageSource};
 use takumi_core::{
   keyframes::deserialize_optional_keyframes,
   style::{CssSource, KeyframesRule},
@@ -101,6 +101,9 @@ pub struct RenderOptions {
   pub lang: Option<String>,
   /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
   pub emoji: Option<String>,
+  /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+  /// every other family.
+  pub image_fonts: Option<Vec<ImageFont>>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector
@@ -132,6 +135,9 @@ pub struct SvgRenderOptions {
   pub lang: Option<String>,
   /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
   pub emoji: Option<String>,
+  /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+  /// every other family.
+  pub image_fonts: Option<Vec<ImageFont>>,
 }
 
 /// Options for rendering an animated image.
@@ -168,6 +174,9 @@ pub struct RenderAnimationOptions {
   pub lang: Option<String>,
   /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
   pub emoji: Option<String>,
+  /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+  /// every other family.
+  pub image_fonts: Option<Vec<ImageFont>>,
 }
 
 /// Output format for static images.

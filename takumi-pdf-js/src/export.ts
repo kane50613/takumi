@@ -2,6 +2,8 @@ import type { CssInput } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type {
   FontLoader,
+  ImageFont,
+  ImageFontLoader,
   ImagesInput,
   NeedsRequest,
   PrepareImagesInput,
@@ -179,6 +181,8 @@ export type MeasureOptions = (
    * `from-font`, or no value, draws emoji from the fonts.
    */
   emoji?: EmojiType | "from-font";
+  /** Faces whose glyphs are images, one per grapheme cluster, bands included. */
+  imageFonts?: ImageFont[];
 };
 
 /** A node tree's laid-out size in CSS px. */
@@ -312,6 +316,8 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
      * `from-font`, or no value, draws emoji from the fonts.
      */
     emoji?: EmojiType | "from-font";
+    /** Faces whose glyphs are images, one per grapheme cluster, bands included. */
+    imageFonts?: ImageFont[];
     /** Document metadata; `lang` doubles as the metadata language. */
     metadata?: PdfMetadata;
     /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
@@ -348,9 +354,14 @@ type OutputOnly =
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** Options for {@link PdfRenderer.prepare}: everything {@link RenderOptions} lays out with. */
-export type PrepareOptions = DistributiveOmit<RenderOptions, OutputOnly | "images"> & {
+export type PrepareOptions = DistributiveOmit<
+  RenderOptions,
+  OutputOnly | "images" | "imageFonts"
+> & {
   /** Images to use as they are, and how to fetch the rest the document draws. */
   images?: PrepareImagesInput;
+  /** Image fonts with the images they have, and how to load the ones the document draws. */
+  imageFonts?: ImageFontLoader[];
   signal?: AbortSignal;
 };
 
@@ -369,7 +380,15 @@ export type PreparedSource = Prepared<Node | string | JsonSource, DocumentLayout
 /** The binding options a document lays out with, its bands resolved to what the wasm side reads. */
 type DocumentLayout = DistributiveOmit<
   PrepareOptions,
-  "fonts" | "images" | "signal" | "fontFamilies" | "css" | "header" | "footer" | "pages"
+  | "fonts"
+  | "images"
+  | "imageFonts"
+  | "signal"
+  | "fontFamilies"
+  | "css"
+  | "header"
+  | "footer"
+  | "pages"
 > & {
   header?: Node | string;
   footer?: Node | string;
@@ -519,7 +538,8 @@ export class PdfRenderer {
    * document out and write it.
    */
   async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, header, footer, pages, css, ...rest } = options;
+    const { fonts, images, imageFonts, signal, fontFamilies, header, footer, pages, css, ...rest } =
+      options;
     const document = await resolveDocument(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
@@ -527,7 +547,7 @@ export class PdfRenderer {
       this.fonts,
       document.node,
       layout,
-      { fonts, images, signal, fontFamilies },
+      { fonts, images, imageFonts, signal, fontFamilies },
       (request) => this.needs(document.trees, layout, request),
     );
   }

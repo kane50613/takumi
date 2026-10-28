@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
   FontCacheOptions, FontStore, NeedsOutput, append_css,
-  input::{Font, ImageSource, decode_images, with_pending_value},
+  input::{Font, ImageFont, ImageSource, decode_images, with_image_fonts, with_pending_value},
   source::{read_source, split_emojis},
   source_cache::SourceCache,
   stylesheet,
@@ -68,6 +68,7 @@ struct RenderOptions {
   font_families: Option<Vec<String>>,
   lang: Option<String>,
   emoji: Option<String>,
+  image_fonts: Option<Vec<ImageFont>>,
 }
 
 /// A renderer holding registered fonts and a decoded-resource cache.
@@ -123,7 +124,12 @@ impl Painter {
       .transpose()
       .map_err(map_error)?;
     let fonts = with_pending_value(
-      self.fonts.for_render(options.font_families.as_deref()),
+      with_image_fonts(
+        self.fonts.for_render(options.font_families.as_deref()),
+        options.image_fonts.as_deref().unwrap_or_default(),
+        &self.resource_cache,
+      )
+      .map_err(map_error)?,
       pending_fonts.map(Into::into),
     )?;
     Ok(run(

@@ -63,3 +63,15 @@ test("a render stops when its signal aborts before reading the document", async 
   ).rejects.toThrow();
   expect(data).not.toHaveBeenCalled();
 });
+
+test("loads the images of the clusters an image font draws, bands included", async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>`;
+  const load = mock((_cluster: string) => new TextEncoder().encode(svg));
+  const prepared = await renderer.prepare("<p>Hi 😀</p>", {
+    header: "<p>🚀</p>",
+    imageFonts: [{ name: "Emoji", load }],
+  });
+
+  expect(load.mock.calls.map(([cluster]) => cluster).sort()).toEqual(["😀", "🚀"]);
+  expect(decoder.decode((await renderer.render(prepared)).subarray(0, 5))).toBe("%PDF-");
+});

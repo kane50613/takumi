@@ -1,6 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
 import type { EmojiType } from "@takumi-rs/helpers/emoji";
-import type { PendingFont } from "@takumi-rs/helpers/renderer";
+import type { ImageFont, ImageFontNeeds, PendingFont } from "@takumi-rs/helpers/renderer";
 import type { Properties } from "csstype";
 
 export {
@@ -134,6 +134,11 @@ export type RenderOptions = {
    * value, draws emoji from the fonts.
    */
   emoji?: EmojiType | "from-font";
+  /**
+   * Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+   * every other family.
+   */
+  imageFonts?: ImageFont[];
 };
 
 /**
@@ -199,6 +204,11 @@ export type RenderAnimationOptions = {
    * value, draws emoji from the fonts.
    */
   emoji?: EmojiType | "from-font";
+  /**
+   * Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+   * every other family.
+   */
+  imageFonts?: ImageFont[];
 };
 
 export type FontDetails = {
@@ -290,6 +300,8 @@ export type RenderNeeds = {
   characters: string;
   /** The ids of the pending fonts the render would load, sorted. */
   faces: number[];
+  /** For each image font, the grapheme clusters the render would draw from it that it has no image for. */
+  glyphs: ImageFontNeeds[];
 };
 
 export type AnimationScene = {

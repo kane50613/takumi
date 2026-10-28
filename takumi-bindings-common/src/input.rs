@@ -2,7 +2,7 @@
 
 #[cfg(feature = "wasm")]
 use std::rc::Rc;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
@@ -12,7 +12,9 @@ use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::{
-    font::{FontError, FontOverride, FontResource, PendingFontFace, RegisteredFamily},
+    font::{
+      FontError, FontOverride, FontResource, ImageFontFace, PendingFontFace, RegisteredFamily,
+    },
     image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache},
     unicode_range::UnicodeRange,
   },
@@ -193,6 +195,79 @@ pub struct ImageSource {
   data: ByteBuf,
   /// Cache policy for the decoded image. Defaults to `"auto"`.
   cache: Option<ImageCacheMode>,
+}
+
+/// A face whose glyphs are images, one per grapheme cluster, as a render's `imageFonts` option
+/// describes it.
+#[derive(Deserialize)]
+pub struct ImageFont {
+  /// The family the face registers under.
+  name: String,
+  /// The image of each grapheme cluster the face draws.
+  #[serde(default)]
+  glyphs: Vec<ImageGlyph>,
+}
+
+/// The image an image font draws for a grapheme cluster.
+#[derive(Deserialize)]
+pub struct ImageGlyph {
+  /// The grapheme cluster, such as an emoji.
+  cluster: String,
+  /// The raw image bytes, SVG markup or a raster image.
+  data: ByteBuf,
+  /// Cache policy for the decoded image. Defaults to `"auto"`.
+  cache: Option<ImageCacheMode>,
+}
+
+impl ImageFont {
+  /// The face, its images decoded through `cache`.
+  pub fn decode(&self, cache: &ResourceCache) -> Result<ImageFontFace, ImageError> {
+    self
+      .glyphs
+      .iter()
+      .try_fold(ImageFontFace::new(self.name.as_str()), |face, glyph| {
+        Ok(face.glyph(
+          glyph.cluster.as_str(),
+          cache.get_or_decode(&glyph.data, glyph.cache.unwrap_or_default())?,
+        ))
+      })
+  }
+}
+
+/// `fonts` with `faces` registered as image glyph faces, or `fonts` itself without any.
+pub fn with_image_faces<P>(fonts: P, faces: Vec<ImageFontFace>) -> P
+where
+  P: Deref<Target = Fonts> + From<Fonts>,
+{
+  if faces.is_empty() {
+    return fonts;
+  }
+
+  let mut fonts = (*fonts).clone();
+
+  for face in faces {
+    fonts.register_image_face(face);
+  }
+
+  P::from(fonts)
+}
+
+/// `fonts` with the image glyph faces `image_fonts` describes, their images decoded through
+/// `cache`.
+pub fn with_image_fonts<P>(
+  fonts: P,
+  image_fonts: &[ImageFont],
+  cache: &ResourceCache,
+) -> Result<P, ImageError>
+where
+  P: Deref<Target = Fonts> + From<Fonts>,
+{
+  let faces = image_fonts
+    .iter()
+    .map(|image_font| image_font.decode(cache))
+    .collect::<Result<_, _>>()?;
+
+  Ok(with_image_faces(fonts, faces))
 }
 
 /// Registers a font input, returning the families it produced and the bytes of font data it holds.

@@ -1,6 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
 import type { EmojiType } from "@takumi-rs/helpers/emoji";
-import type { PendingFont } from "@takumi-rs/helpers/renderer";
+import type { ImageFont, ImageFontNeeds, PendingFont } from "@takumi-rs/helpers/renderer";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
@@ -186,6 +186,8 @@ export type PdfRenderOptions = {
    * `from-font`, or no value, draws emoji from the fonts.
    */
   emoji?: EmojiType | "from-font";
+  /** Faces whose glyphs are images, one per grapheme cluster, bands included. */
+  imageFonts?: ImageFont[];
   /** Document metadata written to the PDF's info dictionary. */
   metadata?: PdfMetadata;
   /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
@@ -215,7 +217,10 @@ export type MeasureOptions = (
   | { size?: PageSize; landscape?: boolean; viewport?: never }
   | { viewport: ViewportInput; size?: never; landscape?: never }
 ) &
-  Pick<PdfRenderOptions, "images" | "css" | "cssVariables" | "fontFamilies" | "lang" | "emoji">;
+  Pick<
+    PdfRenderOptions,
+    "images" | "css" | "cssVariables" | "fontFamilies" | "lang" | "emoji" | "imageFonts"
+  >;
 
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };
@@ -226,6 +231,8 @@ export type RenderNeeds = {
   characters: string;
   /** The ids of the pending fonts the render would load, sorted. */
   faces: number[];
+  /** For each image font, the grapheme clusters the render would draw from it that it has no image for. */
+  glyphs: ImageFontNeeds[];
 };
 
 export type FontCacheOptions = {

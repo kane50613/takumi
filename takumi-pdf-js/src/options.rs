@@ -2,7 +2,7 @@
 //! image resolution it drives.
 
 use serde::Deserialize;
-use takumi_bindings_common::input::ImageSource;
+use takumi_bindings_common::input::{ImageFont, ImageSource};
 use takumi_core::{
   layout::node::Node,
   style::{Color, ColorInput, CssSource, FromCssStr},
@@ -212,6 +212,9 @@ pub(crate) struct PdfRenderOptions {
   /// Draws each emoji, bands included, as an SVG image from this CDN; `from-font`, or none, draws
   /// them from the fonts.
   pub(crate) emoji: Option<String>,
+  /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+  /// every other family.
+  pub(crate) image_fonts: Option<Vec<ImageFont>>,
   /// Document metadata written to the PDF's info dictionary.
   pub(crate) metadata: Option<MetadataInput>,
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.

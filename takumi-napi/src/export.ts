@@ -71,14 +71,14 @@ export class Renderer {
    * and encode it.
    */
   prepare(source: Node | string, options?: PrepareOptions): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, ...layout } = options ?? {};
+    const { fonts, images, imageFonts, signal, fontFamilies, ...layout } = options ?? {};
     const native = toNativeSource(source);
 
     return prepareSource(
       this.fonts,
       native,
       layout,
-      { fonts, images, signal, fontFamilies },
+      { fonts, images, imageFonts, signal, fontFamilies },
       (request) => this.inner.needs(native, ...needsArgs(layout, request), signal),
     );
   }
@@ -156,8 +156,17 @@ export class Renderer {
   async renderAnimation(options: RenderAnimationOptions): Promise<Buffer<ArrayBuffer>> {
     const { fonts, images, signal, fontFamilies, scenes, ...layout } = options;
     const sources = scenes.map((scene) => ({ ...scene, node: toNativeSource(scene.node) }));
-    const { width, height, css, keyframes, devicePixelRatio, lang, emoji } = layout;
-    const sceneLayout = { width, height, css, keyframes, devicePixelRatio, lang, emoji };
+    const { width, height, css, keyframes, devicePixelRatio, lang, emoji, imageFonts } = layout;
+    const sceneLayout = {
+      width,
+      height,
+      css,
+      keyframes,
+      devicePixelRatio,
+      lang,
+      emoji,
+      imageFonts,
+    };
     const prepared = await readSource(
       this.fonts,
       sources,

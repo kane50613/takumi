@@ -287,6 +287,26 @@ describe("emoji", () => {
   });
 });
 
+describe("image fonts", () => {
+  it("draws each cluster's image over the glyph's em box", async () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>`;
+    const tree = await painter.paint('<p style="font-size: 20px">Hi 😀</p>', {
+      width: 100,
+      height: 100,
+      imageFonts: [
+        { name: "Emoji", glyphs: [{ cluster: "😀", data: new TextEncoder().encode(svg) }] },
+      ],
+    });
+    const images = tree.nodes.flatMap((node) =>
+      node.drawables.flatMap((drawable) => (drawable.type === "image" ? [drawable] : [])),
+    );
+
+    expect(images.map((image) => [image.image.src.slice(0, 18), image.rect.width])).toEqual([
+      ["data:image/svg+xml", 20],
+    ]);
+  });
+});
+
 describe("Painter.prepare", () => {
   it("fetches the images a <style> element names and paints them", async () => {
     const src = "https://example.com/a.svg";

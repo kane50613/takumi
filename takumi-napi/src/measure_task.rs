@@ -12,7 +12,8 @@ use takumi_raster::measure;
 use crate::{
   JsBytes, NodeSource, RenderInput, map_error,
   renderer::{
-    ImageCacheMode, MeasuredNode, RenderOptions, RendererState, collect_images, decode_images,
+    ImageCacheMode, ImageFonts, MeasuredNode, RenderOptions, RendererState, collect_images,
+    decode_images,
   },
 };
 
@@ -21,6 +22,8 @@ pub struct MeasureTask {
   pub(crate) state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
+  /// The image fonts the render registers on top of `fonts`.
+  pub(crate) image_fonts: ImageFonts,
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
@@ -44,6 +47,7 @@ impl MeasureTask {
         options.emoji.as_deref(),
       )?),
       fonts: state.fonts_for_render(options.font_families.as_deref())?,
+      image_fonts: ImageFonts::collect(env, options.image_fonts)?,
       state,
       viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
         device_pixel_ratio(options.device_pixel_ratio.map(|ratio| ratio as f32)),
@@ -67,6 +71,8 @@ impl Task for MeasureTask {
     let (node, stylesheet) = input.resolve(&self.state)?;
 
     let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
+    let fonts =
+      take(&mut self.image_fonts).register(Arc::clone(&self.fonts), &self.state.resource_cache)?;
 
     let options = takumi_raster::RenderOptions::builder()
       .viewport(self.viewport)
@@ -74,7 +80,7 @@ impl Task for MeasureTask {
       .stylesheet(stylesheet)
       .time_ms(self.time_ms)
       .node(node)
-      .fonts(&self.fonts)
+      .fonts(&fonts)
       .font_families(take(&mut self.font_families))
       .lang(take(&mut self.lang))
       .build();

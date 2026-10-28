@@ -2,6 +2,8 @@ import type { CssInput } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type {
   FontLoader,
+  ImageFont,
+  ImageFontLoader,
   ImagesInput,
   PrepareImagesInput,
   RegisteredFamilyLike,
@@ -95,19 +97,25 @@ export type PaintOptions = {
    * value, draws emoji from the fonts.
    */
   emoji?: EmojiType | "from-font";
+  /** Faces whose glyphs are images, one per grapheme cluster. */
+  imageFonts?: ImageFont[];
 };
 
 /** Options for {@link Painter.prepare}: everything {@link PaintOptions} lays out with. */
-export type PrepareOptions = Omit<PaintOptions, "images"> & {
+export type PrepareOptions = Omit<PaintOptions, "images" | "imageFonts"> & {
   /** Images to use as they are, and how to fetch the rest the document draws. */
   images?: PrepareImagesInput;
+  /** Image fonts with the images they have, and how to load the ones the document draws. */
+  imageFonts?: ImageFontLoader[];
   signal?: AbortSignal;
 };
 
 /** A document {@link Painter.prepare} readied, with its fonts and images loaded. */
 export type PreparedSource = Prepared<
   Node | string | JsonSource,
-  Omit<PaintOptions, "fonts" | "images" | "fontFamilies" | "css"> & { css?: CssInput[] }
+  Omit<PaintOptions, "fonts" | "images" | "imageFonts" | "fontFamilies" | "css"> & {
+    css?: CssInput[];
+  }
 >;
 
 function isNode(value: NodeInput): value is Node {
@@ -169,7 +177,7 @@ export class Painter {
    * subsets its text uses and fetches the images it draws, so {@link paint} only lays it out.
    */
   async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, css, ...rest } = options;
+    const { fonts, images, imageFonts, signal, fontFamilies, css, ...rest } = options;
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
 
@@ -177,7 +185,7 @@ export class Painter {
       this.#fonts,
       main.node,
       layout,
-      { fonts, images, signal, fontFamilies },
+      { fonts, images, imageFonts, signal, fontFamilies },
       (request) => this.#inner.needs(main.node, ...needsArgs(layout, request)),
     );
   }

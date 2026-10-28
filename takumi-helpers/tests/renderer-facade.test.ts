@@ -39,6 +39,7 @@ const render = async (
       images: [],
       characters: node.type === "text" ? node.text : "",
       faces: facesFor(node.type === "text" ? node.text : "", pending),
+      glyphs: [],
     })),
     { signal: extras.signal },
     () => undefined,
@@ -64,6 +65,7 @@ const stub = () => {
           images: [],
           characters: characters([node]),
           faces: facesFor(characters([node]), pending),
+          glyphs: [],
         })),
         { signal: options.signal },
         (source, opts, signal) => call(source, opts, signal),
@@ -84,6 +86,7 @@ const stub = () => {
         images: [],
         characters: characters(scenes.map((scene) => scene.node)),
         faces: facesFor(characters(scenes.map((scene) => scene.node)), pending),
+        glyphs: [],
       }));
 
       return renderPrepared(fonts, prepared, { signal: options.signal }, (sources, opts, signal) =>

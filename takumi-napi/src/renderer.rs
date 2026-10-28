@@ -8,12 +8,16 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Deserialize;
 use takumi_bindings_common::{
-  css_or_stylesheets, default_fonts, font_cache::FontCache, source_cache::SourceCache,
+  ImageFontNeeds as CommonImageFontNeeds, css_or_stylesheets, default_fonts, font_cache::FontCache,
+  input::with_image_faces, source_cache::SourceCache,
 };
 use takumi_core::{
   Fonts,
-  resources::image::{
-    ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource, ResourceCache,
+  resources::{
+    font::ImageFontFace,
+    image::{
+      ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource, ResourceCache,
+    },
   },
   style::{CssSource, KeyframesRule as CoreKeyframesRule},
 };
@@ -94,6 +98,18 @@ pub struct RenderNeeds {
   pub characters: String,
   /// The ids of the pending fonts the render would load, sorted.
   pub faces: Vec<u32>,
+  /// For each image font, the grapheme clusters the render would draw from it that it has no
+  /// image for.
+  pub glyphs: Vec<ImageFontNeeds>,
+}
+
+/// The grapheme clusters a render would draw from an image font that has no image for them.
+#[napi(object)]
+pub struct ImageFontNeeds {
+  /// The image font's family.
+  pub name: String,
+  /// The clusters, sorted.
+  pub clusters: Vec<String>,
 }
 
 impl From<takumi_raster::RenderNeeds> for RenderNeeds {
@@ -102,6 +118,13 @@ impl From<takumi_raster::RenderNeeds> for RenderNeeds {
       images: needs.images.into_iter().collect(),
       characters: needs.characters.into_iter().collect(),
       faces: needs.faces.into_iter().map(|id| id as u32).collect(),
+      glyphs: CommonImageFontNeeds::list(needs.glyphs)
+        .into_iter()
+        .map(|needs| ImageFontNeeds {
+          name: needs.name,
+          clusters: needs.clusters,
+        })
+        .collect(),
     }
   }
 }
@@ -261,6 +284,9 @@ pub struct RenderOptions<'env> {
   /// no value, draws emoji from the fonts.
   #[napi(ts_type = "EmojiType | \"from-font\"")]
   pub emoji: Option<String>,
+  /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+  /// every other family.
+  pub image_fonts: Option<Vec<ImageFont<'env>>>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector
@@ -295,6 +321,9 @@ pub struct SvgRenderOptions<'env> {
   /// no value, draws emoji from the fonts.
   #[napi(ts_type = "EmojiType | \"from-font\"")]
   pub emoji: Option<String>,
+  /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+  /// every other family.
+  pub image_fonts: Option<Vec<ImageFont<'env>>>,
 }
 
 #[napi(string_enum)]
@@ -374,6 +403,9 @@ pub struct RenderAnimationOptions<'env> {
   /// no value, draws emoji from the fonts.
   #[napi(ts_type = "EmojiType | \"from-font\"")]
   pub emoji: Option<String>,
+  /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
+  /// every other family.
+  pub image_fonts: Option<Vec<ImageFont<'env>>>,
 }
 
 /// Output format for animated images.
@@ -463,6 +495,103 @@ pub struct ImageSource<'ctx> {
   pub data: Object<'ctx>,
   /// Cache policy for the decoded image. Defaults to `"auto"`.
   pub cache: Option<ImageCacheMode>,
+}
+
+/// A face whose glyphs are images, one per grapheme cluster.
+#[napi(object)]
+pub struct ImageFont<'ctx> {
+  /// The family the face registers under. System fallback walks it before every other family.
+  pub name: String,
+  /// The image of each grapheme cluster the face draws.
+  pub glyphs: Option<Vec<ImageGlyph<'ctx>>>,
+}
+
+/// The image an image font draws for a grapheme cluster.
+#[napi(object)]
+pub struct ImageGlyph<'ctx> {
+  /// The grapheme cluster, such as an emoji.
+  pub cluster: String,
+  /// The raw image data, SVG markup or a raster image (Uint8Array or ArrayBuffer).
+  #[napi(ts_type = "Uint8Array | ArrayBuffer")]
+  pub data: Object<'ctx>,
+  /// Cache policy for the decoded image. Defaults to `"auto"`.
+  pub cache: Option<ImageCacheMode>,
+}
+
+/// A render's image fonts, their bytes read on the main thread and decoded on the worker.
+#[derive(Default)]
+pub(crate) struct ImageFonts(Vec<ImageFontBytes>);
+
+/// An image font with the bytes of each glyph's image.
+struct ImageFontBytes {
+  name: String,
+  glyphs: Vec<ImageGlyphBytes>,
+}
+
+/// An image glyph's cluster, the bytes of its image, and how to cache it once decoded.
+struct ImageGlyphBytes {
+  cluster: String,
+  data: JsBytes,
+  cache: ImageCacheMode,
+}
+
+impl ImageFonts {
+  /// Reads the bytes of `image_fonts`.
+  pub(crate) fn collect(env: Env, image_fonts: Option<Vec<ImageFont>>) -> Result<Self> {
+    image_fonts
+      .unwrap_or_default()
+      .into_iter()
+      .map(|image_font| {
+        let glyphs = image_font
+          .glyphs
+          .unwrap_or_default()
+          .into_iter()
+          .map(|glyph| {
+            Ok(ImageGlyphBytes {
+              cluster: glyph.cluster,
+              data: JsBytes::from_object(env, glyph.data)?,
+              cache: glyph.cache.unwrap_or_default(),
+            })
+          })
+          .collect::<Result<_>>()?;
+
+        Ok(ImageFontBytes {
+          name: image_font.name,
+          glyphs,
+        })
+      })
+      .collect::<Result<_>>()
+      .map(Self)
+  }
+
+  /// `fonts` with these faces registered, their images decoded through `resource_cache`.
+  pub(crate) fn register(
+    self,
+    fonts: Arc<Fonts>,
+    resource_cache: &ResourceCache,
+  ) -> Result<Arc<Fonts>> {
+    let faces = self
+      .0
+      .into_iter()
+      .map(|image_font| {
+        image_font.glyphs.into_iter().try_fold(
+          ImageFontFace::new(image_font.name),
+          |face, glyph| {
+            Ok(
+              face.glyph(
+                glyph.cluster,
+                resource_cache
+                  .get_or_decode(glyph.data.as_ref(), glyph.cache.into())
+                  .map_err(map_error)?,
+              ),
+            )
+          },
+        )
+      })
+      .collect::<Result<_>>()?;
+
+    Ok(with_image_faces(fonts, faces))
+  }
 }
 
 /// Options for constructing a [`Renderer`].

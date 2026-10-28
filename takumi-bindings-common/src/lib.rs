@@ -12,7 +12,12 @@ pub mod input;
 pub mod source;
 pub mod source_cache;
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+  cell::RefCell,
+  collections::{BTreeMap, BTreeSet},
+  rc::Rc,
+  sync::Arc,
+};
 
 use font_cache::FontCache;
 use input::{Font, register_font};
@@ -228,6 +233,29 @@ pub struct NeedsOutput {
   images: Vec<String>,
   characters: String,
   faces: Vec<usize>,
+  glyphs: Vec<ImageFontNeeds>,
+}
+
+/// The grapheme clusters a render would draw from an image font that has no image for them.
+#[derive(Serialize)]
+pub struct ImageFontNeeds {
+  /// The image font's family.
+  pub name: String,
+  /// The clusters, sorted.
+  pub clusters: Vec<String>,
+}
+
+impl ImageFontNeeds {
+  /// Each image font's clusters in `glyphs`, a render's [`RenderNeeds::glyphs`].
+  pub fn list(glyphs: BTreeMap<String, BTreeSet<String>>) -> Vec<Self> {
+    glyphs
+      .into_iter()
+      .map(|(name, clusters)| Self {
+        name,
+        clusters: clusters.into_iter().collect(),
+      })
+      .collect()
+  }
 }
 
 impl From<RenderNeeds> for NeedsOutput {
@@ -236,6 +264,7 @@ impl From<RenderNeeds> for NeedsOutput {
       images: needs.images.into_iter().collect(),
       characters: needs.characters.into_iter().collect(),
       faces: needs.faces.into_iter().collect(),
+      glyphs: ImageFontNeeds::list(needs.glyphs),
     }
   }
 }
