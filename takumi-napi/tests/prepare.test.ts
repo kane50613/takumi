@@ -112,6 +112,53 @@ describe("prepare", () => {
     expect(greek.data).not.toHaveBeenCalled();
   });
 
+  test("loads only the family the stack reaches first for a character", async () => {
+    const face = (name: string) => ({
+      name,
+      key: `stack-${name}`,
+      unicodeRange: [[0x20, 0x7f]] as [number, number][],
+      data: mock(() => fontBytes),
+    });
+    const first = face("First");
+    const second = face("Second");
+
+    await new Renderer().prepare('<p style="font-family: First, Second">Hello</p>', {
+      width: 40,
+      height: 20,
+      fonts: [first, second],
+    });
+
+    expect(first.data).toHaveBeenCalledTimes(1);
+    expect(second.data).not.toHaveBeenCalled();
+  });
+
+  test("loads a weight only when text uses it", async () => {
+    const weight = (value: number) => ({
+      name: "Weighted",
+      key: `weight-${value}`,
+      weight: value,
+      unicodeRange: [[0x20, 0x7f]] as [number, number][],
+      data: mock(() => fontBytes),
+    });
+    const regular = weight(400);
+    const bold = weight(700);
+    const renderer = new Renderer();
+    const html = '<p style="font-family: Weighted">Hello</p>';
+
+    await renderer.prepare(html, { width: 40, height: 20, fonts: [regular, bold] });
+
+    expect(regular.data).toHaveBeenCalledTimes(1);
+    expect(bold.data).not.toHaveBeenCalled();
+
+    await renderer.prepare(`${html}<b style="font-family: Weighted">Hi</b>`, {
+      width: 40,
+      height: 20,
+      fonts: [regular, bold],
+    });
+
+    expect(bold.data).toHaveBeenCalledTimes(1);
+  });
+
   test("stops when its signal aborts", async () => {
     const controller = new AbortController();
 

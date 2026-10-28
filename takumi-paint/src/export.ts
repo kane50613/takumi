@@ -9,6 +9,7 @@ import type {
 import {
   FontRegistry,
   type JsonSource,
+  needsArgs,
   Prepared,
   prepareSource,
   readSource,
@@ -177,7 +178,7 @@ export class Painter {
       main.node,
       layout,
       { fonts, images, signal, fontFamilies },
-      (svgs) => this.#inner.needs(main.node, { ...layout, images: svgs }),
+      (request) => this.#inner.needs(main.node, ...needsArgs(layout, request)),
     );
   }
 
@@ -198,8 +199,8 @@ export class Painter {
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
 
-    return readSource(main.node, layout, { fonts, images, fontFamilies }, (svgs) =>
-      this.#inner.needs(main.node, { ...layout, images: svgs }),
+    return readSource(this.#fonts, main.node, layout, { fonts, images, fontFamilies }, (request) =>
+      this.#inner.needs(main.node, ...needsArgs(layout, request)),
     );
   }
 

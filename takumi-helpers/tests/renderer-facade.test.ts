@@ -1,6 +1,6 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { readSource, renderPrepared } from "../src/renderer";
-import type { FontLoader, PrepareExtras } from "../src/renderer";
+import type { FontLoader, PendingFont, PrepareExtras } from "../src/renderer";
 import type { Node } from "../src/types";
 import { fontBackend } from "./font-backend";
 
@@ -13,6 +13,20 @@ const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader 
   data: () => bytes(),
 });
 
+/** The pending fonts whose range covers a character of `text`, as a backend's needs reports them. */
+const facesFor = (text: string, pending: PendingFont[] = []) =>
+  pending
+    .filter((font) =>
+      [...text].some((character) => {
+        const codepoint = character.codePointAt(0) ?? 0;
+
+        return (font.unicodeRange ?? [[0, 0x10ffff]]).some(
+          ([from, to]) => codepoint >= from && codepoint <= to,
+        );
+      }),
+    )
+    .map((font) => font.id);
+
 /** Reads `node`, whose text stands in for the characters a backend reads, then renders nothing. */
 const render = async (
   fonts: ReturnType<typeof fontBackend>["fonts"],
@@ -21,9 +35,10 @@ const render = async (
 ) =>
   renderPrepared(
     fonts,
-    await readSource(node, {}, extras, () => ({
+    await readSource(fonts, node, {}, extras, ({ pending }) => ({
       images: [],
       characters: node.type === "text" ? node.text : "",
+      faces: facesFor(node.type === "text" ? node.text : "", pending),
     })),
     { signal: extras.signal },
     () => undefined,
@@ -45,7 +60,11 @@ const stub = () => {
     async (node: Node, options: { signal?: AbortSignal; fonts?: FontLoader[] } = {}) =>
       renderPrepared(
         fonts,
-        await readSource(node, {}, options, () => ({ images: [], characters: characters([node]) })),
+        await readSource(fonts, node, {}, options, ({ pending }) => ({
+          images: [],
+          characters: characters([node]),
+          faces: facesFor(characters([node]), pending),
+        })),
         { signal: options.signal },
         (source, opts, signal) => call(source, opts, signal),
       );
@@ -61,9 +80,10 @@ const stub = () => {
       fonts?: FontLoader[];
     }) {
       const { scenes, ...extras } = options;
-      const prepared = await readSource(scenes, {}, extras, () => ({
+      const prepared = await readSource(fonts, scenes, {}, extras, ({ pending }) => ({
         images: [],
         characters: characters(scenes.map((scene) => scene.node)),
+        faces: facesFor(characters(scenes.map((scene) => scene.node)), pending),
       }));
 
       return renderPrepared(fonts, prepared, { signal: options.signal }, (sources, opts, signal) =>

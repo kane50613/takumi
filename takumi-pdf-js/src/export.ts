@@ -2,8 +2,8 @@ import type { CssInput } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type {
   FontLoader,
-  ImageSource,
   ImagesInput,
+  NeedsRequest,
   PrepareImagesInput,
   RegisteredFamilyLike,
   SourceNeeds,
@@ -11,6 +11,7 @@ import type {
 import {
   FontRegistry,
   joinNeeds,
+  needsArgs,
   type JsonSource,
   Prepared,
   prepareSource,
@@ -527,7 +528,7 @@ export class PdfRenderer {
       document.node,
       layout,
       { fonts, images, signal, fontFamilies },
-      (svgs) => this.needs(document.trees, layout, svgs),
+      (request) => this.needs(document.trees, layout, request),
     );
   }
 
@@ -572,8 +573,12 @@ export class PdfRenderer {
     const layout = { ...rest, css: sheets.length > 0 ? sheets : undefined };
 
     // The tree measured may itself be a band, so its counters are always in play.
-    const prepared = await readSource(main.node, layout, { fonts, images, fontFamilies }, (svgs) =>
-      this.needs([main.node], layout, svgs),
+    const prepared = await readSource(
+      this.fonts,
+      main.node,
+      layout,
+      { fonts, images, fontFamilies },
+      (request) => this.needs([main.node], layout, request),
     );
 
     return renderPrepared(this.fonts, prepared, {}, (native, opts) =>
@@ -588,9 +593,9 @@ export class PdfRenderer {
   private needs(
     trees: (Node | string | JsonSource)[],
     options: Parameters<PdfRendererInternal["needs"]>[1],
-    svgs?: ImageSource[],
+    request: NeedsRequest,
   ): SourceNeeds {
-    return joinNeeds(trees.map((tree) => this.inner.needs(tree, { ...options, images: svgs })));
+    return joinNeeds(trees.map((tree) => this.inner.needs(tree, ...needsArgs(options, request))));
   }
 
   /** A document and its bands read under `options` without fetching, for {@link render}. */
@@ -599,8 +604,12 @@ export class PdfRenderer {
     const document = await resolveDocument(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
-    return readSource(document.node, layout, { fonts, images, signal, fontFamilies }, (svgs) =>
-      this.needs(document.trees, layout, svgs),
+    return readSource(
+      this.fonts,
+      document.node,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      (request) => this.needs(document.trees, layout, request),
     );
   }
 

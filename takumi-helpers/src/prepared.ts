@@ -1,9 +1,10 @@
 import type { FetchOptions } from "./fetch";
 import { type ImageFetchCache, prepareImages } from "./images";
 import {
+  type FontDetails,
   type FontLoader,
   type FontRegistry,
-  fontsFor,
+  fontsToLoad,
   type ImageLoader,
   type ImageSource,
   type OutputFormatOptions,
@@ -49,19 +50,44 @@ export type BackendPreparedRenderOptions<TInternal> = Pick<
   OutputFormatOptions & { signal?: AbortSignal };
 
 /** What a render reads from a source before it lays it out. */
-export type SourceNeeds = { images: string[]; characters: string };
+export type SourceNeeds = { images: string[]; characters: string; faces: number[] };
 
 /**
- * Reads what a source needs after the cascade. Given `images`, the SVG ones a render will draw, it
- * counts the characters their `text` elements draw too.
+ * A font a render may load, described before its bytes arrive. Font matching takes it as a face
+ * still loading, and `needs` reports its `id` when the render would load it.
  */
-export type SourceReader = (images?: ImageSource[]) => Awaitable<SourceNeeds>;
+export type PendingFont = Pick<FontDetails, "weight" | "style" | "unicodeRange"> & {
+  id: number;
+  name: string;
+};
+
+/** What a needs pass reads a source with besides its layout. */
+export type NeedsRequest = {
+  /** The SVG images a render will draw, whose `text` elements count too. */
+  images?: ImageSource[];
+  /** Fonts still loading, whose ids it reports when font matching would load them. */
+  pending?: PendingFont[];
+  /** The font stack the render falls back through. */
+  fontFamilies?: string[];
+};
+
+/** Reads what a source needs after the cascade. */
+export type SourceReader = (request: NeedsRequest) => Awaitable<SourceNeeds>;
+
+/** The options and pending fonts a binding's `needs` takes for `request` on top of `layout`. */
+export function needsArgs<TLayout>(
+  layout: TLayout,
+  { images, pending, fontFamilies }: NeedsRequest,
+): [TLayout & { images?: ImageSource[]; fontFamilies?: string[] }, PendingFont[] | undefined] {
+  return [{ ...layout, images, fontFamilies }, pending];
+}
 
 /** What a render of several sources, such as a PDF's bands or an animation's scenes, needs. */
 export function joinNeeds(reads: SourceNeeds[]): SourceNeeds {
   return {
     images: reads.flatMap((read) => read.images),
     characters: reads.map((read) => read.characters).join(""),
+    faces: reads.flatMap((read) => read.faces),
   };
 }
 
@@ -111,7 +137,7 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
   extras: PrepareExtras & { fontFamilies?: string[] },
   needs: SourceReader,
 ): Promise<Prepared<TSource, TLayout>> {
-  const state = await collect(source, layout, extras, needs, true);
+  const state = await collect(registry, source, layout, extras, needs, true);
 
   await registry.resolveResources(state.fonts, undefined, state.fontFamilies, () => undefined);
   extras.signal?.throwIfAborted();
@@ -123,16 +149,18 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
  * {@link prepareSource} without fetching: the images are the ones `extras.images` supplies, and
  * `needs` runs only when a font subset depends on the characters.
  */
-export async function readSource<TSource, TLayout>(
+export async function readSource<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
+  registry: FontRegistry<TFamily>,
   source: TSource,
   layout: TLayout,
   extras: PrepareExtras & { fontFamilies?: string[] },
   needs: SourceReader,
 ): Promise<Prepared<TSource, TLayout>> {
-  return createPrepared(await collect(source, layout, extras, needs, false));
+  return createPrepared(await collect(registry, source, layout, extras, needs, false));
 }
 
-async function collect<TSource, TLayout>(
+async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
+  registry: FontRegistry<TFamily>,
   source: TSource,
   layout: TLayout,
   extras: PrepareExtras & { fontFamilies?: string[] },
@@ -143,8 +171,14 @@ async function collect<TSource, TLayout>(
 
   signal?.throwIfAborted();
 
-  let pending: Promise<SourceNeeds> | undefined;
-  const read = () => (pending ??= Promise.resolve(needs()));
+  const resolvedFonts = await fonts;
+  const pending = resolvedFonts && registry.pendingFonts(resolvedFonts);
+  const request: NeedsRequest = {
+    pending,
+    fontFamilies: fontFamilies ?? (pending && resolvedFonts && registry.familiesOf(resolvedFonts)),
+  };
+  let first: Promise<SourceNeeds> | undefined;
+  const read = () => (first ??= Promise.resolve(needs(request)));
   const {
     sources = [],
     cache,
@@ -165,13 +199,15 @@ async function collect<TSource, TLayout>(
     : provided;
   const entries: ImageSource[] = loaded.map((image) => ({ cache, ...image }));
   const svgs = entries.filter((image) => isSvg(image.data));
-  const resolvedFonts = await fonts;
   const subset =
     resolvedFonts &&
-    (await fontsFor(
-      resolvedFonts,
-      async () => (await (svgs.length > 0 ? needs(svgs) : read())).characters,
-    ));
+    (pending
+      ? fontsToLoad(
+          resolvedFonts,
+          pending,
+          (await (svgs.length > 0 ? needs({ ...request, images: svgs }) : read())).faces,
+        )
+      : resolvedFonts);
 
   return { source, layout, fonts: subset, fontFamilies, images: entries };
 }

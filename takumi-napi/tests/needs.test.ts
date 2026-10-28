@@ -36,7 +36,7 @@ describe("needs", () => {
       { width: 10, height: 10 },
     );
 
-    expect(needs).toEqual({ images: ["https://example.com/a.png"], characters: "hi" });
+    expect(needs).toEqual({ images: ["https://example.com/a.png"], characters: "hi", faces: [] });
   });
 });
 

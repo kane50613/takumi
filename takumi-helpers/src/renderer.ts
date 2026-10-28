@@ -1,8 +1,8 @@
 import { fontFromUrl, type GenericFontFamily } from "./fonts";
-import { fontsCovering } from "./fonts/subset";
 import { unicodeRangeOf } from "./unicode-range";
 
 import type { JsonSource } from "./node-source";
+import type { PendingFont } from "./prepared";
 
 export { type JsonSource, toNativeSource } from "./node-source";
 export {
@@ -10,6 +10,9 @@ export {
   type BackendPrepareOptions,
   Prepared,
   type PrepareExtras,
+  needsArgs,
+  type NeedsRequest,
+  type PendingFont,
   type PrepareImagesInput,
   joinNeeds,
   prepareSource,
@@ -273,6 +276,62 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return load;
   }
 
+  /**
+   * The fonts in `fonts` that font matching takes as still loading: each named one the backend
+   * does not hold, by its index. None when no font declares a `unicodeRange`, since every font then
+   * loads.
+   */
+  pendingFonts(fonts: FontLoader[]): PendingFont[] | undefined {
+    const loaders = fonts.map(toLoader);
+
+    if (!loaders.some((loader) => unicodeRangeOf(loader).length > 0)) {
+      return undefined;
+    }
+
+    return loaders.flatMap((loader, id) => {
+      if (
+        isBuffer(loader) ||
+        !("name" in loader) ||
+        !loader.name ||
+        this.backend.cachedFonts(this.keyOf(loader), false)
+      ) {
+        return [];
+      }
+
+      const unicodeRange = unicodeRangeOf(loader);
+
+      return [
+        {
+          id,
+          name: loader.name,
+          weight: loader.weight,
+          style: loader.style,
+          unicodeRange: unicodeRange.length > 0 ? unicodeRange : undefined,
+        },
+      ];
+    });
+  }
+
+  /**
+   * The families a render of `fonts` falls back through, in order, as registering them would name
+   * them: a held font's from the backend, another's from its `name`. Approximate: an unnamed font
+   * the backend does not hold yet, such as a URL, names its family only once it loads, so it is
+   * left out. None when no family is known.
+   */
+  familiesOf(fonts: FontLoader[]): string[] | undefined {
+    const names = fonts.map(toLoader).flatMap((loader) => {
+      const held = this.backend.cachedFonts(this.keyOf(loader), false);
+
+      if (held) {
+        return held.map((family) => family.name);
+      }
+
+      return !isBuffer(loader) && "name" in loader && loader.name ? [loader.name] : [];
+    });
+
+    return names.length > 0 ? [...new Set(names)] : undefined;
+  }
+
   private keyOf(loader: Exclude<FontLoader, string>) {
     const key = createFontKey(loader);
 
@@ -325,23 +384,17 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 }
 
 /**
- * The `fonts` a render uses: every one when none declares a `unicodeRange`, otherwise the subsets
- * that cover one of the `characters` it shapes, read only then, as a browser loads only the
- * `unicode-range` faces its text uses. <https://drafts.csswg.org/css-fonts-4/#unicode-range-desc>
- *
- * Approximate: a browser matches each family's faces to the text that family styles, while this
- * keeps a subset of any family when the document uses a character in its range.
+ * The `fonts` a render loads: every one but the `unicodeRange` subsets among `pending` that font
+ * matching did not reach, as a browser loads only the `unicode-range` faces its text uses.
+ * <https://drafts.csswg.org/css-fonts-4/#unicode-range-desc>
  */
-export async function fontsFor<T>(fonts: T[], characters: () => Awaitable<string>): Promise<T[]> {
-  if (!fonts.some((font) => unicodeRangeOf(font).length > 0)) {
-    return fonts;
-  }
+export function fontsToLoad<T>(fonts: T[], pending: PendingFont[], faces: number[]): T[] {
+  const requested = new Set(faces);
+  const skipped = new Set(
+    pending
+      .filter((font) => font.unicodeRange !== undefined && !requested.has(font.id))
+      .map((font) => font.id),
+  );
 
-  return fontsCovering(fonts, codepointsOf(await characters()));
-}
-
-function* codepointsOf(text: string): Generator<number> {
-  for (const character of text) {
-    yield character.codePointAt(0) ?? 0;
-  }
+  return fonts.filter((_, id) => !skipped.has(id));
 }
