@@ -996,10 +996,9 @@ impl PendingFontFace {
     self
   }
 
-  /// Sets `font-style` to the oblique angles `start` to `end`, in degrees: `normal` is `0`, and
-  /// `italic` and a bare `oblique` are `14`.
-  pub fn slope(mut self, start: f32, end: f32) -> Self {
-    self.descriptors.slope = Some((start, end));
+  /// Sets `font-style`.
+  pub fn style(mut self, style: CssFontStyle) -> Self {
+    self.descriptors.slope = Some((style.slope(), style.slope()));
     self
   }
 
