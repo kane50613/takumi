@@ -2,11 +2,11 @@ use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use takumi_bindings_common::{
-  append_css, device_pixel_ratio, parse_emoji, parse_lang, source_cache::SourceCache, stylesheet,
+  append_css, device_pixel_ratio, parse_lang, source_cache::SourceCache, stylesheet,
 };
 use takumi_core::{
   Fonts,
-  layout::node::{EmojiProvider, Node},
+  layout::node::Node,
   style::{CssSource, FontFamily, KeyframesRule, Lang},
   viewport::Viewport,
 };
@@ -25,7 +25,6 @@ use crate::{
 
 pub struct RenderAnimationTask {
   pub(crate) scenes: Option<Vec<(NodeSource, u32)>>,
-  pub(crate) emoji: Option<EmojiProvider>,
   pub(crate) state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
@@ -64,7 +63,6 @@ impl RenderAnimationTask {
       device_pixel_ratio: dpr,
       font_families,
       lang,
-      emoji,
     } = options;
     let scenes = scenes
       .into_iter()
@@ -87,7 +85,6 @@ impl RenderAnimationTask {
 
     Ok(Self {
       scenes: Some(scenes),
-      emoji: parse_emoji(emoji.as_deref()).map_err(map_error)?,
       fonts: state.fonts_for_render(font_families.as_deref())?,
       state,
       viewport: Viewport::new((width, height))
@@ -117,7 +114,7 @@ impl Task for RenderAnimationTask {
       };
       let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
       let mut document_css = Vec::new();
-      let scenes = read_scenes(scenes, self.emoji, &mut document_css)?;
+      let scenes = read_scenes(scenes, &mut document_css)?;
       let stylesheet = stylesheet(
         &self.state.resource_cache,
         append_css(take(&mut self.css), document_css),
@@ -170,21 +167,15 @@ impl Task for RenderAnimationTask {
   }
 }
 
-/// Each scene's node tree with its emoji split out, adding every HTML scene's `<style>` CSS to
-/// `document_css`.
+/// Each scene's node tree, adding every HTML scene's `<style>` CSS to `document_css`.
 fn read_scenes(
   scenes: Vec<(NodeSource, u32)>,
-  emoji: Option<EmojiProvider>,
   document_css: &mut Vec<String>,
 ) -> Result<Vec<(Node, u32)>> {
   scenes
     .into_iter()
     .map(|(source, duration_ms)| {
-      let (mut node, css) = source.into_parts(&SourceCache::default())?;
-
-      if let Some(provider) = emoji {
-        node.extract_emojis(provider);
-      }
+      let (node, css) = source.into_parts(&SourceCache::default())?;
 
       document_css.extend(css);
 

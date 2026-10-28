@@ -254,10 +254,6 @@ pub struct RenderOptions<'env> {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN, fetched as one of `images`. `from-font`, or
-  /// no value, draws emoji from the fonts.
-  #[napi(ts_type = "EmojiType | \"from-font\"")]
-  pub emoji: Option<String>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector
@@ -288,10 +284,6 @@ pub struct SvgRenderOptions<'env> {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN, fetched as one of `images`. `from-font`, or
-  /// no value, draws emoji from the fonts.
-  #[napi(ts_type = "EmojiType | \"from-font\"")]
-  pub emoji: Option<String>,
 }
 
 #[napi(string_enum)]
@@ -367,10 +359,6 @@ pub struct RenderAnimationOptions<'env> {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN, fetched as one of `images`. `from-font`, or
-  /// no value, draws emoji from the fonts.
-  #[napi(ts_type = "EmojiType | \"from-font\"")]
-  pub emoji: Option<String>,
 }
 
 /// Output format for animated images.

@@ -14,7 +14,7 @@ use takumi_bindings_common::{
   FontCacheOptions, FontStore, NeedsOutput, append_css,
   input::{Font, decode_images},
   parse_lang,
-  source::{read_source, split_emojis},
+  source::read_source,
   source_cache::SourceCache,
   stylesheet,
 };
@@ -102,8 +102,8 @@ pub struct PdfRenderer {
 }
 
 impl PdfRenderer {
-  /// The document `node` describes and the options it renders with, its HTML bands parsed, its
-  /// emoji split out, bands included, and the CSS of every `<style>` element appended.
+  /// The document `node` describes and the options it renders with, its HTML bands parsed and the
+  /// CSS of every `<style>` element appended.
   fn read_document(
     &self,
     node: NodeType,
@@ -113,10 +113,7 @@ impl PdfRenderer {
       .map(|options| from_value(options).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
-    let (mut node, mut document_css) = read_source(node.into(), &self.sources)?;
-    let emoji = options.emoji.take();
-
-    split_emojis(&mut node, emoji.as_deref())?;
+    let (node, mut document_css) = read_source(node.into(), &self.sources)?;
 
     for band in options.bands_mut() {
       if let BandInput::Html(html) = band {
@@ -124,10 +121,6 @@ impl PdfRenderer {
 
         document_css.extend(css);
         *band = BandInput::Node(Box::new(parsed));
-      }
-
-      if let BandInput::Node(node) = band {
-        split_emojis(node, emoji.as_deref())?;
       }
     }
 
