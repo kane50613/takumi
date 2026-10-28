@@ -6,13 +6,14 @@ use crate::{
   Error,
   context::RenderContext,
   fonts::shaping::testing::{GEIST, register},
-  geometry::{NodeId, Point, Size},
+  geometry::{NodeId, PathCommand, Point, Size},
   layout::{
     node::Node,
     paged_layout::PagedLayout,
     paged_layout_oracles as oracles,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
+  paint_property::ClipKind,
   resources::font::Fonts,
   scene::{NodePaint, PagedScene, PaintItemKind, Scene},
   style::{SizingContext, StyleSheet},
@@ -1698,4 +1699,95 @@ fn the_roots_last_fragment_stays_open_while_page_areas_go_on() {
     finalized_after_each_page(&tree, 200.0),
     [0, 0, 0, 0, 0, 0, 0, 8]
   );
+}
+
+/// The block-axis extent, in the stacked pages, of the clip each fragment of the box with `id`
+/// clips its content to.
+fn content_clip_extents(scene: &Scene, id: &str) -> Vec<(f32, f32)> {
+  paints_of(scene, id)
+    .iter()
+    .map(|paint| {
+      let clip = scene
+        .properties
+        .clip(paint.properties.contents.clip.expect("an overflow clip"));
+      let ClipKind::Shape(shape) = &clip.kind else {
+        panic!("a shape clip");
+      };
+      let bounds = PathCommand::build_path(&shape.to_commands())
+        .expect("a clip path")
+        .bounds();
+      let (_, top) = clip.transform.transform_point(bounds.left(), bounds.top());
+      let (_, bottom) = clip
+        .transform
+        .transform_point(bounds.left(), bounds.bottom());
+
+      (top, bottom)
+    })
+    .collect()
+}
+
+/// A box clipping to rounded corners keeps its pages open until it ends, since its whole height
+/// shapes the corners on every page. A square clip leaves them alone.
+#[test]
+fn a_rounded_clip_keeps_its_pages_open_until_it_ends() {
+  for (container, finalized) in [
+    ("clipping rounded", [0, 0, 0, 4]),
+    ("clipping", [1, 2, 3, 4]),
+  ] {
+    let tree = render(
+      root([
+        Node::container([block("child", "tall")]).with_class_name(format!("block {container}"))
+      ]),
+      ".clipping { overflow: hidden } .rounded { border-radius: 50% } .tall { height: 400px }",
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "{container}"
+    );
+  }
+}
+
+#[test]
+fn a_broken_overflow_clip_spans_the_stitched_box() {
+  for (child, container) in [
+    ("translated", "clipping"),
+    ("translated positioned", "clipping"),
+    ("translated", "clipping rounded"),
+  ] {
+    let tree = render(
+      root([Node::container([block("child", child)])
+        .with_class_name(format!("block {container}"))
+        .with_id("container")]),
+      ".clipping { height: 200px; overflow: hidden; position: relative }
+       .rounded { border: 4px solid black; border-radius: 12px }
+       .translated { height: 120px; transform: translateY(50px) }
+       .positioned { position: absolute; width: 200px }",
+    );
+    let paged = PagedScene::lay_out(
+      tree,
+      Size {
+        width: 300.0,
+        height: 100.0,
+      },
+      usize::MAX,
+      false,
+    )
+    .expect("pages lay out");
+    let scene = &paged.into_scene();
+    let inset = if container.contains("rounded") {
+      4.0
+    } else {
+      0.0
+    };
+
+    // Each page clips to the whole container, so the child pushed past the first page by its
+    // transform shows on the second.
+    assert_eq!(
+      content_clip_extents(scene, "container"),
+      [(inset, 200.0 - inset), (inset, 200.0 - inset)],
+      "{child} in {container}"
+    );
+  }
 }

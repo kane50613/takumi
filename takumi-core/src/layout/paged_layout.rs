@@ -23,7 +23,7 @@ use crate::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
-  style::Direction,
+  style::{Direction, Length, SpacePair},
 };
 
 /// A render tree laid out across pages `page_size` one page at a time, each resuming where the
@@ -234,7 +234,8 @@ impl<'r> PagedLayout<'r> {
   }
 
   // A box a containing block holds back, or placed from the block's start in a later fragment,
-  // keeps the block's first page open until it is laid out.
+  // keeps the block's first page open until it is laid out. A box clipping to rounded corners keeps
+  // its own first page open until it ends.
   fn pin_pending_boxes(
     &self,
     token: &BlockBreakToken,
@@ -248,6 +249,7 @@ impl<'r> PagedLayout<'r> {
     if self
       .pending
       .is_containing_block(self.tree.render_node(token.node).context.box_id())
+      || self.clips_to_rounded_box(token.node)
     {
       *pinned = (*pinned).min(self.start_page(chain));
     }
@@ -265,6 +267,24 @@ impl<'r> PagedLayout<'r> {
         chain.pop();
       }
     }
+  }
+
+  /// Whether `node` clips its content to rounded corners, which the height of its stitched box,
+  /// unknown until its last fragment, shapes on every page.
+  fn clips_to_rounded_box(&self, node: NodeId) -> bool {
+    let style = &self.tree.render_node(node).context.style;
+    let square = SpacePair::from_single(Length::zero());
+    let corners = &style.surround_data;
+
+    style.resolve_overflows().should_clip_content()
+      && [
+        corners.border_top_left_radius,
+        corners.border_top_right_radius,
+        corners.border_bottom_right_radius,
+        corners.border_bottom_left_radius,
+      ]
+      .into_iter()
+      .any(|radius| radius != square)
   }
 
   fn update_pending(&mut self) {
