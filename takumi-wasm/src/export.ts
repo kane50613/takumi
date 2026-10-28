@@ -172,17 +172,8 @@ export class Renderer {
   async renderAnimation(options: RenderAnimationOptions): Promise<Uint8Array<ArrayBuffer>> {
     const { fonts, images, signal, fontFamilies, scenes, ...layout } = options;
     const sources = scenes.map((scene) => ({ ...scene, node: toNativeSource(scene.node) }));
-    const { width, height, css, keyframes, devicePixelRatio, lang, emoji, imageFonts } = layout;
-    const sceneLayout = {
-      width,
-      height,
-      css,
-      keyframes,
-      devicePixelRatio,
-      lang,
-      emoji,
-      imageFonts,
-    };
+    const { width, height, css, keyframes, devicePixelRatio, lang, imageFonts } = layout;
+    const sceneLayout = { width, height, css, keyframes, devicePixelRatio, lang, imageFonts };
     const prepared = await readSource(
       this.fonts,
       sources,

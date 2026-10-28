@@ -18,7 +18,6 @@ import {
   renderPrepared,
   toNativeSource,
 } from "@takumi-rs/helpers/renderer";
-import type { EmojiType } from "@takumi-rs/helpers/emoji";
 import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import initWasm, {
@@ -92,11 +91,6 @@ export type PaintOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
-  /**
-   * Draws each emoji as an SVG image from this CDN, fetched as one of `images`. `from-font`, or no
-   * value, draws emoji from the fonts.
-   */
-  emoji?: EmojiType | "from-font";
   /** Faces whose glyphs are images, one per grapheme cluster. */
   imageFonts?: ImageFont[];
 };

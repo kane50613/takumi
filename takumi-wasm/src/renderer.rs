@@ -8,7 +8,7 @@ use takumi_bindings_common::{
   FontStore, NeedsOutput, append_css, css_or_stylesheets, device_pixel_ratio,
   input::{decode_images, with_image_fonts, with_pending_value},
   parse_lang,
-  source::{read_source, split_emojis},
+  source::read_source,
   source_cache::SourceCache,
   stylesheet, time_ms,
 };
@@ -42,12 +42,10 @@ pub struct Renderer {
 fn raster_options<'fonts>(
   resource_cache: &ResourceCache,
   fonts: &'fonts Fonts,
-  mut node: Node,
+  node: Node,
   options: RenderOptions,
   images: HashMap<Arc<str>, LoadedImageSource>,
 ) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
-  split_emojis(&mut node, options.emoji.as_deref())?;
-
   let stylesheet = stylesheet(
     resource_cache,
     css_or_stylesheets(options.css, options.stylesheets),
@@ -240,13 +238,11 @@ impl Renderer {
     source: SourceType,
     options: Option<SvgRenderOptionsType>,
   ) -> Result<String, JsValue> {
-    let (mut node, document_css) = read_source(source.into(), &self.sources)?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: SvgRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
-
-    split_emojis(&mut node, options.emoji.as_deref())?;
 
     options.css = append_css(
       css_or_stylesheets(options.css.take(), options.stylesheets.take()),
@@ -410,7 +406,6 @@ impl Renderer {
       fps,
       font_families,
       lang,
-      emoji,
       image_fonts,
     } = from_value(options.into()).map_err(map_error)?;
 
@@ -432,9 +427,8 @@ impl Renderer {
     let mut nodes = Vec::with_capacity(scenes.len());
 
     for scene in scenes {
-      let (mut node, css) = read_source(scene.node, &SourceCache::default())?;
+      let (node, css) = read_source(scene.node, &SourceCache::default())?;
 
-      split_emojis(&mut node, emoji.as_deref())?;
       document_css.extend(css);
       nodes.push((node, scene.duration_ms));
     }

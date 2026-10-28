@@ -1,5 +1,4 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
-import type { EmojiType } from "@takumi-rs/helpers/emoji";
 import type { ImageFont, ImageFontNeeds, PendingFont } from "@takumi-rs/helpers/renderer";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
@@ -181,11 +180,6 @@ export type PdfRenderOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
-  /**
-   * Draws each emoji, bands included, as an SVG image from this CDN, fetched as one of `images`.
-   * `from-font`, or no value, draws emoji from the fonts.
-   */
-  emoji?: EmojiType | "from-font";
   /** Faces whose glyphs are images, one per grapheme cluster, bands included. */
   imageFonts?: ImageFont[];
   /** Document metadata written to the PDF's info dictionary. */
@@ -219,7 +213,7 @@ export type MeasureOptions = (
 ) &
   Pick<
     PdfRenderOptions,
-    "images" | "css" | "cssVariables" | "fontFamilies" | "lang" | "emoji" | "imageFonts"
+    "images" | "css" | "cssVariables" | "fontFamilies" | "lang" | "imageFonts"
   >;
 
 /** A node tree's laid-out size in CSS px. */

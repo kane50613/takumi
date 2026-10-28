@@ -51,7 +51,6 @@ impl NeedsTask {
         options.css,
         options.stylesheets,
         options.keyframes,
-        options.emoji.as_deref(),
       )?),
       fonts: match pending_fonts {
         Some(pending) => Arc::new(with_pending(&fonts, pending)),

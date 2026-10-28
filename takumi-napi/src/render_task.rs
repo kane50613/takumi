@@ -49,7 +49,6 @@ impl RenderTask {
         options.css,
         options.stylesheets,
         options.keyframes,
-        options.emoji.as_deref(),
       )?),
       fonts: state.fonts_for_render(options.font_families.as_deref())?,
       image_fonts: ImageFonts::collect(env, options.image_fonts)?,

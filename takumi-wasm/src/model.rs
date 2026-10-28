@@ -99,8 +99,6 @@ pub struct RenderOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
-  pub emoji: Option<String>,
   /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
   /// every other family.
   pub image_fonts: Option<Vec<ImageFont>>,
@@ -133,8 +131,6 @@ pub struct SvgRenderOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
-  pub emoji: Option<String>,
   /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
   /// every other family.
   pub image_fonts: Option<Vec<ImageFont>>,
@@ -172,8 +168,6 @@ pub struct RenderAnimationOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
-  pub emoji: Option<String>,
   /// Faces whose glyphs are images, one per grapheme cluster, which system fallback walks before
   /// every other family.
   pub image_fonts: Option<Vec<ImageFont>>,
