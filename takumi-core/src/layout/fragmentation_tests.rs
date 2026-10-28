@@ -1701,6 +1701,101 @@ fn the_roots_last_fragment_stays_open_while_page_areas_go_on() {
   );
 }
 
+const CLIPPED_OVERFLOW_CSS: &str = ".box { height: 100px } .h50 { height: 50px } .h150 { height: 150px } \
+  .h400 { height: 400px } .hidden { overflow: hidden } .clip { overflow: clip } \
+  .flex { display: flex } .grid { display: grid }";
+
+/// A 100px box on the first page, then a 100px box styled `class` holding a 400px child, on pages
+/// 100px tall.
+fn clipped_overflow_pages(class: &str) -> (BTreeMap<String, Vec<Placed>>, usize) {
+  let tree = render(
+    root([
+      block("first", "box"),
+      Node::container([block("inner", "h400")])
+        .with_class_name(format!("block box {class}"))
+        .with_id("clipper"),
+    ]),
+    CLIPPED_OVERFLOW_CSS,
+  );
+
+  pages(&tree, 100.0)
+}
+
+#[test]
+fn the_content_an_overflow_hidden_box_clips_adds_no_pages() {
+  let (boxes, page_count) = clipped_overflow_pages("hidden");
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["clipper"], [placed(1, 0.0, 100.0)]);
+  assert_eq!(boxes["inner"], [placed(1, 0.0, 400.0)]);
+}
+
+#[test]
+fn the_content_an_overflow_clip_box_clips_adds_no_pages() {
+  let (boxes, page_count) = clipped_overflow_pages("clip");
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["inner"], [placed(1, 0.0, 400.0)]);
+}
+
+#[test]
+fn content_overflowing_a_visible_box_continues_on_later_pages() {
+  let (boxes, page_count) = clipped_overflow_pages("");
+
+  assert_eq!(page_count, 5);
+  assert_eq!(
+    boxes["clipper"],
+    [
+      placed(1, 0.0, 100.0),
+      placed(2, 0.0, 0.0),
+      placed(3, 0.0, 0.0),
+      placed(4, 0.0, 0.0)
+    ]
+  );
+}
+
+#[test]
+fn a_clipping_box_that_breaks_stops_breaking_on_the_page_it_ends() {
+  let tree = render(
+    root([
+      block("first", "h50"),
+      Node::container([block("inner", "h400")])
+        .with_class_name("block h150 hidden")
+        .with_id("clipper"),
+      block("after", "h50"),
+    ]),
+    CLIPPED_OVERFLOW_CSS,
+  );
+  let (boxes, page_count) = pages(&tree, 100.0);
+
+  assert_eq!(page_count, 3);
+  assert_eq!(
+    boxes["clipper"],
+    [placed(0, 50.0, 50.0), placed(1, 0.0, 100.0)]
+  );
+  assert_eq!(
+    boxes["inner"],
+    [placed(0, 50.0, 50.0), placed(1, 0.0, 350.0)]
+  );
+  assert_eq!(boxes["after"], [placed(2, 0.0, 50.0)]);
+}
+
+#[test]
+fn the_content_a_clipping_flex_container_clips_adds_no_pages() {
+  let (boxes, page_count) = clipped_overflow_pages("flex hidden");
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["clipper"], [placed(1, 0.0, 100.0)]);
+}
+
+#[test]
+fn the_content_a_clipping_grid_container_clips_adds_no_pages() {
+  let (boxes, page_count) = clipped_overflow_pages("grid hidden");
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["clipper"], [placed(1, 0.0, 100.0)]);
+}
+
 /// The block-axis extent, in the stacked pages, of the clip each fragment of the box with `id`
 /// clips its content to.
 fn content_clip_extents(scene: &Scene, id: &str) -> Vec<(f32, f32)> {

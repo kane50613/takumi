@@ -37,6 +37,10 @@ pub(crate) enum LayoutStatus {
   /// to break there.
   #[cfg(feature = "fragmentation")]
   NeedsEarlierBreak,
+  /// The box ended on this page with clipped content past its end, so it lays out again without
+  /// breaking.
+  #[cfg(feature = "fragmentation")]
+  DisableFragmentation,
   /// A flex row grew to fit its items on the page, so the container lays out again with it.
   #[cfg(feature = "fragmentation")]
   NeedsRelayoutWithRowCrossSizeChanges,

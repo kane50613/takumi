@@ -68,6 +68,16 @@ impl FragmentationLayoutInput {
     }
   }
 
+  /// The input resuming at the same break token with no breakpoint to honor, as Blink's `Relayout`
+  /// passes it without one.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn without_early_break(&self) -> Self {
+    Self {
+      break_token: self.break_token.clone(),
+      early_break: None,
+    }
+  }
+
   /// Whether the layout starts the box afresh with no breakpoint to honor, which a cached layout
   /// stands in for.
   pub(crate) fn is_fresh(&self) -> bool {

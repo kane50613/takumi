@@ -851,10 +851,14 @@ pub(crate) fn finish_fragmentation(builder: &mut BoxFragmentBuilder) -> Result<(
   }
 
   if builder.should_break_inside_for_content() {
-    if is_past_end
-      || (desired_block_size <= space_left
-        && (!was_broken_by_child || builder.is_known_to_fit_in_fragmentainer))
+    if is_past_end {
+      builder.is_at_block_end = true;
+    } else if desired_block_size <= space_left
+      && (!was_broken_by_child || builder.is_known_to_fit_in_fragmentainer)
     {
+      if builder.has_non_visible_block_overflow {
+        return Err(LayoutStatus::DisableFragmentation);
+      }
       builder.is_at_block_end = true;
     }
 

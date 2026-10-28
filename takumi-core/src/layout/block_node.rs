@@ -6,11 +6,6 @@
 
 use std::{mem::take, rc::Rc};
 
-#[cfg(feature = "fragmentation")]
-use crate::layout::{
-  block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder,
-  fragmentation_utils::fragment_index, releases::Finished, tree::FragmentBreak,
-};
 use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
   layout::{
@@ -38,6 +33,14 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   style::{Display, JustifyContent},
+};
+#[cfg(feature = "fragmentation")]
+use crate::{
+  layout::{
+    block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder,
+    fragmentation_utils::fragment_index, releases::Finished, tree::FragmentBreak,
+  },
+  style::Overflow,
 };
 
 /// The layouts a box keeps: Blink's layout result cache, a layout of each fragment that placed its
@@ -625,6 +628,14 @@ impl<'r> LayoutTree<'r> {
     style.is_replaced
       || (state.is_atomic_inline && style.display.is_inline_level() && !style.is_floating())
       || self.render_node(node).context.style.line_clamp().is_some()
+  }
+
+  /// Blink's `BlockNode::HasNonVisibleBlockOverflow` in a horizontal writing mode. The root
+  /// element's overflow applies to the viewport, as Blink's `RespectsCSSOverflow` has it.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn has_non_visible_block_overflow(&self, node: NodeId) -> bool {
+    self.layout_style(node).overflow.y != Overflow::Visible
+      && !self.render_node(node).is_root_element
   }
 
   /// Whether `node` lays inline content out: its children form an inline formatting context, or

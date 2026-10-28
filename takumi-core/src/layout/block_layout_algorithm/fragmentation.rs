@@ -59,6 +59,8 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
 
   /// Blink's `SetupFragmentBuilderForFragmentation`, and the early break the constructor keeps.
   pub(super) fn setup_fragment_builder_for_fragmentation(&mut self) {
+    self.builder.has_non_visible_block_overflow =
+      self.tree.has_non_visible_block_overflow(self.node);
     if setup_fragment_builder_for_fragmentation(
       self.space,
       &self.style,
@@ -748,7 +750,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
   }
 
   /// Blink's `HandleNonsuccessfulLayoutResult`: the layout again to break at the breakpoint it
-  /// found, or the aborted one.
+  /// found or without breaking, or the aborted one.
   pub(super) fn handle_nonsuccessful_layout_result(self, status: LayoutStatus) -> LayoutResult {
     if status == LayoutStatus::NeedsEarlierBreak
       && let Some(early_break) = self.builder.early_break.clone()
@@ -759,6 +761,13 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       };
 
       return BlockLayoutAlgorithm::new(self.tree, self.node, self.space, &input).layout();
+    }
+
+    if status == LayoutStatus::DisableFragmentation {
+      let space = self.space.without_fragmentation();
+      let input = self.input.without_early_break();
+
+      return BlockLayoutAlgorithm::new(self.tree, self.node, &space, &input).layout();
     }
 
     let mut result = self.abort(status);
