@@ -153,37 +153,29 @@ async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
   return defaultRenderer.get(options?.module);
 }
 
-/** The `emoji` option a current renderer splits emoji by, which defaults to Twemoji here. */
-function emojiOption(renderer: Renderer, options?: PipelineOptions) {
-  return isCurrent(renderer) ? { emoji: options?.emoji ?? "twemoji" } : {};
-}
-
-/** Whether `renderer` parses HTML, splits emoji, and reads what a source needs itself, as bindings with `prepare` do. */
+/** Whether `renderer` parses HTML and reads what a source needs itself, as bindings with `prepare` do. */
 function isCurrent(renderer: Renderer): boolean {
   return "prepare" in renderer;
 }
 
 /**
- * Turns an input into what `renderer` takes: HTML as is and a node tree with its emoji in place
- * for a current renderer, which handles both itself, and a node tree with its emoji split out as
- * images for an older one.
+ * Turns an input into what `renderer` takes. A current renderer parses HTML as written when its
+ * emoji come from the fonts. Otherwise the input becomes a node tree with its emoji split out.
  */
 async function resolveContent(
   element: RenderInput,
   renderer: Renderer,
   options?: PipelineOptions,
 ): Promise<{ node: Node | string; css: string[] }> {
-  if (isCurrent(renderer) && typeof element === "string") {
+  if (isCurrent(renderer) && typeof element === "string" && options?.emoji === "from-font") {
     return { node: element, css: [] };
   }
 
-  const { node, css } = await transformElement(element, options);
+  const { node: originalNode, css } = await transformElement(element, options);
   const emojiType = options?.emoji ?? "twemoji";
+  const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
 
-  return {
-    node: isCurrent(renderer) || emojiType === "from-font" ? node : extractEmojis(node, emojiType),
-    css,
-  };
+  return { node, css };
 }
 
 /** A render's options without the ones this pipeline reads itself, with `css` merged. */
@@ -293,7 +285,6 @@ async function prepareScene<T extends PipelineOptions>(element: RenderInput, opt
     const layout = bindingOptions(options, sceneCss);
     const prepared = await renderer.prepare(node, {
       ...layout,
-      ...emojiOption(renderer, options),
       images: options?.images,
       signal: options?.signal,
     });
@@ -450,7 +441,6 @@ export async function renderAnimation(
       lang: options.lang,
       keyframes: options.keyframes,
       css,
-      ...emojiOption(renderer, options),
     },
     options,
   );
@@ -459,7 +449,6 @@ export async function renderAnimation(
 
   return renderer.renderAnimation({
     ...forward,
-    ...emojiOption(renderer, options),
     scenes: scenes.map(({ node, durationMs }) => ({ node, durationMs })),
     images,
     css,
