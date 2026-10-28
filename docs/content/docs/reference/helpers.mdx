@@ -63,9 +63,9 @@ Length and color shorthands return CSS strings. `vw` and `vh` are viewport units
 
 ## Images & emoji
 
-| Helper                           | Import                    | Use                                                                                                                     |
-| :------------------------------- | :------------------------ | :---------------------------------------------------------------------------------------------------------------------- |
-| `prepareImages(options)`         | `takumi-js/helpers`       | Fetch image `urls`, or a node tree's remote images, into `images` entries. A renderer's `prepare` fetches them for you. |
-| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Deprecated. A renderer's `prepare` takes `emoji` and replaces emoji with CDN images itself.                             |
+| Helper                           | Import                    | Use                                                                                         |
+| :------------------------------- | :------------------------ | :------------------------------------------------------------------------------------------ |
+| `prepareImages(options)`         | `takumi-js/helpers`       | Deprecated. A renderer's `prepare` reads the images a document draws and fetches them.      |
+| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Deprecated. A renderer's `prepare` takes `emoji` and replaces emoji with CDN images itself. |
 
 `emojiType` takes the CDN values of the `emoji` option listed in [Image loading & emoji](/docs/images#dynamic-fetching). It does not take `from-font`, which fetches nothing.
