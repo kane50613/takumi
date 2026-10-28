@@ -99,8 +99,6 @@ pub struct RenderOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
-  pub emoji: Option<String>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector
@@ -130,8 +128,6 @@ pub struct SvgRenderOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
-  pub emoji: Option<String>,
 }
 
 /// Options for rendering an animated image.
@@ -166,8 +162,6 @@ pub struct RenderAnimationOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Draws each emoji as an SVG image from this CDN; `from-font`, or none, draws them from fonts.
-  pub emoji: Option<String>,
 }
 
 /// Output format for static images.

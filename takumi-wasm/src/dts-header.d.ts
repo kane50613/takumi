@@ -1,5 +1,4 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
-import type { EmojiType } from "@takumi-rs/helpers/emoji";
 import type { PendingFont } from "@takumi-rs/helpers/renderer";
 import type { Properties } from "csstype";
 
@@ -129,11 +128,6 @@ export type RenderOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
-  /**
-   * Draws each emoji as an SVG image from this CDN, fetched as one of `images`. `from-font`, or no
-   * value, draws emoji from the fonts.
-   */
-  emoji?: EmojiType | "from-font";
 };
 
 /**
@@ -194,11 +188,6 @@ export type RenderAnimationOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
-  /**
-   * Draws each emoji as an SVG image from this CDN, fetched as one of `images`. `from-font`, or no
-   * value, draws emoji from the fonts.
-   */
-  emoji?: EmojiType | "from-font";
 };
 
 export type FontDetails = {

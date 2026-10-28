@@ -16,14 +16,11 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use font_cache::FontCache;
 use input::{Font, register_font};
-use serde::{
-  Deserialize, Serialize,
-  de::{IntoDeserializer, value::Error as DeError},
-};
+use serde::{Deserialize, Serialize};
 
 use takumi_core::{
   Error as CoreError, Fonts,
-  layout::{needs::RenderNeeds, node::EmojiProvider},
+  layout::needs::RenderNeeds,
   resources::{
     font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
     image::ResourceCache,
@@ -156,14 +153,6 @@ pub struct FontCacheOptions {
 /// A render's default language, parsed from its BCP-47 tag.
 pub fn parse_lang(tag: Option<&str>) -> Result<Option<Lang>, CoreError> {
   tag.map(Lang::parse).transpose()
-}
-
-/// The provider a render's `emoji` option names, `None` for `from-font` or no option.
-pub fn parse_emoji(name: Option<&str>) -> Result<Option<EmojiProvider>, DeError> {
-  match name {
-    None | Some("from-font") => Ok(None),
-    Some(name) => EmojiProvider::deserialize(name.into_deserializer()).map(Some),
-  }
 }
 
 /// The timeline position in milliseconds, with negative times clamped to zero.
