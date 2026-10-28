@@ -74,7 +74,11 @@ use crate::{
   window::Window,
 };
 #[cfg(feature = "images")]
-use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
+use takumi_core::{
+  blur::blur_rgba,
+  resources::{font::ImageGlyph, glyph::ResolvedBitmapGlyph},
+  style::BlurType,
+};
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
 type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
@@ -343,6 +347,8 @@ impl Emitter<'_> {
           emitter: self,
           device: self.device(surface, self.tagged),
           text: None,
+          #[cfg(feature = "images")]
+          context: None,
           shadow: None,
           through: None,
         },
@@ -1031,6 +1037,58 @@ impl Emitter<'_> {
     surface.pop();
   }
 
+  /// Draws the image of each of `run`'s image glyphs over its em box, the run starting at
+  /// `origin`. The run's own glyphs, drawn empty, carry the clusters as text.
+  #[cfg(feature = "images")]
+  fn draw_image_glyphs(
+    &self,
+    run: &PositionedInlineRun,
+    origin: Point,
+    context: &RenderContext,
+    surface: &mut Surface,
+  ) {
+    let shaped = &run.glyph_run;
+
+    for glyph in &shaped.glyphs {
+      let Some(ImageGlyph { image, em_box }) =
+        context
+          .fonts()
+          .image_glyph(shaped.font_id(), glyph.id, shaped.font_size)
+      else {
+        continue;
+      };
+      let at = CorePoint {
+        x: origin.x + glyph.x + em_box.left,
+        y: origin.y + glyph.y + em_box.top,
+      };
+      let size = Size {
+        width: em_box.right - em_box.left,
+        height: em_box.bottom - em_box.top,
+      };
+
+      #[cfg(feature = "svg")]
+      if let ImageSource::Svg(svg) = image {
+        self.draw_svg(svg, context, at, size, size, surface);
+
+        continue;
+      }
+
+      let Some(krilla_size) = KrillaSize::from_wh(size.width, size.height) else {
+        continue;
+      };
+      let Some(krilla_image) = self.drawable(
+        "image glyph",
+        rasterized_image(image, context, self.color_filter.as_deref()),
+      ) else {
+        continue;
+      };
+
+      surface.push_transform(&Transform::from_translate(at.x, at.y));
+      surface.draw_image(krilla_image, krilla_size);
+      surface.pop();
+    }
+  }
+
   /// Draws a text-bearing box's runs, from the pre-built inline map when the node is in it (content
   /// tree) or built on the fly (band trees).
   fn emit_node_text(
@@ -1068,6 +1126,8 @@ impl Emitter<'_> {
       emitter: self,
       device: self.device(surface, false),
       text: Some(painted.text()),
+      #[cfg(feature = "images")]
+      context: Some(&node.context),
       shadow: None,
       through: None,
     };
@@ -2111,6 +2171,9 @@ struct TextDevice<'e, 'x, 's, 'a> {
   device: SurfaceDevice<'s, 'a>,
   /// The text the glyphs carry, unless they only draw a mask.
   text: Option<&'e str>,
+  /// The style the images of image glyphs draw in, unless the glyphs only draw a mask.
+  #[cfg(feature = "images")]
+  context: Option<&'e RenderContext>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
   /// While a `background-clip: text` mask draws, the fills each of its shapes and glyphs shows
@@ -2494,6 +2557,14 @@ impl TextDevice<'_, '_, '_, '_> {
             shaped.font_size,
             shadow_color.is_some() || !owned,
           );
+          #[cfg(feature = "images")]
+          if shadow_color.is_none()
+            && let Some(context) = self.context
+          {
+            self
+              .emitter
+              .draw_image_glyphs(run, origin, context, surface);
+          }
           if let Some(colors) = &colors {
             colors.draw_outlines(surface);
             #[cfg(feature = "images")]

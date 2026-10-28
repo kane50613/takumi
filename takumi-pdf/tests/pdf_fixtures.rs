@@ -19,7 +19,7 @@ use takumi_core::{
   Fonts,
   layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage},
   resources::{
-    font::{FontOverride, FontResource},
+    font::{FontOverride, FontResource, ImageFontFace},
     image::{ImageCacheMode, ImageSource, ResourceCache},
     image_buffer::ImageBuffer,
     unicode_range::{UnicodeRange, UnicodeRangeSet},
@@ -2832,6 +2832,50 @@ fn bitmap_glyph_text_shadow() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// An image glyph face draws each emoji as its image, an SVG as vector paths and a bitmap as an
+/// image, over glyphs that carry the clusters into the text layer.
+#[test]
+fn image_glyph_faces() {
+  let image = |path: &str| {
+    ImageSource::from_bytes(
+      &fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(path))
+        .expect("read glyph image"),
+    )
+    .expect("decode glyph image")
+  };
+  let mut fonts = latin_font();
+
+  fonts.register_image_face(
+    ImageFontFace::new("Emoji Images")
+      .glyph("👋", image("assets/images/twemoji/waving-hand.svg"))
+      .glyph("🍔", image("assets/images/twemoji/hamburger.svg"))
+      .glyph("👨‍👩‍👧", image("assets/images/yeecord.png")),
+  );
+
+  let pdf = run_pdf_fixture_with("image-glyph-faces", &fonts, |fonts| {
+    let source = r##"<div style="padding: 16px; background-color: #ffffff; font-size: 32px; line-height: 1.2;">
+      <p style="margin: 0">Hi 👋 and 🍔!</p>
+      <p style="margin: 0; text-decoration: underline">Family 👨‍👩‍👧</p>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse image glyph faces"))
+      .viewport(Viewport::new((320, 130)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = inflated_text(&pdf);
+
+  // A ToUnicode entry reads `<glyph> <UTF-16BE>`.
+  for cluster in [
+    "<D83DDC4B>",
+    "<D83CDF54>",
+    "<D83DDC68200DD83DDC69200DD83DDC67>",
+  ] {
+    assert!(text.contains(cluster), "no glyph maps to {cluster}");
+  }
 }
 
 /// `text-shadow` draws shifted glyph passes under the text, and

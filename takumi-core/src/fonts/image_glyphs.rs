@@ -24,7 +24,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::{
   context::RenderContext,
-  geometry::Placement,
+  geometry::{Placement, Rect},
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedGlyph, ResolvedGlyphs},
     image::{ImageSource, RenderedImage},
@@ -137,9 +137,21 @@ impl ImageGlyphs {
   }
 }
 
-/// `image` as a bitmap glyph filling the em box of a `font_size` font: an em wide, its top
-/// [`TYPO_ASCENDER`] above the baseline. An SVG rasterizes at the em size, and a bitmap scales as
-/// it is.
+/// The em box a glyph of a `font_size` face fills, from the glyph's origin on the baseline: an em
+/// wide, its top [`TYPO_ASCENDER`] above the baseline.
+pub(crate) fn em_box(font_size: f32) -> Rect<f32> {
+  let top = -font_size * f32::from(TYPO_ASCENDER) / f32::from(UNITS_PER_EM);
+
+  Rect {
+    left: 0.0,
+    right: font_size,
+    top,
+    bottom: top + font_size,
+  }
+}
+
+/// `image` as a bitmap glyph filling the [`em_box`] of a `font_size` face, its top rounded to a
+/// pixel. An SVG rasterizes at the em size, and a bitmap scales as it is.
 fn resolve_image_glyph(
   image: &ImageSource,
   font_size: f32,
@@ -170,15 +182,13 @@ fn resolve_image_glyph(
     return None;
   }
 
-  let em_top = font_size * f32::from(TYPO_ASCENDER) / f32::from(UNITS_PER_EM);
-
   Some(ResolvedGlyph::Bitmap(ResolvedBitmapGlyph {
     image: (*bitmap).clone(),
     scale_x: font_size / width as f32,
     scale_y: font_size / height as f32,
     placement: Placement {
       left: 0,
-      top: em_top.round() as i32,
+      top: (-em_box(font_size).top).round() as i32,
       width: size,
       height: size,
     },

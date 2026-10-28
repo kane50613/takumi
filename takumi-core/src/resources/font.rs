@@ -37,8 +37,9 @@ use crate::{
     font_description::FontSelectionDescription,
     font_face::{FaceData, FontFaceDescriptors},
     font_height::FontHeight,
-    image_glyphs::ImageGlyphs,
+    image_glyphs::{ImageGlyphs, em_box},
   },
+  geometry::Rect,
   layout_unit::LayoutUnit,
   resources::{
     glyph::{GlyphResolveContext, ResolvedGlyphs},
@@ -576,10 +577,13 @@ impl Fonts {
     self.registry.selector.image_glyphs(font_id)
   }
 
-  /// The image glyph `glyph_id` of the font `font_id` names draws, when an image glyph face
+  /// The glyph `glyph_id` of the font `font_id` names, at `font_size`, when an image glyph face
   /// shaped it; see [`Fonts::register_image_face`].
-  pub fn image_glyph(&self, font_id: u64, glyph_id: u32) -> Option<&ImageSource> {
-    self.image_glyphs(font_id)?.image(glyph_id)
+  pub fn image_glyph(&self, font_id: u64, glyph_id: u32, font_size: f32) -> Option<ImageGlyph<'_>> {
+    Some(ImageGlyph {
+      image: self.image_glyphs(font_id)?.image(glyph_id)?,
+      em_box: em_box(font_size),
+    })
   }
 
   /// Registers a face whose glyphs are `face`'s images. System fallback walks it before every
@@ -1047,6 +1051,16 @@ impl PendingFontFace {
     self.descriptors.unicode_range = unicode_range;
     self
   }
+}
+
+/// A glyph of an image glyph face: the image it draws, and the em box it fills from the glyph's
+/// origin on the baseline. See [`Fonts::image_glyph`].
+#[derive(Debug, Clone, Copy)]
+pub struct ImageGlyph<'a> {
+  /// The image.
+  pub image: &'a ImageSource,
+  /// Where the image goes, from the glyph's origin.
+  pub em_box: Rect<f32>,
 }
 
 /// A face whose glyphs are images, one per grapheme cluster, such as a set of emoji SVGs. See
