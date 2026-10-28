@@ -33,6 +33,7 @@ use crate::{
     layout_style::LayoutStyle,
     length_utils::LengthResolver,
     logical_rect::{LogicalBoxStrut, LogicalOffset},
+    tree::LayoutTree,
   },
   layout_unit::LayoutUnit,
   style::{BoxDecorationBreak, BreakBetween},
@@ -93,17 +94,19 @@ impl FlexFragmentation {
   }
 }
 
-/// Sets up the fragment builder of a flex container of `style`, `inline_size` wide in `space`.
+/// Sets up the fragment builder of the flex container `node`, `inline_size` wide in `space`.
 pub(super) fn flex_fragment_builder(
+  (tree, node): (&LayoutTree<'_>, NodeId),
   space: &ConstraintSpace,
-  style: &LayoutStyle,
   border_padding: LogicalBoxStrut,
   inline_size: Option<LayoutUnit>,
   input: &FragmentationLayoutInput,
 ) -> BoxFragmentBuilder {
+  let style = tree.layout_style(node);
   let mut builder =
     BoxFragmentBuilder::new(space, style, border_padding, input.break_token.clone());
 
+  builder.has_non_visible_block_overflow = tree.has_non_visible_block_overflow(node);
   setup_fragment_builder_for_fragmentation(
     space,
     style,
@@ -366,7 +369,7 @@ impl FlexLayoutAlgorithm<'_, '_> {
   }
 
   /// Blink's `Layout` after a layout that did not succeed: again to break at the breakpoints it
-  /// found, or with the rows grown to fit their items.
+  /// found, with the rows grown to fit their items, or without breaking.
   pub(super) fn relayout(self, status: LayoutStatus) -> LayoutResult {
     let mut input = self.fragmentation.input.clone();
     let mut additional_early_breaks = self.fragmentation.additional_early_breaks.clone();
@@ -379,6 +382,12 @@ impl FlexLayoutAlgorithm<'_, '_> {
       }
       LayoutStatus::NeedsRelayoutWithRowCrossSizeChanges => {
         cross_size_adjustments = Some(self.fragmentation.row_cross_size_updates.clone());
+      }
+      LayoutStatus::DisableFragmentation => {
+        let space = self.space.without_fragmentation();
+        let input = self.fragmentation.input.without_early_break();
+
+        return FlexLayoutAlgorithm::new(self.tree, self.node, &space, false, &input).layout();
       }
       _ => {
         let mut result = LayoutResult::new(Default::default());

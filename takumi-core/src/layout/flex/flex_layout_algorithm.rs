@@ -383,6 +383,9 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
       .resolve(child_percentage_size.inline_size)
       .unwrap_or(LayoutUnit::ZERO);
 
+    #[cfg(feature = "fragmentation")]
+    let builder = flex_fragment_builder((tree, node), space, border_padding, inline_size, input);
+
     Self {
       tree,
       node,
@@ -416,7 +419,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
       first_baseline: None,
       last_baseline: None,
       #[cfg(feature = "fragmentation")]
-      builder: flex_fragment_builder(space, &style, border_padding, inline_size, input),
+      builder,
       #[cfg(feature = "fragmentation")]
       fragmentation: FlexFragmentation::new(input),
       style,

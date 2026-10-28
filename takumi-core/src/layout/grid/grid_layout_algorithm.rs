@@ -761,6 +761,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       let mut builder =
         BoxFragmentBuilder::new(space, &style, border_padding, input.break_token.clone());
 
+      builder.has_non_visible_block_overflow = tree.has_non_visible_block_overflow(node);
       setup_fragment_builder_for_fragmentation(
         space,
         &style,
@@ -1729,12 +1730,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       .unwrap_or(intrinsic_block_size);
     let fragment_block_size = match self.finish_fragmentation(block_size) {
       Ok(fragment_block_size) => fragment_block_size,
-      Err(status) => {
-        let mut result = LayoutResult::new(LogicalSize::default());
-
-        result.status = status;
-        return result;
-      }
+      Err(status) => return self.relayout(status),
     };
     let mut out_of_flow = self.resumed_out_of_flow();
 
@@ -1901,6 +1897,13 @@ impl GridLayoutAlgorithm<'_, '_> {
 
   fn finish_fragmentation(&mut self, block_size: LayoutUnit) -> Result<LayoutUnit, LayoutStatus> {
     Ok(block_size)
+  }
+
+  fn relayout(self, status: LayoutStatus) -> LayoutResult {
+    let mut result = LayoutResult::new(LogicalSize::default());
+
+    result.status = status;
+    result
   }
 
   fn fragment_intrinsic_block_size(&self, intrinsic_block_size: LayoutUnit) -> LayoutUnit {

@@ -3105,6 +3105,37 @@ fn paged_monolithic_overflow() {
   );
 }
 
+/// Content an `overflow: hidden` box clips past its end adds no pages after it, as in Chromium.
+#[test]
+fn paged_clipped_overflow() {
+  let pdf = run_pdf_fixture("paged-clipped-overflow", |fonts| {
+    let source = r##"<div>
+      <div style="width: 200px; height: 100px; overflow: hidden; background: #eee">
+        <div style="height: 50px; background: red"></div>
+      </div>
+      <div style="width: 200px; height: 100px; overflow: hidden; background: #eee">
+        <div style="height: 400px; background: red"></div>
+      </div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse clipped overflow fixture"))
+      .page(PageOptions {
+        width: 200.0,
+        height: 100.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(
+    page_count(&pdf),
+    2,
+    "the clipped 400px child stays on the second page"
+  );
+}
+
 /// An inline-block taller than a page shows each line of its text on the one page that owns it, so
 /// the text layer holds it once, as it does when the whole block fits on one page.
 #[test]

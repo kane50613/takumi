@@ -62,6 +62,8 @@ pub(crate) struct BoxFragmentBuilder {
   /// no break before them.
   pub(crate) has_subsequent_children: bool,
   pub(crate) monolithic_overflow: LayoutUnit,
+  /// Blink's `HasNonVisibleBlockOverflow` of the builder's node.
+  pub(crate) has_non_visible_block_overflow: bool,
   pub(crate) is_known_to_fit_in_fragmentainer: bool,
   pub(crate) should_clone_box_end_decorations: bool,
   pub(crate) should_prevent_break_before_block_end_decorations: bool,
@@ -140,6 +142,7 @@ impl BoxFragmentBuilder {
       has_unpositioned_list_marker: false,
       has_subsequent_children: false,
       monolithic_overflow: LayoutUnit::ZERO,
+      has_non_visible_block_overflow: false,
       is_known_to_fit_in_fragmentainer: false,
       should_clone_box_end_decorations: false,
       should_prevent_break_before_block_end_decorations: false,

@@ -22,7 +22,7 @@ use crate::{
     },
     grid::{grid_item::GridItemData, grid_track_collection::TrackSpanProperties},
     layout_result::{LayoutResult, LayoutStatus, OutOfFlowCandidate},
-    logical_rect::{LogicalBoxStrut, LogicalOffset},
+    logical_rect::{LogicalBoxStrut, LogicalOffset, LogicalSize},
   },
   layout_unit::LayoutUnit,
   style::{BoxDecorationBreak, BreakBetween},
@@ -622,6 +622,22 @@ impl GridLayoutAlgorithm<'_, '_> {
     self.builder.fragments_total_block_size = block_size;
     finish_fragmentation(&mut self.builder)?;
     Ok(self.builder.fragment_block_size)
+  }
+
+  /// Blink's `Layout` after a layout that did not succeed: again without breaking, or the aborted
+  /// one.
+  pub(super) fn relayout(self, status: LayoutStatus) -> LayoutResult {
+    if status == LayoutStatus::DisableFragmentation {
+      let space = self.space.without_fragmentation();
+      let input = self.fragmentation.input.without_early_break();
+
+      return GridLayoutAlgorithm::new(self.tree, self.node, &space, false, &input).layout();
+    }
+
+    let mut result = LayoutResult::new(LogicalSize::default());
+
+    result.status = status;
+    result
   }
 
   /// The intrinsic block size of this fragment, or of the grid in one piece.
