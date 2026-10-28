@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>selector_form_states</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        gap: 16px;
+        padding: 24px 32px 0;
+      }
+      fieldset {
+        display: flex;
+        gap: 16px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      legend {
+        float: left;
+        padding: 0;
+      }
+      input {
+        appearance: none;
+        display: block;
+        width: 64px;
+        height: 64px;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        border: 6px solid rgb(148, 163, 184);
+        background-color: rgb(255, 255, 255);
+      }
+      input:enabled {
+        background-color: rgb(219, 234, 254);
+      }
+      input:disabled {
+        background-color: rgb(71, 85, 105);
+      }
+      input:checked {
+        background-color: rgb(34, 197, 94);
+      }
+      input:indeterminate {
+        border-color: rgb(234, 179, 8);
+      }
+      input:read-write {
+        border-color: rgb(59, 130, 246);
+      }
+      input:required {
+        border-radius: 50%;
+      }
+      input:optional:read-only {
+        border-style: dashed;
+      }
+      input:placeholder-shown {
+        background-color: rgb(251, 146, 60);
+      }
+    </style>
+  </head>
+  <body style="width: 800px; height: 280px">
+    <div class="row"
+      ><input type="text" /><input type="text" placeholder=" " /><input
+        type="text"
+        readonly /><input type="text" required /><input type="text" disabled /><fieldset disabled
+        ><legend><input type="text" /></legend><input type="text" /></fieldset
+    ></div>
+    <div class="row"
+      ><input type="checkbox" /><input type="checkbox" checked /><input
+        type="checkbox"
+        checked
+        disabled /><input type="radio" name="a" /><input type="radio" name="a" checked /><input
+        type="radio"
+        name="a"
+        checked /><input type="radio" name="b"
+    /></div>
+  </body>
+</html>

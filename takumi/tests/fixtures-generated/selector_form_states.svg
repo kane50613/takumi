@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="280" viewBox="0 0 800 280">
+  <rect x="32" y="24" width="64" height="64" fill="#dbeafe"/>
+  <path d="M32 24h64v64h-64v-64Zm6 6h52v52h-52v-52Z" fill="#3b82f6" fill-rule="evenodd"/>
+  <rect x="112" y="24" width="64" height="64" fill="#fb923c"/>
+  <path d="M112 24h64v64h-64v-64Zm6 6h52v52h-52v-52Z" fill="#3b82f6" fill-rule="evenodd"/>
+  <rect x="192" y="24" width="64" height="64" fill="#dbeafe"/>
+  <path d="M192 27h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M192 85h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M253 24v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M195 24v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M304 24c17.67 0 32 14.33 32 32s-14.33 32-32 32-32-14.33-32-32 14.33-32 32-32Z" fill="#dbeafe"/>
+  <path d="M304 24c17.67 0 32 14.33 32 32s-14.33 32-32 32-32-14.33-32-32 14.33-32 32-32Zm0 6c14.36 0 26 11.64 26 26s-11.64 26-26 26-26-11.64-26-26 11.64-26 26-26Z" fill="#3b82f6" fill-rule="evenodd"/>
+  <rect x="352" y="24" width="64" height="64" fill="#475569"/>
+  <path d="M352 27h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M352 85h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M413 24v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M355 24v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <rect x="432" y="24" width="64" height="64" fill="#dbeafe"/>
+  <path d="M432 24h64v64h-64v-64Zm6 6h52v52h-52v-52Z" fill="#3b82f6" fill-rule="evenodd"/>
+  <rect x="512" y="24" width="64" height="64" fill="#475569"/>
+  <path d="M512 27h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M512 85h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M573 24v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M515 24v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <rect x="32" y="112" width="64" height="64" fill="#dbeafe"/>
+  <path d="M32 115h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M32 173h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M93 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M35 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <rect x="112" y="112" width="64" height="64" fill="#22c55e"/>
+  <path d="M112 115h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M112 173h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M173 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M115 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <rect x="192" y="112" width="64" height="64" fill="#22c55e"/>
+  <path d="M192 115h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M192 173h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M253 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M195 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <rect x="272" y="112" width="64" height="64" fill="#dbeafe"/>
+  <path d="M272 115h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M272 173h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M333 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M275 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <rect x="352" y="112" width="64" height="64" fill="#dbeafe"/>
+  <path d="M352 115h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M352 173h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M413 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M355 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <rect x="432" y="112" width="64" height="64" fill="#22c55e"/>
+  <path d="M432 115h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M432 173h64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M493 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M435 112v64" fill="none" stroke="#94a3b8" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <rect x="512" y="112" width="64" height="64" fill="#dbeafe"/>
+  <path d="M512 115h64" fill="none" stroke="#eab308" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M512 173h64" fill="none" stroke="#eab308" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M573 112v64" fill="none" stroke="#eab308" stroke-width="6" stroke-dasharray="12 5.333"/>
+  <path d="M515 112v64" fill="none" stroke="#eab308" stroke-width="6" stroke-dasharray="12 5.333"/>
+</svg>

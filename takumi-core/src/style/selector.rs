@@ -113,13 +113,15 @@ impl PrecomputedHash for Ident {
 pub(crate) struct SelectorImpl;
 
 // Pseudo-classes parse so a selector list keeps its other selectors, and only the static ones,
-// such as `:lang()` and `:dir()`, match.
+// such as `:lang()`, `:dir()`, and the form control states, match.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PseudoClass {
   /// `:lang(en, fr, ...)` — one or more comma-separated BCP-47 basic-filtering ranges.
   Lang(Vec<Box<str>>),
   /// `:dir(ltr)` or `:dir(rtl)`, by the keyword it names; any other keyword matches nothing.
   Dir(Ident),
+  /// A form control state, such as `:disabled`.
+  FormState(FormState),
   /// Any other pseudo-class, parsed but never matched.
   Other(Ident),
 }
@@ -145,11 +147,58 @@ impl ToCss for PseudoClass {
         direction.to_css(dest)?;
         dest.write_char(')')
       }
+      Self::FormState(state) => {
+        dest.write_char(':')?;
+        dest.write_str(state.name())
+      }
       Self::Other(name) => {
         dest.write_char(':')?;
         name.to_css(dest)
       }
     }
+  }
+}
+
+/// A pseudo-class HTML defines on form control state.
+/// <https://html.spec.whatwg.org/multipage/semantics-other.html#pseudo-classes>
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FormState {
+  Disabled,
+  Enabled,
+  Checked,
+  Indeterminate,
+  PlaceholderShown,
+  ReadOnly,
+  ReadWrite,
+  Required,
+  Optional,
+}
+
+impl FormState {
+  const NAMES: [(&'static str, Self); 9] = [
+    ("disabled", Self::Disabled),
+    ("enabled", Self::Enabled),
+    ("checked", Self::Checked),
+    ("indeterminate", Self::Indeterminate),
+    ("placeholder-shown", Self::PlaceholderShown),
+    ("read-only", Self::ReadOnly),
+    ("read-write", Self::ReadWrite),
+    ("required", Self::Required),
+    ("optional", Self::Optional),
+  ];
+
+  fn from_name(name: &str) -> Option<Self> {
+    Self::NAMES
+      .iter()
+      .find(|(state_name, _)| state_name.eq_ignore_ascii_case(name))
+      .map(|&(_, state)| state)
+  }
+
+  fn name(self) -> &'static str {
+    Self::NAMES
+      .iter()
+      .find(|&&(_, state)| state == self)
+      .map_or("", |&(name, _)| name)
   }
 }
 
@@ -240,7 +289,10 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     &self,
     name: CowRcStr<'i>,
   ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<Self::Error>> {
-    Ok(PseudoClass::Other(Ident::from(&*name)))
+    Ok(FormState::from_name(&name).map_or_else(
+      || PseudoClass::Other(Ident::from(&*name)),
+      PseudoClass::FormState,
+    ))
   }
 
   fn parse_non_ts_functional_pseudo_class(

@@ -1,6 +1,6 @@
 //! Selector matching over the [`Node`] tree, keeping the `selectors` crate out of the public API.
 
-use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
+use std::{cell::OnceCell, collections::HashMap, fmt, iter::successors, ops::Deref, sync::Arc};
 
 use rustc_hash::FxHashMap;
 use selectors::{
@@ -13,17 +13,99 @@ use selectors::{
 use smallvec::SmallVec;
 
 use crate::{
+  form_control::{
+    InputType, has_attribute, is_disableable_form_control, is_element, is_mutable_text_control,
+    is_placeholder_shown, required_state,
+  },
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
     BreakpointOverrides, Direction, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
-    selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
+    selector::{CssRule, FormState, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
 };
 
 struct StyleArena<'a> {
   nodes: Vec<StyleNode<'a>>,
+  /// Built on the first form state query, so a match pass reads the tree for it once.
+  form_controls: OnceCell<FormControls>,
+}
+
+/// Checkedness and selectedness the whole tree decides, by arena index.
+#[derive(Default)]
+struct FormControls {
+  /// The group of each radio button.
+  radio_groups: FxHashMap<usize, usize>,
+  /// The radio button each group keeps checked, the last one the markup checks.
+  checked_radios: Vec<Option<usize>>,
+  /// The option each single-selection `<select>` shows selected.
+  selected_options: FxHashMap<usize, Option<usize>>,
+  /// The first `<legend>` child of each `<fieldset>`.
+  first_legends: FxHashMap<usize, usize>,
+}
+
+impl FormControls {
+  fn new(arena: &StyleArena<'_>) -> Self {
+    let mut controls = Self::default();
+    let mut form_owners: Vec<Option<usize>> = Vec::with_capacity(arena.nodes.len());
+    let mut named_groups: FxHashMap<(Option<usize>, &str), usize> = FxHashMap::default();
+
+    for (index, style_node) in arena.nodes.iter().enumerate() {
+      // Tree order puts every parent before its children.
+      let form_owner = style_node.parent.and_then(|parent| {
+        if is_element(arena.nodes[parent].node, "form") {
+          Some(parent)
+        } else {
+          form_owners[parent]
+        }
+      });
+      let node = style_node.node;
+
+      form_owners.push(form_owner);
+
+      if let Some(parent) = style_node.parent
+        && is_element(node, "legend")
+        && is_element(arena.nodes[parent].node, "fieldset")
+      {
+        controls.first_legends.entry(parent).or_insert(index);
+      }
+
+      if InputType::of(node) == Some(InputType::Radio) {
+        let next_group = controls.checked_radios.len();
+        let group = match node.attribute("name").filter(|name| !name.is_empty()) {
+          Some(name) => *named_groups.entry((form_owner, name)).or_insert(next_group),
+          None => next_group,
+        };
+
+        if group == next_group {
+          controls.checked_radios.push(None);
+        }
+
+        if has_attribute(node, "checked") {
+          controls.checked_radios[group] = Some(index);
+        }
+
+        controls.radio_groups.insert(index, group);
+      } else if is_element(node, "select") && !has_attribute(node, "multiple") {
+        let select = ArenaElement { tree: arena, index };
+
+        controls
+          .selected_options
+          .insert(index, select.selected_option());
+      }
+    }
+
+    controls
+  }
+
+  /// The radio button its group keeps checked, if any.
+  fn checked_radio(&self, radio: usize) -> Option<usize> {
+    self
+      .radio_groups
+      .get(&radio)
+      .and_then(|&group| self.checked_radios[group])
+  }
 }
 struct StyleNode<'a> {
   node: &'a Node,
@@ -48,7 +130,10 @@ impl fmt::Debug for ArenaElement<'_> {
 
 impl<'a> StyleArena<'a> {
   fn new(root: &'a Node) -> Self {
-    let mut arena = StyleArena { nodes: Vec::new() };
+    let mut arena = StyleArena {
+      nodes: Vec::new(),
+      form_controls: OnceCell::new(),
+    };
     arena.add_node(root, None, None);
     arena
   }
@@ -169,6 +254,194 @@ fn remove_node_unique_hashes_from_filter(node: &Node, filter: &mut BloomFilter) 
 impl<'a> ArenaElement<'a> {
   fn style_node(&self) -> &'a StyleNode<'a> {
     &self.tree.nodes[self.index]
+  }
+
+  fn node(&self) -> &'a Node {
+    self.style_node().node
+  }
+
+  fn matches_form_state(&self, state: FormState) -> bool {
+    let node = self.node();
+
+    match state {
+      FormState::Disabled => self.is_actually_disabled(),
+      FormState::Enabled => {
+        (is_disableable_form_control(node)
+          || ["fieldset", "optgroup", "option"]
+            .iter()
+            .any(|tag| is_element(node, tag)))
+          && !self.is_actually_disabled()
+      }
+      FormState::Checked => self.is_checked(),
+      FormState::Indeterminate => match InputType::of(node) {
+        Some(InputType::Radio) => self.form_controls().checked_radio(self.index).is_none(),
+        _ => is_element(node, "progress") && !has_attribute(node, "value"),
+      },
+      FormState::PlaceholderShown => is_placeholder_shown(node),
+      FormState::ReadWrite => self.is_read_write(),
+      FormState::ReadOnly => !self.is_read_write(),
+      FormState::Required => required_state(node) == Some(true),
+      FormState::Optional => required_state(node) == Some(false),
+    }
+  }
+
+  /// HTML's "actually disabled".
+  /// <https://html.spec.whatwg.org/multipage/semantics-other.html#concept-element-disabled>
+  fn is_actually_disabled(&self) -> bool {
+    let node = self.node();
+
+    if is_disableable_form_control(node) || is_element(node, "fieldset") {
+      return has_attribute(node, "disabled") || self.is_in_disabled_fieldset();
+    }
+
+    if is_element(node, "optgroup") {
+      return has_attribute(node, "disabled");
+    }
+
+    is_element(node, "option")
+      && (has_attribute(node, "disabled")
+        || self.parent_element().is_some_and(|parent| {
+          is_element(parent.node(), "optgroup") && has_attribute(parent.node(), "disabled")
+        }))
+  }
+
+  /// Whether a `<fieldset disabled>` holds it outside that fieldset's first `<legend>` child.
+  fn is_in_disabled_fieldset(&self) -> bool {
+    let first_legends = &self.form_controls().first_legends;
+    let mut child = *self;
+
+    while let Some(parent) = child.parent_element() {
+      if is_element(parent.node(), "fieldset")
+        && has_attribute(parent.node(), "disabled")
+        && first_legends.get(&parent.index) != Some(&child.index)
+      {
+        return true;
+      }
+
+      child = parent;
+    }
+
+    false
+  }
+
+  /// A checkbox or radio button's checkedness, or an option's selectedness, as parsing the markup
+  /// leaves them.
+  fn is_checked(&self) -> bool {
+    let node = self.node();
+
+    match InputType::of(node) {
+      Some(InputType::Checkbox) => has_attribute(node, "checked"),
+      Some(InputType::Radio) => self.form_controls().checked_radio(self.index) == Some(self.index),
+      _ => is_element(node, "option") && self.is_selected_option(),
+    }
+  }
+
+  fn form_controls(&self) -> &'a FormControls {
+    self
+      .tree
+      .form_controls
+      .get_or_init(|| FormControls::new(self.tree))
+  }
+
+  /// HTML's selectedness of an `<option>`, from `selected` attributes.
+  fn is_selected_option(&self) -> bool {
+    match self.owner_select() {
+      Some(select) if !has_attribute(select.node(), "multiple") => {
+        self.form_controls().selected_options.get(&select.index) == Some(&Some(self.index))
+      }
+      _ => has_attribute(self.node(), "selected"),
+    }
+  }
+
+  /// The option a single-selection `<select>` shows selected: the last one with `selected`, or
+  /// its first enabled option when none has one and it shows a single row.
+  /// <https://html.spec.whatwg.org/multipage/form-elements.html#selectedness-setting-algorithm>
+  fn selected_option(&self) -> Option<usize> {
+    let options: SmallVec<[ArenaElement<'a>; 8]> = self.options().collect();
+
+    if let Some(last_selected) = options
+      .iter()
+      .rev()
+      .find(|option| has_attribute(option.node(), "selected"))
+    {
+      return Some(last_selected.index);
+    }
+
+    let display_size = self
+      .node()
+      .attribute("size")
+      .and_then(|size| size.trim().parse::<u32>().ok())
+      .filter(|&size| size > 0)
+      .unwrap_or(1);
+
+    options
+      .iter()
+      .find(|option| display_size == 1 && !option.is_actually_disabled())
+      .map(|option| option.index)
+  }
+
+  /// The `<select>` whose list of options holds this `<option>`.
+  fn owner_select(&self) -> Option<Self> {
+    let parent = self.parent_element()?;
+
+    if is_element(parent.node(), "select") {
+      return Some(parent);
+    }
+
+    let grandparent = parent.parent_element()?;
+
+    (is_element(parent.node(), "optgroup") && is_element(grandparent.node(), "select"))
+      .then_some(grandparent)
+  }
+
+  /// A `<select>`'s list of options: its `<option>` children and those of its `<optgroup>`
+  /// children, in tree order.
+  fn options(&self) -> impl Iterator<Item = ArenaElement<'a>> {
+    self.element_children().flat_map(|child| {
+      let options: SmallVec<[ArenaElement<'a>; 8]> = if is_element(child.node(), "optgroup") {
+        child
+          .element_children()
+          .filter(|option| is_element(option.node(), "option"))
+          .collect()
+      } else {
+        SmallVec::from_iter(is_element(child.node(), "option").then_some(child))
+      };
+
+      options
+    })
+  }
+
+  fn element_children(&self) -> impl Iterator<Item = ArenaElement<'a>> {
+    successors(self.first_element_child(), |child| {
+      child.next_sibling_element()
+    })
+  }
+
+  /// HTML's `:read-write`: a mutable text control, or an editable element other than one.
+  fn is_read_write(&self) -> bool {
+    let node = self.node();
+
+    if InputType::of(node).is_some() || is_element(node, "textarea") {
+      return is_mutable_text_control(node, self.is_actually_disabled());
+    }
+
+    let mut current = Some(*self);
+
+    while let Some(element) = current {
+      match element.node().attribute("contenteditable") {
+        Some(value)
+          if value.is_empty()
+            || value.eq_ignore_ascii_case("true")
+            || value.eq_ignore_ascii_case("plaintext-only") =>
+        {
+          return true;
+        }
+        Some(value) if value.eq_ignore_ascii_case("false") => return false,
+        _ => current = element.parent_element(),
+      }
+    }
+
+    false
   }
 
   /// HTML's [directionality](https://html.spec.whatwg.org/multipage/dom.html#the-directionality)
@@ -357,6 +630,7 @@ impl Element for ArenaElement<'_> {
             Direction::Rtl => "rtl",
           };
       }
+      PseudoClass::FormState(state) => return self.matches_form_state(*state),
       PseudoClass::Other(_) => return false,
     };
 
