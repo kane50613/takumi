@@ -259,6 +259,8 @@ The harness reads only these parts of each HTML file:
 - The contents of `<body>`
 - The inline `width` and `height` on `<body>`
 
+The harness parses the body without element presets. A fixture that tests them, such as one with form controls, opts in with `<meta name="takumi-presets" content="chromium" />` in its `<head>`.
+
 The linked `takumi/tests/shared.css` supports browser comparison. It loads the fixture fonts and matches renderer defaults such as `box-sizing: border-box` and a body margin of zero.
 
 Add or change a render fixture like this:

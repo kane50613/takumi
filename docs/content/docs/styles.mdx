@@ -198,6 +198,8 @@ As in Tailwind, the box exists without `content-*`, so `before:` utilities alone
 
 The built-in parser applies no Tailwind Preflight by default. Elements keep their default margins, so an `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
 
+Text fields keep Chromium's defaults too. An `<input>` of type `text`, `search`, `tel`, `url`, `email`, `password`, or `number` draws its `value` in 13.33px Arial inside a 2px inset border. The field is as wide as its `size` attribute asks, and its text is centered vertically. A password shows a dot for each character, and a disabled field turns gray. These fields use `box-sizing: content-box`, as in Chromium.
+
 <Callout type="warn">
   Without Preflight, a border style utility draws on every side. `border-dashed` sets `border-style`
   on all four sides, and an unset border width is `medium`. So `border-l-2 border-dashed` draws a

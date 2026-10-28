@@ -70,9 +70,13 @@ fn render_fixture(path: &Path, name: &str) -> Result<(), String> {
   let viewport = body_viewport(&html)?;
   let css = section(&html, "<style>", "</style>").unwrap_or("").trim();
 
-  let options = FromHtmlOptions::builder()
-    .presets(StylePresets::empty())
-    .build();
+  // A fixture opts into the element presets with `<meta name="takumi-presets" content="chromium">`.
+  let presets = if html.contains(r#"<meta name="takumi-presets" content="chromium" />"#) {
+    StylePresets::chromium()
+  } else {
+    StylePresets::empty()
+  };
+  let options = FromHtmlOptions::builder().presets(presets).build();
   let node = Node::from_html(body, options).map_err(|error| format!("parse: {error:?}"))?;
   let stylesheet = StyleSheet::parse(css).map_err(|error| format!("stylesheet: {error:?}"))?;
 

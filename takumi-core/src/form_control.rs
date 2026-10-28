@@ -5,28 +5,50 @@ use crate::layout::node::{Node, NodeKind};
 /// The state of an `<input>` element's `type` attribute.
 /// <https://html.spec.whatwg.org/multipage/input.html#attr-input-type>
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InputType {
+pub enum InputType {
+  /// `type="hidden"`.
   Hidden,
+  /// `type="text"`.
   Text,
+  /// `type="search"`.
   Search,
+  /// `type="tel"`.
   Tel,
+  /// `type="url"`.
   Url,
+  /// `type="email"`.
   Email,
+  /// `type="password"`.
   Password,
+  /// `type="date"`.
   Date,
+  /// `type="month"`.
   Month,
+  /// `type="week"`.
   Week,
+  /// `type="time"`.
   Time,
+  /// `type="datetime-local"`.
   DateTimeLocal,
+  /// `type="number"`.
   Number,
+  /// `type="range"`.
   Range,
+  /// `type="color"`.
   Color,
+  /// `type="checkbox"`.
   Checkbox,
+  /// `type="radio"`.
   Radio,
+  /// `type="file"`.
   File,
+  /// `type="submit"`.
   Submit,
+  /// `type="image"`.
   Image,
+  /// `type="reset"`.
   Reset,
+  /// `type="button"`.
   Button,
 }
 
@@ -36,8 +58,9 @@ impl InputType {
     is_element(node, "input").then(|| Self::parse(node.attribute("type")))
   }
 
-  /// A missing, invalid, or unknown keyword is the Text state.
-  fn parse(keyword: Option<&str>) -> Self {
+  /// The state the `type` attribute `keyword` selects. A missing, invalid, or unknown keyword
+  /// selects the Text state.
+  pub fn parse(keyword: Option<&str>) -> Self {
     const KEYWORDS: [(&str, InputType); 22] = [
       ("hidden", InputType::Hidden),
       ("text", InputType::Text),
@@ -73,7 +96,7 @@ impl InputType {
   }
 
   /// Blink's `TextFieldInputType`: a type edited in a single-line inner editor.
-  pub(crate) fn is_text_field(self) -> bool {
+  pub fn is_text_field(self) -> bool {
     matches!(
       self,
       Self::Text

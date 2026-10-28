@@ -1895,6 +1895,7 @@ css/css-overflow/float-with-scrollable-descendant.html
 css/css-overflow/grid-container-with-scrollable-descendant.html
 css/css-overflow/grid-nested-container-with-scrollable-descendant.html
 css/css-overflow/inline-block-with-scrollable-descendant.html
+css/css-overflow/input-scrollable-region-001.html
 css/css-overflow/line-clamp/block-ellipsis-002.html
 css/css-overflow/line-clamp/block-ellipsis-005.html
 css/css-overflow/line-clamp/block-ellipsis-006.html
@@ -2222,6 +2223,7 @@ css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-027.html
 !css/css-sizing/intrinsic-percent-replaced-030.tentative.html
 !css/css-sizing/intrinsic-percent-replaced-031.html
 !css/css-sizing/intrinsic-percent-replaced-032.html
+!css/css-sizing/max-content-input-001.html
 !css/css-sizing/min-content-min-width-000.html
 !css/css-sizing/nested-flexbox-image-percentage-max-height-computes-as-none.html
 !css/css-sizing/ortho-writing-mode-001.html

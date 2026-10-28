@@ -193,6 +193,11 @@ impl ShapedRun {
       }),
       em_descent,
       zero_width,
+      has_zero_width: font
+        .as_ref()
+        .is_some_and(|font| font.charmap().map('0').is_some()),
+      avg_char_width: 0.0,
+      max_char_width: 0.0,
     }
   }
 }

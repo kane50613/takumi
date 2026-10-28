@@ -588,6 +588,14 @@ pub(crate) struct PrimaryFontMetrics {
   pub(crate) em_descent: f32,
   /// Blink's `FontMetrics::ZeroWidth`: the advance of the `0` glyph, the `ch` unit's basis.
   pub(crate) zero_width: f32,
+  /// Blink's `FontMetrics::HasZeroWidth`: whether the font maps `0` to a glyph.
+  pub(crate) has_zero_width: bool,
+  /// Blink's `SimpleFontData::AvgCharWidth` as `PlatformInit` reads it off FreeType outside Apple
+  /// platforms: the `OS/2` average width, else the `x` glyph's advance, else the x-height.
+  pub(crate) avg_char_width: f32,
+  /// Blink's `SimpleFontData::MaxCharWidth` outside Windows and Apple platforms: the width of the
+  /// `head` table's bounding box, in whole pixels.
+  pub(crate) max_char_width: f32,
 }
 
 /// A font's own underline.
@@ -669,6 +677,22 @@ impl PrimaryFontMetrics {
         metrics.descent.abs(),
       ),
       zero_width: zero_inline_size(font_ref, font_size, location),
+      has_zero_width: font_ref.charmap().map('0').is_some(),
+      avg_char_width: metrics
+        .average_width
+        .filter(|&width| width != 0.0)
+        .or_else(|| {
+          let glyph = font_ref.charmap().map('x')?;
+
+          font_ref
+            .glyph_metrics(Size::new(font_size), location)
+            .advance_width(glyph)
+        })
+        .or(metrics.x_height)
+        .unwrap_or(0.0),
+      max_char_width: metrics
+        .bounds
+        .map_or(0.0, |bounds| (bounds.x_max - bounds.x_min).round()),
     }
   }
 

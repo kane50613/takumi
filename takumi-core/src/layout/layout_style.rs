@@ -141,6 +141,8 @@ pub(crate) struct LayoutStyle {
   /// `Normal` stands for `auto`.
   pub(crate) align_self: AlignItems,
   pub(crate) is_replaced: bool,
+  /// Blink's `ShouldIgnoreOverflowPropertyForInlineBlockBaseline`.
+  pub(crate) ignores_overflow_for_inline_block_baseline: bool,
   /// The direction `-webkit-box-orient` resolves to for a `-webkit-box`.
   pub(crate) flex_direction: FlexDirection,
   pub(crate) flex_wrap: FlexWrap,
@@ -201,6 +203,7 @@ impl Default for LayoutStyle {
       justify_self: AlignItems::Normal,
       align_self: AlignItems::Normal,
       is_replaced: false,
+      ignores_overflow_for_inline_block_baseline: false,
       flex_direction: FlexDirection::Row,
       flex_wrap: FlexWrap::NoWrap,
       flex_line_count: 1,
@@ -294,6 +297,7 @@ impl LayoutStyle {
       justify_self: style.misc_data.justify_self,
       align_self: style.misc_data.align_self,
       is_replaced,
+      ignores_overflow_for_inline_block_baseline: false,
       flex_direction: style.resolved_flex_direction(),
       flex_wrap: style.misc_data.flex_wrap,
       flex_line_count: usize::from(style.misc2_data.flex_line_count.get()),

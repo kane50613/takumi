@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="takumi-presets" content="chromium" />
+    <title>form_text_input</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        padding: 16px 24px 0;
+        font-family: Archivo;
+        font-size: 16px;
+      }
+      input {
+        font-family: Archivo;
+        box-sizing: content-box;
+      }
+      .styled {
+        width: 150px;
+        padding: 6px 10px;
+        border: 1px solid rgb(203, 213, 225);
+        border-radius: 6px;
+        background-color: rgb(248, 250, 252);
+        color: rgb(15, 23, 42);
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body style="width: 800px; height: 260px">
+    <div class="row"
+      >Name <input type="text" value="Ada Lovelace" /><input
+        type="text"
+        disabled
+        value="-100.11"
+        style="width: 150px" /><input type="password" value="secret"
+    /></div>
+    <div class="row"
+      >Size <input size="5" value="12345678" /><input type="number" value="42" /><input
+        type="number"
+        value="abc" /><input type="email" value="  a@b.co  "
+    /></div>
+    <div class="row"
+      >Styled <input class="styled" value="Joyfill field" /><input
+        class="styled"
+        disabled
+        value="Disabled" /><input
+        class="styled"
+        style="height: 48px"
+        value="Tall and centered" /><input type="hidden" value="hidden"
+    /></div>
+    <div class="row"
+      >Clip <input style="width: 80px" value="A value much longer than its field" /><input
+        style="width: 80px; overflow: hidden; text-overflow: ellipsis"
+        value="A value much longer than its field"
+      /><input value="" />after
+    </div>
+  </body>
+</html>
