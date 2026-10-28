@@ -382,6 +382,30 @@ fn has_class(classes: &str, class: &str) -> bool {
   classes.split_whitespace().any(|name| name == class)
 }
 
+/// Fills every page counter hook with each character its counter style draws, so a needs pass
+/// reads them in the hook's own font.
+pub(crate) fn substitute_counter_characters(node: &mut Node) {
+  let style = node
+    .class_name()
+    .filter(|classes| {
+      [PAGE_HOOK, PAGES_HOOK, TARGET_HOOK]
+        .iter()
+        .any(|hook| has_class(classes, hook))
+    })
+    .map(CounterStyle::from_classes);
+
+  if let Some(style) = style {
+    write_counter(node, style.characters());
+    return;
+  }
+
+  if let NodeKind::Container { children } = &mut node.kind {
+    for child in children {
+      substitute_counter_characters(child);
+    }
+  }
+}
+
 /// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,
 /// like Chromium assigning `textContent` in its header/footer template.
 pub(crate) fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
