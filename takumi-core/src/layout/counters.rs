@@ -72,7 +72,9 @@ impl ListItemCounter {
       };
     }
 
-    if let Some(initial_counter) = ordinals.initial_counter() {
+    if is("ol")
+      && let Some(initial_counter) = ordinals.initial_counter()
+    {
       return Self::OrderedList {
         initial_counter,
         reversed: ordinals.reversed(),
