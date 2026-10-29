@@ -116,6 +116,12 @@ fn filter_markup(filter: NodeRef<'_>) -> String {
           out.push('<');
           out.push_str(name);
           write_attributes(&mut out, node, false);
+
+          if node.children().next().is_none() {
+            out.push_str("/>");
+            continue;
+          }
+
           out.push('>');
           steps.push(Step::Close(name));
           steps.extend(node.children().rev().map(Step::Open));
@@ -208,7 +214,7 @@ mod tests {
         .unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter"><feFlood flood-color="red"></feFlood></filter>"#
+      r#"<filter id="takumi-filter"><feFlood flood-color="red"/></filter>"#
     );
   }
 
@@ -218,7 +224,7 @@ mod tests {
       FilterReference::from_markup("<filter id = 'a&#98;c'><feFlood/></filter>").unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter"><feFlood></feFlood></filter>"#
+      r#"<filter id="takumi-filter"><feFlood/></filter>"#
     );
   }
 
@@ -230,7 +236,7 @@ mod tests {
     .unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter"><feFlood></feFlood></filter>"#
+      r#"<filter id="takumi-filter"><feFlood/></filter>"#
     );
   }
 
@@ -251,7 +257,7 @@ mod tests {
 
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter"><feFlood></feFlood></filter>"#
+      r#"<filter id="takumi-filter"><feFlood/></filter>"#
     );
   }
 
@@ -264,7 +270,7 @@ mod tests {
 
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter"><feFlood flood-color="&quot;&gt;&lt;script&gt;"></feFlood></filter>"#
+      r#"<filter id="takumi-filter"><feFlood flood-color="&quot;&gt;&lt;script&gt;"/></filter>"#
     );
   }
 
