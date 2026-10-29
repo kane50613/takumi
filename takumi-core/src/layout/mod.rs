@@ -20,6 +20,8 @@ pub(crate) mod constraint_space;
 pub(crate) mod content_alignment;
 pub(crate) mod contoured_rect;
 pub(crate) mod corner_shape;
+/// CSS counters in scope while a render tree is built.
+pub(crate) mod counters;
 /// Backend-agnostic box-decoration clip geometry.
 pub mod decoration;
 #[cfg(feature = "fragmentation")]

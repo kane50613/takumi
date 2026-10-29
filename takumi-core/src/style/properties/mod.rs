@@ -18,6 +18,7 @@ pub(crate) mod conic_gradient;
 mod contain;
 mod content;
 mod corner_shape;
+mod counter;
 pub(crate) mod filter;
 #[cfg(feature = "svg")]
 pub(crate) mod filter_reference;
@@ -96,6 +97,7 @@ pub use conic_gradient::ConicGradient;
 pub use contain::*;
 pub use content::*;
 pub use corner_shape::*;
+pub use counter::*;
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, MapDirection, SEPIA_WEIGHTS,

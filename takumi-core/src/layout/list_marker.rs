@@ -309,7 +309,7 @@ pub(super) fn is_list_element(node: &Node) -> bool {
     .is_some_and(|tag| tag.eq_ignore_ascii_case("ol") || tag.eq_ignore_ascii_case("ul"))
 }
 
-fn attribute_number(node: &Node, name: &str) -> Option<i32> {
+pub(super) fn attribute_number(node: &Node, name: &str) -> Option<i32> {
   node
     .attribute(name)
     .and_then(|value| value.trim().parse::<i32>().ok())

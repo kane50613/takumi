@@ -1,10 +1,11 @@
 use std::{fmt, sync::Arc};
 
-use cssparser::{Parser, Token, serialize_string};
+use cssparser::{Parser, Token, serialize_identifier, serialize_string};
 
 use crate::style::{
-  Animatable, BackgroundImage, FromCss, MakeComputed, ParseResult, SizingContext, ToCss,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, BackgroundImage, Direction, FromCss, ListStyleType, MakeComputed, ParseResult,
+  SizingContext, ToCss, properties::counter::counter_name, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// CSS `content` property value for `::before` / `::after` pseudo-elements.
@@ -30,8 +31,74 @@ pub enum ContentItem {
   /// `attr(name [, "fallback"])`, resolved at render-tree-build time against
   /// the originating element's attributes.
   Attr(AttrRef),
+  /// `counter()` or `counters()`, resolved at render-tree-build time against the counters in
+  /// scope.
+  Counter(CounterFunction),
 }
 
+/// A `counter(<name>, <counter-style>?)` or `counters(<name>, <string>, <counter-style>?)`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CounterFunction {
+  /// The counter's name.
+  pub name: Arc<str>,
+  /// The string `counters()` joins every counter of the name in scope with, or `None` for
+  /// `counter()`, which reads the innermost one alone.
+  pub separator: Option<Arc<str>>,
+  /// The counter style the values are written in.
+  pub style: ListStyleType,
+}
+
+impl CounterFunction {
+  /// The text of `values`, the counters in scope from the innermost out, as Blink's
+  /// `LayoutCounter::GenerateCounterText` writes them: the outermost first.
+  pub(crate) fn text(&self, values: &[i32], direction: Direction) -> String {
+    let represent = |value: &i32| {
+      self
+        .style
+        .representation(*value, direction)
+        .unwrap_or_default()
+    };
+
+    match &self.separator {
+      Some(separator) => values
+        .iter()
+        .rev()
+        .map(represent)
+        .collect::<Vec<_>>()
+        .join(separator),
+      None => values.first().map(represent).unwrap_or_default(),
+    }
+  }
+
+  /// The arguments of `counters()` when `joined` is set, of `counter()` otherwise.
+  fn parse<'i>(input: &mut Parser<'i>, joined: bool) -> ParseResult<'i, Self> {
+    let name = counter_name::<ContentItem>(input)?;
+    let separator = if joined {
+      input.expect_comma()?;
+
+      Some(input.expect_string()?.as_ref().into())
+    } else {
+      None
+    };
+    let style = if input.try_parse(Parser::expect_comma).is_ok() {
+      let token = input.next()?.clone();
+
+      match &token {
+        Token::Ident(ident) => ListStyleType::from_ident(ident),
+        _ => None,
+      }
+      .ok_or_else(|| unexpected_token!(ContentItem, &token))?
+    } else {
+      ListStyleType::Decimal
+    };
+
+    Ok(Self {
+      name,
+      separator,
+      style,
+    })
+  }
+}
 /// A parsed `attr(<name> [, <fallback>])` expression.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttrRef {
@@ -113,11 +180,17 @@ impl<'i> FromCss<'i> for ContentItem {
       Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => input
         .parse_nested_block(AttrRef::from_css)
         .map(ContentItem::Attr),
+      Token::Function(ref name) if name.eq_ignore_ascii_case("counter") => input
+        .parse_nested_block(|input| CounterFunction::parse(input, false))
+        .map(ContentItem::Counter),
+      Token::Function(ref name) if name.eq_ignore_ascii_case("counters") => input
+        .parse_nested_block(|input| CounterFunction::parse(input, true))
+        .map(ContentItem::Counter),
       other => Err(unexpected_token!(Self, &other)),
     }
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["<string>", "<image>"];
+  const VALID_TOKENS: &'static [&'static str] = &["<string>", "<image>", "counter()", "counters()"];
 }
 
 impl<'i> FromCss<'i> for AttrRef {
@@ -152,7 +225,31 @@ impl ToCss for ContentItem {
       ContentItem::Text(value) => serialize_string(value, dest),
       ContentItem::Image(image) => image.to_css(dest),
       ContentItem::Attr(attr) => attr.to_css(dest),
+      ContentItem::Counter(counter) => counter.to_css(dest),
     }
+  }
+}
+
+impl ToCss for CounterFunction {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str(if self.separator.is_some() {
+      "counters("
+    } else {
+      "counter("
+    })?;
+    serialize_identifier(&self.name, dest)?;
+
+    if let Some(separator) = &self.separator {
+      dest.write_str(", ")?;
+      serialize_string(separator, dest)?;
+    }
+
+    if self.style != ListStyleType::Decimal {
+      dest.write_str(", ")?;
+      self.style.to_css(dest)?;
+    }
+
+    dest.write_char(')')
   }
 }
 
