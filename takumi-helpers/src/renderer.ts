@@ -20,10 +20,18 @@ export { type JsonSource, toNativeSource } from "./node-source";
 
 type Awaitable<T> = T | Promise<T>;
 
-/** Font byte payloads accepted across environments. */
+/**
+ * Font byte payloads accepted across environments.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
-/** A font descriptor, matching each backend's generated `FontDetails`. */
+/**
+ * A font descriptor, matching each backend's generated `FontDetails`.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type FontDetails = {
   name?: string;
   data: ByteBuf;
@@ -45,25 +53,43 @@ export type FontDetails = {
   generic?: GenericFontFamily;
 };
 
-/** A registered font, either detailed or raw bytes. */
+/**
+ * A registered font, either detailed or raw bytes.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type Font = FontDetails | ByteBuf;
 
-/** Cache policy for a decoded image. Defaults to `"auto"`. */
+/**
+ * Cache policy for a decoded image. Defaults to `"auto"`.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type ImageCacheMode = "auto" | "none";
 
-/** An image source with its URL and raw bytes, matching each backend's generated `ImageSource`. */
+/**
+ * An image source with its URL and raw bytes, matching each backend's generated `ImageSource`.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type ImageSource = {
   src: string;
   data: ByteBuf;
   cache?: ImageCacheMode;
 };
 
-/** A font family produced by `registerFont`. Only `name` is read here; backends keep the full type. */
+/**
+ * A font family produced by `registerFont`. Only `name` is read here; backends keep the full type.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type RegisteredFamilyLike = { name: string };
 
 /**
  * A font to register. Either a URL string (fetched on demand, with name/weight/style read from the
  * file), raw bytes, or a descriptor with a lazy `data()` loader.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
  */
 export type FontLoader =
   | string
@@ -74,11 +100,16 @@ export type FontLoader =
       ranges?: [number, number][];
     } & ({ key: string } | { name: string }));
 
+/** @deprecated Internal to the bindings. Will be removed in v3. */
 export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageSource["data"] | (() => ImageSource["data"] | Promise<ImageSource["data"]>);
 };
 
-/** Images for a render: pre-fetched entries, or a group with a decode-cache default. */
+/**
+ * Images for a render: pre-fetched entries, or a group with a decode-cache default.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type ImagesInput =
   | ImageLoader[]
   | {
@@ -94,6 +125,8 @@ export type ImagesInput =
  * WebP honors both — `lossless` takes precedence over `quality`, and omitting both encodes
  * losslessly. On wasm (`@takumi-rs/wasm`) WebP is always lossless: `lossless` is effectively always
  * on and `quality` is ignored for WebP (lossy WebP is native-only).
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
  */
 export type OutputFormatOptions =
   | { format?: "png" }
@@ -106,20 +139,30 @@ export type OutputFormatOptions =
  * Animation output format. `quality` and `lossless` are WebP-only. On native, `lossless` takes
  * precedence over `quality` and omitting both encodes losslessly; on wasm animated WebP is always
  * lossless and `quality` is ignored.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
  */
 export type AnimationOutputFormatOptions =
   | { format?: "webp"; quality?: number; lossless?: boolean }
   | { format: "apng" }
   | { format: "gif" };
 
-/** The wrapper-managed extras every render entry point accepts on top of the binding options. */
+/**
+ * The wrapper-managed extras every render entry point accepts on top of the binding options.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type RenderExtras = {
   fonts?: FontLoader[] | Promise<FontLoader[]>;
   signal?: AbortSignal;
   images?: ImagesInput;
 };
 
-/** Public `render`/`measure` options for a backend whose binding options are {@link TInternal}. */
+/**
+ * Public `render`/`measure` options for a backend whose binding options are {@link TInternal}.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type BackendRenderOptions<TInternal> = Omit<
   TInternal,
   "images" | "format" | "quality" | "lossless"
@@ -127,7 +170,11 @@ export type BackendRenderOptions<TInternal> = Omit<
   OutputFormatOptions &
   RenderExtras;
 
-/** Public `renderAnimation` options for a backend whose binding options are {@link TInternal}. */
+/**
+ * Public `renderAnimation` options for a backend whose binding options are {@link TInternal}.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type BackendAnimationOptions<TInternal> = Omit<
   TInternal,
   "images" | "format" | "quality" | "lossless"
@@ -135,7 +182,11 @@ export type BackendAnimationOptions<TInternal> = Omit<
   AnimationOutputFormatOptions &
   RenderExtras;
 
-/** Public `renderSvg` options for a backend whose binding options are {@link TInternal}. */
+/**
+ * Public `renderSvg` options for a backend whose binding options are {@link TInternal}.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type BackendSvgOptions<TInternal> = Omit<TInternal, "images"> & RenderExtras;
 
 function isBuffer(data: unknown): data is ByteBuf {
@@ -181,7 +232,11 @@ function createFontKey(font: Exclude<FontLoader, string>): string | ByteBuf {
   return font.data;
 }
 
-/** Normalize an {@link ImagesInput} into concrete, deduped {@link ImageSource} entries. */
+/**
+ * Normalize an {@link ImagesInput} into concrete, deduped {@link ImageSource} entries.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSource[]> {
   const { sources = [], cache } = Array.isArray(images) ? { sources: images } : images;
   const bySrc = new Map(sources.map((image) => [image.src, image]));
@@ -198,7 +253,11 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
 /** How many times a render registers its fonts before it renders with whichever the backend still holds. */
 const REGISTER_ATTEMPTS = 3;
 
-/** What a {@link FontRegistry} needs from a backend: its registration, and the cache behind it. */
+/**
+ * What a {@link FontRegistry} needs from a backend: its registration, and the cache behind it.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type FontBackend<TFamily extends RegisteredFamilyLike> = {
   /** Registers a font under `key`; it is never released for space. */
   registerFont(font: Font, key: string): Awaitable<TFamily[]>;
@@ -213,6 +272,8 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
  * loading it, loads a font once however many renders ask for it at the same time, and turns a set
  * of {@link FontLoader}s plus an {@link ImagesInput} into the `fontFamilies`/`images` the binding
  * expects. The backend keeps the fonts and releases them; this keeps no record of its own.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
  */
 export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly loading = new Map<string, Promise<TFamily[]>>();
@@ -310,7 +371,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   }
 }
 
-/** The binding options {@link withRenderInput} passes on: extras stripped, resolved resources merged in. */
+/**
+ * The binding options {@link withRenderInput} passes on: extras stripped, resolved resources merged in.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
+ */
 export type ResolvedRenderOptions<TOptions> = Omit<
   TOptions,
   keyof RenderExtras | "fontFamilies"
@@ -324,6 +389,8 @@ export type ResolvedRenderOptions<TOptions> = Omit<
  * resolves `images`/`fontFamilies`, and enforces one abort policy: `signal` is checked before and
  * after the (network-bound) resource resolution. Then calls `call` with the binding options and the
  * `signal` for the backend to forward into a native call when it supports cancellation.
+ *
+ * @deprecated Internal to the bindings. Will be removed in v3.
  */
 export async function withRenderInput<
   TOptions extends RenderExtras & { fontFamilies?: string[] },
