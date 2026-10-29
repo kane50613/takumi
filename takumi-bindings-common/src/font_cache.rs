@@ -1,5 +1,6 @@
-//! What each font registration added, by the key its loader gives, so a renderer can skip loading a
-//! font it still holds and release the families renders used least recently past a byte budget.
+//! What each font registration added, by the key its loader gives, and the `@font-face` files a
+//! renderer holds, so it can skip loading what it still holds and release what renders used least
+//! recently past a byte budget.
 
 use std::{
   collections::HashMap,
@@ -8,7 +9,7 @@ use std::{
 
 use takumi_core::{
   Fonts,
-  resources::font::{FontError, RegisteredFamily},
+  resources::font::{FontError, FontSource, RegisteredFamily},
 };
 
 use crate::register_embedded;
@@ -39,6 +40,27 @@ impl Clone for CachedFamily {
   }
 }
 
+/// An `@font-face` file a renderer holds, by URL.
+struct CachedFile {
+  bytes: u64,
+  last_used: AtomicU64,
+}
+
+impl Clone for CachedFile {
+  fn clone(&self) -> Self {
+    Self {
+      bytes: self.bytes,
+      last_used: AtomicU64::new(self.last_used.load(Ordering::Relaxed)),
+    }
+  }
+}
+
+/// What the least recently used entry past the budget is.
+enum Oldest {
+  Family(String),
+  File(String),
+}
+
 /// The registrations of a renderer's fonts, and the budget that bounds the unpinned ones.
 ///
 /// Marking use takes `&self`, so a renderer can share one copy with its renders and change a
@@ -48,6 +70,7 @@ pub struct FontCache {
   max_bytes: u64,
   by_key: HashMap<String, Vec<RegisteredFamily>>,
   families: HashMap<String, CachedFamily>,
+  files: HashMap<String, CachedFile>,
   clock: AtomicU64,
 }
 
@@ -57,6 +80,7 @@ impl Clone for FontCache {
       max_bytes: self.max_bytes,
       by_key: self.by_key.clone(),
       families: self.families.clone(),
+      files: self.files.clone(),
       clock: AtomicU64::new(self.clock.load(Ordering::Relaxed)),
     }
   }
@@ -69,6 +93,7 @@ impl FontCache {
       max_bytes: max_bytes.unwrap_or(u64::MAX),
       by_key: HashMap::new(),
       families: HashMap::new(),
+      files: HashMap::new(),
       clock: AtomicU64::new(0),
     }
   }
@@ -161,6 +186,38 @@ impl FontCache {
     }
   }
 
+  /// Whether the renderer holds the `@font-face` file `url`, which is marked used.
+  pub fn has_file(&self, url: &str) -> bool {
+    let Some(file) = self.files.get(url) else {
+      return false;
+    };
+
+    file.last_used.store(self.tick(), Ordering::Relaxed);
+
+    true
+  }
+
+  /// Loads the `@font-face` file `url`, `bytes` of font data, into `fonts`, then releases what the
+  /// budget no longer fits, other than that file.
+  pub fn admit_file(
+    &mut self,
+    fonts: &mut Fonts,
+    url: &str,
+    source: FontSource<'_>,
+    bytes: u64,
+  ) -> Result<(), FontError> {
+    fonts.load_font_file(url, source)?;
+    self.files.insert(
+      url.to_owned(),
+      CachedFile {
+        bytes,
+        last_used: AtomicU64::new(self.tick()),
+      },
+    );
+
+    self.evict(fonts, &[], Some(url))
+  }
+
   /// Marks `families` used now, as a render that names them starts.
   pub fn touch(&self, families: &[String]) {
     let now = self.tick();
@@ -180,23 +237,45 @@ impl FontCache {
   ) -> Result<(), FontError> {
     let keep: Vec<String> = kept.iter().map(|family| fold(&family.name)).collect();
 
-    self.evict(fonts, &keep)
+    self.evict(fonts, &keep, None)
   }
 
   /// Releases the least recently used unpinned families but `keep` from `fonts` until the rest fit
   /// the budget, with every family the same registrations added. An embedded last-resort font
   /// that goes with a family is registered again. Renders in progress keep the fonts they started
   /// with.
-  fn evict(&mut self, fonts: &mut Fonts, keep: &[String]) -> Result<(), FontError> {
+  fn evict(
+    &mut self,
+    fonts: &mut Fonts,
+    keep: &[String],
+    keep_file: Option<&str>,
+  ) -> Result<(), FontError> {
     while self.unpinned_bytes() > self.max_bytes {
-      let Some(oldest) = self
+      let families = self
         .families
         .iter()
         .filter(|(folded, family)| !family.pinned && !keep.contains(folded))
-        .min_by_key(|(_, family)| family.last_used.load(Ordering::Relaxed))
-        .map(|(folded, _)| folded.clone())
+        .map(|(folded, family)| (Oldest::Family(folded.clone()), &family.last_used));
+      let files = self
+        .files
+        .iter()
+        .filter(|(url, _)| keep_file != Some(url.as_str()))
+        .map(|(url, file)| (Oldest::File(url.clone()), &file.last_used));
+      let Some(oldest) = families
+        .chain(files)
+        .min_by_key(|(_, last_used)| last_used.load(Ordering::Relaxed))
+        .map(|(oldest, _)| oldest)
       else {
         return Ok(());
+      };
+      let oldest = match oldest {
+        Oldest::Family(folded) => folded,
+        Oldest::File(url) => {
+          fonts.forget_font_file(&url);
+          self.files.remove(&url);
+
+          continue;
+        }
       };
 
       for family in self.registered_with(&oldest) {
@@ -246,6 +325,7 @@ impl FontCache {
       .values()
       .filter(|family| !family.pinned)
       .map(|family| family.bytes)
+      .chain(self.files.values().map(|file| file.bytes))
       .sum()
   }
 
@@ -263,6 +343,7 @@ impl FontCache {
   pub fn clear(&mut self) {
     self.by_key.clear();
     self.families.clear();
+    self.files.clear();
   }
 
   fn tick(&self) -> u64 {

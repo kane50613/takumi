@@ -241,6 +241,26 @@ impl PdfRenderer {
     self.fonts.cached_value(key, pin)
   }
 
+  /// Loads the `@font-face` file `url` names, as `needs` reported it, released for space once the
+  /// renderer's font cache is past its budget.
+  #[wasm_bindgen(js_name = cacheFontFile)]
+  pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), js_sys::Error> {
+    self.fonts.cache_font_file(url, data).map_err(map_error)
+  }
+
+  /// Whether the renderer holds the `@font-face` file `url`, loaded or failed, marking it used.
+  #[wasm_bindgen(js_name = hasFontFile)]
+  pub fn has_font_file(&self, url: &str) -> bool {
+    self.fonts.has_font_file(url)
+  }
+
+  /// Records that the `@font-face` file `url` failed to load, so its rule moves on to its next
+  /// source.
+  #[wasm_bindgen(js_name = failFontFile)]
+  pub fn fail_font_file(&self, url: &str) {
+    self.fonts.fail_font_file(url);
+  }
+
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
   #[wasm_bindgen(js_name = unregisterFont)]

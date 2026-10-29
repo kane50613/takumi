@@ -134,3 +134,32 @@ describe("font subsets", () => {
     expect(greek.data).not.toHaveBeenCalled();
   });
 });
+
+describe("@font-face", () => {
+  test("prepare downloads the files the text reaches, moving past a failed src", async () => {
+    const fontRenderer = new Renderer();
+    const fetch = mock(async (url: string) =>
+      url.endsWith("missing.woff2") ? new Response(null, { status: 404 }) : new Response(fontBytes),
+    );
+    const html = `<style>
+      @font-face {
+        font-family: Face;
+        src: url(https://fonts.test/missing.woff2), url(https://fonts.test/face.woff2);
+      }
+      @font-face { font-family: Unused; src: url(https://fonts.test/unused.woff2); }
+      p { font-family: Face }
+    </style>
+    <p>Hello</p>`;
+
+    await fontRenderer.prepare(html, { width: 100, height: 100, images: { fetch } });
+
+    expect(fetch.mock.calls.map(([url]) => url).sort()).toEqual([
+      "https://fonts.test/face.woff2",
+      "https://fonts.test/missing.woff2",
+    ]);
+
+    await fontRenderer.prepare(html, { width: 100, height: 100, images: { fetch } });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
