@@ -49,8 +49,11 @@ pub(crate) struct SimpleFontData {
 }
 
 impl SimpleFontData {
-  /// `face` at `size`; none for a face that does not parse.
+  /// `face` at `size`, scaled by its `size-adjust`; none for a face that does not parse.
   pub(crate) fn new(face: MatchedFace, size: f32, specified_size: f32) -> Option<Self> {
+    let size = face
+      .size_adjust
+      .map_or(size, |size_adjust| size * size_adjust);
     let font = face.typeface.font_ref()?;
     let units_per_em = font.head().ok()?.units_per_em();
     let space_glyph = font
@@ -190,7 +193,12 @@ impl SimpleFontData {
           .map(|variation| (variation.tag, variation.value)),
       );
 
-      Some(PrimaryFontMetrics::of(&font, self.size, (&location).into()))
+      Some(PrimaryFontMetrics::of(
+        &font,
+        self.size,
+        (&location).into(),
+        self.face.metrics_override,
+      ))
     })
   }
 
