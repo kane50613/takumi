@@ -35,7 +35,7 @@ use crate::{
     css_segmented_font_face::FontPlatformDataForRangeSet,
     font_custom_platform_data::FontCustomPlatformData,
     font_description::FontSelectionDescription,
-    font_face::{FaceData, FontFaceDescriptors},
+    font_face::{FaceData, FontFaceDescriptors, PendingSource},
     font_height::FontHeight,
   },
   layout_unit::LayoutUnit,
@@ -548,9 +548,11 @@ impl Fonts {
     let registry = Arc::make_mut(&mut self.registry);
 
     registry.revise();
-    registry
-      .selector
-      .register_pending(face.family, face.descriptors, face.id);
+    registry.selector.register_pending(
+      face.family,
+      face.descriptors,
+      PendingSource::Listed(face.id),
+    );
   }
 
   /// Whether a pending face is registered.

@@ -17,7 +17,7 @@ use super::{
   css_segmented_font_face::FontPlatformDataForRangeSet,
   font_custom_platform_data::FontCustomPlatformData,
   font_description::FontSelectionDescription,
-  font_face::{FaceData, FontFace, FontFaceDescriptors},
+  font_face::{FaceData, FontFace, FontFaceDescriptors, PendingSource},
   font_face_cache::{FontFaceCache, fold_family_name},
 };
 use crate::resources::font::SharedBytes;
@@ -132,14 +132,15 @@ impl CssFontSelector {
     faces
   }
 
-  /// Registers a face of `descriptors`' family with no data yet, which matching finds as `id`.
+  /// Registers a face of `descriptors`' family with no data yet, which matching finds loading
+  /// from `source`.
   pub(crate) fn register_pending(
     &mut self,
     family: Arc<str>,
     descriptors: FontFaceDescriptors,
-    id: usize,
+    source: PendingSource,
   ) {
-    let font_face = Arc::new(FontFace::pending(Arc::clone(&family), descriptors, id));
+    let font_face = Arc::new(FontFace::pending(Arc::clone(&family), descriptors, source));
 
     self.font_face_cache.add_font_face(Arc::clone(&font_face));
     self.font_faces.push(RegisteredFontFace {

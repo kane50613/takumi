@@ -7,8 +7,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::{
   context::RenderContext,
   fonts::{
-    font::Font, font_fallback_list::FontFallbackList, font_fallback_priority::FontFallbackPriority,
-    symbols_iterator::SymbolsIterator,
+    font::Font, font_face::PendingSource, font_fallback_list::FontFallbackList,
+    font_fallback_priority::FontFallbackPriority, symbols_iterator::SymbolsIterator,
   },
   layout::{
     inline::{inline_item::InlineItemType, inline_node::InlineNode},
@@ -226,7 +226,9 @@ impl NeedsCollector {
           continue;
         }
 
-        if let Some(id) = list.pending_face_for_character(character, priority) {
+        if let Some(PendingSource::Listed(id)) =
+          list.pending_face_for_character(character, priority)
+        {
           self.needs.faces.insert(id);
         }
       }

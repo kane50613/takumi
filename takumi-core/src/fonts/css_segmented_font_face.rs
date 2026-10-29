@@ -1,9 +1,9 @@
 //! Blink's [`CSSSegmentedFontFace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/css_segmented_font_face.cc):
 //! the faces of one family that share capabilities and differ by `unicode-range`.
 //!
-//! Every registered face is one Blink adds from script, so `FontFaceList` keeps only its
-//! non-CSS-connected part. Blink's `font_data_table_` cache is left out: the registry is shared
-//! immutably across renders.
+//! A face registered through [`crate::Fonts`] is one Blink adds from script, and a face an
+//! `@font-face` rule makes is CSS-connected. Blink's `font_data_table_` cache is left out: the
+//! registry is shared immutably across renders.
 
 use std::sync::Arc;
 
@@ -36,15 +36,63 @@ impl FaceData<FontPlatformDataForRangeSet> {
 #[derive(Clone, Debug)]
 pub(crate) struct CssSegmentedFontFace {
   font_selection_capabilities: FontSelectionCapabilities,
-  /// Blink's `FontFaceList`, in insertion order.
-  font_faces: Vec<Arc<FontFace>>,
+  font_faces: FontFaceList,
+}
+
+/// Blink's `FontFaceList`: CSS-connected faces in cascade order, then the faces added from script.
+#[derive(Clone, Debug, Default)]
+struct FontFaceList {
+  css_connected_face: Vec<Arc<FontFace>>,
+  non_css_connected_face: Vec<Arc<FontFace>>,
+}
+
+impl FontFaceList {
+  /// Blink's `Insert`. The CSS-connected faces arrive in cascade order, so each goes last.
+  fn insert(&mut self, font_face: Arc<FontFace>) {
+    if font_face.css_connected {
+      self.css_connected_face.push(font_face);
+    } else {
+      self.non_css_connected_face.push(font_face);
+    }
+  }
+
+  /// Blink's `Erase`.
+  fn erase(&mut self, font_face: &Arc<FontFace>) -> bool {
+    [
+      &mut self.css_connected_face,
+      &mut self.non_css_connected_face,
+    ]
+    .into_iter()
+    .any(|part| {
+      let Some(index) = part.iter().position(|each| Arc::ptr_eq(each, font_face)) else {
+        return false;
+      };
+
+      part.remove(index);
+      true
+    })
+  }
+
+  fn is_empty(&self) -> bool {
+    self.css_connected_face.is_empty() && self.non_css_connected_face.is_empty()
+  }
+
+  /// Blink's `ForEachReverse`: the faces added from script, then the CSS-connected ones, each
+  /// last first.
+  fn reverse(&self) -> impl Iterator<Item = &Arc<FontFace>> {
+    self
+      .non_css_connected_face
+      .iter()
+      .rev()
+      .chain(self.css_connected_face.iter().rev())
+  }
 }
 
 impl CssSegmentedFontFace {
   pub(crate) fn new(font_selection_capabilities: FontSelectionCapabilities) -> Self {
     Self {
       font_selection_capabilities,
-      font_faces: Vec::new(),
+      font_faces: FontFaceList::default(),
     }
   }
 
@@ -55,21 +103,12 @@ impl CssSegmentedFontFace {
 
   /// Blink's `AddFontFace`.
   pub(crate) fn add_font_face(&mut self, font_face: Arc<FontFace>) {
-    self.font_faces.push(font_face);
+    self.font_faces.insert(font_face);
   }
 
   /// Blink's `RemoveFontFace`.
   pub(crate) fn remove_font_face(&mut self, font_face: &Arc<FontFace>) -> bool {
-    let Some(index) = self
-      .font_faces
-      .iter()
-      .position(|each| Arc::ptr_eq(each, font_face))
-    else {
-      return false;
-    };
-
-    self.font_faces.remove(index);
-    true
+    self.font_faces.erase(font_face)
   }
 
   /// Blink's `IsEmpty`.
@@ -97,8 +136,7 @@ impl CssSegmentedFontFace {
 
     let created_font_data: Vec<FaceData<FontPlatformDataForRangeSet>> = self
       .font_faces
-      .iter()
-      .rev()
+      .reverse()
       .map(|font_face| {
         font_face
           .get_font_data(&requested_font_description)

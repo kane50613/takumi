@@ -39,14 +39,21 @@ pub(crate) struct FontFaceDescriptors {
 pub(crate) enum FontFaceSource {
   /// Blink's `BinaryDataFontFaceSource`.
   Binary(Arc<FontCustomPlatformData>),
-  /// Blink's `RemoteFontFaceSource` before it loads, by the id the caller gave it.
-  Pending(usize),
+  /// Blink's `RemoteFontFaceSource` before it loads.
+  Pending(PendingSource),
+}
+
+/// What a pending face loads from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PendingSource {
+  /// A face registered with [`crate::Fonts::register_pending`], by the id the caller gave it.
+  Listed(usize),
 }
 
 /// Blink's `FontDataForRangeSet` whose `CustomFontData` is loading.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PendingFace {
-  pub(crate) id: usize,
+  pub(crate) source: PendingSource,
   pub(crate) range_set: UnicodeRangeSet,
 }
 
@@ -81,6 +88,8 @@ pub(crate) struct FontFace {
   pub(crate) family: Arc<str>,
   pub(crate) descriptors: FontFaceDescriptors,
   pub(crate) source: FontFaceSource,
+  /// Whether an `@font-face` rule made the face, rather than a registration from script.
+  pub(crate) css_connected: bool,
 }
 
 impl FontFace {
@@ -93,15 +102,21 @@ impl FontFace {
       family,
       descriptors,
       source: FontFaceSource::Binary(custom_platform_data),
+      css_connected: false,
     }
   }
 
-  /// A face of `family` with no data yet, which matching finds as `id`.
-  pub(crate) fn pending(family: Arc<str>, descriptors: FontFaceDescriptors, id: usize) -> Self {
+  /// A face of `family` with no data yet, which matching finds loading from `source`.
+  pub(crate) fn pending(
+    family: Arc<str>,
+    descriptors: FontFaceDescriptors,
+    source: PendingSource,
+  ) -> Self {
     Self {
       family,
       descriptors,
-      source: FontFaceSource::Pending(id),
+      source: FontFaceSource::Pending(source),
+      css_connected: false,
     }
   }
 
@@ -181,9 +196,9 @@ impl FontFace {
   ) -> FaceData<FontPlatformData> {
     let custom_platform_data = match &self.source {
       FontFaceSource::Binary(custom_platform_data) => custom_platform_data,
-      FontFaceSource::Pending(id) => {
+      FontFaceSource::Pending(source) => {
         return FaceData::Pending(PendingFace {
-          id: *id,
+          source: source.clone(),
           range_set: self.ranges().clone(),
         });
       }
