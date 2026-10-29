@@ -285,6 +285,45 @@ fn a_textarea_built_in_code_shows_the_text_of_its_children() {
 }
 
 #[test]
+fn a_textarea_built_in_code_leaves_later_siblings_their_own_style() {
+  let textarea = Node::container([Node::text("a"), Node::text("b")]).with_tag_name("textarea");
+  let measured = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(Node::container([
+        textarea,
+        Node::container([]).with_class_name("after"),
+      ]))
+      .stylesheet(
+        StyleSheet::parse_loosy(&format!("{CSS} .after {{ display: block; width: 37px }}")).into(),
+      )
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  assert_eq!(measured.children[1].width, 37.0);
+}
+
+#[test]
+fn a_textarea_keeps_its_text_when_a_pseudo_element_generates_content() {
+  let textarea = Node::container([Node::text("Hi")]).with_tag_name("textarea");
+  let measured = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(Node::container([textarea]))
+      .stylesheet(
+        StyleSheet::parse_loosy(&format!("{CSS} textarea::before {{ content: 'x' }}")).into(),
+      )
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  assert_eq!(run_texts(&measured.children[0]), ["Hi"]);
+}
+
+#[test]
 fn rows_and_cols_past_blinks_bound_take_their_defaults() {
   let [huge, default] = inputs(concat!(
     r#"<textarea rows="2147483648" cols="2147483648"></textarea>"#,

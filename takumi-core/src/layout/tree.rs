@@ -2694,6 +2694,7 @@ impl PendingRenderNode {
       parent_context.resolve_child_style(&mut node, source_order, matched_declarations);
     // A textarea's value is its text content, which its children stop carrying once taken.
     if is_element(&node, "textarea") && matches!(node.kind, NodeKind::Container { .. }) {
+      *source_cursor += node.subtree_len() - 1;
       node.kind = NodeKind::Text(TextData {
         text: text_content(&node),
       });
@@ -2728,6 +2729,7 @@ impl PendingRenderNode {
     // Folded text returns as a child beside generated content, so `::before` comes first.
     if (pseudo_before_present || pseudo_after.is_some())
       && !drops_own_text
+      && TextControl::of(&node).is_none()
       && let Some(text) = node.take_text()
     {
       rendered_children.push(RenderNode::generated_sibling_text(&context, text));
