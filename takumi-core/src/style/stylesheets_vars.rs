@@ -400,6 +400,17 @@ pub(crate) fn resolve_custom_properties(
 }
 
 fn contains_var_references(value: &str) -> bool {
+  // A reference spells `var(`, or escapes it, so text with neither skips tokenizing.
+  let bytes = value.as_bytes();
+
+  if !bytes.contains(&b'\\')
+    && !bytes
+      .windows(4)
+      .any(|window| window.eq_ignore_ascii_case(b"var("))
+  {
+    return false;
+  }
+
   let mut input = Parser::new(value);
 
   contains_var_references_in(&mut input).unwrap_or(true)
