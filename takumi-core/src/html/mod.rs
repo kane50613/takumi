@@ -17,9 +17,9 @@
 //! ```
 #![deny(clippy::indexing_slicing, clippy::string_slice)]
 #![cfg_attr(test, allow(clippy::indexing_slicing, clippy::string_slice))]
-mod dom;
+pub(crate) mod dom;
 mod entities;
-mod markup;
+pub(crate) mod markup;
 mod named_references;
 
 use std::{

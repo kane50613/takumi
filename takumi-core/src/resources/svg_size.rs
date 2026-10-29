@@ -2,19 +2,20 @@
 //! percentage size without a `viewBox` stays at the 100 px default instead of the content bounds.
 
 use cssparser::Parser;
-use roxmltree::{Document, ParsingOptions};
 use thiserror::Error;
+
+#[cfg(any(test, not(feature = "svg")))]
+use crate::html::dom::{Namespace, NodeData};
 
 use crate::{
   geometry::Size,
+  html::{dom::Dom, markup::parse},
   style::{FontUnits, FromCssStr, IntrinsicSizing, Length, SizingContext},
   viewport::Viewport,
 };
 
 const FONT_SIZE: f32 = 12.0;
 const DEFAULT_SIZE: f32 = 100.0;
-#[cfg(any(test, not(feature = "svg")))]
-const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
 
 /// The size usvg gives an SVG tree, plus its CSS intrinsic sizing.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -60,11 +61,8 @@ impl ViewBox {
 
 #[derive(Debug, Error)]
 pub(crate) enum SvgSizeError {
-  #[error(transparent)]
-  Xml(#[from] roxmltree::Error),
   #[error("SVG has an invalid size")]
   InvalidSize,
-  #[cfg(any(test, not(feature = "svg")))]
   #[error("SVG root element is not <svg>")]
   InvalidRoot,
 }
@@ -72,12 +70,15 @@ pub(crate) enum SvgSizeError {
 impl SvgSize {
   #[cfg(any(test, not(feature = "svg")))]
   pub(crate) fn parse(markup: &str) -> Result<Self, SvgSizeError> {
-    let document = parse_svg_document(markup)?;
-    let root = document.root_element();
-    let tag = root.tag_name();
-    if tag.name() != "svg" || !matches!(tag.namespace(), None | Some(SVG_NAMESPACE)) {
-      return Err(SvgSizeError::InvalidRoot);
-    }
+    let dom = parse_svg_document(markup);
+    let root = dom
+      .document()
+      .children()
+      .find(|node| matches!(node.data(), NodeData::Element { .. }))
+      .filter(|node| {
+        matches!(node.data(), NodeData::Element { name, .. } if name.ns == Namespace::Svg && &*name.local == "svg")
+      })
+      .ok_or(SvgSizeError::InvalidRoot)?;
 
     Self::from_root(|name| root.attribute(name))
   }
@@ -160,15 +161,12 @@ impl SvgSize {
   }
 }
 
-/// Parses SVG markup as XML, with the DTD entities usvg also accepts.
-pub(crate) fn parse_svg_document(markup: &str) -> Result<Document<'_>, roxmltree::Error> {
-  Document::parse_with_options(
-    markup,
-    ParsingOptions {
-      allow_dtd: true,
-      ..Default::default()
-    },
-  )
+/// Parses SVG markup as the HTML parser parses an `<svg>` element's content. Approximate: Blink's
+/// [`IsolatedSVGDocumentHost`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/svg/graphics/isolated_svg_document_host.cc)
+/// parses an SVG image as XML, so markup that is not well formed fails to load there where this
+/// recovers, and entities a DTD declares stay unexpanded.
+pub(crate) fn parse_svg_document(markup: &str) -> Dom {
+  parse(markup, false)
 }
 
 fn positive(value: f32) -> bool {

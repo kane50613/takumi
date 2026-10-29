@@ -81,6 +81,10 @@ impl Dom {
     }
   }
 
+  pub(crate) fn node(&self, id: NodeId) -> NodeRef<'_> {
+    NodeRef { dom: self, id }
+  }
+
   pub(crate) fn data(&self, id: NodeId) -> &NodeData {
     &self.nodes[id].data
   }
@@ -133,6 +137,10 @@ pub(crate) struct NodeRef<'a> {
 }
 
 impl<'a> NodeRef<'a> {
+  pub(crate) fn id(self) -> NodeId {
+    self.id
+  }
+
   pub(crate) fn data(self) -> &'a NodeData {
     self.dom.data(self.id)
   }

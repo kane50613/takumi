@@ -78,10 +78,6 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.roxmltree]
-workspace = true
-optional = true
-
 [dependencies.harfrust]
 workspace = true
 
@@ -113,7 +109,7 @@ webp = ["dep:image-webp", "dep:libwebp-sys"]
 gif = ["dep:gif"]
 # Parsing HTML markup into a node tree, as `html::from_html` does.
 html = []
-svg-sizing = ["dep:roxmltree"]
+svg-sizing = ["html"]
 svg = ["svg-sizing"]
 # Rasterizing an SVG: the filter pipeline and `SvgSource::rasterize_cached`. A backend that does not rasterize goes without.
 svg-raster = ["svg"]

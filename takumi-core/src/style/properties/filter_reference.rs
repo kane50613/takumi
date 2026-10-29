@@ -2,9 +2,13 @@
 
 use std::{str::from_utf8, sync::Arc};
 
-use roxmltree::Document;
-
-use crate::resources::image::{DataUriError, decode_data_uri};
+use crate::{
+  html::{
+    dom::{Attribute, AttributeNamespace, NodeData, NodeRef},
+    markup::parse,
+  },
+  resources::image::{DataUriError, decode_data_uri},
+};
 
 /// Error produced while parsing a filter reference.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -15,9 +19,6 @@ pub(crate) enum FilterReferenceError {
   /// The data URI could not be decoded.
   #[error("invalid data URI: {0}")]
   InvalidDataUri(&'static str),
-  /// The XML markup could not be parsed.
-  #[error("invalid filter markup: {0}")]
-  InvalidMarkup(String),
   /// The document contains no `<filter>` element.
   #[error("no <filter> element found")]
   MissingFilterElement,
@@ -50,47 +51,43 @@ impl FilterReference {
     Self::from_markup(text)
   }
 
-  /// Validates `<filter>` markup (optionally wrapped in an `<svg>` document)
-  /// and extracts the filter element.
-  pub(crate) fn from_markup(xml: &str) -> Result<Self, FilterReferenceError> {
-    let document = Document::parse(xml)
-      .map_err(|error| FilterReferenceError::InvalidMarkup(error.to_string()))?;
-    let root = document.root_element();
+  /// The first `<filter>` element in `markup`, a filter or an `<svg>` document holding one, with
+  /// its `id` replaced by [`FilterReference::ID`].
+  pub(crate) fn from_markup(markup: &str) -> Result<Self, FilterReferenceError> {
+    // Inside `<svg>`, the parser keeps a lone `<filter>` and its primitives in the SVG namespace.
+    let mut dom = parse(&format!("<svg>{markup}</svg>"), false);
+    let filter = first_filter(dom.document())
+      .ok_or(FilterReferenceError::MissingFilterElement)?
+      .id();
 
-    let filter = if root.has_tag_name("filter") {
-      root
-    } else {
-      root
-        .descendants()
-        .find(|node| node.has_tag_name("filter"))
-        .ok_or(FilterReferenceError::MissingFilterElement)?
-    };
-
-    let filter_range = filter.range();
-    let mut markup = xml[filter_range.clone()].to_string();
-
-    // Replace the author `id` by its byte range with the canonical one.
-    if let Some(id) = filter
-      .attributes()
-      .find(|attribute| attribute.namespace().is_none() && attribute.name() == "id")
-    {
-      let range = id.range();
-      let mut start = range.start - filter_range.start;
-
-      while start > 0 && markup.as_bytes()[start - 1].is_ascii_whitespace() {
-        start -= 1;
-      }
-      markup.replace_range(start..range.end - filter_range.start, "");
+    if let NodeData::Element { attrs, .. } = dom.data_mut(filter) {
+      attrs
+        .retain(|attribute| attribute.ns != AttributeNamespace::None || &*attribute.local != "id");
+      attrs.insert(
+        0,
+        Attribute {
+          ns: AttributeNamespace::None,
+          local: "id".into(),
+          value: Self::ID.into(),
+        },
+      );
     }
-    let rest = markup
-      .strip_prefix("<filter")
-      .ok_or(FilterReferenceError::MissingFilterElement)?;
-    let markup = format!(r#"<filter id="{id}"{rest}"#, id = Self::ID);
 
     Ok(Self {
-      markup: markup.into(),
+      markup: String::from_utf8_lossy(&dom.node(filter).outer_html()).into(),
     })
   }
+}
+
+/// The first `filter` element at or under `node`, in document order.
+fn first_filter(node: NodeRef<'_>) -> Option<NodeRef<'_>> {
+  if let NodeData::Element { name, .. } = node.data()
+    && &*name.local == "filter"
+  {
+    return Some(node);
+  }
+
+  node.children().find_map(first_filter)
 }
 
 #[cfg(test)]
@@ -118,7 +115,7 @@ mod tests {
         .unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter"><feFlood flood-color="red"/></filter>"#
+      r#"<filter id="takumi-filter"><feFlood flood-color="red"></feFlood></filter>"#
     );
   }
 
@@ -128,7 +125,7 @@ mod tests {
       FilterReference::from_markup("<filter id = 'a&#98;c'><feFlood/></filter>").unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter"><feFlood/></filter>"#
+      r#"<filter id="takumi-filter"><feFlood></feFlood></filter>"#
     );
   }
 
@@ -140,7 +137,7 @@ mod tests {
     .unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter"><feFlood/></filter>"#
+      r#"<filter id="takumi-filter"><feFlood></feFlood></filter>"#
     );
   }
 

@@ -1,9 +1,10 @@
-//! The markup an SVG document is built from: parsed XML, or the element nodes of an inline `svg`.
+//! The markup an SVG document is built from: parsed markup, or the element nodes of an inline `svg`.
 
-use roxmltree::{Node as XmlNode, NodeType};
-
-use super::{SVG_NAMESPACE, XLINK_NAMESPACE, XML_NAMESPACE};
-use crate::layout::node::{Node, NodeKind};
+use super::{XLINK_NAMESPACE, XML_NAMESPACE, XMLNS_NAMESPACE};
+use crate::{
+  html::dom::{AttributeNamespace, Namespace, NodeData, NodeRef},
+  layout::node::{Node, NodeKind},
+};
 
 /// A node of the markup: an element, a text, or a node the document leaves out.
 pub(super) trait Markup<'a>: Copy {
@@ -41,34 +42,43 @@ pub(super) trait Markup<'a>: Copy {
   }
 }
 
-impl<'a, 'input> Markup<'a> for XmlNode<'a, 'input> {
+/// A node of an SVG document the HTML parser read, which puts `<svg>` and its descendants in the SVG
+/// namespace.
+impl<'a> Markup<'a> for NodeRef<'a> {
   fn element(self) -> Option<(&'a str, bool)> {
-    if !self.is_element() {
-      return None;
+    match self.data() {
+      NodeData::Element { name, .. } => Some((&name.local, name.ns == Namespace::Svg)),
+      _ => None,
     }
-
-    let name = self.tag_name();
-
-    Some((
-      name.name(),
-      matches!(name.namespace(), None | Some(SVG_NAMESPACE)),
-    ))
   }
 
   fn text(self) -> Option<&'a str> {
-    match self.node_type() {
-      NodeType::Text => XmlNode::text(&self),
+    match self.data() {
+      NodeData::Text(text) => Some(text),
       _ => None,
     }
   }
 
   fn attributes(self) -> impl Iterator<Item = (Option<&'a str>, &'a str, &'a str)> {
-    XmlNode::attributes(&self)
-      .map(|attribute| (attribute.namespace(), attribute.name(), attribute.value()))
+    let attributes = match self.data() {
+      NodeData::Element { attrs, .. } => attrs.as_slice(),
+      _ => &[],
+    };
+
+    attributes.iter().map(|attribute| {
+      let namespace = match attribute.ns {
+        AttributeNamespace::None => None,
+        AttributeNamespace::Xlink => Some(XLINK_NAMESPACE),
+        AttributeNamespace::Xml => Some(XML_NAMESPACE),
+        AttributeNamespace::Xmlns => Some(XMLNS_NAMESPACE),
+      };
+
+      (namespace, &*attribute.local, &*attribute.value)
+    })
   }
 
   fn children(self) -> impl Iterator<Item = Self> {
-    XmlNode::children(&self)
+    NodeRef::children(self)
   }
 }
 

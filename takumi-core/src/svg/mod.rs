@@ -27,14 +27,14 @@ use crate::{
   resources::{
     font::FontsSnapshot,
     image::{ImageError, SvgOp},
-    svg_size::{SvgSize, parse_svg_document},
+    svg_size::{SvgSize, SvgSizeError, parse_svg_document},
   },
   style::{Color, Display, IntrinsicSizing, Lang, Style, StyleDeclarationBlock, StyleSheet},
 };
 
-const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
 const XLINK_NAMESPACE: &str = "http://www.w3.org/1999/xlink";
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
+const XMLNS_NAMESPACE: &str = "http://www.w3.org/2000/xmlns/";
 
 /// The box an SVG document draws in, which its root element inherits from.
 #[derive(Clone, Copy)]
@@ -92,11 +92,16 @@ pub(crate) struct SvgDocument {
 }
 
 impl SvgDocument {
-  /// Parses SVG markup. The root must be an `svg` element in the SVG namespace or in none.
+  /// Parses SVG markup, whose root must be an `svg` element.
   pub(crate) fn parse(markup: &str) -> Result<Self, ImageError> {
-    let xml = parse_svg_document(markup).map_err(ImageError::svg_parse)?;
+    let dom = parse_svg_document(markup);
+    let root = dom
+      .document()
+      .children()
+      .find(|node| node.element().is_some())
+      .ok_or_else(|| ImageError::svg_parse(SvgSizeError::InvalidRoot))?;
 
-    Self::build(xml.root_element())
+    Self::build(root)
   }
 
   /// The document of an inline `svg` element, every attribute of it and of its descendants kept in
@@ -108,7 +113,7 @@ impl SvgDocument {
   /// The document of the root element `root`, which must be an `svg` element.
   fn build<'a>(root: impl Markup<'a>) -> Result<Self, ImageError> {
     if root.element() != Some(("svg", true)) {
-      return Err(ImageError::svg_parse(roxmltree::Error::NoRootNode));
+      return Err(ImageError::svg_parse(SvgSizeError::InvalidRoot));
     }
 
     let size = SvgSize::from_root(|name| root.attribute(name)).map_err(ImageError::svg_parse)?;
@@ -333,22 +338,22 @@ impl TreeBuilder {
 
     for (namespace, name, value) in markup.attributes() {
       match (namespace, name) {
-        (None | Some(SVG_NAMESPACE), "class") => {
+        (None, "class") => {
           node = node.with_class_name(value);
         }
-        (None | Some(SVG_NAMESPACE), "id") => {
+        (None, "id") => {
           node = node.with_id(value);
           self.first_ids.entry(value.into()).or_insert(index);
           self.last_ids.insert(value.into(), index);
         }
-        (None | Some(SVG_NAMESPACE), "style") => {
+        (None, "style") => {
           self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
           node = node.with_style(Style::from(StyleDeclarationBlock::parse_loosy(value)));
         }
         (Some(XLINK_NAMESPACE), "href") => {
           href.get_or_insert(value);
         }
-        (None | Some(SVG_NAMESPACE), "href") => {
+        (None, "href") => {
           href = Some(value);
         }
         (Some(XML_NAMESPACE), "space") => {
@@ -359,7 +364,7 @@ impl TreeBuilder {
             node = node.with_lang(lang);
           }
         }
-        (None | Some(SVG_NAMESPACE), name) => {
+        (None, name) => {
           self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
           attributes.insert(name.into(), value.into());
         }
