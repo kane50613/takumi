@@ -23,6 +23,7 @@ use skrifa::{
 
 use super::{
   font_description::FontSelectionDescription,
+  font_face::FontMetricsOverride,
   font_selection_types::{
     BOLD_THRESHOLD, FontSelectionCapabilities, FontSelectionRange, FontSelectionValue,
     ITALIC_SLOPE_VALUE, NORMAL_SLOPE_VALUE, NORMAL_WEIGHT_VALUE,
@@ -115,6 +116,10 @@ pub(crate) struct FontPlatformData {
   pub(crate) synthetic_italic: bool,
   /// The design coordinates the face is instanced at; a later tag wins, as in Skia.
   pub(crate) variations: Vec<Variation>,
+  /// The `size-adjust` Blink's `CSSFontFace::GetFontData` scales the size by.
+  pub(crate) size_adjust: Option<f32>,
+  /// The metrics Blink's `MetricsOverriddenFontData` replaces.
+  pub(crate) metrics_override: FontMetricsOverride,
 }
 
 impl FontCustomPlatformData {
@@ -380,6 +385,8 @@ impl FontCustomPlatformData {
       synthetic_bold: synthetic_bold && !self.is_bold(),
       synthetic_italic: synthetic_italic && !self.is_italic(),
       variations: variation,
+      size_adjust: None,
+      metrics_override: FontMetricsOverride::default(),
     }
   }
 

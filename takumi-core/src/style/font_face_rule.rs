@@ -2,9 +2,8 @@
 //! reads them, and the face [`FontFace::Create`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/font_face.cc)
 //! makes of one.
 //!
-//! Approximate: `font-feature-settings`, `size-adjust`, and the metric override descriptors are
-//! ignored, and `font-display` has no effect, since a render draws with what has loaded. A
-//! `local()` source never matches, as takumi has no system fonts.
+//! Approximate: `font-feature-settings` is ignored, and a `local()` source never matches.
+//! `font-display` has no effect, as a render draws with the files that have loaded by then.
 
 use std::sync::Arc;
 
@@ -110,6 +109,18 @@ impl FontFaceRule {
         },
         "font-variation-settings" => if let Some(parsed) = descriptor_value(value, variation_settings) {
           descriptors.variation_settings = parsed;
+        },
+        "size-adjust" => if let Some(parsed) = descriptor_value(value, non_negative_fraction) {
+          descriptors.size_adjust = Some(parsed);
+        },
+        "ascent-override" => if let Some(parsed) = descriptor_value(value, metric_override) {
+          descriptors.metrics_override.ascent = parsed;
+        },
+        "descent-override" => if let Some(parsed) = descriptor_value(value, metric_override) {
+          descriptors.metrics_override.descent = parsed;
+        },
+        "line-gap-override" => if let Some(parsed) = descriptor_value(value, metric_override) {
+          descriptors.metrics_override.line_gap = parsed;
         },
         _ => {},
       }
@@ -403,6 +414,26 @@ fn unicode_ranges(input: &mut Parser) -> Option<UnicodeRangeSet> {
     .map(UnicodeRangeSet::from_iter)
 }
 
+/// A non-negative percentage, as a fraction.
+fn non_negative_fraction(input: &mut Parser) -> Option<f32> {
+  input
+    .expect_percentage()
+    .ok()
+    .filter(|fraction| *fraction >= 0.0)
+}
+
+/// Blink's `ConsumeFontMetricOverride`: `normal`, or a non-negative percentage as a fraction.
+fn metric_override(input: &mut Parser) -> Option<Option<f32>> {
+  if input
+    .try_parse(|input| input.expect_ident_matching("normal"))
+    .is_ok()
+  {
+    return Some(None);
+  }
+
+  non_negative_fraction(input).map(Some)
+}
+
 /// `font-variation-settings`, its tags as harfrust reads them.
 fn variation_settings(input: &mut Parser) -> Option<Vec<Variation>> {
   let settings = FontVariationSettings::from_css(input).ok()?;
@@ -526,6 +557,20 @@ mod tests {
     assert_eq!(descriptors.weight, Some((400.0, 400.0)));
     assert!(descriptors.unicode_range.is_entire_range());
     assert_eq!(descriptors.width, Some((100.0, 100.0)));
+  }
+
+  #[test]
+  fn size_adjust_and_metric_overrides_read_as_fractions() {
+    let descriptors = rule(
+      "src: url(a.woff2); size-adjust: 150%; ascent-override: 90%; descent-override: normal;
+       line-gap-override: -10%;",
+    )
+    .descriptors;
+
+    assert_eq!(descriptors.size_adjust, Some(1.5));
+    assert_eq!(descriptors.metrics_override.ascent, Some(0.9));
+    assert_eq!(descriptors.metrics_override.descent, None);
+    assert_eq!(descriptors.metrics_override.line_gap, None);
   }
 
   #[test]

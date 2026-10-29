@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>font_face_metrics</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      @font-face {
+        font-family: "Plain";
+        src: url("assets/fonts/manrope/manrope-latin-wght-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Adjusted";
+        src: url("assets/fonts/manrope/manrope-latin-wght-normal.woff2") format("woff2");
+        size-adjust: 150%;
+      }
+      @font-face {
+        font-family: "Overridden";
+        src: url("assets/fonts/manrope/manrope-latin-wght-normal.woff2") format("woff2");
+        ascent-override: 150%;
+        descent-override: 50%;
+        line-gap-override: 25%;
+      }
+      .root {
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 16px;
+        background-color: rgb(255, 255, 255);
+        color: rgb(15, 23, 42);
+        font-size: 20px;
+      }
+      .line {
+        display: block;
+        margin-bottom: 8px;
+        background-color: rgb(219, 234, 254);
+      }
+      .plain {
+        font-family: Plain;
+      }
+      .adjusted {
+        font-family: Adjusted;
+      }
+      .overridden {
+        font-family: Overridden;
+      }
+    </style>
+  </head>
+  <body style="width: 360px; height: 260px">
+    <div class="root">
+      <div class="line plain">Plain Manrope</div>
+      <div class="line adjusted">size-adjust 150%</div>
+      <div class="line overridden">Overridden metrics</div>
+    </div>
+  </body>
+</html>
