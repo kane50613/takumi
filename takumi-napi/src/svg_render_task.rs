@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 use takumi_bindings_common::{
   css_or_stylesheets,
   input::decode_images,
-  options::{Draw, SvgRenderOptions},
+  options::{Draw, RenderOptions},
 };
 use takumi_core::Fonts;
 
@@ -15,13 +15,13 @@ pub struct SvgRenderTask {
   state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   fonts: Arc<Fonts>,
-  options: SvgRenderOptions,
+  options: RenderOptions,
 }
 
 impl SvgRenderTask {
   pub(crate) fn new(
     source: NodeSource,
-    mut options: SvgRenderOptions,
+    mut options: RenderOptions,
     state: Arc<RendererState>,
   ) -> Self {
     let input = RenderInput::new(
