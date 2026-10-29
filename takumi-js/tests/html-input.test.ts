@@ -16,7 +16,7 @@ test("hands HTML to the renderer as written when emoji come from the fonts", asy
 
 test("parses HTML into a node tree to split its emoji from a CDN", async () => {
   const renderer = new Renderer();
-  const call = spyOn(renderer, "render");
+  const call = spyOn(renderer, "prepare");
 
   await render("<div>a</div>", { ...raw, renderer });
 
