@@ -601,15 +601,23 @@ impl<'t> HarfBuzzShaper<'t> {
         .font_feature_to_use(small_caps_behavior)
         .append_features(&mut caps_features);
 
-      let font_features: Cow<'_, [Feature]> = if caps_features.is_empty() {
-        Cow::Borrowed(&range_data.font_features)
-      } else {
-        caps_features
-          .into_iter()
-          .map(FontFeature::into_harfrust)
-          .chain(range_data.font_features.iter().copied())
-          .collect()
-      };
+      // Blink's `ResolveFontFeatureSettingsDescriptor`: the face's descriptor features the
+      // property leaves unset, before the rest.
+      let resolved_features = adjusted_font
+        .face
+        .feature_settings
+        .iter()
+        .filter(|feature| !font.description.feature_setting_tags.contains(&feature.tag));
+      let font_features: Cow<'_, [Feature]> =
+        if caps_features.is_empty() && adjusted_font.face.feature_settings.is_empty() {
+          Cow::Borrowed(&range_data.font_features)
+        } else {
+          resolved_features
+            .copied()
+            .chain(caps_features.into_iter().map(FontFeature::into_harfrust))
+            .chain(range_data.font_features.iter().copied())
+            .collect()
+        };
 
       let Some(buffer) = shape_range(
         buffer,

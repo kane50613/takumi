@@ -22,6 +22,11 @@
         descent-override: 50%;
         line-gap-override: 25%;
       }
+      @font-face {
+        font-family: "Featured";
+        src: url("assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf") format("truetype");
+        font-feature-settings: "zero" 1;
+      }
       .root {
         display: block;
         width: 100%;
@@ -29,7 +34,7 @@
         padding: 16px;
         background-color: rgb(255, 255, 255);
         color: rgb(15, 23, 42);
-        font-size: 20px;
+        font-size: 24px;
       }
       .line {
         display: block;
@@ -45,13 +50,21 @@
       .overridden {
         font-family: Overridden;
       }
+      .featured {
+        font-family: Featured;
+      }
+      .property-wins {
+        font-feature-settings: "zero" 0;
+      }
     </style>
   </head>
-  <body style="width: 360px; height: 260px">
+  <body style="width: 360px; height: 300px">
     <div class="root">
       <div class="line plain">Plain Manrope</div>
       <div class="line adjusted">size-adjust 150%</div>
       <div class="line overridden">Overridden metrics</div>
+      <div class="line featured">Slashed 2010</div>
+      <div class="line featured property-wins">Property wins 2010</div>
     </div>
   </body>
 </html>

@@ -2,13 +2,13 @@
 //! reads them, and the face [`FontFace::Create`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/font_face.cc)
 //! makes of one.
 //!
-//! Approximate: `font-feature-settings` is ignored, and a `local()` source never matches.
-//! `font-display` has no effect, as a render draws with the files that have loaded by then.
+//! Approximate: a `local()` source never matches. `font-display` has no effect, as a render
+//! draws with the files that have loaded by then.
 
 use std::sync::Arc;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use harfrust::font::Variation;
+use harfrust::{Feature, font::Variation};
 
 use crate::{
   fonts::font_face::FontFaceDescriptors,
@@ -16,7 +16,7 @@ use crate::{
   style::{
     FontStretch, FontStyle, FromCss, GenericFamilyType, MediaQueryList, RawDeclaration,
     RawDeclarationParser,
-    properties::{FontVariationSettings, oblique_angle},
+    properties::{FontFeatureSettings, FontVariationSettings, oblique_angle},
     selector::LayerPath,
   },
 };
@@ -109,6 +109,9 @@ impl FontFaceRule {
         },
         "font-variation-settings" => if let Some(parsed) = descriptor_value(value, variation_settings) {
           descriptors.variation_settings = parsed;
+        },
+        "font-feature-settings" => if let Some(parsed) = descriptor_value(value, feature_settings) {
+          descriptors.feature_settings = parsed;
         },
         "size-adjust" => if let Some(parsed) = descriptor_value(value, non_negative_fraction) {
           descriptors.size_adjust = Some(parsed);
@@ -440,6 +443,18 @@ fn metric_override(input: &mut Parser) -> Option<Option<f32>> {
   non_negative_fraction(input).map(Some)
 }
 
+/// `font-feature-settings`, as harfrust shapes with it.
+fn feature_settings(input: &mut Parser) -> Option<Vec<Feature>> {
+  let settings = FontFeatureSettings::from_css(input).ok()?;
+
+  Some(
+    settings
+      .iter()
+      .map(|feature| feature.into_harfrust())
+      .collect(),
+  )
+}
+
 /// `font-variation-settings`, its tags as harfrust reads them.
 fn variation_settings(input: &mut Parser) -> Option<Vec<Variation>> {
   let settings = FontVariationSettings::from_css(input).ok()?;
@@ -570,6 +585,24 @@ mod tests {
     assert_eq!(descriptors.metrics_override.ascent, Some(0.9));
     assert_eq!(descriptors.metrics_override.descent, None);
     assert_eq!(descriptors.metrics_override.line_gap, None);
+  }
+
+  #[test]
+  fn font_feature_settings_reads_each_feature() {
+    let features = rule(r#"src: url(a.woff2); font-feature-settings: "zero", "ss01" 0;"#)
+      .descriptors
+      .feature_settings;
+
+    assert_eq!(
+      features
+        .iter()
+        .map(|feature| (feature.tag, feature.value))
+        .collect::<Vec<_>>(),
+      [
+        (harfrust::Tag::new(b"zero"), 1),
+        (harfrust::Tag::new(b"ss01"), 0)
+      ]
+    );
   }
 
   #[test]

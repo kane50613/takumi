@@ -237,6 +237,8 @@ pub(crate) struct MatchedFace {
   pub(crate) variations: Vec<Variation>,
   /// The face's `unicode-range`, or `None` for every codepoint.
   pub(crate) unicode_range: Option<UnicodeRangeSet>,
+  /// The face's `font-feature-settings` descriptor.
+  pub(crate) feature_settings: Vec<harfrust::Feature>,
   /// The `size-adjust` the face scales its size by.
   pub(crate) size_adjust: Option<f32>,
   /// The metrics the face's `@font-face` rule overrides.
@@ -253,6 +255,7 @@ impl MatchedFace {
       synthetic_italic: platform.synthetic_italic,
       variations: platform.variations,
       unicode_range: (!face.range_set.is_entire_range()).then_some(face.range_set),
+      feature_settings: platform.feature_settings,
       size_adjust: platform.size_adjust,
       metrics_override: platform.metrics_override,
     }

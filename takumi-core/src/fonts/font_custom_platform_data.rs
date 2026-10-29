@@ -11,7 +11,7 @@ use std::{
 };
 
 use harfrust::{
-  Tag,
+  Feature, Tag,
   font::{Blob, Font as ShapingFont, Variation},
 };
 use skrifa::{
@@ -116,6 +116,10 @@ pub(crate) struct FontPlatformData {
   pub(crate) synthetic_italic: bool,
   /// The design coordinates the face is instanced at; a later tag wins, as in Skia.
   pub(crate) variations: Vec<Variation>,
+  /// The `font-feature-settings` descriptor, which Blink resolves into `ResolvedFeatures` against
+  /// the property; takumi resolves it as it shapes, since one face serves styles whose properties
+  /// differ.
+  pub(crate) feature_settings: Vec<Feature>,
   /// The `size-adjust` Blink's `CSSFontFace::GetFontData` scales the size by.
   pub(crate) size_adjust: Option<f32>,
   /// The metrics Blink's `MetricsOverriddenFontData` replaces.
@@ -385,6 +389,7 @@ impl FontCustomPlatformData {
       synthetic_bold: synthetic_bold && !self.is_bold(),
       synthetic_italic: synthetic_italic && !self.is_italic(),
       variations: variation,
+      feature_settings: Vec::new(),
       size_adjust: None,
       metrics_override: FontMetricsOverride::default(),
     }
