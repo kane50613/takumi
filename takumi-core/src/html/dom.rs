@@ -229,6 +229,7 @@ impl<'a> NodeRef<'a> {
   }
 
   /// Whether the parser put this element in the HTML namespace.
+  #[cfg(feature = "svg")]
   pub(crate) fn is_html_element(self) -> bool {
     matches!(self.data(), NodeData::Element { name, .. } if name.ns == Namespace::Html)
   }

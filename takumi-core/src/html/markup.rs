@@ -705,7 +705,7 @@ pub(super) fn svg_element_case(name: &str) -> &str {
 }
 
 /// An SVG attribute's `name` in the casing the SVG spec gives it, or as is.
-#[cfg(feature = "svg-sizing")]
+#[cfg(feature = "svg")]
 pub(crate) fn svg_attribute_case(name: &str) -> &str {
   SVG_ATTRIBUTES
     .iter()
