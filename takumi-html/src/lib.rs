@@ -44,7 +44,7 @@ use takumi_core::{
 use typed_builder::TypedBuilder;
 
 #[cfg(feature = "svg")]
-use crate::dom::AttributeNamespace;
+use crate::dom::{Attribute, AttributeNamespace};
 use crate::dom::{Namespace, NodeData, NodeRef};
 
 /// Tags whose entire subtree is dropped, matching the JS markup walker.
@@ -630,16 +630,7 @@ impl NodeBuilder<'_> {
       NodeData::Element { name, attrs, .. } => {
         let attributes: BTreeMap<Box<str>, Box<str>> = attrs
           .iter()
-          .map(|attr| {
-            let local = &*attr.local;
-            let name = match attr.ns {
-              AttributeNamespace::Xlink => format!("xlink:{local}").into(),
-              AttributeNamespace::Xml => format!("xml:{local}").into(),
-              AttributeNamespace::None | AttributeNamespace::Xmlns => local.into(),
-            };
-
-            (name, attr.value.clone())
-          })
+          .map(|attr| (qualified_name(attr), attr.value.clone()))
           .collect();
         let mut children = Vec::new();
 
@@ -751,6 +742,20 @@ fn empty_image_style(handle: NodeRef<'_>) -> Style {
   style
 }
 
+/// An attribute's name as SVG markup writes it, its namespace prefix included, as fragment
+/// serialization names it. <https://html.spec.whatwg.org/multipage/parsing.html#attribute's-serialized-name>
+#[cfg(feature = "svg")]
+fn qualified_name(attr: &Attribute) -> Box<str> {
+  let local = &*attr.local;
+
+  match attr.ns {
+    AttributeNamespace::Xlink => format!("xlink:{local}").into(),
+    AttributeNamespace::Xml => format!("xml:{local}").into(),
+    AttributeNamespace::Xmlns if local != "xmlns" => format!("xmlns:{local}").into(),
+    AttributeNamespace::None | AttributeNamespace::Xmlns => local.into(),
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -785,6 +790,33 @@ mod tests {
 
   /// A subtree of an inline `<svg>` past the depth limit fails as the rest of the document does,
   /// rather than drawing without its deepest elements.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn an_svg_attribute_keeps_its_namespace_prefix() {
+    let attribute = |ns, local: &str| Attribute {
+      ns,
+      local: local.into(),
+      value: "".into(),
+    };
+
+    assert_eq!(
+      &*qualified_name(&attribute(AttributeNamespace::Xmlns, "xlink")),
+      "xmlns:xlink"
+    );
+    assert_eq!(
+      &*qualified_name(&attribute(AttributeNamespace::Xmlns, "xmlns")),
+      "xmlns"
+    );
+    assert_eq!(
+      &*qualified_name(&attribute(AttributeNamespace::Xlink, "href")),
+      "xlink:href"
+    );
+    assert_eq!(
+      &*qualified_name(&attribute(AttributeNamespace::None, "fill")),
+      "fill"
+    );
+  }
+
   #[cfg(feature = "svg")]
   #[test]
   fn an_inline_svg_past_the_depth_limit_fails() {
