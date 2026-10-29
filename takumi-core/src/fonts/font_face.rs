@@ -48,6 +48,9 @@ pub(crate) enum FontFaceSource {
 pub(crate) enum PendingSource {
   /// A face registered with [`crate::Fonts::register_pending`], by the id the caller gave it.
   Listed(usize),
+  /// An `@font-face` `src` URL.
+  #[cfg(feature = "font-face")]
+  Url(Arc<str>),
 }
 
 /// Blink's `FontDataForRangeSet` whose `CustomFontData` is loading.

@@ -120,6 +120,9 @@ woff = ["dep:wuff", "wuff/z"]
 rayon = ["dep:rayon"]
 # The paint tree: what the backends paint, as data. Off by default; `takumi-paint` turns it on.
 paint-tree = []
+# `@font-face` rules: their faces join a render's fonts, and `RenderNeeds::fonts` reports the files
+# they load.
+font-face = []
 # Blink's block fragmentation, which lays content out across pages. Off by default; `takumi-pdf`
 # turns it on.
 fragmentation = []

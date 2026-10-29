@@ -150,6 +150,35 @@ impl CssFontSelector {
     insert_family(&mut self.fallback_families, &family);
   }
 
+  /// The face at index 0 of `data`, shared with a registration of the same bytes, or none when
+  /// it does not parse.
+  #[cfg(feature = "font-face")]
+  pub(crate) fn platform_data(
+    &self,
+    data: &SharedBytes,
+    id: u64,
+  ) -> Option<Arc<FontCustomPlatformData>> {
+    self
+      .typeface(id, 0)
+      .or_else(|| FontCustomPlatformData::create(Arc::clone(data), id, 0).map(Arc::new))
+  }
+
+  /// Adds the face an `@font-face` rule makes, after the CSS-connected faces before it in cascade
+  /// order. Fallback does not walk its family, as Blink's system fallback skips web fonts.
+  #[cfg(feature = "font-face")]
+  pub(crate) fn add_css_connected(&mut self, font_face: FontFace) {
+    let font_face = Arc::new(FontFace {
+      css_connected: true,
+      ..font_face
+    });
+
+    self.font_face_cache.add_font_face(Arc::clone(&font_face));
+    self.font_faces.push(RegisteredFontFace {
+      font_face,
+      last_resort: false,
+    });
+  }
+
   /// Whether a pending face is registered.
   pub(crate) fn has_pending_faces(&self) -> bool {
     self

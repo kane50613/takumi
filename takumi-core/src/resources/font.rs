@@ -11,6 +11,9 @@ use std::{
   },
 };
 
+#[cfg(feature = "font-face")]
+use std::collections::HashMap;
+
 use harfrust::font::Variation;
 use skrifa::{
   FontRef, MetadataProvider,
@@ -266,6 +269,9 @@ struct FontRegistry {
   selector: CssFontSelector,
   /// A process-wide stamp of every change, which font-dependent caches key on.
   revision: u64,
+  /// The `@font-face` files the host has loaded or failed to, by URL.
+  #[cfg(feature = "font-face")]
+  font_files: HashMap<Arc<str>, FontFile>,
 }
 
 impl FontRegistry {
@@ -280,6 +286,11 @@ impl FontRegistry {
 /// A render-local font handle: the registry as it stood, and the render's fallback families.
 #[derive(Clone)]
 pub struct FontsSnapshot(Fonts);
+
+#[cfg(feature = "font-face")]
+mod font_face_set;
+#[cfg(feature = "font-face")]
+use font_face_set::FontFile;
 
 impl Deref for FontsSnapshot {
   type Target = Fonts;
