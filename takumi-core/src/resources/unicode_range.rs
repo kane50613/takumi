@@ -192,8 +192,11 @@ fn variation_subtable(cmap: &[u8]) -> Option<&[u8]> {
 fn replace_table(sfnt: &[u8], tag: Tag, table: &[u8]) -> Option<Vec<u8>> {
   let tables = usize::from(read_u16(sfnt, 4)?);
   let directory_len = TABLE_DIRECTORY_LEN + TABLE_RECORD_LEN * tables;
-  let mut out = sfnt.get(..directory_len)?.to_vec();
+  // Bounds the output: every table, the new one too, plus its padding.
+  let mut out = Vec::with_capacity(sfnt.len() + table.len() + 3 * tables);
   let mut replaced = false;
+
+  out.extend_from_slice(sfnt.get(..directory_len)?);
 
   for index in 0..tables {
     let record = TABLE_DIRECTORY_LEN + TABLE_RECORD_LEN * index;

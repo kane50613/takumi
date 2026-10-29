@@ -123,7 +123,7 @@ impl FontStore {
     key: Option<&str>,
     pinned: bool,
   ) -> Result<T, js_sys::Error> {
-    let font: Font = from_value(font.into()).map_err(js_error)?;
+    let font = Font::from_js(font.into()).map_err(js_error)?;
     let registered = self.register(font, key, pinned).map_err(js_error)?;
 
     Ok(to_value(&registered).map_err(js_error)?.unchecked_into())

@@ -1,3 +1,4 @@
+import { lazy } from "@takumi-rs/bindings-js";
 import type {
   ElementInfo,
   Glyph,
@@ -199,7 +200,7 @@ export class PaintTreeView implements PaintTree {
     this.height = raw.height;
     this.fonts = raw.fonts.map((font, index) => ({
       ...font,
-      data: () => files.fontData(index) ?? new Uint8Array(),
+      data: lazy(() => files.fontData(index) ?? new Uint8Array()),
     }));
     this.#listing = new Listing(raw.nodes, this.fonts, files);
 

@@ -5,8 +5,12 @@ use std::{
   sync::Arc,
 };
 
+#[cfg(feature = "wasm")]
+use js_sys::{ArrayBuffer, Reflect, Uint8Array};
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
+#[cfg(feature = "wasm")]
+use serde_wasm_bindgen::{Error as JsError, from_value};
 use takumi_core::{
   Fonts,
   layout::node::Node,
@@ -17,6 +21,8 @@ use takumi_core::{
   },
   style::{FontStyle as CssFontStyle, FromCssStr},
 };
+#[cfg(feature = "wasm")]
+use wasm_bindgen::{JsCast, JsValue};
 
 use crate::font_cache::FontCache;
 
@@ -207,6 +213,37 @@ pub enum Font {
   Buffer(ByteBuf),
 }
 
+#[cfg(feature = "wasm")]
+impl Font {
+  /// Reads a font input from JavaScript, copying its bytes into wasm memory once.
+  pub fn from_js(value: JsValue) -> Result<Self, JsError> {
+    if let Some(bytes) = js_bytes(&value) {
+      return Ok(Self::Buffer(ByteBuf::from(bytes)));
+    }
+
+    let data = Reflect::get(&value, &JsValue::from_str("data")).unwrap_or(JsValue::UNDEFINED);
+    let data = js_bytes(&data)
+      .ok_or_else(|| JsError::new("Expected font data as an ArrayBuffer or Uint8Array"))?;
+
+    Ok(Self::Object(FontDetails {
+      data: ByteBuf::from(data),
+      options: from_value(value)?,
+    }))
+  }
+}
+
+/// The bytes of a `Uint8Array` or `ArrayBuffer`, copied out of JavaScript memory.
+#[cfg(feature = "wasm")]
+fn js_bytes(value: &JsValue) -> Option<Vec<u8>> {
+  if let Some(array) = value.dyn_ref::<Uint8Array>() {
+    return Some(array.to_vec());
+  }
+
+  value
+    .dyn_ref::<ArrayBuffer>()
+    .map(|buffer| Uint8Array::new(buffer).to_vec())
+}
+
 /// A `font-style` value parsed from its CSS text.
 #[derive(Clone, Copy)]
 struct FontStyle(CssFontStyle);
@@ -250,7 +287,7 @@ pub fn register_font(
   match font {
     Font::Buffer(buffer) => register_resource(fonts, FontResource::new(buffer.into_vec())),
     Font::Object(details) => {
-      register_resource(fonts, details.options.resource(details.data.as_slice())?)
+      register_resource(fonts, details.options.resource(details.data.into_vec())?)
     }
   }
 }
