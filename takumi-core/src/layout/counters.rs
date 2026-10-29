@@ -5,20 +5,20 @@
 //! It follows Blink as Chrome ships it, with the experimental `CSSListCounterAccounting` off, so
 //! `reversed()` resets a counter to its integer. The page and page-margin paths are left out, as
 //! this tree holds neither box.
-//!
-//! Approximate: the implicit `list-item` counter ignores `<ol reversed>`, numbering as takumi's
-//! list markers do.
 
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
 use crate::{
-  layout::{list_marker::attribute_number, node::Node},
+  layout::{
+    list_marker::{ListItemOrdinals, explicit_value},
+    node::Node,
+  },
   style::{ComputedStyle, Contain, CounterChange, Display},
 };
 
-const LIST_ITEM: &str = "list-item";
+pub(super) const LIST_ITEM: &str = "list-item";
 
 /// Blink's `CountersAttachmentContext::Type`, as a bit mask.
 const INCREMENT_TYPE: u8 = 1 << 0;
@@ -31,18 +31,31 @@ const SET_TYPE: u8 = 1 << 2;
 pub(super) enum ListItemCounter {
   /// The element generates no `list-item` counter.
   None,
-  /// An `li` that is a list item, with its `value` attribute.
-  Item { explicit_value: Option<i32> },
-  /// An `ol`, with its `start` attribute or 1.
-  OrderedList { initial_counter: i32 },
+  /// An element that is a list item, with an `li`'s `value` attribute, in a list that is
+  /// `reversed` or not.
+  Item {
+    explicit_value: Option<i32>,
+    reversed: bool,
+  },
+  /// An `ol`, with its `InitialCounter`.
+  OrderedList {
+    initial_counter: i32,
+    reversed: bool,
+  },
   /// A `ul`, `menu`, or `dir` that is not a list item.
   OtherList,
 }
 
 impl ListItemCounter {
-  /// The implicit `list-item` counter of `node`, a box with `display`: Blink's
-  /// `ElementGeneratesListItemCounter`, then `ListItemOrdinal::Get`, which a list item alone has.
-  pub(super) fn of(node: &Node, display: Display) -> Self {
+  /// The implicit `list-item` counter of `node`, a box with `display`, whose items `ordinals`
+  /// number, in the list `enclosing` numbers: Blink's `ElementGeneratesListItemCounter`, then
+  /// `ListItemOrdinal::Get`, which a list item alone has.
+  pub(super) fn of(
+    node: &Node,
+    display: Display,
+    ordinals: &ListItemOrdinals,
+    enclosing: &ListItemOrdinals,
+  ) -> Self {
     let Some(tag) = node.tag_name() else {
       return Self::None;
     };
@@ -54,13 +67,15 @@ impl ListItemCounter {
 
     if display == Display::ListItem {
       return Self::Item {
-        explicit_value: is("li").then(|| attribute_number(node, "value")).flatten(),
+        explicit_value: explicit_value(node),
+        reversed: enclosing.reversed(),
       };
     }
 
-    if is("ol") {
+    if let Some(initial_counter) = ordinals.initial_counter() {
       return Self::OrderedList {
-        initial_counter: attribute_number(node, "start").unwrap_or(1),
+        initial_counter,
+        reversed: ordinals.reversed(),
       };
     }
 
@@ -74,7 +89,7 @@ impl ListItemCounter {
 
 /// Blink's `CounterDirectives`: what one element does to one counter.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct CounterDirectives {
+pub(super) struct CounterDirectives {
   reset_value: Option<i64>,
   is_reset_reversed: bool,
   increment_value: Option<i32>,
@@ -82,6 +97,22 @@ struct CounterDirectives {
 }
 
 impl CounterDirectives {
+  /// The directives `style` gives the counter `counter_name`.
+  pub(super) fn of(style: &ComputedStyle, counter_name: &str) -> Self {
+    counter_directives(style)
+      .into_iter()
+      .find_map(|(name, directives)| (&*name == counter_name).then_some(directives))
+      .unwrap_or_default()
+  }
+
+  pub(super) fn has_set(self) -> bool {
+    self.set_value.is_some()
+  }
+
+  pub(super) fn has_increment(self) -> bool {
+    self.increment_value.is_some()
+  }
+
   fn is_reset(self) -> bool {
     self.reset_value.is_some() || self.is_reset_reversed
   }
@@ -90,7 +121,7 @@ impl CounterDirectives {
     self.is_reset() || self.increment_value.is_some() || self.set_value.is_some()
   }
 
-  fn combined_value(self) -> i32 {
+  pub(super) fn combined_value(self) -> i32 {
     if let Some(set_value) = self.set_value {
       return set_value;
     }
@@ -189,7 +220,7 @@ fn calculate_counter_value(
     .unwrap_or(counter_current_value)
 }
 
-fn saturate(value: i64) -> i32 {
+pub(super) fn saturate(value: i64) -> i32 {
   i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX })
 }
 
@@ -304,12 +335,19 @@ impl CountersAttachmentContext {
       ListItemCounter::None => {}
       ListItemCounter::Item {
         explicit_value: Some(value),
+        ..
       } => self.create_counter(LIST_ITEM, value),
-      ListItemCounter::Item { .. } => {
-        self.update_counter_value(LIST_ITEM, INCREMENT_TYPE, 1);
+      ListItemCounter::Item { reversed, .. } => {
+        self.update_counter_value(LIST_ITEM, INCREMENT_TYPE, if reversed { -1 } else { 1 });
       }
-      ListItemCounter::OrderedList { initial_counter } => {
-        self.create_counter(LIST_ITEM, initial_counter.saturating_sub(1));
+      ListItemCounter::OrderedList {
+        initial_counter,
+        reversed,
+      } => {
+        self.create_counter(
+          LIST_ITEM,
+          initial_counter.saturating_add(if reversed { 1 } else { -1 }),
+        );
       }
       ListItemCounter::OtherList => self.create_counter(LIST_ITEM, 0),
     }
@@ -466,6 +504,6 @@ fn has_counter(counter_directives: &[(Arc<str>, CounterDirectives)], counter_nam
     .any(|(name, _)| &**name == counter_name)
 }
 
-fn contains_style(style: &ComputedStyle) -> bool {
+pub(super) fn contains_style(style: &ComputedStyle) -> bool {
   style.misc_data.contain.contains(Contain::STYLE)
 }

@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="takumi-presets" content="chromium" />
+    <title>list_reversed_ordinals</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: 12px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 16px;
+        line-height: 22px;
+        color: rgb(15, 23, 42);
+      }
+      .scope {
+        contain: style;
+        background-color: rgb(241, 245, 249);
+      }
+      li::after {
+        content: " (" counter(list-item) ")";
+        color: rgb(37, 99, 235);
+      }
+    </style>
+  </head>
+  <body style="width: 320px; height: 300px">
+    <ol reversed>
+      <li>three</li>
+      <li>two</li>
+      <li>
+        one
+        <ol reversed start="10">
+          <li>ten</li>
+          <li value="20">twenty</li>
+          <li>nineteen</li>
+        </ol>
+      </li>
+    </ol>
+    <ol>
+      <li>one</li>
+      <div class="scope"><li>scoped one</li></div>
+      <li>two</li>
+    </ol>
+  </body>
+</html>

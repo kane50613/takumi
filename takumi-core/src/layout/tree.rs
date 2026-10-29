@@ -37,7 +37,9 @@ use crate::{
     layout_style::{LayoutLength, LayoutStyle},
     layout_view::LayoutView,
     length_utils::margins_for,
-    list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
+    list_marker::{
+      ListItemCounts, ListItemOrdinals, counts_list_items, is_list_owner, list_marker,
+    },
     node::{Node, NodeKind, NodeStyleLayers, TextData},
     out_of_flow::{ContainingBlock, ContainingBlockClaims, OutOfFlowLayoutPart},
     table::{ColumnConstraints, HiddenParts, TableFragment, TableStructure},
@@ -2332,8 +2334,27 @@ impl RenderNode {
       &[parent_context.stylesheet()],
       parent_context.sizing.viewport,
     );
-    let mut tree =
-      Self::from_node_iterative(parent_context, node, &matched_styles, blockifies_children);
+    let mut list_item_counts = ListItemCounts::default();
+
+    // An `ol` with `reversed` and no `start` numbers its items down from their count, which a first
+    // build finds before the second numbers them.
+    if counts_list_items(&node) {
+      Self::from_node_iterative(
+        parent_context,
+        node.clone(),
+        &matched_styles,
+        blockifies_children,
+        &mut list_item_counts,
+      );
+    }
+
+    let mut tree = Self::from_node_iterative(
+      parent_context,
+      node,
+      &matched_styles,
+      blockifies_children,
+      &mut list_item_counts,
+    );
 
     tree.make_root_element();
     if blockifies_children {
@@ -2358,18 +2379,19 @@ impl RenderNode {
     root: Node,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
     root_blockifies_children: bool,
+    list_item_counts: &mut ListItemCounts,
   ) -> Self {
     let mut walk = TreeWalk {
       matched_declarations,
       source_cursor: 0,
       counters: CountersAttachmentContext::default(),
+      list_item_counts,
     };
-    let mut root_counter = ListCounter::new(&root);
     let mut stack = vec![PendingRenderNode::build(
       parent_context,
       root,
       &mut walk,
-      &mut root_counter,
+      &mut ListItemOrdinals::default(),
       false,
       true,
     )];
@@ -2385,7 +2407,7 @@ impl RenderNode {
           &current.context,
           child,
           &mut walk,
-          &mut current.list_counter,
+          &mut current.list_ordinals,
           current.inside_list,
           (root_blockifies_children && at_root)
             || current
@@ -2416,10 +2438,12 @@ impl RenderNode {
         return RenderNode::empty(parent_context);
       };
 
-      if !finished.owns_list_counter
-        && let Some(parent) = stack.last_mut()
-      {
-        parent.list_counter = finished.list_counter;
+      if finished.owns_list_ordinals {
+        finished
+          .list_ordinals
+          .record_count(finished.source_order, walk.list_item_counts);
+      } else if let Some(parent) = stack.last_mut() {
+        parent.list_ordinals = finished.list_ordinals;
       }
 
       let render_node = finished.finish(&mut walk.counters);
@@ -2668,11 +2692,13 @@ fn drop_collapsible_boundary_whitespace(
 }
 
 /// What building a render tree carries from node to node in document order: each node's matched
-/// declarations by source order, the next source order, and the counters in scope.
+/// declarations by source order, the next source order, the counters in scope, and the item count
+/// of each list that numbers its items from it.
 struct TreeWalk<'a, 'm> {
   matched_declarations: &'a [NodeMatchedDeclarations<'m>],
   source_cursor: usize,
   counters: CountersAttachmentContext,
+  list_item_counts: &'a mut ListItemCounts,
 }
 
 /// A `::before` or `::after` styled, its content still to be generated.
@@ -2717,10 +2743,11 @@ struct PendingRenderNode {
   pseudo_after: Option<PendingPseudo>,
   /// The `list-item` counter the node entered with, `None` when it gets no box.
   entered_counters: Option<ListItemCounter>,
-  list_counter: ListCounter,
+  /// The ordinals of the items it encloses, its own when it owns them, else its enclosing list's.
+  list_ordinals: ListItemOrdinals,
   marker_ordinal: Option<i32>,
   inside_list: bool,
-  owns_list_counter: bool,
+  owns_list_ordinals: bool,
   /// Whether its parent blockifies it, as a flex or grid item or the tree's root.
   blockifies: bool,
 }
@@ -2730,7 +2757,7 @@ impl PendingRenderNode {
     parent_context: &RenderContext,
     mut node: Node,
     walk: &mut TreeWalk<'_, '_>,
-    counter: &mut ListCounter,
+    enclosing_ordinals: &mut ListItemOrdinals,
     inside_list: bool,
     blockifies: bool,
   ) -> Self {
@@ -2752,9 +2779,20 @@ impl PendingRenderNode {
     let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
     let display = context.style.base_data.display;
+    let marker_ordinal =
+      (display == Display::ListItem).then(|| enclosing_ordinals.next_value(&node, &context.style));
+    // Items count within their enclosing list owner, or within their parent when no list owner
+    // encloses them.
+    let owns_list_ordinals = !inside_list || is_list_owner(&node, &context.style);
+    let list_ordinals = if owns_list_ordinals {
+      ListItemOrdinals::new(&node, source_order, walk.list_item_counts)
+    } else {
+      *enclosing_ordinals
+    };
     // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box, so neither
     // it nor a pseudo-element of it is counted.
-    let entered_counters = (display != Display::None).then(|| ListItemCounter::of(&node, display));
+    let entered_counters = (display != Display::None)
+      .then(|| ListItemCounter::of(&node, display, &list_ordinals, enclosing_ordinals));
 
     if let Some(list_item) = entered_counters {
       walk.counters.enter_object(&context.style, list_item);
@@ -2764,7 +2802,6 @@ impl PendingRenderNode {
       .is_some()
       .then(|| walk.matched_declarations.get(source_order))
       .flatten();
-    let marker_ordinal = (display == Display::ListItem).then(|| counter.take(&node));
     let pseudo_before = element_matched
       .and_then(|m| m.before())
       .and_then(|m| PendingPseudo::resolve(&context, m))
@@ -2793,18 +2830,12 @@ impl PendingRenderNode {
       rendered_children.push(RenderNode::generated_sibling_text(&context, text));
     }
 
-    let owns_list_counter = owns_list_counter(&node, inside_list);
-
     Self {
       source_order,
       children_is_some: children_is_some || has_generated_children,
-      list_counter: if owns_list_counter {
-        ListCounter::new(&node)
-      } else {
-        *counter
-      },
-      inside_list: inside_list || is_list_element(&node),
-      owns_list_counter,
+      list_ordinals,
+      inside_list: inside_list || is_list_owner(&node, &context.style),
+      owns_list_ordinals,
       blockifies,
       context,
       node,
