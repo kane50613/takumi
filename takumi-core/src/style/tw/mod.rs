@@ -26,9 +26,7 @@ use crate::{style::*, viewport::Viewport};
 /// Tailwind v4 `--spacing` (rem per unit). Prefer [`Length::from_spacing`].
 pub(crate) const TW_VAR_SPACING: f32 = 0.25;
 
-/// Expands an `@apply` utility list into the declarations it stands for.
-/// The list must arrive comment-free; the stylesheet tokenizer drops them.
-/// `None` when a token is unknown or carries a variant, which `@apply` rejects.
+/// Expands an `@apply` list into declarations, `None` for an unknown token or a variant.
 pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
   let rules = source
     .split_whitespace()
@@ -225,9 +223,7 @@ pub(crate) fn is_ident(token: &str) -> bool {
   !token.is_empty() && token.bytes().all(is_ident_byte)
 }
 
-/// Mirrors Tailwind's `decodeArbitraryValue`: `_` becomes a space and `\_` a
-/// literal `_`, but underscores inside `url(...)` and the first argument of
-/// `var()`/`theme()` are preserved.
+/// Tailwind's `decodeArbitraryValue`.
 fn decode_arbitrary_value(value: &str) -> Cow<'_, str> {
   if !value.contains('_') {
     return Cow::Borrowed(value);
@@ -287,9 +283,7 @@ pub(crate) trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
     Self::from_css_str(token).ok()
   }
 
-  /// Variable namespaces this value type reads, tried in order. The utility keeps
-  /// the built-in value as the fallback behind `var()`, so this only decides
-  /// which variable name the utility reads.
+  /// The variable namespaces this value type reads, in order.
   const NAMESPACES: &'static [Namespace] = &[];
 
   /// Parse a tailwind property from a token, with support for arbitrary values.

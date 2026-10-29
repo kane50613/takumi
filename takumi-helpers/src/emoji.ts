@@ -54,10 +54,7 @@ function getEmojiUrl(icon: string, type: EmojiType) {
   return `${base}${file(getIconCode(icon))}`;
 }
 
-/**
- * Whether `url` is an emoji SVG one of the providers serves at a stable URL. A URL that parsing
- * would rewrite, such as one with `..` segments, is not one, since it can resolve outside `base`.
- */
+/** Whether `url` is a provider's emoji SVG, excluding URLs with `..` that resolve outside `base`. */
 export function isEmojiImageUrl(url: string): boolean {
   return (
     URL.canParse(url) &&

@@ -90,9 +90,7 @@ impl ScoreContext {
       .saturating_sub(self.gap_between_items)
   }
 
-  /// Blink's `Score`: the best score with a line break after `end`, a Knuth-Plass line breaking
-  /// of the items whose penalty is each line's free space squared. It gives up past `limit` and
-  /// picks up where it stopped when asked again with a larger one.
+  /// Blink's `Score`, a Knuth-Plass breaking that resumes when asked again with a larger `limit`.
   fn score(&mut self, end: usize, limit: ScoreUnit) -> ScoreUnit {
     let data = self.scores[end];
     let mut best_score = INFINITY;

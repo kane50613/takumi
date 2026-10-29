@@ -1,9 +1,8 @@
 import type { LoadBackend } from "./types";
 import { loadBackend as loadWasm } from "./wasm-node";
 
-// Dynamic import so bundlers don't inline the native addon — its `.node` binary
-// must resolve from node_modules at runtime, which a bundled-in copy breaks.
-// Selected by the `node`/`bun` condition, so it never reaches a worker/edge bundle.
+// A dynamic import keeps bundlers from inlining the addon, whose `.node` binary must resolve from
+// node_modules at runtime.
 const loadNative: LoadBackend = () =>
   import("@takumi-rs/core").catch((cause) => {
     throw new Error(
@@ -12,14 +11,9 @@ const loadNative: LoadBackend = () =>
     );
   });
 
-// WebContainer can't load native addons, and unbundled runs (e.g. `nitro dev`
-// externalizing this package) resolve `#backend` with Node's default conditions,
-// so the `node` condition lands here even when the host set `unwasm`. Detect it
-// (the same signal Next.js and SvelteKit use) and reroute to the WASM backend.
-//
-// `loadWasm` is imported statically: Nitro inlines a lazily imported chunk and can
-// place the helper that builds its namespace in a chunk importing this one, which
-// then throws `__exportAll is not a function` when it loads.
+// WebContainer cannot load native addons, so it takes the WASM backend, detected as Next.js and
+// SvelteKit do. `loadWasm` is a static import because Nitro can split a lazy one into a chunk that
+// throws `__exportAll is not a function`.
 export const loadBackend: LoadBackend = (module) =>
   typeof process !== "undefined" && process.versions?.webcontainer
     ? loadWasm(module)

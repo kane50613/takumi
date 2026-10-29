@@ -1,9 +1,5 @@
-//! A paint document: what the backends paint for a node tree, with every CSS value resolved.
-//!
-//! [`paint_tree`] runs layout, walks the same stacking-context scene the raster, SVG, and PDF
-//! backends walk, and records what the shared painters draw instead of drawing it. Lengths are
-//! device pixels. A node's `transform` maps its local space onto the canvas, and its drawables
-//! sit in that local space.
+//! A paint document: what the backends paint for a node tree, in device pixels, recorded instead
+//! of drawn.
 
 mod document;
 mod fonts;
@@ -72,10 +68,7 @@ impl PaintTree {
     self.fonts.get(index).map(FontBlob::data)
   }
 
-  /// Each glyph's outline in run `run` of text node `node`, as SVG path data from the run's
-  /// baseline start, by its index in the run's glyphs. An empty string for a glyph with no
-  /// contours, such as a space. `None` for a glyph the run's colour does not fill: colour font
-  /// layers arrive as their own drawables, and bitmap glyphs such as some emoji are left out.
+  /// Each glyph outline of run `run` as SVG path data, `None` for one the run's colour does not fill.
   pub fn run_outlines(&self, node: usize, run: usize) -> Option<Vec<Option<String>>> {
     self.outlines.path_data(node, run)
   }

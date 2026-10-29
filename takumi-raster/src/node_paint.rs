@@ -1,8 +1,4 @@
-//! Raster box-decoration painting (backgrounds, borders, outlines, box-shadows).
-//!
-//! The backend-agnostic geometry — clip regions and the outline ring — lives in
-//! [`takumi_core::layout::decoration`]; these functions composite it with
-//! tiny-skia, and the SVG backend emits the same geometry as vector paths.
+//! Raster box decorations, compositing [`takumi_core::layout::decoration`] with tiny-skia.
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -175,9 +171,7 @@ fn within_cell(
   result
 }
 
-/// The canvas as a [`PaintDevice`]. An unclipped rounded rectangle composites
-/// through the same border machinery the tile path uses, so a background colour
-/// rasterizes as it always has.
+/// The canvas as a [`PaintDevice`].
 pub(crate) struct CanvasDevice<'c> {
   pub(crate) canvas: &'c mut Canvas,
   pub(crate) transform: Affine,
@@ -188,9 +182,7 @@ pub(crate) struct CanvasDevice<'c> {
   layers: Vec<Option<(CanvasSubcanvas, f32)>>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
-  /// The span background strips already rasterized, by span id, strip size, and the strip's
-  /// offset from the pixel grid, since a span paints the same strip on every line. A device paints
-  /// one inline layout, whose span ids are unique.
+  /// The span background strips already rasterized, reused on every line.
   strip_tiles: HashMap<(usize, u32, u32, u32, u32), Option<BackgroundTile>>,
   /// The first error a draw hit.
   error: Option<Error>,
@@ -512,9 +504,7 @@ impl<'c> CanvasDevice<'c> {
       y: offset.y + glyph.y,
     };
 
-    // Approximate: the run's glyphs cast one shadow, their coverage drawn together and blurred
-    // once. Blink's `DropShadowPaintFilter` covers a whole text fragment, which can span several
-    // of these runs where font fallback or bidi splits it, so halos still stack across those.
+    // Approximate: one shadow per run, where Blink's `DropShadowPaintFilter` covers a fragment.
     if let Some(shadow) = self.shadow {
       // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`).
       let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
@@ -982,9 +972,6 @@ pub(crate) fn draw_background(
   Ok(())
 }
 
-/// Rasterizes the background layers into `clip`'s rounded region, relative to the snapped border
-/// box `offset` from the border box, and composites it. Shared by the padding-box and
-/// content-box `background-clip` modes.
 /// Blits each tile of `layers`, cutting the ones that cross the edge of `border_box` to it.
 fn blit_background_tiles(
   layers: &[TileLayer],

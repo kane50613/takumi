@@ -28,9 +28,7 @@ pub struct Viewport {
   pub device_pixel_ratio: f32,
   /// The media type `@media` queries resolve against.
   pub media_target: MediaTarget,
-  /// What viewport-percentage units resolve against when it differs from
-  /// `size`: in paged output the content column lays out at unbounded height
-  /// while `vh` takes the page area (CSS Values 4 §6.1.2, print media).
+  /// What viewport units resolve against when not `size`, such as the page area in paged output.
   pub unit_reference: Option<Size<f32>>,
 }
 
@@ -117,10 +115,7 @@ impl Viewport {
     }
   }
 
-  /// Converts an author-space CSS-pixel value into device pixels, the engine's
-  /// canonical unit (`viewport.size`, layout boxes and everything downstream of
-  /// [`crate::style::Length::to_px`] are device pixels). The only place the
-  /// device-pixel ratio is multiplied in; never write `value * dpr` elsewhere.
+  /// CSS pixels in device pixels. The only place the device pixel ratio multiplies in.
   #[inline]
   pub fn to_device(self, css_px: f32) -> f32 {
     css_px * self.effective_dpr()

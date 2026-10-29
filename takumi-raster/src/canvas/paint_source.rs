@@ -84,12 +84,7 @@ impl<'a> PaintSource<'a> {
     }
   }
 
-  /// Normalizes this source into the form pixel loops sample from, resolving
-  /// everything that does not depend on the pixel exactly once. Tiles that
-  /// already are a pixmap (including a bitmap drawn at its own size) come back
-  /// as [`PaintSource::Pixmap`], and a scaled bitmap comes back as its hoisted
-  /// [`SampledBitmapView`]. Every loop that reads more than one pixel must
-  /// resolve first instead of sampling `self` directly.
+  /// The form pixel loops sample from, resolved once. Loops reading more than one pixel resolve first.
   pub(crate) fn resolve(self) -> ResolvedSource<'a> {
     let Self::BackgroundTile(tile) = self else {
       return ResolvedSource::Direct(self);
@@ -174,9 +169,7 @@ impl<'a> PaintSource<'a> {
   }
 }
 
-/// A [`PaintSource`] after [`PaintSource::resolve`]: the form the interpolators
-/// and pixel loops read from. Keeping them off the raw source is what
-/// guarantees per-pixel work never re-derives sampling state.
+/// A [`PaintSource`] after [`PaintSource::resolve`].
 #[derive(Clone, Copy)]
 pub(crate) enum ResolvedSource<'a> {
   Direct(PaintSource<'a>),
@@ -300,10 +293,8 @@ pub(crate) struct BilinearRow<'p> {
   bottom: &'p [PremultipliedColorU8],
 }
 
-/// Bilinear magnification across a fixed set of destination columns, one destination row at a
-/// time. Each source row is lerped across the columns once and kept while the next destination
-/// rows still read it, so a row costs one vertical lerp; the result matches
-/// [`BilinearAxis::mix`] byte for byte.
+/// Bilinear magnification one row at a time, each source row lerped once, matching
+/// [`BilinearAxis::mix`].
 pub(crate) struct BilinearColumns {
   columns: Vec<BilinearAxis>,
   lerped: RefCell<LerpedRows>,

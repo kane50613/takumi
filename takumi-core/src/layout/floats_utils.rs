@@ -147,9 +147,7 @@ impl<'c> UnpositionedFloat<'c> {
     }
   }
 
-  /// Blink's `CreateConstraintSpaceForFloat`, without fragmentation: a new formatting context in
-  /// the containing block's available size. Approximate: a float past the clamp point is not
-  /// hidden here, as the line that holds it hides it.
+  /// Blink's `CreateConstraintSpaceForFloat`, without fragmentation.
   fn create_constraint_space_for_float(&self) -> ConstraintSpace {
     let mut space = ConstraintSpace::new(
       self.available_size.inline_size,
@@ -390,9 +388,7 @@ fn create_exclusion_area(
   )
 }
 
-/// Blink's `PositionFloat` in a fragmentation context: the float laid out where it starts on the
-/// page, breaking inside it there or pushed to the next page, which every float after it then
-/// follows.
+/// Blink's `PositionFloat` in a fragmentation context.
 #[cfg(feature = "fragmentation")]
 fn position_fragmented_float<'c>(
   unpositioned_float: &mut UnpositionedFloat<'c>,

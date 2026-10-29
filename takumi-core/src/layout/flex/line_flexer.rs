@@ -71,9 +71,7 @@ impl<'a> LineFlexer<'a> {
     while self.resolve_flexible_lengths() {}
   }
 
-  /// Blink's `FreezeItems`: freezes the items `should_freeze` picks, and sums the flex factors
-  /// and free space again. The sums restart rather than subtract, as floating point does not
-  /// associate.
+  /// Blink's `FreezeItems`. The sums restart, as floating point does not associate.
   fn freeze_items(&mut self, should_freeze: impl Fn(&FlexItem) -> bool) {
     let mut total_weighted_flex_shrink = 0.0;
 

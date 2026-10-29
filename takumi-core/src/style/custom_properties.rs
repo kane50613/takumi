@@ -105,9 +105,7 @@ impl CustomProperties {
     }
   }
 
-  /// Records state a utility engine wrote for this element alone. Tailwind's
-  /// own stylesheet says so with an `@property` rule; the engine has no
-  /// stylesheet, so it says so here. An author's rule for the name wins.
+  /// Records state a utility engine wrote for this element alone, as Tailwind's `@property` does.
   pub(crate) fn register_element_state(&mut self, name: &str) {
     if self.registration(name).is_some() {
       return;
@@ -116,9 +114,7 @@ impl CustomProperties {
     Arc::make_mut(&mut self.element_state).insert(name.to_owned());
   }
 
-  /// What a child starts `name` from: the value itself when it inherits, the
-  /// registered initial value when it does not, and nothing when an engine
-  /// wrote it as this element's own state.
+  /// What a child starts `name` from.
   fn inherited_value<'v>(&'v self, name: &str, value: &'v str) -> Option<&'v str> {
     if self.element_state.contains(name) {
       return None;

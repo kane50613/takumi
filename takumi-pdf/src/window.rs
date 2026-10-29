@@ -18,14 +18,9 @@ use crate::{
 /// The content windows one emit walk filters by, in content coordinates.
 #[derive(Clone, Copy, Default)]
 pub(crate) struct Window {
-  /// Vertical paint window `[top, bottom)`. Paint wholly outside it is
-  /// skipped, so clipped-away content never reaches the content stream (or
-  /// text extraction).
+  /// The vertical paint window `[top, bottom)`, outside which nothing paints.
   pub(crate) y: Option<(f32, f32)>,
-  /// Text-line ownership window `[this page's start, next page's start)`. A
-  /// line's ink can reach into the next page, which paints it clipped, but
-  /// its text is emitted on one page alone, save the items taller than a
-  /// page, which every page they cross shows.
+  /// The text-line ownership window, so a line's text lands on one page.
   pub(crate) lines: Option<(f32, f32)>,
 }
 
@@ -38,9 +33,7 @@ impl Window {
     bounds.is_some_and(|b| self.excludes(b.top as f32, b.bottom as f32))
   }
 
-  /// Whether this page draws a line's item spanning `top` to `bottom` on the line at `baseline`:
-  /// the page owning the line does, and so does every page an item taller than the page crosses,
-  /// as Blink spreads monolithic overflow over the pages after it.
+  /// Whether this page draws a line's item, as Blink spreads monolithic overflow.
   pub(crate) fn shows_line_item(&self, item: LineItem) -> bool {
     let overflows = self
       .y
@@ -49,18 +42,14 @@ impl Window {
     !self.disowns_line(item.baseline) || (overflows && !self.excludes(item.top, item.bottom))
   }
 
-  /// Whether a text line at `baseline` belongs to another page. Ownership is
-  /// keyed on the baseline (always inside the line's own box, unlike the font
-  /// ascent band) and half-open, so each line is emitted exactly once.
+  /// Whether the line at `baseline` belongs to another page.
   pub(crate) fn disowns_line(&self, baseline: f32) -> bool {
     self
       .lines
       .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
   }
 
-  /// Narrows both vertical windows to a box that clips its overflow. A clip
-  /// keeps content off the page but not out of the text layer, so what it
-  /// cuts away must never be emitted.
+  /// Narrows both windows to a box clipping its overflow.
   pub(crate) fn narrow(&mut self, top: f32, bottom: f32) {
     for window in [&mut self.y, &mut self.lines] {
       if let Some((from, to)) = window {
@@ -70,9 +59,7 @@ impl Window {
   }
 }
 
-/// One windowed emit: the page-space clip, the content translation, the
-/// window the emitter filters by, and whether the content is a repeated
-/// artifact.
+/// One windowed emit: its clip, translation, window, and whether it repeats.
 pub(crate) struct ContentWindow {
   /// Clip rect on the page, as `(x, y, width, height)`.
   pub(crate) clip: (f32, f32, f32, f32),

@@ -1,8 +1,4 @@
-//! Selector matching over the [`Node`] tree.
-//!
-//! All interaction with the `selectors` crate lives here so it stays out of
-//! takumi's public API. Callers pass a node tree and receive back the
-//! declaration blocks that apply to each node.
+//! Selector matching over the [`Node`] tree, keeping the `selectors` crate out of the public API.
 
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 
@@ -175,9 +171,7 @@ impl<'a> ArenaElement<'a> {
     &self.tree.nodes[self.index]
   }
 
-  /// HTML's directionality: the `dir` of the nearest element that sets one, left to right when
-  /// none does.
-  /// <https://html.spec.whatwg.org/multipage/dom.html#the-directionality>
+  /// HTML's [directionality](https://html.spec.whatwg.org/multipage/dom.html#the-directionality).
   fn directionality(&self) -> Direction {
     let mut current = Some(*self);
 
@@ -365,9 +359,7 @@ impl Element for ArenaElement<'_> {
       PseudoClass::Other(_) => return false,
     };
 
-    // `lang` is inherited: walk up from this element to the nearest ancestor-or-self that
-    // has one set, matching HTML's language-determination algorithm. No ancestor has one
-    // set means the language is unknown, so `:lang()` never matches.
+    // The nearest `lang`, as HTML determines the language. With none, `:lang()` never matches.
     let mut current = Some(*self);
     while let Some(element) = current {
       if let Some(lang) = element.style_node().node.attribute("lang") {
@@ -527,12 +519,7 @@ enum SelectorTarget {
   After,
 }
 
-/// What a selector's rightmost compound requires of the element it matches.
-///
-/// A rule whose rightmost compound names an id, class or tag can only match an
-/// element carrying that name, so other nodes skip it without running the
-/// matcher. Anything else, a bare `*` or an attribute selector, has to be
-/// considered for every node.
+/// The id, class, or tag a selector's rightmost compound requires, so other nodes skip the rule.
 enum SelectorKey {
   Id(String),
   Class(String),
@@ -669,9 +656,8 @@ struct SheetPlacement<'a> {
   layer_offset: usize,
 }
 
-/// Matches every rule in `stylesheets`, which cascade in order, against the tree rooted at
-/// `root`, returning the declaration blocks that apply to each node in tree order. Approximate:
-/// the named layers of different sheets stay apart where CSS merges those with the same name.
+/// The declaration blocks of `stylesheets` that apply to each node under `root`, in tree order.
+/// Approximate: same-named layers of different sheets stay apart.
 pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
   stylesheets: &[&'a StyleSheet],
@@ -725,10 +711,7 @@ pub(crate) fn match_stylesheets_view<'a>(
   let mut element_caches = SelectorCaches::default();
   let mut pseudo_caches = SelectorCaches::default();
 
-  // Arena order is DFS preorder, so one counting filter walked along the
-  // ancestor chain replaces a per-node filter copy: pop-and-remove until the
-  // stack top is this node's parent, match against strict-ancestor hashes
-  // only, then push self before descending.
+  // In preorder, one counting filter along the ancestor chain stands in for a filter per node.
   for (i, matched) in per_node.iter_mut().enumerate() {
     while ancestor_stack.last().copied() != arena.nodes[i].parent {
       let Some(left) = ancestor_stack.pop() else {
@@ -864,9 +847,7 @@ fn selector_target(selector: &Selector<SelectorImpl>) -> Option<SelectorTarget> 
   }
 }
 
-/// Records `rule`'s blocks in `bucket` when one of its selectors matched, at `best_specificity`;
-/// its sheet's named layers start at `layer_offset`, and `layers` counts every named layer and the
-/// `tw` layer after them.
+/// Records `rule`'s blocks in `bucket` at `best_specificity` when one of its selectors matched.
 fn record_matches<'a>(
   rule: &'a CssRule,
   source_order: usize,
@@ -1003,9 +984,7 @@ fn tw_rule_order(arena: &StyleArena<'_>) -> FxHashMap<u64, usize> {
     .collect()
 }
 
-/// RFC 4647 basic filtering, as `:lang()` uses: `range` matches `lang` if they're equal
-/// (case-insensitive) or `lang` extends `range` with a `-` boundary (`zh` matches `zh-Hant`).
-/// `*` matches any non-empty `lang`.
+/// RFC 4647 basic filtering, as `:lang()` uses.
 pub(crate) fn lang_matches(lang: &str, range: &str) -> bool {
   if range == "*" {
     return true;

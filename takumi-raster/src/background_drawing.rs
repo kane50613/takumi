@@ -729,10 +729,8 @@ fn lands_on_pixels(tiling: &ImageTiling) -> bool {
     && whole(tiling.phase.y - tiling.dest.top)
 }
 
-/// Paints `image` over `tiling`'s `dest` as Skia's shaders paint a tiled background: each pixel
-/// centre finds its point in the tile it lands in and samples the image there, a bitmap from its
-/// source, and a gradient or an SVG from its rasterization at the tile's whole-pixel size, as
-/// Blink's `GeneratedImage::DrawPattern` records the tile for Skia's picture shader.
+/// Paints `image` tiled over `tiling`'s `dest` as Skia's shaders do, after Blink's
+/// `GeneratedImage::DrawPattern`.
 fn rasterize_pattern(
   image: &BackgroundImage,
   tiling: &ImageTiling,
@@ -856,9 +854,7 @@ fn rasterize_pattern(
   Ok(Pixmap::from_vec(data, size))
 }
 
-/// `source` inside a one-pixel border of what its neighbours show there: the next tile's opposite
-/// edge where tiles abut, as Skia's repeat tiling filters across the seam, and nothing across
-/// `spacing`.
+/// `source` inside a one-pixel border of its neighbours' edges, as Skia's repeat tiling filters.
 fn padded_tile(source: PixmapRef<'_>, spacing: Size<f32>) -> Option<Pixmap> {
   let (width, height) = (source.width() as usize, source.height() as usize);
   let mut padded = Pixmap::new(width as u32 + 2, height as u32 + 2)?;

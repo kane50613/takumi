@@ -1,9 +1,4 @@
-//! Backend-agnostic box-decoration geometry.
-//!
-//! The clip regions a `background-clip` fills — border, padding, and content
-//! boxes with their inset radii — are pure functions of the border geometry and
-//! computed layout. Resolving them here keeps the raster and SVG backends from
-//! re-deriving the same inset/expand math by hand and drifting apart.
+//! Box decoration geometry the raster and SVG backends share.
 
 use crate::{
   context::RenderContext,
@@ -183,12 +178,7 @@ pub struct OutlineGeometry {
 }
 
 impl OutlineGeometry {
-  /// The outline a box paints, or `None` when it paints none.
-  ///
-  /// Matches Blink's `ComputedStyle::HasOutline`: a width that rounds to zero
-  /// paints nothing, and otherwise `outline-style` has to draw something. A
-  /// transparent colour still counts as an outline, so the decision does not
-  /// look at alpha; a backend is free to skip the invisible fill.
+  /// The outline a box paints, decided as Blink's `ComputedStyle::HasOutline`.
   pub(crate) fn painted(context: &RenderContext, size: Size<f32>) -> Option<Self> {
     let style = &context.style;
     let width = style

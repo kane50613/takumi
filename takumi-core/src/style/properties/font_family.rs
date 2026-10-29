@@ -101,9 +101,7 @@ pub(crate) enum FontFamilyToken {
 impl MakeComputed for FontFamily {}
 
 impl FontFamily {
-  /// Named families ending in `sans-serif`. The trailing generic is the last resort: the
-  /// fallback bucket only holds resolved `fontFamilies`, so an unresolved name would otherwise
-  /// leave text unrendered.
+  /// Named families ending in `sans-serif` as the last resort.
   pub fn from_names(names: impl IntoIterator<Item = String>) -> Self {
     let mut tokens = names
       .into_iter()

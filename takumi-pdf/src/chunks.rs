@@ -1,6 +1,4 @@
-//! A scene's paint chunks, resolved once for every page that walks them, and
-//! indexed by the content height their paint reaches so a page window visits
-//! only its own.
+//! A scene's paint chunks, resolved once and indexed by height for each page window.
 
 use takumi_core::{
   layout::tree::RenderNode,

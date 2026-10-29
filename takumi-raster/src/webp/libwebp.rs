@@ -11,10 +11,7 @@ use crate::{
   write::{AnimatedWebpOptions, AnimationFrame, Bitmap, Quality},
 };
 
-/// libwebp reads `quality` as compression effort when encoding VP8L, not as visual
-/// quality: the output is bit-exact at any value. Below 25 it skips its color cache search and
-/// cost-model backward references (`src/enc/backward_references_enc.c`), which on real cards
-/// takes 40% less time for 11% more bytes than 50.
+/// The VP8L effort, below 25 to skip libwebp's slowest searches for 40% less time.
 const LOSSLESS_EFFORT: f32 = 24.0;
 
 /// libwebp's `method` for a still lossy image. On real cards, 2 writes files about a quarter
@@ -280,9 +277,7 @@ fn encode_frames(
     .collect()
 }
 
-/// Streams frames into an animated WebP a bounded chunk at a time, so peak
-/// raw-pixel memory stays fixed while each chunk still encodes in parallel.
-/// Produces the same bytes as [`write_animated_webp`] for the same frames.
+/// [`write_animated_webp`] a bounded chunk at a time, each chunk encoding in parallel.
 pub(crate) fn encode_animated_webp<W, I>(
   mut frames: I,
   destination: &mut W,
@@ -331,9 +326,7 @@ where
   write_riff_container(&encoded, frame_width, frame_height, destination, &options)
 }
 
-/// Frames to buffer per parallel encode pass. Sized so the buffered raw pixels
-/// stay near a fixed budget whatever the frame dimensions, with at least one
-/// frame per pass.
+/// Frames per parallel encode pass, near a fixed pixel budget.
 fn frames_per_chunk(width: u32, height: u32) -> usize {
   const CHUNK_MEMORY_BUDGET: usize = 64 * 1024 * 1024;
   let frame_bytes = (width as usize)

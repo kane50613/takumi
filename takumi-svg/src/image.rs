@@ -95,9 +95,7 @@ pub(crate) enum Drawing {
 }
 
 impl Drawing {
-  /// What a `background-image: url(...)` draws in a `tile`, rendered at `image_size`, or `None`
-  /// if it cannot be resolved (usually no resource map was supplied) or, as in raster output,
-  /// drawn at that size.
+  /// What a `background-image: url(...)` draws in a `tile`, or `None` when it cannot resolve.
   pub(crate) fn of_url(
     url: &Arc<str>,
     tile: Frame,

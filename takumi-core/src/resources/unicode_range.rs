@@ -85,10 +85,8 @@ impl UnicodeRangeSet {
     }
   }
 
-  /// Rewrites a single-face sfnt so its `cmap` maps only codepoints in the set. Blink filters
-  /// glyph lookup the same way in `HarfBuzzFace`, so a subset never serves a codepoint outside
-  /// its declared range. Returns `None` for a font collection or a font it cannot read, which
-  /// keep their full `cmap`. A copied format 14 subtable keeps its non-default variation glyphs.
+  /// The sfnt with its `cmap` limited to the set, as Blink's `HarfBuzzFace` filters lookups, or
+  /// `None` for a collection or an unreadable font.
   fn restrict_charmap(&self, sfnt: &[u8]) -> Option<Vec<u8>> {
     if self.is_entire_range() {
       return None;

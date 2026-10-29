@@ -329,9 +329,7 @@ pub trait PaintDevice {
   /// [`PaintDevice::pop_clip`].
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine);
 
-  /// Clips later draws to `shape` under `transform` without antialiasing its edges, as a Skia clip
-  /// with antialiasing off keeps only the pixels whose centres fall inside, until the matching
-  /// [`PaintDevice::pop_clip`].
+  /// Clips later draws to `shape` without antialiasing until [`PaintDevice::pop_clip`].
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine);
 
   /// Clips later draws to everything outside `shape` under `transform`, keeping only the pixels

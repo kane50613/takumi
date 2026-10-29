@@ -138,10 +138,7 @@ impl SizedFontStyle<'_> {
     }
   }
 
-  /// The `text-shadow` layers in painting order: back to front, so the first
-  /// one authored ends up on top, and without the ones nobody would see.
-  ///
-  /// Blink walks its shadow vector the same way in `TextPainter`.
+  /// The visible `text-shadow` layers back to front, as Blink's `TextPainter` walks them.
   pub fn painted_text_shadows(&self) -> impl Iterator<Item = &SizedShadow> {
     self
       .text_shadow

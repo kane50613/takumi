@@ -1029,10 +1029,7 @@ mod tests {
     assert_near(Length::CqMax(50.0).to_px(&sizing, 0.0), 40.0);
   }
 
-  /// Resolution reports reading the query container, which is what tells a
-  /// caller the result depends on one. Comparing two resolved values cannot:
-  /// a length clamped against a container agrees across two containers and
-  /// disagrees with a third.
+  /// Whether resolution read the query container.
   #[test]
   fn resolving_a_container_length_reports_the_read() {
     let mut sizing = sizing();

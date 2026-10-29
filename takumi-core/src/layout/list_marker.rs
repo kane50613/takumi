@@ -298,10 +298,7 @@ impl ListCounter {
   }
 }
 
-/// Blink counts list items within their enclosing list, so a wrapper element
-/// inside one keeps counting rather than starting over. A list element is the
-/// one signal for where a list begins; a tree built in code carries no tags, so
-/// there every parent counts the items it holds.
+/// Items count within their enclosing list, or their parent in a tree built in code.
 pub(super) fn owns_list_counter(node: &Node, inside_list: bool) -> bool {
   !inside_list || is_list_element(node)
 }

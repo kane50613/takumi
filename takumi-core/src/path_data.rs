@@ -14,11 +14,7 @@ use crate::{
 /// pairs), used with [`APPROX_CHARS_PER_NUMBER`] to presize the path buffer.
 const NUMBERS_PER_COMMAND: usize = 6;
 
-/// Builds compact SVG path `d` data: numbers are quantized via [`Num`], the
-/// command letter is elided when it repeats (and a moveto's trailing pairs fold
-/// into implicit linetos), and the separator between two numbers is dropped
-/// whenever the grammar still lexes them apart (the next number starts with `-`,
-/// or with `.` when the previous number already carried a `.`).
+/// Compact SVG path `d` data, eliding repeated commands and separators the grammar does not need.
 pub struct PathData {
   out: String,
   prev_was_number: bool,
@@ -27,11 +23,8 @@ pub struct PathData {
 }
 
 impl PathData {
-  /// Path data commands up to the first error, and whether the whole text parsed, after Blink's
-  /// `SVGPathParser` and `SVGPathNormalizer`: absolute commands, `H`/`V` as lines, smooth curves
-  /// expanded, arcs as cubics.
-  ///
-  /// A coordinate that overflows `f32` ends the data as an error.
+  /// Path commands up to the first error and whether all parsed, normalized as Blink's
+  /// `SVGPathNormalizer`.
   pub fn parse(text: &str) -> (Vec<PathCommand>, bool) {
     let mut scanner = Scanner::new(text);
     let mut normalizer = Normalizer::default();
@@ -109,10 +102,7 @@ impl PathData {
   }
 }
 
-/// Quantization grid for path coordinates: two decimals. Path `d` data is the
-/// bulk of the document and is sub-pixel-insensitive at the sizes takumi renders,
-/// so it is quantized harder than the 3-decimal [`Num`] kept for transform
-/// matrices (whose error multiplies into every coordinate).
+/// Path coordinates keep two decimals, one fewer than [`Num`], whose transforms multiply error.
 const PATH_COORD_FACTOR: f32 = 100.0;
 /// Tolerance (one grid step) for treating a curve's control point as the exact
 /// reflection of the previous one, enabling the `s`/`t` shorthands.
@@ -123,14 +113,8 @@ pub fn quantize_path(value: f32) -> f32 {
   (value * PATH_COORD_FACTOR).round() / PATH_COORD_FACTOR
 }
 
-/// Serializes takumi-core path commands ([`PathCommand`], the shared `Command`
-/// type) to compact SVG path `d` data, applying `transform` to every point.
-///
-/// Coordinates are emitted relative to the previous point (the first move stays
-/// absolute), axis-aligned lines collapse to `h`/`v`, and smooth cubics/quadratics
-/// use the `s`/`t` shorthands. Each delta is quantized with its rounding error
-/// folded into the next, so multi-contour fills stay closed — the core of SVGO's
-/// `convertPathData`.
+/// Serializes `commands` under `transform` to relative path data, carrying rounding error forward
+/// so contours stay closed, as SVGO's `convertPathData` does.
 pub fn path_data(commands: &[PathCommand], transform: Affine) -> String {
   let [a, b, c, d, e, f] = transform.to_cols_array();
   let path =
@@ -173,9 +157,7 @@ enum PrevControl {
   Quad(f32, f32),
 }
 
-/// Emits path segments as compact relative commands into a [`PathData`], tracking
-/// the reconstructed (quantized) pen position so each relative delta is computed
-/// against where a consumer actually lands, folding rounding error forward.
+/// Writes relative commands into a [`PathData`] from the quantized pen position.
 struct RelEmit {
   path: PathData,
   x: f32,
@@ -316,18 +298,13 @@ pub fn edges_path_data(edges: Rect<f32>) -> String {
   path.into_string()
 }
 
-/// Quantization grid for coordinates, dimensions, and opacities: three decimals.
-/// SVG rendering is insensitive below this at the raster sizes takumi targets, so
-/// dropping the float tail keeps documents compact without visible drift.
+/// Coordinates, dimensions, and opacities keep three decimals.
 const COORD_FACTOR: f32 = 1000.0;
 
 /// Rough characters one quantized number serializes to, used to presize buffers.
 pub const APPROX_CHARS_PER_NUMBER: usize = 8;
 
-/// Finite-guarded, quantized float formatter shared by every SVG numeric
-/// emission site. Non-finite values serialize as `0`; finite values are rounded
-/// to [`COORD_FACTOR`]'s grid and printed with the shortest representation, so
-/// trailing zeros are dropped.
+/// A number for SVG output on [`COORD_FACTOR`]'s grid, `0` when not finite.
 pub struct Num(pub f32);
 
 /// Stack buffer for one formatted number. 48 bytes holds any `f32` Display.

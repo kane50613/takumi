@@ -30,9 +30,7 @@ struct Noise {
 }
 
 impl Turbulence {
-  /// Blink's `FETurbulence` as Skia's `perlin_noise` raster stage runs it, over the `window` of
-  /// `dest`, `width` pixels wide, as premultiplied pixels. `tile` is the primitive subregion in
-  /// user space, which stitching repeats at.
+  /// Blink's `FETurbulence` as Skia's `perlin_noise` runs it, stitching at `tile`.
   pub(super) fn apply(
     &self,
     canvas: &Canvas,

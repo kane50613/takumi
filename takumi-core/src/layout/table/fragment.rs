@@ -1,6 +1,4 @@
-//! What paint needs of a laid-out table, Blink's table fragment data: where its grid lies apart
-//! from its captions, which cells and rows layout hid, the geometry of its columns and column
-//! groups, and its collapsed borders with the rows and columns they run along.
+//! What paint needs of a laid-out table, Blink's table fragment data.
 
 use std::rc::Rc;
 

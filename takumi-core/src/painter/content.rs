@@ -56,9 +56,7 @@ impl<'n> OwnContent<'n> {
     }
   }
 
-  /// Whether the inline content lays anything out in the node's own `font_style`. A text node at
-  /// `font-size: 0` shows nothing, but an inline formatting context still lays out the children
-  /// that set their own size.
+  /// Whether the inline content lays anything out in the node's own `font_style`.
   pub(crate) fn has_inline_content(&self, font_style: &SizedFontStyle) -> bool {
     let Self::Inline(node) = *self else {
       return false;
@@ -89,9 +87,7 @@ impl<'n> OwnContent<'n> {
     node.fragment_items_in(layout)
   }
 
-  /// The inline content laid out in the content box of `layout`, styled by `font_style`, its
-  /// node's own; `None` when it has none. A node keeps the fragment items it laid out to, so
-  /// painting it again at the same layout only collects its spans.
+  /// The inline content laid out in `layout`'s content box, `None` when it has none.
   pub fn lay_out_inline<'c>(
     &self,
     font_style: &'c SizedFontStyle<'c>,

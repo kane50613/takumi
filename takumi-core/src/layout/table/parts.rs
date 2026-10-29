@@ -1,7 +1,4 @@
-//! The table box tree: the anonymous boxes that give every table part the parent Blink's
-//! `CanBeDirectChild` and `RequiresAnonymousTableWrappers` demand, the spans cells and columns
-//! read from their attributes, and a table's children grouped as `TableGroupedChildren` groups
-//! them.
+//! The table box tree: Blink's anonymous table wrappers, spans, and `TableGroupedChildren`.
 
 use std::mem::take;
 
@@ -74,11 +71,8 @@ impl RenderNode {
     TableRole::of(context.style.base_data.display).is_some()
   }
 
-  /// `children` of a table, row group, row, column group, or column, each in a parent that
-  /// accepts it, or `None` for a box of any other display. A run of children the parent does not
-  /// accept shares one anonymous box, as Blink's `LayoutBlock::AddChild` reuses the anonymous
-  /// child before it; white space between them renders no text, as
-  /// `Text::CanHaveWhitespaceChildren` has it.
+  /// `children` of a table part, each in a parent that accepts it, as Blink's
+  /// `LayoutBlock::AddChild` wraps them; `None` for any other display.
   pub(in crate::layout) fn fix_up_table_children(
     context: &RenderContext,
     children: Vec<RenderNode>,
@@ -147,10 +141,8 @@ impl RenderNode {
     fixed.push(wrapper);
   }
 
-  /// Wraps each run of `children` that are parts of a table, under a `parent` that is not one, in
-  /// an anonymous table, as Blink's `LayoutObject::AddChild` does for a child
-  /// `RequiresAnonymousTableWrappers` turns away. The table is inline-level under an inline
-  /// parent, as `LayoutTable::CreateAnonymousWithParent` makes it.
+  /// Wraps each run of table parts outside a table in an anonymous table, as Blink's
+  /// `LayoutObject::AddChild` does.
   pub(in crate::layout) fn wrap_orphan_table_parts(
     parent: &RenderContext,
     children: Box<[RenderNode]>,
@@ -223,9 +215,7 @@ impl RenderNode {
     )
   }
 
-  /// The row groups of this table in layout order, by child index: the first header group, the
-  /// bodies, then the first footer group, as Blink's `TableGroupedChildren` orders them. Empty for
-  /// a box that is not a table.
+  /// The row groups in layout order, as Blink's `TableGroupedChildren` orders them.
   pub fn table_sections(&self) -> Vec<(usize, TableSectionKind)> {
     if !self.context.style.base_data.display.is_table() {
       return Vec::new();
@@ -297,9 +287,8 @@ impl RenderNode {
   }
 }
 
-/// HTML's rules for parsing non-negative integers, saturating past `u32::MAX` as Blink's
-/// `ParseHTMLClampedNonNegativeInteger` takes an overflow to the maximum.
-/// <https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-non-negative-integers>
+/// HTML's [non-negative integers](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-non-negative-integers),
+/// saturating as Blink's `ParseHTMLClampedNonNegativeInteger`.
 fn parse_non_negative_integer(value: &str) -> Option<u32> {
   let value = value.trim_start_matches(['\t', '\n', '\x0C', '\r', ' ']);
   let value = value.strip_prefix('+').unwrap_or(value);
@@ -327,9 +316,7 @@ pub enum TableSectionKind {
   Footer,
 }
 
-/// A table's children by role, as Blink's `TableGroupedChildren` sorts them: the first header and
-/// footer groups lead and close the sections, and any later ones count as bodies. Each entry is
-/// an index into the table's children.
+/// A table's child indices by role, as Blink's `TableGroupedChildren` sorts them.
 pub(crate) struct TableGroupedChildren {
   pub(crate) captions: Vec<usize>,
   pub(crate) columns: Vec<usize>,

@@ -33,9 +33,7 @@ pub(crate) struct FlexColumnBreakInfo {
   pub(crate) break_after: BreakBetween,
 }
 
-/// How a flex item takes part in Blink's breakpoint checks: an item of a row leaves forced breaks
-/// and the early break before it to the row, and an item of a column keeps its column's early
-/// break apart.
+/// How a flex item takes part in Blink's breakpoint checks.
 #[derive(Debug, Default)]
 pub(crate) struct FlexItemBreak<'f> {
   pub(crate) is_row_item: bool,
@@ -336,9 +334,7 @@ pub(crate) fn setup_fragment_builder_for_fragmentation(
   leaves_block_start_out
 }
 
-/// Blink's `BlockChildIterator`: the children a fragment resuming at a break token resumes or
-/// starts, with the tokens they resume at. It goes on from where the break token left off, so a
-/// page visits only the children it reaches.
+/// Blink's `BlockChildIterator`.
 pub(crate) struct BlockChildIterator {
   tokens: IntoIter<Rc<BlockBreakToken>>,
   children: Rc<[NodeId]>,

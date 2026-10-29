@@ -1,8 +1,6 @@
 use crate::style::impl_css_enum;
 
-/// Controls how text should be broken at word boundaries.
-///
-/// Corresponds to CSS word-break property.
+/// The `word-break` property.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum WordBreak {

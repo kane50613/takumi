@@ -36,9 +36,7 @@ impl From<LineWidthKeyword> for Length {
   }
 }
 
-/// CSSWG `<line-width>`: a `thin | medium | thick` keyword or a `<length>`.
-///
-/// Used by `border-*-width` and `outline-width`. The initial value is `medium`.
+/// A `<line-width>`: `thin`, `medium`, `thick`, or a `<length>`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum LineWidth {

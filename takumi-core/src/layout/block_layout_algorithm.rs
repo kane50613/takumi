@@ -1,8 +1,5 @@
-//! Blink's [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc):
-//! a block container's children in a block formatting context, with margins collapsing, floats,
-//! and clearance, an inline formatting context's lines among them. Without columns, clamping by
-//! height, `text-box-trim`, `margin-trim`, ruby annotations, list marker propagation, or quirks
-//! mode.
+//! Blink's [`BlockLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_layout_algorithm.cc),
+//! without columns, height clamping, `text-box-trim`, `margin-trim`, ruby, or quirks mode.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -814,9 +811,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
   }
 
-  /// Blink's `AlignBlockContent`, or `FinalizeTableCellLayout` for a cell: how far alignment
-  /// moves the content of a box `block_size` tall down, its children, out-of-flow boxes, and
-  /// baselines moved with it.
+  /// Blink's `AlignBlockContent`, or `FinalizeTableCellLayout` for a cell.
   fn align_block_content(&mut self, block_size: LayoutUnit) -> LayoutUnit {
     let offset = if self.space.is_table_cell {
       self.table_cell_content_offset(block_size)
@@ -850,9 +845,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     offset
   }
 
-  /// The alignment part of Blink's `FinalizeTableCellLayout`: how far a cell's `vertical-align`
-  /// or `align-content` moves its content in a cell `block_size` tall. A baseline-aligned cell
-  /// without a baseline takes the end of its content box as one.
+  /// The alignment part of Blink's `FinalizeTableCellLayout`.
   fn table_cell_content_offset(&mut self, block_size: LayoutUnit) -> LayoutUnit {
     // A cell resumed after a break starts at the top of the page.
     if self.is_resuming() {
@@ -2183,9 +2176,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       self.list_marker_intruded_float_offset(marker.node, marker_block_offset);
   }
 
-  /// Blink's `PositionOrPropagateListMarker` for a block child laid out as `result` at `offset`:
-  /// the item's outside marker goes beside the child's first baseline, and the child moves down
-  /// when the marker reaches higher.
+  /// Blink's `PositionOrPropagateListMarker`.
   fn position_list_marker_beside_child(
     &mut self,
     result: &LayoutResult,

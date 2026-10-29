@@ -17,10 +17,7 @@ use crate::{
 const MIN_GRADIENT_LUT_SIZE: usize = 2;
 const MAX_GRADIENT_LUT_SIZE: usize = 8193;
 
-/// 8x8 Bayer thresholds in 8.8 fixed point, applied to gradient samples before
-/// quantization. Blink dithers every gradient (`gradient.cc`, "Legacy behavior:
-/// gradients are always dithered"); an integer-exact sample rounds back to
-/// itself, so flat regions and hard stops stay byte-identical.
+/// 8x8 Bayer thresholds in 8.8 fixed point, as Blink dithers every gradient.
 #[rustfmt::skip]
 const DITHER_NOISE_88: [[i16; 8]; 8] = [
   [-128,    0,  -96,   32, -120,    8,  -88,   40],

@@ -77,9 +77,7 @@ pub(super) struct FaceKey {
 pub struct ShapedRun {
   /// The run's glyphs, positioned from the line origin.
   pub glyphs: Vec<PositionedGlyph>,
-  /// Horizontal offset of the run's start from the line origin. A glyph's `x`
-  /// already carries it; this is for placing what the glyphs do not, such as a
-  /// decoration spanning the run.
+  /// The run's start from the line origin, for what the glyphs do not place, such as decorations.
   pub offset: f32,
   /// Baseline position within the line.
   pub baseline: f32,
@@ -96,9 +94,7 @@ pub struct ShapedRun {
   /// Byte range of the run's source text within its inline layout's
   /// [`BuiltInlineLayout::text`].
   pub text_range: Range<usize>,
-  /// Per-glyph cluster byte ranges into [`BuiltInlineLayout::text`], parallel
-  /// to [`Self::glyphs`] (visual order). Empty when alignment failed; treat as
-  /// unknown.
+  /// Each glyph's cluster bytes in the line's text, empty when unknown.
   pub cluster_ranges: Vec<Range<usize>>,
   /// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`.
   /// A consumer that re-reads the font must apply these or it gets the default instance.
@@ -242,9 +238,7 @@ impl PositionedInlineRun {
     )
   }
 
-  /// The run's affine transform composed onto `base` (the element transform for raster, identity
-  /// for vector emission). `text-fit` scales the line about the run's unmoved place, so the
-  /// relative offset [`Self::glyph_offset`] carries moves it unscaled.
+  /// The run's transform composed onto `base`.
   pub fn transform(&self, base: Affine) -> Affine {
     let Point { x, y } = self.relative_offset;
 

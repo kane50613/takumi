@@ -6,9 +6,7 @@ use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
 };
 
-/// `tab-size` as a number of spaces. `<length>` values are not supported; preserved tabs
-/// expand to `round(n)` spaces before shaping rather than advancing to true tab stops.
-/// The representation is private so `<length>` support can land without a breaking change.
+/// `tab-size` as a number of spaces. Naive: no `<length>`, and tabs expand to spaces.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabSize(f32);
 

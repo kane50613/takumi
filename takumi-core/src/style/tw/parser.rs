@@ -350,9 +350,7 @@ impl TailwindPropertyParser for TwAnimation {
   }
 }
 
-/// A variable-backed colour expression for gradient stops and shadow colours:
-/// `var(--color-*)`, with the built-in colour as the fallback when the token
-/// names one. `current` and `transparent` stay plain keywords.
+/// A `var(--color-*)` colour with the built-in one as the fallback.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct TwVarColor(pub Arc<str>);
 

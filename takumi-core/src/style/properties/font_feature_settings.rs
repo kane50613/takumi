@@ -70,10 +70,7 @@ impl FontFeature {
   }
 }
 
-/// Controls OpenType font features via CSS font-feature-settings property.
-///
-/// This allows enabling/disabling specific typographic features in OpenType fonts
-/// such as ligatures, kerning, small caps, and other advanced typography features.
+/// The `font-feature-settings` property.
 pub(crate) type FontFeatureSettings = Arc<[FontFeature]>;
 
 impl MakeComputed for FontFeatureSettings {}

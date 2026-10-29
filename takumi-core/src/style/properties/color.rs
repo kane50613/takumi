@@ -1011,9 +1011,7 @@ mod tests {
       Color([0, 0, 0, 255]),
     );
 
-    // Oklab would swing the midpoint through a lighter, pinker path; sRGB keeps
-    // each channel on its own straight line, which is what Chromium does for a
-    // legacy colour.
+    // sRGB, as Chromium interpolates a legacy colour.
     assert_eq!(result, ColorInput::Value(Color([128, 128, 128, 255])));
   }
 

@@ -1,12 +1,7 @@
 import initBindings, { Renderer, setGlyphCacheMaxBytes } from "@takumi-rs/wasm";
 import type { Backend, BackendModule } from "./types";
 
-/**
- * Initializes the WASM bindings, preferring a caller-supplied `module` and
- * falling back to the per-bundler binary picked by the import condition.
- * `@takumi-rs/wasm` guards against double init, so a binary already loaded by
- * `@takumi-rs/wasm/auto` (e.g. on Deno) makes this a no-op.
- */
+/** Initializes the WASM bindings from `module`, else the binary the import condition picks. */
 export async function initWasm(module?: BackendModule, fallback?: BackendModule): Promise<Backend> {
   const source = module ?? fallback;
   const resolved = typeof source === "function" ? await source() : await source;

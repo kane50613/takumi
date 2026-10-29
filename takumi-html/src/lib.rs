@@ -47,10 +47,7 @@ use typed_builder::TypedBuilder;
 use crate::dom::{Attribute, AttributeNamespace};
 use crate::dom::{Namespace, NodeData, NodeRef};
 
-/// Tags whose entire subtree is dropped, matching the JS markup walker.
-/// Deliberately distinct from the `display:none` presets (`title`,
-/// `noscript`, `template`, ...): these never reach the tree, those are merely
-/// laid out hidden.
+/// Tags whose subtree never reaches the tree, unlike the `display: none` presets.
 const UNRENDERED_TAGS: [&str; 5] = ["head", "meta", "link", "style", "script"];
 
 const DEFAULT_PRESETS: &[(&str, &str)] = &[
@@ -368,11 +365,7 @@ fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
   css
 }
 
-/// Whether the source is a document: it opens with a doctype or an `<html>` tag, ignoring
-/// leading whitespace and comments.
-///
-/// Document parsing invents `<html>`, `<head>` and `<body>` for a source that
-/// has none, which would wrap every fragment in boxes its author never wrote.
+/// Whether the source opens with a doctype or an `<html>` tag, after white space and comments.
 fn is_document(source: &str) -> bool {
   let mut rest = source.trim_start();
 
@@ -616,9 +609,7 @@ impl NodeBuilder<'_> {
     Ok(ImageSourceInput::Buffer(handle.outer_html()))
   }
 
-  /// An element of an inline `<svg>` with every attribute in its attribute map under its
-  /// qualified name, or a text, none for other nodes. A subtree past the depth limit fails as the
-  /// rest of the document does.
+  /// An inline `<svg>` element with its attributes under their qualified names, or a text.
   #[cfg(feature = "svg")]
   fn svg_node(&self, handle: NodeRef<'_>, depth: usize) -> Result<Option<Node>, HtmlError> {
     if depth >= self.max_depth {

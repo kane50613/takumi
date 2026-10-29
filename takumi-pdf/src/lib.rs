@@ -571,9 +571,7 @@ mod tests {
     );
   }
 
-  /// Chromium drops the default margin on an axis that does not clear an inch
-  /// rather than leave the page with nothing to print on. Its test is
-  /// `axis > one inch`, so an axis of exactly an inch keeps no margin either.
+  /// Chromium drops the default margin on an axis of at most an inch.
   #[test]
   fn a_page_under_an_inch_keeps_no_margin_on_that_axis() {
     for width in [ONE_IN_PX, ONE_IN_PX - 1.0] {

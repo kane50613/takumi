@@ -141,9 +141,7 @@ pub struct RenderContext {
   pub sizing: SizingContext,
   /// The scale factor for the image renderer.
   pub transform: Affine,
-  /// Blink's paint offset of the space the box's layout location is measured in: where that space
-  /// sits in the space Blink snaps paint to pixels in. A painter sets it for each fragment it
-  /// enters, through a scene it shares.
+  /// Blink's paint offset of the space the box's layout location is measured in.
   paint_offset: Cell<Point<f32>>,
   /// Which of the box's fragments the painter entered, as [`Self::paint_offset`] is.
   fragment_index: Cell<usize>,

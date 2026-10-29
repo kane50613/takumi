@@ -11,10 +11,7 @@ import { NodeMetadataReader } from "../jsx/metadata";
 import { isAsciiWhitespace, isUnrenderedElement } from "../jsx/utils";
 import { decodeHtmlEntities } from "./entities";
 
-/**
- * Converts static HTML/SVG markup into Takumi nodes, keeping `<style>` contents
- * as stylesheets and turning `<img>` / `<svg>` into image nodes.
- */
+/** Converts HTML into nodes, `<style>` contents into stylesheets, and `<img>` and `<svg>` into images. */
 export function fromStaticMarkup(markup: string): ConvertedNodes {
   return new NodeBuilder(new NodeMetadataReader()).build(parse(markup) as UltraHtmlDocumentNode);
 }

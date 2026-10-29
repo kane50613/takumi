@@ -23,10 +23,8 @@ const PROBE_SIZES: [f32; 2] = [0.0, 1024.0];
 
 /// How far above its page a box can paint, and which boxes the styles leave to the layout.
 pub(crate) struct PaintReach {
-  /// An upper bound on how many px above its page a box not in [`Self::unbounded`] can paint, or
-  /// none when a negative margin that depends on the layout, or a repeated box, leaves no bound.
-  /// Glyph ink is taken to reach at most [`GLYPH_REACH_EMS`] font sizes above its line, an assumption
-  /// about fonts and not a measurement.
+  /// How many px above its page a box can paint at most, glyphs reaching [`GLYPH_REACH_EMS`] above
+  /// their line by assumption.
   pub(crate) back: Option<f32>,
   /// The boxes, each by the block laying out its inline content, whose paint no bound covers. The
   /// layout bounds them once it has laid them out.
@@ -301,9 +299,7 @@ fn displacement(styles: &[LayoutStyle; 2]) -> Option<f32> {
   }
 }
 
-/// How far above the start of its containing block an absolute box that depends on the block's
-/// block size can start. A size that is auto or a percentage counts as zero, so this is approximate
-/// for a box taller than the block.
+/// How far above its containing block an absolute box can start. Approximate: auto sizes count as zero.
 fn held_displacement(styles: &[LayoutStyle; 2]) -> f32 {
   let style = &styles[0];
   let px = |length: &dyn Fn(&LayoutStyle) -> LayoutLength| {

@@ -960,9 +960,7 @@ fn frame_batch_len() -> usize {
   rayon::current_num_threads().max(1)
 }
 
-/// Renders frames one chunk at a time: `next()` renders a chunk of `rayon`
-/// threads' worth of frames in parallel once the encoder has consumed the
-/// previous chunk, so at most one chunk of raw frames is in memory.
+/// Renders a chunk of frames in parallel per `next()`, holding one chunk at a time.
 #[cfg(feature = "rayon")]
 struct ChunkedFrames<'a, 'g> {
   scenes: &'a [SequentialScene<'g>],

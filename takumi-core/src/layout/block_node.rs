@@ -1,6 +1,5 @@
-//! Blink's [`BlockNode`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_node.cc):
-//! the algorithm that lays a box out, the layouts and intrinsic sizes it keeps, and where its
-//! layout puts its box. Without `contain: size` or scrollbars.
+//! Blink's [`BlockNode`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/block_node.cc),
+//! without `contain: size` or scrollbars.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -617,9 +616,7 @@ impl<'r> LayoutTree<'r> {
       )
   }
 
-  /// Blink's `LayoutBox::IsMonolithic` when printing: replaced content, an atomic inline, or a
-  /// line-clamp container, which no page break splits. A float or a block-in-inline of inline
-  /// content is laid out as an atomic inline, but is not one.
+  /// Blink's `LayoutBox::IsMonolithic` when printing.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn is_monolithic(&self, node: NodeId) -> bool {
     let state = self.node_state(node);
@@ -664,10 +661,8 @@ impl<'r> LayoutTree<'r> {
     self.node_state(node).claims
   }
 
-  /// Places `node`'s fragment `fragment_index`, laid out as `result`, with its border box at
-  /// `location` in its parent's fragment `container_fragment_index`. A fragment that does not
-  /// break ends the box, so the fragments an earlier layout left after it go, as Blink's
-  /// `LayoutBox::SetLayoutResult` drops them.
+  /// Places `node`'s fragment `fragment_index` at `location`, dropping later stale fragments as
+  /// Blink's `LayoutBox::SetLayoutResult` does.
   pub(crate) fn place_child(
     &mut self,
     node: NodeId,
@@ -717,9 +712,7 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Blink's `LayoutRepeatableRoot`: a repeated table header or footer laid out once, then the
-  /// same layout for each later repetition after `token`, which leaves out the out-of-flow boxes
-  /// an ancestor positions.
+  /// Blink's `LayoutRepeatableRoot`.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn lay_out_repeatable_root(
     &mut self,
@@ -759,9 +752,7 @@ impl<'r> LayoutTree<'r> {
     Rc::new(result)
   }
 
-  /// Gives every box under `node`'s fragment `source` a copy of its fragment there for `node`'s
-  /// fragment `target`, as Blink's `FragmentRepeater` deep-clones a repeated root. An out-of-flow
-  /// box repeats with its containing block alone.
+  /// Copies the fragments under `source` to `target`, as Blink's `FragmentRepeater` does.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn repeat_fragments(&mut self, node: NodeId, source: usize, target: usize) {
     let state = self.node_state(node);
@@ -877,9 +868,8 @@ impl<'r> LayoutTree<'r> {
     self.inline_contents.insert(node, content);
   }
 
-  /// Places the inline content boxes of `node`, laid out as `result`, where its lines put them,
-  /// then lays out the out-of-flow boxes an inline box contains, as `OutOfFlowLayoutPart` does for
-  /// an inline containing block, and returns the rest.
+  /// Places `node`'s inline boxes, lays out the out-of-flow boxes they contain as
+  /// `OutOfFlowLayoutPart` does, and returns the rest.
   pub(crate) fn finish_inline_content(
     &mut self,
     node: NodeId,

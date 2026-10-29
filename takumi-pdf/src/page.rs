@@ -51,10 +51,7 @@ pub(crate) struct PageFrame {
 }
 
 impl PageFrame {
-  /// Resolves the geometry. Bands are measured before this so an `auto` margin
-  /// can take the height they came out at; the content window is the full
-  /// margin box, and a band taller than its margin overlaps content, exactly
-  /// as in Chromium.
+  /// Resolves the geometry, a band taller than its margin overlapping content as in Chromium.
   pub(crate) fn resolve(
     page: &PageOptions,
     band_viewport: Viewport,
@@ -227,10 +224,7 @@ pub(crate) struct PageDrawing<'d, 'g> {
 }
 
 impl PageDrawing<'_, '_> {
-  /// Lays the content out on pages and draws the ones `bands` keeps, each as soon as `settle` says
-  /// no later page paints on it. A document that reads the page count, where a box landed or where
-  /// an element sits is first laid out by passes that only count, so only a counter that never
-  /// settles makes it lay out to its end before the first page is drawn.
+  /// Lays the content out on pages and draws each kept page once no later page paints on it.
   pub(crate) fn render(
     &mut self,
     page: PageOptions,
@@ -290,11 +284,8 @@ impl PageDrawing<'_, '_> {
     };
     let (mut header, mut footer) = measure_bands(1)?;
     let mut frame = resolve(header.as_ref(), footer.as_ref())?;
-    // A band with a counter and the page count depend on each other: an `auto`
-    // margin takes the band's height, the band lays out with the real page
-    // numbers, and the page count is only known once the content is laid out.
-    // The band is re-measured with the count each layout produced until its height
-    // stops moving, like the content counters in `Counted::settle`.
+    // A counter band and the page count depend on each other, so the band is measured again until
+    // its height settles.
     let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
       || footer.as_ref().is_some_and(Repeatable::dynamic);
 
@@ -490,9 +481,7 @@ impl PageDrawing<'_, '_> {
   }
 }
 
-/// Draws the paginated content one page at a time: background, the repeatables
-/// under the content, the content window, the repeatables over it, then the
-/// link annotations.
+/// Draws the paginated content one page at a time.
 struct PageComposer<'c, 'g> {
   frame: &'c PageFrame,
   /// In draw order: the header band, the repeated boxes, the footer band.
@@ -576,10 +565,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       self.state.tags.as_ref(),
       &anchor,
     );
-    // A repeated box sits at the same place on every page, so its links are
-    // added per page against the page area rather than the content window.
-    // The box itself is an artifact, and its paths do not exist in the tag
-    // tree, so the annotations stay out of the structure too.
+    // A repeated box's links go on every page against the page area, outside the structure.
     add_link_annotations(
       &mut pdf_page,
       resolved.iter().flat_map(RepeatablePage::links),

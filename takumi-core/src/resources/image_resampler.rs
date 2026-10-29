@@ -1,8 +1,4 @@
-//! Streaming separable resampler fed one source row at a time, so a decoder
-//! never materializes the full-size image.
-//!
-//! Follows `image::imageops::resize`: a vertical pass into f32, then a horizontal one, with its
-//! windows, weights, and rounding.
+//! A resampler fed one source row at a time, matching `image::imageops::resize`.
 
 use std::collections::VecDeque;
 
@@ -84,9 +80,7 @@ struct HorizontalWindow {
   weights: Box<[f32]>,
 }
 
-/// Push premultiplied RGBA source rows in order; target rows are produced as
-/// soon as their vertical window is complete. Peak memory is one vertical
-/// window of source rows plus one intermediate row.
+/// Takes premultiplied source rows in order and yields each target row once its window is full.
 pub(crate) struct StreamResampler {
   native_width: u32,
   native_height: u32,
@@ -205,9 +199,7 @@ impl StreamResampler {
     }
   }
 
-  /// Vertical pass for the current target row into `intermediate`, then the
-  /// horizontal pass into `output`. Accumulation order and rounding match
-  /// `imageops` (`FloatNearest(clamp(t))`).
+  /// Resamples the current target row vertically, then horizontally, rounding as `imageops` does.
   fn emit(&mut self, left: u32) {
     self.intermediate.fill(0.0);
     for (offset, weight) in self.weights.iter().enumerate() {

@@ -1,6 +1,4 @@
-//! CSS fragmentation properties: `break-before`, `break-after`, `break-inside`,
-//! `widows`, `orphans`. Only the paged backend consumes them; other backends
-//! ignore them.
+//! The fragmentation properties, which only paged output reads.
 
 use std::fmt;
 
@@ -10,10 +8,7 @@ use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, lerp,
 };
 
-/// A `break-before` / `break-after` value, Blink's `EBreakBetween`. The legacy
-/// `always` of `page-break-before` and `page-break-after` is `page`.
-/// A sided break forces a page break, and like Blink adds no blank page to
-/// start on the side it names.
+/// A `break-before` or `break-after` value, Blink's `EBreakBetween`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum BreakBetween {

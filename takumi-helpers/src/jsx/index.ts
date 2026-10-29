@@ -46,13 +46,7 @@ export function Bitmap({
 }
 
 export interface FromJsxOptions {
-  /**
-   * Override or disable the default Chromium style presets.
-   *
-   * If an object is provided, all the default style presets will be overridden.
-   *
-   * If `false` is provided explicitly, no default style presets will be used.
-   */
+  /** Style presets replacing Chromium's defaults, or `false` for none. */
   defaultStyles?: typeof defaultStylePresets | false;
   /**
    * The JSX prop name used to pass Tailwind classes.
@@ -207,11 +201,8 @@ class NodeBuilder implements RenderEnv {
   }
 
   /**
-   * Handles context provider/consumer elements natively: providers push their
-   * value onto the traversal's context map (read back by the dispatcher's
-   * `useContext`), consumers call their render prop with the current value.
-   * A `react.context` element type is a provider on React 19 and a legacy
-   * consumer on 18; the render-prop children shape disambiguates.
+   * Resolves context providers and consumers. A `react.context` type is a provider on React 19
+   * and a consumer on 18, told apart by its render-prop children.
    */
   private tryContext(element: ReactElementLike): Promise<ConvertedNodes> | undefined {
     const type = element.type;

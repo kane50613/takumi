@@ -1,8 +1,4 @@
-//! Parsed SVG `<filter>` references for `filter: url(data:image/svg+xml,...)`.
-//!
-//! The markup is validated and extracted at CSS parse time; execution is
-//! run by takumi's own SVG filter pipeline in the raster backend and emitted verbatim by the SVG
-//! backend, so both sides share one spec implementation.
+//! SVG `<filter>` references in `filter: url(data:image/svg+xml,...)`.
 
 use std::{str::from_utf8, sync::Arc};
 
@@ -30,18 +26,14 @@ pub(crate) enum FilterReferenceError {
 /// A validated SVG filter reference.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilterReference {
-  /// The `<filter>` element markup. Any author `id` is stripped and replaced
-  /// with [`FilterReference::ID`], so consumers can rewrite it textually.
-  /// Serialization rebuilds a minimal `data:` URI from it.
+  /// The `<filter>` markup, its `id` replaced with [`FilterReference::ID`].
   pub markup: Arc<str>,
 }
 
 impl FilterReference {
   /// The `id` attribute value guaranteed on [`FilterReference::markup`].
   pub const ID: &str = "takumi-filter";
-  /// Parses a `filter: url(...)` value. Only `data:image/svg+xml` URIs are
-  /// supported; there is no document to resolve fragments or external URLs
-  /// against.
+  /// Parses a `filter: url(...)` value, `data:image/svg+xml` URIs only.
   pub(crate) fn from_url(url: &str) -> Result<Self, FilterReferenceError> {
     let decoded = decode_data_uri(url).map_err(|error| match error {
       DataUriError::Malformed => FilterReferenceError::UnsupportedUrl,
@@ -77,9 +69,7 @@ impl FilterReference {
     let filter_range = filter.range();
     let mut markup = xml[filter_range.clone()].to_string();
 
-    // Strip any author id (via its byte range, so whitespace and entity
-    // encoding don't matter) along with its leading whitespace, and inject the
-    // canonical one, which the SVG backend rewrites textually.
+    // Replace the author `id` by its byte range with the canonical one.
     if let Some(id) = filter
       .attributes()
       .find(|attribute| attribute.namespace().is_none() && attribute.name() == "id")

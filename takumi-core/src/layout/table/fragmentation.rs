@@ -287,9 +287,7 @@ impl TableLayoutAlgorithm<'_, '_> {
     self.builder.add_break_token_before(child);
   }
 
-  /// Whether a repeated footer of `result` fits at `offset`, or the table breaks before it, as
-  /// Blink asks `MovePastBreakpoint` with no builder to update. A footer that already repeated
-  /// fits.
+  /// Whether a repeated footer fits at `offset`, as Blink's `MovePastBreakpoint` asks.
   pub(super) fn fits_repeated_footer(
     &self,
     footer: NodeId,

@@ -1,12 +1,4 @@
-//! Builds a tagged-PDF structure tree from the HTML-derived node tree.
-//!
-//! The emitters record a marked-content identifier per source node while
-//! drawing; afterwards the source tree is walked in logical order and nodes
-//! with a semantic HTML tag become structure elements owning those
-//! identifiers. Containers without a role lift their content to the nearest
-//! tagged ancestor, and bare text under an untagged ancestor wraps in `P` so
-//! no content stays outside the tree. A table maps its row groups, rows, and
-//! cells onto `THead`/`TBody`/`TFoot`, `TR`, and `TH`/`TD`.
+//! A tagged-PDF structure tree from the node tree's semantic HTML tags.
 
 use std::{
   collections::HashSet,
@@ -155,10 +147,7 @@ pub(crate) fn tag_id(path: &[usize]) -> TagId {
   TagId::from(bytes)
 }
 
-/// Drains a run of bare-content identifiers into a single `P`. Bare content
-/// under an untagged ancestor still needs a structure parent, and one
-/// paragraph per block container mirrors HTML text flow without emitting a
-/// structure element per text node.
+/// Drains a run of bare content into one `P`.
 fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>) {
   if pending.is_empty() {
     return;
@@ -192,9 +181,7 @@ impl Walk<'_> {
     is_target
   }
 
-  /// PDF/UA rejects a heading sequence that skips a level or opens below
-  /// `H1`, which HTML happily writes. Numbering by nesting depth keeps the
-  /// document's hierarchy and always produces a sequence validators accept.
+  /// Heading levels by nesting depth, which PDF/UA accepts where HTML's may skip.
   fn heading_level(&mut self, source: u8) -> NonZeroU16 {
     while self.headings.last().is_some_and(|open| *open >= source) {
       self.headings.pop();
@@ -231,9 +218,7 @@ fn build_node(
   let mut role = role(node, walk, nesting);
 
   if role.is_none() && walk.targets.contains(path.as_slice()) {
-    // A destination names a structure element, and PDF/UA-2 asks every link
-    // inside a document to be one. A target that carries no meaning of its own
-    // still has to exist for the link to land on.
+    // A link target keeps its structure element, as PDF/UA-2 asks.
     role = Some(Tag::P);
   }
 
@@ -283,10 +268,7 @@ fn build_node(
   }
 }
 
-/// Builds one structure element: the node's own identifiers, its subtree, and
-/// its wrapped annotations under `kind`. `None` when the element would be
-/// empty and nothing names it, unless `keep_empty` holds it in place — a table
-/// cell with no content still counts toward its row's cell count.
+/// One structure element of `kind`, `None` when empty unless named or `keep_empty`.
 fn build_element(
   node: &RenderNode,
   path: &mut Vec<usize>,
@@ -357,10 +339,7 @@ fn build_element(
       group.push(annotation);
     }
   }
-  // Inline formatting inside a text run leaves its element without any
-  // content of its own; an empty structure element is pure noise. An
-  // element a destination names is the exception: dropping it leaves the
-  // link pointing at nothing.
+  // An empty element goes unless a destination names it.
   (has_content || is_target || keep_empty).then_some(group)
 }
 
@@ -369,11 +348,7 @@ fn span(span: usize) -> Option<NonZeroU32> {
   NonZeroU32::new(u32::try_from(span).ok()?).filter(|span| span.get() > 1)
 }
 
-/// `TH` or `TD` for a cell. The source tag decides when there is one; a
-/// tagless cell in a header row group is still a header. A `TH` takes its
-/// `Scope` from the `scope` attribute, defaulting to `Column` in a header row
-/// group and `Row` elsewhere, per ISO 32000-2 §14.8.4.8.3's algorithm. Its
-/// row span stops at the `rows_left` rows to the end of its row group.
+/// `TH` or `TD` for a cell, a `TH` scoped per ISO 32000-2 §14.8.4.8.3.
 fn cell_kind(cell: &RenderNode, in_header: bool, rows_left: usize) -> Tag {
   let source = cell.node.as_ref();
   let tag_name = source.and_then(|node| node.tag_name());
@@ -408,10 +383,7 @@ fn cell_kind(cell: &RenderNode, in_header: bool, rows_left: usize) -> Tag {
   Tag::table_header(scope, row_span, col_span)
 }
 
-/// Builds `Table → Caption, THead/TBody/TFoot → TR → TH/TD` from a table, its
-/// row groups in layout order. A page-spanning table stays one `Table`, as
-/// ISO 14289-2:2024 §8.2.2 requires: replayed header bands are artifacts, so
-/// only the first occurrence carries content.
+/// A table's structure, one `Table` across pages as ISO 14289-2:2024 §8.2.2 requires.
 fn build_table(
   node: &RenderNode,
   path: &mut Vec<usize>,
@@ -610,11 +582,7 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<Tag> {
       Some(Tag::heading(level, title))
     }
     "p" => Some(Tag::P),
-    // A `Figure` encloses everything the illustration is made of, so the
-    // caption has a parent to sit under and the image inside adds no element
-    // of its own. Without an alternate description there is nothing to
-    // enclose that a `Figure` would describe, and PDF/UA rejects one that
-    // carries no text.
+    // A `Figure` encloses the illustration, and only with alternate text, as PDF/UA requires.
     "figure" => Some(Tag::figure(Some(figure_alt(node)?))),
     "img" if nesting.in_figure => None,
     // `alt=""` marks a decorative image: emitted as an artifact, no element.

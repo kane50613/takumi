@@ -1030,9 +1030,7 @@ fn resolve_clamped_height_for_ratio(width: LayoutUnit, natural_ratio: UnitSize) 
   resolved_height
 }
 
-/// Blink's `ImageTilingInfo` as the background painters fill it: tiles of `tile` px, one with its
-/// top-left at `phase` and the rest `tile + spacing` apart on both axes, showing only inside
-/// `dest`.
+/// Blink's `ImageTilingInfo`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ImageTiling {
   /// The rectangle the layer paints into, relative to the border box.

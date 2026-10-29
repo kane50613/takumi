@@ -50,11 +50,7 @@ function collectImageUrls(node: Node, urls: Set<string>) {
   }
 }
 
-/**
- * A cache of image fetches keyed by URL. Sharing one across renders deduplicates concurrent
- * requests for the same URL (single-flight) and reuses their bytes. Any object with `Map`-like
- * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in.
- */
+/** Image fetches by URL, shared across renders to dedupe requests. Any `Map`-like object works. */
 export interface ImageFetchCache {
   get(url: string): Promise<ArrayBuffer> | undefined;
   set(url: string, data: Promise<ArrayBuffer>): unknown;
@@ -80,12 +76,7 @@ export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = Fet
   throwOnError?: boolean;
 };
 
-/**
- * Collects every remote image a node tree references, fetches the ones not already in `sources`,
- * and returns them as entries ready to hand to a renderer.
- *
- * @deprecated Use a renderer's `prepare`, which reads the images after the cascade.
- */
+/** @deprecated Use a renderer's `prepare`, which reads the images after the cascade. */
 export async function prepareImages<T extends { src: string } = FetchedImage>({
   urls,
   node,

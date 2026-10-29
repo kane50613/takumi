@@ -143,10 +143,7 @@ impl From<TakumiError> for PdfError {
   }
 }
 
-/// Archival standard the output conforms to.
-///
-/// PDF/A-1 is not offered: it prohibits transparency, which most takumi output
-/// uses.
+/// The archival standard, without PDF/A-1, which prohibits transparency.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PdfStandard {
   /// Plain PDF 1.7, no validation.
@@ -237,9 +234,7 @@ impl Tagging {
     self.accessibility().is_some()
   }
 
-  /// PDF/UA-2 requires a destination inside the document to name the structure
-  /// element it lands on. PDF/UA-1 predates them, and an untagged reader gains
-  /// nothing from the indirection.
+  /// Whether destinations name structure elements, as PDF/UA-2 requires.
   pub(crate) fn names_structure_destinations(self) -> bool {
     self == Self::Ua2
   }
@@ -253,9 +248,7 @@ impl Tagging {
   }
 }
 
-/// A 1-based inclusive span of pages to keep, like one entry of Chromium's
-/// print `pageRanges`. An unset `from` starts at the first page; an unset `to`
-/// runs to the last.
+/// A 1-based inclusive span of pages to keep, like Chromium's print `pageRanges`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageRange {
   /// First page of the span, 1-based. `None` starts at the first page.
@@ -712,9 +705,7 @@ pub struct XmpProperty {
 }
 
 impl XmpSchema {
-  /// Rejects a schema the XMP writer would serialize into broken XML: it
-  /// escapes property values but writes names, prefixes and namespace URIs
-  /// verbatim.
+  /// Rejects a schema whose names the XMP writer would write into broken XML.
   fn validate(&self) -> Result<(), PdfError> {
     if !is_xml_name(&self.prefix) {
       return Err(PdfError::InvalidXmpSchema(self.prefix.clone()));
@@ -815,9 +806,7 @@ impl PdfDate {
 pub enum PageMargin {
   /// A length in px.
   Px(f32),
-  /// The space the band on that side takes: its measured height plus the inset
-  /// it draws at, never below [`PageOptions::DEFAULT_MARGIN`]. Left and right
-  /// hold no band, so they take the default. Every side starts here.
+  /// The space a side's band takes, never below [`PageOptions::DEFAULT_MARGIN`].
   #[default]
   Auto,
 }
@@ -902,14 +891,10 @@ pub struct PageOptions {
   pub margin: PageMargins,
 }
 
-/// CSS px (96 dpi) to PDF pt (72 dpi). Layout runs in px; page geometry,
-/// annotations, and destinations are written in pt so pages print at their
-/// physical size.
+/// CSS px (96 dpi) to PDF pt (72 dpi).
 pub(crate) const PT_PER_PX: f32 = 1.0 / ONE_PT_IN_PX;
 
-/// Chromium's print template page insets bands 15pt from the paper edge
-/// (`#header { padding-top: 15pt }`, `#footer { padding-bottom: 15pt }` in
-/// components/printing/resources/print_header_footer_template_page.html).
+/// The 15pt band inset of Chromium's `print_header_footer_template_page.html`.
 pub(crate) const BAND_EDGE_PADDING: f32 = 15.0 * ONE_PT_IN_PX;
 
 /// Presets are portrait with the default margin; chain

@@ -293,9 +293,7 @@ impl PropertyTrees {
     self.effects[id.0].bounds = bounds;
   }
 
-  /// Lets every effect from `effect` up to `container` open outside all clips when an
-  /// out-of-flow descendant paints under the container's clip rather than theirs, as Blink's
-  /// `EffectCanUseCurrentClipAsOutputClip` decides.
+  /// Blink's `EffectCanUseCurrentClipAsOutputClip` for the effects from `effect` to `container`.
   pub(crate) fn release_escaped_effects(
     &mut self,
     effect: Option<EffectId>,

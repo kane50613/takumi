@@ -155,9 +155,7 @@ impl Edge {
   };
 }
 
-/// A table's borders, Blink's `TableBorders`. In the collapsing model each row of the grid holds
-/// two edges per column and one more column's worth, alternating the edge along the column's
-/// inline-start and the edge along its block-start.
+/// A table's borders, Blink's `TableBorders`.
 #[derive(Clone, Debug)]
 pub(crate) struct TableBorders {
   pub(crate) edges: Vec<Edge>,
@@ -521,9 +519,7 @@ impl TableBorders {
     };
   }
 
-  /// Blink's `TableBorders::MergeBorders`: the borders of the box `context` styles, spanning
-  /// `rowspan` rows and `colspan` columns from `start_row` and `start_column`, into every edge
-  /// they are more specific than.
+  /// Blink's `TableBorders::MergeBorders`.
   #[allow(clippy::too_many_arguments)]
   fn merge(
     &mut self,

@@ -1,7 +1,6 @@
-//! Table columns: what each cell and `<col>` asks of the columns it spans, the table's inline size
-//! shared out between them, and where each column lands. Follows Blink's
+//! Table column sizing after Blink's
 //! [`table_layout_algorithm_types.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.cc)
-//! and `table_layout_utils.cc` under the notice in LICENSE-CHROMIUM.
+//! and `table_layout_utils.cc`, under the notice in LICENSE-CHROMIUM.
 
 use std::iter::repeat_n;
 
@@ -325,9 +324,7 @@ pub(crate) struct ColumnLocation {
   pub(crate) is_collapsed: bool,
 }
 
-/// The `<col>` and `<colgroup>` boxes of a table, walked as Blink's `VisitLayoutTableColumn` walks
-/// them: a group spans its columns, or its own `span` when it has none, and no span reaches past
-/// `table_column_count`.
+/// A table's `<col>` and `<colgroup>` boxes, walked as Blink's `VisitLayoutTableColumn`.
 pub(super) trait ColumnVisitor {
   /// A `<col>` at `path` from the table, starting at `start_column` and spanning `span`.
   fn visit_column(
@@ -716,9 +713,7 @@ impl ColumnConstraints {
     inline_border_padding + inline_border_spacing * spaces as i32
   }
 
-  /// Blink's `ComputeGridInlineMinMax`: the table's min- and max-content widths around
-  /// `undistributable_space`, a percentage column widening the maximum when
-  /// `allow_column_percentages`.
+  /// Blink's `ComputeGridInlineMinMax`.
   pub(super) fn grid_inline_min_max(
     &self,
     undistributable_space: LayoutUnit,
@@ -902,9 +897,7 @@ impl ColumnConstraints {
     sizes
   }
 
-  /// Where each column lands, `inline_border_spacing` apart, as Blink's
-  /// `ComputeLocationsFromColumns` places them: an empty mergeable column, or a collapsed one when
-  /// `shrink_collapsed`, takes no room. Also says whether any column is collapsed.
+  /// Blink's `ComputeLocationsFromColumns`, and whether any column is collapsed.
   pub(super) fn locations(
     &self,
     sizes: &[LayoutUnit],

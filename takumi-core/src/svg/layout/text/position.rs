@@ -1,6 +1,4 @@
-//! Positioning the clusters of a chunk, after Blink's `SvgTextLayoutAlgorithm`: absolute and
-//! relative offsets, rotation, `textLength`, anchoring, baselines, and placement along a
-//! `textPath`.
+//! Positioning a chunk's clusters, after Blink's `SvgTextLayoutAlgorithm`.
 
 use std::rc::Rc;
 
@@ -481,9 +479,7 @@ impl TextChunk {
 }
 
 impl SpanStyle {
-  /// How far the span moves down to sit on its baseline, as Blink resolves the baselines of SVG
-  /// text, which usvg follows: the `baseline-shift` of the span and its elements, and the baseline
-  /// the `dominant-baseline` or the `alignment-baseline` names.
+  /// How far the span moves down to sit on its baseline, as Blink resolves SVG text baselines.
   pub(super) fn baseline_shift(&self, font: &ResolvedFont) -> f32 {
     let shift =
       self.baseline_offset.length + self.baseline_offset.superscripts as f32 * font.height() / 2.0;

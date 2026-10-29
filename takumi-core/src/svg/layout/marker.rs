@@ -211,9 +211,7 @@ impl SvgLayout<'_> {
     Some(())
   }
 
-  /// How much the marker scales: its stroke width, or one for `markerUnits="userSpaceOnUse"`. A
-  /// non-scaling stroke under `transform` counts in the host's units, as Blink's
-  /// `LayoutSVGShape::StrokeWidthForMarkerUnits` measures it.
+  /// The marker's scale, Blink's `StrokeWidthForMarkerUnits`.
   fn stroke_scale(
     &self,
     shape: &Styled,

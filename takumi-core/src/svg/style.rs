@@ -1,6 +1,4 @@
-//! Style recalc for an SVG document, after Blink's `StyleResolver`: every element resolves
-//! against the style of the element it inherits from, which is its parent in the document and
-//! the `use` element for an instance of it.
+//! Style recalc for an SVG document, after Blink's `StyleResolver`.
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
@@ -15,9 +13,8 @@ use crate::{
   viewport::Viewport,
 };
 
-/// What Blink's `LayoutSVGRoot` paints as the box of an inline `svg`, around its content. The root
-/// leaves out each one its box sets, which the root cascades again. Approximate: a value the
-/// document's `style` elements give wins over the page's in Blink.
+/// What Blink's `LayoutSVGRoot` paints as an inline `svg`'s box. Approximate: the page's styles
+/// win over the document's.
 const ROOT_BOX_EFFECTS: [LonghandId; 8] = [
   LonghandId::BackgroundColor,
   LonghandId::Opacity,

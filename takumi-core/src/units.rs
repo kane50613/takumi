@@ -1,7 +1,4 @@
-//! CSS absolute length units, in the 96 dpi pixels layout runs in.
-//!
-//! Every crate resolves physical units through these, so a `297mm` length and an
-//! A4 page reach the same pixel value.
+//! CSS absolute length units in 96 dpi pixels, shared by every crate.
 
 /// One centimetre.
 pub const ONE_CM_IN_PX: f32 = 96.0 / 2.54;

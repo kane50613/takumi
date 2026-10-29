@@ -612,9 +612,7 @@ fn build_layers(
       continue;
     }
 
-    // An inline formatting context paints its text itself; its layout children are the
-    // out-of-flow boxes, atomic inlines, and floats inside that content, which paint as boxes
-    // of their own.
+    // An inline formatting context paints its text, and its children paint as boxes.
     if let Some(borders) = table_borders {
       collapsed_borders.push(visits.len(), (context_id, borders));
     }
@@ -1092,9 +1090,7 @@ impl FragmentPlacements {
     Self(unplaced)
   }
 
-  /// Sets the box `paint` paints, laid out at `location`, and the boxes of its content no other
-  /// paint places, to paint the fragment `paint` names, as [`set_paint_offsets`] sets them for
-  /// a scene with one fragment of each box.
+  /// [`set_paint_offsets`] for the fragment `paint` names.
   pub fn enter(&self, root: &RenderNode, paint: &NodePaint, location: Point<f32>) {
     let Some(node) = root.node_at_path(&paint.path) else {
       return;
@@ -1510,10 +1506,7 @@ impl PageWindows {
     self.with_needs(reaching)
   }
 
-  /// How many of the first `drawn` pages no scene of a later page paints from, counting from the
-  /// `released` pages already known to be free. A scene paints from the pages reaching down to its
-  /// page and from the parents of the out-of-flow boxes it paints, until `is_complete` says a
-  /// box is laid out for good.
+  /// How many of the first `drawn` pages no later scene paints from.
   pub fn releasable_pages(
     &mut self,
     released: usize,
@@ -1570,9 +1563,8 @@ struct ScenePlacement {
   fragment_index: usize,
 }
 
-/// Sets the context of each box under `root` to the paint offset its layout location adds to and
-/// the fragment it paints: from `offsets`, keyed by child path, for a box the scene placed, else
-/// those of the box whose inline content it paints in.
+/// Sets each box's paint offset and fragment from `offsets`, or from the box whose content it
+/// paints in.
 fn set_paint_offsets(root: &RenderNode, offsets: &HashMap<Vec<usize>, ScenePlacement>) {
   let mut path = Vec::new();
   let mut stack = vec![(root, OffsetSlot::Root, Point::ZERO, 0)];

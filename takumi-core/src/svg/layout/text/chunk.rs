@@ -1,6 +1,4 @@
-//! The elements and characters of a `text`, after usvg's text tree: white space collapsed as the
-//! SVG white space rules and Chrome have it, the characters grouped into anchored chunks, and each
-//! run of characters given the style of the element it sits in.
+//! A `text`'s characters in anchored chunks, after usvg's text tree.
 
 use std::{collections::HashMap, rc::Rc};
 
@@ -802,9 +800,7 @@ impl<'a> SvgLayout<'a> {
     }
   }
 
-  /// The path a `textPath` runs along, none when it names no shape, the shape is invalid, or the
-  /// path outgrows the budget. The path of a shape is resolved once, and each use is charged its
-  /// commands.
+  /// The path a `textPath` runs along, none when invalid or past the budget.
   fn text_flow(&mut self, text_path: &Styled, scope: &Scope) -> Option<TextFlow> {
     let linked = self.href_target(text_path.index)?;
     let path = match self.text_paths.get(&linked) {

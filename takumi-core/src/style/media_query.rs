@@ -149,10 +149,7 @@ impl MediaFeatureComparison {
 }
 
 impl MediaFeatureValue {
-  /// A `<resolution>` in dots per `px` unit. A `dpcm` value is rounded to two
-  /// decimals, as Blink does; Blink rounds the device pixel ratio the same way
-  /// before comparing, which this does not, so the two disagree when that ratio
-  /// carries more than two decimals.
+  /// A `<resolution>` in dots per `px`, `dpcm` rounded as Blink rounds it.
   fn parse_resolution<'i>(input: &mut Parser<'i>) -> Result<f32, ParseError<StyleSheetParseError>> {
     const DPCM_PER_DPPX: f32 = 96.0 / 2.54;
 
@@ -569,9 +566,7 @@ impl MediaQueryList {
     })
   }
 
-  /// Consumes what is left of a query that parsed as `not all`. A block or a
-  /// stray closing delimiter means the text was never a prelude, which is how a
-  /// caller assembling CSS from strings catches a rule smuggled into one.
+  /// Consumes the rest of a `not all` query, failing on a block or a stray closing delimiter.
   fn skip_malformed_query<'i>(
     input: &mut Parser<'i>,
   ) -> Result<(), ParseError<StyleSheetParseError>> {

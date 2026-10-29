@@ -62,9 +62,7 @@ pub trait GlyphDevice: PaintDevice {
     transform: Affine,
   );
 
-  /// Fills `clip` under `transform` with `background`, its colour and layers, only where `mask`
-  /// draws, as Blink's `BoxPainterBase::PaintFillLayerTextFillBox` keeps a background under a
-  /// `DstIn` text layer.
+  /// Fills `clip` with `background` where `mask` draws, as Blink's `PaintFillLayerTextFillBox`.
   fn fill_text_clip(
     &mut self,
     background: &StripBackground<'_>,
@@ -229,11 +227,8 @@ impl InlineRunLayout<'_> {
 }
 
 impl InlineLines<'_> {
-  /// Paints the text of the block at `frame`: span backgrounds and borders, the element's text shadows, each
-  /// run's underline and overline, glyphs and line-through, then the spans' outlines.
-  ///
-  /// The shadows all paint before any text, so a shadow never lands on a neighbouring run's
-  /// glyphs, as css-text-decor-3 asks of `text-shadow`.
+  /// Paints the text of the block at `frame`, every shadow before any glyph, as css-text-decor-3
+  /// asks.
   pub fn paint(
     &self,
     spans: &[ProcessedInlineSpan<'_>],
@@ -383,10 +378,7 @@ impl<'c> FragmentBackground<'c> {
     }
   }
 
-  /// Paints the color and layers on `fragment` of the block at `frame`, clipped by the span's
-  /// `background-clip` to the fragment, as Blink's `BoxPainterBase::PaintFillLayers` clips both.
-  /// A background clipped to the text fills the fragment under a mask of the `runs` inside it, as
-  /// `BoxPainterBase::PaintFillLayerTextFillBox` does.
+  /// Paints a span's background on `fragment`, as Blink's `BoxPainterBase::PaintFillLayers`.
   fn paint(
     &self,
     fragment: &InlineBackgroundFragment,
@@ -473,9 +465,7 @@ impl PaintedRun<'_> {
     device.draw_glyph_run(self.run, self.style, GlyphFill::Mask, frame);
   }
 
-  /// Paints what `pass` draws of the run at its span's opacity: underline and overline, glyphs
-  /// showing `fill`, then line-through. A shadow pass keeps the text-shadow role for everything it
-  /// draws.
+  /// Paints what `pass` draws of the run: underline and overline, glyphs, then line-through.
   fn paint(&self, fill: GlyphFill, frame: BoxFrame, pass: RunPass, device: &mut dyn GlyphDevice) {
     let PaintedRun {
       run,

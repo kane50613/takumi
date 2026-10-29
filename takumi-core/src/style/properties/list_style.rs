@@ -7,9 +7,7 @@ use crate::style::{
   merge_token_lists, merged_token_len, unexpected_token,
 };
 
-/// The counter style a list item's marker is generated from.
-///
-/// Corresponds to CSS `list-style-type`.
+/// The `list-style-type` property.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[non_exhaustive]
 pub enum ListStyleType {
@@ -42,11 +40,7 @@ pub enum ListStyleType {
   String(Arc<str>),
 }
 
-/// The image a list item's marker draws instead of its counter style.
-///
-/// Corresponds to CSS `list-style-image`. The image is shared with every
-/// descendant that inherits it, and its lengths resolve once the marker box is
-/// built.
+/// The `list-style-image` property.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ListStyleImage(pub Option<Arc<BackgroundImage>>);
 
@@ -79,9 +73,7 @@ impl ToCss for ListStyleImage {
   }
 }
 
-/// Where a list item's marker sits relative to the item's content.
-///
-/// Corresponds to CSS `list-style-position`.
+/// The `list-style-position` property.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ListStylePosition {
@@ -184,9 +176,7 @@ impl ListStyleType {
     )
   }
 
-  /// The marker string for an item at `ordinal`, including the counter style's
-  /// suffix. `direction` only reaches `disclosure-closed`, whose triangle points
-  /// the way the text runs.
+  /// The marker text for `ordinal`, suffix included. `direction` turns `disclosure-closed`.
   pub(crate) fn marker_text(&self, ordinal: i32, direction: Direction) -> Option<String> {
     let (representation, suffix) = match self {
       ListStyleType::None => return None,
@@ -343,9 +333,7 @@ mod tests {
   use super::*;
   use crate::style::FromCssStr;
 
-  /// Every character `marker_text` can generate across the predefined counter
-  /// styles. Mirrored by `LIST_MARKER_CHARACTERS` in
-  /// `takumi-helpers/src/fonts.ts`, which font subsetting feeds to callers.
+  /// Every character the predefined counter styles generate, mirrored by `LIST_MARKER_CHARACTERS`.
   const MARKER_CHARACTERS: &str = "\u{2022}\u{25e6}\u{25a0}\u{25aa}\u{25b8}\u{25c2}\u{25be} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
   #[test]
@@ -470,10 +458,7 @@ mod tests {
     );
   }
 
-  /// Font subsetting loads faces by the characters `MARKER_CHARACTERS`
-  /// promises, so every counter style's output has to stay inside it. The
-  /// match is exhaustive on purpose: a new style fails to compile here until
-  /// it is accounted for.
+  /// Exhaustive, so a new counter style fails to compile until `MARKER_CHARACTERS` covers it.
   #[test]
   fn the_character_set_covers_every_counter_style() {
     let styles = [

@@ -27,10 +27,7 @@ pub(super) struct Utility {
   bare: Option<fn(&mut TailwindDeclarationBuilder)>,
   /// The value forms the root reads, tried in order.
   values: &'static [Value],
-  /// What a theme token none of `values` know writes, as the namespaces it reads paired with the
-  /// longhands each one fills. `bg-brand-500` has no built-in value to expand, so this is the
-  /// only place its target is written down; a root reading two namespaces emits one variable per
-  /// group, and the undefined ones leave their longhands unset.
+  /// The theme namespaces an unknown token reads, each with the longhands it fills.
   theme: &'static [(Namespace, &'static [LonghandId])],
 }
 
@@ -234,9 +231,7 @@ fn companion_variable(name: &str, longhand: LonghandId) -> Option<Arc<str>> {
     .then(|| format!("{name}--line-height").into())
 }
 
-/// The `var()` expression a utility suffix reads, or `None` when the value is
-/// spelled in the class itself. Numeric spacing multiplies the `--spacing` step
-/// the way Tailwind's own `calc(var(--spacing) * 4)` does.
+/// The `var()` a utility suffix reads, `None` when the class spells the value.
 fn var_expression(
   namespaces: &[Namespace],
   suffix: &str,
@@ -1029,10 +1024,7 @@ fn blur_css(blur: &TwBlur) -> String {
   }
 }
 
-/// `var(--shadow-md, <built-in layers>)`: the variable overrides the whole
-/// shape, and the fallback keeps its per-layer colour slots. A custom shape
-/// carries its own colours, so `shadow-*` colour utilities only reach the
-/// fallback.
+/// `var(--shadow-md, <built-in layers>)`, the fallback keeping its colour slots.
 fn preset_shadow_css(variable: &str, layers: impl Iterator<Item = String>) -> String {
   let fallback = layers.collect::<Vec<_>>().join(", ");
 
@@ -1073,9 +1065,7 @@ fn drop_shadow_css(drop_shadow: &TwDropShadow) -> String {
   }
 }
 
-/// One shadow layer with its colour behind `var()`, as Tailwind compiles it:
-/// the colour utility overrides through the variable, the layer's own colour
-/// stays as the fallback.
+/// One shadow layer with its colour behind `var()`, as Tailwind compiles it.
 fn shadow_layer_css(
   prefix: &str,
   offsets: &[&Length],

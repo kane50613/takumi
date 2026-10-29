@@ -74,9 +74,7 @@ impl ComputedStyle {
 
     self.make_computed_values(sizing);
 
-    // The used value of `border-width` is zero when the line's style is `none` or
-    // `hidden`, even though the computed value is `medium`. `outline-width` keeps its
-    // value, as Blink's does, and the outline's readers check its style.
+    // A `none` or `hidden` border is zero wide when used. `outline-width` keeps its value, as Blink's.
     let none = LineWidth::Length(Length::zero());
     let unrendered = |style: BorderStyle, width: LineWidth| !style.is_rendered() && width != none;
     let box_data = &self.box_data;
@@ -169,9 +167,7 @@ impl ComputedStyle {
     self.base_data.position.is_positioned() || self.is_z_index_applicable(is_flex_or_grid_item)
   }
 
-  /// Whether the element establishes a new stacking context, as Blink's
-  /// `ComputedStyle::CalculateIsStackingContextWithoutContainment` decides for the properties
-  /// takumi has, plus the containment half of `LayoutObject::IsStackingContext`.
+  /// Blink's `CalculateIsStackingContextWithoutContainment` and `LayoutObject::IsStackingContext`.
   pub(crate) fn creates_stacking_context(&self, is_flex_or_grid_item: bool) -> bool {
     self.base_data.position == Position::Fixed
       || self.misc_data.contain.contains(Contain::LAYOUT)
@@ -190,11 +186,7 @@ impl ComputedStyle {
         || self.creates_stacking_context(is_flex_or_grid_item))
   }
 
-  /// Whether the box is a containing block for `fixed` descendants, and so
-  /// also for `absolute` ones. Blink resolves this as `ComputeIsFixedContainer`
-  /// (`layout_object.cc`); the conditions takumi has properties for are a
-  /// transform-related property, a non-initial `filter` / `backdrop-filter`,
-  /// and `layout` or `paint` containment.
+  /// Whether the box contains `fixed` descendants, as Blink's `ComputeIsFixedContainer`.
   pub fn contains_fixed_descendants(&self) -> bool {
     self.misc_data.contain.contains(Contain::LAYOUT)
       || self.misc_data.contain.contains(Contain::PAINT)
@@ -216,9 +208,7 @@ impl ComputedStyle {
       || self.misc3_data.scale.is_some()
   }
 
-  /// Blink's `UpdateForPaintOffsetTranslation`: the paint offset a box with this style paints
-  /// at, from `paint_offset` in its parent's space, after the translation its transform, backdrop
-  /// filter, or containment takes moves the whole pixels out. `local` is the box's transform.
+  /// Blink's `UpdateForPaintOffsetTranslation`; `local` is the box's transform.
   pub(crate) fn paint_offset_after_translation(
     &self,
     paint_offset: Point<f32>,
@@ -286,9 +276,7 @@ impl ComputedStyle {
       })
   }
 
-  /// Builds the element's local affine transform around its transform-origin
-  /// (CSS Transforms Level 2 order: `T(origin) * translate * rotate * scale *
-  /// transform * T(-origin)`).
+  /// The local transform, in CSS Transforms 2 order around `transform-origin`.
   pub fn local_transform(&self, width: f32, height: f32, sizing: &SizingContext) -> Affine {
     let (origin_x, origin_y) = self
       .svg_data
@@ -308,9 +296,7 @@ impl ComputedStyle {
     if let Some(scale) = self.misc3_data.scale {
       local *= Affine::scale(scale.x.0, scale.y.0);
     }
-    // offset-path sits after translate/rotate/scale and before `transform`, and
-    // resolves against the containing block (Blink `GetReferenceBox`), proxied
-    // here by the query-container size, then the viewport, then the border box.
+    // Approximate: `offset-path` resolves against the query container for Blink's `GetReferenceBox`.
     let reference_width = sizing
       .container_size
       .width
@@ -349,12 +335,8 @@ impl ComputedStyle {
     local
   }
 
-  /// The computed `(overflow-x, overflow-y)` pair. `visible` paired with an axis
-  /// that is neither `visible` nor `clip` computes to a clipping value, per
-  /// <https://drafts.csswg.org/css-overflow-3/#overflow-properties>. Blink
-  /// resolves it to `auto`; without a scrolling box that is `hidden` here.
-  /// `contain: paint` clips a `visible` axis to the padding edge, as Blink's
-  /// `LayoutBox::ComputeOverflowClipAxes` does.
+  /// The computed [overflow pair](https://drafts.csswg.org/css-overflow-3/#overflow-properties),
+  /// `contain: paint` clipping as Blink's `ComputeOverflowClipAxes`.
   pub fn resolve_overflows(&self) -> SpacePair<Overflow> {
     let (mut x, mut y) = match (self.base_data.overflow_x, self.base_data.overflow_y) {
       (Overflow::Visible, other) if !other.is_clip_or_visible() => (Overflow::Hidden, other),
@@ -490,9 +472,7 @@ impl ComputedStyle {
     }
   }
 
-  /// Resolved OpenType features: the `font-variant-*` expansions, with `caps` standing in for
-  /// `font-variant-caps`, followed by explicit `font-feature-settings`, which win on tag
-  /// conflicts. Borrows the settings when no `font-variant-*` is active, avoiding an allocation.
+  /// The `font-variant-*` features, then `font-feature-settings`, which wins on conflicts.
   pub(crate) fn resolved_font_features(
     &self,
     letter_spacing: bool,

@@ -1,8 +1,6 @@
 use crate::{geometry::Size, style::SizingContext};
 
-/// Blink's `NaturalSizingInfo`: the natural dimensions of an image, per CSS Images Level 3 §5.3.
-/// `width`/`height` are set only where the image has a natural dimension on that axis (a
-/// non-percentage SVG `width`/`height`); a `viewBox`-only SVG has `aspect_ratio` alone.
+/// Blink's `NaturalSizingInfo`, an image's natural dimensions per CSS Images 3 §5.3.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct IntrinsicSizing {
   /// Natural width in pixels, if any.

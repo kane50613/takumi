@@ -109,9 +109,7 @@ static CHROMIUM_LINE_BREAK_TABLE: AsciiLineBreakTable = {
     .with_pairs('\u{7f}'..='\u{7f}', ALL, false)
 };
 
-/// Whether Chromium breaks between `before` and `after`, `before_before` preceding them, where it
-/// overrides UAX #14: after a space run, around a minus sign, and between the ASCII pairs of its
-/// table.
+/// Whether Chromium breaks between `before` and `after` where it overrides UAX #14.
 fn chromium_line_break_override(
   before_before: Option<char>,
   before: char,

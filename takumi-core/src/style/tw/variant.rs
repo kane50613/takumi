@@ -133,9 +133,7 @@ impl Variant {
   }
 }
 
-/// Where a structural variant sorts: `not-*` first, the registered ones in Tailwind's order, then
-/// the `nth-*` families, and an arbitrary variant last. Approximate: Tailwind also orders the values
-/// of one variant, such as `nth-2` before `nth-3`, and the variants inside `not-`.
+/// Where a structural variant sorts. Approximate: values of one variant keep their order.
 fn structural_rank(token: &str) -> u8 {
   if token.starts_with("not-") {
     return 0;

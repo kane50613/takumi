@@ -89,9 +89,7 @@ const PAGE_HOOK: &str = "pageNumber";
 /// The class hook the page count is requested through.
 const PAGES_HOOK: &str = "totalPages";
 
-/// The class hook a cross-reference to another element's page is requested
-/// through. Chromium has no counterpart, so the name follows the CSS
-/// `target-counter(attr(href), page)` this stands in for.
+/// The class hook for another element's page, standing in for CSS `target-counter(attr(href), page)`.
 const TARGET_HOOK: &str = "targetPageNumber";
 
 /// A `@counter-style` this renderer formats.
@@ -254,9 +252,7 @@ fn roman(value: usize) -> String {
   out
 }
 
-/// The counter value a node's class hooks request, if any: `pageNumber` or
-/// `totalPages`, optionally paired with a `@counter-style` name — the same
-/// contract as Chromium's print header/footer templates.
+/// The counter a node's class hooks request, as Chromium's print templates read them.
 pub(crate) fn counter_text(node: &Node, page: usize, pages: usize) -> Option<String> {
   let classes = node.class_name()?;
   let value = if has_class(classes, PAGE_HOOK) {
@@ -270,10 +266,7 @@ pub(crate) fn counter_text(node: &Node, page: usize, pages: usize) -> Option<Str
   Some(CounterStyle::from_classes(classes).format(value))
 }
 
-/// The page a `targetPageNumber` node asks for, formatted. The target is the
-/// fragment of the nearest enclosing `href`, which is the same node a link
-/// annotation reads. A fragment naming no element renders empty, like a link
-/// annotation that finds no destination.
+/// The formatted page of the enclosing `href`'s target, empty when it names no element.
 fn target_counter_text(
   node: &Node,
   href: Option<&str>,
@@ -424,12 +417,7 @@ impl<'c> FlowCounters<'c> {
     }
   }
 
-  /// Fills the content's hooks with the page they land on, taken from the boxes
-  /// by preorder position. A hook laid out inline has no box of its own, so it
-  /// takes the later of the box that holds it and the flow that closed before
-  /// it. A hook inside a repeated subtree is left alone: that box numbers itself
-  /// per page. Counting walks the tree as it stands, so a hook is written only
-  /// after its own subtree has been counted.
+  /// Fills the content's hooks with the page they land on, leaving repeated subtrees alone.
   pub(crate) fn substitute(
     &mut self,
     node: &mut Node,

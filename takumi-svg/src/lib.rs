@@ -109,9 +109,7 @@ impl Frame {
   pub(crate) fn content_box(frame: BoxFrame) -> Self {
     let BoxFrame { layout, origin } = frame;
 
-    // Summed from the origin one side at a time rather than through
-    // `content_box_offset`, which adds border and padding first and rounds
-    // differently.
+    // Summed one side at a time, which rounds unlike `content_box_offset`.
     Self::new(
       origin.x + layout.border.left + layout.padding.left,
       origin.y + layout.border.top + layout.padding.top,
@@ -158,10 +156,7 @@ pub(crate) struct GradientStop {
   pub color: Rgba,
 }
 
-/// An incrementally-built SVG document.
-///
-/// Gradient/filter/clip definitions are written inline at the point of use; SVG
-/// resolves `url(#id)` references regardless of document order.
+/// An SVG document built incrementally, its definitions written where used.
 pub(crate) struct SvgDocument {
   writer: Writer<Vec<u8>>,
   next_id: u32,
@@ -278,9 +273,7 @@ impl SvgDocument {
     self.gradient("linearGradient", "lg", repeating, geometry, stops)
   }
 
-  /// Defines a radial gradient and returns its `url(#id)` reference. `scale`
-  /// stretches the gradient into an ellipse around its center (SVG has no native
-  /// `rx`/`ry`, so a non-uniform scale is applied via `gradientTransform`).
+  /// Defines a radial gradient, `scale` stretching it through `gradientTransform`.
   pub(crate) fn radial_gradient(
     &mut self,
     (cx, cy): (f32, f32),
@@ -598,9 +591,7 @@ impl SvgDocument {
     Ok(GroupToken::default())
   }
 
-  /// Opens a `<g style="isolation:isolate">` establishing an isolated group, so a
-  /// descendant's `mix-blend-mode` composites within the subtree rather than
-  /// against the page backdrop. Returns a token for [`SvgDocument::end_group`].
+  /// Opens an isolated group for [`SvgDocument::end_group`] to close.
   pub(crate) fn begin_isolate_group(&mut self) -> io::Result<GroupToken> {
     self.open("g", &[("style", "isolation:isolate".into())])?;
     Ok(GroupToken::default())
@@ -619,8 +610,6 @@ impl SvgDocument {
     self.empty("path", &attrs)
   }
 
-  /// Interns a glyph outline (path data in glyph space, translation excluded)
-  /// and returns the id shared by every `<use>` of the same outline.
   /// The interned id of `outline` placed by `placed`'s linear part, or `None` when it draws nothing.
   pub(crate) fn outline_ref(
     &mut self,
@@ -746,9 +735,7 @@ impl SvgDocument {
     Ok(reference)
   }
 
-  /// The viewport in the current user space, grown by the `ceil(3σ)` a blur reaches, as
-  /// Chromium bounds shadow blur in `ShadowData::RectOutsets`
-  /// (third_party/blink/renderer/core/style/shadow_data.cc).
+  /// The viewport grown by a blur's reach, as Chromium's `ShadowData::RectOutsets` bounds it.
   fn blur_region(&self, std_deviation: f32) -> Frame {
     let outset = (3.0 * std_deviation).ceil();
     let Frame { x, y, w, h } = self.viewport;
@@ -773,17 +760,8 @@ impl SvgDocument {
     )
   }
 
-  /// Defines a CSS `filter` list as SVG `<filter>` elements and returns their
-  /// `url(#id)` references, to be applied innermost first (index 0 closest to
-  /// the element). Runs of filter functions become one generated chain filter;
-  /// each `url()` reference becomes its own `<filter>`, emitted verbatim, since
-  /// its own region and `color-interpolation-filters` must keep applying.
-  ///
-  /// With `restore_opaque_alpha` the last filter snaps alpha back to opaque. A
-  /// backdrop blur feathers the replay's alpha at the canvas edge (outside the
-  /// input is transparent), letting the sharp original bleed through; browsers
-  /// sample the backdrop with edge duplication instead, so no feathering exists
-  /// to begin with.
+  /// Defines a `filter` list as `<filter>` elements, innermost first. `restore_opaque_alpha`
+  /// undoes a backdrop blur's feathered edge.
   pub(crate) fn filter(
     &mut self,
     filters: &[Filter],
@@ -855,11 +833,7 @@ impl SvgDocument {
     Ok(filter_reference)
   }
 
-  /// Defines a run of CSS filter functions as one chained `<filter>`.
-  /// Primitives are chained with `result="fN"`/`in="f(N-1)"`; the region is
-  /// widened so blur/shadow are not clipped. `size` is the element's border-box
-  /// size, the resolution basis for `drop-shadow` lengths (mirroring the raster
-  /// backend).
+  /// Defines a run of filter functions as one chained `<filter>`, `size` resolving its lengths.
   fn function_chain_filter(
     &mut self,
     filters: &[&Filter],
@@ -1079,9 +1053,7 @@ impl SvgDocument {
     self.empty("path", &attrs)
   }
 
-  /// Closes the root `<svg>` and serializes the document to a string. Interned
-  /// glyph outlines are flushed as a trailing `<defs>`; `<use>` references
-  /// resolve document-wide, so forward references are fine.
+  /// Closes the root `<svg>` and serializes the document, glyph outlines in a trailing `<defs>`.
   pub(crate) fn finish(mut self) -> io::Result<String> {
     if !self.glyph_defs.is_empty() || !self.image_defs.is_empty() {
       self.open("defs", &[])?;

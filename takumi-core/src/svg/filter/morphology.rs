@@ -7,11 +7,7 @@ const MAX_RADIUS: f32 = 256.0;
 const STRIP: usize = 64;
 
 impl MorphologyOperator {
-  /// Blink's `FEMorphology` as Skia's `SkMorphologyImageFilter` runs it: the extremum over the
-  /// `2 * radius + 1` pixels around each pixel on each axis, rounding the radius and reading
-  /// transparent black beyond the layer. A radius of zero leaves its axis as it is.
-  ///
-  /// Pixels are premultiplied and the slice is `width` pixels wide.
+  /// Blink's `FEMorphology` as Skia's `SkMorphologyImageFilter` runs it.
   pub(super) fn apply(self, rx: f32, ry: f32, pixels: &mut [[u8; 4]], width: usize) {
     let radius = |radius: f32| radius.round().clamp(0.0, MAX_RADIUS) as usize;
 
@@ -46,11 +42,7 @@ fn morph(
   }
 }
 
-/// Writes to `dst` the extremum of `src` over the `2 * radius + 1` rows around each row, reading
-/// transparent black beyond the first and last rows. Both are rows of `width` pixels.
-///
-/// The van Herk/Gil-Werman algorithm: blocks of one window each keep their running extrema from
-/// either end, so a window is the extremum of two of them, whatever its size.
+/// The extremum of `src` over the rows around each row, by the van Herk/Gil-Werman algorithm.
 fn sweep_columns(
   pick: impl Fn(u8, u8) -> u8 + Copy,
   src: &[[u8; 4]],

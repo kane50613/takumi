@@ -389,11 +389,7 @@ impl Affine {
     })
   }
 
-  /// Converts the transforms to a [`Affine`] instance
-  ///
-  /// CSS transform property applies transformations from left to right.
-  /// For `transform: translate() rotate()`, the resulting matrix is translate * rotate.
-  /// When applied to point p: translate * rotate * p, rotate is applied first.
+  /// The transforms composed left to right into an [`Affine`].
   pub(crate) fn from_transforms<'a, I: Iterator<Item = &'a Transform>>(
     transforms: I,
     sizing: &SizingContext,

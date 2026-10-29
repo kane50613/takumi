@@ -1,9 +1,6 @@
 use super::BYTE_TO_FLOAT;
 
-/// The arithmetic operator of Blink's `FEComposite` as Skia's `sk_arithmetic_blend` runs it, with
-/// the premultiplied clamp Blink asks for. `src1` is `in` and `src2` is `in2`.
-///
-/// All pixels are premultiplied and the slices have the same length.
+/// Blink's `FEComposite` arithmetic as Skia's `sk_arithmetic_blend` runs it.
 pub(super) fn arithmetic(
   [k1, k2, k3, k4]: [f32; 4],
   src1: &[[u8; 4]],

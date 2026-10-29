@@ -353,9 +353,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
       .add_result(self.space, &child_style, result, block_offset);
   }
 
-  /// The line count and break token Blink's `FragmentBuilder::PropagateFromFragment` reads off a
-  /// line it adds at `block_offset`, and the break data of its block-in-inline, which Blink's
-  /// `AddResult` propagates in its place.
+  /// What Blink's `FragmentBuilder::PropagateFromFragment` reads off a line.
   pub(super) fn add_line_for_fragmentation(
     &mut self,
     line: &LineBoxFragment<'_, 'r>,
@@ -381,9 +379,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     }
   }
 
-  /// Where the lines of a box resumed after a break inside start, or `false` when they ended on
-  /// an earlier page. The lines take the break tokens in order: those of the blocks-in-inline in
-  /// parallel flows, then where the lines broke.
+  /// Where a resumed box's lines start, or `false` when they ended on an earlier page.
   pub(super) fn resume_inline_child(&mut self, inline_child: &mut InlineChild<'_, 'r>) -> bool {
     let Some(token) = self.input.break_token.clone() else {
       return true;
@@ -434,9 +430,7 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     }
   }
 
-  /// Blink's `BlockChildIterator::NextChild` in an inline formatting context: the next line
-  /// resumes where the last one broke, and after a line that ends nothing, at the next break
-  /// token the box resumed at.
+  /// Blink's `BlockChildIterator::NextChild` in an inline formatting context.
   pub(super) fn advance_inline_break_token(&mut self, inline_child: &mut InlineChild<'_, 'r>) {
     if inline_child.break_token.is_some() {
       inline_child.resumed_break_tokens.clear();

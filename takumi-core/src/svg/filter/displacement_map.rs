@@ -2,11 +2,7 @@ use super::{BYTE_TO_FLOAT, ColorChannel, DisplacementMap};
 use crate::geometry::Rect;
 
 impl DisplacementMap {
-  /// Blink's `FEDisplacementMap` as Skia's `sk_displacement` shader runs it, over the `window` of
-  /// `dest`: each pixel takes the `src` pixel nearest its center moved by the straight `map`
-  /// channels. `scale` is the layer's pixels per user unit on each axis.
-  ///
-  /// `src` and `map` are premultiplied, and all three are `width` pixels wide and the same length.
+  /// Blink's `FEDisplacementMap` as Skia's `sk_displacement` runs it.
   pub(super) fn apply(
     &self,
     scale: [f32; 2],

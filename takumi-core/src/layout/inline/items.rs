@@ -267,9 +267,7 @@ impl InlineDecoration<'_> {
   }
 }
 
-/// One open inline span in the chain of span ancestors around an inline item,
-/// innermost last. Chains share their tails, so the `Rc` pointer identifies the
-/// span across items.
+/// One open span around an inline item, innermost last, identified across items by its `Rc`.
 pub struct DecorationLink<'c> {
   pub(crate) decoration: InlineDecoration<'c>,
   pub(crate) parent: Option<Rc<DecorationLink<'c>>>,
@@ -375,9 +373,7 @@ impl From<&InlineBoxItem<'_>> for ComputedLayout {
   }
 }
 
-/// The spans painting reads for an inline formatting context the inline layout port laid out:
-/// a text span per text, and a box span per atomic inline, block-in-inline, float, and out-of-flow
-/// box, each with the spans and the link around it.
+/// The spans painting reads for an inline formatting context, a text or box span per item.
 pub(crate) struct InlineSpans<'c> {
   pub(crate) spans: Vec<ProcessedInlineSpan<'c>>,
   /// The span of each item, by item index.

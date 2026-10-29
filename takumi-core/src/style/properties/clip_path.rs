@@ -11,9 +11,7 @@ use crate::{
   },
 };
 
-/// Represents the fill rule used for determining the interior of shapes.
-///
-/// Corresponds to the SVG fill-rule attribute and is used in polygon(), path(), and shape() functions.
+/// A `<fill-rule>`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum FillRule {
   /// The default rule - counts the number of times a ray from the point crosses the shape's edges
@@ -76,10 +74,7 @@ impl Default for ShapePosition {
   }
 }
 
-/// Represents an inset() rectangle shape.
-///
-/// The inset() function creates an inset rectangle, with its size defined by the offset distance
-/// of each of the four sides of its container and, optionally, rounded corners.
+/// An `inset()` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct InsetShape {

@@ -136,9 +136,7 @@ pub(crate) struct OutlineIsland {
 }
 
 impl OutlineIsland {
-  /// Groups each element's fragments, sorted by element then line, into islands of consecutive
-  /// lines that meet once grown by the outline's reach, as Blink unites the grown rects into one
-  /// region.
+  /// Groups each element's fragments into islands that meet once grown, as Blink unites them.
   pub fn of(rects: &[InlineOutlineRect]) -> Vec<Self> {
     let mut rect_counts: FxHashMap<usize, usize> = FxHashMap::default();
     let mut islands: Vec<Self> = Vec::new();
@@ -506,9 +504,7 @@ fn right_angle_corners(corners: Vec<Point<f32>>) -> Vec<Point<f32>> {
   kept
 }
 
-/// The radius the right-angle corner at `point` takes, coming from `previous` and going to `next`
-/// clockwise: a convex corner takes `convex`'s, a concave one `concave`'s, after Blink's
-/// `GetRadiiCorner`. Radii run top-left, top-right, bottom-right, bottom-left.
+/// The radius of the corner at `point`, after Blink's `GetRadiiCorner`.
 fn corner_radius(
   convex: Sides<SpacePair<f32>>,
   concave: Sides<SpacePair<f32>>,

@@ -51,9 +51,7 @@ macro_rules! longhand_inherits {
   };
 }
 
-/// What an anonymous box takes from the box it stands in for: inherited
-/// properties, plus the ones flagged `anonymous` that apply to that box's own
-/// content but are read from the anonymous box.
+/// What an anonymous box takes from its box: inherited properties and the ones flagged `anonymous`.
 macro_rules! define_anonymous_default {
   ($parent:expr, $default:expr, inherit $inherit:tt $(, anonymous $anonymous:tt)?) => {
     $parent.to_owned()
@@ -102,9 +100,8 @@ pub(crate) struct DeferredDeclaration {
 }
 
 impl DeferredDeclaration {
-  /// Applies the value its `var()` references substitute to, or `unset` to every longhand it
-  /// targets when that value is invalid at computed-value time.
-  /// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
+  /// Applies its substituted value, or `unset` when it is
+  /// [invalid at computed-value time](https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time).
   fn apply_with_parent(&self, style: &mut ComputedStyle, parent: &ComputedStyle) {
     if apply_deferred_declaration(style, Some(parent), self) {
       return;
@@ -166,9 +163,7 @@ impl TwVarRef {
   }
 }
 
-/// A resolved BCP-47 language tag (the canonicalized `language[-Script][-REGION]`
-/// prefix), inherited from the `lang` attribute. Drives locale-aware shaping
-/// (Han unification, line-breaking).
+/// A BCP-47 `language[-Script][-REGION]` tag from the `lang` attribute.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Lang {
   /// The canonical form, ASCII.
@@ -2263,9 +2258,7 @@ define_style! {
 }
 
 impl StyleDeclaration {
-  /// Blink's `StyleCascade::ApplyWideOverlapping` for `vertical-align`, which is to become a
-  /// shorthand of `baseline-source`: it resets `baseline-source`, which a later declaration sets
-  /// again.
+  /// Blink's `StyleCascade::ApplyWideOverlapping` for `vertical-align`.
   fn apply_wide_overlapping(&self, style: &mut ComputedStyle) {
     if matches!(
       self,
@@ -2607,11 +2600,7 @@ impl StyleDeclarationBlock {
       .map(|declarations| Self::from_parsed_declarations(declarations, false))
   }
 
-  /// Parses a declaration list, dropping the declarations that fail and keeping the rest.
-  ///
-  /// This is how CSS asks a `style` attribute to be read: an unsupported value invalidates
-  /// its own declaration and nothing else. [`FromStr`] stays strict for callers that want to
-  /// know the input was not fully understood.
+  /// Parses a declaration list as a `style` attribute is read, dropping only the declarations that fail.
   pub fn parse_loosy(input: &str) -> Self {
     let mut parser = Parser::new(input);
     let mut declaration_parser = StyleDeclarationParser;

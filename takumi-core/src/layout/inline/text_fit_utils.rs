@@ -454,9 +454,7 @@ impl<'l, 'a, 'c> LineFitter<'l, 'a, 'c> {
     )
   }
 
-  /// Blink's `FitLine`: scales the line by `scale_factor`, reshaping its text at the scaled font
-  /// size around fixed spacing, which paint-time scaling would grow; returns whether the line
-  /// height scales.
+  /// Blink's `FitLine`, returning whether the line height scales.
   pub(crate) fn fit_line(
     &mut self,
     scale_factor: f32,

@@ -46,11 +46,7 @@ type KnownGoogleFontFamily = {
 
 type GoogleFontName = GoogleFontShapeFamilies[keyof GoogleFontShapeFamilies];
 
-/**
- * One family to load. A bare string loads weight 400, normal style. The object form autocompletes
- * each known family's weight, style, and variable axes; the last branch keeps any string name
- * (e.g. one built at runtime) usable with a weight and style.
- */
+/** One family to load: a name at weight 400, or an object naming its weights, styles, and axes. */
 export type GoogleFontFamily =
   | GoogleFontName
   | (string & {})
@@ -71,18 +67,13 @@ export type GoogleFontsOptions = FetchOptions & {
   display?: "auto" | "block" | "swap" | "fallback" | "optional";
   /** CSS promise cache; defaults to a bounded cache per fetch implementation. Signals and URL policies bypass caching. */
   cache?: Pick<Map<string, Promise<string>>, "get" | "set" | "delete">;
-  /**
-   * css2 base URL. Defaults to Google Fonts; point it at an API-compatible mirror like
-   * `https://fonts.bunny.net/css2`.
-   */
+  /** The css2 endpoint, Google Fonts by default, or a mirror such as `https://fonts.bunny.net/css2`. */
   baseUrl?: string;
 };
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
 
-// Builds a css2 `family=` value, e.g. `Inter:ital,opsz,wght@0,14..32,400`. Takes plain values
-// rather than a GoogleFontFamily so it never relates that ~2000-member union to a parameter, which
-// overflows the type checker (TS2590).
+// Plain parameters, since relating the ~2000-member GoogleFontFamily union overflows tsc (TS2590).
 function familyValue(
   family: string,
   weights: string[],
@@ -255,11 +246,8 @@ function parseSubsetFaces(css: string): SubsetFace[] {
 }
 
 /**
- * A variable font reuses one woff2 across weights: the same `src` url repeats per subset, one
- * `@font-face` per weight. Collapse each shared url to a single weightless face so the renderer
- * drives the `wght` axis. Registering the file once per weight pins every weight to the file's
- * default, so `font-weight: 700` renders regular. Static fonts give a distinct url per weight and
- * pass through untouched.
+ * Collapses the faces that share a variable font's file into one weightless face, so the renderer
+ * drives its `wght` axis instead of pinning every weight to the default.
  */
 function mergeVariableFaces(faces: SubsetFace[]): SubsetFace[] {
   const weightsByUrl = new Map<string, Set<number | undefined>>();
@@ -284,29 +272,18 @@ function mergeVariableFaces(faces: SubsetFace[]): SubsetFace[] {
   return merged;
 }
 
-/**
- * A codepoint source: content trees, HTML markup, plus loose strings for text a backend injects
- * that no node carries, such as the digits a PDF page counter fills in. A string counts both as
- * written and with its character references decoded.
- */
+/** Content trees, HTML markup, or strings whose codepoints count, character references decoded too. */
 export type CodepointSource = string | Node | (string | Node)[];
 
 /**
- * Every character the predefined list marker styles can generate. Markers are
- * generated content no node carries, so subsetting counts these as always
- * used. Mirrors `MARKER_CHARACTERS` in takumi-core, whose coverage test is the
- * source of truth. `list-style-type: "…"` strings are not covered.
+ * Every character the predefined list markers can generate, mirroring `MARKER_CHARACTERS` in takumi-core.
  *
  * @deprecated Renderers read the characters markers generate themselves.
  */
 export const LIST_MARKER_CHARACTERS =
   "•◦■▪▸◂▾ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-/**
- * Collect every codepoint the content will render.
- *
- * @deprecated Renderers pick font subsets from the text they lay out.
- */
+/** @deprecated Renderers pick font subsets from the text they lay out. */
 export function collectCodepoints(source: CodepointSource): Set<number> {
   const codepoints = new Set<number>();
 
@@ -365,22 +342,14 @@ function lowerBound(values: Uint32Array, target: number): number {
   return low;
 }
 
-/**
- * Keep the subsets that cover the characters in `source`. Range-less fallbacks and entries without a `unicodeRange` stay.
- *
- * @deprecated Pass the fonts to a render, which picks the subsets its text uses.
- */
+/** @deprecated Pass the fonts to a render, which picks the subsets its text uses. */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
   const codepoints = Uint32Array.from(collectCodepoints(source)).sort();
 
   return fonts.filter((font) => rangesCover(unicodeRangeOf(font), codepoints));
 }
 
-/**
- * Turn a font URL into a loader: fetches the bytes on demand, keyed by the URL so repeated renders
- * dedupe. Family name, weight, and style come from the font file. Lets `fonts` take a bare URL
- * string, e.g. `fonts: ["https://example.com/Inter.woff2"]`.
- */
+/** A loader that fetches the font at `url` on demand, its name, weight, and style read from the file. */
 export function fontFromUrl(
   url: string,
   options: FetchOptions = {},
@@ -392,11 +361,8 @@ export function fontFromUrl(
 }
 
 /**
- * Load Google Font families in one css2 request, returning every coverage subset. Each registers
- * under its family name with its `unicode-range`, so a codepoint routes to the subset that
- * declares it, as in a browser.
- * Subsets download lazily. Hand the result to `render`, which registers only the subsets the
- * content uses.
+ * Loads Google Fonts families in one request, as `unicode-range` subsets a render downloads only
+ * when its text uses them.
  *
  * @example
  * const fonts = await googleFonts(["Inter", "Noto Sans JP"]);
@@ -415,11 +381,8 @@ export async function googleFonts(
 
   const css = await loadFontStylesheet(buildUrl(options), options);
 
-  // Google's css2 response orders `@font-face` blocks by its own logic, not by the `family=`
-  // query order — the caller's declared priority survives only if we restore it here. A render
-  // with no explicit `fontFamilies` falls back to registration order, so this is what lets
-  // `families: ["Noto Sans TC", "Noto Sans JP"]` actually prefer the Traditional Chinese face
-  // for a codepoint both cover.
+  // css2 orders faces its own way. Restore the requested family order, which a render without
+  // `fontFamilies` falls back through.
   const familyOrder = new Map(
     options.families.map((family, index) => [
       typeof family === "string" ? family : family.name,

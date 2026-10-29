@@ -88,11 +88,7 @@ pub(super) fn decode_webp(bytes: &[u8]) -> DecodeResult<ImageBuffer> {
   decode_webp_into(bytes, width, height, false)
 }
 
-/// Decodes a WebP directly at the target size via libwebp's internal rescaler,
-/// so no full-size frame is ever allocated. `None` when the input isn't WebP,
-/// needs no downscale, or has a target libwebp can't take; the caller decodes
-/// fully. libwebp's rescaler is not CatmullRom/Lanczos, so pixels differ
-/// slightly from full-decode + resample.
+/// Decodes a WebP at the target size through libwebp's rescaler, `None` when it cannot.
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 pub(super) fn decode_webp_scaled(
   bytes: &[u8],
@@ -440,13 +436,7 @@ fn decode_animated_webp_first_frame(bytes: &[u8]) -> DecodeResult<ImageBuffer> {
     .ok_or(DecodeError::InvalidBuffer)
 }
 
-/// Decodes frame `index` on its own, skipping the frames before it, when the
-/// `ANMF` header shows the frame covers the whole canvas and does not blend
-/// onto what came before. `None` when the frame depends on its predecessors.
-///
-/// Blink reaches individual frames through libwebp's demuxer
-/// (`WebPDemuxGetFrame`); walking the RIFF chunks keeps this available on wasm,
-/// where that demuxer is not.
+/// Decodes frame `index` alone when it covers the canvas without blending, `None` otherwise.
 #[cfg(feature = "webp")]
 pub(crate) fn decode_webp_frame_alone(
   bytes: &[u8],

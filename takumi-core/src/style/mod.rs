@@ -29,9 +29,7 @@ pub(crate) use math::lerp;
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
 pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
-// Selector matching internals (CssRule, SelectorImpl, Ident, …) stay crate-private
-// under `selector::` for the renderer's `layout::matching`; only the stylesheet
-// entry point and `@property` rule type are part of the public surface.
+// Selector internals stay crate-private.
 pub use selector::{MediaQueryList, PropertyRule, StyleSheet};
 pub(crate) use sizing::FontUnits;
 pub use sizing::SizingContext;
