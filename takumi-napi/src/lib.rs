@@ -9,6 +9,7 @@ mod measure_task;
 mod needs_task;
 mod pool;
 mod render_animation_task;
+mod render_job;
 mod render_task;
 pub(crate) mod renderer;
 mod svg_render_task;
@@ -18,7 +19,7 @@ use std::{fmt::Display, sync::Arc};
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
 pub use renderer::Renderer;
-use renderer::{RendererState, deserialize_css, deserialize_keyframes};
+use renderer::RendererState;
 use serde::de::DeserializeOwned;
 use takumi_bindings_common::{
   append_css,
@@ -140,6 +141,16 @@ pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Re
   T::deserialize(&mut de).map_err(|e| Error::from_reason(e.to_string()))
 }
 
+/// Options read from `options`, their defaults when it is absent.
+pub(crate) fn read_options<T: DeserializeOwned + Default>(options: Option<Object>) -> Result<T> {
+  Ok(
+    options
+      .map(deserialize_with_tracing)
+      .transpose()?
+      .unwrap_or_default(),
+  )
+}
+
 /// A node tree from JS: JSON text from a `{ json }` object or HTML from a string, both parsed on
 /// the worker thread, or a tree read from an object.
 pub(crate) enum NodeSource {
@@ -192,18 +203,16 @@ pub(crate) struct RenderInput {
 }
 
 impl RenderInput {
-  /// Reads a render's source and the options that style it.
   pub(crate) fn new(
     source: NodeSource,
-    css: Option<Object>,
-    stylesheets: Option<Vec<String>>,
-    keyframes: Option<Object>,
-  ) -> Result<Self> {
-    Ok(Self {
+    css: Option<Vec<CssSource>>,
+    keyframes: Vec<KeyframesRule>,
+  ) -> Self {
+    Self {
       source,
-      css: deserialize_css(css, stylesheets)?,
-      keyframes: deserialize_keyframes(keyframes)?,
-    })
+      css,
+      keyframes,
+    }
   }
 
   /// The node tree and the stylesheet the render uses, `<style>` elements of HTML included.

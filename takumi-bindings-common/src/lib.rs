@@ -8,6 +8,8 @@
 
 pub mod font_cache;
 pub mod input;
+#[cfg(feature = "raster")]
+pub mod options;
 #[cfg(feature = "wasm")]
 pub mod source;
 pub mod source_cache;

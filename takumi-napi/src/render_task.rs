@@ -1,113 +1,27 @@
-use std::{collections::HashMap, mem::take, sync::Arc};
-
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::{device_pixel_ratio, parse_lang, time_ms};
-use takumi_core::{
-  Fonts,
-  style::{FontFamily, Lang},
-  viewport::Viewport,
-};
-use takumi_raster::{DitheringAlgorithm, render, write_image};
+use takumi_raster::{render, write_image};
 
-use crate::{
-  JsBytes, NodeSource, RenderInput, map_error,
-  renderer::{
-    ImageCacheMode, OutputFormat, RenderOptions, RendererState, collect_images, decode_images,
-  },
-};
+use crate::{map_error, render_job::RenderJob};
 
-pub struct RenderTask {
-  pub(crate) draw_debug_border: bool,
-  pub(crate) input: Option<RenderInput>,
-  pub(crate) state: Arc<RendererState>,
-  /// The fonts as they were when the call was made, so a later change leaves this one alone.
-  pub(crate) fonts: Arc<Fonts>,
-  pub(crate) viewport: Viewport,
-  pub(crate) format: OutputFormat,
-  pub(crate) quality: Option<u8>,
-  pub(crate) lossless: Option<bool>,
-  pub(crate) dithering: DitheringAlgorithm,
-  pub(crate) time_ms: u64,
-  pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
-  pub(crate) font_families: Option<FontFamily>,
-  pub(crate) lang: Option<Lang>,
-}
-
-impl RenderTask {
-  pub(crate) fn from_options(
-    env: Env,
-    source: NodeSource,
-    options: RenderOptions,
-    state: Arc<RendererState>,
-  ) -> Result<Self> {
-    Ok(RenderTask {
-      input: Some(RenderInput::new(
-        source,
-        options.css,
-        options.stylesheets,
-        options.keyframes,
-      )?),
-      fonts: state.fonts_for_render(options.font_families.as_deref()),
-      state,
-      viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
-        device_pixel_ratio(options.device_pixel_ratio.map(|ratio| ratio as f32)),
-      ),
-      format: options.format.unwrap_or(OutputFormat::Png),
-      quality: options.quality,
-      lossless: options.lossless,
-      dithering: options.dithering.map(Into::into).unwrap_or_default(),
-      time_ms: time_ms(options.time_ms),
-      draw_debug_border: options.draw_debug_border.unwrap_or_default(),
-      images: collect_images(env, options.images)?,
-      font_families: options.font_families.map(FontFamily::from_names),
-      lang: parse_lang(options.lang.as_deref()).map_err(map_error)?,
-    })
-  }
-}
+pub struct RenderTask(pub(crate) RenderJob);
 
 impl Task for RenderTask {
   type Output = Vec<u8>;
   type JsValue = Buffer;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    let Some(input) = self.input.take() else {
-      unreachable!()
-    };
-    let (node, stylesheet) = input.resolve(&self.state)?;
-
-    let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
-
-    let image = render(
-      takumi_raster::RenderOptions::builder()
-        .viewport(self.viewport)
-        .images(initialized_images)
-        .resource_cache(self.state.resource_cache.clone())
-        .stylesheet(stylesheet)
-        .time_ms(self.time_ms)
-        .dithering(self.dithering)
-        .node(node)
-        .fonts(&self.fonts)
-        .font_families(take(&mut self.font_families))
-        .lang(take(&mut self.lang))
-        .draw_debug_border(self.draw_debug_border)
-        .build(),
-    )
-    .map_err(map_error)?;
-
-    if self.format == OutputFormat::Raw {
+    let options = &self.0.options;
+    let format = options
+      .format
+      .unwrap_or_default()
+      .raster(options.quality, options.lossless);
+    let image = render(self.0.raster()?).map_err(map_error)?;
+    let Some(format) = format else {
       return Ok(image.into_raw());
-    }
-
+    };
     let mut buffer = Vec::new();
 
-    write_image(
-      &image,
-      &mut buffer,
-      self
-        .format
-        .into_image_output_format(self.quality, self.lossless),
-    )
-    .map_err(map_error)?;
+    write_image(&image, &mut buffer, format).map_err(map_error)?;
 
     Ok(buffer)
   }

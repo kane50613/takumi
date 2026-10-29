@@ -1525,6 +1525,8 @@ dependencies = [
  "serde_json",
  "takumi-core",
  "takumi-html",
+ "takumi-raster",
+ "takumi-svg",
  "wasm-bindgen",
  "wuff",
 ]
