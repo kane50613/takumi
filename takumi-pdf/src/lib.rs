@@ -1,55 +1,122 @@
 #![deny(missing_docs)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-//! Vector PDF output for takumi. The `takumi-pdf` npm package wraps this crate, which is not
-//! published to crates.io.
+//! Writes vector PDFs from HTML or a takumi node tree, without a browser. Text stays selectable and
+//! searchable because the file embeds a subset of each font it uses. Layout comes from
+//! `takumi-core`, the same engine that renders takumi images.
 //!
-//! [`render`] lays out the tree with `takumi-core` and walks the same stacking-context scene as
-//! `takumi-svg`. A vendored krilla fork writes the PDF. Backgrounds become filled paths. Text
-//! becomes glyph runs in embedded subset fonts, so it stays selectable and searchable.
-//! [`measure`] lays out a tree without writing a PDF, such as to size a header band.
+//! JavaScript projects use the [`takumi-pdf`](https://www.npmjs.com/package/takumi-pdf) npm
+//! package, which wraps this crate.
 //!
-//! # Pagination
+//! # Example
 //!
-//! With [`PdfOptions::page`] set, content lays out on pages through takumi-core's block
-//! fragmentation, as Chromium lays out a printed document. Boxes, lines, flex and grid items,
-//! and table rows break across pages. Content that cannot break, such as an image, moves to the
-//! next page, and runs on over the pages after it when it is taller than one. Each page paints
-//! from the scene of the pages that reach it, as soon as no page still to lay out can.
+//! This renders an HTML file to an A4 PDF. It needs `takumi-core` with the `html` feature next to
+//! `takumi-pdf`. Takumi loads no system fonts, so register every font the document uses.
+//!
+//! ```rust,no_run
+//! use std::{error::Error, fs, sync::Arc};
+//!
+//! use takumi_core::{
+//!   Fonts,
+//!   html::{FromHtmlOptions, parse_html},
+//!   resources::font::FontResource,
+//!   style::StyleSheet,
+//! };
+//! use takumi_pdf::{PageOptions, PdfOptions, render};
+//!
+//! fn main() -> Result<(), Box<dyn Error>> {
+//!   let mut fonts = Fonts::default();
+//!   fonts.register(FontResource::new(fs::read("Geist.woff2")?))?;
+//!
+//!   let html = parse_html(&fs::read_to_string("invoice.html")?, FromHtmlOptions::default())?;
+//!   let pdf = render(
+//!     PdfOptions::builder()
+//!       .node(html.node)
+//!       .stylesheet(Arc::new(StyleSheet::parse_owned_list_loosy(html.css)))
+//!       .page(PageOptions::A4)
+//!       .fonts(&fonts)
+//!       .build(),
+//!   )?;
+//!
+//!   fs::write("invoice.pdf", pdf)?;
+//!   Ok(())
+//! }
+//! ```
+//!
+//! [`parse_html`] returns the tree in `node` and the CSS of the document's `<style>` elements in
+//! `css`, which the example passes as the stylesheet.
+//!
+//! Without [`PdfOptions::page`], the document is a single page the size of
+//! [`PdfOptions::viewport`]. [`measure`] lays out a tree without writing a PDF, for example to find
+//! how tall a header band is. [`needs`] lists the images and fonts a tree needs fetched before it
+//! renders.
+//!
+//! # Pages
+//!
+//! With [`PdfOptions::page`] set, content flows across pages as Chromium lays out a printed
+//! document. Lines, boxes, flex and grid items, and table rows break between pages. Content that
+//! cannot break, such as an image, moves to the next page, and continues over the following pages
+//! when it is taller than one.
 //!
 //! Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and the
-//! `widows` and `orphans` minimums, which default to 2 as in Chromium. A table header or footer
-//! group with `break-inside: avoid`, the default for `<thead>` and `<tfoot>`, repeats on each
-//! page the table crosses if it is at most a quarter of the page tall. The header and footer
-//! bands repeat in the page margins, like Chromium's print templates. Nodes classed `pageNumber`
-//! or `totalPages` receive the page counters.
+//! `widows` and `orphans` minimums, which default to 2 as in Chromium. A table repeats its header
+//! or footer group on every page it crosses when the group has `break-inside: avoid`, which
+//! `<thead>` and `<tfoot>` have by default, and is at most a quarter of the page tall.
+//!
+//! [`PdfOptions::header`] and [`PdfOptions::footer`] repeat a band in the top and bottom page
+//! margins, like Chromium's print headers. A band is a node tree, such as the `node` of another
+//! `parse_html` call. Inside a band, takumi fills elements with the class `pageNumber` or
+//! `totalPages` with the current page number or the page count.
 //!
 //! # Document features
 //!
-//! - Link annotations, and an outline built from `h1`–`h6` with [`PdfOptions::outline`].
-//! - Document metadata through [`PdfOptions::metadata`].
-//! - A structure tree, on by default, set by [`PdfOptions::tagged`].
-//! - PDF/A conformance through [`PdfOptions::standard`]. A validation failure fails the render.
-//! - File attachments through [`PdfOptions::attachments`].
-//! - A subset of pages through [`PdfOptions::page_ranges`].
+//! Besides the pages, [`PdfOptions`] sets what else the file carries:
 //!
-//! # CSS coverage
+//! - Links become link annotations, and [`PdfOptions::outline`] builds an outline from `h1`–`h6`.
+//! - [`PdfOptions::metadata`] writes the document metadata.
+//! - [`PdfOptions::tagged`] writes a structure tree, which is on by default.
+//! - [`PdfOptions::standard`] makes the file conform to PDF/A, and the render fails when the file
+//!   does not validate.
+//! - [`PdfOptions::attachments`] embeds files.
+//! - [`PdfOptions::page_ranges`] keeps only some of the pages.
 //!
-//! - backgrounds: color, gradient and url() layers, with `background-size`,
-//!   `-position`, `-repeat`, `-origin`, `-clip` (including `text`) and
-//!   per-layer blend modes; an inline span fills `background-color` per line
-//!   fragment, `box-decoration-break: slice` style (the drifts are listed on
-//!   [`takumi_core::layout::inline::InlineBackgroundFragment`])
-//! - borders, border-radius, `outline`, and `box-shadow`
-//! - text with decorations, `text-shadow`, and `-webkit-text-stroke`
-//! - shadow blur, approximated by bands
-//! - images, with `object-fit` and `object-position`
-//! - `clip-path`, `mask-image`, and the color `filter` functions
-//! - opacity, blend modes, overflow clipping, and affine transforms
+//! # What draws
 //!
-//! A PDF has no operator for `filter: blur()` or `drop-shadow()`. [`render`] fails with
-//! [`PdfError::UnsupportedFilter`], naming the function. `backdrop-filter` is not drawn.
-
+//! These CSS features draw in the PDF:
+//!
+//! - Backgrounds: colors, gradients, and `url()` layers, with `background-size`,
+//!   `background-position`, `background-repeat`, `background-origin`, `background-clip` (including
+//!   `text`), and a blend mode per layer.
+//! - Borders, `border-radius`, `outline`, and `box-shadow`.
+//! - Text with decorations, `text-shadow`, and `-webkit-text-stroke`.
+//! - Images, with `object-fit` and `object-position`.
+//! - `clip-path`, `mask-image`, and the color `filter` functions.
+//! - Opacity, blend modes, overflow clipping, and affine transforms.
+//!
+//! Two of these are approximate. Shadow blur is drawn as bands. An inline element fills its
+//! `background-color` for each line separately, as `box-decoration-break: slice` does.
+//! [`InlineBackgroundFragment`] lists where that differs from Chromium.
+//!
+//! A PDF has no operator for `filter: blur()` or `drop-shadow()`, so [`render`] fails with
+//! [`PdfError::UnsupportedFilter`] and names the function. `backdrop-filter` is ignored.
+//!
+//! [`InlineBackgroundFragment`]: https://docs.rs/takumi-core/latest/takumi_core/layout/inline/struct.InlineBackgroundFragment.html
+//! [`PdfError::UnsupportedFilter`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/enum.PdfError.html#variant.UnsupportedFilter
+//! [`PdfOptions`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html
+//! [`PdfOptions::attachments`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.attachments
+//! [`PdfOptions::footer`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.footer
+//! [`PdfOptions::header`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.header
+//! [`PdfOptions::metadata`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.metadata
+//! [`PdfOptions::outline`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.outline
+//! [`PdfOptions::page`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.page
+//! [`PdfOptions::page_ranges`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.page_ranges
+//! [`PdfOptions::standard`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.standard
+//! [`PdfOptions::tagged`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.tagged
+//! [`PdfOptions::viewport`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/struct.PdfOptions.html#structfield.viewport
+//! [`measure`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/fn.measure.html
+//! [`needs`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/fn.needs.html
+//! [`parse_html`]: https://docs.rs/takumi-core/latest/takumi_core/html/fn.parse_html.html
+//! [`render`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/fn.render.html
 use std::{mem::take, rc::Rc};
 
 mod bands;
