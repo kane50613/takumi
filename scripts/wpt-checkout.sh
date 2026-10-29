@@ -8,7 +8,8 @@ dir="${WPT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)/target/wpt}"
 # The CSS modules and SVG tests takumi renders, then what they share.
 paths="
   css/css-text css/css-text-decor css/css-inline css/css-overflow
-  css/css-backgrounds css/css-box css/css-break css/css-color css/css-display css/css-flexbox css/css-fonts
+  css/css-backgrounds css/css-box css/css-break css/css-color css/css-contain css/css-display
+  css/css-flexbox css/css-fonts css/css-lists
   css/css-grid css/css-images css/css-masking css/css-position css/css-sizing css/css-tables
   css/css-transforms css/compositing css/filter-effects
   css/CSS2/backgrounds css/CSS2/borders css/CSS2/box css/CSS2/colors css/CSS2/floats
