@@ -105,11 +105,10 @@ impl Column {
 
 const NAMES_LEN: usize = Column::Name.total_len();
 const CHARACTERS_LEN: usize = Column::Characters.total_len();
-const NAMES: [u8; NAMES_LEN] = Column::Name.concat();
-const CHARACTERS: [u8; CHARACTERS_LEN] = Column::Characters.concat();
+static NAMES: [u8; NAMES_LEN] = Column::Name.concat();
+static CHARACTERS: [u8; CHARACTERS_LEN] = Column::Characters.concat();
 
-const ENTRIES: [Entry; REFERENCES.len()] = {
-  assert!(NAMES_LEN <= u16::MAX as usize && CHARACTERS_LEN <= u16::MAX as usize);
+static ENTRIES: [Entry; REFERENCES.len()] = {
   let mut entries = [Entry {
     name_start: 0,
     characters_start: 0,
@@ -124,6 +123,7 @@ const ENTRIES: [Entry; REFERENCES.len()] = {
     let name_len = Column::Name.of(index).len();
     let characters_len = Column::Characters.of(index).len();
 
+    assert!(name_start <= u16::MAX as usize && characters_start <= u16::MAX as usize);
     assert!(name_len <= u8::MAX as usize && characters_len <= u8::MAX as usize);
     entries[index] = Entry {
       name_start: name_start as u16,
@@ -142,10 +142,12 @@ const ENTRIES: [Entry; REFERENCES.len()] = {
 const fn utf8(bytes: &'static [u8]) -> &'static str {
   match str::from_utf8(bytes) {
     Ok(text) => text,
-    Err(_) => panic!("named references are UTF-8"),
+    Err(_) => unreachable!(),
   }
 }
 
+// A `const`, so only the packed tables reach the binary.
+#[expect(clippy::large_const_arrays)]
 const REFERENCES: [(&str, &str); 2231] = [
   ("AElig", "\u{c6}"),
   ("AElig;", "\u{c6}"),
