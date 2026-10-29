@@ -60,10 +60,7 @@ export type LayerRule = {
 /** One entry of the `css` render option: stylesheet text, or a rule object. */
 export type CssInput = string | StyleRule | AnimationRule | MediaRule | SupportsRule | LayerRule;
 
-/**
- * A JSX element from any React-shaped runtime; Preact vnodes fit too, so
- * `fromJsx` and the render inputs accept them without casts.
- */
+/** A JSX element from any React-shaped runtime, Preact included. */
 export type ReactElementLike = {
   type:
     | string

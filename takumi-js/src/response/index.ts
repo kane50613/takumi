@@ -57,10 +57,7 @@ function renderStream(element: RenderInput, options?: ImageResponseOptions) {
 }
 
 /**
- * A universal ImageResponse class for generating images in API routes.
- *
- * Drop-in compatible with `next/og`'s `ImageResponse`. It supports React elements,
- * custom fonts, Tailwind CSS (via `tw` prop), and various image formats.
+ * A `Response` with a rendered image, compatible with `next/og`'s `ImageResponse`.
  *
  * @example
  * ```tsx
@@ -75,9 +72,6 @@ function renderStream(element: RenderInput, options?: ImageResponseOptions) {
  *   );
  * }
  * ```
- *
- * @param component - The JSX element to render.
- * @param options - Rendering and response options.
  */
 export class ImageResponse extends Response {
   readonly ready: Promise<void>;

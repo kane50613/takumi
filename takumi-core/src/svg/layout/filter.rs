@@ -1,6 +1,4 @@
-//! Filters, after Blink's `SVGFilterBuilder` and `FilterEffectBuilder`: the `filter` property of an
-//! element becomes the filters its `url()` names and the ones its functions stand for, each with
-//! its region and primitives resolved to user space.
+//! An element's `filter` resolved to user space, after Blink's `SVGFilterBuilder`.
 
 use std::{collections::HashSet, sync::Arc};
 

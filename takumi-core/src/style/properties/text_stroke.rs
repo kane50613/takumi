@@ -2,9 +2,7 @@ use cssparser::Parser;
 
 use crate::style::{ColorInput, FromCss, Length, MakeComputed, ParseResult, SizingContext};
 
-/// Parsed `text-stroke` value.
-///
-/// `color` is optional; when absent the element's `color` property should be used.
+/// A `text-stroke` value, its `color` the element's when absent.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub struct TextStroke {

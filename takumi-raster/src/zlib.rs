@@ -36,9 +36,7 @@ struct Segment {
   len: u64,
 }
 
-/// Compresses `rows` rows of `row_len` bytes at `level` into one zlib stream of up to `segments`
-/// raw DEFLATE segments, each primed with the window of rows before it. `scanlines` appends the
-/// bytes of a range of rows, so no segment holds more than a batch of them at once.
+/// Compresses `rows` into one zlib stream of up to `segments` primed DEFLATE segments.
 pub(crate) fn compress_segmented(
   rows: usize,
   row_len: usize,
@@ -89,9 +87,7 @@ pub(crate) fn compress_segmented(
   Ok(stream)
 }
 
-/// Raw DEFLATE of the `rows` `scanlines` writes, primed with the `primed` rows before them. Every
-/// segment but the `last` ends on a sync flush, which byte-aligns it and leaves the stream open for
-/// the next.
+/// Raw DEFLATE of `rows` primed with the rows before, ending on a sync flush unless `last`.
 fn deflate_segment(
   scanlines: &impl Fn(Range<usize>, &mut Vec<u8>),
   primed: Range<usize>,

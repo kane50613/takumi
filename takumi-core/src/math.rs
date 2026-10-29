@@ -1,17 +1,6 @@
-//! Deterministic float math for painting. `std` trigonometry routes to the
-//! platform's libm, whose results differ across OSes by a ulp and shift golden
-//! pixels; per-pixel angle sampling uses a polynomial built from IEEE-exact
-//! operations instead, so every platform renders identical output.
-//!
-//! Not a libm replacement: inputs are finite, pixel-scale painting values, so
-//! NaN/infinity/signed-zero semantics and extreme-magnitude ranges are out of
-//! scope.
+//! Float math that renders the same on every platform, unlike libm, for finite pixel-scale inputs.
 
-/// Angle of `(x, y)` as a fraction of a full turn in `[0, 1)`:
-/// `atan2(y, x) / τ` with negative angles wrapped into the upper half. This is
-/// Skia's `xy_to_unit_angle` sweep-gradient polynomial (fpminimax of
-/// `atan(t)/2π` over one octant, max error ~2.7e-5 turn), both deterministic
-/// and cheaper than a libm `atan2` per pixel.
+/// The angle of `(x, y)` as a turn in `[0, 1)`, Skia's `xy_to_unit_angle` polynomial.
 #[inline(always)]
 pub(crate) fn xy_to_unit_angle(x: f32, y: f32) -> f32 {
   let x_abs = x.abs();

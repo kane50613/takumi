@@ -232,9 +232,7 @@ impl ChunkWriter<'_, '_, '_> {
       .transpose()?;
     let clip_group = doc.begin_clipped_group(&placed.border_box_path_data())?;
     let mask = placed.begin_mask_group(doc)?;
-    // The blur feathers the clipped backdrop's alpha at its edges; restoring it averages only the
-    // pixels inside, close to the mirrored edges browsers sample. Skipped for opacity(), which
-    // lowers alpha on purpose.
+    // Restore the alpha a blur feathers at the backdrop's edges, except for `opacity()`.
     let restore_alpha = !filters.iter().any(|f| matches!(f, Filter::Opacity(_)));
     let filter_refs = doc.filter(&filters, context, size, restore_alpha)?;
     let filter_wrappers = doc.begin_filter_wrappers(&filter_refs)?;

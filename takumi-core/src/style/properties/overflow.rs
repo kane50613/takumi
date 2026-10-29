@@ -37,9 +37,7 @@ impl TailwindPropertyParser for Overflow {
 }
 
 impl Overflow {
-  /// Whether this value leaves a companion `visible` axis alone. Mirrors Blink's
-  /// `IsOverflowClipOrVisible`; anything outside this set forces the other axis
-  /// to become a scrolling box.
+  /// Blink's `IsOverflowClipOrVisible`.
   pub(crate) fn is_clip_or_visible(self) -> bool {
     matches!(self, Overflow::Visible | Overflow::Clip)
   }

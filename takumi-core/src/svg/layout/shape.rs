@@ -363,9 +363,7 @@ impl SvgLayout<'_> {
 }
 
 impl Shape {
-  /// Converts the bounding box units of the shape's paints to user units against its own bounds,
-  /// dropping a fill or stroke whose paint cannot be placed. A paint that takes its geometry from
-  /// a `use` element waits for `use_context`, the transform and bounds of that element.
+  /// Converts the shape's paints to user units, dropping one that cannot be placed.
   pub(super) fn settle_paints(&mut self, use_context: Option<(Affine, Option<Rect<f32>>)>) {
     let path_transform = self.abs_transform;
     let bounds = self.bounds;
@@ -406,9 +404,7 @@ impl Shape {
 }
 
 impl Shape {
-  /// The objects that paint a shape with `vector-effect: non-scaling-stroke`, as Blink's
-  /// `SVGShapePainter` paints it: the fill where it is, and the stroke of the outline mapped into
-  /// the host's space under the inverse mapping, its paint server moved along.
+  /// A `vector-effect: non-scaling-stroke` shape, as Blink's `SVGShapePainter` paints it.
   fn with_non_scaling_stroke(self) -> Vec<LayoutObject> {
     let transform = self.abs_transform;
     let Some(stroke) = self.stroke.as_ref() else {

@@ -23,9 +23,7 @@ use crate::{
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
-/// The clipped destination region of an overlay: `offset_*` is the overlay's
-/// top-left in canvas space, `x/y` bounds are the canvas-space pixel range to
-/// write.
+/// The clipped canvas region an overlay writes, with the overlay's top-left.
 #[derive(Clone, Copy)]
 pub(crate) struct OverlayBounds {
   pub offset_x: i32,
@@ -372,9 +370,7 @@ pub(super) fn blit_paint_source_translation(
   }
 }
 
-/// Composites `source` whole-pixel at `offset` over `pixmap` at `opacity`, exactly as tiny-skia's
-/// high-precision pipeline draws a source-over pattern there: each channel scaled to `[0, 1]`, the
-/// source multiplied by `opacity`, `dst * (1 - source alpha) + source`, rounded half to even.
+/// Composites `source` at `offset` and `opacity` exactly as tiny-skia's high-precision pipeline does.
 pub(super) fn blit_translucent_translation(
   pixmap: &mut PixmapMut<'_>,
   source: PixmapRef<'_>,
@@ -423,9 +419,7 @@ fn source_over_at_opacity(dest: [u8; 4], source: [u8; 4], opacity: f32) -> [u8; 
   })
 }
 
-/// `value.round_ties_even() as u8` for `value` in `[0, 255]`. Adding and subtracting 2^23 leaves
-/// the default round-half-to-even mode to drop the fraction, which vectorizes where SSE2 has no
-/// rounding instruction and `round_ties_even` becomes a call.
+/// `value.round_ties_even() as u8` by adding and subtracting 2^23, which vectorizes on SSE2.
 #[inline(always)]
 fn round_ties_even_byte(value: f32) -> u8 {
   const SHIFT: f32 = 8_388_608.0;
@@ -596,10 +590,7 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
   );
 }
 
-/// Shared slow path for bordered/transformed overlays: renders the border mask
-/// and composites `source` through it, mapping canvas coordinates back to the
-/// source via `logical_to_source` (and the transform's inverse when the
-/// transform is not identity).
+/// Composites a bordered or transformed overlay through its border mask.
 fn composite_bordered_source(
   target: &mut DrawTarget,
   source: PaintSource<'_>,

@@ -71,9 +71,7 @@ impl_css_enum!(
   "-webkit-legacy" => Continue::WebkitLegacy,
 );
 
-/// Parsed `line-clamp` shorthand: `none | <integer> || <'block-ellipsis'>`.
-///
-/// Expands to `max-lines`, `block-ellipsis`, and `continue`.
+/// The `line-clamp` shorthand of `max-lines`, `block-ellipsis`, and `continue`.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub struct LineClamp {

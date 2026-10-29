@@ -106,9 +106,7 @@ impl CanvasViewport {
     )
   }
 
-  /// Grows the viewport for masks whose pixels move before landing on the
-  /// canvas (shadow offset, blur bleed). Margins cap at `2^20` so the `i32`
-  /// edge arithmetic cannot wrap.
+  /// Grows the viewport for masks that move before landing, capped so `i32` math cannot wrap.
   pub(crate) fn inflate(self, margin_x: f32, margin_y: f32) -> Self {
     const MAX_MARGIN: f32 = (1 << 20) as f32;
     let margin_x = margin_x.ceil().clamp(0.0, MAX_MARGIN) as u32;
@@ -575,9 +573,8 @@ pub(crate) fn alpha_mask(pixels: &[u8]) -> Vec<u8> {
     .collect()
 }
 
-/// `cull` bounds the rasterized area for masks the caller only ever reads
-/// through the canvas. Blink clips the same way in `ClipPathClipper::PaintClipPath`
-/// ("we clip by the cull rect here. Visually, this should be a NOP").
+/// `cull` rejects a mask outside it and cuts an oversized one to it with a halo, as Blink's
+/// `ClipPathClipper::PaintClipPath` clips by the cull rect.
 pub(crate) fn render_mask(
   paths: &[Command],
   transform: Option<Affine>,
@@ -595,9 +592,7 @@ fn fits_glyph_cache(size: Size<f32>, transform: Affine) -> bool {
   })
 }
 
-/// [`render_mask`] of `paths`, filled at `transform` within `cull`, kept in the glyph cache when
-/// it [fits](fits_glyph_cache) for `size`, the local extent of `paths`: a box drawn the same way
-/// every frame of a live view rasterizes once.
+/// [`render_mask`] of `paths`, cached when it [fits](fits_glyph_cache).
 pub(crate) fn render_cached_mask(
   paths: &[Command],
   size: Size<f32>,
@@ -636,14 +631,9 @@ pub(crate) fn cull_bounds(
   [mut left, mut top, mut right, mut bottom]: [i32; 4],
   cull: Option<CanvasViewport>,
 ) -> Option<Placement> {
-  // Cutting a mask that overlaps the cull rect is a protection layer, not an
-  // optimization: it moves the buffer origin, which shifts anti-aliasing by a
-  // float-rounding hair, so it only engages once the full mask is too large to
-  // be worth rasterizing.
+  // Cutting the mask to the cull rect shifts anti-aliasing, so only an oversized mask is cut.
   const CULL_THRESHOLD_PIXELS: u64 = 1 << 24;
-  // The halo keeps the rasterizer's clip edge away from the visible pixels:
-  // clipping a contour exactly on the cull edge shifts the anti-aliasing of
-  // the boundary row.
+  // The halo keeps the clip edge off the visible pixels.
   const CULL_HALO: i32 = 8;
 
   let full_pixels = (right.saturating_sub(left).max(0) as u64)
@@ -760,9 +750,7 @@ impl<'a> MaskView<'a> {
     }
   }
 
-  /// Resolves the combined constraint mask against the pixmap it clips: borrowed
-  /// directly when the stored mask already matches the canvas viewport, cropped
-  /// into a scratch buffer otherwise.
+  /// The combined constraint mask for the pixmap, cropped when the viewport differs.
   pub(crate) fn resolve(self, size: Size<u32>) -> Option<Cow<'a, TinyMask>> {
     if self.origin == self.canvas_origin
       && self.mask.width() == size.width

@@ -273,9 +273,7 @@ pub(crate) fn contains_var_function(specified_value: &str) -> bool {
   contains_in_parser(&mut parser)
 }
 
-/// Advances to the first `!` at the top level, leaving it unread. A value can
-/// carry one for its own sake, so the caller decides whether what follows is an
-/// importance marker.
+/// Advances to the first top-level `!`, leaving it unread.
 pub(crate) fn skip_to_bang(parser: &mut Parser<'_>) {
   let _ = parser.parse_until_before(Delimiter::Bang, |parser| {
     while parser.next_including_whitespace_and_comments().is_ok() {}

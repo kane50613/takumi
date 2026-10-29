@@ -7,10 +7,7 @@ use crate::style::{
   unexpected_token,
 };
 
-/// Superellipse parameter for the CSS `corner-shape` property.
-///
-/// Stores the spec's `s` parameter; the curve exponent is `k = 2^s`
-/// (clamped to `±16`). Positive values are convex, negative concave.
+/// A `corner-shape` superellipse parameter `s`, convex when positive.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Superellipse(pub f32);
 

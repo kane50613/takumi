@@ -1,12 +1,5 @@
-//! One process-global cache for glyph work, under a single byte budget.
-//!
-//! Resolved outlines and the masks rasterized from them are two stages of the
-//! same pipeline, and their byte ratio is set by the content: a 24px CJK outline
-//! outweighs its mask about six to one, while a 96px heading inverts that. They
-//! share one pool so the split follows the workload instead of a fixed fraction.
-//!
-//! The pool is sharded and shared by every worker thread, so a glyph resolved on
-//! one thread is a hit on all of them and eviction is global.
+//! One process-wide cache of resolved glyphs and their masks, sharing a byte budget so the split
+//! follows the workload.
 
 use std::sync::{
   Arc, LazyLock,
@@ -96,9 +89,7 @@ fn get_or_insert(
     .map(|entry| entry.value)
 }
 
-/// The resolved outline or bitmap for `key`, resolving on a miss. Concurrent
-/// misses for the same key resolve once. `resolve` returning `None` caches
-/// nothing and a later call retries.
+/// The resolved outline or bitmap for `key`, resolved once across concurrent misses.
 pub(crate) fn resolved_glyph(
   key: u64,
   resolve: impl Fn() -> Option<ResolvedGlyph>,
@@ -128,9 +119,7 @@ pub fn max_entry_bytes() -> u64 {
   *MAX_ENTRY_BYTES
 }
 
-/// The rasterized mask for `key`, rendering on a miss. Concurrent misses for the
-/// same key rasterize once. Charges the capacity the cache retains, not just the
-/// mask length.
+/// The rasterized mask for `key`, rendered once across concurrent misses.
 pub fn glyph_mask(
   key: u64,
   render: impl Fn() -> (Vec<u8>, Placement),

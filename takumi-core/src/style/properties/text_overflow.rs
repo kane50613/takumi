@@ -4,9 +4,7 @@ use cssparser::{Parser, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{FromCss, MakeComputed, ParseResult, ToCss};
 
-/// Defines how text should be overflowed.
-///
-/// This enum determines how text should be handled when it exceeds the container width.
+/// The `text-overflow` property.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub enum TextOverflow {

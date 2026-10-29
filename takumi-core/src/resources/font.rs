@@ -250,11 +250,8 @@ impl MatchedFace {
   }
 }
 
-/// The registry of fonts available to a renderer: Blink's `CSSFontSelector` over the faces
-/// registered.
-///
-/// Registering and unregistering are the only mutations. They copy the registry only while a
-/// snapshot still shares it, so a snapshot costs a reference count (see [`RenderContext`]).
+/// The fonts a renderer draws with, Blink's `CSSFontSelector`, whose snapshots share one
+/// copy-on-write registry.
 #[derive(Clone, Default)]
 pub struct Fonts {
   registry: Arc<FontRegistry>,
@@ -267,9 +264,7 @@ pub struct Fonts {
 #[derive(Clone, Default)]
 struct FontRegistry {
   selector: CssFontSelector,
-  /// Stamped from a process-wide counter on every registration or removal, so
-  /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
-  /// tell any two registry states apart, including across `Fonts` instances.
+  /// A process-wide stamp of every change, which font-dependent caches key on.
   revision: u64,
 }
 
@@ -603,9 +598,7 @@ pub(crate) struct FontUnderline {
   pub(crate) thickness: f32,
 }
 
-/// Blink's `SimpleFontData::ZeroInlineSize` for horizontal text: the advance of the `0` glyph,
-/// or half the font size when the font has none.
-/// <https://drafts.csswg.org/css-values-4/#ch>
+/// Blink's `SimpleFontData::ZeroInlineSize`, the [`ch`](https://drafts.csswg.org/css-values-4/#ch) unit.
 pub(crate) fn zero_inline_size(font: &FontRef, font_size: f32, location: LocationRef<'_>) -> f32 {
   font
     .charmap()
@@ -618,9 +611,7 @@ pub(crate) fn zero_inline_size(font: &FontRef, font_size: f32, location: Locatio
     .unwrap_or(font_size / 2.0)
 }
 
-/// How far the em box of `font` at `font_size` reaches below the baseline: its typographic
-/// ascender and descender, or else `ascent` and `descent`, scaled to sum to the font size.
-/// https://drafts.csswg.org/css-inline-3/#ascent-descent
+/// How far the [em box](https://drafts.csswg.org/css-inline-3/#ascent-descent) reaches below the baseline.
 pub(crate) fn em_box_descent(
   font: Option<&FontRef>,
   font_size: f32,
@@ -1070,9 +1061,7 @@ impl<'a> FontResource<'a> {
     self.source.as_ref().len()
   }
 
-  /// Does the work registering the font takes in proportion to its size: decompresses woff2 and
-  /// woff, limits the `cmap` to the `unicode_range`, and hashes the result. Registering it after
-  /// takes time independent of its size, so a binding can do this off its main thread.
+  /// Decompresses, restricts, and hashes the font, so registering it after costs the same at any size.
   pub fn into_resolved(self) -> Result<Self, FontError> {
     if self.is_restricted {
       return Ok(self);

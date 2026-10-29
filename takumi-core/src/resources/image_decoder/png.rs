@@ -227,14 +227,7 @@ fn apng_reader(bytes: &[u8]) -> DecodeResult<PngReader<Cursor<&[u8]>>> {
   Ok(reader)
 }
 
-/// Decodes frame `index` on its own, advancing through the earlier frames by
-/// their headers alone, when its `fcTL` shows it covers the whole canvas and
-/// replaces rather than blends. Returns `None` when the frame depends on its
-/// predecessors.
-///
-/// This is the narrow case of Blink's dependency walk in
-/// `ImageDecoder::FindRequiredPreviousFrame`: a full-canvas, non-blending frame
-/// needs no starting state.
+/// Decodes frame `index` alone when it covers the canvas without blending, `None` otherwise.
 pub(crate) fn decode_apng_frame_alone(
   bytes: &[u8],
   index: usize,

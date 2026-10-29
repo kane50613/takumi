@@ -1,6 +1,4 @@
-//! Lays an SVG document out to drawing ops, after Blink's `LayoutSVGRoot`: elements become
-//! containers, shapes, and pictures with their transforms, clips, masks, and paint resolved, and
-//! the painter writes the result as ops.
+//! Lays an SVG document out to drawing ops, after Blink's `LayoutSVGRoot`.
 
 mod budget;
 mod clip_mask;
@@ -583,9 +581,7 @@ impl<'a> SvgLayout<'a> {
     }
   }
 
-  /// Blink's `SVGContainerPainter` setup: the container an element makes, with its transform,
-  /// opacity, blend mode, clip, and mask, or none when it makes nothing. A container that adds
-  /// nothing gives its children to `parent` instead.
+  /// The container an element makes, as Blink's `SVGContainerPainter` sets it up.
   fn convert_group(
     &mut self,
     styled: &Styled,

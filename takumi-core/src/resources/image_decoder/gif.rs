@@ -163,9 +163,7 @@ pub(crate) fn decode_gif_frames(
   let (width, height) = (decoder.width() as u32, decoder.height() as u32);
   let target = target.filter(|target| target.shrinks(width, height));
 
-  // GIF alpha is 0 or 255, so the canvas is valid premultiplied RGBA as-is:
-  // blits copy opaque pixels (premultiply is identity) and cleared pixels are
-  // all-zero. Emitted frames skip the premultiply pass entirely.
+  // GIF alpha is 0 or 255, so the canvas is already premultiplied.
   let mut canvas = vec![0_u8; width as usize * height as usize * 4];
   let mut scratch = Vec::new();
   let mut total_pixels: u64 = 0;

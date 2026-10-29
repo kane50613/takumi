@@ -44,10 +44,7 @@ pub fn blur_alpha(alpha: &mut [u8], width: usize, height: usize, sigma: f32) {
   );
 }
 
-/// Blurs `mask`, placed at `mask_at` in an `image` of transparent pixels, and returns the pixels
-/// `region` covers as [`blur_alpha`] leaves them, without allocating or blurring the rest.
-///
-/// `mask_at` and `region` lie in the image, with the top-left pixel at the origin.
+/// The pixels of `region` that [`blur_alpha`] leaves of `mask` at `mask_at`, blurring nothing else.
 pub fn blur_alpha_region(
   mask: &[u8],
   mask_at: Placement,
@@ -210,10 +207,7 @@ fn blur_rescaled<const N: usize>(
   pixels.copy_from_slice(&rescaled(source, (width, height), &whole, sigma, rounding));
 }
 
-/// The pixels of `region` that `source`, in an image of `size` otherwise transparent, blurs to
-/// past `MAX_SIGMA`.
-///
-/// Approximate: resamples in `f32`, where Skia's raster pipeline may filter at eight bits.
+/// The pixels of `region` that `source` blurs to past `MAX_SIGMA`. Approximate: resamples in `f32`.
 fn rescaled<const N: usize>(
   source: Raster<N>,
   (width, height): (usize, usize),

@@ -452,9 +452,7 @@ pub struct PaintGlyph {
   pub x: f32,
   /// Vertical offset from the baseline start.
   pub y: f32,
-  /// Where the glyph's cluster starts in the run's `text`, in UTF-16 code units, so it indexes a
-  /// JavaScript string. Glyphs of one cluster share it; absent when the shaper's clusters could
-  /// not be matched to the glyphs.
+  /// The glyph's cluster start in the run's `text`, in UTF-16 code units.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub cluster: Option<u32>,
 }

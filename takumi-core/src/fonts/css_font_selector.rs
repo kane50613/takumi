@@ -56,9 +56,7 @@ fn insert_family(families: &mut Vec<Arc<str>>, family: &Arc<str>) {
 }
 
 impl CssFontSelector {
-  /// Registers every face of the sfnt or collection `data` under `descriptors`, its own family
-  /// name when they give none; its faces, the ones registered before included, skipping any
-  /// without a family name.
+  /// Registers each usable face of `data` under `descriptors`, and returns them.
   pub(crate) fn register(
     &mut self,
     data: SharedBytes,
@@ -287,10 +285,8 @@ impl CssFontSelector {
       })
   }
 
-  /// Approximate: Blink takes the faces of the best bucket alone. takumi gives an `auto`
-  /// descriptor the face's own capabilities, which splits the `unicode-range` subsets of one
-  /// family into buckets, so a best bucket whose faces leave out codepoints is followed by the
-  /// faces of the others, the better matches first.
+  /// Approximate: where Blink takes the best bucket alone, the other buckets follow it, since
+  /// `auto` descriptors split one family's subsets apart.
   fn font_data_for_family(
     &self,
     font_description: &FontSelectionDescription,

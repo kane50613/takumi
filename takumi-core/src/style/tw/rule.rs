@@ -23,9 +23,7 @@ use crate::{
   viewport::Viewport,
 };
 
-/// Tailwind's sort key for a utility: its variants, the properties it sets in Tailwind's order,
-/// the one setting more properties first, then its name. Approximate: it ignores the `--tw-sort`
-/// declaration that makes Tailwind sort `size-*` as `size` and a gradient stop as its variable.
+/// Tailwind's sort key for a utility. Approximate: it ignores `--tw-sort`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct TwOrder {
   variants: VariantOrder,

@@ -48,18 +48,13 @@ pub(crate) struct Interactive {
   pub(crate) summary: PageSummary,
 }
 
-/// The anchors, headings and box extents of the boxes a scene paints, which the outline, the
-/// links and the page counters read. The summaries of a document's pages add up to that of its
-/// whole scene.
+/// The anchors, headings, and box extents a scene paints, for outlines, links, and counters.
 #[derive(Debug, PartialEq)]
 pub(crate) struct PageSummary {
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
   pub(crate) headings: Vec<HeadingTarget>,
-  /// Where every box layout gave a position sits, by the source order of its
-  /// node, when the caller asked for them. A node laid out inline has no box
-  /// of its own, so it has no entry here and takes its page from the boxes
-  /// around it.
+  /// Where every box sits, by its node's source order, when asked for.
   pub(crate) extents: Option<HashMap<usize, BoxExtent>>,
 }
 
@@ -316,9 +311,7 @@ impl PageSummary {
     }
   }
 
-  /// The element paths a destination can point at: every anchor and every
-  /// heading the outline lists. Their structure elements need an id so a
-  /// structure destination can name them.
+  /// The element paths a destination can point at, which need structure ids.
   pub(crate) fn destination_targets(&self) -> HashSet<Vec<usize>> {
     self
       .anchors
@@ -328,10 +321,7 @@ impl PageSummary {
       .collect()
   }
 
-  /// Nests flat headings into an outline tree: a heading adopts the following
-  /// deeper headings as children, like an HTML document outline. A heading
-  /// with no destination (its page is dropped by page ranges) loses its entry
-  /// and its children take its place.
+  /// Nests flat headings into an outline tree, a heading without a destination yielding its place.
   pub(crate) fn outline(
     &self,
     destination: impl Fn(&HeadingTarget) -> Option<XyzDestination>,

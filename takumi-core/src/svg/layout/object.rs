@@ -1,6 +1,4 @@
-//! The objects an SVG document lays out to, after Blink's `LayoutSVGContainer`,
-//! `LayoutSVGShape`, and `LayoutSVGImage`: containers and shapes with their transforms, clips,
-//! masks, and resolved paint.
+//! The objects an SVG document lays out to, after Blink's `LayoutSVGContainer` and siblings.
 
 use std::rc::Rc;
 #[cfg(feature = "svg-raster")]
@@ -212,10 +210,7 @@ impl Paint {
     }
   }
 
-  /// Makes the paint drawable on the canvas, after usvg's `process_paint`: a server in bounding
-  /// box units is converted to user units against `bounds`, or against the bounds of the context
-  /// element when the paint takes its geometry from one, and then follows the context element's
-  /// transform. False when it cannot.
+  /// Makes the paint drawable, after usvg's `process_paint`. False when it cannot.
   pub(super) fn resolve_geometry(
     &mut self,
     context: Option<(Affine, Option<Rect<f32>>)>,

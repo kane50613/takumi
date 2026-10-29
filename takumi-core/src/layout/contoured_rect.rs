@@ -30,9 +30,7 @@ pub(crate) struct Corner {
 }
 
 impl Corner {
-  /// The four corners of a `size` box at `origin` with `radii` and `curvatures`, clockwise from
-  /// the top-right, as Blink's `TopRightCorner`, `BottomRightCorner`, `BottomLeftCorner` and
-  /// `TopLeftCorner`.
+  /// The four corners clockwise from the top-right, as Blink's `TopRightCorner` and its siblings.
   pub(crate) fn of_box(
     origin: Point<f32>,
     size: Size<f32>,
@@ -583,11 +581,9 @@ impl Corner {
   }
 }
 
-/// The corner `target` takes once it follows `origin`'s at the given edge insets, cut to the
-/// target rectangle: the pieces of the aligned curve inside it, or `None` when the corner stays
-/// square. This is what Blink's `AddContouredRect` leaves of the rectangle after subtracting each
+/// The corner of an inset rectangle after Blink's `AddContouredRect` subtracts the
 /// [border-aligned corner clip-out path](https://drafts.csswg.org/css-borders-4/#border-aligned-corner-clip-out-path),
-/// for a rectangle inset from its origin.
+/// `None` when it stays square.
 fn inset_corner(
   origin: &Corner,
   target: &Corner,
@@ -647,9 +643,7 @@ fn inset_corner(
   (!pieces.is_empty()).then_some(pieces)
 }
 
-/// The rectangle at `target` inside the origin box of `origin_size` at `origin_offset`, its
-/// corners following the origin's `radii` and `curvatures` as Blink's `AddContouredRect` draws an
-/// inset contoured rectangle.
+/// An inset contoured rectangle, as Blink's `AddContouredRect` draws it.
 pub(crate) fn append_inset_contour(
   origin_offset: Point<f32>,
   origin_size: Size<f32>,

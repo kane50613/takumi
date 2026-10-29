@@ -263,9 +263,7 @@ fn item_baseline(
   }
 }
 
-/// Blink's `GetSynthesizedLogicalBaseline` for an item `block_size` long in `direction`'s baseline
-/// writing mode: the alphabetic baseline at the line-under edge, which `vertical-lr` puts at the
-/// block start.
+/// Blink's `GetSynthesizedLogicalBaseline`.
 fn synthesized_baseline(
   direction: GridTrackSizingDirection,
   grid_direction: Direction,
@@ -610,9 +608,7 @@ fn logical_rect(
 }
 
 impl<'r> LayoutTree<'r> {
-  /// The grid area an out-of-flow `node` of the grid `container` resolves its insets against, or
-  /// `containing_block` when `container` is not a grid. The tracks lie in the fragments stitched
-  /// together, `previously_consumed_block_size` above this one.
+  /// The grid area an out-of-flow `node` resolves its insets against, else `containing_block`.
   pub(crate) fn grid_area(
     &self,
     container: NodeId,
@@ -1309,9 +1305,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     *sizing_tree.layout_data.collection_mut(direction) = track_collection;
   }
 
-  /// Blink's `CompleteTrackSizingAlgorithm`: the tracks of `direction` sized and placed, and
-  /// whether the rows' sizes change the items' contributions to the columns in
-  /// `needs_additional_pass`.
+  /// Blink's `CompleteTrackSizingAlgorithm`.
   fn complete_track_sizing_algorithm(
     &mut self,
     sizing_tree: &mut GridSizingTree,
@@ -1611,9 +1605,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     Point::new(x, offset.block_offset)
   }
 
-  /// Blink's `PlaceOutOfFlowItems`: each out-of-flow child's static position, at the start,
-  /// center, or end of its grid area when the grid is its containing block, and the children a
-  /// later page places, past this one.
+  /// Blink's `PlaceOutOfFlowItems`.
   fn place_out_of_flow_items(
     &self,
     sizing_tree: &GridSizingTree,

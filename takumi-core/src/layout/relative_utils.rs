@@ -28,9 +28,7 @@ impl ConstraintSpace {
   }
 }
 
-/// Blink's `ComputeRelativeOffset`: how far `position: relative` moves `node` in a container of
-/// `direction`, its start inset winning when both horizontal ones are set. A percentage inset
-/// against an indefinite size counts as `auto`.
+/// Blink's `ComputeRelativeOffset`.
 pub(crate) fn compute_relative_offset(
   node: &RenderNode,
   direction: Direction,

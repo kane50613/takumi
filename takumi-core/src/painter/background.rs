@@ -70,9 +70,8 @@ impl BackgroundClipArea {
     }
   }
 
-  /// The border a `border-area` background is masked by when a side leaves gaps, in opaque black,
-  /// as Blink's `AllBordersFillBorderArea` sends such a border to a `DstIn` mask. A border without
-  /// gaps clips to [`BackgroundClipArea::shape`]'s ring instead.
+  /// The mask of a `border-area` background whose border leaves gaps, after Blink's
+  /// `AllBordersFillBorderArea`.
   pub fn border_mask(&self) -> Option<BorderProperties> {
     let Self::BorderArea(border) = self else {
       return None;

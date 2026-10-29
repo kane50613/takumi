@@ -1,6 +1,5 @@
-//! Table rows and sections: their block sizes, the extra block size a table, section, or
-//! rowspanned cell hands its rows, and the baselines rows align their cells to. Follows Blink's
-//! [`table_layout_utils.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/table/table_layout_utils.cc)
+//! Table row and section sizing after Blink's
+//! [`table_layout_utils.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/table/table_layout_utils.cc),
 //! under the notice in LICENSE-CHROMIUM.
 
 use std::cmp::Ordering;
@@ -126,9 +125,7 @@ pub(super) fn cell_block_size(
   (block_size, !is_initial_block_size_definite)
 }
 
-/// Blink's `DistributeExcessBlockSizeToRows`: `desired_block_size` across `row_count` rows from
-/// `start_row`, grown first in percentage rows, then rows starting a rowspan (only when
-/// `is_rowspan_distribution`), then unconstrained rows with content, then empty rows, then all.
+/// Blink's `DistributeExcessBlockSizeToRows`.
 fn distribute_excess_block_size_to_rows(
   start_row: usize,
   row_count: usize,
@@ -347,9 +344,7 @@ pub(super) fn distribute_section_fixed_block_size_to_rows(
   );
 }
 
-/// Blink's `DistributeTableBlockSizeToSections`: grows percent sections to their percentage, then
-/// the body sections (or else every section) to fill `table_block_size`, and hands each grown
-/// section's extra block size to its rows.
+/// Blink's `DistributeTableBlockSizeToSections`.
 pub(super) fn distribute_table_block_size_to_sections(
   block_border_spacing: LayoutUnit,
   table_block_size: LayoutUnit,
@@ -562,9 +557,7 @@ pub(super) struct RowBaselineTabulator {
 }
 
 impl RowBaselineTabulator {
-  /// A cell laid out as `cell`, aligned as `alignment`; its block-end border and padding stand in
-  /// for a baseline it lacks. `depends_on_percentage` says whether a descendant resolves a
-  /// percentage block size against it.
+  /// A cell laid out as `cell` and aligned as `alignment`.
   pub(super) fn process_cell(
     &mut self,
     cell: CellMeasure,

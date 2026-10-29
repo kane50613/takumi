@@ -1,6 +1,4 @@
-//! What one document may spend. A `use` can instantiate a group that instantiates a group, and a
-//! mask or an image can be referenced by every one of them, so what a document lays out and
-//! paints can outgrow its markup exponentially.
+//! What one document may spend, since nested `use` can grow its work exponentially.
 
 use crate::layout::node::MAXIMUM_DOM_TREE_DEPTH;
 

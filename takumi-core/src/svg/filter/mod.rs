@@ -1,6 +1,4 @@
-//! SVG filters: the primitives of a filter as the layout builds them, and, under `svg-raster`, the
-//! pixel code that runs them on a layer. The pixel code is resvg's, moved here and retargeted to
-//! these types, except where takumi already has the math.
+//! SVG filter primitives and, under `svg-raster`, the pixel code from resvg that runs them.
 
 #[cfg(feature = "svg-raster")]
 mod apply;

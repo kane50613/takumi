@@ -41,9 +41,7 @@ impl FrameInfo {
   }
 }
 
-/// Whether frame `index` needs an earlier frame drawn first.
-///
-/// Follows `ImageDecoder::FindRequiredPreviousFrame` in Blink.
+/// Whether frame `index` needs an earlier frame, as Blink's `FindRequiredPreviousFrame` decides.
 pub(crate) fn needs_previous_frame(frames: &[FrameInfo], index: usize, canvas: (u32, u32)) -> bool {
   let Some(frame) = frames.get(index) else {
     return false;

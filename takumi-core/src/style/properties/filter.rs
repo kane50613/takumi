@@ -537,9 +537,7 @@ impl ToCss for Filter {
       Self::DropShadow(v) => write_fn!("drop-shadow", v),
       Self::Url(resource) => resource.to_css(dest),
       #[cfg(feature = "svg")]
-      // A minimal data URI rebuilt from the extracted markup, shorter than the
-      // author's original. Only characters that would break the CSS string or
-      // the data URI body are percent-encoded; `#` is handled on re-parse.
+      // A minimal data URI, percent-encoding only what would break it.
       Self::Reference(reference) => {
         dest.write_str("url(\"data:image/svg+xml,")?;
         for c in reference.markup.chars() {

@@ -753,10 +753,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     }
   }
 
-  /// Blink's `PrepareNextLine`.
-  /// Blink's `ComputeBaseDirection`: a `unicode-bidi: plaintext` block takes each paragraph's
-  /// direction from its first strong character. A forced break ends a paragraph with a line feed,
-  /// so the paragraph a line is in is the one after the last line feed before it.
+  /// Blink's `ComputeBaseDirection`.
   fn compute_base_direction(&mut self) {
     if self.node.block.context.style.misc_data.unicode_bidi != UnicodeBidi::Plaintext {
       return;
@@ -1575,9 +1572,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     true
   }
 
-  /// Blink's `HandleTextForFastMinContent`: breaks the text at every opportunity and keeps the
-  /// widest word, as min-content would otherwise make a line per word. The first and last words
-  /// go through `handle_text`, as they may join the items around them.
+  /// Blink's `HandleTextForFastMinContent`.
   fn handle_text_for_fast_min_content(
     &mut self,
     result_index: usize,
@@ -3930,10 +3925,7 @@ impl<'a, 'c> LineBreaker<'a, '_, 'c> {
     }
   }
 
-  /// The block-in-inline part of Blink's `HandleBlockInInline` after the block laid out as
-  /// `result`: whether the next line moves past it. A block that broke inside resumes in the next
-  /// line; one whose content overflowed its end resumes in a parallel flow, beside the lines after
-  /// it.
+  /// The block-in-inline part of Blink's `HandleBlockInInline`: whether the next line moves past it.
   fn propagate_block_in_inline_break(
     &mut self,
     result: &BoxLayoutResult,

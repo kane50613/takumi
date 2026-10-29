@@ -1,6 +1,4 @@
-//! Writes the laid out tree as drawing ops, after Blink's `SVGContainerPainter` and
-//! `SVGObjectPainter`: a layer is pushed for each transform, clip, mask, blend mode, and opacity
-//! a container has, and popped after its children.
+//! Writes the laid out tree as drawing ops, after Blink's `SVGContainerPainter`.
 
 use std::{iter::repeat_n, mem};
 
@@ -258,10 +256,7 @@ impl<'b> SvgPainter<'b> {
     }
   }
 
-  /// Emits clip layers for `clip_path`; returns how many layers were pushed.
-  ///
-  /// Simple clips (no nested clip on a child, uniform nonzero rules or a single even-odd shape)
-  /// become native clip ops, anything else becomes an alpha mask, mirroring krilla-svg.
+  /// Pushes the clip layers of `clip_path` as krilla-svg does, and returns how many.
   fn push_clip_path(&mut self, clip_path: &LayoutClip) -> usize {
     let mut rules = Vec::new();
 

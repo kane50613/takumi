@@ -1,8 +1,6 @@
-//! What the parts of a table paint, as Blink's
-//! [`table_painters.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/table_painters.cc)
-//! paints them: a table's decorations fill only its grid, a row's or row group's and a column's
-//! background paint into the cells under them, and collapsed borders paint once, from the table,
-//! after its cells' backgrounds. Follows Blink under the notice in LICENSE-CHROMIUM.
+//! Table painting after Blink's
+//! [`table_painters.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/table_painters.cc).
+//! Follows Blink under the notice in LICENSE-CHROMIUM.
 
 use super::{PaintDevice, PaintRole, box_side::BoxSideRect};
 use crate::{
@@ -47,12 +45,8 @@ impl CellArea {
   }
 }
 
-/// A table part's background painting into one cell under it, as Blink paints it over the whole
-/// cell.
-///
-/// Approximate: the background positions against `area`, the part grown to cover the cell, where
-/// Blink positions it against the part alone. Only an image on a part that a spanning cell sticks
-/// out of drifts.
+/// A table part's background painting into one cell. Approximate: it positions against the part
+/// grown to cover the cell, where Blink uses the part alone.
 #[derive(Clone, Copy, Debug)]
 pub struct CellBackground {
   /// The cell, which the background paints inside.
@@ -85,9 +79,7 @@ pub struct ColumnBackground {
 pub enum TableDecorations {
   /// Not a part of a table: it paints as any box does.
   None,
-  /// A table: its decorations fill only its grid, laid out as `grid` at `grid_offset` in the
-  /// table, and its border paints only when it does not collapse. Each column's background then
-  /// paints into the cells under it.
+  /// A table, its decorations filling only `grid` and its columns' backgrounds its cells.
   Table {
     /// The grid's layout, at the table's location moved by `grid_offset`.
     grid: ComputedLayout,
@@ -258,9 +250,7 @@ fn child(node: &RenderNode, index: usize) -> Option<&RenderNode> {
   node.children.as_deref()?.get(index)
 }
 
-/// The cells in the fragment `row_fragment_index` of the row `row` that `includes`, layout did not
-/// hide, and are visible, at `offset` from the part painting into them, `parent_has_layer` when the
-/// row or its row group has one.
+/// The visible cells of `row`'s fragment `row_fragment_index` that `includes`, at `offset`.
 #[allow(clippy::too_many_arguments)]
 fn collect_cells(
   row: &RenderNode,
@@ -420,10 +410,7 @@ impl RenderNode {
     style.participates_in_positioned_paint_bucket(false) || style.creates_stacking_context(false)
   }
 
-  /// Blink's `TableCellBackgroundClipper`: the cell at `area` less its collapsed borders, snapped
-  /// to pixels, when it
-  /// or, by `ancestor_has_layer`, its row or row group paints in a layer of its own, after the
-  /// table's collapsed borders.
+  /// Blink's `TableCellBackgroundClipper`.
   fn background_clip(
     &self,
     area: CellArea,
@@ -680,9 +667,7 @@ impl EdgeJoints {
   }
 }
 
-/// Blink's `TablePainter::PaintCollapsedBorders` for the table `paint` paints, under `transform`.
-/// With `visible`, a block range of the table's border box, only the rows near it paint, as Blink
-/// paints one table fragment per page.
+/// Blink's `TablePainter::PaintCollapsedBorders`, only the rows near `visible` painting.
 pub fn paint_collapsed_borders(
   results: LayoutView<'_>,
   paint: &NodePaint,

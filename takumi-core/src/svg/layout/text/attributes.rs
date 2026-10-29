@@ -53,9 +53,7 @@ impl PositionLists {
 }
 
 impl TextTree {
-  /// The position of each character, where a character is a code point. The values of an element
-  /// reach no further than its own characters, so `<tspan x="10 20 30">ab</tspan>c` gives `c`
-  /// none.
+  /// The position of each code point, an element's values reaching only its own characters.
   pub(super) fn character_positions(
     &self,
     layout: &mut SvgLayout,

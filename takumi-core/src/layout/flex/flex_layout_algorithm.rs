@@ -1607,9 +1607,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     });
   }
 
-  /// Blink's `HandleOutOfFlowPositionedItems`: each out-of-flow child's static position in the
-  /// content box, aligned by `justify-content` and its own `align-self`. Returns the children a
-  /// later page places, at a block end or center this fragment does not reach.
+  /// Blink's `HandleOutOfFlowPositionedItems`, returning the children a later page places.
   fn handle_out_of_flow_positioned_items(
     &mut self,
     total_intrinsic_block_size: LayoutUnit,

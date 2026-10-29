@@ -135,9 +135,7 @@ impl LogicalStaticPosition {
   }
 }
 
-/// Blink's `PhysicalStaticPosition`, in the border box of the box holding the out-of-flow box. A
-/// horizontal writing mode keeps the block direction vertical, so the alignment direction stays
-/// logical.
+/// Blink's `PhysicalStaticPosition`.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub(crate) struct StaticPosition {
   pub(crate) offset: Point<LayoutUnit>,

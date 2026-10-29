@@ -1,8 +1,4 @@
-//! Where replaced content sits inside its content box.
-//!
-//! `object-fit` picks a size, `object-position` places it, and content larger
-//! than the box has to be clipped to it. That is the same arithmetic whether a
-//! backend then samples pixels, writes an `<image>`, or emits an XObject.
+//! Where `object-fit` and `object-position` put replaced content in its box.
 
 use crate::{
   context::RenderContext,
@@ -31,10 +27,7 @@ pub struct ClippedPlacement {
 }
 
 impl ReplacedPlacement {
-  /// Sizes `intrinsic` content for a `content` box and places it.
-  ///
-  /// `fill` and a missing intrinsic size both stretch to the box, which is what
-  /// CSS asks for when there is no ratio to preserve.
+  /// Sizes and places `intrinsic` content in a `content` box.
   pub fn new(context: &RenderContext, content: Size<f32>, intrinsic: Size<f32>) -> Self {
     let scale = match context.style.misc_data.object_fit {
       _ if intrinsic.width <= 0.0 || intrinsic.height <= 0.0 => None,
@@ -70,10 +63,7 @@ impl ReplacedPlacement {
     }
   }
 
-  /// Whether the content reaches past its box and needs clipping to it. A
-  /// percentage past 100% pushes content that fits out of the box, so the test
-  /// is on the placed edges, not the size alone. Half a pixel of slack keeps a
-  /// `cover` that lands on the box from opening a clip nothing shows through.
+  /// Whether the placed content reaches past its box by more than half a pixel.
   pub fn overflows(&self, content: Size<f32>) -> bool {
     self.offset.x < -0.5
       || self.offset.y < -0.5

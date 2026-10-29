@@ -142,11 +142,7 @@ pub fn rgba_len(width: u32, height: u32) -> Option<usize> {
     .checked_mul(4)
 }
 
-/// Converts one premultiplied RGBA pixel to straight alpha.
-///
-/// Rounds half away from zero in integer arithmetic. tiny-skia divides in
-/// `f64`, which lands a hair under the halfway point for some values and rounds
-/// them down; integers make the result identical on every target.
+/// Converts one premultiplied pixel to straight alpha in integers, the same on every target.
 #[inline]
 pub fn demultiply_pixel(pixel: &mut [u8; 4]) {
   let alpha = pixel[3] as u32;

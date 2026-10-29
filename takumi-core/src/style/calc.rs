@@ -112,9 +112,7 @@ impl CalcTerm {
   }
 }
 
-/// A parsed `calc(...)` expression, compressed to its non-zero terms so it
-/// stays inline in `Length`. Naive versus CSS: an expression mixing more than
-/// [`MAX_CALC_TERMS`] distinct units, absolute lengths counting as one, fails to parse.
+/// A `calc()` expression's non-zero terms. Naive: more than [`MAX_CALC_TERMS`] units fail to parse.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct CalcTerms {
   units: [CalcUnit; MAX_CALC_TERMS],
@@ -154,9 +152,7 @@ impl CalcTerms {
 
     for (unit, value) in self.units.into_iter().zip(self.values) {
       match unit {
-        // Absolute units are authored in CSS px and cross the dpr boundary
-        // once; every relative unit already resolves against a device-pixel
-        // basis.
+        // Only absolute units scale by the device pixel ratio here.
         CalcUnit::Px => absolute_css += value,
         CalcUnit::Percent => percent += value,
         CalcUnit::Rem => px += value * sizing.rem_basis(),
@@ -274,9 +270,7 @@ impl CalcFormula {
     }
   }
 
-  /// Compresses to the non-zero terms, the absolute lengths summed into px as CSS Values 4
-  /// simplifies a sum to canonical units, or `None` when more than [`MAX_CALC_TERMS`] distinct
-  /// units remain.
+  /// The non-zero terms, absolute lengths summed into px, or `None` past [`MAX_CALC_TERMS`].
   pub(crate) fn compress(self) -> Option<CalcTerms> {
     let px = self.px
       + self.cm * ONE_CM_IN_PX

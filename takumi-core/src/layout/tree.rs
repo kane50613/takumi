@@ -75,9 +75,8 @@ impl OrderedChild {
   }
 }
 
-/// Each visited node's placement and content box, kept so a hoisted out-of-flow child resolves
-/// against its containing block instead of its box-tree parent. A placement is what a child
-/// starts from: a device transform, or one with the paint offset beside it.
+/// Each visited node's placement and content box, so a hoisted out-of-flow child resolves against
+/// its containing block rather than its box-tree parent.
 pub(crate) struct ContainingBlocks<P = Affine> {
   placements: FxHashMap<NodeId, P>,
   content_boxes: FxHashMap<NodeId, Size<Option<f32>>>,
@@ -260,9 +259,8 @@ pub struct LayoutTree<'r> {
   /// The inline box that is the containing block of each out-of-flow box an inline formatting
   /// context holds, by node, when one is.
   inline_containers: FxHashMap<usize, &'r RenderNode>,
-  /// Each inline formatting context's prepared items, which every pass of one layout shares, as
-  /// Blink keeps them until `NeedsCollectInlines`. Unlike Blink, a streamed layout drops those of a
-  /// box it has not placed yet and prepares them again when it lays the box out.
+  /// Each inline formatting context's prepared items, kept as Blink keeps them until
+  /// `NeedsCollectInlines`; approximate, a streamed layout prepares an unplaced box's again.
   inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
   /// Each table's parts, gathered when the tree is built.
   tables: FxHashMap<usize, Rc<TableStructure>>,
@@ -505,10 +503,7 @@ impl BoxFragment {
     start..start + len
   }
 
-  /// `fragments[index]` placed in its stitched box, `fragments` a box's fragments in layout order.
-  ///
-  /// Blink's `LayoutBox::ComputeSize` sizes the stitched box and `OffsetInStitchedFragments` places
-  /// the fragment in it. A repeated box, as a table header, is not stitched.
+  /// `fragments[index]` placed in its stitched box, as Blink's `OffsetInStitchedFragments` places it.
   pub(crate) fn stitched(fragments: &[Self], index: usize) -> StitchedFragment {
     let fragment = fragments[index].layout;
     let first = &fragments[0];
@@ -1258,9 +1253,7 @@ impl<'r> LayoutTree<'r> {
       let (layout_style, container_independent) = {
         let sizing = &render_node.context.sizing;
 
-        // Resolution reports whether it read the query container, which is
-        // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
-        // agrees across two large containers and disagrees with a small one.
+        // Whether resolution read the container is exact, where comparing resolved sizes is not.
         sizing.container_read.set(false);
         let layout_style = render_node.layout_box_style(sizing);
         let independent = !sizing.container_read.get();
@@ -1358,9 +1351,7 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Computes the layout for the whole tree: the root at its margin edge's offset in
-  /// `available_space`, which is the initial containing block of the out-of-flow boxes no other
-  /// box contains.
+  /// Lays out the whole tree in `available_space`, the initial containing block.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
     let space = self.root_space(available_space);
     let definite = |available: AvailableSpace| match available {
@@ -1460,9 +1451,7 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// The root's border-box min-content and max-content widths in a containing block
-  /// `available_height` tall, sized without laying out its height, as Blink's
-  /// `ComputeMinMaxSizes` sizes a box's inline axis alone.
+  /// The root's border-box min- and max-content widths, as Blink's `ComputeMinMaxSizes`.
   pub(crate) fn root_min_max_widths(&mut self, available_height: AvailableSpace) -> (f32, f32) {
     let mut space = self.root_space(Size {
       width: AvailableSpace::MaxContent,
@@ -1807,9 +1796,7 @@ fn sort_children_by_order(children: &mut [NodeId], mut child_order: impl FnMut(N
 }
 
 impl RenderNode {
-  /// Blink's `HasDescendantThatDependsOnPercentageBlockSize` of the box's layout: an in-flow box
-  /// inside it whose block size resolves a percentage, through anonymous and inline boxes, or a
-  /// relatively positioned one whose block insets do.
+  /// Blink's `HasDescendantThatDependsOnPercentageBlockSize`.
   pub(crate) fn has_descendant_that_depends_on_percentage_block_size(&self) -> bool {
     self.children.iter().flatten().any(|child| {
       let style = child.layout_box_style(&child.context.sizing);
@@ -1882,9 +1869,7 @@ impl RenderNode {
     OwnContent::of(self).has_inline_content(&font_style)
   }
 
-  /// About how many layout nodes its subtree builds: one per box, including the out-of-flow
-  /// boxes inside inline content, and one per positioned inline span, which may stand in as their
-  /// containing block.
+  /// About how many layout nodes its subtree builds, positioned inline spans included.
   fn layout_node_estimate(&self) -> usize {
     let mut count = 0;
     let mut boxes = vec![self];
@@ -2128,9 +2113,7 @@ impl RenderNode {
     ))
   }
 
-  /// The marker is the item's first child, as Blink's `::marker` is. An outside marker beside
-  /// block content stays a child the item places against its first baseline, and an inside one
-  /// takes a line of its own.
+  /// The marker as the item's first child, as Blink's `::marker` is.
   fn attach_marker(&mut self, marker: RenderNode) {
     if self.should_create_inline_layout() {
       self.insert_first_child(marker);
@@ -2196,17 +2179,13 @@ impl RenderNode {
       .is_some_and(Node::is_whitespace_only_text)
   }
 
-  // Only fully-collapsible whitespace may be dropped. preserve / preserve-spaces
-  // keep their spaces, and preserve-breaks may hold a forced break, so a
-  // whitespace-only node in any of those still renders.
+  // Only fully collapsible white space may be dropped.
   pub(super) fn is_collapsible_whitespace_only_text_node(&self) -> bool {
     self.context.style.inherited_data.white_space_collapse == WhiteSpaceCollapse::Collapse
       && self.is_whitespace_only_text_node()
   }
 
-  /// Whether the node paints its own shadows, background, and border: not when
-  /// `visibility: hidden`, nor for an anonymous box, which carries its parent's background only
-  /// for the text it wraps to show through `background-clip: text`.
+  /// Whether the node paints its own shadows, background, and border, unlike a hidden or anonymous box.
   pub fn paints_own_box(&self) -> bool {
     self.node.is_some() && self.context.style.is_visible()
   }
@@ -2352,9 +2331,8 @@ impl RenderNode {
     tree
   }
 
-  /// [CSS Display §2.7](https://drafts.csswg.org/css-display/#transformations): the root element's
-  /// display type is always blockified, and its principal box always establishes an independent
-  /// formatting context.
+  /// The root blockified and establishing a formatting context, per
+  /// [CSS Display §2.7](https://drafts.csswg.org/css-display/#transformations).
   fn make_root_element(&mut self) {
     if self.is_inline_level() {
       self.context.blockify();
@@ -2448,9 +2426,7 @@ impl RenderNode {
     )
   }
 
-  /// Blockifies, trims, and wraps `children` the way their parent's display
-  /// requires. An inline parent holding a block wraps it as a block-in-inline, unless its own
-  /// parent `blockifies` it, which it then does here.
+  /// Blockifies, trims, and wraps `children` as their parent's display requires.
   pub(super) fn normalize_children(
     context: &mut RenderContext,
     children: Box<[RenderNode]>,
@@ -2475,19 +2451,15 @@ impl RenderNode {
     }
 
     let children = RenderNode::wrap_orphan_table_parts(context, children);
-    // Blink's Text::TextLayoutObjectIsNeeded: collapsible
-    // whitespace-only text renders only after an in-flow inline-level
-    // sibling, and leading whitespace only inside an inline parent
-    // (#711, #992).
+    // Blink's `Text::TextLayoutObjectIsNeeded` (#711, #992).
     let children = drop_collapsible_boundary_whitespace(
       Vec::from(children),
       context.style.base_data.display.is_inline(),
     )
     .into_boxed_slice();
 
-    // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
-    // must not be swept into an anonymous block box, nor floats, which Blink's
-    // `LayoutBlockFlow::AddChild` keeps among the block children.
+    // Out-of-flow boxes and floats stay out of anonymous blocks, as Blink's
+    // `LayoutBlockFlow::AddChild` keeps them (#738).
     let has_inline = children
       .iter()
       .any(RenderNode::participates_in_inflow_inline_formatting_context);
@@ -2512,10 +2484,7 @@ impl RenderNode {
       context.blockify();
     }
 
-    // A block parent whose inline content holds out-of-flow boxes wraps that
-    // content, placeholders included, so the boxes lay out against a block.
-    // An inline parent keeps its inline formatting context untouched — an
-    // anonymous block there would be dropped by the surrounding line box.
+    // A block parent wraps inline content holding out-of-flow boxes, so they lay out against a block.
     if !(has_inline && (has_block || (!parent_is_inline && has_out_of_flow))) {
       return children;
     }
@@ -2620,9 +2589,7 @@ impl RenderNode {
     .map(|length| length.to_px(&self.context.sizing, 0.0))
   }
 
-  /// Whether it measures as the inline content it holds: a text node, or an inline box that tree
-  /// building left among block-level siblings, such as in a table row no table wraps, which lays
-  /// out as the anonymous block CSS 2.2 §9.2.1.1 would wrap it in.
+  /// Whether it measures as its inline content, as CSS 2.2 §9.2.1.1's anonymous block would.
   pub(crate) fn measures_as_inline_content(&self) -> bool {
     self.node.as_ref().is_some_and(|node| {
       matches!(node.kind, NodeKind::Text(_))
@@ -2742,9 +2709,7 @@ impl PendingRenderNode {
     let drops_own_text =
       context.style.base_data.display.should_blockify_children() && node.is_whitespace_only_text();
 
-    // An element that folded its text hands it back as a child beside its generated content:
-    // the inline collector emits its own text before any child, so `::before` could not come
-    // first, and a flex or grid container lays the text out as an item only as a child.
+    // Folded text returns as a child beside generated content, so `::before` comes first.
     if (pseudo_before_present || pseudo_after.is_some())
       && !drops_own_text
       && let Some(text) = node.take_text()
@@ -2981,11 +2946,8 @@ impl RenderContext {
       .get(source_order)
       .map(NodeMatchedDeclarations::element)
       .unwrap_or(&default_matched);
-    // A tree built in code is content, not a document: `rem` resolves against
-    // the viewport, so a `font-size` on the outermost node styles text without
-    // rescaling every `rem` length below it. A parsed document is the
-    // exception, since its outermost node is the `<html>` element that CSS
-    // does make the `rem` basis.
+    // `rem` resolves against the viewport in a tree built in code, and the `<html>` element in a
+    // parsed document.
     let is_document_root = source_order == 0
       && node
         .tag_name()

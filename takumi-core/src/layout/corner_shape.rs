@@ -1,9 +1,5 @@
-//! Superellipse corner contours for the CSS `corner-shape` property.
-//!
-//! Corners are built in a normalized square where the curve runs from
-//! `(0, 1)` to `(1, 0)`, the outer box corner sits at `(1, 1)` and the
-//! corner center at `(0, 0)`. Callers map these coordinates into pixel
-//! space per corner orientation.
+//! Superellipse `corner-shape` contours in a unit square, from `(0, 1)` to `(1, 0)` around the
+//! outer corner at `(1, 1)`.
 
 use crate::style::Superellipse;
 
@@ -22,10 +18,7 @@ pub(crate) enum CornerContour {
   Cubics([[f32; 2]; 3], [[f32; 2]; 3]),
 }
 
-/// Builds the normalized contour for a corner shape.
-///
-/// `round` is intentionally excluded: callers keep the legacy quarter-ellipse
-/// path for it, which this module would only reproduce approximately.
+/// The normalized contour for a corner shape other than `round`, which keeps the quarter ellipse.
 pub(crate) fn corner_contour(shape: Superellipse) -> CornerContour {
   if shape.is_fully_concave() {
     return CornerContour::Notch;
@@ -40,9 +33,7 @@ pub(crate) fn corner_contour(shape: Superellipse) -> CornerContour {
   if exponent > 1.0 {
     convex_contour(exponent)
   } else {
-    // A concave superellipse is the convex curve for the inverse exponent
-    // mirrored across the corner chord: map every control point through
-    // `(x, y) -> (1 - x, 1 - y)` and reverse the traversal.
+    // A concave superellipse is the inverse exponent's convex curve mirrored across the chord.
     match convex_contour(1.0 / exponent) {
       CornerContour::Cubic([c1, c2, _]) => {
         CornerContour::Cubic([reflect(c2), reflect(c1), [1.0, 0.0]])
@@ -73,13 +64,9 @@ fn convex_contour(exponent: f32) -> CornerContour {
   )
 }
 
-/// Cubic Bézier approximation of the first half (0° to 45°) of a convex
-/// superellipse corner, ported from Chromium's fitted model:
-/// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/geometry/path_builder.cc>
-///
-/// Returns `(a, b, half)` for the control points `(a, 1)`,
-/// `(half - b, half + b)` and the exact midpoint `(half, half)`; the second
-/// half of the corner is this curve transposed.
+/// The cubic fitting the first half of a convex superellipse corner, from Chromium's
+/// [`path_builder.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/geometry/path_builder.cc):
+/// control points `(a, 1)` and `(half - b, half + b)` to `(half, half)`.
 fn approximate_half_corner(exponent: f64) -> (f32, f32, f32) {
   const P: [f64; 7] = [
     1.2430920942724248,

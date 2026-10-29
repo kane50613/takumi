@@ -1,7 +1,4 @@
-//! Glyph rasterization: resolving a shaped glyph id to an embedded bitmap or a
-//! vector outline (including COLR color layers), independent of the font
-//! registry. The [`Fonts`](super::font::Fonts) registry drives this through
-//! [`GlyphResolveContext`], memoizing the results per worker thread.
+//! Resolves a shaped glyph to a bitmap or an outline, COLR layers included.
 
 use std::sync::Arc;
 
@@ -238,10 +235,7 @@ impl ResolvedGlyph {
     }
   }
 
-  /// Conservative ink extents relative to the glyph's pen origin, in device
-  /// pixels: `(min_x, min_y, max_x, max_y)`. Curve control points are included,
-  /// so the box may slightly overestimate but never undercuts, and the
-  /// faux-bold stroke outset is accounted for.
+  /// Ink extents from the pen origin in device pixels, never smaller than the ink.
   pub(crate) fn ink_extents(&self) -> InkExtents {
     match self {
       Self::Bitmap(bitmap) => {
@@ -313,9 +307,7 @@ pub fn outline_ink(paths: &[Command], embolden: Option<f32>) -> InkExtents {
   ))
 }
 
-/// Skia's fake-bold stroke width as a fraction of text size: `1/24` at 9px and below,
-/// easing to `1/32` at 36px and above, linearly interpolated in between. A constant factor
-/// over-emboldens large text. See Skia's `SkTextFormatParams.h`.
+/// Skia's fake-bold stroke width per text size, from `SkTextFormatParams.h`.
 fn skia_fake_bold_factor(font_size: f32) -> f32 {
   const SMALL_SIZE: f32 = 9.0;
   const LARGE_SIZE: f32 = 36.0;
@@ -500,11 +492,7 @@ impl<'a> GlyphResolveContext<'a> {
   }
 }
 
-/// `ColorPainter` for `ColorLayerCollector` that only records COLR v0 layer
-/// stacking. `push_transform`, `pop_transform`, `push_clip_glyph`,
-/// `push_clip_box`, `pop_clip`, and `push_layer` are intentional no-ops, and
-/// `fill_glyph` only records `Brush::Solid` layers, so gradients and other
-/// non-solid brushes are silently skipped.
+/// Records COLR v0 solid layers, skipping transforms, clips, and non-solid brushes.
 impl ColorPainter for ColorLayerCollector<'_, '_> {
   fn push_transform(&mut self, _transform: Transform) {}
 

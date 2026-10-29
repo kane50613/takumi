@@ -124,9 +124,7 @@ struct CaptionResult {
 }
 
 impl<'r> LayoutTree<'r> {
-  /// Gathers every table's parts and gives them the layout styles the table algorithm expects:
-  /// a table part has no border or padding of its own, a cell lays out with the border the table
-  /// resolves for it and takes the size the table gives it, and a column does not lay out.
+  /// Gives every table part the layout style the table algorithm expects.
   pub(in crate::layout) fn prepare_tables(&mut self, start: usize) {
     // By index from `start`: a subtree appended to the tree holds only its own nodes.
     let mut inside_cell_flex_or_grid = vec![false; self.node_count() - start];
@@ -744,9 +742,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     }
   }
 
-  /// Blink's `TableLayoutAlgorithm::ComputeRows`: the rows, the minimal block size of the table
-  /// grid, and the sections' block size before the table's own grew them. A resumed table reuses
-  /// the rows its first fragment computed.
+  /// Blink's `TableLayoutAlgorithm::ComputeRows`.
   fn compute_rows(
     &mut self,
     grid_inline_size: LayoutUnit,
@@ -1528,9 +1524,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
     result
   }
 
-  /// Blink's repeated footer of a fragment the table broke in: break tokens for the sections from
-  /// `next_entry` the fragment did not reach, then the footer at `location` or the page end, or a
-  /// break before it. Returns the entry past the footer.
+  /// The repeated footer of a broken fragment, as Blink adds it, and the entry past it.
   #[allow(clippy::too_many_arguments)]
   fn add_pending_repeated_footer(
     &mut self,

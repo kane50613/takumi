@@ -197,9 +197,7 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
       || char_before(self.text(), break_opportunity.offset) == SOFT_HYPHEN;
   }
 
-  /// Blink's `ShapeLine`: the line from `start` that fits `available_space`, breaking at the last
-  /// opportunity that fits, and shaping its edges again where they are not safe to break. None
-  /// when the line overflows and `no_result_if_overflow` is set.
+  /// Blink's `ShapeLine`.
   pub(crate) fn shape_line(
     &mut self,
     start: usize,

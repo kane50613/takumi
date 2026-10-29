@@ -70,8 +70,6 @@ pub struct TextData {
 pub enum ImageSourceInput {
   /// Source URL or path.
   Url(Arc<str>),
-  // `serde_bytes` so an FFI `Uint8Array`/`ArrayBuffer`, surfaced as a bytes value
-  // rather than a number array, deserializes here.
   /// Raw image bytes.
   Buffer(#[serde(with = "serde_bytes")] Vec<u8>),
   /// Raw RGBA pixels with explicit dimensions, used without decoding.
@@ -112,9 +110,7 @@ impl RgbaImage {
   }
 }
 
-/// The wire shape of [`RgbaImage`]: straight alpha unless `premultiplied`.
-/// `Option` so an explicit JS `undefined`, surfaced as a unit value, still
-/// deserializes.
+/// The wire shape of [`RgbaImage`], straight alpha unless `premultiplied`.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RgbaImageData {

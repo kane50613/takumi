@@ -1,8 +1,4 @@
-//! The blur of a shadow, approximated for PDF, which has no blur operator.
-//!
-//! Approximate: a blurred shadow is a stack of bands, each the shape spread a little further and
-//! a little fainter, so the edge steps through the Gaussian's coverage instead of fading
-//! smoothly. Blink's PDF output rasterizes the blurred mask instead.
+//! Approximate: a shadow's blur as a stack of fainter spread bands, since PDF has no blur.
 
 /// Bands used to fake one blurred edge. Eight is enough that the steps read as
 /// a gradient at the blur radii interfaces actually use.
@@ -15,9 +11,7 @@ pub(crate) struct Band {
 }
 
 impl Band {
-  /// A sharp shadow is one band at full alpha. A blurred one is a stack from the
-  /// outermost, faintest band inward, with each band's alpha chosen so the fills
-  /// composite to the coverage the blur would have had at that distance.
+  /// The bands, outermost first, compositing to the blur's coverage.
   pub(crate) fn of(blur_radius: f32) -> Vec<Self> {
     let core = Band {
       spread: 0.0,
@@ -50,11 +44,7 @@ impl Band {
   }
 }
 
-/// Coverage a Gaussian blur leaves `distance` blur radii outside the shape.
-///
-/// CSS blurs with a standard deviation of half the blur radius, so the edge
-/// profile is `0.5 * erfc(distance * blur / (sigma * sqrt(2)))`, which reduces
-/// to `0.5 * erfc(sqrt(2) * distance)`.
+/// The coverage a CSS blur leaves `distance` blur radii outside the shape, `0.5 * erfc(sqrt(2) * distance)`.
 fn coverage(distance: f32) -> f32 {
   0.5 * erfc(core::f32::consts::SQRT_2 * distance)
 }

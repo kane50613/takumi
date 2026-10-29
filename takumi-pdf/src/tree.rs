@@ -76,9 +76,7 @@ impl TreeInputs<'_> {
     let mut node = template.clone();
 
     substitute_page_counters(&mut node, page, pages);
-    // A band lays out per page, after the pass that resolves target counters, so
-    // its hooks name no page. They empty like any other unresolved target instead
-    // of leaving the placeholder the template put there.
+    // A band's target hooks name no page, so they empty.
     substitute_target_counters(&mut node, None, &|_: &str| None, &mut Vec::new());
     self.prepare(node, viewport)
   }
@@ -155,9 +153,7 @@ impl PreparedTree {
     })
   }
 
-  /// The size the caller's own node laid out at, which is what `measure`
-  /// reports. [`fill_root`] wraps that node in a page-wide box, so the root's
-  /// size only ever gives the page back.
+  /// The size the caller's node laid out at, inside [`fill_root`]'s page-wide box.
   pub(crate) fn content_size(&self) -> Size<f32> {
     let results = &self.scene.results;
 

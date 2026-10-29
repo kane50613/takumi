@@ -449,9 +449,7 @@ impl DerivedGeometry {
   }
 }
 
-/// The exclusions one copy of an exclusion space sees: the first `len` of an array its copies
-/// share, which a copy holding the array's end adds to in place, as Blink's
-/// `ExclusionSpaceInternal` shares `exclusions_`. No array while there are none.
+/// The first `len` exclusions of an array copies share, as Blink's `ExclusionSpaceInternal` does.
 #[derive(Debug, Clone, Default)]
 struct Exclusions {
   /// In ascending block start order.

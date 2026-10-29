@@ -96,9 +96,6 @@ pub enum Error {
   IoError(#[from] std::io::Error),
 
   /// Encoding an image or animation failed.
-  ///
-  /// Wraps the underlying encoder error opaquely so takumi's public API stays
-  /// independent of the encoder crates' versions.
   #[error("Encoding error: {0}")]
   Encode(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 
@@ -132,9 +129,7 @@ pub enum Error {
   #[error("Animation must contain at least one frame")]
   EmptyAnimationFrames,
 
-  /// The requested frame rate is too high for the target format. Above this
-  /// ceiling some frames fall to or below the shortest duration decoders honor,
-  /// so browsers clamp them to 100ms and playback stalls.
+  /// The frame rate is past what the format plays back without browsers clamping frames.
   #[error("Frame rate {fps} fps exceeds the maximum {max_fps} fps for this animation format")]
   AnimationFrameRateTooHigh {
     /// The requested frame rate.

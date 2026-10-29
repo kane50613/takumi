@@ -10,10 +10,7 @@ import { fromHtml } from "@takumi-rs/helpers/html";
 
 type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
 
-/**
- * Images for a render: pre-fetched entries, or a group that also controls how remote images
- * (and emoji glyphs) are fetched and cached.
- */
+/** Pre-fetched images, or options for fetching and caching remote images and emoji. */
 export type ImagesInput =
   | ImageLoader[]
   | (FetchOptions & {
@@ -34,32 +31,23 @@ type SharedRenderExtras = {
   jsx?: FromJsxOptions;
   images?: ImagesInput;
   /**
-   * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
+   * Where emoji images come from. `"from-font"` draws them from the loaded fonts.
    * @default "twemoji"
    */
   emoji?: EmojiType | "from-font";
 };
 
 type ManagedRendererOptions = {
-  /**
-   * @description The WebAssembly module to use for the renderer. If not provided, the default resolving strategy will be used.
-   */
+  /** The WebAssembly module for the renderer, resolved automatically when omitted. */
   module?: wasm.InitInput | Promise<wasm.InitInput> | { default: wasm.InitInput };
 };
 
-/**
- * Adds the managed-renderer plumbing to a set of inner options. Either bring your
- * own `renderer`, or let Takumi resolve one (optionally pointing at a WASM
- * `module`).
- */
+/** `TInner` plus a `renderer` to use, or a WASM `module` for the one Takumi resolves. */
 type Managed<TInner> =
   | (TInner & SharedRenderExtras)
   | (TInner & Omit<SharedRenderExtras, "renderer"> & ManagedRendererOptions);
 
-/**
- * `Omit` that distributes over unions, so the backends' `format`/`quality`/`lossless`
- * tagged union survives instead of collapsing into one flat member.
- */
+/** `Omit` that distributes over unions, keeping the `format` tagged union intact. */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** The wrapper-level CSS inputs, replacing the backends' `stylesheets` field. */
@@ -233,10 +221,8 @@ async function prepareScene<T extends PipelineOptions>(element: RenderInput, opt
 }
 
 /**
- * Renders a React element, HTML string, or Takumi node tree into an image.
- *
- * This function automatically detects the best renderer for your environment (native Rust on Node.js,
- * WASM on Edge/Workers) and handles fetching fonts and images, and emoji extraction.
+ * Renders a React element, HTML string, or node tree into an image, on the native renderer in
+ * Node.js and WebAssembly elsewhere, fetching its fonts, images, and emoji.
  *
  * @example
  * ```tsx
@@ -247,10 +233,6 @@ async function prepareScene<T extends PipelineOptions>(element: RenderInput, opt
  *   { width: 1200, height: 630 }
  * );
  * ```
- *
- * @param element - The content to render. Can be a JSX element (React-like), an HTML string, or a pre-constructed node tree.
- * @param options - Configuration for rendering, including dimensions, format, fonts, and more.
- * @returns A promise that resolves to the rendered image data (Buffer/Uint8Array).
  */
 export async function render(
   element: RenderInput,
@@ -262,10 +244,7 @@ export async function render(
 }
 
 /**
- * Lays out a React element, HTML string, or Takumi node tree without painting it.
- *
- * Same input handling, CSS, emoji, and image pipeline as {@link render}, on the same default
- * renderer, so fonts registered for rendering measure too.
+ * Lays out a React element, HTML string, or node tree as {@link render} would, without painting it.
  *
  * @example
  * ```tsx
@@ -273,8 +252,6 @@ export async function render(
  *
  * const { width, height } = await measure(<span tw="text-xl">Hello World</span>);
  * ```
- *
- * @returns A promise that resolves to the measured node tree.
  */
 export async function measure(
   element: RenderInput,
@@ -286,12 +263,7 @@ export async function measure(
 }
 
 /**
- * Renders a React element, HTML string, or Takumi node tree into a vector SVG
- * document string.
- *
- * Same input handling and image pipeline as {@link render}, but emits real SVG
- * (`<rect>`, `<path>`, gradients, glyph outlines, embedded images) instead of a
- * raster bitmap.
+ * Renders a React element, HTML string, or node tree as {@link render} would, into an SVG document.
  *
  * @example
  * ```tsx
@@ -302,8 +274,6 @@ export async function measure(
  *   { width: 1200, height: 630 }
  * );
  * ```
- *
- * @returns A promise that resolves to the SVG document string.
  */
 export async function renderSvg(element: RenderInput, options?: RenderSvgOptions): Promise<string> {
   const scene = await prepareScene(element, options);
@@ -312,10 +282,7 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
 }
 
 /**
- * Renders a sequence of scenes into an animated image (WebP / APNG / GIF).
- *
- * Each scene's content goes through the same input handling and image pipeline
- * as {@link render}; images are fetched once across all scenes.
+ * Renders scenes in sequence into an animated WebP, APNG, or GIF, fetching their images once.
  *
  * @example
  * ```tsx
@@ -332,8 +299,6 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
  *   ],
  * });
  * ```
- *
- * @returns A promise that resolves to the encoded animation (Buffer/Uint8Array).
  */
 export async function renderAnimation(
   options: RenderAnimationOptions,

@@ -1,11 +1,4 @@
-//! A CSS `filter` function as a colour matrix.
-//!
-//! `grayscale`, `sepia`, `saturate`, `hue-rotate`, `invert`, `brightness` and
-//! `contrast` are linear transforms of the source colour, and `opacity` scales
-//! alpha. Filter Effects defines each as an `feColorMatrix`, so one matrix per
-//! function serves a rasterizer transforming pixels and a vector backend
-//! transforming the colours it writes alike. The primitives that need a
-//! convolution (`blur`, `drop-shadow`) are not here.
+//! The colour-matrix CSS `filter` functions, as Filter Effects defines each `feColorMatrix`.
 
 use smallvec::SmallVec;
 
@@ -245,9 +238,7 @@ impl ColorMatrix {
     filter
   }
 
-  /// `feColorMatrix type="hueRotate"`, which Filter Effects defines for `hue-rotate()` as well: a
-  /// luma column plus cosine and sine terms. The coefficients are the spec's own, not derivable
-  /// from the luma weights.
+  /// `feColorMatrix type="hueRotate"`, with the spec's own coefficients.
   pub(crate) fn hue_rotate(angle: Angle) -> Self {
     const BASE: [[f32; 3]; 3] = [
       [0.213, 0.715, 0.072],

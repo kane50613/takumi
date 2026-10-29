@@ -1,6 +1,5 @@
-//! SVG documents resolved through takumi's CSS cascade and laid out to drawing ops, after Blink's
-//! `SVGImage`. An element's style comes from its `<style>` rules, its `style` attribute, and its
-//! presentation attributes, and its layout from the shapes, containers, and resources it names.
+//! SVG documents styled through takumi's cascade and laid out to drawing ops, after Blink's
+//! `SVGImage`.
 
 mod approx_eq;
 mod element;
@@ -45,10 +44,7 @@ pub(crate) enum SvgHost<'a> {
     current_color: Color,
     fonts: Option<&'a FontsSnapshot>,
   },
-  /// An inline `svg` element, whose root inherits the style of the box and whose elements match the
-  /// page's stylesheet, then the document's `style` elements. Approximate: Blink orders them by
-  /// where they sit in the document, matches selectors across the HTML ancestors, and applies the
-  /// `style` elements to the whole page.
+  /// An inline `svg` element. Approximate: selectors do not match across its HTML ancestors.
   Inline(&'a RenderContext),
 }
 

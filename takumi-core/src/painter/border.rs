@@ -173,9 +173,7 @@ impl<'b> BoxBorderPainter<'b> {
     }
   }
 
-  /// Paints a collapsed table border square, whatever its radii, with each side meeting its
-  /// neighbours along the wider one's edge and sides that fill a band in the same colour merged
-  /// into one fill.
+  /// Paints a collapsed table border square, merging same-coloured sides into one fill.
   fn paint_collapsed(&self, border: &BorderProperties, at: Affine, device: &mut dyn PaintDevice) {
     let mut fills: SmallVec<[SideFill; 4]> = SmallVec::new();
 
@@ -1161,9 +1159,7 @@ impl BorderShape {
     self.inset_rrect(self.border.width)
   }
 
-  /// The border box inset by `insets`, its radii shrunk to match, as Blink's
-  /// `PixelSnappedContouredBorderWithOutsets` builds it: its corners follow the border box's when
-  /// they are not round.
+  /// The border box inset by `insets`, as Blink's `PixelSnappedContouredBorderWithOutsets`.
   fn inset_rrect(&self, insets: Rect<f32>) -> FillShape {
     ClipBox {
       border: self.corners(shrink_radii(self.outer_radii, insets)),
@@ -1328,9 +1324,7 @@ fn intersection(a: Point<f32>, b: Point<f32>, c: Point<f32>, d: Point<f32>) -> O
   })
 }
 
-/// A dashed or dotted line along one axis, after Blink's `DrawLineWithStyle`: its dashes spread
-/// over the whole line, and round dots stop half a dot short of each end so the end dots stay
-/// inside.
+/// A dashed or dotted line along one axis, after Blink's `DrawLineWithStyle`.
 pub(super) struct StyledLine {
   line: FillShape,
   stroke: StrokeStyle,

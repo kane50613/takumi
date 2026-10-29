@@ -302,9 +302,7 @@ pub struct AppliedTextDecoration {
 pub struct AppliedTextDecorations(Option<Arc<[AppliedTextDecoration]>>);
 
 impl AppliedTextDecorations {
-  /// The decorations inside a box styled `style` whose parent box, styled `parent`, applies
-  /// these, resolved against `sizing` and `current_color`, as Blink's `StyleAdjuster` propagates
-  /// them.
+  /// These decorations propagated into a child box, as Blink's `StyleAdjuster` does.
   pub(crate) fn for_child(
     &self,
     parent: &ComputedStyle,
@@ -492,9 +490,7 @@ impl ToCss for TextUnderlineOffset {
   }
 }
 
-/// Represents the `text-underline-position` value, choosing the baseline the underline
-/// is measured from. The `left` and `right` keywords apply to vertical writing modes,
-/// which are not supported.
+/// The `text-underline-position` property, without the vertical `left` and `right`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum TextUnderlinePosition {

@@ -50,9 +50,7 @@ impl BoxPainter<'_> {
 }
 
 impl OutlineIsland {
-  /// Paints the outline of the element that owns the island, with the block's border box at
-  /// `origin`: a lone rect as a box border, as Blink's `PaintSingleRectOutline` does, and anything
-  /// else as Blink's `ComplexOutlinePainter` does.
+  /// Paints the island's outline, as Blink's `PaintSingleRectOutline` or `ComplexOutlinePainter`.
   pub fn paint(&self, origin: Point<f32>, device: &mut dyn PaintDevice) {
     let (outline, opacity) = self.outline();
     let (width, offset) = outline.painted();

@@ -1,7 +1,5 @@
-//! SVG text after Blink's `LayoutSVGText` and `SvgTextLayoutAlgorithm`: the characters of a `text`
-//! element are shaped with takumi's fonts, positioned by the `x`, `y`, `dx`, `dy` and `rotate`
-//! attributes, anchored, and painted as glyph outlines. Where Blink's text-on-path and
-//! `textLength` details differ it follows usvg, and it draws no SVG-in-font glyphs.
+//! SVG text after Blink's `SvgTextLayoutAlgorithm`. Approximate: text paths and `textLength`
+//! follow usvg, and SVG-in-font glyphs do not draw.
 
 mod attributes;
 mod chunk;

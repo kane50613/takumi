@@ -24,9 +24,7 @@ use super::{
 };
 use crate::style::ImageScalingAlgorithm;
 
-/// A lazily decoded animated image. It keeps the first frame and the per-frame timing,
-/// decodes any later frame at its drawn size when needed, then drops it. Nothing caches
-/// decoded frames, so the byte budget counts a single frame.
+/// An animated image kept encoded, each frame decoding at draw size on demand.
 #[derive(Debug, Clone)]
 pub struct AnimatedSource {
   inner: Arc<AnimatedInner>,
@@ -256,9 +254,7 @@ impl AnimatedSource {
       })
   }
 
-  /// Decodes a single frame by stream index, resampled to `target`. A frame
-  /// that depends on earlier ones is reached by replaying them, since disposal
-  /// is stateful.
+  /// Decodes frame `index` resampled to `target`, replaying the earlier frames it depends on.
   fn decode_frame(&self, index: usize, target: DecodeTarget) -> Option<Arc<ImageBuffer>> {
     if self.stands_alone(index)
       && let Some(frame) = self

@@ -72,10 +72,7 @@ mod tests {
 
   use super::IcuBidiData;
 
-  /// Codepoints where the two sources disagree because icu tracks a newer
-  /// Unicode than `unicode-bidi` 0.3.18's tables: characters assigned after
-  /// the crate's snapshot, plus noncharacters. New entries after an icu bump
-  /// need the same "unassigned or noncharacter in the older table" review.
+  /// Codepoints icu assigns but `unicode-bidi` 0.3.18 does not, plus noncharacters.
   fn known_version_skew(point: u32) -> bool {
     matches!(
       point,

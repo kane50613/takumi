@@ -341,9 +341,7 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
       .on_close_tag(self.constraint_space, line_box);
   }
 
-  /// Blink's `InlineLayoutAlgorithm::PlaceBlockInInline` but the line box's size, which
-  /// `InlineLayoutAlgorithm::create_line` sets: the block at the line's start, its baseline the
-  /// line's unless it collapses through.
+  /// Blink's `InlineLayoutAlgorithm::PlaceBlockInInline`, but the line box's size.
   fn place_block_in_inline(
     &mut self,
     item: &'a InlineItem<'c>,
@@ -506,9 +504,7 @@ mod tests {
     layout_unit::LayoutUnit,
   };
 
-  /// The first line of `block`, as Blink's `InlineLayoutAlgorithm::CreateLine` places it before
-  /// aligning: each item's text or kind, its inline offset and size, and its block offset from
-  /// the baseline; then the line box's ascent and descent.
+  /// The first line of `block`, as Blink's `InlineLayoutAlgorithm::CreateLine` places it.
   fn place_first_line(block: &RenderNode, available_width: f32) -> (Vec<String>, (f32, f32)) {
     let node = InlineNode::new(block);
     let data = node.prepare_layout();

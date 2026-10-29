@@ -42,9 +42,7 @@ pub enum PositionComponent {
 }
 
 impl PositionComponent {
-  /// Where this component lands in `available` space. A keyword is a share of
-  /// that space, so `center` sits halfway; `auto` behaves the same, since a
-  /// position with nothing to say centres.
+  /// Where this component lands in `available` space, `auto` centring.
   pub fn resolve(self, context: &RenderContext, available: f32) -> f32 {
     match Length::from(self) {
       Length::Auto => available * 0.5,

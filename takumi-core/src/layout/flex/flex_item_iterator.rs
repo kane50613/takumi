@@ -14,9 +14,7 @@ pub(crate) struct FlexItemEntry {
   pub(crate) token: Option<Rc<BlockBreakToken>>,
 }
 
-/// Blink's `FlexItemIterator`: the items of a container's lines a fragment lays out, first those
-/// that resume after a break, then those that start. It reads the lines it walks at each step, as
-/// the fragment marks them done.
+/// Blink's `FlexItemIterator`.
 pub(crate) struct FlexItemIterator {
   /// The container's break token, while its child break tokens remain.
   break_token: Option<Rc<BlockBreakToken>>,

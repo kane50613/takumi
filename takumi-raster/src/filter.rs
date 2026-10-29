@@ -26,9 +26,7 @@ enum PreparedFilter {
   AlphaLut(Box<TransferTable>),
 }
 
-/// Builds an execution plan that fuses consecutive RGB or alpha transfer tables
-/// into a single composed LUT, so each LUT-only run costs one lookup per channel
-/// regardless of how many filters it represents.
+/// A plan fusing consecutive transfer tables into one lookup per channel.
 fn prepare_pixel_filters(filters: &[&Filter]) -> SmallVec<[PreparedFilter; 4]> {
   let mut prepared: SmallVec<[PreparedFilter; 4]> = SmallVec::new();
   let mut pending_rgb: Option<TransferTable> = None;
@@ -76,9 +74,7 @@ fn prepare_pixel_filters(filters: &[&Filter]) -> SmallVec<[PreparedFilter; 4]> {
   prepared
 }
 
-/// Runs `transform` on the pixel's straight-alpha channels, leaving it
-/// premultiplied again. Filter Effects defines every colour filter on
-/// non-premultiplied colour, and a canvas pixel is premultiplied.
+/// Runs `transform` on the pixel's straight-alpha channels, as Filter Effects defines them.
 #[inline(always)]
 fn on_straight_alpha(pixel: &mut [u8; 4], transform: impl FnOnce(&mut [u8; 4])) {
   let opaque = pixel[3] == u8::MAX;
@@ -484,9 +480,7 @@ impl Backdrop {
   }
 }
 
-/// Applies a `drop-shadow()` filter to an image. Its blur length is the Gaussian's standard
-/// deviation, as Filter Effects and Blink read it, not half of it as a box shadow's is, and its
-/// offset snaps down to whole pixels, as Chrome paints it.
+/// Applies `drop-shadow()`, its blur a standard deviation and its offset snapped as Chrome does.
 fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) -> Result<()> {
   let canvas_width = pixmap.width();
   let canvas_height = pixmap.height();

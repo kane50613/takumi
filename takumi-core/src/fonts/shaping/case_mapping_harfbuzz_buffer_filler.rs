@@ -14,9 +14,7 @@ pub(crate) enum CaseMapIntend {
 }
 
 impl CaseMapIntend {
-  /// Blink's `CaseMappingHarfBuzzBufferFiller`: adds `text[start..end]` to `buffer` in this case,
-  /// each character's cluster at the byte its source character starts at, and the rest of
-  /// `text` as context.
+  /// Blink's `CaseMappingHarfBuzzBufferFiller`.
   pub(crate) fn fill_buffer(
     self,
     buffer: &mut Buffer,

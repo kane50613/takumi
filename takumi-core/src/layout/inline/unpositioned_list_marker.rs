@@ -56,9 +56,7 @@ impl<'c> UnpositionedListMarker<'c> {
       .find(|(_, line)| line.line_box_bfc_block_offset.is_some())
   }
 
-  /// Blink's `AddToBox` block offset: where the marker laid out as `result` goes beside content
-  /// at `block_offset` whose baseline sits `content_baseline` below it. A marker whose ascent
-  /// passes the content's pushes the content, and what follows it, down.
+  /// Blink's `AddToBox` block offset.
   pub(crate) fn block_offset_beside(
     result: &LayoutResult,
     content_baseline: LayoutUnit,

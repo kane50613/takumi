@@ -38,9 +38,7 @@ pub(crate) enum RepeatBounds {
 }
 
 impl RepeatBounds {
-  /// The clip rect a repeatable draws inside. A band clips to its measured
-  /// height, so a wrap caused by a wider real counter cannot move the band box
-  /// between pages.
+  /// The clip rect a repeatable draws inside, a band its measured height.
   fn rect(&self, frame: &PageFrame, height: f32) -> (f32, f32, f32, f32) {
     match self {
       Self::Header => (0.0, BAND_EDGE_PADDING, frame.size.width, height),
@@ -118,9 +116,7 @@ fn node_count(node: &Node) -> usize {
 }
 
 impl Repeatable {
-  /// Measures every tree of a band with the last page's counters, the widest
-  /// a decimal counter gets, and keeps the tallest, recording the template
-  /// when a page must prepare its own. `template` holds at least one tree.
+  /// Measures a band's trees with the last page's counters and keeps the tallest.
   pub(crate) fn band(
     inputs: &TreeInputs<'_>,
     template: &PageBand,

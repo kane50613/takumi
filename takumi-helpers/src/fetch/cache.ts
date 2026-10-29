@@ -7,10 +7,7 @@ type CacheLimits<T> = {
   sizeOf: (value: T) => number;
 };
 
-/**
- * A least-recently-used cache of pending fetches by URL, bounded by entry count and by the bytes
- * each one settles to. A fetch that fails leaves it.
- */
+/** An LRU cache of fetches by URL, bounded by entries and bytes, dropping a fetch that fails. */
 export class BoundedCache<T> {
   private readonly entries = new Map<string, { pending: Promise<T>; bytes: number }>();
   private bytes = 0;

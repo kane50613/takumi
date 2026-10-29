@@ -1,11 +1,4 @@
-//! The color half of CSS `filter`, as a matrix applied to every color the
-//! filtered subtree paints.
-//!
-//! `grayscale`, `sepia`, `saturate`, `hue-rotate`, `invert`, `brightness` and
-//! `contrast` are linear transforms of the source color, so a vector backend
-//! can fold them into the colors it writes instead of rasterizing. `opacity`
-//! folds into the alpha channel. The primitives that need a convolution
-//! (`blur`, `drop-shadow`) and referenced SVG filters are left alone.
+//! The color functions of CSS `filter` as a matrix folded into every color the subtree paints.
 
 use takumi_core::{
   filter::{ColorMatrix, ColorMatrixChain},
@@ -40,9 +33,7 @@ impl ColorFilter {
     self.functions.coefficient_bits().collect()
   }
 
-  /// Prepends a filter list to whatever the ancestors already apply: CSS
-  /// filters the element first and the ancestor's group afterwards, and the
-  /// matrices do not commute. Returns `None` when nothing changes color.
+  /// Prepends a filter list to the ancestors', `None` when nothing changes color.
   pub(crate) fn compose(outer: Option<&Self>, filters: &[Filter]) -> Option<Self> {
     let mut functions = ColorMatrixChain::default();
     let outer = outer

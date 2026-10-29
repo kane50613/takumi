@@ -11,9 +11,6 @@ use crate::{
 };
 
 /// The rectangle one straight side fills, with the widths of the sides it mitres into.
-///
-/// An adjacent width shapes the ends: a positive one slants the inner edge in by that much, a
-/// negative one slants the outer edge.
 #[derive(Clone, Copy)]
 pub(super) struct BoxSideRect {
   pub(super) side: BorderSide,

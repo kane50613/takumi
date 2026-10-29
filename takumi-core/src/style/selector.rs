@@ -112,11 +112,8 @@ impl PrecomputedHash for Ident {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SelectorImpl;
 
-// Most pseudo-classes are parsed but never matched, so rules with `:hover`, `::before`,
-// etc. survive alongside their sibling selectors instead of getting dropped wholesale.
-// `:lang()` and `:dir()` are matched for real (see `crate::matching`) — they need no
-// live/interactive state, just the `lang` and `dir` attributes inherited up the tree, which a
-// static render has.
+// Pseudo-classes parse so a selector list keeps its other selectors, and only the static ones,
+// such as `:lang()` and `:dir()`, match.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PseudoClass {
   /// `:lang(en, fr, ...)` — one or more comma-separated BCP-47 basic-filtering ranges.
@@ -490,9 +487,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
     _start: &ParserState,
   ) -> Result<Self::AtRule, ()> {
     match prelude {
-      // The expanded declarations become a rule on the parent's selectors, so
-      // a block with declarations before and after the `@apply` keeps its
-      // source order through the flush the nested-rules path already does.
+      // A rule on the parent's selectors, so declarations around `@apply` keep their order.
       AtRulePrelude::Apply(block) => {
         let (normal, important) = block.split_importance();
 
@@ -646,14 +641,9 @@ enum AtRulePrelude {
   Media(MediaQueryList),
   Property(String),
   Supports(bool),
-  /// Tailwind's `@theme`, read as the `:root` rule it compiles to. Modifiers
-  /// are accepted but read the same way: takumi resolves `var()` through the
-  /// cascade at computed time, so `reference` and `inline` collapse into the
-  /// emitted rule.
+  /// Tailwind's `@theme`, read as the `:root` rule it compiles to, whatever its modifiers.
   Theme,
-  /// A Tailwind entry point such as `@import "tailwindcss"`, which here only
-  /// decides Preflight: the built-in scales already back every utility and
-  /// `tw` is already the last layer.
+  /// A Tailwind entry point such as `@import "tailwindcss"`, which only turns Preflight on.
   TailwindImport {
     preflight: bool,
   },
@@ -753,9 +743,7 @@ fn parse_property_rule<'i>(
   })
 }
 
-/// Parses a `@theme` block body: declarations landing on `:root`, plus any
-/// `@keyframes` the theme carries, the way Tailwind's own `theme.css` pairs
-/// `--animate-*` tokens with their keyframes.
+/// Parses a `@theme` body into `:root` declarations and the `@keyframes` it carries.
 struct ThemeBlockParser<'a> {
   context: NestingContext<'a>,
 }
@@ -1283,12 +1271,8 @@ impl From<Vec<PropertyRule>> for StyleSheet {
   }
 }
 
-/// Tailwind's Preflight, minus rules takumi cannot honor: form controls,
-/// `::placeholder`, vendor pseudo-elements, elements that never become a node,
-/// `abbr[title]` (needs `text-decoration-style: dotted`, which is unparsed) and
-/// `summary` (`display: list-item` would draw a marker no bundled font covers).
-/// `:root` stands in for upstream's `html, :host`.
-/// https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/preflight.css
+/// [Tailwind's Preflight](https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/preflight.css),
+/// without the rules for form controls, pseudo-elements, `abbr[title]`, and `summary`.
 const PREFLIGHT_CSS: &str = r"
 @layer base {
   *,
@@ -2947,9 +2931,7 @@ mod tests {
     );
   }
 
-  /// Tailwind inlines a reference token's value into utilities instead of
-  /// emitting `:root`. Here utilities resolve `var()` through the cascade, so
-  /// the token still has to land on `:root` for `bg-brand` to see it.
+  /// A reference token lands on `:root`, since utilities here resolve `var()` through the cascade.
   #[test]
   fn test_theme_reference_still_emits_root() {
     let sheet = parse_stylesheet("@theme reference { --color-brand: #ff0000; }");

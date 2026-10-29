@@ -1,7 +1,4 @@
-//! Style properties and related types for the takumi styling system.
-//!
-//! This module contains CSS-like properties including layout properties,
-//! typography settings, positioning, and visual effects.
+//! CSS properties and their values.
 
 mod animation;
 mod aspect_ratio;
@@ -269,9 +266,7 @@ pub(crate) fn merge_enum_values(tokens: &[&'static str]) -> String {
   }
 }
 
-/// Defines how an image should be resized to fit its container.
-///
-/// Similar to CSS object-fit property.
+/// The `object-fit` property.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum ObjectFit {
   /// The replaced content is sized to fill the element's content box exactly, without maintaining aspect ratio
@@ -377,9 +372,7 @@ impl From<BackgroundClip> for Option<BackgroundOrigin> {
   }
 }
 
-/// Represents the CSS `border-radius` property, supporting elliptical corners.
-///
-/// Each corner has independent horizontal and vertical radii, allowing for both circular and elliptical shapes.
+/// The `border-radius` property, each corner with its own horizontal and vertical radius.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct BorderRadius(pub Sides<SpacePair<Length>>);
 
@@ -435,9 +428,7 @@ impl<'i> FromCss<'i> for BorderRadius {
   const VALID_TOKENS: &'static [&'static str] = &["<length>"];
 }
 
-/// Defines how the width and height of an element are calculated.
-///
-/// This enum determines whether the width and height properties include padding and border, or just the content area.
+/// The `box-sizing` property.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum BoxSizing {
@@ -454,9 +445,7 @@ impl_css_enum!(
   "border-box" => BoxSizing::BorderBox
 );
 
-/// Text alignment options for text rendering.
-///
-/// Corresponds to CSS text-align property values.
+/// The `text-align` property.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum TextAlign {
@@ -513,10 +502,7 @@ impl_css_enum!(
   "auto" => Isolation::Auto
 );
 
-/// Defines whether an element is visible.
-///
-/// This controls whether an element is rendered, but unlike `display: none`,
-/// it still takes up space in the layout.
+/// The `visibility` property.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum Visibility {
@@ -604,9 +590,7 @@ impl_css_enum!(
   "fixed" => TableLayout::Fixed
 );
 
-/// A `border-spacing` value: one or two non-negative lengths. A declaration
-/// carrying a percentage, `auto`, or a negative length is discarded, so the
-/// cascade keeps the previous one.
+/// A `border-spacing` value of one or two non-negative lengths.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BorderSpacing(pub SpacePair<Length>);
 
@@ -680,9 +664,7 @@ impl_css_enum!(
   "bevel" => LineJoin::Bevel
 );
 
-/// Defines the positioning method for an element.
-///
-/// This enum determines how an element is positioned within its containing element.
+/// The `position` property.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum Position {
@@ -847,9 +829,7 @@ impl Clear {
   }
 }
 
-/// Defines the direction of flex items within a flex container.
-///
-/// This enum determines how flex items are laid out along the main axis.
+/// The `flex-direction` property.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum FlexDirection {
@@ -872,10 +852,7 @@ impl_css_enum!(
   "column-reverse" => FlexDirection::ColumnReverse
 );
 
-/// Defines how flex items are aligned along the main axis.
-///
-/// This enum determines how space is distributed between and around flex items
-/// along the main axis of the flex container.
+/// The `justify-content` property.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum JustifyContent {
@@ -886,13 +863,9 @@ pub enum JustifyContent {
   Start,
   /// Items are packed toward the end of the line.
   End,
-  /// Items are packed toward the flex container's main-start side.
-  /// For flex containers with flex_direction RowReverse or ColumnReverse, this is equivalent
-  /// to End. In all other cases it is equivalent to Start.
+  /// `flex-start`, the end in a reversed flex direction.
   FlexStart,
-  /// Items are packed toward the flex container's main-end side.
-  /// For flex containers with flex_direction RowReverse or ColumnReverse, this is equivalent
-  /// to Start. In all other cases it is equivalent to End.
+  /// `flex-end`, the start in a reversed flex direction.
   FlexEnd,
   /// Items are packed toward the center of the line.
   Center,
@@ -903,9 +876,7 @@ pub enum JustifyContent {
   SpaceBetween,
   /// Items are evenly distributed in the line with equal space around them.
   SpaceEvenly,
-  /// Items are evenly distributed in the line; first item is on the start line,
-  /// last item on the end line, and the space between items is twice the space
-  /// between the start/end items and the container edges.
+  /// `space-around`.
   SpaceAround,
   /// `safe start`: like `Start`, falling back to start-edge alignment on overflow.
   SafeStart,
@@ -1125,9 +1096,8 @@ impl Display {
     self.is_flex() || matches!(self, Display::Grid | Display::InlineGrid)
   }
 
-  /// Cast the display to block level.
-  /// Blink's `EquivalentBlockDisplay`, which turns the parts of a table into blocks as well.
-  /// <https://drafts.csswg.org/css-display/#blockify>
+  /// The display [blockified](https://drafts.csswg.org/css-display/#blockify), as Blink's
+  /// `EquivalentBlockDisplay`.
   pub(crate) fn as_blockified(self) -> Self {
     match self {
       Display::Inline
@@ -1250,10 +1220,7 @@ impl From<BoxAlign> for AlignItems {
   }
 }
 
-/// Defines how flex items are aligned along the cross axis.
-///
-/// This enum determines how items are aligned within the flex container
-/// along the cross axis (perpendicular to the main axis).
+/// The `align-items` property.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum AlignItems {

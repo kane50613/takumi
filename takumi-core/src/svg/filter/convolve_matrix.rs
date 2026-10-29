@@ -6,12 +6,7 @@ use crate::geometry::Rect;
 const MAX_UNIFORM_CELLS: usize = 28;
 
 impl ConvolveMatrix {
-  /// Blink's `FEConvolveMatrix` as Skia's `SkMatrixConvolutionImageFilter` shader runs it, over
-  /// the `window` of `source`, a premultiplied layer `width` pixels wide, into the same pixels of
-  /// `out`. `duplicate` and `wrap` tile the window, and `none` reads the layer around it.
-  ///
-  /// Each pass adds one kernel entry times a whole row, so a pixel sums its entries in Skia's
-  /// order and the rows vectorize.
+  /// Blink's `FEConvolveMatrix` as Skia's `SkMatrixConvolutionImageFilter` runs it.
   pub(super) fn apply(
     &self,
     source: &[[u8; 4]],

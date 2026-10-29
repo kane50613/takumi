@@ -78,10 +78,7 @@ pub(crate) fn emit_run_glyphs(
   let fill_color = run.glyph_run.brush.color;
   let bold_join = font_style.parent.misc_inherited_data.stroke_linejoin;
 
-  // Plain outline glyphs are interned in glyph space (translation stripped) and
-  // emitted as `<use>` references, so repeated glyphs cost one outline plus a
-  // `<use>` per occurrence. Faux-bold, COLR layers, and bitmap glyphs need their
-  // own paint, so the accumulated run is flushed before each.
+  // Outline glyphs become `<use>` references to interned outlines, other glyphs paint their own.
   let fill = color_override.unwrap_or(Rgba(fill_color.0));
   let mut uses: Vec<(u32, f32, f32)> = Vec::new();
 

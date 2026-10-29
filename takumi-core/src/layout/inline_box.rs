@@ -1,7 +1,4 @@
-//! Resolving what an inline box paints.
-//!
-//! An inline content box paints as a box of the layout tree, so the only inline box a backend
-//! paints from its line is a replaced one, such as an image, where the line put it.
+//! What a replaced inline box paints where its line put it.
 
 use crate::{
   geometry::{ComputedLayout, Point},

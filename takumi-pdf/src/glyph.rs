@@ -147,11 +147,7 @@ impl Uncovered {
   }
 }
 
-/// The run's glyphs, each carrying the source text it maps to.
-///
-/// Dropping an uncovered glyph leaves its space behind, and a character sharing
-/// a cluster with a covered one still reaches the text layer through that
-/// neighbour's range.
+/// The run's glyphs, each with the source text it maps to.
 pub(crate) fn run_glyphs(
   shaped: &ShapedRun,
   run_text: &str,
@@ -182,11 +178,7 @@ pub(crate) fn run_glyphs(
     .collect()
 }
 
-/// Adds the characters that came out as `.notdef`.
-///
-/// Reads the shaper's own cluster spans, before they are merged for ToUnicode:
-/// a merged span covers its neighbour's text too, and the fallback span covers
-/// the whole run, either of which would blame characters that shaped fine.
+/// Adds the characters that came out as `.notdef`, from the shaper's unmerged clusters.
 fn collect_uncovered(
   shaped: &ShapedRun,
   run_text: &str,
@@ -203,10 +195,7 @@ fn collect_uncovered(
   }
 }
 
-/// Per-glyph byte ranges into `run_text`, from the shaper's cluster
-/// segmentation (correct for ligatures and complex scripts). `None` when the
-/// shaper's ranges do not line up with the glyphs, which leaves every glyph's
-/// text unknown rather than wrong.
+/// Each glyph's bytes in `run_text`, `None` when the clusters do not line up.
 fn cluster_spans(shaped: &ShapedRun, run_text: &str) -> Option<Vec<Range<usize>>> {
   if shaped.cluster_ranges.len() != shaped.glyphs.len() {
     return None;
@@ -227,12 +216,7 @@ fn cluster_spans(shaped: &ShapedRun, run_text: &str) -> Option<Vec<Range<usize>>
   )
 }
 
-/// Gives every glyph whose text overlaps its neighbour's the union of the two.
-///
-/// A consonant and its matra come back as two clusters over the same source
-/// text rather than a partition of it, so each glyph would map to the base
-/// character again. An identical range instead marks them as one cluster, which
-/// is what krilla needs to emit them under a single `/ActualText`.
+/// Merges overlapping glyph ranges, so krilla emits them under one `/ActualText`.
 fn merge_overlapping_spans(spans: &mut [Range<usize>]) {
   let mut group = 0;
 
@@ -253,10 +237,7 @@ fn spans_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
   left.start < right.end && right.start < left.end
 }
 
-/// A positioned glyph adapter. Offsets are stored em-normalized (position ÷ font
-/// size): krilla calls the accessors with `size = 1.0` for text-space math and
-/// with the real font size for cursor movement, so returning `stored × size`
-/// satisfies both. Advances stay zero — glyphs carry absolute offsets instead.
+/// A positioned glyph with em-normalized offsets, which krilla scales by the size it asks with.
 pub(crate) struct PdfGlyph {
   pub(crate) id: GlyphId,
   pub(crate) x_offset: f32,

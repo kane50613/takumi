@@ -259,8 +259,6 @@ impl Emitter<'_> {
   }
 
   /// Paints shadows, backgrounds, and borders in CSS order.
-  /// `background-clip` picks the shape a background fills, never when it
-  /// paints: the border draws over the ring, as it does in Blink.
   fn emit_decorations(
     &self,
     node: &RenderNode,
@@ -453,11 +451,7 @@ impl Emitter<'_> {
     Ok(())
   }
 
-  /// Paints `background-image` layers, bottom layer first, clipped to the
-  /// `background-clip` box. Gradient layers paint as shadings; `url()` layers
-  /// rasterize when the `images` feature is on. `background-origin` sets the
-  /// positioning area the size and position resolve against; a repeating
-  /// layer still tiles across the whole clip region.
+  /// Paints `background-image` layers bottom first, clipped to the `background-clip` box.
   fn emit_background_layers(
     &self,
     node: &RenderNode,
@@ -494,9 +488,7 @@ impl Emitter<'_> {
     });
   }
 
-  /// Draws one layer of a box whose border box sits at `origin`: a lone tile on its own, or
-  /// one tile in a pattern filling the layer's `dest`, so a repeated layer costs one shading
-  /// instead of one per tile. `tile_space` is the space the pattern's tile draws in.
+  /// Draws one layer, a repeated one as a single pattern tile.
   fn layer(
     &self,
     image: &BackgroundImage,
@@ -617,12 +609,8 @@ impl Emitter<'_> {
     surface.draw_path(&path);
   }
 
-  /// The krilla paint of one gradient layer, its geometry anchored at `(x, y)`
-  /// with `size` as the tile. `None` for layers that are not gradients.
-  ///
-  /// PDF 32000-1 8.7.3.1 resolves a pattern matrix against the default space of the stream the
-  /// pattern is used in, which a nested stream does not inherit; `pattern_space` carries what
-  /// krilla no longer composes.
+  /// The krilla paint of a gradient layer. `pattern_space` carries the stream's default space,
+  /// per PDF 32000-1 8.7.3.1.
   fn gradient_paint(
     &self,
     image: &BackgroundImage,
@@ -808,8 +796,6 @@ impl Emitter<'_> {
     }
   }
 
-  /// Draws a decoration inside an artifact sequence when tagging is on, so it
-  /// stays out of the structure tree.
   /// Paints `background`'s layers, `node`'s laid over `frame`, unclipped.
   fn paint_background_layers(
     &self,
@@ -888,10 +874,7 @@ impl Emitter<'_> {
   }
 
   #[cfg(feature = "images")]
-  /// Draws an image node into its content box, honoring `object-fit` and
-  /// `object-position`. SVG sources draw as vector ops; everything else
-  /// rasterizes at its intrinsic size and embeds once per distinct pixel data
-  /// (krilla dedups by content hash).
+  /// Draws an image node into its content box, an SVG as vector ops.
   fn emit_image(
     &self,
     image: &ImageData,
@@ -1089,9 +1072,7 @@ impl Emitter<'_> {
       origin: CorePoint { y, .. },
     } = frame;
 
-    // The caller opened a marked-content region for the text around these
-    // boxes. Marked content does not nest, so each box closes it, takes a
-    // region of its own, and hands it back.
+    // Marked content does not nest, so each box takes the caller's region over and hands it back.
     let owner_tagged = self.tagged && draws(&OwnContent::of(owner));
 
     for positioned in painted
@@ -1123,14 +1104,10 @@ impl Emitter<'_> {
         continue;
       };
 
-      // The box never reaches `emit_box`, so the state that would paint it
-      // there is applied here: its own opacity, and its `filter` composed onto
-      // the one the enclosing stacking contexts left.
+      // The opacity and `filter` `emit_box` would apply.
       let opacity = node.context.style.svg_data.opacity.0;
       let faded = opacity < 1.0;
-      // Its decorations are artifacts and marked content cannot nest within
-      // one stream, so the box's region wraps the whole box only when opacity
-      // moves it into a group of its own, and wraps just the content otherwise.
+      // Marked content cannot nest, so the region wraps the whole box only inside an opacity group.
       let box_tagged = cfg!(feature = "images") && self.tagged;
       let box_wrapped = box_tagged && faded;
 
@@ -1411,9 +1388,8 @@ impl Emitter<'_> {
     })
   }
 
-  /// Shears the text about the run's baseline, the faux oblique the raster renderer applies to
-  /// glyph outlines. Raster shears each glyph about its own origin, so a glyph shaping raises off
-  /// the baseline lands a quarter of the raise further along here.
+  /// Shears the text about the run's baseline for faux oblique. Approximate: raster shears each
+  /// glyph about its own origin.
   fn push_oblique(&self, shaped: &ShapedRun, origin: Point, surface: &mut Surface) -> bool {
     let Some(degrees) = shaped.synthetic_skew else {
       return false;
@@ -1484,9 +1460,7 @@ struct ChunkWriter<'w, 'a, 's> {
 }
 
 impl<'a> ChunkWriter<'_, 'a, '_> {
-  /// The box `paint` names and where it sits relative to the pushed transforms, pushing a
-  /// transform when it needs more than a translation, with the box set to paint the fragment
-  /// `paint` names. Returns how many states went on.
+  /// The box `paint` names and its offset, pushing a transform when needed; returns how many.
   fn place(
     &mut self,
     node: Option<&'a RenderNode>,
@@ -1725,9 +1699,7 @@ fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
 struct SurfaceDevice<'s, 'a> {
   surface: &'s mut Surface<'a>,
   filter: Option<&'s ColorFilter>,
-  /// Whether each fill opens an artifact region of its own. Opening one only
-  /// once something paints leaves no empty region behind, since marked
-  /// content does not nest.
+  /// Whether each fill opens an artifact region of its own.
   artifact: bool,
   /// Each open clip and layer, innermost last.
   stack: Vec<Saved>,
@@ -1781,9 +1753,7 @@ impl SurfaceDevice<'_, '_> {
     }
   }
 
-  /// Draws the path `build` makes at `transform`'s translation, with the rest
-  /// of `transform` pushed around it. A pure translation folds into the path,
-  /// which keeps the content stream free of a `cm` pair for every fill.
+  /// Draws the path `build` makes, folding a pure translation into it.
   fn draw(
     &mut self,
     transform: Affine,
@@ -2101,11 +2071,8 @@ struct GlyphBackground {
   clip: Option<KrillaPath>,
 }
 
-/// The PDF surface as a [`PaintDevice`] for one block's text: shapes draw as on any surface, and
-/// glyphs draw with text operators so the text stays extractable.
-///
-/// Approximate: a blurred `text-shadow` fades through the stepped bands of [`Band`], since PDF has
-/// no blur operator.
+/// The PDF surface as a [`PaintDevice`] for one block's text, glyphs drawn as extractable text.
+/// Approximate: a blurred `text-shadow` steps through [`Band`]s.
 struct TextDevice<'e, 'x, 's, 'a> {
   emitter: &'e Emitter<'x>,
   device: SurfaceDevice<'s, 'a>,
@@ -2119,11 +2086,7 @@ struct TextDevice<'e, 'x, 's, 'a> {
 }
 
 impl TextDevice<'_, '_, '_, '_> {
-  /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
-  /// Runs `draw` once in `color` with no spread, or while a blurred shadow is open, once per shadow
-  /// [`Band`] with the stroke width that spreads it, inside a group of the band's opacity. The
-  /// bands draw `color` opaque inside one group of its alpha, since their alphas add up to the
-  /// blur's coverage for an opaque colour.
+  /// Runs `draw` once, or once per shadow [`Band`] while a blurred shadow is open.
   fn in_shadow_bands(
     &mut self,
     color: Color,
@@ -2340,9 +2303,8 @@ impl GlyphDevice for TextDevice<'_, '_, '_, '_> {
     self.paint_glyph_run(run, frame, fills.as_deref().unwrap_or_default(), with_paint);
   }
 
-  /// Approximate: PDF viewers disagree on where the patterns inside a soft-mask group land, so each
-  /// shape and glyph of the mask paints the fills on its own instead. A translucent background then
-  /// stacks where they overlap, where Blink fills it once through the whole mask.
+  /// Approximate: each shape of the mask paints the fills itself, since viewers disagree on
+  /// patterns in a soft mask.
   fn fill_text_clip(
     &mut self,
     background: &StripBackground<'_>,
@@ -2420,9 +2382,7 @@ impl TextDevice<'_, '_, '_, '_> {
     let surface = &mut *self.device.surface;
     let oblique = self.emitter.push_oblique(shaped, origin, surface);
 
-    // Outlined: text extraction keys on the text-showing operator, whatever the rendering mode,
-    // so glyphs drawn a second time for a shadow or a background would put the text in the text
-    // layer twice. Paths paint the same pixels and stay out of it.
+    // Outlined, so the text layer holds the text once.
     if shadow_color.is_none() {
       for background in fills {
         if let Some(clip) = &background.clip {

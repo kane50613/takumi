@@ -76,10 +76,8 @@ pub fn write_animated_webp<W: Write>(
   )
 }
 
-/// Streams frames into an animated WebP, encoding each as it arrives so only one
-/// raw frame is held at a time. Only the compact encoded frames are retained,
-/// since the RIFF container needs every frame's size before the first byte is
-/// written.
+/// Encodes frames into an animated WebP as they arrive, holding the pending and next raw frames
+/// and every encoded frame until the container is written.
 pub(crate) fn encode_animated_webp<W, I>(
   mut frames: I,
   destination: &mut W,

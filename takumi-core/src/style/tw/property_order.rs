@@ -411,9 +411,7 @@ pub(super) fn property_index(name: &str) -> Option<u16> {
   INDEX.get(name).copied()
 }
 
-/// Where the properties that write `longhands` sort, reading each run of longhands back as the
-/// earliest listed property covering it, so `margin-inline` stands for the two longhands takumi
-/// expands it to.
+/// Where the properties writing `longhands` sort, each run read as the earliest covering property.
 pub(super) fn property_indices(mut longhands: PropertyMask) -> impl Iterator<Item = u16> {
   let mut positions: SmallVec<[u16; 8]> = longhands
     .iter()

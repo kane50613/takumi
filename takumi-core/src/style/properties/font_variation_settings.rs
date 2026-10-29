@@ -21,10 +21,7 @@ impl FontVariation {
   }
 }
 
-/// Controls variable font axis values via CSS font-variation-settings property.
-///
-/// This allows fine-grained control over variable font characteristics like weight,
-/// width, slant, and other custom axes defined in the font.
+/// The `font-variation-settings` property.
 pub(crate) type FontVariationSettings = Arc<[FontVariation]>;
 
 impl MakeComputed for FontVariationSettings {}

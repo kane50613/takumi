@@ -25,11 +25,7 @@ use crate::{
 /// not a document anyone reads; it is a way to spend a renderer's memory.
 pub(crate) const MAX_PAGES: usize = 20_000;
 
-/// How many times pagination reruns to settle page counters. A counter widens
-/// the line it sits on, which can move a break, which can renumber the counter.
-/// The second pass numbers a laid-out document, the third confirms the numbers
-/// did not move, and a document still moving after that keeps the last pass's
-/// numbers.
+/// How many passes pagination takes to settle page counters, which can move breaks.
 const COUNTER_PASSES: usize = 3;
 
 /// Whether laying a tree out reads numbers the layout itself produces: a page counter, or the page
@@ -106,10 +102,7 @@ pub(crate) enum Counted {
 }
 
 impl Counted {
-  /// Counts the pages `node` lays out on in `frame`, refilling the page counters it holds until
-  /// the numbers stop moving, and finds the elements its links name. Each pass frees the pages
-  /// `settle` says are settled. A counter inside a repeated box is left to that box, which lays
-  /// out again per page with its own numbers.
+  /// Counts `node`'s pages until its counters settle, and finds the elements its links name.
   pub(crate) fn settle(
     mut node: Node,
     inputs: &TreeInputs<'_>,
@@ -269,9 +262,7 @@ impl CountingPass {
   }
 }
 
-/// The content laid out across pages, with the `fixed` boxes that repeat on every page and the
-/// interactive targets the pages draw from. The pages stack in the content's coordinates, each the
-/// page area tall.
+/// The content laid out across pages, with its repeated `fixed` boxes and link targets.
 pub(crate) struct Paginated {
   pub(crate) content: PagedContent,
   /// Which of the content's root fragments paint on each page.

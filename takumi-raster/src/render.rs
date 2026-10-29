@@ -231,9 +231,7 @@ pub(crate) fn render_pages_settling<'g>(
   }
 }
 
-/// Rasterizes `node` under an already-built [`RenderContext`]. The context
-/// carries the font snapshot, images, and stylesheet, so animation frames share
-/// one snapshot instead of re-snapshotting per frame.
+/// Rasterizes `node` under a [`RenderContext`] frames share.
 fn render_with_context(
   render_context: RenderContext,
   node: Node,
@@ -244,12 +242,7 @@ fn render_with_context(
   render_scene(&scene)
 }
 
-/// A scene with its per-frame-invariant render state precomputed: the font
-/// snapshot and the shared image table do not change between frames of the
-/// same scene, so they are built once and cheaply cloned per frame instead of
-/// rebuilt (and the whole option tree deep-cloned) each time.
-///
-/// This is the seam where wider per-frame layout reuse would later live.
+/// A scene with the state its frames share built once.
 pub(crate) struct PreparedScene<'a, 'g> {
   scene: &'a SequentialScene<'g>,
   fonts: FontsSnapshot,
@@ -365,9 +358,7 @@ fn total_sequence_duration<'g>(scenes: &[SequentialScene<'g>]) -> u64 {
     .sum::<u64>()
 }
 
-/// Resolves which scene of a `count`-long timeline is active at `time_ms` and the
-/// time offset within it, using `duration_ms(index)` for each scene's length.
-/// Times past the end clamp to the last scene's final millisecond.
+/// The scene active at `time_ms` and the time into it, clamped to the last scene.
 fn resolve_at_time(
   count: usize,
   duration_ms: impl Fn(usize) -> u32,

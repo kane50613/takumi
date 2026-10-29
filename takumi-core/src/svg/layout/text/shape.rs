@@ -26,10 +26,7 @@ use crate::{
   text::bidi_paragraph::{BidiParagraph, Run, direction_from_level},
 };
 
-/// A glyph that has already been positioned correctly.
-///
-/// The transform takes the font size into account, so applying it to the outline of the glyph is
-/// all that is needed to display it.
+/// A positioned glyph, its transform including the font size.
 #[derive(Clone)]
 pub(super) struct PositionedGlyph {
   /// The transform of the glyph within its cluster, which places the marks of zalgo text.
@@ -303,9 +300,7 @@ impl TextChunk {
       .collect()
   }
 
-  /// Shapes the chunk through `HarfBuzzShaper` and spaces it through `ShapeResultSpacing`, in
-  /// visual order. Spans shape with their own font and spacing, so a bidi run is shaped piece by
-  /// piece where the font changes.
+  /// Shapes and spaces the chunk in visual order, each span in its own font.
   fn shape(&self, faces: &mut FontFaces) -> Vec<Glyph> {
     let shaper = HarfBuzzShaper::new(&self.text);
     let mut spacing = ShapeResultSpacing::new(&self.text, true);

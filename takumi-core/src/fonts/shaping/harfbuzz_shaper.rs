@@ -328,10 +328,8 @@ fn queue_characters(
   ));
 }
 
-/// Whether `font` draws the variation sequence `text` starts with in a way the sequence does not
-/// ask for, Blink's `HarfBuzzGetGlyph` answering `kUnmatchedVSGlyphId`. Approximate: Blink marks
-/// the glyph in a HarfBuzz callback, which harfrust lacks, so the cluster is checked after shaping
-/// with the same rules.
+/// Blink's `HarfBuzzGetGlyph` answering `kUnmatchedVSGlyphId` for `text`'s variation sequence.
+/// Approximate: checked after shaping, as harfrust has no glyph callback.
 fn is_unmatched_variation_sequence(font: &SimpleFontData, text: &str) -> bool {
   let mut characters = text.chars();
   let (Some(character), Some(selector)) = (characters.next(), characters.next()) else {
@@ -719,9 +717,7 @@ impl<'t> HarfBuzzShaper<'t> {
         && !fallback_stage.is_last_font_to_shape()
         && self.text[current_cluster..].starts_with(IDEOGRAPHIC_SPACE)
       {
-        // HarfBuzz draws U+3000 with the space glyph, which run splitting, features, and
-        // `line-height` should not take: crbug.com/1193282 and
-        // https://github.com/harfbuzz/harfbuzz/issues/2889.
+        // HarfBuzz draws U+3000 with the space glyph (crbug.com/1193282, harfbuzz#2889).
         ClusterResult::NotDef
       } else if !ignore_variation_selectors
         && is_unmatched_variation_sequence(current_font, &self.text[current_cluster..shape_end])
@@ -963,8 +959,6 @@ mod tests {
       .collect()
   }
 
-  /// A font without `smcp` draws lowercase letters as uppercase ones at 70% of the size, and
-  /// leaves uppercase ones.
   /// Whether each run of `text` draws from a color font, with no `.notdef` glyph.
   fn run_colors(font: &Font, text: &str) -> Vec<bool> {
     prefix_run_colors(font, text, text.len())
@@ -1232,9 +1226,7 @@ mod tests {
     assert_eq!(runs(&rtl), [(3, max, max - 1, latin), (0, 3, 2, latin)]);
   }
 
-  /// Blink's `MaxGlyphsClusterLatin2`, in UTF-8 bytes. The right-to-left run keeps its end, so it
-  /// spans one byte past `MAX_CHARACTERS` while its last cluster still starts within
-  /// `MAX_CHARACTER_INDEX`.
+  /// Blink's `MaxGlyphsClusterLatin2`, in UTF-8 bytes.
   #[test]
   fn max_glyphs_cluster_latin2() {
     let (_fonts, font) = geist();

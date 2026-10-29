@@ -172,9 +172,7 @@ impl<'r> PagedLayout<'r> {
     Ok(true)
   }
 
-  /// Frees what the layout finished with while laying out the first `pages` pages, which no page
-  /// still to be laid out, painted, or summarized reads. Does nothing unless the layout is made
-  /// [`Self::with_release`].
+  /// Frees what no later page reads after the first `pages`, when made [`Self::with_release`].
   pub fn release(&mut self, pages: usize) {
     self.tree.release(pages);
   }

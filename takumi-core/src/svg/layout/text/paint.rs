@@ -1,6 +1,4 @@
-//! Text as the shapes and pictures it paints, after usvg's text flattening: each glyph is its
-//! outline in the fill and stroke of its span, a color glyph its layers, and a bitmap glyph a
-//! picture, in the order Blink paints a span: overline, underline, glyphs, then line-through.
+//! Text as the shapes and pictures it paints, after usvg's text flattening.
 
 use std::rc::Rc;
 
@@ -265,9 +263,7 @@ impl TextPainter<'_> {
     );
   }
 
-  /// Paints the bitmap `glyph` placed by `transform` in the fill opacity of the span, as Skia
-  /// draws a color glyph in its own colors and the alpha of the paint. A span without a fill
-  /// paints none.
+  /// Paints the bitmap `glyph` in the span's fill opacity, as Skia draws a color glyph.
   fn paint_bitmap(&mut self, span: &LaidOutSpan, glyph: &ResolvedGlyph, transform: Affine) {
     let ResolvedGlyph::Bitmap(bitmap) = glyph else {
       return;
@@ -300,9 +296,7 @@ impl TextPainter<'_> {
 }
 
 impl LaidOutSpan {
-  /// The fills of a COLR glyph's layers over the fill of the span, as the raster backend paints
-  /// them, with their outlines. Empty for a span without a fill, which paints the outline of the
-  /// glyph instead.
+  /// The fills of a COLR glyph's layers, as the raster backend paints them.
   fn color_layer_fills(
     &self,
     outline: &ResolvedOutlineGlyph,

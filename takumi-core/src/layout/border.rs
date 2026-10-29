@@ -847,9 +847,7 @@ pub struct BorderDash {
   pub round_cap: bool,
 }
 
-/// Butt-capped dashes of `dash` with gaps near `gap` fitted to `length`, or `None` when two
-/// dashes do not fit and the line draws solid. `spread` stretches the gaps so the line ends on a
-/// dash.
+/// Dashes fitted to `length`, or `None` when two do not fit and the line draws solid.
 fn square_dash(dash: f32, gap: f32, length: f32, closed: bool, spread: bool) -> Option<BorderDash> {
   if length <= dash * 2.0 {
     return None;

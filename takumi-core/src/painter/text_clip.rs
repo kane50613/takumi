@@ -86,10 +86,7 @@ impl<'s> TextClip<'s> {
   }
 }
 
-/// The boxes of one layout drawing their text into a text clip, as `kTextClip` reaches them: every
-/// box but a float in a layer of its own, and an out-of-flow box only when its containing block is
-/// one of them laying out no inline content. Each sits where layout alone puts it, without its
-/// transform or effects.
+/// The boxes drawing their text into a text clip, as Blink's `kTextClip` reaches them.
 struct TextMask<'r> {
   results: LayoutView<'r>,
   containing_blocks: ContainingBlocks<Point<f32>>,

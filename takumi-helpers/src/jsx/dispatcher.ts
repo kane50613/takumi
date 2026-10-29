@@ -1,11 +1,8 @@
 import type { ReactNode } from "react";
 
 /**
- * Hooks read the active dispatcher from React's shared internals; only a
- * renderer installs one. Installing a minimal server-semantics dispatcher
- * (initial state, no effects) around synchronous component calls resolves hooks
- * without react-dom/server, the same way react-ssr-prepass does:
- * https://github.com/FormidableLabs/react-ssr-prepass
+ * A server-semantics hooks dispatcher installed around component calls, as
+ * https://github.com/FormidableLabs/react-ssr-prepass does.
  */
 
 // React 19 and 18 internals keys; both shapes are feature-detected below.
@@ -135,11 +132,7 @@ function createDispatcher(env: RenderEnv, callId: number): Record<string, unknow
 // would otherwise replay forever (React warns on the same pattern).
 const MAX_THENABLE_REPLAYS = 64;
 
-/**
- * Calls a function component with the dispatcher installed, replaying the call
- * when `use()` throws a pending thenable. Without React (or with unrecognized
- * internals) the component is called bare, so hook-free components still work.
- */
+/** Calls a function component under the dispatcher, replaying it while `use()` suspends. */
 export async function callWithDispatcher(
   component: (props: unknown) => ReactNode,
   props: unknown,

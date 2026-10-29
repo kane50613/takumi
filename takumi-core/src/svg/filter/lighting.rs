@@ -103,9 +103,7 @@ impl Lighting {
     }
   }
 
-  /// Lights the `window` of `out` from the alpha of `source`, a premultiplied layer `width` pixels
-  /// wide, as Skia's `sk_normal` and `sk_lighting` shaders do. Samples clamp to `edges`, and read
-  /// transparent past the layer.
+  /// Lights `window` from `source`'s alpha, as Skia's `sk_normal` and `sk_lighting` do.
   pub(super) fn apply(
     &self,
     source: &[[u8; 4]],

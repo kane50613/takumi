@@ -89,12 +89,8 @@ fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
   }
 }
 
-/// Rasterizes an image source into a krilla image. Encoded bytes pass through
-/// undecoded unless a filter has to run over the pixels; bitmap sources
-/// rasterize at their intrinsic size. An SVG source draws as ops instead and has nothing here.
-///
-/// `Ok(None)` is a source with nothing to draw, `Err` one that should have
-/// drawn and could not.
+/// An image source as a krilla image, `Ok(None)` for no raster image, such as an SVG the vector
+/// path draws.
 #[cfg(feature = "images")]
 pub(crate) fn rasterized_image(
   source: &ImageSource,
@@ -308,9 +304,7 @@ impl From<BlendMode> for KrillaBlendMode {
   }
 }
 
-/// Fills the page box before the page draws anything else. An unset color
-/// leaves the page empty rather than painting white, like Chromium's print
-/// path.
+/// Fills the page box, an unset color leaving it empty as Chromium's print path does.
 pub(crate) fn paint_page_background(color: Option<Color>, size: Size<f32>, surface: &mut Surface) {
   let Some(color) = color else {
     return;

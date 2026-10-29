@@ -16,10 +16,7 @@ use crate::style::{
   unexpected_token,
 };
 
-/// Radii of the ellipse through `corner`, as Blink's `EllipseRadius`
-/// (css-images-3 §3.2.1: a corner-sized ellipse keeps the matching side
-/// keyword's aspect ratio, which puts both radii at `sqrt(2)` times the
-/// corner offsets). A corner on an axis leaves no ellipse to size.
+/// The radii of the ellipse through `corner`, as Blink's `EllipseRadius`.
 fn ellipse_radii_through((x, y): (f32, f32)) -> (f32, f32) {
   if x == 0.0 || y == 0.0 {
     return (0.0, 0.0);

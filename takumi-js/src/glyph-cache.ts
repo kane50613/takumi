@@ -1,8 +1,4 @@
-/**
- * Just the part of a backend this module touches. Structural, so the module never
- * imports the backend, which would drag `#backend` into the types of every entry point
- * that re-exports {@link setGlyphCacheMaxBytes}.
- */
+/** The part of a backend this module touches, structural so no entry point's types import `#backend`. */
 type GlyphCacheBackend = {
   setGlyphCacheMaxBytes: (bytes: number) => void;
 };
@@ -11,17 +7,8 @@ let maxBytes: number | undefined;
 let loaded: GlyphCacheBackend | undefined;
 
 /**
- * Sets the byte budget shared by the resolved-glyph and glyph-mask caches; `0` stops
- * caching. Defaults to 8 MiB.
- *
- * The caches belong to the backend rather than to a renderer, so this budget covers
- * every render the process makes. The backend reads it when a cache is first used, so
- * call this before the first render; a later call does not resize a cache already in
- * use.
- *
- * Raise it for scripts with large glyph sets: a CJK outline runs a few kilobytes, so
- * the default holds around a thousand of them and a page of Chinese re-rasterizes
- * glyphs it evicted a moment earlier.
+ * Sets the byte budget of the process-wide glyph caches, 8 MiB by default and `0` to stop caching.
+ * Call it before the first render. Raise it for CJK text, whose glyphs outgrow the default.
  */
 export function setGlyphCacheMaxBytes(bytes: number): void {
   maxBytes = bytes;

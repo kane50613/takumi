@@ -19,9 +19,6 @@ const KAPPA: f32 = 0.552_284_8;
 
 impl BasicShape {
   /// Resolves the shape against a border box, in the box's own coordinates.
-  ///
-  /// The commands are unclosed for `path()`, which carries its own closes, and
-  /// closed for the shapes that describe a region.
   pub(crate) fn path_commands(&self, context: &RenderContext, size: Size<f32>) -> Vec<PathCommand> {
     let mut commands = Vec::new();
 
@@ -224,9 +221,6 @@ pub(crate) fn push_ellipse(
   commands.close();
 }
 
-/// The keyword radii measure to the sides on the shape's own axis, so both
-/// distances come from the same edge pair: the center's coordinate and what is
-/// left of the box beyond it.
 /// One radius of an ellipse centred at `center` on an axis `full` long.
 fn resolve_radius(radius: ShapeRadius, center: f32, sizing: &SizingContext, full: f32) -> f32 {
   let [near, far] = side_distances(center, full);

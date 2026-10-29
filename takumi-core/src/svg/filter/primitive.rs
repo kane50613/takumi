@@ -1,6 +1,4 @@
-//! The filters of an SVG document as Blink builds them from `filter` elements, after Blink's
-//! `FilterEffect` graph: each primitive has its inputs, its subregion, and its color space, all
-//! resolved to user space, so applying a filter never reads the document again.
+//! An SVG document's filters as Blink's `FilterEffect` graph, resolved to user space.
 
 use crate::{
   filter::ColorMatrixChain,

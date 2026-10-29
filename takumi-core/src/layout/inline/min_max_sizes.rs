@@ -39,9 +39,7 @@ struct FloatsMaxSize {
 }
 
 impl FloatsMaxSize {
-  /// Blink's `ComputeMaxSizeForLine`: a line's size with the floats beside it. A float that clears
-  /// the one before it starts a "line" of its own, unlike block layout, which resets only the
-  /// side it clears.
+  /// Blink's `ComputeMaxSizeForLine`.
   fn compute_max_size_for_line(
     &mut self,
     line_inline_size: LayoutUnit,
@@ -79,9 +77,7 @@ impl FloatsMaxSize {
 }
 
 impl<'c> InlineNode<'c> {
-  /// Blink's `ComputeMinMaxSizes`: the min-content size, the widest line when every opportunity
-  /// breaks, and the max-content size, the widest line when only forced breaks do. Kept for text
-  /// alone, as Blink keeps a box's intrinsic sizes until its content changes.
+  /// Blink's `ComputeMinMaxSizes`, kept for text alone.
   pub(crate) fn compute_min_max_sizes(
     self,
     items_data: &InlineNodeData<'c>,

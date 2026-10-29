@@ -97,9 +97,7 @@ impl SvgLayout<'_> {
     Self::fit_image(picture, aspect, size, rect, parent)
   }
 
-  /// The picture `content` draws into `rect`, and its size. An SVG lays out at the container size
-  /// Blink's `SVGImagePainter::ComputeImageViewportSize` gives it: the rectangle, or the concrete
-  /// object size in it when `aspect` stretches.
+  /// The picture `content` draws into `rect`, sized as Blink's `ComputeImageViewportSize`.
   pub(super) fn picture_content(
     &mut self,
     content: ImageContent,

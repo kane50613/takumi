@@ -43,14 +43,10 @@ use crate::{
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 
-/// Pixel buffers above this pixel count are refused rather than allocated. At 4
-/// bytes per pixel the largest accepted buffer is 1 GiB, which still fits the
-/// 32-bit `usize` of the wasm target.
+/// The largest pixel buffer allocated, 1 GiB, which fits wasm's 32-bit `usize`.
 const MAX_BUFFER_PIXELS: u64 = 1 << 28;
 
-/// Byte length of a `width * height` pixel buffer, or `None` when it is empty or
-/// over [`MAX_BUFFER_PIXELS`]. Guards the `u32` products that a huge blur radius
-/// or node size would otherwise wrap.
+/// The byte length of a `width * height` buffer, `None` when empty or past [`MAX_BUFFER_PIXELS`].
 #[inline]
 pub(crate) fn checked_area(width: u32, height: u32, bytes_per_pixel: u32) -> Option<usize> {
   let pixels = u64::from(width).saturating_mul(u64::from(height));
@@ -108,10 +104,7 @@ fn whole_pixel_translation(transform: Affine) -> Option<Point<f32>> {
     })
 }
 
-/// Borrowed view of the active paint destination: the pixmap and the canvas's
-/// combined constraint mask. Primitives take this instead of threading
-/// `(pixmap, mask, size)` separately, so a materialized mask always matches
-/// the pixmap it clips.
+/// The active pixmap with the canvas's combined constraint mask.
 pub(crate) struct DrawTarget<'a, 'p> {
   pub pixmap: &'a mut PixmapMut<'p>,
   pub combined_mask: Option<MaskView<'a>>,
@@ -157,9 +150,7 @@ enum SubcanvasClips {
 }
 
 impl Canvas {
-  /// Creates a canvas backed by a `size`-sized pixmap, or `None` when the pixmap
-  /// cannot be allocated (zero size, over the pixel budget, or dimensions large
-  /// enough to overflow the pixel-buffer length).
+  /// A canvas of `size`, or `None` when the pixmap cannot be allocated.
   pub(crate) fn try_new(size: Size<u32>) -> Option<Self> {
     if !within_pixmap_pixel_budget(size) {
       return None;

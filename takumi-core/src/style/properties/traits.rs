@@ -52,9 +52,7 @@ impl<'i> From<Cow<'i, str>> for ValueError<'i> {
   }
 }
 
-/// Owned error returned by [`FromCssStr::from_css_str`]. Carries a
-/// human-readable message and borrows nothing from the parser, keeping
-/// `cssparser` out of the public API.
+/// The error of [`FromCssStr::from_css_str`], keeping `cssparser` out of the public API.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
   message: String,
@@ -420,9 +418,7 @@ macro_rules! impl_list_animatable {
 
 impl_list_animatable!(Box<[T]>, Arc<[T]>, Vec<T>);
 
-// Matches Blink's `kRepeatableListMaxLength` (list_interpolation_functions.cc);
-// transitions restarted on an already-animating value otherwise compound the
-// LCM expansion until it exhausts memory. See crbug.com/739197.
+// Blink's `kRepeatableListMaxLength`, bounding the LCM expansion (crbug.com/739197).
 const MAX_INTERPOLATED_LIST_LEN: usize = 1000;
 
 fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>>(
@@ -540,15 +536,10 @@ fn interpolate_neutral_padded_list<T: Animatable + Clone>(
 
 /// Serialize a style value to its CSS string representation.
 pub trait ToCss {
-  /// Separator used between items when this type is serialized in a `Vec`/`[T]`
-  /// list. Defaults to `", "`; space-separated grammars (e.g. `filter`, grid
-  /// track lists) override it.
+  /// The separator between list items, `", "` unless the grammar is space-separated.
   const LIST_SEPARATOR: &'static str = ", ";
 
-  /// Keyword an empty `Vec`/`[T]` list of this type serializes to instead of an
-  /// empty string (`none` for `filter`/`grid-template-*`, `normal` for
-  /// `font-feature-settings`/`font-variation-settings`). `None` keeps the empty
-  /// string.
+  /// The keyword an empty list serializes to, such as `none`, or `None` for an empty string.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = None;
 
   /// Write the CSS representation of this value into `dest`.

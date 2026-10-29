@@ -321,9 +321,7 @@ impl FlexLayoutAlgorithm<'_, '_> {
       })));
   }
 
-  /// Blink's `HandleOutOfFlowPositionedItems` part for fragmentation: whether this fragment places
-  /// the out-of-flow children at the block end and block center, which a later page holds when the
-  /// container goes on there.
+  /// Whether this fragment places the out-of-flow children at the block end and center.
   pub(super) fn out_of_flow_block_edges(
     &mut self,
     total_intrinsic_block_size: LayoutUnit,

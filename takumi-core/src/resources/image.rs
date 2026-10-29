@@ -1,7 +1,4 @@
-//! Image resource management for the takumi rendering system.
-//!
-//! This module provides types and utilities for managing image resources,
-//! including loading states, error handling, and image processing operations.
+//! Image sources, their decoding, and the cache of decoded resources.
 
 #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 use super::animated::AnimatedFormat;
@@ -399,11 +396,7 @@ impl From<SvgSource> for ImageSource {
   }
 }
 
-/// An encoded bitmap (PNG/JPEG/WebP) that decodes lazily at draw time, scaled
-/// down to the box it is drawn into. Decoded results are stored in the owning
-/// [`ResourceCache`] keyed by content and target size, so a source drawn at a
-/// stable size decodes once while the retained bytes track the draw size, not
-/// the source size.
+/// An encoded bitmap that decodes at draw time, downscaled to its box and cached by content and size.
 #[derive(Debug)]
 pub struct EncodedBitmap {
   bytes: Box<[u8]>,
@@ -424,9 +417,7 @@ impl EncodedBitmap {
     &self.bytes
   }
 
-  /// Decoded buffer covering a `width` x `height` draw box, downscaled with
-  /// `algorithm`'s filter but never upscaled. Returns the buffer and its scale
-  /// relative to the source dimensions.
+  /// The buffer for a `width` x `height` box, never upscaled, and its scale from the source.
   fn decode_at(
     &self,
     width: u32,
@@ -524,20 +515,13 @@ impl ImageSource {
     }
   }
 
-  /// Load an image source from raw bytes.
-  ///
-  /// - When the `svg` feature is enabled and the bytes look like SVG XML, they
-  ///   are parsed as an SVG document.
-  /// - Otherwise, the bytes are decoded as a raster image.
+  /// Loads an image from bytes, as an SVG document when they look like one.
   pub fn from_bytes(bytes: &[u8]) -> ImageResult {
     Self::from_svg_or_animated_bytes(bytes, || xxh3_64(bytes), &Weak::new())
       .unwrap_or_else(|| Self::from_still_bytes(bytes))
   }
 
-  /// [`from_bytes`](Self::from_bytes), but bitmaps stay encoded and decode at
-  /// draw size, and SVG rasters go into `cache`. Sized entries go into `cache`
-  /// while it is alive; a dead handle (inline node bytes, data URIs) decodes
-  /// per render.
+  /// [`from_bytes`](Self::from_bytes), with bitmaps decoding at draw size into `cache`.
   pub(crate) fn from_bytes_lazy(
     bytes: &[u8],
     hash: u64,
@@ -620,10 +604,7 @@ impl ImageSource {
     }
   }
 
-  /// Prepare image data for layout rendering.
-  ///
-  /// Bitmap images share their buffer so the renderer can sample them
-  /// directly. SVG images are rasterized to a bitmap first.
+  /// The image as a bitmap, an SVG rasterized first.
   pub fn render_for_layout(
     &self,
     width: u32,
@@ -753,9 +734,7 @@ pub(crate) enum DataUriError {
   Undecodable,
 }
 
-/// Decodes a `data:` URI. A raw `#` in the body (hex colors, `url(#id)` in
-/// inline SVG) is a URL fragment delimiter and would truncate it, so it is
-/// escaped first.
+/// Decodes a `data:` URI, escaping a raw `#` that would otherwise end it as a fragment.
 pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError> {
   let escaped = src.split_once(',').and_then(|(header, body)| {
     body
@@ -772,11 +751,7 @@ pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError>
   Ok(DecodedDataUri { mime, bytes })
 }
 
-/// Applies SVG `<filter>` markup (carrying `id="{filter_id}"`) to a premultiplied-RGBA layer in
-/// place.
-///
-/// The markup is resolved against the layer bounds and applied straight to the layer pixels; no
-/// render tree is built and nothing is re-encoded.
+/// Applies the SVG `<filter>` with `id="{filter_id}"` to a premultiplied-RGBA layer in place.
 #[cfg(feature = "svg-raster")]
 pub fn apply_svg_filter(
   layer: &mut [u8],
@@ -866,10 +841,7 @@ pub fn to_data_url(mime: &str, bytes: &[u8]) -> String {
   out
 }
 
-/// Represents the state of an image in the rendering system.
-///
-/// This enum tracks whether an image has been successfully loaded and decoded,
-/// or if there was an error during the process.
+/// An image, loaded or failed.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ImageError {
@@ -919,15 +891,11 @@ impl ImageError {
   }
 }
 
-/// Resource budget before entries start getting evicted. Deliberately
-/// conservative: a single-template server's working set fits comfortably, and
-/// heavier workloads raise it through [`ResourceCache::new`].
+/// The default byte budget, which [`ResourceCache::new`] raises for heavier workloads.
 const DEFAULT_MAX_BYTES: u64 = 64 << 20;
 
-/// Bytes each cache shard holds. An entry over 97% of its shard is never
-/// admitted, so a shard has to be large enough for one decoded photo.
-/// `quick_cache` rounds the shard count up to a power of two, so the count is
-/// rounded down first to keep this floor.
+/// Bytes each shard holds, enough for one decoded photo, since `quick_cache` rejects an entry over
+/// 97% of its shard.
 const SHARD_BYTES: u64 = 64 << 20;
 
 /// Cache policy for a decoded image, applied per [`ResourceCache::get_or_decode`] call.
@@ -942,9 +910,7 @@ pub enum ImageCacheMode {
   None,
 }
 
-/// Cache key: the content hash alone addresses a source entry; a target size
-/// and filter address a decoded-at-size entry; a stylesheet hash addresses a
-/// parsed sheet. `kind` keeps the hash domains apart.
+/// A cache key: a source, a decode at a size and filter, or a parsed sheet, told apart by `kind`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ResourceCacheKey {
   hash: u64,
@@ -1017,9 +983,7 @@ impl Weighter<ResourceCacheKey, CacheEntry> for ResourceWeighter {
 
 pub(crate) type SharedResourceCache = Cache<ResourceCacheKey, CacheEntry, ResourceWeighter>;
 
-/// Content-addressed store of decoded render resources — images, SVG rasters,
-/// parsed stylesheets — sharing one byte budget, used by the renderer to avoid
-/// re-decoding and re-parsing. Clones share the same store.
+/// Decoded images, SVG rasters, and parsed stylesheets under one byte budget, shared by clones.
 #[derive(Clone)]
 pub struct ResourceCache {
   cache: Arc<SharedResourceCache>,
@@ -1064,11 +1028,8 @@ impl ResourceCache {
     }
   }
 
-  /// Returns the decoded image for `bytes`, decoding on a miss and caching it unless `mode`
+  /// The decoded image for `bytes`, decoded once across concurrent misses and cached unless `mode`
   /// is [`ImageCacheMode::None`].
-  ///
-  /// When caching, concurrent misses for the same bytes are single-flighted: one thread
-  /// decodes while the others wait, so each unique image is decoded once.
   pub fn get_or_decode(&self, bytes: &[u8], mode: ImageCacheMode) -> ImageResult {
     let hash = xxh3_64(bytes);
     let key = ResourceCacheKey::source(hash);
@@ -2004,9 +1965,8 @@ mod tests {
     assert!(!apng.stands_alone(1));
   }
 
-  /// The shape most transparent GIFs take: a full-canvas first frame, then
-  /// subframes that each clear back to the background. A frame after such a
-  /// clear starts from a blank canvas, so it needs nothing before it.
+  /// A full-canvas first frame and subframes that clear to the background, as most transparent
+  /// GIFs are.
   #[cfg(feature = "gif")]
   #[test]
   fn a_frame_after_a_background_dispose_stands_alone() {

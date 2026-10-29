@@ -28,10 +28,8 @@ use crate::{
   svg_drawing::{draw as draw_svg, draw_over, tiny_blend_mode},
 };
 
-/// A primitive result: the pixels of the filter region, and where they hold data.
-///
-/// The pixels hold the colors before `filters`, which Skia's `FilterResult` likewise defers so a
-/// run of color filters stores bytes once. Every reader but a pointwise primitive resolves them.
+/// A primitive's pixels over the filter region, with `filters` deferred as Skia's `FilterResult`
+/// defers them.
 #[derive(Clone)]
 struct Image {
   pixmap: Rc<Pixmap>,
@@ -240,9 +238,7 @@ impl SvgFilter {
     Some((image.into_color_space(ColorSpace::Srgb), region))
   }
 
-  /// Applies the filter to a premultiplied RGBA layer in place. It runs on a pixmap that covers
-  /// the part of the region the layer overlaps, with the layer placed at the region offset and
-  /// the window copied back afterwards. None when the pixmap is empty or past the raster budget.
+  /// Applies the filter to a premultiplied RGBA layer in place, `None` past the raster budget.
   pub(crate) fn apply_to_layer(&self, layer: &mut [u8], width: u32, height: u32) -> Option<()> {
     // The pixels of the region with its top-left corner at the origin, which the layer sits within
     // at `dx`, `dy`.
@@ -343,9 +339,7 @@ impl Run<'_> {
     Some(image)
   }
 
-  /// Drops the results that no later primitive reads, so the pixels of a result that its last
-  /// reader holds alone are taken without a copy. `keep_last` keeps the newest result, which is
-  /// the output when nothing reads it.
+  /// Drops the results no later primitive reads, so a last reader takes its pixels without a copy.
   fn release(&mut self, keep_last: bool) {
     let last = self.results.len().saturating_sub(1);
     let later = self.later;
@@ -587,9 +581,7 @@ impl Run<'_> {
     Some(image)
   }
 
-  /// `subregion` in the pixels of the filter region, cut to it.
-  /// A pointwise primitive: `filter` deferred on `input` when it covers the whole region, and run
-  /// over its window otherwise, as the subregion clears the rest.
+  /// A pointwise primitive, deferred on `input` when its `subregion` covers the region.
   fn color_filter(
     &self,
     input: Image,

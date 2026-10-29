@@ -46,9 +46,8 @@ impl FrameRegion {
     }
   }
 
-  /// Bounding box of visibly differing pixels between two equally sized images,
-  /// or `None` when every difference is invisible. RGB under alpha 0 never
-  /// counts: the encoder is free to rewrite it anyway (`config.exact` is 0).
+  /// The bounding box of visibly differing pixels between two images of equal size, `None` when
+  /// none differ.
   pub(super) fn diff(previous: &Bitmap, current: &Bitmap) -> Option<Self> {
     let rows = previous.rows().zip(current.rows());
 
