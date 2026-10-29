@@ -476,7 +476,30 @@ pub(crate) fn apply_deferred_declaration(
 
 #[cfg(test)]
 mod tests {
-  use super::{contains_var_references, strip_trailing_whitespace_and_comments};
+  use cssparser::Parser;
+
+  use super::{
+    contains_var_references, contains_var_references_in, strip_trailing_whitespace_and_comments,
+  };
+
+  #[test]
+  fn the_byte_scan_agrees_with_the_tokenizer() {
+    for value in [
+      "red",
+      "foo(",
+      "a)",
+      "[(",
+      "\"unterminated",
+      "url(x",
+      "calc(1px + 2px",
+    ] {
+      assert_eq!(
+        contains_var_references(value),
+        contains_var_references_in(&mut Parser::new(value)).unwrap_or(true),
+        "{value}"
+      );
+    }
+  }
 
   #[test]
   fn strips_only_trailing_whitespace_and_comments() {
