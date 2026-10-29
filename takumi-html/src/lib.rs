@@ -26,7 +26,7 @@ mod named_references;
 
 use std::{
   borrow::Cow,
-  cell::RefCell,
+  cell::{Cell, RefCell},
   collections::{BTreeMap, HashMap},
   str::FromStr,
   sync::{Arc, LazyLock},
@@ -35,6 +35,7 @@ use std::{
 #[cfg(feature = "svg")]
 use takumi_core::resources::image::{ImageSource, SvgSource};
 use takumi_core::{
+  form_control::InputType,
   layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   style::{
     Direction, Display, FromCssStr, Lang, Length, Style, StyleDeclaration, StyleDeclarationBlock,
@@ -183,6 +184,19 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("caption", "display:table-caption;text-align:center"),
   ("colgroup", "display:table-column-group"),
   ("col", "display:table-column"),
+  // `html.css` for a text field, which `input_preset` picks by the element's `type`.
+  (
+    "input",
+    "margin:0;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.333333px;font-family:Arial;color:#000;letter-spacing:0;word-spacing:0;line-height:normal;text-transform:none;text-indent:0;text-shadow:none;display:inline-block;text-align:start;box-sizing:content-box;padding:1px 2px;border:2px inset #767676;background-color:#fff",
+  ),
+  ("input[type=search]", "box-sizing:border-box"),
+  ("input[type=tel]", "direction:ltr"),
+  (
+    "input:disabled",
+    "background-color:rgba(239,239,239,0.3);color:#545454;border-color:rgba(118,118,118,0.3)",
+  ),
+  // HTML's rendering section hides a hidden input, which Blink gives no box.
+  ("input[type=hidden]", "display:none"),
 ];
 
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Arc<Style>>> = LazyLock::new(|| {
@@ -310,6 +324,7 @@ pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, 
     tw_property: options.tailwind_property.as_deref().unwrap_or("tw"),
     max_depth: options.max_depth,
     styles: RefCell::default(),
+    disabling_fieldsets: Cell::new(0),
   };
   let dom = markup::parse(source, is_document(source));
   let mut nodes = Vec::new();
@@ -436,6 +451,8 @@ struct NodeBuilder<'a> {
   max_depth: usize,
   /// Parsed `style` attributes, by source text.
   styles: RefCell<HashMap<Box<str>, Style>>,
+  /// How many `<fieldset disabled>` hold the element being built outside their first `<legend>`.
+  disabling_fieldsets: Cell<usize>,
 }
 
 impl NodeBuilder<'_> {
@@ -497,24 +514,90 @@ impl NodeBuilder<'_> {
       }),
       _ => match text_only_contents(handle) {
         Some(text) => Node::text(text),
-        None => {
-          let mut children = Vec::new();
-          for child in handle.children() {
-            self.build_nodes(child, depth + 1, &mut children)?;
-          }
-
-          Node::container(children)
-        }
+        None => Node::container(self.build_children(handle, tag, depth)?),
       },
     };
 
     Ok(Some(self.apply_metadata(node, handle, tag)))
   }
 
+  fn build_children(
+    &self,
+    handle: NodeRef<'_>,
+    tag: &str,
+    depth: usize,
+  ) -> Result<Vec<Node>, HtmlError> {
+    let disables = tag == "fieldset" && handle.attribute("disabled").is_some();
+    let first_legend = handle.children().position(
+      |child| matches!(child.data(), NodeData::Element { name, .. } if &*name.local == "legend"),
+    );
+    let mut children = Vec::new();
+
+    if disables {
+      self.disabling_fieldsets.update(|count| count + 1);
+    }
+
+    for (index, child) in handle.children().enumerate() {
+      // HTML exempts the first `<legend>` of a disabled fieldset.
+      let exempts = disables && Some(index) == first_legend;
+
+      if exempts {
+        self.disabling_fieldsets.update(|count| count - 1);
+      }
+
+      let built = self.build_nodes(child, depth + 1, &mut children);
+
+      if exempts {
+        self.disabling_fieldsets.update(|count| count + 1);
+      }
+
+      built?;
+    }
+
+    if disables {
+      self.disabling_fieldsets.update(|count| count - 1);
+    }
+
+    Ok(children)
+  }
+
+  /// The presets of an `<input>`, which `html.css` picks by its `type` and whether it is
+  /// disabled: those of a text field, or of a hidden input. Other types take none yet.
+  fn input_preset(&self, handle: NodeRef<'_>) -> Option<Arc<Style>> {
+    let input_type = InputType::parse(handle.attribute("type"));
+    let keys: &[&str] = match input_type {
+      InputType::Hidden => &["input[type=hidden]"],
+      InputType::Search => &["input", "input[type=search]"],
+      InputType::Tel => &["input", "input[type=tel]"],
+      _ if input_type.is_text_field() => &["input"],
+      _ => &[],
+    };
+    let is_disabled = self.disabling_fieldsets.get() > 0 || handle.attribute("disabled").is_some();
+    let mut presets = keys
+      .iter()
+      .chain((is_disabled && input_type.is_text_field()).then_some(&"input:disabled"))
+      .filter_map(|key| self.presets.get(key));
+    let mut preset = presets.next()?.clone();
+
+    for extra in presets {
+      let preset = Arc::make_mut(&mut preset);
+
+      for declaration in extra.declarations.iter() {
+        preset.push(declaration.clone(), false);
+      }
+    }
+
+    Some(preset)
+  }
+
   fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
     node = node.with_tag_name(tag);
 
-    let mut preset = self.presets.get(tag).cloned();
+    let mut preset = if tag == "input" {
+      self.input_preset(handle)
+    } else {
+      self.presets.get(tag).cloned()
+    };
 
     // A size in other units than pixels, which `ImageData` cannot hold, styles the image.
     if matches!(node.kind, NodeKind::Image(_)) {
@@ -1005,6 +1088,43 @@ mod tests {
     let html = node.to_html();
     assert!(html.contains(r#"data-x="1""#));
     assert!(html.contains("color"));
+  }
+
+  /// `html.css` styles a text field, hides a hidden input, and greys a disabled text field,
+  /// including one inside a disabled fieldset outside its first legend.
+  #[test]
+  fn inputs_take_the_presets_of_their_type_and_state() {
+    let node = parse(concat!(
+      "<div>",
+      r#"<input id="text">"#,
+      r#"<input id="checkbox" type="checkbox">"#,
+      r#"<input id="hidden" type="HIDDEN">"#,
+      r#"<input id="disabled" disabled>"#,
+      "<fieldset disabled>",
+      r#"<legend><input id="in-legend"></legend>"#,
+      r#"<legend><input id="in-second-legend"></legend>"#,
+      r#"<input id="in-fieldset">"#,
+      "</fieldset>",
+      "</div>",
+    ));
+    let html = node.to_html();
+    let style_of = |id: &str| {
+      let id_at = html.find(&format!(r#"id="{id}""#)).unwrap();
+      let start = html[..id_at].rfind('<').unwrap();
+      let end = id_at + html[id_at..].find('>').unwrap();
+
+      html[start..end].to_owned()
+    };
+    let disabled_color = "color: rgb(84, 84, 84)";
+
+    assert!(style_of("text").contains("display: inline-block"));
+    assert!(!style_of("text").contains(disabled_color));
+    assert!(!style_of("checkbox").contains("style="));
+    assert!(style_of("hidden").contains("display: none"));
+    assert!(style_of("disabled").contains(disabled_color));
+    assert!(!style_of("in-legend").contains(disabled_color));
+    assert!(style_of("in-second-legend").contains(disabled_color));
+    assert!(style_of("in-fieldset").contains(disabled_color));
   }
 
   #[test]

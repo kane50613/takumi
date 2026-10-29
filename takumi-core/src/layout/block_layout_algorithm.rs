@@ -52,6 +52,7 @@ use crate::{
     margin_strut::MarginStrut,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
     relative_utils::compute_relative_offset,
+    text_control::{TextControl, TextControlBox, baseline_for_empty_line},
     tree::{LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
@@ -637,6 +638,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       *previous = clamped;
     }
 
+    self.add_line_if_empty();
+
     let mut end_margin_strut = previous.margin_strut;
 
     if self.border_padding.block_end != LayoutUnit::ZERO
@@ -688,6 +691,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     resolver.border_padding = self.border_padding_for_size(resolver.border_padding);
 
+    let unconstrained_intrinsic_block_size = self.intrinsic_block_size;
+
+    if let Some(block_size) = self.default_intrinsic_block_size() {
+      self.intrinsic_block_size = block_size;
+    }
+
     let stitched_intrinsic_block_size =
       self.previously_consumed_block_size() + self.intrinsic_block_size;
     let mut block_size = resolver
@@ -736,7 +745,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       Err(status) => return self.handle_nonsuccessful_layout_result(status),
     }
 
-    let content_offset = self.align_block_content(block_size);
+    let content_offset = self.align_block_content(block_size, unconstrained_intrinsic_block_size);
 
     // Blink's `InlineNode` child keeps its lines until the fragment knows its size.
     if let Some((items_data, mut lines)) = lines {
@@ -812,15 +821,24 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   }
 
   /// Blink's `AlignBlockContent`, or `FinalizeTableCellLayout` for a cell.
-  fn align_block_content(&mut self, block_size: LayoutUnit) -> LayoutUnit {
+  fn align_block_content(
+    &mut self,
+    block_size: LayoutUnit,
+    content_block_size: LayoutUnit,
+  ) -> LayoutUnit {
     let offset = if self.space.is_table_cell {
       self.table_cell_content_offset(block_size)
-    } else if self.is_resuming() || !self.should_include_block_end_border_padding() {
-      // A fragment after the first or before the block end aligns nothing.
+    } else if self.is_resuming() {
+      // A fragment after the first aligns nothing.
+      LayoutUnit::ZERO
+    } else if self.aligns_content_block_center() {
+      (block_size - content_block_size) / 2
+    } else if !self.should_include_block_end_border_padding() {
+      // Nor does a fragment before the block end.
       LayoutUnit::ZERO
     } else {
       BlockContentAlignment::for_block(self.style.align_content)
-        .offset(block_size - self.intrinsic_block_size)
+        .offset(block_size - content_block_size)
     };
 
     if offset == LayoutUnit::ZERO {
@@ -843,6 +861,59 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     }
 
     offset
+  }
+
+  /// Blink's `AlignContentBlockCenter`, which `html.css` sets on a text field as
+  /// `-internal-align-content-block: center`: its content centers without regard to overflow.
+  fn aligns_content_block_center(&self) -> bool {
+    matches!(
+      self.tree.render_node(self.node).text_control,
+      Some(TextControlBox::Host(_))
+    )
+  }
+
+  /// Blink's `ClampIntrinsicBlockSize` for a text control, whose content block size its attributes
+  /// give, one line of its inner editor for a text field.
+  fn default_intrinsic_block_size(&self) -> Option<LayoutUnit> {
+    let render_node = self.tree.render_node(self.node);
+
+    if !matches!(render_node.text_control, Some(TextControlBox::Host(_))) {
+      return None;
+    }
+
+    let editor = render_node.children.as_deref()?.first()?;
+
+    Some(
+      self.border_padding.block_start
+        + TextControl::default_block_size(&editor.context)
+        + self.border_padding.block_end,
+    )
+  }
+
+  /// Blink's `HasLineEvenIfEmpty`: a text field's inner editor with no value still takes a line,
+  /// and a baseline on it.
+  fn add_line_if_empty(&mut self) {
+    let render_node = self.tree.render_node(self.node);
+
+    if !matches!(
+      render_node.text_control,
+      Some(TextControlBox::InnerEditor(_))
+    ) || render_node.own_text().is_some_and(|text| !text.is_empty())
+      || self.is_resuming()
+    {
+      return;
+    }
+
+    let context = &render_node.context;
+
+    self.intrinsic_block_size = self
+      .intrinsic_block_size
+      .max(self.border_padding.block_start + TextControl::default_block_size(context));
+
+    if let Some(baseline) = baseline_for_empty_line(context, self.border_padding.block_start) {
+      self.first_baseline = Some(baseline);
+      self.last_baseline = Some(baseline);
+    }
   }
 
   /// The alignment part of Blink's `FinalizeTableCellLayout`.

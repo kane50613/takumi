@@ -459,7 +459,9 @@ impl LayoutResult {
   /// Blink's `ForceInlineBaselineSynthesis`: an inline-block's scroll container that scrolls in
   /// the block axis takes its block-end margin edge for a baseline.
   pub(crate) fn forces_inline_baseline_synthesis(&self, style: &LayoutStyle) -> bool {
-    self.use_last_baseline_for_inline_baseline && !style.overflow.y.is_clip_or_visible()
+    self.use_last_baseline_for_inline_baseline
+      && !style.overflow.y.is_clip_or_visible()
+      && !style.ignores_overflow_for_inline_block_baseline
   }
 
   /// Blink's `LogicalBoxFragment::BaselineMetrics` baseline, none where the line synthesizes one.

@@ -75,5 +75,7 @@ pub(crate) mod releases;
 pub mod replaced;
 /// CSS tables, laid out by Blink's table algorithm.
 pub mod table;
+/// Text controls laid out around an inner editor.
+pub(crate) mod text_control;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;

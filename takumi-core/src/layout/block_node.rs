@@ -28,6 +28,7 @@ use crate::{
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::{ContainingBlock, ContainingBlockClaims, OutOfFlowLayoutPart},
     table::TableLayoutAlgorithm,
+    text_control::TextControlBox,
     tree::{BoxFragment, LayoutTree, NodeOrigin, push_tight},
   },
   layout_unit::LayoutUnit,
@@ -471,6 +472,19 @@ impl<'r> LayoutTree<'r> {
         depends_on_block_constraints,
         applied_aspect_ratio: true,
       };
+    }
+
+    let render_node = self.render_node(node);
+
+    // Blink's `CalculateMinMaxSizesIgnoringChildren`: a text control takes the size its
+    // attributes give.
+    if let Some(TextControlBox::Host(control)) = render_node.text_control {
+      return MinMaxSizesResult::new(
+        MinMaxSizes::both(
+          control.default_inline_size(&render_node.context) + resolver.border_padding.inline_sum(),
+        ),
+        false,
+      );
     }
 
     let mut result = match algorithm {

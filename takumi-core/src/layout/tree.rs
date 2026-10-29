@@ -39,6 +39,7 @@ use crate::{
     node::{Node, NodeKind, NodeStyleLayers},
     out_of_flow::{ContainingBlock, ContainingBlockClaims, OutOfFlowLayoutPart},
     table::{ColumnConstraints, HiddenParts, TableFragment, TableStructure},
+    text_control::{TextControl, TextControlBox},
   },
   layout_unit::{BoxStrut, LayoutUnit},
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
@@ -696,6 +697,8 @@ pub struct RenderNode {
   /// Whether it is the root element, whose box always establishes an independent formatting
   /// context, as Blink's `CreatesNewFormattingContext` reads `IsDocumentElement`.
   pub(crate) is_root_element: bool,
+  /// The part it plays in a text control, if any.
+  pub(crate) text_control: Option<TextControlBox>,
   /// The fragment items its inline content last laid out to.
   pub(crate) fragment_items: FragmentItemsCache,
   /// The shapes its inline items took when its inline content was last prepared.
@@ -1827,13 +1830,17 @@ impl RenderNode {
   /// The style the native layout lays this node out with: its own override when it has one,
   /// otherwise its computed style.
   pub(crate) fn layout_box_style(&self, sizing: &SizingContext) -> LayoutStyle {
-    match self.layout_style_override.as_deref() {
+    let mut style = match self.layout_style_override.as_deref() {
       Some(style) => LayoutStyle {
         is_replaced: self.is_replaced(),
         ..style.clone()
       },
       None => LayoutStyle::from_computed(&self.context.style, sizing, self.is_replaced()),
-    }
+    };
+
+    style.ignores_overflow_for_inline_block_baseline =
+      matches!(self.text_control, Some(TextControlBox::InnerEditor(_)));
+    style
   }
 
   fn is_replaced(&self) -> bool {
@@ -1857,6 +1864,7 @@ impl RenderNode {
       force_inline_layout: false,
       is_block_in_inline: false,
       is_root_element: false,
+      text_control: None,
       fragment_items: FragmentItemsCache::default(),
       item_shapes: ItemShapes::default(),
     }
@@ -2741,6 +2749,10 @@ impl PendingRenderNode {
 
   /// Closes the node once every child is rendered.
   fn finish(mut self) -> RenderNode {
+    if let Some(control) = TextControl::of(&self.node) {
+      return self.finish_text_control(control);
+    }
+
     if let Some(after) = self.pseudo_after.take() {
       self.rendered_children.push(after);
     }
@@ -2782,6 +2794,33 @@ impl PendingRenderNode {
       render_node.attach_marker(marker);
     }
 
+    render_node
+  }
+
+  /// Closes a text control, which Blink lays out as a block container whatever its `display`, and
+  /// whose inner editor stands in for its generated content.
+  fn finish_text_control(mut self, control: TextControl) -> RenderNode {
+    let display = self.context.style.base_data.display;
+
+    if display != Display::None {
+      self.context.style_mut().base_data_mut().display = if display.is_inline_level() {
+        Display::InlineBlock
+      } else {
+        Display::Block
+      };
+    }
+
+    let editor = control.inner_editor(&self.context, &self.node);
+    let mut render_node = RenderNode::new(
+      self.context,
+      NodeOrigin::Authored {
+        source_order: self.source_order,
+      },
+      Some(self.node),
+      Some(Box::from([editor])),
+    );
+
+    render_node.text_control = Some(TextControlBox::Host(control));
     render_node
   }
 

@@ -33,7 +33,7 @@ pub(crate) mod text;
 /// Error types.
 pub mod error;
 /// HTML form control state, read from attributes.
-pub(crate) mod form_control;
+pub mod form_control;
 pub mod geometry;
 /// `@keyframes` rules and animation timing.
 pub mod keyframes;

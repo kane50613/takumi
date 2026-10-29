@@ -202,14 +202,22 @@ impl BoxLineHeight {
 
   /// Blink's `ComputedLineHeightAsFixed` against `font`, whose size a number multiplies.
   pub(crate) fn computed_as_fixed(self, font: &Font) -> LayoutUnit {
+    self.computed_with_metrics(
+      font.primary_font_metrics(),
+      font.description.fallback.computed_size,
+    )
+  }
+
+  /// Blink's `ComputedLineHeightAsFixed` against a primary font with `metrics` at `font_size`.
+  pub(crate) fn computed_with_metrics(
+    self,
+    metrics: Option<PrimaryFontMetrics>,
+    font_size: f32,
+  ) -> LayoutUnit {
     match self {
       Self::Length(line_height) => line_height,
-      Self::Normal => font
-        .primary_font_metrics()
-        .map_or(LayoutUnit::ZERO, PrimaryFontMetrics::fixed_line_spacing),
-      Self::Number { value, .. } => {
-        number_line_height(value, font.description.fallback.computed_size)
-      }
+      Self::Normal => metrics.map_or(LayoutUnit::ZERO, PrimaryFontMetrics::fixed_line_spacing),
+      Self::Number { value, .. } => number_line_height(value, font_size),
     }
   }
 }
