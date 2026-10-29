@@ -53,6 +53,7 @@ pub(crate) fn font(fonts: &Fonts, family: &str) -> Font {
         specified_size: 16.0,
       },
       features: Vec::new(),
+      feature_setting_tags: Vec::new(),
       locale: None,
       language_override: FontLanguageOverride::Normal,
       variant_caps: FontVariantCaps::Normal,
