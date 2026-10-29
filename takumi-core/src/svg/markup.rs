@@ -2,7 +2,10 @@
 
 use super::{XLINK_NAMESPACE, XML_NAMESPACE, XMLNS_NAMESPACE};
 use crate::{
-  html::dom::{AttributeNamespace, NodeData, NodeRef},
+  html::{
+    dom::{AttributeNamespace, NodeData, NodeRef},
+    markup::svg_attribute_case,
+  },
   layout::node::{Node, NodeKind},
 };
 
@@ -75,15 +78,31 @@ impl<'a> Markup<'a> for NodeRef<'a> {
       _ => &[],
     };
 
-    attributes.iter().map(|attribute| {
-      let namespace = match attribute.ns {
-        AttributeNamespace::None => None,
-        AttributeNamespace::Xlink => Some(XLINK_NAMESPACE),
-        AttributeNamespace::Xml => Some(XML_NAMESPACE),
-        AttributeNamespace::Xmlns => Some(XMLNS_NAMESPACE),
+    // A prefixed root such as `<s:svg>` stays an HTML element, whose attribute names the parser
+    // lowercased.
+    let lowercased = self.is_html_element();
+
+    attributes.iter().map(move |attribute| {
+      let local = if lowercased {
+        svg_attribute_case(&attribute.local)
+      } else {
+        &attribute.local
+      };
+      let (namespace, local) = match attribute.ns {
+        // The HTML parser keeps a prefix other than `xlink`, `xml`, or `xmlns` in the name.
+        AttributeNamespace::None => match local.split_once(':') {
+          Some((prefix, unprefixed)) => match self.prefix_namespace(prefix) {
+            Some(namespace) => (Some(namespace), unprefixed),
+            None => (None, local),
+          },
+          None => (None, local),
+        },
+        AttributeNamespace::Xlink => (Some(XLINK_NAMESPACE), local),
+        AttributeNamespace::Xml => (Some(XML_NAMESPACE), local),
+        AttributeNamespace::Xmlns => (Some(XMLNS_NAMESPACE), local),
       };
 
-      (namespace, &*attribute.local, &*attribute.value)
+      (namespace, local, &*attribute.value)
     })
   }
 

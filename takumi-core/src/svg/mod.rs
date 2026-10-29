@@ -23,11 +23,12 @@ use self::{element::SvgElementKind, markup::Markup};
 use crate::{
   context::RenderContext,
   geometry::Size,
+  html::markup::parse_svg_image,
   layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   resources::{
     font::FontsSnapshot,
     image::{ImageError, SvgOp},
-    svg_size::{SvgSize, SvgSizeError, parse_svg_document},
+    svg_size::{SvgSize, SvgSizeError},
   },
   style::{Color, Display, IntrinsicSizing, Lang, Style, StyleDeclarationBlock, StyleSheet},
 };
@@ -94,7 +95,7 @@ pub(crate) struct SvgDocument {
 impl SvgDocument {
   /// Parses SVG markup, whose root must be an `svg` element.
   pub(crate) fn parse(markup: &str) -> Result<Self, ImageError> {
-    let dom = parse_svg_document(markup);
+    let dom = parse_svg_image(markup);
     let root = dom
       .document()
       .children()

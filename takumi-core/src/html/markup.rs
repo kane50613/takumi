@@ -19,6 +19,22 @@ use super::{
 /// Parses `source`, wrapping its content in `<html>`, `<head>`, and `<body>` as a browser does
 /// when `document` is set.
 pub(crate) fn parse(source: &str, document: bool) -> Dom {
+  parse_with(source, document, false)
+}
+
+/// Parses an SVG image as [`parse`] parses a fragment, except that a self-closing tag closes any
+/// element, which keeps `<s:rect/>` empty under a prefixed root the parser leaves in the HTML
+/// namespace. Approximate: Blink's
+/// [`IsolatedSVGDocumentHost`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/svg/graphics/isolated_svg_document_host.cc)
+/// parses an SVG image as XML, so markup that is not well formed fails to load there where this
+/// recovers, an `<svg>` inside `<html>` loads where XML finds an `html` root, and entities a DTD
+/// declares stay unexpanded.
+#[cfg(feature = "svg-sizing")]
+pub(crate) fn parse_svg_image(source: &str) -> Dom {
+  parse_with(source, false, true)
+}
+
+fn parse_with(source: &str, document: bool, xml_empty_elements: bool) -> Dom {
   let source = normalize_newlines(source);
   let mut parser = Parser {
     rest: &source,
@@ -26,6 +42,7 @@ pub(crate) fn parse(source: &str, document: bool) -> Dom {
     open: Vec::new(),
     templates: Vec::new(),
     document,
+    xml_empty_elements,
     quirks: document,
     html: None,
     head: None,
@@ -78,6 +95,8 @@ struct Parser<'a> {
   /// itself empty as the tree builder does.
   templates: Vec<(NodeId, NodeId)>,
   document: bool,
+  /// Whether a self-closing tag closes an HTML element too.
+  xml_empty_elements: bool,
   /// Whether the tree builder is in quirks mode, as a document without an `html` doctype puts
   /// it. Approximate: legacy public identifiers that also select quirks mode are not recognized.
   /// <https://html.spec.whatwg.org/multipage/parsing.html#the-initial-insertion-mode>
@@ -272,7 +291,10 @@ impl<'a> Parser<'a> {
       ns == Namespace::Html && matches!(tag.name.as_str(), "textarea" | "title");
     let opens = match ns {
       Namespace::Html => {
-        !VOID_ELEMENTS.contains(&tag.name.as_str()) && !raw_text && !escapable_raw_text
+        !VOID_ELEMENTS.contains(&tag.name.as_str())
+          && !raw_text
+          && !escapable_raw_text
+          && !(self.xml_empty_elements && tag.self_closing)
       }
       _ => !tag.self_closing,
     };
@@ -676,6 +698,16 @@ fn foreign_attribute(ns: Namespace, name: String, value: String) -> Attribute {
 #[cfg(feature = "svg-sizing")]
 pub(super) fn svg_element_case(name: &str) -> &str {
   SVG_ELEMENTS
+    .iter()
+    .copied()
+    .find(|cased| cased.eq_ignore_ascii_case(name))
+    .unwrap_or(name)
+}
+
+/// An SVG attribute's `name` in the casing the SVG spec gives it, or as is.
+#[cfg(feature = "svg-sizing")]
+pub(crate) fn svg_attribute_case(name: &str) -> &str {
+  SVG_ATTRIBUTES
     .iter()
     .copied()
     .find(|cased| cased.eq_ignore_ascii_case(name))

@@ -163,29 +163,32 @@ impl<'a> NodeRef<'a> {
       return None;
     };
 
-    if name.ns != Namespace::Svg {
-      return None;
+    // The HTML parser leaves a prefixed root such as `<s:svg>` in the HTML namespace.
+    if let Some((prefix, local)) = name.local.split_once(':') {
+      return (self.prefix_namespace(prefix) == Some(SVG_NAMESPACE))
+        .then(|| svg_element_case(local));
     }
 
-    match name.local.split_once(':') {
-      Some((prefix, local)) => {
-        let declaration = format!("xmlns:{prefix}");
-        let namespace = self.declared(&declaration).or_else(|| {
-          self
-            .dom
-            .document()
-            .children()
-            .find(|node| matches!(node.data(), NodeData::Element { .. }))
-            .and_then(|root| root.declared(&declaration))
-        });
-
-        (namespace == Some(SVG_NAMESPACE)).then(|| svg_element_case(local))
-      }
-      None => self
+    (name.ns == Namespace::Svg
+      && self
         .declared("xmlns")
-        .is_none_or(|namespace| namespace == SVG_NAMESPACE)
-        .then_some(&*name.local),
-    }
+        .is_none_or(|namespace| namespace == SVG_NAMESPACE))
+    .then_some(&*name.local)
+  }
+
+  /// The namespace `prefix` names, as this element or the root element declares it.
+  #[cfg(feature = "svg-sizing")]
+  pub(crate) fn prefix_namespace(self, prefix: &str) -> Option<&'a str> {
+    let declaration = format!("xmlns:{prefix}");
+
+    self.declared(&declaration).or_else(|| {
+      self
+        .dom
+        .document()
+        .children()
+        .find(|node| matches!(node.data(), NodeData::Element { .. }))
+        .and_then(|root| root.declared(&declaration))
+    })
   }
 
   /// The namespace this element's `xmlns` or `xmlns:prefix` attribute `declaration` declares.
@@ -205,16 +208,29 @@ impl<'a> NodeRef<'a> {
       .map(|attr| &*attr.value)
   }
 
-  /// The value of the attribute `name`, when this is an element that has it.
+  /// The value of the attribute `name`, when this is an element that has it. An HTML element's
+  /// attribute names match ASCII case-insensitively, as the parser lowercased them.
   pub(crate) fn attribute(self, name: &str) -> Option<&'a str> {
-    let NodeData::Element { attrs, .. } = self.data() else {
+    let NodeData::Element {
+      name: element,
+      attrs,
+    } = self.data()
+    else {
       return None;
     };
 
     attrs
       .iter()
-      .find(|attr| &*attr.local == name)
+      .find(|attr| {
+        &*attr.local == name
+          || (element.ns == Namespace::Html && attr.local.eq_ignore_ascii_case(name))
+      })
       .map(|attr| &*attr.value)
+  }
+
+  /// Whether the parser put this element in the HTML namespace.
+  pub(crate) fn is_html_element(self) -> bool {
+    matches!(self.data(), NodeData::Element { name, .. } if name.ns == Namespace::Html)
   }
 
   /// This node and its subtree as HTML, escaped as the fragment serialization algorithm escapes them.

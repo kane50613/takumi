@@ -3,8 +3,6 @@ packages:
   takumi-core: patch
 ---
 
-# SVG images parse with takumi's own markup parser
+# Malformed SVG images render what the parser recovers
 
-SVG images, inline `filter: url(data:image/svg+xml,...)` references, and SVG sizing now go through the HTML parser in `takumi_core::html` instead of `roxmltree`, which leaves the binaries. An SVG that is not well-formed XML now renders what the parser recovers, where it used to fail to load, and entities a DTD declares stay unexpanded.
-
-A referenced filter keeps only its filter primitives, the elements whose names start with `fe`, with text and attribute values escaped. A `<script>` or any other element inside the `<filter>` no longer reaches the SVG output.
+SVG images, `filter: url(data:image/svg+xml,...)` references, and SVG sizing now go through takumi's own markup parser instead of `roxmltree`, which leaves the binaries. An SVG that is not well-formed XML renders what the parser recovers instead of failing to load, entities a DTD declares stay unexpanded, and a referenced filter keeps only its `fe*` primitives, so a `<script>` or other element inside the `<filter>` no longer reaches the SVG output.

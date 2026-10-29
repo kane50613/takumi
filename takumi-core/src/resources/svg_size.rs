@@ -5,11 +5,10 @@ use cssparser::Parser;
 use thiserror::Error;
 
 #[cfg(any(test, not(feature = "svg")))]
-use crate::html::dom::NodeData;
+use crate::html::{dom::NodeData, markup::parse_svg_image};
 
 use crate::{
   geometry::Size,
-  html::{dom::Dom, markup::parse},
   style::{FontUnits, FromCssStr, IntrinsicSizing, Length, SizingContext},
   viewport::Viewport,
 };
@@ -70,7 +69,7 @@ pub(crate) enum SvgSizeError {
 impl SvgSize {
   #[cfg(any(test, not(feature = "svg")))]
   pub(crate) fn parse(markup: &str) -> Result<Self, SvgSizeError> {
-    let dom = parse_svg_document(markup);
+    let dom = parse_svg_image(markup);
     let root = dom
       .document()
       .children()
@@ -157,15 +156,6 @@ impl SvgSize {
       },
     })
   }
-}
-
-/// Parses SVG markup as the HTML parser parses an `<svg>` element's content. Approximate: Blink's
-/// [`IsolatedSVGDocumentHost`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/svg/graphics/isolated_svg_document_host.cc)
-/// parses an SVG image as XML, so markup that is not well formed fails to load there where this
-/// recovers, an `<svg>` inside `<html>` loads where XML finds an `html` root, and entities a DTD
-/// declares stay unexpanded.
-pub(crate) fn parse_svg_document(markup: &str) -> Dom {
-  parse(markup, false)
 }
 
 fn positive(value: f32) -> bool {

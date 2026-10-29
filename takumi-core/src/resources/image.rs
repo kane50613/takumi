@@ -1531,9 +1531,9 @@ mod tests {
       path::{Path, PathBuf},
     };
 
-    use crate::{
-      html::dom::{NodeData, NodeRef},
-      resources::svg_size::parse_svg_document,
+    use crate::html::{
+      dom::{NodeData, NodeRef},
+      markup::parse_svg_image,
     };
 
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -1592,7 +1592,7 @@ mod tests {
       };
       let size =
         SvgSize::parse(&markup).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-      let document = parse_svg_document(&markup);
+      let document = parse_svg_image(&markup);
       let root = document
         .document()
         .children()
