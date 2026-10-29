@@ -68,8 +68,10 @@ features = ["woff2", "png", "fragmentation"]
 [lints]
 workspace = true
 
-[dev-dependencies.takumi-html]
-path = "../takumi-html"
+[dev-dependencies.takumi-core]
+path = "../takumi-core"
+default-features = false
+features = ["html"]
 
 [dev-dependencies]
 criterion.workspace = true

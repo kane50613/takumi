@@ -35,6 +35,8 @@ pub mod error;
 /// HTML form control state, read from attributes.
 pub mod form_control;
 pub mod geometry;
+#[cfg(feature = "html")]
+pub mod html;
 /// `@keyframes` rules and animation timing.
 pub mod keyframes;
 pub(crate) mod layout_unit;

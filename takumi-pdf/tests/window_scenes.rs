@@ -3,6 +3,7 @@
 
 use std::{fs, path::Path};
 
+use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{
   Fonts,
   context::RenderContext,
@@ -14,7 +15,6 @@ use takumi_core::{
   style::{Display, Length, SizingContext, Style, StyleDeclaration},
   viewport::Viewport,
 };
-use takumi_html::{FromHtmlOptions, from_html};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();

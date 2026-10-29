@@ -76,6 +76,8 @@
 /// that breadth is intentional for a prelude.
 pub mod prelude {
   #[cfg(feature = "from-html")]
+  pub use takumi_core::html::{FromHtml, FromHtmlOptions, HtmlError, StylePresets};
+  #[cfg(feature = "from-html")]
   pub use takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH as DEFAULT_MAX_DEPTH;
   pub use takumi_core::{
     Error, Fonts, Result,
@@ -88,8 +90,6 @@ pub mod prelude {
     style::*,
     viewport::Viewport,
   };
-  #[cfg(feature = "from-html")]
-  pub use takumi_html::{FromHtml, FromHtmlOptions, HtmlError, StylePresets};
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, AnimationFrame,
@@ -101,7 +101,7 @@ pub mod prelude {
 }
 
 #[cfg(feature = "from-html")]
-pub use takumi_html::from_html;
+pub use takumi_core::html::from_html;
 #[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
   measure, render, render_animation, write_animated_gif, write_animated_png, write_animated_webp,
@@ -118,7 +118,7 @@ pub use takumi_svg::render as render_svg;
 pub mod unstable {
   pub use takumi_core as base;
   #[cfg(feature = "from-html")]
-  pub use takumi_html as html;
+  pub use takumi_core::html;
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster as raster;
   #[cfg(feature = "svg-backend")]

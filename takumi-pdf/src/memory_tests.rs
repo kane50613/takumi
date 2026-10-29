@@ -5,7 +5,7 @@ use std::{
   cell::{Cell, RefCell},
 };
 
-use takumi_html::{FromHtmlOptions, from_html};
+use takumi_core::html::{FromHtmlOptions, from_html};
 
 use crate::{PageMargins, PageOptions, PdfOptions, render_settling, test_support::fonts};
 

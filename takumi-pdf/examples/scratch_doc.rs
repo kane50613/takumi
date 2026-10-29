@@ -1,7 +1,7 @@
 use std::{fs, time::Instant};
 
+use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{Fonts, resources::font::FontResource};
-use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{PageMargins, PageOptions, PdfOptions, render};
 
 fn main() {

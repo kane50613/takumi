@@ -2,7 +2,7 @@
 
 use js_sys::{Error, Reflect};
 use serde_wasm_bindgen::from_value;
-use takumi_html::{FromHtmlOptions, parse_html};
+use takumi_core::html::{FromHtmlOptions, parse_html};
 use wasm_bindgen::JsValue;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// The node tree `source` describes, and the CSS of its `<style>` elements when it is HTML.
-/// Approximate: `takumi_html` does not rebuild misnested formatting elements or move stray table content.
+/// Approximate: `takumi_core::html` does not rebuild misnested formatting elements or move stray table content.
 pub fn read_source(source: JsValue, sources: &SourceCache) -> Result<ParsedSource, Error> {
   if let Some(html) = source.as_string() {
     return sources.parse(SourceKind::Html, &html, |html| {

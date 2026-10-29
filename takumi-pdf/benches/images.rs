@@ -1,8 +1,8 @@
 use std::{collections::HashMap, hint::black_box, sync::Arc};
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{Fonts, resources::image::ImageSource};
-use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{PageOptions, PdfOptions, render};
 
 /// The same photo drawn 120 times across pages, as a logo or avatar repeats through a report.

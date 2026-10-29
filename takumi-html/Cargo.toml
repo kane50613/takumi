@@ -3,23 +3,20 @@ name = "takumi-html"
 version = "0.7.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Parse HTML + Tailwind markup into a takumi node tree, mirroring the JS `fromHtml` helper."
+description = "Re-exports the HTML parser that moved to takumi-core's html module."
 repository = "https://github.com/kane50613/takumi"
 readme = "README.md"
 rust-version = "1.91"
-
-[dependencies]
-thiserror.workspace = true
-typed-builder.workspace = true
 
 [dependencies.takumi-core]
 path = "../takumi-core"
 version = "0.34.0"
 default-features = false
+features = ["html"]
 
 [features]
 # Keeps inline `<svg>` elements as nodes that the page's stylesheet reaches.
-svg = ["takumi-core/svg"]
+svg = ["takumi-core/html-svg-nodes"]
 
 [lints]
 workspace = true

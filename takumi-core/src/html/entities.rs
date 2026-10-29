@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 
-use crate::named_references::NAMED_REFERENCES;
+use super::named_references::NAMED_REFERENCES;
 
 /// Decodes the character references in text content.
 pub(crate) fn decode(text: &str) -> Cow<'_, str> {

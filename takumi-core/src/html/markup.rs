@@ -9,7 +9,7 @@
 
 use std::borrow::Cow;
 
-use crate::{
+use super::{
   dom::{
     Attribute, AttributeNamespace, Dom, ElementName, Namespace, NodeData, NodeId, VOID_ELEMENTS,
   },
