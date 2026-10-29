@@ -22,11 +22,12 @@ pub(crate) struct NamedReferences {
 impl NamedReferences {
   /// The characters `name` stands for.
   pub(crate) fn get(&self, name: &str) -> Option<&'static str> {
-    self
+    let index = self
       .entries
-      .binary_search_by(|entry| self.names[entry.name()].cmp(name))
-      .ok()
-      .map(|index| &self.characters[self.entries[index].characters()])
+      .binary_search_by(|entry| self.names.get(entry.name()).cmp(&Some(name)))
+      .ok()?;
+
+    self.characters.get(self.entries.get(index)?.characters())
   }
 }
 
@@ -59,6 +60,10 @@ enum Column {
   Characters,
 }
 
+#[expect(
+  clippy::indexing_slicing,
+  reason = "evaluated at compile time, where an index out of range fails the build"
+)]
 impl Column {
   const fn of(self, index: usize) -> &'static [u8] {
     let (name, characters) = REFERENCES[index];
@@ -108,6 +113,10 @@ const CHARACTERS_LEN: usize = Column::Characters.total_len();
 static NAMES: [u8; NAMES_LEN] = Column::Name.concat();
 static CHARACTERS: [u8; CHARACTERS_LEN] = Column::Characters.concat();
 
+#[expect(
+  clippy::indexing_slicing,
+  reason = "evaluated at compile time, where an index out of range fails the build"
+)]
 static ENTRIES: [Entry; REFERENCES.len()] = {
   let mut entries = [Entry {
     name_start: 0,

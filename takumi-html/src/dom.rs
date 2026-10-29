@@ -67,6 +67,10 @@ impl Default for Dom {
   }
 }
 
+#[expect(
+  clippy::indexing_slicing,
+  reason = "every `NodeId` comes from `Dom::push`"
+)]
 impl Dom {
   pub(crate) const DOCUMENT: NodeId = 0;
 
@@ -136,9 +140,11 @@ impl<'a> NodeRef<'a> {
   pub(crate) fn children(self) -> impl DoubleEndedIterator<Item = NodeRef<'a>> {
     let dom = self.dom;
 
-    dom.nodes[self.id]
-      .children
-      .iter()
+    dom
+      .nodes
+      .get(self.id)
+      .into_iter()
+      .flat_map(|node| &node.children)
       .map(move |&id| NodeRef { dom, id })
   }
 
