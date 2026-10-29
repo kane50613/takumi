@@ -182,10 +182,10 @@ const prepared = await renderer.prepare(html, {
 const image = await renderer.render(prepared, { format: "webp" });
 ```
 
-- `prepare` takes the layout options of `render`, such as the size, `css`, `lang`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits). Rendering a prepared source takes only the output options, so the layout cannot change between the two calls.
-- With your own `fetch`, a relative URL such as `/logo.png` reaches it, so it can resolve the path and apply its own checks. Without one, only `http://` and `https://` URLs are fetched.
-- A prepared source renders on any renderer from the same package. A renderer that no longer holds its fonts loads them again.
-- `prepareAnimation` does the same for every scene of an animation. It takes the options of `renderAnimation`, and `renderAnimation` takes its result.
+`prepare` takes the layout options of `render`, such as the size, `css`, `lang`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits). Rendering the result takes only output options such as `format`, so the layout stays the one you prepared.
+
+- A prepared source renders on any renderer from the same package, which loads the fonts again if it no longer holds them.
+- `prepareAnimation` prepares every scene of an animation from the options of `renderAnimation`, which then takes its result.
 
 `PdfRenderer` from `takumi-pdf` and `Painter` from `takumi-paint` have the same `prepare`. A PDF's header, footer, and page bands count as part of the document, and rendering a prepared PDF takes the file options such as `metadata`, `outline`, and `pdfa`.
 

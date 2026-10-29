@@ -170,7 +170,7 @@ CJK families can have many coverage subsets. Takumi downloads only the subsets y
 
 Takumi reads the text after styles apply, so generated content and `text-transform` count, and so does the text inside SVG images, such as chart labels. Each character goes through its own font stack. With `font-family: Inter, "Noto Sans JP"`, Latin text loads only Inter's Latin subset, and a weight loads only when text uses it.
 
-Font matching reads a subset's weight and style from its descriptor before the file arrives. A subset without them counts as normal weight and style, so a variable font matches its whole weight range only once loaded.
+Before a subset downloads, font matching knows only the weight and style declared for it. A subset declared without them counts as normal, so a variable font's other weights only match it after it loads.
 
 ### Preloading with `registerFont`
 
