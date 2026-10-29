@@ -63,8 +63,8 @@ export type BackendPreparedRenderOptions<TInternal> = Pick<
 > &
   OutputFormatOptions & { signal?: AbortSignal };
 
-/** What a render reads from a source before it lays it out: the images it draws, and the ids of the listed fonts it loads. */
-type SourceNeeds = { images: string[]; fonts: number[] };
+/** What a render reads from a source before it lays it out: the images it draws, the ids of the listed fonts it loads, and the `@font-face` files it loads. */
+type SourceNeeds = { images: string[]; fonts: number[]; fontFiles?: string[] };
 
 /**
  * A font of a render's `fonts` list, described before its bytes arrive.
@@ -173,6 +173,44 @@ export async function readSource<TFamily extends RegisteredFamilyLike, TSource, 
   return createPrepared(await collect(registry, source, layout, extras, needs, false));
 }
 
+/** The `@font-face` files `reached` reports that the renderer holds neither loaded nor failed. */
+function missingFontFiles<TFamily extends RegisteredFamilyLike>(
+  registry: FontRegistry<TFamily>,
+  reached: SourceNeeds | undefined,
+): string[] {
+  return (reached?.fontFiles ?? []).filter((url) => !registry.hasFontFile(url));
+}
+
+/** Fetches each of `urls` and hands it to the renderer, recording the ones that fail. */
+async function loadFontFiles<TFamily extends RegisteredFamilyLike>(
+  registry: FontRegistry<TFamily>,
+  urls: string[],
+  options: Omit<FetchOptions, "signal"> & { fetchCache?: ImageFetchCache; signal?: AbortSignal },
+): Promise<void> {
+  const fetched = new Map(
+    (await prepareImages({ ...options, urls, throwOnError: false })).map(({ src, data }) => [
+      src,
+      data,
+    ]),
+  );
+
+  await Promise.all(
+    urls.map(async (url) => {
+      const data = fetched.get(url);
+      const loaded =
+        data !== undefined &&
+        (await registry.cacheFontFile(url, data).then(
+          () => true,
+          () => false,
+        ));
+
+      if (!loaded) {
+        registry.failFontFile(url);
+      }
+    }),
+  );
+}
+
 async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   registry: FontRegistry<TFamily>,
   source: TSource,
@@ -209,8 +247,22 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       })
     : provided;
   const entries: ImageSource[] = loaded.map((image) => ({ cache, ...image }));
-  const loads =
-    listed && (await (entries.length > 0 ? needs({ ...request, images: entries }) : read())).fonts;
+  let reached = listed
+    ? await (entries.length > 0 ? needs({ ...request, images: entries }) : read())
+    : fetchMissing
+      ? await read()
+      : undefined;
+
+  // A file that fails moves its rule on to its next `src`, which the next read reports.
+  let missing = fetchMissing ? missingFontFiles(registry, reached) : [];
+
+  while (missing.length > 0) {
+    await loadFontFiles(registry, missing, { ...fetchOptions, fetchCache, signal });
+    reached = await needs({ ...request, images: entries });
+    missing = missingFontFiles(registry, reached);
+  }
+
+  const loads = listed && reached?.fonts;
   const subset = loads ? resolvedFonts?.filter((_, id) => loads.includes(id)) : resolvedFonts;
 
   return { source, layout, fonts: subset, fontFamilies, images: entries };

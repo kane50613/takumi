@@ -9,10 +9,12 @@ readme = "README.md"
 rust-version = "1.91"
 
 [features]
-default = ["images", "svg"]
+default = ["images", "svg", "font-face"]
 images = ["raster-images"]
 raster-images = ["dep:png", "dep:zune-jpeg", "dep:gif", "dep:image-webp", "dep:imagesize"]
 svg = ["takumi-core/svg"]
+# `@font-face` rules, whose files `needs` reports and `Fonts::load_font_file` takes.
+font-face = ["takumi-core/font-face"]
 
 [dependencies]
 typed-builder.workspace = true

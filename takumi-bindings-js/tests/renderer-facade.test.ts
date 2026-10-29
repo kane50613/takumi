@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { readSource, renderPrepared } from "../src/prepared";
+import { prepareSource, readSource, renderPrepared } from "../src/prepared";
 import type { ListedFont, PrepareExtras } from "../src/prepared";
 import type { FontLoader } from "../src/renderer";
 import type { Node } from "@takumi-rs/helpers";
@@ -201,5 +201,35 @@ describe("shared Renderer body", () => {
       { scenes, fontFamilies: ["A", "B"], images: [] },
       undefined,
     );
+  });
+});
+
+describe("@font-face files", () => {
+  test("prepare loads each reached file, and a failed one moves its rule on to the next src", async () => {
+    const { fonts, files, backend } = fontBackend();
+    const fetch = mock(async (input: string | URL | Request) => {
+      const url = String(input);
+
+      return url.endsWith("missing.woff2")
+        ? new Response(null, { status: 404 })
+        : new Response(bytes());
+    });
+    const reads = mock(() => ({
+      images: [],
+      fonts: [],
+      fontFiles:
+        files.get("https://fonts.test/missing.woff2") === "failed"
+          ? files.has("https://fonts.test/face.woff2")
+            ? []
+            : ["https://fonts.test/face.woff2"]
+          : ["https://fonts.test/missing.woff2"],
+    }));
+
+    await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
+
+    expect(backend.failFontFile).toHaveBeenCalledWith("https://fonts.test/missing.woff2");
+    expect(backend.cacheFontFile).toHaveBeenCalledTimes(1);
+    expect(files.get("https://fonts.test/face.woff2")).toBe("loaded");
+    expect(reads).toHaveBeenCalledTimes(3);
   });
 });

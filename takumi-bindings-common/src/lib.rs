@@ -199,6 +199,36 @@ impl FontStore {
     removed
   }
 
+  /// Loads the `@font-face` file `url` names, as a needs pass reported it; it can be released for
+  /// space.
+  pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), FontError> {
+    let (source, bytes) = FontSource::from(data).into_decoded()?;
+    let mut fonts = Fonts::clone(&self.current());
+
+    self
+      .cache
+      .borrow_mut()
+      .admit_file(&mut fonts, url, source, bytes as u64)?;
+    *self.fonts.borrow_mut() = Rc::new(fonts);
+
+    Ok(())
+  }
+
+  /// Whether the store holds the `@font-face` file `url`, loaded or failed, marking it used.
+  pub fn has_font_file(&self, url: &str) -> bool {
+    self.cache.borrow().has_file(url);
+    self.current().has_font_file(url)
+  }
+
+  /// Records that the `@font-face` file `url` failed to load, so its rule moves on to its next
+  /// source.
+  pub fn fail_font_file(&self, url: &str) {
+    let mut fonts = Fonts::clone(&self.current());
+
+    fonts.fail_font_file(url);
+    *self.fonts.borrow_mut() = Rc::new(fonts);
+  }
+
   /// Goes back to the embedded last-resort fonts alone.
   pub fn reset(&self) -> Result<(), FontError> {
     *self.fonts.borrow_mut() = Rc::new(default_fonts()?);
@@ -319,9 +349,11 @@ pub fn stylesheet(
 
 /// What a node tree needs fetched, as a wasm binding hands it to JavaScript.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NeedsOutput {
   images: Vec<String>,
   fonts: Vec<usize>,
+  font_files: Vec<String>,
 }
 
 impl NeedsOutput {
@@ -330,6 +362,7 @@ impl NeedsOutput {
     Self {
       fonts: listed.map_or_else(Vec::new, |listed| listed.to_load(&needs.faces)),
       images: needs.images.into_iter().collect(),
+      font_files: needs.font_files.into_iter().collect(),
     }
   }
 }
