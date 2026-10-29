@@ -7,26 +7,7 @@ import {
 } from "./fonts";
 import { unicodeRangeOf } from "./unicode-range";
 
-import type { JsonSource } from "./node-source";
-import type { ListedFont, PrepareExtras } from "./prepared";
-
 export { type JsonSource, toNativeSource } from "./node-source";
-export { lazy, sheetsOf, type WasmBinding, WasmRenderer } from "./wasm-renderer";
-export {
-  type BackendPreparedRenderOptions,
-  type BackendPrepareOptions,
-  Prepared,
-  type PrepareExtras,
-  needsArgs,
-  type NeedsRequest,
-  type ListedFont,
-  type PrepareImagesInput,
-  prepareSource,
-  readSource,
-  renderPrepared,
-  type SourceNeeds,
-  type SourceReader,
-} from "./prepared";
 
 /**
  * Shared wrapper primitives for the `@takumi-rs/core` (napi) and `@takumi-rs/wasm` renderer
@@ -146,24 +127,13 @@ export type BackendRenderOptions<TInternal> = Omit<
   OutputFormatOptions &
   RenderExtras;
 
-/** An animation's scenes and options, besides what a render loads, for a backend whose binding options are {@link TInternal}. */
-type AnimationLayout<TInternal extends { scenes: { node: unknown }[] }> = Omit<
-  TInternal,
-  "images" | "format" | "quality" | "lossless" | "scenes"
-> & {
-  /** The scenes to render in order, each a node tree or HTML markup. */
-  scenes: (Omit<TInternal["scenes"][number], "node"> & {
-    node: Exclude<TInternal["scenes"][number]["node"], JsonSource>;
-  })[];
-} & AnimationOutputFormatOptions;
-
 /** Public `renderAnimation` options for a backend whose binding options are {@link TInternal}. */
-export type BackendAnimationOptions<TInternal extends { scenes: { node: unknown }[] }> =
-  AnimationLayout<TInternal> & RenderExtras;
-
-/** Public `prepareAnimation` options for a backend whose binding options are {@link TInternal}. */
-export type BackendPrepareAnimationOptions<TInternal extends { scenes: { node: unknown }[] }> =
-  AnimationLayout<TInternal> & PrepareExtras;
+export type BackendAnimationOptions<TInternal> = Omit<
+  TInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  AnimationOutputFormatOptions &
+  RenderExtras;
 
 /** Public `renderSvg` options for a backend whose binding options are {@link TInternal}. */
 export type BackendSvgOptions<TInternal> = Omit<TInternal, "images"> & RenderExtras;
@@ -276,7 +246,9 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     const load = Promise.resolve(extractFontBuffer(loader))
       .then((data) => {
         const view = asView(data);
-        const input = isBuffer(loader) ? view : { ...loader, data: view };
+        const input = isBuffer(loader)
+          ? view
+          : { ...loader, unicodeRange: unicodeRangeOf(loader), data: view };
 
         return pinned ? this.backend.registerFont(input, key) : this.backend.cacheFont(input, key);
       })
@@ -285,27 +257,6 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     this.loading.set(key, load);
 
     return load;
-  }
-
-  /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */
-  listed(fonts: FontLoader[]): ListedFont[] | undefined {
-    const loaders = fonts.map(toLoader);
-
-    if (!loaders.some((loader) => unicodeRangeOf(loader).length > 0)) {
-      return undefined;
-    }
-
-    return loaders.map((loader) => {
-      const key = this.keyOf(loader);
-
-      if (isBuffer(loader) || !("name" in loader)) {
-        return { key };
-      }
-
-      const { name, weight, style } = loader;
-
-      return { key, name, weight, style, unicodeRange: unicodeRangeOf(loader) };
-    });
   }
 
   private keyOf(loader: Exclude<FontLoader, string>) {
@@ -359,11 +310,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   }
 }
 
-/**
- * The binding options {@link withRenderInput} passes on.
- *
- * @deprecated Use a renderer's `prepare`, whose prepared source carries its resolved options.
- */
+/** The binding options {@link withRenderInput} passes on: extras stripped, resolved resources merged in. */
 export type ResolvedRenderOptions<TOptions> = Omit<
   TOptions,
   keyof RenderExtras | "fontFamilies"
@@ -373,9 +320,10 @@ export type ResolvedRenderOptions<TOptions> = Omit<
 };
 
 /**
- * Registers the `fonts` subsets the characters of `source` use, resolves `images` and `fontFamilies`, then calls `call`.
- *
- * @deprecated Use a renderer's `prepare`, which reads the characters after the cascade.
+ * Shared body for every backend render entry point: subsets and registers `fonts` against `source`,
+ * resolves `images`/`fontFamilies`, and enforces one abort policy: `signal` is checked before and
+ * after the (network-bound) resource resolution. Then calls `call` with the binding options and the
+ * `signal` for the backend to forward into a native call when it supports cancellation.
  */
 export async function withRenderInput<
   TOptions extends RenderExtras & { fontFamilies?: string[] },
@@ -391,7 +339,6 @@ export async function withRenderInput<
   ) => Awaitable<TResult>,
 ): Promise<TResult> {
   const { fonts, fontFamilies, signal, images, ...rest } = options;
-
   signal?.throwIfAborted();
 
   const resolvedFonts = await fonts;

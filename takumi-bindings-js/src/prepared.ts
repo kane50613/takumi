@@ -1,6 +1,4 @@
-import type { FetchOptions } from "./fetch";
-import { fetchImages } from "./fetch/images";
-import type { ImageFetchCache } from "./images";
+import { type FetchOptions, type ImageFetchCache, prepareImages } from "@takumi-rs/helpers";
 import {
   type FontDetails,
   type FontLoader,
@@ -50,7 +48,7 @@ export type BackendPreparedRenderOptions<TInternal> = Pick<
   OutputFormatOptions & { signal?: AbortSignal };
 
 /** What a render reads from a source before it lays it out: the images it draws, and the ids of the listed fonts it loads. */
-export type SourceNeeds = { images: string[]; fonts: number[] };
+type SourceNeeds = { images: string[]; fonts: number[] };
 
 /** A font of a render's `fonts` list, described before its bytes arrive. */
 export type ListedFont = Pick<FontDetails, "name" | "weight" | "style" | "unicodeRange"> & {
@@ -161,7 +159,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   } = Array.isArray(images) ? { sources: images } : images;
   const provided = await resolveImageLoaders({ sources, cache });
   const loaded = fetchMissing
-    ? await fetchImages({
+    ? await prepareImages({
         ...fetchOptions,
         urls: (await read()).images,
         sources: provided,

@@ -4,6 +4,7 @@
   "workspaces": [
     "takumi-js",
     "takumi-helpers",
+    "takumi-bindings-js",
     "takumi-napi",
     "takumi-wasm",
     "takumi-image-response",

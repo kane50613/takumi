@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
-import { isNode, resolveDocument } from "../src/jsx";
-import { lazy, sheetsOf } from "../src/renderer";
+import { isNode, resolveDocument } from "../src/document";
+import { lazy, sheetsOf } from "../src/wasm-renderer";
 
 describe("resolveDocument", () => {
   test("keeps HTML and node trees as they are", async () => {

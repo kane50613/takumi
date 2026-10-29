@@ -4,7 +4,7 @@ import {
   FontRegistry,
   type RegisteredFamilyLike,
 } from "./renderer";
-import type { CssInput } from "./types";
+import type { CssInput } from "@takumi-rs/helpers";
 
 /** A wasm binding renderer whose fonts a {@link FontRegistry} loads. */
 export type WasmBinding<TFamily extends RegisteredFamilyLike> = FontBackend<TFamily> & {

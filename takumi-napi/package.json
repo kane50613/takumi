@@ -74,6 +74,7 @@
   },
   "devDependencies": {
     "@napi-rs/cli": "3.10.8",
+    "@takumi-rs/bindings-js": "workspace:*",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "csstype": "catalog:",

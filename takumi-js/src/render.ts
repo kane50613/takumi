@@ -216,8 +216,27 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInp
   return [...own, ...extra];
 }
 
+type RenderedImage = Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>;
+type PreparedSource = napi.PreparedSource | wasm.PreparedSource;
+type PreparedAnimation = napi.PreparedAnimation | wasm.PreparedAnimation;
+type SceneOutput = ReturnType<typeof bindingOptions> & { signal?: AbortSignal };
+
+/** The calls that take what a renderer prepared, as methods so that either backend's renderer fits. */
+type PreparedRenderer = {
+  render(source: PreparedSource, options: SceneOutput): Promise<RenderedImage>;
+  renderSvg(source: PreparedSource, options: { signal?: AbortSignal }): Promise<string>;
+  measure(source: PreparedSource, options: { signal?: AbortSignal }): Promise<napi.MeasuredNode>;
+  renderAnimation(
+    animation: PreparedAnimation,
+    options: { signal?: AbortSignal },
+  ): Promise<RenderedImage>;
+};
+
 /** Readies a single scene for its render, fetching what the renderer reads after the cascade. */
-async function prepareScene<T extends PipelineOptions>(element: RenderInput, options?: T) {
+async function prepareScene<T extends PipelineOptions>(
+  element: RenderInput,
+  options?: T,
+): Promise<{ renderer: PreparedRenderer; prepared: PreparedSource; output: SceneOutput }> {
   options?.signal?.throwIfAborted();
 
   const renderer = await resolveRenderer(options);
@@ -338,6 +357,15 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
 export async function renderAnimation(
   options: RenderAnimationOptions,
 ): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
+  const { renderer, prepared } = await prepareAnimation(options);
+
+  return renderer.renderAnimation(prepared, { signal: options.signal });
+}
+
+/** Readies every scene of an animation for its render, as {@link prepareScene} does for one. */
+async function prepareAnimation(
+  options: RenderAnimationOptions,
+): Promise<{ renderer: PreparedRenderer; prepared: PreparedAnimation }> {
   options.signal?.throwIfAborted();
 
   const renderer = await resolveRenderer(options);
@@ -357,5 +385,5 @@ export async function renderAnimation(
     scenes: scenes.map(({ node, durationMs }) => ({ node, durationMs })),
   });
 
-  return renderer.renderAnimation(prepared, { signal: options.signal });
+  return { renderer, prepared };
 }

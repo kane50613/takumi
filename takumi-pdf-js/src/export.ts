@@ -1,18 +1,21 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
-import { type DocumentInput, resolveDocument } from "@takumi-rs/helpers/jsx";
-import type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/helpers/renderer";
 import {
+  type DocumentInput,
+  type FontLoader,
+  type ImagesInput,
   type JsonSource,
   lazy,
   needsArgs,
   Prepared,
+  type PrepareImagesInput,
   prepareSource,
   readSource,
   renderPrepared,
+  resolveDocument,
   sheetsOf,
   toNativeSource,
   WasmRenderer,
-} from "@takumi-rs/helpers/renderer";
+} from "@takumi-rs/bindings-js";
 import {
   type FontCacheOptions,
   type PageOverride,
@@ -23,8 +26,8 @@ import {
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontCacheOptions } from "../pkg/takumi_pdf_wasm";
-export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/helpers/renderer";
-export { Prepared } from "@takumi-rs/helpers/renderer";
+export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
+export { Prepared } from "@takumi-rs/bindings-js";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";
 

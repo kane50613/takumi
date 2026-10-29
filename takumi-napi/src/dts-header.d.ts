@@ -1,5 +1,4 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
-import type { ListedFont } from "@takumi-rs/helpers/renderer";
 import type { Properties } from "csstype";
 
 export type {
@@ -61,6 +60,9 @@ export interface FontDetails {
 }
 
 export type Font = FontDetails | ByteBuf;
+
+/** A font of a render's `fonts` list, described before its bytes arrive. */
+type ListedFont = Pick<FontDetails, "name" | "weight" | "style" | "unicodeRange"> & { key: string };
 
 /** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
 export type KeyframesMap = Record<string, Record<string, Properties>>;
