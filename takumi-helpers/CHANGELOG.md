@@ -1,3 +1,33 @@
+## @takumi-rs/helpers@2.19.0
+
+### `PdfRenderer` and `Painter` prepare a document too
+
+`PdfRenderer.prepare` and `Painter.prepare`, and the shared `prepare` each package exports, fetch the images a document draws and load the font subsets its text uses, a PDF's header, footer, and page bands included. `render`, `measure`, and `paint` take the prepared document, a PDF with only file options such as `metadata` and `pdfa`.
+
+### Emoji images download once per process
+
+Without a `fetchCache`, every render used to download each emoji's SVG again. Emoji images from the `emoji` providers are now kept across renders in a cache of up to 8 MB per `fetch` function. Other remote images still need a `fetchCache` to be reused. The `fluent` and `fluentFlat` sets now load from a pinned commit of `shuding/fluentui-emoji-unicode`, as the other sets load from a pinned version, so a cached image cannot go stale.
+
+### Renderers take HTML directly
+
+`render`, `renderSvg`, `measure`, and the WASM `renderAsDataUrl` accept an HTML string in place of a node tree. The markup is parsed in Rust, and the CSS of its `<style>` elements follows the `css` option. A `<style>` with a `media` attribute applies only where its query matches. `takumi-html` adds `parse_html`, which returns that CSS with the tree. `fromHtml` from `@takumi-rs/helpers/html` is deprecated in favor of passing the string and will be removed in v3.
+
+### `Renderer.prepare` fetches what a render needs ahead of it
+
+`renderer.prepare(source, options)` styles an HTML string or node tree, fetches the images it draws, and loads the font subsets its text uses. `render`, `renderSvg`, and `measure` take the prepared source with only output options such as `format`. `renderer.prepareAnimation(options)` does the same for every scene of an animation, and `renderAnimation` takes its result. `prepareImages` from `@takumi-rs/helpers` is deprecated in favor of `prepare`.
+
+`takumi-js` renders through `prepare`, so it fetches the images the styled tree draws. An image that `css`, a `<style>` element, or a `::before` rule sets now renders, an image under `display: none` is no longer fetched, and a custom `fetch` now receives relative URLs such as `/logo.png`.
+
+### Editors flag imports from `@takumi-rs/helpers/renderer`
+
+The entry holds glue internal to the renderer packages, which no longer import it. Its exports keep working and will be removed in v3. Import types such as `FontLoader` and `ImagesInput` from the renderer package you use.
+
+### Font subsets load as a browser loads them
+
+When `fonts` holds `unicodeRange` subsets, as `googleFonts` returns, a render now loads only the subsets that font matching reaches for each character, through that text's own font stack, weight, and style. With `font-family: Inter, "Noto Sans JP"`, Latin text no longer loads Noto Sans JP's Latin subset, and a bold subset loads only when bold text uses it.
+
+The text comes from the styled tree, so a subset needed only by a stylesheet's generated content, a list marker, `text-transform`, the `text` elements of an SVG image, or a `takumi-pdf` page counter now loads. `collectCodepoints`, `LIST_MARKER_CHARACTERS`, and `subsetFonts` are deprecated.
+
 ## @takumi-rs/helpers@2.18.0
 
 ### Lay out tables with Chromium's table algorithm

@@ -1,3 +1,33 @@
+## @takumi-rs/wasm@2.19.0
+
+### Render on Nitro's `bun` preset instead of failing
+
+Nitro's `bun` preset used to answer every request with a 500 and `ENOENT ... _libs/@takumi-rs/[object WebAssembly.Module]`. The WASM packages now load their binary through unwasm there, as they do on other Nitro presets.
+
+### Renderers take HTML directly
+
+`render`, `renderSvg`, `measure`, and the WASM `renderAsDataUrl` accept an HTML string in place of a node tree. The markup is parsed in Rust, and the CSS of its `<style>` elements follows the `css` option. A `<style>` with a `media` attribute applies only where its query matches. `takumi-html` adds `parse_html`, which returns that CSS with the tree. `fromHtml` from `@takumi-rs/helpers/html` is deprecated in favor of passing the string and will be removed in v3.
+
+### `Renderer.prepare` fetches what a render needs ahead of it
+
+`renderer.prepare(source, options)` styles an HTML string or node tree, fetches the images it draws, and loads the font subsets its text uses. `render`, `renderSvg`, and `measure` take the prepared source with only output options such as `format`. `renderer.prepareAnimation(options)` does the same for every scene of an animation, and `renderAnimation` takes its result. `prepareImages` from `@takumi-rs/helpers` is deprecated in favor of `prepare`.
+
+`takumi-js` renders through `prepare`, so it fetches the images the styled tree draws. An image that `css`, a `<style>` element, or a `::before` rule sets now renders, an image under `display: none` is no longer fetched, and a custom `fetch` now receives relative URLs such as `/logo.png`.
+
+### Parse HTML strings in Rust in every renderer
+
+`takumi-paint` and `takumi-pdf` take HTML strings as `@takumi-rs/core` and `@takumi-rs/wasm` do, and `takumi-pdf` takes them for header and footer bands too. A `renderAnimation` scene can be an HTML string, its `<style>` rules applying to the animation. With `emoji: "from-font"`, `takumi-js` hands HTML to the renderer instead of parsing it in JavaScript.
+
+### Font subsets load as a browser loads them
+
+When `fonts` holds `unicodeRange` subsets, as `googleFonts` returns, a render now loads only the subsets that font matching reaches for each character, through that text's own font stack, weight, and style. With `font-family: Inter, "Noto Sans JP"`, Latin text no longer loads Noto Sans JP's Latin subset, and a bold subset loads only when bold text uses it.
+
+The text comes from the styled tree, so a subset needed only by a stylesheet's generated content, a list marker, `text-transform`, the `text` elements of an SVG image, or a `takumi-pdf` page counter now loads. `collectCodepoints`, `LIST_MARKER_CHARACTERS`, and `subsetFonts` are deprecated.
+
+### Editors point imports of `@takumi-rs/image-response` and `@takumi-rs/wasm/vite` to their replacements
+
+Editors now flag imports from `@takumi-rs/image-response`, which only re-exports `takumi-js/response`, and from `@takumi-rs/wasm/vite`, which resolves to the same loader as `@takumi-rs/wasm/auto` under Vite. Both keep working and will be removed in v3.
+
 ## @takumi-rs/wasm@2.18.2
 
 ### Faster renderer initialization

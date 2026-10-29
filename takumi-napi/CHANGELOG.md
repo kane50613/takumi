@@ -1,3 +1,29 @@
+## @takumi-rs/core@2.19.0
+
+### Renderers take HTML directly
+
+`render`, `renderSvg`, `measure`, and the WASM `renderAsDataUrl` accept an HTML string in place of a node tree. The markup is parsed in Rust, and the CSS of its `<style>` elements follows the `css` option. A `<style>` with a `media` attribute applies only where its query matches. `takumi-html` adds `parse_html`, which returns that CSS with the tree. `fromHtml` from `@takumi-rs/helpers/html` is deprecated in favor of passing the string and will be removed in v3.
+
+### `Renderer.prepare` fetches what a render needs ahead of it
+
+`renderer.prepare(source, options)` styles an HTML string or node tree, fetches the images it draws, and loads the font subsets its text uses. `render`, `renderSvg`, and `measure` take the prepared source with only output options such as `format`. `renderer.prepareAnimation(options)` does the same for every scene of an animation, and `renderAnimation` takes its result. `prepareImages` from `@takumi-rs/helpers` is deprecated in favor of `prepare`.
+
+`takumi-js` renders through `prepare`, so it fetches the images the styled tree draws. An image that `css`, a `<style>` element, or a `::before` rule sets now renders, an image under `display: none` is no longer fetched, and a custom `fetch` now receives relative URLs such as `/logo.png`.
+
+### Parse HTML strings in Rust in every renderer
+
+`takumi-paint` and `takumi-pdf` take HTML strings as `@takumi-rs/core` and `@takumi-rs/wasm` do, and `takumi-pdf` takes them for header and footer bands too. A `renderAnimation` scene can be an HTML string, its `<style>` rules applying to the animation. With `emoji: "from-font"`, `takumi-js` hands HTML to the renderer instead of parsing it in JavaScript.
+
+### Font subsets load as a browser loads them
+
+When `fonts` holds `unicodeRange` subsets, as `googleFonts` returns, a render now loads only the subsets that font matching reaches for each character, through that text's own font stack, weight, and style. With `font-family: Inter, "Noto Sans JP"`, Latin text no longer loads Noto Sans JP's Latin subset, and a bold subset loads only when bold text uses it.
+
+The text comes from the styled tree, so a subset needed only by a stylesheet's generated content, a list marker, `text-transform`, the `text` elements of an SVG image, or a `takumi-pdf` page counter now loads. `collectCodepoints`, `LIST_MARKER_CHARACTERS`, and `subsetFonts` are deprecated.
+
+### Loading a font no longer blocks rendering
+
+`FontResource::into_resolved` now also limits the `cmap` to the `unicode_range` and hashes the font, so registering a resolved font takes the same short time whatever its size. `@takumi-rs/core` registers fonts on the JavaScript thread after decompressing them in the background, and renders no longer wait on a lock while fonts load. The font cache budget now counts a `unicode-range` subset by the bytes it keeps.
+
 ## @takumi-rs/core@2.18.2
 
 ### Faster renderer initialization

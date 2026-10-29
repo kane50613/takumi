@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/wasm",
-  "version": "2.18.2",
+  "version": "2.19.0",
   "description": "WebAssembly bindings for Takumi: render images, animations, and SVG from node trees. No headless browser.",
   "keywords": [
     "cloudflare-workers",
