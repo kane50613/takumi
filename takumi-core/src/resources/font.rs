@@ -484,9 +484,14 @@ impl Fonts {
       generic_family,
       unicode_range,
       last_resort,
+      is_restricted,
     } = font;
     let (data, id) = source.into_sfnt_with_id()?;
-    let (data, id) = unicode_range.restrict_sfnt(data, id);
+    let (data, id) = if is_restricted {
+      (data, id)
+    } else {
+      unicode_range.restrict_sfnt(data, id)
+    };
     let descriptors = FontFaceDescriptors {
       unicode_range,
       ..info_override
@@ -809,21 +814,6 @@ impl<'a> FontSource<'a> {
     )
   }
 
-  fn into_decoded(self) -> Result<Self, FontError> {
-    if self.is_decoded || (matches!(self.bytes, FontBytes::Shared(_)) && self.is_sfnt()) {
-      return Ok(Self {
-        is_decoded: true,
-        ..self
-      });
-    }
-
-    Ok(Self {
-      bytes: FontBytes::Inline(Cow::Owned(self.bytes.into_sfnt()?)),
-      is_decoded: true,
-      cache_id: self.cache_id,
-    })
-  }
-
   /// The decoded sfnt bytes and the id the glyph caches key them by.
   pub(crate) fn into_sfnt_with_id(self) -> Result<(SharedBytes, u64), FontError> {
     let passthrough = self.is_decoded || self.is_sfnt();
@@ -940,6 +930,8 @@ pub struct FontResource<'a> {
   /// Sorts after every normal family in default fallback selection (see
   /// [`FontResource::last_resort`]).
   last_resort: bool,
+  /// Whether [`Self::into_resolved`] already limited the `cmap` to `unicode_range`.
+  is_restricted: bool,
 }
 
 impl<'a> FontResource<'a> {
@@ -951,6 +943,7 @@ impl<'a> FontResource<'a> {
       generic_family: None,
       unicode_range: UnicodeRangeSet::default(),
       last_resort: false,
+      is_restricted: false,
     }
   }
 
@@ -1011,10 +1004,26 @@ impl<'a> FontResource<'a> {
     self.source.as_ref().len()
   }
 
-  /// Convert to resolved font resource, decompressing woff2/woff into a raw buffer.
+  /// Does the work registering the font takes in proportion to its size: decompresses woff2 and
+  /// woff, limits the `cmap` to the `unicode_range`, and hashes the result. Registering it after
+  /// takes time independent of its size, so a binding can do this off its main thread.
   pub fn into_resolved(self) -> Result<Self, FontError> {
-    let source = self.source.into_decoded()?;
-    Ok(Self { source, ..self })
+    if self.is_restricted {
+      return Ok(self);
+    }
+
+    let (data, id) = self.source.into_sfnt_with_id()?;
+    let (data, id) = self.unicode_range.restrict_sfnt(data, id);
+
+    Ok(Self {
+      source: FontSource {
+        bytes: FontBytes::Shared(data),
+        is_decoded: true,
+        cache_id: Some(id),
+      },
+      is_restricted: true,
+      ..self
+    })
   }
 }
 
@@ -1042,6 +1051,11 @@ mod tests {
     let (data, id) = source.into_sfnt_with_id().unwrap();
 
     FontBlob::new(data, id)
+  }
+
+  /// `source` as [`FontResource::into_resolved`] leaves it.
+  fn resolved(source: FontSource<'_>) -> FontSource<'_> {
+    FontResource::new(source).into_resolved().unwrap().source
   }
 
   /// The families fallback walks before the last-resort ones.
@@ -1140,7 +1154,7 @@ mod tests {
   fn a_static_woff2_face_keeps_its_id_through_decompression() {
     let woff2: &'static [u8] = geist_bytes().leak();
     let registered = blob(FontSource::from_static(woff2));
-    let resolved_first = blob(FontSource::from_static(woff2).into_decoded().unwrap());
+    let resolved_first = blob(resolved(FontSource::from_static(woff2)));
 
     // The bytes the font system holds are the decompressed sfnt either way, so only
     // the id carried past decompression keeps the two from being separate faces.
@@ -1322,11 +1336,28 @@ mod tests {
   }
 
   #[test]
+  fn a_resolved_subset_holds_what_registering_it_would() {
+    let basic_latin =
+      || -> UnicodeRangeSet { [UnicodeRange::new(0x20, 0x7e)].into_iter().collect() };
+    let (data, id) = FontSource::from(geist_bytes()).into_sfnt_with_id().unwrap();
+    let (expected, expected_id) = basic_latin().restrict_sfnt(data, id);
+    let resolved = FontResource::new(geist_bytes())
+      .unicode_range(basic_latin())
+      .into_resolved()
+      .unwrap();
+    let again = resolved.into_resolved().unwrap();
+    let (data, id) = again.source.into_sfnt_with_id().unwrap();
+
+    assert_eq!(id, expected_id);
+    assert_eq!((*data).as_ref(), (*expected).as_ref());
+  }
+
+  #[test]
   fn same_bytes_produce_the_same_blob_id() {
     let first = blob(FontSource::from(geist_bytes()));
     // Decoded up front rather than on registration, so the id has to come from the
     // decoded sfnt and not from whatever the caller happened to hand over.
-    let second = blob(FontSource::from(geist_bytes()).into_decoded().unwrap());
+    let second = blob(resolved(FontSource::from(geist_bytes())));
     let other = blob(FontSource::from(geist_mono_bytes()));
 
     // The glyph caches key on this id, so a re-registered face has to keep the entries

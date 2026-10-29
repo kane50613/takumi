@@ -12,7 +12,8 @@ test("concurrent registerFont calls on one renderer", async () => {
     Array.from({ length: 32 }, (_, i) =>
       renderer.registerFont({
         name: `Geist Concurrent ${i}`,
-        data: fontData,
+        // A copy each, since the same buffer twice is taken as the same font.
+        data: fontData.slice(0),
         weight: 400,
         style: "normal",
       }),
@@ -20,6 +21,13 @@ test("concurrent registerFont calls on one renderer", async () => {
   );
 
   expect(results.every((families) => families[0] && families[0].faces.length > 0)).toBe(true);
+
+  // A registration that overwrote another's would leave that family missing.
+  for (let i = 0; i < 32; i++) {
+    expect(renderer.unregisterFont({ name: `Geist Concurrent ${i}` })).toBe(true);
+  }
+
+  await renderer.registerFont({ name: "Geist Concurrent", data: fontData });
 
   const output = await renderer.render({
     type: "text",

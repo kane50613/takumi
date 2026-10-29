@@ -1,7 +1,4 @@
-use std::{
-  collections::HashMap,
-  sync::{Arc, Mutex, MutexGuard},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
@@ -86,41 +83,42 @@ pub struct Renderer {
   pub(crate) state: Arc<RendererState>,
 }
 
+/// The registered fonts and what registered them, published together.
+#[derive(Clone)]
+pub(crate) struct FontState {
+  fonts: Arc<Fonts>,
+  cache: FontCache,
+}
+
 pub(crate) struct RendererState {
-  /// Wait-free reads via `fonts.load()`; changes serialize on `font_cache` and publish a fresh
-  /// `Arc<Fonts>` via `store`. Renders in flight keep their old snapshot alive.
-  pub(crate) fonts: ArcSwap<Fonts>,
-  pub(crate) font_cache: Mutex<FontCache>,
+  /// Read without waiting through `font_state.load()`, so renders never block. Every change runs
+  /// on the JS thread that owns the renderer, so changes never race, and renders in flight keep
+  /// the state they started with.
+  font_state: ArcSwap<FontState>,
   pub(crate) resource_cache: ResourceCache,
 }
 
 impl RendererState {
-  fn font_cache(&self) -> Result<MutexGuard<'_, FontCache>> {
-    self
-      .font_cache
-      .lock()
-      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))
-  }
-
-  /// Applies `change` to a copy of the fonts and publishes it, one change at a time.
+  /// Applies `change` to a copy of the fonts and publishes it. Call it on the JS thread only.
   pub(crate) fn update_fonts<T>(
     &self,
     change: impl FnOnce(&mut Fonts, &mut FontCache) -> Result<T>,
   ) -> Result<T> {
-    let mut cache = self.font_cache()?;
-    let mut fonts = self.fonts.load_full().as_ref().clone();
-    let changed = change(&mut fonts, &mut cache)?;
+    let mut state = FontState::clone(&self.font_state.load());
+    let changed = change(Arc::make_mut(&mut state.fonts), &mut state.cache)?;
 
-    self.fonts.store(Arc::new(fonts));
+    self.font_state.store(Arc::new(state));
 
     Ok(changed)
   }
 
   /// The fonts for a render that names `families`, which are marked used.
-  pub(crate) fn fonts_for_render(&self, families: Option<&[String]>) -> Result<Arc<Fonts>> {
-    self.font_cache()?.touch(families.unwrap_or_default());
+  pub(crate) fn fonts_for_render(&self, families: Option<&[String]>) -> Arc<Fonts> {
+    let state = self.font_state.load();
 
-    Ok(self.fonts.load_full())
+    state.cache.touch(families.unwrap_or_default());
+
+    Arc::clone(&state.fonts)
   }
 }
 
@@ -453,12 +451,14 @@ impl Renderer {
 
     Ok(Self {
       state: Arc::new(RendererState {
-        fonts: ArcSwap::from_pointee(default_fonts().map_err(map_error)?),
-        font_cache: Mutex::new(FontCache::new(
-          options
-            .font_cache_max_bytes
-            .map(|bytes| bytes.max(0.0) as u64),
-        )),
+        font_state: ArcSwap::from_pointee(FontState {
+          fonts: Arc::new(default_fonts().map_err(map_error)?),
+          cache: FontCache::new(
+            options
+              .font_cache_max_bytes
+              .map(|bytes| bytes.max(0.0) as u64),
+          ),
+        }),
         resource_cache: match options.cache_max_bytes {
           Some(bytes) => ResourceCache::new(bytes.max(0.0) as u64),
           None => ResourceCache::default(),
@@ -505,13 +505,13 @@ impl Renderer {
   /// keeps them from being released for space.
   #[napi(js_name = "cachedFonts")]
   pub fn cached_fonts(&self, key: String, pin: bool) -> Result<Option<Vec<RegisteredFamily>>> {
-    Ok(
-      self
-        .state
-        .font_cache()?
-        .lookup(&key, pin)
-        .map(|registered| registered.into_iter().map(Into::into).collect()),
-    )
+    let registered = if pin {
+      self.state.update_fonts(|_, cache| Ok(cache.pin(&key)))?
+    } else {
+      self.state.font_state.load().cache.lookup(&key)
+    };
+
+    Ok(registered.map(|registered| registered.into_iter().map(Into::into).collect()))
   }
 
   fn load_font(
