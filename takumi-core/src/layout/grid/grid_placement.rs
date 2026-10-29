@@ -17,6 +17,7 @@ use crate::layout::{
   },
   layout_style::LayoutStyle,
 };
+use crate::sort_key::sort_by_key;
 
 /// Blink's `GridPlacementData`: each item's grid area, and how far placement moved the lines.
 #[derive(Debug, Clone)]
@@ -349,7 +350,11 @@ impl<'a> GridPlacement<'a> {
     // Blink's `AppendCurrentItemsToOrderedList`.
     let mut ordered: Vec<usize> = (0..placed_items.items.len()).collect();
 
-    ordered.sort_by_key(|&index| placed_items.items[index].start);
+    sort_by_key(&mut ordered, |&index| {
+      let start = placed_items.items[index].start;
+
+      (start.major_line, start.minor_line)
+    });
     placed_items.ordered = ordered;
 
     self.place_grid_items_locked_to_major_axis(&locked_to_major_axis, &mut placed_items);

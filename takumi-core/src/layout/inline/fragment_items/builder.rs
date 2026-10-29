@@ -33,6 +33,7 @@ use crate::{
   layout_unit::LayoutUnit,
   resources::glyph::ResolvedGlyphs,
   scene::text_ink_reach,
+  sort_key::sort_by_key,
   style::{Affine, Direction},
 };
 
@@ -305,7 +306,7 @@ impl FragmentItems {
       .fold(0.0, f32::max);
     items.baselines = first_baseline.zip(last_baseline);
     items.ink = ink;
-    items.inline_boxes.sort_by_key(|inline_box| inline_box.id);
+    sort_by_key(&mut items.inline_boxes, |inline_box| inline_box.id);
     items.shrink_to_fit();
     items
   }
@@ -822,6 +823,8 @@ pub(in crate::layout::inline) fn line_span_fragments<'c>(
     }
   }
 
-  fragments.sort_by_key(|(_, fragment)| (fragment.id, fragment.line_index));
+  sort_by_key(&mut fragments, |(_, fragment)| {
+    (fragment.id, fragment.line_index)
+  });
   fragments
 }

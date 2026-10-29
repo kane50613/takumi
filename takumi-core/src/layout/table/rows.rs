@@ -4,7 +4,9 @@
 
 use std::cmp::Ordering;
 
-use crate::{layout::content_alignment::BlockContentAlignment, layout_unit::LayoutUnit};
+use crate::{
+  layout::content_alignment::BlockContentAlignment, layout_unit::LayoutUnit, sort_key::sort_by_key,
+};
 
 /// The rows, sections, and cells of one table layout, Blink's `TableTypes::Rows`, `Sections`, and
 /// `CellBlockConstraints`, with each cell's measure.
@@ -524,7 +526,7 @@ impl ColspanCellTabulator {
       *remaining_rows -= 1;
       *remaining_rows != 0
     });
-    self.spanning_cells.sort_by_key(|(start, ..)| *start);
+    sort_by_key(&mut self.spanning_cells, |(start, ..)| *start);
   }
 
   /// Moves past the columns a cell from an earlier row still covers.

@@ -45,7 +45,9 @@ pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
 fn cascade_order<'r>(rules: impl IntoIterator<Item = &'r TwRule>) -> Vec<&'r TwRule> {
   let mut rules: Vec<&TwRule> = rules.into_iter().collect();
 
-  rules.sort_by(|left, right| (left.important, &left.order).cmp(&(right.important, &right.order)));
+  TwRule::sort(&mut rules, |left, right| {
+    (left.important, &left.order).cmp(&(right.important, &right.order))
+  });
   rules
 }
 

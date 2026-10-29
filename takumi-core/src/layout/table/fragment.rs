@@ -15,6 +15,7 @@ use crate::{
     tree::{LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
+  sort_key::sort_by_key,
 };
 
 /// A `<col>` or `<colgroup>` and the columns it covers, Blink's `TableColumnGeometry`.
@@ -164,10 +165,8 @@ impl ColumnGeometries<'_> {
   /// The geometries with each group before the columns it holds, and the columns in order, as
   /// Blink's `ColumnGeometriesBuilder::Sort` orders them.
   fn into_sorted(mut self) -> Vec<ColumnGeometry> {
-    self.geometries.sort_by(|a, b| {
-      a.start_column
-        .cmp(&b.start_column)
-        .then_with(|| a.is_group.cmp(&b.is_group).reverse())
+    sort_by_key(&mut self.geometries, |geometry| {
+      (geometry.start_column, !geometry.is_group)
     });
     self.geometries
   }

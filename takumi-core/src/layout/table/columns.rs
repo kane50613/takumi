@@ -7,6 +7,7 @@ use std::iter::repeat_n;
 use crate::{
   layout::{table::parts::TableGroupedChildren, tree::RenderNode},
   layout_unit::LayoutUnit,
+  sort_key::sort_by_key,
   style::{BoxSizing, ComputedStyle, Display, Length, SizingContext, Visibility},
 };
 
@@ -514,7 +515,7 @@ impl ColumnConstraints {
       column.encompass(cell.as_ref());
     }
 
-    colspan_cells.sort_by_key(|cell| (cell.span, cell.start_column));
+    sort_by_key(&mut colspan_cells, |cell| (cell.span, cell.start_column));
     for colspan in &colspan_cells {
       if is_fixed_layout {
         self.distribute_colspan_fixed(colspan, inline_border_spacing);

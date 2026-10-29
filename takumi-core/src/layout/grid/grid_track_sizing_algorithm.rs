@@ -16,6 +16,7 @@ use crate::{
     logical_rect::{AvailableLogicalSize, LogicalSize},
   },
   layout_unit::LayoutUnit,
+  sort_key::sort_by_key,
 };
 
 /// Blink's `GridItemContributionType`.
@@ -220,16 +221,13 @@ fn distribute_extra_space_to_sets(
     && flex_factor_sum.is_none_or(|sum| are_equal(sum, 0.0))
   {
     // Sets with the least room take their share first; infinite ones last.
-    sets_to_grow.sort_by(|&left, &right| {
-      let left = growth_potential_for_set(&sets[left], contribution_type, false);
-      let right = growth_potential_for_set(&sets[right], contribution_type, false);
+    sort_by_key(sets_to_grow, |&index| {
+      let potential = growth_potential_for_set(&sets[index], contribution_type, false);
 
-      match (left, right) {
-        (None, None) => std::cmp::Ordering::Equal,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (Some(left), Some(right)) => left.cmp(&right),
-      }
+      (
+        potential.is_none(),
+        potential.map_or(0, LayoutUnit::raw_value),
+      )
     });
   }
 
@@ -398,7 +396,9 @@ impl GridTrackSizingAlgorithm {
       return;
     }
 
-    spanning_multiple_ranges.sort_by_key(|&index| grid_items[index].start_line(direction));
+    sort_by_key(&mut spanning_multiple_ranges, |&index| {
+      grid_items[index].start_line(direction)
+    });
 
     for property in [
       TrackSpanProperties::HAS_FLEXIBLE_TRACK,
@@ -652,17 +652,13 @@ impl GridTrackSizingAlgorithm {
       .collect();
 
     // Items spanning no flexible track go first, by span.
-    reordered.sort_by(|&left, &right| {
-      let (left, right) = (&grid_items[left], &grid_items[right]);
+    sort_by_key(&mut reordered, |&index| {
+      let item = &grid_items[index];
 
-      match (
-        left.is_spanning_flexible_track(direction),
-        right.is_spanning_flexible_track(direction),
-      ) {
-        (false, true) => std::cmp::Ordering::Less,
-        (true, false) => std::cmp::Ordering::Greater,
-        (true, true) => std::cmp::Ordering::Equal,
-        (false, false) => left.span_size(direction).cmp(&right.span_size(direction)),
+      if item.is_spanning_flexible_track(direction) {
+        (true, 0)
+      } else {
+        (false, item.span_size(direction))
       }
     });
 
