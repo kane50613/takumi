@@ -40,7 +40,7 @@ use crate::{
     layout_result::{LayoutResult as BoxLayoutResult, LayoutStatus},
     logical_rect::{LogicalOffset, LogicalSize},
     margin_strut::MarginStrut,
-    tree::RenderNode,
+    tree::{NodeOrigin, RenderNode},
   },
   layout_unit::LayoutUnit,
   style::{BlockEllipsis, Direction as TextDirection, TextAlign, TextOverflow, TextWrapStyle},
@@ -824,9 +824,10 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       return LineClampState::LineClampEllipsis;
     }
 
-    // Blink's `ShouldTruncateOverflowingText`; takumi's computed `text-overflow` is `clip` in a
-    // box that does not clip its overflow.
-    let should_truncate_overflowing_text = style.misc4_data.text_overflow != TextOverflow::Clip;
+    // Blink's `ShouldTruncateOverflowingText`, an anonymous block taking the `text-overflow` of the
+    // box it stands in for when that box clips.
+    let should_truncate_overflowing_text = style.misc4_data.text_overflow != TextOverflow::Clip
+      && (style.clips_overflow() || self.node.block.origin == NodeOrigin::Anonymous);
 
     // Approximate: Blink truncates a line that overflowed before `text-fit` fitted it.
     let has_overflow = !line_info.is_block_in_inline

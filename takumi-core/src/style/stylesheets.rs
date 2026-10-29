@@ -1142,10 +1142,11 @@ macro_rules! define_style {
           style.base_data_mut().display.blockify();
           style.make_computed(sizing);
           // An anonymous block truncates as the box it stands in for, which clips for it.
-          if style.misc4_data.text_overflow != parent.misc4_data.text_overflow {
-            style.misc4_data_mut().text_overflow =
-              parent.misc4_data.text_overflow.clone();
-          }
+          style.misc4_data_mut().text_overflow = if parent.clips_overflow() {
+            parent.misc4_data.text_overflow.clone()
+          } else {
+            TextOverflow::Clip
+          };
           style
         }
 

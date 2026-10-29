@@ -157,3 +157,19 @@ fn a_hidden_input_takes_no_box() {
   assert!(run_texts(&measured).is_empty());
   assert_eq!(measured.height, 0.0);
 }
+
+#[test]
+fn a_text_field_ellipsizes_a_value_wider_than_it() {
+  let [input] = inputs(
+    r#"<input disabled value="What is Lorem Ipsum? Lorem Ipsum is dummy text" style="width: 80px; text-overflow: ellipsis">"#,
+  )
+  .try_into()
+  .unwrap();
+  let texts = run_texts(&input);
+
+  assert!(
+    texts.last().is_some_and(|text| text.ends_with('…')),
+    "{texts:?}"
+  );
+  assert!(!texts.concat().contains("dummy text"), "{texts:?}");
+}

@@ -101,9 +101,7 @@ impl TextControl {
 
   /// The box `host` lays out its value in, after Blink's
   /// `TextControlInnerEditorElement::CustomStyleForLayoutObject`. Approximate: the editor clips
-  /// where Blink's scrolls with its scrollbars hidden, which paints the same, and it truncates
-  /// with `text-overflow` only when the host clips its own overflow, since takumi computes the
-  /// host's `text-overflow` to `clip` otherwise.
+  /// where Blink's scrolls with its scrollbars hidden, which paints the same.
   pub(crate) fn inner_editor(self, host: &RenderContext, node: &Node) -> RenderNode {
     let (mut style, sizing, current_color) =
       host.resolve_pseudo_style(&MatchedDeclarationsView::default());
