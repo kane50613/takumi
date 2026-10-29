@@ -1,9 +1,13 @@
 use std::rc::Rc;
 
+use rustc_hash::FxHashMap;
+
 use crate::{
   context::RenderContext,
+  form_control::{has_attribute, is_element},
   geometry::{Point, Size},
   layout::{
+    counters::{CounterDirectives, LIST_ITEM, contains_style, saturate},
     layout_style::LayoutLength,
     node::{Node, resolve_image},
     tree::{NodeOrigin, RenderNode},
@@ -11,8 +15,8 @@ use crate::{
   layout_unit::LayoutUnit,
   matching::MatchedDeclarationsView,
   style::{
-    BackgroundImage, Direction, Display, Length, ListStylePosition, ListStyleType, MakeComputed,
-    TextWrapMode, WhiteSpaceCollapse,
+    BackgroundImage, ComputedStyle, Direction, Display, Length, ListStylePosition, ListStyleType,
+    MakeComputed, TextWrapMode, WhiteSpaceCollapse,
   },
 };
 
@@ -277,36 +281,125 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage) -> RenderNo
   item
 }
 
-/// The running count a list hands to its items, honoring `start` and `value`.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct ListCounter {
-  next: i32,
+/// Blink's [`ListItemOrdinal`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/html/list_item_ordinal.cc)
+/// values of the items one list encloses, numbered in document order as `CalcValue` numbers them
+/// with `CSSListCounterAccounting` off.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct ListItemOrdinals {
+  /// An `ol`'s `InitialCounter`, `None` for any other list.
+  initial_counter: Option<i32>,
+  /// Whether the list is an `ol` with `reversed`, which numbers its items down.
+  reversed: bool,
+  /// Whether `initial_counter` is the item count, which an `ol` with `reversed` and no `start`
+  /// takes from [`ListItemCounts`].
+  counts_items: bool,
+  /// The value of the item numbered last.
+  previous: Option<i32>,
+  items: i32,
 }
 
-impl ListCounter {
-  pub(super) fn new(node: &Node) -> Self {
+/// How many items each `ol` with `reversed` and no `start` encloses, by source order: Blink's
+/// `InitialCounterForReversedOrderedList`, which a first render tree build counts.
+pub(super) type ListItemCounts = FxHashMap<usize, i32>;
+
+impl ListItemOrdinals {
+  /// The ordinals of the items `node` encloses, a list owner or the parent of items that no list
+  /// owner encloses, at `source_order`.
+  pub(super) fn new(node: &Node, source_order: usize, counts: &ListItemCounts) -> Self {
+    if !is_element(node, "ol") {
+      return Self::default();
+    }
+
+    let reversed = has_attribute(node, "reversed");
+    let start = attribute_number(node, "start");
+    let counts_items = reversed && start.is_none();
+    let initial_counter = match start {
+      Some(start) => start,
+      None if reversed => counts.get(&source_order).copied().unwrap_or_default(),
+      None => 1,
+    };
+
     Self {
-      next: attribute_number(node, "start").unwrap_or(1),
+      initial_counter: Some(initial_counter),
+      reversed,
+      counts_items,
+      ..Self::default()
     }
   }
 
-  /// The item's own `value` attribute, else the list's running count.
-  pub(super) fn take(&mut self, node: &Node) -> i32 {
-    let ordinal = attribute_number(node, "value").unwrap_or(self.next);
-    self.next = ordinal.saturating_add(1);
-    ordinal
+  /// Whether `ListItemOrdinal::IsInReversedOrderedList` holds for the items.
+  pub(super) fn reversed(&self) -> bool {
+    self.reversed
+  }
+
+  /// An `ol`'s `InitialCounter`.
+  pub(super) fn initial_counter(&self) -> Option<i32> {
+    self.initial_counter
+  }
+
+  /// Numbers the next item, `node` with `style`: Blink's `ListItemOrdinal::CalcValue`.
+  pub(super) fn next_value(&mut self, node: &Node, style: &ComputedStyle) -> i32 {
+    let directives = CounterDirectives::of(style, LIST_ITEM);
+    let value = if directives.has_set() {
+      directives.combined_value()
+    } else if let Some(explicit_value) = explicit_value(node) {
+      explicit_value
+    } else {
+      let value_step = if directives.has_increment() {
+        directives.combined_value()
+      } else if self.reversed {
+        -1
+      } else {
+        1
+      };
+      let base_value = match (self.previous, self.initial_counter) {
+        (Some(previous), _) => i64::from(previous),
+        (None, Some(initial_counter)) => {
+          i64::from(initial_counter) + if self.reversed { 1 } else { -1 }
+        }
+        (None, None) => 0,
+      };
+
+      saturate(base_value + i64::from(value_step))
+    };
+
+    self.previous = Some(value);
+    self.items = self.items.saturating_add(1);
+    value
+  }
+
+  /// Records the item count of an `ol` with `reversed` and no `start` at `source_order`.
+  pub(super) fn record_count(&self, source_order: usize, counts: &mut ListItemCounts) {
+    if self.counts_items {
+      counts.insert(source_order, self.items);
+    }
   }
 }
 
-/// Items count within their enclosing list, or their parent in a tree built in code.
-pub(super) fn owns_list_counter(node: &Node, inside_list: bool) -> bool {
-  !inside_list || is_list_element(node)
+/// Blink's `ListItemOrdinal::IsListOwner`: an `ol`, `ul`, or `menu`, or a box with style
+/// containment, which the counting of the items inside it does not cross.
+pub(super) fn is_list_owner(node: &Node, style: &ComputedStyle) -> bool {
+  ["ol", "ul", "menu"]
+    .into_iter()
+    .any(|tag| is_element(node, tag))
+    || contains_style(style)
 }
 
-pub(super) fn is_list_element(node: &Node) -> bool {
-  node
-    .tag_name()
-    .is_some_and(|tag| tag.eq_ignore_ascii_case("ol") || tag.eq_ignore_ascii_case("ul"))
+/// Whether the tree holds an `ol` with `reversed` and no `start`, which numbers its items from
+/// their count.
+pub(super) fn counts_list_items(root: &Node) -> bool {
+  root.subtree().any(|node| {
+    is_element(node, "ol")
+      && has_attribute(node, "reversed")
+      && attribute_number(node, "start").is_none()
+  })
+}
+
+/// An `li`'s `value`, which `HTMLLIElement::ParseValue` gives its ordinal.
+pub(super) fn explicit_value(node: &Node) -> Option<i32> {
+  is_element(node, "li")
+    .then(|| attribute_number(node, "value"))
+    .flatten()
 }
 
 pub(super) fn attribute_number(node: &Node, name: &str) -> Option<i32> {
@@ -446,17 +539,97 @@ mod tests {
     assert_eq!(markers(list, &css), ["1. ", "2. ", "3. "]);
   }
 
+  fn li(attributes_of: &[(&str, &str)]) -> Node {
+    item([])
+      .with_tag_name("li")
+      .with_attributes(attributes(attributes_of))
+  }
+
+  fn ol(items: impl Into<Vec<Node>>, attributes_of: &[(&str, &str)]) -> Node {
+    Node::container(items)
+      .with_class_name("list")
+      .with_tag_name("ol")
+      .with_attributes(attributes(attributes_of))
+  }
+
   #[test]
   fn start_and_value_attributes_move_the_count() {
+    let list = ol([li(&[]), li(&[("value", "9")]), li(&[])], &[("start", "3")]);
+
+    assert_eq!(markers(list, LIST_CSS), ["3. ", "9. ", "10. "]);
+  }
+
+  /// `HTMLOListElement::ParseAttribute` reads `start` on an `ol` alone, and
+  /// `HTMLLIElement::ParseValue` reads `value` on an `li` alone.
+  #[test]
+  fn start_and_value_apply_only_to_ol_and_li() {
     let list = Node::container([
-      item([]),
       item([]).with_attributes(attributes(&[("value", "9")])),
       item([]),
     ])
     .with_class_name("list")
     .with_attributes(attributes(&[("start", "3")]));
 
-    assert_eq!(markers(list, LIST_CSS), ["3. ", "9. ", "10. "]);
+    assert_eq!(markers(list, LIST_CSS), ["1. ", "2. "]);
+  }
+
+  /// `InitialCounter` of an `ol` with `reversed` and no `start` is its item count.
+  #[test]
+  fn a_reversed_list_counts_down_from_its_item_count() {
+    let list = ol([li(&[]), li(&[]), li(&[])], &[("reversed", "")]);
+
+    assert_eq!(markers(list, LIST_CSS), ["3. ", "2. ", "1. "]);
+  }
+
+  #[test]
+  fn a_reversed_list_counts_down_from_start_and_past_a_value() {
+    let list = ol(
+      [li(&[]), li(&[("value", "10")]), li(&[])],
+      &[("reversed", ""), ("start", "5")],
+    );
+
+    assert_eq!(markers(list, LIST_CSS), ["5. ", "10. ", "9. "]);
+  }
+
+  /// A nested list's items are not the outer list's, so the outer count leaves them out.
+  #[test]
+  fn a_reversed_list_counts_only_its_own_items() {
+    let nested = ol([li(&[]), li(&[])], &[]);
+    let list = ol(
+      [li(&[]), item([nested]).with_tag_name("li")],
+      &[("reversed", "")],
+    );
+
+    assert_eq!(markers(list, LIST_CSS), ["2. ", "1. ", "1. ", "2. "]);
+  }
+
+  /// `IsListOwner` stops counting at a box with style containment, which numbers its own items.
+  #[test]
+  fn style_containment_numbers_its_own_items() {
+    let scope = Node::container([li(&[]), li(&[])]).with_class_name("scope");
+    let list = ol([li(&[]), scope, li(&[])], &[]);
+    let css = format!("{LIST_CSS} .scope {{ display: block; contain: style }}");
+
+    assert_eq!(markers(list, &css), ["1. ", "1. ", "2. ", "2. "]);
+  }
+
+  /// `CalcValue` takes an item's `counter-set` or `counter-increment` of `list-item`.
+  #[test]
+  fn list_item_counter_properties_move_the_count() {
+    let list = ol(
+      [
+        li(&[]),
+        li(&[]).with_class_name("item set"),
+        li(&[]),
+        li(&[]).with_class_name("item step"),
+      ],
+      &[],
+    );
+    let css = format!(
+      "{LIST_CSS} .set {{ counter-set: list-item 7 }} .step {{ counter-increment: list-item 5 }}"
+    );
+
+    assert_eq!(markers(list, &css), ["1. ", "7. ", "8. ", "13. "]);
   }
 
   /// A wrapper is not a list, so its `start` leaves the enclosing count alone.

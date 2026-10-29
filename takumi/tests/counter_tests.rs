@@ -105,3 +105,26 @@ fn a_counter_nothing_instantiates_reads_zero() {
 
   assert_eq!(counted(css, element("root", [])), ["0|0"]);
 }
+
+#[test]
+fn a_reversed_list_counts_the_list_item_counter_down() {
+  let css =
+    "li { display: list-item; list-style-type: none } li::before { content: counter(list-item) }";
+  let item = || Node::container([]).with_tag_name("li");
+  let list = Node::container([item(), item(), item()])
+    .with_tag_name("ol")
+    .with_attributes(BTreeMap::from([("reversed".into(), "".into())]));
+
+  assert_eq!(counted(css, list), ["3", "2", "1"]);
+}
+
+#[test]
+fn an_li_that_is_not_a_list_item_leaves_the_list_item_counter_alone() {
+  let css = "li { display: list-item; list-style-type: none } .block { display: block }
+    li::before { content: counter(list-item) }";
+  let item = || Node::container([]).with_tag_name("li");
+  let block = item().with_class_name("block");
+  let list = Node::container([item(), block, item()]).with_tag_name("ol");
+
+  assert_eq!(counted(css, list), ["1", "1", "2"]);
+}

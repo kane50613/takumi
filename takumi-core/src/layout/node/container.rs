@@ -1,4 +1,4 @@
-use std::mem::take;
+use std::{iter::from_fn, mem::take};
 
 use crate::layout::node::{Node, NodeKind};
 
@@ -13,15 +13,20 @@ impl Node {
 
   /// How many nodes this one and its descendants hold, counted iteratively for deep trees.
   pub(crate) fn subtree_len(&self) -> usize {
-    let mut len = 0;
+    self.subtree().count()
+  }
+
+  /// This node and its descendants, walked iteratively for deep trees, in no particular order.
+  pub(crate) fn subtree(&self) -> impl Iterator<Item = &Node> {
     let mut pending = vec![self];
 
-    while let Some(node) = pending.pop() {
-      len += 1;
-      pending.extend(node.children().into_iter().flatten());
-    }
+    from_fn(move || {
+      let node = pending.pop()?;
 
-    len
+      pending.extend(node.children().into_iter().flatten());
+
+      Some(node)
+    })
   }
 
   pub(crate) fn take_children(&mut self) -> Option<Box<[Node]>> {
