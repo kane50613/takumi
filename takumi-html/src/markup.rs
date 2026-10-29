@@ -90,18 +90,15 @@ struct Parser<'a> {
 impl<'a> Parser<'a> {
   fn step(&mut self) {
     let rest = self.rest;
-    let bytes = rest.as_bytes();
-    let markup = (0..bytes.len()).find(|&index| {
-      bytes[index] == b'<'
-        && bytes
-          .get(index + 1)
-          .is_some_and(|&next| next.is_ascii_alphabetic() || matches!(next, b'/' | b'!' | b'?'))
+    let markup = rest.as_bytes().windows(2).position(|pair| match *pair {
+      [b'<', next] => next.is_ascii_alphabetic() || matches!(next, b'/' | b'!' | b'?'),
+      _ => false,
     });
 
     match markup {
       Some(0) => self.markup(),
       end => {
-        let (text, rest) = rest.split_at(end.unwrap_or(rest.len()));
+        let (text, rest) = split_or_whole(rest, end.unwrap_or(rest.len()));
 
         self.rest = rest;
         self.insert_text(&entities::decode(text));
@@ -151,7 +148,7 @@ impl<'a> Parser<'a> {
         }
       }
     } else {
-      self.rest = &rest[1..];
+      self.rest = rest.strip_prefix('<').unwrap_or(rest);
 
       let tag = self.tag();
 
@@ -162,9 +159,9 @@ impl<'a> Parser<'a> {
   /// A doctype, or a bogus comment holding `declaration`.
   fn declaration(&mut self, declaration: &str) {
     let Some(doctype) = declaration
-      .get(..7)
-      .filter(|prefix| prefix.eq_ignore_ascii_case("doctype"))
-      .map(|_| &declaration[7..])
+      .split_at_checked(7)
+      .filter(|(prefix, _)| prefix.eq_ignore_ascii_case("doctype"))
+      .map(|(_, doctype)| doctype)
     else {
       self.insert_comment(declaration);
       return;
@@ -186,13 +183,10 @@ impl<'a> Parser<'a> {
   /// Reads a tag from its name to its closing `>`.
   /// <https://html.spec.whatwg.org/multipage/parsing.html#tag-name-state>
   fn tag(&mut self) -> Tag {
-    let mut rest = self.rest;
-    let name_end = rest.find(is_tag_delimiter).unwrap_or(rest.len());
-    let name = rest[..name_end].to_ascii_lowercase();
+    let (name, mut rest) = split_before(self.rest, is_tag_delimiter);
+    let name = name.to_ascii_lowercase();
     let mut attrs: Vec<(String, String)> = Vec::new();
     let mut self_closing = false;
-
-    rest = &rest[name_end..];
 
     loop {
       rest = rest.trim_start_matches(|character: char| character.is_ascii_whitespace());
@@ -218,13 +212,14 @@ impl<'a> Parser<'a> {
       }
 
       // An attribute name may start with `=`.
-      let first = rest.chars().next().map_or(1, char::len_utf8);
-      let name_end = rest[first..]
-        .find(|character: char| is_tag_delimiter(character) || character == '=')
-        .map_or(rest.len(), |end| end + first);
-      let name = rest[..name_end].to_ascii_lowercase();
-      let after_name =
-        rest[name_end..].trim_start_matches(|character: char| character.is_ascii_whitespace());
+      let name_end = rest
+        .char_indices()
+        .skip(1)
+        .find(|&(_, character)| is_tag_delimiter(character) || character == '=')
+        .map_or(rest.len(), |(end, _)| end);
+      let (name, after) = split_or_whole(rest, name_end);
+      let name = name.to_ascii_lowercase();
+      let after_name = after.trim_start_matches(|character: char| character.is_ascii_whitespace());
       let value = match after_name.strip_prefix('=') {
         Some(value) => {
           let (value, after) = split_attribute_value(value);
@@ -233,7 +228,7 @@ impl<'a> Parser<'a> {
           value
         }
         None => {
-          rest = &rest[name_end..];
+          rest = after;
           ""
         }
       };
@@ -370,20 +365,19 @@ impl<'a> Parser<'a> {
         rest
           .get(index..index + close.len())
           .is_some_and(|candidate| candidate.eq_ignore_ascii_case(&close))
-          && rest[index + close.len()..]
-            .chars()
-            .next()
-            .is_none_or(is_tag_delimiter)
+          && rest
+            .get(index + close.len()..)
+            .is_some_and(|after| after.chars().next().is_none_or(is_tag_delimiter))
       });
 
     let Some(end) = end else {
       self.rest = "";
       return rest;
     };
-    let after = &rest[end + close.len()..];
+    let (text, closing) = split_or_whole(rest, end);
 
-    self.rest = after.split_once('>').map_or("", |(_, after)| after);
-    &rest[..end]
+    self.rest = closing.split_once('>').map_or("", |(_, after)| after);
+    text
   }
 
   /// `<html>`, `<head>`, or `<body>` in a document: the first adds the element, a later one
@@ -623,15 +617,25 @@ fn split_attribute_value(source: &str) -> (&str, &str) {
   let source = source.trim_start_matches(|character: char| character.is_ascii_whitespace());
 
   match source.chars().next() {
-    Some(quote @ ('"' | '\'')) => source[1..].split_once(quote).unwrap_or((&source[1..], "")),
-    _ => {
-      let end = source
-        .find(|character: char| character.is_ascii_whitespace() || character == '>')
-        .unwrap_or(source.len());
+    Some(quote @ ('"' | '\'')) => {
+      let quoted = source.strip_prefix(quote).unwrap_or(source);
 
-      source.split_at(end)
+      quoted.split_once(quote).unwrap_or((quoted, ""))
     }
+    _ => split_before(source, |character| {
+      character.is_ascii_whitespace() || character == '>'
+    }),
   }
+}
+
+/// `text` split before the first character `delimiter` matches, or whole when none does.
+fn split_before(text: &str, delimiter: impl Fn(char) -> bool) -> (&str, &str) {
+  split_or_whole(text, text.find(delimiter).unwrap_or(text.len()))
+}
+
+/// `text` split at byte `index`, or whole when `index` is past its end or inside a character.
+fn split_or_whole(text: &str, index: usize) -> (&str, &str) {
+  text.split_at_checked(index).unwrap_or((text, ""))
 }
 
 /// An attribute of an element in `ns`, with the namespace and casing the tree builder gives it.

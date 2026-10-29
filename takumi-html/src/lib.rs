@@ -1,5 +1,20 @@
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+#![deny(
+  clippy::unwrap_used,
+  clippy::expect_used,
+  clippy::panic,
+  clippy::indexing_slicing,
+  clippy::string_slice
+)]
+#![cfg_attr(
+  test,
+  allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::string_slice
+  )
+)]
 #![deny(missing_docs)]
 //! Parse HTML markup into a takumi [`Node`] tree.
 //!
@@ -796,26 +811,31 @@ fn dimension(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<Length> {
       .or_else(|| value.parse().ok().map(Length::Px));
   }
 
-  let digits_end = |start: usize| {
-    value[start..]
+  let digits_len = |text: &str| {
+    text
       .find(|character: char| !character.is_ascii_digit())
-      .map_or(value.len(), |end| start + end)
+      .unwrap_or(text.len())
   };
-  let integer_end = digits_end(0);
+  let integer_end = digits_len(value);
 
   if integer_end == 0 {
     return None;
   }
   // A fraction needs a digit after its point; anything past the number is ignored.
-  let number_end = match value[integer_end..].strip_prefix('.') {
+  let number_end = match value
+    .get(integer_end..)
+    .unwrap_or_default()
+    .strip_prefix('.')
+  {
     Some(fraction) if fraction.starts_with(|character: char| character.is_ascii_digit()) => {
-      digits_end(integer_end + 1)
+      integer_end + 1 + digits_len(fraction)
     }
     _ => integer_end,
   };
-  let number: f32 = value[..number_end].parse().ok()?;
+  let (number, unit) = value.split_at_checked(number_end)?;
+  let number: f32 = number.parse().ok()?;
 
-  Some(if value[number_end..].starts_with('%') {
+  Some(if unit.starts_with('%') {
     Length::Percentage(number)
   } else {
     Length::Px(number)

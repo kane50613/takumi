@@ -24,64 +24,67 @@ fn decode_in(text: &str, in_attribute: bool) -> Cow<'_, str> {
   let mut out = String::with_capacity(text.len());
   let mut rest = text;
 
-  while let Some(start) = rest.find('&') {
-    out.push_str(&rest[..start]);
-    rest = &rest[start + 1..];
+  while let Some((before, after)) = rest.split_once('&') {
+    out.push_str(before);
 
-    let decoded = match rest.strip_prefix('#') {
-      Some(number) => numeric(number).map(|(character, length)| {
+    let decoded = match after.strip_prefix('#') {
+      Some(number) => numeric(number).map(|(character, after)| {
         out.push(character);
-        length + 1
+        after
       }),
-      None => named(rest, in_attribute).map(|(characters, length)| {
+      None => named(after, in_attribute).map(|(characters, after)| {
         out.push_str(characters);
-        length
+        after
       }),
     };
 
-    match decoded {
-      Some(length) => rest = &rest[length..],
-      None => out.push('&'),
-    }
+    rest = decoded.unwrap_or_else(|| {
+      out.push('&');
+      after
+    });
   }
 
   out.push_str(rest);
   Cow::Owned(out)
 }
 
-/// The characters the named reference after the `&` at the start of `text` stands for, and its
-/// length.
-fn named(text: &str, in_attribute: bool) -> Option<(&'static str, usize)> {
+/// The characters the named reference after the `&` at the start of `text` stands for, and the
+/// text after it.
+fn named(text: &str, in_attribute: bool) -> Option<(&'static str, &str)> {
   let run = text
     .bytes()
     .take(LONGEST_NAME)
     .take_while(u8::is_ascii_alphanumeric)
     .count();
 
-  if text[run..].starts_with(';')
-    && let Some(characters) = NAMED_REFERENCES.get(&text[..=run])
+  if let Some((name, after)) = text.split_at_checked(run + 1)
+    && let Some(characters) = name.strip_suffix(';').and(NAMED_REFERENCES.get(name))
   {
-    return Some((characters, run + 1));
+    return Some((characters, after));
   }
 
   (2..=run.min(LONGEST_UNTERMINATED_NAME))
     .rev()
-    .find_map(|length| Some((NAMED_REFERENCES.get(&text[..length])?, length)))
-    .filter(|&(_, length)| {
+    .find_map(|length| {
+      let (name, after) = text.split_at_checked(length)?;
+
+      Some((NAMED_REFERENCES.get(name)?, after))
+    })
+    .filter(|&(_, after)| {
       !in_attribute
-        || !text[length..]
+        || !after
           .bytes()
           .next()
           .is_some_and(|next| next == b'=' || next.is_ascii_alphanumeric())
     })
 }
 
-/// The character the numeric reference after the `&#` at the start of `text` stands for, and its
-/// length.
-fn numeric(text: &str) -> Option<(char, usize)> {
-  let (digits, radix, prefix) = match text.strip_prefix(['x', 'X']) {
-    Some(hex) => (hex, 16, 1),
-    None => (text, 10, 0),
+/// The character the numeric reference after the `&#` at the start of `text` stands for, and the
+/// text after it.
+fn numeric(text: &str) -> Option<(char, &str)> {
+  let (digits, radix) = match text.strip_prefix(['x', 'X']) {
+    Some(hex) => (hex, 16),
+    None => (text, 10),
   };
   let count = digits
     .bytes()
@@ -92,18 +95,16 @@ fn numeric(text: &str) -> Option<(char, usize)> {
     return None;
   }
 
-  let code_point = digits[..count]
+  let (digits, after) = digits.split_at_checked(count)?;
+  let code_point = digits
     .chars()
     .filter_map(|digit| digit.to_digit(radix))
     .fold(0_u32, |value, digit| {
       value.saturating_mul(radix).saturating_add(digit)
     });
-  let terminator = usize::from(digits[count..].starts_with(';'));
+  let after = after.strip_prefix(';').unwrap_or(after);
 
-  Some((
-    code_point_character(code_point),
-    prefix + count + terminator,
-  ))
+  Some((code_point_character(code_point), after))
 }
 
 /// <https://html.spec.whatwg.org/multipage/parsing.html#numeric-character-reference-end-state>
