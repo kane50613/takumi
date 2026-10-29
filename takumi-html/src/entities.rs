@@ -59,14 +59,14 @@ fn named(text: &str, in_attribute: bool) -> Option<(&'static str, usize)> {
     .count();
 
   if text[run..].starts_with(';')
-    && let Some(characters) = lookup(&text[..=run])
+    && let Some(characters) = NAMED_REFERENCES.get(&text[..=run])
   {
     return Some((characters, run + 1));
   }
 
   (2..=run.min(LONGEST_UNTERMINATED_NAME))
     .rev()
-    .find_map(|length| Some((lookup(&text[..length])?, length)))
+    .find_map(|length| Some((NAMED_REFERENCES.get(&text[..length])?, length)))
     .filter(|&(_, length)| {
       !in_attribute
         || !text[length..]
@@ -74,13 +74,6 @@ fn named(text: &str, in_attribute: bool) -> Option<(&'static str, usize)> {
           .next()
           .is_some_and(|next| next == b'=' || next.is_ascii_alphanumeric())
     })
-}
-
-fn lookup(name: &str) -> Option<&'static str> {
-  NAMED_REFERENCES
-    .binary_search_by(|(each, _)| (*each).cmp(name))
-    .ok()
-    .map(|index| NAMED_REFERENCES[index].1)
 }
 
 /// The character the numeric reference after the `&#` at the start of `text` stands for, and its

@@ -3,9 +3,7 @@
 use serde::Deserialize;
 pub use takumi_bindings_common::{
   input::{Font, ImageSource},
-  options::{
-    AnimationOutputFormat, OutputFormat, RenderOptions, RendererOptions, SvgRenderOptions,
-  },
+  options::{AnimationOutputFormat, OutputFormat, RenderOptions, RendererOptions},
 };
 use wasm_bindgen::prelude::*;
 

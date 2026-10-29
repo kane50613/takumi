@@ -46,7 +46,7 @@ fn bytes(value: f64) -> u64 {
   value.max(0.0) as u64
 }
 
-/// Options for rendering an image.
+/// Options for rendering an image or an SVG document.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderOptions {
@@ -108,43 +108,9 @@ impl RenderOptions {
         .build(),
     )
   }
-}
 
-/// What a render draws with besides its options: the fonts, the stylesheet, and the images.
-pub struct Draw<'f> {
-  pub fonts: &'f Fonts,
-  pub cache: &'f ResourceCache,
-  pub stylesheet: Arc<StyleSheet>,
-  pub images: HashMap<Arc<str>, DecodedImage>,
-}
-
-/// Options for rendering a node tree to an SVG document.
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct SvgRenderOptions {
-  /// The width of the viewport in pixels.
-  pub width: Option<u32>,
-  /// The height of the viewport in pixels.
-  pub height: Option<u32>,
-  /// The animation timeline time in milliseconds.
-  pub time_ms: Option<i64>,
-  /// The images the render looks up by `src`.
-  pub images: Option<Vec<ImageSource>>,
-  /// CSS to apply before rendering.
-  pub css: Option<Vec<CssSource>>,
-  /// Deprecated alias of `css`.
-  pub stylesheets: Option<Vec<String>>,
-  /// Deprecated top-level keyframes.
-  #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
-  pub keyframes: Option<Vec<KeyframesRule>>,
-  /// The families the render falls back through, in order.
-  pub font_families: Option<Vec<String>>,
-  /// The BCP-47 language of the root.
-  pub lang: Option<String>,
-}
-
-impl SvgRenderOptions {
-  /// The SVG options for drawing `node` under these options.
+  /// The SVG options for drawing `node` under these options, which draw at a device pixel ratio
+  /// of 1.
   pub fn svg<'f>(&self, node: Node, draw: Draw<'f>) -> Result<SvgOptions<'f>, Error> {
     Ok(
       SvgOptions::builder()
@@ -159,6 +125,14 @@ impl SvgRenderOptions {
         .build(),
     )
   }
+}
+
+/// What a render draws with besides its options: the fonts, the stylesheet, and the images.
+pub struct Draw<'f> {
+  pub fonts: &'f Fonts,
+  pub cache: &'f ResourceCache,
+  pub stylesheet: Arc<StyleSheet>,
+  pub images: HashMap<Arc<str>, DecodedImage>,
 }
 
 /// Options for rendering an animation whose scenes each binding reads as `S`.

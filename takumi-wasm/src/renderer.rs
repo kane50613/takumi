@@ -187,7 +187,7 @@ impl Renderer {
     options: Option<SvgRenderOptionsType>,
   ) -> Result<String, JsValue> {
     let (node, document_css) = read_source(source.into(), &self.sources)?;
-    let mut options: SvgRenderOptions = options
+    let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
