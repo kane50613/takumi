@@ -1331,7 +1331,7 @@ fn tw_rule_order(arena: &StyleArena<'_>) -> FxHashMap<u64, usize> {
 
   let mut sorted: Vec<&TwRule> = rules.into_values().collect();
 
-  sorted.sort_unstable_by(|left, right| left.order.cmp(&right.order));
+  TwRule::sort(&mut sorted, |left, right| left.order.cmp(&right.order));
   sorted
     .into_iter()
     .enumerate()
