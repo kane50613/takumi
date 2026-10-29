@@ -1,4 +1,5 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
+import type { ListedFont } from "@takumi-rs/helpers/renderer";
 
 export type ByteBuf = Uint8Array | ArrayBuffer;
 
@@ -15,10 +16,6 @@ export type FontDetails = {
    * subset of a family under the same `name` with its own ranges.
    */
   unicodeRange?: [number, number][];
-  /** @deprecated Register under `name` with `unicodeRange` instead. */
-  subsetOf?: string;
-  /** @deprecated Ignored; `unicodeRange` decides which subset serves a codepoint. */
-  subsetRank?: number;
   /** CSS generic family keyword this font resolves for. */
   generic?: string;
 };
@@ -386,6 +383,13 @@ export type RawPaintStep =
       readonly type: "begin-group" | "end-group" | "begin-clip" | "end-clip";
       readonly node: number;
     };
+
+/** The images a node tree looks up by URL and the listed fonts the render loads, read after the cascade. */
+export type RenderNeeds = {
+  images: string[];
+  /** The ids of the listed fonts the render loads, sorted. */
+  fonts: number[];
+};
 
 /** The tree as the wasm module serializes it, nodes and runs named by index. */
 export type RawPaintTree = {

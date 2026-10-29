@@ -79,26 +79,22 @@ Margins take numbers in CSS px, not length strings. For Chromium's `"0.5in"`, pa
 
 ## Fetching moves to your code
 
-Takumi does not fetch images for you. Use `prepareImages()` to fetch document images before rendering. Parse the HTML first, so the helper can find its image references:
+`render()` does not fetch images. Call `prepare()` first. It styles the document as `render()` would, fetches the images it draws, and loads the fonts its text uses:
 
-```tsx twoslash title="Pass fetched image bytes"
+```tsx twoslash title="Fetch images, then render"
 declare const html: string;
 // ---cut---
-import { prepareImages } from "@takumi-rs/helpers";
-import { fromHtml } from "@takumi-rs/helpers/html";
-import { render } from "takumi-pdf";
+import { prepare, render } from "takumi-pdf";
 
-const { node, css } = fromHtml(html);
-// [!code highlight]
-const images = await prepareImages({ node });
+const prepared = await prepare(html); // [!code highlight]
 
-const pdf = await render(node, { images, css }); // [!code highlight]
+const pdf = await render(prepared);
 ```
 
-`prepareImages()` walks the tree and fetches every remote `http` or `https` URL in `<img src>`, `background-image`, `mask-image`, and `list-style-image`. It returns the entries for `images`.
+`prepare()` fetches every remote `http` or `https` URL in `<img src>`, `background-image`, `mask-image`, and `list-style-image`, including those that `<style>` rules set and those in the header and footer.
 
-- It reads inline styles and `tw` classes. URLs inside `<style>` rules are not collected, so pass those images through `images` yourself.
-- It takes `timeout`, `maxBytes`, an `allowUrl` predicate, and a `fetchCache` that reuses bytes across renders.
+- Its `images` option takes `timeout`, `maxBytes`, an `allowUrl` predicate, a `fetchCache` that reuses bytes across renders, and your own `fetch`. Your `fetch` also receives relative URLs such as `/logo.png`.
+- Pass page and layout options such as `size`, `margin`, `header`, and `css` to `prepare()`. Pass file options such as `metadata` and `pdfa` to `render()`.
 
 Fonts come from the `fonts` option, not from CSS `@font-face` rules. See [Fonts & images](/docs/pdf/assets). Font URL loaders and `googleFonts()` make their own requests, so give them their own fetch limits.
 

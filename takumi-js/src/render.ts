@@ -1,12 +1,7 @@
 import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
-import {
-  prepareImages,
-  type CssInput,
-  type FetchOptions,
-  type ImageFetchCache,
-} from "@takumi-rs/helpers";
+import { type CssInput, type FetchOptions, type ImageFetchCache } from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
 import { defaultRenderer, type Renderer } from "./backend/renderer";
 import type { ReactNode } from "react";
@@ -113,6 +108,8 @@ export type RenderAnimationOptions = Managed<
 /** The subset of options the shared pipeline reads, across every entry point. */
 type PipelineOptions = Partial<SharedRenderExtras> &
   ManagedRendererOptions & {
+    width?: number;
+    height?: number;
     css?: CssInput | readonly CssInput[];
     stylesheets?: string[];
   };
@@ -151,8 +148,18 @@ async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
   return defaultRenderer.get(options?.module);
 }
 
-/** Transforms an input into a node tree and extracts its emojis. */
-async function resolveContent(element: RenderInput, options?: PipelineOptions) {
+/**
+ * Turns an input into what a renderer takes. The renderer parses HTML as written when its emoji
+ * come from the fonts. Otherwise the input becomes a node tree with its emoji split out.
+ */
+async function resolveContent(
+  element: RenderInput,
+  options?: PipelineOptions,
+): Promise<{ node: Node | string; css: string[] }> {
+  if (typeof element === "string" && options?.emoji === "from-font") {
+    return { node: element, css: [] };
+  }
+
   const { node: originalNode, css } = await transformElement(element, options);
   const emojiType = options?.emoji ?? "twemoji";
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
@@ -160,33 +167,24 @@ async function resolveContent(element: RenderInput, options?: PipelineOptions) {
   return { node, css };
 }
 
-/** Resolves the render's `images` option into concrete entries via {@link prepareImages}. */
-async function collectImages(
-  node: Node | Node[],
-  options?: PipelineOptions,
-): Promise<ImageLoader[]> {
-  const images = options?.images;
-  const { sources, fetchCache, fetch, timeout, maxBytes, allowUrl, cache, throwOnError } =
-    Array.isArray(images) ? { sources: images } : (images ?? {});
+/** A render's options without the ones this pipeline reads itself, with `css` merged. */
+function bindingOptions(
+  options: PipelineOptions | undefined,
+  css: CssInput[],
+): NonNullable<Parameters<Renderer["render"]>[1]> {
+  const {
+    renderer: _renderer,
+    jsx: _jsx,
+    module: _module,
+    emoji: _emoji,
+    images: _images,
+    signal: _signal,
+    css: _css,
+    stylesheets: _stylesheets,
+    ...rest
+  } = options ?? {};
 
-  const prepared = await prepareImages({
-    node,
-    sources,
-    fetchCache,
-    fetch,
-    timeout,
-    maxBytes,
-    allowUrl,
-    throwOnError,
-    signal: options?.signal,
-  });
-
-  return cache
-    ? prepared.map((image) => ({
-        ...image,
-        cache: ("cache" in image ? image.cache : undefined) ?? cache,
-      }))
-    : prepared;
+  return { ...rest, css };
 }
 
 let warnedStylesheets = false;
@@ -221,21 +219,20 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInp
   return [...own, ...extra];
 }
 
-/** Resolves the renderer, node tree, and backend options, images and CSS merged in, a single scene needs. */
+/** Readies a single scene for its render, fetching what the renderer reads after the cascade. */
 async function prepareScene<T extends PipelineOptions>(element: RenderInput, options?: T) {
   options?.signal?.throwIfAborted();
 
   const renderer = await resolveRenderer(options);
   const { node, css } = await resolveContent(element, options);
-  const images = await collectImages(node, options);
+  const layout = bindingOptions(options, mergeCss(options, css));
+  const prepared = await renderer.prepare(node, {
+    ...layout,
+    images: options?.images,
+    signal: options?.signal,
+  });
 
-  // The WASM renderer is synchronous and ignores the signal argument, so honor an
-  // abort that happened during the async font and image loading before the blocking call.
-  options?.signal?.throwIfAborted();
-
-  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
-
-  return { renderer, node, options: { ...forward, images, css: mergeCss(options, css) } };
+  return { renderer, prepared, output: { ...layout, signal: options?.signal } };
 }
 
 /**
@@ -264,7 +261,7 @@ export async function render(
 ): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
   const scene = await prepareScene(element, options);
 
-  return scene.renderer.render(scene.node, scene.options);
+  return scene.renderer.render(scene.prepared, scene.output);
 }
 
 /**
@@ -288,7 +285,7 @@ export async function measure(
 ): Promise<napi.MeasuredNode> {
   const scene = await prepareScene(element, options);
 
-  return scene.renderer.measure(scene.node, scene.options);
+  return scene.renderer.measure(scene.prepared, { signal: options?.signal });
 }
 
 /**
@@ -314,7 +311,7 @@ export async function measure(
 export async function renderSvg(element: RenderInput, options?: RenderSvgOptions): Promise<string> {
   const scene = await prepareScene(element, options);
 
-  return scene.renderer.renderSvg(scene.node, scene.options);
+  return scene.renderer.renderSvg(scene.prepared, { signal: options?.signal });
 }
 
 /**
@@ -346,8 +343,6 @@ export async function renderAnimation(
 ): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
   options.signal?.throwIfAborted();
 
-  const { css: _, stylesheets: _alias, ...forward } = options;
-
   const renderer = await resolveRenderer(options);
   const scenes = await Promise.all(
     options.scenes.map(async (scene) => {
@@ -355,22 +350,15 @@ export async function renderAnimation(
       return { node, durationMs: scene.durationMs, css };
     }),
   );
-
-  const images = await collectImages(
-    scenes.map((scene) => scene.node),
-    options,
-  );
-  const css = mergeCss(
-    options,
-    scenes.flatMap((scene) => scene.css),
-  );
-
-  options.signal?.throwIfAborted();
-
-  return renderer.renderAnimation({
+  const { css: _, stylesheets: _alias, ...forward } = options;
+  const prepared = await renderer.prepareAnimation({
     ...forward,
+    css: mergeCss(
+      options,
+      scenes.flatMap((scene) => scene.css),
+    ),
     scenes: scenes.map(({ node, durationMs }) => ({ node, durationMs })),
-    images,
-    css,
   });
+
+  return renderer.renderAnimation(prepared, { signal: options.signal });
 }

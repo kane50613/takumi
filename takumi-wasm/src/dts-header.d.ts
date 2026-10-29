@@ -1,4 +1,5 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
+import type { ListedFont } from "@takumi-rs/helpers/renderer";
 import type { Properties } from "csstype";
 
 export {
@@ -270,7 +271,15 @@ export type MeasuredNode = {
   runs: MeasuredTextRun[];
 };
 
+/** The images a node tree looks up by URL and the listed fonts the render loads, read after the cascade. */
+export type RenderNeeds = {
+  /** The URLs of image elements and computed background, mask, and list marker images, except `data:` URIs and inline SVG, sorted. */
+  images: string[];
+  /** The ids of the listed fonts the render loads, sorted. */
+  fonts: number[];
+};
+
 export type AnimationScene = {
-  node: Node;
+  node: Node | string | { json: string };
   durationMs: number;
 };

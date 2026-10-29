@@ -7,18 +7,22 @@ mod date;
 mod metadata;
 mod options;
 
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::HashMap, fmt::Display, iter::once, rc::Rc, sync::Arc};
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore,
-  input::{Font, decode_images},
-  parse_lang, stylesheet,
+  FontCacheOptions, FontStore, NeedsOutput, append_css,
+  input::{ListedFonts, decode_images, retain_svg},
+  parse_lang,
+  source::read_source,
+  source_cache::SourceCache,
+  stylesheet,
 };
 use takumi_core::{
-  layout::node::Node,
+  Fonts,
+  layout::{needs::RenderNeeds, node::Node},
   resources::image::{ImageSource, ResourceCache},
-  style::{FontFamily, Lang},
+  style::{FontFamily, Lang, StyleSheet},
   viewport::Viewport,
 };
 use takumi_pdf::{
@@ -27,7 +31,7 @@ use takumi_pdf::{
 };
 use wasm_bindgen::prelude::*;
 
-use crate::options::{PdfRenderOptions, page_background, resolve_geometry};
+use crate::options::{BandInput, PdfRenderOptions, page_background, resolve_geometry};
 
 pub(crate) fn map_error(error: impl Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
@@ -38,8 +42,8 @@ const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
 
 #[wasm_bindgen]
 extern "C" {
-  /// JavaScript object representing a layout node.
-  #[wasm_bindgen(typescript_type = "Node")]
+  /// A layout node, the `{ json }` text of one, or HTML markup to parse in its place.
+  #[wasm_bindgen(typescript_type = "Node | string | { json: string }")]
   pub type NodeType;
 
   /// JavaScript type for font input (details object or raw buffer).
@@ -65,6 +69,13 @@ extern "C" {
   /// JavaScript object representing a measured size.
   #[wasm_bindgen(typescript_type = "MeasuredSize")]
   pub type MeasuredSizeType;
+
+  /// JavaScript object listing what a document needs fetched.
+  #[wasm_bindgen(typescript_type = "RenderNeeds")]
+  pub type RenderNeedsType;
+  /// JavaScript list of a render's fonts, described before their bytes arrive.
+  #[wasm_bindgen(typescript_type = "ListedFont[]")]
+  pub type ListedFontsType;
 }
 
 /// The size returned by [`PdfRenderer::measure`].
@@ -74,21 +85,36 @@ struct MeasuredSizeOutput {
   height: f32,
 }
 
-/// The characters the page counters named by these class names can produce.
-///
-/// A counter's characters appear nowhere in the document, so a caller choosing
-/// which faces to load has no other way to learn it needs, say, Thai digits.
-#[wasm_bindgen(js_name = counterCharacters)]
-pub fn counter_characters(classes: Vec<String>) -> String {
-  takumi_pdf::counter_characters(classes.iter().map(String::as_str))
-}
-
 /// The layout inputs [`PdfRenderer::render`] and [`PdfRenderer::measure`] share.
 struct Layout {
   viewport: Option<Viewport>,
   page: Option<PageOptions>,
   images: HashMap<Arc<str>, ImageSource>,
   lang: Option<Lang>,
+}
+
+/// What every tree of a document lays out with as [`PdfRenderer::measure`] lays it out.
+struct MeasureInputs {
+  layout: Layout,
+  fonts: Rc<Fonts>,
+  stylesheet: Arc<StyleSheet>,
+  font_families: Option<FontFamily>,
+}
+
+impl MeasureInputs {
+  /// The options measuring `node` takes.
+  fn options(&self, node: Node) -> MeasureOptions<'_> {
+    MeasureOptions {
+      viewport: self.layout.viewport,
+      fonts: &self.fonts,
+      node,
+      stylesheet: self.stylesheet.clone(),
+      images: self.layout.images.clone(),
+      page: self.layout.page,
+      font_families: self.font_families.clone(),
+      lang: self.layout.lang,
+    }
+  }
 }
 
 /// A PDF renderer holding registered fonts and a decoded-resource cache.
@@ -100,9 +126,38 @@ struct Layout {
 pub struct PdfRenderer {
   fonts: FontStore,
   resource_cache: ResourceCache,
+  sources: SourceCache,
+  bands: SourceCache,
 }
 
 impl PdfRenderer {
+  /// The document `node` describes and the options it renders with, its HTML bands parsed and the
+  /// CSS of every `<style>` element appended.
+  fn read_document(
+    &self,
+    node: NodeType,
+    options: Option<JsValue>,
+  ) -> Result<(Node, PdfRenderOptions), js_sys::Error> {
+    let mut options: PdfRenderOptions = options
+      .map(|options| from_value(options).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+    let (node, mut document_css) = read_source(node.into(), &self.sources)?;
+
+    for band in options.bands_mut() {
+      if let BandInput::Html(html) = band {
+        let (parsed, css) = read_source(JsValue::from_str(html), &self.bands)?;
+
+        document_css.extend(css);
+        *band = BandInput::Node(Box::new(parsed));
+      }
+    }
+
+    options.css = append_css(options.css.take(), document_css);
+
+    Ok((node, options))
+  }
+
   fn layout(&self, options: &PdfRenderOptions) -> Result<Layout, js_sys::Error> {
     let images = decode_images(
       &self.resource_cache,
@@ -120,16 +175,20 @@ impl PdfRenderer {
     })
   }
 
-  fn load_font(
+  /// What the trees of the document `options` describe lay out with as `measure` lays them out,
+  /// with each font `listed` still loading taken as a pending face.
+  fn measure_inputs(
     &self,
-    font: FontType,
-    key: Option<&str>,
-    pinned: bool,
-  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    let font: Font = from_value(font.into()).map_err(map_error)?;
-    let registered = self.fonts.register(font, key, pinned).map_err(map_error)?;
-
-    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+    options: &mut PdfRenderOptions,
+    listed: Option<&ListedFonts>,
+  ) -> Result<MeasureInputs, js_sys::Error> {
+    Ok(MeasureInputs {
+      layout: self.layout(options)?,
+      fonts: self.fonts.for_needs(&mut options.font_families, listed),
+      stylesheet: stylesheet(&self.resource_cache, options.css.take(), Vec::new())
+        .map_err(map_error)?,
+      font_families: options.font_families.take().map(FontFamily::from_names),
+    })
   }
 }
 
@@ -146,6 +205,8 @@ impl PdfRenderer {
     Ok(PdfRenderer {
       fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
       resource_cache: ResourceCache::default(),
+      sources: SourceCache::default(),
+      bands: SourceCache::default(),
     })
   }
 
@@ -157,7 +218,7 @@ impl PdfRenderer {
     font: FontType,
     key: Option<String>,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.load_font(font, key.as_deref(), true)
+    self.fonts.register_value(font, key.as_deref(), true)
   }
 
   /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
@@ -168,7 +229,7 @@ impl PdfRenderer {
     font: FontType,
     key: &str,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.load_font(font, Some(key), false)
+    self.fonts.register_value(font, Some(key), false)
   }
 
   /// The families a registration under `key` added, when the renderer still holds them; `pin`
@@ -179,11 +240,7 @@ impl PdfRenderer {
     key: &str,
     pin: bool,
   ) -> Result<Option<RegisteredFamiliesType>, js_sys::Error> {
-    self
-      .fonts
-      .cached(key, pin)
-      .map(|registered| Ok(to_value(&registered).map_err(map_error)?.unchecked_into()))
-      .transpose()
+    self.fonts.cached_value(key, pin)
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
@@ -207,11 +264,7 @@ impl PdfRenderer {
     node: NodeType,
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PdfRenderOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
+    let (node, options) = self.read_document(node, options.map(Into::into))?;
     let Layout {
       viewport,
       page,
@@ -264,29 +317,9 @@ impl PdfRenderer {
     node: NodeType,
     options: Option<MeasureOptionsType>,
   ) -> Result<MeasuredSizeType, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PdfRenderOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
-    let Layout {
-      viewport,
-      page,
-      images,
-      lang,
-    } = self.layout(&options)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
-    let measured = takumi_pdf::measure(MeasureOptions {
-      viewport,
-      fonts: &fonts,
-      node,
-      stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
-      images,
-      page,
-      font_families: options.font_families.map(FontFamily::from_names),
-      lang,
-    })
-    .map_err(map_error)?;
+    let (node, mut options) = self.read_document(node, options.map(Into::into))?;
+    let inputs = self.measure_inputs(&mut options, None)?;
+    let measured = takumi_pdf::measure(inputs.options(node)).map_err(map_error)?;
 
     Ok(
       to_value(&MeasuredSizeOutput {
@@ -295,6 +328,37 @@ impl PdfRenderer {
       })
       .map_err(map_error)?
       .unchecked_into(),
+    )
+  }
+
+  /// Reads the images a document and each of its bands look up by URL and the pending fonts their
+  /// text loads, after the cascade, each laid out as `measure` lays it out.
+  pub fn needs(
+    &self,
+    node: NodeType,
+    options: Option<PdfRenderOptionsType>,
+    fonts: Option<ListedFontsType>,
+  ) -> Result<RenderNeedsType, js_sys::Error> {
+    let listed = self.fonts.listed(fonts.map(Into::into))?;
+    let (node, mut options) = self.read_document(node, options.map(Into::into))?;
+
+    retain_svg(&mut options.images);
+
+    let inputs = self.measure_inputs(&mut options, listed.as_ref())?;
+    let bands = options
+      .bands_mut()
+      .filter_map(|band| band.node().cloned())
+      .collect::<Vec<_>>();
+    let needs = once(node)
+      .chain(bands)
+      .map(|tree| takumi_pdf::needs(inputs.options(tree)))
+      .collect::<Result<RenderNeeds, _>>()
+      .map_err(map_error)?;
+
+    Ok(
+      to_value(&NeedsOutput::new(needs, listed.as_ref()))
+        .map_err(map_error)?
+        .unchecked_into(),
     )
   }
 }

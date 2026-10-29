@@ -157,18 +157,20 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello</div>, {
 
 Retries recover a brief outage. They do not help when the host is down or the CI network blocks it. Run unit tests against local files or an injected `fetch`, and test the live service separately. An outer test or route timeout can end the render before the font timeout does. Set `timeout` below that outer limit, and leave time for layout and encoding.
 
-CJK families can have many coverage subsets. Takumi downloads only the subsets your text uses. Matching subsets from several families or weights still download together, so request only the families and weights you use. A timeout during `await googleFonts(...)` comes from the CSS request, before any font file downloads.
+CJK families can have many coverage subsets. Takumi downloads only the subsets your text uses, in the families and weights it is set in. A timeout during `await googleFonts(...)` comes from the CSS request, before any font file downloads.
 
 ### Subsetting
 
 `render` registers only the subsets the content draws. The same `fonts` list works for any text, and unused ranges never download. This runs on every render.
 
-| Font kind                           | Behavior                                  |
-| ----------------------------------- | ----------------------------------------- |
-| Ranged subsets (from `googleFonts`) | Kept only when the text uses their range. |
-| Whole files (URL string, raw bytes) | No `unicode-range`, so they always load.  |
+| Font kind                           | Behavior                                                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Ranged subsets (from `googleFonts`) | Kept only when font matching reaches them for a character, as a browser downloads a `unicode-range` face. |
+| Whole files (URL string, raw bytes) | No `unicode-range`, so they always load.                                                                  |
 
-To filter a list yourself, call `subsetFonts({ fonts, source })` from `takumi-js/helpers`. `source` is the string, node, or node array you render.
+Takumi reads the text after styles apply, so generated content and `text-transform` count, and so does the text inside SVG images, such as chart labels. Each character goes through its own font stack. With `font-family: Inter, "Noto Sans JP"`, Latin text loads only Inter's Latin subset, and a weight loads only when text uses it.
+
+Font matching reads a subset's weight and style from its descriptor before the file arrives. A subset without them counts as normal weight and style, so a variable font matches its whole weight range only once loaded.
 
 ### Preloading with `registerFont`
 

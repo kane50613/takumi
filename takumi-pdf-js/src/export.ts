@@ -1,17 +1,19 @@
-import type { CssInput } from "@takumi-rs/helpers";
-import { fromHtml } from "@takumi-rs/helpers/html";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
-import { FontRegistry } from "@takumi-rs/helpers/renderer";
+import type { CssInput, Node } from "@takumi-rs/helpers";
+import { type DocumentInput, resolveDocument } from "@takumi-rs/helpers/jsx";
+import type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/helpers/renderer";
 import {
-  LIST_MARKER_CHARACTERS,
-  type Node,
-  type ReactElementLike,
-  subsetFonts,
-} from "@takumi-rs/helpers";
-import type { ReactNode } from "react";
+  type JsonSource,
+  lazy,
+  needsArgs,
+  Prepared,
+  prepareSource,
+  readSource,
+  renderPrepared,
+  sheetsOf,
+  toNativeSource,
+  WasmRenderer,
+} from "@takumi-rs/helpers/renderer";
 import {
-  counterCharacters,
   type FontCacheOptions,
   type PageOverride,
   type PageRules,
@@ -21,36 +23,13 @@ import {
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontCacheOptions } from "../pkg/takumi_pdf_wasm";
-export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
+export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/helpers/renderer";
+export { Prepared } from "@takumi-rs/helpers/renderer";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";
 
-/** Every class name in a tree, so the renderer can say what its counters draw. */
-function classNames(node: unknown): string[] {
-  const into: string[] = [];
-
-  collectClassNames(node, into);
-  return into;
-}
-
-function collectClassNames(node: unknown, into: string[]): void {
-  if (typeof node !== "object" || node === null) {
-    return;
-  }
-  const { className, children } = node as { className?: unknown; children?: unknown };
-
-  if (typeof className === "string") {
-    into.push(...className.split(/\s+/).filter(Boolean));
-  }
-  if (Array.isArray(children)) {
-    for (const child of children) {
-      collectClassNames(child, into);
-    }
-  }
-}
-
 /** A document input: a takumi node tree, JSX, or an HTML string. */
-export type NodeInput = Node | ReactNode | ReactElementLike | string;
+export type NodeInput = DocumentInput;
 
 /** A band on a page: a document input, or `false` for none. */
 export type BandInput = NodeInput | false;
@@ -182,11 +161,6 @@ export type MeasureOptions = (
   images?: ImagesInput;
   /** CSS to apply before layout, one string or a list cascading in order. */
   css?: CssInput | readonly CssInput[];
-  /**
-   * CSS stylesheets to apply before layout.
-   * @deprecated Use `css` instead. Will be removed in v3.
-   */
-  stylesheets?: string[];
   /** Per-render font stack: ordered family names used as the fallback chain. */
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
@@ -315,11 +289,6 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     images?: ImagesInput;
     /** CSS to apply before layout, one string or a list cascading in order. */
     css?: CssInput | readonly CssInput[];
-    /**
-     * CSS stylesheets to apply before layout.
-     * @deprecated Use `css` instead. Will be removed in v3.
-     */
-    stylesheets?: string[];
     /** Per-render font stack: ordered family names used as the fallback chain. */
     fontFamilies?: string[];
     /** Default BCP-47 language tag applied to the root. */
@@ -342,49 +311,58 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
      * `"ua2"`, which forbid glyph 0.
      */
     uncoveredText?: UncoveredText;
+    /** Stops the render before it reads the document or draws it. */
+    signal?: AbortSignal;
   };
 
-function isNode(value: NodeInput): value is Node {
-  return typeof value === "object" && value !== null && "type" in value && !("$$typeof" in value);
-}
+/** The render options that only change how laid-out pages are written to the file. */
+type OutputOnly =
+  | "metadata"
+  | "outline"
+  | "backgroundColor"
+  | "uncoveredText"
+  | "pdfa"
+  | "tagged"
+  | "attachments";
 
-let warnedStylesheets = false;
+/** `Omit` that distributes over unions, so the page and conformance variants survive. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-function warnStylesheetsDeprecated(): void {
-  if (warnedStylesheets) return;
-  warnedStylesheets = true;
-  console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
-}
+/** Options for {@link PdfRenderer.prepare}: everything {@link RenderOptions} lays out with. */
+export type PrepareOptions = DistributiveOmit<RenderOptions, OutputOnly | "images"> & {
+  /** Images to use as they are, and how to fetch the rest the document draws. */
+  images?: PrepareImagesInput;
+  signal?: AbortSignal;
+};
 
-/** Narrows the `css` option, which takes one entry or a list of them. */
-function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
-  return Array.isArray(css);
-}
+/** Options for rendering a {@link PreparedSource}: how its pages are written to the file. */
+export type PreparedRenderOptions = ConformanceOptions &
+  Pick<
+    PagedOptions & RenderOptions,
+    "metadata" | "outline" | "backgroundColor" | "uncoveredText"
+  > & {
+    signal?: AbortSignal;
+  };
 
-function ownCss(
-  css: CssInput | readonly CssInput[] | undefined,
-  stylesheets: string[] | undefined,
-): CssInput[] {
-  if (css !== undefined && stylesheets !== undefined) {
-    throw new Error("pass either `css` or `stylesheets`, not both");
-  }
+/** A document {@link PdfRenderer.prepare} readied, with its fonts and images loaded. */
+export type PreparedSource = Prepared<Node | string | JsonSource, DocumentLayout>;
 
-  if (css !== undefined) {
-    return isCssList(css) ? [...css] : [css];
-  }
-
-  if (stylesheets !== undefined) {
-    warnStylesheetsDeprecated();
-  }
-
-  return stylesheets ?? [];
-}
+/** The binding options a document lays out with, its bands resolved to what the wasm side reads. */
+type DocumentLayout = DistributiveOmit<
+  PrepareOptions,
+  "fonts" | "images" | "signal" | "fontFamilies" | "css" | "header" | "footer" | "pages"
+> & {
+  header?: Node | string;
+  footer?: Node | string;
+  pages?: PageRules;
+  css?: CssInput[];
+};
 
 const PAGE_RULES = ["first", "last", "odd", "even"] as const;
 const PAGE_OVERRIDE_FIELDS = ["header", "footer"] as const;
 
 /** Page rules with every document input resolved to a node tree. */
-type ResolvedRules = { pages: PageRules; nodes: Node[]; css: string[] };
+type ResolvedRules = { pages: PageRules; css: string[] };
 
 function rejectNonObject(value: unknown, what: string): void {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -401,7 +379,7 @@ function rejectUnknownKeys(object: object, known: readonly string[], what: strin
 }
 
 async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
-  const resolved: ResolvedRules = { pages: {}, nodes: [], css: [] };
+  const resolved: ResolvedRules = { pages: {}, css: [] };
 
   rejectNonObject(input, "pages");
   rejectUnknownKeys(input, PAGE_RULES, "page rule");
@@ -422,10 +400,9 @@ async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
         page[band] = false;
         continue;
       }
-      const { node, css } = await resolveNode(value);
+      const { node, css } = await resolveDocument(value);
 
       page[band] = node;
-      resolved.nodes.push(node);
       resolved.css.push(...css);
     }
     resolved.pages[rule] = page;
@@ -433,73 +410,82 @@ async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
   return resolved;
 }
 
-async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[] }> {
-  if (isNode(input)) {
-    return { node: input, css: [] };
-  }
+/** What the wasm side reads a document as: HTML as written, a tree as JSON when it can, or JSX rendered. */
+async function resolveNode(
+  input: NodeInput,
+): Promise<{ node: Node | string | JsonSource; css: string[] }> {
+  const { node, css } = await resolveDocument(input);
 
-  if (typeof input === "string") {
-    return fromHtml(input);
-  }
+  return { node: toNativeSource(node), css };
+}
 
-  return fromJsx(input as ReactNode);
+/** A document's main tree as the wasm side reads it, and the layout options that carry its bands and the CSS they bring. */
+async function resolveLayout(
+  node: NodeInput,
+  {
+    header,
+    footer,
+    pages,
+    css,
+  }: Pick<RenderOptions & PagedOptions, "header" | "footer" | "pages" | "css">,
+) {
+  const [main, headerResult, footerResult, pagesResult] = await Promise.all([
+    resolveNode(node),
+    header == null || header === false ? undefined : resolveDocument(header),
+    footer == null || footer === false ? undefined : resolveDocument(footer),
+    pages == null ? undefined : resolveRules(pages),
+  ]);
+
+  return {
+    node: main.node,
+    layout: {
+      header: headerResult?.node,
+      footer: footerResult?.node,
+      pages: pagesResult?.pages,
+      css: sheetsOf(css, [
+        ...main.css,
+        ...(headerResult?.css ?? []),
+        ...(footerResult?.css ?? []),
+        ...(pagesResult?.css ?? []),
+      ]),
+    },
+  };
 }
 
 /** A PDF renderer holding registered fonts. Reuse one instance across renders. */
-export class PdfRenderer {
-  private inner: PdfRendererInternal;
-  private fonts: FontRegistry<RegisteredFamily>;
-
+export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInternal> {
   constructor(options?: FontCacheOptions) {
-    this.inner = new PdfRendererInternal(options);
-    this.fonts = new FontRegistry(this.inner);
+    super(new PdfRendererInternal(options));
   }
 
-  /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
-  async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
-    const { fonts, images, header, footer, pages, css, stylesheets, fontFamilies, ...rest } =
-      options;
-    const [main, headerResult, footerResult, pagesResult] = await Promise.all([
-      resolveNode(node),
-      header == null || header === false ? undefined : resolveNode(header),
-      footer == null || footer === false ? undefined : resolveNode(footer),
-      pages == null ? undefined : resolveRules(pages),
-    ]);
-    const bands = [headerResult?.node, footerResult?.node, ...(pagesResult?.nodes ?? [])].filter(
-      (band) => band !== undefined,
-    );
-    const sheets = [
-      ...ownCss(css, stylesheets),
-      ...main.css,
-      ...(headerResult?.css ?? []),
-      ...(footerResult?.css ?? []),
-      ...(pagesResult?.css ?? []),
-    ];
+  /**
+   * Reads what a document and its bands need under `options`, then loads the font subsets their
+   * text uses and fetches the images they draw, so {@link render} and {@link measure} only lay the
+   * document out and write it.
+   */
+  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
+    const { fonts, images, signal, fontFamilies, header, footer, pages, css, ...rest } = options;
+    const document = await resolveLayout(node, { header, footer, pages, css });
+    const layout = { ...rest, ...document.layout };
 
-    return this.fonts.resolveResources(
-      fonts &&
-        subsetFonts({
-          fonts,
-          // Page counters and list markers render characters no node in the
-          // tree carries, so the renderer says which ones.
-          source: [
-            main.node,
-            ...bands,
-            LIST_MARKER_CHARACTERS,
-            counterCharacters([main.node, ...bands].flatMap((tree) => classNames(tree))),
-          ],
-        }),
-      images,
-      fontFamilies,
-      (resources) =>
-        this.inner.render(main.node, {
-          ...rest,
-          header: headerResult?.node,
-          footer: footerResult?.node,
-          pages: pagesResult?.pages,
-          css: sheets.length > 0 ? sheets : undefined,
-          ...resources,
-        }),
+    return prepareSource(
+      this.fonts,
+      document.node,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      (request) => this.inner.needs(document.node, ...needsArgs(layout, request)),
+    );
+  }
+
+  /** Renders a node tree, JSX, an HTML string, or a prepared document to PDF bytes. */
+  render(document: PreparedSource, options?: PreparedRenderOptions): Promise<Uint8Array>;
+  render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
+  async render(node: PreparedSource | NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
+    return renderPrepared(
+      this.fonts,
+      node instanceof Prepared ? node : await this.read(node, options),
+      node instanceof Prepared ? options : { signal: options.signal },
+      (native, opts) => this.inner.render(native, opts),
     );
   }
 
@@ -514,64 +500,78 @@ export class PdfRenderer {
    * The returned size is the tree's own, not the space it was laid out
    * against: a box with `width: 100px` measures 100 wide on any page.
    */
-  async measure(node: NodeInput, options: MeasureOptions = {}): Promise<MeasuredSize> {
-    const { fonts, images, css, stylesheets, fontFamilies, ...rest } = options;
+  measure(document: PreparedSource): Promise<MeasuredSize>;
+  measure(node: NodeInput, options?: MeasureOptions): Promise<MeasuredSize>;
+  async measure(
+    node: PreparedSource | NodeInput,
+    options: MeasureOptions = {},
+  ): Promise<MeasuredSize> {
+    if (node instanceof Prepared) {
+      return renderPrepared(this.fonts, node, {}, (native, opts) =>
+        this.inner.measure(native, opts),
+      );
+    }
+
+    const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
-    const sheets = [...ownCss(css, stylesheets), ...main.css];
+    const layout = { ...rest, css: sheetsOf(css, main.css) };
 
     // The tree measured may itself be a band, so its counters are always in play.
-    return this.fonts.resolveResources(
-      fonts &&
-        subsetFonts({
-          fonts,
-          source: [main.node, LIST_MARKER_CHARACTERS, counterCharacters(classNames(main.node))],
-        }),
-      images,
-      fontFamilies,
-      (resources) =>
-        this.inner.measure(main.node, {
-          ...rest,
-          css: sheets.length > 0 ? sheets : undefined,
-          ...resources,
-        }),
+    const prepared = await readSource(
+      this.fonts,
+      main.node,
+      layout,
+      { fonts, images, fontFamilies },
+      (request) => this.inner.needs(main.node, ...needsArgs(layout, request)),
+    );
+
+    return renderPrepared(this.fonts, prepared, {}, (native, opts) =>
+      this.inner.measure(native, opts),
     );
   }
 
-  /** Registers a font ahead of time, deduped against earlier registrations. */
-  registerFont(font: FontLoader): Promise<RegisteredFamily[]> {
-    return this.fonts.register(font);
-  }
+  /** A document and its bands read under `options` without fetching, for {@link render}. */
+  private async read(node: NodeInput, options: RenderOptions): Promise<PreparedSource> {
+    const { fonts, images, header, footer, pages, css, fontFamilies, signal, ...rest } = options;
+    const document = await resolveLayout(node, { header, footer, pages, css });
+    const layout = { ...rest, ...document.layout };
 
-  /**
-   * Removes every face registered under the family `name`, from any `registerFont` call and each
-   * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
-   * as well. A later render that lists one of its fonts registers it again.
-   */
-  unregisterFont(family: RegisteredFamilyLike): boolean {
-    return this.inner.unregisterFont(family.name);
-  }
-
-  /** Removes every registered font, leaving the bundled fallback font. */
-  clearFonts(): void {
-    this.inner.clearFonts();
-  }
-
-  /** Releases the underlying wasm renderer's memory. */
-  free(): void {
-    this.inner.free();
+    return readSource(
+      this.fonts,
+      document.node,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      (request) => this.inner.needs(document.node, ...needsArgs(layout, request)),
+    );
   }
 }
 
-let shared: PdfRenderer | undefined;
+const shared = lazy(() => new PdfRenderer());
+
+/** Prepares with a lazily created shared {@link PdfRenderer}. */
+export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedSource> {
+  return shared().prepare(node, options);
+}
 
 /** Renders with a lazily created shared {@link PdfRenderer}. */
-export function render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array> {
-  shared ??= new PdfRenderer();
-  return shared.render(node, options);
+export function render(
+  document: PreparedSource,
+  options?: PreparedRenderOptions,
+): Promise<Uint8Array>;
+export function render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
+export function render(
+  node: PreparedSource | NodeInput,
+  options?: RenderOptions,
+): Promise<Uint8Array> {
+  return node instanceof Prepared ? shared().render(node, options) : shared().render(node, options);
 }
 
 /** Measures with a lazily created shared {@link PdfRenderer}. */
-export function measure(node: NodeInput, options?: MeasureOptions): Promise<MeasuredSize> {
-  shared ??= new PdfRenderer();
-  return shared.measure(node, options);
+export function measure(document: PreparedSource): Promise<MeasuredSize>;
+export function measure(node: NodeInput, options?: MeasureOptions): Promise<MeasuredSize>;
+export function measure(
+  node: PreparedSource | NodeInput,
+  options?: MeasureOptions,
+): Promise<MeasuredSize> {
+  return node instanceof Prepared ? shared().measure(node) : shared().measure(node, options);
 }

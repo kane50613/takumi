@@ -1,10 +1,9 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::{device_pixel_ratio, parse_lang, stylesheet};
+use takumi_bindings_common::{Scenes, device_pixel_ratio, parse_lang, stylesheet};
 use takumi_core::{
   Fonts,
-  layout::node::Node,
   style::{CssSource, FontFamily, KeyframesRule, Lang},
   viewport::Viewport,
 };
@@ -14,32 +13,29 @@ use takumi_raster::{
 };
 
 use crate::{
-  JsBytes, deserialize_with_tracing, map_error,
+  JsBytes, NodeSource, map_error,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
     decode_images, deserialize_css, deserialize_keyframes, webp_lossless,
   },
 };
 
-pub struct RenderAnimationTask {
-  pub(crate) scenes: Option<Vec<(Node, u32)>>,
-  pub(crate) state: Arc<RendererState>,
+/// An animation's scenes and what they lay out with, read on the main thread.
+pub(crate) struct AnimationInput {
+  scenes: Option<Vec<(NodeSource, u32)>>,
+  state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
   pub(crate) fonts: Arc<Fonts>,
-  pub(crate) viewport: Viewport,
-  pub(crate) format: AnimationOutputFormat,
-  pub(crate) quality: Option<u8>,
-  pub(crate) lossless: Option<bool>,
-  pub(crate) draw_debug_border: bool,
-  pub(crate) css: Option<Vec<CssSource>>,
-  pub(crate) keyframes: Vec<KeyframesRule>,
+  viewport: Viewport,
+  draw_debug_border: bool,
+  css: Option<Vec<CssSource>>,
+  keyframes: Vec<KeyframesRule>,
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
-  pub(crate) font_families: Option<FontFamily>,
-  pub(crate) lang: Option<Lang>,
-  pub(crate) fps: u32,
+  font_families: Option<FontFamily>,
+  lang: Option<Lang>,
 }
 
-impl RenderAnimationTask {
+impl AnimationInput {
   pub(crate) fn from_options(
     env: Env,
     options: RenderAnimationOptions,
@@ -50,10 +46,6 @@ impl RenderAnimationTask {
       draw_debug_border,
       width,
       height,
-      format,
-      quality,
-      lossless,
-      fps,
       images,
       css,
       stylesheets,
@@ -61,25 +53,12 @@ impl RenderAnimationTask {
       device_pixel_ratio: dpr,
       font_families,
       lang,
+      ..
     } = options;
     let scenes = scenes
       .into_iter()
-      .map(|scene| Ok((deserialize_with_tracing(scene.node)?, scene.duration_ms)))
-      .collect::<Result<Vec<(Node, u32)>>>()?;
-
-    if scenes.is_empty() {
-      return Err(Error::new(
-        Status::InvalidArg,
-        "Expected at least one animation scene".to_owned(),
-      ));
-    }
-
-    if fps == 0 {
-      return Err(Error::new(
-        Status::InvalidArg,
-        "Expected fps to be greater than 0".to_owned(),
-      ));
-    }
+      .map(|scene| Ok((NodeSource::from_js(scene.node)?, scene.duration_ms)))
+      .collect::<Result<Vec<_>>>()?;
 
     Ok(Self {
       scenes: Some(scenes),
@@ -87,15 +66,86 @@ impl RenderAnimationTask {
       state,
       viewport: Viewport::new((width, height))
         .with_device_pixel_ratio(device_pixel_ratio(dpr.map(|ratio| ratio as f32))),
-      format: format.unwrap_or(AnimationOutputFormat::WebP),
-      quality,
-      lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
       css: deserialize_css(css, stylesheets)?,
       keyframes: deserialize_keyframes(keyframes)?,
       images: collect_images(env, images)?,
       font_families: font_families.map(FontFamily::from_names),
       lang: parse_lang(lang.as_deref()).map_err(map_error)?,
+    })
+  }
+
+  /// Each scene's render options and how long it shows, its HTML parsed.
+  pub(crate) fn scenes(&mut self) -> Result<Vec<(RenderOptions<'_>, u32)>> {
+    let Some(scenes) = self.scenes.take() else {
+      unreachable!()
+    };
+    let images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
+    let Scenes { nodes, css } = Scenes::read(scenes, take(&mut self.css), NodeSource::into_parts)?;
+    let stylesheet =
+      stylesheet(&self.state.resource_cache, css, take(&mut self.keyframes)).map_err(map_error)?;
+
+    Ok(
+      nodes
+        .into_iter()
+        .map(|(node, duration_ms)| {
+          let options = RenderOptions::builder()
+            .viewport(self.viewport)
+            .images(images.clone())
+            .resource_cache(self.state.resource_cache.clone())
+            .stylesheet(stylesheet.clone())
+            .node(node)
+            .fonts(&self.fonts)
+            .font_families(self.font_families.clone())
+            .lang(self.lang)
+            .draw_debug_border(self.draw_debug_border)
+            .build();
+
+          (options, duration_ms)
+        })
+        .collect(),
+    )
+  }
+}
+
+pub struct RenderAnimationTask {
+  pub(crate) input: AnimationInput,
+  pub(crate) format: AnimationOutputFormat,
+  pub(crate) quality: Option<u8>,
+  pub(crate) lossless: Option<bool>,
+  pub(crate) fps: u32,
+}
+
+impl RenderAnimationTask {
+  pub(crate) fn from_options(
+    env: Env,
+    options: RenderAnimationOptions,
+    state: Arc<RendererState>,
+  ) -> Result<Self> {
+    if options.scenes.is_empty() {
+      return Err(Error::new(
+        Status::InvalidArg,
+        "Expected at least one animation scene".to_owned(),
+      ));
+    }
+
+    if options.fps == 0 {
+      return Err(Error::new(
+        Status::InvalidArg,
+        "Expected fps to be greater than 0".to_owned(),
+      ));
+    }
+
+    let format = options.format.unwrap_or(AnimationOutputFormat::WebP);
+    let quality = options.quality;
+    let lossless = options.lossless;
+    let fps = options.fps;
+
+    Ok(Self {
+      input: AnimationInput::from_options(env, options, state)?,
+      format,
+      quality,
+      lossless,
       fps,
     })
   }
@@ -107,34 +157,14 @@ impl Task for RenderAnimationTask {
 
   fn compute(&mut self) -> Result<Self::Output> {
     crate::pool::install(move || {
-      let Some(scenes) = self.scenes.take() else {
-        unreachable!()
-      };
-      let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
-      let stylesheet = stylesheet(
-        &self.state.resource_cache,
-        take(&mut self.css),
-        take(&mut self.keyframes),
-      )
-      .map_err(map_error)?;
-      let scene_options = scenes
+      let scenes = self
+        .input
+        .scenes()?
         .into_iter()
-        .map(|(node, duration_ms)| {
+        .map(|(options, duration_ms)| {
           SequentialScene::builder()
             .duration_ms(duration_ms)
-            .options(
-              RenderOptions::builder()
-                .viewport(self.viewport)
-                .images(initialized_images.clone())
-                .resource_cache(self.state.resource_cache.clone())
-                .stylesheet(stylesheet.clone())
-                .node(node)
-                .fonts(&self.fonts)
-                .font_families(self.font_families.clone())
-                .lang(self.lang)
-                .draw_debug_border(self.draw_debug_border)
-                .build(),
-            )
+            .options(options)
             .build()
         })
         .collect::<Vec<_>>();
@@ -151,7 +181,7 @@ impl Task for RenderAnimationTask {
       };
 
       let mut buffer = Vec::new();
-      write_animation(&scene_options, self.fps, format, &mut buffer)
+      write_animation(&scenes, self.fps, format, &mut buffer)
         .map_err(|e| Error::from_reason(e.to_string()))?;
 
       Ok(buffer)

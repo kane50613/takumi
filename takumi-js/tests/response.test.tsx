@@ -10,9 +10,14 @@ describe("ImageResponse", () => {
       children: [{ type: "text", text: "Hello from node" }],
     };
     const mockedImage = new Uint8Array([1, 2, 3]);
+    const prepared = {};
     const renderer = {
-      render: mock(async (inputNode) => {
+      prepare: mock(async (inputNode) => {
         expect(inputNode).toEqual(node);
+        return prepared;
+      }),
+      render: mock(async (inputPrepared) => {
+        expect(inputPrepared).toBe(prepared);
         return mockedImage;
       }),
     } as any;
@@ -81,6 +86,7 @@ describe("ImageResponse", () => {
   test("should expose rendering errors through ready promise and call onError", async () => {
     const error = new Error("primary render failed");
     const renderer = {
+      prepare: mock(async () => ({})),
       render: mock(async () => {
         throw error;
       }),
