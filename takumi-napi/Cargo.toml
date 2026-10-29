@@ -16,6 +16,7 @@ arc-swap.workspace = true
 
 [dependencies.takumi-bindings-common]
 path = "../takumi-bindings-common"
+features = ["raster"]
 
 [dependencies.takumi-core]
 path = "../takumi-core"

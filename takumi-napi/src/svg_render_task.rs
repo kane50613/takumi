@@ -1,52 +1,41 @@
-use std::{collections::HashMap, mem::take, sync::Arc};
+use std::sync::Arc;
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::{parse_lang, time_ms};
-use takumi_core::{
-  Fonts,
-  style::{FontFamily, Lang},
-  viewport::Viewport,
+use takumi_bindings_common::{
+  css_or_stylesheets,
+  input::decode_images,
+  options::{Draw, SvgRenderOptions},
 };
+use takumi_core::Fonts;
 
-use crate::{
-  JsBytes, NodeSource, RenderInput, map_error,
-  renderer::{ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images},
-};
+use crate::{NodeSource, RenderInput, map_error, renderer::RendererState};
 
 pub struct SvgRenderTask {
-  pub(crate) input: Option<RenderInput>,
-  pub(crate) state: Arc<RendererState>,
+  input: Option<RenderInput>,
+  state: Arc<RendererState>,
   /// The fonts as they were when the call was made, so a later change leaves this one alone.
-  pub(crate) fonts: Arc<Fonts>,
-  pub(crate) viewport: Viewport,
-  pub(crate) time_ms: u64,
-  pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
-  pub(crate) font_families: Option<FontFamily>,
-  pub(crate) lang: Option<Lang>,
+  fonts: Arc<Fonts>,
+  options: SvgRenderOptions,
 }
 
 impl SvgRenderTask {
-  pub(crate) fn from_options(
-    env: Env,
+  pub(crate) fn new(
     source: NodeSource,
-    options: SvgRenderOptions,
+    mut options: SvgRenderOptions,
     state: Arc<RendererState>,
-  ) -> Result<Self> {
-    Ok(SvgRenderTask {
-      input: Some(RenderInput::new(
-        source,
-        options.css,
-        options.stylesheets,
-        options.keyframes,
-      )?),
+  ) -> Self {
+    let input = RenderInput::new(
+      source,
+      css_or_stylesheets(options.css.take(), options.stylesheets.take()),
+      options.keyframes.take().unwrap_or_default(),
+    );
+
+    Self {
+      input: Some(input),
       fonts: state.fonts_for_render(options.font_families.as_deref()),
       state,
-      viewport: Viewport::new((options.width, options.height)),
-      time_ms: time_ms(options.time_ms),
-      images: collect_images(env, options.images)?,
-      font_families: options.font_families.map(FontFamily::from_names),
-      lang: parse_lang(options.lang.as_deref()).map_err(map_error)?,
-    })
+      options,
+    }
   }
 }
 
@@ -59,22 +48,19 @@ impl Task for SvgRenderTask {
       unreachable!()
     };
     let (node, stylesheet) = input.resolve(&self.state)?;
-
-    let images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
-
-    takumi_svg::render(
-      takumi_svg::SvgOptions::builder()
-        .viewport(self.viewport)
-        .images(images)
-        .stylesheet(stylesheet)
-        .time_ms(self.time_ms)
-        .node(node)
-        .fonts(&self.fonts)
-        .font_families(take(&mut self.font_families))
-        .lang(take(&mut self.lang))
-        .build(),
+    let images = decode_images(
+      &self.state.resource_cache,
+      &self.options.images.take().unwrap_or_default(),
     )
-    .map_err(map_error)
+    .map_err(map_error)?;
+    let draw = Draw {
+      fonts: &self.fonts,
+      cache: &self.state.resource_cache,
+      stylesheet,
+      images,
+    };
+
+    takumi_svg::render(self.options.svg(node, draw).map_err(map_error)?).map_err(map_error)
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
