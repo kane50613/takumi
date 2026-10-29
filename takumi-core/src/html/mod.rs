@@ -30,7 +30,7 @@ use std::{
   sync::{Arc, LazyLock},
 };
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "html-svg-nodes")]
 use crate::resources::image::{ImageSource, SvgSource};
 use crate::{
   form_control::InputType,
@@ -42,7 +42,7 @@ use crate::{
 };
 use typed_builder::TypedBuilder;
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "html-svg-nodes")]
 use self::dom::{Attribute, AttributeNamespace};
 use self::dom::{Namespace, NodeData, NodeRef};
 
@@ -699,7 +699,7 @@ impl NodeBuilder<'_> {
 
   /// The source of an inline `<svg>`: its subtree as nodes, which the page's stylesheet reaches,
   /// or its markup when the nodes do not form a document.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "html-svg-nodes")]
   fn inline_svg(&self, handle: NodeRef<'_>, depth: usize) -> Result<ImageSourceInput, HtmlError> {
     let markup = handle.outer_html();
     let root = self.svg_node(handle, depth)?;
@@ -714,13 +714,13 @@ impl NodeBuilder<'_> {
     })
   }
 
-  #[cfg(not(feature = "svg"))]
+  #[cfg(not(feature = "html-svg-nodes"))]
   fn inline_svg(&self, handle: NodeRef<'_>, _depth: usize) -> Result<ImageSourceInput, HtmlError> {
     Ok(ImageSourceInput::Buffer(handle.outer_html()))
   }
 
   /// An inline `<svg>` element with its attributes under their qualified names, or a text.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "html-svg-nodes")]
   fn svg_node(&self, handle: NodeRef<'_>, depth: usize) -> Result<Option<Node>, HtmlError> {
     if depth >= self.max_depth {
       return Err(HtmlError::MaxDepthExceeded(self.max_depth));
@@ -850,7 +850,7 @@ fn empty_image_style(handle: NodeRef<'_>) -> Style {
 
 /// An attribute's name as SVG markup writes it, its namespace prefix included, as fragment
 /// serialization names it. <https://html.spec.whatwg.org/multipage/parsing.html#attribute's-serialized-name>
-#[cfg(feature = "svg")]
+#[cfg(feature = "html-svg-nodes")]
 fn qualified_name(attr: &Attribute) -> Box<str> {
   let local = &*attr.local;
 
@@ -894,9 +894,7 @@ mod tests {
     assert!(svg.to_html().contains("width: 100%; height: 2em"));
   }
 
-  /// A subtree of an inline `<svg>` past the depth limit fails as the rest of the document does,
-  /// rather than drawing without its deepest elements.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "html-svg-nodes")]
   #[test]
   fn an_svg_attribute_keeps_its_namespace_prefix() {
     let attribute = |ns, local: &str| Attribute {
@@ -923,7 +921,9 @@ mod tests {
     );
   }
 
-  #[cfg(feature = "svg")]
+  /// A subtree of an inline `<svg>` past the depth limit fails as the rest of the document does,
+  /// rather than drawing without its deepest elements.
+  #[cfg(feature = "html-svg-nodes")]
   #[test]
   fn an_inline_svg_past_the_depth_limit_fails() {
     let options = FromHtmlOptions::builder().max_depth(2).build();

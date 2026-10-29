@@ -44,7 +44,7 @@ workspace = true
 
 [features]
 default = ["svg"]
-svg = ["takumi-core/svg"]
+svg = ["takumi-core/svg", "takumi-core/html-svg-nodes"]
 # A wasm binding's source: a node tree, `{ json }` text, or HTML.
 wasm = ["takumi-core/html", "dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
 # Options for the bindings that render images.
