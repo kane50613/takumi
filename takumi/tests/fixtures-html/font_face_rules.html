@@ -29,6 +29,10 @@
         font-family: "Face Embedded";
         src: url("assets/fonts/eb-garamond/EBGaramondCaps.eot");
       }
+      @font-face {
+        font-family: "Face Local";
+        src: local("Missing Font"), local("Geist Mono Regular");
+      }
       @media (max-width: 100px) {
         @font-face {
           font-family: "Face Display";
@@ -63,6 +67,9 @@
       .embedded {
         font-family: "Face Embedded", Geist;
       }
+      .local {
+        font-family: "Face Local", Geist;
+      }
     </style>
   </head>
   <body style="width: 420px; height: 240px">
@@ -71,6 +78,7 @@
       <div class="display heavy">Manrope heavy, code digits 2026</div>
       <div class="bold">Poppins at weight 400</div>
       <div class="embedded">EOT falls back to Geist</div>
+      <div class="local">local() finds Geist Mono</div>
     </div>
   </body>
 </html>

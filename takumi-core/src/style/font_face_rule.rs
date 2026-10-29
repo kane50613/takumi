@@ -2,8 +2,9 @@
 //! reads them, and the face [`FontFace::Create`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/font_face.cc)
 //! makes of one.
 //!
-//! Approximate: a `local()` source never matches. `font-display` has no effect, as a render
-//! draws with the files that have loaded by then.
+//! A `local()` source matches a font registered through [`crate::Fonts`], takumi's stand-in for
+//! system fonts. `font-display` has no effect, as a render draws with the files that have loaded
+//! by then.
 
 use std::sync::Arc;
 
@@ -27,8 +28,8 @@ use crate::{
 pub(crate) struct FontFaceRule {
   /// The descriptors, `family` always set.
   pub(crate) descriptors: FontFaceDescriptors,
-  /// The `url()` sources Blink's `InitCSSFontFace` keeps, in order.
-  pub(crate) sources: Vec<Arc<str>>,
+  /// The sources Blink's `InitCSSFontFace` keeps, in order.
+  pub(crate) sources: Vec<FontFaceSrc>,
   /// Media queries gating this rule.
   pub(crate) media_queries: Vec<MediaQueryList>,
   /// Cascade layer this rule belongs to.
@@ -37,26 +38,34 @@ pub(crate) struct FontFaceRule {
   pub(crate) layer_order: Option<usize>,
 }
 
+/// A source a face loads from: Blink's `RemoteFontFaceSource` or `LocalFontFaceSource`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum FontFaceSrc {
+  Url(Arc<str>),
+  /// A full font name or PostScript name.
+  Local(Arc<str>),
+}
+
 /// A `src` entry as `ConsumeFontFaceSrc` keeps it.
-enum FontFaceSrc {
+enum SrcEntry {
   /// A `url()`, and whether it names a `format()`.
   Url {
     url: Arc<str>,
     has_format: bool,
   },
-  Local,
+  Local(Arc<str>),
 }
 
-impl FontFaceSrc {
-  /// Blink's `CSSFontFaceSrcValue::IsSupportedFormat`: the parser already dropped an unsupported
-  /// `format()`, and without one only an `.eot` URL is left out.
-  fn supported_url(self) -> Option<Arc<str>> {
+impl SrcEntry {
+  /// The source `InitCSSFontFace` adds. The parser already dropped an unsupported `format()`, and
+  /// Blink's `CSSFontFaceSrcValue::IsSupportedFormat` leaves out an `.eot` URL without one.
+  fn into_source(self) -> Option<FontFaceSrc> {
     match self {
       Self::Url { url, has_format } => {
         (has_format || url.starts_with("data:") || !url.to_ascii_lowercase().ends_with(".eot"))
-          .then_some(url)
+          .then_some(FontFaceSrc::Url(url))
       }
-      Self::Local => None,
+      Self::Local(name) => Some(FontFaceSrc::Local(name)),
     }
   }
 }
@@ -132,7 +141,7 @@ impl FontFaceRule {
     let family = family?;
     let sources = sources?
       .into_iter()
-      .filter_map(FontFaceSrc::supported_url)
+      .filter_map(SrcEntry::into_source)
       .collect();
 
     descriptors.family = Some(family);
@@ -161,6 +170,28 @@ fn descriptor_value<'i, T>(
 
 /// `font-family`: a `<family-name>`, never a generic family or a CSS-wide keyword.
 fn family_name(input: &mut Parser) -> Option<Arc<str>> {
+  let starts_generic = input
+    .try_parse(|input| {
+      let ident = input.expect_ident_cloned()?;
+
+      if GenericFamilyType::parse(&ident).is_some() {
+        Ok(())
+      } else {
+        Err(input.new_error_for_next_token::<()>())
+      }
+    })
+    .is_ok();
+
+  if starts_generic {
+    return None;
+  }
+
+  font_name(input)
+}
+
+/// A quoted name, or Blink's `ConcatenateFamilyName`: identifiers joined by spaces, which are not
+/// a lone CSS-wide keyword.
+fn font_name(input: &mut Parser) -> Option<Arc<str>> {
   if let Ok(name) = input.try_parse(|input| input.expect_string().map(ToString::to_string)) {
     return Some(name.into());
   }
@@ -169,10 +200,6 @@ fn family_name(input: &mut Parser) -> Option<Arc<str>> {
   let mut words = 0;
 
   while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
-    if words == 0 && GenericFamilyType::parse(&ident).is_some() {
-      return None;
-    }
-
     if words > 0 {
       name.push(' ');
     }
@@ -193,7 +220,7 @@ fn is_css_wide_keyword(ident: &str) -> bool {
 }
 
 /// Blink's `ConsumeFontFaceSrc`: the entries that parse, an invalid one skipped to the next comma.
-fn src_list(input: &mut Parser) -> Option<Vec<FontFaceSrc>> {
+fn src_list(input: &mut Parser) -> Option<Vec<SrcEntry>> {
   let mut sources = Vec::new();
 
   loop {
@@ -229,19 +256,18 @@ fn src_list(input: &mut Parser) -> Option<Vec<FontFaceSrc>> {
 }
 
 /// One `src` entry, ending at a comma or the end of the value.
-fn src_entry(input: &mut Parser) -> Result<FontFaceSrc, ()> {
+fn src_entry(input: &mut Parser) -> Result<SrcEntry, ()> {
   if input
     .try_parse(|input| input.expect_function_matching("local"))
     .is_ok()
   {
-    nested(input, |block| {
-      block
-        .try_parse(|block| block.expect_string().map(|_| ()))
-        .is_ok()
-        || family_name(block).is_some()
-    })?;
+    let name = input
+      .parse_nested_block(|block| {
+        descriptor_value(block, font_name).ok_or(block.new_error_for_next_token::<()>())
+      })
+      .map_err(|_| ())?;
 
-    return src_end(input).map(|()| FontFaceSrc::Local);
+    return src_end(input).map(|()| SrcEntry::Local(name));
   }
 
   let url: Arc<str> = input.expect_url().map_err(|_| ())?.as_ref().into();
@@ -272,7 +298,7 @@ fn src_entry(input: &mut Parser) -> Result<FontFaceSrc, ()> {
     })?;
   }
 
-  src_end(input).map(|()| FontFaceSrc::Url { url, has_format })
+  src_end(input).map(|()| SrcEntry::Url { url, has_format })
 }
 
 /// Succeeds when `accept` takes all of the block `input` just opened.
@@ -486,7 +512,10 @@ mod tests {
     rule(&format!("src: {src};"))
       .sources
       .iter()
-      .map(ToString::to_string)
+      .map(|source| match source {
+        FontFaceSrc::Url(url) => url.to_string(),
+        FontFaceSrc::Local(name) => format!("local({name})"),
+      })
       .collect()
   }
 
@@ -521,8 +550,8 @@ mod tests {
       ["b.otf"]
     );
     assert_eq!(
-      sources(r#"local(Face), url(a.ttf) tech(variations)"#),
-      ["a.ttf"]
+      sources(r#"local(Face Bold), local("Face-Bold"), url(a.ttf) tech(variations)"#),
+      ["local(Face Bold)", "local(Face-Bold)", "a.ttf"]
     );
     assert_eq!(
       sources(r#"url(a.ttf) tech(color-svg), url(b.ttf)"#),
