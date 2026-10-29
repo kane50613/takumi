@@ -686,7 +686,7 @@ mod tests {
 
     assert_eq!(
       css,
-      r##"url("data:image/svg+xml,<filter id=%22takumi-filter%22><feFlood flood-color='#f00'/></filter>")"##
+      r##"url("data:image/svg+xml,<filter id=%22takumi-filter%22><feFlood flood-color=%22#f00%22/></filter>")"##
     );
     assert_eq!(Filters::from_css_str(&css).unwrap(), filters);
   }
