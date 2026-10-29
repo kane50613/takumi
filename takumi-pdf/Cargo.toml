@@ -5,8 +5,8 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Vector PDF output backend for takumi. Emits selectable, searchable text with embedded subset fonts."
 repository = "https://github.com/kane50613/takumi"
+readme = "README.md"
 rust-version = "1.91"
-publish = false
 
 [features]
 default = ["images", "svg"]
@@ -61,6 +61,7 @@ optional = true
 
 [dependencies.takumi-core]
 path = "../takumi-core"
+version = "0.35.0"
 default-features = false
 features = ["woff2", "png", "fragmentation"]
 

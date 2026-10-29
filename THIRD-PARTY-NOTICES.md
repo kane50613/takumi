@@ -20,6 +20,10 @@ This software is based in part on the work of the Independent JPEG Group.
 
 `@takumi-rs/core`, `@takumi-rs/wasm`, `takumi-pdf`, and `takumi-paint` give removed bidi controls and trailing white space their levels as ICU does, under the Unicode License v3. [`takumi-core/LICENSE-ICU`](takumi-core/LICENSE-ICU) names the part and carries the license.
 
+## krilla and subsetter
+
+`takumi-pdf` writes PDF with a vendored copy of [krilla](https://github.com/LaurenzV/krilla) 0.8.2 and subsets fonts with a vendored copy of [subsetter](https://github.com/typst/subsetter) 0.2.6, both under the MIT License or the Apache License 2.0. [`takumi-pdf/LICENSE-KRILLA`](takumi-pdf/LICENSE-KRILLA) and [`takumi-pdf/LICENSE-SUBSETTER`](takumi-pdf/LICENSE-SUBSETTER) carry their notices.
+
 ## libwebp
 
 `@takumi-rs/core` encodes WebP with libwebp.

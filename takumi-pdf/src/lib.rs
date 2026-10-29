@@ -1,8 +1,7 @@
 #![deny(missing_docs)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-//! Vector PDF output for takumi. The `takumi-pdf` npm package wraps this crate, which is not
-//! published to crates.io.
+//! Vector PDF output for takumi. The `takumi-pdf` npm package wraps this crate.
 //!
 //! [`render`] lays out the tree with `takumi-core` and walks the same stacking-context scene as
 //! `takumi-svg`. A vendored krilla fork writes the PDF. Backgrounds become filled paths. Text

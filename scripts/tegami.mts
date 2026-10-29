@@ -66,8 +66,8 @@ const releaseGroups: [ReleaseGroup, string[]][] = [
       "cargo:takumi",
     ],
   ],
-  // The crate is never published; it carries a version so the `/Producer` it
-  // writes matches the npm package a reader installed.
+  // One version, so the `/Producer` the crate writes matches the npm package a
+  // reader installed.
   ["takumi-pdf", ["npm:takumi-pdf", "cargo:takumi-pdf"]],
   ["takumi-paint", ["npm:takumi-paint"]],
 ];
