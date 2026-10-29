@@ -1,3 +1,25 @@
+## takumi-html@0.8.0
+
+### Renderers take HTML directly
+
+`render`, `renderSvg`, `measure`, and the WASM `renderAsDataUrl` accept an HTML string in place of a node tree. The markup is parsed in Rust, and the CSS of its `<style>` elements follows the `css` option. A `<style>` with a `media` attribute applies only where its query matches. `takumi-html` adds `parse_html`, which returns that CSS with the tree. `fromHtml` from `@takumi-rs/helpers/html` is deprecated in favor of passing the string and will be removed in v3.
+
+### Draw the value of text fields such as `<input type="text">`
+
+An `<input>` of type `text`, `search`, `tel`, `url`, `email`, `password`, or `number` now draws its `value` inside the field, as Chromium does. The field takes Chromium's default font, border, and padding, sizes itself from the `size` attribute, centers its text vertically, and sits on the baseline of its line. A password shows a dot for each character, a number field with an invalid value shows nothing, and a disabled field turns gray. `<input type="hidden">` takes no space. These inputs used to draw nothing, not even their author-set width.
+
+### `takumi-html` parses with its own parser instead of html5ever
+
+It recovers from less malformed markup than html5ever. It implies `<html>`, `<head>`, `<body>`, `<tbody>`, and the end tags of `p`, `li`, `dt`, `dd`, `option`, and table rows and cells, but does not reconstruct misnested formatting elements or move stray table content out of the table.
+
+### The HTML parser moves into `takumi-core`
+
+`takumi_core::html` holds `from_html`, `parse_html`, `FromHtml`, `FromHtmlOptions`, `StylePresets`, and `HtmlError`, behind the `html` feature. `takumi-html` now only re-exports that module, so depend on `takumi-core` with `features = ["html"]` instead, adding `html-svg-nodes` where `takumi-html`'s `svg` feature kept inline `<svg>` as nodes. The `takumi` crate's `from-html` feature and its `takumi::html` re-export work as before.
+
+### Lay out `<textarea>` as a field sized by `cols` and `rows`
+
+A `<textarea>` now takes Chromium's default monospace font, border, and padding, and sizes itself from `cols` and `rows` with room for a scrollbar. Its text keeps its line breaks and, unless the field is disabled or read-only, its spaces. It wraps inside the field, which clips it in both axes even under `overflow: visible`, as Chromium does. A disabled textarea turns gray. A textarea used to render as inline text with its line breaks collapsed.
+
 ## takumi-html@0.7.0
 
 ### Style inline `<svg>` elements with the page's stylesheet

@@ -1,3 +1,35 @@
+## takumi-pdf@0.19.0
+
+### `PdfRenderer` and `Painter` prepare a document too
+
+`PdfRenderer.prepare` and `Painter.prepare`, and the shared `prepare` each package exports, fetch the images a document draws and load the font subsets its text uses, a PDF's header, footer, and page bands included. `render`, `measure`, and `paint` take the prepared document, a PDF with only file options such as `metadata` and `pdfa`.
+
+### `render` in `takumi-pdf` takes an abort `signal`
+
+Pass `signal` to stop a render before it reads the document or draws it, as `@takumi-rs/core` renders take one.
+
+### Render on Nitro's `bun` preset instead of failing
+
+Nitro's `bun` preset used to answer every request with a 500 and `ENOENT ... _libs/@takumi-rs/[object WebAssembly.Module]`. The WASM packages now load their binary through unwasm there, as they do on other Nitro presets.
+
+### A class list splits on ASCII whitespace only
+
+Selectors used to split an element's `class` attribute on any Unicode whitespace, so `class="a b"` matched `.a` as an ancestor. It now splits on ASCII whitespace, as HTML does, and `a b` is one class. The same applies to the page counter classes in PDFs.
+
+### Parse HTML strings in Rust in every renderer
+
+`takumi-paint` and `takumi-pdf` take HTML strings as `@takumi-rs/core` and `@takumi-rs/wasm` do, and `takumi-pdf` takes them for header and footer bands too. A `renderAnimation` scene can be an HTML string, its `<style>` rules applying to the animation. With `emoji: "from-font"`, `takumi-js` hands HTML to the renderer instead of parsing it in JavaScript.
+
+### Font subsets load as a browser loads them
+
+When `fonts` holds `unicodeRange` subsets, as `googleFonts` returns, a render now loads only the subsets that font matching reaches for each character, through that text's own font stack, weight, and style. With `font-family: Inter, "Noto Sans JP"`, Latin text no longer loads Noto Sans JP's Latin subset, and a bold subset loads only when bold text uses it.
+
+The text comes from the styled tree, so a subset needed only by a stylesheet's generated content, a list marker, `text-transform`, the `text` elements of an SVG image, or a `takumi-pdf` page counter now loads. `collectCodepoints`, `LIST_MARKER_CHARACTERS`, and `subsetFonts` are deprecated.
+
+### `takumi-pdf` and `takumi-paint` drop their deprecated options
+
+`takumi-pdf` no longer takes `stylesheets`. Pass CSS through `css`, which takes one string or a list. The `subsetOf` and `subsetRank` font fields are gone from both packages. Register each subset under its family `name` with its `unicodeRange`.
+
 ## takumi-pdf@0.18.4
 
 ### Correct filter and backdrop clipping

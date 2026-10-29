@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/bindings-js",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Font registration, prepared renders, and document input shared by the takumi bindings, which bundle it.",
   "type": "module",

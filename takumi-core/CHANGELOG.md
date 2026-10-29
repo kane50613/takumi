@@ -1,3 +1,63 @@
+## takumi-core@0.35.0
+
+### Number content with CSS counters
+
+`counter-reset`, `counter-increment`, and `counter-set` change named counters, and `content` writes them with `counter(name)` or `counters(name, ".")`, in any `list-style-type` style. Counters follow the document order Chrome counts in, including the implicit `list-item` counter of `ol`, `ul`, and `li`, and `contain: style` keeps the counters inside an element from reaching the rest of the page. `::after` reads a counter after the element's children change it, so a section can close with how many items it held.
+
+### `<ol reversed>` numbers its items down
+
+List markers and the `list-item` counter now number as Chrome does: an `<ol reversed>` counts down from `start`, or from its item count when it has no `start`, and a box with `contain: style` numbers the list items inside it from 1. An item's `counter-set` or `counter-increment` of `list-item` moves its marker too. `start` now applies only to an `<ol>`, and `value` only to an `<li>`.
+
+### Draw the value of text fields such as `<input type="text">`
+
+An `<input>` of type `text`, `search`, `tel`, `url`, `email`, `password`, or `number` now draws its `value` inside the field, as Chromium does. The field takes Chromium's default font, border, and padding, sizes itself from the `size` attribute, centers its text vertically, and sits on the baseline of its line. A password shows a dot for each character, a number field with an invalid value shows nothing, and a disabled field turns gray. `<input type="hidden">` takes no space. These inputs used to draw nothing, not even their author-set width.
+
+### A class list splits on ASCII whitespace only
+
+Selectors used to split an element's `class` attribute on any Unicode whitespace, so `class="a b"` matched `.a` as an ancestor. It now splits on ASCII whitespace, as HTML does, and `a b` is one class. The same applies to the page counter classes in PDFs.
+
+### List items inside `display: none` no longer take a number
+
+An item hidden with `display: none`, or inside a hidden element, used to take the next number in its list, so the visible item after it skipped one. It now takes none, as Chromium numbers only items that get a box. Hidden subtrees are also no longer styled, which makes measuring a tree with a large hidden section about a third faster.
+
+### Content a clipping box pushes past a page end shows on the next page
+
+A box with `overflow: hidden` that breaks across pages used to clip each page to its own piece of the box, so a child that a `transform` moved past the page end lost the part that belongs on the next page. Each page now clips to the whole box, as Chromium prints it. Rounded corners on such a box also curve over its whole height on every page, so a PDF holds back a page until the box that starts on it ends.
+
+### Content clipped by `overflow: hidden` no longer adds pages
+
+A box with `overflow` other than `visible` on the block axis that ends on a page used to keep breaking its overflowing children, so the clipped content added blank pages after it. The box now stops breaking on the page where it ends, as Chromium does, and its clipped content stays on that page.
+
+### The HTML parser moves into `takumi-core`
+
+`takumi_core::html` holds `from_html`, `parse_html`, `FromHtml`, `FromHtmlOptions`, `StylePresets`, and `HtmlError`, behind the `html` feature. `takumi-html` now only re-exports that module, so depend on `takumi-core` with `features = ["html"]` instead, adding `html-svg-nodes` where `takumi-html`'s `svg` feature kept inline `<svg>` as nodes. The `takumi` crate's `from-html` feature and its `takumi::html` re-export work as before.
+
+### Read what a render needs after the cascade
+
+`RenderNode::needs` and `takumi_raster::needs` report the images a node tree looks up by URL and the fonts its text would load, read from the styled tree. Stylesheet and Tailwind rules, `display: none`, generated content, list markers, `text-transform`, and the `text` elements of SVG images count as they will render.
+
+Register a font that is still downloading with `Fonts::register_pending` and a `PendingFontFace`. Font matching treats it as a loading `@font-face`, and `needs` reports its id when the text reaches it before a loaded font with the glyph, as Blink starts loading a face.
+
+### Lay out `<textarea>` as a field sized by `cols` and `rows`
+
+A `<textarea>` now takes Chromium's default monospace font, border, and padding, and sizes itself from `cols` and `rows` with room for a scrollbar. Its text keeps its line breaks and, unless the field is disabled or read-only, its spaces. It wraps inside the field, which clips it in both axes even under `overflow: visible`, as Chromium does. A disabled textarea turns gray. A textarea used to render as inline text with its line breaks collapsed.
+
+### Malformed SVG images render what the parser recovers
+
+SVG images, `filter: url(data:image/svg+xml,...)` references, and SVG sizing now go through takumi's own markup parser instead of `roxmltree`, which leaves the binaries. An SVG that is not well-formed XML renders what the parser recovers instead of failing to load, entities a DTD declares stay unexpanded, and a referenced filter keeps only its `fe*` primitives, so a `<script>` or other element inside the `<filter>` no longer reaches the SVG output.
+
+### Match form control states such as `:disabled` and `:checked`
+
+`:disabled`, `:enabled`, `:checked`, `:indeterminate`, `:placeholder-shown`, `:read-only`, `:read-write`, `:required`, and `:optional` now match by the element's attributes, as HTML defines them. A control inside `<fieldset disabled>` counts as disabled, and an `<option>` counts as checked when its `<select>` would show it selected. These selectors used to match nothing, so their rules never applied.
+
+### PNG images decode faster
+
+PNG decoding is 13 to 85% faster natively and 13 to 81% faster in WebAssembly on most images, with the largest gains on flat graphics such as social cards, emoji, and icons, and on paletted and interlaced images. The decoded pixels are unchanged.
+
+### Loading a font no longer blocks rendering
+
+`FontResource::into_resolved` now also limits the `cmap` to the `unicode_range` and hashes the font, so registering a resolved font takes the same short time whatever its size. `@takumi-rs/core` registers fonts on the JavaScript thread after decompressing them in the background, and renders no longer wait on a lock while fonts load. The font cache budget now counts a `unicode-range` subset by the bytes it keeps.
+
 ## takumi-core@0.34.0
 
 ### Align custom property resolution with Chromium
