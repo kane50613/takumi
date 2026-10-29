@@ -104,12 +104,6 @@ impl ComputedStyle {
       }
     }
 
-    // Text truncates only in a box that clips its overflow
-    // (LayoutBlockFlow::ShouldTruncateOverflowingText).
-    if !self.clips_overflow() && self.misc4_data.text_overflow != TextOverflow::Clip {
-      self.misc4_data_mut().text_overflow = TextOverflow::Clip;
-    }
-
     // `-webkit-legacy` collapses only in a vertical `-webkit-box`, Blink's
     // `IsDeprecatedWebkitBoxWithVerticalLineClamp`.
     if self.misc_data.r#continue == Continue::WebkitLegacy {

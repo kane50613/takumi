@@ -251,3 +251,19 @@ fn an_editable_textarea_keeps_its_white_space() {
   assert_eq!(run_texts(&editable), ["a    b"]);
   assert_eq!(run_texts(&read_only), ["a b"]);
 }
+
+#[test]
+fn a_text_field_ellipsizes_a_value_wider_than_it() {
+  let [input] = inputs(
+    r#"<input disabled value="What is Lorem Ipsum? Lorem Ipsum is dummy text" style="width: 80px; text-overflow: ellipsis">"#,
+  )
+  .try_into()
+  .unwrap();
+  let texts = run_texts(&input);
+
+  assert!(
+    texts.last().is_some_and(|text| text.ends_with('…')),
+    "{texts:?}"
+  );
+  assert!(!texts.concat().contains("dummy text"), "{texts:?}");
+}
