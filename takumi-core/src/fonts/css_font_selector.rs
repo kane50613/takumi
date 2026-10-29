@@ -17,7 +17,7 @@ use super::{
   css_segmented_font_face::FontPlatformDataForRangeSet,
   font_custom_platform_data::FontCustomPlatformData,
   font_description::FontSelectionDescription,
-  font_face::{FontFace, FontFaceDescriptors},
+  font_face::{FaceData, FontFace, FontFaceDescriptors},
   font_face_cache::{FontFaceCache, fold_family_name},
 };
 use crate::resources::font::SharedBytes;
@@ -134,6 +134,31 @@ impl CssFontSelector {
     faces
   }
 
+  /// Registers a face of `descriptors`' family with no data yet, which matching finds as `id`.
+  pub(crate) fn register_pending(
+    &mut self,
+    family: Arc<str>,
+    descriptors: FontFaceDescriptors,
+    id: usize,
+  ) {
+    let font_face = Arc::new(FontFace::pending(Arc::clone(&family), descriptors, id));
+
+    self.font_face_cache.add_font_face(Arc::clone(&font_face));
+    self.font_faces.push(RegisteredFontFace {
+      font_face,
+      last_resort: false,
+    });
+    insert_family(&mut self.fallback_families, &family);
+  }
+
+  /// Whether a pending face is registered.
+  pub(crate) fn has_pending_faces(&self) -> bool {
+    self
+      .font_faces
+      .iter()
+      .any(|registered| registered.font_face.custom_platform_data().is_none())
+  }
+
   /// Removes every face of `family`, so it falls back as an unknown family; false when it has none.
   pub(crate) fn unregister_family(&mut self, family: &str) -> bool {
     let key = fold_family_name(family);
@@ -206,7 +231,7 @@ impl CssFontSelector {
     self
       .font_faces
       .iter()
-      .map(|registered| &registered.font_face.custom_platform_data)
+      .filter_map(|registered| registered.font_face.custom_platform_data())
       .find(|typeface| typeface.id == id && typeface.index == index)
       .map(Arc::clone)
   }
@@ -220,10 +245,11 @@ impl CssFontSelector {
       .iter()
       .map(|registered| &registered.font_face)
       .find(|font_face| {
-        let custom_platform_data = &font_face.custom_platform_data;
-
-        custom_platform_data.id == id
-          && custom_platform_data.index == index
+        font_face
+          .custom_platform_data()
+          .is_some_and(|custom_platform_data| {
+            custom_platform_data.id == id && custom_platform_data.index == index
+          })
           && fold_family_name(&font_face.family) == family
       })
   }
@@ -248,7 +274,7 @@ impl CssFontSelector {
     font_description: &FontSelectionDescription,
     family: &str,
     family_is_generic: bool,
-  ) -> Option<Vec<FontPlatformDataForRangeSet>> {
+  ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
     if !family_is_generic {
       return self.font_data_for_family(font_description, family);
     }
@@ -269,14 +295,14 @@ impl CssFontSelector {
     &self,
     font_description: &FontSelectionDescription,
     family: &str,
-  ) -> Option<Vec<FontPlatformDataForRangeSet>> {
+  ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
     let ranked = self
       .font_face_cache
       .get_ranked(font_description.font_selection_request, family);
     let (best, others) = ranked.split_first()?;
     let mut faces = best.get_font_data(font_description)?;
 
-    if faces.iter().any(|face| !face.range_set.is_entire_range()) {
+    if faces.iter().any(|face| !face.range_set().is_entire_range()) {
       faces.extend(
         others
           .iter()
@@ -349,7 +375,12 @@ mod tests {
     let mut faces = selector.get_font_data(description, family, false).unwrap();
 
     assert_eq!(faces.len(), 1);
-    faces.remove(0)
+
+    let FaceData::Loaded(face) = faces.remove(0) else {
+      panic!("{family} matched a pending face");
+    };
+
+    face
   }
 
   /// The weight class of the face `family` picks for `weight`.
@@ -505,8 +536,8 @@ mod tests {
       .unwrap();
 
     assert_eq!(faces.len(), 2);
-    assert!(faces[0].range_set.contains(u32::from('a')));
-    assert!(faces[1].range_set.contains(u32::from('A')));
+    assert!(faces[0].range_set().contains(u32::from('a')));
+    assert!(faces[1].range_set().contains(u32::from('A')));
   }
 
   #[test]

@@ -51,6 +51,8 @@ pub(crate) mod logical_rect;
 pub(crate) mod margin_strut;
 pub mod measure;
 pub(crate) mod min_max_sizes;
+/// What a render tree needs fetched before it renders.
+pub mod needs;
 /// Node Tree
 pub mod node;
 pub(crate) mod out_of_flow;

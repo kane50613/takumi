@@ -1,6 +1,7 @@
 use std::{collections::HashMap, mem, rc::Rc, sync::Arc};
 
 pub use takumi_core::layout::measure::{MeasuredNode, MeasuredTextRun};
+pub use takumi_core::layout::needs::RenderNeeds;
 #[cfg(feature = "pages")]
 use takumi_core::{
   geometry::Size,
@@ -150,6 +151,13 @@ pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
   let layout_results = LayoutResults::compute_document(&root, options.viewport.into());
 
   MeasuredNode::of(&mut root, &layout_results, options.viewport.size.into())
+}
+
+/// What a node needs fetched before it renders: the images it looks up by URL and the characters it draws.
+pub fn needs(mut options: RenderOptions<'_>) -> RenderNeeds {
+  let render_context = options.take_render_context();
+
+  RenderNode::from_node(&render_context, options.node).needs()
 }
 
 /// Renders a node to an image.

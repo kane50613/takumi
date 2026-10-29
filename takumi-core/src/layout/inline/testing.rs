@@ -80,7 +80,11 @@ pub(crate) fn render_root(path: &str, family: &str, root: Node, css: &str) -> Re
   let mut fonts = Fonts::default();
 
   register(&mut fonts, path, family);
+  render_with_fonts(&fonts, root, css)
+}
 
+/// `root` styled with `css` and `fonts`.
+pub(crate) fn render_with_fonts(fonts: &Fonts, root: Node, css: &str) -> RenderNode {
   let context = RenderContext::builder()
     .fonts(fonts.snapshot())
     .sizing(

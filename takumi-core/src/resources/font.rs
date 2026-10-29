@@ -31,9 +31,12 @@ use std::iter::once;
 use crate::{fonts::font_baseline::FontBaseline, resources::glyph::ResolvedGlyph};
 use crate::{
   fonts::{
-    css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
-    font_custom_platform_data::FontCustomPlatformData, font_description::FontSelectionDescription,
-    font_face::FontFaceDescriptors, font_height::FontHeight,
+    css_font_selector::CssFontSelector,
+    css_segmented_font_face::FontPlatformDataForRangeSet,
+    font_custom_platform_data::FontCustomPlatformData,
+    font_description::FontSelectionDescription,
+    font_face::{FaceData, FontFaceDescriptors},
+    font_height::FontHeight,
   },
   layout_unit::LayoutUnit,
   resources::{
@@ -316,7 +319,7 @@ impl Fonts {
     &self,
     families: &[FontFamilyToken],
     description: &FontSelectionDescription,
-  ) -> Vec<Vec<MatchedFace>> {
+  ) -> Vec<Vec<FaceData<MatchedFace>>> {
     families
       .iter()
       .filter_map(|family| match family {
@@ -333,13 +336,21 @@ impl Fonts {
             .get_font_data(description, generic.keyword(), true)
         }
       })
-      .map(|faces| faces.into_iter().map(MatchedFace::of).collect())
+      .map(|faces| {
+        faces
+          .into_iter()
+          .map(|face| face.map(MatchedFace::of))
+          .collect()
+      })
       .collect()
   }
 
   /// The faces system font fallback picks from: the fallback families, the last-resort families
   /// last, each by its best match for `description`.
-  pub(crate) fn fallback_bucket(&self, description: &FontSelectionDescription) -> Vec<MatchedFace> {
+  pub(crate) fn fallback_bucket(
+    &self,
+    description: &FontSelectionDescription,
+  ) -> Vec<FaceData<MatchedFace>> {
     let families: Vec<&Arc<str>> = match &self.fallback_families {
       Some(families) => families
         .iter()
@@ -357,7 +368,7 @@ impl Fonts {
           .get_font_data(description, family, false)
       })
       .flatten()
-      .map(MatchedFace::of)
+      .map(|face| face.map(MatchedFace::of))
       .collect()
   }
 
@@ -381,7 +392,9 @@ impl Fonts {
       .selector
       .font_faces()
       .find(|face| {
-        face.custom_platform_data.id == font_id && face.custom_platform_data.index == index
+        face
+          .custom_platform_data()
+          .is_some_and(|typeface| typeface.id == font_id && typeface.index == index)
       })
       .map(|face| &*face.family)
   }
@@ -509,7 +522,9 @@ impl Fonts {
     let mut families: Vec<RegisteredFamily> = Vec::new();
 
     for font_face in faces {
-      let typeface = &font_face.custom_platform_data;
+      let Some(typeface) = font_face.custom_platform_data() else {
+        continue;
+      };
 
       let face = RegisteredFace {
         weight: typeface.attributes.weight.value(),
@@ -533,8 +548,27 @@ impl Fonts {
     Ok(families)
   }
 
+  /// Registers a face by its descriptors alone, before its data loads. Font matching treats it as
+  /// a face still loading: text it would draw falls back past it, and
+  /// [`RenderNeeds::faces`](crate::layout::needs::RenderNeeds::faces) reports its id when the
+  /// render would load it.
+  pub fn register_pending(&mut self, face: PendingFontFace) {
+    let registry = Arc::make_mut(&mut self.registry);
+
+    registry.revise();
+    registry
+      .selector
+      .register_pending(face.family, face.descriptors, face.id);
+  }
+
+  /// Whether a pending face is registered.
+  pub(crate) fn has_pending_faces(&self) -> bool {
+    self.registry.selector.has_pending_faces()
+  }
+
   /// Removes every face registered under `family`, from each source and `unicode-range` subset
-  /// alike, so it falls back as an unknown family; false when it has no faces.
+  /// alike, pending ones included, so it falls back as an unknown family; false when it has no
+  /// faces.
   pub fn unregister_family(&mut self, family: &str) -> bool {
     let registry = Arc::make_mut(&mut self.registry);
 
@@ -920,6 +954,45 @@ impl FontOverride {
   }
 }
 
+/// A face known by its `@font-face` descriptors before its data loads, such as a `unicode-range`
+/// subset a caller fetches on demand. See [`Fonts::register_pending`].
+#[derive(Debug, Clone)]
+pub struct PendingFontFace {
+  id: usize,
+  family: Arc<str>,
+  descriptors: FontFaceDescriptors,
+}
+
+impl PendingFontFace {
+  /// A face of `family` that needs passes report as `id`, with every descriptor `normal` and
+  /// every codepoint in range.
+  pub fn new(id: usize, family: impl Into<Arc<str>>) -> Self {
+    Self {
+      id,
+      family: family.into(),
+      descriptors: FontFaceDescriptors::default(),
+    }
+  }
+
+  /// Sets `font-weight` to the range `start` to `end`.
+  pub fn weight(mut self, start: f32, end: f32) -> Self {
+    self.descriptors.weight = Some((start, end));
+    self
+  }
+
+  /// Sets `font-style`.
+  pub fn style(mut self, style: CssFontStyle) -> Self {
+    self.descriptors.slope = Some((style.slope(), style.slope()));
+    self
+  }
+
+  /// Limits the codepoints the face serves, as `@font-face` `unicode-range` does.
+  pub fn unicode_range(mut self, unicode_range: UnicodeRangeSet) -> Self {
+    self.descriptors.unicode_range = unicode_range;
+    self
+  }
+}
+
 #[derive(Debug)]
 /// Information of a font resource
 pub struct FontResource<'a> {
@@ -1110,8 +1183,8 @@ mod tests {
 
     assert_eq!(faces.len(), 2);
     assert!(Arc::ptr_eq(
-      &faces[0].custom_platform_data,
-      &faces[1].custom_platform_data
+      faces[0].custom_platform_data().unwrap(),
+      faces[1].custom_platform_data().unwrap()
     ));
   }
 

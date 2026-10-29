@@ -14,13 +14,17 @@ use crate::{
   style::{Length, Style, StyleDeclaration},
 };
 
+/// Whether `src` names an image a render looks up in its `images`, rather than inline data or SVG
+/// markup it decodes itself.
+pub(crate) fn is_image_reference(src: &str) -> bool {
+  !src.is_empty() && !src.starts_with(DATA_URI_PREFIX) && !is_svg_like(src)
+}
+
 impl ImageData {
-  /// The source URL when it is fetched over HTTP(S).
+  /// The source URL when the render looks it up in its `images`.
   pub(crate) fn url(&self) -> Option<&str> {
     match &self.src {
-      ImageSourceInput::Url(src) if src.starts_with("https://") || src.starts_with("http://") => {
-        Some(src.as_ref())
-      }
+      ImageSourceInput::Url(src) if is_image_reference(src) => Some(src.as_ref()),
       _ => None,
     }
   }
