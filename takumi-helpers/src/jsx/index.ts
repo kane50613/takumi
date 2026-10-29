@@ -72,25 +72,6 @@ export async function fromJsx(
   return rootResult(await builder.build(element));
 }
 
-/** A document a takumi package renders: a node tree, JSX, or HTML markup. */
-export type DocumentInput = Node | ReactNode | ReactElementLike | string;
-
-/** Whether `input` is a takumi node tree rather than JSX, which also carries a `type`. */
-export function isNode(input: DocumentInput): input is Node {
-  return typeof input === "object" && input !== null && "type" in input && !("$$typeof" in input);
-}
-
-/** `input` as a node tree or HTML a binding reads, with the CSS JSX brings: JSX rendered, the rest as is. */
-export async function resolveDocument(
-  input: DocumentInput,
-): Promise<{ node: Node | string; css: string[] }> {
-  if (typeof input === "string" || isNode(input)) {
-    return { node: input, css: [] };
-  }
-
-  return fromJsx(input);
-}
-
 const REACT_CONTEXT_TYPE = Symbol.for("react.context");
 const REACT_PROVIDER_TYPE = Symbol.for("react.provider");
 const REACT_CONSUMER_TYPE = Symbol.for("react.consumer");

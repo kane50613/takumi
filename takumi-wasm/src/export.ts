@@ -20,7 +20,7 @@ import {
   readSource,
   renderPrepared,
   toNativeSource,
-} from "@takumi-rs/helpers/renderer";
+} from "@takumi-rs/bindings-js";
 import type {
   BackendAnimationOptions,
   BackendPrepareAnimationOptions,
@@ -31,7 +31,7 @@ import type {
   FontLoader,
   JsonSource,
   RegisteredFamilyLike,
-} from "@takumi-rs/helpers/renderer";
+} from "@takumi-rs/bindings-js";
 
 export type {
   AnimationOutputFormatOptions,
@@ -40,8 +40,8 @@ export type {
   ImagesInput,
   OutputFormatOptions,
   PrepareImagesInput,
-} from "@takumi-rs/helpers/renderer";
-export { Prepared } from "@takumi-rs/helpers/renderer";
+} from "@takumi-rs/bindings-js";
+export { Prepared } from "@takumi-rs/bindings-js";
 
 export type RenderOptions = BackendRenderOptions<RenderOptionsInternal>;
 export type RenderAnimationOptions = BackendAnimationOptions<RenderAnimationOptionsInternal>;

@@ -158,6 +158,7 @@
     "@takumi-rs/helpers": "workspace:*"
   },
   "devDependencies": {
+    "@takumi-rs/bindings-js": "workspace:*",
     "@types/bun": "catalog:",
     "csstype": "catalog:",
     "tsdown": "catalog:",

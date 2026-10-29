@@ -1,6 +1,4 @@
-import type { FetchOptions } from "./fetch";
-import { fetchImages } from "./fetch/images";
-import type { ImageFetchCache } from "./images";
+import { type FetchOptions, type ImageFetchCache, prepareImages } from "@takumi-rs/helpers";
 import {
   type FontDetails,
   type FontLoader,
@@ -17,7 +15,11 @@ type Awaitable<T> = T | Promise<T>;
 /** The binding options that only change how a laid-out page is encoded. */
 type OutputOnly = "format" | "quality" | "lossless" | "dithering" | "drawDebugBorder";
 
-/** Images for {@link Prepared}: entries to use as they are, and how to fetch the rest. */
+/**
+ * Images for {@link Prepared}: entries to use as they are, and how to fetch the rest.
+ *
+ * @internal
+ */
 export type PrepareImagesInput =
   | ImageLoader[]
   | (Omit<FetchOptions, "signal"> & {
@@ -31,18 +33,30 @@ export type PrepareImagesInput =
       throwOnError?: boolean;
     });
 
-/** What `prepare` takes on top of the layout options. */
+/**
+ * What `prepare` takes on top of the layout options.
+ *
+ * @internal
+ */
 export type PrepareExtras = {
   fonts?: FontLoader[] | Promise<FontLoader[]>;
   images?: PrepareImagesInput;
   signal?: AbortSignal;
 };
 
-/** Public `prepare` options for a backend whose binding options are {@link TInternal}. */
+/**
+ * Public `prepare` options for a backend whose binding options are {@link TInternal}.
+ *
+ * @internal
+ */
 export type BackendPrepareOptions<TInternal> = Omit<TInternal, "images" | OutputOnly> &
   PrepareExtras;
 
-/** Public options for rendering a {@link Prepared} on a backend whose binding options are {@link TInternal}. */
+/**
+ * Public options for rendering a {@link Prepared} on a backend whose binding options are {@link TInternal}.
+ *
+ * @internal
+ */
 export type BackendPreparedRenderOptions<TInternal> = Pick<
   TInternal,
   Extract<keyof TInternal, "dithering" | "drawDebugBorder">
@@ -50,14 +64,22 @@ export type BackendPreparedRenderOptions<TInternal> = Pick<
   OutputFormatOptions & { signal?: AbortSignal };
 
 /** What a render reads from a source before it lays it out: the images it draws, and the ids of the listed fonts it loads. */
-export type SourceNeeds = { images: string[]; fonts: number[] };
+type SourceNeeds = { images: string[]; fonts: number[] };
 
-/** A font of a render's `fonts` list, described before its bytes arrive. */
+/**
+ * A font of a render's `fonts` list, described before its bytes arrive.
+ *
+ * @internal
+ */
 export type ListedFont = Pick<FontDetails, "name" | "weight" | "style" | "unicodeRange"> & {
   key: string;
 };
 
-/** What a needs pass reads a source with besides its layout. */
+/**
+ * What a needs pass reads a source with besides its layout.
+ *
+ * @internal
+ */
 export type NeedsRequest = {
   /** The images a render will draw, whose SVG `text` elements count too. */
   images?: ImageSource[];
@@ -67,10 +89,18 @@ export type NeedsRequest = {
   fontFamilies?: string[];
 };
 
-/** Reads what a source needs after the cascade. */
+/**
+ * Reads what a source needs after the cascade.
+ *
+ * @internal
+ */
 export type SourceReader = (request: NeedsRequest) => Awaitable<SourceNeeds>;
 
-/** The options and listed fonts a binding's `needs` takes for `request` on top of `layout`. */
+/**
+ * The options and listed fonts a binding's `needs` takes for `request` on top of `layout`.
+ *
+ * @internal
+ */
 export function needsArgs<TLayout>(
   layout: TLayout,
   { images, fonts, fontFamilies }: NeedsRequest,
@@ -108,7 +138,11 @@ export class Prepared<TSource = unknown, TLayout = unknown> {
   }
 }
 
-/** Reads what `source` needs under `layout`, then loads its font subsets and fetches the images `extras.images` lacks. */
+/**
+ * Reads what `source` needs under `layout`, then loads its font subsets and fetches the images `extras.images` lacks.
+ *
+ * @internal
+ */
 export async function prepareSource<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   registry: FontRegistry<TFamily>,
   source: TSource,
@@ -124,7 +158,11 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
   return createPrepared(state);
 }
 
-/** {@link prepareSource} without fetching, running `needs` only when `fonts` holds `unicodeRange` subsets. */
+/**
+ * {@link prepareSource} without fetching, running `needs` only when `fonts` holds `unicodeRange` subsets.
+ *
+ * @internal
+ */
 export async function readSource<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   registry: FontRegistry<TFamily>,
   source: TSource,
@@ -161,7 +199,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   } = Array.isArray(images) ? { sources: images } : images;
   const provided = await resolveImageLoaders({ sources, cache });
   const loaded = fetchMissing
-    ? await fetchImages({
+    ? await prepareImages({
         ...fetchOptions,
         urls: (await read()).images,
         sources: provided,
@@ -178,7 +216,11 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   return { source, layout, fonts: subset, fontFamilies, images: entries };
 }
 
-/** Calls `call` with the binding options for rendering `prepared` with `output`. The layout `prepared` holds wins. */
+/**
+ * Calls `call` with the binding options for rendering `prepared` with `output`. The layout `prepared` holds wins.
+ *
+ * @internal
+ */
 export function renderPrepared<
   TFamily extends RegisteredFamilyLike,
   TSource,

@@ -1,5 +1,4 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
-import type { ListedFont } from "@takumi-rs/helpers/renderer";
 
 export type ByteBuf = Uint8Array | ArrayBuffer;
 
@@ -21,6 +20,9 @@ export type FontDetails = {
 };
 
 export type FontInput = FontDetails | ByteBuf;
+
+/** A font of a render's `fonts` list, described before its bytes arrive. */
+type ListedFont = Pick<FontDetails, "name" | "weight" | "style" | "unicodeRange"> & { key: string };
 
 export type RegisteredFace = {
   weight: number;

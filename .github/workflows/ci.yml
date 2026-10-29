@@ -217,7 +217,7 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./takumi-helpers
+        run: bun install --frozen-lockfile --filter ./takumi-helpers --filter ./takumi-bindings-js
 
       - name: Test
         working-directory: takumi-helpers
@@ -226,6 +226,10 @@ jobs:
       - name: Build helpers
         working-directory: takumi-helpers
         run: bun run build
+
+      - name: Test binding glue
+        working-directory: takumi-bindings-js
+        run: bun test
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

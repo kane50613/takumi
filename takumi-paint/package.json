@@ -135,6 +135,7 @@
     "@takumi-rs/helpers": "workspace:*"
   },
   "devDependencies": {
+    "@takumi-rs/bindings-js": "workspace:*",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "tsdown": "catalog:"

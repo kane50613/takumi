@@ -276,6 +276,18 @@
         "vitest": "^5.0.0",
       },
     },
+    "takumi-bindings-js": {
+      "name": "@takumi-rs/bindings-js",
+      "version": "0.0.0",
+      "dependencies": {
+        "@takumi-rs/helpers": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "react": "catalog:",
+      },
+    },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
       "version": "2.18.2",
@@ -336,6 +348,7 @@
       },
       "devDependencies": {
         "@napi-rs/cli": "3.10.8",
+        "@takumi-rs/bindings-js": "workspace:*",
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
         "csstype": "catalog:",
@@ -359,6 +372,7 @@
         "@takumi-rs/helpers": "workspace:*",
       },
       "devDependencies": {
+        "@takumi-rs/bindings-js": "workspace:*",
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
         "tsdown": "catalog:",
@@ -377,6 +391,7 @@
         "@takumi-rs/helpers": "workspace:*",
       },
       "devDependencies": {
+        "@takumi-rs/bindings-js": "workspace:*",
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
         "tsdown": "catalog:",
@@ -395,6 +410,7 @@
         "@takumi-rs/helpers": "workspace:*",
       },
       "devDependencies": {
+        "@takumi-rs/bindings-js": "workspace:*",
         "@types/bun": "catalog:",
         "csstype": "catalog:",
         "tsdown": "catalog:",
@@ -1288,6 +1304,8 @@
     "@tailwindcss/oxide-win32-x64-msvc": ["@tailwindcss/oxide-win32-x64-msvc@4.3.3", "", { "os": "win32", "cpu": "x64" }, "sha512-yJ0pwIVc/nYeGoV02WtsN8KYyLQv7kyI2wDnkezyJlGGjkd4QLwDGAwl47YpPJeuI0M0ObaXGSPjvWDPeTPggw=="],
 
     "@tailwindcss/vite": ["@tailwindcss/vite@4.3.3", "", { "dependencies": { "@tailwindcss/node": "4.3.3", "@tailwindcss/oxide": "4.3.3", "tailwindcss": "4.3.3" }, "peerDependencies": { "vite": "^5.2.0 || ^6 || ^7 || ^8" } }, "sha512-yYU8cogLeSh/ms2jh8Fj7jaba/EWa7Ja6GoUqYZaraEuCI5YS6ms6ObZgjjedm+jm6XZjdNRWBpPP6Z86oOxcw=="],
+
+    "@takumi-rs/bindings-js": ["@takumi-rs/bindings-js@workspace:takumi-bindings-js"],
 
     "@takumi-rs/core": ["@takumi-rs/core@workspace:takumi-napi"],
 

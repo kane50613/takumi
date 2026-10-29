@@ -31,6 +31,9 @@
       "entry": ["tests/**/*.test.{ts,tsx}"],
       "ignoreUnresolved": ["./google-fonts-catalog"]
     },
+    "takumi-bindings-js": {
+      "entry": ["tests/**/*.test.{ts,tsx}"]
+    },
     "takumi-js": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
       "ignoreUnresolved": ["#backend"]

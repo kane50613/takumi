@@ -1,0 +1,22 @@
+{
+  "name": "@takumi-rs/bindings-js",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Font registration, prepared renders, and document input shared by the takumi bindings, which bundle it.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@takumi-rs/helpers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:"
+  }
+}
