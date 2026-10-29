@@ -192,33 +192,41 @@ fn variation_subtable(cmap: &[u8]) -> Option<&[u8]> {
 fn replace_table(sfnt: &[u8], tag: Tag, table: &[u8]) -> Option<Vec<u8>> {
   let tables = usize::from(read_u16(sfnt, 4)?);
   let directory_len = TABLE_DIRECTORY_LEN + TABLE_RECORD_LEN * tables;
-  // Bounds the output: every table, the new one too, plus its padding.
-  let mut out = Vec::with_capacity(sfnt.len() + table.len() + 3 * tables);
-  let mut replaced = false;
+  let record = |index: usize| TABLE_DIRECTORY_LEN + TABLE_RECORD_LEN * index;
+  let replaced = (0..tables)
+    .position(|index| sfnt.get(record(index)..record(index) + 4) == Some(&tag.to_be_bytes()[..]))?;
+  let data = (0..tables)
+    .map(|index| {
+      if index == replaced {
+        return Some(table);
+      }
+
+      let offset = read_u32(sfnt, record(index) + 8)? as usize;
+
+      sfnt.get(offset..offset.checked_add(read_u32(sfnt, record(index) + 12)? as usize)?)
+    })
+    .collect::<Option<Vec<_>>>()?;
+  let mut out = Vec::with_capacity(
+    directory_len
+      + data
+        .iter()
+        .map(|data| data.len().next_multiple_of(4))
+        .sum::<usize>(),
+  );
 
   out.extend_from_slice(sfnt.get(..directory_len)?);
+  out[record(replaced) + 4..record(replaced) + 8].copy_from_slice(&checksum(table).to_be_bytes());
 
-  for index in 0..tables {
-    let record = TABLE_DIRECTORY_LEN + TABLE_RECORD_LEN * index;
-    let data = if sfnt.get(record..record + 4)? == tag.to_be_bytes() {
-      replaced = true;
-      out[record + 4..record + 8].copy_from_slice(&checksum(table).to_be_bytes());
-      table
-    } else {
-      let offset = read_u32(sfnt, record + 8)? as usize;
-
-      sfnt.get(offset..offset.checked_add(read_u32(sfnt, record + 12)? as usize)?)?
-    };
-
+  for (index, data) in data.into_iter().enumerate() {
     let offset = out.len() as u32;
 
-    out[record + 8..record + 12].copy_from_slice(&offset.to_be_bytes());
-    out[record + 12..record + 16].copy_from_slice(&(data.len() as u32).to_be_bytes());
+    out[record(index) + 8..record(index) + 12].copy_from_slice(&offset.to_be_bytes());
+    out[record(index) + 12..record(index) + 16].copy_from_slice(&(data.len() as u32).to_be_bytes());
     out.extend_from_slice(data);
     out.resize(out.len().next_multiple_of(4), 0);
   }
 
-  replaced.then_some(out)
+  Some(out)
 }
 
 /// The OpenType table checksum: the sum of its big-endian `u32` words, zero-padded.
@@ -296,6 +304,15 @@ mod tests {
         .restrict_charmap(&archivo())
         .is_none()
     );
+  }
+
+  #[test]
+  fn the_restricted_font_holds_no_spare_capacity() {
+    let restricted = UnicodeRangeSet::from_iter([UnicodeRange::new(0x41, 0x5A)])
+      .restrict_charmap(&archivo())
+      .unwrap();
+
+    assert_eq!(restricted.capacity(), restricted.len());
   }
 
   #[test]
