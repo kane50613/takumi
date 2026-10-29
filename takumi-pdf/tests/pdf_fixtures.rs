@@ -15,6 +15,7 @@ use std::{
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use flate2::read::ZlibDecoder;
+use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{
   Fonts,
   layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage},
@@ -30,7 +31,6 @@ use takumi_core::{
   },
   viewport::Viewport,
 };
-use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
   Attachment, AttachmentRelationship, Band, MeasureOptions, PageBand, PageMargin, PageMargins,
   PageOptions, PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata, PdfOptions,

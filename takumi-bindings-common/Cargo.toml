@@ -18,10 +18,6 @@ path = "../takumi-core"
 default-features = false
 features = ["woff2"]
 
-[dependencies.takumi-html]
-path = "../takumi-html"
-optional = true
-
 [dependencies.takumi-raster]
 path = "../takumi-raster"
 default-features = false
@@ -48,9 +44,9 @@ workspace = true
 
 [features]
 default = ["svg"]
-svg = ["takumi-core/svg", "takumi-html?/svg"]
+svg = ["takumi-core/svg"]
 # A wasm binding's source: a node tree, `{ json }` text, or HTML.
-wasm = ["dep:takumi-html", "dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
+wasm = ["takumi-core/html", "dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
 # Options for the bindings that render images.
 raster = ["dep:takumi-raster", "dep:takumi-svg"]
 

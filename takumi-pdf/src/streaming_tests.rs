@@ -3,8 +3,8 @@
 
 use std::cell::Cell;
 
+use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{Fonts, layout::paged_layout::PagedLayout};
-use takumi_html::{FromHtmlOptions, from_html};
 
 use crate::{
   PageMargin, PageMargins, PageOptions, PageRange, PdfError, PdfOptions, Tagging, render,

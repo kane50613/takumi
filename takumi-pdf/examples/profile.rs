@@ -4,8 +4,8 @@
 
 use std::{fs, hint::black_box, path::Path, time::Instant};
 
+use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{Fonts, resources::font::FontResource};
-use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{PageOptions, PdfOptions, render};
 
 fn main() {

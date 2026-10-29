@@ -8,6 +8,7 @@ use std::{
   sync::Arc,
 };
 
+use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{
   Fonts,
   geometry::Size,
@@ -18,7 +19,6 @@ use takumi_core::{
   style::StyleSheet,
   viewport::Viewport,
 };
-use takumi_html::{FromHtmlOptions, from_html};
 
 use crate::{
   Bitmap, Canvas, Error, RenderOptions, Result,

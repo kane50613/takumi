@@ -111,6 +111,8 @@ png = ["dep:png"]
 jpeg = ["dep:zune-jpeg", "dep:zune-core"]
 webp = ["dep:image-webp", "dep:libwebp-sys"]
 gif = ["dep:gif"]
+# Parsing HTML markup into a node tree, as `html::from_html` does.
+html = []
 svg-sizing = ["dep:roxmltree"]
 svg = ["svg-sizing"]
 # Rasterizing an SVG: the filter pipeline and `SvgSource::rasterize_cached`. A backend that does not rasterize goes without.

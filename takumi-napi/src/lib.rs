@@ -27,12 +27,12 @@ use takumi_bindings_common::{
   source_cache::{ParsedSource, SourceCache, SourceKind},
   stylesheet,
 };
+use takumi_core::html::{FromHtmlOptions, parse_html};
 use takumi_core::{
   layout::node::Node,
   resources::glyph_cache,
   style::{CssSource, KeyframesRule, StyleSheet},
 };
-use takumi_html::{FromHtmlOptions, parse_html};
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
 /// `0` stops caching. Defaults to 8 MiB.

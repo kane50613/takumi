@@ -370,8 +370,8 @@ impl Paginated {
 mod tests {
   use std::rc::Rc;
 
+  use takumi_core::html::{FromHtmlOptions, from_html};
   use takumi_core::scene::PagedScene;
-  use takumi_html::{FromHtmlOptions, from_html};
 
   use super::*;
   use crate::{

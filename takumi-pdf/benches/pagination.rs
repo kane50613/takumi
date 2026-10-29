@@ -1,8 +1,8 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{Fonts, layout::node::Node, resources::font::FontResource};
-use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{PageOptions, PdfOptions, render};
 
 /// A ledger of `rows` rows whose header repeats on every page it spans.

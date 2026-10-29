@@ -1506,7 +1506,6 @@ dependencies = [
  "serde_json",
  "takumi",
  "takumi-core",
- "takumi-html",
  "takumi-raster",
  "takumi-svg",
  "zune-core",
@@ -1524,7 +1523,6 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "takumi-core",
- "takumi-html",
  "takumi-raster",
  "takumi-svg",
  "wasm-bindgen",
@@ -1581,8 +1579,6 @@ name = "takumi-html"
 version = "0.7.1"
 dependencies = [
  "takumi-core",
- "thiserror",
- "typed-builder",
 ]
 
 [[package]]
@@ -1597,7 +1593,6 @@ dependencies = [
  "serde",
  "takumi-bindings-common",
  "takumi-core",
- "takumi-html",
  "takumi-raster",
  "takumi-svg",
 ]
@@ -1637,7 +1632,6 @@ dependencies = [
  "skrifa",
  "smallvec",
  "takumi-core",
- "takumi-html",
  "tiny-skia-path",
  "typed-builder",
  "write-fonts",
@@ -1678,7 +1672,6 @@ dependencies = [
  "skrifa",
  "smallvec",
  "takumi-core",
- "takumi-html",
  "tiny-skia",
  "typed-builder",
  "xxhash-rust",
