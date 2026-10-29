@@ -1,5 +1,7 @@
 //! The DOM a parser fills: every node in one `Vec`, addressed by index.
 
+const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
+
 /// A node's index in its [`Dom`].
 pub(crate) type NodeId = usize;
 
@@ -148,12 +150,26 @@ impl<'a> NodeRef<'a> {
   pub(crate) fn children(self) -> impl DoubleEndedIterator<Item = NodeRef<'a>> {
     let dom = self.dom;
 
-    dom
+    let children = dom
       .nodes
       .get(self.id)
-      .into_iter()
-      .flat_map(|node| &node.children)
-      .map(move |&id| NodeRef { dom, id })
+      .map_or(&[][..], |node| &node.children);
+
+    children.iter().map(move |&id| NodeRef { dom, id })
+  }
+
+  /// The local name of an SVG element, one in the SVG namespace that no `xmlns` attribute of its own
+  /// moves to another. Approximate: XML also gives an element the namespace an ancestor declares.
+  pub(crate) fn svg_element_name(self) -> Option<&'a str> {
+    let NodeData::Element { name, attrs } = self.data() else {
+      return None;
+    };
+    let declared = attrs
+      .iter()
+      .find(|attr| attr.ns == AttributeNamespace::Xmlns && &*attr.local == "xmlns");
+
+    (name.ns == Namespace::Svg && declared.is_none_or(|attr| &*attr.value == SVG_NAMESPACE))
+      .then_some(&*name.local)
   }
 
   /// The value of the attribute `name`, when this is an element that has it.

@@ -5,7 +5,7 @@ use cssparser::Parser;
 use thiserror::Error;
 
 #[cfg(any(test, not(feature = "svg")))]
-use crate::html::dom::{Namespace, NodeData};
+use crate::html::dom::NodeData;
 
 use crate::{
   geometry::Size,
@@ -75,9 +75,7 @@ impl SvgSize {
       .document()
       .children()
       .find(|node| matches!(node.data(), NodeData::Element { .. }))
-      .filter(|node| {
-        matches!(node.data(), NodeData::Element { name, .. } if name.ns == Namespace::Svg && &*name.local == "svg")
-      })
+      .filter(|node| node.svg_element_name() == Some("svg"))
       .ok_or(SvgSizeError::InvalidRoot)?;
 
     Self::from_root(|name| root.attribute(name))
@@ -164,7 +162,8 @@ impl SvgSize {
 /// Parses SVG markup as the HTML parser parses an `<svg>` element's content. Approximate: Blink's
 /// [`IsolatedSVGDocumentHost`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/svg/graphics/isolated_svg_document_host.cc)
 /// parses an SVG image as XML, so markup that is not well formed fails to load there where this
-/// recovers, and entities a DTD declares stay unexpanded.
+/// recovers, an `<svg>` inside `<html>` loads where XML finds an `html` root, and entities a DTD
+/// declares stay unexpanded.
 pub(crate) fn parse_svg_document(markup: &str) -> Dom {
   parse(markup, false)
 }
@@ -253,14 +252,15 @@ mod tests {
 
   #[test]
   fn the_root_must_be_an_svg_element() {
-    let nested = r#"<html><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/></html>"#;
     let foreign = r#"<svg xmlns="http://example.com/ns" width="10" height="10"/>"#;
-    for markup in [nested, foreign] {
-      assert!(matches!(
-        SvgSize::parse(markup),
-        Err(SvgSizeError::InvalidRoot)
-      ));
-    }
+    let nested = r#"<html><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/></html>"#;
+
+    assert!(matches!(
+      SvgSize::parse(foreign),
+      Err(SvgSizeError::InvalidRoot)
+    ));
+    // The HTML parser drops `<html>` from a fragment, where XML would find an `html` root.
+    assert_eq!(SvgSize::parse(nested).unwrap().width, 10.0);
     assert_eq!(
       SvgSize::parse(r#"<svg width="10" height="10"/>"#)
         .unwrap()

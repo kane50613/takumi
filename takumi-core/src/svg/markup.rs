@@ -2,7 +2,7 @@
 
 use super::{XLINK_NAMESPACE, XML_NAMESPACE, XMLNS_NAMESPACE};
 use crate::{
-  html::dom::{AttributeNamespace, Namespace, NodeData, NodeRef},
+  html::dom::{AttributeNamespace, NodeData, NodeRef},
   layout::node::{Node, NodeKind},
 };
 
@@ -29,15 +29,22 @@ pub(super) trait Markup<'a>: Copy {
 
   /// The text of every `style` element under this node that holds CSS, in document order.
   fn style_sheets(self, sheets: &mut Vec<&'a str>) {
-    for child in self.children() {
-      if child.element().is_some_and(|(name, _)| name == "style")
-        && matches!(child.attribute("type"), None | Some("text/css"))
-        && let Some(text) = child.children().find_map(Markup::text)
+    let mut pending: Vec<Self> = self.children().collect();
+
+    pending.reverse();
+
+    while let Some(node) = pending.pop() {
+      if node.element().is_some_and(|(name, _)| name == "style")
+        && matches!(node.attribute("type"), None | Some("text/css"))
+        && let Some(text) = node.children().find_map(Markup::text)
       {
         sheets.push(text);
       }
 
-      child.style_sheets(sheets);
+      let start = pending.len();
+
+      pending.extend(node.children());
+      pending[start..].reverse();
     }
   }
 }
@@ -47,7 +54,7 @@ pub(super) trait Markup<'a>: Copy {
 impl<'a> Markup<'a> for NodeRef<'a> {
   fn element(self) -> Option<(&'a str, bool)> {
     match self.data() {
-      NodeData::Element { name, .. } => Some((&name.local, name.ns == Namespace::Svg)),
+      NodeData::Element { name, .. } => Some((&name.local, self.svg_element_name().is_some())),
       _ => None,
     }
   }
