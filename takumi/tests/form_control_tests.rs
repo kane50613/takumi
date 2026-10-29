@@ -267,3 +267,44 @@ fn a_text_field_ellipsizes_a_value_wider_than_it() {
   );
   assert!(!texts.concat().contains("dummy text"), "{texts:?}");
 }
+
+#[test]
+fn a_textarea_built_in_code_shows_the_text_of_its_children() {
+  let textarea = Node::container([Node::text("a\n"), Node::text("b")]).with_tag_name("textarea");
+  let measured = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(Node::container([textarea]))
+      .stylesheet(StyleSheet::parse_loosy(CSS).into())
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  assert_eq!(run_texts(&measured.children[0]), ["a", "b"]);
+}
+
+#[test]
+fn rows_and_cols_past_blinks_bound_take_their_defaults() {
+  let [huge, default] = inputs(concat!(
+    r#"<textarea rows="2147483648" cols="2147483648"></textarea>"#,
+    r#"<textarea></textarea>"#,
+  ))
+  .try_into()
+  .unwrap();
+
+  assert_eq!((huge.width, huge.height), (default.width, default.height));
+}
+
+#[test]
+fn a_textarea_with_wrap_off_keeps_a_long_line_whole() {
+  let [wrapped, unwrapped] = inputs(concat!(
+    r#"<textarea cols="5">abc def ghi jkl</textarea>"#,
+    r#"<textarea cols="5" wrap="off">abc def ghi jkl</textarea>"#,
+  ))
+  .try_into()
+  .unwrap();
+
+  assert!(run_texts(&wrapped).len() > 1, "{:?}", run_texts(&wrapped));
+  assert_eq!(run_texts(&unwrapped), ["abc def ghi jkl"]);
+}

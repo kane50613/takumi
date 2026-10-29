@@ -90,6 +90,9 @@ pub(crate) enum TextControl {
   },
 }
 
+/// Blink's bound on `rows` and `cols`, past which they take their defaults.
+const MAX_ROWS_OR_COLS: u32 = 0x7fff_ffff;
+
 impl TextControl {
   /// The text control `node` is, if any.
   pub(crate) fn of(node: &Node) -> Option<Self> {
@@ -98,7 +101,7 @@ impl TextControl {
         node
           .attribute(name)
           .and_then(parse_non_negative_integer)
-          .filter(|&value| value > 0)
+          .filter(|&value| value > 0 && value <= MAX_ROWS_OR_COLS)
           .unwrap_or(default)
       };
 

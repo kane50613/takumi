@@ -205,6 +205,8 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
     "textarea:disabled",
     "background-color:rgba(239,239,239,0.3);color:#545454;border-color:rgba(118,118,118,0.3)",
   ),
+  // Blink's `HTMLTextAreaElement::CollectStyleForPresentationAttribute` for `wrap="off"`.
+  ("textarea[wrap=off]", "white-space:pre;overflow-wrap:normal"),
 ];
 
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Arc<Style>>> = LazyLock::new(|| {
@@ -574,7 +576,18 @@ impl NodeBuilder<'_> {
   /// types take none yet.
   fn form_control_preset(&self, handle: NodeRef<'_>, tag: &str) -> Option<Arc<Style>> {
     let (keys, disabled_key): (&[&str], _) = if tag == "textarea" {
-      (&["textarea"], Some("textarea:disabled"))
+      let wraps = !handle
+        .attribute("wrap")
+        .is_some_and(|wrap| wrap.eq_ignore_ascii_case("off"));
+
+      if wraps {
+        (&["textarea"], Some("textarea:disabled"))
+      } else {
+        (
+          &["textarea", "textarea[wrap=off]"],
+          Some("textarea:disabled"),
+        )
+      }
     } else {
       let input_type = InputType::parse(handle.attribute("type"));
       let keys: &[&str] = match input_type {
