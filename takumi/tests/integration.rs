@@ -1,6 +1,7 @@
 mod test_utils;
 
 mod cascade_tests;
+mod counter_tests;
 mod filter_clips;
 mod fixtures;
 mod font_tests;

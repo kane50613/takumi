@@ -118,7 +118,7 @@ fn unsupported_content_value_creates_no_pseudo_box() {
   let root = block("greet");
   let result = measure_with_css(
     root,
-    r#".greet::before { content: counter(foo); color: red; }"#,
+    r#".greet::before { content: leader(dotted); color: red; }"#,
   );
   assert!(run_texts(&result).is_empty());
 }

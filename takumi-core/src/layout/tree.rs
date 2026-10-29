@@ -26,6 +26,7 @@ use crate::{
   layout::{
     block_node::LayoutCache,
     constraint_space::CacheSlot,
+    counters::{CountersAttachmentContext, ListItemCounter},
     grid::grid_layout_algorithm::GridGeometry,
     inline::{
       ContentBox, FragmentItems, InlineContent, InlineContentKind, InlineOutOfFlow,
@@ -2053,6 +2054,7 @@ impl RenderNode {
     originating_node: &Node,
     pseudo_context: &RenderContext,
     items: Box<[ContentItem]>,
+    counters: &mut CountersAttachmentContext,
   ) -> Box<[Self]> {
     let mut children = Vec::with_capacity(items.len());
     let mut text = String::new();
@@ -2070,6 +2072,11 @@ impl RenderNode {
             .attribute(&attr.name)
             .unwrap_or(&attr.fallback),
         ),
+        ContentItem::Counter(counter) => {
+          let values = counters.get_counter_values(&counter.name, counter.separator.is_none());
+
+          text.push_str(&counter.text(&values, pseudo_context.style.inherited_data.direction));
+        }
         ContentItem::Image(image) => {
           flush(&mut text, &mut children);
           children.push(Self::anonymous_image_item(pseudo_context, *image));
@@ -2081,26 +2088,23 @@ impl RenderNode {
     children.into_boxed_slice()
   }
 
-  fn from_pseudo_match(
-    parent_context: &RenderContext,
+  /// The box of `pseudo`, entering and leaving it in `counters` around its content.
+  fn from_pseudo(
+    pseudo: PendingPseudo,
     originating_node: &Node,
-    pseudo_matched: &MatchedDeclarationsView<'_>,
-  ) -> Option<Self> {
-    let (mut style, sizing, current_color) = parent_context.resolve_pseudo_style(pseudo_matched);
+    counters: &mut CountersAttachmentContext,
+  ) -> Self {
+    let PendingPseudo {
+      context: mut pseudo_context,
+      items,
+    } = pseudo;
 
-    if matches!(style.base_data.display, Display::None) {
-      return None;
-    }
+    counters.enter_object(&pseudo_context.style, ListItemCounter::None);
 
-    let items = match take(&mut style.misc1_data_mut().content) {
-      ContentValue::Items(items) => items,
-      _ => return None,
-    };
+    let mut children =
+      Self::pseudo_content_children(originating_node, &pseudo_context, items, counters);
 
-    let mut pseudo_context =
-      RenderContext::from_parent(parent_context, style, sizing, current_color);
-
-    let mut children = Self::pseudo_content_children(originating_node, &pseudo_context, items);
+    counters.leave_object(&pseudo_context.style, ListItemCounter::None);
 
     // A flex or grid pseudo-element lays its content out as items, as a table one fixes up its
     // parts.
@@ -2114,12 +2118,12 @@ impl RenderNode {
       children = Self::normalize_children(&mut pseudo_context, children, false);
     }
 
-    Some(Self::new(
+    Self::new(
       pseudo_context,
       NodeOrigin::Pseudo,
       Some(Node::container([])),
       Some(children),
-    ))
+    )
   }
 
   /// The marker as the item's first child, as Blink's `::marker` is.
@@ -2355,13 +2359,16 @@ impl RenderNode {
     matched_declarations: &[NodeMatchedDeclarations<'_>],
     root_blockifies_children: bool,
   ) -> Self {
-    let mut source_cursor = 0;
+    let mut walk = TreeWalk {
+      matched_declarations,
+      source_cursor: 0,
+      counters: CountersAttachmentContext::default(),
+    };
     let mut root_counter = ListCounter::new(&root);
     let mut stack = vec![PendingRenderNode::build(
       parent_context,
       root,
-      matched_declarations,
-      &mut source_cursor,
+      &mut walk,
       &mut root_counter,
       false,
       true,
@@ -2377,8 +2384,7 @@ impl RenderNode {
         let child_pending = PendingRenderNode::build(
           &current.context,
           child,
-          matched_declarations,
-          &mut source_cursor,
+          &mut walk,
           &mut current.list_counter,
           current.inside_list,
           (root_blockifies_children && at_root)
@@ -2393,7 +2399,7 @@ impl RenderNode {
         // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box, so its
         // descendants are never styled or counted, though their source order is still passed.
         if child_pending.context.style.base_data.display == Display::None {
-          source_cursor += child_pending
+          walk.source_cursor += child_pending
             .pending_children
             .as_slice()
             .iter()
@@ -2416,7 +2422,7 @@ impl RenderNode {
         parent.list_counter = finished.list_counter;
       }
 
-      let render_node = finished.finish();
+      let render_node = finished.finish(&mut walk.counters);
 
       let Some(parent) = stack.last_mut() else {
         return render_node;
@@ -2661,6 +2667,44 @@ fn drop_collapsible_boundary_whitespace(
   out
 }
 
+/// What building a render tree carries from node to node in document order: each node's matched
+/// declarations by source order, the next source order, and the counters in scope.
+struct TreeWalk<'a, 'm> {
+  matched_declarations: &'a [NodeMatchedDeclarations<'m>],
+  source_cursor: usize,
+  counters: CountersAttachmentContext,
+}
+
+/// A `::before` or `::after` styled, its content still to be generated.
+struct PendingPseudo {
+  context: RenderContext,
+  items: Box<[ContentItem]>,
+}
+
+impl PendingPseudo {
+  /// The pseudo-element `pseudo_matched` styles under `parent_context`, when it generates a box.
+  fn resolve(
+    parent_context: &RenderContext,
+    pseudo_matched: &MatchedDeclarationsView<'_>,
+  ) -> Option<Self> {
+    let (mut style, sizing, current_color) = parent_context.resolve_pseudo_style(pseudo_matched);
+
+    if matches!(style.base_data.display, Display::None) {
+      return None;
+    }
+
+    let items = match take(&mut style.misc1_data_mut().content) {
+      ContentValue::Items(items) => items,
+      _ => return None,
+    };
+
+    Some(Self {
+      context: RenderContext::from_parent(parent_context, style, sizing, current_color),
+      items,
+    })
+  }
+}
+
 /// A node whose context is resolved while its children are still being built.
 struct PendingRenderNode {
   context: RenderContext,
@@ -2669,7 +2713,10 @@ struct PendingRenderNode {
   children_is_some: bool,
   pending_children: IntoIter<Node>,
   rendered_children: Vec<RenderNode>,
-  pseudo_after: Option<RenderNode>,
+  /// The `::after`, whose content reads the counters its siblings leave.
+  pseudo_after: Option<PendingPseudo>,
+  /// The `list-item` counter the node entered with, `None` when it gets no box.
+  entered_counters: Option<ListItemCounter>,
   list_counter: ListCounter,
   marker_ordinal: Option<i32>,
   inside_list: bool,
@@ -2682,19 +2729,18 @@ impl PendingRenderNode {
   fn build(
     parent_context: &RenderContext,
     mut node: Node,
-    matched_declarations: &[NodeMatchedDeclarations<'_>],
-    source_cursor: &mut usize,
+    walk: &mut TreeWalk<'_, '_>,
     counter: &mut ListCounter,
     inside_list: bool,
     blockifies: bool,
   ) -> Self {
-    let source_order = *source_cursor;
-    *source_cursor += 1;
+    let source_order = walk.source_cursor;
+    walk.source_cursor += 1;
     let (style, sizing, current_color) =
-      parent_context.resolve_child_style(&mut node, source_order, matched_declarations);
+      parent_context.resolve_child_style(&mut node, source_order, walk.matched_declarations);
     // A textarea's value is its text content, which its children stop carrying once taken.
     if is_element(&node, "textarea") && matches!(node.kind, NodeKind::Container { .. }) {
-      *source_cursor += node.subtree_len() - 1;
+      walk.source_cursor += node.subtree_len() - 1;
       node.kind = NodeKind::Text(TextData {
         text: text_content(&node),
       });
@@ -2705,15 +2751,27 @@ impl PendingRenderNode {
     let children = children.map_or_else(Vec::new, <[Node]>::into_vec);
     let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
-    let element_matched = matched_declarations.get(source_order);
-    let marker_ordinal =
-      (context.style.base_data.display == Display::ListItem).then(|| counter.take(&node));
+    let display = context.style.base_data.display;
+    // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box, so neither
+    // it nor a pseudo-element of it is counted.
+    let entered_counters = (display != Display::None).then(|| ListItemCounter::of(&node, display));
+
+    if let Some(list_item) = entered_counters {
+      walk.counters.enter_object(&context.style, list_item);
+    }
+
+    let element_matched = entered_counters
+      .is_some()
+      .then(|| walk.matched_declarations.get(source_order))
+      .flatten();
+    let marker_ordinal = (display == Display::ListItem).then(|| counter.take(&node));
     let pseudo_before = element_matched
       .and_then(|m| m.before())
-      .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+      .and_then(|m| PendingPseudo::resolve(&context, m))
+      .map(|pseudo| RenderNode::from_pseudo(pseudo, &node, &mut walk.counters));
     let pseudo_after = element_matched
       .and_then(|m| m.after())
-      .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+      .and_then(|m| PendingPseudo::resolve(&context, m));
     let pseudo_before_present = pseudo_before.is_some();
 
     let has_generated_children =
@@ -2753,18 +2811,29 @@ impl PendingRenderNode {
       rendered_children,
       pending_children: children.into_iter(),
       pseudo_after,
+      entered_counters,
       marker_ordinal,
     }
   }
 
-  /// Closes the node once every child is rendered.
-  fn finish(mut self) -> RenderNode {
-    if let Some(control) = TextControl::of(&self.node) {
-      return self.finish_text_control(control);
+  /// Closes the node once every child is rendered, leaving it in `counters`.
+  fn finish(mut self, counters: &mut CountersAttachmentContext) -> RenderNode {
+    let control = TextControl::of(&self.node);
+
+    if control.is_none()
+      && let Some(after) = self.pseudo_after.take()
+    {
+      self
+        .rendered_children
+        .push(RenderNode::from_pseudo(after, &self.node, counters));
     }
 
-    if let Some(after) = self.pseudo_after.take() {
-      self.rendered_children.push(after);
+    if let Some(list_item) = self.entered_counters {
+      counters.leave_object(&self.context.style, list_item);
+    }
+
+    if let Some(control) = control {
+      return self.finish_text_control(control);
     }
 
     // Text a table part holds itself goes into an anonymous child, as a run of text would. White

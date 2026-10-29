@@ -178,30 +178,37 @@ impl ListStyleType {
 
   /// The marker text for `ordinal`, suffix included. `direction` turns `disclosure-closed`.
   pub(crate) fn marker_text(&self, ordinal: i32, direction: Direction) -> Option<String> {
-    let (representation, suffix) = match self {
-      ListStyleType::None => return None,
-      ListStyleType::String(value) => return Some(value.as_ref().to_owned()),
-      ListStyleType::Disc => ("\u{2022}".to_owned(), " "),
-      ListStyleType::Circle => ("\u{25e6}".to_owned(), " "),
-      ListStyleType::Square => ("\u{25aa}".to_owned(), " "),
-      // Ref: https://drafts.csswg.org/css-counter-styles-3/#simple-symbolic
-      ListStyleType::DisclosureClosed if direction == Direction::Rtl => {
-        ("\u{25c2}".to_owned(), " ")
-      }
-      ListStyleType::DisclosureClosed => ("\u{25b8}".to_owned(), " "),
-      ListStyleType::DisclosureOpen => ("\u{25be}".to_owned(), " "),
-      ListStyleType::Decimal => (ordinal.to_string(), ". "),
-      ListStyleType::DecimalLeadingZero => (decimal_leading_zero(ordinal), ". "),
-      ListStyleType::LowerAlpha => (alphabetic(ordinal, 'a'), ". "),
-      ListStyleType::UpperAlpha => (alphabetic(ordinal, 'A'), ". "),
-      ListStyleType::LowerRoman => (roman(ordinal, false), ". "),
-      ListStyleType::UpperRoman => (roman(ordinal, true), ". "),
-    };
+    if let ListStyleType::String(value) = self {
+      return Some(value.as_ref().to_owned());
+    }
 
-    Some(representation + suffix)
+    let suffix = if self.is_symbolic() { " " } else { ". " };
+
+    Some(self.representation(ordinal, direction)? + suffix)
   }
 
-  fn from_ident(ident: &str) -> Option<Self> {
+  /// Blink's `CounterStyle::GenerateRepresentation`: `value` in this style, without the suffix a
+  /// marker adds, or `None` for `none` and a string.
+  pub(crate) fn representation(&self, value: i32, direction: Direction) -> Option<String> {
+    Some(match self {
+      ListStyleType::None | ListStyleType::String(_) => return None,
+      ListStyleType::Disc => "\u{2022}".to_owned(),
+      ListStyleType::Circle => "\u{25e6}".to_owned(),
+      ListStyleType::Square => "\u{25aa}".to_owned(),
+      // Ref: https://drafts.csswg.org/css-counter-styles-3/#simple-symbolic
+      ListStyleType::DisclosureClosed if direction == Direction::Rtl => "\u{25c2}".to_owned(),
+      ListStyleType::DisclosureClosed => "\u{25b8}".to_owned(),
+      ListStyleType::DisclosureOpen => "\u{25be}".to_owned(),
+      ListStyleType::Decimal => value.to_string(),
+      ListStyleType::DecimalLeadingZero => decimal_leading_zero(value),
+      ListStyleType::LowerAlpha => alphabetic(value, 'a'),
+      ListStyleType::UpperAlpha => alphabetic(value, 'A'),
+      ListStyleType::LowerRoman => roman(value, false),
+      ListStyleType::UpperRoman => roman(value, true),
+    })
+  }
+
+  pub(crate) fn from_ident(ident: &str) -> Option<Self> {
     match_ignore_ascii_case! {ident,
       "none" => Some(ListStyleType::None),
       "disc" => Some(ListStyleType::Disc),
