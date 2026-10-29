@@ -385,21 +385,37 @@ impl PageDrawing<'_, '_> {
         None => selection.push_page().is_some(),
       };
 
+      let mut scene = None;
+
       if reads_summary {
-        summary.absorb(PageSummary::of_page(
-          &root,
-          stream.view(),
-          page_size,
-          &stream.pages_of(index),
-          false,
-        )?);
+        let pages = stream.pages_of(index);
+
+        // The summary ignores paint bounds, so a drawing scene of the same pages serves it too.
+        if kept && stream.pages_reaching(index) == pages {
+          let window = scene.insert(stream.window(index)?);
+
+          summary.absorb(PageSummary::collect(window.view(), false));
+        } else {
+          summary.absorb(PageSummary::of_page(
+            &root,
+            stream.view(),
+            page_size,
+            &pages,
+            false,
+          )?);
+        }
       }
       if kept {
+        let scene = match scene {
+          Some(scene) => scene,
+          None => stream.window(index)?,
+        };
+
         composer.compose(
           self.pdf,
           &PageSlice::of(index, frame.window_height),
           counted_pages.unwrap_or_default(),
-          stream.window(index)?.view(),
+          scene.view(),
           |id| {
             let counts = counts.as_ref()?;
 
