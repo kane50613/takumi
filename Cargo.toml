@@ -215,6 +215,10 @@ opt-level = "s"
 [profile.release.package."takumi-bindings-common"]
 opt-level = "z"
 
+# Parsing measured no faster at opt-level 3 than at "z".
+[profile.release.package."takumi-html"]
+opt-level = "z"
+
 [profile.bench]
 debug = true
 strip = "debuginfo"
