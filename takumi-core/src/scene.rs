@@ -28,7 +28,6 @@ use crate::{
 };
 #[cfg(feature = "fragmentation")]
 use std::collections::BTreeSet;
-use std::collections::HashMap;
 
 /// A node's resolved paint inputs.
 #[derive(Clone)]
@@ -1055,7 +1054,7 @@ impl FragmentPlacements {
   fn new(
     root: &RenderNode,
     layout: LayoutView<'_>,
-    placed: &HashMap<Vec<usize>, ScenePlacement>,
+    placed: &FxHashMap<Vec<usize>, ScenePlacement>,
   ) -> Self {
     let mut unplaced = FxHashMap::default();
     let mut stack: Vec<(&RenderNode, Vec<usize>)> = placed
@@ -1124,8 +1123,8 @@ impl FragmentPlacements {
 
 impl SceneLayers {
   /// Where these layers place each box they paint, by child path.
-  fn placements(&self, results: LayoutView<'_>) -> HashMap<Vec<usize>, ScenePlacement> {
-    let mut placements = HashMap::new();
+  fn placements(&self, results: LayoutView<'_>) -> FxHashMap<Vec<usize>, ScenePlacement> {
+    let mut placements = FxHashMap::default();
 
     for context in &self.contexts {
       let items = context.buckets.in_paint_order().into_iter().flatten();
@@ -1565,7 +1564,7 @@ struct ScenePlacement {
 
 /// Sets each box's paint offset and fragment from `offsets`, or from the box whose content it
 /// paints in.
-fn set_paint_offsets(root: &RenderNode, offsets: &HashMap<Vec<usize>, ScenePlacement>) {
+fn set_paint_offsets(root: &RenderNode, offsets: &FxHashMap<Vec<usize>, ScenePlacement>) {
   let mut path = Vec::new();
   let mut stack = vec![(root, OffsetSlot::Root, Point::ZERO, 0)];
 
