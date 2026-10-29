@@ -366,8 +366,23 @@ mod tests {
 
   #[test]
   fn unsupported_function_is_rejected() {
-    assert!(ContentValue::from_css_str("counter(foo)").is_err());
-    assert!(ContentValue::from_css_str("\"prefix\" counter(foo)").is_err());
+    assert!(ContentValue::from_css_str("target-counter(attr(href), page)").is_err());
+    assert!(ContentValue::from_css_str("\"prefix\" target-counter(attr(href), page)").is_err());
+  }
+
+  #[test]
+  fn counter_functions_round_trip() {
+    for css in [
+      "counter(chapter)",
+      "counter(chapter, upper-roman)",
+      "counters(item, \".\")",
+      "counters(item, \".\", lower-alpha)",
+    ] {
+      assert_eq!(parse(css).to_css_string(), css);
+    }
+
+    assert!(ContentValue::from_css_str("counter(none)").is_err());
+    assert!(ContentValue::from_css_str("counters(item)").is_err());
   }
 
   #[test]

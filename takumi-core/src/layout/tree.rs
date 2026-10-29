@@ -2359,16 +2359,17 @@ impl RenderNode {
     matched_declarations: &[NodeMatchedDeclarations<'_>],
     root_blockifies_children: bool,
   ) -> Self {
-    let mut source_cursor = 0;
+    let mut walk = TreeWalk {
+      matched_declarations,
+      source_cursor: 0,
+      counters: CountersAttachmentContext::default(),
+    };
     let mut root_counter = ListCounter::new(&root);
-    let mut counters = CountersAttachmentContext::default();
     let mut stack = vec![PendingRenderNode::build(
       parent_context,
       root,
-      matched_declarations,
-      &mut source_cursor,
+      &mut walk,
       &mut root_counter,
-      &mut counters,
       false,
       true,
     )];
@@ -2383,10 +2384,8 @@ impl RenderNode {
         let child_pending = PendingRenderNode::build(
           &current.context,
           child,
-          matched_declarations,
-          &mut source_cursor,
+          &mut walk,
           &mut current.list_counter,
-          &mut counters,
           current.inside_list,
           (root_blockifies_children && at_root)
             || current
@@ -2400,7 +2399,7 @@ impl RenderNode {
         // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box, so its
         // descendants are never styled or counted, though their source order is still passed.
         if child_pending.context.style.base_data.display == Display::None {
-          source_cursor += child_pending
+          walk.source_cursor += child_pending
             .pending_children
             .as_slice()
             .iter()
@@ -2423,7 +2422,7 @@ impl RenderNode {
         parent.list_counter = finished.list_counter;
       }
 
-      let render_node = finished.finish(&mut counters);
+      let render_node = finished.finish(&mut walk.counters);
 
       let Some(parent) = stack.last_mut() else {
         return render_node;
@@ -2668,6 +2667,14 @@ fn drop_collapsible_boundary_whitespace(
   out
 }
 
+/// What building a render tree carries from node to node in document order: each node's matched
+/// declarations by source order, the next source order, and the counters in scope.
+struct TreeWalk<'a, 'm> {
+  matched_declarations: &'a [NodeMatchedDeclarations<'m>],
+  source_cursor: usize,
+  counters: CountersAttachmentContext,
+}
+
 /// A `::before` or `::after` styled, its content still to be generated.
 struct PendingPseudo {
   context: RenderContext,
@@ -2722,20 +2729,18 @@ impl PendingRenderNode {
   fn build(
     parent_context: &RenderContext,
     mut node: Node,
-    matched_declarations: &[NodeMatchedDeclarations<'_>],
-    source_cursor: &mut usize,
+    walk: &mut TreeWalk<'_, '_>,
     counter: &mut ListCounter,
-    counters: &mut CountersAttachmentContext,
     inside_list: bool,
     blockifies: bool,
   ) -> Self {
-    let source_order = *source_cursor;
-    *source_cursor += 1;
+    let source_order = walk.source_cursor;
+    walk.source_cursor += 1;
     let (style, sizing, current_color) =
-      parent_context.resolve_child_style(&mut node, source_order, matched_declarations);
+      parent_context.resolve_child_style(&mut node, source_order, walk.matched_declarations);
     // A textarea's value is its text content, which its children stop carrying once taken.
     if is_element(&node, "textarea") && matches!(node.kind, NodeKind::Container { .. }) {
-      *source_cursor += node.subtree_len() - 1;
+      walk.source_cursor += node.subtree_len() - 1;
       node.kind = NodeKind::Text(TextData {
         text: text_content(&node),
       });
@@ -2752,18 +2757,18 @@ impl PendingRenderNode {
     let entered_counters = (display != Display::None).then(|| ListItemCounter::of(&node, display));
 
     if let Some(list_item) = entered_counters {
-      counters.enter_object(&context.style, list_item);
+      walk.counters.enter_object(&context.style, list_item);
     }
 
     let element_matched = entered_counters
       .is_some()
-      .then(|| matched_declarations.get(source_order))
+      .then(|| walk.matched_declarations.get(source_order))
       .flatten();
     let marker_ordinal = (display == Display::ListItem).then(|| counter.take(&node));
     let pseudo_before = element_matched
       .and_then(|m| m.before())
       .and_then(|m| PendingPseudo::resolve(&context, m))
-      .map(|pseudo| RenderNode::from_pseudo(pseudo, &node, counters));
+      .map(|pseudo| RenderNode::from_pseudo(pseudo, &node, &mut walk.counters));
     let pseudo_after = element_matched
       .and_then(|m| m.after())
       .and_then(|m| PendingPseudo::resolve(&context, m));
