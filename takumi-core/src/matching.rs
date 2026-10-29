@@ -27,6 +27,8 @@ struct StyleArena<'a> {
 }
 struct StyleNode<'a> {
   node: &'a Node,
+  /// The node's classes, split once for every selector that reads them.
+  classes: Box<[&'a str]>,
   parent: Option<usize>,
   prev_sibling: Option<usize>,
   next_sibling: Option<usize>,
@@ -116,6 +118,7 @@ impl<'a> StyleArena<'a> {
     let index = self.nodes.len();
     self.nodes.push(StyleNode {
       node,
+      classes: node.classes().collect(),
       parent,
       prev_sibling,
       next_sibling: None,
@@ -288,7 +291,11 @@ impl Element for ArenaElement<'_> {
   }
 
   fn has_class(&self, name: &Ident, _case_sensitivity: CaseSensitivity) -> bool {
-    self.style_node().node.classes().any(|class| class == *name)
+    self
+      .style_node()
+      .classes
+      .iter()
+      .any(|class| *class == &**name)
   }
 
   fn imported_part(&self, _name: &Ident) -> Option<Ident> {
@@ -638,13 +645,17 @@ impl RuleIndex {
     }
 
     if let Some(tag) = node.tag_name()
-      && let Some(rules) = self.by_tag.get(&tag.to_ascii_lowercase())
+      && let Some(rules) = if tag.bytes().any(|byte| byte.is_ascii_uppercase()) {
+        self.by_tag.get(&tag.to_ascii_lowercase())
+      } else {
+        self.by_tag.get(tag)
+      }
     {
       out.extend_from_slice(rules);
     }
 
     out.retain(|&rule| matching_media[self.rule_media[rule]]);
-    sort_by_key(out, |&index| index);
+    out.sort_unstable();
     out.dedup();
   }
 }
@@ -705,7 +716,8 @@ pub(crate) fn match_stylesheets_view<'a>(
 
   let mut ancestor_bloom_filter = BloomFilter::new();
   let mut ancestor_stack: Vec<usize> = Vec::new();
-  let mut selector_ancestor_hashes_cache: HashMap<(usize, usize), AncestorHashes> = HashMap::new();
+  let mut selector_ancestor_hashes_cache: FxHashMap<(usize, usize), AncestorHashes> =
+    FxHashMap::default();
 
   let mut candidates = Vec::new();
 
