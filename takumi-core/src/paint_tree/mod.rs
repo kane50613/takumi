@@ -25,7 +25,7 @@ use crate::{
   context::RenderContext,
   error::Result,
   geometry::Size,
-  layout::{node::Node, tree::RenderNode},
+  layout::{needs::RenderNeeds, node::Node, tree::RenderNode},
   resources::image::ImageSource as DecodedImage,
   scene::Scene,
   style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
@@ -81,30 +81,35 @@ impl PaintTree {
   }
 }
 
+impl PaintTreeOptions<'_> {
+  /// The styled render tree of `node`.
+  fn into_render_tree(self) -> RenderNode {
+    let context = RenderContext::builder()
+      .fonts(
+        self
+          .fonts
+          .snapshot_with_fallbacks(self.font_families.as_ref()),
+      )
+      .sizing(SizingContext::builder().viewport(self.viewport).build())
+      .images(Rc::new(self.images))
+      .stylesheet(self.stylesheet)
+      .time_ms(self.time_ms)
+      .style(Box::new(ComputedStyle::root(self.lang, self.font_families)))
+      .build();
+
+    RenderNode::from_node(&context, self.node)
+  }
+}
+
+/// What `options.node` needs fetched before it paints; see [`RenderNode::needs`].
+pub fn paint_tree_needs(options: PaintTreeOptions<'_>) -> RenderNeeds {
+  options.into_render_tree().needs()
+}
+
 /// Lays out `options.node` and records what painting it would draw.
 pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
   let viewport = options.viewport;
-  let context = RenderContext::builder()
-    .fonts(
-      options
-        .fonts
-        .snapshot_with_fallbacks(options.font_families.as_ref()),
-    )
-    .sizing(SizingContext::builder().viewport(viewport).build())
-    .images(Rc::new(options.images))
-    .stylesheet(options.stylesheet)
-    .time_ms(options.time_ms)
-    .style(Box::new(ComputedStyle::root(
-      options.lang,
-      options.font_families,
-    )))
-    .build();
-
-  let scene = Scene::lay_out(
-    RenderNode::from_node(&context, options.node),
-    viewport,
-    false,
-  )?;
+  let scene = Scene::lay_out(options.into_render_tree(), viewport, false)?;
   let Size { width, height } = scene.size;
   let has_root = match scene.contexts.first().and_then(|context| context.root()) {
     Some(paint) => walk::recorded(&scene, paint)?.is_some(),

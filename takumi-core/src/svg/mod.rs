@@ -30,7 +30,7 @@ use crate::{
     image::{ImageError, SvgOp},
     svg_size::{SvgSize, parse_svg_document},
   },
-  style::{Color, IntrinsicSizing, Lang, Style, StyleDeclarationBlock, StyleSheet},
+  style::{Color, Display, IntrinsicSizing, Lang, Style, StyleDeclarationBlock, StyleSheet},
 };
 
 const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
@@ -160,6 +160,51 @@ impl SvgDocument {
       .elements
       .iter()
       .any(|element| element.kind == SvgElementKind::Text)
+  }
+
+  /// The displayed text of the `text` elements, each with its styled context; approximate, ignoring `use`.
+  pub(crate) fn text_runs(&self, host: SvgHost<'_>) -> Vec<(RenderContext, &str)> {
+    let styles = style::StyleResolver::new(self, host, self.canvas);
+
+    self
+      .elements
+      .iter()
+      .zip(self.nodes())
+      .filter(|(element, _)| {
+        element.kind == SvgElementKind::CharacterData && self.inside_text(element.parent)
+      })
+      .filter(|(element, _)| self.is_displayed(element.parent, &styles))
+      .filter_map(|(element, node)| match (&node.kind, element.parent) {
+        (NodeKind::Text(data), Some(parent)) => Some((styles.in_place(parent), data.text.as_str())),
+        _ => None,
+      })
+      .collect()
+  }
+
+  /// Whether neither the element at `index` nor an ancestor has `display: none`.
+  fn is_displayed(&self, mut index: Option<usize>, styles: &style::StyleResolver) -> bool {
+    while let Some(current) = index {
+      if styles.in_place(current).style.base_data.display == Display::None {
+        return false;
+      }
+
+      index = self.elements[current].parent;
+    }
+
+    true
+  }
+
+  /// Whether the element at `index` or one of its ancestors is a `text` element.
+  fn inside_text(&self, mut index: Option<usize>) -> bool {
+    while let Some(current) = index {
+      if self.elements[current].kind == SvgElementKind::Text {
+        return true;
+      }
+
+      index = self.elements[current].parent;
+    }
+
+    false
   }
 
   /// Every node in the preorder the selector matcher numbers them by.

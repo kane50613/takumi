@@ -1,9 +1,7 @@
 //! Blink's [`FontFace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/font_face.cc),
 //! with the part of [`CSSFontFace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/css_font_face.cc)
-//! and `BinaryDataFontFaceSource` a registered face needs: one source, already decoded.
-//!
-//! An `auto` descriptor takes the face's own capabilities, as CSS Fonts 4 asks, where Blink
-//! takes `normal`; see [`FontCustomPlatformData::auto_font_selection_capabilities`].
+//! and its `BinaryDataFontFaceSource`; a pending face stands for a `RemoteFontFaceSource` still loading.
+//! Approximate: `auto` descriptors take the face's own capabilities as CSS Fonts 4 asks, Blink's `normal` on a pending face.
 
 use std::sync::Arc;
 
@@ -13,7 +11,8 @@ use super::{
   font_custom_platform_data::{FontCustomPlatformData, FontPlatformData},
   font_description::{FontSelectionDescription, sort_by_tag},
   font_selection_types::{
-    FontSelectionCapabilities, FontSelectionRange, FontSelectionValue, RangeType,
+    FontSelectionCapabilities, FontSelectionRange, FontSelectionValue, NORMAL_SLOPE_VALUE,
+    NORMAL_WEIGHT_VALUE, NORMAL_WIDTH_VALUE, RangeType,
   },
 };
 use crate::resources::unicode_range::UnicodeRangeSet;
@@ -35,13 +34,53 @@ pub(crate) struct FontFaceDescriptors {
   pub(crate) variation_settings: Vec<Variation>,
 }
 
+/// Where a face's data comes from: Blink's `CSSFontFaceSource`.
+#[derive(Debug)]
+pub(crate) enum FontFaceSource {
+  /// Blink's `BinaryDataFontFaceSource`.
+  Binary(Arc<FontCustomPlatformData>),
+  /// Blink's `RemoteFontFaceSource` before it loads, by the id the caller gave it.
+  Pending(usize),
+}
+
+/// Blink's `FontDataForRangeSet` whose `CustomFontData` is loading.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PendingFace {
+  pub(crate) id: usize,
+  pub(crate) range_set: UnicodeRangeSet,
+}
+
+/// A face's data, or the pending face that has none yet.
+#[derive(Clone, Debug)]
+pub(crate) enum FaceData<T> {
+  Loaded(T),
+  Pending(PendingFace),
+}
+
+impl<T> FaceData<T> {
+  /// The data of a loaded face.
+  pub(crate) fn loaded(&self) -> Option<&T> {
+    match self {
+      Self::Loaded(data) => Some(data),
+      Self::Pending(_) => None,
+    }
+  }
+
+  pub(crate) fn map<U>(self, f: impl FnOnce(T) -> U) -> FaceData<U> {
+    match self {
+      Self::Loaded(data) => FaceData::Loaded(f(data)),
+      Self::Pending(pending) => FaceData::Pending(pending),
+    }
+  }
+}
+
 /// Blink's `FontFace`.
 #[derive(Debug)]
 pub(crate) struct FontFace {
   /// Blink's `familyNameUnquoted`.
   pub(crate) family: Arc<str>,
   pub(crate) descriptors: FontFaceDescriptors,
-  pub(crate) custom_platform_data: Arc<FontCustomPlatformData>,
+  pub(crate) source: FontFaceSource,
 }
 
 impl FontFace {
@@ -53,13 +92,44 @@ impl FontFace {
     Self {
       family,
       descriptors,
-      custom_platform_data,
+      source: FontFaceSource::Binary(custom_platform_data),
+    }
+  }
+
+  /// A face of `family` with no data yet, which matching finds as `id`.
+  pub(crate) fn pending(family: Arc<str>, descriptors: FontFaceDescriptors, id: usize) -> Self {
+    Self {
+      family,
+      descriptors,
+      source: FontFaceSource::Pending(id),
+    }
+  }
+
+  /// The decoded face, none while it is pending.
+  pub(crate) fn custom_platform_data(&self) -> Option<&Arc<FontCustomPlatformData>> {
+    match &self.source {
+      FontFaceSource::Binary(custom_platform_data) => Some(custom_platform_data),
+      FontFaceSource::Pending(_) => None,
+    }
+  }
+
+  /// The capabilities of an `auto` descriptor: the face's own, or Blink's `normal` while pending.
+  fn auto_font_selection_capabilities(&self) -> FontSelectionCapabilities {
+    match &self.source {
+      FontFaceSource::Binary(custom_platform_data) => {
+        custom_platform_data.auto_font_selection_capabilities()
+      }
+      FontFaceSource::Pending(_) => FontSelectionCapabilities::new(
+        FontSelectionRange::single(NORMAL_WIDTH_VALUE),
+        FontSelectionRange::single(NORMAL_SLOPE_VALUE),
+        FontSelectionRange::single(NORMAL_WEIGHT_VALUE),
+      ),
     }
   }
 
   /// Blink's `GetFontSelectionCapabilities`.
   pub(crate) fn get_font_selection_capabilities(&self) -> FontSelectionCapabilities {
-    let auto_capabilities = self.custom_platform_data.auto_font_selection_capabilities();
+    let auto_capabilities = self.auto_font_selection_capabilities();
     let mut capabilities = auto_capabilities;
 
     if let Some(width) = self.descriptors.width {
@@ -104,17 +174,27 @@ impl FontFace {
     &self.descriptors.unicode_range
   }
 
-  /// Blink's `CSSFontFace::GetFontData`, through `BinaryDataFontFaceSource::CreateFontData`.
+  /// Blink's `CSSFontFace::GetFontData`, or the pending face while its source loads.
   pub(crate) fn get_font_data(
     &self,
     font_description: &FontSelectionDescription,
-  ) -> FontPlatformData {
+  ) -> FaceData<FontPlatformData> {
+    let custom_platform_data = match &self.source {
+      FontFaceSource::Binary(custom_platform_data) => custom_platform_data,
+      FontFaceSource::Pending(id) => {
+        return FaceData::Pending(PendingFace {
+          id: *id,
+          range_set: self.ranges().clone(),
+        });
+      }
+    };
     let mut description = font_description.clone();
 
     description.merge_font_variation_settings_with_descriptor(&self.get_font_variation_settings());
-    self
-      .custom_platform_data
-      .get_font_platform_data(&description, &self.get_font_selection_capabilities())
+    FaceData::Loaded(
+      custom_platform_data
+        .get_font_platform_data(&description, &self.get_font_selection_capabilities()),
+    )
   }
 }
 
@@ -155,7 +235,7 @@ mod tests {
 
     assert_eq!(
       face.get_font_selection_capabilities(),
-      face.custom_platform_data.auto_font_selection_capabilities()
+      face.auto_font_selection_capabilities()
     );
   }
 
@@ -189,7 +269,7 @@ mod tests {
 
     assert_eq!(
       face.get_font_selection_capabilities(),
-      face.custom_platform_data.auto_font_selection_capabilities()
+      face.auto_font_selection_capabilities()
     );
   }
 
@@ -232,7 +312,11 @@ mod tests {
     let mut description = FontSelectionDescription::for_request(Default::default());
 
     assert_eq!(
-      face.get_font_data(&description).variation(b"wght"),
+      face
+        .get_font_data(&description)
+        .loaded()
+        .unwrap()
+        .variation(b"wght"),
       Some(350.0)
     );
 
@@ -242,7 +326,11 @@ mod tests {
     }];
 
     assert_eq!(
-      face.get_font_data(&description).variation(b"wght"),
+      face
+        .get_font_data(&description)
+        .loaded()
+        .unwrap()
+        .variation(b"wght"),
       Some(800.0)
     );
   }

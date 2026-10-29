@@ -1,7 +1,7 @@
 //! Blink's [`FontFallbackPriority`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_priority.h).
 
 /// Which fonts a run of text falls back through: text fonts, or emoji fonts first.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub(crate) enum FontFallbackPriority {
   /// Text that is not a symbol.
   #[default]

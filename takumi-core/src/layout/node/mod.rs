@@ -10,6 +10,7 @@ use std::{
 
 use serde::Deserialize;
 
+pub(crate) use self::image::is_image_reference;
 pub use self::image::resolve_image;
 use crate::{
   Xxh3HashSet,

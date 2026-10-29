@@ -10,8 +10,11 @@ pub use super::animated::AnimatedSource;
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
 #[cfg(feature = "svg-sizing")]
-use std::str::{FromStr, from_utf8};
-use std::sync::{Arc, Weak};
+use std::str::FromStr;
+use std::{
+  str::from_utf8,
+  sync::{Arc, Weak},
+};
 
 use quick_cache::{
   DefaultHashBuilder, OptionsBuilder, Weighter,
@@ -203,16 +206,27 @@ impl SvgSource {
   /// The SVG's drawing ops laid out at `viewport`, the size it is drawn at in CSS pixels, in the
   /// box `host` styles.
   pub fn vector_ops(&self, host: &RenderContext, viewport: Size<f32>) -> Vec<SvgOp> {
-    let host = if self.inline {
+    self
+      .document
+      .ops(self.host(host), viewport)
+      .unwrap_or_default()
+  }
+
+  /// The box the document draws in when the box `host` styles shows it.
+  fn host<'a>(&self, host: &'a RenderContext) -> SvgHost<'a> {
+    if self.inline {
       SvgHost::Inline(host)
     } else {
       SvgHost::Image {
         current_color: host.current_color,
         fonts: Some(host.fonts()),
       }
-    };
+    }
+  }
 
-    self.document.ops(host, viewport).unwrap_or_default()
+  /// The text the document's `text` elements draw in `host`; approximate, white space uncollapsed.
+  pub(crate) fn text_runs(&self, host: &RenderContext) -> Vec<(RenderContext, &str)> {
+    self.document.text_runs(self.host(host))
   }
 
   /// An inline `svg` element of an HTML document and its subtree, every attribute kept in the
@@ -718,6 +732,11 @@ impl ImageSource {
 /// Check if the string looks like an SVG image.
 pub(crate) fn is_svg_like(src: &str) -> bool {
   src.contains("<svg")
+}
+
+/// Whether `bytes` hold SVG markup, which [`ResourceCache::get_or_decode`] reads as an SVG.
+pub fn is_svg_bytes(bytes: &[u8]) -> bool {
+  from_utf8(bytes).is_ok_and(is_svg_like)
 }
 
 /// A decoded `data:` URI body with its `type/subtype` MIME string.
