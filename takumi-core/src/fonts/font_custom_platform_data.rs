@@ -184,6 +184,25 @@ impl FontCustomPlatformData {
       .map(|name| name.chars().collect())
   }
 
+  /// Whether `name` is the face's full font name or PostScript name, as fontconfig matches
+  /// `local()` for Blink's `FontUniqueNameLookupLinux`, ignoring ASCII case.
+  #[cfg(feature = "font-face")]
+  pub(crate) fn has_unique_name(&self, name: &str) -> bool {
+    let Some(font) = self.font_ref() else {
+      return false;
+    };
+
+    [StringId::FULL_NAME, StringId::POSTSCRIPT_NAME]
+      .into_iter()
+      .flat_map(|id| font.localized_strings(id))
+      .any(|unique_name| {
+        unique_name
+          .chars()
+          .collect::<String>()
+          .eq_ignore_ascii_case(name)
+      })
+  }
+
   /// Skia's `SkTypeface::isBold`.
   pub(crate) fn is_bold(&self) -> bool {
     self.attributes.weight.value() >= SK_SEMI_BOLD_WEIGHT
