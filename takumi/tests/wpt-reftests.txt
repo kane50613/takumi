@@ -968,10 +968,6 @@ css/css-break/zero-height-page-break-001-print.html
 !css/css-contain/contain-style-counters-002.html
 !css/css-contain/contain-style-ol-ordinal-pseudo-reversed.html
 !css/css-contain/contain-style-ol-ordinal-pseudo.html
-!css/css-contain/contain-style-ol-ordinal-reversed.html
-!css/css-contain/contain-style-ol-ordinal-start-reversed.html
-!css/css-contain/contain-style-ol-ordinal-start.html
-!css/css-contain/contain-style-ol-ordinal.html
 !css/css-contain/content-visibility/content-visibility-001.html
 !css/css-contain/content-visibility/content-visibility-003.html
 !css/css-contain/content-visibility/content-visibility-043.html
@@ -1798,7 +1794,10 @@ css/css-lists/counters-005.html
 css/css-lists/counters-006.html
 css/css-lists/counters-scope-003.html
 css/css-lists/counters-scope-004.html
-css/css-lists/li-value-reversed-024.html
+css/css-lists/li-list-item-counter-001.html
+css/css-lists/li-value-counter-reset-001.html
+css/css-lists/li-value-reversed-011.html
+css/css-lists/li-value-reversed-021.html
 css/css-lists/li-value-reversed-029.html
 css/css-lists/list-and-flex-001.html
 css/css-lists/list-and-grid-001.html
@@ -1808,6 +1807,7 @@ css/css-lists/list-marker-counter-style-mutation.html
 css/css-lists/list-marker-rtl-string-width.html
 css/css-lists/list-marker-with-lineheight-and-overflow-hidden-001.html
 css/css-lists/list-style-position-001.html
+css/css-lists/list-style-type-decimal-line-height.html
 css/css-lists/list-style-type-string-001a.html
 css/css-lists/list-style-type-string-001b.html
 css/css-lists/list-type-none-style-image.html
