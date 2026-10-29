@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>counters_nested_scopes</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 16px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 16px;
+        line-height: 24px;
+        color: rgb(15, 23, 42);
+        counter-reset: section;
+      }
+      .list {
+        display: block;
+        padding-left: 20px;
+        counter-reset: item;
+      }
+      .item {
+        display: block;
+        counter-increment: item;
+      }
+      .item::before {
+        content: counters(item, ".") " ";
+        color: rgb(37, 99, 235);
+      }
+      .scope {
+        display: block;
+        contain: style;
+        background-color: rgb(241, 245, 249);
+      }
+      .section {
+        display: block;
+        counter-increment: section;
+      }
+      .section::before {
+        content: counter(section, upper-roman) ". ";
+      }
+      .root::after {
+        display: block;
+        content: "sections: " counter(section);
+      }
+    </style>
+  </head>
+  <body style="width: 320px; height: 300px">
+    <div class="root">
+      <div class="section">Intro</div>
+      <div class="list">
+        <div class="item">one</div>
+        <div class="item">
+          two
+          <div class="list">
+            <div class="item">nested</div>
+            <div class="item">nested</div>
+          </div>
+        </div>
+        <div class="item">three</div>
+      </div>
+      <div class="scope">
+        <div class="section">contained</div>
+        <div class="section">contained</div>
+      </div>
+      <div class="section">Outro</div>
+    </div>
+  </body>
+</html>
