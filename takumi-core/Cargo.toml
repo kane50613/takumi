@@ -111,6 +111,8 @@ gif = ["dep:gif"]
 html = []
 svg-sizing = ["html"]
 svg = ["svg-sizing"]
+# Keeps an inline `<svg>` in parsed HTML as nodes the page's stylesheet reaches, instead of an SVG buffer.
+html-svg-nodes = ["svg"]
 # Rasterizing an SVG: the filter pipeline and `SvgSource::rasterize_cached`. A backend that does not rasterize goes without.
 svg-raster = ["svg"]
 woff2 = ["dep:wuff", "wuff/brotli"]

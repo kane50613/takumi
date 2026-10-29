@@ -16,7 +16,7 @@ features = ["html"]
 
 [features]
 # Keeps inline `<svg>` elements as nodes that the page's stylesheet reaches.
-svg = ["takumi-core/svg"]
+svg = ["takumi-core/html-svg-nodes"]
 
 [lints]
 workspace = true
