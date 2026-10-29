@@ -8,7 +8,8 @@ const MAX_DEPTH = 127;
 /**
  * JSON text a binding reads in place of a node tree, faster than the tree, and off the main thread in napi.
  *
- * @deprecated Internal to the bindings. Will be removed in v3.
+ * @internal
+ * @deprecated Will be removed in v3.
  */
 export type JsonSource = { json: string };
 
@@ -16,7 +17,8 @@ export type JsonSource = { json: string };
  * A node tree as {@link JsonSource} when JSON keeps every value in it within {@link MAX_DEPTH}, the
  * tree itself otherwise, and HTML as is.
  *
- * @deprecated Internal to the bindings. Will be removed in v3.
+ * @internal
+ * @deprecated Will be removed in v3.
  */
 export function toNativeSource(source: Node | string): Node | string | JsonSource {
   if (typeof source === "string") {

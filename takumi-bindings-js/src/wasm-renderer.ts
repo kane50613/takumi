@@ -6,14 +6,22 @@ import {
 } from "./renderer";
 import type { CssInput } from "@takumi-rs/helpers";
 
-/** A wasm binding renderer whose fonts a {@link FontRegistry} loads. */
+/**
+ * A wasm binding renderer whose fonts a {@link FontRegistry} loads.
+ *
+ * @internal
+ */
 export type WasmBinding<TFamily extends RegisteredFamilyLike> = FontBackend<TFamily> & {
   unregisterFont(family: string): boolean;
   clearFonts(): void;
   free(): void;
 };
 
-/** The fonts and memory of a wasm document renderer, such as a PDF renderer or a painter. */
+/**
+ * The fonts and memory of a wasm document renderer, such as a PDF renderer or a painter.
+ *
+ * @internal
+ */
 export class WasmRenderer<
   TFamily extends RegisteredFamilyLike,
   TInner extends WasmBinding<TFamily>,
@@ -47,7 +55,11 @@ export class WasmRenderer<
   }
 }
 
-/** The `css` option followed by the sheets a document brings, or `undefined` for none. */
+/**
+ * The `css` option followed by the sheets a document brings, or `undefined` for none.
+ *
+ * @internal
+ */
 export function sheetsOf(
   css: CssInput | readonly CssInput[] | undefined,
   documentCss: string[],
@@ -63,7 +75,11 @@ function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInpu
   return Array.isArray(css);
 }
 
-/** A function returning the one value `create` makes on the first call. */
+/**
+ * A function returning the one value `create` makes on the first call.
+ *
+ * @internal
+ */
 export function lazy<T>(create: () => T): () => T {
   let value: T | undefined;
 

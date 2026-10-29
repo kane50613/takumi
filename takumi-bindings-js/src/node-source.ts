@@ -5,12 +5,17 @@ const LONE_SURROGATE = /\p{Cs}/u;
 /** The most arrays and objects `serde_json` reads nested inside each other. */
 const MAX_DEPTH = 127;
 
-/** JSON text a binding reads in place of a node tree, faster than the tree, and off the main thread in napi. */
+/**
+ * JSON text a binding reads in place of a node tree, faster than the tree, and off the main thread in napi.
+ *
+ * @internal
+ */
 export type JsonSource = { json: string };
 
 /**
  * A node tree as {@link JsonSource} when JSON keeps every value in it within {@link MAX_DEPTH}, the
  * tree itself otherwise, and HTML as is.
+ * @internal
  */
 export function toNativeSource(source: Node | string): Node | string | JsonSource {
   if (typeof source === "string") {
