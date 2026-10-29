@@ -2,13 +2,14 @@
 
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 
+use cssparser::match_ignore_ascii_case;
 use rustc_hash::FxHashMap;
 use selectors::{
   Element, OpaqueElement, SelectorImpl as SelectorImplTrait,
   attr::{CaseSensitivity, NamespaceConstraint},
   bloom::BloomFilter,
   matching::*,
-  parser::{AncestorHashes, Component, Selector},
+  parser::{AncestorHashes, Combinator, Component, Selector},
 };
 use smallvec::SmallVec;
 
@@ -527,31 +528,69 @@ enum SelectorTarget {
   After,
 }
 
-/// The id, class, or tag a selector's rightmost compound requires, so other nodes skip the rule.
+/// What a selector's subject compound requires, so other nodes skip the rule. Mirrors the
+/// bucket order of Blink's `RuleSet::FindBestRuleSetAndAdd`: id, class, attribute, then tag.
 enum SelectorKey {
   Id(String),
   Class(String),
+  /// Lowercased: attribute names match case-insensitively.
+  Attribute(String),
   /// Lowercased: tag names match case-insensitively.
   Tag(String),
   Any,
 }
 
-fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
-  let mut key = SelectorKey::Any;
-
-  // `iter` walks the rightmost compound and stops at the first combinator.
-  for component in selector.iter() {
-    match component {
-      Component::ID(id) => return SelectorKey::Id(id.to_string()),
-      Component::Class(class) => key = SelectorKey::Class(class.to_string()),
-      Component::LocalName(name) if matches!(key, SelectorKey::Any) => {
-        key = SelectorKey::Tag(name.lower_name.to_ascii_lowercase());
-      }
-      _ => {}
+impl SelectorKey {
+  fn rank(&self) -> u8 {
+    match self {
+      Self::Any => 0,
+      Self::Tag(_) => 1,
+      Self::Attribute(_) => 2,
+      Self::Class(_) => 3,
+      Self::Id(_) => 4,
     }
   }
+}
 
-  key
+fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
+  let mut key = SelectorKey::Any;
+  let mut keep = |candidate: SelectorKey| {
+    if candidate.rank() > key.rank() {
+      key = candidate;
+    }
+  };
+  // `iter` stops at each combinator. A pseudo-element sits behind one, and the element's own
+  // compound comes after it.
+  let mut iter = selector.iter();
+
+  loop {
+    for component in &mut iter {
+      match component {
+        Component::ID(id) => keep(SelectorKey::Id(id.to_string())),
+        Component::Class(class) => keep(SelectorKey::Class(class.to_string())),
+        Component::AttributeInNoNamespaceExists {
+          local_name_lower, ..
+        } => keep(attribute_key(local_name_lower)),
+        Component::AttributeInNoNamespace { local_name, .. } => keep(attribute_key(local_name)),
+        Component::LocalName(name) => {
+          keep(SelectorKey::Tag(name.lower_name.to_ascii_lowercase()));
+        }
+        _ => {}
+      }
+    }
+
+    if iter.next_sequence() != Some(Combinator::PseudoElement) {
+      return key;
+    }
+  }
+}
+
+/// `id`, `class`, and `lang` live outside a node's attribute map, so they key no bucket.
+fn attribute_key(name: &str) -> SelectorKey {
+  match_ignore_ascii_case! { name,
+    "id" | "class" | "lang" => SelectorKey::Any,
+    _ => SelectorKey::Attribute(name.to_ascii_lowercase()),
+  }
 }
 
 /// A stylesheet's rules, by position, grouped by what their rightmost compound
@@ -560,8 +599,11 @@ fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
 pub(crate) struct RuleIndex {
   by_id: HashMap<String, Vec<usize>>,
   by_class: HashMap<String, Vec<usize>>,
+  by_attribute: HashMap<String, Vec<usize>>,
   by_tag: HashMap<String, Vec<usize>>,
   unindexed: Vec<usize>,
+  /// The bloom filter hashes of each rule's selectors, as Blink's `RuleData` keeps them.
+  ancestor_hashes: Vec<Box<[AncestorHashes]>>,
   /// Each distinct `media_queries` list among the rules.
   media: Vec<Vec<MediaQueryList>>,
   /// The position in `media` of each rule's `media_queries`.
@@ -572,12 +614,21 @@ impl RuleIndex {
   pub(crate) fn build(rules: &[CssRule]) -> Self {
     let mut index = Self {
       rule_media: Vec::with_capacity(rules.len()),
+      ancestor_hashes: Vec::with_capacity(rules.len()),
       ..Self::default()
     };
 
     for (position, rule) in rules.iter().enumerate() {
       let media = index.media_id(&rule.media_queries);
       index.rule_media.push(media);
+      index.ancestor_hashes.push(
+        rule
+          .selectors
+          .slice()
+          .iter()
+          .map(|selector| AncestorHashes::new(selector, QuirksMode::NoQuirks))
+          .collect(),
+      );
 
       let keys: SmallVec<[SelectorKey; 4]> =
         rule.selectors.slice().iter().map(selector_key).collect();
@@ -593,6 +644,7 @@ impl RuleIndex {
         let bucket = match key {
           SelectorKey::Id(name) => index.by_id.entry(name),
           SelectorKey::Class(name) => index.by_class.entry(name),
+          SelectorKey::Attribute(name) => index.by_attribute.entry(name),
           SelectorKey::Tag(name) => index.by_tag.entry(name),
           SelectorKey::Any => unreachable!("handled above"),
         }
@@ -641,6 +693,20 @@ impl RuleIndex {
     for class in node.classes() {
       if let Some(rules) = self.by_class.get(class) {
         out.extend_from_slice(rules);
+      }
+    }
+
+    if !self.by_attribute.is_empty() {
+      for name in node.attribute_names() {
+        let rules = if name.bytes().any(|byte| byte.is_ascii_uppercase()) {
+          self.by_attribute.get(&name.to_ascii_lowercase())
+        } else {
+          self.by_attribute.get(name)
+        };
+
+        if let Some(rules) = rules {
+          out.extend_from_slice(rules);
+        }
       }
     }
 
@@ -716,8 +782,6 @@ pub(crate) fn match_stylesheets_view<'a>(
 
   let mut ancestor_bloom_filter = BloomFilter::new();
   let mut ancestor_stack: Vec<usize> = Vec::new();
-  let mut selector_ancestor_hashes_cache: FxHashMap<(usize, usize), AncestorHashes> =
-    FxHashMap::default();
 
   let mut candidates = Vec::new();
 
@@ -757,15 +821,18 @@ pub(crate) fn match_stylesheets_view<'a>(
     );
 
     for placement in &placements {
-      placement.sheet.rule_index().candidates(
+      let rule_index = placement.sheet.rule_index();
+
+      rule_index.candidates(
         arena.nodes[i].node,
         &placement.matching_media,
         &mut candidates,
       );
 
-      for &rule_index in &candidates {
-        let rule = &placement.sheet.rules()[rule_index];
-        let source_order = placement.rule_offset + rule_index;
+      for &position in &candidates {
+        let rule = &placement.sheet.rules()[position];
+        let source_order = placement.rule_offset + position;
+        let ancestor_hashes = &rule_index.ancestor_hashes[position];
         let mut best_specificities: [Option<u32>; 3] = [None; 3];
 
         for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
@@ -775,11 +842,6 @@ pub(crate) fn match_stylesheets_view<'a>(
           if is_replaced && target != SelectorTarget::Element {
             continue;
           }
-
-          let selector_key = (source_order, selector_index);
-          let ancestor_hashes = selector_ancestor_hashes_cache
-            .entry(selector_key)
-            .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks));
 
           if early_reject_by_local_name(selector, 0, &element) {
             continue;
@@ -791,7 +853,13 @@ pub(crate) fn match_stylesheets_view<'a>(
             &mut pseudo_ctx
           };
 
-          if matches_selector(selector, 0, Some(ancestor_hashes), &element, ctx) {
+          if matches_selector(
+            selector,
+            0,
+            Some(&ancestor_hashes[selector_index]),
+            &element,
+            ctx,
+          ) {
             let specificity = selector.specificity();
             let slot = &mut best_specificities[target as usize];
 
@@ -1011,7 +1079,7 @@ pub(crate) fn lang_matches(lang: &str, range: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
+  use std::{collections::BTreeMap, sync::Arc};
 
   use crate::{
     context::RenderContext,
@@ -1050,5 +1118,34 @@ mod tests {
 
     // U+00A0 is not ASCII whitespace, so `a\u{a0}x` is one class and its child stays.
     assert_eq!(kept, [0, 1]);
+  }
+
+  fn candidates(css: &str, node: &Node) -> Vec<usize> {
+    let stylesheet = StyleSheet::parse(css).expect("stylesheet parses");
+    let index = stylesheet.rule_index();
+    let mut out = Vec::new();
+
+    index.candidates(node, &index.matching_media(Viewport::default()), &mut out);
+    out
+  }
+
+  #[test]
+  fn a_pseudo_element_rule_waits_for_its_host_class() {
+    let css = ".a::after { content: 'x' }";
+
+    assert_eq!(candidates(css, &Node::container([])), [0; 0]);
+    assert_eq!(
+      candidates(css, &Node::container([]).with_class_name("a")),
+      [0]
+    );
+  }
+
+  #[test]
+  fn an_attribute_rule_reaches_nodes_with_the_attribute_in_any_case() {
+    let css = "[DATA-X] { color: red } [data-y='1'] { color: red } [id] { color: red }";
+    let node = Node::container([]).with_attributes(BTreeMap::from([("data-X".into(), "".into())]));
+
+    assert_eq!(candidates(css, &node), [0, 2]);
+    assert_eq!(candidates(css, &Node::container([])), [2]);
   }
 }
