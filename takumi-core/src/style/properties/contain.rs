@@ -12,9 +12,6 @@ use crate::style::{
 ///
 /// `size`, `inline-size` and `strict` are rejected, per the partial
 /// implementation rule in <https://www.w3.org/TR/css-contain-2/#conform-partial>.
-///
-/// Approximate: `style` containment scopes nothing, because takumi has no
-/// author-facing counters. List-item ordinals cross the boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Contain(u8);
 

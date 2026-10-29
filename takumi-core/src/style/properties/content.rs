@@ -36,6 +36,10 @@ pub enum ContentItem {
   Counter(CounterFunction),
 }
 
+/// The most bytes one `counters()` writes, a resource limit: nested counters and a long separator
+/// would otherwise grow generated text with the square of the nesting depth.
+const MAX_COUNTERS_TEXT_BYTES: usize = 16 * 1024;
+
 /// A `counter(<name>, <counter-style>?)` or `counters(<name>, <string>, <counter-style>?)`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CounterFunction {
@@ -50,7 +54,8 @@ pub struct CounterFunction {
 
 impl CounterFunction {
   /// The text of `values`, the counters in scope from the innermost out, as Blink's
-  /// `LayoutCounter::GenerateCounterText` writes them: the outermost first.
+  /// `LayoutCounter::GenerateCounterText` writes them: the outermost first, up to
+  /// [`MAX_COUNTERS_TEXT_BYTES`].
   pub(crate) fn text(&self, values: &[i32], direction: Direction) -> String {
     let represent = |value: &i32| {
       self
@@ -58,16 +63,27 @@ impl CounterFunction {
         .representation(*value, direction)
         .unwrap_or_default()
     };
+    let Some(separator) = &self.separator else {
+      return values.first().map(represent).unwrap_or_default();
+    };
+    let mut text = String::new();
 
-    match &self.separator {
-      Some(separator) => values
-        .iter()
-        .rev()
-        .map(represent)
-        .collect::<Vec<_>>()
-        .join(separator),
-      None => values.first().map(represent).unwrap_or_default(),
+    for (index, value) in values.iter().rev().enumerate() {
+      let part = represent(value);
+      let joined = if index == 0 { 0 } else { separator.len() };
+
+      if text.len() + joined + part.len() > MAX_COUNTERS_TEXT_BYTES {
+        break;
+      }
+
+      if index > 0 {
+        text.push_str(separator);
+      }
+
+      text.push_str(&part);
     }
+
+    text
   }
 
   /// The arguments of `counters()` when `joined` is set, of `counter()` otherwise.

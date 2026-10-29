@@ -2749,8 +2749,7 @@ impl PendingRenderNode {
     let display = context.style.base_data.display;
     // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box, so neither
     // it nor a pseudo-element of it is counted.
-    let entered_counters = (display != Display::None && !matches!(node.kind, NodeKind::Text(_)))
-      .then(|| ListItemCounter::of(&node, display));
+    let entered_counters = (display != Display::None).then(|| ListItemCounter::of(&node, display));
 
     if let Some(list_item) = entered_counters {
       counters.enter_object(&context.style, list_item);

@@ -2,10 +2,12 @@
 //! the CSS counters in scope as the render tree is built in document order, entering each element
 //! and pseudo-element that gets a box and leaving it after its descendants.
 //!
-//! Approximate: takumi has no page or page-margin boxes here, so the page counter paths are left
-//! out. As without Blink's experimental `CSSListCounterAccounting`, `reversed()` resets a counter
-//! to its integer, and the implicit `list-item` counter ignores `<ol reversed>`, as takumi's list
-//! markers do.
+//! It follows Blink as Chrome ships it, with the experimental `CSSListCounterAccounting` off, so
+//! `reversed()` resets a counter to its integer. The page and page-margin paths are left out, as
+//! this tree holds neither box.
+//!
+//! Approximate: the implicit `list-item` counter ignores `<ol reversed>`, numbering as takumi's
+//! list markers do.
 
 use std::sync::Arc;
 
