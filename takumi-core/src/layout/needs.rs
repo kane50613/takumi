@@ -100,7 +100,7 @@ impl RenderNode {
           needs.needs.images.insert(url.to_owned());
         }
 
-        needs.add_svg_text(svg_image(&image.src, &node.context), &node.context);
+        needs.add_svg_text(|| svg_image(&image.src, &node.context), &node.context);
       }
 
       let creates_inline_context = node.should_create_inline_layout();
@@ -147,7 +147,7 @@ impl NeedsCollector {
           self.needs.images.insert(url.to_string());
         }
 
-        self.add_svg_text(svg_url(url, context), context);
+        self.add_svg_text(|| svg_url(url, context), context);
       }
     }
   }
@@ -169,16 +169,18 @@ impl NeedsCollector {
           self.needs.images.insert(url.to_owned());
         }
 
-        self.add_svg_text(svg_url(url, context), context);
+        self.add_svg_text(|| svg_url(url, context), context);
       }
     }
   }
 
   /// Adds the characters an SVG image's `text` elements draw with the render's fonts, shown in the
   /// box `context` styles, and the pending faces their fonts would load.
-  fn add_svg_text(&mut self, image: Option<ImageSource>, context: &RenderContext) {
+  fn add_svg_text(&mut self, image: impl FnOnce() -> Option<ImageSource>, context: &RenderContext) {
     #[cfg(feature = "svg")]
-    if let Some(ImageSource::Svg(svg)) = image {
+    if context.fonts().has_pending_faces()
+      && let Some(ImageSource::Svg(svg)) = image()
+    {
       for (context, text) in svg.text_runs(context) {
         let font = context.font(FontDescription::new(&SizedFontStyle::from_style(
           &context.style,
@@ -629,6 +631,19 @@ mod tests {
     );
 
     assert_eq!(shaped, "ΩЖ");
+  }
+
+  #[test]
+  fn skips_the_text_a_hidden_svg_element_holds() {
+    let shaped = shaped(
+      "ЖΩZ",
+      [Node::image(
+        "<svg xmlns='http://www.w3.org/2000/svg'><text>Ж<tspan display='none'>Ω</tspan></text><g style='display: none'><text>Z</text></g></svg>",
+      )],
+      "",
+    );
+
+    assert_eq!(shaped, "Ж");
   }
 
   #[test]
