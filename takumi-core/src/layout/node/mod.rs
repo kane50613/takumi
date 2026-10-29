@@ -724,6 +724,15 @@ impl Node {
       .flat_map(str::split_ascii_whitespace)
   }
 
+  /// The names in the element's attribute map.
+  pub(crate) fn attribute_names(&self) -> impl Iterator<Item = &str> {
+    self
+      .metadata
+      .attributes
+      .iter()
+      .flat_map(|attributes| attributes.keys().map(AsRef::as_ref))
+  }
+
   /// The rules the element's `tw` utilities compile to, in the order they were written.
   pub(crate) fn tw_rules(&self) -> impl Iterator<Item = &Arc<TwRule>> {
     self.metadata.tw.iter().flat_map(|tw| tw.rules().iter())
