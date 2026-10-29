@@ -1,6 +1,9 @@
 //! The node, font, and image inputs a binding deserializes from JS before handing them to takumi.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  collections::{BTreeSet, HashMap, HashSet},
+  sync::Arc,
+};
 
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
@@ -8,12 +11,14 @@ use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::{
-    font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
-    image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache},
+    font::{FontError, FontOverride, FontResource, FontSource, PendingFontFace, RegisteredFamily},
+    image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache, is_svg_bytes},
     unicode_range::UnicodeRange,
   },
   style::{FontStyle as CssFontStyle, FromCssStr},
 };
+
+use crate::font_cache::FontCache;
 
 /// The node tree in `json`, failing with the message reading the tree from an object reports,
 /// which carries no line and column.
@@ -28,6 +33,106 @@ pub fn node_from_json(json: &str) -> Result<Node, String> {
   })
 }
 
+/// A font a render's `fonts` list names, described before its bytes arrive.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedFont {
+  /// The key it registers under.
+  key: String,
+  name: Option<String>,
+  weight: Option<f64>,
+  style: Option<FontStyle>,
+  unicode_range: Option<Vec<(u32, u32)>>,
+}
+
+/// A render's `fonts` list as a needs pass reads it: each font a renderer does not hold yet is a
+/// face still loading.
+pub struct ListedFonts {
+  pending: Vec<PendingFontFace>,
+  /// The families a render of the list falls back through, in order: a held font's as it
+  /// registered them, another's by its `name`. Approximate: an unnamed font not held yet, such as
+  /// a URL, names its family only once it loads, so it is left out.
+  pub families: Option<Vec<String>>,
+  len: usize,
+  /// The listed `unicodeRange` subsets still loading.
+  subsets: Vec<usize>,
+}
+
+impl ListedFonts {
+  /// `listed` read against `cache`, which knows the fonts a renderer still holds.
+  pub fn read(cache: &FontCache, listed: Vec<ListedFont>) -> Self {
+    let len = listed.len();
+    let mut pending = Vec::new();
+    let mut families: Vec<String> = Vec::new();
+    let mut subsets = Vec::new();
+
+    for (id, font) in listed.into_iter().enumerate() {
+      if let Some(held) = cache.lookup(&font.key) {
+        families.extend(held.into_iter().map(|family| family.name));
+        continue;
+      }
+
+      let Some(name) = font.name.filter(|name| !name.is_empty()) else {
+        continue;
+      };
+      let mut face = PendingFontFace::new(id, name.as_str());
+
+      families.push(name);
+
+      if let Some(weight) = font.weight {
+        face = face.weight(weight as f32, weight as f32);
+      }
+
+      if let Some(FontStyle(style)) = font.style {
+        face = face.style(style);
+      }
+
+      if let Some(ranges) = font.unicode_range.filter(|ranges| !ranges.is_empty()) {
+        subsets.push(id);
+        face = face.unicode_range(
+          ranges
+            .into_iter()
+            .map(|(from, to)| UnicodeRange::new(from, to))
+            .collect(),
+        );
+      }
+
+      pending.push(face);
+    }
+
+    let mut seen = HashSet::new();
+
+    families.retain(|family| seen.insert(family.clone()));
+
+    Self {
+      pending,
+      families: (!families.is_empty()).then_some(families),
+      len,
+      subsets,
+    }
+  }
+
+  /// `fonts` with every listed font still loading registered as a pending face.
+  pub fn fonts(&self, fonts: &Fonts) -> Fonts {
+    let mut fonts = fonts.clone();
+
+    for face in &self.pending {
+      fonts.register_pending(face.clone());
+    }
+
+    fonts
+  }
+
+  /// The ids of the listed fonts a render that reaches the pending `faces` loads: every one but the
+  /// `unicodeRange` subsets font matching did not reach, as a browser loads only the
+  /// `unicode-range` faces its text uses. <https://drafts.csswg.org/css-fonts-4/#unicode-range-desc>
+  pub fn to_load(&self, faces: &BTreeSet<usize>) -> Vec<usize> {
+    (0..self.len)
+      .filter(|id| !self.subsets.contains(id) || faces.contains(id))
+      .collect()
+  }
+}
+
 /// How to register a font's bytes, each field overriding what the file says.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +145,8 @@ pub struct FontOptions {
   style: Option<FontStyle>,
   /// Inclusive codepoint ranges the font serves, as `@font-face` `unicode-range`.
   unicode_range: Option<Vec<(u32, u32)>>,
+  /// Deprecated: the codepoint ranges in place of `unicodeRange`.
+  ranges: Option<Vec<(u32, u32)>>,
   /// Deprecated: the family to register under in place of `name`.
   subset_of: Option<String>,
   /// CSS generic family keyword this font resolves for.
@@ -63,19 +170,23 @@ impl FontOptions {
         style: self.style.map(|style| style.0),
         ..Default::default()
       })
-      .unicode_range(
-        self
-          .unicode_range
-          .iter()
-          .flatten()
-          .map(|&(from, to)| UnicodeRange::new(from, to))
-          .collect(),
-      );
+      .unicode_range(self.served_ranges().collect());
 
     match &self.generic {
       Some(generic) => Ok(resource.generic_family(generic.parse()?)),
       None => Ok(resource),
     }
+  }
+
+  /// The codepoints the font serves, from `unicodeRange` or else the deprecated `ranges`.
+  fn served_ranges(&self) -> impl Iterator<Item = UnicodeRange> + '_ {
+    self
+      .unicode_range
+      .as_ref()
+      .or(self.ranges.as_ref())
+      .into_iter()
+      .flatten()
+      .map(|&(from, to)| UnicodeRange::new(from, to))
   }
 }
 
@@ -127,6 +238,14 @@ pub struct ImageSource {
   cache: Option<ImageCacheMode>,
 }
 
+/// Keeps the images a needs pass reads: the SVG ones, whose `text` elements the render's fonts
+/// draw. A needs pass decodes no raster image.
+pub fn retain_svg(images: &mut Option<Vec<ImageSource>>) {
+  if let Some(images) = images {
+    images.retain(|image| is_svg_bytes(&image.data));
+  }
+}
+
 /// Registers a font input, returning the families it produced and the bytes of font data it holds.
 pub fn register_font(
   fonts: &mut Fonts,
@@ -163,4 +282,27 @@ pub fn decode_images(
       Ok((source.src.clone(), image))
     })
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn served_ranges(json: &str) -> Vec<UnicodeRange> {
+    let options: FontOptions = serde_json::from_str(json).unwrap();
+
+    options.served_ranges().collect()
+  }
+
+  #[test]
+  fn reads_the_deprecated_ranges_when_unicode_range_is_absent() {
+    assert_eq!(
+      served_ranges(r#"{ "ranges": [[65, 90]] }"#),
+      [UnicodeRange::new(65, 90)]
+    );
+    assert_eq!(
+      served_ranges(r#"{ "unicodeRange": [[48, 57]], "ranges": [[65, 90]] }"#),
+      [UnicodeRange::new(48, 57)]
+    );
+  }
 }

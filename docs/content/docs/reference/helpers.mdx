@@ -22,7 +22,7 @@ const node = container({
 | :------------------------------- | :----------------------------------------------------------------------------------------------------------------------------- |
 | `googleFonts(options)`           | Load Google Fonts families in one request. `render` keeps the subsets used. See [Fonts & text](/docs/fonts#from-google-fonts). |
 | `fontFromUrl(url, options?)`     | Turn a font URL into a lazy `fonts` entry. `options` takes the [fetch limits](/docs/images#fetch-limits).                      |
-| `subsetFonts({ fonts, source })` | Keep the font subsets that cover the codepoints in `source`. `render` does this for you.                                       |
+| `subsetFonts({ fonts, source })` | Deprecated. A render keeps the subsets its text uses, the text inside SVG images included.                                     |
 
 `googleFonts`, `fontFromUrl`, and `prepareImages` share [fetch limits and retry behavior](/docs/images#fetch-limits).
 
@@ -63,9 +63,9 @@ Length and color shorthands return CSS strings. `vw` and `vh` are viewport units
 
 ## Images & emoji
 
-| Helper                           | Import                    | Use                                                                                                 |
-| :------------------------------- | :------------------------ | :-------------------------------------------------------------------------------------------------- |
-| `prepareImages(options)`         | `takumi-js/helpers`       | Fetch a node tree's remote images into `images` entries. See [Image loading & emoji](/docs/images). |
-| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/images#emoji).                              |
+| Helper                           | Import                    | Use                                                                                    |
+| :------------------------------- | :------------------------ | :------------------------------------------------------------------------------------- |
+| `prepareImages(options)`         | `takumi-js/helpers`       | Deprecated. A renderer's `prepare` reads the images a document draws and fetches them. |
+| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/images#emoji).                 |
 
 `emojiType` takes the CDN values of the `emoji` option listed in [Image loading & emoji](/docs/images#dynamic-fetching). It does not take `from-font`, which fetches nothing.

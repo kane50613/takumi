@@ -296,11 +296,18 @@ export type CodepointSource = string | Node | (string | Node)[];
  * generated content no node carries, so subsetting counts these as always
  * used. Mirrors `MARKER_CHARACTERS` in takumi-core, whose coverage test is the
  * source of truth. `list-style-type: "…"` strings are not covered.
+ *
+ * @deprecated Renderers read the characters markers generate themselves.
  */
 export const LIST_MARKER_CHARACTERS =
   "•◦■▪▸◂▾ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-/** Collect every codepoint the content will render. */
+/**
+ * Collect every codepoint the content will render.
+ *
+ * @deprecated Renderers pick font subsets from the text they lay out, so stylesheet content and
+ * `text-transform` count.
+ */
 export function collectCodepoints(source: CodepointSource): Set<number> {
   const codepoints = new Set<number>();
 
@@ -360,9 +367,11 @@ function lowerBound(values: Uint32Array, target: number): number {
 }
 
 /**
- * Keep the subsets `source` renders, dropping the rest. Range-less fallbacks (a full font or a
- * `text=` subset) always stay. Runs without network, so a renderer can apply it to the final
- * node tree. Works on any descriptor carrying `unicodeRange`; entries without it are kept.
+ * Keep the subsets that cover the characters in `source`, dropping the rest. Range-less fallbacks
+ * (a full font or a `text=` subset) and entries without a `unicodeRange` always stay.
+ *
+ * @deprecated Pass the fonts to a render. A renderer picks the subsets its text uses after the
+ * cascade, the text inside its SVG images included.
  */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
   const codepoints = Uint32Array.from(collectCodepoints(source)).sort();
@@ -390,7 +399,7 @@ export function fontFromUrl(
  * under its family name with its `unicode-range`, so a codepoint routes to the subset that
  * declares it, as in a browser.
  * Subsets download lazily. Hand the result to `render`, which registers only the subsets the
- * content uses; or trim them first with {@link subsetFonts}.
+ * content uses.
  *
  * @example
  * const fonts = await googleFonts(["Inter", "Noto Sans JP"]);

@@ -5,6 +5,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+arc-swap.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true
 
@@ -17,12 +18,30 @@ path = "../takumi-core"
 default-features = false
 features = ["woff2"]
 
+[dependencies.takumi-html]
+path = "../takumi-html"
+optional = true
+
+[dependencies.js-sys]
+workspace = true
+optional = true
+
+[dependencies.serde-wasm-bindgen]
+workspace = true
+optional = true
+
+[dependencies.wasm-bindgen]
+workspace = true
+optional = true
+
 [lints]
 workspace = true
 
 [features]
 default = ["svg"]
-svg = ["takumi-core/svg"]
+svg = ["takumi-core/svg", "takumi-html?/svg"]
+# A wasm binding's source: a node tree, `{ json }` text, or HTML.
+wasm = ["dep:takumi-html", "dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
 
 [dev-dependencies.wuff]
 workspace = true

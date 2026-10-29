@@ -55,8 +55,6 @@ use std::{mem::take, rc::Rc};
 mod bands;
 mod chunks;
 mod counters;
-
-pub use counters::counter_characters;
 mod emitter;
 mod filter;
 mod glyph;
@@ -104,7 +102,7 @@ mod subsetter;
 
 use takumi_core::{
   geometry::Point as CorePoint,
-  layout::tree::RenderNode,
+  layout::{needs::RenderNeeds, tree::RenderNode},
   page_stream::{SETTLED_PAGES, Settle},
   style::{Color, Lang},
   viewport::MediaTarget,
@@ -119,6 +117,7 @@ pub use crate::options::{
   PdfOptions, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
 };
 use crate::{
+  counters::substitute_counter_characters,
   emitter::{DocumentState, Emitter},
   glyph::Uncovered,
   inline::{InlineCache, TextBox},
@@ -168,6 +167,30 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     width: size.width,
     height: size.height,
   })
+}
+
+/// What a node tree needs fetched before it renders, read after the cascade as [`measure`] lays it
+/// out, each page counter hook filled with every character its counter style draws; see
+/// [`RenderNode::needs`].
+pub fn needs(options: MeasureOptions<'_>) -> Result<RenderNeeds, PdfError> {
+  let inputs = TreeInputs {
+    fonts: options.fonts,
+    stylesheet: options.stylesheet,
+    images: Rc::new(options.images),
+    font_families: options.font_families,
+    lang: options.lang,
+  };
+  let viewport = match (options.page, options.viewport) {
+    (Some(page), _) => band_viewport(&page),
+    (None, Some(viewport)) => viewport.with_media_target(MediaTarget::Print),
+    (None, None) => return Err(PdfError::MissingViewport),
+  };
+
+  let mut node = options.node;
+
+  substitute_counter_characters(&mut node);
+
+  Ok(RenderNode::from_initial_containing_block(&inputs.context(viewport), node).needs())
 }
 
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged

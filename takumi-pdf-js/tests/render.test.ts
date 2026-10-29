@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { expect, spyOn, test } from "bun:test";
+import { join } from "node:path";
+import { expect, mock, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { PageNumber, PdfRenderer, TotalPages } from "takumi-pdf";
 
@@ -83,33 +84,13 @@ test("object stylesheet rules match CSS strings in render and measure", async ()
   );
 });
 
-test("stylesheets warns once", async () => {
-  const warn = spyOn(console, "warn").mockImplementation(() => {});
-  const options = { viewport: { width: 600, height: 300 }, stylesheets: ["div {}"] };
-
-  await renderer.render(`<div>Hello</div>`, options);
-  await renderer.render(`<div>Hello</div>`, options);
-
-  expect(warn.mock.calls).toHaveLength(1);
-  expect(warn.mock.calls[0]?.[0]).toContain("`stylesheets` option is deprecated");
-  warn.mockRestore();
-});
-
-test("css takes one string and rejects the stylesheets alias next to it", async () => {
+test("css takes one string", async () => {
   const pdf = await renderer.render(`<div class="title">Hello PDF</div>`, {
     viewport: { width: 600, height: 300 },
     css: ".title { font-size: 32px }",
   });
 
   expect(pdfHeader(pdf)).toBe("%PDF-");
-
-  await expect(
-    renderer.render(`<div>Hello</div>`, {
-      viewport: { width: 600, height: 300 },
-      css: "div {}",
-      stylesheets: ["div {}"],
-    }),
-  ).rejects.toThrow("pass either `css` or `stylesheets`, not both");
 });
 
 test("paginates and substitutes footer counters", async () => {
@@ -436,4 +417,35 @@ test("rejects a pages value that is not an object", async () => {
   await expect(
     renderer.render(doc, { pages: { nope: {} } as unknown as Record<string, never> }),
   ).rejects.toThrow("unknown page rule: nope");
+});
+
+test("loads font subsets for characters only a stylesheet adds", async () => {
+  const bytes = readFileSync(join(import.meta.dir, "../../assets/fonts/geist/Geist[wght].woff2"));
+  const subset = (key: string, range: [number, number]) => ({
+    name: "Subset",
+    key,
+    unicodeRange: [range],
+    data: mock(() => bytes),
+  });
+  const latin = subset("latin", [0x20, 0x7f]);
+  const cyrillic = subset("cyrillic", [0x400, 0x4ff]);
+  const greek = subset("greek", [0x370, 0x3ff]);
+
+  await new PdfRenderer().render(container({ tagName: "div", children: [text("a")] }), {
+    viewport: { width: 100, height: 100 },
+    css: ["div::before { content: 'Ж' }"],
+    fonts: [latin, cyrillic, greek],
+  });
+
+  expect(latin.data).toHaveBeenCalledTimes(1);
+  expect(cyrillic.data).toHaveBeenCalledTimes(1);
+  expect(greek.data).not.toHaveBeenCalled();
+});
+
+test("renders an HTML band with its own <style>", async () => {
+  const pdf = await new PdfRenderer().render("<p>Body</p>", {
+    header: '<style>.head { font-size: 20px }</style><div class="head">Head</div>',
+  });
+
+  expect(new TextDecoder().decode(pdf.subarray(0, 5))).toBe("%PDF-");
 });
