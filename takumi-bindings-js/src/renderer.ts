@@ -14,10 +14,18 @@ import { unicodeRangeOf } from "./unicode-range";
 
 type Awaitable<T> = T | Promise<T>;
 
-/** Font byte payloads accepted across environments. */
+/**
+ * Font byte payloads accepted across environments.
+ *
+ * @internal
+ */
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
-/** A font descriptor, matching each backend's generated `FontDetails`. */
+/**
+ * A font descriptor, matching each backend's generated `FontDetails`.
+ *
+ * @internal
+ */
 export type FontDetails = {
   name?: string;
   data: ByteBuf;
@@ -39,25 +47,38 @@ export type FontDetails = {
   generic?: GenericFontFamily;
 };
 
-/** A registered font, either detailed or raw bytes. */
+/**
+ * A registered font, either detailed or raw bytes.
+ *
+ * @internal
+ */
 export type Font = FontDetails | ByteBuf;
 
 /** Cache policy for a decoded image. Defaults to `"auto"`. */
 type ImageCacheMode = "auto" | "none";
 
-/** An image source with its URL and raw bytes, matching each backend's generated `ImageSource`. */
+/**
+ * An image source with its URL and raw bytes, matching each backend's generated `ImageSource`.
+ *
+ * @internal
+ */
 export type ImageSource = {
   src: string;
   data: ByteBuf;
   cache?: ImageCacheMode;
 };
 
-/** A font family produced by `registerFont`. Only `name` is read here; backends keep the full type. */
+/**
+ * A font family produced by `registerFont`. Only `name` is read here; backends keep the full type.
+ *
+ * @internal
+ */
 export type RegisteredFamilyLike = { name: string };
 
 /**
  * A font to register. Either a URL string (fetched on demand, with name/weight/style read from the
  * file), raw bytes, or a descriptor with a lazy `data()` loader.
+ * @internal
  */
 export type FontLoader =
   | string
@@ -68,11 +89,16 @@ export type FontLoader =
       ranges?: [number, number][];
     } & ({ key: string } | { name: string }));
 
+/** @internal */
 export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageSource["data"] | (() => ImageSource["data"] | Promise<ImageSource["data"]>);
 };
 
-/** Images for a render: pre-fetched entries, or a group with a decode-cache default. */
+/**
+ * Images for a render: pre-fetched entries, or a group with a decode-cache default.
+ *
+ * @internal
+ */
 export type ImagesInput =
   | ImageLoader[]
   | {
@@ -88,6 +114,7 @@ export type ImagesInput =
  * WebP honors both — `lossless` takes precedence over `quality`, and omitting both encodes
  * losslessly. On wasm (`@takumi-rs/wasm`) WebP is always lossless: `lossless` is effectively always
  * on and `quality` is ignored for WebP (lossy WebP is native-only).
+ * @internal
  */
 export type OutputFormatOptions =
   | { format?: "png" }
@@ -100,6 +127,7 @@ export type OutputFormatOptions =
  * Animation output format. `quality` and `lossless` are WebP-only. On native, `lossless` takes
  * precedence over `quality` and omitting both encodes losslessly; on wasm animated WebP is always
  * lossless and `quality` is ignored.
+ * @internal
  */
 export type AnimationOutputFormatOptions =
   | { format?: "webp"; quality?: number; lossless?: boolean }
@@ -113,7 +141,11 @@ type RenderExtras = {
   images?: ImagesInput;
 };
 
-/** Public `render`/`measure` options for a backend whose binding options are {@link TInternal}. */
+/**
+ * Public `render`/`measure` options for a backend whose binding options are {@link TInternal}.
+ *
+ * @internal
+ */
 export type BackendRenderOptions<TInternal> = Omit<
   TInternal,
   "images" | "format" | "quality" | "lossless"
@@ -132,15 +164,27 @@ type AnimationLayout<TInternal extends { scenes: { node: unknown }[] }> = Omit<
   })[];
 } & AnimationOutputFormatOptions;
 
-/** Public `renderAnimation` options for a backend whose binding options are {@link TInternal}. */
+/**
+ * Public `renderAnimation` options for a backend whose binding options are {@link TInternal}.
+ *
+ * @internal
+ */
 export type BackendAnimationOptions<TInternal extends { scenes: { node: unknown }[] }> =
   AnimationLayout<TInternal> & RenderExtras;
 
-/** Public `prepareAnimation` options for a backend whose binding options are {@link TInternal}. */
+/**
+ * Public `prepareAnimation` options for a backend whose binding options are {@link TInternal}.
+ *
+ * @internal
+ */
 export type BackendPrepareAnimationOptions<TInternal extends { scenes: { node: unknown }[] }> =
   AnimationLayout<TInternal> & PrepareExtras;
 
-/** Public `renderSvg` options for a backend whose binding options are {@link TInternal}. */
+/**
+ * Public `renderSvg` options for a backend whose binding options are {@link TInternal}.
+ *
+ * @internal
+ */
 export type BackendSvgOptions<TInternal> = Omit<TInternal, "images"> & RenderExtras;
 
 function isBuffer(data: unknown): data is ByteBuf {
@@ -186,7 +230,11 @@ function createFontKey(font: Exclude<FontLoader, string>): string | ByteBuf {
   return font.data;
 }
 
-/** Normalize an {@link ImagesInput} into concrete, deduped {@link ImageSource} entries. */
+/**
+ * Normalize an {@link ImagesInput} into concrete, deduped {@link ImageSource} entries.
+ *
+ * @internal
+ */
 export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSource[]> {
   const { sources = [], cache } = Array.isArray(images) ? { sources: images } : images;
   const bySrc = new Map(sources.map((image) => [image.src, image]));
@@ -203,7 +251,11 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
 /** How many times a render registers its fonts before it renders with whichever the backend still holds. */
 const REGISTER_ATTEMPTS = 3;
 
-/** What a {@link FontRegistry} needs from a backend: its registration, and the cache behind it. */
+/**
+ * What a {@link FontRegistry} needs from a backend: its registration, and the cache behind it.
+ *
+ * @internal
+ */
 export type FontBackend<TFamily extends RegisteredFamilyLike> = {
   /** Registers a font under `key`; it is never released for space. */
   registerFont(font: Font, key: string): Awaitable<TFamily[]>;
@@ -218,6 +270,7 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
  * loading it, loads a font once however many renders ask for it at the same time, and turns a set
  * of {@link FontLoader}s plus an {@link ImagesInput} into the `fontFamilies`/`images` the binding
  * expects. The backend keeps the fonts and releases them; this keeps no record of its own.
+ * @internal
  */
 export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly loading = new Map<string, Promise<TFamily[]>>();
