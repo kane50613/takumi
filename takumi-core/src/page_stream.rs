@@ -96,10 +96,15 @@ impl<'r> PageStream<'r> {
     self.windows.pages_of(page)
   }
 
+  /// The pages whose root fragments the scene that paints `page` draws from.
+  pub fn pages_reaching(&self, page: usize) -> Vec<usize> {
+    self.windows.pages_reaching(page)
+  }
+
   /// The scene that paints the settled page `page`. Fails with [`Error::PageReleased`] when it
   /// needs a page that was released.
   pub fn window(&self, page: usize) -> Result<SceneRef<'_>> {
-    let pages = self.windows.pages_reaching(page);
+    let pages = self.pages_reaching(page);
 
     if let Some(&released) = pages.iter().find(|&&reached| reached < self.released) {
       return Err(Error::PageReleased(released));
