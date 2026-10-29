@@ -4,7 +4,6 @@ use serde::Deserialize;
 pub use takumi_bindings_common::input::{Font, ImageSource};
 use takumi_core::{
   keyframes::deserialize_optional_keyframes,
-  layout::node::Node,
   style::{CssSource, KeyframesRule},
 };
 use takumi_raster::DitheringAlgorithm;
@@ -44,6 +43,13 @@ extern "C" {
   /// JavaScript object representing a measured node tree.
   #[wasm_bindgen(typescript_type = "MeasuredNode")]
   pub type MeasuredNodeType;
+
+  /// JavaScript object listing what a node tree needs fetched.
+  #[wasm_bindgen(typescript_type = "RenderNeeds")]
+  pub type RenderNeedsType;
+  /// JavaScript list of a render's fonts, described before their bytes arrive.
+  #[wasm_bindgen(typescript_type = "ListedFont[]")]
+  pub type ListedFontsType;
 }
 
 /// Options for constructing a `Renderer`.
@@ -208,8 +214,9 @@ pub enum AnimationOutputFormat {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnimationScene {
-  /// The node tree to render for this scene.
-  pub node: Node,
+  /// The node tree to render for this scene, the `{ json }` text of one, or HTML markup.
+  #[serde(with = "serde_wasm_bindgen::preserve")]
+  pub node: JsValue,
   /// The duration of this scene in milliseconds.
   pub duration_ms: u32,
 }

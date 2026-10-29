@@ -1,15 +1,18 @@
-import type { CssInput } from "@takumi-rs/helpers";
-import { fromHtml } from "@takumi-rs/helpers/html";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
-import { FontRegistry } from "@takumi-rs/helpers/renderer";
+import type { CssInput, Node } from "@takumi-rs/helpers";
+import { type DocumentInput, resolveDocument } from "@takumi-rs/helpers/jsx";
+import type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/helpers/renderer";
 import {
-  LIST_MARKER_CHARACTERS,
-  type Node,
-  type ReactElementLike,
-  subsetFonts,
-} from "@takumi-rs/helpers";
-import type { ReactNode } from "react";
+  type JsonSource,
+  lazy,
+  needsArgs,
+  Prepared,
+  prepareSource,
+  readSource,
+  renderPrepared,
+  sheetsOf,
+  toNativeSource,
+  WasmRenderer,
+} from "@takumi-rs/helpers/renderer";
 import initWasm, {
   type FontCacheOptions,
   type InitInput,
@@ -20,7 +23,8 @@ import initWasm, {
 } from "../pkg/takumi_paint_wasm";
 import { type PaintTree, PaintTreeView } from "./tree";
 
-export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
+export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/helpers/renderer";
+export { Prepared } from "@takumi-rs/helpers/renderer";
 export type {
   BlendMode,
   ColorStop,
@@ -60,7 +64,7 @@ export type {
 } from "./tree";
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
-export type NodeInput = Node | ReactNode | ReactElementLike | string;
+export type NodeInput = DocumentInput;
 
 /** Options for {@link Painter.paint}. */
 export type PaintOptions = {
@@ -82,22 +86,26 @@ export type PaintOptions = {
   lang?: string;
 };
 
-function isNode(value: NodeInput): value is Node {
-  return typeof value === "object" && value !== null && "type" in value && !("$$typeof" in value);
-}
+/** Options for {@link Painter.prepare}: everything {@link PaintOptions} lays out with. */
+export type PrepareOptions = Omit<PaintOptions, "images"> & {
+  /** Images to use as they are, and how to fetch the rest the document draws. */
+  images?: PrepareImagesInput;
+  signal?: AbortSignal;
+};
 
-function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
-  return Array.isArray(css);
-}
+/** A document {@link Painter.prepare} readied, with its fonts and images loaded. */
+export type PreparedSource = Prepared<
+  Node | string | JsonSource,
+  Omit<PaintOptions, "fonts" | "images" | "fontFamilies" | "css"> & { css?: CssInput[] }
+>;
 
-async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[] }> {
-  if (isNode(input)) {
-    return { node: input, css: [] };
-  }
-  if (typeof input === "string") {
-    return fromHtml(input);
-  }
-  return fromJsx(input as ReactNode);
+/** What the wasm side reads `input` as: HTML as written, a tree as JSON when it can, or JSX rendered. */
+async function resolveNode(
+  input: NodeInput,
+): Promise<{ node: Node | string | JsonSource; css: string[] }> {
+  const { node, css } = await resolveDocument(input);
+
+  return { node: toNativeSource(node), css };
 }
 
 /** Loads the wasm module for `takumi-paint/no-init`. The other entries load it on import. */
@@ -112,65 +120,62 @@ export function initSync(source: { module: SyncInitInput }): void {
   initWasmSync(source);
 }
 
-export class Painter {
-  #inner: PainterInternal;
-  #fonts: FontRegistry<RegisteredFamily>;
-
+export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
   constructor(options?: FontCacheOptions) {
-    this.#inner = new PainterInternal(options);
-    this.#fonts = new FontRegistry(this.#inner);
+    super(new PainterInternal(options));
   }
 
-  /** Lays out a node tree, JSX, or an HTML string and returns what painting it would draw. */
-  async paint(node: NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
-    const { fonts, images, css, fontFamilies, ...rest } = options;
+  /** Reads what a node tree, JSX, or HTML needs under `options`, then loads its font subsets and fetches its images. */
+  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
+    const { fonts, images, signal, fontFamilies, css, ...rest } = options;
     const main = await resolveNode(node);
-    const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
-    const sheets = [...own, ...main.css];
-    const painted = await this.#fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: [main.node, LIST_MARKER_CHARACTERS] }),
-      images,
-      fontFamilies,
-      (resources) =>
-        this.#inner.paint(main.node, {
-          ...rest,
-          css: sheets.length > 0 ? sheets : undefined,
-          ...resources,
-        }),
+    const layout = { ...rest, css: sheetsOf(css, main.css) };
+
+    return prepareSource(
+      this.fonts,
+      main.node,
+      layout,
+      { fonts, images, signal, fontFamilies },
+      (request) => this.inner.needs(main.node, ...needsArgs(layout, request)),
+    );
+  }
+
+  /** Lays out a node tree, JSX, an HTML string, or a prepared document and returns what painting it would draw. */
+  paint(document: PreparedSource): Promise<PaintTree>;
+  paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
+  async paint(node: PreparedSource | NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
+    const prepared = node instanceof Prepared ? node : await this.read(node, options);
+    const painted = await renderPrepared(this.fonts, prepared, {}, (native, opts) =>
+      this.inner.paint(native, opts),
     );
 
     return new PaintTreeView(painted.tree(), painted);
   }
 
-  /** Registers a font ahead of time, deduped against earlier registrations. */
-  registerFont(font: FontLoader): Promise<RegisteredFamily[]> {
-    return this.#fonts.register(font);
-  }
+  private async read(node: NodeInput, options: PaintOptions): Promise<PreparedSource> {
+    const { fonts, images, css, fontFamilies, ...rest } = options;
+    const main = await resolveNode(node);
+    const layout = { ...rest, css: sheetsOf(css, main.css) };
 
-  /**
-   * Removes every face registered under the family `name`, from any `registerFont` call and each
-   * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
-   * as well. A later render that lists one of its fonts registers it again.
-   */
-  unregisterFont(family: RegisteredFamilyLike): boolean {
-    return this.#inner.unregisterFont(family.name);
-  }
-
-  /** Removes every registered font, leaving the bundled fallback font. */
-  clearFonts(): void {
-    this.#inner.clearFonts();
-  }
-
-  /** Releases the underlying wasm memory. */
-  free(): void {
-    this.#inner.free();
+    return readSource(this.fonts, main.node, layout, { fonts, images, fontFamilies }, (request) =>
+      this.inner.needs(main.node, ...needsArgs(layout, request)),
+    );
   }
 }
 
-let shared: Painter | undefined;
+const shared = lazy(() => new Painter());
+
+/** Prepares with a lazily created shared {@link Painter}. */
+export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedSource> {
+  return shared().prepare(node, options);
+}
 
 /** Paints with a lazily created shared {@link Painter}. */
-export function paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree> {
-  shared ??= new Painter();
-  return shared.paint(node, options);
+export function paint(document: PreparedSource): Promise<PaintTree>;
+export function paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
+export function paint(
+  node: PreparedSource | NodeInput,
+  options?: PaintOptions,
+): Promise<PaintTree> {
+  return node instanceof Prepared ? shared().paint(node) : shared().paint(node, options);
 }

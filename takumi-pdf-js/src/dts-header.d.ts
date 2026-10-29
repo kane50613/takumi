@@ -1,4 +1,5 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
+import type { ListedFont } from "@takumi-rs/helpers/renderer";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
@@ -15,10 +16,6 @@ export type FontDetails = {
    * subset of a family under the same `name` with its own ranges.
    */
   unicodeRange?: [number, number][];
-  /** @deprecated Register under `name` with `unicodeRange` instead. */
-  subsetOf?: string;
-  /** @deprecated Ignored; `unicodeRange` decides which subset serves a codepoint. */
-  subsetRank?: number;
   /** CSS generic family keyword this font resolves for. */
   generic?: string;
 };
@@ -74,7 +71,7 @@ export type PageSize = PageSizeName | Dimensions;
 export type PageMarginSide = number | "auto";
 
 /** A band on a page: a node tree, or `false` for none. */
-export type Band = Node | false;
+export type Band = Node | string | false;
 
 /** What some pages draw instead of the document's own bands. A field left out falls through. */
 export type PageOverride = {
@@ -216,6 +213,13 @@ export type MeasureOptions = (
 
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };
+
+/** The images a node tree looks up by URL and the listed fonts the render loads, read after the cascade. */
+export type RenderNeeds = {
+  images: string[];
+  /** The ids of the listed fonts the render loads, sorted. */
+  fonts: number[];
+};
 
 export type FontCacheOptions = {
   /**

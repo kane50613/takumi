@@ -3,24 +3,25 @@
 use std::{collections::HashMap, sync::Arc};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
-use js_sys::Reflect;
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontStore, append_css, css_or_stylesheets, device_pixel_ratio,
-  input::{decode_images, node_from_json},
-  parse_lang, stylesheet, time_ms,
+  FontStore, NeedsOutput, Scenes, append_css, css_or_stylesheets, device_pixel_ratio,
+  input::{decode_images, retain_svg},
+  parse_lang,
+  source::read_source,
+  source_cache::SourceCache,
+  stylesheet, time_ms,
 };
 use takumi_core::{
   Fonts,
-  layout::node::Node,
+  layout::{needs::RenderNeeds, node::Node},
   resources::image::{ImageSource as LoadedImageSource, ResourceCache},
   style::FontFamily,
   viewport::Viewport,
 };
-use takumi_html::{FromHtmlOptions, parse_html};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, SequentialScene,
-  measure, render, write_animation, write_image,
+  measure, needs, render, write_animation, write_image,
 };
 use wasm_bindgen::prelude::*;
 
@@ -35,6 +36,7 @@ use crate::{helper::map_error, model::*};
 pub struct Renderer {
   fonts: FontStore,
   resource_cache: ResourceCache,
+  sources: SourceCache,
 }
 
 fn raster_options<'fonts>(
@@ -74,18 +76,6 @@ fn raster_options<'fonts>(
 
 #[wasm_bindgen]
 impl Renderer {
-  fn load_font(
-    &self,
-    font: FontType,
-    key: Option<&str>,
-    pinned: bool,
-  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    let font: Font = from_value(font.into()).map_err(map_error)?;
-    let registered = self.fonts.register(font, key, pinned).map_err(map_error)?;
-
-    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
-  }
-
   fn images_map(
     &self,
     images: Option<&[ImageSource]>,
@@ -107,6 +97,7 @@ impl Renderer {
         Some(bytes) => ResourceCache::new(bytes),
         None => ResourceCache::default(),
       },
+      sources: SourceCache::default(),
     })
   }
 
@@ -117,7 +108,7 @@ impl Renderer {
     font: FontType,
     key: Option<String>,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.load_font(font, key.as_deref(), true)
+    self.fonts.register_value(font, key.as_deref(), true)
   }
 
   /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
@@ -128,7 +119,7 @@ impl Renderer {
     font: FontType,
     key: &str,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.load_font(font, Some(key), false)
+    self.fonts.register_value(font, Some(key), false)
   }
 
   /// The families a registration under `key` added, when the renderer still holds them; `pin`
@@ -139,11 +130,7 @@ impl Renderer {
     key: &str,
     pin: bool,
   ) -> Result<Option<RegisteredFamiliesType>, js_sys::Error> {
-    self
-      .fonts
-      .cached(key, pin)
-      .map(|registered| Ok(to_value(&registered).map_err(map_error)?.unchecked_into()))
-      .transpose()
+    self.fonts.cached_value(key, pin)
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
@@ -166,7 +153,7 @@ impl Renderer {
     source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<Vec<u8>, JsValue> {
-    let (node, document_css) = read_source(source)?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -218,7 +205,7 @@ impl Renderer {
     source: SourceType,
     options: Option<SvgRenderOptionsType>,
   ) -> Result<String, JsValue> {
-    let (node, document_css) = read_source(source)?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: SvgRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -264,7 +251,7 @@ impl Renderer {
     source: SourceType,
     options: Option<RenderOptionsType>,
   ) -> Result<MeasuredNodeType, JsValue> {
-    let (node, document_css) = read_source(source)?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -285,6 +272,41 @@ impl Renderer {
     Ok(to_value(&layout).map_err(map_error)?.into())
   }
 
+  /// Reads what a node tree, or HTML, needs fetched before it renders.
+  #[wasm_bindgen(js_name = needs)]
+  pub fn needs(
+    &self,
+    source: SourceType,
+    options: Option<RenderOptionsType>,
+    fonts: Option<ListedFontsType>,
+  ) -> Result<RenderNeedsType, JsValue> {
+    let listed = self.fonts.listed(fonts.map(Into::into))?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
+    let mut options: RenderOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+
+    options.css = append_css(
+      css_or_stylesheets(options.css.take(), options.stylesheets.take()),
+      document_css,
+    );
+
+    retain_svg(&mut options.images);
+
+    let images = self.images_map(options.images.take().as_deref())?;
+    let fonts = self
+      .fonts
+      .for_needs(&mut options.font_families, listed.as_ref());
+    let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
+
+    Ok(
+      to_value(&NeedsOutput::new(needs(render_options), listed.as_ref()))
+        .map_err(map_error)?
+        .into(),
+    )
+  }
+
   /// Renders a node tree, or HTML, into a data URL.
   ///
   /// `raw` format is not supported for data URL.
@@ -294,7 +316,7 @@ impl Renderer {
     source: SourceType,
     options: RenderOptionsType,
   ) -> Result<String, js_sys::Error> {
-    let (node, document_css) = read_source(source)?;
+    let (node, document_css) = read_source(source.into(), &self.sources)?;
     let mut options: RenderOptions = from_value(options.into()).map_err(map_error)?;
 
     options.css = append_css(
@@ -324,102 +346,127 @@ impl Renderer {
     Ok(data_uri)
   }
 
+  /// Reads what every scene of an animation needs fetched before it renders.
+  #[wasm_bindgen(js_name = animationNeeds)]
+  pub fn animation_needs(
+    &self,
+    options: RenderAnimationOptionsType,
+    fonts: Option<ListedFontsType>,
+  ) -> Result<RenderNeedsType, JsValue> {
+    let listed = self.fonts.listed(fonts.map(Into::into))?;
+    let mut options: RenderAnimationOptions = from_value(options.into()).map_err(map_error)?;
+
+    retain_svg(&mut options.images);
+
+    let fonts = self
+      .fonts
+      .for_needs(&mut options.font_families, listed.as_ref());
+    let needs = self
+      .animation_scenes(&fonts, options)?
+      .into_iter()
+      .map(|(options, _)| needs(options))
+      .collect::<RenderNeeds>();
+
+    Ok(
+      to_value(&NeedsOutput::new(needs, listed.as_ref()))
+        .map_err(map_error)?
+        .into(),
+    )
+  }
+
   /// Renders a sequential animation timeline into a buffer.
   #[wasm_bindgen(js_name = renderAnimation, unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render_animation(&self, options: RenderAnimationOptionsType) -> Result<Vec<u8>, JsValue> {
+    let mut options: RenderAnimationOptions = from_value(options.into()).map_err(map_error)?;
+
+    if options.scenes.is_empty() {
+      return Err(JsValue::from_str("Expected at least one animation scene"));
+    }
+
+    if options.fps == 0 {
+      return Err(JsValue::from_str("Expected fps to be greater than 0"));
+    }
+
+    let fps = options.fps;
+    // wasm `image-webp` is lossless-only, which the WebP option defaults to.
+    let format = match options.format.take().unwrap_or(AnimationOutputFormat::WebP) {
+      AnimationOutputFormat::WebP => AnimationFormat::WebP(AnimatedWebpOptions::default()),
+      AnimationOutputFormat::APng => AnimationFormat::Apng(AnimatedPngOptions::default()),
+      AnimationOutputFormat::Gif => AnimationFormat::Gif(AnimatedGifOptions::default()),
+    };
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let scenes = self
+      .animation_scenes(&fonts, options)?
+      .into_iter()
+      .map(|(options, duration_ms)| {
+        SequentialScene::builder()
+          .duration_ms(duration_ms)
+          .options(options)
+          .build()
+      })
+      .collect::<Vec<_>>();
+
+    let mut buffer = Vec::new();
+    write_animation(&scenes, fps, format, &mut buffer).map_err(map_error)?;
+
+    Ok(buffer)
+  }
+}
+
+impl Renderer {
+  /// Each scene's render options under `fonts` and how long it shows, its HTML parsed.
+  fn animation_scenes<'fonts>(
+    &self,
+    fonts: &'fonts Fonts,
+    options: RenderAnimationOptions,
+  ) -> Result<Vec<(takumi_raster::RenderOptions<'fonts>, u32)>, JsValue> {
     let RenderAnimationOptions {
       scenes,
       width,
       height,
-      format,
       images,
       draw_debug_border,
       css,
       stylesheets,
       keyframes,
       device_pixel_ratio: dpr,
-      fps,
       font_families,
       lang,
-    } = from_value(options.into()).map_err(map_error)?;
-
+      ..
+    } = options;
     let lang = parse_lang(lang.as_deref()).map_err(map_error)?;
-
     let images = self.images_map(images.as_deref())?;
-
-    if scenes.is_empty() {
-      return Err(JsValue::from_str("Expected at least one animation scene"));
-    }
-
-    if fps == 0 {
-      return Err(JsValue::from_str("Expected fps to be greater than 0"));
-    }
-
     let viewport = Viewport::new((width, height)).with_device_pixel_ratio(device_pixel_ratio(dpr));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
-    let stylesheet = stylesheet(
-      &self.resource_cache,
+    let Scenes { nodes, css } = Scenes::read(
+      scenes
+        .into_iter()
+        .map(|scene| (scene.node, scene.duration_ms)),
       css_or_stylesheets(css, stylesheets),
-      keyframes.unwrap_or_default(),
+      read_source,
+    )?;
+    let stylesheet =
+      stylesheet(&self.resource_cache, css, keyframes.unwrap_or_default()).map_err(map_error)?;
+
+    Ok(
+      nodes
+        .into_iter()
+        .map(|(node, duration_ms)| {
+          let options = takumi_raster::RenderOptions::builder()
+            .viewport(viewport)
+            .images(images.clone())
+            .resource_cache(self.resource_cache.clone())
+            .stylesheet(stylesheet.clone())
+            .node(node)
+            .fonts(fonts)
+            .font_families(font_families.clone().map(FontFamily::from_names))
+            .lang(lang)
+            .draw_debug_border(draw_debug_border)
+            .build();
+
+          (options, duration_ms)
+        })
+        .collect(),
     )
-    .map_err(map_error)?;
-    let fonts = self.fonts.for_render(font_families.as_deref());
-    let scene_options = scenes
-      .into_iter()
-      .map(|scene| {
-        SequentialScene::builder()
-          .duration_ms(scene.duration_ms)
-          .options(
-            takumi_raster::RenderOptions::builder()
-              .viewport(viewport)
-              .images(images.clone())
-              .resource_cache(self.resource_cache.clone())
-              .stylesheet(stylesheet.clone())
-              .node(scene.node)
-              .fonts(&fonts)
-              .font_families(font_families.clone().map(FontFamily::from_names))
-              .lang(lang)
-              .draw_debug_border(draw_debug_border)
-              .build(),
-          )
-          .build()
-      })
-      .collect::<Vec<_>>();
-
-    // wasm `image-webp` is lossless-only, which the WebP option defaults to.
-    let format = match format.unwrap_or(AnimationOutputFormat::WebP) {
-      AnimationOutputFormat::WebP => AnimationFormat::WebP(AnimatedWebpOptions::default()),
-      AnimationOutputFormat::APng => AnimationFormat::Apng(AnimatedPngOptions::default()),
-      AnimationOutputFormat::Gif => AnimationFormat::Gif(AnimatedGifOptions::default()),
-    };
-
-    let mut buffer = Vec::new();
-    write_animation(&scene_options, fps, format, &mut buffer).map_err(map_error)?;
-
-    Ok(buffer)
   }
-}
-
-/// The node tree `source` describes, and the CSS of its `<style>` elements when it is HTML.
-fn read_source(source: SourceType) -> Result<(Node, Vec<String>), js_sys::Error> {
-  let source: JsValue = source.into();
-
-  if let Some(html) = source.as_string() {
-    let parsed = parse_html(&html, FromHtmlOptions::default()).map_err(map_error)?;
-
-    return Ok((parsed.node, parsed.css));
-  }
-
-  if let Some(json) = Reflect::get(&source, &JsValue::from_str("json"))
-    .ok()
-    .and_then(|json| json.as_string())
-  {
-    // The object path's errors come from `serde_wasm_bindgen`, which starts them with `Error: `.
-    return Ok((
-      node_from_json(&json).map_err(|message| map_error(format!("Error: {message}")))?,
-      Vec::new(),
-    ));
-  }
-
-  Ok((from_value(source).map_err(map_error)?, Vec::new()))
 }

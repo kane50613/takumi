@@ -254,33 +254,6 @@ fn roman(value: usize) -> String {
   out
 }
 
-/// The characters the page counters named by `classes` can produce, or nothing
-/// when no class asks for a counter.
-///
-/// A counter's characters appear nowhere in the document, so a caller choosing
-/// which faces to load has no other way to learn it needs, say, Thai digits.
-pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> String {
-  let mut hooked = false;
-  let mut characters = String::new();
-
-  for class in classes {
-    if [PAGE_HOOK, PAGES_HOOK, TARGET_HOOK].contains(&class) {
-      hooked = true;
-      continue;
-    }
-    if let Some(style) = CounterStyle::from_name(class) {
-      characters.push_str(&style.characters());
-    }
-  }
-
-  if !hooked {
-    return String::new();
-  }
-  // A hook without a style counts in decimal, and a band can hold both: a
-  // plain `pageNumber` beside a `totalPages thai` still needs its own digits.
-  CounterStyle::Decimal.characters() + &characters
-}
-
 /// The counter value a node's class hooks request, if any: `pageNumber` or
 /// `totalPages`, optionally paired with a `@counter-style` name — the same
 /// contract as Chromium's print header/footer templates.
@@ -380,6 +353,29 @@ pub(crate) fn any_node(node: &Node, matches: &impl Fn(&Node) -> bool) -> bool {
 
 fn has_class(classes: &str, class: &str) -> bool {
   classes.split_ascii_whitespace().any(|name| name == class)
+}
+
+/// Fills each page counter hook with every character its style draws, so a needs pass reads them.
+pub(crate) fn substitute_counter_characters(node: &mut Node) {
+  let style = node
+    .class_name()
+    .filter(|classes| {
+      [PAGE_HOOK, PAGES_HOOK, TARGET_HOOK]
+        .iter()
+        .any(|hook| has_class(classes, hook))
+    })
+    .map(CounterStyle::from_classes);
+
+  if let Some(style) = style {
+    write_counter(node, style.characters());
+    return;
+  }
+
+  if let NodeKind::Container { children } = &mut node.kind {
+    for child in children {
+      substitute_counter_characters(child);
+    }
+  }
 }
 
 /// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,
@@ -502,20 +498,6 @@ mod tests {
     assert_eq!(format_counter(28, "upper-latin"), "AB");
     assert_eq!(format_counter(1, "lower-greek"), "α");
     assert_eq!(format_counter(1, "katakana"), "ア");
-  }
-
-  #[test]
-  fn a_styled_counter_leaves_an_unstyled_one_its_digits() {
-    let mixed = counter_characters(["pageNumber", "totalPages", "thai"]);
-
-    assert!(mixed.contains('7'), "the plain counter lost its digits");
-    assert!(mixed.contains('๗'), "the styled counter lost its digits");
-    assert_eq!(
-      counter_characters(["nav", "thai"]),
-      "",
-      "no counter, no characters"
-    );
-    assert_eq!(counter_characters(["pageNumber"]), "0123456789");
   }
 
   #[test]

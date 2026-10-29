@@ -4,11 +4,17 @@ use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Deserialize;
-use takumi_bindings_common::{css_or_stylesheets, default_fonts, font_cache::FontCache};
+use takumi_bindings_common::{
+  css_or_stylesheets, default_fonts,
+  font_cache::FontCache,
+  input::{ListedFont, ListedFonts},
+  source_cache::SourceCache,
+};
 use takumi_core::{
   Fonts,
   resources::image::{
     ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource, ResourceCache,
+    is_svg_bytes,
   },
   style::{CssSource, KeyframesRule as CoreKeyframesRule},
 };
@@ -17,9 +23,15 @@ use takumi_raster::{
 };
 
 use crate::{
-  De, JsBytes, NodeSource, RegisteredFamily, load_font_task::LoadFontTask, map_error,
-  measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
-  render_task::RenderTask, svg_render_task::SvgRenderTask,
+  De, JsBytes, NodeSource, RegisteredFamily, deserialize_with_tracing,
+  load_font_task::LoadFontTask,
+  map_error,
+  measure_task::MeasureTask,
+  needs_task::{AnimationNeedsTask, NeedsTask},
+  parse_font_input,
+  render_animation_task::RenderAnimationTask,
+  render_task::RenderTask,
+  svg_render_task::SvgRenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -77,6 +89,31 @@ impl From<takumi_raster::MeasuredNode> for MeasuredNode {
   }
 }
 
+/// The images a node tree looks up by URL and the listed fonts the render loads.
+#[napi(object)]
+pub struct RenderNeeds {
+  /// The image URLs the tree looks up, except `data:` URIs and inline SVG, sorted.
+  pub images: Vec<String>,
+  /// The ids of the listed fonts the render loads, sorted.
+  pub fonts: Vec<u32>,
+}
+
+impl RenderNeeds {
+  /// What `needs` reports, with the ids of the `listed` fonts the render loads.
+  pub(crate) fn new(needs: takumi_raster::RenderNeeds, listed: Option<&ListedFonts>) -> Self {
+    Self {
+      fonts: listed.map_or_else(Vec::new, |listed| {
+        listed
+          .to_load(&needs.faces)
+          .into_iter()
+          .map(|id| id as u32)
+          .collect()
+      }),
+      images: needs.images.into_iter().collect(),
+    }
+  }
+}
+
 /// The main renderer for Takumi image rendering engine (Node.js version).
 #[napi]
 pub struct Renderer {
@@ -96,6 +133,7 @@ pub(crate) struct RendererState {
   /// the state they started with.
   font_state: ArcSwap<FontState>,
   pub(crate) resource_cache: ResourceCache,
+  pub(crate) sources: SourceCache,
 }
 
 impl RendererState {
@@ -110,6 +148,21 @@ impl RendererState {
     self.font_state.store(Arc::new(state));
 
     Ok(changed)
+  }
+
+  /// A render's `fonts` list read against the fonts this renderer holds.
+  pub(crate) fn listed(
+    &self,
+    families: &mut Option<Vec<String>>,
+    listed: Option<Vec<ListedFont>>,
+  ) -> Option<ListedFonts> {
+    let listed = ListedFonts::read(&self.font_state.load().cache, listed?);
+
+    if families.is_none() {
+      families.clone_from(&listed.families);
+    }
+
+    Some(listed)
   }
 
   /// The fonts for a render that names `families`, which are marked used.
@@ -139,6 +192,11 @@ pub(crate) fn decode_images(
   }
 
   Ok(map)
+}
+
+/// Keeps the SVG images a needs pass reads, whose `text` elements the fonts draw.
+pub(crate) fn retain_svg(images: &mut HashMap<Arc<str>, (JsBytes, ImageCacheMode)>) {
+  images.retain(|_, (bytes, _)| is_svg_bytes(bytes.as_ref()));
 }
 
 pub(crate) fn collect_images(
@@ -286,9 +344,9 @@ impl From<DitheringAlgorithm> for CoreDitheringAlgorithm {
 /// Represents a single scene in a sequential animation timeline.
 #[napi(object)]
 pub struct AnimationScene<'ctx> {
-  /// The node tree to render for this scene.
-  #[napi(ts_type = "Node")]
-  pub node: Object<'ctx>,
+  /// The node tree to render for this scene, the `{ json }` text of one, or HTML markup.
+  #[napi(ts_type = "Node | string | { json: string }")]
+  pub node: Either<String, Object<'ctx>>,
   /// The duration of this scene in milliseconds.
   pub duration_ms: u32,
 }
@@ -463,6 +521,7 @@ impl Renderer {
           Some(bytes) => ResourceCache::new(bytes.max(0.0) as u64),
           None => ResourceCache::default(),
         },
+        sources: SourceCache::default(),
       }),
     })
   }
@@ -627,6 +686,55 @@ impl Renderer {
         env,
         node,
         options.unwrap_or_default(),
+        Arc::clone(&self.state),
+      )?,
+      signal,
+    ))
+  }
+
+  /// Reads what a node tree, or HTML, needs fetched before it renders, asynchronously.
+  #[napi(
+    ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, fonts?: ListedFont[], signal?: AbortSignal",
+    ts_return_type = "Promise<RenderNeeds>"
+  )]
+  pub fn needs(
+    &self,
+    env: Env,
+    source: Either<String, Object>,
+    options: Option<RenderOptions>,
+    fonts: Option<Object>,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<NeedsTask>> {
+    Ok(AsyncTask::with_optional_signal(
+      NeedsTask::from_options(
+        env,
+        NodeSource::from_js(source)?,
+        options.unwrap_or_default(),
+        fonts.map(deserialize_with_tracing).transpose()?,
+        Arc::clone(&self.state),
+      )?,
+      signal,
+    ))
+  }
+
+  /// Reads what every scene of an animation needs fetched before it renders, asynchronously.
+  #[napi(
+    js_name = "animationNeeds",
+    ts_args_type = "options: RenderAnimationOptions, fonts?: ListedFont[], signal?: AbortSignal",
+    ts_return_type = "Promise<RenderNeeds>"
+  )]
+  pub fn animation_needs(
+    &self,
+    env: Env,
+    options: RenderAnimationOptions,
+    fonts: Option<Object>,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<AnimationNeedsTask>> {
+    Ok(AsyncTask::with_optional_signal(
+      AnimationNeedsTask::from_options(
+        env,
+        options,
+        fonts.map(deserialize_with_tracing).transpose()?,
         Arc::clone(&self.state),
       )?,
       signal,

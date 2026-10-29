@@ -1,16 +1,9 @@
 import type { CSSProperties } from "react";
 import type { Node } from "./types";
-import { defaultMaxFetchBytes, type FetchOptions } from "./fetch";
-import { fetchBytes } from "./fetch/bytes";
-import { FetchDeadline } from "./fetch/deadline";
-import { BoundedCache, perFetch } from "./fetch/cache";
-import { isEmojiImageUrl } from "./emoji";
+import type { FetchOptions } from "./fetch";
+import { fetchImages, isRemoteUrl } from "./fetch/images";
 
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
-
-function isRemoteUrl(value: string): boolean {
-  return value.startsWith("https://") || value.startsWith("http://");
-}
 
 function collectCssUrls(value: unknown, urls: Set<string>) {
   if (typeof value === "string") {
@@ -68,77 +61,6 @@ export interface ImageFetchCache {
   delete(url: string): unknown;
 }
 
-/** The most a shared emoji fetch downloads, whatever the caller allows; emoji SVGs run a few KB. */
-const maxSharedImageBytes = 1024 * 1024;
-
-/** Emoji SVGs fetched without a `fetchCache`, which providers serve at stable URLs. */
-const emojiImageCache = perFetch(
-  () =>
-    new BoundedCache<ArrayBuffer>({
-      maxBytes: 8 * 1024 * 1024,
-      maxEntries: 1024,
-      sizeOf: (data) => data.byteLength,
-    }),
-);
-
-function withinMaxBytes(data: ArrayBuffer, maxBytes: number): ArrayBuffer {
-  if (data.byteLength > maxBytes) {
-    throw new Error(`Response exceeds ${maxBytes} bytes`);
-  }
-
-  return data;
-}
-
-/**
- * Fetches `url` through a cache other callers share. The shared request carries no caller's
- * `signal` or `timeout`, so a caller that gives up ends only its own wait; it stops at the default
- * timeout and {@link maxSharedImageBytes}, and leaves the cache when it fails.
- */
-function fetchSharedImageData(
-  url: string,
-  options: FetchOptions,
-  cache: ImageFetchCache,
-): Promise<ArrayBuffer> {
-  let pending = cache.get(url);
-
-  if (!pending) {
-    options.signal?.throwIfAborted();
-    pending = fetchBytes(url, { fetch: options.fetch, maxBytes: maxSharedImageBytes });
-    cache.set(url, pending);
-  }
-
-  const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
-
-  return new FetchDeadline(options).waitFor(pending).then((data) => withinMaxBytes(data, maxBytes));
-}
-
-function fetchImageData(
-  url: string,
-  options: FetchOptions,
-  fetchCache?: ImageFetchCache,
-): Promise<ArrayBuffer> {
-  const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
-
-  const cached = fetchCache?.get(url);
-  if (cached) {
-    return new FetchDeadline(options).waitFor(cached).then((data) => {
-      if (options.allowUrl && !options.allowUrl(url)) {
-        throw new Error(`URL blocked by allowUrl policy: ${url}`);
-      }
-
-      return withinMaxBytes(data, maxBytes);
-    });
-  }
-
-  const promise = fetchBytes(url, options).catch((error) => {
-    fetchCache?.delete(url);
-    throw error;
-  });
-
-  fetchCache?.set(url, promise);
-  return promise;
-}
-
 /** A fetched image entry: its source URL and raw bytes. */
 export interface FetchedImage {
   src: string;
@@ -146,8 +68,10 @@ export interface FetchedImage {
 }
 
 export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = FetchOptions & {
-  /** The node tree(s) whose remote images to fetch. */
-  node: Node | Node[];
+  /** Image URLs to fetch. A relative one is fetched only through a custom `fetch`, which can resolve it. */
+  urls?: Iterable<string>;
+  /** The node tree(s) whose remote images to fetch. Images a stylesheet or `<style>` element names are not collected. */
+  node?: Node | Node[];
   /** Pre-fetched entries; their URLs are not re-fetched. */
   sources?: T[];
   /** Single-flight byte cache shared across renders. */
@@ -159,40 +83,19 @@ export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = Fet
 /**
  * Collects every remote image a node tree references, fetches the ones not already in `sources`,
  * and returns them as entries ready to hand to a renderer.
+ *
+ * @deprecated Use a renderer's `prepare`, which reads the images after the cascade.
  */
 export async function prepareImages<T extends { src: string } = FetchedImage>({
+  urls,
   node,
-  sources = [],
-  fetchCache,
-  fetch,
-  timeout,
-  signal,
-  maxBytes,
-  allowUrl,
-  throwOnError = true,
+  ...options
 }: PrepareImagesOptions<T>): Promise<(T | FetchedImage)[]> {
-  const provided = new Map(sources.map((image) => [image.src, image]));
-  const referenced = new Set<string>();
+  const referenced = new Set(urls);
 
-  for (const root of Array.isArray(node) ? node : [node]) {
+  for (const root of node === undefined ? [] : Array.isArray(node) ? node : [node]) {
     collectImageUrls(root, referenced);
   }
 
-  const urls = [...referenced].filter((url) => !provided.has(url));
-  const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
-
-  const tasks = urls.map(async (src): Promise<FetchedImage> => ({
-    src,
-    data:
-      !fetchCache && !allowUrl && isEmojiImageUrl(src)
-        ? await fetchSharedImageData(src, fetchOptions, emojiImageCache(fetch ?? globalThis.fetch))
-        : await fetchImageData(src, fetchOptions, fetchCache),
-  }));
-  const fetched = throwOnError
-    ? await Promise.all(tasks)
-    : (await Promise.allSettled(tasks))
-        .filter((result) => result.status === "fulfilled")
-        .map((result) => result.value);
-
-  return [...provided.values(), ...fetched];
+  return fetchImages({ ...options, urls: referenced });
 }

@@ -1111,7 +1111,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/flexbox-paint-ordering-002.xhtml
 !css/css-flexbox/flexbox-sizing-horiz-001.xhtml
 !css/css-flexbox/flexbox-sizing-vert-001.xhtml
-!css/css-flexbox/flexbox-table-fixup-001.xhtml
 !css/css-flexbox/flexbox-whitespace-handling-001a.xhtml
 !css/css-flexbox/flexbox-whitespace-handling-001b.xhtml
 !css/css-flexbox/flexbox-whitespace-handling-002.xhtml
@@ -3071,9 +3070,6 @@ svg/linking/reftests/use-keyframes.html
 svg/linking/reftests/use-nested-symbol-001.html
 svg/linking/reftests/use-symbol-rendered-001.html
 svg/painting/
-!svg/painting/currentColor-override-pserver-fallback.svg
-!svg/painting/currentColor-override-pserver-fill.svg
-!svg/painting/currentColor-override-pserver-stroke.svg
 !svg/painting/marker-005.svg
 !svg/painting/marker-006.svg
 !svg/painting/marker-009.svg
@@ -3127,13 +3123,8 @@ svg/pservers/reftests/radialgradient-fully-overlapping.svg
 svg/pservers/reftests/stroke-fallback-invalid-uri.svg
 svg/render/order/clip-path-filter-order.svg
 svg/render/reftests/
-svg/shapes/circle-01.svg
-svg/shapes/ellipse-04.svg
-svg/shapes/ellipse-09.svg
-svg/shapes/rect-03.svg
-svg/shapes/rect-04.svg
-svg/shapes/rect-05.svg
-svg/shapes/reftests/
+svg/shapes/
+!svg/shapes/line-dasharray.svg
 !svg/shapes/reftests/pathlength-005.html
 svg/struct/reftests/
 !svg/struct/reftests/currentScale.svg

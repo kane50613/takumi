@@ -7,13 +7,14 @@ use std::mem::take;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore,
-  input::{Font, ImageSource, decode_images},
+  FontCacheOptions, FontStore, NeedsOutput, append_css,
+  input::{ImageSource, ListedFonts, decode_images, retain_svg},
+  source::read_source,
+  source_cache::SourceCache,
   stylesheet,
 };
 use takumi_core::{
-  layout::node::Node,
-  paint_tree::{PaintTree, PaintTreeOptions, paint_tree},
+  paint_tree::{PaintTree, PaintTreeOptions, paint_tree, paint_tree_needs},
   resources::image::ResourceCache,
   style::{CssSource, FontFamily, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
@@ -29,8 +30,8 @@ const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
 
 #[wasm_bindgen]
 extern "C" {
-  /// JavaScript object representing a layout node.
-  #[wasm_bindgen(typescript_type = "Node")]
+  /// A layout node, the `{ json }` text of one, or HTML markup to parse in its place.
+  #[wasm_bindgen(typescript_type = "Node | string | { json: string }")]
   pub type NodeType;
   /// JavaScript type for font input (details object or raw buffer).
   #[wasm_bindgen(typescript_type = "FontInput")]
@@ -44,6 +45,12 @@ extern "C" {
   /// JavaScript object representing render options.
   #[wasm_bindgen(typescript_type = "PaintOptions")]
   pub type RenderOptionsType;
+  /// JavaScript object listing what a node tree needs fetched.
+  #[wasm_bindgen(typescript_type = "RenderNeeds")]
+  pub type RenderNeedsType;
+  /// JavaScript list of a render's fonts, described before their bytes arrive.
+  #[wasm_bindgen(typescript_type = "ListedFont[]")]
+  pub type ListedFontsType;
   /// JavaScript object representing a painted tree.
   #[wasm_bindgen(typescript_type = "RawPaintTree")]
   pub type RawPaintTreeType;
@@ -62,6 +69,18 @@ struct RenderOptions {
   lang: Option<String>,
 }
 
+impl RenderOptions {
+  /// The options JavaScript passed, or the defaults without any.
+  fn read(options: Option<RenderOptionsType>) -> Result<Self, js_sys::Error> {
+    Ok(
+      options
+        .map(|options| from_value(options.into()).map_err(map_error))
+        .transpose()?
+        .unwrap_or_default(),
+    )
+  }
+}
+
 /// A renderer holding registered fonts and a decoded-resource cache.
 ///
 /// Every method takes `&self` and the fonts are copy-on-write, mirroring the
@@ -71,19 +90,50 @@ struct RenderOptions {
 pub struct Painter {
   fonts: FontStore,
   resource_cache: ResourceCache,
+  sources: SourceCache,
 }
 
 impl Painter {
-  fn load_font(
+  /// Calls `run` with the paint options `node` and `options` describe.
+  fn with_tree_options<T>(
     &self,
-    font: FontType,
-    key: Option<&str>,
-    pinned: bool,
-  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    let font: Font = from_value(font.into()).map_err(map_error)?;
-    let registered = self.fonts.register(font, key, pinned).map_err(map_error)?;
+    node: NodeType,
+    mut options: RenderOptions,
+    listed: Option<&ListedFonts>,
+    run: impl FnOnce(PaintTreeOptions<'_>) -> T,
+  ) -> Result<T, js_sys::Error> {
+    let (node, document_css) = read_source(node.into(), &self.sources)?;
 
-    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+    options.css = append_css(options.css.take(), document_css);
+    let images = decode_images(
+      &self.resource_cache,
+      options.images.as_deref().unwrap_or_default(),
+    )
+    .map_err(map_error)?;
+    let lang = options
+      .lang
+      .as_deref()
+      .map(Lang::parse)
+      .transpose()
+      .map_err(map_error)?;
+    let fonts = self.fonts.for_needs(&mut options.font_families, listed);
+    Ok(run(
+      PaintTreeOptions::builder()
+        .viewport(
+          Viewport::new((options.width, options.height)).with_device_pixel_ratio(
+            options
+              .device_pixel_ratio
+              .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
+          ),
+        )
+        .fonts(&fonts)
+        .node(node)
+        .images(images)
+        .stylesheet(stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?)
+        .font_families(options.font_families.map(FontFamily::from_names))
+        .lang(lang)
+        .build(),
+    ))
   }
 }
 
@@ -100,6 +150,7 @@ impl Painter {
     Ok(Painter {
       fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
       resource_cache: ResourceCache::default(),
+      sources: SourceCache::default(),
     })
   }
 
@@ -111,7 +162,7 @@ impl Painter {
     font: FontType,
     key: Option<String>,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.load_font(font, key.as_deref(), true)
+    self.fonts.register_value(font, key.as_deref(), true)
   }
 
   /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
@@ -122,7 +173,7 @@ impl Painter {
     font: FontType,
     key: &str,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.load_font(font, Some(key), false)
+    self.fonts.register_value(font, Some(key), false)
   }
 
   /// The families a registration under `key` added, when the renderer still holds them; `pin`
@@ -133,11 +184,7 @@ impl Painter {
     key: &str,
     pin: bool,
   ) -> Result<Option<RegisteredFamiliesType>, js_sys::Error> {
-    self
-      .fonts
-      .cached(key, pin)
-      .map(|registered| Ok(to_value(&registered).map_err(map_error)?.unchecked_into()))
-      .transpose()
+    self.fonts.cached_value(key, pin)
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
@@ -159,46 +206,35 @@ impl Painter {
     node: NodeType,
     options: Option<RenderOptionsType>,
   ) -> Result<RenderedPaint, js_sys::Error> {
-    let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: RenderOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
-    let images = decode_images(
-      &self.resource_cache,
-      options.images.as_deref().unwrap_or_default(),
-    )
-    .map_err(map_error)?;
-    let lang = options
-      .lang
-      .as_deref()
-      .map(Lang::parse)
-      .transpose()
+    let mut tree = self
+      .with_tree_options(node, RenderOptions::read(options)?, None, paint_tree)?
       .map_err(map_error)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
-    let mut tree = paint_tree(
-      PaintTreeOptions::builder()
-        .viewport(
-          Viewport::new((options.width, options.height)).with_device_pixel_ratio(
-            options
-              .device_pixel_ratio
-              .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-          ),
-        )
-        .fonts(&fonts)
-        .node(node)
-        .images(images)
-        .stylesheet(stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?)
-        .font_families(options.font_families.map(FontFamily::from_names))
-        .lang(lang)
-        .build(),
-    )
-    .map_err(map_error)?;
     let raw = take(&mut tree.document)
       .serialize(&Serializer::json_compatible())
       .map_err(map_error)?;
 
     Ok(RenderedPaint { tree, raw })
+  }
+
+  /// Reads the images a node tree looks up and the pending fonts its text loads.
+  pub fn needs(
+    &self,
+    node: NodeType,
+    options: Option<RenderOptionsType>,
+    fonts: Option<ListedFontsType>,
+  ) -> Result<RenderNeedsType, js_sys::Error> {
+    let listed = self.fonts.listed(fonts.map(Into::into))?;
+    let mut options = RenderOptions::read(options)?;
+
+    retain_svg(&mut options.images);
+
+    let needs = self.with_tree_options(node, options, listed.as_ref(), paint_tree_needs)?;
+
+    Ok(
+      to_value(&NeedsOutput::new(needs, listed.as_ref()))
+        .map_err(map_error)?
+        .unchecked_into(),
+    )
   }
 }
 

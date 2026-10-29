@@ -1,4 +1,5 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
+import type { ListedFont } from "@takumi-rs/helpers/renderer";
 import type { Properties } from "csstype";
 
 export type {

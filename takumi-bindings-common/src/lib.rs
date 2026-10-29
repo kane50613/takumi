@@ -8,15 +8,26 @@
 
 pub mod font_cache;
 pub mod input;
+#[cfg(feature = "wasm")]
+pub mod source;
+pub mod source_cache;
 
+#[cfg(feature = "wasm")]
+use std::fmt::Display;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use font_cache::FontCache;
-use input::{Font, register_font};
-use serde::Deserialize;
+use input::{Font, ListedFonts, register_font};
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "wasm")]
+use serde_wasm_bindgen::{from_value, to_value};
+use source_cache::{ParsedSource, SourceCache};
+#[cfg(feature = "wasm")]
+use wasm_bindgen::{JsCast, JsValue};
 
 use takumi_core::{
   Error as CoreError, Fonts,
+  layout::{needs::RenderNeeds, node::Node},
   resources::{
     font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
     image::ResourceCache,
@@ -87,6 +98,58 @@ impl FontStore {
     self.current()
   }
 
+  /// The registry for a needs pass, with each listed font still loading registered as pending.
+  pub fn for_needs(
+    &self,
+    families: &mut Option<Vec<String>>,
+    listed: Option<&ListedFonts>,
+  ) -> Rc<Fonts> {
+    let Some(listed) = listed else {
+      return self.for_render(families.as_deref());
+    };
+
+    if families.is_none() {
+      families.clone_from(&listed.families);
+    }
+
+    Rc::new(listed.fonts(&self.for_render(families.as_deref())))
+  }
+
+  /// Registers the font JavaScript describes under `key`. One that is not `pinned` can be released.
+  #[cfg(feature = "wasm")]
+  pub fn register_value<T: JsCast>(
+    &self,
+    font: impl Into<JsValue>,
+    key: Option<&str>,
+    pinned: bool,
+  ) -> Result<T, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(js_error)?;
+    let registered = self.register(font, key, pinned).map_err(js_error)?;
+
+    Ok(to_value(&registered).map_err(js_error)?.unchecked_into())
+  }
+
+  /// [`Self::cached`] as the binding's JavaScript type `T`.
+  #[cfg(feature = "wasm")]
+  pub fn cached_value<T: JsCast>(&self, key: &str, pin: bool) -> Result<Option<T>, js_sys::Error> {
+    self
+      .cached(key, pin)
+      .map(|registered| Ok(to_value(&registered).map_err(js_error)?.unchecked_into()))
+      .transpose()
+  }
+
+  /// A render's `fonts` list, as JavaScript describes it, read against the fonts this store holds.
+  #[cfg(feature = "wasm")]
+  pub fn listed(&self, listed: Option<JsValue>) -> Result<Option<ListedFonts>, js_sys::Error> {
+    listed
+      .map(|listed| {
+        from_value(listed)
+          .map(|listed| ListedFonts::read(&self.cache.borrow(), listed))
+          .map_err(js_error)
+      })
+      .transpose()
+  }
+
   fn current(&self) -> Rc<Fonts> {
     self.fonts.borrow().clone()
   }
@@ -143,6 +206,12 @@ impl FontStore {
   }
 }
 
+/// `error` as the JavaScript error a wasm binding throws.
+#[cfg(feature = "wasm")]
+fn js_error(error: impl Display) -> js_sys::Error {
+  js_sys::Error::new(&error.to_string())
+}
+
 /// Options for a renderer whose only option is its font cache budget.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -187,6 +256,40 @@ pub fn append_css(css: Option<Vec<CssSource>>, document: Vec<String>) -> Option<
   Some(css)
 }
 
+/// An animation's scene trees, each with how long it shows, and the CSS every scene renders with.
+pub struct Scenes {
+  /// Each scene's tree and its duration in milliseconds.
+  pub nodes: Vec<(Node, u32)>,
+  /// The render's CSS followed by the CSS of each HTML scene's `<style>` elements.
+  pub css: Option<Vec<CssSource>>,
+}
+
+impl Scenes {
+  /// `scenes` with each source parsed by `read`, styled by `css` and every scene's `<style>`.
+  pub fn read<S, E>(
+    scenes: impl IntoIterator<Item = (S, u32)>,
+    css: Option<Vec<CssSource>>,
+    read: impl Fn(S, &SourceCache) -> Result<ParsedSource, E>,
+  ) -> Result<Self, E> {
+    let mut document_css = Vec::new();
+    let nodes = scenes
+      .into_iter()
+      .map(|(source, duration_ms)| {
+        let (node, css) = read(source, &SourceCache::default())?;
+
+        document_css.extend(css);
+
+        Ok((node, duration_ms))
+      })
+      .collect::<Result<Vec<_>, E>>()?;
+
+    Ok(Self {
+      nodes,
+      css: append_css(css, document_css),
+    })
+  }
+}
+
 /// The stylesheet for a render: the loose-parsed sheet list with its keyframes.
 /// Parsed sheets are cached by source text in `cache`; per-render keyframes are
 /// grafted onto a copy so the cached parse stays pristine.
@@ -210,4 +313,21 @@ pub fn stylesheet(
   let mut extended = (*sheet).clone();
   extended.extend_keyframes(keyframes);
   Ok(Arc::new(extended))
+}
+
+/// What a node tree needs fetched, as a wasm binding hands it to JavaScript.
+#[derive(Serialize)]
+pub struct NeedsOutput {
+  images: Vec<String>,
+  fonts: Vec<usize>,
+}
+
+impl NeedsOutput {
+  /// What `needs` reports, with the ids of the `listed` fonts the render loads.
+  pub fn new(needs: RenderNeeds, listed: Option<&ListedFonts>) -> Self {
+    Self {
+      fonts: listed.map_or_else(Vec::new, |listed| listed.to_load(&needs.faces)),
+      images: needs.images.into_iter().collect(),
+    }
+  }
 }

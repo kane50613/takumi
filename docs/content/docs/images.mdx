@@ -7,14 +7,13 @@ Takumi fetches the remote images your markup references, accepts images you fetc
 
 ## External images
 
-`render()` and `ImageResponse` fetch every remote `http://` or `https://` URL the tree references:
+`render()` and `ImageResponse` fetch every remote `http://` or `https://` image the tree draws once its styles apply:
 
 - an `<img>` `src`
-- `background-image`, `mask-image`, and `list-style-image` in a node's `style` or `tw`
+- `background-image`, `mask-image`, and `list-style-image`, whether `style`, `tw`, `css`, a `<style>` element, or a `::before` rule sets them
+- images an animation's `@keyframes` switch to
 
-<Callout type="warn">
-  Takumi does not fetch URLs inside `css` or a `<style>` tag. Pass those images as [pre-fetched images](#pre-fetched-images).
-</Callout>
+An image under `display: none` is not fetched. A relative URL such as `/logo.png` is fetched only through your own [`fetch`](#fetch-limits), which can resolve it.
 
 When user input can reach the markup, set `allowUrl`, as [URLs from user input](#urls-from-user-input) describes.
 
@@ -135,27 +134,21 @@ Emoji detection follows the Unicode presentation rules. A pictograph that defaul
 
 #### Manual extraction
 
-The `extractEmojis` helper does the splitting. It replaces each emoji with an image node that points at the CDN. Call it yourself to fetch emoji with your other images on your own renderer.
+The `extractEmojis` helper does the splitting. It replaces each emoji with an image node that points at the CDN. On your own renderer, call it before [`prepare()`](#prepare-on-your-own-renderer), which then fetches the emoji with your other images.
 
 ```tsx twoslash title="Extract emoji before rendering"
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { prepareImages } from "takumi-js/helpers";
 import { Renderer } from "takumi-js/node";
 
 let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
 node = extractEmojis(node, "twemoji");
 
-const images = await prepareImages({ node });
-
 const renderer = new Renderer();
+const prepared = await renderer.prepare(node, { width: 1200, height: 630 });
 
-const image = await renderer.render(node, {
-  images,
-});
+const image = await renderer.render(prepared, { format: "webp" });
 ```
-
-`prepareImages` fetches the remote URLs missing from `sources`. It returns the supplied `sources` and the fetched entries together. It takes the same [fetch cache](#external-images) and [limits](#fetch-limits).
 
 ### COLR / bitmap fonts
 
@@ -167,6 +160,34 @@ To use a color font, do both of these:
 - Set `emoji: "from-font"`.
 
 Variation selectors take priority over font order. A code point followed by `U+FE0F` renders as a color emoji, even when a text font comes first in the stack. A code point followed by `U+FE0E` renders as a monochrome glyph, even when a color font comes first. Bare code points follow stack order, as in browsers.
+
+## Prepare on your own renderer
+
+A renderer you create yourself fetches nothing on its own. Its `prepare()` does what `render()` does before drawing. It styles the source, fetches the images it draws, and loads the font subsets its text uses. Pass the result to the renderer's `render`, `renderSvg`, or `measure`:
+
+```tsx twoslash title="Prepare, then render"
+import { Renderer } from "takumi-js/node";
+
+declare const html: string;
+// ---cut---
+const renderer = new Renderer();
+const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+
+const prepared = await renderer.prepare(html, {
+  width: 1200,
+  height: 630,
+  images: { fetchCache },
+});
+
+const image = await renderer.render(prepared, { format: "webp" });
+```
+
+`prepare` takes the layout options of `render`, such as the size, `css`, `lang`, and `fonts`, plus `images` with the same [fetch limits](#fetch-limits). Rendering the result takes only output options such as `format`, so the layout stays the one you prepared.
+
+- A prepared source renders on any renderer from the same package, which loads the fonts again if it no longer holds them.
+- `prepareAnimation` prepares every scene of an animation from the options of `renderAnimation`, which then takes its result.
+
+`PdfRenderer` from `takumi-pdf` and `Painter` from `takumi-paint` have the same `prepare`. A PDF's header, footer, and page bands count as part of the document, and rendering a prepared PDF takes the file options such as `metadata`, `outline`, and `pdfa`.
 
 ## Fetch limits
 

@@ -15,6 +15,7 @@ js-sys.workspace = true
 
 [dependencies.takumi-bindings-common]
 path = "../takumi-bindings-common"
+features = ["wasm"]
 
 [dependencies.serde]
 workspace = true
@@ -28,10 +29,6 @@ features = ["woff2", "svg-raster", "image-decoding"]
 [dependencies.takumi-raster]
 path = "../takumi-raster"
 default-features = false
-features = ["svg"]
-
-[dependencies.takumi-html]
-path = "../takumi-html"
 features = ["svg"]
 
 [dependencies.takumi-svg]

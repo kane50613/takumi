@@ -1517,10 +1517,15 @@ dependencies = [
 name = "takumi-bindings-common"
 version = "0.0.0"
 dependencies = [
+ "arc-swap",
+ "js-sys",
  "serde",
+ "serde-wasm-bindgen",
  "serde_bytes",
  "serde_json",
  "takumi-core",
+ "takumi-html",
+ "wasm-bindgen",
  "wuff",
 ]
 
@@ -1698,7 +1703,6 @@ dependencies = [
  "serde-wasm-bindgen",
  "takumi-bindings-common",
  "takumi-core",
- "takumi-html",
  "takumi-raster",
  "takumi-svg",
  "wasm-bindgen",
