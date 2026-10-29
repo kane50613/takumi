@@ -2056,7 +2056,6 @@ css/css-overflow/text-overflow-020.html
 css/css-overflow/text-overflow-029.html
 css/css-overflow/text-overflow-030.html
 css/css-overflow/text-overflow-ellipsis-001.html
-css/css-overflow/text-overflow-ellipsis-editing-input.html
 css/css-overflow/text-overflow-ellipsis-indent-001.html
 css/css-overflow/text-overflow-ellipsis-rtl-001.html
 css/css-overflow/text-overflow-ellipsis-textarea-with-caret.html
