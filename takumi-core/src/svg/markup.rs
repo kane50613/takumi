@@ -54,7 +54,10 @@ pub(super) trait Markup<'a>: Copy {
 impl<'a> Markup<'a> for NodeRef<'a> {
   fn element(self) -> Option<(&'a str, bool)> {
     match self.data() {
-      NodeData::Element { name, .. } => Some((&name.local, self.svg_element_name().is_some())),
+      NodeData::Element { name, .. } => Some(match self.svg_element_name() {
+        Some(local) => (local, true),
+        None => (&name.local, false),
+      }),
       _ => None,
     }
   }

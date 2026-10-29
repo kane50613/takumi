@@ -672,6 +672,16 @@ fn foreign_attribute(ns: Namespace, name: String, value: String) -> Attribute {
   }
 }
 
+/// An SVG element's `name` in the casing the SVG spec gives it, or as is.
+#[cfg(feature = "svg-sizing")]
+pub(super) fn svg_element_case(name: &str) -> &str {
+  SVG_ELEMENTS
+    .iter()
+    .copied()
+    .find(|cased| cased.eq_ignore_ascii_case(name))
+    .unwrap_or(name)
+}
+
 /// `name` in the casing `table` lists it in, or as is.
 fn adjust_case(table: &[&str], name: String) -> String {
   table

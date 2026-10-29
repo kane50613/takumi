@@ -1,5 +1,9 @@
 //! The DOM a parser fills: every node in one `Vec`, addressed by index.
 
+#[cfg(feature = "svg-sizing")]
+use super::markup::svg_element_case;
+
+#[cfg(feature = "svg-sizing")]
 const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
 
 /// A node's index in its [`Dom`].
@@ -150,18 +154,55 @@ impl<'a> NodeRef<'a> {
     children.iter().map(move |&id| NodeRef { dom, id })
   }
 
-  /// The local name of an SVG element, one in the SVG namespace that no `xmlns` attribute of its own
-  /// moves to another. Approximate: XML also gives an element the namespace an ancestor declares.
+  /// The local name of an SVG element: one in the SVG namespace that its own `xmlns` keeps there,
+  /// or whose prefix the element or the root element declares as SVG, the prefix stripped.
+  /// Approximate: XML also resolves the default namespace or a prefix any other ancestor declares.
+  #[cfg(feature = "svg-sizing")]
   pub(crate) fn svg_element_name(self) -> Option<&'a str> {
-    let NodeData::Element { name, attrs } = self.data() else {
+    let NodeData::Element { name, .. } = self.data() else {
       return None;
     };
-    let declared = attrs
-      .iter()
-      .find(|attr| attr.ns == AttributeNamespace::Xmlns && &*attr.local == "xmlns");
 
-    (name.ns == Namespace::Svg && declared.is_none_or(|attr| &*attr.value == SVG_NAMESPACE))
-      .then_some(&*name.local)
+    if name.ns != Namespace::Svg {
+      return None;
+    }
+
+    match name.local.split_once(':') {
+      Some((prefix, local)) => {
+        let declaration = format!("xmlns:{prefix}");
+        let namespace = self.declared(&declaration).or_else(|| {
+          self
+            .dom
+            .document()
+            .children()
+            .find(|node| matches!(node.data(), NodeData::Element { .. }))
+            .and_then(|root| root.declared(&declaration))
+        });
+
+        (namespace == Some(SVG_NAMESPACE)).then(|| svg_element_case(local))
+      }
+      None => self
+        .declared("xmlns")
+        .is_none_or(|namespace| namespace == SVG_NAMESPACE)
+        .then_some(&*name.local),
+    }
+  }
+
+  /// The namespace this element's `xmlns` or `xmlns:prefix` attribute `declaration` declares.
+  #[cfg(feature = "svg-sizing")]
+  fn declared(self, declaration: &str) -> Option<&'a str> {
+    let NodeData::Element { attrs, .. } = self.data() else {
+      return None;
+    };
+
+    attrs
+      .iter()
+      .find(|attr| match attr.ns {
+        AttributeNamespace::Xmlns if &*attr.local == "xmlns" => declaration == "xmlns",
+        AttributeNamespace::Xmlns => declaration.strip_prefix("xmlns:") == Some(&*attr.local),
+        _ => &*attr.local == declaration,
+      })
+      .map(|attr| &*attr.value)
   }
 
   /// The value of the attribute `name`, when this is an element that has it.
