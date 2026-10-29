@@ -1531,7 +1531,10 @@ mod tests {
       path::{Path, PathBuf},
     };
 
-    use crate::resources::svg_size::parse_svg_document;
+    use crate::html::{
+      dom::{NodeData, NodeRef},
+      markup::parse_svg_image,
+    };
 
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
       for entry in fs::read_dir(dir).unwrap().flatten() {
@@ -1544,7 +1547,7 @@ mod tests {
       }
     }
 
-    fn previous_intrinsic(root: roxmltree::Node, size: (f32, f32)) -> IntrinsicSizing {
+    fn previous_intrinsic(root: NodeRef<'_>, size: (f32, f32)) -> IntrinsicSizing {
       let is_absolute = |name| {
         root
           .attribute(name)
@@ -1589,8 +1592,12 @@ mod tests {
       };
       let size =
         SvgSize::parse(&markup).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-      let document = parse_svg_document(&markup).unwrap();
-      let root = document.root_element();
+      let document = parse_svg_image(&markup);
+      let root = document
+        .document()
+        .children()
+        .find(|node| matches!(node.data(), NodeData::Element { .. }))
+        .unwrap();
       let canvas = source.dimensions();
 
       let percent = |name| {

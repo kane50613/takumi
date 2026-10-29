@@ -1555,7 +1555,6 @@ dependencies = [
  "precomputed-hash",
  "quick_cache",
  "rayon",
- "roxmltree",
  "rustc-hash",
  "selectors",
  "serde",

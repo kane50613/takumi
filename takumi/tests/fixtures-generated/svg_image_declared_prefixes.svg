@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140" viewBox="0 0 240 140">
+  <rect x="0" y="0" width="240" height="140" fill="#fff"/>
+  <clipPath id="cp0">
+    <path d="M0 0H160V80H0Z"/>
+  </clipPath>
+  <g transform="matrix(1 0 0 1 40 30)" clip-path="url(#cp0)">
+    <g style="isolation:isolate">
+      <g transform="matrix(4 0 0 4 0 0)">
+        <path d="M2 2h16v16h-16Z" fill="#2563eb"/>
+        <g transform="matrix(1 0 0 1 20 0)">
+          <path d="M2 2h16v16h-16Z" fill="#2563eb"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -222,8 +222,6 @@ strip = "debuginfo"
 # Crates that run at most once per image (parse/decode/encode), never per pixel.
 # Size-optimizing them is perf-neutral (verified via the napi JS bench). Hot
 # raster/shaping and image-webp (wasm webp encode) stay at opt-level 3.
-[profile.release.package.roxmltree]
-opt-level = "z"
 [profile.release.package.zune-jpeg]
 opt-level = "z"
 [profile.release.package.imagesize]

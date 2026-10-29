@@ -1,5 +1,11 @@
 //! The DOM a parser fills: every node in one `Vec`, addressed by index.
 
+#[cfg(feature = "svg-sizing")]
+use super::markup::svg_element_case;
+
+#[cfg(feature = "svg-sizing")]
+const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
+
 /// A node's index in its [`Dom`].
 pub(crate) type NodeId = usize;
 
@@ -140,24 +146,92 @@ impl<'a> NodeRef<'a> {
   pub(crate) fn children(self) -> impl DoubleEndedIterator<Item = NodeRef<'a>> {
     let dom = self.dom;
 
-    dom
+    let children = dom
       .nodes
       .get(self.id)
-      .into_iter()
-      .flat_map(|node| &node.children)
-      .map(move |&id| NodeRef { dom, id })
+      .map_or(&[][..], |node| &node.children);
+
+    children.iter().map(move |&id| NodeRef { dom, id })
   }
 
-  /// The value of the attribute `name`, when this is an element that has it.
-  pub(crate) fn attribute(self, name: &str) -> Option<&'a str> {
+  /// The local name of an SVG element: one in the SVG namespace that its own `xmlns` keeps there,
+  /// or whose prefix the element or the root element declares as SVG, the prefix stripped.
+  /// Approximate: XML also resolves the default namespace or a prefix any other ancestor declares.
+  #[cfg(feature = "svg-sizing")]
+  pub(crate) fn svg_element_name(self) -> Option<&'a str> {
+    let NodeData::Element { name, .. } = self.data() else {
+      return None;
+    };
+
+    // The HTML parser leaves a prefixed root such as `<s:svg>` in the HTML namespace.
+    if let Some((prefix, local)) = name.local.split_once(':') {
+      return (self.prefix_namespace(prefix) == Some(SVG_NAMESPACE))
+        .then(|| svg_element_case(local));
+    }
+
+    (name.ns == Namespace::Svg
+      && self
+        .declared("xmlns")
+        .is_none_or(|namespace| namespace == SVG_NAMESPACE))
+    .then_some(&*name.local)
+  }
+
+  /// The namespace `prefix` names, as this element or the root element declares it.
+  #[cfg(feature = "svg-sizing")]
+  pub(crate) fn prefix_namespace(self, prefix: &str) -> Option<&'a str> {
+    let declaration = format!("xmlns:{prefix}");
+
+    self.declared(&declaration).or_else(|| {
+      self
+        .dom
+        .document()
+        .children()
+        .find(|node| matches!(node.data(), NodeData::Element { .. }))
+        .and_then(|root| root.declared(&declaration))
+    })
+  }
+
+  /// The namespace this element's `xmlns` or `xmlns:prefix` attribute `declaration` declares.
+  #[cfg(feature = "svg-sizing")]
+  fn declared(self, declaration: &str) -> Option<&'a str> {
     let NodeData::Element { attrs, .. } = self.data() else {
       return None;
     };
 
     attrs
       .iter()
-      .find(|attr| &*attr.local == name)
+      .find(|attr| match attr.ns {
+        AttributeNamespace::Xmlns if &*attr.local == "xmlns" => declaration == "xmlns",
+        AttributeNamespace::Xmlns => declaration.strip_prefix("xmlns:") == Some(&*attr.local),
+        _ => &*attr.local == declaration,
+      })
       .map(|attr| &*attr.value)
+  }
+
+  /// The value of the attribute `name`, when this is an element that has it. An HTML element's
+  /// attribute names match ASCII case-insensitively, as the parser lowercased them.
+  pub(crate) fn attribute(self, name: &str) -> Option<&'a str> {
+    let NodeData::Element {
+      name: element,
+      attrs,
+    } = self.data()
+    else {
+      return None;
+    };
+
+    attrs
+      .iter()
+      .find(|attr| {
+        &*attr.local == name
+          || (element.ns == Namespace::Html && attr.local.eq_ignore_ascii_case(name))
+      })
+      .map(|attr| &*attr.value)
+  }
+
+  /// Whether the parser put this element in the HTML namespace.
+  #[cfg(feature = "svg")]
+  pub(crate) fn is_html_element(self) -> bool {
+    matches!(self.data(), NodeData::Element { name, .. } if name.ns == Namespace::Html)
   }
 
   /// This node and its subtree as HTML, escaped as the fragment serialization algorithm escapes them.

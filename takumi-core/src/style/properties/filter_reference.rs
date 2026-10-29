@@ -2,9 +2,13 @@
 
 use std::{str::from_utf8, sync::Arc};
 
-use roxmltree::Document;
-
-use crate::resources::image::{DataUriError, decode_data_uri};
+use crate::{
+  html::{
+    dom::{AttributeNamespace, NodeData, NodeRef},
+    markup::parse,
+  },
+  resources::image::{DataUriError, decode_data_uri},
+};
 
 /// Error produced while parsing a filter reference.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -15,9 +19,6 @@ pub(crate) enum FilterReferenceError {
   /// The data URI could not be decoded.
   #[error("invalid data URI: {0}")]
   InvalidDataUri(&'static str),
-  /// The XML markup could not be parsed.
-  #[error("invalid filter markup: {0}")]
-  InvalidMarkup(String),
   /// The document contains no `<filter>` element.
   #[error("no <filter> element found")]
   MissingFilterElement,
@@ -50,46 +51,141 @@ impl FilterReference {
     Self::from_markup(text)
   }
 
-  /// Validates `<filter>` markup (optionally wrapped in an `<svg>` document)
-  /// and extracts the filter element.
-  pub(crate) fn from_markup(xml: &str) -> Result<Self, FilterReferenceError> {
-    let document = Document::parse(xml)
-      .map_err(|error| FilterReferenceError::InvalidMarkup(error.to_string()))?;
-    let root = document.root_element();
-
-    let filter = if root.has_tag_name("filter") {
-      root
-    } else {
-      root
-        .descendants()
-        .find(|node| node.has_tag_name("filter"))
-        .ok_or(FilterReferenceError::MissingFilterElement)?
-    };
-
-    let filter_range = filter.range();
-    let mut markup = xml[filter_range.clone()].to_string();
-
-    // Replace the author `id` by its byte range with the canonical one.
-    if let Some(id) = filter
-      .attributes()
-      .find(|attribute| attribute.namespace().is_none() && attribute.name() == "id")
-    {
-      let range = id.range();
-      let mut start = range.start - filter_range.start;
-
-      while start > 0 && markup.as_bytes()[start - 1].is_ascii_whitespace() {
-        start -= 1;
-      }
-      markup.replace_range(start..range.end - filter_range.start, "");
-    }
-    let rest = markup
-      .strip_prefix("<filter")
-      .ok_or(FilterReferenceError::MissingFilterElement)?;
-    let markup = format!(r#"<filter id="{id}"{rest}"#, id = Self::ID);
+  /// The first `<filter>` element in `markup`, a filter or an `<svg>` document holding one, as
+  /// [`filter_markup`] writes it.
+  pub(crate) fn from_markup(markup: &str) -> Result<Self, FilterReferenceError> {
+    // Inside `<svg>`, the parser keeps a lone `<filter>` and its primitives in the SVG namespace.
+    let dom = parse(&format!("<svg>{markup}</svg>"), false);
+    let filter = first_filter(dom.document()).ok_or(FilterReferenceError::MissingFilterElement)?;
 
     Ok(Self {
-      markup: markup.into(),
+      markup: filter_markup(filter).into(),
     })
+  }
+}
+
+/// The first `filter` element at or under `root`, in document order.
+fn first_filter(root: NodeRef<'_>) -> Option<NodeRef<'_>> {
+  let mut pending = vec![root];
+
+  while let Some(node) = pending.pop() {
+    if node.svg_element_name() == Some("filter") {
+      return Some(node);
+    }
+
+    let start = pending.len();
+
+    pending.extend(node.children());
+    pending[start..].reverse();
+  }
+
+  None
+}
+
+/// `filter` as XML under the id [`FilterReference::ID`], with only the filter primitives under it,
+/// the elements whose names start with `fe`. The SVG backend writes this markup into its output
+/// as is, so names keep to XML name characters and text and values are escaped: nothing in it can
+/// close the filter or add an element such as `<script>`.
+fn filter_markup(filter: NodeRef<'_>) -> String {
+  enum Step<'a> {
+    Open(NodeRef<'a>),
+    Close(&'a str),
+  }
+
+  let mut out = format!(r#"<filter id="{}""#, FilterReference::ID);
+
+  write_attributes(&mut out, filter, true);
+  out.push('>');
+
+  let mut steps = vec![Step::Close("filter")];
+
+  steps.extend(filter.children().rev().map(Step::Open));
+
+  while let Some(step) = steps.pop() {
+    match step {
+      Step::Open(node) => match node.data() {
+        NodeData::Text(text) => escape_into(&mut out, text),
+        NodeData::Element { .. } => {
+          let Some(name) = node
+            .svg_element_name()
+            .filter(|name| name.starts_with("fe") && is_xml_name(name))
+          else {
+            continue;
+          };
+
+          out.push('<');
+          out.push_str(name);
+          write_attributes(&mut out, node, false);
+
+          if node.children().next().is_none() {
+            out.push_str("/>");
+            continue;
+          }
+
+          out.push('>');
+          steps.push(Step::Close(name));
+          steps.extend(node.children().rev().map(Step::Open));
+        }
+        _ => {}
+      },
+      Step::Close(name) => {
+        out.push_str("</");
+        out.push_str(name);
+        out.push('>');
+      }
+    }
+  }
+
+  out
+}
+
+/// Writes the attributes of `element` with an XML name, its `id` left out when `skip_id` is set.
+fn write_attributes(out: &mut String, element: NodeRef<'_>, skip_id: bool) {
+  let NodeData::Element { attrs, .. } = element.data() else {
+    return;
+  };
+
+  for attribute in attrs {
+    let prefix = match attribute.ns {
+      AttributeNamespace::None if skip_id && &*attribute.local == "id" => continue,
+      AttributeNamespace::None => "",
+      AttributeNamespace::Xlink => "xlink:",
+      AttributeNamespace::Xml => "xml:",
+      AttributeNamespace::Xmlns => continue,
+    };
+
+    if !is_xml_name(&attribute.local) {
+      continue;
+    }
+
+    out.push(' ');
+    out.push_str(prefix);
+    out.push_str(&attribute.local);
+    out.push_str("=\"");
+    escape_into(out, &attribute.value);
+    out.push('"');
+  }
+}
+
+/// Whether `name` is a name XML reads back as one: ASCII letters, digits, `-`, `_`, and `.`,
+/// starting with a letter or `_`.
+fn is_xml_name(name: &str) -> bool {
+  name.starts_with(|character: char| character.is_ascii_alphabetic() || character == '_')
+    && name
+      .chars()
+      .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+}
+
+/// Appends `text` to `out` with the characters XML gives meaning escaped.
+fn escape_into(out: &mut String, text: &str) {
+  for character in text.chars() {
+    match character {
+      '&' => out.push_str("&amp;"),
+      '<' => out.push_str("&lt;"),
+      '>' => out.push_str("&gt;"),
+      '"' => out.push_str("&quot;"),
+      _ => out.push(character),
+    }
   }
 }
 
@@ -149,6 +245,32 @@ mod tests {
     assert_eq!(
       FilterReference::from_markup(r"<svg><rect/></svg>",),
       Err(FilterReferenceError::MissingFilterElement)
+    );
+  }
+
+  #[test]
+  fn keeps_only_filter_primitives() {
+    let reference = FilterReference::from_markup(
+      "<filter><feFlood/><script>alert(1)</script><foreignObject><style></filter><script>x</script></style></foreignObject></filter>",
+    )
+    .unwrap();
+
+    assert_eq!(
+      &*reference.markup,
+      r#"<filter id="takumi-filter"><feFlood/></filter>"#
+    );
+  }
+
+  #[test]
+  fn escapes_attribute_values_and_drops_unreadable_names() {
+    let reference = FilterReference::from_markup(
+      r#"<filter><feFlood flood-color='"><script>' a"b="c"/></filter>"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+      &*reference.markup,
+      r#"<filter id="takumi-filter"><feFlood flood-color="&quot;&gt;&lt;script&gt;"/></filter>"#
     );
   }
 

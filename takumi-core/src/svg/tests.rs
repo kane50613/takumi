@@ -1010,3 +1010,24 @@ fn an_isolated_square_cap_stroke_carries_its_ink_bounds() {
   assert!(bounds.right >= 20.0 + reach);
   assert!(bounds.bottom >= 10.0 + reach);
 }
+
+#[test]
+fn a_root_and_attributes_with_declared_prefixes_resolve() {
+  let markup = r##"<s:svg xmlns:s="http://www.w3.org/2000/svg" xmlns:link="http://www.w3.org/1999/xlink" viewBox="0 0 40 20" width="160" height="80"><s:rect id="r" width="16" height="16" fill="red"/><s:use link:href="#r" x="20"/></s:svg>"##;
+  let document = SvgDocument::parse(markup);
+
+  assert!(document.is_ok(), "{document:?}");
+
+  let document = document.unwrap();
+  let ops = document
+    .ops(
+      SvgHost::Image {
+        current_color: BLACK,
+        fonts: None,
+      },
+      document.declared_size(),
+    )
+    .unwrap_or_default();
+
+  assert_eq!(fills(&ops), [red(), red()]);
+}
