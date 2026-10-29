@@ -297,7 +297,9 @@ jobs:
           # Unwind panics so napi-rs converts panics into catchable JS errors
           # instead of aborting the host process.
           CARGO_PROFILE_RELEASE_PANIC: unwind
-          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options
+          # Panic messages keep their text but drop the source file, line, and column, which cost
+          # a static and a relocation per panic site.
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Zlocation-detail=none
         run: ${{ matrix.settings.build }} -- --locked && bun build:js
 
       - name: Upload artifact
