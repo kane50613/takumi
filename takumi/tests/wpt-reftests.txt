@@ -2057,6 +2057,7 @@ css/css-overflow/text-overflow-ellipsis-001.html
 css/css-overflow/text-overflow-ellipsis-indent-001.html
 css/css-overflow/text-overflow-ellipsis-rtl-001.html
 css/css-overflow/text-overflow-ellipsis-textarea-with-caret.html
+css/css-overflow/text-overflow-string-in-input.html
 css/css-overflow/text-overflow-string-in-textarea-field-sizing-content-fits.html
 css/css-overflow/text-overflow-string-in-textarea-not-inherited.html
 !css/css-position/multicol/static-position/
@@ -2596,16 +2597,6 @@ css/css-text/text-spacing-trim/text-spacing-trim-start-001.html
 !css/css-text/white-space/trailing-other-space-separators-003.html
 !css/css-text/white-space/trailing-other-space-separators-004.html
 !css/css-text/white-space/trailing-space-align-start.tentative.html
-!css/css-text/white-space/trailing-space-and-text-alignment-001.html
-!css/css-text/white-space/trailing-space-and-text-alignment-002.html
-!css/css-text/white-space/trailing-space-and-text-alignment-003.html
-!css/css-text/white-space/trailing-space-and-text-alignment-004.html
-!css/css-text/white-space/trailing-space-and-text-alignment-005.html
-!css/css-text/white-space/trailing-space-and-text-alignment-rtl-001.html
-!css/css-text/white-space/trailing-space-and-text-alignment-rtl-002.html
-!css/css-text/white-space/trailing-space-and-text-alignment-rtl-003.html
-!css/css-text/white-space/trailing-space-and-text-alignment-rtl-004.html
-!css/css-text/white-space/trailing-space-and-text-alignment-rtl-005.html
 !css/css-text/white-space/white-space-collapse-discard-001.xht
 !css/css-text/white-space/white-space-collapse-preserve-breaks-001.xht
 !css/css-text/white-space/white-space-intrinsic-size-022.html
