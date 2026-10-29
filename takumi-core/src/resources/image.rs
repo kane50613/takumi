@@ -224,9 +224,7 @@ impl SvgSource {
     }
   }
 
-  /// The characters the document's `text` elements draw, each element's with the context it is
-  /// styled in, when the box `host` styles shows it. Approximate: white space comes as written,
-  /// where layout collapses it to spaces.
+  /// The text the document's `text` elements draw in `host`; approximate, white space uncollapsed.
   pub(crate) fn text_runs(&self, host: &RenderContext) -> Vec<(RenderContext, &str)> {
     self.document.text_runs(self.host(host))
   }

@@ -14,8 +14,7 @@ use crate::{
   style::{Length, Style, StyleDeclaration},
 };
 
-/// Whether `src` names an image a render looks up in its `images`, rather than inline data or SVG
-/// markup it decodes itself.
+/// Whether `src` names an image the render looks up in its `images`.
 pub(crate) fn is_image_reference(src: &str) -> bool {
   !src.is_empty() && !src.starts_with(DATA_URI_PREFIX) && !is_svg_like(src)
 }

@@ -548,10 +548,7 @@ impl Fonts {
     Ok(families)
   }
 
-  /// Registers a face by its descriptors alone, before its data loads. Font matching treats it as
-  /// a face still loading: text it would draw falls back past it, and
-  /// [`RenderNeeds::faces`](crate::layout::needs::RenderNeeds::faces) reports its id when the
-  /// render would load it.
+  /// Registers a face still loading, which [`RenderNeeds::faces`](crate::layout::needs::RenderNeeds::faces) reports when reached.
   pub fn register_pending(&mut self, face: PendingFontFace) {
     let registry = Arc::make_mut(&mut self.registry);
 
@@ -566,9 +563,7 @@ impl Fonts {
     self.registry.selector.has_pending_faces()
   }
 
-  /// Removes every face registered under `family`, from each source and `unicode-range` subset
-  /// alike, pending ones included, so it falls back as an unknown family; false when it has no
-  /// faces.
+  /// Removes every face of `family`, pending ones included; false when it has none.
   pub fn unregister_family(&mut self, family: &str) -> bool {
     let registry = Arc::make_mut(&mut self.registry);
 
@@ -954,8 +949,7 @@ impl FontOverride {
   }
 }
 
-/// A face known by its `@font-face` descriptors before its data loads, such as a `unicode-range`
-/// subset a caller fetches on demand. See [`Fonts::register_pending`].
+/// A face known by its `@font-face` descriptors before its data loads.
 #[derive(Debug, Clone)]
 pub struct PendingFontFace {
   id: usize,
@@ -964,8 +958,7 @@ pub struct PendingFontFace {
 }
 
 impl PendingFontFace {
-  /// A face of `family` that needs passes report as `id`, with every descriptor `normal` and
-  /// every codepoint in range.
+  /// A face of `family` reported as `id`, every descriptor `normal`.
   pub fn new(id: usize, family: impl Into<Arc<str>>) -> Self {
     Self {
       id,

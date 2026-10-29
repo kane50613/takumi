@@ -1,14 +1,7 @@
 //! Blink's [`FontFace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/font_face.cc),
 //! with the part of [`CSSFontFace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/css_font_face.cc)
-//! and the `BinaryDataFontFaceSource` a registered face needs: one source, already decoded. A
-//! pending face stands for a `RemoteFontFaceSource` that has not loaded: it has descriptors and
-//! no data.
-//!
-//! An `auto` descriptor of a registered face takes the face's own capabilities, as CSS Fonts 4
-//! asks, where Blink takes `normal`; see
-//! [`FontCustomPlatformData::auto_font_selection_capabilities`]. A pending face has no data to
-//! read them from, so its `auto` descriptors take Blink's `normal`. That is approximate: once
-//! loaded, a variable face would match the ranges of its axes instead.
+//! and its `BinaryDataFontFaceSource`; a pending face stands for a `RemoteFontFaceSource` still loading.
+//! Approximate: `auto` descriptors take the face's own capabilities as CSS Fonts 4 asks, Blink's `normal` on a pending face.
 
 use std::sync::Arc;
 
@@ -50,8 +43,7 @@ pub(crate) enum FontFaceSource {
   Pending(usize),
 }
 
-/// A pending face as font matching finds it: Blink's `FontDataForRangeSet` whose
-/// `CustomFontData` is loading.
+/// Blink's `FontDataForRangeSet` whose `CustomFontData` is loading.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PendingFace {
   pub(crate) id: usize,
@@ -182,8 +174,7 @@ impl FontFace {
     &self.descriptors.unicode_range
   }
 
-  /// Blink's `CSSFontFace::GetFontData`, through `BinaryDataFontFaceSource::CreateFontData`, or
-  /// the pending face a `RemoteFontFaceSource` would give loading fallback data for.
+  /// Blink's `CSSFontFace::GetFontData`, or the pending face while its source loads.
   pub(crate) fn get_font_data(
     &self,
     font_description: &FontSelectionDescription,

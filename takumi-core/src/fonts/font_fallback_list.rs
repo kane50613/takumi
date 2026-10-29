@@ -26,8 +26,7 @@ impl FontData {
     matches!(self, Self::Segmented(_))
   }
 
-  /// Blink's `FontDataForCharacter`: a segmented font's face for `character`, else its first;
-  /// none when that face is pending.
+  /// Blink's `FontDataForCharacter`, none when the face is pending.
   pub(crate) fn font_data_for_character(&self, character: char) -> Option<Rc<SimpleFontData>> {
     match self {
       Self::Simple(font_data) => Some(Rc::clone(font_data)),
@@ -121,8 +120,7 @@ impl FontFallbackList {
     }
   }
 
-  /// Whether the registry the list resolved from holds a pending face, which only then can
-  /// [`Self::pending_face_for_character`] find.
+  /// Whether the registry the list resolved from holds a pending face.
   pub(crate) fn has_pending_faces(&self) -> bool {
     self.has_pending_faces
   }
@@ -148,10 +146,7 @@ impl FontFallbackList {
       .clone()
   }
 
-  /// Blink's `DeterminePrimarySimpleFontDataCore`: the first font a segmented font's
-  /// `unicode-range` does not rule out for `character`, past a pending face to a loaded face of
-  /// its font, else the first font, else the last resort. Approximate: where every font is
-  /// pending, Blink takes the first one's loading fallback, and takumi the last resort.
+  /// Blink's `DeterminePrimarySimpleFontDataCore`; approximate, the last resort where Blink takes a pending font's loading fallback.
   fn determine_primary_simple_font_data(&self, character: char) -> Option<Rc<SimpleFontData>> {
     for font_data in &self.font_list {
       if !font_data.contains_character(character) {
@@ -176,10 +171,7 @@ impl FontFallbackList {
       .or_else(|| self.font_cache.last_resort_fallback_font())
   }
 
-  /// The pending face a render would load for `character`: walking the fonts as shaping does,
-  /// the first pending face whose `unicode-range` contributes for it before a loaded font has
-  /// its glyph. Approximate: shaping hints with every character a font left unshaped, here with
-  /// `character` alone.
+  /// The pending face shaping would load for `character`; approximate, hinting with `character` alone.
   pub(crate) fn pending_face_for_character(
     &self,
     character: char,
