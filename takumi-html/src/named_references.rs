@@ -1,8 +1,152 @@
 //! The named character references the HTML tokenizer knows, from
 //! <https://html.spec.whatwg.org/entities.json>, without the leading `&` and sorted by name. A name
-//! without a `;` is one the tokenizer also decodes unterminated.
+//! without a `;` is one the tokenizer also decodes unterminated. The binary holds them packed into
+//! two strings, as a table of string pairs costs two pointers per entry.
 
-pub(crate) static NAMED_REFERENCES: [(&str, &str); 2231] = [
+use std::ops::Range;
+
+/// The character references the tokenizer looks names up in.
+pub(crate) static NAMED_REFERENCES: NamedReferences = NamedReferences {
+  names: utf8(&NAMES),
+  characters: utf8(&CHARACTERS),
+  entries: &ENTRIES,
+};
+
+/// A table of names and the characters each stands for, packed into two strings.
+pub(crate) struct NamedReferences {
+  names: &'static str,
+  characters: &'static str,
+  entries: &'static [Entry],
+}
+
+impl NamedReferences {
+  /// The characters `name` stands for.
+  pub(crate) fn get(&self, name: &str) -> Option<&'static str> {
+    self
+      .entries
+      .binary_search_by(|entry| self.names[entry.name()].cmp(name))
+      .ok()
+      .map(|index| &self.characters[self.entries[index].characters()])
+  }
+}
+
+/// Where an entry's name and characters sit in the packed strings.
+#[derive(Clone, Copy)]
+struct Entry {
+  name_start: u16,
+  characters_start: u16,
+  name_len: u8,
+  characters_len: u8,
+}
+
+impl Entry {
+  fn name(self) -> Range<usize> {
+    let start = usize::from(self.name_start);
+
+    start..start + usize::from(self.name_len)
+  }
+
+  fn characters(self) -> Range<usize> {
+    let start = usize::from(self.characters_start);
+
+    start..start + usize::from(self.characters_len)
+  }
+}
+
+#[derive(Clone, Copy)]
+enum Column {
+  Name,
+  Characters,
+}
+
+impl Column {
+  const fn of(self, index: usize) -> &'static [u8] {
+    let (name, characters) = REFERENCES[index];
+
+    match self {
+      Self::Name => name.as_bytes(),
+      Self::Characters => characters.as_bytes(),
+    }
+  }
+
+  const fn total_len(self) -> usize {
+    let mut total = 0;
+    let mut index = 0;
+
+    while index < REFERENCES.len() {
+      total += self.of(index).len();
+      index += 1;
+    }
+
+    total
+  }
+
+  const fn concat<const LEN: usize>(self) -> [u8; LEN] {
+    let mut bytes = [0; LEN];
+    let mut at = 0;
+    let mut index = 0;
+
+    while index < REFERENCES.len() {
+      let text = self.of(index);
+      let mut offset = 0;
+
+      while offset < text.len() {
+        bytes[at] = text[offset];
+        at += 1;
+        offset += 1;
+      }
+
+      index += 1;
+    }
+
+    bytes
+  }
+}
+
+const NAMES_LEN: usize = Column::Name.total_len();
+const CHARACTERS_LEN: usize = Column::Characters.total_len();
+const NAMES: [u8; NAMES_LEN] = Column::Name.concat();
+const CHARACTERS: [u8; CHARACTERS_LEN] = Column::Characters.concat();
+
+const ENTRIES: [Entry; REFERENCES.len()] = {
+  assert!(NAMES_LEN <= u16::MAX as usize && CHARACTERS_LEN <= u16::MAX as usize);
+  let mut entries = [Entry {
+    name_start: 0,
+    characters_start: 0,
+    name_len: 0,
+    characters_len: 0,
+  }; REFERENCES.len()];
+  let mut name_start = 0;
+  let mut characters_start = 0;
+  let mut index = 0;
+
+  while index < REFERENCES.len() {
+    let name_len = Column::Name.of(index).len();
+    let characters_len = Column::Characters.of(index).len();
+
+    assert!(name_len <= u8::MAX as usize && characters_len <= u8::MAX as usize);
+    entries[index] = Entry {
+      name_start: name_start as u16,
+      characters_start: characters_start as u16,
+      name_len: name_len as u8,
+      characters_len: characters_len as u8,
+    };
+    name_start += name_len;
+    characters_start += characters_len;
+    index += 1;
+  }
+
+  entries
+};
+
+const fn utf8(bytes: &'static [u8]) -> &'static str {
+  match str::from_utf8(bytes) {
+    Ok(text) => text,
+    Err(_) => panic!("named references are UTF-8"),
+  }
+}
+
+const REFERENCES: [(&str, &str); 2231] = [
   ("AElig", "\u{c6}"),
   ("AElig;", "\u{c6}"),
   ("AMP", "&"),
@@ -2235,3 +2379,18 @@ pub(crate) static NAMED_REFERENCES: [(&str, &str); 2231] = [
   ("zwj;", "\u{200d}"),
   ("zwnj;", "\u{200c}"),
 ];
+
+#[cfg(test)]
+mod tests {
+  use super::{NAMED_REFERENCES, REFERENCES};
+
+  #[test]
+  fn every_name_finds_its_own_characters() {
+    for (name, characters) in REFERENCES {
+      assert_eq!(NAMED_REFERENCES.get(name), Some(characters), "{name}");
+    }
+
+    assert_eq!(NAMED_REFERENCES.get("notaname;"), None);
+    assert_eq!(NAMED_REFERENCES.get("AEli"), None);
+  }
+}
