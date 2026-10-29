@@ -28,6 +28,7 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   resources::font::PrimaryFontMetrics,
+  sort_key::sort_by_key,
   style::{
     BoxDecorationBreak, Direction as TextDirection, TextFitMode, TextFitTarget, VerticalAlign,
     VerticalAlignKeyword,
@@ -911,10 +912,11 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
   /// Blink's `UpdateFragmentedBoxDataEdges`: inserts the split boxes after the ones they split
   /// from, and moves the line-right edges to the last parts.
   fn update_fragmented_box_data_edges(&mut self, mut fragmented_boxes: Vec<BoxData<'a, 'c>>) {
-    fragmented_boxes.sort_by(|a, b| {
-      a.fragmented_box_data_index
-        .cmp(&b.fragmented_box_data_index)
-        .then(a.fragment_start.cmp(&b.fragment_start))
+    sort_by_key(&mut fragmented_boxes, |fragmented_box| {
+      (
+        fragmented_box.fragmented_box_data_index,
+        fragmented_box.fragment_start,
+      )
     });
 
     for mut fragmented_box in fragmented_boxes.into_iter().rev() {

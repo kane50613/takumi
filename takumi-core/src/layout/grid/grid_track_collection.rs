@@ -15,6 +15,7 @@ use crate::{
     layout_style::LayoutLength,
   },
   layout_unit::LayoutUnit,
+  sort_key::sort_by_key,
 };
 
 bitflags! {
@@ -174,8 +175,8 @@ impl<'a> GridRangeBuilder<'a> {
   /// Blink's `FinalizeRanges`: the ranges, and each of `item_count` items' start and end ranges.
   pub(crate) fn finalize_ranges(mut self, item_count: usize) -> (Vec<GridRange>, ItemRangeIndices) {
     if self.must_sort_grid_lines {
-      self.start_lines.sort_by_key(|line| line.grid_line);
-      self.end_lines.sort_by_key(|line| line.grid_line);
+      sort_by_key(&mut self.start_lines, |line| line.grid_line);
+      sort_by_key(&mut self.end_lines, |line| line.grid_line);
     }
 
     let explicit_repeater_count = self.explicit_tracks.repeater_count();
