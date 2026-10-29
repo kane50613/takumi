@@ -173,12 +173,21 @@ export async function readSource<TFamily extends RegisteredFamilyLike, TSource, 
   return createPrepared(await collect(registry, source, layout, extras, needs, false));
 }
 
-/** The `@font-face` files `reached` reports that the renderer holds neither loaded nor failed. */
+/** The `@font-face` files `reached` reports that the renderer holds neither loaded nor failed, and that this read has not `tried`, which they join. */
 function missingFontFiles<TFamily extends RegisteredFamilyLike>(
   registry: FontRegistry<TFamily>,
   reached: SourceNeeds | undefined,
+  tried: Set<string>,
 ): string[] {
-  return (reached?.fontFiles ?? []).filter((url) => !registry.hasFontFile(url));
+  const missing = (reached?.fontFiles ?? []).filter(
+    (url) => !tried.has(url) && !registry.hasFontFile(url),
+  );
+
+  for (const url of missing) {
+    tried.add(url);
+  }
+
+  return missing;
 }
 
 /** Fetches each of `urls` and hands it to the renderer, recording the ones that fail. */
@@ -253,13 +262,15 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       ? await read()
       : undefined;
 
-  // A file that fails moves its rule on to its next `src`, which the next read reports.
-  let missing = fetchMissing ? missingFontFiles(registry, reached) : [];
+  // A file that fails moves its rule on to its next `src`, which the next read reports. Each URL
+  // loads at most once, so a file the font cache releases to fit another cannot loop the reads.
+  const tried = new Set<string>();
+  let missing = fetchMissing ? missingFontFiles(registry, reached, tried) : [];
 
   while (missing.length > 0) {
     await loadFontFiles(registry, missing, { ...fetchOptions, fetchCache, signal });
     reached = await needs({ ...request, images: entries });
-    missing = missingFontFiles(registry, reached);
+    missing = missingFontFiles(registry, reached, tried);
   }
 
   const loads = listed && reached?.fonts;

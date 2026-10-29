@@ -233,3 +233,19 @@ describe("@font-face files", () => {
     expect(reads).toHaveBeenCalledTimes(3);
   });
 });
+
+test("prepare loads each @font-face file once even when the cache releases it", async () => {
+  const { fonts, backend } = fontBackend();
+  backend.hasFontFile.mockImplementation(() => false);
+  const fetch = mock(async () => new Response(bytes()));
+  const reads = mock(() => ({
+    images: [],
+    fonts: [],
+    fontFiles: ["https://fonts.test/a.woff2", "https://fonts.test/b.woff2"],
+  }));
+
+  await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
+
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(reads).toHaveBeenCalledTimes(2);
+});
