@@ -89,7 +89,8 @@ fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
   }
 }
 
-/// An image source as a krilla image, `Ok(None)` when it draws nothing, such as an SVG.
+/// An image source as a krilla image, `Ok(None)` for no raster image, such as an SVG the vector
+/// path draws.
 #[cfg(feature = "images")]
 pub(crate) fn rasterized_image(
   source: &ImageSource,

@@ -24,7 +24,7 @@ use super::{
 };
 use crate::style::ImageScalingAlgorithm;
 
-/// An animated image keeping its first frame and decoding later ones at draw size on demand.
+/// An animated image kept encoded, each frame decoding at draw size on demand.
 #[derive(Debug, Clone)]
 pub struct AnimatedSource {
   inner: Arc<AnimatedInner>,

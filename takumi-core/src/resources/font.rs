@@ -250,8 +250,8 @@ impl MatchedFace {
   }
 }
 
-/// The fonts a renderer draws with, Blink's `CSSFontSelector`, copied on write so a snapshot is a
-/// reference count.
+/// The fonts a renderer draws with, Blink's `CSSFontSelector`, whose snapshots share one
+/// copy-on-write registry.
 #[derive(Clone, Default)]
 pub struct Fonts {
   registry: Arc<FontRegistry>,

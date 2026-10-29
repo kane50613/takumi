@@ -806,7 +806,8 @@ impl PdfDate {
 pub enum PageMargin {
   /// A length in px.
   Px(f32),
-  /// The space a side's band takes, never below [`PageOptions::DEFAULT_MARGIN`].
+  /// The space a side's band takes, at least [`PageOptions::DEFAULT_MARGIN`] on an axis longer
+  /// than an inch and zero otherwise.
   #[default]
   Auto,
 }

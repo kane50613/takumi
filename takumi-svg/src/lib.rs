@@ -156,7 +156,8 @@ pub(crate) struct GradientStop {
   pub color: Rgba,
 }
 
-/// An SVG document built incrementally, its definitions written where used.
+/// An SVG document built incrementally: gradients and filters written where defined, glyph and
+/// image definitions deferred to a trailing `<defs>`.
 pub(crate) struct SvgDocument {
   writer: Writer<Vec<u8>>,
   next_id: u32,

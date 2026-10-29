@@ -56,7 +56,7 @@ fn insert_family(families: &mut Vec<Arc<str>>, family: &Arc<str>) {
 }
 
 impl CssFontSelector {
-  /// Registers every face of `data` under `descriptors`, and returns them.
+  /// Registers each usable face of `data` under `descriptors`, and returns them.
   pub(crate) fn register(
     &mut self,
     data: SharedBytes,

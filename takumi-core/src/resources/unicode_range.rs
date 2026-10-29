@@ -85,8 +85,8 @@ impl UnicodeRangeSet {
     }
   }
 
-  /// The sfnt with its `cmap` limited to the set, as Blink's `HarfBuzzFace` filters lookups, or
-  /// `None` for a collection or an unreadable font.
+  /// The sfnt with its base `cmap` mappings limited to the set, as Blink's `HarfBuzzFace` filters
+  /// lookups, its variation subtable kept; `None` for a collection or an unreadable font.
   fn restrict_charmap(&self, sfnt: &[u8]) -> Option<Vec<u8>> {
     if self.is_entire_range() {
       return None;

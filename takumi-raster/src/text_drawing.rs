@@ -23,7 +23,9 @@ struct GlyphBucket {
 }
 
 impl GlyphBucket {
-  /// Snaps the origin as Skia's `computeAxisAlignmentForHText` does.
+  /// Snaps the origin to a quarter pixel along the baseline and a whole pixel across it, on the
+  /// axis Skia's `computeAxisAlignmentForHText` picks. Approximate: halves round away from zero,
+  /// where Skia rounds up.
   fn of(transform: Affine) -> Self {
     let (x_steps, y_steps) = if transform.b == 0.0 {
       (4, 1)

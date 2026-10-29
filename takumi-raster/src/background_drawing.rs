@@ -854,7 +854,8 @@ fn rasterize_pattern(
   Ok(Pixmap::from_vec(data, size))
 }
 
-/// `source` inside a one-pixel border of its neighbours' edges, as Skia's repeat tiling filters.
+/// `source` inside a one-pixel border: on an axis without spacing, the neighbouring tile's edge,
+/// as Skia's repeat tiling filters across the seam, and transparent on one with spacing.
 fn padded_tile(source: PixmapRef<'_>, spacing: Size<f32>) -> Option<Pixmap> {
   let (width, height) = (source.width() as usize, source.height() as usize);
   let mut padded = Pixmap::new(width as u32 + 2, height as u32 + 2)?;

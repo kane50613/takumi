@@ -76,7 +76,8 @@ pub fn write_animated_webp<W: Write>(
   )
 }
 
-/// Encodes frames into an animated WebP as they arrive, holding one raw frame.
+/// Encodes frames into an animated WebP as they arrive, holding the pending and next raw frames
+/// and every encoded frame until the container is written.
 pub(crate) fn encode_animated_webp<W, I>(
   mut frames: I,
   destination: &mut W,

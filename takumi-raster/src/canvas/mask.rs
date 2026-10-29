@@ -573,7 +573,8 @@ pub(crate) fn alpha_mask(pixels: &[u8]) -> Vec<u8> {
     .collect()
 }
 
-/// `cull` bounds the rasterized area, as Blink's `ClipPathClipper::PaintClipPath` clips.
+/// `cull` rejects a mask outside it and cuts an oversized one to it with a halo, as Blink's
+/// `ClipPathClipper::PaintClipPath` clips by the cull rect.
 pub(crate) fn render_mask(
   paths: &[Command],
   transform: Option<Affine>,

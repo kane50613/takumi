@@ -171,7 +171,8 @@ impl<'a> ArenaElement<'a> {
     &self.tree.nodes[self.index]
   }
 
-  /// HTML's [directionality](https://html.spec.whatwg.org/multipage/dom.html#the-directionality).
+  /// HTML's [directionality](https://html.spec.whatwg.org/multipage/dom.html#the-directionality)
+  /// from `dir` attributes. Approximate: `dir="auto"` does not read the text.
   fn directionality(&self) -> Direction {
     let mut current = Some(*self);
 
