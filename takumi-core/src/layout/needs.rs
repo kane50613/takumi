@@ -1,5 +1,4 @@
-//! What a render tree needs from outside before it renders, read after the cascade so stylesheet
-//! rules, `display: none`, generated content, and `text-transform` count as they will render.
+//! What a render tree needs from outside before it renders, read from the styled tree.
 
 use std::{collections::BTreeSet, rc::Rc};
 
@@ -25,13 +24,9 @@ use crate::{font_style::SizedFontStyle, fonts::font_description::FontDescription
 /// The images a render tree looks up by URL and the pending fonts its text loads.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RenderNeeds {
-  /// The URLs of image elements, of computed `background-image` and `mask-image` values, and of
-  /// list items' `list-style-image`, except `data:` URIs and inline SVG the render decodes itself.
+  /// The image URLs the tree looks up, except `data:` URIs and inline SVG.
   pub images: BTreeSet<String>,
-  /// The ids of the pending faces (see [`Fonts::register_pending`](crate::Fonts::register_pending))
-  /// the render would load: for each of those characters, the first pending face the fallback of
-  /// the font it is drawn in meets before a loaded font with its glyph, which Blink's
-  /// `FontFallbackIterator` begins loading.
+  /// The ids of the [pending faces](crate::Fonts::register_pending) font fallback would load.
   pub faces: BTreeSet<usize>,
 }
 
@@ -58,8 +53,7 @@ impl FromIterator<RenderNeeds> for RenderNeeds {
 #[derive(Default)]
 struct NeedsCollector {
   needs: RenderNeeds,
-  /// Each fallback list by address, kept alive so no other list takes the address, with the
-  /// characters and priorities walked through it.
+  /// Each fallback list by address, held so the address stays unique, with what it has looked up.
   walked: FxHashMap<*const FontFallbackList, WalkedCharacters>,
 }
 
@@ -89,8 +83,7 @@ impl RenderNode {
 
     let mut stack = vec![(self, false)];
 
-    // Whether an ancestor's inline walk reads the node's text, which then reads its children's too,
-    // except a box it passes because that box lays out on its own.
+    // `walked`: an ancestor's inline walk already read this node's text.
     while let Some((node, walked)) = stack.pop() {
       needs.add_style(&node.context);
       needs.add_keyframes(&node.context);
@@ -152,8 +145,7 @@ impl NeedsCollector {
     }
   }
 
-  /// Adds the images the `@keyframes` rules the box animates with switch to, which only show at
-  /// later frames.
+  /// Adds the images the box's `@keyframes` switch to.
   fn add_keyframes(&mut self, context: &RenderContext) {
     for name in context.style.misc1_data.animation_name.iter().flatten() {
       let Some(rule) = find_keyframes(context.stylesheet(), name, context.sizing.viewport) else {
@@ -174,8 +166,7 @@ impl NeedsCollector {
     }
   }
 
-  /// Adds the characters an SVG image's `text` elements draw with the render's fonts, shown in the
-  /// box `context` styles, and the pending faces their fonts would load.
+  /// Adds the pending faces an SVG image's `text` elements would load.
   fn add_svg_text(&mut self, image: impl FnOnce() -> Option<ImageSource>, context: &RenderContext) {
     #[cfg(feature = "svg")]
     if context.fonts().has_pending_faces()
@@ -194,8 +185,7 @@ impl NeedsCollector {
     let _ = (image, context);
   }
 
-  /// Adds the text inline layout shapes in the inline formatting context `root` establishes,
-  /// collected as layout collects it, `text-transform` applied with the character before each run.
+  /// Adds the text of the inline formatting context `root` establishes, collected as layout collects it.
   fn add_inline_text(&mut self, root: &RenderNode) {
     let data = InlineNode::new(root).collect_inlines();
 
@@ -215,8 +205,7 @@ impl NeedsCollector {
     }
   }
 
-  /// Adds the pending faces `font` would load to draw `text`, each character looked up at the
-  /// fallback priority Blink's `SymbolsIterator` gives its run.
+  /// Adds the pending faces `font` would load to draw `text`, at Blink's `SymbolsIterator` priorities.
   fn add_text(&mut self, font: &Font, text: &str) {
     let list = &font.fallback_list;
 
@@ -247,9 +236,7 @@ impl NeedsCollector {
   }
 }
 
-/// The image `src` names when it is one the render can read without fetching: an entry of its
-/// `images`, inline markup, or a `data:` URI. A raster `data:` URI stays undecoded, since only an
-/// SVG draws text.
+/// The SVG `src` names when the render can read it without fetching.
 fn svg_url(src: &str, context: &RenderContext) -> Option<ImageSource> {
   if is_image_reference(src) {
     return context.images().get(src).cloned();
@@ -302,8 +289,7 @@ mod tests {
       .unicode_range(UnicodeRangeSet::from_iter([range]))
   }
 
-  /// The ids of the pending faces `children` request in a block styled by `css`, with Geist Mono
-  /// registered ahead of `faces`.
+  /// The pending faces `children` request under `css`, with Geist Mono registered first.
   fn requested(
     faces: impl IntoIterator<Item = PendingFontFace>,
     children: impl Into<Vec<Node>>,
@@ -337,8 +323,7 @@ mod tests {
     .collect()
   }
 
-  /// The characters of `probe` whose own pending face `children` request in a block styled by
-  /// `css`, every face in the block's only family.
+  /// The characters of `probe` whose one-character pending face `children` request under `css`.
   fn shaped(probe: &str, children: impl Into<Vec<Node>>, css: &str) -> String {
     let probe: Vec<char> = probe.chars().collect();
     let faces = probe.iter().enumerate().map(|(id, &character)| {

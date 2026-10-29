@@ -1,8 +1,5 @@
 //! Approximate stand-in for the fallback half of Blink's `FontCache`, searching registered fonts; see #2001.
-//!
-//! Pending faces of the fallback families take part as their registered faces would, though Blink's
-//! system fallback never picks a web font: a pending face counts as a text face that has every
-//! codepoint of its `unicode-range`, since it has no glyphs to read yet.
+//! Unlike Blink, system fallback also picks pending faces, as if they had every codepoint of their `unicode-range`.
 
 use std::{cell::RefCell, collections::hash_map::Entry, rc::Rc};
 
@@ -70,8 +67,7 @@ impl FontCache {
     }
   }
 
-  /// The pending face [`Self::fallback_font_for_character`] would pick for `hint` once it loads,
-  /// none when a loaded face comes first.
+  /// The pending face [`Self::fallback_font_for_character`] would pick for `hint`, unless a loaded one comes first.
   pub(crate) fn pending_fallback_font_for_character(
     &self,
     hint: char,

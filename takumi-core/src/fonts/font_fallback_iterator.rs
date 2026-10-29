@@ -1,10 +1,5 @@
 //! Blink's [`FontFallbackIterator`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc).
-//!
-//! A pending face stands for Blink's custom font that is loading: [`FontFallbackIterator::next`]
-//! records one that contributes for the hint list, as Blink calls `BeginLoadIfNeeded`, and goes on
-//! past it. Approximate: a pending face is never a `data:` URL font, which Blink loads whenever it
-//! contributes, and the system font stages record pending faces of the fallback families too; see
-//! [`FontCache::pending_fallback_font_for_character`](super::font_cache::FontCache::pending_fallback_font_for_character).
+//! Approximate: system fallback also records pending faces, which Blink never picks there.
 
 use std::{collections::HashSet, rc::Rc};
 
@@ -105,8 +100,7 @@ impl<'a> FontFallbackIterator<'a> {
     }
   }
 
-  /// Blink's `RangeSetContributesForHint`: a pending face contributes only for a character no
-  /// face already passed as pending covers.
+  /// Blink's `RangeSetContributesForHint`.
   fn range_set_contributes_for_hint(
     &self,
     hint_list: &[char],
@@ -119,8 +113,7 @@ impl<'a> FontFallbackIterator<'a> {
     })
   }
 
-  /// Records the pending face of the fallback families system fallback would pick for `hint`
-  /// once it loads.
+  /// Records the pending face system fallback would pick for `hint`.
   fn track_pending_fallback_font(
     &mut self,
     hint: char,

@@ -162,10 +162,7 @@ impl SvgDocument {
       .any(|element| element.kind == SvgElementKind::Text)
   }
 
-  /// The text inside the document's `text` elements drawn in `host`: each element's character
-  /// data in document order, outside `display: none` elements, with the context of the element
-  /// around it styled where it stands. Approximate: an element a `use` instances inherits along its
-  /// own ancestors, not the `use`'s.
+  /// The displayed text of the `text` elements, each with its styled context; approximate, ignoring `use`.
   pub(crate) fn text_runs(&self, host: SvgHost<'_>) -> Vec<(RenderContext, &str)> {
     let styles = style::StyleResolver::new(self, host, self.canvas);
 
