@@ -305,8 +305,7 @@ export const LIST_MARKER_CHARACTERS =
 /**
  * Collect every codepoint the content will render.
  *
- * @deprecated Renderers pick font subsets from the text they lay out, so stylesheet content and
- * `text-transform` count.
+ * @deprecated Renderers pick font subsets from the text they lay out.
  */
 export function collectCodepoints(source: CodepointSource): Set<number> {
   const codepoints = new Set<number>();
@@ -367,11 +366,9 @@ function lowerBound(values: Uint32Array, target: number): number {
 }
 
 /**
- * Keep the subsets that cover the characters in `source`, dropping the rest. Range-less fallbacks
- * (a full font or a `text=` subset) and entries without a `unicodeRange` always stay.
+ * Keep the subsets that cover the characters in `source`. Range-less fallbacks and entries without a `unicodeRange` stay.
  *
- * @deprecated Pass the fonts to a render. A renderer picks the subsets its text uses after the
- * cascade, the text inside its SVG images included.
+ * @deprecated Pass the fonts to a render, which picks the subsets its text uses.
  */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
   const codepoints = Uint32Array.from(collectCodepoints(source)).sort();

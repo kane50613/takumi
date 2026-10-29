@@ -148,10 +148,7 @@ async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
   return defaultRenderer.get(options?.module);
 }
 
-/**
- * Turns an input into what a renderer takes. The renderer parses HTML as written when its emoji
- * come from the fonts. Otherwise the input becomes a node tree with its emoji split out.
- */
+/** Turns an input into what a renderer takes, splitting out its emoji unless the renderer's fonts draw them. */
 async function resolveContent(
   element: RenderInput,
   options?: PipelineOptions,

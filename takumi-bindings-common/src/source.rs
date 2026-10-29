@@ -10,11 +10,8 @@ use crate::{
   source_cache::{ParsedSource, SourceCache, SourceKind},
 };
 
-/// The node tree `source` describes, and the CSS of its `<style>` elements when it is HTML. HTML
-/// and JSON come from `sources` when they are the text it parsed last.
-///
-/// HTML parses with `takumi_html`, which recovers from less malformed markup than a browser: it
-/// does not reconstruct misnested formatting elements or move stray table content out of a table.
+/// The node tree `source` describes, and the CSS of its `<style>` elements when it is HTML.
+/// Approximate: `takumi_html` does not rebuild misnested formatting elements or move stray table content.
 pub fn read_source(source: JsValue, sources: &SourceCache) -> Result<ParsedSource, Error> {
   if let Some(html) = source.as_string() {
     return sources.parse(SourceKind::Html, &html, |html| {

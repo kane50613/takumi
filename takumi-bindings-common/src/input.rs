@@ -45,13 +45,11 @@ pub struct ListedFont {
   unicode_range: Option<Vec<(u32, u32)>>,
 }
 
-/// A render's `fonts` list as a needs pass reads it: each font a renderer does not hold yet is a
-/// face still loading.
+/// A render's `fonts` list as a needs pass reads it.
 pub struct ListedFonts {
   pending: Vec<PendingFontFace>,
-  /// The families a render of the list falls back through, in order: a held font's as it
-  /// registered them, another's by its `name`. Approximate: an unnamed font not held yet, such as
-  /// a URL, names its family only once it loads, so it is left out.
+  /// The families a render falls back through, in order.
+  /// Approximate: an unnamed font not held yet, such as a URL, is left out.
   pub families: Option<Vec<String>>,
   len: usize,
   /// The listed `unicodeRange` subsets still loading.
@@ -123,9 +121,8 @@ impl ListedFonts {
     fonts
   }
 
-  /// The ids of the listed fonts a render that reaches the pending `faces` loads: every one but the
-  /// `unicodeRange` subsets font matching did not reach, as a browser loads only the
-  /// `unicode-range` faces its text uses. <https://drafts.csswg.org/css-fonts-4/#unicode-range-desc>
+  /// The ids of the listed fonts a render loads, without the `unicodeRange` subsets it does not reach.
+  /// <https://drafts.csswg.org/css-fonts-4/#unicode-range-desc>
   pub fn to_load(&self, faces: &BTreeSet<usize>) -> Vec<usize> {
     (0..self.len)
       .filter(|id| !self.subsets.contains(id) || faces.contains(id))
@@ -238,8 +235,7 @@ pub struct ImageSource {
   cache: Option<ImageCacheMode>,
 }
 
-/// Keeps the images a needs pass reads: the SVG ones, whose `text` elements the render's fonts
-/// draw. A needs pass decodes no raster image.
+/// Keeps the SVG images a needs pass reads, whose `text` elements the fonts draw.
 pub fn retain_svg(images: &mut Option<Vec<ImageSource>>) {
   if let Some(images) = images {
     images.retain(|image| is_svg_bytes(&image.data));

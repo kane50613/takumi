@@ -98,8 +98,7 @@ impl FontStore {
     self.current()
   }
 
-  /// The registry for a needs pass naming `families`, or else the families `listed` falls back
-  /// through, with each listed font still loading registered as a pending face.
+  /// The registry for a needs pass, with each listed font still loading registered as pending.
   pub fn for_needs(
     &self,
     families: &mut Option<Vec<String>>,
@@ -116,8 +115,7 @@ impl FontStore {
     Rc::new(listed.fonts(&self.for_render(families.as_deref())))
   }
 
-  /// Registers the font JavaScript describes under `key`, returning its families as the
-  /// binding's JavaScript type `T`; one that is not `pinned` can be released for space.
+  /// Registers the font JavaScript describes under `key`. One that is not `pinned` can be released.
   #[cfg(feature = "wasm")]
   pub fn register_value<T: JsCast>(
     &self,

@@ -31,11 +31,7 @@ function withinMaxBytes(data: ArrayBuffer, maxBytes: number): ArrayBuffer {
   return data;
 }
 
-/**
- * Fetches `url` through a cache other callers share. The shared request carries no caller's
- * `signal` or `timeout`, so a caller that gives up ends only its own wait; it stops at the default
- * timeout and {@link maxSharedImageBytes}, and leaves the cache when it fails.
- */
+/** Fetches `url` through a shared cache, so a caller's `signal` and `timeout` end only its own wait. */
 function fetchSharedImageData(
   url: string,
   options: FetchOptions,
@@ -81,10 +77,7 @@ function fetchImageData(
   return promise;
 }
 
-/**
- * Fetches each of `urls` not already in `sources`, and returns the entries ready to hand to a
- * renderer, `sources` first.
- */
+/** Fetches each of `urls` not already in `sources`, returning the entries with `sources` first. */
 export async function fetchImages<T extends { src: string } = FetchedImage>({
   urls = [],
   sources = [],

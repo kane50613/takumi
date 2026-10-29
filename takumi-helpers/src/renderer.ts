@@ -287,10 +287,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return load;
   }
 
-  /**
-   * `fonts` described for a backend's needs pass, which decides from the fonts it holds which of
-   * them a render loads. None when no font declares a `unicodeRange`, since every font then loads.
-   */
+  /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */
   listed(fonts: FontLoader[]): ListedFont[] | undefined {
     const loaders = fonts.map(toLoader);
 
@@ -363,7 +360,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 }
 
 /**
- * The binding options {@link withRenderInput} passes on: extras stripped, resolved resources merged in.
+ * The binding options {@link withRenderInput} passes on.
  *
  * @deprecated Use a renderer's `prepare`, whose prepared source carries its resolved options.
  */
@@ -376,12 +373,9 @@ export type ResolvedRenderOptions<TOptions> = Omit<
 };
 
 /**
- * Registers the `fonts` subsets the characters of `source` use, resolves `images` and
- * `fontFamilies`, and checks `signal` before and after, then calls `call` with the binding options
- * and the `signal`.
+ * Registers the `fonts` subsets the characters of `source` use, resolves `images` and `fontFamilies`, then calls `call`.
  *
- * @deprecated Use a renderer's `prepare`, which reads the characters after the cascade. This reads
- * them from the text of `source` alone.
+ * @deprecated Use a renderer's `prepare`, which reads the characters after the cascade.
  */
 export async function withRenderInput<
   TOptions extends RenderExtras & { fontFamilies?: string[] },

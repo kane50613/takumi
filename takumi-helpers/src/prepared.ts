@@ -52,10 +52,7 @@ export type BackendPreparedRenderOptions<TInternal> = Pick<
 /** What a render reads from a source before it lays it out: the images it draws, and the ids of the listed fonts it loads. */
 export type SourceNeeds = { images: string[]; fonts: number[] };
 
-/**
- * A font of a render's `fonts` list, described before its bytes arrive. A backend that does not hold
- * it takes it as a face still loading, and `needs` reports its index when the render loads it.
- */
+/** A font of a render's `fonts` list, described before its bytes arrive. */
 export type ListedFont = Pick<FontDetails, "name" | "weight" | "style" | "unicodeRange"> & {
   key: string;
 };
@@ -96,11 +93,7 @@ let stateOf: <TSource, TLayout>(
   prepared: Prepared<TSource, TLayout>,
 ) => PreparedState<TSource, TLayout>;
 
-/**
- * A source with its layout options, the font subsets its text uses, and the images it draws,
- * fetched. Render it with the `render`, `renderSvg`, or `measure` of a renderer of the backend that
- * prepared it.
- */
+/** A source with its layout options, the font subsets its text uses, and the images it draws, fetched. */
 export class Prepared<TSource = unknown, TLayout = unknown> {
   readonly #state: PreparedState<TSource, TLayout>;
 
@@ -115,11 +108,7 @@ export class Prepared<TSource = unknown, TLayout = unknown> {
   }
 }
 
-/**
- * Reads what `source` needs, then loads the font subsets its text uses and fetches the images it
- * draws that `extras.images` does not supply. `needs` reads the source after the cascade under
- * `layout`, the binding options it will render with.
- */
+/** Reads what `source` needs under `layout`, then loads its font subsets and fetches the images `extras.images` lacks. */
 export async function prepareSource<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   registry: FontRegistry<TFamily>,
   source: TSource,
@@ -135,10 +124,7 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
   return createPrepared(state);
 }
 
-/**
- * {@link prepareSource} without fetching: the images are the ones `extras.images` supplies, and
- * `needs` runs only when `fonts` holds `unicodeRange` subsets.
- */
+/** {@link prepareSource} without fetching, running `needs` only when `fonts` holds `unicodeRange` subsets. */
 export async function readSource<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   registry: FontRegistry<TFamily>,
   source: TSource,
@@ -192,10 +178,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   return { source, layout, fonts: subset, fontFamilies, images: entries };
 }
 
-/**
- * Calls `call` with the binding options for rendering `prepared` with `output`, while the backend
- * holds every font it uses. The layout `prepared` holds wins over any layout option in `output`.
- */
+/** Calls `call` with the binding options for rendering `prepared` with `output`. The layout `prepared` holds wins. */
 export function renderPrepared<
   TFamily extends RegisteredFamilyLike,
   TSource,

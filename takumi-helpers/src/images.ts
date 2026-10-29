@@ -70,10 +70,7 @@ export interface FetchedImage {
 export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = FetchOptions & {
   /** Image URLs to fetch. A relative one is fetched only through a custom `fetch`, which can resolve it. */
   urls?: Iterable<string>;
-  /**
-   * The node tree(s) whose remote images to fetch, read from `src`, inline styles, and `tw`
-   * classes. Images a stylesheet or a `<style>` element names are not collected.
-   */
+  /** The node tree(s) whose remote images to fetch. Images a stylesheet or `<style>` element names are not collected. */
   node?: Node | Node[];
   /** Pre-fetched entries; their URLs are not re-fetched. */
   sources?: T[];
@@ -87,8 +84,7 @@ export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = Fet
  * Collects every remote image a node tree references, fetches the ones not already in `sources`,
  * and returns them as entries ready to hand to a renderer.
  *
- * @deprecated Use a renderer's `prepare`, which reads the images after the cascade and fetches
- * them with the same options.
+ * @deprecated Use a renderer's `prepare`, which reads the images after the cascade.
  */
 export async function prepareImages<T extends { src: string } = FetchedImage>({
   urls,

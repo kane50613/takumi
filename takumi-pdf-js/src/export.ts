@@ -458,11 +458,7 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
     super(new PdfRendererInternal(options));
   }
 
-  /**
-   * Reads what a document and its bands need under `options`, then loads the font subsets their
-   * text uses and fetches the images they draw, so {@link render} and {@link measure} only lay the
-   * document out and write it.
-   */
+  /** Reads what a document and its bands need under `options`, then loads their font subsets and fetches their images. */
   async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
     const { fonts, images, signal, fontFamilies, header, footer, pages, css, ...rest } = options;
     const document = await resolveLayout(node, { header, footer, pages, css });

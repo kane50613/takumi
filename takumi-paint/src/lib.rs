@@ -216,8 +216,7 @@ impl Painter {
     Ok(RenderedPaint { tree, raw })
   }
 
-  /// Reads the images a node tree looks up by URL and the pending fonts its text loads, after the
-  /// cascade.
+  /// Reads the images a node tree looks up and the pending fonts its text loads.
   pub fn needs(
     &self,
     node: NodeType,

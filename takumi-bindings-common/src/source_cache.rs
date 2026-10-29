@@ -1,5 +1,4 @@
-//! The last source text a renderer parsed, so a render that follows `needs` on the same HTML or
-//! JSON reads it once.
+//! The last source text a renderer parsed, so a render after `needs` reads it once.
 
 use std::sync::Arc;
 

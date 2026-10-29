@@ -169,9 +169,7 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
   })
 }
 
-/// What a node tree needs fetched before it renders, read after the cascade as [`measure`] lays it
-/// out, each page counter hook filled with every character its counter style draws; see
-/// [`RenderNode::needs`].
+/// What a node tree needs fetched before it renders, with page counter hooks filled. See [`RenderNode::needs`].
 pub fn needs(options: MeasureOptions<'_>) -> Result<RenderNeeds, PdfError> {
   let inputs = TreeInputs {
     fonts: options.fonts,

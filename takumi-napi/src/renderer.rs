@@ -89,12 +89,10 @@ impl From<takumi_raster::MeasuredNode> for MeasuredNode {
   }
 }
 
-/// The images a node tree looks up by URL and the listed fonts the render loads, read after the
-/// cascade.
+/// The images a node tree looks up by URL and the listed fonts the render loads.
 #[napi(object)]
 pub struct RenderNeeds {
-  /// The URLs of image elements and computed background, mask, and list marker images, except
-  /// `data:` URIs and inline SVG, sorted.
+  /// The image URLs the tree looks up, except `data:` URIs and inline SVG, sorted.
   pub images: Vec<String>,
   /// The ids of the listed fonts the render loads, sorted.
   pub fonts: Vec<u32>,
@@ -152,8 +150,7 @@ impl RendererState {
     Ok(changed)
   }
 
-  /// A render's `fonts` list read against the fonts this renderer holds, with `families` set to the
-  /// families the list falls back through unless the render names its own.
+  /// A render's `fonts` list read against the fonts this renderer holds.
   pub(crate) fn listed(
     &self,
     families: &mut Option<Vec<String>>,
@@ -197,8 +194,7 @@ pub(crate) fn decode_images(
   Ok(map)
 }
 
-/// Keeps the images a needs pass reads: the SVG ones, whose `text` elements the render's fonts
-/// draw. A needs pass decodes no raster image.
+/// Keeps the SVG images a needs pass reads, whose `text` elements the fonts draw.
 pub(crate) fn retain_svg(images: &mut HashMap<Arc<str>, (JsBytes, ImageCacheMode)>) {
   images.retain(|_, (bytes, _)| is_svg_bytes(bytes.as_ref()));
 }

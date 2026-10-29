@@ -125,10 +125,7 @@ export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
     super(new PainterInternal(options));
   }
 
-  /**
-   * Reads what a node tree, JSX, or an HTML string needs under `options`, then loads the font
-   * subsets its text uses and fetches the images it draws, so {@link paint} only lays it out.
-   */
+  /** Reads what a node tree, JSX, or HTML needs under `options`, then loads its font subsets and fetches its images. */
   async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
     const { fonts, images, signal, fontFamilies, css, ...rest } = options;
     const main = await resolveNode(node);

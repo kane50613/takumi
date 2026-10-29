@@ -72,11 +72,7 @@ export class Renderer {
     this.fonts = new FontRegistry(this.inner);
   }
 
-  /**
-   * Reads what `source` needs under `options`, then loads the font subsets its text uses and fetches
-   * the images it draws, so {@link render}, {@link renderSvg}, and {@link measure} only lay it out
-   * and encode it.
-   */
+  /** Reads what `source` needs under `options`, then loads its font subsets and fetches its images. */
   prepare(source: Node | string, options?: PrepareOptions): Promise<PreparedSource> {
     const { fonts, images, signal, fontFamilies, ...layout } = options ?? {};
     const native = toNativeSource(source);
@@ -163,11 +159,7 @@ export class Renderer {
     );
   }
 
-  /**
-   * Reads what every scene of an animation needs, then loads the font subsets their text uses and
-   * fetches the images they draw, so {@link renderAnimation} only lays the scenes out and encodes
-   * them.
-   */
+  /** Reads what every scene needs under `options`, then loads their font subsets and fetches their images. */
   prepareAnimation(options: PrepareAnimationOptions): Promise<PreparedAnimation> {
     return this.readAnimation(options, prepareSource);
   }

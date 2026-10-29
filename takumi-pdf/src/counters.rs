@@ -355,8 +355,7 @@ fn has_class(classes: &str, class: &str) -> bool {
   classes.split_ascii_whitespace().any(|name| name == class)
 }
 
-/// Fills every page counter hook with each character its counter style draws, so a needs pass
-/// reads them in the hook's own font.
+/// Fills each page counter hook with every character its style draws, so a needs pass reads them.
 pub(crate) fn substitute_counter_characters(node: &mut Node) {
   let style = node
     .class_name()

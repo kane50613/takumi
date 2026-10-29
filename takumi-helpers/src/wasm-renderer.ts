@@ -31,11 +31,7 @@ export class WasmRenderer<
     return this.fonts.register(font);
   }
 
-  /**
-   * Removes every face registered under the family `name`, from any `registerFont` call and each
-   * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
-   * as well. A later render that lists one of its fonts registers it again.
-   */
+  /** Removes every face registered under the family `name`, returning whether it had any. */
   unregisterFont(family: RegisteredFamilyLike): boolean {
     return this.inner.unregisterFont(family.name);
   }

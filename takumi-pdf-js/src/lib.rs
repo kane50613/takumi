@@ -131,8 +131,7 @@ pub struct PdfRenderer {
 }
 
 impl PdfRenderer {
-  /// The document `node` describes and the options it renders with, its HTML bands parsed and the
-  /// CSS of every `<style>` element appended.
+  /// The document `node` describes and its options, with HTML bands parsed and `<style>` CSS appended.
   fn read_document(
     &self,
     node: NodeType,
@@ -175,8 +174,7 @@ impl PdfRenderer {
     })
   }
 
-  /// What the trees of the document `options` describe lay out with as `measure` lays them out,
-  /// with each font `listed` still loading taken as a pending face.
+  /// What the document's trees lay out with as `measure` lays them out.
   fn measure_inputs(
     &self,
     options: &mut PdfRenderOptions,
@@ -331,8 +329,7 @@ impl PdfRenderer {
     )
   }
 
-  /// Reads the images a document and each of its bands look up by URL and the pending fonts their
-  /// text loads, after the cascade, each laid out as `measure` lays it out.
+  /// Reads the images a document and its bands look up and the pending fonts their text loads.
   pub fn needs(
     &self,
     node: NodeType,
