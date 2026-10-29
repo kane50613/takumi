@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 
@@ -23,7 +23,7 @@ impl Task for LoadFontTask {
   fn compute(&mut self) -> Result<Self::Output> {
     self
       .info
-      .resource(self.buffer.as_ref().to_vec())
+      .resource(take(&mut self.buffer).into_vec())
       .map_err(map_error)?
       .into_resolved()
       .map_err(map_error)

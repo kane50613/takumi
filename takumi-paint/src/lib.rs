@@ -4,6 +4,8 @@
 
 use std::mem::take;
 
+use js_sys::Uint8Array;
+
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
@@ -254,8 +256,8 @@ impl RenderedPaint {
 
   /// The file of the tree's font at `index`.
   #[wasm_bindgen(js_name = fontData)]
-  pub fn font_data(&self, index: usize) -> Option<Vec<u8>> {
-    self.tree.font_data(index).map(<[u8]>::to_vec)
+  pub fn font_data(&self, index: usize) -> Option<Uint8Array> {
+    self.tree.font_data(index).map(Uint8Array::from)
   }
 
   /// The SVG path data of each glyph of run `run` of text node `node`, `null` for a glyph the

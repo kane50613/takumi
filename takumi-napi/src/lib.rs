@@ -92,6 +92,7 @@ impl From<takumi_core::resources::font::RegisteredFace> for RegisteredFace {
 }
 
 /// Bytes copied out of a JS buffer, so a worker thread never reads memory JS can rewrite or detach.
+#[derive(Default)]
 pub(crate) struct JsBytes(Box<[u8]>);
 
 impl AsRef<[u8]> for JsBytes {
@@ -101,6 +102,10 @@ impl AsRef<[u8]> for JsBytes {
 }
 
 impl JsBytes {
+  pub(crate) fn into_vec(self) -> Vec<u8> {
+    self.0.into_vec()
+  }
+
   pub(crate) fn from_object(env: Env, value: Object) -> Result<Self> {
     if value.is_buffer()? {
       let buffer = unsafe { BufferSlice::from_napi_value(env.raw(), value.raw()) }?;
