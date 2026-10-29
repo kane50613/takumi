@@ -152,8 +152,8 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 it drifts.
 
 <sup>2</sup> `size`, `inline-size`, and `strict` cause a parse error because size containment is not
-implemented. `style` parses but has nothing to scope: Takumi has no author-facing counters, and
-list-item ordinals do not restart at the boundary.
+implemented. `style` scopes `counter-reset`, `counter-increment`, and `counter-set` to the subtree.
+List markers still number across the boundary, which Chrome stops at.
 
 Containment is a correctness feature here, not a performance hint. Takumi renders once, so there
 is no relayout to skip, and paint containment adds a stacking context and a clip layer per box.
