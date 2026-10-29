@@ -4,7 +4,7 @@
 use crate::{
   context::RenderContext,
   font_style::BoxLineHeight,
-  form_control::InputType,
+  form_control::{InputType, has_attribute, is_element, text_content},
   layout::{
     node::Node,
     tree::{NodeOrigin, RenderNode},
@@ -13,13 +13,20 @@ use crate::{
   matching::MatchedDeclarationsView,
   resources::font::PrimaryFontMetrics,
   style::{
-    Display, FontFamilyToken, Length, LineHeight, Overflow, OverflowWrap, Size, TextWrapMode,
-    WhiteSpaceCollapse,
+    ComputedStyle, Display, FontFamilyToken, Length, LineHeight, Overflow, OverflowWrap, Size,
+    TextWrapMode, WhiteSpaceCollapse,
   },
 };
 
 /// The number of characters a text field without a valid `size` attribute is wide.
 const DEFAULT_SIZE: u32 = 20;
+
+/// The `cols` and `rows` of a `<textarea>` without valid ones.
+const DEFAULT_COLS: u32 = 20;
+const DEFAULT_ROWS: u32 = 2;
+
+/// The thickness of a scrollbar in Blink's default Aura theme on Linux.
+const SCROLLBAR_THICKNESS: f32 = 15.0;
 
 /// Blink's `kFontFamiliesWithInvalidCharWidth`: families whose average character width does not
 /// size a text field.
@@ -74,11 +81,37 @@ pub(crate) enum TextControlBox {
 pub(crate) enum TextControl {
   /// Blink's `LayoutTextControlSingleLine`: an `<input>` text field `size` characters wide.
   SingleLine { size: u32 },
+  /// Blink's `LayoutTextControlMultiLine`: a `<textarea>` `cols` characters wide and `rows` lines
+  /// tall, which reserves room for a vertical scrollbar when it may show one.
+  MultiLine {
+    cols: u32,
+    rows: u32,
+    reserves_scrollbar: bool,
+  },
 }
+
+/// Blink's bound on `rows` and `cols`, past which they take their defaults.
+const MAX_ROWS_OR_COLS: u32 = 0x7fff_ffff;
 
 impl TextControl {
   /// The text control `node` is, if any.
   pub(crate) fn of(node: &Node) -> Option<Self> {
+    if is_element(node, "textarea") {
+      let positive = |name: &str, default: u32| {
+        node
+          .attribute(name)
+          .and_then(parse_non_negative_integer)
+          .filter(|&value| value > 0 && value <= MAX_ROWS_OR_COLS)
+          .unwrap_or(default)
+      };
+
+      return Some(Self::MultiLine {
+        cols: positive("cols", DEFAULT_COLS),
+        rows: positive("rows", DEFAULT_ROWS),
+        reserves_scrollbar: true,
+      });
+    }
+
     let input_type = InputType::of(node)?;
 
     if !input_type.is_text_field() {
@@ -99,34 +132,75 @@ impl TextControl {
     Some(Self::SingleLine { size })
   }
 
+  /// Blink's `StyleAdjuster` for a `<textarea>`, which scrolls in each axis whose `overflow` is
+  /// `visible`. Approximate: takumi has no `auto`, so it clips where Blink would scroll, which a
+  /// static render paints the same.
+  pub(crate) fn adjust_host_style(&mut self, style: &mut ComputedStyle) {
+    let Self::MultiLine {
+      reserves_scrollbar, ..
+    } = self
+    else {
+      return;
+    };
+    let base = style.base_data_mut();
+
+    // Blink's `TextAreaIntrinsicInlineSize` makes room for a scrollbar an `auto` axis may show.
+    *reserves_scrollbar = base.overflow_y == Overflow::Visible;
+    for overflow in [&mut base.overflow_x, &mut base.overflow_y] {
+      if *overflow == Overflow::Visible {
+        *overflow = Overflow::Hidden;
+      }
+    }
+  }
+
   /// The box `host` lays out its value in, after Blink's
   /// `TextControlInnerEditorElement::CustomStyleForLayoutObject`. Approximate: the editor clips
   /// where Blink's scrolls with its scrollbars hidden, which paints the same.
   pub(crate) fn inner_editor(self, host: &RenderContext, node: &Node) -> RenderNode {
     let (mut style, sizing, current_color) =
       host.resolve_pseudo_style(&MatchedDeclarationsView::default());
-    let host_line_height = computed_line_height(host).to_float().trunc();
-    let removes_line_height = sizing.font_size >= host_line_height
-      || match host.style.box_data.height {
-        Size::Length(length) if length.has_percentage() => true,
-        Size::Length(Length::Auto | Length::Calc(_)) => false,
-        Size::Length(length) => length.to_px(&host.sizing, 0.0) > host_line_height,
-        _ => false,
-      };
 
-    style.base_data_mut().display = Display::FlowRoot;
-    style.base_data_mut().overflow_x = Overflow::Hidden;
-    style.base_data_mut().overflow_y = Overflow::Hidden;
-    style.misc4_data_mut().text_overflow = host.style.misc4_data.text_overflow.clone();
+    style.base_data_mut().display = Display::Block;
+    if let Self::SingleLine { .. } = self {
+      let host_line_height = computed_line_height(host).to_float().trunc();
+      let removes_line_height = sizing.font_size >= host_line_height
+        || match host.style.box_data.height {
+          Size::Length(length) if length.has_percentage() => true,
+          Size::Length(Length::Auto | Length::Calc(_)) => false,
+          Size::Length(length) => length.to_px(&host.sizing, 0.0) > host_line_height,
+          _ => false,
+        };
 
+      style.base_data_mut().display = Display::FlowRoot;
+      style.base_data_mut().overflow_x = Overflow::Hidden;
+      style.base_data_mut().overflow_y = Overflow::Hidden;
+      style.misc4_data_mut().text_overflow = host.style.misc4_data.text_overflow.clone();
+
+      let inherited = style.inherited_data_mut();
+
+      inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
+      inherited.text_wrap_mode = TextWrapMode::NoWrap;
+      if removes_line_height {
+        inherited.line_height = LineHeight::Normal;
+      }
+      style.misc_inherited_data_mut().overflow_wrap = OverflowWrap::Normal;
+    }
+
+    // Blink's `StyleAdjuster::AdjustStyleForEditing`: plain-text editing keeps white space.
+    // Approximate: a control a disabled fieldset disables still keeps it, where Blink's editor
+    // there is read-only and collapses it.
+    let is_editable = !has_attribute(node, "disabled") && !has_attribute(node, "readonly");
     let inherited = style.inherited_data_mut();
 
-    inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
-    inherited.text_wrap_mode = TextWrapMode::NoWrap;
-    if removes_line_height {
-      inherited.line_height = LineHeight::Normal;
+    if is_editable
+      && matches!(
+        (inherited.white_space_collapse, inherited.text_wrap_mode),
+        (WhiteSpaceCollapse::Collapse, _)
+          | (WhiteSpaceCollapse::PreserveBreaks, TextWrapMode::Wrap)
+      )
+    {
+      inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
     }
-    style.misc_inherited_data_mut().overflow_wrap = OverflowWrap::Normal;
 
     let context = RenderContext::from_parent(host, style, sizing, current_color);
     let value = self.value(node);
@@ -147,10 +221,18 @@ impl TextControl {
     editor
   }
 
-  /// The text the editor shows: the sanitized value, masked in a password field.
+  /// The text the editor shows: the sanitized value, masked in a password field, or a
+  /// `<textarea>`'s text.
   fn value(self, node: &Node) -> String {
     let Some(input_type) = InputType::of(node) else {
-      return String::new();
+      let mut value = text_content(node).replace("\r\n", "\n").replace('\r', "\n");
+
+      // Blink's `AddPlaceholderBreakElementIfNecessary`: a final line break still opens a line.
+      if value.ends_with('\n') {
+        value.push('\n');
+      }
+
+      return value;
     };
     let value = input_type.sanitize_value(node.attribute("value").unwrap_or_default());
 
@@ -163,11 +245,27 @@ impl TextControl {
     }
   }
 
-  /// Blink's `TextFieldIntrinsicInlineSize`: the content inline size `host` takes.
+  /// Blink's `TextFieldIntrinsicInlineSize` or `TextAreaIntrinsicInlineSize`: the content inline
+  /// size `host` takes.
   pub(crate) fn default_inline_size(self, host: &RenderContext) -> LayoutUnit {
-    let Self::SingleLine { size } = self;
     let metrics = primary_font_metrics(host);
     let char_width = avg_char_width(host, metrics);
+    let size = match self {
+      Self::SingleLine { size } => size,
+      Self::MultiLine {
+        cols,
+        reserves_scrollbar,
+        ..
+      } => {
+        let scrollbar = if reserves_scrollbar {
+          SCROLLBAR_THICKNESS
+        } else {
+          0.0
+        };
+
+        return LayoutUnit::from_float((char_width * cols as f32).ceil() + scrollbar);
+      }
+    };
     let max_char_width = metrics
       .filter(|&metrics| has_valid_avg_char_width(host, metrics))
       .map_or(0.0, |metrics| metrics.max_char_width);
@@ -181,10 +279,15 @@ impl TextControl {
     LayoutUnit::from_float(width.ceil())
   }
 
-  /// Blink's `TextFieldIntrinsicBlockSize`: the content block size of a host whose inner editor
-  /// is `editor`, one of the editor's lines.
-  pub(crate) fn default_block_size(editor: &RenderContext) -> LayoutUnit {
-    computed_line_height(editor)
+  /// Blink's `TextFieldIntrinsicBlockSize` or `TextAreaIntrinsicBlockSize`: the content block
+  /// size of a host whose inner editor is `editor`, `rows` of the editor's lines.
+  pub(crate) fn default_block_size(self, editor: &RenderContext) -> LayoutUnit {
+    let rows = match self {
+      Self::SingleLine { .. } => 1,
+      Self::MultiLine { rows, .. } => rows,
+    };
+
+    computed_line_height(editor) * rows as i32
   }
 }
 

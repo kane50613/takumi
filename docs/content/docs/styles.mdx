@@ -200,6 +200,8 @@ The built-in parser applies no Tailwind Preflight by default. Elements keep thei
 
 Text fields keep Chromium's defaults too. An `<input>` of type `text`, `search`, `tel`, `url`, `email`, `password`, or `number` draws its `value` in 13.33px Arial inside a 2px inset border. The field is as wide as its `size` attribute asks, and its text is centered vertically. A password shows a dot for each character, and a disabled field turns gray. These fields use `box-sizing: content-box`, as in Chromium.
 
+A `<textarea>` draws its text in 13.33px monospace inside a 1px border, as many columns wide and rows tall as its `cols` and `rows` attributes ask, plus room for a scrollbar. It always clips its text, even with `overflow: visible`, because Chromium treats that value as `auto` on a textarea.
+
 <Callout type="warn">
   Without Preflight, a border style utility draws on every side. `border-dashed` sets `border-style`
   on all four sides, and an unset border width is `medium`. So `border-l-2 border-dashed` draws a

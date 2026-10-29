@@ -227,6 +227,22 @@ pub(crate) fn has_text(node: &Node) -> bool {
   false
 }
 
+/// The text of `node` and its descendants, in tree order.
+pub(crate) fn text_content(node: &Node) -> String {
+  let mut text = String::new();
+  let mut stack = vec![node];
+
+  while let Some(node) = stack.pop() {
+    match &node.kind {
+      NodeKind::Text(data) => text.push_str(&data.text),
+      NodeKind::Container { children } => stack.extend(children.iter().rev()),
+      NodeKind::Image(_) => {}
+    }
+  }
+
+  text
+}
+
 /// Blink's `ParseToDoubleForNumberType`: a valid floating-point number that is finite.
 /// <https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#valid-floating-point-number>
 fn is_valid_number(value: &str) -> bool {

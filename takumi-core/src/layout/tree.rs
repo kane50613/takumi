@@ -21,6 +21,7 @@ use crate::{
   context::{BoxId, RenderContext},
   font_style::SizedFontStyle,
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
+  form_control::{is_element, text_content},
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     block_node::LayoutCache,
@@ -36,7 +37,7 @@ use crate::{
     layout_view::LayoutView,
     length_utils::margins_for,
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
-    node::{Node, NodeKind, NodeStyleLayers},
+    node::{Node, NodeKind, NodeStyleLayers, TextData},
     out_of_flow::{ContainingBlock, ContainingBlockClaims, OutOfFlowLayoutPart},
     table::{ColumnConstraints, HiddenParts, TableFragment, TableStructure},
     text_control::{TextControl, TextControlBox},
@@ -2691,6 +2692,14 @@ impl PendingRenderNode {
     *source_cursor += 1;
     let (style, sizing, current_color) =
       parent_context.resolve_child_style(&mut node, source_order, matched_declarations);
+    // A textarea's value is its text content, which its children stop carrying once taken.
+    if is_element(&node, "textarea") && matches!(node.kind, NodeKind::Container { .. }) {
+      *source_cursor += node.subtree_len() - 1;
+      node.kind = NodeKind::Text(TextData {
+        text: text_content(&node),
+      });
+    }
+
     let children = node.take_children();
     let children_is_some = children.is_some();
     let children = children.map_or_else(Vec::new, <[Node]>::into_vec);
@@ -2720,6 +2729,7 @@ impl PendingRenderNode {
     // Folded text returns as a child beside generated content, so `::before` comes first.
     if (pseudo_before_present || pseudo_after.is_some())
       && !drops_own_text
+      && TextControl::of(&node).is_none()
       && let Some(text) = node.take_text()
     {
       rendered_children.push(RenderNode::generated_sibling_text(&context, text));
@@ -2799,7 +2809,9 @@ impl PendingRenderNode {
 
   /// Closes a text control, which Blink lays out as a block container whatever its `display`, and
   /// whose inner editor stands in for its generated content.
-  fn finish_text_control(mut self, control: TextControl) -> RenderNode {
+  fn finish_text_control(mut self, mut control: TextControl) -> RenderNode {
+    control.adjust_host_style(self.context.style_mut());
+
     let display = self.context.style.base_data.display;
 
     if display != Display::None {

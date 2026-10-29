@@ -868,7 +868,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   fn aligns_content_block_center(&self) -> bool {
     matches!(
       self.tree.render_node(self.node).text_control,
-      Some(TextControlBox::Host(_))
+      Some(TextControlBox::Host(TextControl::SingleLine { .. }))
     )
   }
 
@@ -877,15 +877,14 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   fn default_intrinsic_block_size(&self) -> Option<LayoutUnit> {
     let render_node = self.tree.render_node(self.node);
 
-    if !matches!(render_node.text_control, Some(TextControlBox::Host(_))) {
+    let Some(TextControlBox::Host(control)) = render_node.text_control else {
       return None;
-    }
-
+    };
     let editor = render_node.children.as_deref()?.first()?;
 
     Some(
       self.border_padding.block_start
-        + TextControl::default_block_size(&editor.context)
+        + control.default_block_size(&editor.context)
         + self.border_padding.block_end,
     )
   }
@@ -895,12 +894,13 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   fn add_line_if_empty(&mut self) {
     let render_node = self.tree.render_node(self.node);
 
-    if !matches!(
-      render_node.text_control,
-      Some(TextControlBox::InnerEditor(_))
-    ) || render_node.own_text().is_some_and(|text| !text.is_empty())
-      || self.is_resuming()
-    {
+    let Some(TextControlBox::InnerEditor(control @ TextControl::SingleLine { .. })) =
+      render_node.text_control
+    else {
+      return;
+    };
+
+    if render_node.own_text().is_some_and(|text| !text.is_empty()) || self.is_resuming() {
       return;
     }
 
@@ -908,7 +908,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     self.intrinsic_block_size = self
       .intrinsic_block_size
-      .max(self.border_padding.block_start + TextControl::default_block_size(context));
+      .max(self.border_padding.block_start + control.default_block_size(context));
 
     if let Some(baseline) = baseline_for_empty_line(context, self.border_padding.block_start) {
       self.first_baseline = Some(baseline);

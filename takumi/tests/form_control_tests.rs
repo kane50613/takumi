@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use takumi::prelude::*;
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_texts};
@@ -158,6 +160,98 @@ fn a_hidden_input_takes_no_box() {
   assert_eq!(measured.height, 0.0);
 }
 
+/// The content box of a `<textarea>` box with `html.css`'s 1px border and 2px padding.
+fn content_size(textarea: &MeasuredNode) -> (f32, f32) {
+  (textarea.width - 6.0, textarea.height - 6.0)
+}
+
+#[test]
+fn rows_and_cols_size_a_textarea() {
+  let [default, tall, wide, hidden] = inputs(concat!(
+    "<textarea></textarea>",
+    r#"<textarea rows="4"></textarea>"#,
+    r#"<textarea cols="40" rows="0"></textarea>"#,
+    r#"<textarea style="overflow: hidden"></textarea>"#,
+  ))
+  .try_into()
+  .unwrap();
+  let (default_width, default_height) = content_size(&default);
+
+  // `rows="0"` is invalid, so the default of two rows stands.
+  assert_eq!(content_size(&tall).1, default_height * 2.0);
+  assert_eq!(content_size(&wide).1, default_height);
+  // A textarea that may scroll keeps room for a 15px scrollbar beside its columns.
+  assert_within(
+    content_size(&wide).0 - 15.0,
+    (default_width - 15.0) * 2.0,
+    1.0,
+  );
+  assert_eq!(content_size(&hidden).0, default_width - 15.0);
+}
+
+#[test]
+fn a_textarea_shows_its_text_with_line_breaks_normalized() {
+  let [textarea] = inputs("<textarea>one&#13;&#10;two&#13;three</textarea>")
+    .try_into()
+    .unwrap();
+
+  assert_eq!(run_texts(&textarea), ["one", "two", "three"]);
+}
+
+#[test]
+fn a_final_line_break_opens_a_line() {
+  let [ending, plain] = inputs("<textarea>a&#10;</textarea><textarea>a</textarea>")
+    .try_into()
+    .unwrap();
+
+  assert_eq!(editor(&ending).height, editor(&plain).height * 2.0);
+}
+
+#[test]
+fn a_textarea_clips_its_text_even_when_its_overflow_is_visible() {
+  let node = Node::from_html(
+    concat!(
+      r#"<div style="background-color: white; width: 100px; height: 100px">"#,
+      r#"<textarea style="display: block; overflow: visible; height: 20px; padding: 0; "#,
+      r#"border: 0; background-color: white; color: black; font: 20px Geist; "#,
+      r#"white-space: pre">"#,
+      "MMM&#10;MMM&#10;MMM&#10;MMM</textarea></div>",
+    ),
+    FromHtmlOptions::default(),
+  )
+  .unwrap();
+  let image = takumi::render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((100, 100)))
+      .node(node)
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+  let (pixels, _) = image.as_raw().as_chunks::<4>();
+  let inked = |rows: Range<usize>| {
+    pixels[rows.start * 100..rows.end * 100]
+      .iter()
+      .any(|pixel| pixel[..3] != [255, 255, 255])
+  };
+
+  assert!(inked(0..20));
+  assert!(!inked(20..100));
+}
+
+#[test]
+fn an_editable_textarea_keeps_its_white_space() {
+  let [editable, read_only] = inputs(concat!(
+    r#"<textarea style="white-space: normal">a    b</textarea>"#,
+    r#"<textarea readonly style="white-space: normal">a    b</textarea>"#,
+  ))
+  .try_into()
+  .unwrap();
+
+  assert_eq!(run_texts(&editable), ["a    b"]);
+  assert_eq!(run_texts(&read_only), ["a b"]);
+}
+
 #[test]
 fn a_text_field_ellipsizes_a_value_wider_than_it() {
   let [input] = inputs(
@@ -172,4 +266,84 @@ fn a_text_field_ellipsizes_a_value_wider_than_it() {
     "{texts:?}"
   );
   assert!(!texts.concat().contains("dummy text"), "{texts:?}");
+}
+
+#[test]
+fn a_textarea_built_in_code_shows_the_text_of_its_children() {
+  let textarea = Node::container([Node::text("a\n"), Node::text("b")]).with_tag_name("textarea");
+  let measured = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(Node::container([textarea]))
+      .stylesheet(StyleSheet::parse_loosy(CSS).into())
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  assert_eq!(run_texts(&measured.children[0]), ["a", "b"]);
+}
+
+#[test]
+fn a_textarea_built_in_code_leaves_later_siblings_their_own_style() {
+  let textarea = Node::container([Node::text("a"), Node::text("b")]).with_tag_name("textarea");
+  let measured = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(Node::container([
+        textarea,
+        Node::container([]).with_class_name("after"),
+      ]))
+      .stylesheet(
+        StyleSheet::parse_loosy(&format!("{CSS} .after {{ display: block; width: 37px }}")).into(),
+      )
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  assert_eq!(measured.children[1].width, 37.0);
+}
+
+#[test]
+fn a_textarea_keeps_its_text_when_a_pseudo_element_generates_content() {
+  let textarea = Node::container([Node::text("Hi")]).with_tag_name("textarea");
+  let measured = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(Node::container([textarea]))
+      .stylesheet(
+        StyleSheet::parse_loosy(&format!("{CSS} textarea::before {{ content: 'x' }}")).into(),
+      )
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  assert_eq!(run_texts(&measured.children[0]), ["Hi"]);
+}
+
+#[test]
+fn rows_and_cols_past_blinks_bound_take_their_defaults() {
+  let [huge, default] = inputs(concat!(
+    r#"<textarea rows="2147483648" cols="2147483648"></textarea>"#,
+    r#"<textarea></textarea>"#,
+  ))
+  .try_into()
+  .unwrap();
+
+  assert_eq!((huge.width, huge.height), (default.width, default.height));
+}
+
+#[test]
+fn a_textarea_with_wrap_off_keeps_a_long_line_whole() {
+  let [wrapped, unwrapped] = inputs(concat!(
+    r#"<textarea cols="5">abc def ghi jkl</textarea>"#,
+    r#"<textarea cols="5" wrap="off">abc def ghi jkl</textarea>"#,
+  ))
+  .try_into()
+  .unwrap();
+
+  assert!(run_texts(&wrapped).len() > 1, "{:?}", run_texts(&wrapped));
+  assert_eq!(run_texts(&unwrapped), ["abc def ghi jkl"]);
 }
