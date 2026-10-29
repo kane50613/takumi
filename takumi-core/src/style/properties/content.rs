@@ -186,13 +186,19 @@ mod tests {
     assert_eq!(parse("normal"), ContentValue::Normal);
   }
 
+  fn attr(name: &str, fallback: &str) -> ContentItem {
+    ContentItem::Attr(AttrRef {
+      name: name.into(),
+      fallback: fallback.into(),
+    })
+  }
+
   #[test]
   fn parses_single_string() {
-    let ContentValue::Items(items) = parse("\"hello\"") else {
-      panic!("expected items");
-    };
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0], ContentItem::Text("hello".into()));
+    assert_eq!(
+      parse("\"hello\""),
+      ContentValue::Items(vec![ContentItem::Text("hello".into())].into())
+    );
   }
 
   #[test]
@@ -204,52 +210,45 @@ mod tests {
 
   #[test]
   fn parses_multiple_strings_as_list() {
-    let ContentValue::Items(items) = parse("\"a\" \"b\"") else {
-      panic!("expected items");
-    };
-    assert_eq!(items.len(), 2);
+    assert_eq!(
+      parse("\"a\" \"b\""),
+      ContentValue::Items(
+        vec![ContentItem::Text("a".into()), ContentItem::Text("b".into())].into()
+      )
+    );
   }
 
   #[test]
   fn parses_attr_without_fallback() {
-    let ContentValue::Items(items) = parse("attr(label)") else {
-      panic!("expected items");
-    };
-    let ContentItem::Attr(attr) = &items[0] else {
-      panic!("expected attr");
-    };
-    assert_eq!(&*attr.name, "label");
-    assert_eq!(&*attr.fallback, "");
+    assert_eq!(
+      parse("attr(label)"),
+      ContentValue::Items(vec![attr("label", "")].into())
+    );
   }
 
   #[test]
   fn parses_attr_with_fallback() {
-    let ContentValue::Items(items) = parse("attr(label, \"unknown\")") else {
-      panic!("expected items");
-    };
-    let ContentItem::Attr(attr) = &items[0] else {
-      panic!("expected attr");
-    };
-    assert_eq!(&*attr.fallback, "unknown");
+    assert_eq!(
+      parse("attr(label, \"unknown\")"),
+      ContentValue::Items(vec![attr("label", "unknown")].into())
+    );
   }
 
   #[test]
   fn parses_url_image() {
-    let ContentValue::Items(items) = parse("url(\"icon.png\")") else {
-      panic!("expected items");
-    };
     assert_matches!(
-      &items[0],
-      ContentItem::Image(image) if matches!(**image, BackgroundImage::Url(_))
+      parse("url(\"icon.png\")"),
+      ContentValue::Items(items)
+        if matches!(&items[0], ContentItem::Image(image) if matches!(**image, BackgroundImage::Url(_)))
     );
   }
 
   #[test]
   fn parses_mixed_list() {
-    let ContentValue::Items(items) = parse("\"Prefix: \" attr(name) url(\"icon.png\")") else {
-      panic!("expected items");
-    };
-    assert_eq!(items.len(), 3);
+    assert_matches!(
+      parse("\"Prefix: \" attr(name) url(\"icon.png\")"),
+      ContentValue::Items(items) if items.len() == 3
+    );
   }
 
   #[test]
