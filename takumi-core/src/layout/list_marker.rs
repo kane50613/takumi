@@ -4,6 +4,7 @@ use rustc_hash::FxHashMap;
 
 use crate::{
   context::RenderContext,
+  form_control::{has_attribute, is_element},
   geometry::{Point, Size},
   layout::{
     counters::{CounterDirectives, LIST_ITEM, contains_style, saturate},
@@ -309,7 +310,7 @@ impl ListItemOrdinals {
       return Self::default();
     }
 
-    let reversed = node.attribute("reversed").is_some();
+    let reversed = has_attribute(node, "reversed");
     let start = attribute_number(node, "start");
     let counts_items = reversed && start.is_none();
     let initial_counter = match start {
@@ -389,7 +390,7 @@ pub(super) fn is_list_owner(node: &Node, style: &ComputedStyle) -> bool {
 pub(super) fn counts_list_items(root: &Node) -> bool {
   root.subtree().any(|node| {
     is_element(node, "ol")
-      && node.attribute("reversed").is_some()
+      && has_attribute(node, "reversed")
       && attribute_number(node, "start").is_none()
   })
 }
@@ -399,12 +400,6 @@ pub(super) fn explicit_value(node: &Node) -> Option<i32> {
   is_element(node, "li")
     .then(|| attribute_number(node, "value"))
     .flatten()
-}
-
-fn is_element(node: &Node, name: &str) -> bool {
-  node
-    .tag_name()
-    .is_some_and(|tag| tag.eq_ignore_ascii_case(name))
 }
 
 pub(super) fn attribute_number(node: &Node, name: &str) -> Option<i32> {
