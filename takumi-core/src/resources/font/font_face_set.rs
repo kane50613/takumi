@@ -153,16 +153,23 @@ impl Fonts {
 
     registry.revise();
     registry.font_files.remove(url);
+    // A cached document registry still holds the file, outside the budget that released it.
+    DOCUMENT_REGISTRIES.clear();
 
     true
   }
 
-  /// These fonts with each of `urls` failed to load, as one document's downloads did.
+  /// These fonts with each of `urls` failed to load, as one document's downloads did. The revision
+  /// stays, since only `@font-face` rules read the files, and the document cache keys on the
+  /// source each rule reaches, so renders of one document with the same failures share its faces.
   pub fn with_failed_font_files(&self, urls: &[String]) -> Self {
     let mut fonts = self.clone();
+    let registry = Arc::make_mut(&mut fonts.registry);
 
     for url in urls {
-      fonts.fail_font_file(url.as_str());
+      registry
+        .font_files
+        .insert(url.as_str().into(), FontFile::Failed);
     }
 
     fonts
