@@ -4,6 +4,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
 
+mod load_font_file_task;
 mod load_font_task;
 mod measure_task;
 mod needs_task;

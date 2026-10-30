@@ -94,10 +94,18 @@ impl FontStore {
     })
   }
 
-  /// The registry for a render that names `families`, which are marked used.
-  pub fn for_render(&self, families: Option<&[String]>) -> Rc<Fonts> {
+  /// The registry for a render that names `families`, which are marked used, with the
+  /// `@font-face` files its document `failed` to download.
+  pub fn for_render(&self, families: Option<&[String]>, failed: Option<&[String]>) -> Rc<Fonts> {
     self.cache.borrow().touch(families.unwrap_or_default());
-    self.current()
+
+    let failed = failed.unwrap_or_default();
+
+    if failed.is_empty() {
+      self.current()
+    } else {
+      Rc::new(self.current().with_failed_font_files(failed))
+    }
   }
 
   /// The registry for a needs pass, with each listed font still loading registered as pending.
@@ -105,16 +113,17 @@ impl FontStore {
     &self,
     families: &mut Option<Vec<String>>,
     listed: Option<&ListedFonts>,
+    failed: Option<&[String]>,
   ) -> Rc<Fonts> {
     let Some(listed) = listed else {
-      return self.for_render(families.as_deref());
+      return self.for_render(families.as_deref(), failed);
     };
 
     if families.is_none() {
       families.clone_from(&listed.families);
     }
 
-    Rc::new(listed.fonts(&self.for_render(families.as_deref())))
+    Rc::new(listed.fonts(&self.for_render(families.as_deref(), failed)))
   }
 
   /// Registers the font JavaScript describes under `key`. One that is not `pinned` can be released.
@@ -197,6 +206,27 @@ impl FontStore {
     }
 
     removed
+  }
+
+  /// Loads the `@font-face` file `url` names, as a needs pass reported it; it can be released for
+  /// space.
+  pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), FontError> {
+    let (source, bytes) = FontSource::from(data).into_decoded()?;
+    let mut fonts = Fonts::clone(&self.current());
+
+    self
+      .cache
+      .borrow_mut()
+      .admit_file(&mut fonts, url, source, bytes as u64)?;
+    *self.fonts.borrow_mut() = Rc::new(fonts);
+
+    Ok(())
+  }
+
+  /// Whether the store holds the `@font-face` file `url`, marking it used.
+  pub fn has_font_file(&self, url: &str) -> bool {
+    self.cache.borrow().has_file(url);
+    self.current().has_font_file(url)
   }
 
   /// Goes back to the embedded last-resort fonts alone.
@@ -319,9 +349,11 @@ pub fn stylesheet(
 
 /// What a node tree needs fetched, as a wasm binding hands it to JavaScript.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NeedsOutput {
   images: Vec<String>,
   fonts: Vec<usize>,
+  font_files: Vec<String>,
 }
 
 impl NeedsOutput {
@@ -330,6 +362,7 @@ impl NeedsOutput {
     Self {
       fonts: listed.map_or_else(Vec::new, |listed| listed.to_load(&needs.faces)),
       images: needs.images.into_iter().collect(),
+      font_files: needs.font_files.into_iter().collect(),
     }
   }
 }

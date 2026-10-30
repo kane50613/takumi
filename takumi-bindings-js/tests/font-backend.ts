@@ -7,10 +7,13 @@ type HeldFamily = { name: string };
 
 export const fontBackend = (): {
   held: Map<string, HeldFamily[]>;
+  files: Set<string>;
   backend: {
     registerFont: Mock<(font: Font, key: string) => HeldFamily[]>;
     cacheFont: Mock<(font: Font, key: string) => HeldFamily[]>;
     cachedFonts: Mock<(key: string, _pin: boolean) => HeldFamily[] | undefined>;
+    cacheFontFile: Mock<(url: string, _data: ArrayBuffer | Uint8Array) => void>;
+    hasFontFile: Mock<(url: string) => boolean>;
   };
   fonts: FontRegistry<HeldFamily>;
 } => {
@@ -22,11 +25,16 @@ export const fontBackend = (): {
 
     return families;
   };
+  const files = new Set<string>();
   const backend = {
     registerFont: mock(load),
     cacheFont: mock(load),
     cachedFonts: mock((key: string, _pin: boolean) => held.get(key)),
+    cacheFontFile: mock((url: string, _data: ArrayBuffer | Uint8Array) => {
+      files.add(url);
+    }),
+    hasFontFile: mock((url: string) => files.has(url)),
   };
 
-  return { held, backend, fonts: new FontRegistry(backend) };
+  return { held, files, backend, fonts: new FontRegistry(backend) };
 };

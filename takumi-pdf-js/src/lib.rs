@@ -182,7 +182,11 @@ impl PdfRenderer {
   ) -> Result<MeasureInputs, js_sys::Error> {
     Ok(MeasureInputs {
       layout: self.layout(options)?,
-      fonts: self.fonts.for_needs(&mut options.font_families, listed),
+      fonts: self.fonts.for_needs(
+        &mut options.font_families,
+        listed,
+        options.failed_font_files.as_deref(),
+      ),
       stylesheet: stylesheet(&self.resource_cache, options.css.take(), Vec::new())
         .map_err(map_error)?,
       font_families: options.font_families.take().map(FontFamily::from_names),
@@ -241,6 +245,19 @@ impl PdfRenderer {
     self.fonts.cached_value(key, pin)
   }
 
+  /// Loads the `@font-face` file `url` names, as `needs` reported it, released for space once the
+  /// renderer's font cache is past its budget.
+  #[wasm_bindgen(js_name = cacheFontFile)]
+  pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), js_sys::Error> {
+    self.fonts.cache_font_file(url, data).map_err(map_error)
+  }
+
+  /// Whether the renderer holds the `@font-face` file `url`, marking it used.
+  #[wasm_bindgen(js_name = hasFontFile)]
+  pub fn has_font_file(&self, url: &str) -> bool {
+    self.fonts.has_font_file(url)
+  }
+
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
   #[wasm_bindgen(js_name = unregisterFont)]
@@ -269,7 +286,10 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts.for_render(
+      options.font_families.as_deref(),
+      options.failed_font_files.as_deref(),
+    );
 
     takumi_pdf::render(PdfOptions {
       viewport,

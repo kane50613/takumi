@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { readSource, renderPrepared } from "../src/prepared";
+import { prepareSource, readSource, renderPrepared } from "../src/prepared";
 import type { ListedFont, PrepareExtras } from "../src/prepared";
 import type { FontLoader } from "../src/renderer";
 import type { Node } from "@takumi-rs/helpers";
@@ -202,4 +202,47 @@ describe("shared Renderer body", () => {
       undefined,
     );
   });
+});
+
+describe("@font-face files", () => {
+  test("prepare loads each reached file, and a failed one moves its rule on to the next src", async () => {
+    const { fonts, files, backend } = fontBackend();
+    const fetch = mock(async (input: string | URL | Request) =>
+      String(input).endsWith("missing.woff2")
+        ? new Response(null, { status: 404 })
+        : new Response(bytes()),
+    );
+    const reads = mock(({ failedFontFiles = [] }: { failedFontFiles?: string[] }) => ({
+      images: [],
+      fonts: [],
+      fontFiles: failedFontFiles.includes("https://fonts.test/missing.woff2")
+        ? ["https://fonts.test/face.woff2"]
+        : ["https://fonts.test/missing.woff2"],
+    }));
+    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
+
+    const prepared = await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
+
+    await renderPrepared(fonts, prepared, {}, call);
+
+    expect(backend.cacheFontFile).toHaveBeenCalledTimes(1);
+    expect(files.has("https://fonts.test/face.woff2")).toBe(true);
+    expect(call.mock.calls[0]?.[1].failedFontFiles).toEqual(["https://fonts.test/missing.woff2"]);
+  });
+});
+
+test("prepare loads each @font-face file once even when the cache releases it", async () => {
+  const { fonts, backend } = fontBackend();
+  backend.hasFontFile.mockImplementation(() => false);
+  const fetch = mock(async () => new Response(bytes()));
+  const reads = mock(() => ({
+    images: [],
+    fonts: [],
+    fontFiles: ["https://fonts.test/a.woff2", "https://fonts.test/b.woff2"],
+  }));
+
+  await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
+
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(reads).toHaveBeenCalledTimes(2);
 });

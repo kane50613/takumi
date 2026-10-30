@@ -13,7 +13,8 @@ use takumi_bindings_common::{
 use takumi_core::{Fonts, resources::image::ResourceCache};
 
 use crate::{
-  NodeSource, RegisteredFamily, deserialize_with_tracing,
+  JsBytes, NodeSource, RegisteredFamily, deserialize_with_tracing,
+  load_font_file_task::LoadFontFileTask,
   load_font_task::LoadFontTask,
   map_error,
   measure_task::MeasureTask,
@@ -87,6 +88,8 @@ pub struct RenderNeeds {
   pub images: Vec<String>,
   /// The ids of the listed fonts the render loads, sorted.
   pub fonts: Vec<u32>,
+  /// The `@font-face` file URLs the render loads, sorted.
+  pub font_files: Vec<String>,
 }
 
 impl RenderNeeds {
@@ -101,6 +104,7 @@ impl RenderNeeds {
           .collect()
       }),
       images: needs.images.into_iter().collect(),
+      font_files: needs.font_files.into_iter().collect(),
     }
   }
 }
@@ -156,13 +160,21 @@ impl RendererState {
     Some(listed)
   }
 
-  /// The fonts for a render that names `families`, which are marked used.
-  pub(crate) fn fonts_for_render(&self, families: Option<&[String]>) -> Arc<Fonts> {
+  /// The fonts for a render that names `families`, which are marked used, with the `@font-face`
+  /// files its document `failed` to download.
+  pub(crate) fn fonts_for_render(
+    &self,
+    families: Option<&[String]>,
+    failed: Option<&[String]>,
+  ) -> Arc<Fonts> {
     let state = self.font_state.load();
 
     state.cache.touch(families.unwrap_or_default());
 
-    Arc::clone(&state.fonts)
+    match failed {
+      Some(failed) if !failed.is_empty() => Arc::new(state.fonts.with_failed_font_files(failed)),
+      _ => Arc::clone(&state.fonts),
+    }
   }
 }
 
@@ -248,6 +260,39 @@ impl Renderer {
     };
 
     Ok(registered.map(|registered| registered.into_iter().map(Into::into).collect()))
+  }
+
+  /// Loads the `@font-face` file `url` names, as `needs` reported it, released for space once the
+  /// font cache is past its budget.
+  #[napi(
+    js_name = "cacheFontFile",
+    ts_args_type = "url: string, data: Uint8Array | ArrayBuffer, signal?: AbortSignal",
+    ts_return_type = "Promise<void>"
+  )]
+  pub fn cache_font_file(
+    &self,
+    env: Env,
+    url: String,
+    data: Object,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<LoadFontFileTask>> {
+    Ok(AsyncTask::with_optional_signal(
+      LoadFontFileTask {
+        state: Arc::clone(&self.state),
+        url,
+        buffer: JsBytes::from_object(env, data)?,
+      },
+      signal,
+    ))
+  }
+
+  /// Whether the renderer holds the `@font-face` file `url`, marking it used.
+  #[napi(js_name = "hasFontFile")]
+  pub fn has_font_file(&self, url: String) -> bool {
+    let state = self.state.font_state.load();
+
+    state.cache.has_file(&url);
+    state.fonts.has_font_file(&url)
   }
 
   fn load_font(

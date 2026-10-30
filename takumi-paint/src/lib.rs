@@ -68,6 +68,8 @@ struct RenderOptions {
   images: Option<Vec<ImageSource>>,
   css: Option<Vec<CssSource>>,
   font_families: Option<Vec<String>>,
+  /// The `@font-face` files the paint's `prepare` failed to download.
+  failed_font_files: Option<Vec<String>>,
   lang: Option<String>,
 }
 
@@ -118,7 +120,11 @@ impl Painter {
       .map(Lang::parse)
       .transpose()
       .map_err(map_error)?;
-    let fonts = self.fonts.for_needs(&mut options.font_families, listed);
+    let fonts = self.fonts.for_needs(
+      &mut options.font_families,
+      listed,
+      options.failed_font_files.as_deref(),
+    );
     Ok(run(
       PaintTreeOptions::builder()
         .viewport(
@@ -187,6 +193,19 @@ impl Painter {
     pin: bool,
   ) -> Result<Option<RegisteredFamiliesType>, js_sys::Error> {
     self.fonts.cached_value(key, pin)
+  }
+
+  /// Loads the `@font-face` file `url` names, as `needs` reported it, released for space once the
+  /// renderer's font cache is past its budget.
+  #[wasm_bindgen(js_name = cacheFontFile)]
+  pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), js_sys::Error> {
+    self.fonts.cache_font_file(url, data).map_err(map_error)
+  }
+
+  /// Whether the renderer holds the `@font-face` file `url`, marking it used.
+  #[wasm_bindgen(js_name = hasFontFile)]
+  pub fn has_font_file(&self, url: &str) -> bool {
+    self.fonts.has_font_file(url)
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning

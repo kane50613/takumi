@@ -120,6 +120,19 @@ impl Renderer {
     self.fonts.cached_value(key, pin)
   }
 
+  /// Loads the `@font-face` file `url` names, as `needs` reported it, released for space once the
+  /// renderer's font cache is past its budget.
+  #[wasm_bindgen(js_name = cacheFontFile)]
+  pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), js_sys::Error> {
+    self.fonts.cache_font_file(url, data).map_err(map_error)
+  }
+
+  /// Whether the renderer holds the `@font-face` file `url`, marking it used.
+  #[wasm_bindgen(js_name = hasFontFile)]
+  pub fn has_font_file(&self, url: &str) -> bool {
+    self.fonts.has_font_file(url)
+  }
+
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
   #[wasm_bindgen(js_name = unregisterFont)]
@@ -152,7 +165,10 @@ impl Renderer {
     );
 
     let images = self.images_map(options.images.as_deref())?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts.for_render(
+      options.font_families.as_deref(),
+      options.failed_font_files.as_deref(),
+    );
     self.render_internal(&fonts, node, options, images)
   }
 
@@ -204,7 +220,10 @@ impl Renderer {
       options.keyframes.take().unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts.for_render(
+      options.font_families.as_deref(),
+      options.failed_font_files.as_deref(),
+    );
     let draw = Draw {
       fonts: &fonts,
       cache: &self.resource_cache,
@@ -236,7 +255,10 @@ impl Renderer {
 
     let images = self.images_map(options.images.as_deref())?;
 
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts.for_render(
+      options.font_families.as_deref(),
+      options.failed_font_files.as_deref(),
+    );
     let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
 
     let layout = measure(render_options).map_err(map_error)?;
@@ -267,9 +289,11 @@ impl Renderer {
     retain_svg(&mut options.images);
 
     let images = self.images_map(options.images.take().as_deref())?;
-    let fonts = self
-      .fonts
-      .for_needs(&mut options.font_families, listed.as_ref());
+    let fonts = self.fonts.for_needs(
+      &mut options.font_families,
+      listed.as_ref(),
+      options.failed_font_files.as_deref(),
+    );
     let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
 
     Ok(
@@ -303,7 +327,10 @@ impl Renderer {
     };
 
     let images = self.images_map(options.images.as_deref())?;
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts.for_render(
+      options.font_families.as_deref(),
+      options.failed_font_files.as_deref(),
+    );
     let buffer = self.render_internal(&fonts, node, options, images)?;
 
     let mut data_uri = String::new();
@@ -328,9 +355,11 @@ impl Renderer {
 
     retain_svg(&mut options.images);
 
-    let fonts = self
-      .fonts
-      .for_needs(&mut options.font_families, listed.as_ref());
+    let fonts = self.fonts.for_needs(
+      &mut options.font_families,
+      listed.as_ref(),
+      options.failed_font_files.as_deref(),
+    );
     let needs = self
       .animation_scenes(&fonts, options)?
       .into_iter()
@@ -358,7 +387,10 @@ impl Renderer {
       .format
       .unwrap_or_default()
       .raster(options.quality, options.lossless);
-    let fonts = self.fonts.for_render(options.font_families.as_deref());
+    let fonts = self.fonts.for_render(
+      options.font_families.as_deref(),
+      options.failed_font_files.as_deref(),
+    );
     let scenes = self
       .animation_scenes(&fonts, options)?
       .into_iter()

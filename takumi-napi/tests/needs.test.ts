@@ -134,3 +134,68 @@ describe("font subsets", () => {
     expect(greek.data).not.toHaveBeenCalled();
   });
 });
+
+describe("@font-face", () => {
+  test("prepare downloads the files the text reaches, moving past a failed src it retries later", async () => {
+    const fontRenderer = new Renderer();
+    const fetch = mock(async (url: string) =>
+      url.endsWith("missing.woff2") ? new Response(null, { status: 404 }) : new Response(fontBytes),
+    );
+    const html = `<style>
+      @font-face {
+        font-family: Face;
+        src: url(https://fonts.test/missing.woff2), url(https://fonts.test/face.woff2);
+      }
+      @font-face { font-family: Unused; src: url(https://fonts.test/unused.woff2); }
+      p { font-family: Face }
+    </style>
+    <p>Hello</p>`;
+
+    await fontRenderer.prepare(html, { width: 100, height: 100, images: { fetch } });
+
+    expect(fetch.mock.calls.map(([url]) => url).sort()).toEqual([
+      "https://fonts.test/face.woff2",
+      "https://fonts.test/missing.woff2",
+    ]);
+
+    await fontRenderer.prepare(html, { width: 100, height: 100, images: { fetch } });
+
+    // The loaded file stays with the renderer, and the failed one is tried again.
+    expect(fetch.mock.calls.slice(2).map(([url]) => url)).toEqual([
+      "https://fonts.test/missing.woff2",
+    ]);
+  });
+});
+
+describe("@font-face rendering", () => {
+  test("draws with the font a rule loads, as the fonts option does", async () => {
+    const manrope = await readFile(
+      join(import.meta.dir, "../../assets/fonts/manrope/manrope-latin-wght-normal.woff2"),
+    );
+    const fetch = mock(async (_url: string) => new Response(manrope));
+    const options = { width: 200, height: 60, format: "png" as const };
+    const page = (css: string) =>
+      `<style>${css} p { font: 24px Face; margin: 0 }</style><p>Hello</p>`;
+
+    const fromRule = new Renderer();
+    const ruled = await fromRule.render(
+      await fromRule.prepare(
+        page("@font-face { font-family: Face; src: url(https://fonts.test/manrope.woff2) }"),
+        { ...options, images: { fetch } },
+      ),
+      options,
+    );
+    const fromOption = new Renderer();
+    const listed = await fromOption.render(
+      await fromOption.prepare(page(""), {
+        ...options,
+        fonts: [{ name: "Face", data: manrope }],
+      }),
+      options,
+    );
+    const fallback = await new Renderer().render(page(""), options);
+
+    expect(Buffer.compare(ruled, listed)).toBe(0);
+    expect(Buffer.compare(ruled, fallback)).not.toBe(0);
+  });
+});
