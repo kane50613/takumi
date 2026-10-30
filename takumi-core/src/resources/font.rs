@@ -14,7 +14,7 @@ use std::{
 #[cfg(feature = "font-face")]
 use std::collections::HashMap;
 
-use harfrust::font::Variation;
+use harfrust::{Feature, font::Variation};
 use skrifa::{
   FontRef, MetadataProvider,
   attribute::Style,
@@ -238,7 +238,7 @@ pub(crate) struct MatchedFace {
   /// The face's `unicode-range`, or `None` for every codepoint.
   pub(crate) unicode_range: Option<UnicodeRangeSet>,
   /// The face's `font-feature-settings` descriptor.
-  pub(crate) feature_settings: Vec<harfrust::Feature>,
+  pub(crate) feature_settings: Vec<Feature>,
   /// The `size-adjust` the face scales its size by.
   pub(crate) size_adjust: Option<f32>,
   /// The metrics the face's `@font-face` rule overrides.
