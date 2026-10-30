@@ -302,7 +302,9 @@ impl SvgLayout<'_> {
     let non_scaling = style.svg_data.vector_effect == VectorEffect::NonScalingStroke;
     let objects = |shape: Shape| {
       if non_scaling {
-        shape.with_non_scaling_stroke()
+        let host_transform = self.non_scaling_stroke_transform(shape.abs_transform);
+
+        shape.with_non_scaling_stroke(host_transform)
       } else {
         vec![LayoutObject::Shape(Box::new(shape))]
       }
@@ -404,9 +406,9 @@ impl Shape {
 }
 
 impl Shape {
-  /// A `vector-effect: non-scaling-stroke` shape, as Blink's `SVGShapePainter` paints it.
-  fn with_non_scaling_stroke(self) -> Vec<LayoutObject> {
-    let transform = self.abs_transform;
+  /// A `vector-effect: non-scaling-stroke` shape stroked in the space `transform` maps to, as Blink's
+  /// `SVGShapePainter` paints it.
+  fn with_non_scaling_stroke(self, transform: Affine) -> Vec<LayoutObject> {
     let Some(stroke) = self.stroke.as_ref() else {
       return vec![LayoutObject::Shape(Box::new(self))];
     };

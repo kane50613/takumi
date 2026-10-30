@@ -131,13 +131,15 @@ fn an_inline_svg_scales_with_the_device_pixel_ratio() {
   let html = r#"<div style="display:flex">
     <svg width="20" height="10" viewBox="0 0 10 5" style="display:block"><rect x="1" y="1" width="8" height="3" fill="rgb(0, 128, 0)"/></svg>
     <svg width="20" height="10" style="display:block; font-size: 4px"><rect x="2" y="2" width="1em" height="1em" fill="rgb(0, 0, 255)" stroke="rgb(255, 0, 0)" stroke-width="2"/></svg>
+    <svg width="20" height="10" viewBox="0 0 10 5" style="display:block"><rect x="2" y="1" width="6" height="3" fill="none" stroke="rgb(0, 128, 0)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+    <svg width="20" height="10" viewBox="0 0 10 5" style="display:block"><marker id="m" markerWidth="1" markerHeight="1" viewBox="0 0 1 1"><rect width="1" height="1" fill="rgb(0, 0, 255)"/></marker><path d="M2 2H8" stroke="rgb(255, 0, 0)" stroke-width="2" vector-effect="non-scaling-stroke" marker-start="url(#m)"/></svg>
   </div>"#;
-  let once = render_at(html, 40, 10, 1);
-  let twice = render_at(html, 40, 10, 2);
+  let once = render_at(html, 80, 10, 1);
+  let twice = render_at(html, 80, 10, 2);
 
   for y in 0..10 {
-    for x in 0..40 {
-      assert_eq!(twice[(2 * y * 80) + 2 * x], once[y * 40 + x], "({x}, {y})");
+    for x in 0..80 {
+      assert_eq!(twice[(2 * y * 160) + 2 * x], once[y * 80 + x], "({x}, {y})");
     }
   }
 }

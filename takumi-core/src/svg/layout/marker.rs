@@ -231,7 +231,9 @@ impl SvgLayout<'_> {
     );
 
     if shape.style().svg_data.vector_effect == VectorEffect::NonScalingStroke {
-      width /= transform.root_mean_square_scale();
+      width /= self
+        .non_scaling_stroke_transform(transform)
+        .root_mean_square_scale();
     }
 
     (width > 0.0 && width.is_finite()).then_some(width)

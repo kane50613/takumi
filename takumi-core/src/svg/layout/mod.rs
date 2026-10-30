@@ -254,6 +254,12 @@ impl<'a> SvgLayout<'a> {
     })
   }
 
+  /// `transform` without the root's zoom, the space Blink's `ComputeNonScalingStrokeTransform`
+  /// strokes a non-scaling stroke in.
+  fn non_scaling_stroke_transform(&self, transform: Affine) -> Affine {
+    Affine::scale(self.zoom.recip(), self.zoom.recip()) * transform
+  }
+
   /// The `viewBox` size Blink's `SVGSVGElement::ViewBoxToViewTransform` synthesizes for a root
   /// without one: its `width` and `height`, a percentage of the viewport.
   fn synthesized_view_box_size(&self) -> Size<f32> {
