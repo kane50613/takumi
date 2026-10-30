@@ -1,6 +1,6 @@
 [package]
 name = "takumi-html"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Re-exports the HTML parser that moved to takumi-core's html module."
@@ -10,7 +10,7 @@ rust-version = "1.91"
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.35.0"
+version = "0.35.1"
 default-features = false
 features = ["html"]
 

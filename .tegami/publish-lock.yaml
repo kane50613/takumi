@@ -1,240 +1,99 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n  takumi-paint:\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n# `PdfRenderer` and `Painter` prepare a document too\n\n`PdfRenderer.prepare` and `Painter.prepare`, and the shared `prepare` each package exports, fetch the images a document draws and load the font subsets its text uses, a PDF's header, footer, and page bands included. `render`, `measure`, and `paint` take the prepared document, a PDF with only file options such as `metadata` and `pdfa`.\n"
-    filename: prepare-pdf-paint.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# The `takumi-pdf` crate is on crates.io\n\nRust programs can depend on `takumi-pdf` to write PDFs with selectable text, as the `takumi-pdf` npm package does. Its `render`, `measure`, and `needs` take the node tree, fonts, and stylesheet types from `takumi-core`.\n"
+    filename: publish-takumi-pdf.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-pdf:\n    type: patch\n  takumi-paint:\n    type: patch\n---\n\n# Render on Nitro's `bun` preset instead of failing\n\nNitro's `bun` preset used to answer every request with a 500 and `ENOENT ... _libs/@takumi-rs/[object WebAssembly.Module]`. The WASM packages now load their binary through unwasm there, as they do on other Nitro presets.\n"
-    filename: nitro-bun-preset-wasm.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Parse HTML strings in Rust in every renderer\n\n`takumi-paint` and `takumi-pdf` take HTML strings as `@takumi-rs/core` and `@takumi-rs/wasm` do, and `takumi-pdf` takes them for header and footer bands too. A `renderAnimation` scene can be an HTML string, its `<style>` rules applying to the animation. With `emoji: \"from-font\"`, `takumi-js` hands HTML to the renderer instead of parsing it in JavaScript.\n"
-    filename: html-in-bindings.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-js:\n    type: patch\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Font subsets load as a browser loads them\n\nWhen `fonts` holds `unicodeRange` subsets, as `googleFonts` returns, a render now loads only the subsets that font matching reaches for each character, through that text's own font stack, weight, and style. With `font-family: Inter, \"Noto Sans JP\"`, Latin text no longer loads Noto Sans JP's Latin subset, and a bold subset loads only when bold text uses it.\n\nThe text comes from the styled tree, so a subset needed only by a stylesheet's generated content, a list marker, `text-transform`, the `text` elements of an SVG image, or a `takumi-pdf` page counter now loads. `collectCodepoints`, `LIST_MARKER_CHARACTERS`, and `subsetFonts` are deprecated.\n"
-    filename: font-subsets-from-layout.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n  takumi-paint:\n    type: minor\n---\n\n# `takumi-pdf` and `takumi-paint` drop their deprecated options\n\n`takumi-pdf` no longer takes `stylesheets`. Pass CSS through `css`, which takes one string or a list. The `subsetOf` and `subsetRank` font fields are gone from both packages. Register each subset under its family `name` with its `unicodeRange`.\n"
-    filename: pdf-drop-stylesheets.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n# Renderers take HTML directly\n\n`render`, `renderSvg`, `measure`, and the WASM `renderAsDataUrl` accept an HTML string in place of a node tree. The markup is parsed in Rust, and the CSS of its `<style>` elements follows the `css` option. A `<style>` with a `media` attribute applies only where its query matches. `takumi-html` adds `parse_html`, which returns that CSS with the tree. `fromHtml` from `@takumi-rs/helpers/html` is deprecated in favor of passing the string and will be removed in v3.\n"
-    filename: html-source-input.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n  takumi-js:\n    type: minor\n---\n\n# `Renderer.prepare` fetches what a render needs ahead of it\n\n`renderer.prepare(source, options)` styles an HTML string or node tree, fetches the images it draws, and loads the font subsets its text uses. `render`, `renderSvg`, and `measure` take the prepared source with only output options such as `format`. `renderer.prepareAnimation(options)` does the same for every scene of an animation, and `renderAnimation` takes its result. `prepareImages` from `@takumi-rs/helpers` is deprecated in favor of `prepare`.\n\n`takumi-js` renders through `prepare`, so it fetches the images the styled tree draws. An image that `css`, a `<style>` element, or a `::before` rule sets now renders, an image under `display: none` is no longer fetched, and a custom `fetch` now receives relative URLs such as `/logo.png`.\n"
-    filename: prepare.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/image-response\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Editors point imports of `@takumi-rs/image-response` and `@takumi-rs/wasm/vite` to their replacements\n\nEditors now flag imports from `@takumi-rs/image-response`, which only re-exports `takumi-js/response`, and from `@takumi-rs/wasm/vite`, which resolves to the same loader as `@takumi-rs/wasm/auto` under Vite. Both keep working and will be removed in v3.\n"
-    filename: deprecate-moved-entries.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Emoji images download once per process\n\nWithout a `fetchCache`, every render used to download each emoji's SVG again. Emoji images from the `emoji` providers are now kept across renders in a cache of up to 8 MB per `fetch` function. Other remote images still need a `fetchCache` to be reused. The `fluent` and `fluentFlat` sets now load from a pinned commit of `shuding/fluentui-emoji-unicode`, as the other sets load from a pinned version, so a cached image cannot go stale.\n"
-    filename: emoji-fetch-cache.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Editors flag imports from `@takumi-rs/helpers/renderer`\n\nThe entry holds glue internal to the renderer packages, which no longer import it. Its exports keep working and will be removed in v3. Import types such as `FontLoader` and `ImagesInput` from the renderer package you use.\n"
-    filename: deprecate-renderer-entry.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-js:\n    type: patch\n---\n\n# Render on the native backend under Nitro's `!unwasm` opt-in\n\nA Nitro build with `exportConditions: [\"!unwasm\"]` picked `@takumi-rs/core`, but every request failed with `TypeError: __exportAll is not a function`. It now renders with the native addon, and the `bun` preset no longer bundles the WASM binary next to it.\n"
-    filename: nitro-native-opt-in.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n# Loading a font no longer blocks rendering\n\n`FontResource::into_resolved` now also limits the `cmap` to the `unicode_range` and hashes the font, so registering a resolved font takes the same short time whatever its size. `@takumi-rs/core` registers fonts on the JavaScript thread after decompressing them in the background, and renders no longer wait on a lock while fonts load. The font cache budget now counts a `unicode-range` subset by the bytes it keeps.\n"
-    filename: font-resolve-off-main-thread.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# `render` in `takumi-pdf` takes an abort `signal`\n\nPass `signal` to stop a render before it reads the document or draws it, as `@takumi-rs/core` renders take one.\n"
-    filename: pdf-render-signal.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# A class list splits on ASCII whitespace only\n\nSelectors used to split an element's `class` attribute on any Unicode whitespace, so `class=\"a b\"` matched `.a` as an ancestor. It now splits on ASCII whitespace, as HTML does, and `a b` is one class. The same applies to the page counter classes in PDFs.\n"
-    filename: class-ascii-whitespace.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n---\n\n# Draw the value of text fields such as `<input type=\"text\">`\n\nAn `<input>` of type `text`, `search`, `tel`, `url`, `email`, `password`, or `number` now draws its `value` inside the field, as Chromium does. The field takes Chromium's default font, border, and padding, sizes itself from the `size` attribute, centers its text vertically, and sits on the baseline of its line. A password shows a dot for each character, a number field with an invalid value shows nothing, and a disabled field turns gray. `<input type=\"hidden\">` takes no space. These inputs used to draw nothing, not even their author-set width.\n"
-    filename: text-input-value.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: minor\n---\n\n# `takumi-html` parses with its own parser instead of html5ever\n\nIt recovers from less malformed markup than html5ever. It implies `<html>`, `<head>`, `<body>`, `<tbody>`, and the end tags of `p`, `li`, `dt`, `dd`, `option`, and table rows and cells, but does not reconstruct misnested formatting elements or move stray table content out of the table.\n"
-    filename: html-builtin-parser.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n---\n\n# The HTML parser moves into `takumi-core`\n\n`takumi_core::html` holds `from_html`, `parse_html`, `FromHtml`, `FromHtmlOptions`, `StylePresets`, and `HtmlError`, behind the `html` feature. `takumi-html` now only re-exports that module, so depend on `takumi-core` with `features = [\"html\"]` instead, adding `html-svg-nodes` where `takumi-html`'s `svg` feature kept inline `<svg>` as nodes. The `takumi` crate's `from-html` feature and its `takumi::html` re-export work as before.\n"
-    filename: html-in-core.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n---\n\n# Lay out `<textarea>` as a field sized by `cols` and `rows`\n\nA `<textarea>` now takes Chromium's default monospace font, border, and padding, and sizes itself from `cols` and `rows` with room for a scrollbar. Its text keeps its line breaks and, unless the field is disabled or read-only, its spaces. It wraps inside the field, which clips it in both axes even under `overflow: visible`, as Chromium does. A disabled textarea turns gray. A textarea used to render as inline text with its line breaks collapsed.\n"
-    filename: textarea-control.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Number content with CSS counters\n\n`counter-reset`, `counter-increment`, and `counter-set` change named counters, and `content` writes them with `counter(name)` or `counters(name, \".\")`, in any `list-style-type` style. Counters follow the document order Chrome counts in, including the implicit `list-item` counter of `ol`, `ul`, and `li`, and `contain: style` keeps the counters inside an element from reaching the rest of the page. `::after` reads a counter after the element's children change it, so a section can close with how many items it held.\n"
-    filename: css-counters.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# `<ol reversed>` numbers its items down\n\nList markers and the `list-item` counter now number as Chrome does: an `<ol reversed>` counts down from `start`, or from its item count when it has no `start`, and a box with `contain: style` numbers the list items inside it from 1. An item's `counter-set` or `counter-increment` of `list-item` moves its marker too. `start` now applies only to an `<ol>`, and `value` only to an `<li>`.\n"
-    filename: list-item-ordinal.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# List items inside `display: none` no longer take a number\n\nAn item hidden with `display: none`, or inside a hidden element, used to take the next number in its list, so the visible item after it skipped one. It now takes none, as Chromium numbers only items that get a box. Hidden subtrees are also no longer styled, which makes measuring a tree with a large hidden section about a third faster.\n"
-    filename: skip-hidden-subtrees.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Content a clipping box pushes past a page end shows on the next page\n\nA box with `overflow: hidden` that breaks across pages used to clip each page to its own piece of the box, so a child that a `transform` moved past the page end lost the part that belongs on the next page. Each page now clips to the whole box, as Chromium prints it. Rounded corners on such a box also curve over its whole height on every page, so a PDF holds back a page until the box that starts on it ends.\n"
-    filename: paged-overflow-clip-stitched.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Content clipped by `overflow: hidden` no longer adds pages\n\nA box with `overflow` other than `visible` on the block axis that ends on a page used to keep breaking its overflowing children, so the clipped content added blank pages after it. The box now stops breaking on the page where it ends, as Chromium does, and its clipped content stays on that page.\n"
-    filename: clipped-overflow-pages.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: minor\n---\n\n# Read what a render needs after the cascade\n\n`RenderNode::needs` and `takumi_raster::needs` report the images a node tree looks up by URL and the fonts its text would load, read from the styled tree. Stylesheet and Tailwind rules, `display: none`, generated content, list markers, `text-transform`, and the `text` elements of SVG images count as they will render.\n\nRegister a font that is still downloading with `Fonts::register_pending` and a `PendingFontFace`. Font matching treats it as a loading `@font-face`, and `needs` reports its id when the text reaches it before a loaded font with the glyph, as Blink starts loading a face.\n"
-    filename: render-needs.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Malformed SVG images render what the parser recovers\n\nSVG images, `filter: url(data:image/svg+xml,...)` references, and SVG sizing now go through takumi's own markup parser instead of `roxmltree`, which leaves the binaries. An SVG that is not well-formed XML renders what the parser recovers instead of failing to load, entities a DTD declares stay unexpanded, and a referenced filter keeps only its `fe*` primitives, so a `<script>` or other element inside the `<filter>` no longer reaches the SVG output.\n"
-    filename: svg-through-html.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Match form control states such as `:disabled` and `:checked`\n\n`:disabled`, `:enabled`, `:checked`, `:indeterminate`, `:placeholder-shown`, `:read-only`, `:read-write`, `:required`, and `:optional` now match by the element's attributes, as HTML defines them. A control inside `<fieldset disabled>` counts as disabled, and an `<option>` counts as checked when its `<select>` would show it selected. These selectors used to match nothing, so their rules never applied.\n"
-    filename: form-state-pseudo-classes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# PNG images decode faster\n\nPNG decoding is 13 to 85% faster natively and 13 to 81% faster in WebAssembly on most images, with the largest gains on flat graphics such as social cards, emoji, and icons, and on paletted and interlaced images. The decoded pixels are unchanged.\n"
-    filename: png-decode-speed.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# An inline `<svg>` draws whole at a `devicePixelRatio` above one\n\nAn inline `<svg>` with a `viewBox` used to scale its shapes by the device pixel ratio twice, so at `devicePixelRatio: 2` only the top-left quarter showed. Its user units are now CSS pixels at any ratio, as Chromium draws them.\n"
+    filename: inline-svg-device-pixel-ratio.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
-  - changelogIds:
-      - prepare-pdf-paint.md
-      - nitro-bun-preset-wasm.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - pdf-drop-stylesheets.md
-    id: npm:takumi-paint
+  - id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:waku-ssr
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:takumi-js
+    updated: true
+  - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:docs
     updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:svelte
-    updated: false
+  - id: npm:@takumi-rs/bindings-js
+    updated: true
+  - id: npm:takumi-paint
+    updated: true
+  - changelogIds:
+      - publish-takumi-pdf.md
+    id: npm:takumi-pdf
+    updated: true
   - id: npm:ffmpeg-keyframe-animation
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:example-liquid-glass
     updated: false
-  - id: npm:example-cloudflare-workers
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:ffplay
     updated: false
   - id: npm:example-css-library-integration
     updated: false
   - id: npm:example-e-invoice
     updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:ffplay
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:pdf-bench
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-satori-html
     updated: false
   - id: npm:example-nextjs
     updated: false
   - changelogIds:
-      - nitro-bun-preset-wasm.md
-      - html-source-input.md
-      - prepare.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - deprecate-moved-entries.md
-    id: npm:@takumi-rs/wasm
-    updated: true
-  - changelogIds:
-      - deprecate-moved-entries.md
-    id: npm:@takumi-rs/image-response
-    updated: true
-  - changelogIds:
-      - prepare-pdf-paint.md
-      - emoji-fetch-cache.md
-      - html-source-input.md
-      - prepare.md
-      - deprecate-renderer-entry.md
-      - font-subsets-from-layout.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:@takumi-rs/bindings-js
-    updated: true
-  - changelogIds:
-      - nitro-native-opt-in.md
-      - prepare.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-    id: npm:takumi-js
-    updated: true
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - changelogIds:
-      - html-source-input.md
-      - prepare.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - font-resolve-off-main-thread.md
-    id: npm:@takumi-rs/core
-    updated: true
-  - changelogIds:
-      - prepare-pdf-paint.md
-      - pdf-render-signal.md
-      - nitro-bun-preset-wasm.md
-      - class-ascii-whitespace.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - pdf-drop-stylesheets.md
-    id: npm:takumi-pdf
-    updated: true
-  - id: npm:docs
-    updated: false
-  - changelogIds:
-      - html-source-input.md
-      - text-input-value.md
-      - html-builtin-parser.md
-      - html-in-core.md
-      - textarea-control.md
-    id: cargo:takumi-html
-    updated: true
-  - changelogIds:
-      - css-counters.md
-      - list-item-ordinal.md
-      - text-input-value.md
-      - class-ascii-whitespace.md
-      - skip-hidden-subtrees.md
-      - paged-overflow-clip-stitched.md
-      - clipped-overflow-pages.md
-      - html-in-core.md
-      - render-needs.md
-      - textarea-control.md
-      - svg-through-html.md
-      - form-state-pseudo-classes.md
-      - png-decode-speed.md
-      - font-resolve-off-main-thread.md
+      - inline-svg-device-pixel-ratio.md
     id: cargo:takumi-core
     updated: true
-  - changelogIds:
-      - render-needs.md
-    id: cargo:takumi-raster
+  - id: cargo:takumi-html
     updated: true
   - id: cargo:takumi-svg
     updated: true
+  - changelogIds:
+      - publish-takumi-pdf.md
+    id: cargo:takumi-pdf
+    updated: true
   - id: cargo:takumi
     updated: true
-  - changelogIds:
-      - prepare-pdf-paint.md
-      - pdf-render-signal.md
-      - nitro-bun-preset-wasm.md
-      - class-ascii-whitespace.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - pdf-drop-stylesheets.md
-    id: cargo:takumi-pdf
+  - id: cargo:takumi-raster
     updated: true
 npm:packages:
   - id: npm:takumi-workspace
-  - id: npm:takumi-paint
-  - id: npm:waku-ssr
-  - id: npm:example-satori-html
-  - id: npm:svelte
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-twitter-images
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-css-library-integration
-  - id: npm:example-e-invoice
-  - id: npm:example-tanstack-start
-  - id: npm:ffplay
-  - id: npm:pdf-bench
-  - id: npm:example-nextjs
   - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/bindings-js
   - id: npm:takumi-js
-  - id: npm:example-liquid-glass
-  - id: npm:example-generate-invoice
   - id: npm:@takumi-rs/core
-  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/helpers
   - id: npm:docs
+  - id: npm:@takumi-rs/bindings-js
+  - id: npm:takumi-paint
+  - id: npm:takumi-pdf
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-liquid-glass
+  - id: npm:waku-ssr
+  - id: npm:ffplay
+  - id: npm:example-css-library-integration
+  - id: npm:example-e-invoice
+  - id: npm:svelte
+  - id: npm:example-twitter-images
+  - id: npm:example-tanstack-start
+  - id: npm:example-cloudflare-workers
+  - id: npm:pdf-bench
+  - id: npm:example-generate-invoice
+  - id: npm:example-satori-html
+  - id: npm:example-nextjs
