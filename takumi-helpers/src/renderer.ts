@@ -243,10 +243,25 @@ function createFontKey(font: Exclude<FontLoader, string>): string | ByteBuf {
   }
 
   if (typeof font.data === "function") {
-    return `${font.name ?? ""}:${font.weight ?? ""}:${font.style ?? ""}`;
+    return faceKey(font);
   }
 
   return font.data;
+}
+
+/** The face descriptors `font` registers under, which a key must include to keep each face. */
+function faceKey(font: Exclude<FontLoader, string | ByteBuf>): string {
+  const ranges = unicodeRangeOf(font)
+    .map(([start, end]) => `${start}-${end}`)
+    .join(",");
+
+  return [
+    font.subsetOf ?? font.name ?? "",
+    font.weight ?? "",
+    font.style ?? "",
+    ranges,
+    font.generic ?? "",
+  ].join(":");
 }
 
 /**
@@ -347,7 +362,13 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       return key;
     }
 
-    const known = this.bufferKeys.get(key);
+    const buffer = this.bufferKeyOf(key);
+
+    return isBuffer(loader) ? buffer : `${buffer}:${faceKey(loader)}`;
+  }
+
+  private bufferKeyOf(buffer: ByteBuf) {
+    const known = this.bufferKeys.get(buffer);
 
     if (known) {
       return known;
@@ -355,7 +376,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
     const assigned = `buffer:${++this.buffers}`;
 
-    this.bufferKeys.set(key, assigned);
+    this.bufferKeys.set(buffer, assigned);
 
     return assigned;
   }
