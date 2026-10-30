@@ -49,7 +49,10 @@ export type PrepareExtras = {
  *
  * @internal
  */
-export type BackendPrepareOptions<TInternal> = Omit<TInternal, "images" | OutputOnly> &
+export type BackendPrepareOptions<TInternal> = Omit<
+  TInternal,
+  "images" | "failedFontFiles" | OutputOnly
+> &
   PrepareExtras;
 
 /**
@@ -87,6 +90,8 @@ export type NeedsRequest = {
   fonts?: ListedFont[];
   /** The font stack the render falls back through, or by default the one `fonts` describes. */
   fontFamilies?: string[];
+  /** The `@font-face` files this document failed to download, so their rules move on to their next `src`. */
+  failedFontFiles?: string[];
 };
 
 /**
@@ -103,9 +108,12 @@ export type SourceReader = (request: NeedsRequest) => Awaitable<SourceNeeds>;
  */
 export function needsArgs<TLayout>(
   layout: TLayout,
-  { images, fonts, fontFamilies }: NeedsRequest,
-): [TLayout & { images?: ImageSource[]; fontFamilies?: string[] }, ListedFont[] | undefined] {
-  return [{ ...layout, images, fontFamilies }, fonts];
+  { images, fonts, fontFamilies, failedFontFiles }: NeedsRequest,
+): [
+  TLayout & { images?: ImageSource[]; fontFamilies?: string[]; failedFontFiles?: string[] },
+  ListedFont[] | undefined,
+] {
+  return [{ ...layout, images, fontFamilies, failedFontFiles }, fonts];
 }
 
 type PreparedState<TSource, TLayout> = {
@@ -114,6 +122,7 @@ type PreparedState<TSource, TLayout> = {
   fonts: FontLoader[] | undefined;
   fontFamilies: string[] | undefined;
   images: ImageSource[];
+  failedFontFiles: string[];
 };
 
 let createPrepared: <TSource, TLayout>(
@@ -190,12 +199,12 @@ function missingFontFiles<TFamily extends RegisteredFamilyLike>(
   return missing;
 }
 
-/** Fetches each of `urls` and hands it to the renderer, recording the ones that fail. */
+/** Fetches each of `urls` and hands it to the renderer, returning the ones that failed. */
 async function loadFontFiles<TFamily extends RegisteredFamilyLike>(
   registry: FontRegistry<TFamily>,
   urls: string[],
   options: Omit<FetchOptions, "signal"> & { fetchCache?: ImageFetchCache; signal?: AbortSignal },
-): Promise<void> {
+): Promise<string[]> {
   const fetched = new Map(
     (await prepareImages({ ...options, urls, throwOnError: false })).map(({ src, data }) => [
       src,
@@ -203,21 +212,21 @@ async function loadFontFiles<TFamily extends RegisteredFamilyLike>(
     ]),
   );
 
-  await Promise.all(
+  const loaded = await Promise.all(
     urls.map(async (url) => {
       const data = fetched.get(url);
-      const loaded =
+
+      return (
         data !== undefined &&
-        (await registry.cacheFontFile(url, data).then(
+        registry.cacheFontFile(url, data).then(
           () => true,
           () => false,
-        ));
-
-      if (!loaded) {
-        registry.failFontFile(url);
-      }
+        )
+      );
     }),
   );
+
+  return urls.filter((_, index) => !loaded[index]);
 }
 
 async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
@@ -265,18 +274,22 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   // A file that fails moves its rule on to its next `src`, which the next read reports. Each URL
   // loads at most once, so a file the font cache releases to fit another cannot loop the reads.
   const tried = new Set<string>();
+  const failedFontFiles: string[] = [];
   let missing = fetchMissing ? missingFontFiles(registry, reached, tried) : [];
 
   while (missing.length > 0) {
-    await loadFontFiles(registry, missing, { ...fetchOptions, fetchCache, signal });
-    reached = await needs({ ...request, images: entries });
+    failedFontFiles.push(
+      ...(await loadFontFiles(registry, missing, { ...fetchOptions, fetchCache, signal })),
+    );
+    signal?.throwIfAborted();
+    reached = await needs({ ...request, images: entries, failedFontFiles });
     missing = missingFontFiles(registry, reached, tried);
   }
 
   const loads = listed && reached?.fonts;
   const subset = loads ? resolvedFonts?.filter((_, id) => loads.includes(id)) : resolvedFonts;
 
-  return { source, layout, fonts: subset, fontFamilies, images: entries };
+  return { source, layout, fonts: subset, fontFamilies, images: entries, failedFontFiles };
 }
 
 /**
@@ -297,7 +310,11 @@ export function renderPrepared<
   call: (
     source: TSource,
     options: TLayout &
-      Omit<TOutput, "signal"> & { images?: ImageSource[]; fontFamilies?: string[] },
+      Omit<TOutput, "signal"> & {
+        images?: ImageSource[];
+        fontFamilies?: string[];
+        failedFontFiles?: string[];
+      },
     signal: AbortSignal | undefined,
   ) => Awaitable<TResult>,
 ): Promise<TResult> {
@@ -309,6 +326,9 @@ export function renderPrepared<
   return registry.resolveResources(state.fonts, state.images, state.fontFamilies, (resolved) => {
     signal?.throwIfAborted();
 
-    return call(state.source, { ...encoding, ...state.layout, ...resolved }, signal);
+    const failed =
+      state.failedFontFiles.length > 0 ? { failedFontFiles: state.failedFontFiles } : {};
+
+    return call(state.source, { ...encoding, ...state.layout, ...resolved, ...failed }, signal);
   });
 }

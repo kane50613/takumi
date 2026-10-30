@@ -160,7 +160,7 @@ const image = await render(<div style={{ fontFamily: "Brand" }}>Hello</div>, {
 });
 ```
 
-The rule's descriptors, such as `font-weight`, `unicode-range`, and `size-adjust`, apply as they do in Chrome. When a `src` fails to download, the rule moves on to its next source. A `local()` source names a font you loaded through `fonts`, by its full name or PostScript name. Takumi downloads the files with the `fetch`, `timeout`, `maxBytes`, `allowUrl`, and `fetchCache` you pass in `images`, so a relative URL needs your own `fetch`.
+The rule's descriptors, such as `font-weight`, `unicode-range`, and `size-adjust`, apply as they do in Chrome. When a `src` fails to download, the rule moves on to its next source for that render, and the next `prepare()` tries the file again. A `local()` source names a font you loaded through `fonts`, by its full name or PostScript name. Takumi downloads the files with the `fetch`, `timeout`, `maxBytes`, `allowUrl`, and `fetchCache` you pass in `images`, so a relative URL needs your own `fetch`.
 
 A renderer's `render()` called without `prepare()` downloads nothing. It draws with the `@font-face` files the renderer already holds, and falls back past the rest.
 

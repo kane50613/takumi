@@ -125,6 +125,8 @@ export type RenderOptions = {
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: string[];
+  /** @internal The `@font-face` files `prepare` failed to download. */
+  failedFontFiles?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 };
@@ -185,6 +187,8 @@ export type RenderAnimationOptions = {
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: string[];
+  /** @internal The `@font-face` files `prepare` failed to download. */
+  failedFontFiles?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 };

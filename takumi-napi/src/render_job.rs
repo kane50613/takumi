@@ -35,7 +35,10 @@ impl RenderJob {
 
     Self {
       input: Some(input),
-      fonts: state.fonts_for_render(options.font_families.as_deref()),
+      fonts: state.fonts_for_render(
+        options.font_families.as_deref(),
+        options.failed_font_files.as_deref(),
+      ),
       state,
       options,
     }

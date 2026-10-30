@@ -160,13 +160,21 @@ impl RendererState {
     Some(listed)
   }
 
-  /// The fonts for a render that names `families`, which are marked used.
-  pub(crate) fn fonts_for_render(&self, families: Option<&[String]>) -> Arc<Fonts> {
+  /// The fonts for a render that names `families`, which are marked used, with the `@font-face`
+  /// files its document `failed` to download.
+  pub(crate) fn fonts_for_render(
+    &self,
+    families: Option<&[String]>,
+    failed: Option<&[String]>,
+  ) -> Arc<Fonts> {
     let state = self.font_state.load();
 
     state.cache.touch(families.unwrap_or_default());
 
-    Arc::clone(&state.fonts)
+    match failed {
+      Some(failed) if !failed.is_empty() => Arc::new(state.fonts.with_failed_font_files(failed)),
+      _ => Arc::clone(&state.fonts),
+    }
   }
 }
 
@@ -278,24 +286,13 @@ impl Renderer {
     ))
   }
 
-  /// Whether the renderer holds the `@font-face` file `url`, loaded or failed, marking it used.
+  /// Whether the renderer holds the `@font-face` file `url`, marking it used.
   #[napi(js_name = "hasFontFile")]
   pub fn has_font_file(&self, url: String) -> bool {
     let state = self.state.font_state.load();
 
     state.cache.has_file(&url);
     state.fonts.has_font_file(&url)
-  }
-
-  /// Records that the `@font-face` file `url` failed to load, so its rule moves on to its next
-  /// source.
-  #[napi(js_name = "failFontFile")]
-  pub fn fail_font_file(&self, url: String) -> Result<()> {
-    self.state.update_fonts(|fonts, _| {
-      fonts.fail_font_file(url);
-
-      Ok(())
-    })
   }
 
   fn load_font(
