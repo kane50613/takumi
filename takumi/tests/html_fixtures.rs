@@ -109,7 +109,23 @@ fn body_viewport(html: &str) -> Result<Viewport, String> {
       })
   };
 
-  Ok(Viewport::new((pixels("width")?, pixels("height")?)))
+  // A fixture renders at a device pixel ratio with `<meta name="takumi-device-pixel-ratio" content="2" />`.
+  let device_pixel_ratio = match section(
+    html,
+    r#"<meta name="takumi-device-pixel-ratio" content=""#,
+    "\"",
+  ) {
+    Some(ratio) => ratio.parse::<u32>().map_err(|error| error.to_string())?,
+    None => 1,
+  };
+
+  Ok(
+    Viewport::new((
+      pixels("width")? * device_pixel_ratio,
+      pixels("height")? * device_pixel_ratio,
+    ))
+    .with_device_pixel_ratio(device_pixel_ratio as f32),
+  )
 }
 
 fn section<'h>(html: &'h str, start: &str, end: &str) -> Option<&'h str> {

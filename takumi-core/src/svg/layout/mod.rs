@@ -107,6 +107,8 @@ pub(super) struct SvgLayout<'a> {
   position_lists: HashMap<usize, Rc<text::PositionLists>>,
   /// The size the root is laid out at.
   viewport: Size<f32>,
+  /// The device pixels per CSS pixel the root scales by, Blink's effective zoom of an inline `svg`.
+  zoom: f32,
   /// Whether a root without a `viewBox` takes one from its `width` and `height`, as Blink's
   /// `SVGSVGElement::ShouldSynthesizeViewBox` does for an `SVGImage`.
   synthesizes_view_box: bool,
@@ -119,7 +121,7 @@ pub(super) struct SvgLayout<'a> {
 
 impl<'a> SvgLayout<'a> {
   /// A layout of `document` drawn in `host` at `viewport`, Blink's container size of an
-  /// `SVGImage` or the content box of an inline `svg`, in CSS pixels.
+  /// `SVGImage` or the content box of an inline `svg`, in device pixels.
   pub(super) fn new(document: &'a SvgDocument, host: SvgHost<'a>, viewport: Size<f32>) -> Self {
     Self::nested(document, host, viewport, 0)
   }
@@ -135,6 +137,10 @@ impl<'a> SvgLayout<'a> {
       styles: StyleResolver::new(document, host, viewport),
       viewport,
       synthesizes_view_box: matches!(host, SvgHost::Image { .. }),
+      zoom: match host {
+        SvgHost::Image { .. } => 1.0,
+        SvgHost::Inline(context) => context.sizing.viewport.effective_dpr(),
+      },
       clip_paths: HashMap::new(),
       masks: HashMap::new(),
       #[cfg(feature = "svg-raster")]
@@ -163,7 +169,10 @@ impl<'a> SvgLayout<'a> {
   /// The document as Blink's `LayoutSVGRoot` lays it out: the container of everything it draws and
   /// the canvas size.
   fn layout_root(&mut self) -> Option<LayoutDocument> {
-    let canvas = self.viewport;
+    let canvas = Size::new(
+      self.viewport.width / self.zoom,
+      self.viewport.height / self.zoom,
+    );
     let parent_context = self.styles.root_context().clone();
     let root = self.styled(0, &parent_context);
     let view_box = self
@@ -203,25 +212,26 @@ impl<'a> SvgLayout<'a> {
 
     if !self.is_visible_element(&root, &scope) {
       return Some(LayoutDocument {
-        width: canvas.width,
-        height: canvas.height,
+        width: self.viewport.width,
+        height: self.viewport.height,
         root: tree,
       });
     }
 
-    let root_transform = ViewBox {
-      x: view_box_rect.x(),
-      y: view_box_rect.y(),
-      width: view_box_rect.width(),
-      height: view_box_rect.height(),
-    }
-    .to_transform(aspect, canvas);
+    let root_transform = Affine::scale(self.zoom, self.zoom)
+      * ViewBox {
+        x: view_box_rect.x(),
+        y: view_box_rect.y(),
+        width: view_box_rect.width(),
+        height: view_box_rect.height(),
+      }
+      .to_transform(aspect, canvas);
     let identity = root_transform.to_cols_array() == Affine::IDENTITY.to_cols_array();
 
     // The root's background propagates to the canvas, which the viewport covers.
     if let Some(background) = background {
       tree.children.push(LayoutObject::background(
-        Rect::positive_from_xywh(0.0, 0.0, canvas.width, canvas.height)?,
+        Rect::positive_from_xywh(0.0, 0.0, self.viewport.width, self.viewport.height)?,
         background,
       )?);
     }
@@ -238,8 +248,8 @@ impl<'a> SvgLayout<'a> {
     }
 
     Some(LayoutDocument {
-      width: canvas.width,
-      height: canvas.height,
+      width: self.viewport.width,
+      height: self.viewport.height,
       root: tree,
     })
   }

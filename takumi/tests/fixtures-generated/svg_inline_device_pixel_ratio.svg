@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400">
+  <rect x="0" y="0" width="800" height="400" fill="#eee"/>
+  <clipPath id="cp0">
+    <path d="M0 0H400V200H0Z"/>
+  </clipPath>
+  <g transform="matrix(1 0 0 1 40 40)" clip-path="url(#cp0)">
+    <g style="isolation:isolate">
+      <g transform="matrix(2 0 0 2 0 0)">
+        <path d="M50 0h100c27.61 0 50 22.39 50 50s-22.39 50-50 50h-100c-27.61 0-50-22.39-50-50s22.39-50 50-50Z" fill="#0f7b6c"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp1">
+    <path d="M0 0H240V240H0Z"/>
+  </clipPath>
+  <g transform="matrix(1 0 0 1 500 80)" clip-path="url(#cp1)">
+    <g style="isolation:isolate">
+      <g transform="matrix(2 0 0 2 0 0)">
+        <path d="M110 60c0 27.61-22.39 50-50 50s-50-22.39-50-50 22.39-50 50-50 50 22.39 50 50Z" fill="none" stroke="#ff6f91" stroke-width="10"/>
+      </g>
+    </g>
+  </g>
+</svg>
