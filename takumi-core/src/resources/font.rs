@@ -1225,8 +1225,7 @@ mod tests {
     assert_eq!(weights, vec![Some((400.0, 400.0)), Some((700.0, 700.0))]);
   }
 
-  /// Registering a face again moves it after the faces registered since, as a later `@font-face`
-  /// rule wins over an earlier one.
+  /// A face registered again takes precedence over faces registered since.
   #[test]
   fn a_face_registered_again_takes_precedence_again() {
     let mut fonts = Fonts::default();
@@ -1253,8 +1252,7 @@ mod tests {
     assert_eq!(wghts, vec![700.0, 300.0]);
   }
 
-  /// Copies that differ only past their tables restrict to the same sfnt, so one `unicode-range` subset
-  /// declared at two weights keeps a face for each too.
+  /// One `unicode-range` subset declared at two weights keeps a face for each.
   #[test]
   fn a_ranged_subset_registered_at_two_weights_keeps_both_faces() {
     let mut fonts = Fonts::default();
