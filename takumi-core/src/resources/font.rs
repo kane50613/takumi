@@ -1225,6 +1225,41 @@ mod tests {
     assert_eq!(weights, vec![Some((400.0, 400.0)), Some((700.0, 700.0))]);
   }
 
+  /// Copies that differ only past their tables restrict to the same sfnt, so one `unicode-range` subset
+  /// declared at two weights keeps a face for each too.
+  #[test]
+  fn a_ranged_subset_registered_at_two_weights_keeps_both_faces() {
+    let mut fonts = Fonts::default();
+    let latin: UnicodeRangeSet = [UnicodeRange::new(0x00, 0xff)].into_iter().collect();
+    let sfnt = read_font_asset("../assets/fonts/geist/geist-latin-wght-300-800.ttf");
+    let mut padded = sfnt.clone();
+
+    padded.extend([1; 8]);
+
+    for (bytes, weight) in [(sfnt, 400.0), (padded, 700.0)] {
+      fonts
+        .register(
+          FontResource::new(bytes)
+            .override_info(FontOverride {
+              family_name: Some("Geist".into()),
+              weight: Some(weight),
+              ..Default::default()
+            })
+            .unicode_range(latin.clone()),
+        )
+        .unwrap();
+    }
+
+    let weights: Vec<_> = fonts
+      .registry
+      .selector
+      .font_faces()
+      .map(|face| face.descriptors.weight)
+      .collect();
+
+    assert_eq!(weights, vec![Some((400.0, 400.0)), Some((700.0, 700.0))]);
+  }
+
   #[test]
   fn shared_sfnt_bytes_reach_the_font_system_uncopied() {
     let sfnt = FontBytes::Inline(Cow::Owned(geist_bytes()))
