@@ -2,9 +2,9 @@
 //! reads them, and the face [`FontFace::Create`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/font_face.cc)
 //! makes of one.
 //!
-//! Approximate: `font-feature-settings`, `size-adjust`, and the metric override descriptors parse
-//! but do not apply, and `font-display` has no effect, since a render draws with what has loaded.
-//! A `local()` source never matches, as takumi has no system fonts.
+//! Approximate: `font-feature-settings`, `size-adjust`, and the metric override descriptors are
+//! ignored, and `font-display` has no effect, since a render draws with what has loaded. A
+//! `local()` source never matches, as takumi has no system fonts.
 
 use std::sync::Arc;
 

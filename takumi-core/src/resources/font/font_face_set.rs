@@ -9,6 +9,7 @@ use std::{
 };
 
 use quick_cache::sync::Cache;
+use skrifa::FontRef;
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
 use crate::{
@@ -90,7 +91,9 @@ impl RestrictedFiles {
 }
 
 impl Fonts {
-  /// Hands over the file an `@font-face` `src` names, as [`RenderNeeds::fonts`] reports it.
+  /// Hands over the file an `@font-face` `src` names, as [`RenderNeeds::fonts`] reports it. A file
+  /// that does not parse as a font fails, as a Blink load error does, so the host can record it
+  /// with [`Self::fail_font_file`].
   ///
   /// [`RenderNeeds::fonts`]: crate::layout::needs::RenderNeeds::fonts
   pub fn load_font_file(
@@ -99,6 +102,8 @@ impl Fonts {
     source: FontSource<'_>,
   ) -> Result<(), FontError> {
     let (data, id) = source.into_sfnt_with_id()?;
+
+    FontRef::from_index((*data).as_ref(), 0).map_err(|_| FontError::UnsupportedFormat)?;
     let registry = Arc::make_mut(&mut self.registry);
 
     registry.revise();

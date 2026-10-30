@@ -67,3 +67,16 @@ fn a_rule_outside_its_media_query_adds_no_face() {
 
   assert_eq!(reached(&CONTEXT, css, "Face", "a"), urls([]));
 }
+
+#[test]
+fn a_file_that_is_not_a_font_fails_to_load() {
+  let css = "@font-face { font-family: Face; src: url(bad.woff2); }";
+  let mut fonts = CONTEXT.clone();
+
+  assert!(
+    fonts
+      .load_font_file("bad.woff2", FontSource::from(b"not a font".to_vec()))
+      .is_err()
+  );
+  assert_eq!(reached(&fonts, css, "Face", "a"), urls(["bad.woff2"]));
+}
