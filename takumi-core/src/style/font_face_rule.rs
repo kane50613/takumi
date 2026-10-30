@@ -154,11 +154,9 @@ fn family_name(input: &mut Parser) -> Option<Arc<str>> {
   let mut name = String::new();
 
   while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
-    if name.is_empty() && GenericFamilyType::parse(&ident).is_some() {
-      return None;
-    }
-
-    if is_css_wide_keyword(&ident) {
+    if (name.is_empty() && GenericFamilyType::parse(&ident).is_some())
+      || is_css_wide_keyword(&ident)
+    {
       return None;
     }
 
@@ -221,20 +219,12 @@ fn src_entry(input: &mut Parser) -> Result<FontFaceSrc, ()> {
     .try_parse(|input| input.expect_function_matching("local"))
     .is_ok()
   {
-    input
-      .parse_nested_block(|block| {
-        let valid = block
-          .try_parse(|block| block.expect_string().map(|_| ()))
-          .is_ok()
-          || family_name(block).is_some();
-
-        if valid {
-          Ok(())
-        } else {
-          Err(block.new_error_for_next_token::<()>())
-        }
-      })
-      .map_err(|_| ())?;
+    nested(input, |block| {
+      block
+        .try_parse(|block| block.expect_string().map(|_| ()))
+        .is_ok()
+        || family_name(block).is_some()
+    })?;
 
     return src_end(input).map(|()| FontFaceSrc::Local);
   }
@@ -245,24 +235,16 @@ fn src_entry(input: &mut Parser) -> Result<FontFaceSrc, ()> {
     .is_ok();
 
   if has_format {
-    input
-      .parse_nested_block(|block| {
-        if is_supported_format(block) {
-          Ok(())
-        } else {
-          Err(block.new_error_for_next_token::<()>())
-        }
-      })
-      .map_err(|_| ())?;
+    nested(input, is_supported_format)?;
   }
 
   if input
     .try_parse(|input| input.expect_function_matching("tech"))
     .is_ok()
   {
-    input
-      .parse_nested_block(|block| {
-        block.parse_comma_separated(|block| {
+    nested(input, |block| {
+      block
+        .parse_comma_separated(|block| {
           let tech = block.expect_ident_cloned()?;
 
           if is_supported_tech(&tech) {
@@ -271,11 +253,24 @@ fn src_entry(input: &mut Parser) -> Result<FontFaceSrc, ()> {
             Err(block.new_error_for_next_token::<()>())
           }
         })
-      })
-      .map_err(|_| ())?;
+        .is_ok()
+    })?;
   }
 
   src_end(input).map(|()| FontFaceSrc::Url { url, has_format })
+}
+
+/// Succeeds when `accept` takes all of the block `input` just opened.
+fn nested(input: &mut Parser, accept: impl FnOnce(&mut Parser) -> bool) -> Result<(), ()> {
+  input
+    .parse_nested_block(|block| {
+      if accept(block) {
+        Ok(())
+      } else {
+        Err(block.new_error_for_next_token::<()>())
+      }
+    })
+    .map_err(|_| ())
 }
 
 /// Succeeds at a comma or the end of the value, without consuming the comma.
@@ -314,16 +309,17 @@ fn is_supported_tech(tech: &str) -> bool {
   }
 }
 
+fn expect_auto<'i>(input: &mut Parser<'i>) -> Result<(), cssparser::BasicParseError> {
+  input.expect_ident_matching("auto")
+}
+
 /// `auto`, or a range whose ends swap to keep it increasing, as CSS Fonts 4 asks.
 /// <https://drafts.csswg.org/css-fonts/#font-prop-desc>
 fn range<'i>(
   input: &mut Parser<'i>,
   mut value: impl FnMut(&mut Parser<'i>) -> Option<f32>,
 ) -> Option<Option<(f32, f32)>> {
-  if input
-    .try_parse(|input| input.expect_ident_matching("auto"))
-    .is_ok()
-  {
+  if input.try_parse(expect_auto).is_ok() {
     return Some(None);
   }
 
@@ -358,10 +354,7 @@ fn weight_range(input: &mut Parser) -> Option<Option<(f32, f32)>> {
 
 /// `font-style`: `normal`, `italic`, or `oblique` with up to two angles.
 fn slope_range(input: &mut Parser) -> Option<Option<(f32, f32)>> {
-  if input
-    .try_parse(|input| input.expect_ident_matching("auto"))
-    .is_ok()
-  {
+  if input.try_parse(expect_auto).is_ok() {
     return Some(None);
   }
 

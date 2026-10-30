@@ -101,9 +101,7 @@ impl RestrictedFiles {
 
     let restricted = range.restrict_sfnt(Arc::clone(data), id);
 
-    self
-      .copies
-      .insert(key, (Arc::clone(&restricted.0), restricted.1));
+    self.copies.insert(key, restricted.clone());
 
     Some(restricted)
   }
@@ -125,6 +123,7 @@ impl Fonts {
     if !is_usable_font(&data) {
       return Err(FontError::UnsupportedFormat);
     }
+
     let registry = Arc::make_mut(&mut self.registry);
 
     registry.revise();
