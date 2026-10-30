@@ -21,7 +21,7 @@ fn reached(fonts: &Fonts, css: &str, family: &str, text: &str) -> BTreeSet<Strin
       .stylesheet(StyleSheet::parse(css).unwrap().into())
       .build(),
   )
-  .fonts
+  .font_files
 }
 
 fn urls<const N: usize>(urls: [&str; N]) -> BTreeSet<String> {

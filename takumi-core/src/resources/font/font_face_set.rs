@@ -108,11 +108,11 @@ impl RestrictedFiles {
 }
 
 impl Fonts {
-  /// Hands over the file an `@font-face` `src` names, as [`RenderNeeds::fonts`] reports it. A file
+  /// Hands over the file an `@font-face` `src` names, as [`RenderNeeds::font_files`] reports it. A file
   /// that is not a usable font fails, as Blink's OTS sanitizing fails a load, so the host can
   /// record it with [`Self::fail_font_file`].
   ///
-  /// [`RenderNeeds::fonts`]: crate::layout::needs::RenderNeeds::fonts
+  /// [`RenderNeeds::font_files`]: crate::layout::needs::RenderNeeds::font_files
   pub fn load_font_file(
     &mut self,
     url: impl Into<Arc<str>>,

@@ -87,7 +87,7 @@ fn render_fixture(path: &Path, name: &str) -> Result<(), String> {
   let mut fonts = CONTEXT.clone();
 
   load_font_files(&mut fonts, |fonts| {
-    needs(fixture_options(fonts, viewport, &node, &stylesheet)).fonts
+    needs(fixture_options(fonts, viewport, &node, &stylesheet)).font_files
   });
 
   write_goldens(fixture_options(&fonts, viewport, &node, &stylesheet), name)

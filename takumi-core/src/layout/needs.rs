@@ -30,7 +30,7 @@ pub struct RenderNeeds {
   pub faces: BTreeSet<usize>,
   /// The `@font-face` `src` URLs font fallback would load, to hand to
   /// [`Fonts::load_font_file`](crate::Fonts::load_font_file).
-  pub fonts: BTreeSet<String>,
+  pub font_files: BTreeSet<String>,
 }
 
 impl Extend<RenderNeeds> for RenderNeeds {
@@ -38,7 +38,7 @@ impl Extend<RenderNeeds> for RenderNeeds {
     for read in reads {
       self.images.extend(read.images);
       self.faces.extend(read.faces);
-      self.fonts.extend(read.fonts);
+      self.font_files.extend(read.font_files);
     }
   }
 }
@@ -236,7 +236,7 @@ impl NeedsCollector {
           }
           #[cfg(feature = "font-face")]
           Some(PendingSource::Url(url)) => {
-            self.needs.fonts.insert(url.to_string());
+            self.needs.font_files.insert(url.to_string());
           }
           None => {}
         }

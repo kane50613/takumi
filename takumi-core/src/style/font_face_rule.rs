@@ -152,22 +152,23 @@ fn family_name(input: &mut Parser) -> Option<Arc<str>> {
   }
 
   let mut name = String::new();
+  let mut words = 0;
 
   while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
-    if (name.is_empty() && GenericFamilyType::parse(&ident).is_some())
-      || is_css_wide_keyword(&ident)
-    {
+    if words == 0 && GenericFamilyType::parse(&ident).is_some() {
       return None;
     }
 
-    if !name.is_empty() {
+    if words > 0 {
       name.push(' ');
     }
 
     name.push_str(&ident);
+    words += 1;
   }
 
-  (!name.is_empty()).then(|| name.into())
+  // A CSS-wide keyword is reserved only as the whole name, as in Blink's `ConcatenateFamilyName`.
+  (words > 0 && (words > 1 || !is_css_wide_keyword(&name))).then(|| name.into())
 }
 
 fn is_css_wide_keyword(ident: &str) -> bool {
@@ -452,6 +453,13 @@ mod tests {
     assert_eq!(
       rule("src: url(a.woff2);").descriptors.family.as_deref(),
       Some("Face")
+    );
+    assert_eq!(
+      rules("@font-face { font-family: Foo inherit; src: url(a.woff2); }")[0]
+        .descriptors
+        .family
+        .as_deref(),
+      Some("Foo inherit")
     );
   }
 
