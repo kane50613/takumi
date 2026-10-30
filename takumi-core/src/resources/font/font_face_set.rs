@@ -8,7 +8,7 @@ use std::{
   sync::{Arc, LazyLock},
 };
 
-use quick_cache::sync::Cache;
+use quick_cache::{Weighter, sync::Cache};
 use skrifa::{FontRef, raw::TableProvider};
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
@@ -29,14 +29,33 @@ pub(super) enum FontFile {
   Failed,
 }
 
-/// The registries the rules of recent renders made, so the same rules over the same fonts reuse
-/// their decoded faces.
-static DOCUMENT_REGISTRIES: LazyLock<Cache<DocumentKey, Arc<FontRegistry>>> =
-  LazyLock::new(|| Cache::new(16));
-
 /// The bytes the `unicode-range` copies of one document's faces may take, past which a face that
 /// needs another copy fails to load, so a stylesheet cannot multiply a large file without bound.
 const MAX_RESTRICTED_BYTES: usize = 256 << 20;
+
+/// The least a cached document registry weighs, so the cache holds at most 16 of them.
+const MIN_DOCUMENT_WEIGHT: u64 = 16 << 20;
+
+/// The registries the rules of recent renders made, so the same rules over the same fonts reuse
+/// their decoded faces, weighed by their `unicode-range` copies.
+static DOCUMENT_REGISTRIES: LazyLock<Cache<DocumentKey, DocumentFonts, ByCopies>> =
+  LazyLock::new(|| Cache::with_weighter(16, MAX_RESTRICTED_BYTES as u64, ByCopies));
+
+/// A document's registry, and the bytes of the `unicode-range` copies it alone holds.
+#[derive(Clone)]
+struct DocumentFonts {
+  registry: Arc<FontRegistry>,
+  copied_bytes: u64,
+}
+
+#[derive(Clone)]
+struct ByCopies;
+
+impl Weighter<DocumentKey, DocumentFonts> for ByCopies {
+  fn weight(&self, _key: &DocumentKey, fonts: &DocumentFonts) -> u64 {
+    fonts.copied_bytes.max(MIN_DOCUMENT_WEIGHT)
+  }
+}
 
 /// What a document's faces are made of: the registry they extend, and each face's descriptors,
 /// as written, with the URL of the source it reaches.
@@ -176,9 +195,12 @@ impl FontsSnapshot {
 
         registry.revise();
 
-        Ok::<_, ()>(Arc::new(registry))
+        Ok::<_, ()>(DocumentFonts {
+          registry: Arc::new(registry),
+          copied_bytes: restricted.bytes as u64,
+        })
       })
-      .unwrap_or_else(|()| Arc::clone(base));
+      .map_or_else(|()| Arc::clone(base), |fonts| fonts.registry);
 
     Self(Fonts {
       registry,
