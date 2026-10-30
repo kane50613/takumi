@@ -90,7 +90,7 @@ impl CssFontSelector {
         continue;
       }
 
-      if let Some(font_face) = self.font_face(&family, id, platform_data.index) {
+      if let Some(font_face) = self.font_face(&family, id, platform_data.index, descriptors) {
         faces.push(Arc::clone(font_face));
 
         continue;
@@ -234,8 +234,14 @@ impl CssFontSelector {
       .map(Arc::clone)
   }
 
-  /// The face `family` already lists at `index` of the data `id` names.
-  fn font_face(&self, family: &str, id: u64, index: u32) -> Option<&Arc<FontFace>> {
+  /// The face `family` already lists at `index` of the data `id` names, under `descriptors`.
+  fn font_face(
+    &self,
+    family: &str,
+    id: u64,
+    index: u32,
+    descriptors: &FontFaceDescriptors,
+  ) -> Option<&Arc<FontFace>> {
     let family = fold_family_name(family);
 
     self
@@ -249,6 +255,7 @@ impl CssFontSelector {
             custom_platform_data.id == id && custom_platform_data.index == index
           })
           && fold_family_name(&font_face.family) == family
+          && font_face.descriptors == *descriptors
       })
   }
 

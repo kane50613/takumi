@@ -1194,6 +1194,37 @@ mod tests {
     ));
   }
 
+  fn register_weighted(fonts: &mut Fonts, weight: f32) {
+    fonts
+      .register(
+        FontResource::new(geist_bytes()).override_info(FontOverride {
+          family_name: Some("Geist".into()),
+          weight: Some(weight),
+          ..Default::default()
+        }),
+      )
+      .unwrap();
+  }
+
+  /// One file declared at two weights keeps a face for each, as `@font-face` rules sharing a `src` do.
+  #[test]
+  fn a_font_registered_at_two_weights_keeps_both_faces() {
+    let mut fonts = Fonts::default();
+
+    register_weighted(&mut fonts, 400.0);
+    register_weighted(&mut fonts, 700.0);
+    register_weighted(&mut fonts, 700.0);
+
+    let weights: Vec<_> = fonts
+      .registry
+      .selector
+      .font_faces()
+      .map(|face| face.descriptors.weight)
+      .collect();
+
+    assert_eq!(weights, vec![Some((400.0, 400.0)), Some((700.0, 700.0))]);
+  }
+
   #[test]
   fn shared_sfnt_bytes_reach_the_font_system_uncopied() {
     let sfnt = FontBytes::Inline(Cow::Owned(geist_bytes()))
