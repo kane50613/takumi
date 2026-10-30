@@ -19,40 +19,44 @@ fn fold(family: &str) -> String {
   family.chars().flat_map(char::to_lowercase).collect()
 }
 
+/// A last-use stamp, set through a shared reference so renders mark use without a lock.
+struct LastUsed(AtomicU64);
+
+impl LastUsed {
+  fn new(now: u64) -> Self {
+    Self(AtomicU64::new(now))
+  }
+
+  fn set(&self, now: u64) {
+    self.0.store(now, Ordering::Relaxed);
+  }
+
+  fn get(&self) -> u64 {
+    self.0.load(Ordering::Relaxed)
+  }
+}
+
+impl Clone for LastUsed {
+  fn clone(&self) -> Self {
+    Self::new(self.get())
+  }
+}
+
+#[derive(Clone)]
 struct CachedFamily {
   /// Bytes of font data its registrations hold. A file holding several families counts in each.
   bytes: u64,
   /// Added to by an explicit registration, so never released for space.
   pinned: bool,
-  /// Stamped through a shared reference, so renders mark use without a lock.
-  last_used: AtomicU64,
+  last_used: LastUsed,
   keys: Vec<String>,
 }
 
-impl Clone for CachedFamily {
-  fn clone(&self) -> Self {
-    Self {
-      bytes: self.bytes,
-      pinned: self.pinned,
-      last_used: AtomicU64::new(self.last_used.load(Ordering::Relaxed)),
-      keys: self.keys.clone(),
-    }
-  }
-}
-
 /// An `@font-face` file a renderer holds, by URL.
+#[derive(Clone)]
 struct CachedFile {
   bytes: u64,
-  last_used: AtomicU64,
-}
-
-impl Clone for CachedFile {
-  fn clone(&self) -> Self {
-    Self {
-      bytes: self.bytes,
-      last_used: AtomicU64::new(self.last_used.load(Ordering::Relaxed)),
-    }
-  }
+  last_used: LastUsed,
 }
 
 /// What the least recently used entry past the budget is.
@@ -104,11 +108,7 @@ impl FontCache {
     let now = self.tick();
 
     for family in &registered {
-      self
-        .families
-        .get(&fold(&family.name))?
-        .last_used
-        .store(now, Ordering::Relaxed);
+      self.families.get(&fold(&family.name))?.last_used.set(now);
     }
 
     Some(registered)
@@ -171,13 +171,13 @@ impl FontCache {
         .or_insert_with(|| CachedFamily {
           bytes: 0,
           pinned,
-          last_used: AtomicU64::new(now),
+          last_used: LastUsed::new(now),
           keys: Vec::new(),
         });
 
       cached.bytes += bytes;
       cached.pinned |= pinned;
-      *cached.last_used.get_mut() = now;
+      cached.last_used.set(now);
       cached.keys.extend(key.map(str::to_owned));
     }
 
@@ -192,7 +192,7 @@ impl FontCache {
       return false;
     };
 
-    file.last_used.store(self.tick(), Ordering::Relaxed);
+    file.last_used.set(self.tick());
 
     true
   }
@@ -211,7 +211,7 @@ impl FontCache {
       url.to_owned(),
       CachedFile {
         bytes,
-        last_used: AtomicU64::new(self.tick()),
+        last_used: LastUsed::new(self.tick()),
       },
     );
 
@@ -224,7 +224,7 @@ impl FontCache {
 
     for family in families {
       if let Some(cached) = self.families.get(&fold(family)) {
-        cached.last_used.store(now, Ordering::Relaxed);
+        cached.last_used.set(now);
       }
     }
   }
@@ -263,7 +263,7 @@ impl FontCache {
         .map(|(url, file)| (Oldest::File(url.clone()), &file.last_used));
       let Some(oldest) = families
         .chain(files)
-        .min_by_key(|(_, last_used)| last_used.load(Ordering::Relaxed))
+        .min_by_key(|(_, last_used)| last_used.get())
         .map(|(oldest, _)| oldest)
       else {
         return Ok(());

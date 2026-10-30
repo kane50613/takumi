@@ -99,9 +99,12 @@ impl FontStore {
   pub fn for_render(&self, families: Option<&[String]>, failed: Option<&[String]>) -> Rc<Fonts> {
     self.cache.borrow().touch(families.unwrap_or_default());
 
-    match failed {
-      Some(failed) if !failed.is_empty() => Rc::new(self.current().with_failed_font_files(failed)),
-      _ => self.current(),
+    let failed = failed.unwrap_or_default();
+
+    if failed.is_empty() {
+      self.current()
+    } else {
+      Rc::new(self.current().with_failed_font_files(failed))
     }
   }
 
