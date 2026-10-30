@@ -27,7 +27,7 @@ impl MakeComputed for FontStyle {}
 
 /// An `oblique` angle in degrees, signed where `Angle` keeps a turn in [0, 360), and within
 /// ±90deg.
-fn oblique_angle<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
+pub(crate) fn oblique_angle<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
   let start = input.state();
   let angle = *Angle::from_css(input)?;
   let angle = if angle > 180.0 { angle - 360.0 } else { angle };

@@ -31,7 +31,7 @@ default-features = false
 optional = true
 
 [features]
-default = ["raster-backend", "woff2", "woff", "svg-source", "image-decoding", "rayon"]
+default = ["raster-backend", "woff2", "woff", "svg-source", "image-decoding", "rayon", "font-face"]
 raster-backend = ["dep:takumi-raster"]
 # Expose the backend crates wholesale under `takumi::unstable`. Everything behind
 # this flag is implementation surface with no semver guarantee.
@@ -49,6 +49,8 @@ rayon = ["takumi-raster?/rayon"]
 # Raster rendering across pages, through takumi-core's block fragmentation.
 pages = ["takumi-raster?/pages"]
 from-html = ["takumi-core/html"]
+# `@font-face` rules, whose files `needs` reports and `Fonts::load_font_file` takes.
+font-face = ["takumi-core/font-face"]
 
 [dev-dependencies]
 criterion.workspace = true

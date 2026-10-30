@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>font_face_rules</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      @font-face {
+        font-family: "Face Display";
+        src:
+          url("assets/fonts/missing.woff2") format("woff2"),
+          url("assets/fonts/manrope/manrope-latin-wght-normal.woff2") format("woff2");
+        font-weight: 200 800;
+      }
+      @font-face {
+        font-family: "Face Display";
+        src: url("assets/fonts/google-sans-code/GoogleSansCode-VariableFont_wght.woff2")
+          format("woff2");
+        font-weight: 200 800;
+        unicode-range: U+30-39;
+      }
+      @font-face {
+        font-family: "Face Bold";
+        src: url("assets/fonts/poppins/poppins-v24-devanagari_latin-700.woff2") format("woff2");
+        font-weight: bold;
+      }
+      @font-face {
+        font-family: "Face Embedded";
+        src: url("assets/fonts/eb-garamond/EBGaramondCaps.eot");
+      }
+      @media (max-width: 100px) {
+        @font-face {
+          font-family: "Face Display";
+          src: url("assets/fonts/eb-garamond/EBGaramondCaps.woff2") format("woff2");
+        }
+      }
+      .root {
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 16px;
+        background-color: rgb(255, 255, 255);
+        color: rgb(15, 23, 42);
+        font-size: 24px;
+        line-height: 36px;
+      }
+      .root > div {
+        display: block;
+      }
+      .display {
+        font-family: "Face Display", Geist;
+      }
+      .light {
+        font-weight: 250;
+      }
+      .heavy {
+        font-weight: 800;
+      }
+      .bold {
+        font-family: "Face Bold", Geist;
+      }
+      .embedded {
+        font-family: "Face Embedded", Geist;
+      }
+    </style>
+  </head>
+  <body style="width: 420px; height: 240px">
+    <div class="root">
+      <div class="display light">Manrope light, code digits 2026</div>
+      <div class="display heavy">Manrope heavy, code digits 2026</div>
+      <div class="bold">Poppins at weight 400</div>
+      <div class="embedded">EOT falls back to Geist</div>
+    </div>
+  </body>
+</html>

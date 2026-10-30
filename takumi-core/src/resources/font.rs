@@ -11,6 +11,9 @@ use std::{
   },
 };
 
+#[cfg(feature = "font-face")]
+use std::collections::HashMap;
+
 use harfrust::font::Variation;
 use skrifa::{
   FontRef, MetadataProvider,
@@ -35,7 +38,7 @@ use crate::{
     css_segmented_font_face::FontPlatformDataForRangeSet,
     font_custom_platform_data::FontCustomPlatformData,
     font_description::FontSelectionDescription,
-    font_face::{FaceData, FontFaceDescriptors},
+    font_face::{FaceData, FontFaceDescriptors, PendingSource},
     font_height::FontHeight,
   },
   layout_unit::LayoutUnit,
@@ -266,6 +269,9 @@ struct FontRegistry {
   selector: CssFontSelector,
   /// A process-wide stamp of every change, which font-dependent caches key on.
   revision: u64,
+  /// The `@font-face` files the host has loaded or failed to, by URL.
+  #[cfg(feature = "font-face")]
+  font_files: HashMap<Arc<str>, FontFile>,
 }
 
 impl FontRegistry {
@@ -280,6 +286,11 @@ impl FontRegistry {
 /// A render-local font handle: the registry as it stood, and the render's fallback families.
 #[derive(Clone)]
 pub struct FontsSnapshot(Fonts);
+
+#[cfg(feature = "font-face")]
+mod font_face_set;
+#[cfg(feature = "font-face")]
+use font_face_set::FontFile;
 
 impl Deref for FontsSnapshot {
   type Target = Fonts;
@@ -548,9 +559,11 @@ impl Fonts {
     let registry = Arc::make_mut(&mut self.registry);
 
     registry.revise();
-    registry
-      .selector
-      .register_pending(face.family, face.descriptors, face.id);
+    registry.selector.register_pending(
+      face.family,
+      face.descriptors,
+      PendingSource::Listed(face.id),
+    );
   }
 
   /// Whether a pending face is registered.
