@@ -1,6 +1,6 @@
 {
   "name": "takumi-js",
-  "version": "2.19.0",
+  "version": "2.19.1",
   "description": "Render images, animations, and SVG from JSX, HTML, and CSS. No headless browser.",
   "keywords": [
     "animated-webp",
