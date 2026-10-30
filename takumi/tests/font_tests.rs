@@ -290,8 +290,6 @@ fn unregister_removes_every_subset() {
 
 const REREGISTERED_SIZE: (u32, u32) = (360, 180);
 
-/// One static regular file registered as `Alpha`, as `Beta` at 400 and 700, and as `Beta` italic,
-/// as four `@font-face` rules sharing a `src` declare it.
 fn reregistered_fonts() -> Fonts {
   let mut fonts = Fonts::default();
   let regular = read_font("poppins/poppins-v24-devanagari_latin-regular.woff2");
@@ -332,8 +330,7 @@ fn render_reregistered(fonts: &Fonts, declaration: &str) -> Bitmap {
   .unwrap()
 }
 
-/// Each registration of one file keeps its own face: `Beta` draws the file as `Alpha` does, at
-/// 700 and in italic too, since a face is declared there and nothing is synthesized.
+/// One file registered under other families, weights and styles draws unsynthesized in each.
 #[test]
 fn a_font_registered_again_under_other_descriptors_keeps_each_face() {
   let fonts = reregistered_fonts();
