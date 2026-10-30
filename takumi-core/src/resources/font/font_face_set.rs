@@ -158,6 +158,17 @@ impl Fonts {
     true
   }
 
+  /// These fonts with each of `urls` failed to load, as one document's downloads did.
+  pub fn with_failed_font_files(&self, urls: &[String]) -> Self {
+    let mut fonts = self.clone();
+
+    for url in urls {
+      fonts.fail_font_file(url.as_str());
+    }
+
+    fonts
+  }
+
   /// Records that the file `url` names failed to load, so a rule moves on to its next `src`.
   pub fn fail_font_file(&mut self, url: impl Into<Arc<str>>) {
     let registry = Arc::make_mut(&mut self.registry);

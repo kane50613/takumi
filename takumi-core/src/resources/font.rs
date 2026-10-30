@@ -886,7 +886,6 @@ impl<'a> FontSource<'a> {
     )
   }
 
-  /// The decoded sfnt bytes and the id the glyph caches key them by.
   /// The font decompressed to sfnt now, so loading it later costs no decoding, and its byte length.
   pub fn into_decoded(self) -> Result<(FontSource<'static>, usize), FontError> {
     let (data, id) = self.into_sfnt_with_id()?;
@@ -902,6 +901,7 @@ impl<'a> FontSource<'a> {
     ))
   }
 
+  /// The decoded sfnt bytes and the id the glyph caches key them by.
   pub(crate) fn into_sfnt_with_id(self) -> Result<(SharedBytes, u64), FontError> {
     let passthrough = self.is_decoded || self.is_sfnt();
     let cache_id = self.cache_id;

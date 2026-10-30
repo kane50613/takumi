@@ -265,10 +265,8 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
   cachedFonts(key: string, pin: boolean): TFamily[] | null | undefined;
   /** Loads the `@font-face` file `url` names, released for space past the budget. */
   cacheFontFile(url: string, data: ArrayBuffer | Uint8Array): Awaitable<void>;
-  /** Whether the backend holds the `@font-face` file `url`, loaded or failed. */
+  /** Whether the backend holds the `@font-face` file `url`. */
   hasFontFile(url: string): boolean;
-  /** Records that the `@font-face` file `url` failed to load. */
-  failFontFile(url: string): void;
 };
 
 /**
@@ -321,19 +319,14 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return load;
   }
 
-  /** Loads the `@font-face` file `url` names. */
+  /** Loads the `@font-face` file `url` names. A wasm backend reads only a `Uint8Array`. */
   async cacheFontFile(url: string, data: ArrayBuffer | Uint8Array): Promise<void> {
-    await this.backend.cacheFontFile(url, data);
+    await this.backend.cacheFontFile(url, asView(data));
   }
 
-  /** Whether the backend holds the `@font-face` file `url`, loaded or failed. */
+  /** Whether the backend holds the `@font-face` file `url`. */
   hasFontFile(url: string): boolean {
     return this.backend.hasFontFile(url);
-  }
-
-  /** Records that the `@font-face` file `url` failed to load, so its rule moves on to its next `src`. */
-  failFontFile(url: string): void {
-    this.backend.failFontFile(url);
   }
 
   /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */

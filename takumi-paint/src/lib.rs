@@ -68,6 +68,8 @@ struct RenderOptions {
   images: Option<Vec<ImageSource>>,
   css: Option<Vec<CssSource>>,
   font_families: Option<Vec<String>>,
+  /// The `@font-face` files the paint's `prepare` failed to download.
+  failed_font_files: Option<Vec<String>>,
   lang: Option<String>,
 }
 
@@ -118,7 +120,11 @@ impl Painter {
       .map(Lang::parse)
       .transpose()
       .map_err(map_error)?;
-    let fonts = self.fonts.for_needs(&mut options.font_families, listed);
+    let fonts = self.fonts.for_needs(
+      &mut options.font_families,
+      listed,
+      options.failed_font_files.as_deref(),
+    );
     Ok(run(
       PaintTreeOptions::builder()
         .viewport(
@@ -196,17 +202,10 @@ impl Painter {
     self.fonts.cache_font_file(url, data).map_err(map_error)
   }
 
-  /// Whether the renderer holds the `@font-face` file `url`, loaded or failed, marking it used.
+  /// Whether the renderer holds the `@font-face` file `url`, marking it used.
   #[wasm_bindgen(js_name = hasFontFile)]
   pub fn has_font_file(&self, url: &str) -> bool {
     self.fonts.has_font_file(url)
-  }
-
-  /// Records that the `@font-face` file `url` failed to load, so its rule moves on to its next
-  /// source.
-  #[wasm_bindgen(js_name = failFontFile)]
-  pub fn fail_font_file(&self, url: &str) {
-    self.fonts.fail_font_file(url);
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning

@@ -207,30 +207,27 @@ describe("shared Renderer body", () => {
 describe("@font-face files", () => {
   test("prepare loads each reached file, and a failed one moves its rule on to the next src", async () => {
     const { fonts, files, backend } = fontBackend();
-    const fetch = mock(async (input: string | URL | Request) => {
-      const url = String(input);
-
-      return url.endsWith("missing.woff2")
+    const fetch = mock(async (input: string | URL | Request) =>
+      String(input).endsWith("missing.woff2")
         ? new Response(null, { status: 404 })
-        : new Response(bytes());
-    });
-    const reads = mock(() => ({
+        : new Response(bytes()),
+    );
+    const reads = mock(({ failedFontFiles = [] }: { failedFontFiles?: string[] }) => ({
       images: [],
       fonts: [],
-      fontFiles:
-        files.get("https://fonts.test/missing.woff2") === "failed"
-          ? files.has("https://fonts.test/face.woff2")
-            ? []
-            : ["https://fonts.test/face.woff2"]
-          : ["https://fonts.test/missing.woff2"],
+      fontFiles: failedFontFiles.includes("https://fonts.test/missing.woff2")
+        ? ["https://fonts.test/face.woff2"]
+        : ["https://fonts.test/missing.woff2"],
     }));
+    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
 
-    await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
+    const prepared = await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
 
-    expect(backend.failFontFile).toHaveBeenCalledWith("https://fonts.test/missing.woff2");
+    await renderPrepared(fonts, prepared, {}, call);
+
     expect(backend.cacheFontFile).toHaveBeenCalledTimes(1);
-    expect(files.get("https://fonts.test/face.woff2")).toBe("loaded");
-    expect(reads).toHaveBeenCalledTimes(3);
+    expect(files.has("https://fonts.test/face.woff2")).toBe(true);
+    expect(call.mock.calls[0]?.[1].failedFontFiles).toEqual(["https://fonts.test/missing.woff2"]);
   });
 });
 

@@ -79,6 +79,8 @@ pub struct RenderOptions {
   pub keyframes: Option<Vec<KeyframesRule>>,
   /// The families the render falls back through, in order.
   pub font_families: Option<Vec<String>>,
+  /// The `@font-face` files the render's `prepare` failed to download.
+  pub failed_font_files: Option<Vec<String>>,
   /// The BCP-47 language of the root.
   pub lang: Option<String>,
 }
@@ -168,6 +170,8 @@ pub struct RenderAnimationOptions<S> {
   pub keyframes: Option<Vec<KeyframesRule>>,
   /// The families the render falls back through, in order.
   pub font_families: Option<Vec<String>>,
+  /// The `@font-face` files the render's `prepare` failed to download.
+  pub failed_font_files: Option<Vec<String>>,
   /// The BCP-47 language of the root.
   pub lang: Option<String>,
 }

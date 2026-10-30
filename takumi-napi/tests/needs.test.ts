@@ -136,7 +136,7 @@ describe("font subsets", () => {
 });
 
 describe("@font-face", () => {
-  test("prepare downloads the files the text reaches, moving past a failed src", async () => {
+  test("prepare downloads the files the text reaches, moving past a failed src it retries later", async () => {
     const fontRenderer = new Renderer();
     const fetch = mock(async (url: string) =>
       url.endsWith("missing.woff2") ? new Response(null, { status: 404 }) : new Response(fontBytes),
@@ -160,6 +160,9 @@ describe("@font-face", () => {
 
     await fontRenderer.prepare(html, { width: 100, height: 100, images: { fetch } });
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    // The loaded file stays with the renderer, and the failed one is tried again.
+    expect(fetch.mock.calls.slice(2).map(([url]) => url)).toEqual([
+      "https://fonts.test/missing.woff2",
+    ]);
   });
 });

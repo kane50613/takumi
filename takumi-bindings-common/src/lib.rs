@@ -94,10 +94,15 @@ impl FontStore {
     })
   }
 
-  /// The registry for a render that names `families`, which are marked used.
-  pub fn for_render(&self, families: Option<&[String]>) -> Rc<Fonts> {
+  /// The registry for a render that names `families`, which are marked used, with the
+  /// `@font-face` files its document `failed` to download.
+  pub fn for_render(&self, families: Option<&[String]>, failed: Option<&[String]>) -> Rc<Fonts> {
     self.cache.borrow().touch(families.unwrap_or_default());
-    self.current()
+
+    match failed {
+      Some(failed) if !failed.is_empty() => Rc::new(self.current().with_failed_font_files(failed)),
+      _ => self.current(),
+    }
   }
 
   /// The registry for a needs pass, with each listed font still loading registered as pending.
@@ -105,16 +110,17 @@ impl FontStore {
     &self,
     families: &mut Option<Vec<String>>,
     listed: Option<&ListedFonts>,
+    failed: Option<&[String]>,
   ) -> Rc<Fonts> {
     let Some(listed) = listed else {
-      return self.for_render(families.as_deref());
+      return self.for_render(families.as_deref(), failed);
     };
 
     if families.is_none() {
       families.clone_from(&listed.families);
     }
 
-    Rc::new(listed.fonts(&self.for_render(families.as_deref())))
+    Rc::new(listed.fonts(&self.for_render(families.as_deref(), failed)))
   }
 
   /// Registers the font JavaScript describes under `key`. One that is not `pinned` can be released.
@@ -214,19 +220,10 @@ impl FontStore {
     Ok(())
   }
 
-  /// Whether the store holds the `@font-face` file `url`, loaded or failed, marking it used.
+  /// Whether the store holds the `@font-face` file `url`, marking it used.
   pub fn has_font_file(&self, url: &str) -> bool {
     self.cache.borrow().has_file(url);
     self.current().has_font_file(url)
-  }
-
-  /// Records that the `@font-face` file `url` failed to load, so its rule moves on to its next
-  /// source.
-  pub fn fail_font_file(&self, url: &str) {
-    let mut fonts = Fonts::clone(&self.current());
-
-    fonts.fail_font_file(url);
-    *self.fonts.borrow_mut() = Rc::new(fonts);
   }
 
   /// Goes back to the embedded last-resort fonts alone.

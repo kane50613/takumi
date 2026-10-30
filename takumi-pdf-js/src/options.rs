@@ -207,6 +207,8 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) css: Option<Vec<CssSource>>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   pub(crate) font_families: Option<Vec<String>>,
+  /// The `@font-face` files the render's `prepare` failed to download.
+  pub(crate) failed_font_files: Option<Vec<String>>,
   /// Default BCP-47 language tag applied to the root.
   pub(crate) lang: Option<String>,
   /// Document metadata written to the PDF's info dictionary.
