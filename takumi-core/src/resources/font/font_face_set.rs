@@ -9,7 +9,7 @@ use std::{
 };
 
 use quick_cache::sync::Cache;
-use skrifa::FontRef;
+use skrifa::{FontRef, raw::TableProvider};
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
 use crate::{
@@ -92,8 +92,8 @@ impl RestrictedFiles {
 
 impl Fonts {
   /// Hands over the file an `@font-face` `src` names, as [`RenderNeeds::fonts`] reports it. A file
-  /// that does not parse as a font fails, as a Blink load error does, so the host can record it
-  /// with [`Self::fail_font_file`].
+  /// that is not a usable font fails, as Blink's OTS sanitizing fails a load, so the host can
+  /// record it with [`Self::fail_font_file`].
   ///
   /// [`RenderNeeds::fonts`]: crate::layout::needs::RenderNeeds::fonts
   pub fn load_font_file(
@@ -103,7 +103,9 @@ impl Fonts {
   ) -> Result<(), FontError> {
     let (data, id) = source.into_sfnt_with_id()?;
 
-    FontRef::from_index((*data).as_ref(), 0).map_err(|_| FontError::UnsupportedFormat)?;
+    if !is_usable_font(&data) {
+      return Err(FontError::UnsupportedFormat);
+    }
     let registry = Arc::make_mut(&mut self.registry);
 
     registry.revise();
@@ -233,4 +235,12 @@ impl RuleSource<'_> {
       )),
     }
   }
+}
+
+/// Whether `data` is a font with the tables a face draws from. Approximate: Blink's OTS sanitizer
+/// checks every table, where this only requires `head`, `hhea`, `maxp`, and `cmap`.
+fn is_usable_font(data: &SharedBytes) -> bool {
+  FontRef::from_index((**data).as_ref(), 0).is_ok_and(|font| {
+    font.head().is_ok() && font.hhea().is_ok() && font.maxp().is_ok() && font.cmap().is_ok()
+  })
 }

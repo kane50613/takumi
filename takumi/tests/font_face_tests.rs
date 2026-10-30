@@ -73,9 +73,17 @@ fn a_file_that_is_not_a_font_fails_to_load() {
   let css = "@font-face { font-family: Face; src: url(bad.woff2); }";
   let mut fonts = CONTEXT.clone();
 
+  // An sfnt header with no tables parses, but holds nothing to draw with.
+  let empty_sfnt = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].to_vec();
+
   assert!(
     fonts
       .load_font_file("bad.woff2", FontSource::from(b"not a font".to_vec()))
+      .is_err()
+  );
+  assert!(
+    fonts
+      .load_font_file("bad.woff2", FontSource::from(empty_sfnt))
       .is_err()
   );
   assert_eq!(reached(&fonts, css, "Face", "a"), urls(["bad.woff2"]));
