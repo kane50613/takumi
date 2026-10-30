@@ -1225,6 +1225,34 @@ mod tests {
     assert_eq!(weights, vec![Some((400.0, 400.0)), Some((700.0, 700.0))]);
   }
 
+  /// Registering a face again moves it after the faces registered since, as a later `@font-face`
+  /// rule wins over an earlier one.
+  #[test]
+  fn a_face_registered_again_takes_precedence_again() {
+    let mut fonts = Fonts::default();
+
+    for wght in [300.0, 700.0, 300.0] {
+      fonts
+        .register(
+          FontResource::new(geist_bytes()).override_info(FontOverride {
+            family_name: Some("Geist".into()),
+            axes: vec![("wght".to_owned(), wght)],
+            ..Default::default()
+          }),
+        )
+        .unwrap();
+    }
+
+    let wghts: Vec<_> = fonts
+      .registry
+      .selector
+      .font_faces()
+      .map(|face| face.descriptors.variation_settings[0].value)
+      .collect();
+
+    assert_eq!(wghts, vec![700.0, 300.0]);
+  }
+
   /// Copies that differ only past their tables restrict to the same sfnt, so one `unicode-range` subset
   /// declared at two weights keeps a face for each too.
   #[test]

@@ -90,8 +90,8 @@ impl CssFontSelector {
         continue;
       }
 
-      if let Some(font_face) = self.font_face(&family, id, platform_data.index, descriptors) {
-        faces.push(Arc::clone(font_face));
+      if let Some(font_face) = self.promote(&family, id, platform_data.index, descriptors) {
+        faces.push(font_face);
 
         continue;
       }
@@ -234,29 +234,35 @@ impl CssFontSelector {
       .map(Arc::clone)
   }
 
-  /// The face `family` already lists at `index` of the data `id` names, under `descriptors`.
-  fn font_face(
-    &self,
+  /// Moves the face `family` already lists at `index` of the data `id` names, under
+  /// `descriptors`, after every other face, as registering it anew would place it.
+  fn promote(
+    &mut self,
     family: &str,
     id: u64,
     index: u32,
     descriptors: &FontFaceDescriptors,
-  ) -> Option<&Arc<FontFace>> {
+  ) -> Option<Arc<FontFace>> {
     let family = fold_family_name(family);
+    let position = self.font_faces.iter().position(|registered| {
+      let font_face = &registered.font_face;
 
-    self
-      .font_faces
-      .iter()
-      .map(|registered| &registered.font_face)
-      .find(|font_face| {
-        font_face
-          .custom_platform_data()
-          .is_some_and(|custom_platform_data| {
-            custom_platform_data.id == id && custom_platform_data.index == index
-          })
-          && fold_family_name(&font_face.family) == family
-          && font_face.descriptors == *descriptors
-      })
+      font_face
+        .custom_platform_data()
+        .is_some_and(|custom_platform_data| {
+          custom_platform_data.id == id && custom_platform_data.index == index
+        })
+        && fold_family_name(&font_face.family) == family
+        && font_face.descriptors == *descriptors
+    })?;
+    let registered = self.font_faces.remove(position);
+    let font_face = Arc::clone(&registered.font_face);
+
+    self.font_face_cache.remove_font_face(&font_face);
+    self.font_face_cache.add_font_face(Arc::clone(&font_face));
+    self.font_faces.push(registered);
+
+    Some(font_face)
   }
 
   /// The families registered as a last resort, which fallback walks after every other.
