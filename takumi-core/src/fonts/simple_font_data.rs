@@ -17,7 +17,7 @@ use skrifa::{
 };
 
 use crate::{
-  fonts::font_description::FontDescription,
+  fonts::{font_description::FontDescription, font_face::FontMetricsOverride},
   resources::{
     font::{MatchedFace, PrimaryFontMetrics, RunSynthesis},
     glyph::synthesis_embolden_strength,
@@ -49,8 +49,11 @@ pub(crate) struct SimpleFontData {
 }
 
 impl SimpleFontData {
-  /// `face` at `size`; none for a face that does not parse.
+  /// `face` at `size`, scaled by its `size-adjust`; none for a face that does not parse.
   pub(crate) fn new(face: MatchedFace, size: f32, specified_size: f32) -> Option<Self> {
+    let size = face
+      .size_adjust
+      .map_or(size, |size_adjust| size * size_adjust);
     let font = face.typeface.font_ref()?;
     let units_per_em = font.head().ok()?.units_per_em();
     let space_glyph = font
@@ -105,10 +108,14 @@ impl SimpleFontData {
     }))
   }
 
-  /// Blink's `CreateScaledFontData`.
+  /// Blink's `CreateScaledFontData`, which scales the description's size, so `size-adjust` does not
+  /// carry over, and makes plain font data, without the metrics the face overrides.
   fn create_scaled_font_data(&self, font_description: &FontDescription, scale_factor: f32) -> Self {
     Self {
-      face: self.face.clone(),
+      face: MatchedFace {
+        metrics_override: FontMetricsOverride::default(),
+        ..self.face.clone()
+      },
       size: (font_description.fallback.computed_size * scale_factor).round(),
       specified_size: self.specified_size,
       variations: self.variations.clone(),
@@ -190,7 +197,12 @@ impl SimpleFontData {
           .map(|variation| (variation.tag, variation.value)),
       );
 
-      Some(PrimaryFontMetrics::of(&font, self.size, (&location).into()))
+      Some(PrimaryFontMetrics::of(
+        &font,
+        self.size,
+        (&location).into(),
+        self.face.metrics_override,
+      ))
     })
   }
 

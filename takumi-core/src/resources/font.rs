@@ -14,7 +14,7 @@ use std::{
 #[cfg(feature = "font-face")]
 use std::collections::HashMap;
 
-use harfrust::font::Variation;
+use harfrust::{Feature, font::Variation};
 use skrifa::{
   FontRef, MetadataProvider,
   attribute::Style,
@@ -38,7 +38,7 @@ use crate::{
     css_segmented_font_face::FontPlatformDataForRangeSet,
     font_custom_platform_data::FontCustomPlatformData,
     font_description::FontSelectionDescription,
-    font_face::{FaceData, FontFaceDescriptors, PendingSource},
+    font_face::{FaceData, FontFaceDescriptors, FontMetricsOverride, PendingSource},
     font_height::FontHeight,
   },
   layout_unit::LayoutUnit,
@@ -237,6 +237,12 @@ pub(crate) struct MatchedFace {
   pub(crate) variations: Vec<Variation>,
   /// The face's `unicode-range`, or `None` for every codepoint.
   pub(crate) unicode_range: Option<UnicodeRangeSet>,
+  /// The face's `font-feature-settings` descriptor.
+  pub(crate) feature_settings: Vec<Feature>,
+  /// The `size-adjust` the face scales its size by.
+  pub(crate) size_adjust: Option<f32>,
+  /// The metrics the face's `@font-face` rule overrides.
+  pub(crate) metrics_override: FontMetricsOverride,
 }
 
 impl MatchedFace {
@@ -249,6 +255,9 @@ impl MatchedFace {
       synthetic_italic: platform.synthetic_italic,
       variations: platform.variations,
       unicode_range: (!face.range_set.is_entire_range()).then_some(face.range_set),
+      feature_settings: platform.feature_settings,
+      size_adjust: platform.size_adjust,
+      metrics_override: platform.metrics_override,
     }
   }
 }
@@ -665,30 +674,36 @@ pub(crate) struct ExactFontMetrics {
 }
 
 impl PrimaryFontMetrics {
-  /// The metrics of `font_ref` at `font_size` and `location`, rounded as Blink's
-  /// `SimpleFontData::PlatformInit` rounds Skia's.
-  pub(crate) fn of(font_ref: &FontRef, font_size: f32, location: LocationRef<'_>) -> Self {
+  /// The metrics of `font_ref` at `font_size` and `location`, with those `metrics_override`
+  /// replaces, rounded as Blink's `SimpleFontData::PlatformInit` rounds Skia's.
+  pub(crate) fn of(
+    font_ref: &FontRef,
+    font_size: f32,
+    location: LocationRef<'_>,
+    metrics_override: FontMetricsOverride,
+  ) -> Self {
     let metrics = font_ref.metrics(Size::new(font_size), location);
+    let ascent = metrics_override
+      .ascent
+      .map_or(metrics.ascent, |ascent| font_size * ascent);
+    let descent = metrics_override
+      .descent
+      .map_or(metrics.descent.abs(), |descent| font_size * descent);
+    let line_gap = metrics_override
+      .line_gap
+      .map_or(metrics.leading, |line_gap| font_size * line_gap);
 
     Self {
-      ascent: metrics.ascent.round(),
-      descent: metrics.descent.abs().round(),
-      line_gap: metrics.leading.round(),
+      ascent: ascent.round(),
+      descent: descent.round(),
+      line_gap: line_gap.round(),
       x_height: metrics.x_height,
-      exact: ExactFontMetrics {
-        ascent: metrics.ascent,
-        descent: metrics.descent.abs(),
-      },
+      exact: ExactFontMetrics { ascent, descent },
       underline: metrics.underline.map(|underline| FontUnderline {
         position: -underline.offset,
         thickness: underline.thickness,
       }),
-      em_descent: em_box_descent(
-        Some(font_ref),
-        font_size,
-        metrics.ascent,
-        metrics.descent.abs(),
-      ),
+      em_descent: em_box_descent(Some(font_ref), font_size, ascent, descent),
       zero_width: zero_inline_size(font_ref, font_size, location),
       has_zero_width: font_ref.charmap().map('0').is_some(),
       avg_char_width: metrics
