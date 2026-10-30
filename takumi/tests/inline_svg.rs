@@ -104,3 +104,42 @@ fn a_tspan_override_reorders_its_characters() {
   assert_ne!(overridden, text("a<tspan>bc</tspan>"));
   assert!(apart <= 2, "{overridden:?} {reversed:?}");
 }
+
+/// The straight-alpha pixels of a `width` by `height` CSS pixel render of `html` at
+/// `device_pixel_ratio`, row by row.
+fn render_at(html: &str, width: u32, height: u32, device_pixel_ratio: u32) -> Vec<[u8; 4]> {
+  let node = Node::from_html(html, FromHtmlOptions::default()).unwrap();
+  let bitmap = render(
+    RenderOptions::builder()
+      .viewport(
+        Viewport::new((width * device_pixel_ratio, height * device_pixel_ratio))
+          .with_device_pixel_ratio(device_pixel_ratio as f32),
+      )
+      .node(node)
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  bitmap.as_raw().as_chunks::<4>().0.to_vec()
+}
+
+/// User units are CSS pixels whatever the device pixel ratio, as Blink's `LayoutSVGRoot` fits the
+/// `viewBox` to the unzoomed content box and then scales by the zoom.
+#[test]
+fn an_inline_svg_scales_with_the_device_pixel_ratio() {
+  let html = r#"<div style="display:flex">
+    <svg width="20" height="10" viewBox="0 0 10 5" style="display:block"><rect x="1" y="1" width="8" height="3" fill="rgb(0, 128, 0)"/></svg>
+    <svg width="20" height="10" style="display:block; font-size: 4px"><rect x="2" y="2" width="1em" height="1em" fill="rgb(0, 0, 255)" stroke="rgb(255, 0, 0)" stroke-width="2"/></svg>
+    <svg width="20" height="10" viewBox="0 0 10 5" style="display:block"><rect x="2" y="1" width="6" height="3" fill="none" stroke="rgb(0, 128, 0)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+    <svg width="20" height="10" viewBox="0 0 10 5" style="display:block"><marker id="m" markerWidth="1" markerHeight="1" viewBox="0 0 1 1"><rect width="1" height="1" fill="rgb(0, 0, 255)"/></marker><path d="M2 2H8" stroke="rgb(255, 0, 0)" stroke-width="2" vector-effect="non-scaling-stroke" marker-start="url(#m)"/></svg>
+  </div>"#;
+  let once = render_at(html, 80, 10, 1);
+  let twice = render_at(html, 80, 10, 2);
+
+  for y in 0..10 {
+    for x in 0..80 {
+      assert_eq!(twice[(2 * y * 160) + 2 * x], once[y * 80 + x], "({x}, {y})");
+    }
+  }
+}

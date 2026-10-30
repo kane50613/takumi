@@ -77,7 +77,7 @@ impl<'a> StyleResolver<'a> {
         let page = host.stylesheet();
         let root_context = RenderContext::builder()
           .fonts(host.fonts().clone())
-          .sizing(host.sizing.clone())
+          .sizing(host.sizing.in_css_pixels())
           .current_color(host.current_color)
           .style(Rc::clone(&host.style))
           .stylesheet(Arc::clone(page))

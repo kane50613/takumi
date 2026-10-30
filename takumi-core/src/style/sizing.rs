@@ -63,6 +63,39 @@ impl SizingContext {
     self.viewport.to_css(device_px)
   }
 
+  /// A copy that resolves lengths in CSS pixels, at a device pixel ratio of one.
+  #[cfg(feature = "svg")]
+  pub(crate) fn in_css_pixels(&self) -> Self {
+    let css_size =
+      |device: Option<u32>| device.map(|device| self.to_css(device as f32).round() as u32);
+
+    Self {
+      viewport: Viewport {
+        size: (
+          css_size(self.viewport.size.width),
+          css_size(self.viewport.size.height),
+        )
+          .into(),
+        device_pixel_ratio: 1.0,
+        unit_reference: Some(Size {
+          width: self.to_css(self.viewport.unit_width()),
+          height: self.to_css(self.viewport.unit_height()),
+        }),
+        ..self.viewport
+      },
+      container_size: self
+        .container_size
+        .map(|size| size.map(|size| self.to_css(size))),
+      container_read: Cell::new(false),
+      font_size: self.to_css(self.font_size),
+      root_font_size: self.root_font_size.map(|size| self.to_css(size)),
+      line_height: self.to_css(self.line_height),
+      root_line_height: self.root_line_height.map(|size| self.to_css(size)),
+      ch: self.to_css(self.ch),
+      ex: self.to_css(self.ex),
+    }
+  }
+
   /// Whether lengths resolve the same against both, whatever either read of a query container.
   pub(crate) fn resolves_like(&self, other: &Self) -> bool {
     self.viewport == other.viewport

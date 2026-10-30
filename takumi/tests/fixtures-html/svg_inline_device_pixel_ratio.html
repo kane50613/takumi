@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="takumi-device-pixel-ratio" content="2" />
+    <title>svg_inline_device_pixel_ratio</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 400px; height: 200px">
+    <div style="position: relative; width: 400px; height: 200px; background: rgb(238, 238, 238)">
+      <div style="position: absolute; left: 20px; top: 20px; width: 200px; height: 100px">
+        <svg width="200" height="100" viewBox="0 0 200 100" style="display: block">
+          <rect x="0" y="0" width="200" height="100" rx="50" fill="rgb(15, 123, 108)" />
+        </svg>
+      </div>
+      <div style="position: absolute; left: 250px; top: 40px; width: 120px; height: 120px">
+        <svg width="120" height="120" style="display: block; font-size: 20px">
+          <circle
+            cx="3em"
+            cy="3em"
+            r="2.5em"
+            fill="none"
+            stroke="rgb(255, 111, 145)"
+            stroke-width="10"
+          />
+        </svg>
+      </div>
+    </div>
+  </body>
+</html>

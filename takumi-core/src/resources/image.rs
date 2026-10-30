@@ -200,7 +200,7 @@ impl SvgSource {
     self.document.node_count() * size_of::<Node>()
   }
 
-  /// The SVG's drawing ops laid out at `viewport`, the size it is drawn at in CSS pixels, in the
+  /// The SVG's drawing ops laid out at `viewport`, the size it is drawn at in device pixels, in the
   /// box `host` styles.
   pub fn vector_ops(&self, host: &RenderContext, viewport: Size<f32>) -> Vec<SvgOp> {
     self
@@ -329,7 +329,7 @@ impl SvgSource {
 }
 
 /// The part of an SVG laid out at `viewport` that a `width` by `height` bitmap covers: `size` from
-/// `origin`, both in the viewport's CSS pixels.
+/// `origin`, both in device pixels.
 #[cfg(feature = "svg-raster")]
 #[derive(Debug, Clone, Copy)]
 pub struct SvgRaster {
