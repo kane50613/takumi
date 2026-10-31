@@ -9,7 +9,7 @@
   "dependencies": {
     "@cloudflare/vite-plugin": "1.65.0",
     "@types/node": "^26.4.1",
-    "@types/react": "19.2.18",
+    "@types/react": "19.3.0",
     "esbuild": "0.28.2",
     "miniflare": "4.20260730.0",
     "next": "16.4.3",
