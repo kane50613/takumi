@@ -6,7 +6,7 @@ use std::{
   ops::Deref,
   str::FromStr,
   sync::{
-    Arc,
+    Arc, Weak,
     atomic::{AtomicU64, Ordering},
   },
 };
@@ -15,6 +15,7 @@ use std::{
 use std::collections::HashMap;
 
 use harfrust::{Feature, font::Variation};
+use rustc_hash::FxHashMap;
 use skrifa::{
   FontRef, MetadataProvider,
   attribute::Style,
@@ -278,9 +279,36 @@ struct FontRegistry {
   selector: CssFontSelector,
   /// A process-wide stamp of every change, which font-dependent caches key on.
   revision: u64,
+  /// What each [`FontResource::source_key`] resolved to, while a face holds it.
+  resolved_sources: FxHashMap<u64, ResolvedSource>,
   /// The `@font-face` files the host has loaded or failed to, by URL.
   #[cfg(feature = "font-face")]
   font_files: HashMap<Arc<str>, FontFile>,
+}
+
+/// The sfnt bytes a font resolved to and their id, without keeping the bytes alive.
+#[derive(Clone)]
+struct ResolvedSource {
+  data: Weak<dyn AsRef<[u8]> + Send + Sync>,
+  id: u64,
+}
+
+impl ResolvedSource {
+  fn new(data: &SharedBytes, id: u64) -> Self {
+    Self {
+      data: Arc::downgrade(data),
+      id,
+    }
+  }
+
+  /// The bytes as a source, while a face still holds them.
+  fn source(&self) -> Option<FontSource<'static>> {
+    Some(FontSource::decoded(self.data.upgrade()?, self.id))
+  }
+
+  fn is_held(&self) -> bool {
+    self.data.strong_count() > 0
+  }
 }
 
 impl FontRegistry {
@@ -499,6 +527,21 @@ impl Fonts {
     }
   }
 
+  /// `font` resolved to the bytes a face from the same source holds, decoding nothing.
+  pub fn resolved(&self, font: &FontResource<'_>) -> Option<FontResource<'static>> {
+    let key = font.source_key();
+
+    Some(FontResource {
+      source: self.registry.resolved_sources.get(&key)?.source()?,
+      info_override: font.info_override.clone(),
+      generic_family: font.generic_family,
+      unicode_range: font.unicode_range.clone(),
+      last_resort: font.last_resort,
+      is_restricted: true,
+      source_key: OnceCell::from(key),
+    })
+  }
+
   /// Registers a font, decoding it and skipping faces already registered under the same family
   /// in this context.
   pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
@@ -513,6 +556,7 @@ impl Fonts {
       unicode_range,
       last_resort,
       is_restricted,
+      source_key,
     } = font;
     let (data, id) = source.into_sfnt_with_id()?;
     let (data, id) = if is_restricted {
@@ -520,6 +564,16 @@ impl Fonts {
     } else {
       unicode_range.restrict_sfnt(data, id)
     };
+
+    if let Some(&key) = source_key.get() {
+      registry
+        .resolved_sources
+        .retain(|_, resolved| resolved.is_held());
+      registry
+        .resolved_sources
+        .insert(key, ResolvedSource::new(&data, id));
+    }
+
     let descriptors = FontFaceDescriptors {
       unicode_range,
       ..info_override
@@ -891,14 +945,28 @@ impl<'a> FontSource<'a> {
     let (data, id) = self.into_sfnt_with_id()?;
     let len = (*data).as_ref().len();
 
-    Ok((
-      FontSource {
-        bytes: FontBytes::Shared(data),
-        is_decoded: true,
-        cache_id: Some(id),
+    Ok((FontSource::decoded(data, id), len))
+  }
+
+  /// Sfnt `data` that `id` names, which loads without decoding or hashing.
+  fn decoded(data: SharedBytes, id: u64) -> FontSource<'static> {
+    FontSource {
+      bytes: FontBytes::Shared(data),
+      is_decoded: true,
+      cache_id: Some(id),
+    }
+  }
+
+  /// These bytes copied, so the source outlives the buffer it borrowed.
+  fn into_owned(self) -> FontSource<'static> {
+    FontSource {
+      bytes: match self.bytes {
+        FontBytes::Inline(bytes) => FontBytes::Inline(Cow::Owned(bytes.into_owned())),
+        FontBytes::Shared(bytes) => FontBytes::Shared(bytes),
       },
-      len,
-    ))
+      is_decoded: self.is_decoded,
+      cache_id: self.cache_id,
+    }
   }
 
   /// The decoded sfnt bytes and the id the glyph caches key them by.
@@ -1056,6 +1124,8 @@ pub struct FontResource<'a> {
   last_resort: bool,
   /// Whether [`Self::into_resolved`] already limited the `cmap` to `unicode_range`.
   is_restricted: bool,
+  /// [`Self::source_key`], once computed.
+  source_key: OnceCell<u64>,
 }
 
 impl<'a> FontResource<'a> {
@@ -1068,6 +1138,7 @@ impl<'a> FontResource<'a> {
       unicode_range: UnicodeRangeSet::default(),
       last_resort: false,
       is_restricted: false,
+      source_key: OnceCell::new(),
     }
   }
 
@@ -1134,17 +1205,41 @@ impl<'a> FontResource<'a> {
       return Ok(self);
     }
 
+    // Hashed now, since decoding replaces the bytes the key hashes.
+    self.source_key();
+
     let (data, id) = self.source.into_sfnt_with_id()?;
     let (data, id) = self.unicode_range.restrict_sfnt(data, id);
 
     Ok(Self {
-      source: FontSource {
-        bytes: FontBytes::Shared(data),
-        is_decoded: true,
-        cache_id: Some(id),
-      },
+      source: FontSource::decoded(data, id),
       is_restricted: true,
       ..self
+    })
+  }
+
+  /// This font with its bytes copied, so it outlives the buffer it borrowed.
+  pub fn into_owned(self) -> FontResource<'static> {
+    FontResource {
+      source: self.source.into_owned(),
+      ..self
+    }
+  }
+
+  /// The hash of the bytes and `unicode_range`, the inputs [`Self::into_resolved`] reads.
+  fn source_key(&self) -> u64 {
+    *self.source_key.get_or_init(|| {
+      let bytes = self.source.as_ref();
+      let mut hasher = Xxh3::new();
+
+      hasher.update(&bytes.len().to_le_bytes());
+      hasher.update(bytes);
+
+      if !self.unicode_range.is_entire_range() {
+        self.unicode_range.hash_into(&mut hasher);
+      }
+
+      hasher.digest()
     })
   }
 }
@@ -1293,6 +1388,42 @@ mod tests {
       .collect();
 
     assert_eq!(wghts, vec![700.0, 300.0]);
+  }
+
+  /// The same bytes and range under another family reuse what a face still holds.
+  #[test]
+  fn a_font_registered_again_reuses_what_it_resolved_to() {
+    let latin = || -> UnicodeRangeSet { [UnicodeRange::new(0x00, 0xff)].into_iter().collect() };
+    let named = |family: &str| {
+      FontResource::new(geist_bytes())
+        .unicode_range(latin())
+        .override_info(FontOverride {
+          family_name: Some(family.into()),
+          ..Default::default()
+        })
+    };
+    let mut fonts = Fonts::default();
+
+    fonts.register(named("A").into_resolved().unwrap()).unwrap();
+
+    let held = fonts
+      .registry
+      .selector
+      .font_faces()
+      .find_map(|face| face.custom_platform_data())
+      .map(|typeface| (*typeface.data).as_ref().as_ptr())
+      .unwrap();
+    let again = fonts.resolved(&named("B")).unwrap();
+
+    assert_eq!(again.source.as_ref().as_ptr(), held);
+    assert!(fonts.resolved(&FontResource::new(geist_bytes())).is_none());
+
+    fonts.register(again).unwrap();
+    fonts.unregister_family("A");
+    assert!(fonts.resolved(&named("C")).is_some());
+
+    fonts.unregister_family("B");
+    assert!(fonts.resolved(&named("C")).is_none());
   }
 
   /// One `unicode-range` subset declared at two weights keeps a face for each.

@@ -297,7 +297,10 @@ pub fn register_resource(
   fonts: &mut Fonts,
   resource: FontResource<'_>,
 ) -> Result<(Vec<RegisteredFamily>, u64), FontError> {
-  let resource = resource.into_resolved()?;
+  let resource = match fonts.resolved(&resource) {
+    Some(resolved) => resolved,
+    None => resource.into_resolved()?.into_owned(),
+  };
   let bytes = resource.byte_len() as u64;
 
   Ok((fonts.register(resource)?, bytes))
