@@ -232,7 +232,7 @@ describe("@font-face files", () => {
 });
 
 test("prepare loads each @font-face file once even when the cache releases it", async () => {
-  const { fonts, backend } = fontBackend();
+  const { fonts } = fontBackend();
   const fetch = mock(async () => new Response(bytes()));
   const reads = mock(() => ({
     images: [],
