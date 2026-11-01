@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use skrifa::{FontRef, MetadataProvider, raw::types::Tag};
-use xxhash_rust::xxh3::{Xxh3, xxh3_64};
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::resources::font::SharedBytes;
 
@@ -65,14 +65,6 @@ impl UnicodeRangeSet {
       .0
       .get(index)
       .is_some_and(|range| range.contains(codepoint))
-  }
-
-  /// Feeds the ranges to `hasher`.
-  pub(crate) fn hash_into(&self, hasher: &mut Xxh3) {
-    for range in &self.0 {
-      hasher.update(&range.from.to_le_bytes());
-      hasher.update(&range.to.to_le_bytes());
-    }
   }
 
   /// Whether the set covers every codepoint, so the face needs no filtering.
