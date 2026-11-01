@@ -84,6 +84,11 @@ impl From<RenderContextInit> for RenderContext {
   fn from(init: RenderContextInit) -> Self {
     Self {
       shared: Rc::new(RenderShared {
+        #[cfg(feature = "font-face")]
+        fonts: init
+          .fonts
+          .with_font_faces(&init.stylesheet, init.sizing.viewport),
+        #[cfg(not(feature = "font-face"))]
         fonts: init.fonts,
         images: init.images,
         resource_cache: init.resource_cache,

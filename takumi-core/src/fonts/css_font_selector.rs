@@ -17,7 +17,7 @@ use super::{
   css_segmented_font_face::FontPlatformDataForRangeSet,
   font_custom_platform_data::FontCustomPlatformData,
   font_description::FontSelectionDescription,
-  font_face::{FaceData, FontFace, FontFaceDescriptors},
+  font_face::{FaceData, FontFace, FontFaceDescriptors, PendingSource},
   font_face_cache::{FontFaceCache, fold_family_name},
 };
 use crate::resources::font::SharedBytes;
@@ -132,14 +132,15 @@ impl CssFontSelector {
     faces
   }
 
-  /// Registers a face of `descriptors`' family with no data yet, which matching finds as `id`.
+  /// Registers a face of `descriptors`' family with no data yet, which matching finds loading
+  /// from `source`.
   pub(crate) fn register_pending(
     &mut self,
     family: Arc<str>,
     descriptors: FontFaceDescriptors,
-    id: usize,
+    source: PendingSource,
   ) {
-    let font_face = Arc::new(FontFace::pending(Arc::clone(&family), descriptors, id));
+    let font_face = Arc::new(FontFace::pending(Arc::clone(&family), descriptors, source));
 
     self.font_face_cache.add_font_face(Arc::clone(&font_face));
     self.font_faces.push(RegisteredFontFace {
@@ -147,6 +148,35 @@ impl CssFontSelector {
       last_resort: false,
     });
     insert_family(&mut self.fallback_families, &family);
+  }
+
+  /// The face at index 0 of `data`, shared with a registration of the same bytes, or none when
+  /// it does not parse.
+  #[cfg(feature = "font-face")]
+  pub(crate) fn platform_data(
+    &self,
+    data: &SharedBytes,
+    id: u64,
+  ) -> Option<Arc<FontCustomPlatformData>> {
+    self
+      .typeface(id, 0)
+      .or_else(|| FontCustomPlatformData::create(Arc::clone(data), id, 0).map(Arc::new))
+  }
+
+  /// Adds the face an `@font-face` rule makes, after the CSS-connected faces before it in cascade
+  /// order. Fallback does not walk its family, as Blink's system fallback skips web fonts.
+  #[cfg(feature = "font-face")]
+  pub(crate) fn add_css_connected(&mut self, font_face: FontFace) {
+    let font_face = Arc::new(FontFace {
+      css_connected: true,
+      ..font_face
+    });
+
+    self.font_face_cache.add_font_face(Arc::clone(&font_face));
+    self.font_faces.push(RegisteredFontFace {
+      font_face,
+      last_resort: false,
+    });
   }
 
   /// Whether a pending face is registered.

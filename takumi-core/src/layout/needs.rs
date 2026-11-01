@@ -7,8 +7,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::{
   context::RenderContext,
   fonts::{
-    font::Font, font_fallback_list::FontFallbackList, font_fallback_priority::FontFallbackPriority,
-    symbols_iterator::SymbolsIterator,
+    font::Font, font_face::PendingSource, font_fallback_list::FontFallbackList,
+    font_fallback_priority::FontFallbackPriority, symbols_iterator::SymbolsIterator,
   },
   layout::{
     inline::{inline_item::InlineItemType, inline_node::InlineNode},
@@ -28,6 +28,9 @@ pub struct RenderNeeds {
   pub images: BTreeSet<String>,
   /// The ids of the [pending faces](crate::Fonts::register_pending) font fallback would load.
   pub faces: BTreeSet<usize>,
+  /// The `@font-face` `src` URLs font fallback would load, to hand to
+  /// [`Fonts::load_font_file`](crate::Fonts::load_font_file).
+  pub font_files: BTreeSet<String>,
 }
 
 impl Extend<RenderNeeds> for RenderNeeds {
@@ -35,6 +38,7 @@ impl Extend<RenderNeeds> for RenderNeeds {
     for read in reads {
       self.images.extend(read.images);
       self.faces.extend(read.faces);
+      self.font_files.extend(read.font_files);
     }
   }
 }
@@ -226,8 +230,15 @@ impl NeedsCollector {
           continue;
         }
 
-        if let Some(id) = list.pending_face_for_character(character, priority) {
-          self.needs.faces.insert(id);
+        match list.pending_face_for_character(character, priority) {
+          Some(PendingSource::Listed(id)) => {
+            self.needs.faces.insert(id);
+          }
+          #[cfg(feature = "font-face")]
+          Some(PendingSource::Url(url)) => {
+            self.needs.font_files.insert(url.to_string());
+          }
+          None => {}
         }
       }
 

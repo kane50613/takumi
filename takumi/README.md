@@ -46,6 +46,8 @@ write_image(&image, &mut png, OutputFormat::Png)?;
 - [`render_animation`] renders every frame of a scene timeline at a fixed frame rate.
   [`write_animation`] streams the frames into animated WebP, APNG, or GIF instead.
 - [`measure`] lays out the tree and returns box sizes and text runs without drawing.
+- [`needs`] reports the images and `@font-face` files a tree loads, for the host to fetch
+  before it renders.
 - `render_svg` writes vector SVG. It needs the `svg-backend` feature.
 - `from_html` parses HTML into a node tree. It needs the `from-html` feature.
 
@@ -55,6 +57,7 @@ write_image(&image, &mut png, OutputFormat::Png)?;
 - `svg-source` (default) enables SVG image sources in the core and raster backend.
 - `svg-backend` enables the vector SVG output backend (`render_svg`).
 - `from-html` enables HTML parsing (`from_html`).
+- `font-face` (default) applies `@font-face` rules, loading the files `needs` reports.
 - `woff2` (default) enables WOFF2 font support.
 - `woff` (default) enables WOFF font support.
 - `image-decoding` (default) enables `png`, `jpeg`, `webp` and `gif` together.

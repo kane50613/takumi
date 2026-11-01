@@ -13,6 +13,8 @@ use selectors::parser::{
   SelectorImpl as SelectorImplTrait, SelectorList,
 };
 
+#[cfg(feature = "font-face")]
+use crate::style::font_face_rule::FontFaceRule;
 pub use crate::style::media_query::MediaQueryList;
 use crate::{
   Xxh3HashSet,
@@ -50,7 +52,7 @@ pub(crate) enum LayerName {
   Anonymous,
 }
 
-type LayerPath = Vec<LayerName>;
+pub(crate) type LayerPath = Vec<LayerName>;
 
 /// An ASCII-case-insensitive CSS identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -347,6 +349,8 @@ struct StyleSheetFragment {
   rules: Vec<CssRule>,
   keyframes: Vec<KeyframesRule>,
   property_rules: Vec<PropertyRule>,
+  #[cfg(feature = "font-face")]
+  font_faces: Vec<FontFaceRule>,
   declared_layers: Vec<LayerPath>,
   preflight: bool,
 }
@@ -356,6 +360,8 @@ impl StyleSheetFragment {
     self.rules.extend(other.rules);
     self.keyframes.extend(other.keyframes);
     self.property_rules.extend(other.property_rules);
+    #[cfg(feature = "font-face")]
+    self.font_faces.extend(other.font_faces);
     self.declared_layers.extend(other.declared_layers);
     self.preflight |= other.preflight;
   }
@@ -692,6 +698,8 @@ enum AtRulePrelude {
   Layer(Vec<LayerPath>),
   Media(MediaQueryList),
   Property(String),
+  #[cfg(feature = "font-face")]
+  FontFace,
   Supports(bool),
   /// Tailwind's `@theme`, read as the `:root` rule it compiles to, whatever its modifiers.
   Theme,
@@ -701,7 +709,7 @@ enum AtRulePrelude {
   },
   /// `@apply`, already expanded into the declarations its utilities stand for.
   Apply(Box<StyleDeclarationBlock>),
-  /// An at-rule takumi does not implement, such as `@font-face`, dropped
+  /// An at-rule takumi does not implement, such as `@counter-style`, dropped
   /// without failing the sheet: <https://drafts.csswg.org/css-syntax-3/#consume-at-rule>.
   Unknown,
 }
@@ -1011,6 +1019,10 @@ impl NestingContext<'_> {
       AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
       AtRulePrelude::Supports(false) | AtRulePrelude::Unknown => Ok(skip_block(input)),
       AtRulePrelude::Theme => self.parse_theme_block(input),
+      #[cfg(feature = "font-face")]
+      AtRulePrelude::FontFace => Err(ParseError::custom(
+        StyleSheetParseErrorKind::UnsupportedNestedAtRule,
+      )),
       AtRulePrelude::Keyframes(_)
       | AtRulePrelude::Property(_)
       | AtRulePrelude::TailwindImport { .. }
@@ -1108,6 +1120,13 @@ fn parse_at_rule_prelude<'i>(
       }
     }
     return Ok(AtRulePrelude::Theme);
+  }
+
+  #[cfg(feature = "font-face")]
+  if name.eq_ignore_ascii_case("font-face") {
+    input.expect_exhausted()?;
+
+    return Ok(AtRulePrelude::FontFace);
   }
 
   if name.eq_ignore_ascii_case("property") {
@@ -1247,6 +1266,10 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         for property_rule in &mut fragment.property_rules {
           property_rule.media_queries.push(media_query.clone());
         }
+        #[cfg(feature = "font-face")]
+        for font_face in &mut fragment.font_faces {
+          font_face.media_queries.push(media_query.clone());
+        }
 
         Ok(fragment)
       }
@@ -1256,6 +1279,17 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Supports(false) | AtRulePrelude::Unknown => Ok(skip_block(input)),
       AtRulePrelude::Property(name) => Ok(StyleSheetFragment {
         property_rules: vec![parse_property_rule(name, input)?],
+        ..StyleSheetFragment::default()
+      }),
+      #[cfg(feature = "font-face")]
+      AtRulePrelude::FontFace => Ok(StyleSheetFragment {
+        font_faces: FontFaceRule::parse(input)
+          .map(|rule| FontFaceRule {
+            layer: self.current_layer.clone(),
+            ..rule
+          })
+          .into_iter()
+          .collect(),
         ..StyleSheetFragment::default()
       }),
     }
@@ -1298,6 +1332,9 @@ pub struct StyleSheet {
   pub(crate) keyframes: Vec<KeyframesRule>,
   /// `@property` rules.
   pub(crate) property_rules: Vec<PropertyRule>,
+  /// `@font-face` rules that make a face, in source order.
+  #[cfg(feature = "font-face")]
+  pub(crate) font_faces: Vec<FontFaceRule>,
   /// Number of distinct cascade layers.
   pub(crate) layer_count: usize,
   /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
@@ -1445,6 +1482,12 @@ impl StyleSheet {
     &self.property_rules
   }
 
+  /// The `@font-face` rules that make a face, in source order.
+  #[cfg(feature = "font-face")]
+  pub(crate) fn font_faces(&self) -> &[FontFaceRule] {
+    &self.font_faces
+  }
+
   /// Extends the stylesheet with keyframes.
   pub fn extend_keyframes(&mut self, keyframes: Vec<KeyframesRule>) {
     self.keyframes.extend(keyframes);
@@ -1521,6 +1564,8 @@ impl StyleSheet {
       mut rules,
       keyframes,
       property_rules,
+      #[cfg(feature = "font-face")]
+      mut font_faces,
       mut declared_layers,
       preflight,
     } = fragment;
@@ -1540,6 +1585,8 @@ impl StyleSheet {
 
     let mut layer_order = HashMap::<LayerPath, usize>::new();
     let used_layers = rules.iter().filter_map(|rule| rule.layer.clone());
+    #[cfg(feature = "font-face")]
+    let used_layers = used_layers.chain(font_faces.iter().filter_map(|rule| rule.layer.clone()));
 
     for layer_name in declared_layers.into_iter().chain(used_layers) {
       let next_order = layer_order.len();
@@ -1548,6 +1595,14 @@ impl StyleSheet {
 
     for rule in &mut rules {
       rule.layer_order = rule
+        .layer
+        .as_ref()
+        .and_then(|layer_name| layer_order.get(layer_name).copied());
+    }
+
+    #[cfg(feature = "font-face")]
+    for font_face in &mut font_faces {
+      font_face.layer_order = font_face
         .layer
         .as_ref()
         .and_then(|layer_name| layer_order.get(layer_name).copied());
@@ -1564,6 +1619,8 @@ impl StyleSheet {
       rules: rules.into(),
       keyframes,
       property_rules,
+      #[cfg(feature = "font-face")]
+      font_faces,
       layer_count: layer_order.len(),
     })
   }

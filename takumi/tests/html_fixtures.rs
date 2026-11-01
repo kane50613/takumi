@@ -12,16 +12,21 @@
 //! formatter cannot re-wrap.
 
 use std::{
+  collections::BTreeSet,
   env, fs,
   path::{Path, PathBuf},
 };
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use takumi::prelude::{
-  FromHtml, FromHtmlOptions, Node, RenderOptions, StylePresets, StyleSheet, Viewport,
+use takumi::{
+  needs,
+  prelude::{
+    FontSource, Fonts, FromHtml, FromHtmlOptions, Node, RenderOptions, StylePresets, StyleSheet,
+    Viewport,
+  },
 };
 
-use crate::test_utils::{CONTEXT, TEST_IMAGES, matches_fragments, write_goldens};
+use crate::test_utils::{CONTEXT, TEST_IMAGES, matches_fragments, repo_base_path, write_goldens};
 
 #[test]
 fn html_fixtures() {
@@ -79,17 +84,50 @@ fn render_fixture(path: &Path, name: &str) -> Result<(), String> {
   let options = FromHtmlOptions::builder().presets(presets).build();
   let node = Node::from_html(body, options).map_err(|error| format!("parse: {error:?}"))?;
   let stylesheet = StyleSheet::parse(css).map_err(|error| format!("stylesheet: {error:?}"))?;
+  let mut fonts = CONTEXT.clone();
 
-  write_goldens(
-    RenderOptions::builder()
-      .viewport(viewport)
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .stylesheet(stylesheet.into())
-      .build(),
-    name,
-  )
+  load_font_files(&mut fonts, |fonts| {
+    needs(fixture_options(fonts, viewport, &node, &stylesheet)).font_files
+  });
+
+  write_goldens(fixture_options(&fonts, viewport, &node, &stylesheet), name)
+}
+
+fn fixture_options<'f>(
+  fonts: &'f Fonts,
+  viewport: Viewport,
+  node: &Node,
+  stylesheet: &StyleSheet,
+) -> RenderOptions<'f> {
+  RenderOptions::builder()
+    .viewport(viewport)
+    .node(node.clone())
+    .fonts(fonts)
+    .images(TEST_IMAGES.clone())
+    .stylesheet(stylesheet.clone().into())
+    .build()
+}
+
+/// Loads each `@font-face` file the render reaches from the repository root, as the fixtures'
+/// `<base href>` resolves it, until none is left. A missing file fails, which moves its rule on
+/// to its next `src`.
+fn load_font_files(fonts: &mut Fonts, mut reached: impl FnMut(&Fonts) -> BTreeSet<String>) {
+  loop {
+    let urls = reached(fonts);
+
+    if urls.is_empty() {
+      return;
+    }
+
+    for url in urls {
+      match fs::read(repo_base_path(&url)) {
+        Ok(bytes) => fonts
+          .load_font_file(url.as_str(), FontSource::from(bytes))
+          .unwrap_or_else(|_| fonts.fail_font_file(url.as_str())),
+        Err(_) => fonts.fail_font_file(url.as_str()),
+      }
+    }
+  }
 }
 
 fn body_viewport(html: &str) -> Result<Viewport, String> {

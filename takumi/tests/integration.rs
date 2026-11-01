@@ -4,6 +4,7 @@ mod cascade_tests;
 mod counter_tests;
 mod filter_clips;
 mod fixtures;
+mod font_face_tests;
 mod font_tests;
 mod form_control_tests;
 mod html_fixtures;

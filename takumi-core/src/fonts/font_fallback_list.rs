@@ -3,10 +3,14 @@
 use std::{cell::OnceCell, rc::Rc};
 
 use super::{
-  font_cache::FontCache, font_data_for_range_set::FontDataForRangeSet,
-  font_description::FontFallbackKey, font_face::FaceData,
-  font_fallback_iterator::FontFallbackIterator, font_fallback_priority::FontFallbackPriority,
-  shaping::shape_cache::ShapeCache, simple_font_data::SimpleFontData,
+  font_cache::FontCache,
+  font_data_for_range_set::FontDataForRangeSet,
+  font_description::FontFallbackKey,
+  font_face::{FaceData, PendingSource},
+  font_fallback_iterator::FontFallbackIterator,
+  font_fallback_priority::FontFallbackPriority,
+  shaping::shape_cache::ShapeCache,
+  simple_font_data::SimpleFontData,
 };
 use crate::{
   resources::font::{Fonts, MatchedFace},
@@ -176,7 +180,7 @@ impl FontFallbackList {
     &self,
     character: char,
     font_fallback_priority: FontFallbackPriority,
-  ) -> Option<usize> {
+  ) -> Option<PendingSource> {
     let mut iterator = FontFallbackIterator::new(self, font_fallback_priority);
     let hint_list = [character];
 
@@ -184,7 +188,7 @@ impl FontFallbackList {
       let font_data = iterator.next(&hint_list);
 
       if let Some(face) = iterator.tracked_loading_faces().next() {
-        return Some(face.id);
+        return Some(face.source.clone());
       }
 
       if font_data

@@ -3,6 +3,8 @@ pub(crate) mod calc;
 mod css_input;
 mod css_source;
 mod custom_properties;
+#[cfg(feature = "font-face")]
+pub(crate) mod font_face_rule;
 mod matched_style_cache;
 pub mod math;
 mod media_query;
