@@ -4479,6 +4479,68 @@ fn table_structure_tags() {
   }
 }
 
+/// A link on a row or row group joins the structure tree in its last cell, as `TR` admits only cells
+/// and a row group only rows.
+#[test]
+fn a_link_on_a_table_row_or_row_group_joins_the_structure_tree() {
+  for tag in ["thead", "tbody", "tfoot", "tr"] {
+    let link = |name: &str| {
+      if name == tag {
+        r#" href="https://example.com""#
+      } else {
+        ""
+      }
+    };
+    let doc = format!(
+      r#"<div style="font-size:14px"><h1>Rows</h1><table>
+        <thead{}><tr><th>Head</th></tr></thead>
+        <tbody{}><tr{} style="background:#eee"><td>a</td></tr></tbody>
+        <tfoot{}><tr><td>Foot</td></tr></tfoot>
+      </table></div>"#,
+      link("thead"),
+      link("tbody"),
+      link("tr"),
+      link("tfoot"),
+    );
+
+    for (tagged, standard) in [
+      (Tagging::On, PdfStandard::None),
+      (Tagging::Ua2, PdfStandard::A4),
+    ] {
+      let pdf = render(
+        PdfOptions::builder()
+          .node(from_html(&doc, FromHtmlOptions::default()).expect("parse table doc"))
+          .page(PageOptions::A4)
+          .tagged(tagged)
+          .standard(standard)
+          .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+          .metadata(PdfMetadata {
+            title: Some("Rows".into()),
+            creation_date: Some(PdfDate {
+              year: 2026,
+              month: 11,
+              day: 2,
+              hour: 0,
+              minute: 0,
+              second: 0,
+            }),
+            ..Default::default()
+          })
+          .fonts(&fonts())
+          .build(),
+      )
+      .unwrap_or_else(|error| panic!("a link on <{tag}> failed to render: {error}"));
+      let haystack = inflated_text(&pdf);
+
+      assert!(haystack.contains("/Link"), "<{tag}> lost its Link element");
+      assert!(
+        haystack.contains("https://example.com"),
+        "<{tag}> lost its link annotation"
+      );
+    }
+  }
+}
+
 /// PDF/UA-2 rides on PDF 2.0, so it pairs with PDF/A-4 and validates the same
 /// structure tree PDF/UA-1 does.
 #[test]
