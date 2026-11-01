@@ -56,9 +56,8 @@ impl SimpleFontData {
       .map_or(size, |size_adjust| size * size_adjust);
     let font = face.typeface.font_ref()?;
     let units_per_em = font.head().ok()?.units_per_em();
-    let space_glyph = font
-      .charmap()
-      .map(' ')
+    let space_glyph = face
+      .glyph(&font, ' ')
       .map_or(0, |glyph| glyph.to_u32() as u16);
     let axes = font.axes();
     let mut variations: Vec<Variation> = Vec::new();
@@ -198,10 +197,10 @@ impl SimpleFontData {
       );
 
       Some(PrimaryFontMetrics::of(
+        &self.face,
         &font,
         self.size,
         (&location).into(),
-        self.face.metrics_override,
       ))
     })
   }
@@ -215,7 +214,7 @@ impl SimpleFontData {
   pub(crate) fn has_glyph(&self, ch: char) -> bool {
     self
       .font_ref()
-      .is_some_and(|font| font.charmap().map(ch).is_some())
+      .is_some_and(|font| self.face.glyph(&font, ch).is_some())
   }
 
   /// The face at its variation coordinates, as harfrust shapes with it, read once.

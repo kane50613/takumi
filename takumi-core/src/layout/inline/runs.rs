@@ -177,8 +177,9 @@ impl ShapedRun {
     } = self.metrics;
     let font = FontRef::from_index(self.font_data(), self.font_index).ok();
     let em_descent = em_box_descent(font.as_ref(), self.font_size, ascent, descent);
+    let zero = font.as_ref().and_then(|font| font.charmap().map('0'));
     let zero_width = font.as_ref().map_or(self.font_size / 2.0, |font| {
-      zero_inline_size(font, self.font_size, LocationRef::default())
+      zero_inline_size(font, zero, self.font_size, LocationRef::default())
     });
 
     PrimaryFontMetrics {
@@ -193,9 +194,7 @@ impl ShapedRun {
       }),
       em_descent,
       zero_width,
-      has_zero_width: font
-        .as_ref()
-        .is_some_and(|font| font.charmap().map('0').is_some()),
+      has_zero_width: zero.is_some(),
       avg_char_width: 0.0,
       max_char_width: 0.0,
     }

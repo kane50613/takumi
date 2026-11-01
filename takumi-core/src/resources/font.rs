@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use harfrust::{Feature, font::Variation};
 use rustc_hash::FxHashMap;
 use skrifa::{
-  FontRef, MetadataProvider,
+  FontRef, GlyphId, MetadataProvider,
   attribute::Style,
   instance::{LocationRef, Size},
   raw::{
@@ -247,6 +247,16 @@ pub(crate) struct MatchedFace {
 }
 
 impl MatchedFace {
+  /// The glyph `font`, the face's data, maps `character` to within its `unicode-range`.
+  pub(crate) fn glyph(&self, font: &FontRef, character: char) -> Option<GlyphId> {
+    self
+      .unicode_range
+      .as_ref()
+      .is_none_or(|range| range.contains(u32::from(character)))
+      .then(|| font.charmap().map(character))
+      .flatten()
+  }
+
   fn of(face: FontPlatformDataForRangeSet) -> Self {
     let platform = face.font_platform_data;
 
@@ -291,23 +301,13 @@ struct FontRegistry {
 struct ResolvedSource {
   data: Weak<dyn AsRef<[u8]> + Send + Sync>,
   id: u64,
-  unicode_range: UnicodeRangeSet,
   /// [`SourceOrigin::digest`] of the bytes resolved.
   digest: Option<u128>,
 }
 
 impl ResolvedSource {
-  /// The bytes as a source when `bytes` and `unicode_range` resolve to them and a face holds them.
-  fn matching(
-    &self,
-    bytes: &[u8],
-    unicode_range: &UnicodeRangeSet,
-    digest: &OnceCell<u128>,
-  ) -> Option<FontSource<'static>> {
-    if self.unicode_range != *unicode_range {
-      return None;
-    }
-
+  /// The bytes as a source when `bytes` resolve to them and a face holds them.
+  fn matching(&self, bytes: &[u8], digest: &OnceCell<u128>) -> Option<FontSource<'static>> {
     let data = self.data.upgrade()?;
     let is_same = match self.digest {
       Some(resolved) => *digest.get_or_init(|| xxh3_128(bytes)) == resolved,
@@ -547,7 +547,7 @@ impl Fonts {
       .resolved_sources
       .get(&bytes.len())?
       .iter()
-      .find_map(|resolved| resolved.matching(bytes, &font.unicode_range, &digest))?;
+      .find_map(|resolved| resolved.matching(bytes, &digest))?;
 
     Some(FontResource {
       source,
@@ -555,7 +555,6 @@ impl Fonts {
       generic_family: font.generic_family,
       unicode_range: font.unicode_range.clone(),
       last_resort: font.last_resort,
-      is_restricted: true,
       origin: None,
     })
   }
@@ -573,15 +572,9 @@ impl Fonts {
       generic_family,
       unicode_range,
       last_resort,
-      is_restricted,
       origin,
     } = font;
     let (data, id) = source.into_sfnt_with_id()?;
-    let (data, id) = if is_restricted {
-      (data, id)
-    } else {
-      unicode_range.restrict_sfnt(data, id)
-    };
 
     if let Some(origin) = origin {
       registry.resolved_sources.retain(|_, sources| {
@@ -595,7 +588,6 @@ impl Fonts {
         .push(ResolvedSource {
           data: Arc::downgrade(&data),
           id,
-          unicode_range: unicode_range.clone(),
           digest: origin.digest,
         });
     }
@@ -709,10 +701,13 @@ pub(crate) struct FontUnderline {
 }
 
 /// Blink's `SimpleFontData::ZeroInlineSize`, the [`ch`](https://drafts.csswg.org/css-values-4/#ch) unit.
-pub(crate) fn zero_inline_size(font: &FontRef, font_size: f32, location: LocationRef<'_>) -> f32 {
-  font
-    .charmap()
-    .map('0')
+pub(crate) fn zero_inline_size(
+  font: &FontRef,
+  zero: Option<GlyphId>,
+  font_size: f32,
+  location: LocationRef<'_>,
+) -> f32 {
+  zero
     .and_then(|glyph| {
       font
         .glyph_metrics(Size::new(font_size), location)
@@ -754,14 +749,17 @@ pub(crate) struct ExactFontMetrics {
 }
 
 impl PrimaryFontMetrics {
-  /// The metrics of `font_ref` at `font_size` and `location`, with those `metrics_override`
-  /// replaces, rounded as Blink's `SimpleFontData::PlatformInit` rounds Skia's.
+  /// The metrics of `face`, whose data `font_ref` reads, at `font_size` and `location`, with
+  /// those its `metrics_override` replaces, rounded as Blink's `SimpleFontData::PlatformInit`
+  /// rounds Skia's.
   pub(crate) fn of(
+    face: &MatchedFace,
     font_ref: &FontRef,
     font_size: f32,
     location: LocationRef<'_>,
-    metrics_override: FontMetricsOverride,
   ) -> Self {
+    let metrics_override = face.metrics_override;
+    let zero = face.glyph(font_ref, '0');
     let metrics = font_ref.metrics(Size::new(font_size), location);
     let ascent = metrics_override
       .ascent
@@ -784,13 +782,13 @@ impl PrimaryFontMetrics {
         thickness: underline.thickness,
       }),
       em_descent: em_box_descent(Some(font_ref), font_size, ascent, descent),
-      zero_width: zero_inline_size(font_ref, font_size, location),
-      has_zero_width: font_ref.charmap().map('0').is_some(),
+      zero_width: zero_inline_size(font_ref, zero, font_size, location),
+      has_zero_width: zero.is_some(),
       avg_char_width: metrics
         .average_width
         .filter(|&width| width != 0.0)
         .or_else(|| {
-          let glyph = font_ref.charmap().map('x')?;
+          let glyph = face.glyph(font_ref, 'x')?;
 
           font_ref
             .glyph_metrics(Size::new(font_size), location)
@@ -1148,8 +1146,6 @@ pub struct FontResource<'a> {
   /// Sorts after every normal family in default fallback selection (see
   /// [`FontResource::last_resort`]).
   last_resort: bool,
-  /// Whether [`Self::into_resolved`] already limited the `cmap` to `unicode_range`.
-  is_restricted: bool,
   /// What [`Self::into_resolved`] replaced, so the same bytes registering again can reuse it.
   origin: Option<SourceOrigin>,
 }
@@ -1158,7 +1154,7 @@ pub struct FontResource<'a> {
 #[derive(Debug)]
 struct SourceOrigin {
   len: usize,
-  /// The bytes' hash when resolving rewrote them, `None` when the resolved bytes are the same.
+  /// The bytes' hash when decoding replaced them, `None` when the resolved bytes are the same.
   digest: Option<u128>,
 }
 
@@ -1171,7 +1167,6 @@ impl<'a> FontResource<'a> {
       generic_family: None,
       unicode_range: UnicodeRangeSet::default(),
       last_resort: false,
-      is_restricted: false,
       origin: None,
     }
   }
@@ -1233,24 +1228,21 @@ impl<'a> FontResource<'a> {
     self.source.as_ref().len()
   }
 
-  /// Decompresses, restricts, and hashes the font, so registering it after costs the same at any size.
+  /// Decompresses and hashes the font, so registering it after costs the same at any size.
   pub fn into_resolved(self) -> Result<Self, FontError> {
-    if self.is_restricted {
+    if self.source.is_decoded {
       return Ok(self);
     }
 
     let bytes = self.source.as_ref();
-    let is_kept = self.source.is_sfnt() && self.unicode_range.is_entire_range();
     let origin = SourceOrigin {
       len: bytes.len(),
-      digest: (!is_kept).then(|| xxh3_128(bytes)),
+      digest: (!self.source.is_sfnt()).then(|| xxh3_128(bytes)),
     };
     let (data, id) = self.source.into_sfnt_with_id()?;
-    let (data, id) = self.unicode_range.restrict_sfnt(data, id);
 
     Ok(Self {
       source: FontSource::decoded(data, id),
-      is_restricted: true,
       origin: Some(origin),
       ..self
     })
@@ -1411,7 +1403,7 @@ mod tests {
     assert_eq!(wghts, vec![700.0, 300.0]);
   }
 
-  /// The same bytes and range under another family reuse what a face still holds.
+  /// The same bytes under another family or range reuse what a face still holds.
   #[test]
   fn a_font_registered_again_reuses_what_it_resolved_to() {
     let latin = || -> UnicodeRangeSet { [UnicodeRange::new(0x00, 0xff)].into_iter().collect() };
@@ -1436,8 +1428,11 @@ mod tests {
       .unwrap();
     let again = fonts.resolved(&named("B")).unwrap();
 
+    let unranged = fonts.resolved(&FontResource::new(geist_bytes())).unwrap();
+
     assert_eq!(again.source.as_ref().as_ptr(), held);
-    assert!(fonts.resolved(&FontResource::new(geist_bytes())).is_none());
+    assert_eq!(unranged.source.as_ref().as_ptr(), held);
+    drop(unranged);
 
     fonts.register(again).unwrap();
     fonts.unregister_family("A");
@@ -1450,42 +1445,23 @@ mod tests {
   /// Other bytes of the same length resolve on their own, compared directly or by digest.
   #[test]
   fn a_font_of_the_same_length_is_not_mistaken_for_another() {
-    let latin = || -> UnicodeRangeSet { [UnicodeRange::new(0x00, 0xff)].into_iter().collect() };
+    let altered = |mut bytes: Vec<u8>| {
+      *bytes.last_mut().unwrap() ^= 1;
+      bytes
+    };
     let sfnt = || read_font_asset("../assets/fonts/geist/geist-latin-wght-300-800.ttf");
-    let mut altered = sfnt();
-
-    *altered.last_mut().unwrap() ^= 1;
-
     let mut fonts = Fonts::default();
 
-    fonts
-      .register(FontResource::new(sfnt()).into_resolved().unwrap())
-      .unwrap();
-    fonts
-      .register(
-        FontResource::new(sfnt())
-          .unicode_range(latin())
-          .into_resolved()
-          .unwrap(),
-      )
-      .unwrap();
+    for bytes in [sfnt(), geist_bytes()] {
+      fonts
+        .register(FontResource::new(bytes).into_resolved().unwrap())
+        .unwrap();
+    }
 
-    assert!(fonts.resolved(&FontResource::new(sfnt())).is_some());
-    assert!(
-      fonts
-        .resolved(&FontResource::new(sfnt()).unicode_range(latin()))
-        .is_some()
-    );
-    assert!(
-      fonts
-        .resolved(&FontResource::new(altered.clone()))
-        .is_none()
-    );
-    assert!(
-      fonts
-        .resolved(&FontResource::new(altered).unicode_range(latin()))
-        .is_none()
-    );
+    for bytes in [sfnt(), geist_bytes()] {
+      assert!(fonts.resolved(&FontResource::new(bytes.clone())).is_some());
+      assert!(fonts.resolved(&FontResource::new(altered(bytes))).is_none());
+    }
   }
 
   /// One `unicode-range` subset declared at two weights keeps a face for each.
@@ -1743,11 +1719,10 @@ mod tests {
   }
 
   #[test]
-  fn a_resolved_subset_holds_what_registering_it_would() {
+  fn a_resolved_subset_holds_the_whole_font() {
     let basic_latin =
       || -> UnicodeRangeSet { [UnicodeRange::new(0x20, 0x7e)].into_iter().collect() };
-    let (data, id) = FontSource::from(geist_bytes()).into_sfnt_with_id().unwrap();
-    let (expected, expected_id) = basic_latin().restrict_sfnt(data, id);
+    let (expected, expected_id) = FontSource::from(geist_bytes()).into_sfnt_with_id().unwrap();
     let resolved = FontResource::new(geist_bytes())
       .unicode_range(basic_latin())
       .into_resolved()

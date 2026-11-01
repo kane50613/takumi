@@ -3,12 +3,9 @@
 //! the host loads each `src` file and hands it over by URL, and each rule makes the face its
 //! first usable source gives.
 
-use std::{
-  collections::HashMap,
-  sync::{Arc, LazyLock},
-};
+use std::sync::{Arc, LazyLock};
 
-use quick_cache::{Weighter, sync::Cache};
+use quick_cache::sync::Cache;
 use skrifa::{FontRef, raw::TableProvider};
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
@@ -18,7 +15,6 @@ use crate::{
     font_custom_platform_data::FontCustomPlatformData,
     font_face::{FontFace, PendingSource},
   },
-  resources::unicode_range::UnicodeRangeSet,
   style::{
     StyleSheet,
     font_face_rule::{FontFaceRule, FontFaceSrc},
@@ -33,33 +29,10 @@ pub(super) enum FontFile {
   Failed,
 }
 
-/// The bytes the `unicode-range` copies of one document's faces may take, past which a face that
-/// needs another copy fails to load, so a stylesheet cannot multiply a large file without bound.
-const MAX_RESTRICTED_BYTES: usize = 256 << 20;
-
-/// The least a cached document registry weighs, so the cache holds at most 16 of them.
-const MIN_DOCUMENT_WEIGHT: u64 = 16 << 20;
-
 /// The registries the rules of recent renders made, so the same rules over the same fonts reuse
-/// their decoded faces, weighed by their `unicode-range` copies.
-static DOCUMENT_REGISTRIES: LazyLock<Cache<DocumentKey, DocumentFonts, ByCopies>> =
-  LazyLock::new(|| Cache::with_weighter(16, MAX_RESTRICTED_BYTES as u64, ByCopies));
-
-/// A document's registry, and the bytes of the `unicode-range` copies it alone holds.
-#[derive(Clone)]
-struct DocumentFonts {
-  registry: Arc<FontRegistry>,
-  copied_bytes: u64,
-}
-
-#[derive(Clone)]
-struct ByCopies;
-
-impl Weighter<DocumentKey, DocumentFonts> for ByCopies {
-  fn weight(&self, _key: &DocumentKey, fonts: &DocumentFonts) -> u64 {
-    fonts.copied_bytes.max(MIN_DOCUMENT_WEIGHT)
-  }
-}
+/// their decoded faces.
+static DOCUMENT_REGISTRIES: LazyLock<Cache<DocumentKey, Arc<FontRegistry>>> =
+  LazyLock::new(|| Cache::new(16));
 
 /// What a document's faces are made of: the registry they extend, and each face's descriptors
 /// and the source it reaches, as written.
@@ -67,48 +40,6 @@ impl Weighter<DocumentKey, DocumentFonts> for ByCopies {
 struct DocumentKey {
   base: u64,
   faces: Vec<(String, String)>,
-}
-
-/// The `unicode-range` copies of the files one document's faces draw with, one per file and range.
-#[derive(Default)]
-struct RestrictedFiles {
-  copies: HashMap<(u64, String), (SharedBytes, u64)>,
-  bytes: usize,
-}
-
-impl RestrictedFiles {
-  /// `data`, which `id` names, with its `cmap` limited to `range`, none once the copies would
-  /// pass [`MAX_RESTRICTED_BYTES`].
-  fn restrict(
-    &mut self,
-    data: &SharedBytes,
-    id: u64,
-    range: &UnicodeRangeSet,
-  ) -> Option<(SharedBytes, u64)> {
-    if range.is_entire_range() {
-      return Some((Arc::clone(data), id));
-    }
-
-    let key = (id, format!("{range:?}"));
-
-    if let Some((data, id)) = self.copies.get(&key) {
-      return Some((Arc::clone(data), *id));
-    }
-
-    let len = (**data).as_ref().len();
-
-    if self.bytes + len > MAX_RESTRICTED_BYTES {
-      return None;
-    }
-
-    self.bytes += len;
-
-    let restricted = range.restrict_sfnt(Arc::clone(data), id);
-
-    self.copies.insert(key, restricted.clone());
-
-    Some(restricted)
-  }
 }
 
 impl Fonts {
@@ -212,22 +143,18 @@ impl FontsSnapshot {
     let registry = DOCUMENT_REGISTRIES
       .get_or_insert_with(&key, || {
         let mut registry = (**base).clone();
-        let mut restricted = RestrictedFiles::default();
 
         for source in sources {
-          if let Some(font_face) = source.font_face(&registry.selector, &mut restricted) {
+          if let Some(font_face) = source.font_face(&registry.selector) {
             registry.selector.add_css_connected(font_face);
           }
         }
 
         registry.revise();
 
-        Ok::<_, ()>(DocumentFonts {
-          registry: Arc::new(registry),
-          copied_bytes: restricted.bytes as u64,
-        })
+        Ok::<_, ()>(Arc::new(registry))
       })
-      .map_or_else(|()| Arc::clone(base), |fonts| fonts.registry);
+      .unwrap_or_else(|()| Arc::clone(base));
 
     Self(Fonts {
       registry,
@@ -274,11 +201,7 @@ impl FontRegistry {
 impl RuleSource<'_> {
   /// Blink's `FontFace::Create` for the rule, drawing with the source's data or waiting on its
   /// URL. Data that does not parse as a font makes no face.
-  fn font_face(
-    &self,
-    selector: &CssFontSelector,
-    restricted: &mut RestrictedFiles,
-  ) -> Option<FontFace> {
+  fn font_face(&self, selector: &CssFontSelector) -> Option<FontFace> {
     let family = self.rule.descriptors.family.clone()?;
     let descriptors = self.rule.descriptors.clone();
     let (data, id, index) = match self.data {
@@ -292,8 +215,7 @@ impl RuleSource<'_> {
         ));
       }
     };
-    let (data, id) = restricted.restrict(data, id, &descriptors.unicode_range)?;
-    let platform_data = selector.platform_data(&data, id, index)?;
+    let platform_data = selector.platform_data(data, id, index)?;
 
     Some(FontFace::new(family, descriptors, platform_data))
   }
