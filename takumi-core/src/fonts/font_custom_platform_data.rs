@@ -11,7 +11,7 @@ use std::{
 };
 
 use harfrust::{
-  Tag,
+  Feature, Tag,
   font::{Blob, Font as ShapingFont, Variation},
 };
 use skrifa::{
@@ -23,6 +23,7 @@ use skrifa::{
 
 use super::{
   font_description::FontSelectionDescription,
+  font_face::FontMetricsOverride,
   font_selection_types::{
     BOLD_THRESHOLD, FontSelectionCapabilities, FontSelectionRange, FontSelectionValue,
     ITALIC_SLOPE_VALUE, NORMAL_SLOPE_VALUE, NORMAL_WEIGHT_VALUE,
@@ -115,6 +116,14 @@ pub(crate) struct FontPlatformData {
   pub(crate) synthetic_italic: bool,
   /// The design coordinates the face is instanced at; a later tag wins, as in Skia.
   pub(crate) variations: Vec<Variation>,
+  /// The `font-feature-settings` descriptor, which Blink resolves into `ResolvedFeatures` against
+  /// the property; takumi resolves it as it shapes, since one face serves styles whose properties
+  /// differ.
+  pub(crate) feature_settings: Vec<Feature>,
+  /// The `size-adjust` Blink's `CSSFontFace::GetFontData` scales the size by.
+  pub(crate) size_adjust: Option<f32>,
+  /// The metrics Blink's `MetricsOverriddenFontData` replaces.
+  pub(crate) metrics_override: FontMetricsOverride,
 }
 
 impl FontCustomPlatformData {
@@ -173,6 +182,25 @@ impl FontCustomPlatformData {
       .into_iter()
       .find_map(|id| font.localized_strings(id).english_or_first())
       .map(|name| name.chars().collect())
+  }
+
+  /// Whether `name` is the face's full font name or PostScript name, as fontconfig matches
+  /// `local()` for Blink's `FontUniqueNameLookupLinux`, ignoring ASCII case.
+  #[cfg(feature = "font-face")]
+  pub(crate) fn has_unique_name(&self, name: &str) -> bool {
+    let Some(font) = self.font_ref() else {
+      return false;
+    };
+
+    [StringId::FULL_NAME, StringId::POSTSCRIPT_NAME]
+      .into_iter()
+      .flat_map(|id| font.localized_strings(id))
+      .any(|unique_name| {
+        unique_name
+          .chars()
+          .collect::<String>()
+          .eq_ignore_ascii_case(name)
+      })
   }
 
   /// Skia's `SkTypeface::isBold`.
@@ -380,6 +408,9 @@ impl FontCustomPlatformData {
       synthetic_bold: synthetic_bold && !self.is_bold(),
       synthetic_italic: synthetic_italic && !self.is_italic(),
       variations: variation,
+      feature_settings: Vec::new(),
+      size_adjust: None,
+      metrics_override: FontMetricsOverride::default(),
     }
   }
 

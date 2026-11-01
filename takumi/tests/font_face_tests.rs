@@ -88,3 +88,14 @@ fn a_file_that_is_not_a_font_fails_to_load() {
   );
   assert_eq!(reached(&fonts, css, "Face", "a"), urls(["bad.woff2"]));
 }
+
+#[test]
+fn local_matches_a_registered_full_or_postscript_name() {
+  let css = format!(
+    "@font-face {{ font-family: Face; src: local(Missing Font), local('geistmono-regular'), url({MANROPE}); }}
+     @font-face {{ font-family: Other; src: local(Missing Font), url({MANROPE}); }}"
+  );
+
+  assert_eq!(reached(&CONTEXT, &css, "Face", "a"), urls([]));
+  assert_eq!(reached(&CONTEXT, &css, "Other", "a"), urls([MANROPE]));
+}

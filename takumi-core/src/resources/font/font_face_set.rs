@@ -15,10 +15,14 @@ use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedByt
 use crate::{
   fonts::{
     css_font_selector::CssFontSelector,
+    font_custom_platform_data::FontCustomPlatformData,
     font_face::{FontFace, PendingSource},
   },
   resources::unicode_range::UnicodeRangeSet,
-  style::{StyleSheet, font_face_rule::FontFaceRule},
+  style::{
+    StyleSheet,
+    font_face_rule::{FontFaceRule, FontFaceSrc},
+  },
   viewport::Viewport,
 };
 
@@ -57,12 +61,12 @@ impl Weighter<DocumentKey, DocumentFonts> for ByCopies {
   }
 }
 
-/// What a document's faces are made of: the registry they extend, and each face's descriptors,
-/// as written, with the URL of the source it reaches.
+/// What a document's faces are made of: the registry they extend, and each face's descriptors
+/// and the source it reaches, as written.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct DocumentKey {
   base: u64,
-  faces: Vec<(String, Arc<str>)>,
+  faces: Vec<(String, String)>,
 }
 
 /// The `unicode-range` copies of the files one document's faces draw with, one per file and range.
@@ -176,7 +180,7 @@ impl FontsSnapshot {
         .map(|source| {
           (
             format!("{:?}", source.rule.descriptors),
-            Arc::clone(source.url),
+            format!("{:?}", source.src),
           )
         })
         .collect(),
@@ -211,29 +215,41 @@ impl FontsSnapshot {
 /// A rule and the source Blink's `CSSFontFace::GetFontData` reaches: its first that has not failed.
 struct RuleSource<'r> {
   rule: &'r FontFaceRule,
-  url: &'r Arc<str>,
-  /// The file the host loaded for `url`, none while it has not.
-  loaded: Option<(&'r SharedBytes, u64)>,
+  src: &'r FontFaceSrc,
+  data: SourceData<'r>,
+}
+
+/// What a reached source draws with.
+enum SourceData<'r> {
+  /// The file the host loaded for a `url()`.
+  File(&'r SharedBytes, u64),
+  /// The registered face a `local()` names.
+  Local(&'r Arc<FontCustomPlatformData>),
+  /// A `url()` the host has not loaded yet.
+  Pending(&'r Arc<str>),
 }
 
 impl FontRegistry {
-  /// The source `rule` reaches, none when every source has failed.
+  /// The source `rule` reaches, none when every source has failed or names no registered face.
   fn source_of<'r>(&'r self, rule: &'r FontFaceRule) -> Option<RuleSource<'r>> {
-    rule.sources.iter().find_map(|url| {
-      let loaded = match self.font_files.get(url) {
-        Some(FontFile::Loaded { data, id }) => Some((data, *id)),
-        Some(FontFile::Failed) => return None,
-        None => None,
+    rule.sources.iter().find_map(|src| {
+      let data = match src {
+        FontFaceSrc::Url(url) => match self.font_files.get(url) {
+          Some(FontFile::Loaded { data, id }) => SourceData::File(data, *id),
+          Some(FontFile::Failed) => return None,
+          None => SourceData::Pending(url),
+        },
+        FontFaceSrc::Local(name) => SourceData::Local(self.selector.local_face(name)?),
       };
 
-      Some(RuleSource { rule, url, loaded })
+      Some(RuleSource { rule, src, data })
     })
   }
 }
 
 impl RuleSource<'_> {
-  /// Blink's `FontFace::Create` for the rule, drawing with the loaded file or waiting on the URL.
-  /// A file that does not parse as a font makes no face.
+  /// Blink's `FontFace::Create` for the rule, drawing with the source's data or waiting on its
+  /// URL. Data that does not parse as a font makes no face.
   fn font_face(
     &self,
     selector: &CssFontSelector,
@@ -241,20 +257,21 @@ impl RuleSource<'_> {
   ) -> Option<FontFace> {
     let family = self.rule.descriptors.family.clone()?;
     let descriptors = self.rule.descriptors.clone();
-
-    match self.loaded {
-      Some((data, id)) => {
-        let (data, id) = restricted.restrict(data, id, &descriptors.unicode_range)?;
-        let platform_data = selector.platform_data(&data, id)?;
-
-        Some(FontFace::new(family, descriptors, platform_data))
+    let (data, id, index) = match self.data {
+      SourceData::File(data, id) => (data, id, 0),
+      SourceData::Local(typeface) => (&typeface.data, typeface.id, typeface.index),
+      SourceData::Pending(url) => {
+        return Some(FontFace::pending(
+          family,
+          descriptors,
+          PendingSource::Url(Arc::clone(url)),
+        ));
       }
-      None => Some(FontFace::pending(
-        family,
-        descriptors,
-        PendingSource::Url(Arc::clone(self.url)),
-      )),
-    }
+    };
+    let (data, id) = restricted.restrict(data, id, &descriptors.unicode_range)?;
+    let platform_data = selector.platform_data(&data, id, index)?;
+
+    Some(FontFace::new(family, descriptors, platform_data))
   }
 }
 

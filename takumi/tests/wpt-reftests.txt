@@ -1318,7 +1318,10 @@ css/css-fonts/quoted-generic-ignored.html
 css/css-fonts/rem-in-monospace.html
 css/css-fonts/rlh-in-monospace.html
 css/css-fonts/rtl-glyph-extents.html
-css/css-fonts/size-adjust-02.html
+css/css-fonts/size-adjust-01.html
+css/css-fonts/size-adjust-text-decoration.tentative.html
+css/css-fonts/size-adjust-unicode-range-system-fallback.html
+css/css-fonts/size-adjust.tentative.html
 css/css-fonts/standard-font-family-11.html
 css/css-fonts/standard-font-family-12.html
 css/css-fonts/standard-font-family-13.html

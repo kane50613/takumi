@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use harfrust::font::Variation;
+use harfrust::{Feature, font::Variation};
 
 use super::{
   font_custom_platform_data::{FontCustomPlatformData, FontPlatformData},
@@ -32,6 +32,20 @@ pub(crate) struct FontFaceDescriptors {
   pub(crate) unicode_range: UnicodeRangeSet,
   /// `font-variation-settings`.
   pub(crate) variation_settings: Vec<Variation>,
+  /// `font-feature-settings`.
+  pub(crate) feature_settings: Vec<Feature>,
+  /// `size-adjust`, as a fraction.
+  pub(crate) size_adjust: Option<f32>,
+  /// `ascent-override`, `descent-override`, and `line-gap-override`.
+  pub(crate) metrics_override: FontMetricsOverride,
+}
+
+/// Blink's `FontMetricsOverride`: each metric as a fraction of the font size, none for `normal`.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct FontMetricsOverride {
+  pub(crate) ascent: Option<f32>,
+  pub(crate) descent: Option<f32>,
+  pub(crate) line_gap: Option<f32>,
 }
 
 /// Where a face's data comes from: Blink's `CSSFontFaceSource`.
@@ -209,10 +223,15 @@ impl FontFace {
     let mut description = font_description.clone();
 
     description.merge_font_variation_settings_with_descriptor(&self.get_font_variation_settings());
-    FaceData::Loaded(
-      custom_platform_data
-        .get_font_platform_data(&description, &self.get_font_selection_capabilities()),
-    )
+
+    let mut platform_data = custom_platform_data
+      .get_font_platform_data(&description, &self.get_font_selection_capabilities());
+
+    platform_data.feature_settings = self.descriptors.feature_settings.clone();
+    platform_data.size_adjust = self.descriptors.size_adjust;
+    platform_data.metrics_override = self.descriptors.metrics_override;
+
+    FaceData::Loaded(platform_data)
   }
 }
 

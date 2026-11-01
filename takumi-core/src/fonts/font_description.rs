@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use std::str::FromStr;
 
-use harfrust::{Feature, Language, font::Variation};
+use harfrust::{Feature, Language, Tag, font::Variation};
 
 use super::font_selection_types::FontSelectionRequest;
 use crate::{
@@ -20,6 +20,8 @@ pub(crate) struct FontDescription {
   pub(crate) fallback: FontFallbackKey,
   /// Blink's `FontFeatures`.
   pub(crate) features: Vec<Feature>,
+  /// The tags of Blink's `FeatureSettings`, which `font-feature-settings` sets.
+  pub(crate) feature_setting_tags: Vec<Tag>,
   /// Blink's `LocaleOrDefault` as a HarfBuzz language.
   pub(crate) locale: Option<Language>,
   /// `font-language-override`, which Blink lacks.
@@ -69,6 +71,12 @@ impl FontDescription {
         .resolved_font_features(style.letter_spacing != 0.0, FontVariantCaps::Normal)
         .iter()
         .map(|feature| feature.into_harfrust())
+        .collect(),
+      feature_setting_tags: computed
+        .inherited_data
+        .font_feature_settings
+        .iter()
+        .map(|feature| feature.tag.into_harfrust())
         .collect(),
       locale: computed
         .lang

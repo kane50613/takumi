@@ -150,17 +150,30 @@ impl CssFontSelector {
     insert_family(&mut self.fallback_families, &family);
   }
 
-  /// The face at index 0 of `data`, shared with a registration of the same bytes, or none when
+  /// The face at `index` of `data`, shared with a registration of the same bytes, or none when
   /// it does not parse.
   #[cfg(feature = "font-face")]
   pub(crate) fn platform_data(
     &self,
     data: &SharedBytes,
     id: u64,
+    index: u32,
   ) -> Option<Arc<FontCustomPlatformData>> {
     self
-      .typeface(id, 0)
-      .or_else(|| FontCustomPlatformData::create(Arc::clone(data), id, 0).map(Arc::new))
+      .typeface(id, index)
+      .or_else(|| FontCustomPlatformData::create(Arc::clone(data), id, index).map(Arc::new))
+  }
+
+  /// The registered face `local()` names, Blink's `LocalFontFaceSource` among takumi's stand-in
+  /// for system fonts: the faces registered through [`crate::Fonts`].
+  #[cfg(feature = "font-face")]
+  pub(crate) fn local_face(&self, name: &str) -> Option<&Arc<FontCustomPlatformData>> {
+    self
+      .font_faces
+      .iter()
+      .filter(|registered| !registered.font_face.css_connected)
+      .filter_map(|registered| registered.font_face.custom_platform_data())
+      .find(|typeface| typeface.has_unique_name(name))
   }
 
   /// Adds the face an `@font-face` rule makes, after the CSS-connected faces before it in cascade
