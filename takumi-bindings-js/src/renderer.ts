@@ -263,6 +263,8 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
   cacheFont(font: Font, key: string): Awaitable<TFamily[]>;
   /** The families a registration under `key` added while the backend holds them; `pin` keeps them. */
   cachedFonts(key: string, pin: boolean): TFamily[] | null | undefined;
+  /** Loads the `@font-face` file `url` names, released for space past the budget. */
+  cacheFontFile(url: string, data: ArrayBuffer | Uint8Array): Awaitable<void>;
 };
 
 /**
@@ -313,6 +315,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     this.loading.set(key, load);
 
     return load;
+  }
+
+  /** Loads the `@font-face` file `url` names. A wasm backend reads only a `Uint8Array`. */
+  async cacheFontFile(url: string, data: ArrayBuffer | Uint8Array): Promise<void> {
+    await this.backend.cacheFontFile(url, asView(data));
   }
 
   /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */

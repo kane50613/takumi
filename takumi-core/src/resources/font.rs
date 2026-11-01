@@ -886,6 +886,21 @@ impl<'a> FontSource<'a> {
     )
   }
 
+  /// The font decompressed to sfnt now, so loading it later costs no decoding, and its byte length.
+  pub fn into_decoded(self) -> Result<(FontSource<'static>, usize), FontError> {
+    let (data, id) = self.into_sfnt_with_id()?;
+    let len = (*data).as_ref().len();
+
+    Ok((
+      FontSource {
+        bytes: FontBytes::Shared(data),
+        is_decoded: true,
+        cache_id: Some(id),
+      },
+      len,
+    ))
+  }
+
   /// The decoded sfnt bytes and the id the glyph caches key them by.
   pub(crate) fn into_sfnt_with_id(self) -> Result<(SharedBytes, u64), FontError> {
     let passthrough = self.is_decoded || self.is_sfnt();

@@ -48,7 +48,7 @@ fn a_failed_source_moves_the_rule_on_to_its_next() {
 
   assert_eq!(reached(&fonts, &css, "Face", "a"), urls(["missing.woff2"]));
 
-  fonts.fail_font_file("missing.woff2");
+  fonts = fonts.with_failed_font_files(&["missing.woff2".to_string()]);
   assert_eq!(reached(&fonts, &css, "Face", "a"), urls([MANROPE]));
 
   fonts
@@ -98,4 +98,16 @@ fn local_matches_a_registered_full_or_postscript_name() {
 
   assert_eq!(reached(&CONTEXT, &css, "Face", "a"), urls([]));
   assert_eq!(reached(&CONTEXT, &css, "Other", "a"), urls([MANROPE]));
+}
+
+#[test]
+fn failed_files_move_a_rule_on_only_in_the_fonts_they_fail_in() {
+  let failed = CONTEXT.with_failed_font_files(&["missing.woff2".to_owned()]);
+  let css = format!("@font-face {{ font-family: Face; src: url(missing.woff2), url({MANROPE}); }}");
+
+  assert_eq!(reached(&failed, &css, "Face", "a"), urls([MANROPE]));
+  assert_eq!(
+    reached(&CONTEXT, &css, "Face", "a"),
+    urls(["missing.woff2"])
+  );
 }

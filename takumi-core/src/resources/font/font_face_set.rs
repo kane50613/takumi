@@ -114,7 +114,7 @@ impl RestrictedFiles {
 impl Fonts {
   /// Hands over the file an `@font-face` `src` names, as [`RenderNeeds::font_files`] reports it. A file
   /// that is not a usable font fails, as Blink's OTS sanitizing fails a load, so the host can
-  /// record it with [`Self::fail_font_file`].
+  /// record it with [`Self::with_failed_font_files`].
   ///
   /// [`RenderNeeds::font_files`]: crate::layout::needs::RenderNeeds::font_files
   pub fn load_font_file(
@@ -138,12 +138,36 @@ impl Fonts {
     Ok(())
   }
 
-  /// Records that the file `url` names failed to load, so a rule moves on to its next `src`.
-  pub fn fail_font_file(&mut self, url: impl Into<Arc<str>>) {
+  /// Lets go of the file `url` names, so a rule waits on it again; false when it held none.
+  pub fn forget_font_file(&mut self, url: &str) -> bool {
+    if !self.registry.font_files.contains_key(url) {
+      return false;
+    }
+
     let registry = Arc::make_mut(&mut self.registry);
 
     registry.revise();
-    registry.font_files.insert(url.into(), FontFile::Failed);
+    registry.font_files.remove(url);
+    // A cached document registry still holds the file, outside the budget that released it.
+    DOCUMENT_REGISTRIES.clear();
+
+    true
+  }
+
+  /// These fonts with each of `urls` failed to load, as one document's downloads did. The revision
+  /// stays, since only `@font-face` rules read the files, and the document cache keys on the
+  /// source each rule reaches, so renders of one document with the same failures share its faces.
+  pub fn with_failed_font_files(&self, urls: &[String]) -> Self {
+    let mut fonts = self.clone();
+    let registry = Arc::make_mut(&mut fonts.registry);
+
+    for url in urls {
+      registry
+        .font_files
+        .insert(url.as_str().into(), FontFile::Failed);
+    }
+
+    fonts
   }
 }
 

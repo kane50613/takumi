@@ -140,6 +140,30 @@ const fonts = await googleFonts({
 
 The default CSS cache is bounded and shares concurrent requests for the same URL. A request with `signal` or `allowUrl` skips the cache, so cancellation and URL checks stay with the caller. `maxBytes` applies to cache hits too.
 
+### From `@font-face` rules
+
+An `@font-face` rule in `css` or a `<style>` element loads its font as a browser does. `render`, `ImageResponse`, and each renderer's `prepare()` download the `src` files the text reaches, and skip the rest.
+
+```tsx twoslash title="Load a font from CSS"
+import { render } from "takumi-js";
+
+const image = await render(<div style={{ fontFamily: "Brand" }}>Hello</div>, {
+  width: 1200,
+  height: 630,
+  // [!code ++:6]
+  css: `
+    @font-face {
+      font-family: Brand;
+      src: url("https://example.com/Brand.woff2") format("woff2");
+    }
+  `,
+});
+```
+
+The rule's descriptors, such as `font-weight`, `unicode-range`, and `size-adjust`, apply as they do in Chrome. When a `src` fails to download, the rule moves on to its next source for that render, and the next `prepare()` tries the file again. A `local()` source names a font you loaded through `fonts`, by its full name or PostScript name. Takumi downloads the files with the `fetch`, `timeout`, `maxBytes`, `allowUrl`, and `fetchCache` you pass in `images`, so a relative URL needs your own `fetch`.
+
+A renderer's `render()` called without `prepare()` downloads nothing. It draws with the `@font-face` files the renderer already holds, and falls back past the rest.
+
 ### Fonts in CI and offline renders
 
 Bundle font files when a render must work without Google Fonts:

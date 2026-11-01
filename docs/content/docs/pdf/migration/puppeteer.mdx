@@ -96,7 +96,7 @@ const pdf = await render(prepared);
 - Its `images` option takes `timeout`, `maxBytes`, an `allowUrl` predicate, a `fetchCache` that reuses bytes across renders, and your own `fetch`. Your `fetch` also receives relative URLs such as `/logo.png`.
 - Pass page and layout options such as `size`, `margin`, `header`, and `css` to `prepare()`. Pass file options such as `metadata` and `pdfa` to `render()`.
 
-Fonts come from the `fonts` option, not from CSS `@font-face` rules. See [Fonts & images](/docs/pdf/assets). Font URL loaders and `googleFonts()` make their own requests, so give them their own fetch limits.
+Fonts come from the `fonts` option or from CSS `@font-face` rules, whose files `prepare()` downloads with the `images` fetch options. See [Fonts & images](/docs/pdf/assets). Font URL loaders and `googleFonts()` make their own requests, so give them their own fetch limits.
 
 ## Known gaps
 

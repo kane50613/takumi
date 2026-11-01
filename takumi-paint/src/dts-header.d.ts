@@ -56,6 +56,8 @@ export type PaintOptions = {
   css?: CssInput[];
   /** Per-render font stack: ordered family names used as the fallback chain. */
   fontFamilies?: string[];
+  /** @internal The `@font-face` files `prepare` failed to download. */
+  failedFontFiles?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
 };
