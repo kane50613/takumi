@@ -127,12 +127,6 @@ impl Renderer {
     self.fonts.cache_font_file(url, data).map_err(map_error)
   }
 
-  /// Whether the renderer holds the `@font-face` file `url`, marking it used.
-  #[wasm_bindgen(js_name = hasFontFile)]
-  pub fn has_font_file(&self, url: &str) -> bool {
-    self.fonts.has_font_file(url)
-  }
-
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
   #[wasm_bindgen(js_name = unregisterFont)]

@@ -286,15 +286,6 @@ impl Renderer {
     ))
   }
 
-  /// Whether the renderer holds the `@font-face` file `url`, marking it used.
-  #[napi(js_name = "hasFontFile")]
-  pub fn has_font_file(&self, url: String) -> bool {
-    let state = self.state.font_state.load();
-
-    state.cache.has_file(&url);
-    state.fonts.has_font_file(&url)
-  }
-
   fn load_font(
     &self,
     env: Env,

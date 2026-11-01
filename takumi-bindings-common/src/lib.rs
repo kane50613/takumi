@@ -223,12 +223,6 @@ impl FontStore {
     Ok(())
   }
 
-  /// Whether the store holds the `@font-face` file `url`, marking it used.
-  pub fn has_font_file(&self, url: &str) -> bool {
-    self.cache.borrow().has_file(url);
-    self.current().has_font_file(url)
-  }
-
   /// Goes back to the embedded last-resort fonts alone.
   pub fn reset(&self) -> Result<(), FontError> {
     *self.fonts.borrow_mut() = Rc::new(default_fonts()?);

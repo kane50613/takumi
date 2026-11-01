@@ -13,7 +13,6 @@ export const fontBackend = (): {
     cacheFont: Mock<(font: Font, key: string) => HeldFamily[]>;
     cachedFonts: Mock<(key: string, _pin: boolean) => HeldFamily[] | undefined>;
     cacheFontFile: Mock<(url: string, _data: ArrayBuffer | Uint8Array) => void>;
-    hasFontFile: Mock<(url: string) => boolean>;
   };
   fonts: FontRegistry<HeldFamily>;
 } => {
@@ -33,7 +32,6 @@ export const fontBackend = (): {
     cacheFontFile: mock((url: string, _data: ArrayBuffer | Uint8Array) => {
       files.add(url);
     }),
-    hasFontFile: mock((url: string) => files.has(url)),
   };
 
   return { held, files, backend, fonts: new FontRegistry(backend) };

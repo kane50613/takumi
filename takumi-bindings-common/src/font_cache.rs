@@ -186,17 +186,6 @@ impl FontCache {
     }
   }
 
-  /// Whether the renderer holds the `@font-face` file `url`, which is marked used.
-  pub fn has_file(&self, url: &str) -> bool {
-    let Some(file) = self.files.get(url) else {
-      return false;
-    };
-
-    file.last_used.set(self.tick());
-
-    true
-  }
-
   /// Loads the `@font-face` file `url`, `bytes` of font data, into `fonts`, then releases what the
   /// budget no longer fits, other than that file.
   pub fn admit_file(
