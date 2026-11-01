@@ -3,8 +3,8 @@
 use std::{borrow::Cow, collections::VecDeque, rc::Rc};
 
 use harfrust::{
-  Buffer, Direction as HbDirection, Feature, GlyphInfo, GlyphPosition, Language, ShapeOptions,
-  ShaperFont, shape,
+  Advances, Buffer, Direction as HbDirection, Feature, FontFuncs, GlyphId, GlyphInfo,
+  GlyphPosition, Language, ShapeOptions, ShaperFont, shape,
 };
 use icu_properties::{PropertyNamesShort, props::Script};
 use skrifa::MetadataProvider;
@@ -25,6 +25,7 @@ use crate::{
     simple_font_data::SimpleFontData,
     small_caps_iterator::{SmallCapsBehavior, SmallCapsIterator},
   },
+  resources::unicode_range::UnicodeRangeSet,
   style::{Direction as TextDirection, FontFeature, FontVariantCaps},
   text::{
     character::{
@@ -213,7 +214,13 @@ fn shape_range(
   direction: HbDirection,
   language: Option<&Language>,
 ) -> Option<HarfBuzzBuffer> {
-  let shaper_font = ShaperFont::new(current_font.shaping_font()?);
+  let range_funcs = current_font
+    .face
+    .unicode_range
+    .as_ref()
+    .map(UnicodeRangeFuncs);
+  let shaper_font = ShaperFont::new(current_font.shaping_font()?)
+    .with_font_funcs(range_funcs.as_ref().map(|funcs| funcs as &dyn FontFuncs));
   let script = icu_script_to_hb_script(current_run_script);
   let plan = current_font.shape_plan(direction, script, language, font_features)?;
 
@@ -328,6 +335,32 @@ fn queue_characters(
   ));
 }
 
+/// Blink's `HarfBuzzGetGlyph`, which maps no glyph for a codepoint outside a face's `unicode-range`.
+struct UnicodeRangeFuncs<'a>(&'a UnicodeRangeSet);
+
+impl FontFuncs for UnicodeRangeFuncs<'_> {
+  fn nominal_glyph(&self, font: &ShaperFont, codepoint: u32) -> Option<GlyphId> {
+    self
+      .0
+      .contains(codepoint)
+      .then(|| font.default_nominal_glyph(codepoint))
+      .flatten()
+  }
+
+  fn variation_glyph(&self, font: &ShaperFont, codepoint: u32, selector: u32) -> Option<GlyphId> {
+    self
+      .0
+      .contains(codepoint)
+      .then(|| font.default_variation_glyph(codepoint, selector))
+      .flatten()
+  }
+
+  /// The font's own advances, batched as they are without callbacks.
+  fn glyph_h_advances(&self, font: &ShaperFont, advances: Advances<'_>) {
+    font.default_glyph_h_advances(advances);
+  }
+}
+
 /// Blink's `HarfBuzzGetGlyph` answering `kUnmatchedVSGlyphId` for `text`'s variation sequence.
 /// Approximate: checked after shaping, as harfrust has no glyph callback.
 fn is_unmatched_variation_sequence(font: &SimpleFontData, text: &str) -> bool {
@@ -345,7 +378,9 @@ fn is_unmatched_variation_sequence(font: &SimpleFontData, text: &str) -> bool {
   };
   let charmap = font_ref.charmap();
 
-  if charmap.map_variant(character, selector).is_some() || charmap.map(character).is_none() {
+  if charmap.map_variant(character, selector).is_some()
+    || font.face.glyph(&font_ref, character).is_none()
+  {
     return false;
   }
 

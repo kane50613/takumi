@@ -215,7 +215,7 @@ impl SimpleFontData {
   pub(crate) fn has_glyph(&self, ch: char) -> bool {
     self
       .font_ref()
-      .is_some_and(|font| font.charmap().map(ch).is_some())
+      .is_some_and(|font| self.face.glyph(&font, ch).is_some())
   }
 
   /// The face at its variation coordinates, as harfrust shapes with it, read once.
