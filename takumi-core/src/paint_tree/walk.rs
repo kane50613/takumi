@@ -1,8 +1,6 @@
 //! Walks the stacking-context scene in paint order, recording each node and the steps that
 //! paint it.
 
-use std::collections::HashMap;
-
 use super::{
   document::{
     DrawPart, Drawable, Effects, ElementInfo, ImageSource, NodeKind, Paint, PaintFilter,
@@ -35,6 +33,7 @@ use crate::{
   sort_key::sort_by_key,
   style::{Affine, BackgroundImage, Filter, Isolation, TextAlign, ToCss},
 };
+use rustc_hash::FxHashMap;
 
 /// A render node placed in the document, inside the box `parent`.
 #[derive(Clone, Copy)]
@@ -78,7 +77,7 @@ impl Walker {
   pub(super) fn scene(&mut self, scene: &Scene, prefix: &[usize]) -> Result<()> {
     let chunks = PaintChunk::in_paint_order(&scene.contexts);
     let owners = PaintChunk::effect_owners(&chunks, &scene.properties);
-    let paints: HashMap<&[usize], &NodePaint> = chunks
+    let paints: FxHashMap<&[usize], &NodePaint> = chunks
       .iter()
       .map(|chunk| (chunk.node.path.as_slice(), chunk.node))
       .collect();
@@ -90,7 +89,7 @@ impl Walker {
         prefix,
         owners: &owners,
         paints: &paints,
-        boxes: HashMap::new(),
+        boxes: FxHashMap::default(),
         open: Vec::new(),
         error: None,
       },
@@ -531,7 +530,7 @@ impl Walker {
   /// Links every node to its parent and lists each box's children in document order. A box that
   /// shares its path with an earlier one, such as a list item's marker, belongs to that box.
   pub(super) fn link(&mut self) {
-    let mut boxes: HashMap<&[usize], usize> = HashMap::new();
+    let mut boxes: FxHashMap<&[usize], usize> = FxHashMap::default();
 
     for (id, path) in self.paths.iter().enumerate() {
       if let Some(path) = path {
@@ -599,9 +598,9 @@ struct StepWriter<'w, 's> {
   prefix: &'w [usize],
   owners: &'w [Option<&'s NodePaint>],
   /// Every box the chunks paint, by path.
-  paints: &'w HashMap<&'s [usize], &'s NodePaint>,
+  paints: &'w FxHashMap<&'s [usize], &'s NodePaint>,
   /// The node each box recorded as, by path.
-  boxes: HashMap<Vec<usize>, Option<usize>>,
+  boxes: FxHashMap<Vec<usize>, Option<usize>>,
   /// The node each open clip or effect belongs to, when it was recorded.
   open: Vec<Option<usize>>,
   error: Option<Error>,

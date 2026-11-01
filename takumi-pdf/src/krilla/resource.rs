@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -6,6 +5,7 @@ use std::marker::PhantomData;
 use pdf_writer::types::ProcSet;
 use pdf_writer::writers;
 use pdf_writer::{Chunk, Dict, Finish, Name, Ref};
+use rustc_hash::FxHashMap;
 
 use crate::krilla::serialize::{Cacheable, SerializeContext};
 use crate::krilla::util::NameExt;
@@ -338,7 +338,7 @@ where
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct ResourceMapper<T: ?Sized> {
   forward: Vec<Ref>,
-  backward: HashMap<Ref, ResourceNumber>,
+  backward: FxHashMap<Ref, ResourceNumber>,
   phantom: PhantomData<T>,
 }
 
@@ -349,7 +349,7 @@ where
   pub(crate) fn new() -> Self {
     Self {
       forward: Vec::new(),
-      backward: HashMap::new(),
+      backward: FxHashMap::default(),
       phantom: PhantomData,
     }
   }

@@ -1,8 +1,9 @@
 //! Text boxes' inline layout, read from the fragment items layout left on each
 //! box, resolved once for the page that shows it.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
+use rustc_hash::FxHashMap;
 use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId},
@@ -25,8 +26,8 @@ struct PreparedInline<'c> {
 /// The text boxes' resolved runs, resolved on first use and dropped once a page
 /// goes by without using them.
 pub(crate) struct InlineCache<'c> {
-  boxes: HashMap<FragmentKey, &'c TextBox<'c>>,
-  built: RefCell<HashMap<FragmentKey, Rc<PreparedInline<'c>>>>,
+  boxes: FxHashMap<FragmentKey, &'c TextBox<'c>>,
+  built: RefCell<FxHashMap<FragmentKey, Rc<PreparedInline<'c>>>>,
 }
 
 /// A text-bearing box's fragment in a prepared tree, with the resolved font style its inline layout

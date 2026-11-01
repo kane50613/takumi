@@ -1,7 +1,8 @@
 //! `@counter-style` formatting and substitution of the page-counter class hooks.
 
-use std::{collections::HashMap, ops::Range};
+use std::ops::Range;
 
+use rustc_hash::FxHashMap;
 use takumi_core::layout::node::{Node, NodeKind};
 
 use crate::interactive::percent_decode;
@@ -395,7 +396,7 @@ pub(crate) struct BoxPages {
 /// The state a content-counter walk carries: what the boxes resolved to, and
 /// how far the flow has come.
 pub(crate) struct FlowCounters<'c> {
-  page_of: &'c HashMap<usize, BoxPages>,
+  page_of: &'c FxHashMap<usize, BoxPages>,
   pages: usize,
   repeated: &'c [Range<usize>],
   cursor: usize,
@@ -404,7 +405,7 @@ pub(crate) struct FlowCounters<'c> {
 
 impl<'c> FlowCounters<'c> {
   pub(crate) fn new(
-    page_of: &'c HashMap<usize, BoxPages>,
+    page_of: &'c FxHashMap<usize, BoxPages>,
     pages: usize,
     repeated: &'c [Range<usize>],
   ) -> Self {

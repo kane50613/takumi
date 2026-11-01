@@ -1,6 +1,6 @@
 //! Style recalc for an SVG document, after Blink's `StyleResolver`.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use super::{SvgDocument, SvgHost};
 use crate::{
@@ -12,6 +12,7 @@ use crate::{
   style::{ColorInput, ComputedStyle, LonghandId, SizingContext},
   viewport::Viewport,
 };
+use rustc_hash::FxHashMap;
 
 /// What Blink's `LayoutSVGRoot` paints as an inline `svg`'s box. Approximate: the page's styles
 /// win over the document's.
@@ -35,7 +36,7 @@ pub(super) struct StyleResolver<'a> {
   /// Whether the document is an inline `svg`, whose root the box it is drawn in already paints.
   inline: bool,
   /// The contexts of elements resolved where they stand in the document.
-  in_place: RefCell<HashMap<usize, RenderContext>>,
+  in_place: RefCell<FxHashMap<usize, RenderContext>>,
 }
 
 impl<'a> StyleResolver<'a> {

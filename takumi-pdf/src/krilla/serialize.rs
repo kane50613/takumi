@@ -9,6 +9,7 @@ use indexmap::IndexMap;
 use pdf_writer::types::{StructRole, StructRole2};
 use pdf_writer::writers::{OutputIntent, StructTreeRoot};
 use pdf_writer::{Chunk, Content, Finish, Limits, Name, Obj, Pdf, Ref, Settings, Str, TextStr};
+use rustc_hash::FxHashMap;
 
 use crate::krilla::chunk_container::ChunkContainer;
 use crate::krilla::color::{CieBasedColorSpace, DeviceColorSpace, SpecialColorSpace};
@@ -235,7 +236,7 @@ pub(crate) struct SerializeContext {
   page_infos: Vec<PageInfo>,
   /// Keep track of object hashes and their corresponding reference. This is used for
   /// caching, so that for example same images will not be embedded twice in the document.
-  cached_mappings: HashMap<u128, Ref>,
+  cached_mappings: FxHashMap<u128, Ref>,
   /// The current ref in use. All serializers should use the `new_ref` method (which indirectly
   /// is based on this field) to generate a new Ref, instead of creating one manually with
   /// `Ref::new`.
@@ -283,7 +284,7 @@ impl SerializeContext {
     };
 
     Self {
-      cached_mappings: HashMap::new(),
+      cached_mappings: FxHashMap::default(),
       pdf2_ns,
       global_objects: GlobalObjects::default(),
       cur_ref,

@@ -1,11 +1,11 @@
 //! A tagged-PDF structure tree from the node tree's semantic HTML tags.
 
 use std::{
-  collections::HashSet,
   mem,
   num::{NonZeroU16, NonZeroU32},
 };
 
+use rustc_hash::FxHashSet;
 use takumi_core::{
   context::BoxId,
   layout::{node::NodeKind, tree::RenderNode},
@@ -105,7 +105,7 @@ impl TagCollector {
     &mut self,
     root: &RenderNode,
     lang: Option<&str>,
-    targets: &HashSet<Vec<usize>>,
+    targets: &FxHashSet<Vec<usize>>,
   ) -> TagTree {
     // Stable, so each node's identifiers keep the order they were drawn in.
     self.records.sort_by_key(|record| record.node);
@@ -166,7 +166,7 @@ struct Walk<'c> {
   collector: &'c mut TagCollector,
   headings: Vec<u8>,
   /// Paths a destination points at, whose structure elements need an id.
-  targets: &'c HashSet<Vec<usize>>,
+  targets: &'c FxHashSet<Vec<usize>>,
 }
 
 impl Walk<'_> {

@@ -1,9 +1,7 @@
 //! Checks run on every document of the fragmentation tests: paged layout stepped a page at a time
 //! agrees with the layout driven to the end, and so does the view of it while it steps.
 
-use std::collections::HashSet;
-
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
   geometry::{NodeId, Size},
@@ -218,7 +216,7 @@ fn page_chunks(
 
 /// Where a scene's tree has the box at `path` and the inline content under it that no chunk of
 /// `placed` paints, once the scene entered `paint`.
-fn entered(root: &RenderNode, paint: &NodePaint, placed: &HashSet<Vec<usize>>) -> Vec<String> {
+fn entered(root: &RenderNode, paint: &NodePaint, placed: &FxHashSet<Vec<usize>>) -> Vec<String> {
   let mut states = Vec::new();
   let mut stack = vec![(
     root.node_at_path(&paint.path).expect("node"),
@@ -249,7 +247,7 @@ fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
   let whole = PagedScene::lay_out(root.clone(), page_size, usize::MAX, true)
     .expect("pages lay out")
     .into_scene();
-  let placed: HashSet<Vec<usize>> = PaintChunk::in_paint_order(&whole.contexts)
+  let placed: FxHashSet<Vec<usize>> = PaintChunk::in_paint_order(&whole.contexts)
     .iter()
     .map(|chunk| chunk.node.path.clone())
     .collect();

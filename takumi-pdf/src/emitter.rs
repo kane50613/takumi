@@ -1,6 +1,8 @@
 //! The scene walker that emits boxes, text and images onto a krilla surface.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
+
+use rustc_hash::FxHashMap;
 
 #[cfg(all(feature = "images", feature = "svg"))]
 use takumi_core::resources::image::{ImageSource, SvgSource};
@@ -80,7 +82,7 @@ use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style:
 type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 
 /// Krilla fonts embedded so far, one per distinct instance.
-type FontMap = HashMap<FontKey, Font>;
+type FontMap = FxHashMap<FontKey, Font>;
 
 pub(crate) struct Emitter<'a> {
   pub(crate) scene: SceneView<'a>,

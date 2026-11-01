@@ -1,7 +1,8 @@
 //! Raster box decorations, compositing [`takumi_core::layout::decoration`] with tiny-skia.
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
+use rustc_hash::FxHashMap;
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Rect, Size},
@@ -183,7 +184,7 @@ pub(crate) struct CanvasDevice<'c> {
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
   /// The span background strips already rasterized, reused on every line.
-  strip_tiles: HashMap<(usize, u32, u32, u32, u32), Option<BackgroundTile>>,
+  strip_tiles: FxHashMap<(usize, u32, u32, u32, u32), Option<BackgroundTile>>,
   /// The first error a draw hit.
   error: Option<Error>,
 }
@@ -211,7 +212,7 @@ impl<'c> CanvasDevice<'c> {
       clips: Vec::new(),
       layers: Vec::new(),
       shadow: None,
-      strip_tiles: HashMap::new(),
+      strip_tiles: FxHashMap::default(),
       error: None,
     }
   }
