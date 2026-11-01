@@ -393,7 +393,7 @@ fn build_table(
 ) {
   let Recorded {
     identifiers,
-    annotations,
+    mut annotations,
     ..
   } = walk.collector.take(node.context.box_id());
   let mut kind = Tag::TABLE;
@@ -448,10 +448,12 @@ fn build_table(
     let display = section.context.style.base_data.display;
     let in_header = display == Display::TableHeaderGroup;
     let row_count = section.children.as_deref().map_or(0, <[RenderNode]>::len);
+    let section_links = walk.collector.take(section.context.box_id()).annotations;
     let mut rows = Vec::new();
 
     path.push(index);
     for (row_index, row) in section.children.iter().flatten().enumerate() {
+      let row_links = walk.collector.take(row.context.box_id()).annotations;
       let mut cells = Vec::new();
 
       path.push(row_index);
@@ -470,11 +472,17 @@ fn build_table(
         path.pop();
       }
       path.pop();
+      push_row_links(row_links, cells.last_mut(), &mut annotations);
       if !cells.is_empty() {
-        rows.push(tag_group(Tag::TR, cells));
+        rows.push(cells);
       }
     }
     path.pop();
+    push_row_links(
+      section_links,
+      rows.last_mut().and_then(|cells| cells.last_mut()),
+      &mut annotations,
+    );
 
     if !rows.is_empty() {
       let tag = match display {
@@ -483,7 +491,10 @@ fn build_table(
         _ => Tag::T_BODY,
       };
 
-      groups.push(tag_group(tag, rows));
+      groups.push(tag_group(
+        tag,
+        rows.into_iter().map(|cells| tag_group(Tag::TR, cells)),
+      ));
     }
   }
 
@@ -497,9 +508,23 @@ fn build_table(
 
 /// Wraps loose link-annotation identifiers (inline anchors have no painted
 /// box of their own) in `Link` elements of their own.
-fn push_link_wrappers(annotations: Vec<Identifier>, parent: &mut Vec<TagGroup>) {
-  for annotation in annotations {
-    parent.push(tag_group(Tag::LINK, [annotation]));
+fn push_link_wrappers<N: From<TagGroup>>(annotations: Vec<Identifier>, parent: &mut Vec<N>) {
+  parent.extend(
+    annotations
+      .into_iter()
+      .map(|annotation| tag_group(Tag::LINK, [annotation]).into()),
+  );
+}
+
+/// Puts a row or row group's links in its last cell, or with the table's links when it has none.
+fn push_row_links(
+  annotations: Vec<Identifier>,
+  cell: Option<&mut TagGroup>,
+  table_links: &mut Vec<Identifier>,
+) {
+  match cell {
+    Some(cell) => push_link_wrappers(annotations, &mut cell.children),
+    None => table_links.extend(annotations),
   }
 }
 
