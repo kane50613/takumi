@@ -114,7 +114,7 @@ impl RestrictedFiles {
 impl Fonts {
   /// Hands over the file an `@font-face` `src` names, as [`RenderNeeds::font_files`] reports it. A file
   /// that is not a usable font fails, as Blink's OTS sanitizing fails a load, so the host can
-  /// record it with [`Self::fail_font_file`].
+  /// record it with [`Self::with_failed_font_files`].
   ///
   /// [`RenderNeeds::font_files`]: crate::layout::needs::RenderNeeds::font_files
   pub fn load_font_file(
@@ -138,14 +138,9 @@ impl Fonts {
     Ok(())
   }
 
-  /// Whether the file `url` names has loaded or failed to.
-  pub fn has_font_file(&self, url: &str) -> bool {
-    self.registry.font_files.contains_key(url)
-  }
-
   /// Lets go of the file `url` names, so a rule waits on it again; false when it held none.
   pub fn forget_font_file(&mut self, url: &str) -> bool {
-    if !self.has_font_file(url) {
+    if !self.registry.font_files.contains_key(url) {
       return false;
     }
 
@@ -173,14 +168,6 @@ impl Fonts {
     }
 
     fonts
-  }
-
-  /// Records that the file `url` names failed to load, so a rule moves on to its next `src`.
-  pub fn fail_font_file(&mut self, url: impl Into<Arc<str>>) {
-    let registry = Arc::make_mut(&mut self.registry);
-
-    registry.revise();
-    registry.font_files.insert(url.into(), FontFile::Failed);
   }
 }
 

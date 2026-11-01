@@ -119,14 +119,18 @@ fn load_font_files(fonts: &mut Fonts, mut reached: impl FnMut(&Fonts) -> BTreeSe
       return;
     }
 
-    for url in urls {
-      match fs::read(repo_base_path(&url)) {
-        Ok(bytes) => fonts
-          .load_font_file(url.as_str(), FontSource::from(bytes))
-          .unwrap_or_else(|_| fonts.fail_font_file(url.as_str())),
-        Err(_) => fonts.fail_font_file(url.as_str()),
-      }
-    }
+    let failed: Vec<String> = urls
+      .into_iter()
+      .filter(|url| {
+        fs::read(repo_base_path(url)).map_or(true, |bytes| {
+          fonts
+            .load_font_file(url.as_str(), FontSource::from(bytes))
+            .is_err()
+        })
+      })
+      .collect();
+
+    *fonts = fonts.with_failed_font_files(&failed);
   }
 }
 

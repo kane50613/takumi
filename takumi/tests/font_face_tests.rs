@@ -48,7 +48,7 @@ fn a_failed_source_moves_the_rule_on_to_its_next() {
 
   assert_eq!(reached(&fonts, &css, "Face", "a"), urls(["missing.woff2"]));
 
-  fonts.fail_font_file("missing.woff2");
+  fonts = fonts.with_failed_font_files(&["missing.woff2".to_string()]);
   assert_eq!(reached(&fonts, &css, "Face", "a"), urls([MANROPE]));
 
   fonts
