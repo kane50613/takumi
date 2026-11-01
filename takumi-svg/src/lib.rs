@@ -37,6 +37,7 @@ use quick_xml::{
   events::{BytesEnd, BytesStart, BytesText, Event},
 };
 pub use render::{SvgOptions, render};
+use rustc_hash::FxHashMap;
 use takumi_core::{
   context::RenderContext,
   filter::ColorMatrix,
@@ -166,7 +167,7 @@ pub(crate) struct SvgDocument {
   glyph_ids: HashMap<String, u32>,
   /// Interned ids by outline and the linear part of its placement, so a repeated glyph skips
   /// formatting its path. `None` for an outline that draws nothing.
-  glyph_keys: HashMap<(u64, [u32; 4]), Option<u32>>,
+  glyph_keys: FxHashMap<(u64, [u32; 4]), Option<u32>>,
   /// `data:` URLs by what they encode, `None` for an image that would not encode.
   image_hrefs: HashMap<ImageKey, Option<Rc<str>>>,
   /// Images drawn at their own pixel size, emitted as `<defs>` by [`Self::finish`].
@@ -197,7 +198,7 @@ impl SvgDocument {
       next_id: 0,
       glyph_defs: Vec::new(),
       glyph_ids: HashMap::new(),
-      glyph_keys: HashMap::new(),
+      glyph_keys: FxHashMap::default(),
       image_hrefs: HashMap::new(),
       image_defs: Vec::new(),
       image_ids: HashMap::new(),

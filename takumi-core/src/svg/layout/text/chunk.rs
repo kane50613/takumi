@@ -1,6 +1,6 @@
 //! A `text`'s characters in anchored chunks, after usvg's text tree.
 
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 use super::{
   BaselineOffset, DecorationStyle, Decorations, LengthAdjust, Scope, SpanStyle, Styled, SvgLayout,
@@ -16,6 +16,7 @@ use crate::{
   style::{Direction, DominantBaseline, Length, TextDecorationLines, UnicodeBidi, Visibility},
   svg::{element::SvgElementKind, length::LengthAxis},
 };
+use rustc_hash::FxHashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum XmlSpace {
@@ -80,7 +81,7 @@ struct ChunkState {
   /// Set once the budget is spent, which ends the walk.
   exhausted: bool,
   /// The style of the characters of each element, made once.
-  styles: HashMap<usize, Option<Rc<SpanStyle>>>,
+  styles: FxHashMap<usize, Option<Rc<SpanStyle>>>,
   chars: usize,
   chunk_bytes: usize,
   split_chunk: bool,
@@ -512,7 +513,7 @@ impl TextTree {
       .unwrap_or_default();
     let mut state = ChunkState {
       exhausted: false,
-      styles: HashMap::new(),
+      styles: FxHashMap::default(),
       chars: 0,
       chunk_bytes: 0,
       split_chunk: false,

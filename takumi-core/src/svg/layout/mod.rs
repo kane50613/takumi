@@ -16,11 +16,12 @@ mod text;
 mod use_element;
 mod view_box;
 
+use std::rc::Rc;
 #[cfg(feature = "svg-raster")]
 use std::sync::Arc;
-use std::{collections::HashMap, rc::Rc};
 
 use cssparser::Parser;
+use rustc_hash::FxHashMap;
 
 use self::{
   budget::Budget,
@@ -88,23 +89,23 @@ pub(super) struct SvgLayout<'a> {
   styles: StyleResolver<'a>,
   /// The clip paths and masks laid out, by element and the viewport their percentages resolved
   /// against.
-  clip_paths: HashMap<(usize, [u32; 4]), Rc<LayoutClip>>,
-  masks: HashMap<(usize, [u32; 4]), Rc<LayoutMask>>,
+  clip_paths: FxHashMap<(usize, [u32; 4]), Rc<LayoutClip>>,
+  masks: FxHashMap<(usize, [u32; 4]), Rc<LayoutMask>>,
   /// The filters in user units, by element and the viewport their percentages resolved against.
   #[cfg(feature = "svg-raster")]
-  filters: HashMap<(usize, [u32; 4]), Arc<SvgFilter>>,
+  filters: FxHashMap<(usize, [u32; 4]), Arc<SvgFilter>>,
   /// Whether each clip path or mask, or one it chains to, is in bounding box units.
-  bounding_box_units: HashMap<(clip_mask::Resource, usize), bool>,
+  bounding_box_units: FxHashMap<(clip_mask::Resource, usize), bool>,
   /// The paint servers laid out, by element and the viewport their percentages resolved against.
-  paint_servers: HashMap<(usize, [u32; 4]), Paint>,
+  paint_servers: FxHashMap<(usize, [u32; 4]), Paint>,
   /// The images decoded so far by the element that names them.
-  images: HashMap<usize, Option<(ImageContent, Size<f32>)>>,
+  images: FxHashMap<usize, Option<(ImageContent, Size<f32>)>>,
   /// The `use` elements and resources being laid out, which may not contain themselves.
   active: Vec<usize>,
   /// The outlines of the shapes `textPath` elements name, by the element.
-  text_paths: HashMap<usize, Rc<text::TextPathShape>>,
+  text_paths: FxHashMap<usize, Rc<text::TextPathShape>>,
   /// The position and rotation lists of the elements in a `text`, by the element.
-  position_lists: HashMap<usize, Rc<text::PositionLists>>,
+  position_lists: FxHashMap<usize, Rc<text::PositionLists>>,
   /// The size the root is laid out at.
   viewport: Size<f32>,
   /// The device pixels per CSS pixel the root scales by, Blink's effective zoom of an inline `svg`.
@@ -141,15 +142,15 @@ impl<'a> SvgLayout<'a> {
         SvgHost::Image { .. } => 1.0,
         SvgHost::Inline(context) => context.sizing.viewport.effective_dpr(),
       },
-      clip_paths: HashMap::new(),
-      masks: HashMap::new(),
+      clip_paths: FxHashMap::default(),
+      masks: FxHashMap::default(),
       #[cfg(feature = "svg-raster")]
-      filters: HashMap::new(),
-      bounding_box_units: HashMap::new(),
-      paint_servers: HashMap::new(),
-      images: HashMap::new(),
-      text_paths: HashMap::new(),
-      position_lists: HashMap::new(),
+      filters: FxHashMap::default(),
+      bounding_box_units: FxHashMap::default(),
+      paint_servers: FxHashMap::default(),
+      images: FxHashMap::default(),
+      text_paths: FxHashMap::default(),
+      position_lists: FxHashMap::default(),
       active: Vec::new(),
       image_depth,
       budget: Budget::default(),

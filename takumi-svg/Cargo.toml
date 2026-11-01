@@ -10,6 +10,7 @@ rust-version = "1.91"
 
 [dependencies]
 quick-xml.workspace = true
+rustc-hash.workspace = true
 tiny-skia.workspace = true
 typed-builder.workspace = true
 

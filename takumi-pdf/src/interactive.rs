@@ -3,10 +3,11 @@
 
 use std::{
   cell::RefCell,
-  collections::{HashMap, HashSet, hash_map::Entry},
+  collections::{HashMap, hash_map::Entry},
   str::from_utf8,
 };
 
+use rustc_hash::{FxHashMap, FxHashSet};
 use takumi_core::{
   context::BoxId,
   font_style::SizedFontStyle,
@@ -55,7 +56,7 @@ pub(crate) struct PageSummary {
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
   pub(crate) headings: Vec<HeadingTarget>,
   /// Where every box sits, by its node's source order, when asked for.
-  pub(crate) extents: Option<HashMap<usize, BoxExtent>>,
+  pub(crate) extents: Option<FxHashMap<usize, BoxExtent>>,
 }
 
 /// A laid-out box's vertical extent in content coordinates.
@@ -159,7 +160,7 @@ impl PageSummary {
     Self {
       anchors: HashMap::new(),
       headings: Vec::new(),
-      extents: extents.then(HashMap::new),
+      extents: extents.then(FxHashMap::default),
     }
   }
 
@@ -312,7 +313,7 @@ impl PageSummary {
   }
 
   /// The element paths a destination can point at, which need structure ids.
-  pub(crate) fn destination_targets(&self) -> HashSet<Vec<usize>> {
+  pub(crate) fn destination_targets(&self) -> FxHashSet<Vec<usize>> {
     self
       .anchors
       .values()

@@ -1,5 +1,5 @@
 use pdf_writer::{Chunk, Finish, Name, Pdf, Ref, Str, TextStr};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::OnceLock;
 use xmp_writer::{RenditionClass, XmpWriter};
 
@@ -103,7 +103,7 @@ impl ChunkContainer {
     sc: &mut SerializeContext,
   ) -> KrillaResult<(Pdf, Ref, Option<ObjectStreams>)> {
     let mut remapped_ref = Ref::new(1);
-    let mut remapper = HashMap::new();
+    let mut remapper = FxHashMap::default();
 
     // Allows us to estimate the capacity we will need for the new PDF.
     let mut chunks_byte_len = 0;
@@ -385,7 +385,7 @@ impl ChunkContainer {
 
 pub(crate) struct EmbeddedPdfChunk {
   pub(crate) original_chunk: Chunk,
-  pub(crate) root_ref_mappings: HashMap<Ref, Ref>,
+  pub(crate) root_ref_mappings: FxHashMap<Ref, Ref>,
   pub(crate) new_chunk: OnceLock<Chunk>,
 }
 

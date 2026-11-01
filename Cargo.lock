@@ -1666,6 +1666,7 @@ dependencies = [
  "libz-rs-sys",
  "png",
  "rayon",
+ "rustc-hash",
  "serde",
  "serde_json",
  "skrifa",
@@ -1682,6 +1683,7 @@ name = "takumi-svg"
 version = "0.3.34"
 dependencies = [
  "quick-xml",
+ "rustc-hash",
  "takumi-core",
  "tiny-skia",
  "typed-builder",

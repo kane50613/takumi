@@ -1,7 +1,7 @@
 //! Blink's [`FontFallbackIterator`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc).
 //! Approximate: system fallback also records pending faces, which Blink never picks there.
 
-use std::{collections::HashSet, rc::Rc};
+use std::rc::Rc;
 
 use super::{
   font_data_for_range_set::FontDataForRangeSet,
@@ -11,6 +11,7 @@ use super::{
   simple_font_data::SimpleFontData,
 };
 use crate::text::character::has_likely_script;
+use rustc_hash::FxHashSet;
 
 /// Blink's `HintCharList`.
 pub(crate) type HintCharList = Vec<char>;
@@ -33,9 +34,9 @@ pub(crate) struct FontFallbackIterator<'a> {
   segmented_face_index: usize,
   fallback_stage: FallbackStage,
   font_fallback_priority: FontFallbackPriority,
-  previously_asked_for_hint: HashSet<char>,
+  previously_asked_for_hint: FxHashSet<char>,
   /// The faces returned whole, by font blob id and face index: Blink's typeface ids.
-  unique_font_data_for_range_sets_returned: HashSet<(u64, u32)>,
+  unique_font_data_for_range_sets_returned: FxHashSet<(u64, u32)>,
   first_candidate: Option<FontDataForRangeSet>,
   /// Blink's `tracked_loading_range_sets_`.
   tracked_loading_range_sets: Vec<PendingFace>,
@@ -52,8 +53,8 @@ impl<'a> FontFallbackIterator<'a> {
       segmented_face_index: 0,
       fallback_stage: FallbackStage::FontGroupFonts,
       font_fallback_priority,
-      previously_asked_for_hint: HashSet::new(),
-      unique_font_data_for_range_sets_returned: HashSet::new(),
+      previously_asked_for_hint: FxHashSet::default(),
+      unique_font_data_for_range_sets_returned: FxHashSet::default(),
       first_candidate: None,
       tracked_loading_range_sets: Vec::new(),
     }

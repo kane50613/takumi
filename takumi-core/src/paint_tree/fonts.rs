@@ -1,8 +1,7 @@
 //! The font instance table runs reference by index.
 
-use std::collections::HashMap;
-
 use crate::resources::font::FontBlob;
+use rustc_hash::FxHashMap;
 use skrifa::{FontRef, MetadataProvider, attribute::Style};
 
 use super::document::{PaintFont, PaintVariation};
@@ -36,7 +35,7 @@ impl FontKey {
 /// Deduplicates the font instances the runs use.
 #[derive(Default)]
 pub(super) struct FontTable {
-  indices: HashMap<FontKey, usize>,
+  indices: FxHashMap<FontKey, usize>,
   fonts: Vec<PaintFont>,
   data: Vec<FontBlob>,
 }

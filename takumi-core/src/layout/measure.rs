@@ -1,7 +1,6 @@
 //! Where a laid-out tree puts each box and text run, for callers that measure instead of paint.
 
-use std::collections::HashMap;
-
+use rustc_hash::FxHashMap;
 use serde::Serialize;
 
 use crate::{
@@ -59,7 +58,7 @@ impl MeasuredNode {
       transform: Affine::IDENTITY,
       container_size,
     })];
-    let mut measured_by_node_id: HashMap<usize, MeasuredNode> = HashMap::new();
+    let mut measured_by_node_id: FxHashMap<usize, MeasuredNode> = FxHashMap::default();
     let mut containing_blocks = ContainingBlocks::default();
 
     while let Some(visit) = visits.pop() {
