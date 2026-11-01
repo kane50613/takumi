@@ -60,8 +60,8 @@ describe("FontRegistry", () => {
 
     expect(backend.registerFont).not.toHaveBeenCalled();
     expect(backend.cachedFonts.mock.calls.filter(([, pin]) => pin)).toEqual([
-      ["Inter::", true],
-      ["Inter::", true],
+      ["Inter::::", true],
+      ["Inter::::", true],
     ]);
   });
 
@@ -103,6 +103,31 @@ describe("FontRegistry", () => {
     await fonts.register(buffer);
     await fonts.register(buffer);
     await fonts.register(new Uint8Array([1]));
+
+    expect(backend.registerFont).toHaveBeenCalledTimes(2);
+  });
+
+  test("registers one buffer again under another family, weight, style or unicodeRange", async () => {
+    const { backend, fonts } = fontBackend();
+    const data = new Uint8Array([1]);
+
+    await fonts.register({ name: "Alpha", data });
+    await fonts.register({ name: "Beta", data });
+    await fonts.register({ name: "Beta", data, weight: 700 });
+    await fonts.register({ name: "Beta", data, style: "italic" });
+    await fonts.register({ name: "Beta", data, unicodeRange: [[0x41, 0x5a]] });
+    await fonts.register({ name: "Beta", data, unicodeRange: [[0x41, 0x5a]] });
+
+    expect(
+      backend.registerFont.mock.calls.map(([font]) => ("name" in font ? font.name : "")),
+    ).toEqual(["Alpha", "Beta", "Beta", "Beta", "Beta"]);
+  });
+
+  test("keys a lazy font by its unicodeRange", async () => {
+    const { backend, fonts } = fontBackend();
+
+    await fonts.register({ ...font("Inter"), unicodeRange: [[0x00, 0x7f]] });
+    await fonts.register({ ...font("Inter"), unicodeRange: [[0x400, 0x4ff]] });
 
     expect(backend.registerFont).toHaveBeenCalledTimes(2);
   });

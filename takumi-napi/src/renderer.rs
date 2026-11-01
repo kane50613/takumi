@@ -19,7 +19,7 @@ use crate::{
   map_error,
   measure_task::MeasureTask,
   needs_task::{AnimationNeedsTask, NeedsTask},
-  parse_font_input, read_options,
+  read_font, read_options,
   render_animation_task::{AnimationInput, RenderAnimationTask},
   render_job::RenderJob,
   render_task::RenderTask,
@@ -294,13 +294,12 @@ impl Renderer {
     pinned: bool,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
-    let (info, buffer) = parse_font_input(env, font)?;
+    let resource = read_font(env, font, &self.state.font_state.load().fonts)?;
 
     Ok(AsyncTask::with_optional_signal(
       LoadFontTask {
         state: Arc::clone(&self.state),
-        buffer,
-        info,
+        resource: Some(resource),
         key,
         pinned,
       },

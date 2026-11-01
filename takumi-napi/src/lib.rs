@@ -31,7 +31,10 @@ use takumi_bindings_common::{
 use takumi_core::html::{FromHtmlOptions, parse_html};
 use takumi_core::{
   layout::node::Node,
-  resources::glyph_cache,
+  resources::{
+    font::{FontResource, Fonts},
+    glyph_cache,
+  },
   style::{CssSource, KeyframesRule, StyleSheet},
 };
 
@@ -108,38 +111,54 @@ impl JsBytes {
   }
 
   pub(crate) fn from_object(env: Env, value: Object) -> Result<Self> {
-    if value.is_buffer()? {
-      let buffer = unsafe { BufferSlice::from_napi_value(env.raw(), value.raw()) }?;
-      return Ok(Self(Box::from(&*buffer)));
-    }
-
-    if value.is_typedarray()? {
-      let array = unsafe { Uint8ArraySlice::from_napi_value(env.raw(), value.raw()) }?;
-      return Ok(Self(Box::from(&*array)));
-    }
-
-    if value.is_arraybuffer()? {
-      let buffer = unsafe { ArrayBuffer::from_napi_value(env.raw(), value.raw()) }?;
-      return Ok(Self(Box::from(&*buffer)));
-    }
-
-    Err(Error::from_reason(
-      "Expected Buffer, ArrayBuffer, or Uint8Array".to_owned(),
-    ))
+    read_bytes(env, value, |bytes| Self(Box::from(bytes)))
   }
 }
 
-pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontOptions, JsBytes)> {
-  if let Ok(buffer) = JsBytes::from_object(env, font) {
-    Ok((FontOptions::default(), buffer))
-  } else {
-    let buffer = font
-      .get_named_property("data")
-      .and_then(|buffer| JsBytes::from_object(env, buffer))?;
-    let font: FontOptions = deserialize_with_tracing(font).map_err(map_error)?;
-
-    Ok((font, buffer))
+/// Calls `read` with the bytes of a JS buffer, borrowed for the call alone.
+fn read_bytes<R>(env: Env, value: Object, read: impl FnOnce(&[u8]) -> R) -> Result<R> {
+  if value.is_buffer()? {
+    let buffer = unsafe { BufferSlice::from_napi_value(env.raw(), value.raw()) }?;
+    return Ok(read(&buffer));
   }
+
+  if value.is_typedarray()? {
+    let array = unsafe { Uint8ArraySlice::from_napi_value(env.raw(), value.raw()) }?;
+    return Ok(read(&array));
+  }
+
+  if value.is_arraybuffer()? {
+    let buffer = unsafe { ArrayBuffer::from_napi_value(env.raw(), value.raw()) }?;
+    return Ok(read(&buffer));
+  }
+
+  Err(Error::from_reason(
+    "Expected Buffer, ArrayBuffer, or Uint8Array".to_owned(),
+  ))
+}
+
+/// The font a `Font` input describes, copied unless [`Fonts::resolved`] finds its bytes.
+pub(crate) fn read_font(env: Env, font: Object, fonts: &Fonts) -> Result<FontResource<'static>> {
+  let resolve = |info: FontOptions, data: Object| {
+    read_bytes(env, data, |bytes| {
+      let resource = info.resource(bytes).map_err(map_error)?;
+
+      Ok(
+        fonts
+          .resolved(&resource)
+          .unwrap_or_else(|| resource.into_owned()),
+      )
+    })?
+  };
+
+  if font.is_buffer()? || font.is_typedarray()? || font.is_arraybuffer()? {
+    return resolve(FontOptions::default(), font);
+  }
+
+  resolve(
+    deserialize_with_tracing(font)?,
+    font.get_named_property("data")?,
+  )
 }
 
 pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Result<T> {

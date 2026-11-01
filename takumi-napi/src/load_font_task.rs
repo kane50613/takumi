@@ -1,16 +1,14 @@
-use std::{mem::take, sync::Arc};
+use std::sync::Arc;
 
 use napi::bindgen_prelude::*;
 
-use takumi_bindings_common::input::FontOptions;
 use takumi_core::resources::font::FontResource;
 
-use crate::{JsBytes, RegisteredFamily, map_error, renderer::RendererState};
+use crate::{RegisteredFamily, map_error, renderer::RendererState};
 
 pub struct LoadFontTask {
   pub(crate) state: Arc<RendererState>,
-  pub(crate) buffer: JsBytes,
-  pub(crate) info: FontOptions,
+  pub(crate) resource: Option<FontResource<'static>>,
   pub(crate) key: Option<String>,
   pub(crate) pinned: bool,
 }
@@ -22,9 +20,9 @@ impl Task for LoadFontTask {
   /// Decompresses the font off the JS thread, the costly part of loading it.
   fn compute(&mut self) -> Result<Self::Output> {
     self
-      .info
-      .resource(take(&mut self.buffer).into_vec())
-      .map_err(map_error)?
+      .resource
+      .take()
+      .ok_or_else(|| Error::from_reason("The font was already loaded"))?
       .into_resolved()
       .map_err(map_error)
   }

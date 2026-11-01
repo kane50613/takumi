@@ -2,7 +2,7 @@ use std::{assert_matches, fs, sync::Arc};
 
 use takumi::{prelude::*, render, render_svg};
 
-use crate::test_utils::{rasterize_svg, repo_base_path};
+use crate::test_utils::{rasterize_svg, repo_base_path, write_goldens};
 
 fn read_font(path: &str) -> Vec<u8> {
   fs::read(repo_base_path("assets/fonts").join(path)).unwrap()
@@ -286,4 +286,86 @@ fn unregister_removes_every_subset() {
     pixel_diff(&render_devanagari(&fonts, "Alpha"), &registered),
     0
   );
+}
+
+const REREGISTERED_SIZE: (u32, u32) = (360, 180);
+
+fn reregistered_fonts() -> Fonts {
+  let mut fonts = Fonts::default();
+  let regular = read_font("poppins/poppins-v24-devanagari_latin-regular.woff2");
+
+  for (family, weight, style) in [
+    ("Alpha", None, None),
+    ("Beta", Some(400.0), None),
+    ("Beta", Some(700.0), None),
+    ("Beta", None, Some(FontStyle::italic())),
+  ] {
+    fonts
+      .register(
+        FontResource::new(regular.clone()).override_info(FontOverride {
+          family_name: Some(family.into()),
+          weight,
+          style,
+          ..Default::default()
+        }),
+      )
+      .unwrap();
+  }
+
+  fonts
+}
+
+fn render_reregistered(fonts: &Fonts, declaration: &str) -> Bitmap {
+  let html = format!(
+    r#"<div style="display: flex; width: 360px; height: 180px; background-color: white; color: black; font-size: 48px; {declaration}">Ticket 7</div>"#
+  );
+
+  render(
+    RenderOptions::builder()
+      .viewport(Viewport::new(REREGISTERED_SIZE))
+      .node(Node::from_html(&html, FromHtmlOptions::default()).unwrap())
+      .fonts(fonts)
+      .build(),
+  )
+  .unwrap()
+}
+
+/// One file registered under other families, weights and styles draws unsynthesized in each.
+#[test]
+fn a_font_registered_again_under_other_descriptors_keeps_each_face() {
+  let fonts = reregistered_fonts();
+  let alpha = render_reregistered(&fonts, "font-family: Alpha");
+
+  for declaration in [
+    "font-family: Beta",
+    "font-family: Beta; font-weight: 700",
+    "font-family: Beta; font-style: italic",
+  ] {
+    assert_eq!(
+      pixel_diff(&render_reregistered(&fonts, declaration), &alpha),
+      0,
+      "{declaration}"
+    );
+  }
+
+  let rows = [
+    "font-family: Alpha",
+    "font-family: Beta; font-weight: 700",
+    "font-family: Beta; font-style: italic",
+  ]
+  .map(|declaration| format!(r#"<span style="{declaration}">Ticket 7</span>"#))
+  .join("");
+  let html = format!(
+    r#"<div style="display: flex; flex-direction: column; width: 360px; height: 180px; background-color: white; color: black; font-size: 40px">{rows}</div>"#
+  );
+
+  write_goldens(
+    RenderOptions::builder()
+      .viewport(Viewport::new(REREGISTERED_SIZE))
+      .node(Node::from_html(&html, FromHtmlOptions::default()).unwrap())
+      .fonts(&fonts)
+      .build(),
+    "font_registered_again_under_other_descriptors",
+  )
+  .unwrap();
 }
