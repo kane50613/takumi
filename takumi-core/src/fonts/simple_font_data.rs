@@ -56,8 +56,9 @@ impl SimpleFontData {
       .map_or(size, |size_adjust| size * size_adjust);
     let font = face.typeface.font_ref()?;
     let units_per_em = font.head().ok()?.units_per_em();
-    let space_glyph = face
-      .glyph(&font, ' ')
+    let space_glyph = font
+      .charmap()
+      .map(' ')
       .map_or(0, |glyph| glyph.to_u32() as u16);
     let axes = font.axes();
     let mut variations: Vec<Variation> = Vec::new();
@@ -197,10 +198,10 @@ impl SimpleFontData {
       );
 
       Some(PrimaryFontMetrics::of(
-        &self.face,
         &font,
         self.size,
         (&location).into(),
+        self.face.metrics_override,
       ))
     })
   }

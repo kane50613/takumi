@@ -749,17 +749,15 @@ pub(crate) struct ExactFontMetrics {
 }
 
 impl PrimaryFontMetrics {
-  /// The metrics of `face`, whose data `font_ref` reads, at `font_size` and `location`, with
-  /// those its `metrics_override` replaces, rounded as Blink's `SimpleFontData::PlatformInit`
-  /// rounds Skia's.
+  /// The metrics of `font_ref` at `font_size` and `location`, with those `metrics_override`
+  /// replaces, rounded as Blink's `SimpleFontData::PlatformInit` rounds Skia's.
   pub(crate) fn of(
-    face: &MatchedFace,
     font_ref: &FontRef,
     font_size: f32,
     location: LocationRef<'_>,
+    metrics_override: FontMetricsOverride,
   ) -> Self {
-    let metrics_override = face.metrics_override;
-    let zero = face.glyph(font_ref, '0');
+    let zero = font_ref.charmap().map('0');
     let metrics = font_ref.metrics(Size::new(font_size), location);
     let ascent = metrics_override
       .ascent
@@ -788,7 +786,7 @@ impl PrimaryFontMetrics {
         .average_width
         .filter(|&width| width != 0.0)
         .or_else(|| {
-          let glyph = face.glyph(font_ref, 'x')?;
+          let glyph = font_ref.charmap().map('x')?;
 
           font_ref
             .glyph_metrics(Size::new(font_size), location)
