@@ -170,6 +170,13 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    title: "Nathan Brodin",
+    image: "https://brodin.dev/og",
+    url: "https://brodin.dev",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
