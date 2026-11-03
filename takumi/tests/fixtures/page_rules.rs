@@ -68,3 +68,32 @@ fn page_rules() {
     write_image(page, &mut file, OutputFormat::WebPLossless).unwrap();
   }
 }
+
+/// `vw` and `vh` in an `@page` rule take the fractional page size.
+#[test]
+fn page_rules_viewport_units() {
+  let stylesheet = Arc::new(StyleSheet::parse("@page { size: 100vw 100vh; margin: 0 }").unwrap());
+  let options = RenderOptions::builder()
+    .viewport(Viewport::new((200, 200)))
+    .node(Node::container([]))
+    .fonts(&CONTEXT)
+    .stylesheet(Arc::clone(&stylesheet))
+    .build();
+  let sizer = PageSizer::from_page_rules(
+    stylesheet,
+    Size {
+      width: 200.9,
+      height: 100.9,
+    },
+    Rect::all(0.0),
+  );
+  let mut sizes = Vec::new();
+
+  render_pages(options, sizer, 1, |page| {
+    sizes.push((page.width(), page.height()));
+    Ok(())
+  })
+  .unwrap();
+
+  assert_eq!(sizes, [(201, 101)]);
+}
