@@ -88,8 +88,10 @@ impl<'r> PagedLayout<'r> {
 
     let page = self.page_count();
     let page_size = self.sizer.size(page);
+    let top = self.sizes.top(page);
+    let bottom = top + page_size.height;
 
-    if !page_size.has_area() || !(self.sizes.top(page) + page_size.height).is_finite() {
+    if !page_size.has_area() || !bottom.is_finite() || bottom <= top {
       return Err(Error::InvalidPageSize);
     }
 
