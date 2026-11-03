@@ -12,6 +12,7 @@ pub(crate) struct PerPage<T> {
   right: T,
 }
 
+#[cfg(test)]
 impl<T: Clone> PerPage<T> {
   /// `value` for every page.
   pub(crate) fn uniform(value: T) -> Self {
