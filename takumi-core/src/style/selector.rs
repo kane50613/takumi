@@ -1139,10 +1139,11 @@ fn parse_at_rule_prelude<'i>(
     return Ok(AtRulePrelude::FontFace);
   }
 
-  if name.eq_ignore_ascii_case("page") {
-    return PageSelector::parse(input)
-      .map(AtRulePrelude::Page)
-      .ok_or_else(ParseError::unexpected_token);
+  // Blink's `ConsumePageRule` drops a rule whose selector `ParsePageSelector` rejects.
+  if name.eq_ignore_ascii_case("page")
+    && let Ok(selector) = input.try_parse(|input| PageSelector::parse(input).ok_or(()))
+  {
+    return Ok(AtRulePrelude::Page(selector));
   }
 
   if name.eq_ignore_ascii_case("property") {

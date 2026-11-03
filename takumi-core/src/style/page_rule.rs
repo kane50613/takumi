@@ -277,6 +277,8 @@ impl PageDescriptors {
   }
 
   /// Reads one declaration, dropping one that is not valid as Blink's `ParsePageDescriptor` does.
+  /// Approximate: a `var()` is dropped too, where Blink resolves it against the root's custom
+  /// properties.
   fn set(&mut self, name: &str, input: &mut Parser) {
     let side = |input: &mut Parser| input.try_parse(Length::from_css).ok().map(Some);
     let margin = |margin| Self { size: None, margin };
@@ -496,7 +498,7 @@ mod tests {
       "@page :first, :left { margin: 1px }",
       "@page :first:left { margin: 1px }",
     ] {
-      let sheet = StyleSheet::parse_loosy(css);
+      let sheet = StyleSheet::parse(css).expect("a rule Blink drops leaves the sheet valid");
       let print = Viewport::default().with_media_target(MediaTarget::Print);
 
       assert_eq!(
