@@ -23,18 +23,24 @@ function runs(tree: PaintTree): TextRun[] {
 describe("Painter.paint", () => {
   it("frees one tree without freeing the painter or another tree", async () => {
     const local = new Painter();
+
     try {
       const first = await local.paint(text("dispose"));
-      const snapshot = first.toJSON();
       const second = await local.paint(text("dispose"));
+      const snapshot = first.toJSON();
+
       first.free();
       first.free();
+      expect(() => first.toJSON()).toThrow("The paint tree was freed");
+      expect(() => runs(first)[0]?.outlines()).toThrow("The paint tree was freed");
+      expect(first.nodes.length).toBeGreaterThan(0);
       expect(second.toJSON()).toEqual(snapshot);
       second.free();
+
       const third = await local.paint(text("dispose"));
+
       expect(third.toJSON()).toEqual(snapshot);
       third.free();
-      expect(snapshot.tree.nodes.length).toBeGreaterThan(0);
     } finally {
       local.free();
     }

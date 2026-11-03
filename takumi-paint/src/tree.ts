@@ -159,9 +159,9 @@ export interface PaintTree {
    */
   toJSON(): SerializedPaintTree;
   /**
-   * Release the font files and glyph outlines held in wasm memory. Calling this more than once
-   * is safe. After release, do not call `toJSON()`, `Font.data()`, or `TextRun.outlines()`.
-   * Plain JSON snapshots and node geometry remain usable. This does not free the painter.
+   * Releases the font files and glyph outlines the tree holds in wasm memory, which garbage
+   * collection otherwise releases at no set time. Calling it again does nothing. Afterwards
+   * `toJSON()`, `TextRun.outlines()`, and a `Font.data()` not read before throw.
    */
   free(): void;
 }
@@ -195,13 +195,14 @@ export class PaintTreeView implements PaintTree {
   readonly root: BoxNode;
   readonly nodes: readonly PaintNode[];
   readonly #raw: RawPaintTree;
-  readonly #files: PaintedFiles;
+  readonly #files: ReleasableFiles;
   readonly #listing: Listing;
   #steps: readonly PaintStep[] | undefined;
-  #freed = false;
 
-  /** Wraps the serialized tree `raw`, reading font files and run outlines from `files`. */
-  constructor(raw: RawPaintTree, files: PaintedFiles) {
+  /** Wraps the serialized tree `raw`, reading font files and run outlines from `painted`. */
+  constructor(raw: RawPaintTree, painted: PaintedFiles) {
+    const files = new ReleasableFiles(painted);
+
     this.#raw = raw;
     this.#files = files;
     this.width = raw.width;
@@ -258,9 +259,37 @@ export class PaintTreeView implements PaintTree {
   }
 
   free(): void {
-    if (this.#freed) return;
-    this.#freed = true;
     this.#files.free();
+  }
+}
+
+/** A tree's files until `free()` releases them, after which reading them throws. */
+class ReleasableFiles implements PaintedFiles {
+  #files: PaintedFiles | undefined;
+
+  constructor(files: PaintedFiles) {
+    this.#files = files;
+  }
+
+  free(): void {
+    this.#files?.free();
+    this.#files = undefined;
+  }
+
+  fontData(index: number): Uint8Array | undefined {
+    return this.#live().fontData(index);
+  }
+
+  runOutlines(node: number, run: number): readonly (string | null)[] | undefined {
+    return this.#live().runOutlines(node, run);
+  }
+
+  #live(): PaintedFiles {
+    if (!this.#files) {
+      throw new Error("The paint tree was freed");
+    }
+
+    return this.#files;
   }
 }
 

@@ -76,23 +76,24 @@ for (const step of tree.steps) {
 
 ## Release a paint tree
 
-Call `tree.free()` when you have finished reading font files and glyph outlines. This releases
-the tree's WebAssembly resources. You can call it more than once. It does not free the painter
-or other trees.
+A tree holds its font files and glyph outlines in WebAssembly memory. Garbage collection releases
+them at no set time, so call `tree.free()` once you have read what you need. Calling it again does
+nothing, and the painter and other trees stay usable.
 
 ```ts
 const tree = await paint({ type: "text", text: "Hello" });
+
 try {
   const snapshot = tree.toJSON();
-  // The snapshot remains usable after tree.free().
+  // The snapshot stays usable after tree.free().
 } finally {
   tree.free();
 }
 ```
 
-After `free()`, do not call `tree.toJSON()`, `font.data()`, or `run.outlines()`.
-Node geometry and previously copied data remain usable. Call `painter.free()` separately
-when you have finished with a `Painter` instance.
+After `free()`, the tree's nodes and their geometry stay readable. `tree.toJSON()`,
+`run.outlines()`, and a `font.data()` you have not read before throw. Call `painter.free()`
+separately once you have finished with a `Painter`.
 
 ## What the tree holds
 
