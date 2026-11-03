@@ -417,7 +417,7 @@ fn a_page_without_area_fails_and_an_unlaid_page_reaches_nothing() {
   assert!(matches!(
     LayoutResults::compute_pages(
       &breaks,
-      PageSizer::new(move |index| Size {
+      PageSizer::new(move |index, _| Size {
         height: if index == 0 { 16_777_216.0 } else { 1.0 },
         ..page
       }),
