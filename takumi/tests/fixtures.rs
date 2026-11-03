@@ -14,6 +14,8 @@ pub mod html_byte_order_mark;
 pub mod html_parser_recovery;
 #[path = "fixtures/jpeg_output.rs"]
 pub mod jpeg_output;
+#[path = "fixtures/page_rules.rs"]
+pub mod page_rules;
 #[path = "fixtures/paint_bounds_ink_reach.rs"]
 pub mod paint_bounds_ink_reach;
 #[path = "fixtures/paint_bounds_text_ink.rs"]
