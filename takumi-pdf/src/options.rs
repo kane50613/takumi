@@ -876,23 +876,23 @@ impl PageMargins {
     matches!(self.top, PageMargin::Auto) || matches!(self.bottom, PageMargin::Auto)
   }
 
-  /// These margins with each side an `@page` rule sets replaced. A percentage takes `page`'s
-  /// width on every side, as Blink's `ComputeMarginsForSelf` resolves a page box's margins.
+  /// These margins with each side an `@page` rule sets replaced. A percentage takes `page`'s size
+  /// on its own axis, as Blink's `SetUpSpaceBuilderForPageBox` resolves a page box's margins.
   /// Approximate: `auto` leaves room for the side's band, where Blink's `ResolveAutoMargins` gives
   /// a page box without a `width` or `height` none.
   fn overlaid(self, sides: Rect<Option<Length>>, page: &PageOptions) -> Self {
     let sizing = page.sizing();
-    let side = |current: PageMargin, length: Option<Length>| match length {
+    let side = |current: PageMargin, length: Option<Length>, basis: f32| match length {
       None => current,
       Some(Length::Auto) => PageMargin::Auto,
-      Some(length) => PageMargin::Px(length.to_px(&sizing, page.width)),
+      Some(length) => PageMargin::Px(length.to_px(&sizing, basis)),
     };
 
     Self {
-      top: side(self.top, sides.top),
-      right: side(self.right, sides.right),
-      bottom: side(self.bottom, sides.bottom),
-      left: side(self.left, sides.left),
+      top: side(self.top, sides.top, page.height),
+      right: side(self.right, sides.right, page.width),
+      bottom: side(self.bottom, sides.bottom, page.height),
+      left: side(self.left, sides.left, page.width),
     }
   }
 
@@ -1139,7 +1139,26 @@ pub struct MeasuredSize {
 
 #[cfg(test)]
 mod tests {
-  use super::{PdfError, TakumiError};
+  use takumi_core::{geometry::Rect, style::StyleSheet};
+
+  use super::{PageOptions, PdfError, TakumiError};
+
+  #[test]
+  fn a_margin_percentage_takes_the_page_size_on_its_own_axis() {
+    let stylesheet =
+      StyleSheet::parse("@page { size: 600px 300px; margin: 10% 5% }").expect("parses");
+    let page = *PageOptions::A4.with_page_rules(&stylesheet).get(0);
+
+    assert_eq!(
+      page.margin.resolve(page.size(), None, None),
+      Rect {
+        top: 30.0,
+        right: 30.0,
+        bottom: 30.0,
+        left: 30.0,
+      }
+    );
+  }
 
   #[test]
   fn a_page_limit_from_layout_reads_as_too_many_pages() {
