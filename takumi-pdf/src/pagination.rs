@@ -4,8 +4,7 @@
 use std::collections::HashMap;
 
 use takumi_core::{
-  geometry::Size,
-  layout::{node::Node, tree::RenderNode},
+  layout::{node::Node, page_sizes::PageSizes, tree::RenderNode},
   page_stream::{PageStream, Settle, Settled},
   scene::PageWindows,
 };
@@ -38,11 +37,11 @@ pub(crate) fn reads_layout(node: &Node) -> bool {
 /// says it is settled. Returns how many pages the layout came to.
 pub(crate) fn walk_pages(
   root: &RenderNode,
-  page_size: Size<f32>,
+  sizes: PageSizes,
   settle: Settle<'_>,
   mut visit: impl FnMut(&PageStream<'_>, usize) -> Result<(), PdfError>,
 ) -> Result<usize, PdfError> {
-  let mut stream = PageStream::new(root, page_size, MAX_PAGES);
+  let mut stream = PageStream::new(root, sizes, MAX_PAGES);
 
   loop {
     let Settled { pages, laid } = stream.advance(settle)?;
@@ -186,15 +185,15 @@ impl CountingPass {
     collect: Collect,
   ) -> Result<Self, PdfError> {
     let content = Prepared::new(node, inputs, frame)?;
-    let page_size = frame.page_size();
+    let sizes = frame.page_sizes();
     let extents = collect == Collect::Extents;
     let mut summary = (collect != Collect::Nothing).then(|| PageSummary::new(extents));
-    let pages = walk_pages(&content.root, page_size, settle, |stream, index| {
+    let pages = walk_pages(&content.root, sizes, settle, |stream, index| {
       if let Some(summary) = &mut summary {
         summary.absorb(PageSummary::of_page(
           &content.root,
           stream.view(),
-          page_size,
+          &sizes,
           &stream.pages_of(index),
           extents,
         )?);
@@ -332,7 +331,7 @@ impl Paginated {
   fn lay_out(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
     let (content, repeated) = inputs.prepare_paged(node, frame)?;
     let starts = PageStarts::new(content.page_count, frame.window_height);
-    let mut windows = PageWindows::new(content.page_size);
+    let mut windows = PageWindows::new(content.sizes);
 
     windows.refresh(
       &content.root,
@@ -355,7 +354,7 @@ impl Paginated {
     PageSummary::of_pages(
       &content.root,
       content.layout(),
-      content.page_size,
+      &content.sizes,
       &self.windows,
       extents,
     )
@@ -460,7 +459,7 @@ mod tests {
   fn whole_scene_summary(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> PageSummary {
     let (root, _) = inputs.prepare_root(node, frame).expect("the tree prepares");
     let paged =
-      PagedScene::lay_out(root, frame.page_size(), MAX_PAGES, true).expect("the pages lay out");
+      PagedScene::lay_out(root, frame.page_sizes(), MAX_PAGES, true).expect("the pages lay out");
 
     let scene = paged.into_scene();
 

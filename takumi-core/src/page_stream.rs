@@ -4,8 +4,9 @@ use std::ops::Range;
 
 use crate::{
   Error, Result,
-  geometry::Size,
-  layout::{layout_view::LayoutView, paged_layout::PagedLayout, tree::RenderNode},
+  layout::{
+    layout_view::LayoutView, page_sizes::PageSizes, paged_layout::PagedLayout, tree::RenderNode,
+  },
   scene::{PageWindows, SceneRef},
 };
 
@@ -29,19 +30,19 @@ pub struct PageStream<'r> {
   root: &'r RenderNode,
   layout: PagedLayout<'r>,
   windows: PageWindows,
-  page_size: Size<f32>,
+  sizes: PageSizes,
   handed_over: usize,
   released: usize,
 }
 
 impl<'r> PageStream<'r> {
-  /// Starts laying `root` out on at most `max_pages` pages `page_size`.
-  pub fn new(root: &'r RenderNode, page_size: Size<f32>, max_pages: usize) -> Self {
+  /// Starts laying `root` out on at most `max_pages` pages sized as `sizes` says.
+  pub fn new(root: &'r RenderNode, sizes: PageSizes, max_pages: usize) -> Self {
     Self {
       root,
-      layout: PagedLayout::new(root, page_size, max_pages).with_release(),
-      windows: PageWindows::new(page_size),
-      page_size,
+      layout: PagedLayout::new(root, sizes, max_pages).with_release(),
+      windows: PageWindows::new(sizes),
+      sizes,
       handed_over: 0,
       released: 0,
     }
@@ -110,6 +111,6 @@ impl<'r> PageStream<'r> {
       return Err(Error::PageReleased(released));
     }
 
-    SceneRef::window(self.root, self.layout.view(), self.page_size, &pages, true)
+    SceneRef::window(self.root, self.layout.view(), &self.sizes, &pages, true)
   }
 }

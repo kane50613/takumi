@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
-  layout::{node::Node, tree::RenderNode},
+  layout::{node::Node, page_sizes::PageSizes, tree::RenderNode},
   page_stream::Settle,
   scene::{SceneRef, SceneView},
   style::Color,
@@ -94,11 +94,12 @@ impl PageFrame {
     })
   }
 
-  pub(crate) fn page_size(&self) -> Size<f32> {
-    Size {
+  /// Every page's area, which the content lays out on.
+  pub(crate) fn page_sizes(&self) -> PageSizes {
+    PageSizes::uniform(Size {
       width: self.content_width,
       height: self.window_height,
-    }
+    })
   }
 
   /// The content column: content width, unbounded height. Viewport units
@@ -371,7 +372,7 @@ impl PageDrawing<'_, '_> {
     } = *content;
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let composer = PageComposer::new(self, &frame, &repeatables);
-    let page_size = frame.page_size();
+    let sizes = frame.page_sizes();
     let mut summary = PageSummary::new(false);
     let counted_pages = counts.as_ref().map(|counts| counts.starts.len());
 
@@ -379,7 +380,7 @@ impl PageDrawing<'_, '_> {
       selection = selection.with_pages(pages)?;
     }
 
-    let pages = walk_pages(&root, page_size, settle, |stream, index| {
+    let pages = walk_pages(&root, sizes, settle, |stream, index| {
       let kept = match counted_pages {
         Some(_) => selection.keeps(index),
         None => selection.push_page().is_some(),
@@ -399,7 +400,7 @@ impl PageDrawing<'_, '_> {
           summary.absorb(PageSummary::of_page(
             &root,
             stream.view(),
-            page_size,
+            &sizes,
             &pages,
             false,
           )?);
@@ -464,7 +465,7 @@ impl PageDrawing<'_, '_> {
       starts,
       ..
     } = *paginated;
-    let (page_size, pages) = (content.page_size, content.page_count);
+    let (sizes, pages) = (content.sizes, content.page_count);
     let (root, results) = content.into_parts();
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let plan = PagePlan {
@@ -484,7 +485,7 @@ impl PageDrawing<'_, '_> {
       let scene = SceneRef::window(
         &plan.root,
         results.view(),
-        page_size,
+        &sizes,
         &windows.pages_reaching(slice.index),
         true,
       )?;

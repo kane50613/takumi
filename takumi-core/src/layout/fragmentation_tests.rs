@@ -9,6 +9,7 @@ use crate::{
   geometry::{NodeId, PathCommand, Point, Size},
   layout::{
     node::Node,
+    page_sizes::PageSizes,
     paged_layout::PagedLayout,
     paged_layout_oracles as oracles,
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -123,7 +124,8 @@ fn pages(root: &RenderNode, page_height: f32) -> (BTreeMap<String, Vec<Placed>>,
   oracles::check(root, page_size);
 
   let (results, page_count) =
-    LayoutResults::compute_pages(root, page_size, usize::MAX).expect("pages lay out");
+    LayoutResults::compute_pages(root, PageSizes::uniform(page_size), usize::MAX)
+      .expect("pages lay out");
   let containers: Vec<(usize, Point<f32>)> =
     (0..page_count).map(|page| (page, Point::ZERO)).collect();
   let mut boxes = BTreeMap::new();
@@ -242,10 +244,10 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
   );
   let paged = PagedScene::lay_out(
     tree,
-    Size {
+    PageSizes::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
     false,
   )
@@ -351,21 +353,21 @@ fn paged_layout_stops_at_its_page_limit() {
   );
 
   assert_eq!(
-    LayoutResults::compute_pages(&breaks, page, 3)
+    LayoutResults::compute_pages(&breaks, PageSizes::uniform(page), 3)
       .expect("three pages fit")
       .1,
     3
   );
   assert!(matches!(
-    LayoutResults::compute_pages(&breaks, page, 2),
+    LayoutResults::compute_pages(&breaks, PageSizes::uniform(page), 2),
     Err(Error::TooManyPages(2))
   ));
   assert!(matches!(
-    LayoutResults::compute_pages(&far, page, 4),
+    LayoutResults::compute_pages(&far, PageSizes::uniform(page), 4),
     Err(Error::TooManyPages(4))
   ));
 
-  let mut stepped = PagedLayout::new(&breaks, page, 2);
+  let mut stepped = PagedLayout::new(&breaks, PageSizes::uniform(page), 2);
 
   assert!(stepped.next_page().expect("first page"));
   assert!(stepped.next_page().expect("second page"));
@@ -387,10 +389,10 @@ fn lines_that_ended_stay_on_their_page_in_a_stretched_box() {
   );
   let paged = PagedScene::lay_out(
     tree,
-    Size {
+    PageSizes::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
     false,
   )
@@ -414,10 +416,10 @@ fn a_sliced_box_leaves_its_border_out_where_it_breaks() {
   );
   let (results, page_count) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizes::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
@@ -457,10 +459,10 @@ fn a_later_page_keeps_the_out_of_flow_boxes_an_earlier_one_positioned() {
   );
   let (results, page_count) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizes::uniform(Size {
       width: 300.0,
       height: 192.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
@@ -600,7 +602,8 @@ fn a_tables_finished_rows_free_their_layouts_before_the_table_ends() {
     width: 300.0,
     height: 200.0,
   };
-  let mut layout = PagedLayout::new(&tree, page_size, usize::MAX).with_release();
+  let mut layout =
+    PagedLayout::new(&tree, PageSizes::uniform(page_size), usize::MAX).with_release();
 
   assert!(layout.next_page().expect("page lays out"));
   layout.release(1);
@@ -623,7 +626,8 @@ fn a_tables_rows_still_to_come_drop_their_measures() {
     width: 300.0,
     height: 200.0,
   };
-  let mut layout = PagedLayout::new(&tree, page_size, usize::MAX).with_release();
+  let mut layout =
+    PagedLayout::new(&tree, PageSizes::uniform(page_size), usize::MAX).with_release();
 
   assert!(layout.next_page().expect("page lays out"));
   layout.release(0);
@@ -794,10 +798,10 @@ fn a_short_table_footer_repeats_at_the_end_of_every_page() {
 fn nested_fragments(root: &RenderNode, page_height: f32) -> (Vec<(usize, f32, f32)>, usize) {
   let (results, page_count) = LayoutResults::compute_pages(
     root,
-    Size {
+    PageSizes::uniform(Size {
       width: 300.0,
       height: page_height,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
@@ -1190,10 +1194,10 @@ fn a_fixed_box_starting_on_a_later_page_repeats_from_that_page() {
   );
   let (results, page_count) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizes::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
@@ -1249,10 +1253,10 @@ fn a_fixed_box_inside_a_repeated_fixed_box_repeats_too() {
   );
   let (results, page_count) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizes::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
@@ -1556,7 +1560,7 @@ fn finalized_after_each_page(root: &RenderNode, page_height: f32) -> Vec<usize> 
     width: 300.0,
     height: page_height,
   };
-  let mut layout = PagedLayout::new(root, page_size, usize::MAX);
+  let mut layout = PagedLayout::new(root, PageSizes::uniform(page_size), usize::MAX);
   let mut finalized = Vec::new();
 
   while layout.next_page().expect("page lays out") {
@@ -1621,10 +1625,10 @@ fn an_absolute_box_found_on_a_later_page_keeps_every_page_open_until_then() {
   );
   let (results, _) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizes::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
@@ -1862,10 +1866,10 @@ fn a_broken_overflow_clip_spans_the_stitched_box() {
     );
     let paged = PagedScene::lay_out(
       tree,
-      Size {
+      PageSizes::uniform(Size {
         width: 300.0,
         height: 100.0,
-      },
+      }),
       usize::MAX,
       false,
     )

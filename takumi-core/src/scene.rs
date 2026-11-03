@@ -5,6 +5,8 @@ use rustc_hash::FxHashMap;
 #[cfg(feature = "fragmentation")]
 use rustc_hash::FxHashSet;
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::page_sizes::PageSizes;
 use crate::{
   context::{BoxId, RenderContext},
   error::{Error, Result},
@@ -369,9 +371,12 @@ impl SceneRequest<'_> {
     build_layers(
       self.root,
       self.layout_results.view(),
-      self.container_size,
       self.paint_bounds,
-      &[(0, Point::ZERO)],
+      &[RootFragment {
+        fragment_index: 0,
+        paint_offset: Point::ZERO,
+        container_size: self.container_size,
+      }],
       #[cfg(feature = "fragmentation")]
       None,
     )
@@ -388,13 +393,21 @@ struct BuildTrace {
   out_of_flow: Vec<(NodeId, NodeId)>,
 }
 
+/// One of the root's fragments a scene paints, at its offset in the scene.
+#[derive(Clone, Copy)]
+struct RootFragment {
+  fragment_index: usize,
+  paint_offset: Point<f32>,
+  /// The size percentages of the root resolve against in this fragment.
+  container_size: Size<Option<f32>>,
+}
+
 /// The scene layers of the root fragments `roots` names, laid out as `layout_results` says.
 fn build_layers(
   root: &RenderNode,
   layout_results: LayoutView<'_>,
-  container_size: Size<Option<f32>>,
   paint_bounds: bool,
-  roots: &[(usize, Point<f32>)],
+  roots: &[RootFragment],
   #[cfg(feature = "fragmentation")] mut trace: Option<&mut BuildTrace>,
 ) -> Result<SceneLayers> {
   let mut contexts = vec![StackingContextNode::with_root(None)];
@@ -411,7 +424,11 @@ fn build_layers(
     .iter()
     .rev()
     .map(
-      |&(fragment_index, paint_offset)| StackingContextBuildVisit {
+      |&RootFragment {
+         fragment_index,
+         paint_offset,
+         container_size,
+       }| StackingContextBuildVisit {
         path: Vec::new(),
         node_id: NodeId::ROOT,
         fragment_index,
@@ -1161,32 +1178,22 @@ pub struct PagedScene {
 
 #[cfg(feature = "fragmentation")]
 impl PagedScene {
-  /// Lays `root` out on at most `max_pages` pages `page_size` and builds the scene of them all.
+  /// Lays `root` out on at most `max_pages` pages sized as `sizes` says and builds the scene of
+  /// them all.
   pub fn lay_out(
     root: RenderNode,
-    page_size: Size<f32>,
+    sizes: PageSizes,
     max_pages: usize,
     paint_bounds: bool,
   ) -> Result<Self> {
     root.clear_layout_caches();
-    let (results, page_count) = LayoutResults::compute_pages(&root, page_size, max_pages)?;
+    let (results, page_count) = LayoutResults::compute_pages(&root, sizes, max_pages)?;
     // A page the root starts after holds none of it.
-    let roots = page_roots(
-      results.view(),
-      page_size,
-      &(0..page_count).collect::<Vec<_>>(),
-    );
-    let layers = build_layers(
-      &root,
-      results.view(),
-      page_size.map(Some),
-      paint_bounds,
-      &roots,
-      None,
-    )?;
+    let roots = page_roots(results.view(), &sizes, &(0..page_count).collect::<Vec<_>>());
+    let layers = build_layers(&root, results.view(), paint_bounds, &roots, None)?;
     let fragments =
       FragmentPlacements::new(&root, results.view(), &layers.placements(results.view()));
-    let mut scene = Scene::new(root, results, layers, page_size);
+    let mut scene = Scene::new(root, results, layers, sizes.size(0));
 
     scene.fragments = Some(fragments);
     Ok(Self { scene, page_count })
@@ -1221,30 +1228,20 @@ pub struct SceneRef<'a> {
 
 #[cfg(feature = "fragmentation")]
 impl<'a> SceneRef<'a> {
-  /// Where page `page` starts in the scene of pages `page_size`: the pages stack in the block
-  /// direction.
-  pub fn page_origin(page_size: Size<f32>, page: usize) -> Point<f32> {
-    Point {
-      x: 0.0,
-      y: page_size.height * page as f32,
-    }
-  }
-
   /// The scene of the root's fragments on `pages`, which stack as in [`PagedScene`], provided
   /// `pages` holds every page [`PageWindows`] names for it.
   pub fn window(
     root: &'a RenderNode,
     layout: LayoutView<'a>,
-    page_size: Size<f32>,
+    sizes: &PageSizes,
     pages: &[usize],
     paint_bounds: bool,
   ) -> Result<Self> {
     let layers = build_layers(
       root,
       layout,
-      page_size.map(Some),
       paint_bounds,
-      &page_roots(layout, page_size, pages),
+      &page_roots(layout, sizes, pages),
       None,
     )?;
     let placements = layers.placements(layout);
@@ -1286,17 +1283,17 @@ impl<'a> SceneRef<'a> {
 }
 
 #[cfg(feature = "fragmentation")]
-fn page_roots(
-  layout: LayoutView<'_>,
-  page_size: Size<f32>,
-  pages: &[usize],
-) -> Vec<(usize, Point<f32>)> {
+fn page_roots(layout: LayoutView<'_>, sizes: &PageSizes, pages: &[usize]) -> Vec<RootFragment> {
   pages
     .iter()
     .filter_map(|&page| {
       layout
         .fragment_in(NodeId::ROOT, page)
-        .map(|fragment_index| (fragment_index, SceneRef::page_origin(page_size, page)))
+        .map(|fragment_index| RootFragment {
+          fragment_index,
+          paint_offset: sizes.origin(page),
+          container_size: sizes.size(page).map(Some),
+        })
     })
     .collect()
 }
@@ -1382,7 +1379,7 @@ impl SceneLayers {
 /// Which root fragments paint on each page of a paged layout, kept up to date by [`Self::refresh`].
 #[cfg(feature = "fragmentation")]
 pub struct PageWindows {
-  page_size: Size<f32>,
+  sizes: PageSizes,
   /// How far each page's root fragment paints.
   reaches: Vec<PageReach>,
   /// The pages each page's scene needs to paint the boxes they defer to its containing blocks.
@@ -1395,10 +1392,10 @@ pub struct PageWindows {
 
 #[cfg(feature = "fragmentation")]
 impl PageWindows {
-  /// Windows of pages `page_size`, none added yet.
-  pub fn new(page_size: Size<f32>) -> Self {
+  /// Windows of pages sized as `sizes` says, none added yet.
+  pub fn new(sizes: PageSizes) -> Self {
     Self {
-      page_size,
+      sizes,
       reaches: Vec::new(),
       needs: Vec::new(),
       parents: FxHashMap::default(),
@@ -1442,9 +1439,8 @@ impl PageWindows {
     let layers = build_layers(
       root,
       layout,
-      self.page_size.map(Some),
       true,
-      &page_roots(layout, self.page_size, &[page]),
+      &page_roots(layout, &self.sizes, &[page]),
       Some(&mut trace),
     )?;
     let mut reach = layers.reach();
@@ -1478,9 +1474,8 @@ impl PageWindows {
         build_layers(
           root,
           layout,
-          self.page_size.map(Some),
           true,
-          &page_roots(layout, self.page_size, &pages),
+          &page_roots(layout, &self.sizes, &pages),
           None,
         )?
         .reach(),
@@ -1493,8 +1488,8 @@ impl PageWindows {
   /// The pages, in order, whose root fragments a scene needs to paint page `page` as the scene of
   /// every page would.
   pub fn pages_reaching(&self, page: usize) -> Vec<usize> {
-    let top = self.page_size.height * page as f32;
-    let bottom = top + self.page_size.height;
+    let top = self.sizes.top(page);
+    let bottom = top + self.sizes.size(page).height;
     let reaching = self
       .reaches
       .iter()
@@ -1514,7 +1509,7 @@ impl PageWindows {
   ) -> usize {
     self.parents.retain(|&child, _| !is_complete(child));
 
-    let below = self.page_size.height * drawn as f32;
+    let below = self.sizes.top(drawn);
     // [`Self::refresh`] measures the pages from `stable` on again.
     let drawn = drawn.min(self.stable).min(self.reaches.len());
     let reaches = self.reaches.get(released..drawn).unwrap_or_default();

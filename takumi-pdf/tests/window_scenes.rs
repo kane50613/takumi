@@ -8,7 +8,7 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   geometry::Size,
-  layout::{node::Node, paged_layout::PagedLayout, tree::RenderNode},
+  layout::{node::Node, page_sizes::PageSizes, paged_layout::PagedLayout, tree::RenderNode},
   paint_chunk::PaintChunk,
   resources::font::FontResource,
   scene::{PageWindows, PagedScene, SceneBounds, SceneRef, StackingContextNode},
@@ -77,11 +77,12 @@ fn page_chunks(contexts: &[StackingContextNode], page: usize, page_height: f32) 
 /// Paints every page of `name` from its window as the layout and the windows allow.
 fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
   let root = document(name, page_size);
-  let whole = PagedScene::lay_out(root.clone(), page_size, 1000, true)
+  let sizes = PageSizes::uniform(page_size);
+  let whole = PagedScene::lay_out(root.clone(), sizes, 1000, true)
     .expect("pages lay out")
     .into_scene();
-  let mut layout = PagedLayout::new(&root, page_size, 1000);
-  let mut windows = PageWindows::new(page_size);
+  let mut layout = PagedLayout::new(&root, sizes, 1000);
+  let mut windows = PageWindows::new(sizes);
   let mut emitted = 0;
 
   loop {
@@ -101,7 +102,7 @@ fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
     for page in emitted..ready {
       let pages = windows.pages_reaching(page);
       let window =
-        SceneRef::window(&root, layout.view(), page_size, &pages, true).expect("window builds");
+        SceneRef::window(&root, layout.view(), &sizes, &pages, true).expect("window builds");
 
       let expected = page_chunks(&whole.contexts, page, page_size.height);
       let actual = page_chunks(&window.contexts, page, page_size.height);

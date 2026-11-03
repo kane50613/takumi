@@ -12,10 +12,10 @@ use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{
   Fonts,
   geometry::Size,
-  layout::node::Node,
+  layout::{node::Node, page_sizes::PageSizes},
   page_stream::{PageStream, SETTLED_PAGES, Settled},
   resources::font::FontResource,
-  scene::{PagedScene, SceneRef},
+  scene::PagedScene,
   style::StyleSheet,
   viewport::Viewport,
 };
@@ -72,7 +72,8 @@ fn options<'f>(
 fn whole_document(mut options: RenderOptions<'_>, page_size: Size<f32>) -> Result<Vec<Bitmap>> {
   let render_context = options.take_render_context();
   let root = RenderNode::from_node(&render_context, options.node);
-  let paged = PagedScene::lay_out(root, page_size, usize::MAX, true)?;
+  let sizes = PageSizes::uniform(page_size);
+  let paged = PagedScene::lay_out(root, sizes, usize::MAX, true)?;
   let page_count = paged.page_count();
   let size = page_size.map(|length| length.round() as u32);
   let scene = paged.into_scene();
@@ -80,7 +81,7 @@ fn whole_document(mut options: RenderOptions<'_>, page_size: Size<f32>) -> Resul
   let mut pages = Vec::new();
 
   for index in 0..page_count {
-    let origin = SceneRef::page_origin(page_size, index).map(|length| length.round() as i32);
+    let origin = sizes.origin(index).map(|length| length.round() as i32);
     let mut canvas = Canvas::try_new(size)
       .ok_or(Error::InvalidViewport)?
       .with_origin(origin);
@@ -453,7 +454,7 @@ fn a_released_page_cannot_be_painted_again() {
   let mut options = options(&fonts, &node, &stylesheet, PAGE_SIZE);
   let render_context = options.take_render_context();
   let root = RenderNode::from_node(&render_context, options.node);
-  let mut stream = PageStream::new(&root, PAGE_SIZE, usize::MAX);
+  let mut stream = PageStream::new(&root, PageSizes::uniform(PAGE_SIZE), usize::MAX);
   let mut drawn = 0;
 
   while drawn < 3 {

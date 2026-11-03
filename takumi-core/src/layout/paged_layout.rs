@@ -7,7 +7,7 @@ use rustc_hash::FxHashSet;
 
 use crate::{
   Error, Result,
-  geometry::{AvailableSpace, NodeId, Point, Size},
+  geometry::{AvailableSpace, NodeId, Point},
   layout::{
     block_break_token::BlockBreakToken,
     break_appeal::BreakAppeal,
@@ -18,6 +18,7 @@ use crate::{
     layout_view::LayoutView,
     length_utils::margins_for,
     page_area::PageAreas,
+    page_sizes::PageSizes,
     paint_reach::PaintReach,
     pending_boxes::PendingBoxes,
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -26,11 +27,11 @@ use crate::{
   style::{Direction, Length, SpacePair},
 };
 
-/// A render tree laid out across pages `page_size` one page at a time, each resuming where the
-/// one before broke.
+/// A render tree laid out across pages sized as `sizes` says, one page at a time, each resuming
+/// where the one before broke.
 pub struct PagedLayout<'r> {
   tree: LayoutTree<'r>,
-  page_size: Size<f32>,
+  sizes: PageSizes,
   max_pages: usize,
   break_token: Option<Rc<BlockBreakToken>>,
   page_count: usize,
@@ -46,15 +47,15 @@ pub struct PagedLayout<'r> {
 }
 
 impl<'r> PagedLayout<'r> {
-  /// Starts laying `root` out on at most `max_pages` pages `page_size`.
-  pub fn new(root: &'r RenderNode, page_size: Size<f32>, max_pages: usize) -> Self {
+  /// Starts laying `root` out on at most `max_pages` pages sized as `sizes` says.
+  pub fn new(root: &'r RenderNode, sizes: PageSizes, max_pages: usize) -> Self {
     root.clear_layout_caches();
 
     let reach = PaintReach::of(root);
 
     Self {
       tree: LayoutTree::from_render_node(root),
-      page_size,
+      sizes,
       max_pages,
       break_token: None,
       page_count: 0,
@@ -83,13 +84,14 @@ impl<'r> PagedLayout<'r> {
       return Err(Error::TooManyPages(self.max_pages));
     }
 
-    let page_block_size = LayoutUnit::from_float(self.page_size.height);
     let page = self.page_count;
+    let page_size = self.sizes.size(page);
+    let page_block_size = LayoutUnit::from_float(page_size.height);
 
     self.tree.begin_page(page + 1);
     let mut space = self
       .tree
-      .root_space(self.page_size.map(AvailableSpace::Definite));
+      .root_space(page_size.map(AvailableSpace::Definite));
     let mut margins = margins_for(
       self.tree.layout_style(NodeId::ROOT),
       space.percentage_resolution_inline_size,
@@ -141,7 +143,7 @@ impl<'r> PagedLayout<'r> {
         // The pages stack in the block direction, which the out-of-flow boxes lay out across.
         let root_origin = Point::new(
           margins.inline_start,
-          page_block_size * page as i32 + margins.block_start,
+          self.sizes.block_offset(page) + margins.block_start,
         );
 
         self.break_token = result.break_info.break_token.clone();
@@ -162,7 +164,7 @@ impl<'r> PagedLayout<'r> {
       page,
       root_fragment,
       candidates,
-      self.page_size,
+      &self.sizes,
       &space,
     );
     self.page_count += 1;
@@ -222,7 +224,7 @@ impl<'r> PagedLayout<'r> {
       return 0;
     };
     // A page not laid out starts at or below the page after the last one laid out.
-    let pages_back = (reach_back / self.page_size.height).ceil();
+    let pages_back = (reach_back / self.sizes.min_height()).ceil();
     let finalized = self.finalized_pages();
 
     if pages_back.is_nan() || pages_back >= finalized as f32 {
