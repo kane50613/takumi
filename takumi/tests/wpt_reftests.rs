@@ -17,11 +17,13 @@
 mod test_utils;
 
 use std::{
+  cell::RefCell,
   collections::{BTreeMap, BTreeSet, HashMap, HashSet},
   env, fs,
   panic::{self, AssertUnwindSafe},
   path::{Path, PathBuf},
   process,
+  rc::Rc,
   sync::{
     Arc, Mutex, MutexGuard, PoisonError,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -43,20 +45,22 @@ use takumi::{
 };
 use takumi_core::{
   geometry::{Rect, Size},
-  layout::page_sizes::PageSizer,
+  layout::page_sizes::{PageBox, PageRules, PageSizer},
   resources::image::ResourceCache,
-  viewport::MediaTarget,
+  style::PageName,
 };
 use test_utils::{CONTEXT, matches_fragments};
 
 /// The WPT harness's viewport.
 const VIEWPORT: (u32, u32) = (800, 600);
 
-/// The page area of a print reftest: WPT's 5 by 3 inch page less its half-inch margins, at 96
-/// pixels an inch.
-const PRINT_PAGE_AREA: (u32, u32) = (384, 192);
+/// WPT's 5 by 3 inch print reftest page, at 96 pixels an inch.
+const PRINT_PAGE_SIZE: Size<f32> = Size {
+  width: 480.0,
+  height: 288.0,
+};
 
-/// The margin of a print reftest's page, on every side.
+/// The half-inch margin of a print reftest's page, on every side.
 const PRINT_PAGE_MARGIN: f32 = 48.0;
 
 /// The WPT directories the run discovers reftests in.
@@ -1064,34 +1068,52 @@ impl Runner {
         .into_iter()
         .chain(sheets.into_iter().map(|(.., sheet)| sheet)),
     ));
-    let size = if print { PRINT_PAGE_AREA } else { VIEWPORT };
-    let options = RenderOptions::builder()
-      .viewport(Viewport::new(size).with_media_target(if print {
-        MediaTarget::Print
-      } else {
-        MediaTarget::Screen
-      }))
-      .node(node.clone())
-      .fonts(&self.fonts)
-      .images(images)
-      .stylesheet(Arc::clone(&stylesheet))
-      .build();
-    let bitmaps = if print {
-      let page = Size {
-        width: size.0 as f32 + 2.0 * PRINT_PAGE_MARGIN,
-        height: size.1 as f32 + 2.0 * PRINT_PAGE_MARGIN,
-      };
-      let sizer = PageSizer::from_page_rules(stylesheet, page, Rect::all(PRINT_PAGE_MARGIN));
+    let options = |viewport: Viewport| {
+      RenderOptions::builder()
+        .viewport(viewport)
+        .node(node.clone())
+        .fonts(&self.fonts)
+        .images(images.clone())
+        .stylesheet(Arc::clone(&stylesheet))
+        .build()
+    };
+    let (bitmaps, page_boxes) = if print {
+      let rules = PageRules::new(
+        Arc::clone(&stylesheet),
+        PageBox {
+          size: PRINT_PAGE_SIZE,
+          margin: Rect::all(PRINT_PAGE_MARGIN),
+        },
+      );
+      // Approximate: Blink sizes the content's viewport from the first page under its page name,
+      // which this takes as unnamed.
+      let viewport = Viewport::print_page(rules.page_box(0, &PageName::default()).area());
+      let page_boxes = Rc::new(RefCell::new(Vec::new()));
+      let sizer = PageSizer::new({
+        let page_boxes = Rc::clone(&page_boxes);
+
+        move |page, name| {
+          let page_box = rules.page_box(page, name);
+          let mut page_boxes = page_boxes.borrow_mut();
+
+          page_boxes.truncate(page);
+          page_boxes.push(page_box);
+          page_box.area()
+        }
+      });
       let mut pages = Vec::new();
 
-      render_pages(options, sizer, usize::MAX, |page| {
+      render_pages(options(viewport), sizer, usize::MAX, |page| {
         pages.push(page);
         Ok(())
       })
       .map_err(|error| format!("render: {error}"))?;
-      pages
+      (pages, page_boxes.take())
     } else {
-      vec![render(options).map_err(|error| format!("render: {error}"))?]
+      let bitmap =
+        render(options(Viewport::new(VIEWPORT))).map_err(|error| format!("render: {error}"))?;
+
+      (vec![bitmap], Vec::new())
     };
 
     let selected = |index: usize| {
@@ -1107,8 +1129,9 @@ impl Runner {
         .iter()
         .enumerate()
         .filter(|&(index, _)| selected(index))
-        .map(|(_, bitmap)| Page {
+        .map(|(index, bitmap)| Page {
           size: (bitmap.width(), bitmap.height()),
+          sheet: page_boxes.get(index).map(|&page_box| sheet(page_box)),
           pixels: over_white(bitmap),
         })
         .collect(),
@@ -1121,10 +1144,27 @@ struct Rendering {
   pages: Vec<Page>,
 }
 
-/// One rendered page's size and RGBA.
+/// One rendered page's size, printed sheet, and RGBA.
 struct Page {
   size: (u32, u32),
+  sheet: Option<[i32; 6]>,
   pixels: Vec<u8>,
+}
+
+/// `page_box` in whole pixels, as a printed sheet holds it: its width and height, then its top,
+/// right, bottom, and left margins.
+fn sheet(page_box: PageBox) -> [i32; 6] {
+  let PageBox { size, margin } = page_box;
+
+  [
+    size.width,
+    size.height,
+    margin.top,
+    margin.right,
+    margin.bottom,
+    margin.left,
+  ]
+  .map(|length| length.round() as i32)
 }
 
 impl Rendering {
@@ -1136,7 +1176,9 @@ impl Rendering {
         .iter()
         .zip(&reference.pages)
         .all(|(test, reference)| {
-          test.size == reference.size && fuzzy.allows(&test.pixels, &reference.pixels)
+          test.size == reference.size
+            && test.sheet == reference.sheet
+            && fuzzy.allows(&test.pixels, &reference.pixels)
         })
   }
 }
