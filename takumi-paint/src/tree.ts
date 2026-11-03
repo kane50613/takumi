@@ -158,6 +158,12 @@ export interface PaintTree {
    * left out.
    */
   toJSON(): SerializedPaintTree;
+  /**
+   * Release the font files and glyph outlines held in wasm memory. Calling this more than once
+   * is safe. After release, do not call `toJSON()`, `Font.data()`, or `TextRun.outlines()`.
+   * Plain JSON snapshots and node geometry remain usable. This does not free the painter.
+   */
+  free(): void;
 }
 
 /** The version of {@link SerializedPaintTree} this package writes and reads. */
@@ -177,6 +183,7 @@ export type SerializedPaintTree = {
 
 /** What the wasm module keeps of a painted tree: its font files and run outlines. */
 interface PaintedFiles {
+  free(): void;
   fontData(index: number): Uint8Array | undefined;
   runOutlines(node: number, run: number): readonly (string | null)[] | undefined;
 }
@@ -191,6 +198,7 @@ export class PaintTreeView implements PaintTree {
   readonly #files: PaintedFiles;
   readonly #listing: Listing;
   #steps: readonly PaintStep[] | undefined;
+  #freed = false;
 
   /** Wraps the serialized tree `raw`, reading font files and run outlines from `files`. */
   constructor(raw: RawPaintTree, files: PaintedFiles) {
@@ -247,6 +255,12 @@ export class PaintTreeView implements PaintTree {
           : null,
       ),
     };
+  }
+
+  free(): void {
+    if (this.#freed) return;
+    this.#freed = true;
+    this.#files.free();
   }
 }
 

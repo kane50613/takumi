@@ -74,6 +74,26 @@ for (const step of tree.steps) {
 
 `paint()` also takes an HTML string or a Takumi node tree.
 
+## Release a paint tree
+
+Call `tree.free()` when you have finished reading font files and glyph outlines. This releases
+the tree's WebAssembly resources. You can call it more than once. It does not free the painter
+or other trees.
+
+```ts
+const tree = await paint({ type: "text", text: "Hello" });
+try {
+  const snapshot = tree.toJSON();
+  // The snapshot remains usable after tree.free().
+} finally {
+  tree.free();
+}
+```
+
+After `free()`, do not call `tree.toJSON()`, `font.data()`, or `run.outlines()`.
+Node geometry and previously copied data remain usable. Call `painter.free()` separately
+when you have finished with a `Painter` instance.
+
 ## What the tree holds
 
 | Part      | Contents                                                                    |
