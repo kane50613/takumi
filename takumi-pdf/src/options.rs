@@ -1090,7 +1090,7 @@ impl PageOptions {
     Viewport::new((self.width as u32, self.height as u32)).with_media_target(MediaTarget::Print)
   }
 
-  /// Approximate: `rem` resolves against 16px, where Blink's page style takes the root's font size.
+  /// Approximate: `em` and `rem` resolve against 16px, where Blink's page style takes the root's.
   fn sizing(&self) -> SizingContext {
     SizingContext::builder().viewport(self.viewport()).build()
   }
