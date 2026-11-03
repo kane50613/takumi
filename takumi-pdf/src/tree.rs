@@ -27,7 +27,7 @@ use crate::{
   bands::{FixedTemplate, Repeatable},
   counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
   options::PdfError,
-  page::PageFrame,
+  page::{PageFrame, PageFrames},
   pagination::MAX_PAGES,
 };
 
@@ -87,11 +87,11 @@ impl TreeInputs<'_> {
   pub(crate) fn prepare_paged(
     &self,
     node: Node,
-    frame: &PageFrame,
+    frames: &PageFrames,
   ) -> Result<(PagedContent, Vec<Repeatable>), PdfError> {
-    let (root, repeated) = self.prepare_root(node, frame)?;
+    let (root, repeated) = self.prepare_root(node, frames.first())?;
 
-    Ok((PagedContent::lay_out(root, frame.page_sizes())?, repeated))
+    Ok((PagedContent::lay_out(root, frames.page_sizes())?, repeated))
   }
 
   /// The content tree to lay out across pages, and the `fixed` subtrees taken out of it. Those

@@ -5,7 +5,11 @@ use std::collections::HashMap;
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
-  layout::{node::Node, page_sizes::PageSizes, tree::RenderNode},
+  layout::{
+    node::Node,
+    page_sizes::{PageSizes, PerPage},
+    tree::RenderNode,
+  },
   page_stream::Settle,
   scene::{SceneRef, SceneView},
   style::Color,
@@ -34,8 +38,8 @@ use crate::{
   window::{ContentWindow, Window},
 };
 
-/// Page geometry resolved once: everything derived from [`PageOptions`] and
-/// the measured band heights.
+/// One page's geometry: everything derived from [`PageOptions`] and the measured band heights.
+#[derive(Clone)]
 pub(crate) struct PageFrame {
   /// Page size in px.
   pub(crate) size: Size<f32>,
@@ -94,12 +98,12 @@ impl PageFrame {
     })
   }
 
-  /// Every page's area, which the content lays out on.
-  pub(crate) fn page_sizes(&self) -> PageSizes {
-    PageSizes::uniform(Size {
+  /// The page area, which the content lays out on.
+  fn area(&self) -> Size<f32> {
+    Size {
       width: self.content_width,
       height: self.window_height,
-    })
+    }
   }
 
   /// The content column: content width, unbounded height. Viewport units
@@ -113,6 +117,42 @@ impl PageFrame {
         height: self.window_height,
       },
     )
+  }
+}
+
+/// Each page's geometry.
+pub(crate) struct PageFrames(PerPage<PageFrame>);
+
+impl PageFrames {
+  /// Resolves each page's geometry, as [`PageFrame::resolve`] does.
+  pub(crate) fn resolve(
+    page: &PageOptions,
+    band_viewport: Viewport,
+    header_height: Option<f32>,
+    footer_height: Option<f32>,
+  ) -> Result<Self, PdfError> {
+    PageFrame::resolve(page, band_viewport, header_height, footer_height)
+      .map(|frame| Self(PerPage::uniform(frame)))
+  }
+
+  /// The geometry of page `page`, counted from 0.
+  pub(crate) fn get(&self, page: usize) -> &PageFrame {
+    self.0.get(page)
+  }
+
+  /// The first page's geometry, whose area is the content's initial containing block.
+  pub(crate) fn first(&self) -> &PageFrame {
+    self.0.get(0)
+  }
+
+  /// Each page's area, which the content lays out on.
+  pub(crate) fn page_sizes(&self) -> PageSizes {
+    self.0.map(PageFrame::area).into()
+  }
+
+  /// Whether every page has the margins it has in `other`, so the content lays out the same.
+  fn has_margins_of(&self, other: &Self) -> bool {
+    self.0.map(|frame| frame.margin) == other.0.map(|frame| frame.margin)
   }
 }
 
@@ -140,7 +180,7 @@ pub(crate) struct PageBands<'o> {
 /// The paginated document once its pages are drawn: what the outline, the structure tree and the
 /// destinations read.
 pub(crate) struct PagePlan {
-  pub(crate) frame: PageFrame,
+  pub(crate) frames: PageFrames,
   pub(crate) selection: PageSelection,
   /// Whether destinations name tag-tree structure elements.
   pub(crate) structural: bool,
@@ -152,7 +192,7 @@ pub(crate) struct PagePlan {
 impl PagePlan {
   fn destinations(&self) -> Destinations<'_> {
     Destinations {
-      frame: &self.frame,
+      frames: &self.frames,
       selection: &self.selection,
       starts: &self.starts,
       structural: self.structural,
@@ -174,7 +214,7 @@ impl PagePlan {
 /// Where a position in the content lands in the output, once the pages are counted and the ones
 /// kept are known.
 struct Destinations<'p> {
-  frame: &'p PageFrame,
+  frames: &'p PageFrames,
   selection: &'p PageSelection,
   starts: &'p PageStarts,
   structural: bool,
@@ -186,11 +226,12 @@ impl Destinations<'_> {
   fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
     let index = self.starts.index_of(top);
     let emitted = self.selection.emitted(index)?;
-    let y = self.frame.margin.top + (top - self.starts.start(index)).max(0.0);
+    let margin = self.frames.get(index).margin;
+    let y = margin.top + (top - self.starts.start(index)).max(0.0);
 
     Some(xyz_destination(
       emitted,
-      Point::from_xy(self.frame.margin.left * PT_PER_PX, y * PT_PER_PX),
+      Point::from_xy(margin.left * PT_PER_PX, y * PT_PER_PX),
       path,
       self.structural,
     ))
@@ -204,7 +245,7 @@ impl Destinations<'_> {
 }
 
 struct Solved {
-  frame: PageFrame,
+  frames: PageFrames,
   header: Option<Repeatable>,
   footer: Option<Repeatable>,
 }
@@ -276,7 +317,7 @@ impl PageDrawing<'_, '_> {
         ))
       };
     let resolve = |header: Option<&Repeatable>, footer: Option<&Repeatable>| {
-      PageFrame::resolve(
+      PageFrames::resolve(
         &page,
         band_viewport,
         header.map(Repeatable::height),
@@ -284,18 +325,18 @@ impl PageDrawing<'_, '_> {
       )
     };
     let (mut header, mut footer) = measure_bands(1)?;
-    let mut frame = resolve(header.as_ref(), footer.as_ref())?;
+    let mut frames = resolve(header.as_ref(), footer.as_ref())?;
     // A counter band and the page count depend on each other, so the band is measured again until
     // its height settles.
     let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
       || footer.as_ref().is_some_and(Repeatable::dynamic);
 
     if !dynamic && !reads_layout(&node) {
-      let content = Prepared::new(node, inputs, &frame)?;
+      let content = Prepared::new(node, inputs, frames.first())?;
 
       return Ok((
         Solved {
-          frame,
+          frames,
           header,
           footer,
         },
@@ -306,7 +347,7 @@ impl PageDrawing<'_, '_> {
     // Only a margin that follows a band can move the frame, which is when the content lays out
     // again from the source.
     let source = (dynamic && page.margin.follow_bands()).then(|| node.clone());
-    let mut counted = Counted::settle(node, inputs, &frame, settle)?;
+    let mut counted = Counted::settle(node, inputs, &frames, settle)?;
 
     if dynamic {
       const BAND_PASSES: usize = 3;
@@ -324,24 +365,23 @@ impl PageDrawing<'_, '_> {
           break;
         }
 
-        let next_frame = resolve(header.as_ref(), footer.as_ref())?;
+        let next_frames = resolve(header.as_ref(), footer.as_ref())?;
 
-        // The content lays out the same in a frame whose margins did not move.
-        if next_frame.margin == frame.margin {
+        if next_frames.has_margins_of(&frames) {
           break;
         }
         let Some(source) = &source else {
           break;
         };
 
-        frame = next_frame;
-        counted = Counted::settle(source.clone(), inputs, &frame, settle)?;
+        frames = next_frames;
+        counted = Counted::settle(source.clone(), inputs, &frames, settle)?;
       }
     }
 
     Ok((
       Solved {
-        frame,
+        frames,
         header,
         footer,
       },
@@ -361,7 +401,7 @@ impl PageDrawing<'_, '_> {
     settle: Settle<'_>,
   ) -> Result<PagePlan, PdfError> {
     let Solved {
-      frame,
+      frames,
       header,
       footer,
     } = solved;
@@ -371,8 +411,8 @@ impl PageDrawing<'_, '_> {
       reads_summary,
     } = *content;
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
-    let composer = PageComposer::new(self, &frame, &repeatables);
-    let sizes = frame.page_sizes();
+    let composer = PageComposer::new(self, &frames, &repeatables);
+    let sizes = frames.page_sizes();
     let mut summary = PageSummary::new(false);
     let counted_pages = counts.as_ref().map(|counts| counts.starts.len());
 
@@ -414,14 +454,14 @@ impl PageDrawing<'_, '_> {
 
         composer.compose(
           self.pdf,
-          &PageSlice::of(index, frame.window_height),
+          &PageSlice::of(index, &sizes),
           counted_pages.unwrap_or_default(),
           scene.view(),
           |id| {
             let counts = counts.as_ref()?;
 
             Destinations {
-              frame: &frame,
+              frames: &frames,
               selection: &selection,
               starts: &counts.starts,
               structural,
@@ -432,16 +472,14 @@ impl PageDrawing<'_, '_> {
       }
       Ok(())
     })?;
-    let window = frame.window_height;
-
     selection.finish()?;
     Ok(PagePlan {
-      frame,
+      frames,
       selection,
       structural,
       root,
       summary: summary.finished(),
-      starts: PageStarts::new(pages, window),
+      starts: PageStarts::new(pages, sizes),
     })
   }
 
@@ -453,7 +491,7 @@ impl PageDrawing<'_, '_> {
     structural: bool,
   ) -> Result<PagePlan, PdfError> {
     let Solved {
-      frame,
+      frames,
       header,
       footer,
     } = solved;
@@ -469,14 +507,14 @@ impl PageDrawing<'_, '_> {
     let (root, results) = content.into_parts();
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let plan = PagePlan {
-      frame,
+      frames,
       selection,
       structural,
       root,
       summary,
       starts,
     };
-    let composer = PageComposer::new(self, &plan.frame, &repeatables);
+    let composer = PageComposer::new(self, &plan.frames, &repeatables);
 
     for slice in plan.starts.slices() {
       if !plan.selection.keeps(slice.index) {
@@ -500,11 +538,12 @@ impl PageDrawing<'_, '_> {
 
 /// Draws the paginated content one page at a time.
 struct PageComposer<'c, 'g> {
-  frame: &'c PageFrame,
+  frames: &'c PageFrames,
   /// In draw order: the header band, the repeated boxes, the footer band.
   repeatables: &'c [Repeatable],
   inputs: &'c TreeInputs<'g>,
-  page_context: RenderContext,
+  /// Each page's context, which a repeated box lays out in against the page area.
+  page_contexts: PerPage<RenderContext>,
   state: &'c DocumentState<'c>,
   background: Option<Color>,
 }
@@ -512,14 +551,16 @@ struct PageComposer<'c, 'g> {
 impl<'c, 'g> PageComposer<'c, 'g> {
   fn new(
     drawing: &PageDrawing<'c, 'g>,
-    frame: &'c PageFrame,
+    frames: &'c PageFrames,
     repeatables: &'c [Repeatable],
   ) -> Self {
     Self {
-      frame,
+      frames,
       repeatables,
       inputs: drawing.inputs,
-      page_context: drawing.inputs.context(frame.page_area),
+      page_contexts: frames
+        .0
+        .map(|frame| drawing.inputs.context(frame.page_area)),
       state: drawing.state,
       background: drawing.background,
     }
@@ -535,14 +576,14 @@ impl<'c, 'g> PageComposer<'c, 'g> {
     scene: SceneView<'_>,
     anchor: impl Fn(&str) -> Option<XyzDestination>,
   ) -> Result<(), PdfError> {
-    let frame = self.frame;
+    let frame = self.frames.get(slice.index);
     let resolved = self
       .repeatables
       .iter()
       .map(|repeatable| {
         repeatable.for_page(
           self.inputs,
-          &self.page_context,
+          self.page_contexts.get(slice.index),
           frame,
           slice.index + 1,
           pages,
@@ -563,6 +604,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
     }
     self.emit_content(
       Emitter::new(scene, self.state, Some(&inline), Some(&chunks), true),
+      frame,
       slice,
       &mut surface,
     )?;
@@ -603,11 +645,10 @@ impl<'c, 'g> PageComposer<'c, 'g> {
   fn emit_content(
     &self,
     emitter: Emitter<'_>,
+    frame: &PageFrame,
     slice: &PageSlice,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let frame = self.frame;
-
     ContentWindow {
       clip: (
         frame.margin.left,
