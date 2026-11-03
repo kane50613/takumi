@@ -76,7 +76,8 @@ impl<'r> PagedLayout<'r> {
   }
 
   /// Lays out the next page and returns whether there was one. Fails with [`Error::TooManyPages`]
-  /// when a page past `max_pages` is needed.
+  /// when a page past `max_pages` is needed, and [`Error::InvalidPageSize`] when the sizer gives
+  /// the page no area.
   pub fn next_page(&mut self) -> Result<bool> {
     if self.is_finished {
       return Ok(false);
@@ -87,6 +88,11 @@ impl<'r> PagedLayout<'r> {
 
     let page = self.page_count();
     let page_size = self.sizer.size(page);
+
+    if !page_size.has_area() {
+      return Err(Error::InvalidPageSize);
+    }
+
     let page_block_size = LayoutUnit::from_float(page_size.height);
 
     self.sizes.push(page_size);

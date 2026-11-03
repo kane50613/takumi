@@ -128,7 +128,9 @@ impl PageAreas {
 }
 
 impl FixedBox {
-  /// Blink's repeated fixed box: places its repetition on page `page`.
+  /// Blink's repeated fixed box: places its repetition on page `page`. Approximate: every
+  /// repetition reuses the layout of the first page it is on, so a page of another size keeps
+  /// that page's geometry.
   fn place_repetition(
     &self,
     tree: &mut LayoutTree<'_>,

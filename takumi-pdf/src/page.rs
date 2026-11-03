@@ -65,16 +65,9 @@ impl PageFrame {
     let margin = page
       .margin
       .resolve(page.size(), header_height, footer_height);
-    let Size {
-      width: content_width,
-      height: content_height,
-    } = page.content_size(margin);
+    let content = page.content_size(margin);
 
-    if !(content_width.is_finite()
-      && content_height.is_finite()
-      && content_width > 0.0
-      && content_height > 0.0)
-    {
+    if !content.has_area() {
       return Err(PdfError::InvalidPageSize);
     }
 
@@ -82,17 +75,10 @@ impl PageFrame {
       size: page.size(),
       page_size,
       margin,
-      content_width,
-      window_height: content_height,
+      content_width: content.width,
+      window_height: content.height,
       band_viewport,
-      page_area: print_viewport(
-        content_width,
-        Some(content_height),
-        Size {
-          width: content_width,
-          height: content_height,
-        },
-      ),
+      page_area: print_viewport(content.width, Some(content.height), content),
     })
   }
 

@@ -1474,8 +1474,12 @@ impl PageWindows {
   }
 
   /// The pages, in order, whose root fragments a scene needs to paint page `page` as the scene of
-  /// every page would.
+  /// every page would. A page not laid out yet has none.
   pub fn pages_reaching(&self, sizes: &PageSizes, page: usize) -> Vec<usize> {
+    if page >= sizes.len() {
+      return Vec::new();
+    }
+
     let top = sizes.top(page);
     let bottom = top + sizes.size(page).height;
     let reaching = self
@@ -1498,7 +1502,7 @@ impl PageWindows {
   ) -> usize {
     self.parents.retain(|&child, _| !is_complete(child));
 
-    let below = sizes.top(drawn);
+    let below = sizes.top(drawn.min(sizes.len()));
     // [`Self::refresh`] measures the pages from `stable` on again.
     let drawn = drawn.min(self.stable).min(self.reaches.len());
     let reaches = self.reaches.get(released..drawn).unwrap_or_default();

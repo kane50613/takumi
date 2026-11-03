@@ -14,6 +14,7 @@ use crate::{
     paged_layout_oracles as oracles,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
+  page_stream::PageStream,
   paint_property::ClipKind,
   resources::font::Fonts,
   scene::{NodePaint, PagedScene, PaintItemKind, Scene},
@@ -374,6 +375,39 @@ fn paged_layout_stops_at_its_page_limit() {
   assert!(stepped.next_page().expect("first page"));
   assert!(stepped.next_page().expect("second page"));
   assert!(matches!(stepped.next_page(), Err(Error::TooManyPages(2))));
+}
+
+/// A page the sizer gives no area fails the layout, and a page not laid out yet reaches nothing.
+#[test]
+fn a_page_without_area_fails_and_an_unlaid_page_reaches_nothing() {
+  let page = Size {
+    width: 300.0,
+    height: 200.0,
+  };
+  let breaks = render(
+    root([block("a", "h100"), block("b", "h100 page")]),
+    ".h100 { height: 100px } .page { break-before: page }",
+  );
+  let sizer = PageSizer::new(move |index| {
+    if index == 0 {
+      page
+    } else {
+      Size {
+        height: 0.0,
+        ..page
+      }
+    }
+  });
+
+  assert!(matches!(
+    LayoutResults::compute_pages(&breaks, sizer, usize::MAX),
+    Err(Error::InvalidPageSize)
+  ));
+  assert!(
+    PageStream::new(&breaks, PageSizer::uniform(page), usize::MAX)
+      .pages_reaching(5)
+      .is_empty()
+  );
 }
 
 /// A flex item stretched past the page where its lines end lays out none on the later pages.

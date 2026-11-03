@@ -107,6 +107,10 @@ pub enum Error {
   #[error("Invalid viewport dimensions: a canvas holds 1 to 64 megapixels")]
   InvalidViewport,
 
+  /// A page size that is not finite or not larger than zero.
+  #[error("Page size must be finite and larger than zero")]
+  InvalidPageSize,
+
   /// RGBA buffer length does not match `width * height * 4`.
   #[error("Invalid RGBA buffer length: expected {expected} bytes, got {actual}")]
   InvalidRgbaBufferLength {
