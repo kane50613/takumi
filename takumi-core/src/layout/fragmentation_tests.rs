@@ -9,6 +9,7 @@ use crate::{
   geometry::{NodeId, PathCommand, Point, Size},
   layout::{
     node::Node,
+    page_sizes::PageSizer,
     paged_layout::PagedLayout,
     paged_layout_oracles as oracles,
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -122,8 +123,10 @@ fn pages(root: &RenderNode, page_height: f32) -> (BTreeMap<String, Vec<Placed>>,
 
   oracles::check(root, page_size);
 
-  let (results, page_count) =
-    LayoutResults::compute_pages(root, page_size, usize::MAX).expect("pages lay out");
+  let (results, sizes) =
+    LayoutResults::compute_pages(root, PageSizer::uniform(page_size), usize::MAX)
+      .expect("pages lay out");
+  let page_count = sizes.len();
   let containers: Vec<(usize, Point<f32>)> =
     (0..page_count).map(|page| (page, Point::ZERO)).collect();
   let mut boxes = BTreeMap::new();
@@ -242,10 +245,10 @@ fn each_fragment_of_a_paged_scene_paints_its_own_lines() {
   );
   let paged = PagedScene::lay_out(
     tree,
-    Size {
+    PageSizer::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
     false,
   )
@@ -351,21 +354,22 @@ fn paged_layout_stops_at_its_page_limit() {
   );
 
   assert_eq!(
-    LayoutResults::compute_pages(&breaks, page, 3)
+    LayoutResults::compute_pages(&breaks, PageSizer::uniform(page), 3)
       .expect("three pages fit")
-      .1,
+      .1
+      .len(),
     3
   );
   assert!(matches!(
-    LayoutResults::compute_pages(&breaks, page, 2),
+    LayoutResults::compute_pages(&breaks, PageSizer::uniform(page), 2),
     Err(Error::TooManyPages(2))
   ));
   assert!(matches!(
-    LayoutResults::compute_pages(&far, page, 4),
+    LayoutResults::compute_pages(&far, PageSizer::uniform(page), 4),
     Err(Error::TooManyPages(4))
   ));
 
-  let mut stepped = PagedLayout::new(&breaks, page, 2);
+  let mut stepped = PagedLayout::new(&breaks, PageSizer::uniform(page), 2);
 
   assert!(stepped.next_page().expect("first page"));
   assert!(stepped.next_page().expect("second page"));
@@ -387,10 +391,10 @@ fn lines_that_ended_stay_on_their_page_in_a_stretched_box() {
   );
   let paged = PagedScene::lay_out(
     tree,
-    Size {
+    PageSizer::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
     false,
   )
@@ -412,15 +416,16 @@ fn a_sliced_box_leaves_its_border_out_where_it_breaks() {
     root([block("a", "h100"), block("b", "framed")]),
     ".h100 { height: 100px } .framed { height: 200px; border: 5px solid black; padding: 4px }",
   );
-  let (results, page_count) = LayoutResults::compute_pages(
+  let (results, sizes) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizer::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
+  let page_count = sizes.len();
   let b = results.box_children(NodeId::ROOT).expect("children")[1].node_id;
   let fragments = results.fragments(b).expect("fragments");
 
@@ -455,15 +460,16 @@ fn a_later_page_keeps_the_out_of_flow_boxes_an_earlier_one_positioned() {
     root([body]),
     ".h20 { height: 20px } .abs { position: absolute; top: 96px } .forced { break-before: page }",
   );
-  let (results, page_count) = LayoutResults::compute_pages(
+  let (results, sizes) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizer::uniform(Size {
       width: 300.0,
       height: 192.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
+  let page_count = sizes.len();
   let body = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
   let abs = &results.box_children(body).expect("body children")[0];
 
@@ -600,7 +606,8 @@ fn a_tables_finished_rows_free_their_layouts_before_the_table_ends() {
     width: 300.0,
     height: 200.0,
   };
-  let mut layout = PagedLayout::new(&tree, page_size, usize::MAX).with_release();
+  let mut layout =
+    PagedLayout::new(&tree, PageSizer::uniform(page_size), usize::MAX).with_release();
 
   assert!(layout.next_page().expect("page lays out"));
   layout.release(1);
@@ -623,7 +630,8 @@ fn a_tables_rows_still_to_come_drop_their_measures() {
     width: 300.0,
     height: 200.0,
   };
-  let mut layout = PagedLayout::new(&tree, page_size, usize::MAX).with_release();
+  let mut layout =
+    PagedLayout::new(&tree, PageSizer::uniform(page_size), usize::MAX).with_release();
 
   assert!(layout.next_page().expect("page lays out"));
   layout.release(0);
@@ -792,15 +800,16 @@ fn a_short_table_footer_repeats_at_the_end_of_every_page() {
 /// `page_height` tall: their containers' fragment indices, block offsets, and block sizes, with
 /// the page count.
 fn nested_fragments(root: &RenderNode, page_height: f32) -> (Vec<(usize, f32, f32)>, usize) {
-  let (results, page_count) = LayoutResults::compute_pages(
+  let (results, sizes) = LayoutResults::compute_pages(
     root,
-    Size {
+    PageSizer::uniform(Size {
       width: 300.0,
       height: page_height,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
+  let page_count = sizes.len();
   let parent = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
   let child = results.box_children(parent).expect("children")[0].node_id;
   let fragments = results
@@ -1188,15 +1197,16 @@ fn a_fixed_box_starting_on_a_later_page_repeats_from_that_page() {
     ".fixed { position: fixed; top: 10px; height: 20px } .h20 { height: 20px } \
      .forced { break-after: page } .abs { position: absolute; top: 450px; height: 10px }",
   );
-  let (results, page_count) = LayoutResults::compute_pages(
+  let (results, sizes) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizer::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
+  let page_count = sizes.len();
   let body = results.box_children(NodeId::ROOT).expect("root children")[0].node_id;
   let fixed = results.box_children(body).expect("body children")[1].node_id;
 
@@ -1247,15 +1257,16 @@ fn a_fixed_box_inside_a_repeated_fixed_box_repeats_too() {
     ".fixed { position: fixed; top: 10px; height: 20px } \
      .inner { position: fixed; top: 50px; height: 7px } .h500 { height: 500px }",
   );
-  let (results, page_count) = LayoutResults::compute_pages(
+  let (results, sizes) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizer::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
+  let page_count = sizes.len();
   let inner_fragments = (0..)
     .map_while(|index| results.fragments(NodeId::new(index)).ok())
     .find(|fragments| {
@@ -1556,7 +1567,7 @@ fn finalized_after_each_page(root: &RenderNode, page_height: f32) -> Vec<usize> 
     width: 300.0,
     height: page_height,
   };
-  let mut layout = PagedLayout::new(root, page_size, usize::MAX);
+  let mut layout = PagedLayout::new(root, PageSizer::uniform(page_size), usize::MAX);
   let mut finalized = Vec::new();
 
   while layout.next_page().expect("page lays out") {
@@ -1619,15 +1630,16 @@ fn an_absolute_box_found_on_a_later_page_keeps_every_page_open_until_then() {
     ]),
     ".h300 { height: 300px } .late { position: absolute; top: 0; left: 0; width: 10px; height: 10px }",
   );
-  let (results, _) = LayoutResults::compute_pages(
+  let (results, sizes) = LayoutResults::compute_pages(
     &tree,
-    Size {
+    PageSizer::uniform(Size {
       width: 300.0,
       height: 200.0,
-    },
+    }),
     usize::MAX,
   )
   .expect("pages lay out");
+  let _ = sizes.len();
   // The box is the last in the tree, found on the second page and placed a page above it.
   let late = results
     .fragments(NodeId::new(results.node_count() - 1))
@@ -1862,10 +1874,10 @@ fn a_broken_overflow_clip_spans_the_stitched_box() {
     );
     let paged = PagedScene::lay_out(
       tree,
-      Size {
+      PageSizer::uniform(Size {
         width: 300.0,
         height: 100.0,
-      },
+      }),
       usize::MAX,
       false,
     )

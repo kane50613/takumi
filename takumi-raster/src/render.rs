@@ -5,8 +5,8 @@ pub use takumi_core::layout::needs::RenderNeeds;
 #[cfg(feature = "pages")]
 use takumi_core::{
   geometry::Size,
+  layout::page_sizes::PageSizer,
   page_stream::{PageStream, SETTLED_PAGES, Settle, Settled},
-  scene::SceneRef,
 };
 use takumi_core::{
   scene::Scene,
@@ -209,7 +209,7 @@ pub(crate) fn render_pages_settling<'g>(
 ) -> Result<()> {
   let render_context = options.take_render_context();
   let root = RenderNode::from_node(&render_context, options.node);
-  let mut stream = PageStream::new(&root, page_size, max_pages);
+  let mut stream = PageStream::new(&root, PageSizer::uniform(page_size), max_pages);
   let size = page_size.map(|length| length.round() as u32);
 
   loop {
@@ -217,7 +217,10 @@ pub(crate) fn render_pages_settling<'g>(
 
     for index in pages {
       let scene = stream.window(index)?;
-      let origin = SceneRef::page_origin(page_size, index).map(|length| length.round() as i32);
+      let origin = stream
+        .sizes()
+        .origin(index)
+        .map(|length| length.round() as i32);
       let mut canvas = Canvas::try_new(size)
         .ok_or(Error::InvalidViewport)?
         .with_origin(origin);

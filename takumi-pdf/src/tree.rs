@@ -9,6 +9,7 @@ use takumi_core::{
   layout::{
     layout_view::LayoutView,
     node::{Node, NodeKind},
+    page_sizes::{PageSizer, PageSizes},
     paged_layout::PagedLayout,
     tree::{LayoutResults, RenderNode},
   },
@@ -92,7 +93,7 @@ impl TreeInputs<'_> {
   ) -> Result<(PagedContent, Vec<Repeatable>), PdfError> {
     let (root, repeated) = self.prepare_root(node, frame)?;
 
-    Ok((PagedContent::lay_out(root, frame.page_size())?, repeated))
+    Ok((PagedContent::lay_out(root, frame.page_sizer())?, repeated))
   }
 
   /// The content tree to lay out across pages, and the `fixed` subtrees taken out of it. Those
@@ -189,24 +190,22 @@ impl PreparedTree {
 pub(crate) struct PagedContent {
   pub(crate) root: RenderNode,
   results: LayoutResults,
-  pub(crate) page_size: Size<f32>,
-  pub(crate) page_count: usize,
+  pub(crate) sizes: PageSizes,
 }
 
 impl PagedContent {
-  pub(crate) fn lay_out(root: RenderNode, page_size: Size<f32>) -> Result<Self, PdfError> {
-    let mut layout = PagedLayout::new(&root, page_size, MAX_PAGES);
+  pub(crate) fn lay_out(root: RenderNode, sizer: PageSizer) -> Result<Self, PdfError> {
+    let mut layout = PagedLayout::new(&root, sizer, MAX_PAGES);
 
     while layout.next_page()? {}
 
-    let page_count = layout.page_count();
+    let sizes = layout.sizes().clone();
     let results = layout.into_results();
 
     Ok(Self {
       root,
       results,
-      page_size,
-      page_count,
+      sizes,
     })
   }
 
@@ -214,8 +213,8 @@ impl PagedContent {
     self.results.view()
   }
 
-  pub(crate) fn into_parts(self) -> (RenderNode, LayoutResults) {
-    (self.root, self.results)
+  pub(crate) fn into_parts(self) -> (RenderNode, LayoutResults, PageSizes) {
+    (self.root, self.results, self.sizes)
   }
 }
 

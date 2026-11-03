@@ -12,7 +12,7 @@ use takumi_core::{
   context::BoxId,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
-  layout::{layout_view::LayoutView, node::Node, tree::RenderNode},
+  layout::{layout_view::LayoutView, node::Node, page_sizes::PageSizes, tree::RenderNode},
   painter::OwnContent,
   scene::{NodePaint, PageWindows, SceneRef, SceneView},
   style::{Affine, Position},
@@ -176,11 +176,11 @@ impl PageSummary {
   pub(crate) fn of_page(
     root: &RenderNode,
     layout: LayoutView<'_>,
-    page_size: Size<f32>,
+    sizes: &PageSizes,
     pages: &[usize],
     extents: bool,
   ) -> Result<Self, PdfError> {
-    let scene = SceneRef::window(root, layout, page_size, pages, false)?;
+    let scene = SceneRef::window(root, layout, sizes, pages, false)?;
 
     Ok(Self::collect(scene.view(), extents))
   }
@@ -189,7 +189,7 @@ impl PageSummary {
   pub(crate) fn of_pages(
     root: &RenderNode,
     layout: LayoutView<'_>,
-    page_size: Size<f32>,
+    sizes: &PageSizes,
     windows: &PageWindows,
     extents: bool,
   ) -> Result<Self, PdfError> {
@@ -199,7 +199,7 @@ impl PageSummary {
       summary.absorb(Self::of_page(
         root,
         layout,
-        page_size,
+        sizes,
         &windows.pages_of(page),
         extents,
       )?);
