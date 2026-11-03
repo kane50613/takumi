@@ -3,7 +3,7 @@ use std::{fs::File, sync::Arc};
 use takumi::{prelude::*, unstable::raster::render_pages, write_image};
 use takumi_core::{
   geometry::{Rect, Size},
-  layout::page_sizes::PageSizer,
+  layout::page_sizes::{PageBox, PageRules},
 };
 
 use crate::test_utils::{CONTEXT, generated_path};
@@ -35,17 +35,19 @@ fn page_rules() {
     .fonts(&CONTEXT)
     .stylesheet(Arc::clone(&stylesheet))
     .build();
-  let sizer = PageSizer::from_page_rules(
+  let rules = PageRules::new(
     stylesheet,
-    Size {
-      width: 200.0,
-      height: 200.0,
+    PageBox {
+      size: Size {
+        width: 200.0,
+        height: 200.0,
+      },
+      margin: Rect::all(0.0),
     },
-    Rect::all(0.0),
   );
   let mut pages = Vec::new();
 
-  render_pages(options, sizer, 8, |page| {
+  render_pages(options, rules, 8, |page| {
     pages.push(page);
     Ok(())
   })
@@ -79,17 +81,19 @@ fn page_rules_viewport_units() {
     .fonts(&CONTEXT)
     .stylesheet(Arc::clone(&stylesheet))
     .build();
-  let sizer = PageSizer::from_page_rules(
+  let rules = PageRules::new(
     stylesheet,
-    Size {
-      width: 200.9,
-      height: 100.9,
+    PageBox {
+      size: Size {
+        width: 200.9,
+        height: 100.9,
+      },
+      margin: Rect::all(0.0),
     },
-    Rect::all(0.0),
   );
   let mut sizes = Vec::new();
 
-  render_pages(options, sizer, 1, |page| {
+  render_pages(options, rules, 1, |page| {
     sizes.push((page.width(), page.height()));
     Ok(())
   })

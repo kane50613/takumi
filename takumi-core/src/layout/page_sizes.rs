@@ -28,53 +28,96 @@ impl PageSizer {
     Self::new(move |_, _| size)
   }
 
-  /// Each page's area as the `@page` rules of `stylesheet` lay over a `page` with `margin`, as
-  /// Blink's `StyleForPage` and `ResolvePageBoxGeometry` give it, a margin percentage taking the
-  /// page's size on its own axis. A rule that leaves no page area is ignored, as Blink's
-  /// `LayoutPageContainer` ignores it.
-  pub fn from_page_rules(stylesheet: Arc<StyleSheet>, page: Size<f32>, margin: Rect<f32>) -> Self {
-    let viewport = Viewport::print_page(page);
-    let base_area = page.inset(margin);
-
-    Self::new(move |index, name| {
-      let kind = PageKind::of(index);
-      let descriptors =
-        stylesheet.page_descriptors(viewport, |selector| selector.matches(kind, name));
-      let size = descriptors.size.map_or(page, |size| {
-        size.resolve(page, &SizingContext::builder().viewport(viewport).build())
-      });
-      let sizing = SizingContext::builder()
-        .viewport(Viewport::print_page(size))
-        .build();
-      // Blink's `ResolveAutoMargins` leaves a page box that fills its page no `auto` margin.
-      let side = |base: f32, length: Option<Length>, basis: f32| match length {
-        None => base,
-        Some(Length::Auto) => 0.0,
-        Some(length) => length.to_px(&sizing, basis),
-      };
-      let area = size.inset(Rect {
-        top: side(margin.top, descriptors.margin.top, size.height),
-        right: side(margin.right, descriptors.margin.right, size.width),
-        bottom: side(margin.bottom, descriptors.margin.bottom, size.height),
-        left: side(margin.left, descriptors.margin.left, size.width),
-      });
-
-      if area.width >= 1.0 && area.height >= 1.0 {
-        area
-      } else {
-        base_area
-      }
-    })
-  }
-
   pub(crate) fn size(&self, page: usize, name: &PageName) -> Size<f32> {
     (self.0)(page, name)
+  }
+}
+
+impl From<PageRules> for PageSizer {
+  fn from(rules: PageRules) -> Self {
+    Self::new(move |page, name| rules.page_box(page, name).area())
   }
 }
 
 impl From<Size<f32>> for PageSizer {
   fn from(size: Size<f32>) -> Self {
     Self::uniform(size)
+  }
+}
+
+/// A page's size and the margins around its page area.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PageBox {
+  /// The page's size.
+  pub size: Size<f32>,
+  /// The margins between the page's edges and its page area.
+  pub margin: Rect<f32>,
+}
+
+impl PageBox {
+  /// The page area inside the margins.
+  pub fn area(&self) -> Size<f32> {
+    self.size.inset(self.margin)
+  }
+}
+
+/// The `@page` rules of a stylesheet laid over a default page box.
+pub struct PageRules {
+  stylesheet: Arc<StyleSheet>,
+  base: PageBox,
+  viewport: Viewport,
+}
+
+impl PageRules {
+  /// The `@page` rules of `stylesheet` over `base`, the page box no rule changes.
+  pub fn new(stylesheet: Arc<StyleSheet>, base: PageBox) -> Self {
+    Self {
+      stylesheet,
+      base,
+      viewport: Viewport::print_page(base.size),
+    }
+  }
+
+  /// Page `page`'s box as a page `name`, as Blink's `StyleForPage` and `ResolvePageBoxGeometry`
+  /// give it, a margin percentage taking the page's size on its own axis. A rule that leaves no
+  /// page area is ignored, as Blink's `LayoutPageContainer` ignores it.
+  pub fn page_box(&self, page: usize, name: &PageName) -> PageBox {
+    let kind = PageKind::of(page);
+    let descriptors = self
+      .stylesheet
+      .page_descriptors(self.viewport, |selector| selector.matches(kind, name));
+    let size = descriptors.size.map_or(self.base.size, |size| {
+      size.resolve(
+        self.base.size,
+        &SizingContext::builder().viewport(self.viewport).build(),
+      )
+    });
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::print_page(size))
+      .build();
+    // Blink's `ResolveAutoMargins` leaves a page box that fills its page no `auto` margin.
+    let side = |base: f32, length: Option<Length>, basis: f32| match length {
+      None => base,
+      Some(Length::Auto) => 0.0,
+      Some(length) => length.to_px(&sizing, basis),
+    };
+    let margin = self.base.margin;
+    let page_box = PageBox {
+      size,
+      margin: Rect {
+        top: side(margin.top, descriptors.margin.top, size.height),
+        right: side(margin.right, descriptors.margin.right, size.width),
+        bottom: side(margin.bottom, descriptors.margin.bottom, size.height),
+        left: side(margin.left, descriptors.margin.left, size.width),
+      },
+    };
+    let area = page_box.area();
+
+    if area.width >= 1.0 && area.height >= 1.0 {
+      page_box
+    } else {
+      self.base
+    }
   }
 }
 

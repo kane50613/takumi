@@ -182,8 +182,9 @@ pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
 
 /// Renders a node across at most `max_pages` pages, each the page area `pages` gives it, handing
 /// each page's image to `page` in order, so a long document holds one page's pixels and scene at a
-/// time. A `Size<f32>` gives every page the same area, and [`PageSizer::from_page_rules`] the area
-/// the stylesheet's `@page` rules give each.
+/// time. A `Size<f32>` gives every page the same area, and
+/// [`PageRules`](takumi_core::layout::page_sizes::PageRules) the area the stylesheet's `@page`
+/// rules give each.
 ///
 /// A page is handed over as soon as no page still to lay out can paint onto it, which a box the
 /// tree does not bound, such as one with a transform, delays until it is laid out. Layout runs
