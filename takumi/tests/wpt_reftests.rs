@@ -41,7 +41,11 @@ use takumi::{
   unstable::raster::render_pages,
   write_image,
 };
-use takumi_core::{geometry::Size, resources::image::ResourceCache};
+use takumi_core::{
+  geometry::{Rect, Size},
+  layout::page_sizes::PageSizer,
+  resources::image::ResourceCache,
+};
 use test_utils::{CONTEXT, matches_fragments};
 
 /// The WPT harness's viewport.
@@ -50,6 +54,9 @@ const VIEWPORT: (u32, u32) = (800, 600);
 /// The page area of a print reftest: WPT's 5 by 3 inch page less its half-inch margins, at 96
 /// pixels an inch.
 const PRINT_PAGE_AREA: (u32, u32) = (384, 192);
+
+/// The margin of a print reftest's page, on every side.
+const PRINT_PAGE_MARGIN: f32 = 48.0;
 
 /// The WPT directories the run discovers reftests in.
 const ROOTS: [&str; 2] = ["css", "svg"];
@@ -900,7 +907,6 @@ impl Runner {
     let source = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let print = is_print_reftest(path.strip_prefix(&self.root).unwrap_or(path));
     let test = self.render(path, &source, print)?;
-    let pages = reftest_pages(&source);
     let mut has_match_reference = false;
     let mut matched = false;
 
@@ -914,7 +920,7 @@ impl Runner {
           .and_then(|reference| self.render(&reference_path, &reference, print))?
       };
 
-      let is_alike = test.is_alike(&reference, Fuzzy::of(&source, &href), pages.as_deref());
+      let is_alike = test.is_alike(&reference, Fuzzy::of(&source, &href));
 
       has_match_reference |= matches;
       matched |= matches && is_alike;
@@ -924,15 +930,15 @@ impl Runner {
           let name = self.relative(path).replace('/', "__");
 
           for (suffix, rendering) in [("test", &test), ("ref", &reference)] {
-            let (width, height) = rendering.size;
-
-            for (index, pixels) in rendering.pages.iter().enumerate() {
+            for (index, rendered) in rendering.pages.iter().enumerate() {
+              let (width, height) = rendered.size;
               let page = if print {
                 format!("-page{}", index + 1)
               } else {
                 String::new()
               };
-              let bitmap = Bitmap::from_raw(width, height, pixels.clone()).ok_or("render size")?;
+              let bitmap =
+                Bitmap::from_raw(width, height, rendered.pixels.clone()).ok_or("render size")?;
               let mut file = fs::File::create(dump.join(format!("{name}-{suffix}{page}.png")))
                 .map_err(|error| error.to_string())?;
 
@@ -1028,29 +1034,29 @@ impl Runner {
         Some((Arc::from(url), image))
       })
       .collect();
-    let stylesheet = StyleSheet::parse_list_loosy(
+    let stylesheet = Arc::new(StyleSheet::parse_list_loosy(
       [UA_SHEET, if is_svg { STANDALONE_SVG_SHEET } else { "" }]
         .map(str::to_owned)
         .into_iter()
         .chain(sheets.into_iter().map(|(.., sheet)| sheet)),
-    );
+    ));
     let size = if print { PRINT_PAGE_AREA } else { VIEWPORT };
     let options = RenderOptions::builder()
       .viewport(Viewport::new(size))
       .node(node.clone())
       .fonts(&self.fonts)
       .images(images)
-      .stylesheet(stylesheet.into())
+      .stylesheet(Arc::clone(&stylesheet))
       .build();
     let bitmaps = if print {
-      let page_size = Size {
-        width: size.0 as f32,
-        height: size.1 as f32,
+      let page = Size {
+        width: size.0 as f32 + 2.0 * PRINT_PAGE_MARGIN,
+        height: size.1 as f32 + 2.0 * PRINT_PAGE_MARGIN,
       };
-
+      let sizer = PageSizer::from_page_rules(stylesheet, page, Rect::all(PRINT_PAGE_MARGIN));
       let mut pages = Vec::new();
 
-      render_pages(options, page_size, usize::MAX, |page| {
+      render_pages(options, sizer, usize::MAX, |page| {
         pages.push(page);
         Ok(())
       })
@@ -1060,43 +1066,52 @@ impl Runner {
       vec![render(options).map_err(|error| format!("render: {error}"))?]
     };
 
-    Ok(Rendering {
-      size,
-      pages: bitmaps.iter().map(over_white).collect(),
-    })
-  }
-}
-
-/// A document rendered onto white: one page, or one per print page.
-struct Rendering {
-  size: (u32, u32),
-  pages: Vec<Vec<u8>>,
-}
-
-impl Rendering {
-  /// Whether it renders like `reference` within `fuzzy` on every page, or the 1-based `pages` a
-  /// `reftest-pages` names.
-  fn is_alike(&self, reference: &Self, fuzzy: Fuzzy, pages: Option<&[(usize, usize)]>) -> bool {
+    let ranges = reftest_pages(source);
     let selected = |index: usize| {
-      pages.is_none_or(|ranges| {
+      ranges.as_ref().is_none_or(|ranges| {
         ranges
           .iter()
           .any(|&(first, last)| (first..=last).contains(&(index + 1)))
       })
     };
 
-    if pages.is_none() && self.pages.len() != reference.pages.len() {
-      return false;
-    }
+    Ok(Rendering {
+      pages: bitmaps
+        .iter()
+        .enumerate()
+        .filter(|&(index, _)| selected(index))
+        .map(|(_, bitmap)| Page {
+          size: (bitmap.width(), bitmap.height()),
+          pixels: over_white(bitmap),
+        })
+        .collect(),
+    })
+  }
+}
 
-    (0..self.pages.len().max(reference.pages.len()))
-      .filter(|&index| selected(index))
-      .all(
-        |index| match (self.pages.get(index), reference.pages.get(index)) {
-          (Some(test), Some(reference)) => fuzzy.allows(test, reference),
-          _ => false,
-        },
-      )
+/// A document rendered onto white: one page, or each print page its `reftest-pages` selects.
+struct Rendering {
+  pages: Vec<Page>,
+}
+
+/// One rendered page's size and RGBA.
+struct Page {
+  size: (u32, u32),
+  pixels: Vec<u8>,
+}
+
+impl Rendering {
+  /// Whether it renders like `reference` within `fuzzy`, page for page, as wptrunner compares
+  /// the pages each document's own `reftest-pages` selects.
+  fn is_alike(&self, reference: &Self, fuzzy: Fuzzy) -> bool {
+    self.pages.len() == reference.pages.len()
+      && self
+        .pages
+        .iter()
+        .zip(&reference.pages)
+        .all(|(test, reference)| {
+          test.size == reference.size && fuzzy.allows(&test.pixels, &reference.pixels)
+        })
   }
 }
 

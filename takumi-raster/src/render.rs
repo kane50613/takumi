@@ -4,7 +4,6 @@ pub use takumi_core::layout::measure::{MeasuredNode, MeasuredTextRun};
 pub use takumi_core::layout::needs::RenderNeeds;
 #[cfg(feature = "pages")]
 use takumi_core::{
-  geometry::Size,
   layout::page_sizes::PageSizer,
   page_stream::{PageStream, SETTLED_PAGES, Settle, Settled},
 };
@@ -181,8 +180,10 @@ pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
   canvas.into_inner()
 }
 
-/// Renders a node across at most `max_pages` pages `page_size`, handing each page's image to
-/// `page` in order, so a long document holds one page's pixels and scene at a time.
+/// Renders a node across at most `max_pages` pages, each the page area `pages` gives it, handing
+/// each page's image to `page` in order, so a long document holds one page's pixels and scene at a
+/// time. A `Size<f32>` gives every page the same area, and [`PageSizer::from_page_rules`] the area
+/// the stylesheet's `@page` rules give each.
 ///
 /// A page is handed over as soon as no page still to lay out can paint onto it, which a box the
 /// tree does not bound, such as one with a transform, delays until it is laid out. Layout runs
@@ -191,36 +192,34 @@ pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
 #[cfg(feature = "pages")]
 pub fn render_pages<'g>(
   options: RenderOptions<'g>,
-  page_size: Size<f32>,
+  pages: impl Into<PageSizer>,
   max_pages: usize,
   page: impl FnMut(Bitmap) -> Result<()>,
 ) -> Result<()> {
-  render_pages_settling(options, page_size, max_pages, SETTLED_PAGES, page)
+  render_pages_settling(options, pages.into(), max_pages, SETTLED_PAGES, page)
 }
 
 /// [`render_pages`] with `settle` saying how many of the first pages are safe to hand over.
 #[cfg(feature = "pages")]
 pub(crate) fn render_pages_settling<'g>(
   mut options: RenderOptions<'g>,
-  page_size: Size<f32>,
+  pages: PageSizer,
   max_pages: usize,
   settle: Settle<'_>,
   mut page: impl FnMut(Bitmap) -> Result<()>,
 ) -> Result<()> {
   let render_context = options.take_render_context();
   let root = RenderNode::from_node(&render_context, options.node);
-  let mut stream = PageStream::new(&root, PageSizer::uniform(page_size), max_pages);
-  let size = page_size.map(|length| length.round() as u32);
+  let mut stream = PageStream::new(&root, pages, max_pages);
 
   loop {
     let Settled { pages, laid } = stream.advance(settle)?;
 
     for index in pages {
       let scene = stream.window(index)?;
-      let origin = stream
-        .sizes()
-        .origin(index)
-        .map(|length| length.round() as i32);
+      let sizes = stream.sizes();
+      let size = sizes.size(index).map(|length| length.round() as u32);
+      let origin = sizes.origin(index).map(|length| length.round() as i32);
       let mut canvas = Canvas::try_new(size)
         .ok_or(Error::InvalidViewport)?
         .with_origin(origin);

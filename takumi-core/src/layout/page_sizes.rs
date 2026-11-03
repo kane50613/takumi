@@ -1,10 +1,13 @@
 //! The page area of each page of a paged layout, which Blink's `PaginatedRootLayoutAlgorithm` asks
 //! `StyleForPage` for as it reaches the page, by its index and the named page its content is on.
 
+use std::sync::Arc;
+
 use crate::{
-  geometry::{Point, Size},
+  geometry::{Point, Rect, Size},
   layout_unit::LayoutUnit,
-  style::PageName,
+  style::{Length, PageKind, PageName, SizingContext, StyleSheet},
+  viewport::Viewport,
 };
 
 /// A page's index and name to the size of its page area.
@@ -23,6 +26,45 @@ impl PageSizer {
   /// Every page `size`.
   pub fn uniform(size: Size<f32>) -> Self {
     Self::new(move |_, _| size)
+  }
+
+  /// Each page's area as the `@page` rules of `stylesheet` lay over a `page` with `margin`, as
+  /// Blink's `StyleForPage` and `ResolvePageBoxGeometry` give it, a margin percentage taking the
+  /// page's size on its own axis. A rule that leaves no page area is ignored, as Blink's
+  /// `LayoutPageContainer` ignores it.
+  pub fn from_page_rules(stylesheet: Arc<StyleSheet>, page: Size<f32>, margin: Rect<f32>) -> Self {
+    let viewport = Viewport::print_page(page);
+    let base_area = page.inset(margin);
+
+    Self::new(move |index, name| {
+      let kind = PageKind::of(index);
+      let descriptors =
+        stylesheet.page_descriptors(viewport, |selector| selector.matches(kind, name));
+      let size = descriptors.size.map_or(page, |size| {
+        size.resolve(page, &SizingContext::builder().viewport(viewport).build())
+      });
+      let sizing = SizingContext::builder()
+        .viewport(Viewport::print_page(size))
+        .build();
+      // Blink's `ResolveAutoMargins` leaves a page box that fills its page no `auto` margin.
+      let side = |base: f32, length: Option<Length>, basis: f32| match length {
+        None => base,
+        Some(Length::Auto) => 0.0,
+        Some(length) => length.to_px(&sizing, basis),
+      };
+      let area = size.inset(Rect {
+        top: side(margin.top, descriptors.margin.top, size.height),
+        right: side(margin.right, descriptors.margin.right, size.width),
+        bottom: side(margin.bottom, descriptors.margin.bottom, size.height),
+        left: side(margin.left, descriptors.margin.left, size.width),
+      });
+
+      if area.width >= 1.0 && area.height >= 1.0 {
+        area
+      } else {
+        base_area
+      }
+    })
   }
 
   pub(crate) fn size(&self, page: usize, name: &PageName) -> Size<f32> {

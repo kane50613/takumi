@@ -22,7 +22,7 @@ use takumi_core::{
     page_rule::{PageContext, PageSize},
   },
   units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
-  viewport::{MediaTarget, Viewport},
+  viewport::Viewport,
 };
 use typed_builder::TypedBuilder;
 
@@ -1065,7 +1065,7 @@ impl PageOptions {
 
   /// The page as the viewport an `@page` rule's `@media` and lengths resolve against.
   pub(crate) fn viewport(&self) -> Viewport {
-    Viewport::new((self.width as u32, self.height as u32)).with_media_target(MediaTarget::Print)
+    Viewport::print_page(self.size())
   }
 }
 
