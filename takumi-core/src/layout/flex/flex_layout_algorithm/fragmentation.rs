@@ -831,7 +831,7 @@ impl FlexLayoutAlgorithm<'_, '_> {
         setup_space_builder_for_fragmentation(
           self.space,
           &self.builder,
-          self.tree.is_monolithic(node),
+          self.tree.fragmentation_child(node),
           offset.block_offset,
           &mut child_space,
         );

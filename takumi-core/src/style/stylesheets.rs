@@ -1612,6 +1612,7 @@ define_style! {
       filter: Filters,
       flex_basis: Option<FlexBasis>,
       flex_grow: Option<FlexGrow>,
+      page: PageName,
     }
     /// Blink's `misc->misc2` field group, which Blink nests in `misc`.
     misc2_data: StyleMisc2Data {

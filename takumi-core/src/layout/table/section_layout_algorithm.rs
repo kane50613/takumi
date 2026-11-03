@@ -8,9 +8,10 @@ use crate::layout::{
   box_fragment_builder::BoxFragmentBuilder,
   break_appeal::BreakAppeal,
   fragmentation_utils::{
-    FlexItemBreak, IndexedBlockChildIterator, break_before_child_if_needed, finish_fragmentation,
-    fragment_index, fragmentation_layout_input_for_child, is_early_break_target,
-    setup_fragment_builder_for_fragmentation, setup_space_builder_for_fragmentation,
+    FlexItemBreak, FragmentationChild, IndexedBlockChildIterator, break_before_child_if_needed,
+    finish_fragmentation, fragment_index, fragmentation_layout_input_for_child,
+    is_early_break_target, setup_fragment_builder_for_fragmentation,
+    setup_space_builder_for_fragmentation,
   },
   logical_rect::LogicalBoxStrut,
 };
@@ -228,7 +229,14 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
   }
 
   fn setup_row_space_for_fragmentation(&self, space: &mut ConstraintSpace, offset: LayoutUnit) {
-    setup_space_builder_for_fragmentation(self.space, &self.builder, false, offset, space);
+    // Approximate: a row's own `page` is not read.
+    setup_space_builder_for_fragmentation(
+      self.space,
+      &self.builder,
+      FragmentationChild::default(),
+      offset,
+      space,
+    );
   }
 
   fn lay_out_row(

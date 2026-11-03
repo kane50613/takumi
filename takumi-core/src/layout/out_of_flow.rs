@@ -1045,7 +1045,7 @@ impl<'r> LayoutTree<'r> {
     {
       setup_space_for_fragmentation(
         part.space,
-        self.is_monolithic(candidate.node),
+        self.fragmentation_child(candidate.node),
         fragmentation.fragmentainer_offset + offset.y,
         fragmentation.fragmentainer_block_size,
         candidate.requires_content_before_breaking,

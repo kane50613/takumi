@@ -388,7 +388,7 @@ fn a_page_without_area_fails_and_an_unlaid_page_reaches_nothing() {
     root([block("a", "h100"), block("b", "h100 page")]),
     ".h100 { height: 100px } .page { break-before: page }",
   );
-  let sizer = PageSizer::new(move |index| {
+  let sizer = PageSizer::new(move |index, _| {
     if index == 0 {
       page
     } else {
@@ -1953,4 +1953,87 @@ fn a_broken_overflow_clip_spans_the_stitched_box() {
       "{child} in {container}"
     );
   }
+}
+
+/// A box on another named page than the boxes before it starts a page, laid out at the size of
+/// its name, as Blink's `CalculateBreakBetweenValue` and `PaginatedRootLayoutAlgorithm` do. A
+/// child with no `page` of its own stays on its container's named page.
+#[test]
+fn a_change_of_page_name_breaks_and_sizes_the_page() {
+  let tree = render(
+    root([
+      Node::container([block("intro", "h50"), block("body", "h50")])
+        .with_class_name("block cover")
+        .with_id("cover"),
+      block("plain", "h50"),
+      block("wide-a", "h50 wide"),
+      block("wide-b", "h50 wide"),
+    ]),
+    ".h50 { height: 50px } .cover { page: cover } .wide { page: wide }",
+  );
+
+  // The page laid out again under its name leaves the layout the streamed pages read whole.
+  oracles::check(
+    &tree,
+    Size {
+      width: 300.0,
+      height: 300.0,
+    },
+  );
+
+  let sizer = PageSizer::new(|_, name| match name.get() {
+    Some("cover") => Size {
+      width: 300.0,
+      height: 400.0,
+    },
+    Some("wide") => Size {
+      width: 500.0,
+      height: 300.0,
+    },
+    _ => Size {
+      width: 300.0,
+      height: 300.0,
+    },
+  });
+  let (results, sizes) =
+    LayoutResults::compute_pages(&tree, sizer, usize::MAX).expect("pages lay out");
+  let pages: Vec<_> = (0..sizes.len())
+    .map(|page| (sizes.name(page).get(), sizes.size(page)))
+    .collect();
+  let width = |index: usize| {
+    let child = results.box_children(NodeId::ROOT).expect("root children")[index].node_id;
+
+    results.fragments(child).expect("fragments")[0]
+      .layout
+      .size
+      .width
+  };
+
+  assert_eq!(
+    pages,
+    [
+      (
+        Some("cover"),
+        Size {
+          width: 300.0,
+          height: 400.0
+        }
+      ),
+      (
+        None,
+        Size {
+          width: 300.0,
+          height: 300.0
+        }
+      ),
+      (
+        Some("wide"),
+        Size {
+          width: 500.0,
+          height: 300.0
+        }
+      ),
+    ]
+  );
+  assert_eq!((width(1), width(2)), (300.0, 500.0));
 }

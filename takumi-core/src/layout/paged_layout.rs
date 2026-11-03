@@ -1,5 +1,5 @@
 //! Blink's [`PaginatedRootLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/paginated_root_layout_algorithm.cc)
-//! without page boxes or `@page`, driven a page at a time so a caller can read the pages laid out so far.
+//! without page boxes, driven a page at a time so a caller can read the pages laid out so far.
 
 use std::rc::Rc;
 
@@ -7,16 +7,18 @@ use rustc_hash::FxHashSet;
 
 use crate::{
   Error, Result,
-  geometry::{AvailableSpace, NodeId, Point},
+  geometry::{AvailableSpace, NodeId, Point, Size},
   layout::{
     block_break_token::BlockBreakToken,
     break_appeal::BreakAppeal,
     break_token::BreakToken,
-    constraint_space::BlockFragmentation,
+    constraint_space::{BlockFragmentation, ConstraintSpace},
     fragmentation_layout_input::FragmentationLayoutInput,
     fragmentation_utils::{adjust_margins_for_fragmentation, fragment_index, is_break_inside},
+    layout_result::LayoutResult,
     layout_view::LayoutView,
     length_utils::margins_for,
+    logical_rect::LogicalBoxStrut,
     page_area::PageAreas,
     page_sizes::{PageSizer, PageSizes},
     paint_reach::PaintReach,
@@ -24,7 +26,7 @@ use crate::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
-  style::{Direction, Length, SpacePair},
+  style::{Direction, Length, PageName, SpacePair},
 };
 
 /// A render tree laid out across pages sized as a [`PageSizer`] says, one page at a time, each
@@ -87,47 +89,38 @@ impl<'r> PagedLayout<'r> {
     }
 
     let page = self.page_count();
-    let page_size = self.sizer.size(page);
-    let top = self.sizes.top(page);
-    let bottom = top + page_size.height;
 
-    if !page_size.has_area() || !bottom.is_finite() || bottom <= top {
-      return Err(Error::InvalidPageSize);
-    }
-
-    let page_block_size = LayoutUnit::from_float(page_size.height);
-
-    self.sizes.push(page_size);
     self.tree.begin_page(page + 1);
-    let mut space = self
-      .tree
-      .root_space(page_size.map(AvailableSpace::Definite));
-    let mut margins = margins_for(
-      self.tree.layout_style(NodeId::ROOT),
-      space.percentage_resolution_inline_size,
-      Direction::Ltr,
-    );
 
-    adjust_margins_for_fragmentation(self.break_token.as_deref(), false, &mut margins);
-    space.block_fragmentation = Some(BlockFragmentation {
-      fragmentainer_block_size: page_block_size,
-      fragmentainer_offset: margins.block_start,
-      requires_content_before_breaking: false,
-      should_propagate_child_break_values: true,
-      min_break_appeal: BreakAppeal::LastResort,
-      min_block_size_should_encompass_intrinsic_size: false,
-    });
+    let (root_fragment, candidates, laid_root, space) = match self.last_root_fragment {
+      // Blink's page area past the root's end holds no content to name its page.
+      Some(root_fragment) if self.break_token.is_none() => {
+        let laid = self.page_space(page, PageName::default())?;
 
-    let (root_fragment, candidates, laid_root) = match self.last_root_fragment {
-      Some(root_fragment) if self.break_token.is_none() => (root_fragment, Vec::new(), false),
+        self.sizes.push(laid.size, laid.name);
+        (root_fragment, Vec::new(), false, laid.space)
+      }
       _ => {
-        let input = FragmentationLayoutInput {
-          break_token: self.break_token.clone(),
-          early_break: None,
-        };
-        let result = self.tree.layout_fragment(NodeId::ROOT, &space, &input);
         let fragment_index = fragment_index(self.break_token.as_deref());
-        let space_left = page_block_size - margins.block_start;
+        let name = page
+          .checked_sub(1)
+          .map(|before| self.sizes.name(before).clone())
+          .unwrap_or_default();
+        let mut laid = self.lay_out_root(page, name)?;
+        let laid_name = self.root_page_name(&laid);
+
+        // A page whose content names another page lays out again under that page's style, as
+        // Blink's `PaginatedRootLayoutAlgorithm` does.
+        if laid_name != laid.page.name {
+          laid = self.lay_out_root(page, laid_name)?;
+        }
+
+        let LaidRoot {
+          page: laid_page,
+          result,
+        } = laid;
+        let space_left =
+          LayoutUnit::from_float(laid_page.size.height) - laid_page.margins.block_start;
 
         // Blink's page area breaks before a root that starts past the page end, leaving the page
         // blank, as `MovePastBreakpoint` must break before such a child.
@@ -136,6 +129,7 @@ impl<'r> PagedLayout<'r> {
             || (space_left == LayoutUnit::ZERO
               && is_break_inside(result.break_info.break_token.as_deref())))
         {
+          self.sizes.push(laid_page.size, laid_page.name);
           self.break_token = Some(Rc::new(BlockBreakToken::break_before(NodeId::ROOT, false)));
 
           return Ok(true);
@@ -145,21 +139,26 @@ impl<'r> PagedLayout<'r> {
           NodeId::ROOT,
           fragment_index,
           page,
-          Point::new(margins.inline_start, margins.block_start),
+          Point::new(
+            laid_page.margins.inline_start,
+            laid_page.margins.block_start,
+          ),
           &result,
         );
 
         // The pages stack in the block direction, which the out-of-flow boxes lay out across.
         let root_origin = Point::new(
-          margins.inline_start,
-          self.sizes.block_offset(page) + margins.block_start,
+          laid_page.margins.inline_start,
+          self.sizes.block_offset(page) + laid_page.margins.block_start,
         );
 
+        self.sizes.push(laid_page.size, laid_page.name);
         self.break_token = result.break_info.break_token.clone();
         (
           (fragment_index, root_origin),
           result.out_of_flow.clone(),
           true,
+          laid_page.space,
         )
       }
     };
@@ -180,6 +179,67 @@ impl<'r> PagedLayout<'r> {
     self.update_pending();
 
     Ok(true)
+  }
+
+  /// The space page `page` lays the root out in under the style of the page named `name`.
+  fn page_space(&self, page: usize, name: PageName) -> Result<PageSpace> {
+    let size = self.sizer.size(page, &name);
+    let top = self.sizes.top(page);
+    let bottom = top + size.height;
+
+    if !size.has_area() || !bottom.is_finite() || bottom <= top {
+      return Err(Error::InvalidPageSize);
+    }
+
+    let mut space = self.tree.root_space(size.map(AvailableSpace::Definite));
+    let mut margins = margins_for(
+      self.tree.layout_style(NodeId::ROOT),
+      space.percentage_resolution_inline_size,
+      Direction::Ltr,
+    );
+
+    adjust_margins_for_fragmentation(self.break_token.as_deref(), false, &mut margins);
+    space.block_fragmentation = Some(BlockFragmentation {
+      fragmentainer_block_size: LayoutUnit::from_float(size.height),
+      fragmentainer_offset: margins.block_start,
+      requires_content_before_breaking: false,
+      should_propagate_child_break_values: true,
+      min_break_appeal: BreakAppeal::LastResort,
+      min_block_size_should_encompass_intrinsic_size: false,
+    });
+    // Blink's `SetupSpaceBuilderForFragmentation` for the root in the page area.
+    space.page_name = self.tree.layout_style(NodeId::ROOT).breaks.page.clone();
+
+    Ok(PageSpace {
+      size,
+      name,
+      space,
+      margins,
+    })
+  }
+
+  /// The root laid out on page `page` under the style of the page named `name`.
+  fn lay_out_root(&mut self, page: usize, name: PageName) -> Result<LaidRoot> {
+    let page = self.page_space(page, name)?;
+    let input = FragmentationLayoutInput {
+      break_token: self.break_token.clone(),
+      early_break: None,
+    };
+    let result = self.tree.layout_fragment(NodeId::ROOT, &page.space, &input);
+
+    Ok(LaidRoot { page, result })
+  }
+
+  /// Blink's `PageNameForChildFragment` of the page area for the root laid out as `laid`.
+  fn root_page_name(&self, laid: &LaidRoot) -> PageName {
+    [
+      &laid.result.break_info.propagated_page_name,
+      &self.tree.layout_style(NodeId::ROOT).breaks.page,
+    ]
+    .into_iter()
+    .find(|name| name.is_named())
+    .cloned()
+    .unwrap_or_default()
   }
 
   /// Frees what no later page reads after the first `pages`, when made [`Self::with_release`].
@@ -362,4 +422,18 @@ fn open_nodes(root_token: Option<&BlockBreakToken>) -> FxHashSet<NodeId> {
     );
   }
   open
+}
+
+/// A page's size under the style of its name, and the space the root lays out in on it.
+struct PageSpace {
+  size: Size<f32>,
+  name: PageName,
+  space: ConstraintSpace,
+  margins: LogicalBoxStrut,
+}
+
+/// The root laid out on a page.
+struct LaidRoot {
+  page: PageSpace,
+  result: Rc<LayoutResult>,
 }

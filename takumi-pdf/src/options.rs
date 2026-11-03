@@ -19,7 +19,7 @@ use takumi_core::{
   },
   style::{
     Color, FontFamily, Lang, Length, SizingContext, StyleSheet,
-    page_rule::{PageContext, PageKind, PageSize},
+    page_rule::{PageContext, PageSize},
   },
   units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
   viewport::{MediaTarget, Viewport},
@@ -1014,9 +1014,9 @@ impl PageOptions {
     }
   }
 
-  /// Each page with the `@page` rules of `stylesheet` that match it in `context` laid over it,
-  /// as Blink's `StyleForPage` styles a page, CSS winning as Chromium's `preferCSSPageSize` lets
-  /// it. Lengths resolve with this page as the viewport, as Blink's
+  /// Each kind of page of each name with the `@page` rules of `stylesheet` that match it in
+  /// `context` laid over it, as Blink's `StyleForPage` styles a page, CSS winning as Chromium's
+  /// `preferCSSPageSize` lets it. Lengths resolve with this page as the viewport, as Blink's
   /// `ViewportSizeChangeScopeForPrinting` sizes it to the default page box.
   pub(crate) fn with_page_rules(
     self,
@@ -1025,25 +1025,23 @@ impl PageOptions {
   ) -> PerPage<Self> {
     let viewport = self.viewport();
     let sizing = context.sizing(viewport);
-    let page = |kind| {
-      let descriptors = stylesheet.page_descriptors(viewport, kind, context);
-      let sized = descriptors
-        .size
-        .map_or(self, |size| self.sized(size, &sizing));
-      let page = Self {
-        margin: sized.margin.overlaid(descriptors.margin, &sized, &sizing),
-        ..sized
-      };
 
-      // Blink's `LayoutPageContainer` ignores the author's page style when it leaves no page area.
-      if page.has_area() { page } else { self }
-    };
-
-    PerPage::new(
+    PerPage::of_names(
+      stylesheet.page_names(),
       context.direction(),
-      page(PageKind::First),
-      page(PageKind::Left),
-      page(PageKind::Right),
+      |kind, name| {
+        let descriptors = stylesheet.page_descriptors(viewport, kind, name, context);
+        let sized = descriptors
+          .size
+          .map_or(self, |size| self.sized(size, &sizing));
+        let page = Self {
+          margin: sized.margin.overlaid(descriptors.margin, &sized, &sizing),
+          ..sized
+        };
+
+        // Blink's `LayoutPageContainer` ignores the author's page style when it leaves no page area.
+        if page.has_area() { page } else { self }
+      },
     )
   }
 
@@ -1121,7 +1119,7 @@ mod tests {
     context::RenderContext,
     geometry::Rect,
     layout::node::Node,
-    style::{SizingContext, StyleSheet, page_rule::PageContext},
+    style::{PageName, SizingContext, StyleSheet, page_rule::PageContext},
   };
 
   use super::{PageMargin, PageOptions, PdfError, TakumiError};
@@ -1142,7 +1140,7 @@ mod tests {
 
     (0..3)
       .map(|index| {
-        let page = pages.get(index);
+        let page = pages.get(index, &PageName::default());
         let margin = page.margin.resolve(page.size(), None, None);
 
         (margin.left, margin.right)
@@ -1156,7 +1154,7 @@ mod tests {
       StyleSheet::parse("@page { size: 600px 300px; margin: 10% 5% }").expect("parses");
     let page = *PageOptions::A4
       .with_page_rules(&stylesheet, &PageContext::default())
-      .get(0);
+      .first();
 
     assert_eq!(
       page.margin.resolve(page.size(), None, None),
@@ -1196,7 +1194,7 @@ mod tests {
     let stylesheet = StyleSheet::parse("@page { margin: auto }").expect("parses");
     let page = *PageOptions::A4
       .with_page_rules(&stylesheet, &PageContext::default())
-      .get(0);
+      .first();
 
     assert!(matches!(PageOptions::A4.margin.top, PageMargin::Auto));
     assert_eq!(

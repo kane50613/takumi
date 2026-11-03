@@ -147,7 +147,23 @@ A `@page` rule in `css` or a `<style>` element sets the page size and margins. I
 - A rule whose margins leave no page area is ignored. A header or footer that leaves no page area fails the render, as it does with the `margin` option.
 - `em`, `rem`, and `var()` read the root element's font size and custom properties. `vw` and `vh` read the page the options give, before `size` changes it.
 
-Page names, margin boxes such as `@top-center`, and other descriptors are not read.
+Margin boxes such as `@top-center` and other descriptors are not read.
+
+### Named pages
+
+The `page` property puts an element on a named page, which `@page` rules with that name style. An element on a different named page than the content before it starts a new page, and its children stay on that page type unless they name their own. Content without a `page` goes back to the unnamed pages.
+
+```css title="A landscape page for a wide table"
+@page wide {
+  size: A4 landscape;
+  margin: 10mm;
+}
+.wide-table {
+  page: wide;
+}
+```
+
+`@page wide:first` styles the first page of the document when it is a `wide` page, as `:first` does for unnamed pages. A name without a rule of its own takes the unnamed pages' rules.
 
 ## Reuse a renderer
 

@@ -6935,3 +6935,70 @@ fn at_page_rules_size_and_margin_the_first_left_and_right_pages() {
     );
   }
 }
+
+/// The `page` property puts a box on a named page, which `@page` rules of that name size and
+/// margin, as Blink's named pages do: a cover, the body, a landscape spread for a wide table, and
+/// the body again. A change of page name breaks the page.
+#[test]
+fn named_pages_take_the_page_rules_of_their_name() {
+  const CSS: &str = "
+    @page { size: A5; margin: 15mm }
+    @page cover { margin: 40mm 20mm }
+    @page wide { size: A5 landscape; margin: 10mm }
+    .cover { page: cover; font-size: 28px; font-weight: 700 }
+    .wide { page: wide }
+    p { margin: 0 0 6px; font-size: 11px; line-height: 15px }
+    table { width: 100%; border-collapse: collapse; font-size: 10px }
+    td { border: 1px solid #b4b4b4; padding: 2px 4px }
+  ";
+  let paragraph = |index: usize| {
+    format!(
+      "<p>Paragraph {index} sits on the body pages, between the cover and the wide table.</p>"
+    )
+  };
+  let row = |index: usize| {
+    format!(
+      "<tr>{}</tr>",
+      (1..=8)
+        .map(|column| format!("<td>Row {index}, column {column}</td>"))
+        .collect::<String>()
+    )
+  };
+  let html = format!(
+    r#"<div class="cover">Named pages</div>{}<div class="wide"><table>{}</table></div>{}"#,
+    (1..=6).map(paragraph).collect::<String>(),
+    (1..=12).map(row).collect::<String>(),
+    (7..=12).map(paragraph).collect::<String>(),
+  );
+  let pdf = run_pdf_fixture("named-pages", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse the document"))
+      .stylesheet(Arc::new(
+        StyleSheet::parse(CSS).expect("parse the named pages"),
+      ))
+      .page(PageOptions::A4)
+      .footer(
+        from_html(
+          r#"<div style="text-align: center; font-size: 10px; color: #141414">
+            Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+          </div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the footer"),
+      )
+      .fonts(fonts)
+      .build()
+  });
+  let a5 = (148.0 * 72.0 / 25.4, 210.0 * 72.0 / 25.4);
+  let landscape = (a5.1, a5.0);
+  let boxes = media_boxes(&pdf);
+
+  assert_eq!(boxes.len(), 4, "{boxes:?}");
+  for (page, (&(width, height), expected)) in boxes.iter().zip([a5, a5, landscape, a5]).enumerate()
+  {
+    assert!(
+      (width - expected.0).abs() < 0.5 && (height - expected.1).abs() < 0.5,
+      "page {page} is {width}x{height}, not {expected:?}"
+    );
+  }
+}

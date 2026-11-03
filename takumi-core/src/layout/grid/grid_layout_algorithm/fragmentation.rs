@@ -381,7 +381,7 @@ impl GridLayoutAlgorithm<'_, '_> {
         setup_space_builder_for_fragmentation(
           self.space,
           &self.builder,
-          self.tree.is_monolithic(item.node),
+          self.tree.fragmentation_child(item.node),
           child_block_offset,
           &mut space,
         );

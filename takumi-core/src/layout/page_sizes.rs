@@ -1,27 +1,32 @@
 //! The page area of each page of a paged layout, which Blink's `PaginatedRootLayoutAlgorithm` asks
-//! `StyleForPage` for as it reaches the page.
+//! `StyleForPage` for as it reaches the page, by its index and the named page its content is on.
 
 use crate::{
   geometry::{Point, Size},
   layout_unit::LayoutUnit,
+  style::PageName,
 };
 
+/// A page's index and name to the size of its page area.
+type SizeOf = dyn Fn(usize, &PageName) -> Size<f32>;
+
 /// What gives each page its page area, as Blink's `StyleForPage` does.
-pub struct PageSizer(Box<dyn Fn(usize) -> Size<f32>>);
+pub struct PageSizer(Box<SizeOf>);
 
 impl PageSizer {
-  /// `size_of` gives page `page`, counted from 0, its page area.
-  pub fn new(size_of: impl Fn(usize) -> Size<f32> + 'static) -> Self {
+  /// `size_of` gives page `page`, counted from 0, its page area as a page `name`, which every name
+  /// must have: a page lays out first under the name of the page before it.
+  pub fn new(size_of: impl Fn(usize, &PageName) -> Size<f32> + 'static) -> Self {
     Self(Box::new(size_of))
   }
 
   /// Every page `size`.
   pub fn uniform(size: Size<f32>) -> Self {
-    Self::new(move |_| size)
+    Self::new(move |_, _| size)
   }
 
-  pub(crate) fn size(&self, page: usize) -> Size<f32> {
-    (self.0)(page)
+  pub(crate) fn size(&self, page: usize, name: &PageName) -> Size<f32> {
+    (self.0)(page, name)
   }
 }
 
@@ -31,10 +36,12 @@ impl From<Size<f32>> for PageSizer {
   }
 }
 
-/// The page area of each page laid out so far. The pages stack in the block direction.
+/// The page area and the page name of each page laid out so far. The pages stack in the block
+/// direction.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PageSizes {
   sizes: Vec<Size<f32>>,
+  names: Vec<PageName>,
   /// Where each page starts, and after them where the next would.
   tops: Vec<f32>,
   /// The tops in layout units, summed from each page's rounded height.
@@ -47,6 +54,7 @@ impl Default for PageSizes {
   fn default() -> Self {
     Self {
       sizes: Vec::new(),
+      names: Vec::new(),
       tops: vec![0.0],
       block_offsets: vec![LayoutUnit::ZERO],
       uniform_height: None,
@@ -60,13 +68,13 @@ impl PageSizes {
     let mut sizes = Self::default();
 
     for _ in 0..pages {
-      sizes.push(size);
+      sizes.push(size, PageName::default());
     }
     sizes
   }
 
-  /// Adds the next page.
-  pub(crate) fn push(&mut self, size: Size<f32>) {
+  /// Adds the next page, a page `name`.
+  pub(crate) fn push(&mut self, size: Size<f32>, name: PageName) {
     let page = self.sizes.len();
     let uniform_height = match self.uniform_height {
       None if page == 0 => Some(size.height),
@@ -80,6 +88,7 @@ impl PageSizes {
     };
 
     self.sizes.push(size);
+    self.names.push(name);
     self.tops.push(next_top);
     self
       .block_offsets
@@ -100,6 +109,11 @@ impl PageSizes {
   /// The page area of page `page`, counted from 0.
   pub fn size(&self, page: usize) -> Size<f32> {
     self.sizes[page]
+  }
+
+  /// The named page page `page` is, as its content's `page` says.
+  pub fn name(&self, page: usize) -> &PageName {
+    &self.names[page]
   }
 
   /// Where page `page` starts in the scene of every page.
@@ -137,7 +151,7 @@ impl PageSizes {
 #[cfg(test)]
 mod tests {
   use super::PageSizes;
-  use crate::{geometry::Size, layout_unit::LayoutUnit};
+  use crate::{geometry::Size, layout_unit::LayoutUnit, style::PageName};
 
   fn height(height: f32) -> Size<f32> {
     Size {
@@ -151,7 +165,7 @@ mod tests {
     let mut sizes = PageSizes::default();
 
     for page in [100.0, 50.0, 70.0, 50.0] {
-      sizes.push(height(page));
+      sizes.push(height(page), PageName::default());
     }
 
     assert_eq!(

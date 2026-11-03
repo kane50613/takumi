@@ -37,8 +37,11 @@ use crate::{
 #[cfg(feature = "fragmentation")]
 use crate::{
   layout::{
-    block_break_token::BlockBreakToken, box_fragment_builder::BoxFragmentBuilder,
-    fragmentation_utils::fragment_index, releases::Finished, tree::FragmentBreak,
+    block_break_token::BlockBreakToken,
+    box_fragment_builder::BoxFragmentBuilder,
+    fragmentation_utils::{FragmentationChild, fragment_index},
+    releases::Finished,
+    tree::FragmentBreak,
   },
   style::Overflow,
 };
@@ -628,6 +631,15 @@ impl<'r> LayoutTree<'r> {
         style.display,
         Display::Block | Display::ListItem | Display::Inline
       )
+  }
+
+  /// What setting up `node`'s space for fragmentation reads off it.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn fragmentation_child(&self, node: NodeId) -> FragmentationChild<'_> {
+    FragmentationChild {
+      is_monolithic: self.is_monolithic(node),
+      page_name: Some(&self.node_state(node).layout_style.breaks.page),
+    }
   }
 
   /// Blink's `LayoutBox::IsMonolithic` when printing.

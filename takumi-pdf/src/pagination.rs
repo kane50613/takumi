@@ -11,6 +11,7 @@ use takumi_core::{
   },
   page_stream::{PageStream, Settle, Settled},
   scene::PageWindows,
+  style::PageName,
 };
 
 use crate::{
@@ -256,7 +257,7 @@ impl CountingPass {
     let repeated: Vec<_> = self
       .content
       .repeated
-      .get(0)
+      .first()
       .iter()
       .filter_map(Repeatable::source_orders)
       .map(|orders| orders.start.saturating_sub(1)..orders.end.saturating_sub(1))
@@ -282,6 +283,8 @@ pub(crate) struct Paginated {
 pub(crate) struct PageSlice {
   /// 0-based; display page numbers are `index + 1`.
   pub(crate) index: usize,
+  /// The named page the page is, which picks its frame.
+  pub(crate) name: PageName,
   pub(crate) start: f32,
   /// Where the next page begins.
   pub(crate) end: f32,
@@ -293,6 +296,7 @@ impl PageSlice {
 
     Self {
       index,
+      name: sizes.name(index).clone(),
       start,
       end: start + sizes.size(index).height,
     }
@@ -344,11 +348,8 @@ impl Paginated {
 mod tests {
   use std::rc::Rc;
 
+  use takumi_core::html::{FromHtmlOptions, from_html};
   use takumi_core::scene::PagedScene;
-  use takumi_core::{
-    html::{FromHtmlOptions, from_html},
-    style::Direction,
-  };
 
   use super::*;
   use crate::{
@@ -535,7 +536,7 @@ mod tests {
       )
       .expect("the page has an area")
     };
-    let frames = PageFrames::new(Direction::Ltr, frame(220.0), frame(140.0), frame(180.0));
+    let frames = PageFrames::new(frame(220.0), frame(140.0), frame(180.0));
     let source = (1..=40)
       .map(|line| format!(r#"<div id="line-{line}" style="height: 20px">Line {line}</div>"#))
       .collect::<String>();

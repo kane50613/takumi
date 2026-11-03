@@ -23,7 +23,7 @@ use crate::{
     block_break_token::BlockBreakToken, break_appeal::BreakAppeal, early_break::EarlyBreak,
     fragmentation_utils::fragment_index,
   },
-  style::BreakBetween,
+  style::{BreakBetween, PageName},
 };
 
 /// Blink's `LayoutResult::EStatus`.
@@ -348,6 +348,8 @@ pub(crate) struct BreakInfo {
   /// Whether the box's `break-inside` avoids a page break, which Blink reads off the fragment's
   /// style.
   pub(crate) avoids_break_inside: bool,
+  /// Blink's `PropagatedPageName`: the named page of the box's first child, none to take its own.
+  pub(crate) propagated_page_name: PageName,
 }
 
 #[cfg(feature = "fragmentation")]
@@ -367,6 +369,7 @@ impl Default for BreakInfo {
       fragment_index: 0,
       is_repeated: false,
       avoids_break_inside: false,
+      propagated_page_name: PageName::default(),
     }
   }
 }

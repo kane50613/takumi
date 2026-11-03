@@ -6,7 +6,7 @@ use std::rc::Rc;
 use bitflags::bitflags;
 
 #[cfg(feature = "fragmentation")]
-use crate::layout::break_appeal::BreakAppeal;
+use crate::{layout::break_appeal::BreakAppeal, style::PageName};
 use crate::{
   layout::{
     bfc_rect::BfcOffset, exclusions::exclusion_space::ExclusionSpace,
@@ -111,6 +111,9 @@ pub(crate) struct ConstraintSpace {
   /// Blink's `ShouldRepeat`: a repeated table header or footer repeats again on the next page.
   #[cfg(feature = "fragmentation")]
   pub(crate) should_repeat: bool,
+  /// Blink's `PageName`: the named page the box is on, which its children without one take.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) page_name: PageName,
 }
 
 /// The fields Blink's `ConstraintSpace` keeps for block fragmentation, for pages alone: a space
@@ -170,6 +173,8 @@ impl ConstraintSpace {
       block_fragmentation: None,
       #[cfg(feature = "fragmentation")]
       should_repeat: false,
+      #[cfg(feature = "fragmentation")]
+      page_name: PageName::default(),
     }
   }
 
