@@ -72,7 +72,7 @@ const pdf = await render(html, {
 | `timeout`, `waitForFonts`                | not needed, since there is no page to load |
 | `scale`                                  | not supported, so scale the CSS instead    |
 | `pageRanges`                             | `pageRanges: [1, { from: 4, to: 8 }]`      |
-| `preferCSSPageSize`, `@page`             | not supported, so set `size` and `margin`  |
+| `preferCSSPageSize`, `@page`             | `@page` rules always win over the options  |
 | `omitBackground`                         | not supported                              |
 
 Margins take numbers in CSS px, not length strings. For Chromium's `"0.5in"`, pass `48`.
@@ -104,6 +104,6 @@ Takumi supports a subset of browser CSS. Check these differences before you repl
 
 - Scripts do not run, so charts and diagrams have to arrive as markup, SVG, or images. A client-side chart library does not work.
 - PDF output rejects `filter: blur()` and `drop-shadow()`, and does not draw `backdrop-filter`. Blurred `box-shadow` and `text-shadow` are approximated with bands. Grid, flexbox, transforms, gradients, masks, and clip paths all work.
-- `@page` is not supported, so page geometry comes from the options.
+- `@page` reads `size` and the margins, also for `:first`, `:left`, and `:right`. Page names and margin boxes such as `@top-center` are ignored.
 
 Keep Puppeteer to reproduce a live web page as a browser shows it. Use `takumi-pdf` for documents written for print. See [Comparison](/docs/pdf/comparison) for measured numbers.

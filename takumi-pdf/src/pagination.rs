@@ -368,7 +368,7 @@ mod tests {
   use std::rc::Rc;
 
   use takumi_core::html::{FromHtmlOptions, from_html};
-  use takumi_core::scene::PagedScene;
+  use takumi_core::{layout::page_sizes::PerPage, scene::PagedScene};
 
   use super::*;
   use crate::{
@@ -504,7 +504,7 @@ mod tests {
           height,
           margin: PageMargins::uniform(12.0),
         };
-        let frames = PageFrames::resolve(&page, band_viewport(&page), None, None)
+        let frames = PageFrames::resolve(&PerPage::uniform(page), band_viewport(&page), None, None)
           .expect("the page has an area");
         let paginated = Paginated::lay_out(node.clone(), &inputs, &frames)
           .unwrap_or_else(|_| panic!("{name} lays out on {width}x{height}"));

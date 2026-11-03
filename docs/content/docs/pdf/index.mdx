@@ -102,8 +102,6 @@ const pdf = await render(report, {
 | `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | Margin in CSS px. A side left out of the object is `"auto"`.                           |
 | `backgroundColor` | CSS color                                                 | unset    | Fills the whole page, margins included, under everything. Viewers show unset as white. |
 
-<Callout type="warn">CSS `@page` rules are not parsed.</Callout>
-
 Each keyword is a portrait paper size:
 
 | Keyword | Size         | Keyword    | Size         |
@@ -122,6 +120,33 @@ Each keyword is a portrait paper size:
 | Left, right | 37.8px                                                                   |
 
 On a page one inch or smaller along an axis, automatic margins on that axis are 0. To set a numeric margin that fits a band, see [Sizing the margin](/docs/pdf/headers#sizing-the-margin).
+
+### `@page` rules
+
+A `@page` rule in `css` or a `<style>` element sets the page size and margins. It wins over `size`, `landscape`, and `margin`, as CSS does in Chromium with `preferCSSPageSize`. `:first` styles the first page, and `:left` and `:right` style the pages after it. The first page counts as a right page.
+
+```css title="A cover page, then mirrored margins"
+@page {
+  size: A5;
+  margin: 10mm;
+}
+@page :first {
+  margin-top: 30mm;
+}
+@page :left {
+  margin-left: 25mm;
+}
+@page :right {
+  margin-right: 25mm;
+}
+```
+
+- `size` takes `auto`, one or two lengths, a keyword from the table above, `portrait`, or `landscape`.
+- A margin percentage is a share of the page width, on every side.
+- `margin: auto` leaves room for the band on that side, as the `"auto"` option does.
+- A rule whose margins leave no page area is ignored.
+
+Page names, margin boxes such as `@top-center`, and other descriptors are not read. Pages progress left to right even under `direction: rtl`, where Chromium makes the first page a left page. Header and footer bands lay out at the first page's width.
 
 ## Reuse a renderer
 

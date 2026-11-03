@@ -1,0 +1,566 @@
+//! `@page` rules as Blink's [`ParsePageSelector`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/parser/css_parser_impl.cc)
+//! reads them, and the descriptors that win for a page, as `PageRuleCollector` matches them.
+//! Only `size` and the margin descriptors are read. Approximate: a named page selector never
+//! matches, as takumi does not support the `page` property.
+
+use cssparser::{Parser, Token, match_ignore_ascii_case};
+
+use crate::{
+  geometry::Rect,
+  style::{
+    FromCss, Length, MediaQueryList, RawDeclaration, RawDeclarationParser, selector::LayerPath,
+  },
+  viewport::Viewport,
+};
+
+/// One of the pages Blink's `PageRuleCollector` tells apart. The first page is a right page, as
+/// pages progress left to right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageKind {
+  /// The first page.
+  First,
+  /// A left page after the first.
+  Left,
+  /// A right page after the first.
+  Right,
+}
+
+/// A page pseudo-class, the one Blink's `ParsePageSelector` takes after a page name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PagePseudoClass {
+  /// `:first`.
+  First,
+  /// `:left`.
+  Left,
+  /// `:right`.
+  Right,
+}
+
+/// An `@page` selector: an optional page name and an optional pseudo-class.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PageSelector {
+  /// The page name, which a `page` property would give elements.
+  name: Option<String>,
+  pseudo_class: Option<PagePseudoClass>,
+}
+
+impl PageSelector {
+  /// Whether the selector applies to `kind` pages, as Blink's `CheckPageSelectorComponents` says.
+  pub fn matches(&self, kind: PageKind) -> bool {
+    self.name.is_none()
+      && match self.pseudo_class {
+        None => true,
+        Some(PagePseudoClass::First) => kind == PageKind::First,
+        Some(PagePseudoClass::Left) => kind == PageKind::Left,
+        Some(PagePseudoClass::Right) => kind != PageKind::Left,
+      }
+  }
+
+  /// Blink's `CSSSelector::Specificity` for a page selector.
+  fn specificity(&self) -> u32 {
+    let pseudo_class = match self.pseudo_class {
+      None => 0,
+      Some(PagePseudoClass::First) => 2,
+      Some(PagePseudoClass::Left | PagePseudoClass::Right) => 1,
+    };
+
+    u32::from(self.name.is_some()) * 4 + pseudo_class
+  }
+
+  /// Blink's `ParsePageSelector`: a page name, a pseudo-class, both, or nothing.
+  pub(crate) fn parse(input: &mut Parser) -> Option<Self> {
+    let name = input
+      .try_parse(|input| input.expect_ident().map(ToString::to_string))
+      .ok();
+    let pseudo_class = if input.try_parse(Parser::expect_colon).is_ok() {
+      let ident = input.expect_ident().ok()?.clone();
+
+      Some(match_ignore_ascii_case! { &ident,
+        "first" => PagePseudoClass::First,
+        "left" => PagePseudoClass::Left,
+        "right" => PagePseudoClass::Right,
+        _ => return None,
+      })
+    } else {
+      None
+    };
+
+    input.expect_exhausted().ok()?;
+
+    Some(Self { name, pseudo_class })
+  }
+}
+
+/// A page size keyword, portrait as css-page-3 writes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageSizeName {
+  /// ISO A3.
+  A3,
+  /// ISO A4.
+  A4,
+  /// ISO A5.
+  A5,
+  /// ISO B4.
+  B4,
+  /// ISO B5.
+  B5,
+  /// JIS B4.
+  JisB4,
+  /// JIS B5.
+  JisB5,
+  /// US Ledger.
+  Ledger,
+  /// US Legal.
+  Legal,
+  /// US Letter.
+  Letter,
+}
+
+/// The orientation keyword in a `size` value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageOrientation {
+  /// The shorter side is the width.
+  Portrait,
+  /// The longer side is the width.
+  Landscape,
+}
+
+/// The sheet part of a `size` value.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PageSheet {
+  /// A keyword such as `A4`.
+  Named(PageSizeName),
+  /// Explicit lengths; one length names a square.
+  Lengths {
+    /// The page width.
+    width: Length,
+    /// The page height.
+    height: Length,
+  },
+}
+
+/// A `size` value: `auto`, a sheet, an orientation, or a sheet with an orientation.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct PageSize {
+  /// The sheet, or `None` to keep the size the renderer was given.
+  pub sheet: Option<PageSheet>,
+  /// The orientation, or `None` to keep the sheet's own.
+  pub orientation: Option<PageOrientation>,
+}
+
+impl PageSize {
+  /// `auto | <length [0,∞]>{1,2} | [ <page-size> || [ portrait | landscape ] ]`.
+  fn parse(input: &mut Parser) -> Option<Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("auto"))
+      .is_ok()
+    {
+      return Some(Self::default());
+    }
+
+    if let Ok(width) = input.try_parse(sheet_length) {
+      let height = input.try_parse(sheet_length).unwrap_or(width);
+
+      return Some(Self {
+        sheet: Some(PageSheet::Lengths { width, height }),
+        orientation: None,
+      });
+    }
+
+    let mut size = Self::default();
+
+    while let Ok(ident) = input.try_parse(|input| input.expect_ident().cloned()) {
+      let orientation = match_ignore_ascii_case! { &ident,
+        "portrait" => Some(PageOrientation::Portrait),
+        "landscape" => Some(PageOrientation::Landscape),
+        _ => None,
+      };
+
+      match orientation {
+        Some(orientation) if size.orientation.is_none() => size.orientation = Some(orientation),
+        None if size.sheet.is_none() => {
+          size.sheet = Some(PageSheet::Named(page_size_name(&ident)?))
+        }
+        _ => return None,
+      }
+    }
+
+    (size.sheet.is_some() || size.orientation.is_some()).then_some(size)
+  }
+}
+
+fn page_size_name(ident: &str) -> Option<PageSizeName> {
+  Some(match_ignore_ascii_case! { ident,
+    "a3" => PageSizeName::A3,
+    "a4" => PageSizeName::A4,
+    "a5" => PageSizeName::A5,
+    "b4" => PageSizeName::B4,
+    "b5" => PageSizeName::B5,
+    "jis-b4" => PageSizeName::JisB4,
+    "jis-b5" => PageSizeName::JisB5,
+    "ledger" => PageSizeName::Ledger,
+    "legal" => PageSizeName::Legal,
+    "letter" => PageSizeName::Letter,
+    _ => return None,
+  })
+}
+
+/// A length for `size`, which takes no `auto`, no percentage, and no negative value.
+fn sheet_length(input: &mut Parser) -> Result<Length, ()> {
+  let start = input.state();
+  let negative = matches!(
+    input.next(),
+    Ok(Token::Dimension { value, .. } | Token::Number { value, .. }) if *value < 0.0
+  );
+
+  input.reset(&start);
+
+  match Length::from_css(input) {
+    Ok(Length::Auto | Length::Percentage(_)) | Err(_) => Err(()),
+    Ok(_) if negative => Err(()),
+    Ok(length) => Ok(length),
+  }
+}
+
+/// `margin: <length>{1,4}`, expanded as the `margin` shorthand is.
+fn margin_shorthand(input: &mut Parser) -> Option<Rect<Option<Length>>> {
+  let mut values = Vec::with_capacity(4);
+
+  while values.len() < 4
+    && let Ok(length) = input.try_parse(Length::from_css)
+  {
+    values.push(length);
+  }
+
+  let (top, right, bottom, left) = match values.as_slice() {
+    [all] => (*all, *all, *all, *all),
+    [vertical, horizontal] => (*vertical, *horizontal, *vertical, *horizontal),
+    [top, horizontal, bottom] => (*top, *horizontal, *bottom, *horizontal),
+    [top, right, bottom, left] => (*top, *right, *bottom, *left),
+    _ => return None,
+  };
+
+  Some(Rect {
+    top: Some(top),
+    right: Some(right),
+    bottom: Some(bottom),
+    left: Some(left),
+  })
+}
+
+/// The descriptors an `@page` rule sets, or those that win the cascade.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PageDescriptors {
+  /// The `size` descriptor.
+  pub size: Option<PageSize>,
+  /// The margin descriptors, per side.
+  pub margin: Rect<Option<Length>>,
+}
+
+impl PageDescriptors {
+  /// Overrides each descriptor `other` sets.
+  fn apply(&mut self, other: &Self) {
+    if other.size.is_some() {
+      self.size = other.size;
+    }
+
+    for (side, value) in [
+      (&mut self.margin.top, other.margin.top),
+      (&mut self.margin.right, other.margin.right),
+      (&mut self.margin.bottom, other.margin.bottom),
+      (&mut self.margin.left, other.margin.left),
+    ] {
+      if value.is_some() {
+        *side = value;
+      }
+    }
+  }
+
+  /// Reads one declaration, dropping one that is not valid as Blink's `ParsePageDescriptor` does.
+  fn set(&mut self, name: &str, input: &mut Parser) {
+    let side = |input: &mut Parser| input.try_parse(Length::from_css).ok().map(Some);
+    let margin = |margin| Self { size: None, margin };
+    let parsed = match_ignore_ascii_case! { name,
+      "size" => PageSize::parse(input).map(|size| Self { size: Some(size), ..Self::default() }),
+      "margin" => margin_shorthand(input).map(margin),
+      "margin-top" => side(input).map(|top| margin(Rect { top, ..Rect::default() })),
+      "margin-right" => side(input).map(|right| margin(Rect { right, ..Rect::default() })),
+      "margin-bottom" => side(input).map(|bottom| margin(Rect { bottom, ..Rect::default() })),
+      "margin-left" => side(input).map(|left| margin(Rect { left, ..Rect::default() })),
+      _ => None,
+    };
+
+    if let Some(parsed) = parsed
+      && input.is_exhausted()
+    {
+      self.apply(&parsed);
+    }
+  }
+}
+
+/// One `@page` rule.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) struct PageRule {
+  /// The selector, universal for a bare `@page`.
+  pub(crate) selector: PageSelector,
+  /// The descriptors without `!important`.
+  pub(crate) normal: PageDescriptors,
+  /// The descriptors with `!important`.
+  pub(crate) important: PageDescriptors,
+  /// Media queries gating this rule.
+  pub(crate) media_queries: Vec<MediaQueryList>,
+  /// Cascade layer this rule belongs to.
+  pub(crate) layer: Option<LayerPath>,
+  /// Resolved ordinal of the rule's layer.
+  pub(crate) layer_order: Option<usize>,
+}
+
+impl PageRule {
+  /// The rule `@page <selector> { ... }` makes.
+  pub(crate) fn parse(selector: PageSelector, input: &mut Parser) -> Self {
+    let mut rule = Self {
+      selector,
+      ..Self::default()
+    };
+
+    for declaration in cssparser::RuleBodyParser::new(input, &mut RawDeclarationParser) {
+      let Ok(RawDeclaration {
+        name,
+        value,
+        important,
+      }) = declaration
+      else {
+        continue;
+      };
+      let descriptors = if important {
+        &mut rule.important
+      } else {
+        &mut rule.normal
+      };
+
+      descriptors.set(&name, &mut Parser::new(value));
+    }
+
+    rule
+  }
+
+  /// The descriptors that win among `rules` whose `@media` holds at `viewport` and whose selector
+  /// passes `selects`, in cascade order: importance, layer, specificity, then source order.
+  pub(crate) fn cascade<'r>(
+    rules: impl IntoIterator<Item = &'r Self>,
+    layer_count: usize,
+    viewport: Viewport,
+    selects: impl Fn(&PageSelector) -> bool,
+  ) -> PageDescriptors {
+    let mut ranked: Vec<(u64, &PageDescriptors)> = Vec::new();
+
+    for (order, rule) in rules.into_iter().enumerate() {
+      if !selects(&rule.selector)
+        || !rule
+          .media_queries
+          .iter()
+          .all(|queries| queries.matches(viewport))
+      {
+        continue;
+      }
+
+      let rank = |important: bool, layer: usize| {
+        (u64::from(important) << 63)
+          | ((layer as u64) << 40)
+          | (u64::from(rule.selector.specificity()) << 20)
+          | order as u64
+      };
+
+      ranked.push((
+        rank(false, rule.layer_order.unwrap_or(layer_count)),
+        &rule.normal,
+      ));
+      ranked.push((
+        rank(
+          true,
+          rule.layer_order.map_or(0, |layer| layer_count - layer),
+        ),
+        &rule.important,
+      ));
+    }
+
+    ranked.sort_by_key(|&(rank, _)| rank);
+
+    let mut winners = PageDescriptors::default();
+
+    for (_, descriptors) in ranked {
+      winners.apply(descriptors);
+    }
+
+    winners
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::{
+    style::StyleSheet,
+    viewport::{MediaTarget, Viewport},
+  };
+
+  fn winners(css: &str, kind: PageKind) -> PageDescriptors {
+    let print = Viewport::default().with_media_target(MediaTarget::Print);
+
+    StyleSheet::parse(css)
+      .expect("parse @page")
+      .page_descriptors(print, |selector| selector.matches(kind))
+  }
+
+  #[test]
+  fn a_page_rule_reads_size_and_margin() {
+    assert_eq!(
+      winners(
+        "@page { size: A4 landscape; margin: 1in 2cm; margin-top: auto }",
+        PageKind::Right
+      ),
+      PageDescriptors {
+        size: Some(PageSize {
+          sheet: Some(PageSheet::Named(PageSizeName::A4)),
+          orientation: Some(PageOrientation::Landscape),
+        }),
+        margin: Rect {
+          top: Some(Length::Auto),
+          right: Some(Length::Cm(2.0)),
+          bottom: Some(Length::In(1.0)),
+          left: Some(Length::Cm(2.0)),
+        },
+      }
+    );
+  }
+
+  #[test]
+  fn size_takes_lengths_a_keyword_and_an_orientation() {
+    let size = |css: &str| winners(&format!("@page {{ size: {css} }}"), PageKind::Right).size;
+
+    assert_eq!(
+      size("10cm 20cm"),
+      Some(PageSize {
+        sheet: Some(PageSheet::Lengths {
+          width: Length::Cm(10.0),
+          height: Length::Cm(20.0),
+        }),
+        orientation: None,
+      })
+    );
+    assert_eq!(
+      size("landscape letter").map(|size| (size.sheet, size.orientation)),
+      Some((
+        Some(PageSheet::Named(PageSizeName::Letter)),
+        Some(PageOrientation::Landscape)
+      ))
+    );
+    assert_eq!(size("auto"), Some(PageSize::default()));
+
+    for invalid in [
+      "50%",
+      "-1px",
+      "10cm -1px",
+      "A4 letter",
+      "portrait landscape",
+    ] {
+      assert_eq!(size(invalid), None, "{invalid}");
+    }
+  }
+
+  #[test]
+  fn pseudo_classes_select_the_first_left_and_right_pages() {
+    let css = "@page { margin: 1px } @page :right { margin: 2px } @page :left { margin: 3px } @page :first { margin: 4px }";
+    let top = |kind| winners(css, kind).margin.top;
+
+    assert_eq!(top(PageKind::First), Some(Length::Px(4.0)));
+    assert_eq!(top(PageKind::Left), Some(Length::Px(3.0)));
+    assert_eq!(top(PageKind::Right), Some(Length::Px(2.0)));
+  }
+
+  #[test]
+  fn the_first_page_is_a_right_page() {
+    assert_eq!(
+      winners("@page :right { margin: 2px }", PageKind::First)
+        .margin
+        .top,
+      Some(Length::Px(2.0))
+    );
+  }
+
+  #[test]
+  fn a_named_page_or_an_unknown_selector_selects_nothing() {
+    for css in [
+      "@page cover { margin: 1px }",
+      "@page :blank { margin: 1px }",
+      "@page :first, :left { margin: 1px }",
+      "@page :first:left { margin: 1px }",
+    ] {
+      let sheet = StyleSheet::parse_loosy(css);
+      let print = Viewport::default().with_media_target(MediaTarget::Print);
+
+      assert_eq!(
+        sheet
+          .page_descriptors(print, |selector| selector.matches(PageKind::First))
+          .margin
+          .top,
+        None,
+        "{css}"
+      );
+    }
+  }
+
+  #[test]
+  fn a_media_query_gates_the_rule() {
+    assert_eq!(
+      winners(
+        "@media print { @page { margin: 1mm } } @media screen { @page { margin: 1cm } }",
+        PageKind::Right
+      )
+      .margin
+      .top,
+      Some(Length::Mm(1.0))
+    );
+  }
+
+  #[test]
+  fn the_cascade_orders_importance_then_layer_then_specificity_then_source() {
+    let top = |css| winners(css, PageKind::First).margin.top;
+
+    assert_eq!(
+      top("@page { margin: 1mm !important } @page { margin: 2mm }"),
+      Some(Length::Mm(1.0))
+    );
+    assert_eq!(
+      top(
+        "@layer base { @page { margin: 1mm } } @page { margin: 2mm } @layer base { @page { margin: 3mm } }"
+      ),
+      Some(Length::Mm(2.0))
+    );
+    assert_eq!(
+      top("@layer base { @page { margin: 1mm !important } } @page { margin: 2mm !important }"),
+      Some(Length::Mm(1.0))
+    );
+    assert_eq!(
+      top("@page :first { margin: 1mm } @page :right { margin: 2mm }"),
+      Some(Length::Mm(1.0))
+    );
+  }
+
+  #[test]
+  fn an_invalid_descriptor_is_dropped_and_the_rest_kept() {
+    assert_eq!(
+      winners(
+        "@page { color: red; margin: 0; margin-left: 1px 2px }",
+        PageKind::Right
+      )
+      .margin,
+      Rect {
+        top: Some(Length::Px(0.0)),
+        right: Some(Length::Px(0.0)),
+        bottom: Some(Length::Px(0.0)),
+        left: Some(Length::Px(0.0)),
+      }
+    );
+  }
+}

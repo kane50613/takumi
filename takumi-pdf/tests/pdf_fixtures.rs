@@ -6823,3 +6823,62 @@ fn stream_relative_body_with_bottom_child() {
 
   assert!(page_count(&pdf) >= 3);
 }
+
+/// Each page's `/MediaBox` width and height in pt, in page order.
+fn media_boxes(pdf: &[u8]) -> Vec<(f32, f32)> {
+  String::from_utf8_lossy(pdf)
+    .split("/MediaBox[0 0 ")
+    .skip(1)
+    .map(|rest| {
+      let mut numbers = rest
+        .split([' ', ']'])
+        .map(|number| number.parse::<f32>().expect("a MediaBox number"));
+
+      (
+        numbers.next().expect("a width"),
+        numbers.next().expect("a height"),
+      )
+    })
+    .collect()
+}
+
+/// `@page` sizes and margins the pages as Blink's `StyleForPage` does: the first page by its
+/// `:first` rule, then the left and right pages by theirs, each page laying its content out at
+/// its own page area.
+#[test]
+fn at_page_rules_size_and_margin_the_first_left_and_right_pages() {
+  const CSS: &str = "
+    @page { size: A5; margin: 10mm }
+    @page :first { size: A5 landscape; margin-top: 20mm }
+    @page :left { margin-left: 25mm }
+    @page :right { margin-right: 25mm }
+    p { margin: 0 0 6px; font-size: 11px; line-height: 15px }
+  ";
+  let paragraphs: String = (1..=75)
+    .map(|index| {
+      format!(
+        "<p>Paragraph {index} runs long enough to wrap, so the width of each page decides where its lines break.</p>"
+      )
+    })
+    .collect();
+  let pdf = run_pdf_fixture("at-page-first-left-right", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&paragraphs, FromHtmlOptions::default()).expect("parse the paragraphs"))
+      .stylesheet(Arc::new(StyleSheet::parse(CSS).expect("parse @page")))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let boxes = media_boxes(&pdf);
+  let a5 = (148.0 * 72.0 / 25.4, 210.0 * 72.0 / 25.4);
+
+  assert!(boxes.len() >= 4, "{boxes:?}");
+  for (page, &(width, height)) in boxes.iter().enumerate() {
+    let expected = if page == 0 { (a5.1, a5.0) } else { a5 };
+
+    assert!(
+      (width - expected.0).abs() < 0.5 && (height - expected.1).abs() < 0.5,
+      "page {page} is {width}x{height}, not {expected:?}"
+    );
+  }
+}

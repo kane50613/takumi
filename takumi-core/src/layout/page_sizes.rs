@@ -45,6 +45,15 @@ impl<T> PerPage<T> {
     PerPage::new(map(&self.first), map(&self.left), map(&self.right))
   }
 
+  /// Each value mapped through `map`, or the first error it returns.
+  pub fn try_map<U, E>(&self, mut map: impl FnMut(&T) -> Result<U, E>) -> Result<PerPage<U>, E> {
+    Ok(PerPage::new(
+      map(&self.first)?,
+      map(&self.left)?,
+      map(&self.right)?,
+    ))
+  }
+
   /// The first page's value, the left pages', and the right pages'.
   pub fn values(&self) -> [&T; 3] {
     [&self.first, &self.left, &self.right]

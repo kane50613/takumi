@@ -12,11 +12,14 @@ use takumi_core::{
   Fonts,
   error::Error as TakumiError,
   geometry::{Rect, Size},
-  layout::node::Node,
+  layout::{node::Node, page_sizes::PerPage},
   resources::{font::FontError, image::ImageSource},
-  style::{Color, FontFamily, Lang, StyleSheet},
+  style::{
+    Color, FontFamily, Lang, Length, PageKind, PageOrientation, PageSheet, PageSize, PageSizeName,
+    SizingContext, StyleSheet,
+  },
   units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
-  viewport::Viewport,
+  viewport::{MediaTarget, Viewport},
 };
 use typed_builder::TypedBuilder;
 
@@ -864,6 +867,26 @@ impl PageMargins {
     matches!(self.top, PageMargin::Auto) || matches!(self.bottom, PageMargin::Auto)
   }
 
+  /// These margins with each side an `@page` rule sets replaced. A percentage takes `page`'s
+  /// width on every side, as Blink's `ComputeMarginsForSelf` resolves a page box's margins.
+  /// Approximate: `auto` leaves room for the side's band, where Blink's `ResolveAutoMargins` gives
+  /// a page box without a `width` or `height` none.
+  fn overlaid(self, sides: Rect<Option<Length>>, page: &PageOptions) -> Self {
+    let sizing = page.sizing();
+    let side = |current: PageMargin, length: Option<Length>| match length {
+      None => current,
+      Some(Length::Auto) => PageMargin::Auto,
+      Some(length) => PageMargin::Px(length.to_px(&sizing, page.width)),
+    };
+
+    Self {
+      top: side(self.top, sides.top),
+      right: side(self.right, sides.right),
+      bottom: side(self.bottom, sides.bottom),
+      left: side(self.left, sides.left),
+    }
+  }
+
   /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.
   pub(crate) fn resolve(
     self,
@@ -976,6 +999,90 @@ impl PageOptions {
       width: self.width - margin.horizontal(),
       height: self.height - margin.vertical(),
     }
+  }
+
+  /// Each page with the `@page` rules of `stylesheet` that match it laid over it, as Blink's
+  /// `StyleForPage` styles a page, CSS winning as Chromium's `preferCSSPageSize` lets it.
+  pub(crate) fn with_page_rules(self, stylesheet: &StyleSheet) -> PerPage<Self> {
+    let page = |kind| {
+      let descriptors =
+        stylesheet.page_descriptors(self.viewport(), |selector| selector.matches(kind));
+      let sized = descriptors.size.map_or(self, |size| self.sized(size));
+      let page = Self {
+        margin: sized.margin.overlaid(descriptors.margin, &sized),
+        ..sized
+      };
+
+      // Blink's `LayoutPageContainer` ignores the author's page style when it leaves no page area.
+      if page.has_area() { page } else { self }
+    };
+
+    PerPage::new(
+      page(PageKind::First),
+      page(PageKind::Left),
+      page(PageKind::Right),
+    )
+  }
+
+  /// Whether the margins leave at least a pixel of page area on each axis, before any band.
+  fn has_area(&self) -> bool {
+    let area = self.content_size(self.margin.resolve(self.size(), None, None));
+
+    area.width >= 1.0 && area.height >= 1.0
+  }
+
+  /// The page at a `size` value: the sheet it names, or this one, turned to the orientation it
+  /// asks for.
+  fn sized(self, size: PageSize) -> Self {
+    let (width, height) = match size.sheet {
+      None => (self.width, self.height),
+      Some(PageSheet::Named(name)) => {
+        let preset = Self::named(name);
+
+        (preset.width, preset.height)
+      }
+      Some(PageSheet::Lengths { width, height }) => {
+        let sizing = self.sizing();
+
+        (width.to_px(&sizing, 0.0), height.to_px(&sizing, 0.0))
+      }
+    };
+    let (width, height) = match size.orientation {
+      Some(PageOrientation::Landscape) if width < height => (height, width),
+      Some(PageOrientation::Portrait) if width > height => (height, width),
+      _ => (width, height),
+    };
+
+    Self {
+      width,
+      height,
+      ..self
+    }
+  }
+
+  /// The preset a css-page-3 size keyword names.
+  const fn named(name: PageSizeName) -> Self {
+    match name {
+      PageSizeName::A3 => Self::A3,
+      PageSizeName::A4 => Self::A4,
+      PageSizeName::A5 => Self::A5,
+      PageSizeName::B4 => Self::B4,
+      PageSizeName::B5 => Self::B5,
+      PageSizeName::JisB4 => Self::JIS_B4,
+      PageSizeName::JisB5 => Self::JIS_B5,
+      PageSizeName::Ledger => Self::LEDGER,
+      PageSizeName::Legal => Self::LEGAL,
+      PageSizeName::Letter => Self::LETTER,
+    }
+  }
+
+  /// The page as the viewport an `@page` rule's `@media` and lengths resolve against.
+  fn viewport(&self) -> Viewport {
+    Viewport::new((self.width as u32, self.height as u32)).with_media_target(MediaTarget::Print)
+  }
+
+  fn sizing(&self) -> SizingContext {
+    SizingContext::builder().viewport(self.viewport()).build()
   }
 }
 

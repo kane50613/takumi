@@ -126,13 +126,14 @@ pub(crate) struct PageFrames(PerPage<PageFrame>);
 impl PageFrames {
   /// Resolves each page's geometry, as [`PageFrame::resolve`] does.
   pub(crate) fn resolve(
-    page: &PageOptions,
+    pages: &PerPage<PageOptions>,
     band_viewport: Viewport,
     header_height: Option<f32>,
     footer_height: Option<f32>,
   ) -> Result<Self, PdfError> {
-    PageFrame::resolve(page, band_viewport, header_height, footer_height)
-      .map(|frame| Self(PerPage::uniform(frame)))
+    pages
+      .try_map(|page| PageFrame::resolve(page, band_viewport, header_height, footer_height))
+      .map(Self)
   }
 
   /// The geometry of page `page`, counted from 0.
@@ -276,7 +277,8 @@ impl PageDrawing<'_, '_> {
     settle: Settle<'_>,
   ) -> Result<PagePlan, PdfError> {
     let selection = PageSelection::new(bands.page_ranges)?;
-    let (solved, content) = Self::solve(self.inputs, page, &bands, node, settle)?;
+    let pages = page.with_page_rules(&self.inputs.stylesheet);
+    let (solved, content) = Self::solve(self.inputs, &pages, &bands, node, settle)?;
 
     match content {
       Content::Stream(content) => self.stream(solved, content, None, selection, structural, settle),
@@ -295,14 +297,15 @@ impl PageDrawing<'_, '_> {
   /// the boxes' pages are needed first, lays the content out on pages.
   fn solve(
     inputs: &TreeInputs<'_>,
-    page: PageOptions,
+    pages: &PerPage<PageOptions>,
     bands: &PageBands<'_>,
     node: Node,
     settle: Settle<'_>,
   ) -> Result<(Solved, Content), PdfError> {
     // Bands lay out at full page width and draw inside the margin areas,
-    // like Chromium's print header and footer templates.
-    let band_viewport = band_viewport(&page);
+    // like Chromium's print header and footer templates. Approximate: they lay out at the first
+    // page's width on a page of another size.
+    let band_viewport = band_viewport(pages.get(0));
     let measure_bands =
       |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
         let band = |template: Option<&PageBand>, bounds| {
@@ -318,7 +321,7 @@ impl PageDrawing<'_, '_> {
       };
     let resolve = |header: Option<&Repeatable>, footer: Option<&Repeatable>| {
       PageFrames::resolve(
-        &page,
+        pages,
         band_viewport,
         header.map(Repeatable::height),
         footer.map(Repeatable::height),
@@ -346,7 +349,8 @@ impl PageDrawing<'_, '_> {
 
     // Only a margin that follows a band can move the frame, which is when the content lays out
     // again from the source.
-    let source = (dynamic && page.margin.follow_bands()).then(|| node.clone());
+    let follows_bands = pages.values().iter().any(|page| page.margin.follow_bands());
+    let source = (dynamic && follows_bands).then(|| node.clone());
     let mut counted = Counted::settle(node, inputs, &frames, settle)?;
 
     if dynamic {
