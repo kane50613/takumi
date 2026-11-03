@@ -131,6 +131,7 @@ mod interactive;
 mod memory_tests;
 mod options;
 mod page;
+mod page_kinds;
 mod pagination;
 mod paint;
 #[cfg(feature = "images")]
