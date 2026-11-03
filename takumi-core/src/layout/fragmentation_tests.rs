@@ -403,6 +403,17 @@ fn a_page_without_area_fails_and_an_unlaid_page_reaches_nothing() {
     LayoutResults::compute_pages(&breaks, sizer, usize::MAX),
     Err(Error::InvalidPageSize)
   ));
+  assert!(matches!(
+    LayoutResults::compute_pages(
+      &breaks,
+      PageSizer::uniform(Size {
+        height: f32::MAX,
+        ..page
+      }),
+      usize::MAX
+    ),
+    Err(Error::InvalidPageSize)
+  ));
   assert!(
     PageStream::new(&breaks, PageSizer::uniform(page), usize::MAX)
       .pages_reaching(5)

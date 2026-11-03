@@ -107,7 +107,7 @@ pub enum Error {
   #[error("Invalid viewport dimensions: a canvas holds 1 to 64 megapixels")]
   InvalidViewport,
 
-  /// A page size that is not finite or not larger than zero.
+  /// A page size that is not finite or not larger than zero, or a page that ends past `f32::MAX`.
   #[error("Page size must be finite and larger than zero")]
   InvalidPageSize,
 

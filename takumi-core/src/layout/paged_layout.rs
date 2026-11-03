@@ -89,7 +89,7 @@ impl<'r> PagedLayout<'r> {
     let page = self.page_count();
     let page_size = self.sizer.size(page);
 
-    if !page_size.has_area() {
+    if !page_size.has_area() || !(self.sizes.top(page) + page_size.height).is_finite() {
       return Err(Error::InvalidPageSize);
     }
 
