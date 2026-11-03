@@ -45,6 +45,7 @@ use takumi_core::{
   geometry::{Rect, Size},
   layout::page_sizes::PageSizer,
   resources::image::ResourceCache,
+  viewport::MediaTarget,
 };
 use test_utils::{CONTEXT, matches_fragments};
 
@@ -547,17 +548,31 @@ fn is_print_reftest(path: &Path) -> bool {
       .is_some_and(|parent| parent.components().any(|part| part.as_os_str() == "print"))
 }
 
-/// The 1-based page ranges a `<meta name=reftest-pages>` in `source` compares, none for every page.
-fn reftest_pages(source: &str) -> Option<Vec<(usize, usize)>> {
-  let content = html_tags(source, "meta")
+/// The 1-based page ranges each `<meta name=reftest-pages>` in a test's `source` compares, keyed by
+/// the reference `href` its content names before a `:`, else none for the test, as wptrunner's
+/// `SourceFile.page_ranges` reads them.
+fn reftest_pages(source: &str) -> HashMap<Option<String>, Vec<(usize, usize)>> {
+  html_tags(source, "meta")
     .into_iter()
-    .find(|attributes| {
+    .filter(|attributes| {
       attributes
         .get("name")
         .is_some_and(|name| name == "reftest-pages")
-    })?
-    .remove("content")?;
+    })
+    .filter_map(|mut attributes| {
+      let content = attributes.remove("content")?;
+      let (href, ranges) = match content.rsplit_once(':') {
+        Some((href, ranges)) => (Some(href.to_owned()), ranges),
+        None => (None, content.as_str()),
+      };
 
+      Some((href, page_ranges(ranges)?))
+    })
+    .collect()
+}
+
+/// The 1-based page ranges in a `reftest-pages` value such as `1, 3-4, -2, 5-`.
+fn page_ranges(content: &str) -> Option<Vec<(usize, usize)>> {
   let bound = |text: &str, open: usize| {
     let text = text.trim();
 
@@ -906,18 +921,20 @@ impl Runner {
   fn compare(&self, path: &Path) -> Result<bool, String> {
     let source = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let print = is_print_reftest(path.strip_prefix(&self.root).unwrap_or(path));
-    let test = self.render(path, &source, print)?;
+    let page_ranges = reftest_pages(&source);
+    let test = self.render(path, &source, print, page_ranges.get(&None))?;
     let mut has_match_reference = false;
     let mut matched = false;
 
     for (href, matches) in references(&source) {
       let reference_path = self.resolve(path, &href);
+      let reference_pages = page_ranges.get(&Some(href.clone()));
       let reference = if href == "about:blank" {
-        self.render(path, "", print)?
+        self.render(path, "", print, reference_pages)?
       } else {
         fs::read_to_string(&reference_path)
           .map_err(|error| format!("{href}: {error}"))
-          .and_then(|reference| self.render(&reference_path, &reference, print))?
+          .and_then(|reference| self.render(&reference_path, &reference, print, reference_pages))?
       };
 
       let is_alike = test.is_alike(&reference, Fuzzy::of(&source, &href));
@@ -957,8 +974,15 @@ impl Runner {
     Ok(!has_match_reference || matched)
   }
 
-  /// The document at `path` rendered onto white, as RGBA, across print pages when `print`.
-  fn render(&self, path: &Path, source: &str, print: bool) -> Result<Rendering, String> {
+  /// The document at `path` rendered onto white, as RGBA, across the print pages `page_ranges`
+  /// selects when `print`, every page without them.
+  fn render(
+    &self,
+    path: &Path,
+    source: &str,
+    print: bool,
+    page_ranges: Option<&Vec<(usize, usize)>>,
+  ) -> Result<Rendering, String> {
     let is_svg = path.extension().is_some_and(|extension| extension == "svg");
     let sized;
     let source = if is_svg {
@@ -1042,7 +1066,11 @@ impl Runner {
     ));
     let size = if print { PRINT_PAGE_AREA } else { VIEWPORT };
     let options = RenderOptions::builder()
-      .viewport(Viewport::new(size))
+      .viewport(Viewport::new(size).with_media_target(if print {
+        MediaTarget::Print
+      } else {
+        MediaTarget::Screen
+      }))
       .node(node.clone())
       .fonts(&self.fonts)
       .images(images)
@@ -1066,9 +1094,8 @@ impl Runner {
       vec![render(options).map_err(|error| format!("render: {error}"))?]
     };
 
-    let ranges = reftest_pages(source);
     let selected = |index: usize| {
-      ranges.as_ref().is_none_or(|ranges| {
+      page_ranges.is_none_or(|ranges| {
         ranges
           .iter()
           .any(|&(first, last)| (first..=last).contains(&(index + 1)))
@@ -1089,7 +1116,7 @@ impl Runner {
   }
 }
 
-/// A document rendered onto white: one page, or each print page its `reftest-pages` selects.
+/// A document rendered onto white: one page, or each print page its test's `reftest-pages` selects.
 struct Rendering {
   pages: Vec<Page>,
 }
@@ -1101,8 +1128,7 @@ struct Page {
 }
 
 impl Rendering {
-  /// Whether it renders like `reference` within `fuzzy`, page for page, as wptrunner compares
-  /// the pages each document's own `reftest-pages` selects.
+  /// Whether it renders like `reference` within `fuzzy`, page for page.
   fn is_alike(&self, reference: &Self, fuzzy: Fuzzy) -> bool {
     self.pages.len() == reference.pages.len()
       && self
@@ -1214,12 +1240,15 @@ fn xhtml_style_blocks_read_as_xml() {
 #[test]
 fn reftest_pages_reads_open_and_single_ranges() {
   assert_eq!(
-    reftest_pages(r#"<meta name="reftest-pages" content="1, 3-4, -2, 5-">"#),
-    Some(vec![(1, 1), (3, 4), (1, 2), (5, usize::MAX)])
+    reftest_pages(
+      r#"<meta name="reftest-pages" content="1, 3-4, -2, 5-">
+         <meta name="reftest-pages" content="ref.html:2">"#
+    ),
+    HashMap::from([
+      (None, vec![(1, 1), (3, 4), (1, 2), (5, usize::MAX)]),
+      (Some("ref.html".to_owned()), vec![(2, 2)]),
+    ])
   );
-  assert_eq!(
-    reftest_pages(r#"<meta name="reftest-pages" content="x">"#),
-    None
-  );
-  assert_eq!(reftest_pages("<p>"), None);
+  assert!(reftest_pages(r#"<meta name="reftest-pages" content="x">"#).is_empty());
+  assert!(reftest_pages("<p>").is_empty());
 }

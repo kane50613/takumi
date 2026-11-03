@@ -2141,7 +2141,6 @@ css/css-overflow/text-overflow-ellipsis-textarea-with-caret.html
 css/css-overflow/text-overflow-string-in-input.html
 css/css-overflow/text-overflow-string-in-textarea-field-sizing-content-fits.html
 css/css-overflow/text-overflow-string-in-textarea-not-inherited.html
-!css/css-page/background-image-only-for-print.html
 !css/css-page/basic-pagination-002-print.html
 !css/css-page/basic-pagination-003-print.html
 !css/css-page/body-background-slr-print.html
