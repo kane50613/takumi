@@ -2037,3 +2037,35 @@ fn a_change_of_page_name_breaks_and_sizes_the_page() {
   );
   assert_eq!((width(1), width(2)), (300.0, 500.0));
 }
+
+/// A table row on a named page starts that page, and content of that name in its cell stays on it.
+#[test]
+fn a_named_table_row_starts_its_page_once() {
+  let row = |id: &str, content: Vec<Node>| {
+    Node::container([Node::container(content).with_class_name("cell")])
+      .with_class_name("row")
+      .with_id(id)
+  };
+  let tree = render(
+    root([Node::container([
+      row("plain", vec![block("plain-content", "h50")]),
+      row(
+        "wide",
+        vec![block("wide-a", "h50"), block("wide-b", "h50 wide")],
+      ),
+    ])
+    .with_class_name("table")]),
+    ".table { display: table } .row { display: table-row } .cell { display: table-cell } \
+     .h50 { height: 50px } .wide, #wide { page: wide }",
+  );
+  let sizer = PageSizer::new(|_, name| Size {
+    width: if name.is_named() { 500.0 } else { 300.0 },
+    height: 300.0,
+  });
+  let (_, sizes) = LayoutResults::compute_pages(&tree, sizer, usize::MAX).expect("pages lay out");
+  let names: Vec<_> = (0..sizes.len())
+    .map(|page| sizes.name(page).get())
+    .collect();
+
+  assert_eq!(names, [None, Some("wide")]);
+}

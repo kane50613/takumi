@@ -8,10 +8,9 @@ use crate::layout::{
   box_fragment_builder::BoxFragmentBuilder,
   break_appeal::BreakAppeal,
   fragmentation_utils::{
-    FlexItemBreak, FragmentationChild, IndexedBlockChildIterator, break_before_child_if_needed,
-    finish_fragmentation, fragment_index, fragmentation_layout_input_for_child,
-    is_early_break_target, setup_fragment_builder_for_fragmentation,
-    setup_space_builder_for_fragmentation,
+    FlexItemBreak, IndexedBlockChildIterator, break_before_child_if_needed, finish_fragmentation,
+    fragment_index, fragmentation_layout_input_for_child, is_early_break_target,
+    setup_fragment_builder_for_fragmentation, setup_space_builder_for_fragmentation,
   },
   logical_rect::LogicalBoxStrut,
 };
@@ -119,7 +118,7 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
       #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
       let mut space = data.space(part, CacheSlot::Layout);
 
-      self.setup_row_space_for_fragmentation(&mut space, offset);
+      self.setup_row_space_for_fragmentation(row.node, &mut space, offset);
 
       let result = self.lay_out_row(row.node, &space, &token);
 
@@ -228,12 +227,16 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
     true
   }
 
-  fn setup_row_space_for_fragmentation(&self, space: &mut ConstraintSpace, offset: LayoutUnit) {
-    // Approximate: a row's own `page` is not read.
+  fn setup_row_space_for_fragmentation(
+    &self,
+    row: NodeId,
+    space: &mut ConstraintSpace,
+    offset: LayoutUnit,
+  ) {
     setup_space_builder_for_fragmentation(
       self.space,
       &self.builder,
-      FragmentationChild::default(),
+      self.tree.fragmentation_child(row),
       offset,
       space,
     );
@@ -376,7 +379,13 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
     false
   }
 
-  fn setup_row_space_for_fragmentation(&self, _space: &mut ConstraintSpace, _offset: LayoutUnit) {}
+  fn setup_row_space_for_fragmentation(
+    &self,
+    _row: NodeId,
+    _space: &mut ConstraintSpace,
+    _offset: LayoutUnit,
+  ) {
+  }
 
   fn lay_out_row(
     &mut self,
