@@ -258,8 +258,8 @@ fn sheet_length(input: &mut Parser) -> Result<Length, ()> {
   input.reset(&start);
 
   match Length::from_css(input) {
-    Ok(Length::Auto | Length::Percentage(_)) | Err(_) => Err(()),
-    Ok(_) if negative => Err(()),
+    Ok(Length::Auto) | Err(_) => Err(()),
+    Ok(length) if negative || length.has_percentage() => Err(()),
     Ok(length) => Ok(length),
   }
 }
@@ -503,6 +503,7 @@ mod tests {
 
     for invalid in [
       "50%",
+      "calc(50% + 10px)",
       "-1px",
       "10cm -1px",
       "A4 letter",
