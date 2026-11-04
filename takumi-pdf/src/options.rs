@@ -13,7 +13,10 @@ use takumi_core::{
   error::Error as TakumiError,
   geometry::{Rect, Size},
   layout::node::Node,
-  resources::{font::FontError, image::ImageSource},
+  resources::{
+    font::FontError,
+    image::{ImageSource, ResourceCache},
+  },
   style::{Color, FontFamily, Lang, StyleSheet},
   units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
   viewport::Viewport,
@@ -379,6 +382,9 @@ pub struct PdfOptions<'g> {
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
   pub images: HashMap<Arc<str>, ImageSource>,
+  /// The cache `data:` URI images decode through, shared by renders that embed the same image; `None` gives the render its own.
+  #[builder(default, setter(strip_option))]
+  pub resource_cache: Option<ResourceCache>,
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub page: Option<PageOptions>,
@@ -995,6 +1001,9 @@ pub struct MeasureOptions<'g> {
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
   pub images: HashMap<Arc<str>, ImageSource>,
+  /// The cache `data:` URI images decode through; see [`PdfOptions::resource_cache`].
+  #[builder(default, setter(strip_option))]
+  pub resource_cache: Option<ResourceCache>,
   /// Lays out at the full page width with unbounded height, exactly how
   /// [`crate::render`] measures a header/footer band. Margins do not affect the
   /// result.

@@ -217,6 +217,7 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     fonts: options.fonts,
     stylesheet: options.stylesheet,
     images: Rc::new(options.images),
+    resource_cache: options.resource_cache.unwrap_or_default(),
     font_families: options.font_families,
     lang: options.lang,
   };
@@ -242,6 +243,7 @@ pub fn needs(options: MeasureOptions<'_>) -> Result<RenderNeeds, PdfError> {
     fonts: options.fonts,
     stylesheet: options.stylesheet,
     images: Rc::new(options.images),
+    resource_cache: options.resource_cache.unwrap_or_default(),
     font_families: options.font_families,
     lang: options.lang,
   };
@@ -274,6 +276,7 @@ fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Ve
     fonts: options.fonts,
     stylesheet: options.stylesheet,
     images: Rc::new(options.images),
+    resource_cache: options.resource_cache.unwrap_or_default(),
     font_families: options.font_families,
     lang: options.lang,
   };

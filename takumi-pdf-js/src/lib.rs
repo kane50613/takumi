@@ -98,6 +98,7 @@ struct MeasureInputs {
   layout: Layout,
   fonts: Rc<Fonts>,
   stylesheet: Arc<StyleSheet>,
+  resource_cache: ResourceCache,
   font_families: Option<FontFamily>,
 }
 
@@ -110,6 +111,7 @@ impl MeasureInputs {
       node,
       stylesheet: self.stylesheet.clone(),
       images: self.layout.images.clone(),
+      resource_cache: Some(self.resource_cache.clone()),
       page: self.layout.page,
       font_families: self.font_families.clone(),
       lang: self.layout.lang,
@@ -189,6 +191,7 @@ impl PdfRenderer {
       ),
       stylesheet: stylesheet(&self.resource_cache, options.css.take(), Vec::new())
         .map_err(map_error)?,
+      resource_cache: self.resource_cache.clone(),
       font_families: options.font_families.take().map(FontFamily::from_names),
     })
   }
@@ -291,6 +294,7 @@ impl PdfRenderer {
       node,
       stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
       images,
+      resource_cache: Some(self.resource_cache.clone()),
       page,
       page_ranges: options
         .page_ranges
