@@ -223,4 +223,9 @@ export class Renderer {
   free(): void {
     this.inner.free();
   }
+
+  /** Releases the underlying wasm renderer's memory at the end of a `using` block. */
+  [Symbol.dispose](): void {
+    this.free();
+  }
 }

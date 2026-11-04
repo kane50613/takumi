@@ -53,6 +53,11 @@ export class WasmRenderer<
   free(): void {
     this.inner.free();
   }
+
+  /** Releases the underlying wasm memory at the end of a `using` block. */
+  [Symbol.dispose](): void {
+    this.free();
+  }
 }
 
 /**
