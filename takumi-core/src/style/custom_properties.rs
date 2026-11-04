@@ -6,7 +6,13 @@ use std::{
   sync::Arc,
 };
 
-use crate::style::{CssWideKeyword, FromCssStr, selector::PropertyRule};
+use crate::{
+  layout::layout_style::LayoutLength,
+  style::{CssWideKeyword, FromCssStr, Length, SizingContext, selector::PropertyRule},
+};
+
+/// The `syntax` of a registration whose value computes to an absolute length.
+const LENGTH_SYNTAX: &str = "<length>";
 
 /// The `@property` rules in force, by name, shared by every element they reach.
 pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
@@ -20,6 +26,14 @@ pub struct CustomProperties {
   /// Names a utility engine wrote as this element's own composition state.
   /// Unlike a registration, this does not reach the children.
   element_state: Arc<HashSet<String>>,
+}
+
+/// `value` in CSS px, when it is a length that resolves without a percentage basis.
+fn computed_length(value: &str, sizing: &SizingContext) -> Option<f32> {
+  match Length::from_css_str(value).ok()?.to_layout_length(sizing) {
+    LayoutLength::Fixed(px) => Some(sizing.to_css(px)),
+    _ => None,
+  }
 }
 
 impl CustomProperties {
@@ -103,6 +117,33 @@ impl CustomProperties {
         None => self.remove(&rule.name),
       }
     }
+  }
+
+  /// These properties with each registered `<length>` computed to px against `sizing`, the
+  /// element's own, or `None` when none changes.
+  pub(crate) fn with_computed_lengths(&self, sizing: &SizingContext) -> Option<Self> {
+    let computed: Vec<(String, String)> = self
+      .registrations
+      .values()
+      .filter(|rule| rule.syntax == LENGTH_SYNTAX)
+      .filter_map(|rule| {
+        let value = self.get(&rule.name)?;
+        let px = format!("{}px", computed_length(value, sizing)?);
+
+        (px != value).then(|| (rule.name.clone(), px))
+      })
+      .collect();
+
+    if computed.is_empty() {
+      return None;
+    }
+
+    let mut properties = self.clone();
+
+    for (name, value) in computed {
+      properties.set(name, value);
+    }
+    Some(properties)
   }
 
   /// Records state a utility engine wrote for this element alone, as Tailwind's `@property` does.
