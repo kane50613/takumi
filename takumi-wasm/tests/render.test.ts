@@ -439,3 +439,13 @@ describe("renderAsDataUrl", () => {
     expect(animated.width).toBe(150);
   });
 });
+
+test("a using block frees the renderer", () => {
+  const local = new Renderer();
+
+  {
+    using disposed = local;
+  }
+
+  expect(() => local.clearFonts()).toThrow();
+});

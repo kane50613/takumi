@@ -449,3 +449,13 @@ test("renders an HTML band with its own <style>", async () => {
 
   expect(new TextDecoder().decode(pdf.subarray(0, 5))).toBe("%PDF-");
 });
+
+test("a using block frees the renderer", () => {
+  const local = new PdfRenderer();
+
+  {
+    using disposed = local;
+  }
+
+  expect(() => local.clearFonts()).toThrow();
+});
