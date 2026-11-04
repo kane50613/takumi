@@ -18,8 +18,8 @@ use takumi_core::{
     image::{ImageSource, ResourceCache},
   },
   style::{
-    Color, FontFamily, Lang, Length, PageKind, PageOrientation, PageSheet, PageSize, PageSizeName,
-    SizingContext, StyleSheet,
+    Color, FontFamily, Lang, Length, SizingContext, StyleSheet,
+    page_rule::{PageKind, PageSize},
   },
   units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
   viewport::{MediaTarget, Viewport},
@@ -1014,8 +1014,7 @@ impl PageOptions {
   /// `StyleForPage` styles a page, CSS winning as Chromium's `preferCSSPageSize` lets it.
   pub(crate) fn with_page_rules(self, stylesheet: &StyleSheet) -> PerPage<Self> {
     let page = |kind| {
-      let descriptors =
-        stylesheet.page_descriptors(self.viewport(), |selector| selector.matches(kind));
+      let descriptors = stylesheet.page_descriptors(self.viewport(), kind);
       let sized = descriptors.size.map_or(self, |size| self.sized(size));
       let page = Self {
         margin: sized.margin.overlaid(descriptors.margin, &sized),
@@ -1040,48 +1039,14 @@ impl PageOptions {
     area.width >= 1.0 && area.height >= 1.0
   }
 
-  /// The page at a `size` value: the sheet it names, or this one, turned to the orientation it
-  /// asks for.
+  /// The page at a `size` value.
   fn sized(self, size: PageSize) -> Self {
-    let (width, height) = match size.sheet {
-      None => (self.width, self.height),
-      Some(PageSheet::Named(name)) => {
-        let preset = Self::named(name);
-
-        (preset.width, preset.height)
-      }
-      Some(PageSheet::Lengths { width, height }) => {
-        let sizing = self.sizing();
-
-        (width.to_px(&sizing, 0.0), height.to_px(&sizing, 0.0))
-      }
-    };
-    let (width, height) = match size.orientation {
-      Some(PageOrientation::Landscape) if width < height => (height, width),
-      Some(PageOrientation::Portrait) if width > height => (height, width),
-      _ => (width, height),
-    };
+    let Size { width, height } = size.resolve(self.size(), &self.sizing());
 
     Self {
       width,
       height,
       ..self
-    }
-  }
-
-  /// The preset a css-page-3 size keyword names.
-  const fn named(name: PageSizeName) -> Self {
-    match name {
-      PageSizeName::A3 => Self::A3,
-      PageSizeName::A4 => Self::A4,
-      PageSizeName::A5 => Self::A5,
-      PageSizeName::B4 => Self::B4,
-      PageSizeName::B5 => Self::B5,
-      PageSizeName::JisB4 => Self::JIS_B4,
-      PageSizeName::JisB5 => Self::JIS_B5,
-      PageSizeName::Ledger => Self::LEDGER,
-      PageSizeName::Legal => Self::LEGAL,
-      PageSizeName::Letter => Self::LETTER,
     }
   }
 

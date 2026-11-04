@@ -6,10 +6,12 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
-  geometry::Rect,
+  geometry::{Rect, Size},
   style::{
-    FromCss, Length, MediaQueryList, RawDeclaration, RawDeclarationParser, selector::LayerPath,
+    FromCss, Length, MediaQueryList, RawDeclaration, RawDeclarationParser, SizingContext,
+    selector::LayerPath,
   },
+  units::{ONE_IN_PX, ONE_MM_IN_PX},
   viewport::Viewport,
 };
 
@@ -38,7 +40,7 @@ pub(crate) enum PagePseudoClass {
 
 /// An `@page` selector: an optional page name and an optional pseudo-class.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct PageSelector {
+pub(crate) struct PageSelector {
   /// The page name, which a `page` property would give elements.
   name: Option<String>,
   pseudo_class: Option<PagePseudoClass>,
@@ -46,7 +48,7 @@ pub struct PageSelector {
 
 impl PageSelector {
   /// Whether the selector applies to `kind` pages, as Blink's `CheckPageSelectorComponents` says.
-  pub fn matches(&self, kind: PageKind) -> bool {
+  pub(crate) fn matches(&self, kind: PageKind) -> bool {
     self.name.is_none()
       && match self.pseudo_class {
         None => true,
@@ -93,7 +95,7 @@ impl PageSelector {
 
 /// A page size keyword, portrait as css-page-3 writes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PageSizeName {
+pub(crate) enum PageSizeName {
   /// ISO A3.
   A3,
   /// ISO A4.
@@ -116,9 +118,29 @@ pub enum PageSizeName {
   Letter,
 }
 
+impl PageSizeName {
+  /// The sheet's portrait size in px.
+  const fn size(self) -> Size<f32> {
+    let (width, height) = match self {
+      Self::A3 => (297.0 * ONE_MM_IN_PX, 420.0 * ONE_MM_IN_PX),
+      Self::A4 => (210.0 * ONE_MM_IN_PX, 297.0 * ONE_MM_IN_PX),
+      Self::A5 => (148.0 * ONE_MM_IN_PX, 210.0 * ONE_MM_IN_PX),
+      Self::B4 => (250.0 * ONE_MM_IN_PX, 353.0 * ONE_MM_IN_PX),
+      Self::B5 => (176.0 * ONE_MM_IN_PX, 250.0 * ONE_MM_IN_PX),
+      Self::JisB4 => (257.0 * ONE_MM_IN_PX, 364.0 * ONE_MM_IN_PX),
+      Self::JisB5 => (182.0 * ONE_MM_IN_PX, 257.0 * ONE_MM_IN_PX),
+      Self::Ledger => (11.0 * ONE_IN_PX, 17.0 * ONE_IN_PX),
+      Self::Legal => (8.5 * ONE_IN_PX, 14.0 * ONE_IN_PX),
+      Self::Letter => (8.5 * ONE_IN_PX, 11.0 * ONE_IN_PX),
+    };
+
+    Size { width, height }
+  }
+}
+
 /// The orientation keyword in a `size` value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PageOrientation {
+pub(crate) enum PageOrientation {
   /// The shorter side is the width.
   Portrait,
   /// The longer side is the width.
@@ -127,7 +149,7 @@ pub enum PageOrientation {
 
 /// The sheet part of a `size` value.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PageSheet {
+pub(crate) enum PageSheet {
   /// A keyword such as `A4`.
   Named(PageSizeName),
   /// Explicit lengths; one length names a square.
@@ -143,12 +165,32 @@ pub enum PageSheet {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct PageSize {
   /// The sheet, or `None` to keep the size the renderer was given.
-  pub sheet: Option<PageSheet>,
+  sheet: Option<PageSheet>,
   /// The orientation, or `None` to keep the sheet's own.
-  pub orientation: Option<PageOrientation>,
+  orientation: Option<PageOrientation>,
 }
 
 impl PageSize {
+  /// The page this value gives a `base` page: the sheet it names, or `base`, turned to the
+  /// orientation it asks for.
+  pub fn resolve(self, base: Size<f32>, sizing: &SizingContext) -> Size<f32> {
+    let Size { width, height } = match self.sheet {
+      None => base,
+      Some(PageSheet::Named(name)) => name.size(),
+      Some(PageSheet::Lengths { width, height }) => Size {
+        width: width.to_px(sizing, 0.0),
+        height: height.to_px(sizing, 0.0),
+      },
+    };
+    let (width, height) = match self.orientation {
+      Some(PageOrientation::Landscape) if width < height => (height, width),
+      Some(PageOrientation::Portrait) if width > height => (height, width),
+      _ => (width, height),
+    };
+
+    Size { width, height }
+  }
+
   /// `auto | <length [0,∞]>{1,2} | [ <page-size> || [ portrait | landscape ] ]`.
   fn parse(input: &mut Parser) -> Option<Self> {
     if input
@@ -347,17 +389,17 @@ impl PageRule {
   }
 
   /// The descriptors that win among `rules` whose `@media` holds at `viewport` and whose selector
-  /// passes `selects`, in cascade order: importance, layer, specificity, then source order.
+  /// matches `kind` pages, in cascade order: importance, layer, specificity, then source order.
   pub(crate) fn cascade<'r>(
     rules: impl IntoIterator<Item = &'r Self>,
     layer_count: usize,
     viewport: Viewport,
-    selects: impl Fn(&PageSelector) -> bool,
+    kind: PageKind,
   ) -> PageDescriptors {
     let mut ranked: Vec<(u64, &PageDescriptors)> = Vec::new();
 
     for (order, rule) in rules.into_iter().enumerate() {
-      if !selects(&rule.selector)
+      if !rule.selector.matches(kind)
         || !rule
           .media_queries
           .iter()
@@ -411,7 +453,7 @@ mod tests {
 
     StyleSheet::parse(css)
       .expect("parse @page")
-      .page_descriptors(print, |selector| selector.matches(kind))
+      .page_descriptors(print, kind)
   }
 
   #[test]
@@ -502,10 +544,7 @@ mod tests {
       let print = Viewport::default().with_media_target(MediaTarget::Print);
 
       assert_eq!(
-        sheet
-          .page_descriptors(print, |selector| selector.matches(PageKind::First))
-          .margin
-          .top,
+        sheet.page_descriptors(print, PageKind::First).margin.top,
         None,
         "{css}"
       );

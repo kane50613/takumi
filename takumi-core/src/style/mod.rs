@@ -8,7 +8,7 @@ pub(crate) mod font_face_rule;
 mod matched_style_cache;
 pub mod math;
 mod media_query;
-mod page_rule;
+pub mod page_rule;
 pub(crate) mod properties;
 mod raw_declaration;
 pub(crate) mod selector;
@@ -33,9 +33,6 @@ pub(crate) use properties::unexpected_token;
 pub use properties::*;
 pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
 // Selector internals stay crate-private.
-pub use page_rule::{
-  PageDescriptors, PageKind, PageOrientation, PageSelector, PageSheet, PageSize, PageSizeName,
-};
 pub use selector::{MediaQueryList, PropertyRule, StyleSheet};
 pub(crate) use sizing::FontUnits;
 pub use sizing::SizingContext;
