@@ -707,6 +707,40 @@ mod tests {
   }
 
   #[test]
+  fn parse_calc_compares_numbers() {
+    let px = |css| Length::from_css_str(css);
+
+    assert_eq!(px("calc(min(3, 1, 2))"), Ok(Length::Px(1.0)));
+    assert_eq!(px("calc(max(3, 1, 2))"), Ok(Length::Px(3.0)));
+    assert_eq!(px("calc(clamp(1, 1, 2))"), Ok(Length::Px(1.0)));
+    assert_eq!(px("calc(clamp(1, 4 / 5, 2))"), Ok(Length::Px(1.0)));
+    assert_eq!(px("calc(clamp(1, 3, 2))"), Ok(Length::Px(2.0)));
+    assert_eq!(px("calc(clamp(2, 1, 1))"), Ok(Length::Px(2.0)));
+    assert_matches!(px("calc(min(1, nan))"), Ok(Length::Px(v)) if v.is_nan());
+    assert_eq!(
+      px("calc(400px / clamp(1, 4 / 5, 2))").map(|length| length.to_css_string()),
+      Ok("calc(400px)".to_string())
+    );
+    assert!(px("calc(clamp(1, 2))").is_err());
+    assert!(px("calc(min(1px, 2))").is_err());
+  }
+
+  #[test]
+  fn parse_calc_divides_a_length_by_a_like_length() {
+    let px = |css| Length::from_css_str(css);
+
+    assert_eq!(px("calc(400px / 400px)"), Ok(Length::Px(1.0)));
+    assert_eq!(px("calc(1in / 48px)"), Ok(Length::Px(2.0)));
+    assert_eq!(
+      px("calc(calc(10px + 2em) / calc(5px + 1em))"),
+      Ok(Length::Px(2.0))
+    );
+    assert_eq!(px("calc(0px / 1em)"), Ok(Length::Px(0.0)));
+    assert!(px("calc(1em / 1px)").is_err());
+    assert!(px("calc(1px / 0px)").is_err());
+  }
+
+  #[test]
   fn parse_calc_rejects_division_by_zero() {
     let parsed = Length::from_css_str("calc(10px / 0)");
     assert!(parsed.is_err());

@@ -133,6 +133,14 @@ impl CalcTerms {
       .map(|(unit, value)| CalcTerm { unit, value })
   }
 
+  /// The coefficient of `unit`, zero when no term carries it.
+  fn value(&self, unit: CalcUnit) -> f32 {
+    self
+      .terms()
+      .find(|term| term.unit == unit)
+      .map_or(0.0, |term| term.value)
+  }
+
   pub(crate) fn neg(self) -> Self {
     Self {
       units: self.units,
@@ -270,6 +278,22 @@ impl CalcFormula {
     }
   }
 
+  /// `self / rhs` as a number, when `self` is a multiple of a non-zero `rhs`.
+  // TODO: divide unlike units, such as `1em / 1px`, once sizing is known.
+  fn ratio(self, rhs: Self) -> Option<f32> {
+    let (lhs, rhs) = (self.compress()?, rhs.compress()?);
+    let divisor = rhs.terms().next()?;
+    let factor = lhs.value(divisor.unit) / divisor.value;
+
+    (lhs
+      .terms()
+      .all(|term| term.value == rhs.value(term.unit) * factor)
+      && rhs
+        .terms()
+        .all(|term| lhs.value(term.unit) == term.value * factor))
+    .then_some(factor)
+  }
+
   /// The non-zero terms, absolute lengths summed into px, or `None` past [`MAX_CALC_TERMS`].
   pub(crate) fn compress(self) -> Option<CalcTerms> {
     let px = self.px
@@ -322,6 +346,13 @@ pub(crate) enum CalcValue {
 }
 
 impl CalcValue {
+  fn number(self) -> Option<f32> {
+    match self {
+      Self::Number(value) => Some(value),
+      Self::Formula(_) => None,
+    }
+  }
+
   /// Applies a binary operator, or `None` when the operand types rule it out.
   fn combine(self, operator: char, rhs: Self) -> Option<Self> {
     Some(match (operator, self, rhs) {
@@ -335,6 +366,7 @@ impl CalcValue {
       ('/', _, Self::Number(0.0)) => return None,
       ('/', Self::Formula(lhs), Self::Number(rhs)) => Self::Formula(lhs.scale(1.0 / rhs)),
       ('/', Self::Number(lhs), Self::Number(rhs)) => Self::Number(lhs / rhs),
+      ('/', Self::Formula(lhs), Self::Formula(rhs)) => Self::Number(lhs.ratio(rhs)?),
       _ => return None,
     })
   }
@@ -353,15 +385,16 @@ fn parse_calc_sum_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, 
   })
 }
 
-/// Parses a `calc(...)` that must reduce to a unitless number.
+/// Parses a math function, such as `calc(...)` or `max(...)`, that must reduce to a unitless number.
 pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
-  let token = input.next()?.clone();
+  let start = input.state();
 
-  if let Token::Function(function) = &token
-    && function.eq_ignore_ascii_case("calc")
-    && let CalcValue::Number(value) = input.parse_nested_block(parse_calc_sum)?
-  {
-    return Ok(value);
+  if let Token::Function(_) = input.next()? {
+    input.reset(&start);
+
+    if let CalcValue::Number(value) = parse_calc_factor_at(input, 0)? {
+      return Ok(value);
+    }
   }
 
   Err(CssParseError::unexpected_token())
@@ -434,6 +467,23 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'
     Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
       input.parse_nested_block(|input| parse_calc_sum_at(input, depth + 1))
     }
+    Token::Function(name) => {
+      let name = name.clone();
+      let token = token.clone();
+
+      input.parse_nested_block(|input| {
+        let arguments = input.parse_comma_separated(|input| parse_calc_sum_at(input, depth + 1))?;
+
+        // TODO: compare lengths too, which needs a min/max node for unlike units.
+        arguments
+          .into_iter()
+          .map(CalcValue::number)
+          .collect::<Option<Vec<_>>>()
+          .and_then(|values| compare(&name, &values))
+          .map(CalcValue::Number)
+          .ok_or_else(|| unexpected_token!(Length, &token))
+      })
+    }
     Token::Ident(ident) => match_ignore_ascii_case! {ident.as_ref(),
       "e" => Ok(CalcValue::Number(std::f32::consts::E)),
       "pi" => Ok(CalcValue::Number(std::f32::consts::PI)),
@@ -444,4 +494,38 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'
     },
     _ => Err(unexpected_token!(Length, token)),
   }
+}
+
+/// The number the comparison function `name`, `min()`, `max()` or `clamp()`, gives `values`.
+fn compare(name: &str, values: &[f32]) -> Option<f32> {
+  match_ignore_ascii_case! { name,
+    "min" => min_of(values),
+    "max" => max_of(values),
+    "clamp" => clamp_of(values),
+    _ => None,
+  }
+}
+
+// A NaN argument makes the result NaN: https://drafts.csswg.org/css-values-4/#calc-ieee
+fn min_of(values: &[f32]) -> Option<f32> {
+  values
+    .iter()
+    .copied()
+    .reduce(|lhs, rhs| if rhs < lhs || rhs.is_nan() { rhs } else { lhs })
+}
+
+fn max_of(values: &[f32]) -> Option<f32> {
+  values
+    .iter()
+    .copied()
+    .reduce(|lhs, rhs| if rhs > lhs || rhs.is_nan() { rhs } else { lhs })
+}
+
+/// `clamp(MIN, VAL, MAX)` is `max(MIN, min(VAL, MAX))`: https://drafts.csswg.org/css-values-4/#funcdef-clamp
+fn clamp_of(values: &[f32]) -> Option<f32> {
+  let &[min, value, max] = values else {
+    return None;
+  };
+
+  max_of(&[min, min_of(&[value, max])?])
 }

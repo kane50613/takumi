@@ -3,9 +3,13 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp, tw::Namespace,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
+  parse_calc_number_expression, tw::Namespace, tw::TailwindPropertyParser, unexpected_token,
 };
+
+/// The weights `font-weight` accepts: https://drafts.csswg.org/css-fonts-4/#font-weight-absolute-values
+const MIN_FONT_WEIGHT: f32 = 1.0;
+const MAX_FONT_WEIGHT: f32 = 1000.0;
 
 /// Represents font weight value.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -66,10 +70,17 @@ impl Animatable for FontWeight {
 
 impl<'i> FromCss<'i> for FontWeight {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    // A math function's result clamps to the range: https://drafts.csswg.org/css-values-4/#calc-range
+    if let Ok(value) = input.try_parse(parse_calc_number_expression) {
+      return Ok(value.clamp(MIN_FONT_WEIGHT, MAX_FONT_WEIGHT).into());
+    }
+
     let token = input.next()?;
 
     match token {
-      Token::Number { value, .. } if (1.0..=1000.0).contains(value) => Ok((*value).into()),
+      Token::Number { value, .. } if (MIN_FONT_WEIGHT..=MAX_FONT_WEIGHT).contains(value) => {
+        Ok((*value).into())
+      }
       Token::Ident(ident) => match_ignore_ascii_case! { ident,
         "normal" => Ok(400.0.into()),
         "bold" => Ok(700.0.into()),
@@ -161,6 +172,19 @@ mod tests {
     assert!(FontWeight::from_css_str("1001").is_err());
     assert_eq!(FontWeight::from_css_str("1"), Ok(1.0.into()));
     assert_eq!(FontWeight::from_css_str("1000"), Ok(1000.0.into()));
+  }
+
+  #[test]
+  fn parses_math_functions_of_numbers() {
+    assert_eq!(FontWeight::from_css_str("max(500, 400)"), Ok(500.0.into()));
+    assert_eq!(FontWeight::from_css_str("min(500, 400)"), Ok(400.0.into()));
+    assert_eq!(
+      FontWeight::from_css_str("clamp(100, 50, 900)"),
+      Ok(100.0.into())
+    );
+    assert_eq!(FontWeight::from_css_str("calc(300 * 2)"), Ok(600.0.into()));
+    assert_eq!(FontWeight::from_css_str("calc(2000)"), Ok(1000.0.into()));
+    assert!(FontWeight::from_css_str("max(500px, 400)").is_err());
   }
 
   #[test]

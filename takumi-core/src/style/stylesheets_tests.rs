@@ -1463,6 +1463,37 @@ fn test_var_supports_nested_fallback_chains() {
 }
 
 #[test]
+fn test_var_divides_by_a_number_from_clamp_or_a_length_ratio() {
+  for stretch in [
+    "1",
+    "clamp(1, 1, 2)",
+    "clamp(1, 4 / 5, 2)",
+    "calc(400px / 400px)",
+  ] {
+    let style = inherited_style_from_pairs(
+      [("--s", stretch), ("width", "calc(400px / var(--s))")],
+      &ComputedStyle::default(),
+    );
+
+    assert_eq!(
+      style.box_data.width.to_css_string(),
+      "calc(400px)",
+      "--s: {stretch}"
+    );
+  }
+}
+
+#[test]
+fn test_var_feeds_a_number_into_max() {
+  let style = inherited_style_from_pairs(
+    [("font-weight", "max(500, var(--fw, 400))")],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(style.inherited_data.font_weight, 500.0.into());
+}
+
+#[test]
 fn test_var_resolves_inside_nested_functions() {
   let resolved = resolve_var("calc(var(--space) + 2px)", [("--space", "8px")]);
 
