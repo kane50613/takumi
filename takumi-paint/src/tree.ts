@@ -164,6 +164,8 @@ export interface PaintTree {
    * `toJSON()`, `TextRun.outlines()`, and a `Font.data()` not read before throw.
    */
   free(): void;
+  /** Frees the tree at the end of a `using` block. */
+  [Symbol.dispose](): void;
 }
 
 /** The version of {@link SerializedPaintTree} this package writes and reads. */
@@ -260,6 +262,10 @@ export class PaintTreeView implements PaintTree {
 
   free(): void {
     this.#files.free();
+  }
+
+  [Symbol.dispose](): void {
+    this.free();
   }
 }
 

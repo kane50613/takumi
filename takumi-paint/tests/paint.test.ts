@@ -39,8 +39,12 @@ describe("Painter.paint", () => {
 
       const third = await local.paint(text("dispose"));
 
-      expect(third.toJSON()).toEqual(snapshot);
-      third.free();
+      {
+        using disposed = third;
+
+        expect(disposed.toJSON()).toEqual(snapshot);
+      }
+      expect(() => third.toJSON()).toThrow("The paint tree was freed");
     } finally {
       local.free();
     }
