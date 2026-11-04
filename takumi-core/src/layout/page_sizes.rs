@@ -79,8 +79,10 @@ impl PageRules {
   }
 
   /// Page `page`'s box as a page `name`, as Blink's `StyleForPage` and `ResolvePageBoxGeometry`
-  /// give it, a margin percentage taking the page's size on its own axis. A rule that leaves no
-  /// page area is ignored, as Blink's `LayoutPageContainer` ignores it.
+  /// give it, a margin percentage taking the page's size on its own axis. A rule that leaves less
+  /// than a pixel of page area on either axis is ignored, as Blink's `LayoutPageContainer` ignores
+  /// one that leaves none. Approximate: `em` and `rem` resolve against 16px, where Blink's page
+  /// style takes the root's.
   pub fn page_box(&self, page: usize, name: &PageName) -> PageBox {
     let kind = PageKind::of(page);
     let descriptors = self.stylesheet.page_descriptors(self.viewport, kind, name);
