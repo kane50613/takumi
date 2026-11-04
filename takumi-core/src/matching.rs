@@ -1394,6 +1394,61 @@ mod tests {
     assert_eq!(kept, [0, 1]);
   }
 
+  /// Whether `.b`, a list of a `li` holding a `span` and a `li[data-off]`, is drawn under `css`.
+  fn list_is_drawn(css: &str, first_off: bool) -> bool {
+    let stylesheet = StyleSheet::parse(css).expect("stylesheet parses");
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let off = || BTreeMap::from([("data-off".into(), "".into())]);
+    let first = Node::container([Node::container([]).with_tag_name("span")]).with_tag_name("li");
+    let first = if first_off {
+      first.with_attributes(off())
+    } else {
+      first
+    };
+    let list = Node::container([
+      first,
+      Node::container([])
+        .with_tag_name("li")
+        .with_attributes(off()),
+    ])
+    .with_tag_name("ul")
+    .with_class_name("b");
+    let root = RenderNode::from_node(&context, Node::container([list]));
+
+    root
+      .children
+      .as_deref()
+      .is_some_and(|children| !children.is_empty())
+  }
+
+  #[test]
+  fn has_matches_by_its_relative_selector() {
+    let hidden_when = |selector: &str| format!("{selector} {{ display: none }}");
+
+    assert!(!list_is_drawn(&hidden_when(".b:has(li)"), false));
+    assert!(!list_is_drawn(&hidden_when(".b:has(> li)"), false));
+    assert!(!list_is_drawn(&hidden_when(".b:has(li[data-off])"), false));
+    assert!(!list_is_drawn(&hidden_when(".b:has(span)"), false));
+    assert!(list_is_drawn(&hidden_when(".b:has(> span)"), false));
+    assert!(list_is_drawn(&hidden_when(".b:has(p)"), false));
+    assert!(list_is_drawn(
+      &hidden_when(".b:not(:has(> li:not([data-off])))"),
+      false
+    ));
+    assert!(!list_is_drawn(
+      &hidden_when(".b:not(:has(> li:not([data-off])))"),
+      true
+    ));
+  }
+
   fn candidates(css: &str, node: &Node) -> Vec<usize> {
     let stylesheet = StyleSheet::parse(css).expect("stylesheet parses");
     let index = stylesheet.rule_index();

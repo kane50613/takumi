@@ -287,6 +287,10 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     true
   }
 
+  fn parse_has(&self) -> bool {
+    true
+  }
+
   fn parse_non_ts_pseudo_class(
     &self,
     name: CowRcStr<'i>,
