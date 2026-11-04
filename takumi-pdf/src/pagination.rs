@@ -475,6 +475,7 @@ mod tests {
       fonts: &fonts,
       stylesheet: Default::default(),
       images: Rc::default(),
+      resource_cache: Default::default(),
       font_families: None,
       lang: None,
     };
