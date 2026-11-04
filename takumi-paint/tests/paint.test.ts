@@ -21,6 +21,35 @@ function runs(tree: PaintTree): TextRun[] {
 }
 
 describe("Painter.paint", () => {
+  it("frees one tree without freeing the painter or another tree", async () => {
+    const local = new Painter();
+
+    try {
+      const first = await local.paint(text("dispose"));
+      const second = await local.paint(text("dispose"));
+      const snapshot = first.toJSON();
+
+      first.free();
+      first.free();
+      expect(() => first.toJSON()).toThrow("The paint tree was freed");
+      expect(() => runs(first)[0]?.outlines()).toThrow("The paint tree was freed");
+      expect(first.nodes.length).toBeGreaterThan(0);
+      expect(second.toJSON()).toEqual(snapshot);
+      second.free();
+
+      const third = await local.paint(text("dispose"));
+
+      {
+        using disposed = third;
+
+        expect(disposed.toJSON()).toEqual(snapshot);
+      }
+      expect(() => third.toJSON()).toThrow("The paint tree was freed");
+    } finally {
+      local.free();
+    }
+  });
+
   it("points each glyph at where its cluster starts in the run's text", async () => {
     const tree = await painter.paint(text("café ok", { fontSize: 32 }), {
       width: 400,

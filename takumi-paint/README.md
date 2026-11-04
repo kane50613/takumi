@@ -74,6 +74,25 @@ for (const step of tree.steps) {
 
 `paint()` also takes an HTML string or a Takumi node tree.
 
+## Release a paint tree
+
+A tree holds its font files and glyph outlines in WebAssembly memory. Garbage collection releases
+them at no set time, so free the tree once you have read what you need. A `using` declaration
+frees it when its block ends:
+
+```ts
+using tree = await paint({ type: "text", text: "Hello" });
+const snapshot = tree.toJSON();
+// The snapshot stays usable after the block frees the tree.
+```
+
+Without `using`, call `tree.free()` yourself, in a `finally` block if the reads can throw. Calling
+it again does nothing, and the painter and other trees stay usable.
+
+After `free()`, the tree's nodes and their geometry stay readable. `tree.toJSON()`,
+`run.outlines()`, and a `font.data()` you have not read before throw. Call `painter.free()`
+separately once you have finished with a `Painter`.
+
 ## What the tree holds
 
 | Part      | Contents                                                                    |
