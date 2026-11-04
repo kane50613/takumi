@@ -944,6 +944,18 @@ impl<'i> FromCss<'i> for Color {
       Token::Function(ref name) => {
         let token = Token::Function(name.clone());
 
+        // With no `color-scheme`, the used scheme is light: https://drafts.csswg.org/css-color-5/#light-dark
+        if name.eq_ignore_ascii_case("light-dark") {
+          return input.parse_nested_block(|input| {
+            let light = Color::from_css(input)?;
+
+            input.expect_comma()?;
+            Color::from_css(input)?;
+
+            Ok(light)
+          });
+        }
+
         if name.eq_ignore_ascii_case("color-mix") {
           return input.parse_nested_block(|input| {
             let color_mix = ColorMix::from_css(input)?;
@@ -997,6 +1009,20 @@ mod tests {
       ch: 16.0 / 2.0,
       ex: 16.0 / 2.0,
     }
+  }
+
+  #[test]
+  fn light_dark_takes_its_light_colour() {
+    assert_eq!(
+      Color::from_css_str("light-dark(red, blue)"),
+      Ok(Color([255, 0, 0, 255]))
+    );
+    assert_eq!(
+      ColorInput::from_css_str("light-dark(#00ff00, rgb(0 0 255))"),
+      Ok(ColorInput::Value(Color([0, 255, 0, 255])))
+    );
+    assert!(Color::from_css_str("light-dark(red)").is_err());
+    assert!(Color::from_css_str("light-dark(red, 1px)").is_err());
   }
 
   #[test]
