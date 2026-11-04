@@ -1082,7 +1082,12 @@ impl Runner {
         Arc::clone(&stylesheet),
         PageBox {
           size: PRINT_PAGE_SIZE,
-          margin: Rect::all(PRINT_PAGE_MARGIN),
+          margin: Rect {
+            top: PRINT_PAGE_MARGIN,
+            right: PRINT_PAGE_MARGIN,
+            bottom: PRINT_PAGE_MARGIN,
+            left: PRINT_PAGE_MARGIN,
+          },
         },
       );
       // Approximate: Blink sizes the content's viewport from the first page under its page name,

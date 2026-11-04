@@ -42,7 +42,7 @@ fn page_rules() {
         width: 200.0,
         height: 200.0,
       },
-      margin: Rect::all(0.0),
+      margin: Rect::default(),
     },
   );
   let mut pages = Vec::new();
@@ -88,7 +88,7 @@ fn page_rules_viewport_units() {
         width: 200.9,
         height: 100.9,
       },
-      margin: Rect::all(0.0),
+      margin: Rect::default(),
     },
   );
   let mut sizes = Vec::new();

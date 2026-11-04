@@ -183,7 +183,7 @@ pub struct Rect<T> {
 
 impl<T> Rect<T> {
   /// A rect with all four edges `value`.
-  pub fn all(value: T) -> Self
+  pub(crate) fn all(value: T) -> Self
   where
     T: Copy,
   {

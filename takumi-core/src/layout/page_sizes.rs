@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::{
   geometry::{Point, Rect, Size},
   layout_unit::LayoutUnit,
-  style::{Length, PageKind, PageName, SizingContext, StyleSheet},
+  style::{Length, PageName, SizingContext, StyleSheet, page_rule::PageKind},
   viewport::Viewport,
 };
 
@@ -83,9 +83,7 @@ impl PageRules {
   /// page area is ignored, as Blink's `LayoutPageContainer` ignores it.
   pub fn page_box(&self, page: usize, name: &PageName) -> PageBox {
     let kind = PageKind::of(page);
-    let descriptors = self
-      .stylesheet
-      .page_descriptors(self.viewport, |selector| selector.matches(kind, name));
+    let descriptors = self.stylesheet.page_descriptors(self.viewport, kind, name);
     let size = descriptors.size.map_or(self.base.size, |size| {
       size.resolve(
         self.base.size,
