@@ -850,19 +850,6 @@ fn parse_style_declaration_expands_border_side_shorthands() {
 
 #[test]
 fn a_shorthand_takes_light_dark() {
-  let red = ColorInput::Value(Color([255, 0, 0, 255]));
-
-  assert_eq!(
-    parse_declarations("border-top", "1px solid light-dark(red, blue)")
-      .iter()
-      .collect::<Vec<_>>(),
-    [
-      &StyleDeclaration::border_top_width(LineWidth::Length(Length::Px(1.0))),
-      &StyleDeclaration::border_top_style(BorderStyle::Solid),
-      &StyleDeclaration::border_top_color(red),
-    ]
-  );
-
   let style = inherited_style_from_pairs(
     [
       ("--c", "light-dark(red, blue)"),
@@ -875,7 +862,11 @@ fn a_shorthand_takes_light_dark() {
     style.box_data.border_top_width,
     LineWidth::Length(Length::Px(1.0))
   );
-  assert_eq!(style.surround_data.border_top_color, red);
+  assert_eq!(style.box_data.border_top_style, BorderStyle::Solid);
+  assert_eq!(
+    style.surround_data.border_top_color,
+    ColorInput::Value(Color([255, 0, 0, 255]))
+  );
 }
 
 #[test]

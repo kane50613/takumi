@@ -944,7 +944,7 @@ impl<'i> FromCss<'i> for Color {
       Token::Function(ref name) => {
         let token = Token::Function(name.clone());
 
-        // With no `color-scheme`, the used scheme is light: https://drafts.csswg.org/css-color-5/#light-dark
+        // A render has no `color-scheme`, so it is light: https://drafts.csswg.org/css-color-5/#light-dark
         if name.eq_ignore_ascii_case("light-dark") {
           return input.parse_nested_block(|input| {
             let light = Color::from_css(input)?;
