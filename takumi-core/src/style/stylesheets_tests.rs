@@ -1486,11 +1486,11 @@ fn test_var_divides_by_a_number_from_clamp_or_a_length_ratio() {
 #[test]
 fn test_var_feeds_a_number_into_max() {
   let style = inherited_style_from_pairs(
-    [("font-weight", "max(300, var(--fw, 400))")],
+    [("font-weight", "max(300, var(--fw, 600))")],
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.inherited_data.font_weight, 400.0.into());
+  assert_eq!(style.inherited_data.font_weight, 600.0.into());
 }
 
 #[test]
