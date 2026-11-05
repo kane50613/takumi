@@ -1394,8 +1394,6 @@ mod tests {
     assert_eq!(kept, [0, 1]);
   }
 
-  /// Whether `ul.b` is drawn among its siblings `div, p` under `css`. It holds an `li` with a
-  /// `span`, off when `first_off`, and an `li[data-off]`.
   fn list_is_drawn(css: &str, first_off: bool) -> bool {
     let stylesheet = StyleSheet::parse(css).expect("stylesheet parses");
     let context = RenderContext::builder()
