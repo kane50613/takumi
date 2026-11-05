@@ -3045,8 +3045,7 @@ impl RenderContext {
     )
   }
 
-  /// This style as a child inherits it, with the stylesheet's registered custom properties at
-  /// their computed values.
+  /// This style as a child inherits it, with the stylesheet's registered custom properties.
   fn inherited_style(&self) -> Cow<'_, ComputedStyle> {
     if self.stylesheet().property_rules().is_empty() {
       return Cow::Borrowed(&self.style);
@@ -3366,10 +3365,11 @@ mod tests {
   #[test]
   fn a_registered_length_inherits_as_the_px_its_parent_computes() {
     let stylesheet = parse_stylesheet(
-      "@property --g { syntax: '<length>'; inherits: true; initial-value: 0px }
+      "@property --g { syntax: ' <length> '; inherits: true; initial-value: 0px }
        @property --h { syntax: '<length>'; inherits: true; initial-value: 3px }
-       .p { font-size: 20px; --g: .5em }
-       .c { font-size: 2em; margin-top: var(--g); margin-bottom: var(--h) }",
+       @property --w { syntax: '*'; inherits: true }
+       .p { font-size: 20px; --g: .5em; --w: .5em }
+       .c { font-size: 2em; margin-top: var(--g); margin-bottom: var(--h); margin-left: var(--w) }",
     );
     let context = RenderContext::builder()
       .fonts(Fonts::default().snapshot())
@@ -3393,6 +3393,7 @@ mod tests {
     );
     assert_eq!(margin(child.context.style.box_data.margin_top), 10.0);
     assert_eq!(margin(child.context.style.box_data.margin_bottom), 3.0);
+    assert_eq!(margin(child.context.style.box_data.margin_left), 20.0);
   }
 
   #[test]

@@ -11,9 +11,6 @@ use crate::{
   style::{CssWideKeyword, FromCssStr, Length, SizingContext, selector::PropertyRule},
 };
 
-/// The `syntax` of a registration whose value computes to an absolute length.
-const LENGTH_SYNTAX: &str = "<length>";
-
 /// The `@property` rules in force, by name, shared by every element they reach.
 pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
 
@@ -28,7 +25,7 @@ pub struct CustomProperties {
   element_state: Arc<HashSet<String>>,
 }
 
-/// `value` in CSS px, when it is a length that resolves without a percentage basis.
+/// `value` in CSS px, unless it is not a length or needs a percentage basis.
 fn computed_length(value: &str, sizing: &SizingContext) -> Option<f32> {
   match Length::from_css_str(value).ok()?.to_layout_length(sizing) {
     LayoutLength::Fixed(px) => Some(sizing.to_css(px)),
@@ -119,31 +116,30 @@ impl CustomProperties {
     }
   }
 
-  /// These properties with each registered `<length>` computed to px against `sizing`, the
-  /// element's own, or `None` when none changes.
+  /// A copy with each registered `<length>` computed to px against `sizing`, if any changes.
+  /// <https://drafts.css-houdini.org/css-properties-values-api-1/#calculation-of-computed-values>
   pub(crate) fn with_computed_lengths(&self, sizing: &SizingContext) -> Option<Self> {
-    let computed: Vec<(String, String)> = self
+    let mut computed: Option<Self> = None;
+
+    for rule in self
       .registrations
       .values()
-      .filter(|rule| rule.syntax == LENGTH_SYNTAX)
-      .filter_map(|rule| {
-        let value = self.get(&rule.name)?;
-        let px = format!("{}px", computed_length(value, sizing)?);
+      .filter(|rule| rule.syntax == "<length>")
+    {
+      let Some(value) = self.get(&rule.name) else {
+        continue;
+      };
+      let Some(px) = computed_length(value, sizing).map(|px| format!("{px}px")) else {
+        continue;
+      };
 
-        (px != value).then(|| (rule.name.clone(), px))
-      })
-      .collect();
-
-    if computed.is_empty() {
-      return None;
+      if px != value {
+        computed
+          .get_or_insert_with(|| self.clone())
+          .set(rule.name.clone(), px);
+      }
     }
-
-    let mut properties = self.clone();
-
-    for (name, value) in computed {
-      properties.set(name, value);
-    }
-    Some(properties)
+    computed
   }
 
   /// Records state a utility engine wrote for this element alone, as Tailwind's `@property` does.
