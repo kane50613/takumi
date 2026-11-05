@@ -1394,7 +1394,8 @@ mod tests {
     assert_eq!(kept, [0, 1]);
   }
 
-  /// Whether `.b`, a list of a `li` holding a `span` and a `li[data-off]`, is drawn under `css`.
+  /// Whether `ul.b` is drawn among its siblings `div, p` under `css`. It holds an `li` with a
+  /// `span`, off when `first_off`, and an `li[data-off]`.
   fn list_is_drawn(css: &str, first_off: bool) -> bool {
     let stylesheet = StyleSheet::parse(css).expect("stylesheet parses");
     let context = RenderContext::builder()
@@ -1406,45 +1407,46 @@ mod tests {
       )
       .stylesheet(Arc::new(stylesheet))
       .build();
-    let off = || BTreeMap::from([("data-off".into(), "".into())]);
-    let first = Node::container([Node::container([]).with_tag_name("span")]).with_tag_name("li");
-    let first = if first_off {
-      first.with_attributes(off())
-    } else {
-      first
+    let li = |off: bool, children| {
+      Node::container(children)
+        .with_tag_name("li")
+        .with_attributes(BTreeMap::from_iter(
+          off.then(|| ("data-off".into(), "".into())),
+        ))
     };
     let list = Node::container([
-      first,
-      Node::container([])
-        .with_tag_name("li")
-        .with_attributes(off()),
+      li(first_off, vec![Node::container([]).with_tag_name("span")]),
+      li(true, vec![]),
     ])
     .with_tag_name("ul")
     .with_class_name("b");
-    let root = RenderNode::from_node(&context, Node::container([list]));
+    let siblings = [
+      list,
+      Node::container([]).with_tag_name("div"),
+      Node::container([]).with_tag_name("p"),
+    ];
+    let root = RenderNode::from_node(&context, Node::container(siblings));
 
-    root
-      .children
-      .as_deref()
-      .is_some_and(|children| !children.is_empty())
+    root.children.as_deref().map_or(0, <[_]>::len) == 3
   }
 
   #[test]
   fn has_matches_by_its_relative_selector() {
-    let hidden_when = |selector: &str| format!("{selector} {{ display: none }}");
+    let drawn = |selector: &str| list_is_drawn(&format!("{selector} {{ display: none }}"), false);
 
-    assert!(!list_is_drawn(&hidden_when(".b:has(li)"), false));
-    assert!(!list_is_drawn(&hidden_when(".b:has(> li)"), false));
-    assert!(!list_is_drawn(&hidden_when(".b:has(li[data-off])"), false));
-    assert!(!list_is_drawn(&hidden_when(".b:has(span)"), false));
-    assert!(list_is_drawn(&hidden_when(".b:has(> span)"), false));
-    assert!(list_is_drawn(&hidden_when(".b:has(p)"), false));
-    assert!(list_is_drawn(
-      &hidden_when(".b:not(:has(> li:not([data-off])))"),
-      false
-    ));
+    assert!(!drawn(".b:has(li)"));
+    assert!(!drawn(".b:has(> li)"));
+    assert!(!drawn(".b:has(li[data-off])"));
+    assert!(!drawn(".b:has(span)"));
+    assert!(drawn(".b:has(> span)"));
+    assert!(drawn(".b:has(p)"));
+    assert!(!drawn(".b:has(+ div)"));
+    assert!(drawn(".b:has(+ p)"));
+    assert!(!drawn(".b:has(~ p)"));
+    assert!(drawn(".b:has(~ span)"));
+    assert!(drawn(".b:not(:has(> li:not([data-off])))"));
     assert!(!list_is_drawn(
-      &hidden_when(".b:not(:has(> li:not([data-off])))"),
+      ".b:not(:has(> li:not([data-off]))) { display: none }",
       true
     ));
   }
