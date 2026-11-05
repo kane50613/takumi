@@ -351,7 +351,7 @@ mod tests {
   use crate::{
     options::{PageMargins, PageOptions},
     page::{PageFrame, PageFrames},
-    test_support::{fixture, fonts},
+    test_support::{fixture, fonts, uniform_pages},
   };
 
   /// Documents with the targets a summary reads in the places a page's root fragment shares with
@@ -482,9 +482,8 @@ mod tests {
           height,
           margin: PageMargins::uniform(12.0),
         };
-        let frames = PageFrames::uniform(
-          PageFrame::resolve(&page, (None, None)).expect("the page has an area"),
-        );
+        let frames =
+          uniform_pages(PageFrame::resolve(&page, (None, None)).expect("the page has an area"));
         let paginated = Paginated::lay_out(node.clone(), &inputs, &frames)
           .unwrap_or_else(|_| panic!("{name} lays out on {width}x{height}"));
         let summary = paginated.summarize(true).expect("the pages summarize");

@@ -12,14 +12,6 @@ pub(crate) struct PerPage<T> {
   right: T,
 }
 
-#[cfg(test)]
-impl<T: Clone> PerPage<T> {
-  /// `value` for every page.
-  pub(crate) fn uniform(value: T) -> Self {
-    Self::new(value.clone(), value.clone(), value)
-  }
-}
-
 impl<T> PerPage<T> {
   /// `first` for the first page, and `left` and `right` for the left and right pages after it.
   pub(crate) fn new(first: T, left: T, right: T) -> Self {
