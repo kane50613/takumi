@@ -796,7 +796,10 @@ fn parse_property_rule<'i>(
   };
 
   // The descriptor is a string, and nothing downstream wants the quotes.
-  let syntax = syntax.trim_matches(['"', '\'']).trim().to_owned();
+  let syntax = syntax
+    .trim_matches(['"', '\''])
+    .trim_matches(|c: char| c.is_ascii_whitespace())
+    .to_owned();
 
   // css-properties-values-api-1 2.1: only the universal syntax may leave the
   // initial value out, because every other one needs a value to fall back to.
