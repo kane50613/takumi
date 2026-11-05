@@ -12,10 +12,10 @@ const flags = [
   "--strip-target-features",
 ];
 
-const [wasmFile] = process.argv.slice(2);
+const [wasmFile, ...extraFlags] = process.argv.slice(2);
 
 if (!wasmFile) {
-  throw new Error("usage: bun scripts/wasm-opt.mts <file.wasm>");
+  throw new Error("usage: bun scripts/wasm-opt.mts <file.wasm> [wasm-opt flags...]");
 }
 
 const version = await $`wasm-opt --version`.nothrow().quiet();
@@ -27,4 +27,4 @@ if (!version.stdout.toString().includes(`version ${BINARYEN_VERSION}`)) {
   );
 }
 
-await $`wasm-opt ${flags} ${wasmFile} -o ${wasmFile}`;
+await $`wasm-opt ${flags} ${extraFlags} ${wasmFile} -o ${wasmFile}`;
