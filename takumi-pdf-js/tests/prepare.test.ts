@@ -26,6 +26,26 @@ test("fetches the images the document and its bands draw", async () => {
   expect(decoder.decode((await renderer.render(prepared)).subarray(0, 5))).toBe("%PDF-");
 });
 
+test("fetches the images a section and its bands draw", async () => {
+  const fetch = mock(async (_url: string) => new Response(png));
+  const prepared = await renderer.prepare("<p>Cover</p>", {
+    sections: [
+      {
+        node: '<img src="https://example.com/section.png" width="10" height="10">',
+        landscape: true,
+        footer: '<img src="https://example.com/footer.png" width="10" height="10">',
+      },
+    ],
+    images: { fetch },
+  });
+
+  expect(fetch.mock.calls.map(([url]) => url).sort()).toEqual([
+    "https://example.com/footer.png",
+    "https://example.com/section.png",
+  ]);
+  expect(decoder.decode(await renderer.render(prepared)).match(/\/MediaBox/g)).toHaveLength(2);
+});
+
 test("writes the file with the options render takes", async () => {
   const prepared = await prepare("<h1>Title</h1>");
   const pdf = await render(prepared, { outline: true });
