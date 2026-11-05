@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_calc_number_math</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      div {
+        display: block;
+        height: 24px;
+        margin: 8px;
+        background: rgb(59, 130, 246);
+        width: calc(200px / var(--s));
+      }
+      .clamp {
+        --s: clamp(1, 4 / 5, 2);
+      }
+      .max {
+        --s: max(1, 2, 4);
+      }
+      .ratio {
+        --s: calc(400px / 200px);
+      }
+      .min {
+        --s: min(4, 1 / 2);
+      }
+    </style>
+  </head>
+  <body style="width: 420px; height: 160px">
+    <div class="clamp"></div>
+    <div class="max"></div>
+    <div class="ratio"></div>
+    <div class="min"></div>
+  </body>
+</html>

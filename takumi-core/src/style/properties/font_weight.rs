@@ -7,7 +7,7 @@ use crate::style::{
   parse_calc_number_expression, tw::Namespace, tw::TailwindPropertyParser, unexpected_token,
 };
 
-/// The weights `font-weight` accepts: https://drafts.csswg.org/css-fonts-4/#font-weight-absolute-values
+/// <https://drafts.csswg.org/css-fonts-4/#font-weight-absolute-values>
 const MIN_FONT_WEIGHT: f32 = 1.0;
 const MAX_FONT_WEIGHT: f32 = 1000.0;
 
@@ -70,7 +70,7 @@ impl Animatable for FontWeight {
 
 impl<'i> FromCss<'i> for FontWeight {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    // A math function's result clamps to the range: https://drafts.csswg.org/css-values-4/#calc-range
+    // https://drafts.csswg.org/css-values-4/#calc-range
     if let Ok(value) = input.try_parse(parse_calc_number_expression) {
       return Ok(value.clamp(MIN_FONT_WEIGHT, MAX_FONT_WEIGHT).into());
     }

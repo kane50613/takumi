@@ -133,7 +133,7 @@ impl CalcTerms {
       .map(|(unit, value)| CalcTerm { unit, value })
   }
 
-  /// The coefficient of `unit`, zero when no term carries it.
+  /// The coefficient of `unit`, or zero.
   fn value(&self, unit: CalcUnit) -> f32 {
     self
       .terms()
@@ -278,19 +278,16 @@ impl CalcFormula {
     }
   }
 
-  /// `self / rhs` as a number, when `self` is a multiple of a non-zero `rhs`.
-  // TODO: divide unlike units, such as `1em / 1px`, once sizing is known.
+  /// `self / rhs`, when `self` is a multiple of `rhs`: every term's quotient is the same.
+  // TODO: divide unlike units, such as `1em / 1px`, and a divisor such as `10px - 1em` that may
+  // resolve to zero, once sizing is known.
   fn ratio(self, rhs: Self) -> Option<f32> {
     let (lhs, rhs) = (self.compress()?, rhs.compress()?);
-    let divisor = rhs.terms().next()?;
-    let factor = lhs.value(divisor.unit) / divisor.value;
+    let mut quotients = rhs.terms().map(|term| lhs.value(term.unit) / term.value);
+    let factor = quotients.next()?;
 
-    (lhs
-      .terms()
-      .all(|term| term.value == rhs.value(term.unit) * factor)
-      && rhs
-        .terms()
-        .all(|term| lhs.value(term.unit) == term.value * factor))
+    (quotients.all(|quotient| quotient == factor)
+      && lhs.terms().all(|term| rhs.value(term.unit) != 0.0))
     .then_some(factor)
   }
 
@@ -385,7 +382,7 @@ fn parse_calc_sum_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, 
   })
 }
 
-/// Parses a math function, such as `calc(...)` or `max(...)`, that must reduce to a unitless number.
+/// Parses a math function that must reduce to a unitless number.
 pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
   let start = input.state();
 
@@ -474,7 +471,7 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'
       input.parse_nested_block(|input| {
         let arguments = input.parse_comma_separated(|input| parse_calc_sum_at(input, depth + 1))?;
 
-        // TODO: compare lengths too, which needs a min/max node for unlike units.
+        // TODO: compare lengths.
         arguments
           .into_iter()
           .map(CalcValue::number)
@@ -496,7 +493,7 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'
   }
 }
 
-/// The number the comparison function `name`, `min()`, `max()` or `clamp()`, gives `values`.
+/// `min()`, `max()` or `clamp()` of `values`.
 fn compare(name: &str, values: &[f32]) -> Option<f32> {
   match_ignore_ascii_case! { name,
     "min" => min_of(values),
@@ -521,7 +518,7 @@ fn max_of(values: &[f32]) -> Option<f32> {
     .reduce(|lhs, rhs| if rhs > lhs || rhs.is_nan() { rhs } else { lhs })
 }
 
-/// `clamp(MIN, VAL, MAX)` is `max(MIN, min(VAL, MAX))`: https://drafts.csswg.org/css-values-4/#funcdef-clamp
+/// <https://drafts.csswg.org/css-values-4/#funcdef-clamp>
 fn clamp_of(values: &[f32]) -> Option<f32> {
   let &[min, value, max] = values else {
     return None;

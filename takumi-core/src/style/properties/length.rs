@@ -731,12 +731,18 @@ mod tests {
 
     assert_eq!(px("calc(400px / 400px)"), Ok(Length::Px(1.0)));
     assert_eq!(px("calc(1in / 48px)"), Ok(Length::Px(2.0)));
+    assert_eq!(px("calc(1px / 41px)"), Ok(Length::Px(1.0 / 41.0)));
+    assert_eq!(
+      px("calc(calc(1px + 3em) / calc(41px + 123em))"),
+      Ok(Length::Px(1.0 / 41.0))
+    );
     assert_eq!(
       px("calc(calc(10px + 2em) / calc(5px + 1em))"),
       Ok(Length::Px(2.0))
     );
     assert_eq!(px("calc(0px / 1em)"), Ok(Length::Px(0.0)));
     assert!(px("calc(1em / 1px)").is_err());
+    assert!(px("calc(calc(1px + 1em) / 1px)").is_err());
     assert!(px("calc(1px / 0px)").is_err());
   }
 
