@@ -355,7 +355,7 @@ mod tests {
   use crate::{
     options::{PageMargins, PageOptions},
     page::{PageFrame, PageFrames},
-    test_support::{fixture, fonts, uniform_pages},
+    test_support::{fixture, fonts, per_kind, uniform_pages},
   };
 
   /// Documents with the targets a summary reads in the places a page's root fragment shares with
@@ -536,7 +536,7 @@ mod tests {
       )
       .expect("the page has an area")
     };
-    let frames = PageFrames::new(frame(220.0), frame(140.0), frame(180.0));
+    let frames = per_kind(frame(220.0), frame(140.0), frame(180.0));
     let source = (1..=40)
       .map(|line| format!(r#"<div id="line-{line}" style="height: 20px">Line {line}</div>"#))
       .collect::<String>();

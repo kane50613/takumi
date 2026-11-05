@@ -137,24 +137,13 @@ impl<T> PerPage<T> {
 }
 
 #[cfg(test)]
-impl<T: Clone> PerPage<T> {
-  /// `first`, `left`, and `right` for the first, left, and right pages of every name, in a
-  /// left-to-right document.
-  pub(crate) fn new(first: T, left: T, right: T) -> Self {
-    Self {
-      direction: Direction::Ltr,
-      entries: vec![(PageName::default(), [first, left, right])],
-    }
-  }
-}
-
-#[cfg(test)]
 mod tests {
   use std::rc::Rc;
 
   use takumi_core::style::{Direction, PageName, page_rule::PageKind};
 
   use super::PerPage;
+  use crate::test_support::per_kind;
 
   #[test]
   fn pages_after_the_first_alternate_left_and_right() {
@@ -201,7 +190,7 @@ mod tests {
   #[test]
   fn values_with_one_key_share_one_mapping() {
     let mut calls = 0;
-    let shared = PerPage::new(10, 20, 10)
+    let shared = per_kind(10, 20, 10)
       .try_map_shared(
         |value| *value,
         |value| {
