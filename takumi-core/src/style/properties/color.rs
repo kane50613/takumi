@@ -941,50 +941,45 @@ impl<'i> FromCss<'i> for Color {
           .map(|(r, g, b)| Color([r, g, b, 255]))
           .map_err(|_| unexpected_token!(token))
       }
-      Token::Function(ref name) => {
-        let token = Token::Function(name.clone());
-
+      Token::Function(ref name) => match_ignore_ascii_case! { name,
         // A render has no `color-scheme`, so it is light: https://drafts.csswg.org/css-color-5/#light-dark
-        if name.eq_ignore_ascii_case("light-dark") {
-          return input.parse_nested_block(|input| {
-            let light = Color::from_css(input)?;
+        "light-dark" => input.parse_nested_block(|input| {
+          let light = Color::from_css(input)?;
 
-            input.expect_comma()?;
-            Color::from_css(input)?;
+          input.expect_comma()?;
+          Color::from_css(input)?;
 
-            Ok(light)
-          });
+          Ok(light)
+        }),
+        "color-mix" => input.parse_nested_block(|input| {
+          let color_mix = ColorMix::from_css(input)?;
+          color_mix
+            .evaluate()
+            .ok_or_else(|| input.new_error_for_next_token())
+        }),
+        _ => {
+          let token = Token::Function(name.clone());
+          let target_cs = relative_target_cs(name);
+
+          input.parse_nested_block(|input| {
+            if let Some(cs) = target_cs
+              && input.try_parse(|i| i.expect_ident_matching("from")).is_ok()
+            {
+              return parse_relative_color(input, cs);
+            }
+
+            while input.next().is_ok() {}
+
+            let mut function = input.slice_from(position).to_string();
+
+            function.push(')');
+
+            parse_color(&function)
+              .map(Color::from_dynamic)
+              .map_err(|_| unexpected_token!(&token))
+          })
         }
-
-        if name.eq_ignore_ascii_case("color-mix") {
-          return input.parse_nested_block(|input| {
-            let color_mix = ColorMix::from_css(input)?;
-            color_mix
-              .evaluate()
-              .ok_or_else(|| input.new_error_for_next_token())
-          });
-        }
-
-        let target_cs = relative_target_cs(name);
-
-        input.parse_nested_block(|input| {
-          if let Some(cs) = target_cs
-            && input.try_parse(|i| i.expect_ident_matching("from")).is_ok()
-          {
-            return parse_relative_color(input, cs);
-          }
-
-          while input.next().is_ok() {}
-
-          let mut function = input.slice_from(position).to_string();
-
-          function.push(')');
-
-          parse_color(&function)
-            .map(Color::from_dynamic)
-            .map_err(|_| unexpected_token!(&token))
-        })
-      }
+      },
       _ => Err(unexpected_token!(token)),
     }
   }
