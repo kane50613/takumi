@@ -461,22 +461,24 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'
         None => Err(unexpected_token!(Length, token)),
       }
     }
-    Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
-      input.parse_nested_block(|input| parse_calc_sum_at(input, depth + 1))
-    }
     Token::Function(name) => {
-      let name = name.clone();
       let token = token.clone();
+      // TODO: compare lengths.
+      let compare: fn(&[f32]) -> Option<f32> = match_ignore_ascii_case! { name,
+        "calc" => return input.parse_nested_block(|input| parse_calc_sum_at(input, depth + 1)),
+        "min" => min_of,
+        "max" => max_of,
+        "clamp" => clamp_of,
+        _ => return Err(unexpected_token!(Length, &token)),
+      };
 
       input.parse_nested_block(|input| {
-        let arguments = input.parse_comma_separated(|input| parse_calc_sum_at(input, depth + 1))?;
-
-        // TODO: compare lengths.
-        arguments
+        input
+          .parse_comma_separated(|input| parse_calc_sum_at(input, depth + 1))?
           .into_iter()
           .map(CalcValue::number)
           .collect::<Option<Vec<_>>>()
-          .and_then(|values| compare(&name, &values))
+          .and_then(|values| compare(&values))
           .map(CalcValue::Number)
           .ok_or_else(|| unexpected_token!(Length, &token))
       })
@@ -490,16 +492,6 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'
       _ => Err(unexpected_token!(Length, token)),
     },
     _ => Err(unexpected_token!(Length, token)),
-  }
-}
-
-/// `min()`, `max()` or `clamp()` of `values`.
-fn compare(name: &str, values: &[f32]) -> Option<f32> {
-  match_ignore_ascii_case! { name,
-    "min" => min_of(values),
-    "max" => max_of(values),
-    "clamp" => clamp_of(values),
-    _ => None,
   }
 }
 
