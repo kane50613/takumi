@@ -103,6 +103,8 @@ function card(): PaintTree {
     toJSON: () => {
       throw new Error("The inspector never serializes the tree");
     },
+    free: () => {},
+    [Symbol.dispose]: () => {},
   };
 }
 
