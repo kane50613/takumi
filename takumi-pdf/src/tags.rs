@@ -101,9 +101,9 @@ impl TagCollector {
 
   /// Walks the source tree in logical order and builds the structure tree from
   /// the recorded identifiers.
-  pub(crate) fn build_tree(
+  pub(crate) fn build_tree<'r>(
     &mut self,
-    root: &RenderNode,
+    roots: impl IntoIterator<Item = (&'r RenderNode, Vec<usize>)>,
     lang: Option<&str>,
     targets: &FxHashSet<Vec<usize>>,
   ) -> TagTree {
@@ -119,15 +119,17 @@ impl TagCollector {
       targets,
     };
 
-    build_node(
-      root,
-      &mut Vec::new(),
-      &mut walk,
-      &mut top,
-      &mut pending,
-      Nesting::default(),
-    );
-    flush_paragraph(&mut pending, &mut top);
+    for (root, mut path) in roots {
+      build_node(
+        root,
+        &mut path,
+        &mut walk,
+        &mut top,
+        &mut pending,
+        Nesting::default(),
+      );
+      flush_paragraph(&mut pending, &mut top);
+    }
     for group in top {
       tree.push(group);
     }

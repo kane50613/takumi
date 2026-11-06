@@ -88,7 +88,7 @@ pub(crate) struct AnchorTarget {
 }
 
 /// A heading in content coordinates, for the outline.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HeadingTarget {
   level: u8,
   text: String,
@@ -205,6 +205,22 @@ impl PageSummary {
       )?);
     }
     Ok(summary.finished())
+  }
+
+  /// Adds the summary of section `index`, its paths under the section's.
+  pub(crate) fn append_section(&mut self, section: &Self, index: usize) {
+    self
+      .headings
+      .extend(section.headings.iter().cloned().map(|mut heading| {
+        heading.path.insert(0, index);
+        heading
+      }));
+    for (id, anchor) in &section.anchors {
+      let mut anchor = anchor.clone();
+
+      anchor.path.insert(0, index);
+      self.anchors.entry(id.clone()).or_insert(anchor);
+    }
   }
 
   /// Adds the summary of the next page. An anchor, a heading or a box seen on an earlier page

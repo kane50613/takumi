@@ -27,7 +27,8 @@ use crate::{
   },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
   pagination::{
-    Counted, Counts, PageSlice, PageStarts, Paginated, Prepared, reads_layout, walk_pages,
+    Counted, Counts, PageCounters, PageSlice, PageStarts, Paginated, Prepared, reads_layout,
+    walk_pages,
   },
   paint::paint_page_background,
   tree::TreeInputs,
@@ -146,6 +147,8 @@ pub(crate) struct PagePlan {
   pub(crate) root: RenderNode,
   pub(crate) summary: PageSummary,
   pub(crate) starts: PageStarts,
+  /// The index of the section these pages draw, which its structure paths start with.
+  pub(crate) prefix: Vec<usize>,
 }
 
 impl PagePlan {
@@ -155,6 +158,7 @@ impl PagePlan {
       selection: &self.selection,
       starts: &self.starts,
       structural: self.structural,
+      prefix: &self.prefix,
     }
   }
 
@@ -172,17 +176,18 @@ impl PagePlan {
 
 /// Where a position in the content lands in the output, once the pages are counted and the ones
 /// kept are known.
-struct Destinations<'p> {
-  frame: &'p PageFrame,
-  selection: &'p PageSelection,
-  starts: &'p PageStarts,
-  structural: bool,
+pub(crate) struct Destinations<'p> {
+  pub(crate) frame: &'p PageFrame,
+  pub(crate) selection: &'p PageSelection,
+  pub(crate) starts: &'p PageStarts,
+  pub(crate) structural: bool,
+  pub(crate) prefix: &'p [usize],
 }
 
 impl Destinations<'_> {
   /// The page `top` falls on, at its position inside that page. `None` when the page is dropped
   /// by [`crate::PdfOptions::page_ranges`].
-  fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
+  pub(crate) fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
     let index = self.starts.index_of(top);
     let emitted = self.selection.emitted(index)?;
     let y = self.frame.margin.top + (top - self.starts.start(index)).max(0.0);
@@ -190,7 +195,7 @@ impl Destinations<'_> {
     Some(xyz_destination(
       emitted,
       Point::from_xy(self.frame.margin.left * PT_PER_PX, y * PT_PER_PX),
-      path,
+      &[self.prefix, path].concat(),
       self.structural,
     ))
   }
@@ -202,10 +207,152 @@ impl Destinations<'_> {
   }
 }
 
-struct Solved {
-  frame: PageFrame,
+pub(crate) struct Solved {
+  pub(crate) frame: PageFrame,
   header: Option<Repeatable>,
   footer: Option<Repeatable>,
+}
+
+impl Solved {
+  fn dynamic(&self) -> bool {
+    self.header.as_ref().is_some_and(Repeatable::dynamic)
+      || self.footer.as_ref().is_some_and(Repeatable::dynamic)
+  }
+}
+
+/// The bands of one page geometry, and the frame they leave the content.
+pub(crate) struct BandLayout<'b, 'g> {
+  inputs: &'b TreeInputs<'g>,
+  page: PageOptions,
+  bands: &'b PageBands<'b>,
+  viewport: Viewport,
+}
+
+impl<'b, 'g> BandLayout<'b, 'g> {
+  pub(crate) fn new(
+    inputs: &'b TreeInputs<'g>,
+    page: PageOptions,
+    bands: &'b PageBands<'b>,
+  ) -> Self {
+    // Bands lay out at full page width and draw inside the margin areas,
+    // like Chromium's print header and footer templates.
+    Self {
+      inputs,
+      page,
+      bands,
+      viewport: band_viewport(&page),
+    }
+  }
+
+  fn measure(&self, pages: usize) -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
+    let band = |template: Option<&PageBand>, bounds| {
+      template
+        .map(|template| Repeatable::band(self.inputs, template, self.viewport, bounds, pages))
+        .transpose()
+    };
+
+    Ok((
+      band(self.bands.header.as_ref(), RepeatBounds::Header)?,
+      band(self.bands.footer.as_ref(), RepeatBounds::Footer)?,
+    ))
+  }
+
+  fn resolve(
+    &self,
+    header: Option<&Repeatable>,
+    footer: Option<&Repeatable>,
+  ) -> Result<PageFrame, PdfError> {
+    PageFrame::resolve(
+      &self.page,
+      self.viewport,
+      header.map(Repeatable::height),
+      footer.map(Repeatable::height),
+    )
+  }
+
+  /// The bands laid out for a document of `pages` pages, and the frame around them.
+  fn solve(&self, pages: usize) -> Result<Solved, PdfError> {
+    let (header, footer) = self.measure(pages)?;
+    let frame = self.resolve(header.as_ref(), footer.as_ref())?;
+
+    Ok(Solved {
+      frame,
+      header,
+      footer,
+    })
+  }
+
+  /// Counts `node`'s pages in `solved`'s frame, measuring counter bands until their height settles.
+  fn settle(
+    &self,
+    solved: Solved,
+    node: Node,
+    settle: Settle<'_>,
+    counters: PageCounters<'_>,
+  ) -> Result<(Solved, Counted), PdfError> {
+    let dynamic = solved.dynamic();
+    let Solved {
+      mut frame,
+      mut header,
+      mut footer,
+    } = solved;
+    // Only a margin that follows a band can move the frame, which is when the content lays out
+    // again from the source.
+    let source = (dynamic && self.page.margin.follow_bands()).then(|| node.clone());
+    let mut counted = Counted::settle(node, self.inputs, &frame, settle, counters)?;
+
+    if dynamic {
+      const BAND_PASSES: usize = 3;
+
+      for _ in 0..BAND_PASSES {
+        let (next_header, next_footer) = self.measure(counters.total.unwrap_or(counted.pages()))?;
+        let stable = next_header.as_ref().map(Repeatable::height)
+          == header.as_ref().map(Repeatable::height)
+          && next_footer.as_ref().map(Repeatable::height)
+            == footer.as_ref().map(Repeatable::height);
+
+        header = next_header;
+        footer = next_footer;
+        if stable {
+          break;
+        }
+
+        let next_frame = self.resolve(header.as_ref(), footer.as_ref())?;
+
+        // The content lays out the same in a frame whose margins did not move.
+        if next_frame.margin == frame.margin {
+          break;
+        }
+        let Some(source) = &source else {
+          break;
+        };
+
+        frame = next_frame;
+        counted = Counted::settle(source.clone(), self.inputs, &frame, settle, counters)?;
+      }
+    }
+
+    Ok((
+      Solved {
+        frame,
+        header,
+        footer,
+      },
+      counted,
+    ))
+  }
+
+  /// Lays the bands out and counts the pages `node` lays out on, numbered as `counters` says.
+  pub(crate) fn count(
+    &self,
+    node: Node,
+    settle: Settle<'_>,
+    counters: PageCounters<'_>,
+  ) -> Result<(Solved, Counted), PdfError> {
+    let solved = self.solve(counters.total.unwrap_or(1))?;
+
+    self.settle(solved, node, settle, counters)
+  }
 }
 
 /// What the passes that solved the frame left of the content.
@@ -221,6 +368,9 @@ pub(crate) struct PageDrawing<'d, 'g> {
   pub(crate) inputs: &'d TreeInputs<'g>,
   pub(crate) state: &'d DocumentState<'d>,
   pub(crate) background: Option<Color>,
+  pub(crate) counters: PageCounters<'d>,
+  /// Where `href="#id"` lands in any section, when the document has sections.
+  pub(crate) destinations: Option<&'d HashMap<Box<str>, XyzDestination>>,
 }
 
 impl PageDrawing<'_, '_> {
@@ -238,14 +388,28 @@ impl PageDrawing<'_, '_> {
 
     match content {
       Content::Stream(content) => self.stream(solved, content, None, selection, structural, settle),
-      Content::Counted(Counted::Pages { content, counts }) => {
+      Content::Counted(counted) => {
+        let selection = selection.with_pages(counted.pages())?;
+
+        self.draw(solved, counted, selection, structural, settle)
+      }
+    }
+  }
+
+  /// Draws the pages `counted` laid out, keeping the ones `selection` does.
+  pub(crate) fn draw(
+    &mut self,
+    solved: Solved,
+    counted: Counted,
+    selection: PageSelection,
+    structural: bool,
+    settle: Settle<'_>,
+  ) -> Result<PagePlan, PdfError> {
+    match counted {
+      Counted::Pages { content, counts } => {
         self.stream(solved, content, Some(counts), selection, structural, settle)
       }
-      Content::Counted(Counted::Laid(paginated)) => {
-        let selection = selection.with_pages(paginated.starts.len())?;
-
-        self.compose(solved, paginated, selection, structural)
-      }
+      Counted::Laid(paginated) => self.compose(solved, paginated, selection, structural),
     }
   }
 
@@ -258,94 +422,18 @@ impl PageDrawing<'_, '_> {
     node: Node,
     settle: Settle<'_>,
   ) -> Result<(Solved, Content), PdfError> {
-    // Bands lay out at full page width and draw inside the margin areas,
-    // like Chromium's print header and footer templates.
-    let band_viewport = band_viewport(&page);
-    let measure_bands =
-      |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
-        let band = |template: Option<&PageBand>, bounds| {
-          template
-            .map(|template| Repeatable::band(inputs, template, band_viewport, bounds, pages))
-            .transpose()
-        };
+    let layout = BandLayout::new(inputs, page, bands);
+    let solved = layout.solve(1)?;
 
-        Ok((
-          band(bands.header.as_ref(), RepeatBounds::Header)?,
-          band(bands.footer.as_ref(), RepeatBounds::Footer)?,
-        ))
-      };
-    let resolve = |header: Option<&Repeatable>, footer: Option<&Repeatable>| {
-      PageFrame::resolve(
-        &page,
-        band_viewport,
-        header.map(Repeatable::height),
-        footer.map(Repeatable::height),
-      )
-    };
-    let (mut header, mut footer) = measure_bands(1)?;
-    let mut frame = resolve(header.as_ref(), footer.as_ref())?;
-    // A counter band and the page count depend on each other, so the band is measured again until
-    // its height settles.
-    let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
-      || footer.as_ref().is_some_and(Repeatable::dynamic);
+    if !solved.dynamic() && !reads_layout(&node) {
+      let content = Prepared::new(node, inputs, &solved.frame)?;
 
-    if !dynamic && !reads_layout(&node) {
-      let content = Prepared::new(node, inputs, &frame)?;
-
-      return Ok((
-        Solved {
-          frame,
-          header,
-          footer,
-        },
-        Content::Stream(Box::new(content)),
-      ));
+      return Ok((solved, Content::Stream(Box::new(content))));
     }
 
-    // Only a margin that follows a band can move the frame, which is when the content lays out
-    // again from the source.
-    let source = (dynamic && page.margin.follow_bands()).then(|| node.clone());
-    let mut counted = Counted::settle(node, inputs, &frame, settle)?;
+    let (solved, counted) = layout.settle(solved, node, settle, PageCounters::default())?;
 
-    if dynamic {
-      const BAND_PASSES: usize = 3;
-
-      for _ in 0..BAND_PASSES {
-        let (next_header, next_footer) = measure_bands(counted.pages())?;
-        let stable = next_header.as_ref().map(Repeatable::height)
-          == header.as_ref().map(Repeatable::height)
-          && next_footer.as_ref().map(Repeatable::height)
-            == footer.as_ref().map(Repeatable::height);
-
-        header = next_header;
-        footer = next_footer;
-        if stable {
-          break;
-        }
-
-        let next_frame = resolve(header.as_ref(), footer.as_ref())?;
-
-        // The content lays out the same in a frame whose margins did not move.
-        if next_frame.margin == frame.margin {
-          break;
-        }
-        let Some(source) = &source else {
-          break;
-        };
-
-        frame = next_frame;
-        counted = Counted::settle(source.clone(), inputs, &frame, settle)?;
-      }
-    }
-
-    Ok((
-      Solved {
-        frame,
-        header,
-        footer,
-      },
-      Content::Counted(counted),
-    ))
+    Ok((solved, Content::Counted(counted)))
   }
 
   /// Lays `content` out a page at a time and draws each page, in order, once `settle` says it is
@@ -374,10 +462,7 @@ impl PageDrawing<'_, '_> {
     let page_size = frame.page_size();
     let mut summary = PageSummary::new(false);
     let counted_pages = counts.as_ref().map(|counts| counts.starts.len());
-
-    if let Some(pages) = counted_pages {
-      selection = selection.with_pages(pages)?;
-    }
+    let destinations = self.destinations;
 
     let pages = walk_pages(&root, page_size, settle, |stream, index| {
       let kept = match counted_pages {
@@ -417,6 +502,9 @@ impl PageDrawing<'_, '_> {
           counted_pages.unwrap_or_default(),
           scene.view(),
           |id| {
+            if let Some(destinations) = destinations {
+              return destinations.get(id).cloned();
+            }
             let counts = counts.as_ref()?;
 
             Destinations {
@@ -424,6 +512,7 @@ impl PageDrawing<'_, '_> {
               selection: &selection,
               starts: &counts.starts,
               structural,
+              prefix: &[],
             }
             .anchor(&counts.anchors, id)
           },
@@ -441,6 +530,7 @@ impl PageDrawing<'_, '_> {
       root,
       summary: summary.finished(),
       starts: PageStarts::new(pages, window),
+      prefix: Vec::new(),
     })
   }
 
@@ -474,8 +564,10 @@ impl PageDrawing<'_, '_> {
       root,
       summary,
       starts,
+      prefix: Vec::new(),
     };
     let composer = PageComposer::new(self, &plan.frame, &repeatables);
+    let destinations = self.destinations;
 
     for slice in plan.starts.slices() {
       if !plan.selection.keeps(slice.index) {
@@ -489,9 +581,16 @@ impl PageDrawing<'_, '_> {
         true,
       )?;
 
-      composer.compose(self.pdf, &slice, pages, scene.view(), |id| {
-        plan.anchor_destination(id)
-      })?;
+      composer.compose(
+        self.pdf,
+        &slice,
+        pages,
+        scene.view(),
+        |id| match destinations {
+          Some(destinations) => destinations.get(id).cloned(),
+          None => plan.anchor_destination(id),
+        },
+      )?;
     }
     Ok(plan)
   }
@@ -506,6 +605,7 @@ struct PageComposer<'c, 'g> {
   page_context: RenderContext,
   state: &'c DocumentState<'c>,
   background: Option<Color>,
+  counters: PageCounters<'c>,
 }
 
 impl<'c, 'g> PageComposer<'c, 'g> {
@@ -521,6 +621,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       page_context: drawing.inputs.context(frame.page_area),
       state: drawing.state,
       background: drawing.background,
+      counters: drawing.counters,
     }
   }
 
@@ -543,8 +644,8 @@ impl<'c, 'g> PageComposer<'c, 'g> {
           self.inputs,
           &self.page_context,
           frame,
-          slice.index + 1,
-          pages,
+          self.counters.offset + slice.index + 1,
+          self.counters.total.unwrap_or(pages),
         )
       })
       .collect::<Result<Vec<_>, _>>()?;

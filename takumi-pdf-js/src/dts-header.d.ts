@@ -75,6 +75,16 @@ export type PageMarginSide = number | "auto";
 /** A band on a page: a node tree, or `false` for none. */
 export type Band = Node | string | false;
 
+/** Content starting on a new page. A field left out takes the document's. */
+export type PdfSection = {
+  node: Node | string;
+  size?: PageSize;
+  landscape?: boolean;
+  margin?: PageMargin;
+  header?: Band;
+  footer?: Band;
+};
+
 /** What some pages draw instead of the document's own bands. A field left out falls through. */
 export type PageOverride = {
   header?: Band;
@@ -146,7 +156,7 @@ export type Tagged = boolean | "ua1" | "ua2";
 export type PdfRenderOptions = {
   /**
    * Fixed viewport for single-page output. Mutually exclusive with the paged
-   * fields (`size`, `landscape`, `margin`, `header`, `footer`, `pages`, `pageRanges`).
+   * fields (`size`, `landscape`, `margin`, `header`, `footer`, `pages`, nonempty `sections`, `pageRanges`).
    */
   viewport?: ViewportInput;
   /** Page size for paged output. Defaults to A4. */
@@ -164,6 +174,8 @@ export type PdfRenderOptions = {
   footer?: Band;
   /** What some pages draw differently from the rest. */
   pages?: PageRules;
+  /** Content after the document's, each section starting on a new page. */
+  sections?: PdfSection[];
   /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`. Page counters
    * keep their full-output numbers.

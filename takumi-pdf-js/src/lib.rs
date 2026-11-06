@@ -145,7 +145,7 @@ impl PdfRenderer {
       .unwrap_or_default();
     let (node, mut document_css) = read_source(node.into(), &self.sources)?;
 
-    for band in options.bands_mut() {
+    for band in options.trees_mut() {
       if let BandInput::Html(html) = band {
         let (parsed, css) = read_source(JsValue::from_str(html), &self.bands)?;
 
@@ -276,13 +276,14 @@ impl PdfRenderer {
     node: NodeType,
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
-    let (node, options) = self.read_document(node, options.map(Into::into))?;
+    let (node, mut options) = self.read_document(node, options.map(Into::into))?;
     let Layout {
       viewport,
       page,
       images,
       lang,
     } = self.layout(&options)?;
+    let sections = options.take_sections()?;
     let fonts = self.fonts.for_render(
       options.font_families.as_deref(),
       options.failed_font_files.as_deref(),
@@ -292,6 +293,7 @@ impl PdfRenderer {
       viewport,
       fonts: &fonts,
       node,
+      sections,
       stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
       images,
       resource_cache: Some(self.resource_cache.clone()),
@@ -360,13 +362,32 @@ impl PdfRenderer {
     retain_svg(&mut options.images);
 
     let inputs = self.measure_inputs(&mut options, listed.as_ref())?;
+    let sections = options.take_sections()?;
     let bands = options
-      .bands_mut()
+      .trees_mut()
       .filter_map(|band| band.node().cloned())
       .collect::<Vec<_>>();
+    let section_trees = sections.into_iter().flat_map(|section| {
+      let page = section.page;
+      let own = [section.header, section.footer]
+        .into_iter()
+        .flatten()
+        .filter_map(Band::node);
+
+      once(section.node)
+        .chain(own)
+        .chain(bands.iter().cloned())
+        .map(move |tree| (page, tree))
+    });
     let needs = once(node)
-      .chain(bands)
+      .chain(bands.iter().cloned())
       .map(|tree| takumi_pdf::needs(inputs.options(tree)))
+      .chain(section_trees.map(|(page, tree)| {
+        takumi_pdf::needs(MeasureOptions {
+          page,
+          ..inputs.options(tree)
+        })
+      }))
       .collect::<Result<RenderNeeds, _>>()
       .map_err(map_error)?;
 

@@ -1,6 +1,8 @@
 //! Deserialization of the render/measure option object, and the geometry and
 //! image resolution it drives.
 
+use std::iter::once;
+
 use serde::Deserialize;
 use takumi_bindings_common::input::ImageSource;
 use takumi_core::{
@@ -9,7 +11,8 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_pdf::{
-  Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageRules, UncoveredText,
+  Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageRules, PdfSection,
+  UncoveredText,
 };
 
 use crate::metadata::{AttachmentInput, MetadataInput, PdfaInput, TaggedInput};
@@ -187,6 +190,8 @@ pub(crate) struct PdfRenderOptions {
   landscape: Option<bool>,
   /// Page margin in CSS px: one number or per-side values.
   margin: Option<MarginInput>,
+  /// Content after the document's, each section starting on a new page.
+  pub(crate) sections: Option<Vec<SectionInput>>,
   /// Paper color as a CSS color, painted under everything on every page.
   pub(crate) background_color: Option<String>,
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
@@ -226,6 +231,18 @@ pub(crate) struct PdfRenderOptions {
   /// What a character no registered font covers turns into: `"error"`
   /// (default), `"placeholder"` or `"blank"`.
   pub(crate) uncovered_text: Option<UncoveredTextInput>,
+}
+
+/// A section as the caller writes it. A geometry field left out takes the document's.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SectionInput {
+  node: BandInput,
+  size: Option<SizeInput>,
+  landscape: Option<bool>,
+  margin: Option<MarginInput>,
+  header: Option<BandInput>,
+  footer: Option<BandInput>,
 }
 
 /// `uncoveredText` names accepted from JS.
@@ -321,8 +338,8 @@ pub(crate) struct PageRulesInput {
 }
 
 impl PdfRenderOptions {
-  /// Every band, the page rules' included.
-  pub(crate) fn bands_mut(&mut self) -> impl Iterator<Item = &mut BandInput> {
+  /// Every tree besides the document's own: its bands, its page rules' and its sections'.
+  pub(crate) fn trees_mut(&mut self) -> impl Iterator<Item = &mut BandInput> {
     let rules = self.pages.iter_mut().flat_map(|pages| {
       [
         &mut pages.first,
@@ -335,10 +352,47 @@ impl PdfRenderOptions {
       .flat_map(|rule| [&mut rule.header, &mut rule.footer])
     });
 
+    let sections = self.sections.iter_mut().flatten().flat_map(
+      |SectionInput {
+         node,
+         header,
+         footer,
+         ..
+       }| once(node).chain(header.iter_mut()).chain(footer.iter_mut()),
+    );
+
     [&mut self.header, &mut self.footer]
       .into_iter()
       .chain(rules)
       .flatten()
+      .chain(sections)
+  }
+
+  /// The sections, their geometry filled in from the document's field by field.
+  pub(crate) fn take_sections(&mut self) -> Result<Vec<PdfSection>, js_sys::Error> {
+    self
+      .sections
+      .take()
+      .unwrap_or_default()
+      .into_iter()
+      .map(|section| {
+        let node = Band::from(section.node)
+          .node()
+          .ok_or_else(|| js_sys::Error::new("a section's node is a node or HTML, not false"))?;
+        let mut resolved = PdfSection::builder()
+          .node(node)
+          .page(resolve_page(
+            section.size.as_ref().or(self.size.as_ref()),
+            section.landscape.or(self.landscape).unwrap_or(false),
+            section.margin.as_ref().or(self.margin.as_ref()),
+          )?)
+          .build();
+
+        resolved.header = section.header.map(Band::from);
+        resolved.footer = section.footer.map(Band::from);
+        Ok(resolved)
+      })
+      .collect()
   }
 }
 
@@ -366,11 +420,15 @@ pub(crate) fn resolve_geometry(
     || options.header.is_some()
     || options.footer.is_some()
     || options.pages.is_some()
+    || options
+      .sections
+      .as_ref()
+      .is_some_and(|sections| !sections.is_empty())
     || options.page_ranges.is_some();
 
   match options.viewport {
     Some(_) if paged_field_set => Err(js_sys::Error::new(
-      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pages, pageRanges)",
+      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pages, sections, pageRanges)",
     )),
     Some(input) => Ok((
       Some(Viewport::new((

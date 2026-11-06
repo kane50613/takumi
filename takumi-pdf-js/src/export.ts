@@ -20,6 +20,7 @@ import {
   type FontCacheOptions,
   type PageOverride,
   type PageRules,
+  type PdfSection,
   PdfRenderer as PdfRendererInternal,
   type RegisteredFamily,
 } from "../pkg/takumi_pdf_wasm";
@@ -49,6 +50,16 @@ export type PageRulesInput = {
   last?: PageOverrideInput;
   odd?: PageOverrideInput;
   even?: PageOverrideInput;
+};
+
+/** Content starting on a new page with its own geometry. A field left out takes the document's, not the previous section's. */
+export type SectionInput = {
+  node: NodeInput;
+  size?: PageSize;
+  landscape?: boolean;
+  margin?: PageMargin;
+  header?: BandInput;
+  footer?: BandInput;
 };
 
 /** Explicit dimensions in CSS px (96 dpi). */
@@ -125,6 +136,11 @@ type PagedOptions = {
   /** What some pages draw differently from the rest. */
   pages?: PageRulesInput;
   /**
+   * Content after the document's, each section starting on a new page of its own size. Page
+   * counters, links, the outline and the structure tree run across the whole document.
+   */
+  sections?: SectionInput[];
+  /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`, like a print
    * dialog's page ranges. Layout and page counters still run over the whole
    * document, so a kept page shows the numbers it would in full output.
@@ -147,6 +163,7 @@ type ViewportOptions = {
   header?: never;
   footer?: never;
   pages?: never;
+  sections?: [];
   pageRanges?: never;
 };
 
@@ -353,16 +370,26 @@ export type PreparedSource = Prepared<Node | string | JsonSource, DocumentLayout
 /** The binding options a document lays out with, its bands resolved to what the wasm side reads. */
 type DocumentLayout = DistributiveOmit<
   PrepareOptions,
-  "fonts" | "images" | "signal" | "fontFamilies" | "css" | "header" | "footer" | "pages"
+  | "fonts"
+  | "images"
+  | "signal"
+  | "fontFamilies"
+  | "css"
+  | "header"
+  | "footer"
+  | "pages"
+  | "sections"
 > & {
   header?: Node | string;
   footer?: Node | string;
   pages?: PageRules;
+  sections?: PdfSection[];
   css?: CssInput[];
 };
 
 const PAGE_RULES = ["first", "last", "odd", "even"] as const;
 const PAGE_OVERRIDE_FIELDS = ["header", "footer"] as const;
+const SECTION_FIELDS = ["node", "size", "landscape", "margin", "header", "footer"] as const;
 
 /** Page rules with every document input resolved to a node tree. */
 type ResolvedRules = { pages: PageRules; css: string[] };
@@ -413,6 +440,41 @@ async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
   return resolved;
 }
 
+function resolveSections(input: SectionInput[]): Promise<{ section: PdfSection; css: string[] }[]> {
+  if (!Array.isArray(input)) {
+    throw new TypeError("sections takes an array");
+  }
+
+  return Promise.all(input.map(resolveSection));
+}
+
+async function resolveSection(
+  input: SectionInput,
+): Promise<{ section: PdfSection; css: string[] }> {
+  rejectNonObject(input, "section");
+  rejectUnknownKeys(input, SECTION_FIELDS, "section field");
+  if (!("node" in input)) {
+    throw new TypeError("section.node is required");
+  }
+
+  const { node, header, footer, ...geometry } = input;
+  const [main, top, bottom] = await Promise.all([
+    resolveDocument(node),
+    header == null || header === false ? undefined : resolveDocument(header),
+    footer == null || footer === false ? undefined : resolveDocument(footer),
+  ]);
+
+  return {
+    section: {
+      ...geometry,
+      node: main.node,
+      header: header === false ? false : top?.node,
+      footer: footer === false ? false : bottom?.node,
+    },
+    css: [...main.css, ...(top?.css ?? []), ...(bottom?.css ?? [])],
+  };
+}
+
 /** What the wasm side reads a document as: HTML as written, a tree as JSON when it can, or JSX rendered. */
 async function resolveNode(
   input: NodeInput,
@@ -429,14 +491,16 @@ async function resolveLayout(
     header,
     footer,
     pages,
+    sections,
     css,
-  }: Pick<RenderOptions & PagedOptions, "header" | "footer" | "pages" | "css">,
+  }: Pick<RenderOptions & PagedOptions, "header" | "footer" | "pages" | "sections" | "css">,
 ) {
-  const [main, headerResult, footerResult, pagesResult] = await Promise.all([
+  const [main, headerResult, footerResult, pagesResult, sectionResults] = await Promise.all([
     resolveNode(node),
     header == null || header === false ? undefined : resolveDocument(header),
     footer == null || footer === false ? undefined : resolveDocument(footer),
     pages == null ? undefined : resolveRules(pages),
+    sections == null ? undefined : resolveSections(sections),
   ]);
 
   return {
@@ -445,11 +509,13 @@ async function resolveLayout(
       header: headerResult?.node,
       footer: footerResult?.node,
       pages: pagesResult?.pages,
+      sections: sectionResults?.map((result) => result.section),
       css: sheetsOf(css, [
         ...main.css,
         ...(headerResult?.css ?? []),
         ...(footerResult?.css ?? []),
         ...(pagesResult?.css ?? []),
+        ...(sectionResults?.flatMap((result) => result.css) ?? []),
       ]),
     },
   };
@@ -463,8 +529,9 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
 
   /** Reads what a document and its bands need under `options`, then loads their font subsets and fetches their images. */
   async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, header, footer, pages, css, ...rest } = options;
-    const document = await resolveLayout(node, { header, footer, pages, css });
+    const { fonts, images, signal, fontFamilies, header, footer, pages, sections, css, ...rest } =
+      options;
+    const document = await resolveLayout(node, { header, footer, pages, sections, css });
     const layout = { ...rest, ...document.layout };
 
     return prepareSource(
@@ -531,8 +598,9 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
 
   /** A document and its bands read under `options` without fetching, for {@link render}. */
   private async read(node: NodeInput, options: RenderOptions): Promise<PreparedSource> {
-    const { fonts, images, header, footer, pages, css, fontFamilies, signal, ...rest } = options;
-    const document = await resolveLayout(node, { header, footer, pages, css });
+    const { fonts, images, header, footer, pages, sections, css, fontFamilies, signal, ...rest } =
+      options;
+    const document = await resolveLayout(node, { header, footer, pages, sections, css });
     const layout = { ...rest, ...document.layout };
 
     return readSource(
