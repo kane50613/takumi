@@ -140,8 +140,8 @@ pub struct InlineLines<'l> {
   outline_rects: Vec<InlineOutlineRect>,
 }
 
-/// Where an item of a line sits, in its block's border box: the line's baseline, and the item's
-/// top and bottom.
+/// Where an item of a line sits, in its block's border box: the line's baseline and box, and the
+/// item's top and bottom.
 #[derive(Clone, Copy)]
 pub struct LineItem {
   /// The baseline of the line holding it.
@@ -150,6 +150,8 @@ pub struct LineItem {
   pub top: f32,
   /// Its bottom.
   pub bottom: f32,
+  /// The top and bottom of the line box holding it.
+  pub line: (f32, f32),
 }
 
 impl LineItem {
@@ -157,13 +159,27 @@ impl LineItem {
   /// has none.
   pub fn of_run(run: &PositionedInlineRun, layout: ComputedLayout) -> Option<Self> {
     let shaped = &run.glyph_run;
-    let baseline = run.glyph_offset(layout).y + shaped.glyphs.first()?.y;
+    let offset = run.glyph_offset(layout).y;
+    let baseline = offset + shaped.glyphs.first()?.y;
+    let (line_top, line_bottom) = run.line_box;
 
     Some(Self {
       baseline,
       top: baseline - shaped.metrics.ascent,
       bottom: baseline + shaped.metrics.descent,
+      line: (offset + line_top, offset + line_bottom),
     })
+  }
+
+  /// An item spanning `top` to `bottom` on the line with `baseline`, its own extent standing in
+  /// for the line box.
+  pub fn spanning(baseline: f32, top: f32, bottom: f32) -> Self {
+    Self {
+      baseline,
+      top,
+      bottom,
+      line: (top, bottom),
+    }
   }
 
   /// The item with its block's border box moved down by `y`.
@@ -172,6 +188,7 @@ impl LineItem {
       baseline: self.baseline + y,
       top: self.top + y,
       bottom: self.bottom + y,
+      line: (self.line.0 + y, self.line.1 + y),
     }
   }
 }
@@ -190,11 +207,11 @@ impl InlineRunLayout<'_> {
         .background_fragments
         .iter()
         .filter(|fragment| {
-          keep(LineItem {
-            baseline: fragment.baseline,
-            top: fragment.y,
-            bottom: fragment.y + fragment.height,
-          })
+          keep(LineItem::spanning(
+            fragment.baseline,
+            fragment.y,
+            fragment.y + fragment.height,
+          ))
         })
         .collect(),
       outline_rects: self
@@ -202,11 +219,11 @@ impl InlineRunLayout<'_> {
         .iter()
         .copied()
         .filter(|rect| {
-          keep(LineItem {
-            baseline: rect.y + rect.height / 2.0,
-            top: rect.y,
-            bottom: rect.y + rect.height,
-          })
+          keep(LineItem::spanning(
+            rect.y + rect.height / 2.0,
+            rect.y,
+            rect.y + rect.height,
+          ))
         })
         .collect(),
     }

@@ -1094,11 +1094,11 @@ impl Emitter<'_> {
         let content_y = y + layout.content_box_offset().y;
         let top = content_y + positioned.y;
 
-        !self.window.shows_line_item(LineItem {
-          baseline: content_y + baseline,
+        !self.window.shows_line_item(LineItem::spanning(
+          content_y + baseline,
           top,
-          bottom: top + positioned.height,
-        })
+          top + positioned.height,
+        ))
       }) {
         continue;
       }

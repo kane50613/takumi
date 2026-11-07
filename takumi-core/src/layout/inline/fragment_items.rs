@@ -212,6 +212,8 @@ struct RunPlacement {
   decoration_placement: DecorationPlacement,
   /// How far `position: relative` on its spans moves it.
   relative_offset: Point<f32>,
+  /// The top and bottom of the line box it sits in.
+  line_box: (f32, f32),
 }
 
 /// The glyphs of every run of a [`FragmentItems`], in two encodings.
@@ -579,6 +581,7 @@ impl FragmentItems {
         decoration_placement: item.placement.decoration_placement.clone(),
         paint_offset,
         relative_offset: item.placement.relative_offset,
+        line_box: item.placement.line_box,
         #[cfg(feature = "paint-tree")]
         index: runs.len(),
       });

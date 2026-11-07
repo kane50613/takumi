@@ -37,11 +37,13 @@ use crate::{
   style::{Affine, Direction},
 };
 
-/// What a line gives the texts on it: where its content box sits, its baseline, its root box's
-/// font, and the baselines of the spans on it.
+/// What a line gives the texts on it: where its content box sits, its baseline and line box, its
+/// root box's font, and the baselines of the spans on it.
 struct TextLine<'l> {
   content: Point<f32>,
   baseline: f32,
+  /// The line box's top and bottom.
+  line_box: (f32, f32),
   root_font: BoxFont,
   span_baselines: &'l FxHashMap<usize, f32>,
 }
@@ -121,13 +123,12 @@ impl FragmentItems {
       let line_top = line_top.to_float();
       let line_left = line.bfc_line_offset.to_float();
       let baseline = line_top + line.metrics.ascent.to_float();
+      let line_box = (line_top, line_top + line.block_size.to_float());
       // Where each span on the line has its baseline, for the decorations it paints.
       let mut span_baselines: FxHashMap<usize, f32> = FxHashMap::default();
 
       if line.line_box_bfc_block_offset.is_some() {
-        items
-          .line_boxes
-          .push((line_top, line_top + line.block_size.to_float()));
+        items.line_boxes.push(line_box);
       }
 
       if let Some(line_baseline) = line.bfc_baseline().map(LayoutUnit::to_float) {
@@ -251,6 +252,7 @@ impl FragmentItems {
               let text_line = TextLine {
                 content,
                 baseline,
+                line_box,
                 root_font,
                 span_baselines: &span_baselines,
               };
@@ -588,6 +590,7 @@ impl FragmentItems {
           line_scale,
           decoration_placement,
           relative_offset: Point::ZERO,
+          line_box: line.line_box,
         },
         |run, resolved_glyphs| {
           include_glyph_ink(&mut ink.content, run, resolved_glyphs, scaled, scale);

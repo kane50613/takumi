@@ -38,21 +38,30 @@ pub(crate) struct LineFrame {
 }
 
 impl LineFrame {
-  /// `item` in the space the transform maps into: its vertical extent across the span, and its
-  /// baseline at the span's middle.
+  /// `item` in the space the transform maps into: its extent and line box across the span, and
+  /// its baseline at the span's middle.
   fn map(self, item: LineItem) -> LineItem {
     let y = |x: f32, y: f32| self.transform.transform_point(x, y).1;
-    let corners = [
-      y(self.left, item.top),
-      y(self.right, item.top),
-      y(self.left, item.bottom),
-      y(self.right, item.bottom),
-    ];
+    let extent = |top: f32, bottom: f32| {
+      let corners = [
+        y(self.left, top),
+        y(self.right, top),
+        y(self.left, bottom),
+        y(self.right, bottom),
+      ];
+
+      (
+        corners.into_iter().fold(f32::INFINITY, f32::min),
+        corners.into_iter().fold(f32::NEG_INFINITY, f32::max),
+      )
+    };
+    let (top, bottom) = extent(item.top, item.bottom);
 
     LineItem {
       baseline: y((self.left + self.right) / 2.0, item.baseline),
-      top: corners.into_iter().fold(f32::INFINITY, f32::min),
-      bottom: corners.into_iter().fold(f32::NEG_INFINITY, f32::max),
+      top,
+      bottom,
+      line: extent(item.line.0, item.line.1),
     }
   }
 }
