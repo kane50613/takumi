@@ -435,11 +435,11 @@ fn position_fragmented_float<'c>(
     let mut space = unpositioned_float.create_constraint_space_for_float();
 
     if !fragmentation.is_monolithic {
+      space.should_propagate_child_break_values = true;
       space.block_fragmentation = Some(BlockFragmentation {
         fragmentainer_block_size: fragmentation.fragmentainer_block_size,
         fragmentainer_offset,
         requires_content_before_breaking: false,
-        should_propagate_child_break_values: true,
         min_break_appeal: fragmentation.min_break_appeal,
         min_block_size_should_encompass_intrinsic_size: false,
       });

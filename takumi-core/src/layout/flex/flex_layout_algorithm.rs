@@ -662,7 +662,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
   ) -> ConstraintSpace {
     let mut available_size = self.child_available_size;
     let mut percentage_size = self.child_percentage_size;
-    let mut space = ConstraintSpace::new(None, child_style.direction);
+    let mut space = ConstraintSpace::for_child(self.space, None, child_style.direction);
 
     space.is_new_formatting_context = true;
     // Until the line has a cross size every layout is a measure.
@@ -1759,6 +1759,8 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     let held_out_of_flow =
       self.handle_out_of_flow_positioned_items(total_intrinsic_block_size, out_of_flow);
 
+    self.propagate_row_break_values();
+
     self.keep_break_token_data(flex_lines, held_out_of_flow, total_intrinsic_block_size);
 
     let size = LogicalSize::new(inline_size, block_size);
@@ -2013,6 +2015,8 @@ impl FlexLayoutAlgorithm<'_, '_> {
   fn fragment_intrinsic_block_size(&self, total_intrinsic_block_size: LayoutUnit) -> LayoutUnit {
     total_intrinsic_block_size
   }
+
+  fn propagate_row_break_values(&mut self) {}
 
   fn keep_break_token_data(
     &mut self,

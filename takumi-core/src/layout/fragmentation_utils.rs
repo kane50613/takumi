@@ -511,14 +511,15 @@ pub(crate) fn setup_space_for_fragmentation(
   };
 
   if child.is_monolithic {
+    child_space.should_propagate_child_break_values = false;
     return;
   }
 
+  child_space.should_propagate_child_break_values = true;
   child_space.block_fragmentation = Some(BlockFragmentation {
     fragmentainer_block_size,
     fragmentainer_offset,
     requires_content_before_breaking,
-    should_propagate_child_break_values: true,
     min_break_appeal: parent.min_break_appeal,
     min_block_size_should_encompass_intrinsic_size: false,
   });
@@ -696,7 +697,6 @@ pub(crate) fn move_past_breakpoint_without_builder(
     fragmentainer_block_size,
     fragmentainer_offset: LayoutUnit::ZERO,
     requires_content_before_breaking: false,
-    should_propagate_child_break_values: false,
     min_break_appeal,
     min_block_size_should_encompass_intrinsic_size: false,
   });
