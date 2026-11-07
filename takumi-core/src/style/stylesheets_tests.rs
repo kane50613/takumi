@@ -849,6 +849,27 @@ fn parse_style_declaration_expands_border_side_shorthands() {
 }
 
 #[test]
+fn a_shorthand_takes_light_dark() {
+  let style = inherited_style_from_pairs(
+    [
+      ("--c", "light-dark(red, blue)"),
+      ("border", "1px solid var(--c)"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(
+    style.box_data.border_top_width,
+    LineWidth::Length(Length::Px(1.0))
+  );
+  assert_eq!(style.box_data.border_top_style, BorderStyle::Solid);
+  assert_eq!(
+    style.surround_data.border_top_color,
+    ColorInput::Value(Color([255, 0, 0, 255]))
+  );
+}
+
+#[test]
 fn parse_style_declaration_expands_border_style_and_color_shorthands() {
   let border_style = parse_declarations("border-style", "dashed hidden");
   assert_eq!(
