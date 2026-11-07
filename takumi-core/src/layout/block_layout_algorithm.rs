@@ -1332,7 +1332,11 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     has_clearance_past_adjoining_floats: bool,
   ) -> ConstraintSpace {
     let space = self.space;
-    let mut builder = ConstraintSpace::new(child_available_size.inline_size, child_style.direction);
+    let mut builder = ConstraintSpace::for_child(
+      space,
+      child_available_size.inline_size,
+      child_style.direction,
+    );
 
     builder.inline_auto_behavior = child.map_or(AutoSizeBehavior::StretchImplicit, |child| {
       self.inline_auto_behavior_for_child(child, child_style)

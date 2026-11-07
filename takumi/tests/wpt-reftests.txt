@@ -693,6 +693,10 @@ css/css-break/flexbox/multi-line-row-flex-fragmentation-081a-print.html
 css/css-break/flexbox/multi-line-row-flex-fragmentation-081b-print.html
 css/css-break/flexbox/multi-line-row-flex-fragmentation-081c-print.html
 css/css-break/flexbox/multi-line-row-flex-fragmentation-081d-print.html
+css/css-break/flexbox/multi-line-row-flex-fragmentation-082a-print.html
+css/css-break/flexbox/multi-line-row-flex-fragmentation-082b-print.html
+css/css-break/flexbox/multi-line-row-flex-fragmentation-082c-print.html
+css/css-break/flexbox/multi-line-row-flex-fragmentation-082d-print.html
 css/css-break/flexbox/multi-line-row-flex-fragmentation-083a.html
 css/css-break/flexbox/multi-line-row-flex-fragmentation-083b.html
 css/css-break/flexbox/multi-line-row-flex-fragmentation-083c.html

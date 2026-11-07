@@ -52,6 +52,9 @@ pub(crate) struct BoxFragmentBuilder {
   pub(crate) early_break: Option<Rc<EarlyBreak>>,
   pub(crate) initial_break_before: Option<BreakBetween>,
   pub(crate) previous_break_after: BreakBetween,
+  /// Whether the result keeps the break values, as Blink's `LayoutResult` does when its space
+  /// propagates them and the box applies no layout containment.
+  keeps_break_values: bool,
   pub(crate) consumed_block_size: LayoutUnit,
   pub(crate) sequence_number: u32,
   pub(crate) is_at_block_end: bool,
@@ -139,6 +142,8 @@ impl BoxFragmentBuilder {
       early_break: None,
       initial_break_before: None,
       previous_break_after: BreakBetween::Auto,
+      keeps_break_values: space.should_propagate_child_break_values()
+        && !style.applies_layout_containment(),
       consumed_block_size: LayoutUnit::ZERO,
       sequence_number: 0,
       is_at_block_end: false,
@@ -707,6 +712,10 @@ impl BoxFragmentBuilder {
   pub(crate) fn finish_break_info(&mut self, node: NodeId) -> BreakInfo {
     if !self.has_block_fragmentation() {
       return BreakInfo {
+        initial_break_before: self
+          .initial_break_before
+          .filter(|_| self.keeps_break_values),
+        final_break_after: self.keeps_break_values.then_some(self.previous_break_after),
         is_first_for_node: self.is_first_for_node,
         fragment_index: fragment_index(self.previous_break_token.as_deref()),
         ..BreakInfo::default()
@@ -726,8 +735,10 @@ impl BoxFragmentBuilder {
       break_token,
       break_appeal: self.break_appeal,
       has_forced_break: self.has_forced_break,
-      initial_break_before: self.initial_break_before,
-      final_break_after: Some(self.previous_break_after),
+      initial_break_before: self
+        .initial_break_before
+        .filter(|_| self.keeps_break_values),
+      final_break_after: self.keeps_break_values.then_some(self.previous_break_after),
       early_break: self.early_break.clone(),
       block_size_for_fragmentation: Some(self.block_size_for_fragmentation),
       is_block_size_for_fragmentation_clamped: self.is_block_size_for_fragmentation_clamped,
