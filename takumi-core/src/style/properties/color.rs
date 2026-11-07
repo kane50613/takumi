@@ -784,10 +784,30 @@ impl<'i> FromCss<'i> for ColorInput {
       return Ok(ColorInput::CurrentColor);
     }
 
+    if input
+      .try_parse(|input| input.expect_function_matching("light-dark"))
+      .is_ok()
+    {
+      return parse_light_dark(input);
+    }
+
     Ok(ColorInput::Value(Color::from_css(input)?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["currentColor", "<color>"];
+}
+
+/// The light colour of a `light-dark()` block, since a render has no `color-scheme`.
+/// <https://drafts.csswg.org/css-color-5/#light-dark>
+fn parse_light_dark<'i, T: FromCss<'i>>(input: &mut Parser<'i>) -> ParseResult<'i, T> {
+  input.parse_nested_block(|input| {
+    let light = T::from_css(input)?;
+
+    input.expect_comma()?;
+    T::from_css(input)?;
+
+    Ok(light)
+  })
 }
 
 /// Reference: https://www.w3.org/TR/css-color-5/#relative-colors
@@ -942,15 +962,7 @@ impl<'i> FromCss<'i> for Color {
           .map_err(|_| unexpected_token!(token))
       }
       Token::Function(ref name) => match_ignore_ascii_case! { name,
-        // A render has no `color-scheme`, so it is light: https://drafts.csswg.org/css-color-5/#light-dark
-        "light-dark" => input.parse_nested_block(|input| {
-          let light = Color::from_css(input)?;
-
-          input.expect_comma()?;
-          Color::from_css(input)?;
-
-          Ok(light)
-        }),
+        "light-dark" => parse_light_dark(input),
         "color-mix" => input.parse_nested_block(|input| {
           let color_mix = ColorMix::from_css(input)?;
           color_mix
@@ -1015,6 +1027,10 @@ mod tests {
     assert_eq!(
       ColorInput::from_css_str("light-dark(#00ff00, rgb(0 0 255))"),
       Ok(ColorInput::Value(Color([0, 255, 0, 255])))
+    );
+    assert_eq!(
+      ColorInput::from_css_str("light-dark(currentColor, blue)"),
+      Ok(ColorInput::CurrentColor)
     );
     assert!(Color::from_css_str("light-dark(red)").is_err());
     assert!(Color::from_css_str("light-dark(red, 1px)").is_err());
