@@ -288,10 +288,13 @@ pub(crate) struct PageSlice {
   pub(crate) start: f32,
   /// Where the next page begins.
   pub(crate) end: f32,
+  /// Whether it is the document's last page, known once `sizes` holds every page.
+  pub(crate) last: bool,
 }
 
 impl PageSlice {
-  pub(crate) fn of(index: usize, sizes: &PageSizes) -> Self {
+  /// Page `index` of `sizes`, which holds every page when `complete`.
+  pub(crate) fn of(index: usize, sizes: &PageSizes, complete: bool) -> Self {
     let start = sizes.top(index);
 
     Self {
@@ -299,12 +302,26 @@ impl PageSlice {
       name: sizes.name(index).clone(),
       start,
       end: start + sizes.size(index).height,
+      last: complete && index + 1 == sizes.len(),
     }
+  }
+
+  /// The lines this page owns, past its top edge on the first page and past its bottom edge on
+  /// the last.
+  pub(crate) fn lines(&self) -> (f32, f32) {
+    let top = if self.index == 0 {
+      f32::NEG_INFINITY
+    } else {
+      self.start
+    };
+    let bottom = if self.last { f32::INFINITY } else { self.end };
+
+    (top, bottom)
   }
 
   /// Every page of `sizes`, in order.
   pub(crate) fn all(sizes: &PageSizes) -> impl Iterator<Item = Self> {
-    (0..sizes.len()).map(|index| Self::of(index, sizes))
+    (0..sizes.len()).map(|index| Self::of(index, sizes, true))
   }
 }
 

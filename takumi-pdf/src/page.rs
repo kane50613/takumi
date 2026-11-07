@@ -392,7 +392,7 @@ impl PageDrawing<'_, '_> {
 
         composer.compose(
           self.pdf,
-          &PageSlice::of(index, stream.sizes()),
+          &PageSlice::of(index, stream.sizes(), stream.is_finished()),
           counted_pages.unwrap_or_default(),
           scene.view(),
           |id| {
@@ -598,7 +598,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       },
       window: Window {
         y: Some((slice.start, slice.end)),
-        lines: Some((slice.start, slice.end)),
+        lines: Some(slice.lines()),
         ..Window::default()
       },
       artifact: false,

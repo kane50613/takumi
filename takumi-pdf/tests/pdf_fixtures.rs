@@ -7045,14 +7045,34 @@ fn paged_lines_under_a_transform_or_a_clip() {
     300.0,
     100.0,
   );
+  let translated_off = render_paged(
+    "paged-translated-text-past-the-end",
+    r#"<div style="line-height: 24px; transform: translateY(88px)">Total due</div>"#,
+    300.0,
+    100.0,
+  );
 
-  assert_eq!(text_objects_per_page(&rotated), [1, 1]);
-  assert_eq!(text_objects_per_page(&clipped), [3]);
-  assert_eq!(text_objects_per_page(&at_page_edge), [1]);
+  for (pdf, expected) in [
+    (&rotated, &[1, 1][..]),
+    (&clipped, &[3]),
+    (&at_page_edge, &[1]),
+    (&translated_off, &[1]),
+  ] {
+    let pages = text_shows_per_page(pdf);
+    let shows = pages.iter().flatten().collect::<HashSet<_>>();
+
+    assert_eq!(pages.iter().map(Vec::len).collect::<Vec<_>>(), expected);
+    assert_eq!(
+      shows.len(),
+      expected.iter().sum::<usize>(),
+      "a line's text is drawn twice"
+    );
+  }
 }
 
-/// How many text objects each page's content stream draws, the page clip its first line.
-fn text_objects_per_page(pdf: &[u8]) -> Vec<usize> {
+/// The text each page's content stream shows, a show operator line per text object, the page
+/// clip its first line.
+fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
   content_streams(pdf)
     .iter()
     .filter(|stream| {
@@ -7064,8 +7084,9 @@ fn text_objects_per_page(pdf: &[u8]) -> Vec<usize> {
     .map(|stream| {
       stream
         .split(|byte| *byte == b'\n')
-        .filter(|line| line.starts_with(b"BT"))
-        .count()
+        .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+        .map(<[u8]>::to_vec)
+        .collect()
     })
     .collect()
 }
