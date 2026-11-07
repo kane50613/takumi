@@ -15,7 +15,8 @@ use crate::{
   style::{
     Animatable, AnimationTime, BackgroundImage, Color, ColorInput, CssWideKeyword, FromCss,
     FromCssStr, Length, MakeComputed, SizingContext, ToCss, Transform, Transforms,
-    contains_var_references, lerp, parse_calc_number_expression, parse_percentage_value,
+    contains_var_references, is_math_function, lerp, parse_angle, parse_calc_number_expression,
+    parse_percentage_value,
   },
   viewport::Viewport,
 };
@@ -387,11 +388,14 @@ impl DataType {
       Self::Percentage => parse_percentage_value(input)
         .ok()
         .map(|fraction| Item::Percentage(fraction * 100.0)),
-      Self::Angle => match input.next().ok()? {
+      Self::Angle => match input.next().ok()?.clone() {
         // Not `Angle`, which wraps to a turn and takes a unitless number.
+        Token::Function(name) if is_math_function(&name) => {
+          parse_angle(&name, input).ok().map(Item::Angle)
+        }
         Token::Dimension { value, unit, .. } => {
-          let degrees = match_ignore_ascii_case! { unit,
-            "deg" => *value,
+          let degrees = match_ignore_ascii_case! { &unit,
+            "deg" => value,
             "grad" => value * 0.9,
             "rad" => value.to_degrees(),
             "turn" => value * 360.0,
@@ -516,6 +520,7 @@ fn is_length(length: &Length, percentage: bool) -> bool {
     Length::Calc(formula) => {
       percentage || formula.resolve(&probe_sizing(100, 10.0)).components().1 == 0.0
     }
+    Length::Math(expr) => percentage || !expr.has_percent(),
     _ => true,
   }
 }
@@ -524,6 +529,23 @@ fn is_length(length: &Length, percentage: bool) -> bool {
 /// resolves against.
 fn length_item(length: Length, percentage: bool, sizing: Option<&SizingContext>) -> Option<Item> {
   let sizing = sizing?;
+
+  // A math function that needs the percentage basis computes its other units and stays a function.
+  if let Length::Math(expr) = length
+    && expr.has_percent()
+  {
+    // A full interner leaves no tree to compute into, so the value is invalid rather than `auto`.
+    let computed = expr.make_computed(sizing);
+
+    if computed == Length::Auto {
+      return None;
+    }
+
+    let mut serialized = String::new();
+
+    computed.to_css(&mut serialized).ok()?;
+    return Some(Item::Specified(serialized));
+  }
 
   match length.to_layout_length(sizing) {
     LayoutLength::Fixed(px) if percentage => Some(Item::LengthPercentage {
@@ -757,6 +779,52 @@ mod tests {
     assert!(independent("<image>", "linear-gradient(red 10px, blue)"));
     assert!(!independent("<image>", "linear-gradient(red 1em, blue)"));
     assert!(!independent("<length>", "10cqw"));
+  }
+
+  /// A registered value takes the math functions, computed as Chromium computes them.
+  #[test]
+  fn computes_math_as_chromium() {
+    let compute = |syntax: &str, value: &str, font_size: f32| {
+      let mut sizing = SizingContext::builder()
+        .viewport(Viewport::new((1000, 800)))
+        .build();
+
+      sizing.font_size = font_size;
+      syntax
+        .parse::<PropertySyntax>()
+        .expect("the syntax parses")
+        .compute(value, Some(&sizing))
+    };
+
+    assert_eq!(
+      compute("<angle>", "calc(1turn / 4)", 20.0).as_deref(),
+      Some("90deg")
+    );
+    assert_eq!(
+      compute("<angle>", "atan2(1, 1)", 16.0).as_deref(),
+      Some("45deg")
+    );
+    assert_eq!(
+      compute("<length>", "min(10px, 2em)", 20.0).as_deref(),
+      Some("10px")
+    );
+    assert_eq!(compute("<length>", "min(10px, 20%)", 16.0), None);
+    assert_eq!(
+      compute("<length-percentage>", "min(10px, 20%)", 20.0).as_deref(),
+      Some("min(10px, 20%)")
+    );
+    assert_eq!(
+      compute("<length-percentage>", "clamp(1em, 5%, 30px)", 16.0).as_deref(),
+      Some("clamp(16px, 5%, 30px)")
+    );
+    assert_eq!(
+      compute("<integer>", "round(7.5)", 16.0).as_deref(),
+      Some("8")
+    );
+    assert_eq!(
+      compute("<integer>", "max(2, 3)", 16.0).as_deref(),
+      Some("3")
+    );
   }
 
   /// A turn and more interpolates through every angle on the way, as Chromium animates it.

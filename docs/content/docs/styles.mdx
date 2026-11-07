@@ -98,10 +98,9 @@ A rule takes effect only when it is valid, as in Chromium. It needs `syntax` and
 
 A `font-size` that reads a registered length in `em` makes a cycle, as does a `line-height` that reads one in `lh`, and on the root element `rem` and `rlh` count too. The property then takes its `initial-value`, and the declaration that reads it acts as `unset`, as in Chromium. An animation runs on `::before` and `::after` too, and an `animation-*` property that reads an animated custom property keeps the value from before the animation.
 
-Takumi differs from Chromium in two places:
+A registered `<length>`, `<percentage>`, `<length-percentage>`, `<number>`, `<integer>`, or `<angle>` takes the [math functions](#math-functions) too, so `--angle: calc(1turn / 4)` computes to `90deg`.
 
-- A `<url>` keeps the URL as written, because a render has no document to resolve it against.
-- An `<angle>` does not take `calc()`.
+Takumi differs from Chromium in three places. A `<url>` keeps the URL as written, because a render has no document to resolve it against. A `<time>` or `<resolution>` takes no math function, so `calc(2dppx)` falls back as an invalid value does. A `<length-percentage>` whose value is a nonlinear math function that needs the percentage, such as `min(10px, 20%)`, switches halfway when it animates instead of interpolating, while a linear one such as `calc(10px + 20%)` interpolates.
 
 ### Math functions
 
