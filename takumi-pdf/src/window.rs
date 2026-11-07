@@ -76,14 +76,14 @@ impl Window {
   }
 
   /// Whether this page draws a line's item: any part of it the clips leave, on the page that owns
-  /// its line, or on every page its monolithic overflow spreads over, as Blink spreads it.
+  /// its line and on every other page its line box reaches, as Blink paints a line on each page it
+  /// shows on.
   pub(crate) fn shows_line_item(&self, item: LineItem) -> bool {
     let item = self.in_window(item);
-    let overflows = self
-      .y
-      .is_some_and(|(y0, y1)| item.bottom - item.top > y1 - y0);
+    let (line_top, line_bottom) = item.line;
 
-    !self.excludes(item.top, item.bottom) && (!self.disowns(item) || overflows)
+    !self.excludes(item.top, item.bottom)
+      && (!self.disowns(item) || !self.excludes(line_top, line_bottom))
   }
 
   /// Whether the line holding `item` belongs to another page.
@@ -92,8 +92,9 @@ impl Window {
   }
 
   /// A line belongs to the page holding its baseline, or the middle of the part a clip leaves
-  /// when the clip cuts its baseline away. Approximate: Blink picks no owner from geometry. It
-  /// paints each line in the page whose fragment holds its line box.
+  /// when the clip cuts its baseline away. Blink has no owner and draws a line's text on every page
+  /// it shows on, so a PDF Chromium prints repeats it. Here one page holds its text, and the others
+  /// draw outlines.
   fn disowns(&self, item: LineItem) -> bool {
     let height = match self.clip {
       Some((top, bottom)) if item.baseline < top || item.baseline >= bottom => {

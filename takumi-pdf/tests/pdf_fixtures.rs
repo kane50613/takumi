@@ -7051,9 +7051,25 @@ fn paged_lines_under_a_transform_or_a_clip() {
     300.0,
     100.0,
   );
+  let across = render_paged(
+    "paged-translated-text-across-pages",
+    r#"<div style="height: 200px"><div style="line-height: 24px; transform: translateY(88px)">Total due</div></div>"#,
+    300.0,
+    100.0,
+  );
+  let first_page = String::from_utf8_lossy(&text_streams(&across)[0]).into_owned();
+
+  // The first page draws the line's top as outlines, and the second holds its text.
+  assert!(
+    first_page
+      .lines()
+      .any(|line| line.ends_with(" f") || line == "f"),
+    "{first_page}"
+  );
 
   for (pdf, expected) in [
-    (&rotated, &[1, 1][..]),
+    (&across, &[0, 1][..]),
+    (&rotated, &[1, 1]),
     (&clipped, &[3]),
     (&at_page_edge, &[1]),
     (&translated_off, &[1]),
@@ -7070,17 +7086,23 @@ fn paged_lines_under_a_transform_or_a_clip() {
   }
 }
 
-/// The text each page's content stream shows, a show operator line per text object, the page
-/// clip its first line.
-fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
+/// Each page's content stream, the page clip its first line.
+fn text_streams(pdf: &[u8]) -> Vec<Vec<u8>> {
   content_streams(pdf)
-    .iter()
+    .into_iter()
     .filter(|stream| {
       stream
         .split(|byte| *byte == b'\n')
         .next()
         .is_some_and(|line| line.starts_with(b"q ") && line.ends_with(b" re"))
     })
+    .collect()
+}
+
+/// The text each page's content stream shows, a show operator line per text object.
+fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
+  text_streams(pdf)
+    .iter()
     .map(|stream| {
       stream
         .split(|byte| *byte == b'\n')
