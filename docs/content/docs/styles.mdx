@@ -96,9 +96,10 @@ The stylesheet supports:
 
 A rule takes effect only when it is valid, as in Chromium. `syntax` must use the names above, and `initial-value` must match it and compute without the element, so `var()`, `em`, and `vw` make the rule invalid. A declared value that does not match the syntax falls back to the inherited value when `inherits` is `true`, and to `initial-value` otherwise.
 
-Takumi differs from Chromium in three places:
+A `font-size` that reads a registered length in `em` makes a cycle, as does a `line-height` that reads one in `lh`, and on the root element `rem` and `rlh` count too. The property then takes its `initial-value`, and the declaration that reads it acts as `unset`, as in Chromium. An animation runs on `::before` and `::after` too, and an `animation-*` property that reads an animated custom property keeps the value from before the animation.
 
-- An element reads its own registered length as written, and its children read the px it computes to. Chromium computes it on the element too, which matters only when `font-size` reads a font-relative registered length. Every other type computes on the element itself.
+Takumi differs from Chromium in two places:
+
 - A `<url>` keeps the URL as written, because a render has no document to resolve it against.
 - An `<angle>` does not take `calc()`.
 

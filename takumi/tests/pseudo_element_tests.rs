@@ -326,3 +326,26 @@ fn own_white_space_is_no_flex_item_beside_after() {
   assert_eq!(collapsed.children.len(), 1);
   assert_eq!(preserved.children.len(), 1);
 }
+
+/// A generated box runs its animations, its longhands and its registered custom properties alike,
+/// as Chromium animates a pseudo-element.
+#[test]
+fn a_pseudo_element_animates() {
+  let width = |css: &str| measure_with_css(block("box"), css).children[0].width;
+
+  assert_eq!(
+    width(
+      "@keyframes grow { from { width: 100px } to { width: 300px } }
+       .box::before { content: ''; display: block; height: 1px; animation: grow 1000ms linear -250ms }"
+    ),
+    150.0
+  );
+  assert_eq!(
+    width(
+      "@property --w { syntax: '<length>'; inherits: false; initial-value: 0px }
+       @keyframes grow { from { --w: 100px } to { --w: 300px } }
+       .box::before { content: ''; display: block; height: 1px; width: var(--w); animation: grow 1000ms linear -750ms }"
+    ),
+    250.0
+  );
+}
