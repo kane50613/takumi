@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140" viewBox="0 0 240 140">
+  <path d="M2 2h8v8h-8v-8Zm1 1h6v6h-6v-6Z" fill="#808080" fill-rule="evenodd"/>
+  <clipPath id="cp0">
+    <path d="M4 4h4v4h-4v-4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <use href="#i0" transform="matrix(.25 0 0 .5 2 3)"/>
+  </g>
+  <path d="M14 2h8v8h-8v-8Zm1 1h6v6h-6v-6Z" fill="#808080" fill-rule="evenodd"/>
+  <clipPath id="cp1">
+    <path d="M16 4h4v4h-4v-4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp1)">
+    <use href="#i0" transform="matrix(.25 0 0 .5 16 7)"/>
+  </g>
+  <path d="M26 2h8v8h-8v-8Zm1 1h6v6h-6v-6Z" fill="#808080" fill-rule="evenodd"/>
+  <use href="#i0" transform="matrix(.25 0 0 .5 28 4)"/>
+  <path d="M38 2h8v8h-8v-8Zm1 1h6v6h-6v-6Z" fill="#808080" fill-rule="evenodd"/>
+  <clipPath id="cp2">
+    <path d="M40 4h4v4h-4v-4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
+    <use href="#i0" transform="matrix(.25 0 0 .5 38 3)"/>
+  </g>
+  <path d="M2 14h48v32h-48v-32Zm1 1h46v30h-46v-30Z" fill="#808080" fill-rule="evenodd"/>
+  <use href="#i0" transform="matrix(2.75 0 0 2.75 4 16)"/>
+  <path d="M54 14h48v32h-48v-32Zm1 1h46v30h-46v-30Z" fill="#808080" fill-rule="evenodd"/>
+  <clipPath id="cp3">
+    <path d="M56 16h44v28h-44v-28Z"/>
+  </clipPath>
+  <g clip-path="url(#cp3)">
+    <use href="#i0" transform="matrix(2.75 0 0 2.75 54 21)"/>
+  </g>
+  <path d="M106 14h48v32h-48v-32Zm1 1h46v30h-46v-30Z" fill="#808080" fill-rule="evenodd"/>
+  <use href="#i0" transform="matrix(2.75 0 0 2.75 108 19)"/>
+  <path d="M158 14h48v32h-48v-32Zm1 1h46v30h-46v-30Z" fill="#808080" fill-rule="evenodd"/>
+  <use href="#i0" transform="matrix(2.75 0 0 2.75 160 19)"/>
+  <path d="M2 50h32v48h-32v-48Zm1 1h30v46h-30v-46Z" fill="#808080" fill-rule="evenodd"/>
+  <clipPath id="cp4">
+    <path d="M4 52h28v44h-28v-44Z"/>
+  </clipPath>
+  <g clip-path="url(#cp4)">
+    <use href="#i0" transform="matrix(5.5 0 0 5.5 -26 52)"/>
+  </g>
+  <path d="M38 50h32v48h-32v-48Zm1 1h30v46h-30v-46Z" fill="#808080" fill-rule="evenodd"/>
+  <clipPath id="cp5">
+    <path d="M40 52h28v44h-28v-44Z"/>
+  </clipPath>
+  <g clip-path="url(#cp5)">
+    <use href="#i0" transform="matrix(5.5 0 0 5.5 -22 51)"/>
+  </g>
+  <path d="M74 50h32v48h-32v-48Zm1 1h30v46h-30v-46Z" fill="#808080" fill-rule="evenodd"/>
+  <clipPath id="cp6">
+    <path d="M76 52h28v44h-28v-44Z"/>
+  </clipPath>
+  <g clip-path="url(#cp6)">
+    <use href="#i0" transform="matrix(5.5 0 0 5.5 46 55)"/>
+  </g>
+  <path d="M110 50h32v48h-32v-48Zm1 1h30v46h-30v-46Z" fill="#808080" fill-rule="evenodd"/>
+  <clipPath id="cp7">
+    <path d="M112 52h28v44h-28v-44Z"/>
+  </clipPath>
+  <g clip-path="url(#cp7)">
+    <use href="#i0" transform="matrix(5.5 0 0 5.5 82 52)"/>
+  </g>
+  <defs>
+    <image id="i0" width="16" height="8" preserveAspectRatio="none" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAICAIAAAB/FOjAAAAAJElEQVR42mNkYPjPgB0wYhVlYiAR0F4Dy/+GRuw+qGcYKn4AAG3kA5LRg6r3AAAAAElFTkSuQmCC"/>
+  </defs>
+</svg>

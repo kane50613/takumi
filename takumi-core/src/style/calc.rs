@@ -123,6 +123,43 @@ pub struct CalcTerms {
 pub(crate) const MAX_CALC_TERMS: usize = 4;
 
 impl CalcTerms {
+  /// `100%` less `offset`, an offset from the far edge measured from the near one, or `None`
+  /// when it needs more than [`MAX_CALC_TERMS`] units.
+  pub(crate) fn from_far_edge(offset: Length) -> Option<Self> {
+    let offset = match offset {
+      Length::Auto => return None,
+      Length::Percentage(percent) => CalcFormula::percent(percent / 100.0).compress()?,
+      Length::Calc(terms) => terms,
+      length => CalcFormula::from_length(length).compress()?,
+    };
+    let percent = 1.0
+      - offset
+        .terms()
+        .filter(|term| term.unit == CalcUnit::Percent)
+        .map(|term| term.value)
+        .sum::<f32>();
+    let mut terms = Self::default();
+    let others = offset.terms().filter(|term| term.unit != CalcUnit::Percent);
+
+    // The percentage leads, as Blink serializes `calc(100% - 2px)`.
+    for (index, term) in [CalcTerm {
+      unit: CalcUnit::Percent,
+      value: percent,
+    }]
+    .into_iter()
+    .chain(others.map(|term| CalcTerm {
+      value: -term.value,
+      ..term
+    }))
+    .filter(|term| term.value != 0.0)
+    .enumerate()
+    {
+      *terms.units.get_mut(index)? = term.unit;
+      terms.values[index] = term.value;
+    }
+    Some(terms)
+  }
+
   /// The stored terms; trailing zero-valued slots are padding.
   pub(crate) fn terms(&self) -> impl Iterator<Item = CalcTerm> {
     self
