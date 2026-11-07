@@ -7,6 +7,7 @@ use crate::{
   geometry::{NodeId, Size},
   layout::{
     layout_view::LayoutView,
+    page_sizes::PageSizer,
     paged_layout::PagedLayout,
     tree::{LayoutResults, RenderNode},
   },
@@ -90,9 +91,11 @@ pub(crate) fn check_when_finished(root: &RenderNode, page_size: Size<f32>) {
 }
 
 fn check_pages(root: &RenderNode, page_size: Size<f32>, streams: bool) {
-  let (expected, expected_pages) =
-    LayoutResults::compute_pages(root, page_size, usize::MAX).expect("pages lay out");
-  let mut layout = PagedLayout::new(root, page_size, usize::MAX);
+  let (expected, sizes) =
+    LayoutResults::compute_pages(root, PageSizer::uniform(page_size), usize::MAX)
+      .expect("pages lay out");
+  let expected_pages = sizes.len();
+  let mut layout = PagedLayout::new(root, PageSizer::uniform(page_size), usize::MAX);
   let mut finalized = Vec::new();
 
   while layout.next_page().expect("page lays out") {
@@ -244,15 +247,20 @@ fn entered(root: &RenderNode, paint: &NodePaint, placed: &FxHashSet<Vec<usize>>)
 /// Paints each page from its window as the pages settle, and checks the chunks and the boxes'
 /// states agree with the scene of every page at once.
 fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
-  let whole = PagedScene::lay_out(root.clone(), page_size, usize::MAX, true)
-    .expect("pages lay out")
-    .into_scene();
+  let whole = PagedScene::lay_out(
+    root.clone(),
+    PageSizer::uniform(page_size),
+    usize::MAX,
+    true,
+  )
+  .expect("pages lay out")
+  .into_scene();
   let placed: FxHashSet<Vec<usize>> = PaintChunk::in_paint_order(&whole.contexts)
     .iter()
     .map(|chunk| chunk.node.path.clone())
     .collect();
-  let mut layout = PagedLayout::new(root, page_size, usize::MAX);
-  let mut windows = PageWindows::new(page_size);
+  let mut layout = PagedLayout::new(root, PageSizer::uniform(page_size), usize::MAX);
+  let mut windows = PageWindows::default();
   let mut emitted = 0;
 
   loop {
@@ -262,7 +270,7 @@ fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
       .refresh(
         root,
         layout.view(),
-        layout.page_count(),
+        layout.sizes(),
         layout.finalized_pages(),
       )
       .expect("pages refresh");
@@ -276,9 +284,9 @@ fn assert_windows(root: &RenderNode, page_size: Size<f32>, streams: bool) {
     };
 
     for page in emitted..ready {
-      let pages = windows.pages_reaching(page);
+      let pages = windows.pages_reaching(layout.sizes(), page);
       let window =
-        SceneRef::window(root, layout.view(), page_size, &pages, true).expect("window builds");
+        SceneRef::window(root, layout.view(), layout.sizes(), &pages, true).expect("window builds");
       let expected = page_chunks(&whole.contexts, page, page_size.height);
 
       assert_eq!(

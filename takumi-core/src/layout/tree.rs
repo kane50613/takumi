@@ -13,6 +13,7 @@ use crate::layout::{
   block_break_token::BlockBreakToken,
   layout_result::LayoutResult,
   layout_view::{HoistedBy, LiveLayout},
+  page_sizes::{PageSizer, PageSizes},
   paged_layout::PagedLayout,
   releases::{Finished, Releases},
 };
@@ -230,20 +231,20 @@ impl LayoutResults {
     self.view().box_children(node_id)
   }
 
-  /// [`Self::compute_document`] laid out across pages `page_size`, with the page count.
+  /// [`Self::compute_document`] laid out across pages sized as `sizer` says, with the pages.
   #[cfg(feature = "fragmentation")]
   pub(crate) fn compute_pages(
     root: &RenderNode,
-    page_size: Size<f32>,
+    sizer: PageSizer,
     max_pages: usize,
-  ) -> crate::Result<(Self, usize)> {
-    let mut layout = PagedLayout::new(root, page_size, max_pages);
+  ) -> crate::Result<(Self, PageSizes)> {
+    let mut layout = PagedLayout::new(root, sizer, max_pages);
 
     while layout.next_page()? {}
 
-    let page_count = layout.page_count();
+    let sizes = layout.sizes().clone();
 
-    Ok((layout.into_results(), page_count))
+    Ok((layout.into_results(), sizes))
   }
 
   #[cfg(all(test, feature = "fragmentation"))]

@@ -124,6 +124,11 @@ impl Size<f32> {
     height: 0.0,
   };
 
+  /// Whether both dimensions are finite and above zero.
+  pub fn has_area(self) -> bool {
+    self.width.is_finite() && self.height.is_finite() && self.width > 0.0 && self.height > 0.0
+  }
+
   /// Shrinks by `inset` on each edge, clamped to zero.
   pub fn inset(self, inset: Rect<f32>) -> Self {
     Size {

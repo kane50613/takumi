@@ -77,11 +77,11 @@ fn page_chunks(contexts: &[StackingContextNode], page: usize, page_height: f32) 
 /// Paints every page of `name` from its window as the layout and the windows allow.
 fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
   let root = document(name, page_size);
-  let whole = PagedScene::lay_out(root.clone(), page_size, 1000, true)
+  let whole = PagedScene::lay_out(root.clone(), page_size.into(), 1000, true)
     .expect("pages lay out")
     .into_scene();
-  let mut layout = PagedLayout::new(&root, page_size, 1000);
-  let mut windows = PageWindows::new(page_size);
+  let mut layout = PagedLayout::new(&root, page_size.into(), 1000);
+  let mut windows = PageWindows::default();
   let mut emitted = 0;
 
   loop {
@@ -91,7 +91,7 @@ fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
       .refresh(
         &root,
         layout.view(),
-        layout.page_count(),
+        layout.sizes(),
         layout.finalized_pages(),
       )
       .expect("pages refresh");
@@ -99,9 +99,9 @@ fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
     let ready = layout.settled_pages();
 
     for page in emitted..ready {
-      let pages = windows.pages_reaching(page);
-      let window =
-        SceneRef::window(&root, layout.view(), page_size, &pages, true).expect("window builds");
+      let pages = windows.pages_reaching(layout.sizes(), page);
+      let window = SceneRef::window(&root, layout.view(), layout.sizes(), &pages, true)
+        .expect("window builds");
 
       let expected = page_chunks(&whole.contexts, page, page_size.height);
       let actual = page_chunks(&window.contexts, page, page_size.height);

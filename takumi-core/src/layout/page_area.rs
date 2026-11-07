@@ -12,6 +12,7 @@ use crate::{
     layout_result::{LayoutResult, OutOfFlowCandidate},
     logical_rect::LogicalBoxStrut,
     out_of_flow::{ContainingBlock, ContainingBlockClaims, OutOfFlowLayoutPart},
+    page_sizes::PageSizes,
     tree::LayoutTree,
   },
   layout_unit::LayoutUnit,
@@ -50,23 +51,26 @@ impl PageAreas {
     page: usize,
     (fragment_index, origin): (usize, Point<LayoutUnit>),
     root_candidates: Vec<OutOfFlowCandidate>,
-    page_size: Size<f32>,
+    sizes: &PageSizes,
     space: &ConstraintSpace,
   ) {
-    let page_block_size = LayoutUnit::from_float(page_size.height);
-    let page_start = Point::new(LayoutUnit::ZERO, page_block_size * page as i32);
-    let size = Size {
-      width: LayoutUnit::from_float(page_size.width),
-      height: page_block_size,
+    let area = |page| {
+      let size = sizes.size(page);
+
+      Size {
+        width: LayoutUnit::from_float(size.width),
+        height: LayoutUnit::from_float(size.height),
+      }
     };
+    let page_start = Point::new(LayoutUnit::ZERO, sizes.block_offset(page));
     // The initial containing block is the first page's area, which a later page's sees above it.
     let initial_containing_block = ContainingBlock {
       origin: Point::new(-origin.x, -origin.y),
-      size,
+      size: area(0),
     };
     let page_containing_block = ContainingBlock {
       origin: page_start - origin,
-      size,
+      size: area(page),
     };
     let mut space = space.clone();
 
@@ -124,7 +128,9 @@ impl PageAreas {
 }
 
 impl FixedBox {
-  /// Blink's repeated fixed box: places its repetition on page `page`.
+  /// Blink's repeated fixed box: places its repetition on page `page`. Approximate: every
+  /// repetition reuses the layout of the first page it is on, so a page of another size keeps
+  /// that page's geometry.
   fn place_repetition(
     &self,
     tree: &mut LayoutTree<'_>,

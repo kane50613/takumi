@@ -7,7 +7,7 @@ use rustc_hash::FxHashSet;
 
 use crate::{
   Error, Result,
-  geometry::{AvailableSpace, NodeId, Point, Size},
+  geometry::{AvailableSpace, NodeId, Point},
   layout::{
     block_break_token::BlockBreakToken,
     break_appeal::BreakAppeal,
@@ -18,6 +18,7 @@ use crate::{
     layout_view::LayoutView,
     length_utils::margins_for,
     page_area::PageAreas,
+    page_sizes::{PageSizer, PageSizes},
     paint_reach::PaintReach,
     pending_boxes::PendingBoxes,
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -26,14 +27,15 @@ use crate::{
   style::{Direction, Length, SpacePair},
 };
 
-/// A render tree laid out across pages `page_size` one page at a time, each resuming where the
-/// one before broke.
+/// A render tree laid out across pages sized as a [`PageSizer`] says, one page at a time, each
+/// resuming where the one before broke.
 pub struct PagedLayout<'r> {
   tree: LayoutTree<'r>,
-  page_size: Size<f32>,
+  sizer: PageSizer,
+  /// The pages laid out.
+  sizes: PageSizes,
   max_pages: usize,
   break_token: Option<Rc<BlockBreakToken>>,
-  page_count: usize,
   page_areas: PageAreas,
   /// The root's last fragment and its origin, which page areas past the root's end attach to.
   last_root_fragment: Option<(usize, Point<LayoutUnit>)>,
@@ -46,18 +48,18 @@ pub struct PagedLayout<'r> {
 }
 
 impl<'r> PagedLayout<'r> {
-  /// Starts laying `root` out on at most `max_pages` pages `page_size`.
-  pub fn new(root: &'r RenderNode, page_size: Size<f32>, max_pages: usize) -> Self {
+  /// Starts laying `root` out on at most `max_pages` pages sized as `sizer` says.
+  pub fn new(root: &'r RenderNode, sizer: PageSizer, max_pages: usize) -> Self {
     root.clear_layout_caches();
 
     let reach = PaintReach::of(root);
 
     Self {
       tree: LayoutTree::from_render_node(root),
-      page_size,
+      sizer,
+      sizes: PageSizes::default(),
       max_pages,
       break_token: None,
-      page_count: 0,
       page_areas: PageAreas::default(),
       last_root_fragment: None,
       last_root_page: 0,
@@ -74,22 +76,32 @@ impl<'r> PagedLayout<'r> {
   }
 
   /// Lays out the next page and returns whether there was one. Fails with [`Error::TooManyPages`]
-  /// when a page past `max_pages` is needed.
+  /// when a page past `max_pages` is needed, and [`Error::InvalidPageSize`] when the sizer gives
+  /// the page no area.
   pub fn next_page(&mut self) -> Result<bool> {
     if self.is_finished {
       return Ok(false);
     }
-    if self.page_count == self.max_pages {
+    if self.page_count() == self.max_pages {
       return Err(Error::TooManyPages(self.max_pages));
     }
 
-    let page_block_size = LayoutUnit::from_float(self.page_size.height);
-    let page = self.page_count;
+    let page = self.page_count();
+    let page_size = self.sizer.size(page);
+    let top = self.sizes.top(page);
+    let bottom = top + page_size.height;
 
+    if !page_size.has_area() || !bottom.is_finite() || bottom <= top {
+      return Err(Error::InvalidPageSize);
+    }
+
+    let page_block_size = LayoutUnit::from_float(page_size.height);
+
+    self.sizes.push(page_size);
     self.tree.begin_page(page + 1);
     let mut space = self
       .tree
-      .root_space(self.page_size.map(AvailableSpace::Definite));
+      .root_space(page_size.map(AvailableSpace::Definite));
     let mut margins = margins_for(
       self.tree.layout_style(NodeId::ROOT),
       space.percentage_resolution_inline_size,
@@ -125,7 +137,6 @@ impl<'r> PagedLayout<'r> {
               && is_break_inside(result.break_info.break_token.as_deref())))
         {
           self.break_token = Some(Rc::new(BlockBreakToken::break_before(NodeId::ROOT, false)));
-          self.page_count += 1;
 
           return Ok(true);
         }
@@ -141,7 +152,7 @@ impl<'r> PagedLayout<'r> {
         // The pages stack in the block direction, which the out-of-flow boxes lay out across.
         let root_origin = Point::new(
           margins.inline_start,
-          page_block_size * page as i32 + margins.block_start,
+          self.sizes.block_offset(page) + margins.block_start,
         );
 
         self.break_token = result.break_info.break_token.clone();
@@ -162,10 +173,9 @@ impl<'r> PagedLayout<'r> {
       page,
       root_fragment,
       candidates,
-      self.page_size,
+      &self.sizes,
       &space,
     );
-    self.page_count += 1;
     self.is_finished = self.break_token.is_none() && !self.page_areas.resumes();
     self.update_pending();
 
@@ -191,13 +201,13 @@ impl<'r> PagedLayout<'r> {
   /// [`Self::view`].
   pub fn finalized_pages(&self) -> usize {
     if self.is_finished {
-      return self.page_count;
+      return self.page_count();
     }
     if self.pending.pins_every_page() {
       return 0;
     }
 
-    let mut pinned = self.page_count;
+    let mut pinned = self.page_count();
     let mut chain = vec![NodeId::ROOT];
 
     // The page areas after the root's last fragment attach to it, so it paints more with each.
@@ -215,20 +225,19 @@ impl<'r> PagedLayout<'r> {
   /// [`Self::finalized_pages`] holds final, less the pages the boxes of the tree paint above their own.
   pub fn settled_pages(&self) -> usize {
     if self.is_finished {
-      return self.page_count;
+      return self.page_count();
     }
 
     let Some(reach_back) = self.reach_back else {
       return 0;
     };
-    // A page not laid out starts at or below the page after the last one laid out.
-    let pages_back = (reach_back / self.page_size.height).ceil();
     let finalized = self.finalized_pages();
 
-    if pages_back.is_nan() || pages_back >= finalized as f32 {
-      return 0;
-    }
-    finalized - pages_back as usize
+    // A box on a page past the final ones starts at or below the first of them.
+    self
+      .sizes
+      .pages_above(self.sizes.top(finalized) - reach_back)
+      .min(finalized)
   }
 
   // A box a containing block holds back, or placed from the block's start in a later fragment,
@@ -316,7 +325,12 @@ impl<'r> PagedLayout<'r> {
 
   /// How many pages are laid out.
   pub fn page_count(&self) -> usize {
-    self.page_count
+    self.sizes.len()
+  }
+
+  /// The size of each page laid out.
+  pub fn sizes(&self) -> &PageSizes {
+    &self.sizes
   }
 
   /// Whether the last page is laid out.

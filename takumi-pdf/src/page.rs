@@ -5,7 +5,11 @@ use std::collections::HashMap;
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
-  layout::{node::Node, tree::RenderNode},
+  layout::{
+    node::Node,
+    page_sizes::{PageSizer, PageSizes},
+    tree::RenderNode,
+  },
   page_stream::Settle,
   scene::{SceneRef, SceneView},
   style::Color,
@@ -26,9 +30,7 @@ use crate::{
     surface::Surface,
   },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
-  pagination::{
-    Counted, Counts, PageSlice, PageStarts, Paginated, Prepared, reads_layout, walk_pages,
-  },
+  pagination::{Counted, Counts, PageSlice, Paginated, Prepared, reads_layout, walk_pages},
   paint::paint_page_background,
   tree::TreeInputs,
   window::{ContentWindow, Window},
@@ -63,16 +65,9 @@ impl PageFrame {
     let margin = page
       .margin
       .resolve(page.size(), header_height, footer_height);
-    let Size {
-      width: content_width,
-      height: content_height,
-    } = page.content_size(margin);
+    let content = page.content_size(margin);
 
-    if !(content_width.is_finite()
-      && content_height.is_finite()
-      && content_width > 0.0
-      && content_height > 0.0)
-    {
+    if !content.has_area() {
       return Err(PdfError::InvalidPageSize);
     }
 
@@ -80,25 +75,19 @@ impl PageFrame {
       size: page.size(),
       page_size,
       margin,
-      content_width,
-      window_height: content_height,
+      content_width: content.width,
+      window_height: content.height,
       band_viewport,
-      page_area: print_viewport(
-        content_width,
-        Some(content_height),
-        Size {
-          width: content_width,
-          height: content_height,
-        },
-      ),
+      page_area: print_viewport(content.width, Some(content.height), content),
     })
   }
 
-  pub(crate) fn page_size(&self) -> Size<f32> {
-    Size {
+  /// Every page's area, which the content lays out on.
+  pub(crate) fn page_sizer(&self) -> PageSizer {
+    PageSizer::uniform(Size {
       width: self.content_width,
       height: self.window_height,
-    }
+    })
   }
 
   /// The content column: content width, unbounded height. Viewport units
@@ -145,7 +134,7 @@ pub(crate) struct PagePlan {
   pub(crate) structural: bool,
   pub(crate) root: RenderNode,
   pub(crate) summary: PageSummary,
-  pub(crate) starts: PageStarts,
+  pub(crate) sizes: PageSizes,
 }
 
 impl PagePlan {
@@ -153,7 +142,7 @@ impl PagePlan {
     Destinations {
       frame: &self.frame,
       selection: &self.selection,
-      starts: &self.starts,
+      sizes: &self.sizes,
       structural: self.structural,
     }
   }
@@ -175,7 +164,7 @@ impl PagePlan {
 struct Destinations<'p> {
   frame: &'p PageFrame,
   selection: &'p PageSelection,
-  starts: &'p PageStarts,
+  sizes: &'p PageSizes,
   structural: bool,
 }
 
@@ -183,9 +172,9 @@ impl Destinations<'_> {
   /// The page `top` falls on, at its position inside that page. `None` when the page is dropped
   /// by [`crate::PdfOptions::page_ranges`].
   fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
-    let index = self.starts.index_of(top);
+    let index = self.sizes.page_at(top);
     let emitted = self.selection.emitted(index)?;
-    let y = self.frame.margin.top + (top - self.starts.start(index)).max(0.0);
+    let y = self.frame.margin.top + (top - self.sizes.top(index)).max(0.0);
 
     Some(xyz_destination(
       emitted,
@@ -242,7 +231,7 @@ impl PageDrawing<'_, '_> {
         self.stream(solved, content, Some(counts), selection, structural, settle)
       }
       Content::Counted(Counted::Laid(paginated)) => {
-        let selection = selection.with_pages(paginated.starts.len())?;
+        let selection = selection.with_pages(paginated.content.sizes.len())?;
 
         self.compose(solved, paginated, selection, structural)
       }
@@ -371,15 +360,14 @@ impl PageDrawing<'_, '_> {
     } = *content;
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let composer = PageComposer::new(self, &frame, &repeatables);
-    let page_size = frame.page_size();
     let mut summary = PageSummary::new(false);
-    let counted_pages = counts.as_ref().map(|counts| counts.starts.len());
+    let counted_pages = counts.as_ref().map(|counts| counts.sizes.len());
 
     if let Some(pages) = counted_pages {
       selection = selection.with_pages(pages)?;
     }
 
-    let pages = walk_pages(&root, page_size, settle, |stream, index| {
+    let sizes = walk_pages(&root, frame.page_sizer(), settle, |stream, index| {
       let kept = match counted_pages {
         Some(_) => selection.keeps(index),
         None => selection.push_page().is_some(),
@@ -399,7 +387,7 @@ impl PageDrawing<'_, '_> {
           summary.absorb(PageSummary::of_page(
             &root,
             stream.view(),
-            page_size,
+            stream.sizes(),
             &pages,
             false,
           )?);
@@ -413,7 +401,7 @@ impl PageDrawing<'_, '_> {
 
         composer.compose(
           self.pdf,
-          &PageSlice::of(index, frame.window_height),
+          &PageSlice::of(index, stream.sizes()),
           counted_pages.unwrap_or_default(),
           scene.view(),
           |id| {
@@ -422,7 +410,7 @@ impl PageDrawing<'_, '_> {
             Destinations {
               frame: &frame,
               selection: &selection,
-              starts: &counts.starts,
+              sizes: &counts.sizes,
               structural,
             }
             .anchor(&counts.anchors, id)
@@ -431,7 +419,6 @@ impl PageDrawing<'_, '_> {
       }
       Ok(())
     })?;
-    let window = frame.window_height;
 
     selection.finish()?;
     Ok(PagePlan {
@@ -440,7 +427,7 @@ impl PageDrawing<'_, '_> {
       structural,
       root,
       summary: summary.finished(),
-      starts: PageStarts::new(pages, window),
+      sizes,
     })
   }
 
@@ -461,11 +448,9 @@ impl PageDrawing<'_, '_> {
       content,
       windows,
       repeated,
-      starts,
       ..
     } = *paginated;
-    let (page_size, pages) = (content.page_size, content.page_count);
-    let (root, results) = content.into_parts();
+    let (root, results, sizes) = content.into_parts();
     let repeatables: Vec<_> = header.into_iter().chain(repeated).chain(footer).collect();
     let plan = PagePlan {
       frame,
@@ -473,23 +458,23 @@ impl PageDrawing<'_, '_> {
       structural,
       root,
       summary,
-      starts,
+      sizes,
     };
     let composer = PageComposer::new(self, &plan.frame, &repeatables);
 
-    for slice in plan.starts.slices() {
+    for slice in PageSlice::all(&plan.sizes) {
       if !plan.selection.keeps(slice.index) {
         continue;
       }
       let scene = SceneRef::window(
         &plan.root,
         results.view(),
-        page_size,
-        &windows.pages_reaching(slice.index),
+        &plan.sizes,
+        &windows.pages_reaching(&plan.sizes, slice.index),
         true,
       )?;
 
-      composer.compose(self.pdf, &slice, pages, scene.view(), |id| {
+      composer.compose(self.pdf, &slice, plan.sizes.len(), scene.view(), |id| {
         plan.anchor_destination(id)
       })?;
     }

@@ -4,8 +4,11 @@
 use std::collections::HashMap;
 
 use takumi_core::{
-  geometry::Size,
-  layout::{node::Node, tree::RenderNode},
+  layout::{
+    node::Node,
+    page_sizes::{PageSizer, PageSizes},
+    tree::RenderNode,
+  },
   page_stream::{PageStream, Settle, Settled},
   scene::PageWindows,
 };
@@ -35,14 +38,14 @@ pub(crate) fn reads_layout(node: &Node) -> bool {
 }
 
 /// Lays `root` out a page at a time and calls `visit` with the stream and each page once `settle`
-/// says it is settled. Returns how many pages the layout came to.
+/// says it is settled. Returns the pages the layout came to.
 pub(crate) fn walk_pages(
   root: &RenderNode,
-  page_size: Size<f32>,
+  sizer: PageSizer,
   settle: Settle<'_>,
   mut visit: impl FnMut(&PageStream<'_>, usize) -> Result<(), PdfError>,
-) -> Result<usize, PdfError> {
-  let mut stream = PageStream::new(root, page_size, MAX_PAGES);
+) -> Result<PageSizes, PdfError> {
+  let mut stream = PageStream::new(root, sizer, MAX_PAGES);
 
   loop {
     let Settled { pages, laid } = stream.advance(settle)?;
@@ -51,7 +54,7 @@ pub(crate) fn walk_pages(
       visit(&stream, index)?;
     }
     if !laid {
-      return Ok(stream.page_count());
+      return Ok(stream.sizes().clone());
     }
   }
 }
@@ -84,7 +87,7 @@ impl Prepared {
 
 /// What the passes that count a document leave for drawing it.
 pub(crate) struct Counts {
-  pub(crate) starts: PageStarts,
+  pub(crate) sizes: PageSizes,
   /// Where the elements with an `id` are, when a link to one reads them.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
 }
@@ -140,8 +143,8 @@ impl Counted {
 
   pub(crate) fn pages(&self) -> usize {
     match self {
-      Self::Pages { counts, .. } => counts.starts.len(),
-      Self::Laid(paginated) => paginated.starts.len(),
+      Self::Pages { counts, .. } => counts.sizes.len(),
+      Self::Laid(paginated) => paginated.content.sizes.len(),
     }
   }
 }
@@ -172,7 +175,7 @@ impl Collect {
 /// the counters are filled from.
 struct CountingPass {
   content: Prepared,
-  starts: PageStarts,
+  sizes: PageSizes,
   /// Absent when nothing reads the boxes.
   summary: Option<PageSummary>,
 }
@@ -186,25 +189,29 @@ impl CountingPass {
     collect: Collect,
   ) -> Result<Self, PdfError> {
     let content = Prepared::new(node, inputs, frame)?;
-    let page_size = frame.page_size();
     let extents = collect == Collect::Extents;
     let mut summary = (collect != Collect::Nothing).then(|| PageSummary::new(extents));
-    let pages = walk_pages(&content.root, page_size, settle, |stream, index| {
-      if let Some(summary) = &mut summary {
-        summary.absorb(PageSummary::of_page(
-          &content.root,
-          stream.view(),
-          page_size,
-          &stream.pages_of(index),
-          extents,
-        )?);
-      }
-      Ok(())
-    })?;
+    let sizes = walk_pages(
+      &content.root,
+      frame.page_sizer(),
+      settle,
+      |stream, index| {
+        if let Some(summary) = &mut summary {
+          summary.absorb(PageSummary::of_page(
+            &content.root,
+            stream.view(),
+            stream.sizes(),
+            &stream.pages_of(index),
+            extents,
+          )?);
+        }
+        Ok(())
+      },
+    )?;
 
     Ok(Self {
       content,
-      starts: PageStarts::new(pages, frame.window_height),
+      sizes,
       summary: summary.map(PageSummary::finished),
     })
   }
@@ -214,7 +221,7 @@ impl CountingPass {
     Counted::Pages {
       content: Box::new(self.content),
       counts: Counts {
-        starts: self.starts,
+        sizes: self.sizes,
         anchors: self
           .summary
           .filter(|_| links)
@@ -230,8 +237,8 @@ impl CountingPass {
     let Some(summary) = &self.summary else {
       return;
     };
-    let pages = self.starts.len();
-    let page_at = |top: &f32| self.starts.index_of(*top) + 1;
+    let pages = self.sizes.len();
+    let page_at = |top: &f32| self.sizes.page_at(*top) + 1;
     let page_of = summary
       .extents
       .iter()
@@ -268,7 +275,6 @@ pub(crate) struct Paginated {
   /// Which of the content's root fragments paint on each page.
   pub(crate) windows: PageWindows,
   pub(crate) repeated: Vec<Repeatable>,
-  pub(crate) starts: PageStarts,
 }
 
 /// One page's window into the content.
@@ -281,71 +287,38 @@ pub(crate) struct PageSlice {
 }
 
 impl PageSlice {
-  pub(crate) fn of(index: usize, window: f32) -> Self {
-    let start = index as f32 * window;
+  pub(crate) fn of(index: usize, sizes: &PageSizes) -> Self {
+    let start = sizes.top(index);
 
     Self {
       index,
       start,
-      end: start + window,
-    }
-  }
-}
-
-pub(crate) struct PageStarts {
-  starts: Vec<f32>,
-  window: f32,
-}
-
-impl PageStarts {
-  pub(crate) fn new(pages: usize, window: f32) -> Self {
-    Self {
-      starts: (0..pages)
-        .map(|page| PageSlice::of(page, window).start)
-        .collect(),
-      window,
+      end: start + sizes.size(index).height,
     }
   }
 
-  pub(crate) fn len(&self) -> usize {
-    self.starts.len()
-  }
-
-  pub(crate) fn start(&self, index: usize) -> f32 {
-    self.starts[index]
-  }
-
-  /// 0-based index of the page `top` falls on.
-  pub(crate) fn index_of(&self, top: f32) -> usize {
-    self
-      .starts
-      .partition_point(|start| *start <= top)
-      .saturating_sub(1)
-  }
-
-  pub(crate) fn slices(&self) -> impl Iterator<Item = PageSlice> {
-    (0..self.starts.len()).map(|index| PageSlice::of(index, self.window))
+  /// Every page of `sizes`, in order.
+  pub(crate) fn all(sizes: &PageSizes) -> impl Iterator<Item = Self> {
+    (0..sizes.len()).map(|index| Self::of(index, sizes))
   }
 }
 
 impl Paginated {
   fn lay_out(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
     let (content, repeated) = inputs.prepare_paged(node, frame)?;
-    let starts = PageStarts::new(content.page_count, frame.window_height);
-    let mut windows = PageWindows::new(content.page_size);
+    let mut windows = PageWindows::default();
 
     windows.refresh(
       &content.root,
       content.layout(),
-      content.page_count,
-      content.page_count,
+      &content.sizes,
+      content.sizes.len(),
     )?;
 
     Ok(Self {
       content,
       windows,
       repeated,
-      starts,
     })
   }
 
@@ -355,7 +328,7 @@ impl Paginated {
     PageSummary::of_pages(
       &content.root,
       content.layout(),
-      content.page_size,
+      &content.sizes,
       &self.windows,
       extents,
     )
@@ -460,7 +433,7 @@ mod tests {
   fn whole_scene_summary(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> PageSummary {
     let (root, _) = inputs.prepare_root(node, frame).expect("the tree prepares");
     let paged =
-      PagedScene::lay_out(root, frame.page_size(), MAX_PAGES, true).expect("the pages lay out");
+      PagedScene::lay_out(root, frame.page_sizer(), MAX_PAGES, true).expect("the pages lay out");
 
     let scene = paged.into_scene();
 
@@ -517,9 +490,11 @@ mod tests {
           summary,
           whole,
           "{name} on {width}x{height} pages ({} pages)",
-          paginated.starts.len()
+          paginated.content.sizes.len()
         );
-        if paginated.starts.len() > 1 && !summary.anchors.is_empty() && !summary.headings.is_empty()
+        if paginated.content.sizes.len() > 1
+          && !summary.anchors.is_empty()
+          && !summary.headings.is_empty()
         {
           with_targets_across_pages += 1;
         }
