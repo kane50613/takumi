@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::Parser;
 
-use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss, parse_integer_value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 /// Represents the CSS `order` value used for flex/grid item ordering.
@@ -13,7 +13,7 @@ impl Animatable for Order {}
 
 impl<'i> FromCss<'i> for Order {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Ok(Self(input.expect_integer()?))
+    Ok(Self(parse_integer_value(input)?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<integer>"];

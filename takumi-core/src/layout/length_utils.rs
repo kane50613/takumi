@@ -268,7 +268,10 @@ impl<'a> LengthResolver<'a> {
 
         Some(border_padding.max(available_size - margins.inline_sum()))
       }
-      LayoutLength::Fixed(_) | LayoutLength::Percent(_) | LayoutLength::Calc { .. } => {
+      LayoutLength::Fixed(_)
+      | LayoutLength::Percent(_)
+      | LayoutLength::Calc { .. }
+      | LayoutLength::Math(_) => {
         let mut percentage_resolution_size = self.space.percentage_resolution_inline_size;
 
         if length.has_percent() && percentage_resolution_size.is_none() {
@@ -412,7 +415,10 @@ impl<'a> LengthResolver<'a> {
 
         Some(border_padding.max(available_size - start - end))
       }
-      LayoutLength::Fixed(_) | LayoutLength::Percent(_) | LayoutLength::Calc { .. } => {
+      LayoutLength::Fixed(_)
+      | LayoutLength::Percent(_)
+      | LayoutLength::Calc { .. }
+      | LayoutLength::Math(_) => {
         let mut percentage_resolution_size = override_percentage_resolution_size
           .unwrap_or(self.space.percentage_resolution_block_size);
 
