@@ -1275,28 +1275,28 @@ jobs:
         run: bun run typecheck
 
       # A pending changeset means the release PR is open, so production keeps the docs of the
-      # published release and master goes to next.takumi.kane.tw until that PR merges.
+      # published release and master goes to preview.takumi.kane.tw until that PR merges.
       - name: Pick docs target
         id: target
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           if find .tegami -maxdepth 1 -name '*.md' | grep -q .; then
-            echo "environment=next" >> "$GITHUB_OUTPUT"
+            echo "environment=preview" >> "$GITHUB_OUTPUT"
           else
             echo "environment=production" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Pull Vercel project settings (preview)
-        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'next'
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'preview'
         run: bunx vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Vercel output (preview)
-        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'next'
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'preview'
         run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions
 
       - name: Deploy to Vercel (preview)
         id: deploy_preview
-        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'next'
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'preview'
         run: |
           DEPLOYMENT_URL=$(bunx vercel deploy --archive=tgz --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
@@ -1318,9 +1318,9 @@ jobs:
           bunx vercel alias set ${{ steps.deploy_preview.outputs.url }} "${PREVIEW_ALIAS}" --token=${{ secrets.VERCEL_TOKEN }}
           echo "alias=${PREVIEW_ALIAS}" >> $GITHUB_OUTPUT
 
-      - name: Assign alias (next)
-        if: steps.target.outputs.environment == 'next'
-        run: bunx vercel alias set ${{ steps.deploy_preview.outputs.url }} next.takumi.kane.tw --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Assign alias (master preview)
+        if: steps.target.outputs.environment == 'preview'
+        run: bunx vercel alias set ${{ steps.deploy_preview.outputs.url }} preview.takumi.kane.tw --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Comment preview URL on PR
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
