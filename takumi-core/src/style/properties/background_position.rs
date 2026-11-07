@@ -205,22 +205,51 @@ impl Default for PositionValue {
   }
 }
 
+/// How many values a `<position>` takes, by the Blink function that parses it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PositionSyntax {
+  /// One or two, as Blink's `ConsumeOneOrTwoValuedPosition` reads `transform-origin`.
+  OneOrTwo,
+  /// One, two, or four, as Blink's `ConsumePosition` reads a `<position>`.
+  Position,
+  /// One to four, as `ConsumePosition` reads a `<bg-position>`.
+  Background,
+}
+
 impl PositionValue {
-  /// A `<position>`, of one, two, or four values, and of three where `three_values` allows it as
-  /// `background-position` does, after Blink's `ConsumePosition`.
+  /// A position of `syntax`, after Blink's `ConsumePosition`.
   /// <https://drafts.csswg.org/css-values-4/#position>
-  fn parse<'i>(input: &mut Parser<'i>, three_values: bool) -> ParseResult<'i, Self> {
+  pub(crate) fn parse<'i>(input: &mut Parser<'i>, syntax: PositionSyntax) -> ParseResult<'i, Self> {
     let mut edges = Edges::default();
     let first = edges.component(input)?;
 
     if first.keyword().is_none() {
       edges.horizontal = true;
     }
+    if syntax == PositionSyntax::OneOrTwo
+      && edges.vertical
+      && input.try_parse(Length::from_css).is_ok()
+    {
+      return Err(input.new_error_for_next_token());
+    }
 
     let after_first = input.state();
     let Ok(second) = input.try_parse(|input| edges.component(input)) else {
+      // A second side keyword of the first one's axis names no position.
+      if input
+        .try_parse(PositionComponent::from_css)
+        .is_ok_and(|component| component.keyword().is_some())
+      {
+        return Err(input.new_error_for_next_token());
+      }
+
       return Ok(Self::from_one(first));
     };
+
+    if syntax == PositionSyntax::OneOrTwo {
+      return Ok(Self::from_two(first, second));
+    }
+
     let after_second = input.state();
     let third = first
       .keyword()
@@ -233,7 +262,7 @@ impl PositionValue {
       .and_then(|_| input.try_parse(|input| edges.component(input)).ok());
 
     if let Some(third) = third
-      && (fourth.is_some() || three_values)
+      && (fourth.is_some() || syntax == PositionSyntax::Background)
     {
       return Self::from_edges(&[Some(first), Some(second), Some(third), fourth])
         .ok_or_else(|| input.new_error_for_next_token());
@@ -247,6 +276,11 @@ impl PositionValue {
 
     input.reset(&after_second);
     Ok(Self::from_two(first, second))
+  }
+
+  /// A `transform-origin`, of one or two values.
+  pub(crate) fn parse_origin<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::parse(input, PositionSyntax::OneOrTwo)
   }
 
   /// Blink's `PositionFromOneValue`.
@@ -282,6 +316,8 @@ impl PositionValue {
 
     while let Some(Some(keyword)) = values.get(index) {
       let offset = match values.get(index + 1) {
+        // An offset takes a length or percentage, never `auto`.
+        Some(Some(PositionComponent::Length(Length::Auto))) => return None,
         Some(Some(PositionComponent::Length(offset))) => {
           index += 1;
           Some(*offset)
@@ -367,7 +403,7 @@ fn next_is_ident(input: &mut Parser<'_>) -> bool {
 
 impl<'i> FromCss<'i> for PositionValue {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::parse(input, false)
+    Self::parse(input, PositionSyntax::Position)
   }
 
   const VALID_TOKENS: &'static [&'static str] = PositionComponent::VALID_TOKENS;
@@ -428,7 +464,9 @@ pub type PositionValues = Box<[PositionValue]>;
 
 impl<'i> FromCss<'i> for PositionValues {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    parse_comma_list(input, |input| PositionValue::parse(input, true))
+    parse_comma_list(input, |input| {
+      PositionValue::parse(input, PositionSyntax::Background)
+    })
   }
 
   const VALID_TOKENS: &'static [&'static str] = PositionValue::VALID_TOKENS;
@@ -484,7 +522,8 @@ mod tests {
       "right right",
       "left left",
     ] {
-      assert!(entire(css, false).is_none(), "{css}");
+      assert!(entire(css, PositionSyntax::Position).is_none(), "{css}");
+      assert!(PositionValue::from_css_str(css).is_err(), "{css}");
     }
     for css in [
       "center center",
@@ -493,14 +532,14 @@ mod tests {
       "top center",
       "bottom left",
     ] {
-      assert!(entire(css, false).is_some(), "{css}");
+      assert!(entire(css, PositionSyntax::Position).is_some(), "{css}");
     }
   }
 
   /// A whole declaration value parsed as a position, as a declaration list parses one.
-  fn entire(css: &str, three_values: bool) -> Option<String> {
+  fn entire(css: &str, syntax: PositionSyntax) -> Option<String> {
     Parser::new(css)
-      .parse_entirely(|input| PositionValue::parse(input, three_values))
+      .parse_entirely(|input| PositionValue::parse(input, syntax))
       .ok()
       .map(|position| position.to_css_string())
   }
@@ -509,30 +548,58 @@ mod tests {
   /// `background-position`, the three-value one, as Blink's `ConsumePosition` reads them.
   #[test]
   fn an_offset_measures_from_the_side_before_it() {
-    for (css, three_values, expected) in [
-      ("top 25% left 25%", false, Some("25% 25%")),
+    for (css, syntax, expected) in [
+      (
+        "top 25% left 25%",
+        PositionSyntax::Position,
+        Some("25% 25%"),
+      ),
       (
         "bottom 1px right 2px",
-        false,
+        PositionSyntax::Position,
         Some("calc(100% - 2px) calc(100% - 1px)"),
       ),
       (
         "right 2px bottom 1px",
-        false,
+        PositionSyntax::Position,
         Some("calc(100% - 2px) calc(100% - 1px)"),
       ),
-      ("top 3px left 50%", false, Some("50% 3px")),
-      ("top 50% right 25%", false, Some("75% 50%")),
-      ("right 10% top", false, None),
-      ("right 10% top", true, Some("90% top")),
-      ("center right 25%", true, Some("75% center")),
-      ("top 10px", false, None),
-      ("left 10px", false, Some("left 10px")),
-      ("left 10px top 5px", false, Some("10px 5px")),
-      ("left 10px left 5px", false, None),
-      ("center 10px top 5px", false, None),
+      (
+        "top 3px left 50%",
+        PositionSyntax::Position,
+        Some("50% 3px"),
+      ),
+      (
+        "top 50% right 25%",
+        PositionSyntax::Position,
+        Some("75% 50%"),
+      ),
+      ("right 10% top", PositionSyntax::Position, None),
+      ("right 10% top", PositionSyntax::Background, Some("90% top")),
+      (
+        "center right 25%",
+        PositionSyntax::Background,
+        Some("75% center"),
+      ),
+      ("top 10px", PositionSyntax::Position, None),
+      ("left 10px", PositionSyntax::Position, Some("left 10px")),
+      (
+        "left 10px top 5px",
+        PositionSyntax::Position,
+        Some("10px 5px"),
+      ),
+      ("left 10px left 5px", PositionSyntax::Position, None),
+      ("center 10px top 5px", PositionSyntax::Position, None),
+      ("left auto top 5px", PositionSyntax::Position, None),
+      ("right 10px bottom 20px", PositionSyntax::OneOrTwo, None),
+      ("top 10px", PositionSyntax::OneOrTwo, None),
+      (
+        "right bottom",
+        PositionSyntax::OneOrTwo,
+        Some("right bottom"),
+      ),
     ] {
-      assert_eq!(entire(css, three_values).as_deref(), expected, "{css}");
+      assert_eq!(entire(css, syntax).as_deref(), expected, "{css}");
     }
   }
 

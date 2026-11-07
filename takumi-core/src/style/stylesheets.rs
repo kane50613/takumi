@@ -331,6 +331,9 @@ macro_rules! define_style {
     let _ = $value;
     false
   }};
+  // `where parse = path` parses the property with `path` instead of its type's `FromCss`.
+  (@parse $ty:ty, $parse:path) => { $parse };
+  (@parse $ty:ty) => { <$ty as FromCss>::from_css };
   (@builder $name:ident, $ty:ty, manual) => {};
   (@builder $name:ident, $ty:ty) => {
     paste! {
@@ -351,6 +354,7 @@ macro_rules! define_style {
               $(where anonymous = $longhand_anonymous:literal)?
               $(where builder = $longhand_builder:ident)?
               $(where non_negative = $longhand_non_negative:literal)?
+              $(where parse = $longhand_parse:path)?
               $(= $longhand_default:expr)?,
           )*
         }
@@ -459,7 +463,7 @@ macro_rules! define_style {
           let declaration = match self {
             $($(
               Self::[<$longhand:camel>] => StyleDeclaration::[<$longhand:camel>](
-                <$longhand_ty as FromCss>::from_css(input)?,
+                define_style!(@parse $longhand_ty $(, $longhand_parse)?)(input)?,
               ),
             )*)*
             $(
@@ -1542,7 +1546,9 @@ define_style! {
     svg_data: StyleSvgData {
       opacity: PercentageNumber,
       transform: Option<Transforms>,
-      transform_origin: PositionValue = PositionValue::center(),
+      transform_origin: PositionValue
+        where parse = PositionValue::parse_origin
+        = PositionValue::center(),
       alignment_baseline: AlignmentBaseline,
       mask_type: MaskType,
       vector_effect: VectorEffect,
