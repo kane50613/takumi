@@ -94,7 +94,7 @@ The stylesheet supports:
 | `<image>`, `<url>`, `<string>`, `<custom-ident>`, a keyword | the value as written                   | switches halfway |
 | `*`                                                         | the value as written                   | switches halfway |
 
-A rule takes effect only when it is valid, as in Chromium. `syntax` must use the names above, and `initial-value` must match it and compute without the element, so `var()`, `em`, and `vw` make the rule invalid. A declared value that does not match the syntax falls back to the inherited value when `inherits` is `true`, and to `initial-value` otherwise.
+A rule takes effect only when it is valid, as in Chromium. It needs `syntax` and `inherits`, and `syntax` must use the names above. Any syntax other than `*` also needs an `initial-value` that matches it and computes without the element, so `var()`, `em`, and `vw` make the rule invalid. A declared value that does not match the syntax falls back to the inherited value when `inherits` is `true`, and to `initial-value` otherwise.
 
 Takumi differs from Chromium in three places:
 
