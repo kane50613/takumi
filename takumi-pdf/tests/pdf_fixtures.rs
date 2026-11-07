@@ -4225,6 +4225,47 @@ fn a_float_breaks_only_when_it_does_not_fit_its_page() {
   assert_eq!(float_heights(120), [75.0, 45.0]);
 }
 
+/// `@page` reads the root element, as Blink's `StyleForPage` inherits its style: under
+/// `direction: rtl` the first page is a left page, and `em` and `var()` take the root's font size
+/// and custom properties.
+#[test]
+fn at_page_rules_read_the_root_element() {
+  const CSS: &str = "
+    html { direction: rtl; font-size: 20px; --inner: 3em }
+    @page { size: A5; margin: 1em }
+    @page :left { margin-left: var(--inner) }
+    @page :right { margin-right: var(--inner) }
+    p { margin: 0 0 6px; font-size: 11px; line-height: 15px }
+  ";
+  let paragraphs: String = (1..=90)
+    .map(|index| format!("<p>Paragraph {index} wraps across the width each page leaves it.</p>"))
+    .collect();
+  let html = format!("<html><body>{paragraphs}</body></html>");
+  let pdf = run_pdf_fixture("at-page-root-element", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse the document"))
+      .stylesheet(Arc::new(StyleSheet::parse(CSS).expect("parse @page")))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(page_clip_lefts(&pdf)[..3], [60.0, 20.0, 60.0]);
+}
+
+/// The left edge of the page area's clip, the first rectangle on each page, in CSS pixels.
+fn page_clip_lefts(pdf: &[u8]) -> Vec<f32> {
+  content_streams(pdf)
+    .iter()
+    .filter_map(|stream| {
+      stream
+        .split(|byte| *byte == b'\n')
+        .find_map(|line| operands(line, "re"))
+        .and_then(|operands| operands.first().map(|points| points * 96.0 / 72.0))
+    })
+    .collect()
+}
+
 /// The height of the first rectangle inside the page clip on each page that draws one, in CSS
 /// pixels.
 fn page_fill_heights(pdf: &[u8]) -> Vec<f32> {

@@ -11,6 +11,21 @@ impl Node {
     (!children.is_empty()).then_some(children.as_slice())
   }
 
+  /// A copy of this node without its children, which is all resolving its own style reads.
+  pub(crate) fn without_children(&self) -> Self {
+    let kind = match &self.kind {
+      NodeKind::Container { .. } => NodeKind::Container {
+        children: Vec::new(),
+      },
+      kind => kind.clone(),
+    };
+
+    Self {
+      metadata: self.metadata.clone(),
+      kind,
+    }
+  }
+
   /// How many nodes this one and its descendants hold, counted iteratively for deep trees.
   pub(crate) fn subtree_len(&self) -> usize {
     self.subtree().count()

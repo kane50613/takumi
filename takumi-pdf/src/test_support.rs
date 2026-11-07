@@ -2,7 +2,7 @@
 
 use std::{fs, path::Path};
 
-use takumi_core::{Fonts, resources::font::FontResource};
+use takumi_core::{Fonts, resources::font::FontResource, style::Direction};
 
 use crate::page_kinds::PerPage;
 
@@ -33,5 +33,5 @@ pub(crate) fn fixture(name: &str) -> String {
 
 /// `value` for every page.
 pub(crate) fn uniform_pages<T: Clone>(value: T) -> PerPage<T> {
-  PerPage::new(value.clone(), value.clone(), value)
+  PerPage::new(Direction::Ltr, value.clone(), value.clone(), value)
 }

@@ -344,8 +344,11 @@ impl Paginated {
 mod tests {
   use std::rc::Rc;
 
-  use takumi_core::html::{FromHtmlOptions, from_html};
   use takumi_core::scene::PagedScene;
+  use takumi_core::{
+    html::{FromHtmlOptions, from_html},
+    style::Direction,
+  };
 
   use super::*;
   use crate::{
@@ -532,7 +535,7 @@ mod tests {
       )
       .expect("the page has an area")
     };
-    let frames = PageFrames::new(frame(220.0), frame(140.0), frame(180.0));
+    let frames = PageFrames::new(Direction::Ltr, frame(220.0), frame(140.0), frame(180.0));
     let source = (1..=40)
       .map(|line| format!(r#"<div id="line-{line}" style="height: 20px">Line {line}</div>"#))
       .collect::<String>();

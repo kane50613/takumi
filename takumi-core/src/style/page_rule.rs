@@ -8,23 +8,98 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use crate::{
   geometry::{Rect, Size},
   style::{
-    FromCss, Length, MediaQueryList, RawDeclaration, RawDeclarationParser, SizingContext,
+    CustomProperties, Direction, FromCss, Length, MediaQueryList, RawDeclaration,
+    RawDeclarationParser, SizingContext, contains_var_references, resolve_var_references,
     selector::LayerPath,
   },
   units::{ONE_IN_PX, ONE_MM_IN_PX},
   viewport::Viewport,
 };
 
-/// One of the pages Blink's `PageRuleCollector` tells apart. The first page is a right page, as
-/// pages progress left to right.
+/// One of the pages Blink's `PageRuleCollector` tells apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageKind {
-  /// The first page.
+  /// The first page, a left page under `direction: rtl` and a right page otherwise.
   First,
   /// A left page after the first.
   Left,
   /// A right page after the first.
   Right,
+}
+
+impl PageKind {
+  /// The kind of page `page`, counted from 0, as Blink's `IsFirstPage` and `IsLeftPage` say under
+  /// the root's `direction`.
+  pub fn of(page: usize, direction: Direction) -> Self {
+    let first_is_left = usize::from(direction == Direction::Rtl);
+
+    if page == 0 {
+      Self::First
+    } else if (page + first_is_left) % 2 == 1 {
+      Self::Left
+    } else {
+      Self::Right
+    }
+  }
+
+  /// Whether this kind of page is a left page under `direction`.
+  fn is_left(self, direction: Direction) -> bool {
+    match self {
+      Self::First => direction == Direction::Rtl,
+      Self::Left => true,
+      Self::Right => false,
+    }
+  }
+}
+
+/// What a page's style inherits from the root element, as Blink's `StyleForPage` takes it: the
+/// root's `direction`, font sizes, and custom properties, or the initial style without a root.
+#[derive(Clone)]
+pub struct PageContext {
+  direction: Direction,
+  sizing: SizingContext,
+  custom_properties: CustomProperties,
+}
+
+impl Default for PageContext {
+  fn default() -> Self {
+    Self {
+      direction: Direction::default(),
+      sizing: SizingContext::builder()
+        .viewport(Viewport::default())
+        .build(),
+      custom_properties: CustomProperties::default(),
+    }
+  }
+}
+
+impl PageContext {
+  /// The context a root element with `direction`, `sizing`, and `custom_properties` gives.
+  pub(crate) fn new(
+    direction: Direction,
+    sizing: SizingContext,
+    custom_properties: CustomProperties,
+  ) -> Self {
+    Self {
+      direction,
+      sizing,
+      custom_properties,
+    }
+  }
+
+  /// The root's `direction`, which decides which pages are left pages.
+  pub fn direction(&self) -> Direction {
+    self.direction
+  }
+
+  /// What a page's lengths resolve against at `viewport`: the root's font sizes for `em` and
+  /// `rem`.
+  pub fn sizing(&self, viewport: Viewport) -> SizingContext {
+    SizingContext {
+      viewport: viewport.with_font_size(self.sizing.viewport.font_size),
+      ..self.sizing.clone()
+    }
+  }
 }
 
 /// A page pseudo-class, the one Blink's `ParsePageSelector` takes after a page name.
@@ -47,14 +122,15 @@ pub(crate) struct PageSelector {
 }
 
 impl PageSelector {
-  /// Whether the selector applies to `kind` pages, as Blink's `CheckPageSelectorComponents` says.
-  pub(crate) fn matches(&self, kind: PageKind) -> bool {
+  /// Whether the selector applies to `kind` pages under the root's `direction`, as Blink's
+  /// `CheckPageSelectorComponents` says.
+  pub(crate) fn matches(&self, kind: PageKind, direction: Direction) -> bool {
     self.name.is_none()
       && match self.pseudo_class {
         None => true,
         Some(PagePseudoClass::First) => kind == PageKind::First,
-        Some(PagePseudoClass::Left) => kind == PageKind::Left,
-        Some(PagePseudoClass::Right) => kind != PageKind::Left,
+        Some(PagePseudoClass::Left) => kind.is_left(direction),
+        Some(PagePseudoClass::Right) => !kind.is_left(direction),
       }
   }
 
@@ -318,10 +394,9 @@ impl PageDescriptors {
     }
   }
 
-  /// Reads one declaration, dropping one that is not valid as Blink's `ParsePageDescriptor` does.
-  /// Approximate: a `var()` is dropped too, where Blink resolves it against the root's custom
-  /// properties.
-  fn set(&mut self, name: &str, input: &mut Parser) {
+  /// The descriptors one declaration sets, or `None` for one Blink's `ParsePageDescriptor` drops.
+  fn parse(name: &str, value: &str) -> Option<Self> {
+    let input = &mut Parser::new(value);
     let side = |input: &mut Parser| input.try_parse(Length::from_css).ok().map(Some);
     let margin = |margin| Self { size: None, margin };
     let parsed = match_ignore_ascii_case! { name,
@@ -332,12 +407,53 @@ impl PageDescriptors {
       "margin-bottom" => side(input).map(|bottom| margin(Rect { bottom, ..Rect::default() })),
       "margin-left" => side(input).map(|left| margin(Rect { left, ..Rect::default() })),
       _ => None,
+    }?;
+
+    input.is_exhausted().then_some(parsed)
+  }
+
+  /// The descriptors `name` sets when its `var()` substitution fails: invalid at computed-value
+  /// time, the declaration is `unset`, which gives `size` and each margin its initial value.
+  fn unset(name: &str) -> Option<Self> {
+    let initial = if name.eq_ignore_ascii_case("size") {
+      "auto"
+    } else {
+      "0"
     };
 
-    if let Some(parsed) = parsed
-      && input.is_exhausted()
-    {
-      self.apply(&parsed);
+    Self::parse(name, initial)
+  }
+}
+
+/// A declaration in an `@page` rule: its descriptors, or, holding a `var()`, its text until the
+/// page context's custom properties substitute it, as Blink's pending substitution value.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum PageDeclaration {
+  Parsed(PageDescriptors),
+  Pending { name: String, value: String },
+}
+
+impl PageDeclaration {
+  /// The declaration `name: value`, or `None` for one Blink drops.
+  fn parse(name: &str, value: &str) -> Option<Self> {
+    if contains_var_references(value) {
+      return PageDescriptors::unset(name).map(|_| Self::Pending {
+        name: name.to_owned(),
+        value: value.to_owned(),
+      });
+    }
+
+    PageDescriptors::parse(name, value).map(Self::Parsed)
+  }
+
+  /// The descriptors this declaration sets in a page context with `custom_properties`.
+  fn descriptors(&self, custom_properties: &CustomProperties) -> PageDescriptors {
+    match self {
+      Self::Parsed(descriptors) => descriptors.clone(),
+      Self::Pending { name, value } => resolve_var_references(value, custom_properties)
+        .and_then(|value| PageDescriptors::parse(name, &value))
+        .or_else(|| PageDescriptors::unset(name))
+        .unwrap_or_default(),
     }
   }
 }
@@ -347,10 +463,10 @@ impl PageDescriptors {
 pub(crate) struct PageRule {
   /// The selector, universal for a bare `@page`.
   pub(crate) selector: PageSelector,
-  /// The descriptors without `!important`.
-  pub(crate) normal: PageDescriptors,
-  /// The descriptors with `!important`.
-  pub(crate) important: PageDescriptors,
+  /// The declarations without `!important`, in source order.
+  pub(crate) normal: Vec<PageDeclaration>,
+  /// The declarations with `!important`, in source order.
+  pub(crate) important: Vec<PageDeclaration>,
   /// Media queries gating this rule.
   pub(crate) media_queries: Vec<MediaQueryList>,
   /// Cascade layer this rule belongs to.
@@ -376,30 +492,32 @@ impl PageRule {
       else {
         continue;
       };
-      let descriptors = if important {
+      let declarations = if important {
         &mut rule.important
       } else {
         &mut rule.normal
       };
 
-      descriptors.set(&name, &mut Parser::new(value));
+      declarations.extend(PageDeclaration::parse(&name, value));
     }
 
     rule
   }
 
   /// The descriptors that win among `rules` whose `@media` holds at `viewport` and whose selector
-  /// matches `kind` pages, in cascade order: importance, layer, specificity, then source order.
+  /// matches `kind` pages in `context`, in cascade order: importance, layer, specificity, then
+  /// source order.
   pub(crate) fn cascade<'r>(
     rules: impl IntoIterator<Item = &'r Self>,
     layer_count: usize,
     viewport: Viewport,
     kind: PageKind,
+    context: &PageContext,
   ) -> PageDescriptors {
-    let mut ranked: Vec<(u64, &PageDescriptors)> = Vec::new();
+    let mut ranked: Vec<(u64, &[PageDeclaration])> = Vec::new();
 
     for (order, rule) in rules.into_iter().enumerate() {
-      if !rule.selector.matches(kind)
+      if !rule.selector.matches(kind, context.direction)
         || !rule
           .media_queries
           .iter()
@@ -432,8 +550,11 @@ impl PageRule {
 
     let mut winners = PageDescriptors::default();
 
-    for (_, descriptors) in ranked {
-      winners.apply(descriptors);
+    for declaration in ranked
+      .into_iter()
+      .flat_map(|(_, declarations)| declarations)
+    {
+      winners.apply(&declaration.descriptors(&context.custom_properties));
     }
 
     winners
@@ -449,11 +570,31 @@ mod tests {
   };
 
   fn winners(css: &str, kind: PageKind) -> PageDescriptors {
+    winners_in(css, kind, &PageContext::default())
+  }
+
+  fn winners_in(css: &str, kind: PageKind, context: &PageContext) -> PageDescriptors {
     let print = Viewport::default().with_media_target(MediaTarget::Print);
 
     StyleSheet::parse(css)
       .expect("parse @page")
-      .page_descriptors(print, kind)
+      .page_descriptors(print, kind, context)
+  }
+
+  fn context_with(direction: Direction, custom_properties: &[(&str, &str)]) -> PageContext {
+    let mut properties = CustomProperties::default();
+
+    for (name, value) in custom_properties {
+      properties.set((*name).to_owned(), (*value).to_owned());
+    }
+
+    PageContext::new(
+      direction,
+      SizingContext::builder()
+        .viewport(Viewport::default())
+        .build(),
+      properties,
+    )
   }
 
   #[test]
@@ -524,12 +665,85 @@ mod tests {
   }
 
   #[test]
-  fn the_first_page_is_a_right_page() {
-    assert_eq!(
-      winners("@page :right { margin: 2px }", PageKind::First)
+  fn the_first_page_is_a_right_page_unless_the_root_is_rtl() {
+    let css = "@page :left { margin: 1px } @page :right { margin: 2px }";
+    let first = |direction| {
+      winners_in(css, PageKind::First, &context_with(direction, &[]))
         .margin
-        .top,
-      Some(Length::Px(2.0))
+        .top
+    };
+
+    assert_eq!(first(Direction::Ltr), Some(Length::Px(2.0)));
+    assert_eq!(first(Direction::Rtl), Some(Length::Px(1.0)));
+  }
+
+  #[test]
+  fn pages_alternate_from_the_side_the_direction_starts_on() {
+    let kinds = |direction| {
+      (0..4)
+        .map(|page| PageKind::of(page, direction))
+        .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+      kinds(Direction::Ltr),
+      [
+        PageKind::First,
+        PageKind::Left,
+        PageKind::Right,
+        PageKind::Left
+      ]
+    );
+    assert_eq!(
+      kinds(Direction::Rtl),
+      [
+        PageKind::First,
+        PageKind::Right,
+        PageKind::Left,
+        PageKind::Right
+      ]
+    );
+  }
+
+  #[test]
+  fn a_var_takes_the_root_custom_property() {
+    let context = context_with(Direction::Ltr, &[("--m", "3px"), ("--size", "A5")]);
+    let descriptors = winners_in(
+      "@page { size: var(--size); margin: var(--m) 1px }",
+      PageKind::Right,
+      &context,
+    );
+
+    assert_eq!(
+      descriptors.size,
+      Some(PageSize {
+        sheet: Some(PageSheet::Named(PageSizeName::A5)),
+        orientation: None,
+      })
+    );
+    assert_eq!(descriptors.margin.top, Some(Length::Px(3.0)));
+    assert_eq!(descriptors.margin.right, Some(Length::Px(1.0)));
+  }
+
+  #[test]
+  fn a_var_that_fails_unsets_its_descriptor_over_earlier_rules() {
+    let context = context_with(Direction::Ltr, &[("--m", "red")]);
+    let descriptors = winners_in(
+      "@page { size: A4; margin: 2px } @page { size: var(--missing); margin-top: var(--m) }",
+      PageKind::Right,
+      &context,
+    );
+
+    assert_eq!(descriptors.size, Some(PageSize::default()));
+    assert_eq!(descriptors.margin.top, Some(Length::Px(0.0)));
+    assert_eq!(descriptors.margin.left, Some(Length::Px(2.0)));
+  }
+
+  #[test]
+  fn a_var_in_an_unknown_descriptor_is_dropped() {
+    assert_eq!(
+      winners("@page { color: var(--c) }", PageKind::Right),
+      PageDescriptors::default()
     );
   }
 
@@ -545,7 +759,10 @@ mod tests {
       let print = Viewport::default().with_media_target(MediaTarget::Print);
 
       assert_eq!(
-        sheet.page_descriptors(print, PageKind::First).margin.top,
+        sheet
+          .page_descriptors(print, PageKind::First, &PageContext::default())
+          .margin
+          .top,
         None,
         "{css}"
       );

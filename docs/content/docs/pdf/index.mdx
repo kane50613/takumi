@@ -123,7 +123,7 @@ On a page one inch or smaller along an axis, automatic margins on that axis are 
 
 ### `@page` rules
 
-A `@page` rule in `css` or a `<style>` element sets the page size and margins. It wins over `size`, `landscape`, and `margin`, as CSS does in Chromium with `preferCSSPageSize`. `:first` styles the first page, and `:left` and `:right` style the pages after it. The first page counts as a right page.
+A `@page` rule in `css` or a `<style>` element sets the page size and margins. It wins over `size`, `landscape`, and `margin`, as CSS does in Chromium with `preferCSSPageSize`. `:first` styles the first page, and `:left` and `:right` style pages by the side they fall on. The first page is a right page, or a left page when the root element has `direction: rtl`.
 
 ```css title="A cover page, then mirrored margins"
 @page {
@@ -143,11 +143,11 @@ A `@page` rule in `css` or a `<style>` element sets the page size and margins. I
 
 - `size` takes `auto`, one or two lengths, a keyword from the table above, `portrait`, or `landscape`.
 - A margin percentage is a share of the page height for the top and bottom margins, and of the page width for the left and right.
-- `margin: auto` leaves room for the band on that side, as the `"auto"` option does.
+- `margin: auto` is 0, as in Chromium. To leave room for a band, leave that side out of the rule so the `"auto"` option applies.
 - A rule whose margins leave no page area is ignored. A header or footer that leaves no page area fails the render, as it does with the `margin` option.
-- Descriptors that use `var()` are ignored, and `em` and `rem` are 16px.
+- `em`, `rem`, and `var()` read the root element's font size and custom properties. `vw` and `vh` read the page the options give, before `size` changes it.
 
-Page names, margin boxes such as `@top-center`, and other descriptors are not read. Pages progress left to right even under `direction: rtl`, where Chromium makes the first page a left page.
+Page names, margin boxes such as `@top-center`, and other descriptors are not read.
 
 ## Reuse a renderer
 
