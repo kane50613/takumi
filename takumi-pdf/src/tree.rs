@@ -24,10 +24,10 @@ use takumi_core::{
 };
 
 use crate::{
-  bands::{FixedTemplate, Repeatable},
+  bands::{FixedTemplate, Repeatable, RepeatedBoxes},
   counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
   options::PdfError,
-  page::PageFrame,
+  page::PageFrames,
   pagination::MAX_PAGES,
 };
 
@@ -89,46 +89,53 @@ impl TreeInputs<'_> {
   pub(crate) fn prepare_paged(
     &self,
     node: Node,
-    frame: &PageFrame,
-  ) -> Result<(PagedContent, Vec<Repeatable>), PdfError> {
-    let (root, repeated) = self.prepare_root(node, frame)?;
+    frames: &PageFrames,
+  ) -> Result<(PagedContent, RepeatedBoxes), PdfError> {
+    let (root, repeated) = self.prepare_root(node, frames)?;
 
-    Ok((PagedContent::lay_out(root, frame.page_sizer())?, repeated))
+    Ok((PagedContent::lay_out(root, frames.page_sizer())?, repeated))
   }
 
   /// The content tree to lay out across pages, and the `fixed` subtrees taken out of it. Those
-  /// repeat on every page, so they lay out against the page area on their own.
+  /// repeat on every page, so they lay out against each page area on their own.
   pub(crate) fn prepare_root(
     &self,
     node: Node,
-    frame: &PageFrame,
-  ) -> Result<(RenderNode, Vec<Repeatable>), PdfError> {
-    let viewport = frame.column();
+    frames: &PageFrames,
+  ) -> Result<(RenderNode, RepeatedBoxes), PdfError> {
+    let viewport = frames.first().column();
     let node = fill_root(node, viewport);
     // A repeated box holding a counter lays out again per page, from the subtree
     // its preorder position names in the tree it was taken from.
     let source = has_page_counters(&node).then(|| node.clone());
     let mut root = RenderNode::from_initial_containing_block(&self.context(viewport), node);
-    let repeated = take_repeating_fixed(&mut root);
-    let page_context = self.context(frame.page_area);
-    let repeated = repeated
-      .into_iter()
-      .map(|(node, parent)| {
-        let template = source
-          .as_ref()
-          .zip(node.source_order())
-          .and_then(|(source, index)| Some((index, node_in_source_order(source, index)?)))
-          .filter(|(_, template)| has_page_counters(template))
-          .map(|(source_order, template)| FixedTemplate {
-            node: template.clone(),
-            parent,
-            source_order,
-          });
-        let prepared = PreparedTree::lay_out(page_root(&page_context, node), frame.page_area)?;
+    let fixed = take_repeating_fixed(&mut root);
+    let repeated = frames.try_map_shared(
+      |frame| frame.page_area,
+      |frame| {
+        let page_context = self.context(frame.page_area);
 
-        Ok(Repeatable::fixed(prepared, template))
-      })
-      .collect::<Result<Vec<_>, PdfError>>()?;
+        fixed
+          .iter()
+          .map(|(node, parent)| {
+            let template = source
+              .as_ref()
+              .zip(node.source_order())
+              .and_then(|(source, index)| Some((index, node_in_source_order(source, index)?)))
+              .filter(|(_, template)| has_page_counters(template))
+              .map(|(source_order, template)| FixedTemplate {
+                node: template.clone(),
+                parent: parent.clone(),
+                source_order,
+              });
+            let prepared =
+              PreparedTree::lay_out(page_root(&page_context, node.clone()), frame.page_area)?;
+
+            Ok(Repeatable::fixed(prepared, template))
+          })
+          .collect::<Result<Vec<_>, PdfError>>()
+      },
+    )?;
 
     Ok((root, repeated))
   }

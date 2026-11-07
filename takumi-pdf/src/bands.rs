@@ -1,7 +1,7 @@
 //! Trees drawn once per page: header and footer bands, and repeated `fixed`
 //! boxes.
 
-use std::ops::Range;
+use std::{ops::Range, rc::Rc};
 
 use takumi_core::{
   context::RenderContext,
@@ -19,7 +19,8 @@ use crate::{
   interactive::{Interactive, LinkTarget},
   krilla::surface::Surface,
   options::{BAND_EDGE_PADDING, PageBand, PdfError},
-  page::PageFrame,
+  page::{PageBands, PageFrame},
+  page_kinds::PerPage,
   tree::{PreparedTree, TreeInputs, page_root},
   window::{ContentWindow, Window},
 };
@@ -55,6 +56,50 @@ impl RepeatBounds {
         frame.window_height,
       ),
     }
+  }
+}
+
+/// The repeated `fixed` boxes of each page, laid out against its page area.
+pub(crate) type RepeatedBoxes = PerPage<Rc<Vec<Repeatable>>>;
+
+/// The header and footer bands measured at one page width.
+pub(crate) struct Bands {
+  pub(crate) header: Option<Repeatable>,
+  pub(crate) footer: Option<Repeatable>,
+}
+
+impl Bands {
+  /// Measures the bands of `templates` at `viewport` with the last of `pages` pages' counters.
+  pub(crate) fn measure(
+    inputs: &TreeInputs<'_>,
+    templates: &PageBands<'_>,
+    viewport: Viewport,
+    pages: usize,
+  ) -> Result<Self, PdfError> {
+    let band = |template: Option<&PageBand>, bounds| {
+      template
+        .map(|template| Repeatable::band(inputs, template, viewport, bounds, pages))
+        .transpose()
+    };
+
+    Ok(Self {
+      header: band(templates.header.as_ref(), RepeatBounds::Header)?,
+      footer: band(templates.footer.as_ref(), RepeatBounds::Footer)?,
+    })
+  }
+
+  /// Whether a band holds a counter and lays out again per page.
+  pub(crate) fn dynamic(&self) -> bool {
+    self.header.as_ref().is_some_and(Repeatable::dynamic)
+      || self.footer.as_ref().is_some_and(Repeatable::dynamic)
+  }
+
+  /// The heights the header and the footer came out at.
+  pub(crate) fn heights(&self) -> (Option<f32>, Option<f32>) {
+    (
+      self.header.as_ref().map(Repeatable::height),
+      self.footer.as_ref().map(Repeatable::height),
+    )
   }
 }
 

@@ -14,13 +14,13 @@ use takumi_core::{
 };
 
 use crate::{
-  bands::Repeatable,
+  bands::{Repeatable, RepeatedBoxes},
   counters::{
     BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
   interactive::{AnchorTarget, PageSummary, has_internal_links, has_summary_targets},
   options::PdfError,
-  page::PageFrame,
+  page::PageFrames,
   tree::{PagedContent, TreeInputs},
 };
 
@@ -63,7 +63,7 @@ pub(crate) fn walk_pages(
 pub(crate) struct Prepared {
   pub(crate) root: RenderNode,
   /// The `fixed` boxes taken out of the root, which repeat on every page.
-  pub(crate) repeated: Vec<Repeatable>,
+  pub(crate) repeated: RepeatedBoxes,
   /// Whether the tree holds an anchor or a heading, which its pages are summarized for.
   pub(crate) reads_summary: bool,
 }
@@ -72,10 +72,10 @@ impl Prepared {
   pub(crate) fn new(
     node: Node,
     inputs: &TreeInputs<'_>,
-    frame: &PageFrame,
+    frames: &PageFrames,
   ) -> Result<Self, PdfError> {
     let reads_summary = has_summary_targets(&node);
-    let (root, repeated) = inputs.prepare_root(node, frame)?;
+    let (root, repeated) = inputs.prepare_root(node, frames)?;
 
     Ok(Self {
       root,
@@ -109,7 +109,7 @@ impl Counted {
   pub(crate) fn settle(
     mut node: Node,
     inputs: &TreeInputs<'_>,
-    frame: &PageFrame,
+    frames: &PageFrames,
     settle: Settle<'_>,
   ) -> Result<Self, PdfError> {
     let links = has_internal_links(&node);
@@ -118,13 +118,13 @@ impl Counted {
     let numbered = collect == Collect::Extents || has_target_counters(&node);
 
     if !numbered {
-      return Ok(CountingPass::run(node, inputs, frame, settle, collect)?.into_counted(links));
+      return Ok(CountingPass::run(node, inputs, frames, settle, collect)?.into_counted(links));
     }
 
     let mut previous: Vec<String> = Vec::new();
 
     for _ in 0..COUNTER_PASSES {
-      let pass = CountingPass::run(node.clone(), inputs, frame, settle, collect)?;
+      let pass = CountingPass::run(node.clone(), inputs, frames, settle, collect)?;
       let mut written = Vec::new();
 
       pass.substitute_counters(&mut node, &mut written);
@@ -137,7 +137,7 @@ impl Counted {
     // The numbers are still moving, and this was the last pass allowed. They are laid out once
     // more so the page shows the numbers it was laid out with.
     Ok(Self::Laid(Box::new(Paginated::lay_out(
-      node, inputs, frame,
+      node, inputs, frames,
     )?)))
   }
 
@@ -184,16 +184,16 @@ impl CountingPass {
   fn run(
     node: Node,
     inputs: &TreeInputs<'_>,
-    frame: &PageFrame,
+    frames: &PageFrames,
     settle: Settle<'_>,
     collect: Collect,
   ) -> Result<Self, PdfError> {
-    let content = Prepared::new(node, inputs, frame)?;
+    let content = Prepared::new(node, inputs, frames)?;
     let extents = collect == Collect::Extents;
     let mut summary = (collect != Collect::Nothing).then(|| PageSummary::new(extents));
     let sizes = walk_pages(
       &content.root,
-      frame.page_sizer(),
+      frames.page_sizer(),
       settle,
       |stream, index| {
         if let Some(summary) = &mut summary {
@@ -256,6 +256,7 @@ impl CountingPass {
     let repeated: Vec<_> = self
       .content
       .repeated
+      .get(0)
       .iter()
       .filter_map(Repeatable::source_orders)
       .map(|orders| orders.start.saturating_sub(1)..orders.end.saturating_sub(1))
@@ -274,7 +275,7 @@ pub(crate) struct Paginated {
   pub(crate) content: PagedContent,
   /// Which of the content's root fragments paint on each page.
   pub(crate) windows: PageWindows,
-  pub(crate) repeated: Vec<Repeatable>,
+  pub(crate) repeated: RepeatedBoxes,
 }
 
 /// One page's window into the content.
@@ -304,8 +305,8 @@ impl PageSlice {
 }
 
 impl Paginated {
-  fn lay_out(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
-    let (content, repeated) = inputs.prepare_paged(node, frame)?;
+  fn lay_out(node: Node, inputs: &TreeInputs<'_>, frames: &PageFrames) -> Result<Self, PdfError> {
+    let (content, repeated) = inputs.prepare_paged(node, frames)?;
     let mut windows = PageWindows::default();
 
     windows.refresh(
@@ -349,7 +350,7 @@ mod tests {
   use super::*;
   use crate::{
     options::{PageMargins, PageOptions},
-    page::{PageFrame, band_viewport},
+    page::{PageFrame, PageFrames},
     test_support::{fixture, fonts},
   };
 
@@ -430,10 +431,12 @@ mod tests {
   }
 
   /// The summary of the scene of every page of `node`, which the pages' summaries replace.
-  fn whole_scene_summary(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> PageSummary {
-    let (root, _) = inputs.prepare_root(node, frame).expect("the tree prepares");
+  fn whole_scene_summary(node: Node, inputs: &TreeInputs<'_>, frames: &PageFrames) -> PageSummary {
+    let (root, _) = inputs
+      .prepare_root(node, frames)
+      .expect("the tree prepares");
     let paged =
-      PagedScene::lay_out(root, frame.page_sizer(), MAX_PAGES, true).expect("the pages lay out");
+      PagedScene::lay_out(root, frames.page_sizer(), MAX_PAGES, true).expect("the pages lay out");
 
     let scene = paged.into_scene();
 
@@ -479,12 +482,13 @@ mod tests {
           height,
           margin: PageMargins::uniform(12.0),
         };
-        let frame = PageFrame::resolve(&page, band_viewport(&page), None, None)
-          .expect("the page has an area");
-        let paginated = Paginated::lay_out(node.clone(), &inputs, &frame)
+        let frames = PageFrames::uniform(
+          PageFrame::resolve(&page, (None, None)).expect("the page has an area"),
+        );
+        let paginated = Paginated::lay_out(node.clone(), &inputs, &frames)
           .unwrap_or_else(|_| panic!("{name} lays out on {width}x{height}"));
         let summary = paginated.summarize(true).expect("the pages summarize");
-        let whole = whole_scene_summary(node.clone(), &inputs, &frame);
+        let whole = whole_scene_summary(node.clone(), &inputs, &frames);
 
         assert_eq!(
           summary,
@@ -503,6 +507,55 @@ mod tests {
     assert!(
       with_targets_across_pages >= 12,
       "only {with_targets_across_pages} layouts had targets on several pages"
+    );
+  }
+  /// The first, left, and right pages each take the height of their own frame, and the pages'
+  /// summaries still add up to the summary of the whole scene.
+  #[test]
+  fn first_left_and_right_frames_size_their_own_pages() {
+    let fonts = fonts();
+    let inputs = TreeInputs {
+      fonts: &fonts,
+      stylesheet: Default::default(),
+      images: Rc::default(),
+      resource_cache: Default::default(),
+      font_families: None,
+      lang: None,
+    };
+    let frame = |height| {
+      PageFrame::resolve(
+        &PageOptions {
+          width: 300.0,
+          height,
+          margin: PageMargins::uniform(10.0),
+        },
+        (None, None),
+      )
+      .expect("the page has an area")
+    };
+    let frames = PageFrames::new(frame(220.0), frame(140.0), frame(180.0));
+    let source = (1..=40)
+      .map(|line| format!(r#"<div id="line-{line}" style="height: 20px">Line {line}</div>"#))
+      .collect::<String>();
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse the document");
+    let paginated = Paginated::lay_out(node.clone(), &inputs, &frames).expect("the pages lay out");
+    let slices: Vec<_> = PageSlice::all(&paginated.content.sizes)
+      .map(|slice| (slice.start, slice.end))
+      .collect();
+
+    assert_eq!(
+      slices[..5],
+      [
+        (0.0, 200.0),
+        (200.0, 320.0),
+        (320.0, 480.0),
+        (480.0, 600.0),
+        (600.0, 760.0)
+      ]
+    );
+    assert_eq!(
+      paginated.summarize(true).expect("the pages summarize"),
+      whole_scene_summary(node, &inputs, &frames)
     );
   }
 }
