@@ -41,10 +41,11 @@ impl LinearEasing {
     }
 
     let points = canonicalize(points);
+    let parts = points.len();
     let mut key = String::new();
 
     write_points(&points, &mut key).map_err(|_| CssParseError::unexpected_token())?;
-    interner::intern(&CURVES, key, points.into())
+    interner::intern(&CURVES, key, points.into(), parts)
       .map(Self)
       .ok_or_else(CssParseError::unexpected_token)
   }
