@@ -385,6 +385,8 @@ pub(crate) fn parse_number_value<'i>(input: &mut Parser<'i>) -> ParseResult<'i, 
 pub(crate) fn parse_integer_value<'i>(input: &mut Parser<'i>) -> ParseResult<'i, i32> {
   match input.try_parse(Parser::expect_integer) {
     Ok(integer) => Ok(integer),
-    Err(_) => parse_calc_number_expression(input).map(|number| (number + 0.5).floor() as i32),
+    Err(_) => {
+      parse_calc_number_expression(input).map(|number| (f64::from(number) + 0.5).floor() as i32)
+    }
   }
 }
