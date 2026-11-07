@@ -47,6 +47,20 @@ pub struct ClipNode {
   pub owner: Vec<usize>,
 }
 
+impl ClipNode {
+  /// Whether the clip cuts content off below some block offset, which an overflow clip on the
+  /// inline axis alone does not: its block axis spans [`UNBOUNDED`] both ways.
+  pub(crate) fn clips_block_end(&self) -> bool {
+    match &self.kind {
+      ClipKind::Shape(FillShape::Rect(size)) => {
+        self.transform.transform_point(0.0, size.height).1 < UNBOUNDED / 2.0
+      }
+      ClipKind::Shape(_) => true,
+      ClipKind::ClipPath(_) | ClipKind::PixelMovingFilter(_) => false,
+    }
+  }
+}
+
 /// A geometric clip or Blink's input boundary for a pixel-moving filter.
 #[derive(Debug, Clone)]
 pub enum ClipKind {

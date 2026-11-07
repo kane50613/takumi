@@ -3215,6 +3215,26 @@ fn content_moved_past_the_last_page_adds_pages() {
     ),
     1
   );
+  // A clip on the inline axis alone leaves the block axis visible, as Chromium prints it.
+  assert_eq!(
+    pages(
+      r#"<div style="height: 90px; overflow-x: clip; background: #ddd"><div style="height: 30px; background: #f87171; transform: translateY(120px)"></div></div>"#
+    ),
+    2
+  );
+  assert_eq!(
+    pages(
+      r#"<div style="height: 90px; overflow-x: hidden; background: #ddd"><div style="height: 30px; background: #f87171; transform: translateY(120px)"></div></div>"#
+    ),
+    1
+  );
+  // An absolute box moved past the last page adds none, as Chromium prints it.
+  assert_eq!(
+    pages(&format!(
+      r#"{lead}<div style="position: absolute; top: 60px; height: 30px; width: 50px; background: #f87171; transform: translateY(120px)"></div>"#
+    )),
+    1
+  );
   // A box on the first page moved past the content's second.
   assert_eq!(
     pages(

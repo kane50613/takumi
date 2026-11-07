@@ -7,8 +7,6 @@ use rustc_hash::FxHashSet;
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::page_sizes::{PageSizer, PageSizes};
-#[cfg(feature = "fragmentation")]
-use crate::paint_property::ClipKind;
 use crate::{
   context::{BoxId, RenderContext},
   error::{Error, Result},
@@ -1319,7 +1317,7 @@ pub(crate) fn scrollable_block_end(
     while let Some(id) = clip {
       let clip_node = layers.properties.clip(id);
 
-      clipped |= matches!(clip_node.kind, ClipKind::Shape(_));
+      clipped |= clip_node.clips_block_end();
       clip = clip_node.parent;
     }
     if clipped {
