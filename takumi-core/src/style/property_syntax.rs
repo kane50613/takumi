@@ -534,10 +534,17 @@ fn length_item(length: Length, percentage: bool, sizing: Option<&SizingContext>)
   if let Length::Math(expr) = length
     && expr.has_percent()
   {
-    let mut computed = String::new();
+    // A full interner leaves no tree to compute into, so the value is invalid rather than `auto`.
+    let computed = expr.make_computed(sizing);
 
-    expr.make_computed(sizing).to_css(&mut computed).ok()?;
-    return Some(Item::Specified(computed));
+    if computed == Length::Auto {
+      return None;
+    }
+
+    let mut serialized = String::new();
+
+    computed.to_css(&mut serialized).ok()?;
+    return Some(Item::Specified(serialized));
   }
 
   match length.to_layout_length(sizing) {

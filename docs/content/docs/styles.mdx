@@ -100,7 +100,7 @@ A `font-size` that reads a registered length in `em` makes a cycle, as does a `l
 
 A registered value takes the [math functions](#math-functions) too, so `--angle: calc(1turn / 4)` computes to `90deg`.
 
-Takumi differs from Chromium in one place: a `<url>` keeps the URL as written, because a render has no document to resolve it against.
+Takumi differs from Chromium in two places. A `<url>` keeps the URL as written, because a render has no document to resolve it against. A `<length-percentage>` whose value is a math function that needs the percentage, such as `min(10px, 20%)`, switches halfway when it animates instead of interpolating.
 
 ### Math functions
 
