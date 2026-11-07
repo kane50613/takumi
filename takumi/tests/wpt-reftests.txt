@@ -2281,6 +2281,9 @@ css/css-position/sticky/position-sticky-offset-print.html
 css/css-position/sticky/position-sticky-overflow-clip-container.html
 css/css-position/sticky/position-sticky-table-td-subpixel-zoom.html
 css/css-position/sticky/position-sticky-table-td-top.html
+!css/css-properties-values-api/
+css/css-properties-values-api/registered-property-computation-color-004.html
+css/css-properties-values-api/registered-property-computation-color-006.html
 !css/css-sizing/aspect-ratio/abspos-014.html
 !css/css-sizing/aspect-ratio/block-aspect-ratio-004.html
 !css/css-sizing/aspect-ratio/block-aspect-ratio-005.html
