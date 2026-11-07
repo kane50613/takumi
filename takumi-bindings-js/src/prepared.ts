@@ -182,15 +182,15 @@ export async function readSource<TFamily extends RegisteredFamilyLike, TSource, 
   return createPrepared(await collect(registry, source, layout, extras, needs, false));
 }
 
-/** The `@font-face` files `reached` reports the renderer is waiting on that this read has not `tried`, which they join. */
-function missingFontFiles(reached: SourceNeeds | undefined, tried: Set<string>): string[] {
-  const missing = (reached?.fontFiles ?? []).filter((url) => !tried.has(url));
+/** The `items` not `seen` yet, which join them. */
+function unseen<T>(items: T[], seen: Set<T>): T[] {
+  const fresh = items.filter((item) => !seen.has(item));
 
-  for (const url of missing) {
-    tried.add(url);
+  for (const item of fresh) {
+    seen.add(item);
   }
 
-  return missing;
+  return fresh;
 }
 
 /** Fetches each of `urls` and hands it to the renderer, returning the ones that failed. */
@@ -265,19 +265,40 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       ? await read()
       : undefined;
 
-  // A file that fails moves its rule on to its next `src`, which the next read reports. Each URL
-  // loads at most once, so a file the font cache releases to fit another cannot loop the reads.
+  // A file that fails moves its rule on to its next `src`, and a listed subset without a glyph its
+  // `unicodeRange` claims moves the character on to the next family, as a browser does. The next
+  // read reports either. Each URL and listed font loads at most once, so a font the font cache
+  // releases to fit another cannot loop the reads.
   const tried = new Set<string>();
+  const cached = new Set<number>();
+  const missingOf = (needs?: SourceNeeds) =>
+    fetchMissing ? unseen(needs?.fontFiles ?? [], tried) : [];
+  const uncachedOf = (needs?: SourceNeeds) =>
+    listed && resolvedFonts
+      ? unseen(needs?.fonts ?? [], cached).flatMap((id) => resolvedFonts[id] ?? [])
+      : [];
   const failedFontFiles: string[] = [];
-  let missing = fetchMissing ? missingFontFiles(reached, tried) : [];
+  let missing = missingOf(reached);
+  let uncached = uncachedOf(reached);
 
-  while (missing.length > 0) {
-    failedFontFiles.push(
-      ...(await loadFontFiles(registry, missing, { ...fetchOptions, fetchCache, signal })),
-    );
+  while (missing.length > 0 || uncached.length > 0) {
+    if (missing.length > 0) {
+      failedFontFiles.push(
+        ...(await loadFontFiles(registry, missing, { ...fetchOptions, fetchCache, signal })),
+      );
+    }
+
+    const loadedListed = await registry.cache(uncached);
+
     signal?.throwIfAborted();
+
+    if (missing.length === 0 && !loadedListed) {
+      break;
+    }
+
     reached = await needs({ ...request, images: entries, failedFontFiles });
-    missing = missingFontFiles(reached, tried);
+    missing = missingOf(reached);
+    uncached = uncachedOf(reached);
   }
 
   const loads = listed && reached?.fonts;

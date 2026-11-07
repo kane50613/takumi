@@ -115,7 +115,6 @@ describe("readSource and renderPrepared abort policy", () => {
     const controller = new AbortController();
     const font: FontLoader = {
       name: "Fam",
-      unicodeRange: [[0x41, 0x5a]],
       data: () => {
         controller.abort();
         return bytes();
@@ -244,4 +243,50 @@ test("prepare loads each @font-face file once even when the cache releases it", 
 
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(reads).toHaveBeenCalledTimes(2);
+});
+
+test("a listed subset without the glyph its unicodeRange claims loads the next family", async () => {
+  const { fonts, held } = fontBackend();
+  const subset = (name: string) => ({
+    name,
+    unicodeRange: [[0x100, 0x24f]] as [number, number][],
+    data: mock(bytes),
+  });
+  const sans = subset("Sans");
+  const serif = subset("Serif");
+  // Sans claims Ĕ but has no glyph for it, which only loading it shows.
+  const reads = mock(({ fonts: listed = [] }: { fonts?: ListedFont[] }) => ({
+    images: [],
+    fonts: listed[0] && held.has(listed[0].key) ? [0, 1] : [0],
+  }));
+  const call = mock((_source: unknown, _options: { fontFamilies?: string[] }) => undefined);
+
+  await renderPrepared(
+    fonts,
+    await readSource(fonts, textNode("Ĕ"), {}, { fonts: [sans, serif] }, reads),
+    {},
+    call,
+  );
+
+  expect(sans.data).toHaveBeenCalledTimes(1);
+  expect(serif.data).toHaveBeenCalledTimes(1);
+  expect(reads).toHaveBeenCalledTimes(3);
+  expect(call.mock.calls[0]?.[1].fontFamilies).toEqual(["Sans", "Serif"]);
+});
+
+test("a render loads listed subsets but leaves @font-face files to prepare", async () => {
+  const { fonts } = fontBackend();
+  const fetch = spyOn(globalThis, "fetch");
+  const sans = { name: "Sans", unicodeRange: [[0x41, 0x5a]] as [number, number][], data: bytes };
+  const reads = mock(() => ({
+    images: [],
+    fonts: [0],
+    fontFiles: ["https://fonts.test/a.woff2"],
+  }));
+
+  await readSource(fonts, textNode("A"), {}, { fonts: [sans] }, reads);
+
+  expect(reads).toHaveBeenCalledTimes(2);
+  expect(fetch).not.toHaveBeenCalled();
+  fetch.mockRestore();
 });
