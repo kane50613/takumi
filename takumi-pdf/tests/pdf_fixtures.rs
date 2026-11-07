@@ -3167,6 +3167,56 @@ fn paged_rounded_clip_waits_for_the_whole_box() {
   assert!(first_page.contains("75 -225 c"), "{first_page}");
 }
 
+/// Content a transform or `position: relative` moves past the last page adds the pages it reaches,
+/// as Chromium prints it, while a shadow and content its box clips add none.
+#[test]
+fn content_moved_past_the_last_page_adds_pages() {
+  fn options<'f>(html: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse the document"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 100.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .fonts(fonts)
+      .build()
+  }
+
+  let fonts = fonts();
+  let pages = |html: &str| page_count(&render(options(html, &fonts)).expect("render the document"));
+  let lead = r#"<div style="height: 60px; background: #ddd"></div>"#;
+  let transformed = format!(
+    r#"{lead}<div style="height: 30px; background: #f87171; transform: translateY(120px)"></div>"#
+  );
+
+  assert_eq!(
+    page_count(&run_pdf_fixture(
+      "paged-transform-past-the-last-page",
+      |fonts| { options(&transformed, fonts) }
+    )),
+    3
+  );
+  assert_eq!(
+    pages(&format!(
+      r#"{lead}<div style="height: 30px; background: #f87171; position: relative; top: 120px"></div>"#
+    )),
+    3
+  );
+  assert_eq!(
+    pages(&format!(
+      r#"{lead}<div style="height: 30px; background: #f87171; box-shadow: 0 150px 0 #60a5fa"></div>"#
+    )),
+    1
+  );
+  assert_eq!(
+    pages(
+      r#"<div style="height: 90px; overflow: hidden; background: #ddd"><div style="height: 30px; background: #f87171; transform: translateY(120px)"></div></div>"#
+    ),
+    1
+  );
+}
+
 /// A line taller than a page moves to the next page, as content precedes it, then runs on over the
 /// page after it, where its text and the lines after it follow.
 #[test]
