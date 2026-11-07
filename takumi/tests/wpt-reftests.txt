@@ -817,8 +817,6 @@ css/css-break/zero-height-page-break-001-print.html
 !css/css-color/inline-opacity-float-child.html
 !css/css-color/lch-009.html
 !css/css-color/lch-010.html
-!css/css-color/light-dark-currentcolor.html
-!css/css-color/light-dark-inheritance.html
 !css/css-color/oklch-009.html
 !css/css-color/oklch-010.html
 !css/css-color/relative-currentcolor-a98rgb-01.html
@@ -2908,7 +2906,6 @@ css/css-transforms/matrix/svg-matrix-069.html
 !css/css-transforms/rotate_45deg.html
 !css/css-transforms/rotate_x_45deg.html
 !css/css-transforms/rotate_y_45deg.html
-!css/css-transforms/scale-animation-with-var-001.html
 !css/css-transforms/scrollable-hidden-3d-transform-z.html
 !css/css-transforms/scrollable-scroll-3d-transform-z.html
 !css/css-transforms/transform-3d-rotateY-stair-above-001.xht
@@ -3081,6 +3078,7 @@ css/css-values/calc-offsets-relative-left-1.html
 css/css-values/calc-offsets-relative-right-1.html
 css/css-values/calc-offsets-relative-top-1.html
 css/css-values/calc-padding-block-1.html
+css/css-values/calc-positive-fraction-001.html
 css/css-values/calc-rounding-001.html
 css/css-values/calc-rounding-002.html
 css/css-values/calc-rounding-003.html
@@ -3355,6 +3353,7 @@ svg/styling/render/transform.svg
 svg/styling/stroke-color-inherit-link-visited.svg
 svg/styling/text-overflow-presentation-attribute-foreignobject.html
 svg/styling/use-element-animations.html
+svg/styling/use-element-non-rendered-has-selector.html
 svg/styling/use-element-non-rendered-sibling-selector.html
 svg/text/reftests/dominant-baseline-central-large-font-size.svg
 svg/text/reftests/dominant-baseline-text-after-edge.svg

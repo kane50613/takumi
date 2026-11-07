@@ -44,6 +44,21 @@ fn math_functions_resolve_as_chromium() {
     ("min(10%, 3em)", 40.0),
     ("clamp(10px, 1em + 10%, 200px)", 60.0),
     ("calc(50% - min(20px, 10%))", 180.0),
+    ("min(1px+ 2px, 10px)", 0.0),
+    ("min(1px +2px, 10px)", 0.0),
+    ("calc(1px*2)", 2.0),
+    ("mod(-10px, calc(infinity * 1px))", 0.0),
+    ("mod(10px, calc(infinity * 1px))", 10.0),
+    ("rem(-10px, calc(infinity * 1px))", -10.0),
+    ("calc(1px * hypot(1e20, 1e20) / 1e20)", 1.40625),
+    ("clamp(none, 50px, 30px)", 30.0),
+    ("clamp(40px, 50px, none)", 50.0),
+    ("calc(1px / cos(90deg))", 33554432.0),
+    ("min(10px, calc(NaN * 1px))", 0.0),
+    ("max(calc(NaN * 1px), 10px)", 0.0),
+    ("clamp(0px, 10px, calc(NaN * 1px))", 0.0),
+    ("calc(1px * hypot(3, NaN))", 0.0),
+    ("min(-10px, -20px)", -20.0),
   ];
   let mismatches: Vec<_> = cases
     .iter()

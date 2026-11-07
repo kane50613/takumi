@@ -36,7 +36,9 @@ pub use properties::*;
 pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
 // Selector internals stay crate-private.
 pub use math_expression::MathExpr;
-pub(crate) use math_expression::{is_math_function, parse_angle, parse_length, parse_number};
+pub(crate) use math_expression::{
+  is_math_function, parse_angle, parse_length, parse_number, parse_percentage,
+};
 pub use selector::{MediaQueryList, PropertyRule, StyleSheet};
 pub(crate) use sizing::FontUnits;
 pub use sizing::SizingContext;
