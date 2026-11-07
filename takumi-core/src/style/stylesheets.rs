@@ -896,6 +896,7 @@ macro_rules! define_style {
           style
             .custom_properties
             .enforce_syntax(&declared_custom_properties, &parent.custom_properties);
+          break_relative_unit_cycles(&mut style, &mut declarations);
 
           // Pre-resolve `direction` so logical-axis applies below see the
           // final value even if `direction:` is declared later in the block.
@@ -2424,6 +2425,131 @@ impl ImportantBits {
       }
     }
   }
+}
+
+impl ComputedStyle {
+  /// Copies each of `longhands` from `source`.
+  pub(crate) fn copy_longhands(&mut self, longhands: &PropertyMask, source: &Self) {
+    for longhand in longhands.iter() {
+      self.copy_longhand(longhand, source);
+    }
+  }
+}
+
+impl Style {
+  /// The `animation` longhands its declarations set through `var()` of one of the custom
+  /// properties `names`.
+  pub(crate) fn animation_longhands_reading(&self, names: &[&str]) -> PropertyMask {
+    const ANIMATION: [LonghandId; 8] = [
+      LonghandId::AnimationName,
+      LonghandId::AnimationDuration,
+      LonghandId::AnimationDelay,
+      LonghandId::AnimationTimingFunction,
+      LonghandId::AnimationIterationCount,
+      LonghandId::AnimationDirection,
+      LonghandId::AnimationFillMode,
+      LonghandId::AnimationPlayState,
+    ];
+
+    self
+      .declarations
+      .declarations
+      .iter()
+      .filter_map(|declaration| match declaration {
+        StyleDeclaration::Deferred(deferred) => Some(deferred),
+        StyleDeclaration::VarRef(var_ref) => Some(&var_ref.deferred),
+        _ => None,
+      })
+      .filter(|deferred| {
+        names
+          .iter()
+          .any(|name| references(&deferred.specified_value, name))
+      })
+      .flat_map(|deferred| {
+        deferred
+          .property
+          .target_longhands()
+          .iter()
+          .collect::<Vec<_>>()
+      })
+      .filter(|longhand| ANIMATION.contains(longhand))
+      .collect()
+  }
+}
+
+/// Breaks the cycles `font-size` and `line-height` make with a registered custom property whose
+/// value reads them through a font-relative unit: both are invalid at computed-value time, so the
+/// property takes its initial value and the declaration reading it drops, as Chromium breaks them.
+/// <https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles>
+fn break_relative_unit_cycles(style: &mut ComputedStyle, declarations: &mut ParsedDeclarations) {
+  const CYCLES: [(LonghandId, &[&str]); 2] = [
+    (LonghandId::FontSize, &["em", "ex", "cap", "ch", "ic", "lh"]),
+    (LonghandId::LineHeight, &["lh"]),
+  ];
+  let mut cyclic: Vec<String> = Vec::new();
+
+  declarations.retain(|declaration| {
+    let deferred = match declaration {
+      StyleDeclaration::Deferred(deferred) => deferred,
+      StyleDeclaration::VarRef(var_ref) => &var_ref.deferred,
+      _ => return true,
+    };
+    let longhands = deferred.property.target_longhands();
+    let before = cyclic.len();
+
+    for (longhand, units) in CYCLES {
+      if !longhands.contains(&longhand) {
+        continue;
+      }
+      for (name, value) in style.custom_properties.typed_values() {
+        if references(&deferred.specified_value, name) && has_unit(value, units) {
+          cyclic.push(name.to_owned());
+        }
+      }
+    }
+    cyclic.len() == before
+  });
+  for name in cyclic {
+    style.custom_properties.reset_to_initial(&name);
+  }
+}
+
+/// Whether `value` holds a dimension in one of `units`, at any depth.
+fn has_unit(value: &str, units: &[&str]) -> bool {
+  fn walk(input: &mut Parser<'_>, units: &[&str]) -> bool {
+    while let Ok(token) = input.next() {
+      match token {
+        Token::Dimension { unit, .. }
+          if units.iter().any(|known| unit.eq_ignore_ascii_case(known)) =>
+        {
+          return true;
+        }
+        Token::Function(_) | Token::ParenthesisBlock => {
+          let nested = input
+            .parse_nested_block(|input| Ok::<_, cssparser::ParseError<()>>(walk(input, units)))
+            .unwrap_or(false);
+
+          if nested {
+            return true;
+          }
+        }
+        _ => {}
+      }
+    }
+    false
+  }
+
+  walk(&mut Parser::new(value), units)
+}
+
+/// Whether `value` names the custom property `name`, not merely one it begins.
+fn references(value: &str, name: &str) -> bool {
+  value.match_indices(name).any(|(at, _)| {
+    value[at + name.len()..]
+      .chars()
+      .next()
+      .is_none_or(|next| !(next.is_alphanumeric() || next == '-' || next == '_'))
+  })
 }
 
 /// Ordered specified declarations plus the set of important properties.

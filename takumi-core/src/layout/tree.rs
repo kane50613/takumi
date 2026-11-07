@@ -3084,13 +3084,7 @@ impl RenderContext {
     &self,
     pseudo_matched: &MatchedDeclarationsView<'_>,
   ) -> (ComputedStyle, SizingContext, Color) {
-    let (style_layers, _) = self.cascade(NodeStyleLayers::default(), pseudo_matched);
-    let mut style = style_layers.inherit(&self.inherited_style());
-    let sizing = self.child_sizing(&style, &self.sizing, false);
-    let current_color = style.inherited_data.color.resolve(self.current_color);
-
-    style.make_computed(&sizing);
-    (style, sizing, current_color)
+    self.resolve_uncached_child_style(NodeStyleLayers::default(), pseudo_matched, false)
   }
 
   /// Resolves a child's style and sizing from its matched declarations, sharing the style a box
@@ -3204,12 +3198,20 @@ impl RenderContext {
         })
       });
       if !animated.is_empty() {
-        style = animated
+        // An animated custom property is animation-tainted, so an animation property that reads
+        // it keeps the value from before the animation, as Chromium keeps it.
+        // <https://drafts.csswg.org/css-variables-1/#animation-tainted>
+        let names: Vec<&str> = animated.iter().map(|(name, _)| name.as_str()).collect();
+        let tainted = style_layers.animation_longhands_reading(&names);
+        let mut animated_style = animated
           .into_iter()
           .fold(style_layers, |layers, (name, value)| {
             layers.with(StyleDeclaration::CustomProperty(name, value))
           })
           .inherit_with_lang(&inherited_parent, lang);
+
+        animated_style.copy_longhands(&tainted, &style);
+        style = animated_style;
       }
     }
     if !style.misc1_data.animation_name.is_empty() {

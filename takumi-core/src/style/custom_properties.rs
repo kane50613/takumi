@@ -169,6 +169,26 @@ impl CustomProperties {
     }
   }
 
+  /// Each property a typed syntax registers, with its value.
+  pub(crate) fn typed_values(&self) -> impl Iterator<Item = (&str, &str)> {
+    self
+      .registrations
+      .values()
+      .filter(|rule| rule.syntax != PropertySyntax::Universal)
+      .filter_map(|rule| Some((rule.name.as_str(), self.get(&rule.name)?)))
+  }
+
+  /// Sets the registered `name` to its initial value.
+  pub(crate) fn reset_to_initial(&mut self, name: &str) {
+    match self
+      .registration(name)
+      .and_then(|rule| rule.initial_value.clone())
+    {
+      Some(value) => self.set(name.to_owned(), value),
+      None => self.remove(name),
+    }
+  }
+
   /// Records state a utility engine wrote for this element alone, as Tailwind's `@property` does.
   pub(crate) fn register_element_state(&mut self, name: &str) {
     if self.registration(name).is_some() {

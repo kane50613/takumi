@@ -747,3 +747,48 @@ fn a_registered_custom_property_cascades_as_chromium_does() {
     100.0
   );
 }
+
+/// An animation property that reads an animated custom property keeps its value from before the
+/// animation, as Chromium keeps it: `g` runs over the declared 1s, not the 2s `a` animates `--d` to.
+#[test]
+fn an_animated_custom_property_leaves_the_animation_properties_alone() {
+  let measured = measure_with_css(
+    Node::container([styled_block(
+      "box",
+      serde_json::json!({ "display": "block", "height": "1px" }),
+    )]),
+    "@keyframes g { from { width: 0px } to { width: 400px } }
+     @keyframes a { from { --d: 2s } to { --d: 2s } }
+     .box { --d: 1s; animation-name: g, a; animation-duration: var(--d), 1s;
+       animation-timing-function: linear; animation-delay: -500ms }",
+  );
+
+  assert_eq!(measured.children[0].width, 200.0);
+}
+
+/// A registered length in a font-relative unit that `font-size` reads makes a cycle, which leaves
+/// the property at its initial value and `font-size` inherited, as Chromium breaks it.
+#[test]
+fn font_size_breaks_a_cycle_with_a_font_relative_registered_length() {
+  let size = |declarations: &str| {
+    let css = format!(
+      "@property --x {{ syntax: '<length>'; inherits: false; initial-value: 0px }}
+       .p {{ font-size: 10px }}
+       .box {{ --x: 2em; width: var(--x); height: 1em; {declarations} }}"
+    );
+    let measured = measure_with_css(
+      Node::container([styled_block(
+        "box",
+        serde_json::json!({ "display": "block" }),
+      )])
+      .with_class_name("p"),
+      &css,
+    );
+
+    (measured.children[0].width, measured.children[0].height)
+  };
+
+  assert_eq!(size("font-size: var(--x)"), (0.0, 10.0));
+  assert_eq!(size("font-size: calc(var(--x) + 1px)"), (0.0, 10.0));
+  assert_eq!(size("font-size: 30px"), (60.0, 30.0));
+}
