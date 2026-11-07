@@ -172,7 +172,7 @@ use takumi_core::{
   geometry::Point as CorePoint,
   layout::{needs::RenderNeeds, tree::RenderNode},
   page_stream::{SETTLED_PAGES, Settle},
-  style::{Color, Lang},
+  style::{Color, Lang, page_rule::PageContext},
   viewport::MediaTarget,
 };
 
@@ -223,7 +223,16 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     lang: options.lang,
   };
   let tree = match (options.page, options.viewport) {
-    (Some(page), _) => inputs.prepare_band(&options.node, 999, 999, band_viewport(&page))?,
+    (Some(page), _) => inputs.prepare_band(
+      &options.node,
+      999,
+      999,
+      band_viewport(
+        page
+          .with_page_rules(&inputs.stylesheet, &PageContext::default())
+          .get(0),
+      ),
+    )?,
     (None, Some(viewport)) => {
       inputs.prepare(options.node, viewport.with_media_target(MediaTarget::Print))?
     }
@@ -249,7 +258,11 @@ pub fn needs(options: MeasureOptions<'_>) -> Result<RenderNeeds, PdfError> {
     lang: options.lang,
   };
   let viewport = match (options.page, options.viewport) {
-    (Some(page), _) => band_viewport(&page),
+    (Some(page), _) => band_viewport(
+      page
+        .with_page_rules(&inputs.stylesheet, &PageContext::default())
+        .get(0),
+    ),
     (None, Some(viewport)) => viewport.with_media_target(MediaTarget::Print),
     (None, None) => return Err(PdfError::MissingViewport),
   };

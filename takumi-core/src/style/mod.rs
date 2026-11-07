@@ -8,6 +8,7 @@ pub(crate) mod font_face_rule;
 mod matched_style_cache;
 pub mod math;
 mod media_query;
+pub mod page_rule;
 pub(crate) mod properties;
 mod raw_declaration;
 pub(crate) mod selector;

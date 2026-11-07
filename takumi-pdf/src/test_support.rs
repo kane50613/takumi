@@ -1,8 +1,10 @@
-//! Fonts and fixtures the unit tests share.
+//! Fonts, fixtures, and page values the unit tests share.
 
 use std::{fs, path::Path};
 
-use takumi_core::{Fonts, resources::font::FontResource};
+use takumi_core::{Fonts, resources::font::FontResource, style::Direction};
+
+use crate::page_kinds::PerPage;
 
 pub(crate) fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -27,4 +29,9 @@ pub(crate) fn fixture(name: &str) -> String {
       .join(name),
   )
   .expect("read html fixture")
+}
+
+/// `value` for every page.
+pub(crate) fn uniform_pages<T: Clone>(value: T) -> PerPage<T> {
+  PerPage::new(Direction::Ltr, value.clone(), value.clone(), value)
 }

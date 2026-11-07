@@ -1,39 +1,38 @@
 //! A value for each kind of page Blink's `PageRuleCollector` tells apart: the first page, the left
-//! pages, and the right pages. Approximate: the pages progress left to right whatever the root's
-//! `direction`, where Blink makes the first page a left page under `direction: rtl`.
+//! pages, and the right pages.
 
 use std::{convert::Infallible, rc::Rc};
+
+use takumi_core::style::{Direction, page_rule::PageKind};
 
 /// A value for the first page, one for the left pages, and one for the right pages after it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct PerPage<T> {
+  /// The root's `direction`, which decides which pages are left pages.
+  direction: Direction,
   first: T,
   left: T,
   right: T,
 }
 
-impl<T: Clone> PerPage<T> {
-  /// `value` for every page.
-  pub(crate) fn uniform(value: T) -> Self {
-    Self::new(value.clone(), value.clone(), value)
-  }
-}
-
 impl<T> PerPage<T> {
-  /// `first` for the first page, and `left` and `right` for the left and right pages after it.
-  pub(crate) fn new(first: T, left: T, right: T) -> Self {
-    Self { first, left, right }
+  /// `first` for the first page, and `left` and `right` for the left and right pages after it,
+  /// in a document whose root has `direction`.
+  pub(crate) fn new(direction: Direction, first: T, left: T, right: T) -> Self {
+    Self {
+      direction,
+      first,
+      left,
+      right,
+    }
   }
 
-  /// The value of page `page`, counted from 0. Page 1 is the first left page, as Blink's
-  /// `PageRuleCollector::IsLeftPage` says.
+  /// The value of page `page`, counted from 0.
   pub(crate) fn get(&self, page: usize) -> &T {
-    if page == 0 {
-      &self.first
-    } else if page % 2 == 1 {
-      &self.left
-    } else {
-      &self.right
+    match PageKind::of(page, self.direction) {
+      PageKind::First => &self.first,
+      PageKind::Left => &self.left,
+      PageKind::Right => &self.right,
     }
   }
 
@@ -44,7 +43,12 @@ impl<T> PerPage<T> {
 
   /// Each value mapped through `map`.
   pub(crate) fn map<U>(&self, mut map: impl FnMut(&T) -> U) -> PerPage<U> {
-    PerPage::new(map(&self.first), map(&self.left), map(&self.right))
+    PerPage::new(
+      self.direction,
+      map(&self.first),
+      map(&self.left),
+      map(&self.right),
+    )
   }
 
   /// Each value mapped through `map` with the value of `other` for the same pages, or the first
@@ -55,6 +59,7 @@ impl<T> PerPage<T> {
     mut map: impl FnMut(&T, &U) -> Result<V, E>,
   ) -> Result<PerPage<V>, E> {
     Ok(PerPage::new(
+      self.direction,
       map(&self.first, &other.first)?,
       map(&self.left, &other.left)?,
       map(&self.right, &other.right)?,
@@ -94,6 +99,7 @@ impl<T> PerPage<T> {
     };
 
     Ok(PerPage::new(
+      self.direction,
       share(&self.first)?,
       share(&self.left)?,
       share(&self.right)?,
@@ -105,22 +111,32 @@ impl<T> PerPage<T> {
 mod tests {
   use std::rc::Rc;
 
+  use takumi_core::style::Direction;
+
   use super::PerPage;
 
   #[test]
   fn pages_after_the_first_alternate_left_and_right() {
-    let pages = PerPage::new("first", "left", "right");
+    let pages = |direction| {
+      let pages = PerPage::new(direction, "first", "left", "right");
+
+      (0..5).map(|page| *pages.get(page)).collect::<Vec<_>>()
+    };
 
     assert_eq!(
-      (0..5).map(|page| *pages.get(page)).collect::<Vec<_>>(),
+      pages(Direction::Ltr),
       ["first", "left", "right", "left", "right"]
+    );
+    assert_eq!(
+      pages(Direction::Rtl),
+      ["first", "right", "left", "right", "left"]
     );
   }
 
   #[test]
   fn values_with_one_key_share_one_mapping() {
     let mut calls = 0;
-    let shared = PerPage::new(10, 20, 10)
+    let shared = PerPage::new(Direction::Ltr, 10, 20, 10)
       .try_map_shared(
         |value| *value,
         |value| {

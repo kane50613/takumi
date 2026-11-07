@@ -344,14 +344,17 @@ impl Paginated {
 mod tests {
   use std::rc::Rc;
 
-  use takumi_core::html::{FromHtmlOptions, from_html};
   use takumi_core::scene::PagedScene;
+  use takumi_core::{
+    html::{FromHtmlOptions, from_html},
+    style::Direction,
+  };
 
   use super::*;
   use crate::{
     options::{PageMargins, PageOptions},
     page::{PageFrame, PageFrames},
-    test_support::{fixture, fonts},
+    test_support::{fixture, fonts, uniform_pages},
   };
 
   /// Documents with the targets a summary reads in the places a page's root fragment shares with
@@ -482,9 +485,8 @@ mod tests {
           height,
           margin: PageMargins::uniform(12.0),
         };
-        let frames = PageFrames::uniform(
-          PageFrame::resolve(&page, (None, None)).expect("the page has an area"),
-        );
+        let frames =
+          uniform_pages(PageFrame::resolve(&page, (None, None)).expect("the page has an area"));
         let paginated = Paginated::lay_out(node.clone(), &inputs, &frames)
           .unwrap_or_else(|_| panic!("{name} lays out on {width}x{height}"));
         let summary = paginated.summarize(true).expect("the pages summarize");
@@ -533,7 +535,7 @@ mod tests {
       )
       .expect("the page has an area")
     };
-    let frames = PageFrames::new(frame(220.0), frame(140.0), frame(180.0));
+    let frames = PageFrames::new(Direction::Ltr, frame(220.0), frame(140.0), frame(180.0));
     let source = (1..=40)
       .map(|line| format!(r#"<div id="line-{line}" style="height: 20px">Line {line}</div>"#))
       .collect::<String>();

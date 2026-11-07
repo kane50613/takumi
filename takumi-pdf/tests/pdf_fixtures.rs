@@ -9,6 +9,7 @@ use std::{
   collections::{HashMap, HashSet},
   fs,
   io::Read,
+  iter,
   path::Path,
   sync::Arc,
 };
@@ -4224,6 +4225,47 @@ fn a_float_breaks_only_when_it_does_not_fit_its_page() {
   assert_eq!(float_heights(120), [75.0, 45.0]);
 }
 
+/// `@page` reads the root element, as Blink's `StyleForPage` inherits its style: under
+/// `direction: rtl` the first page is a left page, and `em` and `var()` take the root's font size
+/// and custom properties.
+#[test]
+fn at_page_rules_read_the_root_element() {
+  const CSS: &str = "
+    html { direction: rtl; font-size: 20px; --inner: 3em }
+    @page { size: A5; margin: 1em }
+    @page :left { margin-left: var(--inner) }
+    @page :right { margin-right: var(--inner) }
+    p { margin: 0 0 6px; font-size: 11px; line-height: 15px }
+  ";
+  let paragraphs: String = (1..=90)
+    .map(|index| format!("<p>Paragraph {index} wraps across the width each page leaves it.</p>"))
+    .collect();
+  let html = format!("<html><body>{paragraphs}</body></html>");
+  let pdf = run_pdf_fixture("at-page-root-element", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse the document"))
+      .stylesheet(Arc::new(StyleSheet::parse(CSS).expect("parse @page")))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(page_clip_lefts(&pdf)[..3], [60.0, 20.0, 60.0]);
+}
+
+/// The left edge of the page area's clip, the first rectangle on each page, in CSS pixels.
+fn page_clip_lefts(pdf: &[u8]) -> Vec<f32> {
+  content_streams(pdf)
+    .iter()
+    .filter_map(|stream| {
+      stream
+        .split(|byte| *byte == b'\n')
+        .find_map(|line| operands(line, "re"))
+        .and_then(|operands| operands.first().map(|points| points * 96.0 / 72.0))
+    })
+    .collect()
+}
+
 /// The height of the first rectangle inside the page clip on each page that draws one, in CSS
 /// pixels.
 fn page_fill_heights(pdf: &[u8]) -> Vec<f32> {
@@ -6822,4 +6864,74 @@ fn stream_relative_body_with_bottom_child() {
   });
 
   assert!(page_count(&pdf) >= 3);
+}
+
+/// Each page's `/MediaBox` width and height in pt, in page order.
+fn media_boxes(pdf: &[u8]) -> Vec<(f32, f32)> {
+  String::from_utf8_lossy(pdf)
+    .split("/MediaBox[0 0 ")
+    .skip(1)
+    .map(|rest| {
+      let mut numbers = rest
+        .split([' ', ']'])
+        .map(|number| number.parse::<f32>().expect("a MediaBox number"));
+
+      (
+        numbers.next().expect("a width"),
+        numbers.next().expect("a height"),
+      )
+    })
+    .collect()
+}
+
+/// `@page` sizes and margins the pages as Blink's `StyleForPage` does: the first page by its
+/// `:first` rule, then the left and right pages by theirs. Each page lays its content and its
+/// repeated `fixed` box out at its own page area, and its footer band at its own width.
+#[test]
+fn at_page_rules_size_and_margin_the_first_left_and_right_pages() {
+  const CSS: &str = "
+    @page { size: A5; margin: 10mm }
+    @page :first { size: A5 landscape; margin-top: 20mm }
+    @page :left { margin-left: 25mm }
+    @page :right { margin-right: 25mm }
+    p { margin: 0 0 6px; font-size: 11px; line-height: 15px }
+    .rule { position: fixed; top: 0; left: 0; right: 0; height: 2px; background: #2f6fde }
+  ";
+  let paragraphs: String = iter::once(r#"<div class="rule"></div>"#.to_owned())
+    .chain((1..=75)
+    .map(|index| {
+      format!(
+        "<p>Paragraph {index} runs long enough to wrap, so the width of each page decides where its lines break.</p>"
+      )
+    }))
+    .collect();
+  let pdf = run_pdf_fixture("at-page-first-left-right", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&paragraphs, FromHtmlOptions::default()).expect("parse the paragraphs"))
+      .stylesheet(Arc::new(StyleSheet::parse(CSS).expect("parse @page")))
+      .page(PageOptions::A4)
+      .footer(
+        from_html(
+          r#"<div style="text-align: center; font-size: 10px; color: #141414; border-top: 1px solid #b4b4b4">
+            Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+          </div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the footer"),
+      )
+      .fonts(fonts)
+      .build()
+  });
+  let boxes = media_boxes(&pdf);
+  let a5 = (148.0 * 72.0 / 25.4, 210.0 * 72.0 / 25.4);
+
+  assert!(boxes.len() >= 4, "{boxes:?}");
+  for (page, &(width, height)) in boxes.iter().enumerate() {
+    let expected = if page == 0 { (a5.1, a5.0) } else { a5 };
+
+    assert!(
+      (width - expected.0).abs() < 0.5 && (height - expected.1).abs() < 0.5,
+      "page {page} is {width}x{height}, not {expected:?}"
+    );
+  }
 }

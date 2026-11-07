@@ -55,7 +55,7 @@ use crate::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Direction, Display, Float, FontUnits, LineHeight, MatchedStyleKey, Position, Registrations,
     SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
-    WhiteSpaceCollapse, apply_stylesheet_animations,
+    WhiteSpaceCollapse, apply_stylesheet_animations, page_rule::PageContext,
   },
   viewport::Viewport,
 };
@@ -3274,9 +3274,84 @@ impl RenderContext {
   }
 }
 
+impl PageContext {
+  /// The page context `root` gives as the root element under `parent_context`, as Blink's
+  /// `StyleForPage` inherits the root's style. Without an `@page` rule to read it, the root is
+  /// not styled and the context is the initial one.
+  pub fn from_root(parent_context: &RenderContext, root: &Node) -> Self {
+    let Some(matched) = Self::matched(parent_context, root) else {
+      return Self::default();
+    };
+
+    Self::of_root(parent_context, root, 0, &matched)
+  }
+
+  /// [`Self::from_root`] for the first root element `initial_containing_block` holds, or the
+  /// initial page context when it holds none.
+  pub fn from_initial_containing_block(
+    parent_context: &RenderContext,
+    initial_containing_block: &Node,
+  ) -> Self {
+    let Some(matched) = Self::matched(parent_context, initial_containing_block) else {
+      return Self::default();
+    };
+    let (style, sizing, current_color) = parent_context.resolve_child_style(
+      &mut initial_containing_block.without_children(),
+      0,
+      &matched,
+    );
+    let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
+    let mut source_order = 1;
+
+    for root in initial_containing_block.children().unwrap_or_default() {
+      if !matches!(root.kind, NodeKind::Text(_)) {
+        return Self::of_root(&context, root, source_order, &matched);
+      }
+
+      source_order += root.subtree_len();
+    }
+
+    Self::default()
+  }
+
+  /// The declarations the stylesheet of `parent_context` matches in `tree`, or `None` when it has
+  /// no `@page` rule to read a page context.
+  fn matched<'s>(
+    parent_context: &'s RenderContext,
+    tree: &Node,
+  ) -> Option<Vec<NodeMatchedDeclarations<'s>>> {
+    let stylesheet = parent_context.stylesheet();
+
+    (!stylesheet.page_rules.is_empty())
+      .then(|| match_stylesheets_view(tree, &[stylesheet], parent_context.sizing.viewport))
+  }
+
+  /// The page context of `root`, the node at `source_order` in `matched`. A `display: none` root
+  /// gives the initial one, as Blink's `StyleForPage` does.
+  fn of_root(
+    context: &RenderContext,
+    root: &Node,
+    source_order: usize,
+    matched: &[NodeMatchedDeclarations<'_>],
+  ) -> Self {
+    let (style, sizing, _) =
+      context.resolve_child_style(&mut root.without_children(), source_order, matched);
+
+    if style.base_data.display == Display::None {
+      return Self::default();
+    }
+
+    Self::new(
+      style.inherited_data.direction,
+      sizing,
+      style.custom_properties.inherited(),
+    )
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use std::str::FromStr;
+  use std::{str::FromStr, sync::Arc};
 
   use super::{
     NodeId, NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
@@ -3284,10 +3359,12 @@ mod tests {
   };
   use crate::{
     context::RenderContext,
+    layout::node::Node,
     resources::font::Fonts,
     style::{
-      ComputedStyle, Length, PropertyRule, SizingContext, Style, StyleDeclaration,
+      ComputedStyle, Direction, Length, PropertyRule, SizingContext, Style, StyleDeclaration,
       StyleDeclarationBlock, StyleSheet,
+      page_rule::{PageContext, PageKind},
     },
     viewport::Viewport,
   };
@@ -3296,6 +3373,57 @@ mod tests {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
     result.unwrap_or_default()
+  }
+
+  #[test]
+  fn a_page_context_inherits_the_first_root_element() {
+    let page = |css: &str| {
+      let stylesheet = Arc::new(parse_stylesheet(css));
+      let context = RenderContext::builder()
+        .fonts(Fonts::default().snapshot())
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::default())
+            .build(),
+        )
+        .stylesheet(Arc::clone(&stylesheet))
+        .build();
+      let roots = Node::container([
+        Node::text(" "),
+        Node::container([Node::container([])]).with_class_name("root"),
+        Node::container([]).with_class_name("later"),
+      ]);
+      let page = PageContext::from_initial_containing_block(&context, &roots);
+      let margin = stylesheet
+        .page_descriptors(Viewport::default(), PageKind::First, &page)
+        .margin
+        .top;
+
+      (
+        page.direction(),
+        page.sizing(Viewport::default()).font_size,
+        margin,
+      )
+    };
+    let rules = "@page { margin: var(--m, 1px) } .later { direction: rtl; --m: 9px }";
+
+    assert_eq!(
+      page(&format!(
+        "{rules} .root {{ direction: rtl; font-size: 20px; --m: 3px }}"
+      )),
+      (Direction::Rtl, 20.0, Some(Length::Px(3.0)))
+    );
+    assert_eq!(
+      page(&format!(
+        "{rules} .root {{ display: none; direction: rtl; font-size: 20px }}"
+      )),
+      (Direction::Ltr, 16.0, Some(Length::Px(1.0)))
+    );
+    assert_eq!(
+      page(".root { direction: rtl }").0,
+      Direction::Ltr,
+      "without an @page rule the root is not styled"
+    );
   }
 
   #[test]

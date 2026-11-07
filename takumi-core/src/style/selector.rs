@@ -16,6 +16,8 @@ use selectors::parser::{
 #[cfg(feature = "font-face")]
 use crate::style::font_face_rule::FontFaceRule;
 pub use crate::style::media_query::MediaQueryList;
+use crate::style::page_rule::{PageContext, PageDescriptors, PageKind, PageRule, PageSelector};
+use crate::viewport::Viewport;
 use crate::{
   Xxh3HashSet,
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
@@ -355,6 +357,7 @@ struct StyleSheetFragment {
   property_rules: Vec<PropertyRule>,
   #[cfg(feature = "font-face")]
   font_faces: Vec<FontFaceRule>,
+  page_rules: Vec<PageRule>,
   declared_layers: Vec<LayerPath>,
   preflight: bool,
 }
@@ -366,6 +369,7 @@ impl StyleSheetFragment {
     self.property_rules.extend(other.property_rules);
     #[cfg(feature = "font-face")]
     self.font_faces.extend(other.font_faces);
+    self.page_rules.extend(other.page_rules);
     self.declared_layers.extend(other.declared_layers);
     self.preflight |= other.preflight;
   }
@@ -704,6 +708,7 @@ enum AtRulePrelude {
   Property(String),
   #[cfg(feature = "font-face")]
   FontFace,
+  Page(PageSelector),
   Supports(bool),
   /// Tailwind's `@theme`, read as the `:root` rule it compiles to, whatever its modifiers.
   Theme,
@@ -1029,6 +1034,7 @@ impl NestingContext<'_> {
       )),
       AtRulePrelude::Keyframes(_)
       | AtRulePrelude::Property(_)
+      | AtRulePrelude::Page(_)
       | AtRulePrelude::TailwindImport { .. }
       | AtRulePrelude::Apply(_) => Err(ParseError::custom(
         StyleSheetParseErrorKind::UnsupportedNestedAtRule,
@@ -1131,6 +1137,13 @@ fn parse_at_rule_prelude<'i>(
     input.expect_exhausted()?;
 
     return Ok(AtRulePrelude::FontFace);
+  }
+
+  // Blink's `ConsumePageRule` drops a rule whose selector `ParsePageSelector` rejects.
+  if name.eq_ignore_ascii_case("page")
+    && let Ok(selector) = input.try_parse(|input| PageSelector::parse(input).ok_or(()))
+  {
+    return Ok(AtRulePrelude::Page(selector));
   }
 
   if name.eq_ignore_ascii_case("property") {
@@ -1274,6 +1287,9 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         for font_face in &mut fragment.font_faces {
           font_face.media_queries.push(media_query.clone());
         }
+        for page_rule in &mut fragment.page_rules {
+          page_rule.media_queries.push(media_query.clone());
+        }
 
         Ok(fragment)
       }
@@ -1294,6 +1310,13 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           })
           .into_iter()
           .collect(),
+        ..StyleSheetFragment::default()
+      }),
+      AtRulePrelude::Page(selector) => Ok(StyleSheetFragment {
+        page_rules: vec![PageRule {
+          layer: self.current_layer.clone(),
+          ..PageRule::parse(selector, input)
+        }],
         ..StyleSheetFragment::default()
       }),
     }
@@ -1339,6 +1362,8 @@ pub struct StyleSheet {
   /// `@font-face` rules that make a face, in source order.
   #[cfg(feature = "font-face")]
   pub(crate) font_faces: Vec<FontFaceRule>,
+  /// `@page` rules, in source order.
+  pub(crate) page_rules: Vec<PageRule>,
   /// Number of distinct cascade layers.
   pub(crate) layer_count: usize,
   /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
@@ -1492,6 +1517,17 @@ impl StyleSheet {
     &self.font_faces
   }
 
+  /// The `@page` descriptors that win for a `kind` page in `context`, with `@media` read at
+  /// `viewport`.
+  pub fn page_descriptors(
+    &self,
+    viewport: Viewport,
+    kind: PageKind,
+    context: &PageContext,
+  ) -> PageDescriptors {
+    PageRule::cascade(&self.page_rules, self.layer_count, viewport, kind, context)
+  }
+
   /// Extends the stylesheet with keyframes.
   pub fn extend_keyframes(&mut self, keyframes: Vec<KeyframesRule>) {
     self.keyframes.extend(keyframes);
@@ -1570,6 +1606,7 @@ impl StyleSheet {
       property_rules,
       #[cfg(feature = "font-face")]
       mut font_faces,
+      mut page_rules,
       mut declared_layers,
       preflight,
     } = fragment;
@@ -1591,6 +1628,7 @@ impl StyleSheet {
     let used_layers = rules.iter().filter_map(|rule| rule.layer.clone());
     #[cfg(feature = "font-face")]
     let used_layers = used_layers.chain(font_faces.iter().filter_map(|rule| rule.layer.clone()));
+    let used_layers = used_layers.chain(page_rules.iter().filter_map(|rule| rule.layer.clone()));
 
     for layer_name in declared_layers.into_iter().chain(used_layers) {
       let next_order = layer_order.len();
@@ -1612,6 +1650,13 @@ impl StyleSheet {
         .and_then(|layer_name| layer_order.get(layer_name).copied());
     }
 
+    for page_rule in &mut page_rules {
+      page_rule.layer_order = page_rule
+        .layer
+        .as_ref()
+        .and_then(|layer_name| layer_order.get(layer_name).copied());
+    }
+
     rules.retain(|rule| {
       !rule.normal_declarations.declarations.is_empty()
         || !rule.important_declarations.declarations.is_empty()
@@ -1625,6 +1670,7 @@ impl StyleSheet {
       property_rules,
       #[cfg(feature = "font-face")]
       font_faces,
+      page_rules,
       layer_count: layer_order.len(),
     })
   }

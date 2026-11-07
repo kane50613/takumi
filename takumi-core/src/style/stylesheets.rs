@@ -39,7 +39,11 @@ use self::{
   stylesheets_helpers::*,
   stylesheets_vars::{apply_deferred_declaration, resolve_custom_properties},
 };
-pub(crate) use self::{stylesheets_mask::PropertyMask, stylesheets_values::ParsedValues};
+pub(crate) use self::{
+  stylesheets_mask::PropertyMask,
+  stylesheets_values::ParsedValues,
+  stylesheets_vars::{contains_var_references, resolve_var_references},
+};
 
 /// Whether a longhand declared `where inherit = true` inherits.
 macro_rules! longhand_inherits {

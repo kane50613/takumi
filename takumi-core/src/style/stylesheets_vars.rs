@@ -399,7 +399,7 @@ pub(crate) fn resolve_custom_properties(
   Some(resolved)
 }
 
-fn contains_var_references(value: &str) -> bool {
+pub(crate) fn contains_var_references(value: &str) -> bool {
   // A reference spells `var(`, or escapes it, so text with neither skips tokenizing.
   let bytes = value.as_bytes();
 

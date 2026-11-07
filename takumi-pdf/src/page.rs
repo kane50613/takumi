@@ -12,7 +12,7 @@ use takumi_core::{
   },
   page_stream::Settle,
   scene::{SceneRef, SceneView},
-  style::Color,
+  style::{Color, page_rule::PageContext},
   viewport::{MediaTarget, Viewport},
 };
 
@@ -256,7 +256,9 @@ impl PageDrawing<'_, '_> {
     settle: Settle<'_>,
   ) -> Result<PagePlan, PdfError> {
     let selection = PageSelection::new(bands.page_ranges)?;
-    let pages = PerPage::uniform(page);
+    let root =
+      PageContext::from_initial_containing_block(&self.inputs.context(page.viewport()), &node);
+    let pages = page.with_page_rules(&self.inputs.stylesheet, &root);
     let (solved, content) = Self::solve(self.inputs, &pages, &bands, node, settle)?;
 
     match content {

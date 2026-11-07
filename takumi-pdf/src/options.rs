@@ -17,17 +17,23 @@ use takumi_core::{
     font::FontError,
     image::{ImageSource, ResourceCache},
   },
-  style::{Color, FontFamily, Lang, StyleSheet},
+  style::{
+    Color, FontFamily, Lang, Length, SizingContext, StyleSheet,
+    page_rule::{PageContext, PageKind, PageSize},
+  },
   units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
-  viewport::Viewport,
+  viewport::{MediaTarget, Viewport},
 };
 use typed_builder::TypedBuilder;
 
-use crate::krilla::{
-  configure::{Accessibility, Archival},
-  embed::{AssociationKind, EmbeddedFile, MimeType},
-  error::KrillaError,
-  metadata::{DateTime, Metadata},
+use crate::{
+  krilla::{
+    configure::{Accessibility, Archival},
+    embed::{AssociationKind, EmbeddedFile, MimeType},
+    error::KrillaError,
+    metadata::{DateTime, Metadata},
+  },
+  page_kinds::PerPage,
 };
 
 /// Errors from [`crate::render`].
@@ -870,6 +876,30 @@ impl PageMargins {
     matches!(self.top, PageMargin::Auto) || matches!(self.bottom, PageMargin::Auto)
   }
 
+  /// These margins with each side an `@page` rule sets replaced, its lengths resolving against
+  /// `sizing`. A percentage takes `page`'s size on its own axis, as Blink's
+  /// `SetUpSpaceBuilderForPageBox` resolves a page box's margins, and `auto` is zero, as Blink's
+  /// `ResolveAutoMargins` gives a page box without a `width` or `height`.
+  fn overlaid(
+    self,
+    sides: Rect<Option<Length>>,
+    page: &PageOptions,
+    sizing: &SizingContext,
+  ) -> Self {
+    let side = |current: PageMargin, length: Option<Length>, basis: f32| match length {
+      None => current,
+      Some(Length::Auto) => PageMargin::Px(0.0),
+      Some(length) => PageMargin::Px(length.to_px(sizing, basis)),
+    };
+
+    Self {
+      top: side(self.top, sides.top, page.height),
+      right: side(self.right, sides.right, page.width),
+      bottom: side(self.bottom, sides.bottom, page.height),
+      left: side(self.left, sides.left, page.width),
+    }
+  }
+
   /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.
   pub(crate) fn resolve(
     self,
@@ -983,6 +1013,62 @@ impl PageOptions {
       height: self.height - margin.vertical(),
     }
   }
+
+  /// Each page with the `@page` rules of `stylesheet` that match it in `context` laid over it,
+  /// as Blink's `StyleForPage` styles a page, CSS winning as Chromium's `preferCSSPageSize` lets
+  /// it. Lengths resolve with this page as the viewport, as Blink's
+  /// `ViewportSizeChangeScopeForPrinting` sizes it to the default page box.
+  pub(crate) fn with_page_rules(
+    self,
+    stylesheet: &StyleSheet,
+    context: &PageContext,
+  ) -> PerPage<Self> {
+    let viewport = self.viewport();
+    let sizing = context.sizing(viewport);
+    let page = |kind| {
+      let descriptors = stylesheet.page_descriptors(viewport, kind, context);
+      let sized = descriptors
+        .size
+        .map_or(self, |size| self.sized(size, &sizing));
+      let page = Self {
+        margin: sized.margin.overlaid(descriptors.margin, &sized, &sizing),
+        ..sized
+      };
+
+      // Blink's `LayoutPageContainer` ignores the author's page style when it leaves no page area.
+      if page.has_area() { page } else { self }
+    };
+
+    PerPage::new(
+      context.direction(),
+      page(PageKind::First),
+      page(PageKind::Left),
+      page(PageKind::Right),
+    )
+  }
+
+  /// Whether the margins leave at least a pixel of page area on each axis, before any band.
+  fn has_area(&self) -> bool {
+    let area = self.content_size(self.margin.resolve(self.size(), None, None));
+
+    area.width >= 1.0 && area.height >= 1.0
+  }
+
+  /// The page at a `size` value, its lengths resolving against `sizing`.
+  fn sized(self, size: PageSize, sizing: &SizingContext) -> Self {
+    let Size { width, height } = size.resolve(self.size(), sizing);
+
+    Self {
+      width,
+      height,
+      ..self
+    }
+  }
+
+  /// The page as the viewport an `@page` rule's `@media` and lengths resolve against.
+  pub(crate) fn viewport(&self) -> Viewport {
+    Viewport::new((self.width as u32, self.height as u32)).with_media_target(MediaTarget::Print)
+  }
 }
 
 /// Inputs for [`crate::measure`], built with [`MeasureOptions::builder`].
@@ -1028,7 +1114,96 @@ pub struct MeasuredSize {
 
 #[cfg(test)]
 mod tests {
-  use super::{PdfError, TakumiError};
+  use std::sync::Arc;
+
+  use takumi_core::{
+    Fonts,
+    context::RenderContext,
+    geometry::Rect,
+    layout::node::Node,
+    style::{SizingContext, StyleSheet, page_rule::PageContext},
+  };
+
+  use super::{PageMargin, PageOptions, PdfError, TakumiError};
+
+  /// The left and right margins of the first three pages `css` gives an A4 page whose root has
+  /// the class `root`.
+  fn side_margins(css: &str) -> Vec<(f32, f32)> {
+    let stylesheet = Arc::new(StyleSheet::parse(css).expect("parses"));
+    let page = PageOptions::A4;
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(SizingContext::builder().viewport(page.viewport()).build())
+      .stylesheet(Arc::clone(&stylesheet))
+      .build();
+    let roots = Node::container([Node::container([]).with_class_name("root")]);
+    let root = PageContext::from_initial_containing_block(&context, &roots);
+    let pages = page.with_page_rules(&stylesheet, &root);
+
+    (0..3)
+      .map(|index| {
+        let page = pages.get(index);
+        let margin = page.margin.resolve(page.size(), None, None);
+
+        (margin.left, margin.right)
+      })
+      .collect()
+  }
+
+  #[test]
+  fn a_margin_percentage_takes_the_page_size_on_its_own_axis() {
+    let stylesheet =
+      StyleSheet::parse("@page { size: 600px 300px; margin: 10% 5% }").expect("parses");
+    let page = *PageOptions::A4
+      .with_page_rules(&stylesheet, &PageContext::default())
+      .get(0);
+
+    assert_eq!(
+      page.margin.resolve(page.size(), None, None),
+      Rect {
+        top: 30.0,
+        right: 30.0,
+        bottom: 30.0,
+        left: 30.0,
+      }
+    );
+  }
+
+  #[test]
+  fn an_rtl_root_makes_the_first_page_a_left_page() {
+    const CSS: &str =
+      "@page { margin: 0 } @page :left { margin-left: 30px } @page :right { margin-right: 20px }";
+
+    assert_eq!(side_margins(CSS), [(0.0, 20.0), (30.0, 0.0), (0.0, 20.0)]);
+    assert_eq!(
+      side_margins(&format!("{CSS} .root {{ direction: rtl }}")),
+      [(30.0, 0.0), (0.0, 20.0), (30.0, 0.0)]
+    );
+  }
+
+  #[test]
+  fn em_and_var_read_the_root_and_vw_the_page_before_size() {
+    let (left, right) = side_margins(
+      ".root { font-size: 20px; --right: 2em } @page { size: 400px 300px; margin: 0 var(--right) 0 10vw }",
+    )[0];
+
+    assert!((left - PageOptions::A4.width / 10.0).abs() < 0.1, "{left}");
+    assert_eq!(right, 40.0);
+  }
+
+  #[test]
+  fn an_auto_margin_in_an_at_page_rule_is_zero() {
+    let stylesheet = StyleSheet::parse("@page { margin: auto }").expect("parses");
+    let page = *PageOptions::A4
+      .with_page_rules(&stylesheet, &PageContext::default())
+      .get(0);
+
+    assert!(matches!(PageOptions::A4.margin.top, PageMargin::Auto));
+    assert_eq!(
+      page.margin.resolve(page.size(), Some(50.0), Some(50.0)),
+      Rect::default()
+    );
+  }
 
   #[test]
   fn a_page_limit_from_layout_reads_as_too_many_pages() {
