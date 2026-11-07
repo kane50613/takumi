@@ -116,6 +116,13 @@ fn linear_easing_as_chromium() {
   let many_points = format!("linear({})", vec!["0.5"; 5_000].join(", "));
 
   assert!(AnimationTimingFunction::from_css_str(&many_points).is_err());
+  // Chromium rejects a number between the two percentages of one stop.
+  assert!(AnimationTimingFunction::from_css_str("linear(0, 25% 0.5 75%, 1)").is_err());
+  // Two curves that serialize alike stay apart.
+  assert_ne!(
+    AnimationTimingFunction::from_css_str("linear(0, 0 50.00001%, 1 50.00001%, 1)"),
+    AnimationTimingFunction::from_css_str("linear(0, 0 50.00002%, 1 50.00002%, 1)"),
+  );
 
   for (easing, chromium) in [
     ("linear(0, 1)", "linear(0 0%, 1 100%)"),
@@ -125,6 +132,14 @@ fn linear_easing_as_chromium() {
       "linear(0 0%, 0.5 25%, 0.5 75%, 1 100%)",
     ),
     ("linear(0, 1 50%, 0)", "linear(0 0%, 1 50%, 0 100%)"),
+    (
+      "linear(0, calc(0.5) 50%, 1)",
+      "linear(0 0%, 0.5 50%, 1 100%)",
+    ),
+    (
+      "linear(0, 0.5 calc(25% + 25%), 1)",
+      "linear(0 0%, 0.5 50%, 1 100%)",
+    ),
     ("linear(0 20%, 1 60%)", "linear(0 20%, 1 60%)"),
     (
       "linear(0, 0.3, 0.6 80%, 1)",
