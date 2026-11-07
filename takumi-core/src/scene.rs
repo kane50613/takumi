@@ -1287,8 +1287,8 @@ impl<'a> SceneRef<'a> {
 
 /// Blink's `BlockEndScrollableOverflow` of page `page`'s root fragment, which the paginated root
 /// adds pages for: how far down its boxes' border boxes reach once transformed, leaving out the
-/// boxes inside one that clips its overflow. `None` when the page holds no root fragment.
-/// Approximate: line boxes and the fragments of earlier pages do not count.
+/// boxes inside one that clips its overflow, and their line boxes with them. `None` when the page
+/// holds no root fragment.
 #[cfg(feature = "fragmentation")]
 pub(crate) fn scrollable_block_end(
   root: &RenderNode,
@@ -1326,11 +1326,29 @@ pub(crate) fn scrollable_block_end(
       continue;
     }
 
-    let size = layout
-      .fragment_layout(node.node_id, node.fragment_index)?
-      .size;
+    let fragment = layout.fragment_layout(node.node_id, node.fragment_index)?;
+    let content = fragment.content_box_offset();
+    let lines = root
+      .node_at_path(&node.path)
+      .and_then(|render_node| render_node.fragment_items_of(node.fragment_index, fragment))
+      .and_then(|items| {
+        let (first, last) = (items.line_boxes().first()?.0, items.line_boxes().last()?.1);
 
-    if let Some((_, _, _, bottom)) = transformed_rect_extents(Point::ZERO, size, node.transform) {
+        Some((
+          Point::new(content.x, content.y + first),
+          Size {
+            width: fragment.content_box_width(),
+            height: last - first,
+          },
+        ))
+      });
+    let reaches = [(Point::ZERO, fragment.size)]
+      .into_iter()
+      .chain(lines)
+      .filter_map(|(origin, size)| transformed_rect_extents(origin, size, node.transform))
+      .map(|(_, _, _, bottom)| bottom);
+
+    for bottom in reaches {
       end = Some(end.map_or(bottom, |end| end.max(bottom)));
     }
   }

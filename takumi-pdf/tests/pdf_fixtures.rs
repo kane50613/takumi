@@ -3215,6 +3215,20 @@ fn content_moved_past_the_last_page_adds_pages() {
     ),
     1
   );
+  // A box on the first page moved past the content's second.
+  assert_eq!(
+    pages(
+      r#"<div style="height: 30px; background: #f87171; transform: translateY(380px)"></div><div style="height: 150px; background: #ddd"></div>"#
+    ),
+    5
+  );
+  // Lines that overflow a box too short for them.
+  assert_eq!(
+    pages(&format!(
+      r#"{lead}<div style="height: 30px; line-height: 40px; font-size: 20px">One<br>Two<br>Three</div>"#
+    )),
+    3
+  );
 }
 
 /// A line taller than a page moves to the next page, as content precedes it, then runs on over the
