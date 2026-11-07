@@ -307,9 +307,9 @@ impl PageSlice {
   }
 
   /// The lines this page owns, past its top edge on the first page and past its bottom edge on
-  /// the last. Approximate: Blink's `BoxFragmentPainter::PaintLineBoxes` paints a line in the page whose fragment
-  /// holds its line box, clipped to that page, and has no window for lines a transform moves off
-  /// the document.
+  /// the last. Approximate: Blink's `BoxFragmentPainter::PaintLineBoxes` paints a line in the
+  /// page whose fragment holds its line box, clipped to that page, and has no window for lines a
+  /// transform moves off the document.
   pub(crate) fn lines(&self) -> (f32, f32) {
     let top = if self.index == 0 {
       f32::NEG_INFINITY
