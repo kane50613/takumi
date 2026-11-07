@@ -111,14 +111,17 @@ static TREES: LazyLock<RwLock<Interner<Node>>> = LazyLock::new(RwLock::default);
 
 impl MathExpr {
   fn intern(node: Node) -> Option<Self> {
-    if node.size() > interner::MAX_PARTS {
+    let size = node.size();
+
+    // A tree past the limit would take long to serialize as a key, so it stops first.
+    if size > interner::MAX_PARTS {
       return None;
     }
 
     let mut key = String::new();
 
     node.to_css(&mut key).ok()?;
-    interner::intern(&TREES, key, node).map(Self)
+    interner::intern(&TREES, key, node, size).map(Self)
   }
 
   fn with<R>(self, read: impl FnOnce(&Node) -> R) -> R {
