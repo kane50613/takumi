@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_property_registered_length</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      @property --gap {
+        syntax: "<length>";
+        inherits: true;
+        initial-value: 0px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+      }
+      .parent {
+        display: block;
+        width: 80px;
+        height: 100px;
+        font-size: 20px;
+        background: rgb(226, 232, 240);
+      }
+      .registered {
+        --gap: 0.5em;
+      }
+      .unregistered {
+        --plain: 0.5em;
+      }
+      .child {
+        display: block;
+        height: 20px;
+        font-size: 2em;
+        background: rgb(59, 130, 246);
+      }
+      .registered .child {
+        margin-top: var(--gap);
+      }
+      .unregistered .child {
+        margin-top: var(--plain);
+      }
+    </style>
+  </head>
+  <body style="width: 192px; height: 116px">
+    <div class="row">
+      <div class="parent registered"><div class="child"></div></div>
+      <div class="parent unregistered"><div class="child"></div></div>
+    </div>
+  </body>
+</html>

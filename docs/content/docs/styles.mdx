@@ -51,13 +51,56 @@ A `<style>` tag in the JSX or HTML feeds the same stylesheet. Takumi pulls it ou
 The stylesheet supports:
 
 - Selectors cover type, class, id, attribute, and combinators. They also cover structural pseudo-classes such as `:first-child` and `:nth-child()`, plus `:is()`, `:where()`, `:not()`, `:has()`, `:root`, `:lang()`, and `:dir()`, and the `::before` and `::after` pseudo-elements. Form control states such as `:disabled`, `:checked`, and `:placeholder-shown` match the attributes in the markup.
-- At-rules cover `@media`, `@supports`, `@layer`, `@keyframes`, and [`@font-face`](/docs/fonts#from-font-face-rules).
+- At-rules cover `@media`, `@supports`, `@layer`, `@keyframes`, [`@property`](#registered-custom-properties), and [`@font-face`](/docs/fonts#from-font-face-rules).
 - Values cover custom properties with `var()`, the [math functions](#math-functions), and shorthands. A render is light, so `light-dark()` takes its first colour.
 
 <Callout type="info">
   A render is one static frame. Interactive pseudo-classes such as `:hover` and `:focus` parse but
   never match.
 </Callout>
+
+### Registered custom properties
+
+`@property` gives a custom property a type, as in a browser. A registered property computes to that type, inherits the computed value, and animates through it. This rule spins a conic gradient, which an unregistered `--angle` cannot do, because it would switch from `0deg` to `360deg` halfway through:
+
+```css
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes spin {
+  to {
+    --angle: 360deg;
+  }
+}
+.badge {
+  background: conic-gradient(from var(--angle), red, blue);
+  animation: spin 2s linear infinite;
+}
+```
+
+`syntax` takes `*`, or the type names below and keywords, joined by `|`. A name followed by `+` takes a space-separated list, and one followed by `#` a comma-separated list.
+
+| `syntax`                                                    | Computes to                            | Animates         |
+| ----------------------------------------------------------- | -------------------------------------- | ---------------- |
+| `<length>`                                                  | px                                     | yes              |
+| `<length-percentage>`                                       | px, a percentage, or `calc()` of both  | yes              |
+| `<number>`, `<percentage>`                                  | a number, a percentage                 | yes              |
+| `<integer>`                                                 | an integer, `calc()` rounded           | yes, rounding    |
+| `<angle>`, `<time>`, `<resolution>`                         | deg, s, dppx                           | yes              |
+| `<color>`                                                   | `rgb()` or `rgba()`, or `currentcolor` | yes              |
+| `<transform-function>`, `<transform-list>`                  | the transforms, lengths in px          | yes              |
+| `<image>`, `<url>`, `<string>`, `<custom-ident>`, a keyword | the value as written                   | switches halfway |
+| `*`                                                         | the value as written                   | switches halfway |
+
+A rule takes effect only when it is valid, as in Chromium. It needs `syntax` and `inherits`, and `syntax` must use the names above. Any syntax other than `*` also needs an `initial-value` that matches it and computes without the element, so `var()`, `em`, and `vw` make the rule invalid. A declared value that does not match the syntax falls back to the inherited value when `inherits` is `true`, and to `initial-value` otherwise.
+
+Takumi differs from Chromium in three places:
+
+- An element reads its own registered length as written, and its children read the px it computes to. Chromium computes it on the element too, which matters only when `font-size` reads a font-relative registered length. Every other type computes on the element itself.
+- A `<url>` keeps the URL as written, because a render has no document to resolve it against.
+- An `<angle>` does not take `calc()`.
 
 ### Math functions
 

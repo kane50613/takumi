@@ -17,7 +17,7 @@ use selectors::parser::{
 use crate::style::font_face_rule::FontFaceRule;
 pub use crate::style::media_query::MediaQueryList;
 use crate::style::{
-  PageName,
+  PageName, PropertySyntax,
   page_rule::{PageContext, PageDescriptors, PageKind, PageRule, PageSelector},
 };
 use crate::viewport::Viewport;
@@ -38,8 +38,8 @@ use crate::{
 pub struct PropertyRule {
   /// Custom property name, including the leading `--`.
   pub name: String,
-  /// Declared `syntax` descriptor.
-  pub syntax: String,
+  /// The values the property takes.
+  pub syntax: PropertySyntax,
   /// Whether the property inherits.
   pub inherits: bool,
   /// Declared `initial-value`, if any.
@@ -795,16 +795,32 @@ fn parse_property_rule<'i>(
     ));
   };
 
-  // The descriptor is a string, and nothing downstream wants the quotes.
-  let syntax = syntax.trim_matches(['"', '\'']).to_owned();
+  // The descriptor is one CSS string, which the syntax is read from once decoded.
+  let mut syntax_input = Parser::new(&syntax);
+  let decoded = syntax_input.expect_string().map(ToString::to_string).ok();
+  let syntax = decoded
+    .filter(|_| syntax_input.is_exhausted())
+    .and_then(|decoded| decoded.parse::<PropertySyntax>().ok())
+    .ok_or_else(|| ParseError::custom(StyleSheetParseErrorKind::InvalidPropertySyntax))?;
 
-  // css-properties-values-api-1 2.1: only the universal syntax may leave the
-  // initial value out, because every other one needs a value to fall back to.
-  if syntax != "*" && initial_value.is_none() {
-    return Err(ParseError::custom(
-      StyleSheetParseErrorKind::MissingPropertyInitialValue,
-    ));
-  }
+  // css-properties-values-api-1 2.1: only the universal syntax may leave the initial value out,
+  // and any other must take it and compute it without an element.
+  let initial_value = match (&syntax, initial_value) {
+    (PropertySyntax::Universal, initial_value) => initial_value,
+    (_, None) => {
+      return Err(ParseError::custom(
+        StyleSheetParseErrorKind::MissingPropertyInitialValue,
+      ));
+    }
+    (_, Some(value)) if syntax.is_computationally_independent(&value) => {
+      syntax.compute(&value, None)
+    }
+    _ => {
+      return Err(ParseError::custom(
+        StyleSheetParseErrorKind::InvalidPropertyInitialValue,
+      ));
+    }
+  };
 
   Ok(PropertyRule {
     name: property_name,
@@ -2567,7 +2583,7 @@ mod tests {
 
     assert_eq!(sheet.property_rules.len(), 1);
     assert_eq!(sheet.property_rules[0].name, "--box-size");
-    assert_eq!(sheet.property_rules[0].syntax, "<length>");
+    assert_eq!(sheet.property_rules[0].syntax.to_string(), "<length>");
     assert!(!sheet.property_rules[0].inherits);
     assert_eq!(
       sheet.property_rules[0].initial_value,
@@ -2620,7 +2636,7 @@ mod tests {
 
     assert_eq!(sheet.property_rules.len(), 1);
     assert_eq!(sheet.property_rules[0].name, "--box-size");
-    assert_eq!(sheet.property_rules[0].syntax, "<length>");
+    assert_eq!(sheet.property_rules[0].syntax.to_string(), "<length>");
     assert!(!sheet.property_rules[0].inherits);
     assert_eq!(
       sheet.property_rules[0].initial_value,
@@ -2641,7 +2657,7 @@ mod tests {
 
     assert_eq!(sheet.property_rules.len(), 1);
     assert_eq!(sheet.property_rules[0].name, "--tw-rotate-x");
-    assert_eq!(sheet.property_rules[0].syntax, "*");
+    assert_eq!(sheet.property_rules[0].syntax.to_string(), "*");
     assert!(!sheet.property_rules[0].inherits);
     assert_eq!(sheet.property_rules[0].initial_value, None);
 
@@ -2685,16 +2701,6 @@ mod tests {
           inherits: false;
           initial-value: translate(10px, 20px);
         }
-        @property --curve {
-          syntax: "<easing-function>";
-          inherits: false;
-          initial-value: ease-in-out;
-        }
-        @property --fx {
-          syntax: "<filter-function>";
-          inherits: false;
-          initial-value: blur(4px);
-        }
         @property --bg {
           syntax: "<image>";
           inherits: false;
@@ -2703,14 +2709,22 @@ mod tests {
       "#,
     );
 
-    assert_eq!(sheet.property_rules.len(), 7);
-    assert_eq!(sheet.property_rules[0].syntax, "<length> | <color>");
-    assert_eq!(sheet.property_rules[1].syntax, "none | auto");
-    assert_eq!(sheet.property_rules[2].syntax, "<time>");
-    assert_eq!(sheet.property_rules[3].syntax, "<transform-function>");
-    assert_eq!(sheet.property_rules[4].syntax, "<easing-function>");
-    assert_eq!(sheet.property_rules[5].syntax, "<filter-function>");
-    assert_eq!(sheet.property_rules[6].syntax, "<image>");
+    let syntaxes: Vec<_> = sheet
+      .property_rules
+      .iter()
+      .map(|rule| rule.syntax.to_string())
+      .collect();
+
+    assert_eq!(
+      syntaxes,
+      [
+        "<length> | <color>",
+        "none | auto",
+        "<time>",
+        "<transform-function>",
+        "<image>"
+      ]
+    );
   }
 
   #[test]
@@ -2779,23 +2793,33 @@ mod tests {
     assert!(result.is_err());
   }
 
+  /// A name the syntax grammar does not list, or an initial value that needs the element to
+  /// compute, drops the rule, as Chromium drops it.
   #[test]
-  fn test_property_rule_computationally_dependent_initial_value_is_preserved() {
-    let sheet = parse_stylesheet(
+  fn test_property_rules_chromium_drops() {
+    let sheet = parse_stylesheet_loosy(
       r#"
-        @property --box-size {
-          syntax: "<length>";
-          inherits: false;
-          initial-value: var(--fallback);
-        }
+        @property --curve { syntax: "<easing-function>"; inherits: false; initial-value: ease }
+        @property --fx { syntax: "<filter-function>"; inherits: false; initial-value: blur(4px) }
+        @property --list { syntax: "<transform-list>+"; inherits: false; initial-value: none }
+        @property --spaced { syntax: "<length> +"; inherits: false; initial-value: 1px }
+        @property --wide { syntax: "inherit"; inherits: false; initial-value: inherit }
+        @property --var { syntax: "<length>"; inherits: false; initial-value: var(--fallback) }
+        @property --em { syntax: "<length>"; inherits: false; initial-value: 1em }
+        @property --vw { syntax: "<length>"; inherits: false; initial-value: 10vw }
+        @property --off { syntax: "<length>"; inherits: false; initial-value: red }
+        @property --bare { syntax: <length>; inherits: false; initial-value: 1px }
+        @property --escaped { syntax: "\3c length\3e"; inherits: false; initial-value: 2px }
+        @property --kept { syntax: "<length>"; inherits: false; initial-value: 1in }
       "#,
     );
+    let kept: Vec<_> = sheet
+      .property_rules
+      .iter()
+      .map(|rule| (rule.name.as_str(), rule.initial_value.as_deref()))
+      .collect();
 
-    assert_eq!(sheet.property_rules.len(), 1);
-    assert_eq!(
-      sheet.property_rules[0].initial_value,
-      Some("var(--fallback)".to_owned())
-    );
+    assert_eq!(kept, [("--escaped", Some("2px")), ("--kept", Some("1in"))]);
   }
 
   #[test]

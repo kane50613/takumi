@@ -248,6 +248,15 @@ pub enum StyleSheetParseErrorKind {
   #[error("`@property` with a typed syntax needs an initial-value")]
   MissingPropertyInitialValue,
 
+  /// `@property` gives a `syntax` that is not a valid syntax string.
+  #[error("`@property` syntax is not a valid syntax string")]
+  InvalidPropertySyntax,
+
+  /// `@property` gives an `initial-value` its syntax does not take, or one that needs the
+  /// element to compute.
+  #[error("`@property` initial-value must match its syntax and be computationally independent")]
+  InvalidPropertyInitialValue,
+
   /// `@supports` mixed `and` and `or` without parentheses.
   #[error("@supports cannot mix `and` and `or` without parentheses")]
   SupportsMixedAndOrWithoutParentheses,
