@@ -26,12 +26,14 @@ use crate::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   layout_unit::LayoutUnit,
+  scene::scrollable_block_end,
   style::{Direction, Length, PageName, SpacePair},
 };
 
 /// A render tree laid out across pages sized as a [`PageSizer`] says, one page at a time, each
 /// resuming where the one before broke.
 pub struct PagedLayout<'r> {
+  root: &'r RenderNode,
   tree: LayoutTree<'r>,
   sizer: PageSizer,
   /// The pages laid out.
@@ -43,6 +45,9 @@ pub struct PagedLayout<'r> {
   last_root_fragment: Option<(usize, Point<LayoutUnit>)>,
   last_root_page: usize,
   is_finished: bool,
+  /// How far down the root's last fragment reaches once it ends, which the pages run on to, as
+  /// Blink's page area reserves the root's scrollable overflow as monolithic overflow.
+  overflow_end: Option<f32>,
   /// How far above their pages the boxes of the tree paint, as `PaintReach::back` bounds it.
   reach_back: Option<f32>,
   /// The boxes no page has laid out yet that can paint on an earlier page.
@@ -57,6 +62,7 @@ impl<'r> PagedLayout<'r> {
     let reach = PaintReach::of(root);
 
     Self {
+      root,
       tree: LayoutTree::from_render_node(root),
       sizer,
       sizes: PageSizes::default(),
@@ -66,6 +72,7 @@ impl<'r> PagedLayout<'r> {
       last_root_fragment: None,
       last_root_page: 0,
       is_finished: false,
+      overflow_end: None,
       reach_back: reach.back,
       pending: PendingBoxes::new(&reach),
     }
@@ -166,6 +173,9 @@ impl<'r> PagedLayout<'r> {
     self.last_root_fragment = Some(root_fragment);
     if laid_root {
       self.last_root_page = page;
+      if self.break_token.is_none() {
+        self.overflow_end = scrollable_block_end(self.root, self.tree.view(), &self.sizes, page)?;
+      }
     }
     self.page_areas.lay_out(
       &mut self.tree,
@@ -175,7 +185,11 @@ impl<'r> PagedLayout<'r> {
       &self.sizes,
       &space,
     );
-    self.is_finished = self.break_token.is_none() && !self.page_areas.resumes();
+    let page_end = self.sizes.top(page) + self.sizes.size(page).height;
+
+    self.is_finished = self.break_token.is_none()
+      && !self.page_areas.resumes()
+      && self.overflow_end.is_none_or(|end| end <= page_end);
     self.update_pending();
 
     Ok(true)

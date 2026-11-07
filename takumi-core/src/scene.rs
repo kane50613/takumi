@@ -7,6 +7,8 @@ use rustc_hash::FxHashSet;
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::page_sizes::{PageSizer, PageSizes};
+#[cfg(feature = "fragmentation")]
+use crate::paint_property::ClipKind;
 use crate::{
   context::{BoxId, RenderContext},
   error::{Error, Result},
@@ -1281,6 +1283,59 @@ impl<'a> SceneRef<'a> {
       fragments: Some(&self.fragments),
     }
   }
+}
+
+/// Blink's `BlockEndScrollableOverflow` of page `page`'s root fragment, which the paginated root
+/// adds pages for: how far down its boxes' border boxes reach once transformed, leaving out the
+/// boxes inside one that clips its overflow. `None` when the page holds no root fragment.
+/// Approximate: line boxes and the fragments of earlier pages do not count.
+#[cfg(feature = "fragmentation")]
+pub(crate) fn scrollable_block_end(
+  root: &RenderNode,
+  layout: LayoutView<'_>,
+  sizes: &PageSizes,
+  page: usize,
+) -> Result<Option<f32>> {
+  let roots = page_roots(layout, sizes, &[page]);
+
+  if roots.is_empty() {
+    return Ok(None);
+  }
+
+  let layers = build_layers(root, layout, false, &roots, None)?;
+  let mut seen = FxHashSet::default();
+  let mut end = None::<f32>;
+
+  for chunk in PaintChunk::in_paint_order(&layers.contexts) {
+    let node = chunk.node;
+
+    if !seen.insert((node.node_id, node.fragment_index)) {
+      continue;
+    }
+
+    let mut clip = node.properties.border_box.clip;
+    let mut clipped = false;
+
+    while let Some(id) = clip {
+      let clip_node = layers.properties.clip(id);
+
+      clipped |= matches!(clip_node.kind, ClipKind::Shape(_));
+      clip = clip_node.parent;
+    }
+    if clipped {
+      continue;
+    }
+
+    let size = layout
+      .fragment_layout(node.node_id, node.fragment_index)?
+      .size;
+
+    if let Some((_, _, _, bottom)) = transformed_rect_extents(Point::ZERO, size, node.transform) {
+      end = Some(end.map_or(bottom, |end| end.max(bottom)));
+    }
+  }
+
+  Ok(end)
 }
 
 #[cfg(feature = "fragmentation")]
