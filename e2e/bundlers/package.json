@@ -7,9 +7,9 @@
     "test": "bun run.ts"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "1.65.0",
+    "@cloudflare/vite-plugin": "1.66.0",
     "@types/node": "^26.4.1",
-    "@types/react": "19.2.18",
+    "@types/react": "19.3.0",
     "esbuild": "0.28.2",
     "miniflare": "4.20260730.0",
     "next": "16.4.3",
@@ -19,7 +19,7 @@
     "takumi-js": "file:.packs/takumi-js.tgz",
     "typescript": "^7.0.2",
     "vite": "8.3.5",
-    "wrangler": "4.153.0"
+    "wrangler": "4.156.0"
   },
   "overrides": {
     "@takumi-rs/core": "file:.packs/core.tgz",
