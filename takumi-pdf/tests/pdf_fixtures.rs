@@ -7002,3 +7002,70 @@ fn named_pages_take_the_page_rules_of_their_name() {
     );
   }
 }
+
+/// A paged PDF draws a line on the page that shows it: text in a rotated box on its own page, a
+/// line an overflow clip cuts in half on the page holding its visible half, and a line a clip cuts
+/// at the page edge on the page above it.
+#[test]
+fn paged_lines_under_a_transform_or_a_clip() {
+  let render_paged = |name: &str, html: &str, width: f32, height: f32| {
+    run_pdf_fixture(name, |fonts| {
+      PdfOptions::builder()
+        .node(from_html(html, FromHtmlOptions::default()).expect("parse the document"))
+        .page(PageOptions {
+          width,
+          height,
+          margin: PageMargins::uniform(0.0),
+        })
+        .fonts(fonts)
+        .build()
+    })
+  };
+  let text = "Our new plan adds scheduled exports, row-level security and a redesigned mobile app.";
+
+  let rotated = render_paged(
+    "paged-rotated-text",
+    r#"<div style="height: 200px">Q3 results</div><div style="height: 200px; break-before: page"><div style="transform: rotate(-15deg)">Draft</div></div>"#,
+    400.0,
+    200.0,
+  );
+  let clipped = render_paged(
+    "paged-clipped-line",
+    &format!(
+      r#"<div style="width: 240px; height: 60px; overflow: hidden; line-height: 24px">{text}</div>"#
+    ),
+    300.0,
+    100.0,
+  );
+  let at_page_edge = render_paged(
+    "paged-clipped-line-at-page-edge",
+    &format!(
+      r#"<html><body style="margin: 0; height: 100px; overflow: hidden"><div style="width: 240px; padding-top: 88px; line-height: 24px">{text}</div></body></html>"#
+    ),
+    300.0,
+    100.0,
+  );
+
+  assert_eq!(text_objects_per_page(&rotated), [1, 1]);
+  assert_eq!(text_objects_per_page(&clipped), [3]);
+  assert_eq!(text_objects_per_page(&at_page_edge), [1]);
+}
+
+/// How many text objects each page's content stream draws, the page clip its first line.
+fn text_objects_per_page(pdf: &[u8]) -> Vec<usize> {
+  content_streams(pdf)
+    .iter()
+    .filter(|stream| {
+      stream
+        .split(|byte| *byte == b'\n')
+        .next()
+        .is_some_and(|line| line.starts_with(b"q ") && line.ends_with(b" re"))
+    })
+    .map(|stream| {
+      stream
+        .split(|byte| *byte == b'\n')
+        .filter(|line| line.starts_with(b"BT"))
+        .count()
+    })
+    .collect()
+}

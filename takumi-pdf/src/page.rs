@@ -599,6 +599,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       window: Window {
         y: Some((slice.start, slice.end)),
         lines: Some((slice.start, slice.end)),
+        ..Window::default()
       },
       artifact: false,
     }

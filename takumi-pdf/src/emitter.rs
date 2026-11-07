@@ -73,7 +73,7 @@ use crate::{
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
   tree::draws,
-  window::Window,
+  window::{LineFrame, Window},
 };
 #[cfg(feature = "images")]
 use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
@@ -1386,7 +1386,7 @@ impl Emitter<'_> {
       text,
       glyphs,
       origin: Point::from_xy(x + offset.x, y + offset.y),
-      owned: !self.window.disowns_line(item.baseline),
+      owned: !self.window.disowns_line(item),
     })
   }
 
@@ -1485,6 +1485,24 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
     Some((node, BoxFrame::new(layout, CorePoint::ZERO), 1))
   }
 
+  /// How the lines of the box `paint` places at `frame` map into the window: through its own
+  /// transform when placing it pushed one, or through the transform a clip pushed around it.
+  fn line_frame(&self, paint: &NodePaint, frame: BoxFrame, pushed: usize) -> Option<LineFrame> {
+    let (transform, left) = if pushed > 0 {
+      (paint.transform, 0.0)
+    } else if self.current.is_identity() {
+      return None;
+    } else {
+      (self.current, frame.origin.x)
+    };
+
+    Some(LineFrame {
+      transform,
+      left,
+      right: left + frame.layout.size.width,
+    })
+  }
+
   /// Writes one chunk under the states already pushed.
   fn emit(&mut self, resolved: &ResolvedChunk<'a>) {
     let chunk = &resolved.chunk;
@@ -1498,6 +1516,10 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
     let Some((node, frame, pushed)) = self.place(resolved.node, chunk.node) else {
       return;
     };
+    let outer_frame = self.emitter.window.frame;
+
+    self.emitter.window.frame = self.line_frame(chunk.node, frame, pushed);
+
     let emitter = &mut *self.emitter;
     let surface = &mut *self.surface;
     let result = match chunk.part {
@@ -1542,6 +1564,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
     };
 
     pop_transforms(surface, pushed);
+    self.emitter.window.frame = outer_frame;
 
     if let Err(error) = result {
       self.error.get_or_insert(error);
