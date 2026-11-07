@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>selector_has</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      ul {
+        display: flex;
+        gap: 8px;
+        margin: 8px;
+        padding: 8px;
+        list-style: none;
+        background: rgb(226, 232, 240);
+      }
+      li {
+        width: 40px;
+        height: 40px;
+        background: rgb(59, 130, 246);
+      }
+      li[data-off] {
+        background: rgb(148, 163, 184);
+      }
+      ul:has(> li:not([data-off])) {
+        background: rgb(187, 247, 208);
+      }
+      ul:not(:has(> li:not([data-off]))) {
+        display: none;
+      }
+      ul:has(+ p) {
+        outline: 4px solid rgb(239, 68, 68);
+      }
+      ul:has(~ p) li:first-child {
+        border-radius: 20px;
+      }
+    </style>
+  </head>
+  <body style="width: 240px; height: 200px">
+    <ul>
+      <li></li>
+      <li data-off></li>
+    </ul>
+    <ul>
+      <li data-off></li>
+    </ul>
+    <ul>
+      <li data-off></li>
+      <li></li>
+    </ul>
+    <p></p>
+  </body>
+</html>

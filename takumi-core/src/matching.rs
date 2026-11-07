@@ -1394,6 +1394,61 @@ mod tests {
     assert_eq!(kept, [0, 1]);
   }
 
+  fn list_is_drawn(css: &str, first_off: bool) -> bool {
+    let stylesheet = StyleSheet::parse(css).expect("stylesheet parses");
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let li = |off: bool, children| {
+      Node::container(children)
+        .with_tag_name("li")
+        .with_attributes(BTreeMap::from_iter(
+          off.then(|| ("data-off".into(), "".into())),
+        ))
+    };
+    let list = Node::container([
+      li(first_off, vec![Node::container([]).with_tag_name("span")]),
+      li(true, vec![]),
+    ])
+    .with_tag_name("ul")
+    .with_class_name("b");
+    let siblings = [
+      list,
+      Node::container([]).with_tag_name("div"),
+      Node::container([]).with_tag_name("p"),
+    ];
+    let root = RenderNode::from_node(&context, Node::container(siblings));
+
+    root.children.as_deref().map_or(0, <[_]>::len) == 3
+  }
+
+  #[test]
+  fn has_matches_by_its_relative_selector() {
+    let drawn = |selector: &str| list_is_drawn(&format!("{selector} {{ display: none }}"), false);
+
+    assert!(!drawn(".b:has(li)"));
+    assert!(!drawn(".b:has(> li)"));
+    assert!(!drawn(".b:has(li[data-off])"));
+    assert!(!drawn(".b:has(span)"));
+    assert!(drawn(".b:has(> span)"));
+    assert!(drawn(".b:has(p)"));
+    assert!(!drawn(".b:has(+ div)"));
+    assert!(drawn(".b:has(+ p)"));
+    assert!(!drawn(".b:has(~ p)"));
+    assert!(drawn(".b:has(~ span)"));
+    assert!(drawn(".b:not(:has(> li:not([data-off])))"));
+    assert!(!list_is_drawn(
+      ".b:not(:has(> li:not([data-off]))) { display: none }",
+      true
+    ));
+  }
+
   fn candidates(css: &str, node: &Node) -> Vec<usize> {
     let stylesheet = StyleSheet::parse(css).expect("stylesheet parses");
     let index = stylesheet.rule_index();
