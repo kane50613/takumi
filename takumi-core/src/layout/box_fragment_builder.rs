@@ -417,8 +417,9 @@ impl BoxFragmentBuilder {
     }
   }
 
-  /// Blink's check in `AddChild` that a child in the same flow ending at `block_end` overflows the
-  /// page because something monolithic is inside, so the content after it moves below.
+  /// Blink's check in `AddChild` that a child in the same flow ending at `block_end` reaches past
+  /// the page, which moves the content after it below. Like Blink's, it checks only the offset, so
+  /// any line that overflows counts, not just one with monolithic content.
   pub(crate) fn reserve_space_past_child(&mut self, block_end: LayoutUnit) {
     let fragmentainer_overflow = block_end - self.fragmentainer_space_left(false);
 
