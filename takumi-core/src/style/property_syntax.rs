@@ -16,6 +16,7 @@ use crate::{
     Animatable, AnimationTime, BackgroundImage, Color, ColorInput, CssWideKeyword, FromCss,
     FromCssStr, Length, MakeComputed, SizingContext, ToCss, Transform, Transforms,
     contains_var_references, is_math_function, lerp, parse_angle, parse_calc_number_expression,
+    parse_percentage_value,
   },
   viewport::Viewport,
 };
@@ -384,22 +385,9 @@ impl DataType {
           .ok()
           .map(|value| Item::Integer(round_integer(value))),
       },
-      Self::Percentage => {
-        if let Ok(unit_value) = input.try_parse(|input| match input.next()? {
-          Token::Percentage { unit_value, .. } => Ok(*unit_value),
-          _ => Err(input.new_error_for_next_token::<()>()),
-        }) {
-          return Some(Item::Percentage(unit_value * 100.0));
-        }
-
-        // A `calc()` of percentages alone.
-        let Length::Calc(formula) = Length::from_css(input).ok()? else {
-          return None;
-        };
-        let (px, percent) = formula.resolve(&probe_sizing(100, 10.0)).components();
-
-        (px == 0.0).then_some(Item::Percentage(percent * 100.0))
-      }
+      Self::Percentage => parse_percentage_value(input)
+        .ok()
+        .map(|fraction| Item::Percentage(fraction * 100.0)),
       Self::Angle => match input.next().ok()?.clone() {
         // Not `Angle`, which wraps to a turn and takes a unitless number.
         Token::Function(name) if is_math_function(&name) => {
@@ -757,6 +745,8 @@ mod tests {
       Some("50%")
     );
     assert_eq!(compute("<percentage>", "calc(10px + 5%)"), None);
+    assert_eq!(compute("<percentage>", "calc(1em - 10px)"), None);
+    assert_eq!(compute("<percentage>", "calc(1em - 1em + 5%)"), None);
     assert_eq!(compute("<resolution>", "-1dppx"), None);
     assert_eq!(
       compute("<custom-ident>", r"\31 foo").as_deref(),

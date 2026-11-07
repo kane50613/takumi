@@ -281,6 +281,7 @@ impl Length {
     match self {
       Self::Percentage(_) => true,
       Self::Calc(terms) => terms.terms().any(|term| term.unit == CalcUnit::Percent),
+      Self::Math(expr) => expr.has_percent(),
       _ => false,
     }
   }
@@ -718,7 +719,11 @@ mod tests {
   fn calc_division_by_zero_clamps_to_the_largest_length() {
     assert_eq!(
       Length::from_css_str("calc(10px / 0)"),
-      Ok(Length::Px(f32::MAX))
+      Ok(Length::Calc(
+        CalcFormula::linear(f32::MAX, 0.0)
+          .compress()
+          .expect("one term compresses")
+      ))
     );
   }
 

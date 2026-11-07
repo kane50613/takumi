@@ -6,12 +6,12 @@ use std::{
   sync::{LazyLock, RwLock},
 };
 
-use cssparser::{ParseError as CssParseError, Parser, Token};
+use cssparser::{ParseError as CssParseError, Parser};
 
 use crate::style::{
   ParseResult, ToCss,
   interner::{self, Interner},
-  lerp,
+  lerp, parse_number_value, parse_percentage_value,
 };
 
 /// A `linear()` curve, by its index among the interned curves.
@@ -42,9 +42,13 @@ impl LinearEasing {
 
     let points = canonicalize(points);
     let parts = points.len();
-    let mut key = String::new();
+    // Serialization rounds to six digits, so the key keeps every bit of each point.
+    let key = points
+      .iter()
+      .map(|point| format!("{:x}:{:x}", point.output.to_bits(), point.input.to_bits()))
+      .collect::<Vec<_>>()
+      .join(",");
 
-    write_points(&points, &mut key).map_err(|_| CssParseError::unexpected_token())?;
     interner::intern(&CURVES, key, points.into(), parts)
       .map(Self)
       .ok_or_else(CssParseError::unexpected_token)
@@ -84,16 +88,27 @@ impl ToCss for LinearEasing {
   }
 }
 
-/// One stop: a number and up to two percentages, in either order, each percentage a point.
+/// One stop: a number and up to two contiguous percentages, in either order, each percentage a
+/// point, as Blink's `ConsumeLinearStop`.
 fn parse_stop<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Vec<(f32, Option<f32>)>> {
   let mut output = None;
   let mut inputs = Vec::new();
 
   while !input.is_exhausted() {
-    match *input.next()? {
-      Token::Number { value, .. } if output.is_none() => output = Some(value),
-      Token::Percentage { unit_value, .. } if inputs.len() < 2 => inputs.push(unit_value),
-      _ => return Err(CssParseError::unexpected_token()),
+    if output.is_none()
+      && let Ok(number) = input.try_parse(parse_number_value)
+    {
+      output = Some(number);
+      continue;
+    }
+    if !inputs.is_empty() {
+      return Err(CssParseError::unexpected_token());
+    }
+
+    inputs.push(parse_percentage_value(input)?);
+
+    if let Ok(second) = input.try_parse(parse_percentage_value) {
+      inputs.push(second);
     }
   }
 

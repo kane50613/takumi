@@ -764,6 +764,54 @@ fn an_animated_custom_property_leaves_the_animation_properties_alone() {
   );
 
   assert_eq!(measured.children[0].width, 200.0);
+
+  // The taint reaches an alias of the animated property, and survives an important replay.
+  for duration in [
+    "--duration: var(--d); animation-duration: var(--duration), 1s",
+    "animation-duration: var(--d), 1s !important",
+  ] {
+    let measured = measure_with_css(
+      Node::container([styled_block(
+        "box",
+        serde_json::json!({ "display": "block", "height": "1px" }),
+      )]),
+      &format!(
+        "@keyframes g {{ from {{ width: 0px }} to {{ width: 400px }} }}
+         @keyframes a {{ from {{ --d: 2s }} to {{ --d: 2s }} }}
+         .box {{ --d: 1s; animation-name: g, a; {duration};
+           animation-timing-function: linear; animation-delay: -500ms }}"
+      ),
+    );
+
+    assert_eq!(measured.children[0].width, 200.0, "{duration}");
+  }
+}
+
+/// On the document root, `rem` reads the root's own font size, so a registered `rem` length that
+/// `font-size` reads makes a cycle, as Chromium breaks it.
+#[test]
+fn the_root_font_size_breaks_a_cycle_with_a_registered_rem_length() {
+  let root = |declarations: &str| {
+    let html = Node::from_html("<html></html>", FromHtmlOptions::default()).expect("parses");
+    let measured = measure_with_css(
+      html,
+      &format!(
+        "@property --x {{ syntax: '<length>'; inherits: false; initial-value: 0px }}
+         html {{ display: block; height: 1em; {declarations} }}"
+      ),
+    );
+
+    (measured.width, measured.height)
+  };
+
+  assert_eq!(
+    root("--x: 2rem; font-size: var(--x); width: var(--x)"),
+    (0.0, 16.0)
+  );
+  assert_eq!(
+    root("--x: 2rem; font-size: 20px; width: var(--x)"),
+    (40.0, 20.0)
+  );
 }
 
 /// A registered length in a font-relative unit that `font-size` reads makes a cycle, which leaves
@@ -791,4 +839,16 @@ fn font_size_breaks_a_cycle_with_a_font_relative_registered_length() {
   assert_eq!(size("font-size: var(--x)"), (0.0, 10.0));
   assert_eq!(size("font-size: calc(var(--x) + 1px)"), (0.0, 10.0));
   assert_eq!(size("font-size: 30px"), (60.0, 30.0));
+  assert_eq!(size("font-size: var(--x) !important"), (0.0, 10.0));
+  assert_eq!(size("font-size: var(--x); font-size: 30px"), (60.0, 30.0));
+  assert_eq!(size("font-size: 30px; font-size: var(--x)"), (0.0, 10.0));
+  assert_eq!(
+    size("--alias: var(--x); font-size: var(--alias)"),
+    (0.0, 10.0)
+  );
+  assert_eq!(
+    size("--alias: var(--x); font-size: var(--x); width: var(--alias)"),
+    (0.0, 10.0)
+  );
+  assert_eq!(size("font-size: var(--prefix--x, 25px)"), (50.0, 25.0));
 }

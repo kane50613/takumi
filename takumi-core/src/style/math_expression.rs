@@ -17,7 +17,7 @@ use crate::{
   layout::layout_style::LayoutLength,
   style::{
     Length, ParseResult, SizingContext, ToCss,
-    calc::{CalcFormula, CalcValue},
+    calc::{CalcFormula, CalcUnit, CalcValue},
     interner::{self, Interner},
     length_from_dimension_unit,
   },
@@ -252,7 +252,10 @@ pub(crate) fn parse_length<'i>(name: &str, input: &mut Parser<'i>) -> ParseResul
     };
   }
   if let Some(value) = node.eval(&CalcFormula::absolute_px) {
-    return Ok(Length::Px(value.finite()));
+    return CalcFormula::linear(value.finite(), 0.0)
+      .compress()
+      .map(Length::Calc)
+      .ok_or_else(CssParseError::unexpected_token);
   }
 
   MathExpr::intern(node)
@@ -262,30 +265,39 @@ pub(crate) fn parse_length<'i>(name: &str, input: &mut Parser<'i>) -> ParseResul
 
 /// The number the math function `name` reads from `input`.
 pub(crate) fn parse_number<'i>(name: &str, input: &mut Parser<'i>) -> ParseResult<'i, f32> {
-  match input
-    .parse_nested_block(|input| parse_function(name, input, 0))?
-    .eval(&CalcFormula::absolute_px)
-  {
-    Some(Value {
-      raw,
-      kind: Kind::NUMBER,
-    }) => Ok(raw),
-    _ => Err(CssParseError::unexpected_token()),
-  }
+  parse_constant(name, input, Kind::NUMBER, &CalcFormula::absolute_px)
+}
+
+/// The percentage, as a fraction, the math function `name` reads from `input`.
+pub(crate) fn parse_percentage<'i>(name: &str, input: &mut Parser<'i>) -> ParseResult<'i, f32> {
+  parse_constant(name, input, Kind::LENGTH, &|formula| {
+    formula
+      .compress()?
+      .terms()
+      .all(|term| term.unit == CalcUnit::Percent)
+      .then_some(formula.percent)
+  })
 }
 
 /// The angle in degrees the math function `name` reads from `input`.
 pub(crate) fn parse_angle<'i>(name: &str, input: &mut Parser<'i>) -> ParseResult<'i, f32> {
-  match input
+  parse_constant(name, input, Kind::ANGLE, &CalcFormula::absolute_px)
+}
+
+/// The value of `kind` the math function `name` reads from `input`, each length leaf as `length`
+/// gives it.
+fn parse_constant<'i>(
+  name: &str,
+  input: &mut Parser<'i>,
+  kind: Kind,
+  length: &dyn Fn(&CalcFormula) -> Option<f32>,
+) -> ParseResult<'i, f32> {
+  input
     .parse_nested_block(|input| parse_function(name, input, 0))?
-    .eval(&CalcFormula::absolute_px)
-  {
-    Some(Value {
-      raw,
-      kind: Kind::ANGLE,
-    }) => Ok(finite(raw)),
-    _ => Err(CssParseError::unexpected_token()),
-  }
+    .eval(length)
+    .filter(|value| value.kind == kind)
+    .map(Value::finite)
+    .ok_or_else(CssParseError::unexpected_token)
 }
 
 /// The arguments of the math function `name`, type-checked into one node.
@@ -304,9 +316,25 @@ fn parse_function<'i>(name: &str, input: &mut Parser<'i>, depth: u32) -> ParseRe
     "min" => Node::Min(args(input)?.into()),
     "max" => Node::Max(args(input)?.into()),
     "clamp" => {
-      let [low, value, high]: [Node; 3] = args(input)?.try_into().map_err(|_| invalid())?;
+      let bounds = input.parse_comma_separated(|input| {
+        if input.try_parse(|input| input.expect_ident_matching("none")).is_ok() {
+          return Ok(None);
+        }
 
-      Node::Clamp(Box::new([low, value, high]))
+        parse_sum(input, depth + 1).map(Some)
+      })?;
+      let [low, Some(value), high]: [Option<Node>; 3] = bounds.try_into().map_err(|_| invalid())? else {
+        return Err(invalid());
+      };
+
+      // An unbounded side leaves `min()` or `max()`, as Blink's `CSSMathExpressionOperation`
+      // simplifies `clamp()`.
+      match (low, high) {
+        (Some(low), Some(high)) => Node::Clamp(Box::new([low, value, high])),
+        (None, Some(high)) => Node::Min([value, high].into()),
+        (Some(low), None) => Node::Max([low, value].into()),
+        (None, None) => value,
+      }
     },
     "round" => {
       let rounding = input
@@ -366,23 +394,54 @@ fn parse_function<'i>(name: &str, input: &mut Parser<'i>, depth: u32) -> ParseRe
 fn fold_unary(name: &str, argument: Node) -> Option<Node> {
   let value = argument.eval(&CalcFormula::absolute_px)?;
   let number = value.kind == Kind::NUMBER;
-  let radians = match value.kind {
-    Kind::NUMBER => value.raw,
-    Kind::ANGLE => value.raw.to_radians(),
+  let degrees = match value.kind {
+    Kind::NUMBER => value.raw.to_degrees(),
+    Kind::ANGLE => value.raw,
     _ => return None,
   };
 
   Some(match_ignore_ascii_case! { name,
-    "sin" => Node::Number(radians.sin()),
-    "cos" => Node::Number(radians.cos()),
-    "tan" => Node::Number(radians.tan()),
-    "asin" if number => Node::Angle(radians.asin().to_degrees()),
-    "acos" if number => Node::Angle(radians.acos().to_degrees()),
-    "atan" if number => Node::Angle(radians.atan().to_degrees()),
-    "sqrt" if number => Node::Number(radians.sqrt()),
-    "exp" if number => Node::Number(radians.exp()),
+    "sin" => Node::Number(sin_cos_degrees(degrees).0),
+    "cos" => Node::Number(sin_cos_degrees(degrees).1),
+    "tan" => Node::Number(tan_degrees(degrees)),
+    "asin" if number => Node::Angle(value.raw.asin().to_degrees()),
+    "acos" if number => Node::Angle(value.raw.acos().to_degrees()),
+    "atan" if number => Node::Angle(value.raw.atan().to_degrees()),
+    "sqrt" if number => Node::Number(value.raw.sqrt()),
+    "exp" if number => Node::Number(value.raw.exp()),
     _ => return None,
   })
+}
+
+/// The sine and cosine of `degrees`, exact at multiples of 90deg, as gfx's `SinCosDegrees`.
+fn sin_cos_degrees(degrees: f32) -> (f32, f32) {
+  let quadrants = degrees / 90.0;
+
+  if degrees.abs() < 90_000_000.0 && quadrants.fract() == 0.0 {
+    return [(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)][(quadrants as i32 & 3) as usize];
+  }
+
+  degrees.to_radians().sin_cos()
+}
+
+/// The tangent of `degrees`, exact at multiples of 45deg, as Blink's `TanDegrees`.
+fn tan_degrees(degrees: f32) -> f32 {
+  let octants = degrees / 45.0;
+
+  if degrees.abs() < 90_000_000.0 && octants.fract() == 0.0 {
+    return [
+      0.0,
+      1.0,
+      f32::INFINITY,
+      -1.0,
+      0.0,
+      1.0,
+      f32::NEG_INFINITY,
+      -1.0,
+    ][(octants as i32 & 7) as usize];
+  }
+
+  degrees.to_radians().tan()
 }
 
 /// `mod()` and `rem()` as nodes, and `atan2()` and `pow()` computed now.
@@ -410,7 +469,7 @@ fn parse_sum<'i>(input: &mut Parser<'i>, mut depth: u32) -> ParseResult<'i, Node
   let mut node = parse_product(input, depth)?;
 
   // Each operand of a chain nests the tree one level deeper, so a chain counts toward the depth.
-  while let Some(operator) = operator(input, ['+', '-']) {
+  while let Some(operator) = sum_operator(input) {
     depth += 1;
     let rhs = parse_product(input, depth)?;
 
@@ -429,7 +488,7 @@ fn parse_sum<'i>(input: &mut Parser<'i>, mut depth: u32) -> ParseResult<'i, Node
 fn parse_product<'i>(input: &mut Parser<'i>, mut depth: u32) -> ParseResult<'i, Node> {
   let mut node = parse_factor(input, depth)?;
 
-  while let Some(operator) = operator(input, ['*', '/']) {
+  while let Some(operator) = product_operator(input) {
     depth += 1;
     let rhs = parse_factor(input, depth)?;
 
@@ -442,11 +501,32 @@ fn parse_product<'i>(input: &mut Parser<'i>, mut depth: u32) -> ParseResult<'i, 
   Ok(node)
 }
 
-/// Consumes the next token when it is a delimiter among `operators`.
-fn operator(input: &mut Parser<'_>, operators: [char; 2]) -> Option<char> {
+/// Consumes the next `+` or `-`, which needs whitespace on both sides.
+/// <https://drafts.csswg.org/css-values-4/#calc-syntax>
+fn sum_operator(input: &mut Parser<'_>) -> Option<char> {
+  input
+    .try_parse(|input| {
+      let Ok(Token::WhiteSpace(_)) = input.next_including_whitespace() else {
+        return Err(());
+      };
+      let operator = match input.next_including_whitespace() {
+        Ok(&Token::Delim(operator @ ('+' | '-'))) => operator,
+        _ => return Err(()),
+      };
+
+      match input.next_including_whitespace() {
+        Ok(Token::WhiteSpace(_)) => Ok(operator),
+        _ => Err(()),
+      }
+    })
+    .ok()
+}
+
+/// Consumes the next `*` or `/`.
+fn product_operator(input: &mut Parser<'_>) -> Option<char> {
   input
     .try_parse(|input| match input.next() {
-      Ok(&Token::Delim(operator)) if operators.contains(&operator) => Ok(operator),
+      Ok(&Token::Delim(operator @ ('*' | '/'))) => Ok(operator),
       _ => Err(()),
     })
     .ok()
@@ -639,29 +719,25 @@ impl Node {
         Value::new(lhs.raw / rhs.raw, lhs.kind.over(rhs.kind)?)
       }
       Self::Negate(node) => node.eval(length)?.map(|value| -value),
-      Self::Min(nodes) => fold(nodes, length, f32::min)?,
-      Self::Max(nodes) => fold(nodes, length, f32::max)?,
+      Self::Min(nodes) => fold(nodes, length, minimum)?,
+      Self::Max(nodes) => fold(nodes, length, maximum)?,
       Self::Clamp(nodes) => {
         let [low, value, high] = [&nodes[0], &nodes[1], &nodes[2]].map(|node| node.eval(length));
         let (low, value, high) = (low?, value?, high?);
 
         // The lower bound wins over the upper one.
-        value.zip(high, f32::min)?.zip(low, f32::max)?
+        value.zip(high, minimum)?.zip(low, maximum)?
       }
       Self::Round(rounding, value, step) => {
         value.eval(length)?.zip(step.eval(length)?, |value, step| {
-          rounding.round(value, step)
+          Step::Round(*rounding).apply(value, step)
         })?
       }
       Self::Mod(value, step) => value.eval(length)?.zip(step.eval(length)?, |value, step| {
-        if step.is_infinite() && value.is_finite() && value.signum() != step.signum() {
-          step
-        } else {
-          value - step * (value / step).floor()
-        }
+        Step::Mod.apply(value, step)
       })?,
       Self::Rem(value, step) => value.eval(length)?.zip(step.eval(length)?, |value, step| {
-        value - step * (value / step).trunc()
+        Step::Rem.apply(value, step)
       })?,
       Self::Abs(node) => node.eval(length)?.map(f32::abs),
       Self::Sign(node) => {
@@ -675,18 +751,15 @@ impl Node {
 
         Value::new(sign, Kind::NUMBER)
       }
-      Self::Hypot(nodes) => {
-        let mut kind = None;
-        let mut sum = 0.0;
-
-        for node in nodes.iter() {
-          let value = node.eval(length)?;
-
-          kind = Some(value);
-          sum += value.raw * value.raw;
+      // Blink's `EvaluateHypotIteration`: a scaled hypotenuse, so no square overflows.
+      Self::Hypot(nodes) => fold(nodes, length, |sum, value| {
+        if sum.is_nan() || value.is_nan() {
+          f32::NAN
+        } else {
+          sum.hypot(value)
         }
-        kind?.map(|_| sum.sqrt())
-      }
+      })?
+      .map(f32::abs),
     })
   }
 }
@@ -703,36 +776,137 @@ fn fold(
   values.try_fold(first, |folded, value| folded.zip(value?, combine))
 }
 
-impl Rounding {
-  /// `value` rounded to a multiple of `step`.
-  /// <https://drafts.csswg.org/css-values-4/#round-func>
-  fn round(self, value: f32, step: f32) -> f32 {
-    if step == 0.0 {
+/// A function that steps its value by a multiple of a step, as Blink's
+/// `EvaluateSteppedValueFunction`.
+/// <https://drafts.csswg.org/css-values-4/#round-infinities>
+#[derive(Clone, Copy)]
+enum Step {
+  Round(Rounding),
+  Mod,
+  Rem,
+}
+
+impl Step {
+  fn apply(self, value: f32, step: f32) -> f32 {
+    if value.is_nan() || step.is_nan() || step == 0.0 || (value.is_infinite() && step.is_infinite())
+    {
       return f32::NAN;
     }
-    if value.is_infinite() {
-      return if step.is_infinite() { f32::NAN } else { value };
-    }
-    if step.is_infinite() {
-      return match self {
-        Self::Up if value > 0.0 => f32::INFINITY,
-        Self::Down if value < 0.0 => f32::NEG_INFINITY,
-        _ => 0.0_f32.copysign(value),
-      };
-    }
 
-    let step = step.abs();
-    let (lower, upper) = ((value / step).floor() * step, (value / step).ceil() * step);
+    let finite_step = step.is_finite();
 
     match self {
-      Self::Up => upper,
-      Self::Down => lower,
-      Self::ToZero if value < 0.0 => upper,
-      Self::ToZero => lower,
-      // A half rounds up, toward positive infinity.
-      Self::Nearest if value - lower < upper - value => lower,
-      Self::Nearest => upper,
+      Self::Round(_) if value % step == 0.0 || value.is_infinite() => value,
+      Self::Mod | Self::Rem if value.is_infinite() => f32::NAN,
+      Self::Round(rounding) => {
+        let (lower, upper) = nearest_multiples(value, step);
+        let negative = value.is_sign_negative();
+
+        match rounding {
+          Rounding::Nearest if !finite_step => 0.0_f32.copysign(value),
+          Rounding::Nearest => {
+            let (lower, upper) = if value < 0.0 {
+              (upper, lower)
+            } else {
+              (lower, upper)
+            };
+            let distance = (value % step).abs();
+            let half = step.abs() / 2.0;
+
+            if distance < half || (value < 0.0 && distance == half) {
+              lower
+            } else {
+              upper
+            }
+          }
+          Rounding::Up if !finite_step && value == 0.0 => value,
+          Rounding::Up if !finite_step => {
+            if negative {
+              -0.0
+            } else {
+              f32::INFINITY
+            }
+          }
+          Rounding::Up => upper,
+          Rounding::Down if !finite_step && value == 0.0 => value,
+          Rounding::Down if !finite_step => {
+            if negative {
+              f32::NEG_INFINITY
+            } else {
+              0.0
+            }
+          }
+          Rounding::Down => lower,
+          Rounding::ToZero if !finite_step => 0.0_f32.copysign(value),
+          Rounding::ToZero if upper.abs() < lower.abs() => upper,
+          Rounding::ToZero => lower,
+        }
+      }
+      Self::Mod => {
+        if !finite_step && value.is_sign_negative() != step.is_sign_negative() {
+          return f32::NAN;
+        }
+
+        let remainder = value % step;
+
+        if remainder == 0.0 {
+          0.0_f32.copysign(step)
+        } else if remainder.is_sign_negative() != step.is_sign_negative() {
+          remainder + step
+        } else {
+          remainder
+        }
+      }
+      Self::Rem => value % step,
     }
+  }
+}
+
+/// The multiples of `step` either side of `value`, as Blink's `GetNearestMultiples`.
+fn nearest_multiples(value: f32, step: f32) -> (f32, f32) {
+  let (mut a, mut b) = (value.abs(), step.abs());
+  let mut c = -(a % b);
+  let lower = a + c;
+
+  // Adding by increasing magnitude keeps a small term from rounding away.
+  if a.abs() > c.abs() {
+    (a, c) = (c, a);
+  }
+  if a.abs() > b.abs() {
+    (a, b) = (b, a);
+  }
+  if b.abs() > c.abs() {
+    (b, c) = (c, b);
+  }
+
+  let upper = a + b + c;
+
+  if value < 0.0 {
+    (-upper, -lower)
+  } else {
+    (lower, upper)
+  }
+}
+
+/// The smaller value, NaN when either is, and -0 below +0.
+fn minimum(a: f32, b: f32) -> f32 {
+  if a.is_nan() || b.is_nan() {
+    f32::NAN
+  } else if a == 0.0 && b == 0.0 && (a.is_sign_negative() || b.is_sign_negative()) {
+    -0.0
+  } else {
+    a.min(b)
+  }
+}
+
+/// The larger value, NaN when either is, and +0 above -0.
+fn maximum(a: f32, b: f32) -> f32 {
+  if a.is_nan() || b.is_nan() {
+    f32::NAN
+  } else if a == 0.0 && b == 0.0 && (a.is_sign_positive() || b.is_sign_positive()) {
+    0.0
+  } else {
+    a.max(b)
   }
 }
 
@@ -870,6 +1044,30 @@ mod tests {
       FontWeight::from_css_str("calc(1200)"),
       Ok(FontWeight::from(1000.0))
     );
+    assert_eq!(
+      FontWeight::from_css_str("calc(NaN)"),
+      Ok(FontWeight::from(1.0))
+    );
+    assert_eq!(FlexGrow::from_css_str("calc(-1)"), Ok(FlexGrow(0.0)));
+    assert_eq!(
+      PercentageNumber::from_css_str("min(50%, 75%)"),
+      Ok(PercentageNumber(0.5))
+    );
+    assert!(PercentageNumber::from_css_str("calc(50% * 50%)").is_err());
+    assert_eq!(
+      ZIndex::from_css_str("calc(8388609)"),
+      Ok(ZIndex::Integer(8_388_609))
+    );
+  }
+
+  /// A constant calculation keeps its identity, so a negative one is not rejected as a literal is.
+  #[test]
+  fn a_negative_calculation_is_not_a_negative_literal() {
+    let length = Length::from_css_str("min(-10px, -20px)").expect("the length parses");
+
+    assert!(!length.is_negative());
+    assert_eq!(length.to_css_string(), "calc(-20px)");
+    assert!(Length::from_css_str("max(200px, 20%)").is_ok_and(Length::has_percentage));
   }
 
   /// A tree past the size limit does not intern, however shallow.
@@ -928,7 +1126,7 @@ mod tests {
       Length::from_css_str("calc(10px + 20%)"),
       Ok(Length::Calc(_))
     ));
-    assert_eq!(Length::from_css_str("max(1in, 10px)"), Ok(Length::Px(96.0)));
+    assert_eq!(serialized("max(1in, 10px)"), "calc(96px)");
     assert_eq!(serialized("min(10px, 20%)"), "min(10px, 20%)");
     assert_eq!(serialized("clamp(1em, 5%, 3rem)"), "clamp(1em, 5%, 3rem)");
   }
