@@ -1,14 +1,14 @@
 //! CSS math functions that do not reduce to the linear `px + %` form `calc()` keeps, such as
 //! `min(10px, 20%)`, held as a tree until layout knows the percentage basis, as Blink holds a
-//! `CSSMathExpressionNode`. A tree is interned, so a `Length` that names one stays `Copy`.
+//! `CSSMathExpressionNode`. A tree is [interned](super::interner), so a `Length` that names one
+//! stays `Copy`.
 //! <https://drafts.csswg.org/css-values-4/#math>
 
 use std::{
-  collections::HashMap,
   f32::consts::{E, PI},
   fmt::{self, Write},
   slice,
-  sync::{LazyLock, PoisonError, RwLock},
+  sync::{LazyLock, RwLock},
 };
 
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
@@ -18,16 +18,13 @@ use crate::{
   style::{
     Length, ParseResult, SizingContext, ToCss,
     calc::{CalcFormula, CalcValue},
+    interner::{self, Interner},
     length_from_dimension_unit,
   },
 };
 
 /// Blink's `kMaxExpressionDepth`, from css_math_expression_node.h.
 const MAX_DEPTH: u32 = 100;
-
-/// How many distinct trees the process keeps. A value past it does not parse, which bounds the
-/// memory a stream of distinct stylesheets can take.
-const MAX_EXPRESSIONS: usize = 1 << 16;
 
 /// A math expression, by its index among the interned trees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -110,44 +107,22 @@ enum Rounding {
   ToZero,
 }
 
-/// The interned trees, and the index of each by its serialization.
-#[derive(Default)]
-struct Interner {
-  nodes: Vec<Node>,
-  indices: HashMap<String, u32>,
-}
-
-static INTERNER: LazyLock<RwLock<Interner>> = LazyLock::new(RwLock::default);
+static TREES: LazyLock<RwLock<Interner<Node>>> = LazyLock::new(RwLock::default);
 
 impl MathExpr {
   fn intern(node: Node) -> Option<Self> {
-    let mut key = String::new();
-
-    node.to_css(&mut key).ok()?;
-    if let Some(&index) = INTERNER.read().ok()?.indices.get(&key) {
-      return Some(Self(index));
-    }
-
-    let mut interner = INTERNER.write().ok()?;
-
-    if let Some(&index) = interner.indices.get(&key) {
-      return Some(Self(index));
-    }
-    if interner.nodes.len() >= MAX_EXPRESSIONS {
+    if node.size() > interner::MAX_PARTS {
       return None;
     }
 
-    let index = u32::try_from(interner.nodes.len()).ok()?;
+    let mut key = String::new();
 
-    interner.nodes.push(node);
-    interner.indices.insert(key, index);
-    Some(Self(index))
+    node.to_css(&mut key).ok()?;
+    interner::intern(&TREES, key, node).map(Self)
   }
 
   fn with<R>(self, read: impl FnOnce(&Node) -> R) -> R {
-    let interner = INTERNER.read().unwrap_or_else(PoisonError::into_inner);
-
-    read(&interner.nodes[self.0 as usize])
+    interner::with(&TREES, self.0, read)
   }
 
   /// The length in device px against `sizing`, a percentage taking `basis`.
@@ -554,6 +529,24 @@ impl Node {
     }
   }
 
+  /// How many nodes the tree has.
+  fn size(&self) -> usize {
+    1 + match self {
+      Self::Number(_) | Self::Angle(_) | Self::Length(_) => 0,
+      Self::Sum(lhs, rhs)
+      | Self::Product(lhs, rhs)
+      | Self::Quotient(lhs, rhs)
+      | Self::Round(_, lhs, rhs)
+      | Self::Mod(lhs, rhs)
+      | Self::Rem(lhs, rhs) => lhs.size() + rhs.size(),
+      Self::Negate(node) | Self::Abs(node) | Self::Sign(node) => node.size(),
+      Self::Min(nodes) | Self::Max(nodes) | Self::Hypot(nodes) => {
+        nodes.iter().map(Self::size).sum()
+      }
+      Self::Clamp(nodes) => nodes.iter().map(Self::size).sum(),
+    }
+  }
+
   /// Whether a percentage takes part.
   fn has_percent(&self) -> bool {
     match self {
@@ -874,6 +867,18 @@ mod tests {
       FontWeight::from_css_str("calc(1200)"),
       Ok(FontWeight::from(1000.0))
     );
+  }
+
+  /// A tree past the size limit does not intern, however shallow.
+  #[test]
+  fn a_wide_tree_stops_at_the_size_limit() {
+    let wide = |terms: usize| format!("min({}, 20%)", vec!["1px"; terms].join(", "));
+
+    assert!(matches!(
+      Length::from_css_str(&wide(100)),
+      Ok(Length::Math(_))
+    ));
+    assert!(Length::from_css_str(&wide(5_000)).is_err());
   }
 
   /// A long chain counts toward the depth limit, so it cannot nest the tree past it.

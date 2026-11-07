@@ -5,6 +5,7 @@ mod css_source;
 mod custom_properties;
 #[cfg(feature = "font-face")]
 pub(crate) mod font_face_rule;
+mod interner;
 mod matched_style_cache;
 pub mod math;
 mod math_expression;
