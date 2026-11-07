@@ -133,6 +133,14 @@ impl CalcTerms {
       .map(|(unit, value)| CalcTerm { unit, value })
   }
 
+  /// The coefficient of `unit`, or zero.
+  fn value(&self, unit: CalcUnit) -> f32 {
+    self
+      .terms()
+      .find(|term| term.unit == unit)
+      .map_or(0.0, |term| term.value)
+  }
+
   pub(crate) fn neg(self) -> Self {
     Self {
       units: self.units,
@@ -270,6 +278,19 @@ impl CalcFormula {
     }
   }
 
+  /// `self / rhs`, when `self` is a multiple of `rhs`: every term's quotient is the same.
+  // TODO: divide unlike units, such as `1em / 1px`, and a divisor such as `10px - 1em` that may
+  // resolve to zero, once sizing is known.
+  fn ratio(self, rhs: Self) -> Option<f32> {
+    let (lhs, rhs) = (self.compress()?, rhs.compress()?);
+    let mut quotients = rhs.terms().map(|term| lhs.value(term.unit) / term.value);
+    let factor = quotients.next()?;
+
+    (quotients.all(|quotient| quotient == factor)
+      && lhs.terms().all(|term| rhs.value(term.unit) != 0.0))
+    .then_some(factor)
+  }
+
   /// The non-zero terms, absolute lengths summed into px, or `None` past [`MAX_CALC_TERMS`].
   pub(crate) fn compress(self) -> Option<CalcTerms> {
     let px = self.px
@@ -322,6 +343,13 @@ pub(crate) enum CalcValue {
 }
 
 impl CalcValue {
+  fn number(self) -> Option<f32> {
+    match self {
+      Self::Number(value) => Some(value),
+      Self::Formula(_) => None,
+    }
+  }
+
   /// Applies a binary operator, or `None` when the operand types rule it out.
   fn combine(self, operator: char, rhs: Self) -> Option<Self> {
     Some(match (operator, self, rhs) {
@@ -335,6 +363,7 @@ impl CalcValue {
       ('/', _, Self::Number(0.0)) => return None,
       ('/', Self::Formula(lhs), Self::Number(rhs)) => Self::Formula(lhs.scale(1.0 / rhs)),
       ('/', Self::Number(lhs), Self::Number(rhs)) => Self::Number(lhs / rhs),
+      ('/', Self::Formula(lhs), Self::Formula(rhs)) => Self::Number(lhs.ratio(rhs)?),
       _ => return None,
     })
   }
@@ -353,15 +382,16 @@ fn parse_calc_sum_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, 
   })
 }
 
-/// Parses a `calc(...)` that must reduce to a unitless number.
+/// Parses a math function that must reduce to a unitless number.
 pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
-  let token = input.next()?.clone();
+  let start = input.state();
 
-  if let Token::Function(function) = &token
-    && function.eq_ignore_ascii_case("calc")
-    && let CalcValue::Number(value) = input.parse_nested_block(parse_calc_sum)?
-  {
-    return Ok(value);
+  if let Token::Function(_) = input.next()? {
+    input.reset(&start);
+
+    if let CalcValue::Number(value) = parse_calc_factor_at(input, 0)? {
+      return Ok(value);
+    }
   }
 
   Err(CssParseError::unexpected_token())
@@ -431,8 +461,27 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'
         None => Err(unexpected_token!(Length, token)),
       }
     }
-    Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
-      input.parse_nested_block(|input| parse_calc_sum_at(input, depth + 1))
+    Token::Function(name) => {
+      let token = token.clone();
+      // TODO: compare lengths.
+      let compare: fn(&[f32]) -> Option<f32> = match_ignore_ascii_case! { name,
+        "calc" => return input.parse_nested_block(|input| parse_calc_sum_at(input, depth + 1)),
+        "min" => min_of,
+        "max" => max_of,
+        "clamp" => clamp_of,
+        _ => return Err(unexpected_token!(Length, &token)),
+      };
+
+      input.parse_nested_block(|input| {
+        input
+          .parse_comma_separated(|input| parse_calc_sum_at(input, depth + 1))?
+          .into_iter()
+          .map(CalcValue::number)
+          .collect::<Option<Vec<_>>>()
+          .and_then(|values| compare(&values))
+          .map(CalcValue::Number)
+          .ok_or_else(|| unexpected_token!(Length, &token))
+      })
     }
     Token::Ident(ident) => match_ignore_ascii_case! {ident.as_ref(),
       "e" => Ok(CalcValue::Number(std::f32::consts::E)),
@@ -444,4 +493,28 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'
     },
     _ => Err(unexpected_token!(Length, token)),
   }
+}
+
+// A NaN argument makes the result NaN: https://drafts.csswg.org/css-values-4/#calc-ieee
+fn min_of(values: &[f32]) -> Option<f32> {
+  values
+    .iter()
+    .copied()
+    .reduce(|lhs, rhs| if rhs < lhs || rhs.is_nan() { rhs } else { lhs })
+}
+
+fn max_of(values: &[f32]) -> Option<f32> {
+  values
+    .iter()
+    .copied()
+    .reduce(|lhs, rhs| if rhs > lhs || rhs.is_nan() { rhs } else { lhs })
+}
+
+/// <https://drafts.csswg.org/css-values-4/#funcdef-clamp>
+fn clamp_of(values: &[f32]) -> Option<f32> {
+  let &[min, value, max] = values else {
+    return None;
+  };
+
+  max_of(&[min, min_of(&[value, max])?])
 }

@@ -56,8 +56,9 @@ impl<'i> FromCss<'i> for LineHeight {
       return Ok(Self::Normal);
     }
 
+    // https://drafts.csswg.org/css-values-4/#calc-range
     if let Ok(number) = input.try_parse(parse_calc_number_expression) {
-      return Ok(LineHeight::Unitless(number));
+      return Ok(LineHeight::Unitless(number.max(0.0)));
     }
 
     if let Ok(percent) = input.try_parse(Parser::expect_percentage) {
@@ -118,6 +119,14 @@ mod tests {
     assert_eq!(
       LineHeight::from_css_str("calc(1.75 / 1.125)"),
       Ok(LineHeight::Unitless(1.75 / 1.125))
+    );
+  }
+
+  #[test]
+  fn clamps_a_negative_math_function_to_zero() {
+    assert_eq!(
+      LineHeight::from_css_str("min(1, -1)"),
+      Ok(LineHeight::Unitless(0.0))
     );
   }
 
