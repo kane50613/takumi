@@ -111,7 +111,7 @@ fn next_page_laid(options: RenderOptions<'_>, page_size: Size<f32>) -> Result<Ve
 
   render_pages_settling(
     options,
-    page_size,
+    page_size.into(),
     usize::MAX,
     &|layout| {
       if layout.is_finished() {
@@ -594,7 +594,7 @@ fn laid_when_first_page_goes(source: &str) -> (usize, usize) {
 
   render_pages_settling(
     options(&fonts, &node, &stylesheet, PAGE_SIZE),
-    PAGE_SIZE,
+    PAGE_SIZE.into(),
     usize::MAX,
     &|layout| {
       laid.set(layout.page_count());

@@ -63,6 +63,13 @@ impl Viewport {
     }
   }
 
+  /// A `page` as the print viewport an `@page` rule's `@media` and lengths resolve against.
+  pub fn print_page(page: Size<f32>) -> Self {
+    Self::new((page.width as u32, page.height as u32))
+      .with_media_target(MediaTarget::Print)
+      .with_unit_reference(page)
+  }
+
   /// Sets the font size in pixels.
   pub const fn with_font_size(mut self, font_size: f32) -> Self {
     self.font_size = font_size;
