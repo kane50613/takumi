@@ -70,8 +70,10 @@ impl Animatable for FontWeight {
 
 impl<'i> FromCss<'i> for FontWeight {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    // https://drafts.csswg.org/css-values-4/#calc-range
+    // https://drafts.csswg.org/css-values-4/#calc-ieee and #calc-range
     if let Ok(value) = input.try_parse(parse_calc_number_expression) {
+      let value = if value.is_nan() { 0.0 } else { value };
+
       return Ok(value.clamp(MIN_FONT_WEIGHT, MAX_FONT_WEIGHT).into());
     }
 
@@ -184,6 +186,7 @@ mod tests {
     );
     assert_eq!(FontWeight::from_css_str("calc(300 * 2)"), Ok(600.0.into()));
     assert_eq!(FontWeight::from_css_str("calc(2000)"), Ok(1000.0.into()));
+    assert_eq!(FontWeight::from_css_str("min(nan, 500)"), Ok(1.0.into()));
     assert!(FontWeight::from_css_str("max(500px, 400)").is_err());
   }
 
