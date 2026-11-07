@@ -98,6 +98,11 @@ impl<'r> PageStream<'r> {
     self.layout.sizes()
   }
 
+  /// Whether the last page is laid out.
+  pub fn is_finished(&self) -> bool {
+    self.layout.is_finished()
+  }
+
   /// The pages whose root fragments a scene needs to paint the root fragment of `page`.
   pub fn pages_of(&self, page: usize) -> Vec<usize> {
     self.windows.pages_of(page)

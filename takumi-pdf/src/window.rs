@@ -1,7 +1,7 @@
 //! The page window a prepared tree emits through: what it paints, what it
 //! owns, and the clip and translation that put it on the page.
 
-use takumi_core::{geometry::Point, painter::LineItem, scene::SceneBounds};
+use takumi_core::{geometry::Point, painter::LineItem, scene::SceneBounds, style::Affine};
 
 use crate::{
   emitter::Emitter,
@@ -22,6 +22,48 @@ pub(crate) struct Window {
   pub(crate) y: Option<(f32, f32)>,
   /// The text-line ownership window, so a line's text lands on one page.
   pub(crate) lines: Option<(f32, f32)>,
+  /// The extent the boxes clipping their overflow leave, which [`Self::narrow`] sets.
+  pub(crate) clip: Option<(f32, f32)>,
+  /// How the box painting maps its lines into these windows when it paints under a transform:
+  /// the transform and the horizontal span its lines take.
+  pub(crate) frame: Option<LineFrame>,
+}
+
+/// The transform a box's lines paint under, and the horizontal span they take in its space.
+#[derive(Clone, Copy)]
+pub(crate) struct LineFrame {
+  pub(crate) transform: Affine,
+  pub(crate) left: f32,
+  pub(crate) right: f32,
+}
+
+impl LineFrame {
+  /// `item` in the space the transform maps into: its extent and line box across the span, and
+  /// its baseline at the span's middle.
+  fn map(self, item: LineItem) -> LineItem {
+    let y = |x: f32, y: f32| self.transform.transform_point(x, y).1;
+    let extent = |top: f32, bottom: f32| {
+      let corners = [
+        y(self.left, top),
+        y(self.right, top),
+        y(self.left, bottom),
+        y(self.right, bottom),
+      ];
+
+      (
+        corners.into_iter().fold(f32::INFINITY, f32::min),
+        corners.into_iter().fold(f32::NEG_INFINITY, f32::max),
+      )
+    };
+    let (top, bottom) = extent(item.top, item.bottom);
+
+    LineItem {
+      baseline: y((self.left + self.right) / 2.0, item.baseline),
+      top,
+      bottom,
+      line: extent(item.line.0, item.line.1),
+    }
+  }
 }
 
 impl Window {
@@ -33,29 +75,49 @@ impl Window {
     bounds.is_some_and(|b| self.excludes(b.top as f32, b.bottom as f32))
   }
 
-  /// Whether this page draws a line's item, as Blink spreads monolithic overflow.
+  /// Whether this page draws a line's item: any part of it the clips leave, on the page that owns
+  /// its line and on every other page its line box reaches, as Blink paints a line on each page it
+  /// shows on.
   pub(crate) fn shows_line_item(&self, item: LineItem) -> bool {
-    let overflows = self
-      .y
-      .is_some_and(|(y0, y1)| item.bottom - item.top > y1 - y0);
+    let item = self.in_window(item);
+    let (line_top, line_bottom) = item.line;
 
-    !self.disowns_line(item.baseline) || (overflows && !self.excludes(item.top, item.bottom))
+    !self.excludes(item.top, item.bottom)
+      && (!self.disowns(item) || !self.excludes(line_top, line_bottom))
   }
 
-  /// Whether the line at `baseline` belongs to another page.
-  pub(crate) fn disowns_line(&self, baseline: f32) -> bool {
+  /// Whether the line holding `item` belongs to another page.
+  pub(crate) fn disowns_line(&self, item: LineItem) -> bool {
+    self.disowns(self.in_window(item))
+  }
+
+  /// A line belongs to the page holding its baseline, or the middle of the part a clip leaves
+  /// when the clip cuts its baseline away. Blink has no owner and draws a line's text on every page
+  /// it shows on, so a PDF Chromium prints repeats it. Here one page holds its text, and the others
+  /// draw outlines.
+  fn disowns(&self, item: LineItem) -> bool {
+    let height = match self.clip {
+      Some((top, bottom)) if item.baseline < top || item.baseline >= bottom => {
+        (item.top.max(top) + item.bottom.min(bottom)) / 2.0
+      }
+      _ => item.baseline,
+    };
+
     self
       .lines
-      .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
+      .is_some_and(|(y0, y1)| height < y0 || height >= y1)
   }
 
-  /// Narrows both windows to a box clipping its overflow.
+  fn in_window(&self, item: LineItem) -> LineItem {
+    self.frame.map_or(item, |frame| frame.map(item))
+  }
+
+  /// Narrows the paint window and the clip to a box clipping its overflow.
   pub(crate) fn narrow(&mut self, top: f32, bottom: f32) {
-    for window in [&mut self.y, &mut self.lines] {
-      if let Some((from, to)) = window {
-        *window = Some((from.max(top), to.min(bottom)));
-      }
-    }
+    let narrowed = |(from, to): (f32, f32)| (from.max(top), to.min(bottom));
+
+    self.y = self.y.map(narrowed);
+    self.clip = Some(self.clip.map_or((top, bottom), narrowed));
   }
 }
 

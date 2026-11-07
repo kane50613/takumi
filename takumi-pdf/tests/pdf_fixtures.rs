@@ -7002,3 +7002,113 @@ fn named_pages_take_the_page_rules_of_their_name() {
     );
   }
 }
+
+/// A paged PDF draws a line on the page that shows it: text in a rotated box on its own page, a
+/// line an overflow clip cuts in half on the page holding its visible half, and a line a clip cuts
+/// at the page edge on the page above it.
+#[test]
+fn paged_lines_under_a_transform_or_a_clip() {
+  let render_paged = |name: &str, html: &str, width: f32, height: f32| {
+    run_pdf_fixture(name, |fonts| {
+      PdfOptions::builder()
+        .node(from_html(html, FromHtmlOptions::default()).expect("parse the document"))
+        .page(PageOptions {
+          width,
+          height,
+          margin: PageMargins::uniform(0.0),
+        })
+        .fonts(fonts)
+        .build()
+    })
+  };
+  let text = "Our new plan adds scheduled exports, row-level security and a redesigned mobile app.";
+
+  let rotated = render_paged(
+    "paged-rotated-text",
+    r#"<div style="height: 200px">Q3 results</div><div style="height: 200px; break-before: page"><div style="transform: rotate(-15deg)">Draft</div></div>"#,
+    400.0,
+    200.0,
+  );
+  let clipped = render_paged(
+    "paged-clipped-line",
+    &format!(
+      r#"<div style="width: 240px; height: 60px; overflow: hidden; line-height: 24px">{text}</div>"#
+    ),
+    300.0,
+    100.0,
+  );
+  let at_page_edge = render_paged(
+    "paged-clipped-line-at-page-edge",
+    &format!(
+      r#"<html><body style="margin: 0; height: 100px; overflow: hidden"><div style="width: 240px; padding-top: 88px; line-height: 24px">{text}</div></body></html>"#
+    ),
+    300.0,
+    100.0,
+  );
+  let translated_off = render_paged(
+    "paged-translated-text-past-the-end",
+    r#"<div style="line-height: 24px; transform: translateY(88px)">Total due</div>"#,
+    300.0,
+    100.0,
+  );
+  let across = render_paged(
+    "paged-translated-text-across-pages",
+    r#"<div style="height: 200px"><div style="line-height: 24px; transform: translateY(88px)">Total due</div></div>"#,
+    300.0,
+    100.0,
+  );
+  let first_page = String::from_utf8_lossy(&text_streams(&across)[0]).into_owned();
+
+  // The first page draws the line's top as outlines, and the second holds its text.
+  assert!(
+    first_page
+      .lines()
+      .any(|line| line.ends_with(" f") || line == "f"),
+    "{first_page}"
+  );
+
+  for (pdf, expected) in [
+    (&across, &[0, 1][..]),
+    (&rotated, &[1, 1]),
+    (&clipped, &[3]),
+    (&at_page_edge, &[1]),
+    (&translated_off, &[1]),
+  ] {
+    let pages = text_shows_per_page(pdf);
+    let shows = pages.iter().flatten().collect::<HashSet<_>>();
+
+    assert_eq!(pages.iter().map(Vec::len).collect::<Vec<_>>(), expected);
+    assert_eq!(
+      shows.len(),
+      expected.iter().sum::<usize>(),
+      "a line's text is drawn twice"
+    );
+  }
+}
+
+/// Each page's content stream, the page clip its first line.
+fn text_streams(pdf: &[u8]) -> Vec<Vec<u8>> {
+  content_streams(pdf)
+    .into_iter()
+    .filter(|stream| {
+      stream
+        .split(|byte| *byte == b'\n')
+        .next()
+        .is_some_and(|line| line.starts_with(b"q ") && line.ends_with(b" re"))
+    })
+    .collect()
+}
+
+/// The text each page's content stream shows, a show operator line per text object.
+fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
+  text_streams(pdf)
+    .iter()
+    .map(|stream| {
+      stream
+        .split(|byte| *byte == b'\n')
+        .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+        .map(<[u8]>::to_vec)
+        .collect()
+    })
+    .collect()
+}

@@ -216,6 +216,8 @@ pub struct PositionedInlineRun {
   pub(crate) paint_offset: Point<f32>,
   /// How far `position: relative` on its spans moves it.
   pub(crate) relative_offset: Point<f32>,
+  /// The top and bottom of the line box it sits in, below the content box's top.
+  pub(crate) line_box: (f32, f32),
   /// Where the run sits among its block's runs.
   #[cfg(feature = "paint-tree")]
   pub(crate) index: usize,
