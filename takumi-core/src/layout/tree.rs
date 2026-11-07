@@ -53,9 +53,10 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, FontUnits, LineHeight, MatchedStyleKey, Position, Registrations,
-    SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
-    WhiteSpaceCollapse, apply_stylesheet_animations, page_rule::PageContext,
+    Direction, Display, Float, FontUnits, KeyframesRule, LineHeight, MatchedStyleKey, Position,
+    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
+    StyleSheet, WhiteSpaceCollapse, animated_custom_properties, apply_stylesheet_animations,
+    page_rule::PageContext,
   },
   viewport::Viewport,
 };
@@ -3048,15 +3049,22 @@ impl RenderContext {
 
   /// This style as a child inherits it, with the stylesheet's registered custom properties.
   fn inherited_style(&self) -> Cow<'_, ComputedStyle> {
-    // Registrations come only from this render's stylesheet, so a style that carries any carries
-    // them all, and its descendants take them through `inherited`.
-    if self.stylesheet().property_rules().is_empty()
-      || self.style.custom_properties.has_registrations()
-    {
+    if self.stylesheet().property_rules().is_empty() {
       return Cow::Borrowed(&self.style);
     }
 
-    self.registered_inherited_style()
+    // Registrations come only from this render's stylesheet, so a style that carries any carries
+    // them all, and its descendants take them through `inherited`.
+    let mut style = if self.style.custom_properties.has_registrations() {
+      Cow::Borrowed(self.style.as_ref())
+    } else {
+      self.registered_inherited_style()
+    };
+
+    if let Some(custom_properties) = style.custom_properties.with_computed_values(&self.sizing) {
+      style.to_mut().custom_properties = custom_properties;
+    }
+    style
   }
 
   /// [`Self::inherited_style`] for a style the stylesheet's `@property` rules have not reached yet,
@@ -3154,20 +3162,7 @@ impl RenderContext {
 
     let (style_layers, element_important) = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
-
-    let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
-
-    let mut child_sizing_for_final: Option<SizingContext> = None;
-    if !style.misc1_data.animation_name.is_empty() {
-      let (animated, child_sizing) = self.animated_style(style);
-
-      style = animated;
-      child_sizing_for_final = Some(child_sizing);
-    }
-
-    // Important declarations outrank an animation, and `inherit` among them
-    // needs the parent the first pass resolved against.
-    let important = matched
+    let important: Vec<&StyleDeclaration> = matched
       .unlayered_important()
       .iter()
       .map(|declarations| declarations.iter())
@@ -3182,14 +3177,54 @@ impl RenderContext {
           .inline
           .iter()
           .map(|declarations| declarations.iter()),
-      );
+      )
+      .flatten()
+      .collect();
+    // An animated custom property cascades above the element's declarations, before `var()`
+    // substitutes it, so the element cascades again with it.
+    let recascade = self
+      .stylesheet()
+      .keyframes
+      .iter()
+      .any(KeyframesRule::animates_custom_properties)
+      .then(|| style_layers.clone());
 
-    for declarations in important {
-      for declaration in declarations {
-        declaration
-          .clone()
-          .apply_with_parent(&mut style, &inherited_parent);
+    let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
+
+    let mut child_sizing_for_final: Option<SizingContext> = None;
+    if let Some(style_layers) = recascade
+      && !style.misc1_data.animation_name.is_empty()
+    {
+      let mut animated = self.animated_custom_properties(&style);
+
+      // An important declaration outranks the animation of the same custom property.
+      animated.retain(|(name, _)| {
+        !important.iter().any(|declaration| {
+          matches!(declaration, StyleDeclaration::CustomProperty(important, _) if important == name.as_str())
+        })
+      });
+      if !animated.is_empty() {
+        style = animated
+          .into_iter()
+          .fold(style_layers, |layers, (name, value)| {
+            layers.with(StyleDeclaration::CustomProperty(name, value))
+          })
+          .inherit_with_lang(&inherited_parent, lang);
       }
+    }
+    if !style.misc1_data.animation_name.is_empty() {
+      let (animated, child_sizing) = self.animated_style(style);
+
+      style = animated;
+      child_sizing_for_final = Some(child_sizing);
+    }
+
+    // Important declarations outrank an animation, and `inherit` among them
+    // needs the parent the first pass resolved against.
+    for &declaration in &important {
+      declaration
+        .clone()
+        .apply_with_parent(&mut style, &inherited_parent);
     }
 
     let sizing = self.child_sizing(
@@ -3248,6 +3283,19 @@ impl RenderContext {
         .root_line_height
         .or_else(|| is_document_root.then_some(line_height)),
       FontUnits { ch, ex },
+    )
+  }
+
+  /// The custom properties the stylesheet animations set on `style` at this render's time.
+  fn animated_custom_properties(&self, style: &ComputedStyle) -> Vec<(String, String)> {
+    let sizing = self.child_sizing(style, &self.sizing, false);
+
+    animated_custom_properties(
+      style,
+      self.stylesheet(),
+      self.time_ms(),
+      &sizing,
+      style.inherited_data.color.resolve(self.current_color),
     )
   }
 
@@ -3362,8 +3410,8 @@ mod tests {
     layout::node::Node,
     resources::font::Fonts,
     style::{
-      ComputedStyle, Direction, Length, PageName, PropertyRule, SizingContext, Style,
-      StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+      ComputedStyle, Direction, Length, PageName, PropertyRule, PropertySyntax, SizingContext,
+      Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
       page_rule::{PageContext, PageKind},
     },
     viewport::Viewport,
@@ -3489,6 +3537,40 @@ mod tests {
   }
 
   #[test]
+  fn a_registered_length_inherits_as_the_px_its_parent_computes() {
+    let stylesheet = parse_stylesheet(
+      "@property --g { syntax: ' <length> '; inherits: true; initial-value: 0px }
+       @property --h { syntax: '<length>'; inherits: true; initial-value: 3px }
+       @property --w { syntax: '*'; inherits: true }
+       .p { font-size: 20px; --g: .5em; --w: .5em }
+       .c { font-size: 2em; margin-top: var(--g); margin-bottom: var(--h); margin-left: var(--w) }",
+    );
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([Node::container([]).with_class_name("c")]).with_class_name("p"),
+    );
+    let child = &tree.children.as_deref().expect("children")[0];
+    let margin = |length: Length| length.to_px(&child.context.sizing, 0.0);
+
+    assert_eq!(
+      child.context.style.custom_properties.get("--g"),
+      Some("10px")
+    );
+    assert_eq!(margin(child.context.style.box_data.margin_top), 10.0);
+    assert_eq!(margin(child.context.style.box_data.margin_bottom), 3.0);
+    assert_eq!(margin(child.context.style.box_data.margin_left), 20.0);
+  }
+
+  #[test]
   fn registered_custom_property_can_disable_inheritance() {
     let mut parent = ComputedStyle::default();
     parent
@@ -3497,7 +3579,7 @@ mod tests {
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
       name: "--box-size".to_owned(),
-      syntax: "*".to_owned(),
+      syntax: PropertySyntax::Universal,
       inherits: false,
       initial_value: Some("10px".to_owned()),
       media_queries: Vec::new(),
@@ -3520,7 +3602,7 @@ mod tests {
     let parent = ComputedStyle::default();
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
       name: "--tw-gradient-from-position".to_owned(),
-      syntax: "<length-percentage>".to_owned(),
+      syntax: "<length-percentage>".parse().unwrap(),
       inherits: false,
       initial_value: Some("0%".to_owned()),
       media_queries: Vec::new(),
@@ -3547,7 +3629,7 @@ mod tests {
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
       name: "--box-size".to_owned(),
-      syntax: "*".to_owned(),
+      syntax: PropertySyntax::Universal,
       inherits: true,
       initial_value: Some("10px".to_owned()),
       media_queries: Vec::new(),
@@ -3569,7 +3651,7 @@ mod tests {
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
       name: "--box-size".to_owned(),
-      syntax: "*".to_owned(),
+      syntax: PropertySyntax::Universal,
       inherits: true,
       initial_value: Some("10px".to_owned()),
       media_queries: Vec::new(),
@@ -3592,14 +3674,14 @@ mod tests {
     let stylesheets = [StyleSheet::from(vec![
       PropertyRule {
         name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
+        syntax: PropertySyntax::Universal,
         inherits: true,
         initial_value: Some("10px".to_owned()),
         media_queries: Vec::new(),
       },
       PropertyRule {
         name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
+        syntax: PropertySyntax::Universal,
         inherits: true,
         initial_value: Some("20px".to_owned()),
         media_queries: Vec::new(),
@@ -3626,14 +3708,14 @@ mod tests {
     let stylesheets = [StyleSheet::from(vec![
       PropertyRule {
         name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
+        syntax: PropertySyntax::Universal,
         inherits: false,
         initial_value: Some("10px".to_owned()),
         media_queries: Vec::new(),
       },
       PropertyRule {
         name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
+        syntax: PropertySyntax::Universal,
         inherits: true,
         initial_value: Some("20px".to_owned()),
         media_queries: Vec::new(),
@@ -3658,14 +3740,14 @@ mod tests {
     let stylesheets = [StyleSheet::from(vec![
       PropertyRule {
         name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
+        syntax: PropertySyntax::Universal,
         inherits: false,
         initial_value: Some("10px".to_owned()),
         media_queries: Vec::new(),
       },
       PropertyRule {
         name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
+        syntax: PropertySyntax::Universal,
         inherits: true,
         initial_value: None,
         media_queries: Vec::new(),
@@ -3680,7 +3762,7 @@ mod tests {
   }
 
   #[test]
-  fn registered_custom_property_accepts_assignment_without_syntax_validation() {
+  fn a_value_its_syntax_does_not_take_is_invalid_at_computed_value_time() {
     let parent = ComputedStyle::default();
     let stylesheet = parse_stylesheet(
       r#"
@@ -3701,7 +3783,8 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom_properties.get("--box-size"), Some("red"));
+
+    assert_eq!(resolved.custom_properties.get("--box-size"), Some("10px"));
   }
 
   #[test]
