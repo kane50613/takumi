@@ -104,6 +104,6 @@ Takumi supports a subset of browser CSS. Check these differences before you repl
 
 - Scripts do not run, so charts and diagrams have to arrive as markup, SVG, or images. A client-side chart library does not work.
 - PDF output rejects `filter: blur()` and `drop-shadow()`, and does not draw `backdrop-filter`. Blurred `box-shadow` and `text-shadow` are approximated with bands. Grid, flexbox, transforms, gradients, masks, and clip paths all work.
-- `@page` reads `size` and the margins, also for `:first`, `:left`, and `:right`. Page names and margin boxes such as `@top-center` are ignored.
+- `@page` reads `size` and the margins, for `:first`, `:left`, `:right`, and the page names the `page` property gives. Margin boxes such as `@top-center` are ignored.
 
 Keep Puppeteer to reproduce a live web page as a browser shows it. Use `takumi-pdf` for documents written for print. See [Comparison](/docs/pdf/comparison) for measured numbers.

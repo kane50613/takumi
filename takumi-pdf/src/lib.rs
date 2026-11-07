@@ -230,7 +230,7 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
       band_viewport(
         page
           .with_page_rules(&inputs.stylesheet, &PageContext::default())
-          .get(0),
+          .first(),
       ),
     )?,
     (None, Some(viewport)) => {
@@ -261,7 +261,7 @@ pub fn needs(options: MeasureOptions<'_>) -> Result<RenderNeeds, PdfError> {
     (Some(page), _) => band_viewport(
       page
         .with_page_rules(&inputs.stylesheet, &PageContext::default())
-        .get(0),
+        .first(),
     ),
     (None, Some(viewport)) => viewport.with_media_target(MediaTarget::Print),
     (None, None) => return Err(PdfError::MissingViewport),

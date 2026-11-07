@@ -2,7 +2,11 @@
 
 use std::{fs, path::Path};
 
-use takumi_core::{Fonts, resources::font::FontResource, style::Direction};
+use takumi_core::{
+  Fonts,
+  resources::font::FontResource,
+  style::{Direction, page_rule::PageKind},
+};
 
 use crate::page_kinds::PerPage;
 
@@ -31,7 +35,17 @@ pub(crate) fn fixture(name: &str) -> String {
   .expect("read html fixture")
 }
 
+/// `first`, `left`, and `right` for the first, left, and right pages of every name, in a
+/// left-to-right document.
+pub(crate) fn per_kind<T: Clone>(first: T, left: T, right: T) -> PerPage<T> {
+  PerPage::of_names(Vec::new(), Direction::Ltr, |kind, _| match kind {
+    PageKind::First => first.clone(),
+    PageKind::Left => left.clone(),
+    PageKind::Right => right.clone(),
+  })
+}
+
 /// `value` for every page.
 pub(crate) fn uniform_pages<T: Clone>(value: T) -> PerPage<T> {
-  PerPage::new(Direction::Ltr, value.clone(), value.clone(), value)
+  PerPage::of_names(Vec::new(), Direction::Ltr, |_, _| value.clone())
 }

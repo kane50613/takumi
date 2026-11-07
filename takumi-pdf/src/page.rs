@@ -118,16 +118,11 @@ impl PageFrames {
     })
   }
 
-  /// The first page's geometry, whose area is the content's initial containing block.
-  pub(crate) fn first(&self) -> &PageFrame {
-    self.get(0)
-  }
-
   /// Each page's area, which the content lays out on.
   pub(crate) fn page_sizer(&self) -> PageSizer {
     let areas = self.map(PageFrame::area);
 
-    PageSizer::new(move |page| *areas.get(page))
+    PageSizer::new(move |page, name| *areas.get(page, name))
   }
 
   /// Whether every page has the margins it has in `other`, so the content lays out the same.
@@ -206,7 +201,7 @@ impl Destinations<'_> {
   fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
     let index = self.sizes.page_at(top);
     let emitted = self.selection.emitted(index)?;
-    let margin = self.frames.get(index).margin;
+    let margin = self.frames.get(index, self.sizes.name(index)).margin;
     let y = margin.top + (top - self.sizes.top(index)).max(0.0);
 
     Some(xyz_destination(
@@ -294,7 +289,7 @@ impl PageDrawing<'_, '_> {
     let mut frames = PageFrames::resolve(pages, &bands)?;
     // A counter band and the page count depend on each other, so the band is measured again until
     // its height settles.
-    let dynamic = bands.values().iter().any(|bands| bands.dynamic());
+    let dynamic = bands.values().any(|bands| bands.dynamic());
 
     if !dynamic && !reads_layout(&node) {
       let content = Prepared::new(node, inputs, &frames)?;
@@ -304,7 +299,7 @@ impl PageDrawing<'_, '_> {
 
     // Only a margin that follows a band can move the frame, which is when the content lays out
     // again from the source.
-    let follows_bands = pages.values().iter().any(|page| page.margin.follow_bands());
+    let follows_bands = pages.values().any(|page| page.margin.follow_bands());
     let source = (dynamic && follows_bands).then(|| node.clone());
     let mut counted = Counted::settle(node, inputs, &frames, settle)?;
 
@@ -518,14 +513,14 @@ impl<'c, 'g> PageComposer<'c, 'g> {
     scene: SceneView<'_>,
     anchor: impl Fn(&str) -> Option<XyzDestination>,
   ) -> Result<(), PdfError> {
-    let frame = self.frames.get(slice.index);
-    let bands = self.bands.get(slice.index);
-    let page_context = self.page_contexts.get(slice.index);
+    let frame = self.frames.get(slice.index, &slice.name);
+    let bands = self.bands.get(slice.index, &slice.name);
+    let page_context = self.page_contexts.get(slice.index, &slice.name);
     // In draw order: the header band, the repeated boxes, the footer band.
     let resolved = bands
       .header
       .iter()
-      .chain(self.repeated.get(slice.index).iter())
+      .chain(self.repeated.get(slice.index, &slice.name).iter())
       .chain(&bands.footer)
       .map(|repeatable| {
         repeatable.for_page(self.inputs, page_context, frame, slice.index + 1, pages)

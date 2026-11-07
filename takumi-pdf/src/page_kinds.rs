@@ -1,69 +1,104 @@
-//! A value for each kind of page Blink's `PageRuleCollector` tells apart: the first page, the left
-//! pages, and the right pages.
+//! A value for each kind of page Blink's `PageRuleCollector` tells apart: the first page, a left
+//! page, or a right page, of each page name an `@page` rule selects, and of the pages none does.
 
 use std::{convert::Infallible, rc::Rc};
 
-use takumi_core::style::{Direction, page_rule::PageKind};
+use takumi_core::style::{Direction, PageName, page_rule::PageKind};
 
-/// A value for the first page, one for the left pages, and one for the right pages after it.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// A value for the first, left, and right pages of each named page, and of the unnamed pages.
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PerPage<T> {
   /// The root's `direction`, which decides which pages are left pages.
   direction: Direction,
-  first: T,
-  left: T,
-  right: T,
+  /// The unnamed pages' values first, then those of each name. A page whose name no entry has
+  /// takes the unnamed pages' values, as no named rule selects it.
+  entries: Vec<(PageName, [T; 3])>,
 }
 
 impl<T> PerPage<T> {
-  /// `first` for the first page, and `left` and `right` for the left and right pages after it,
-  /// in a document whose root has `direction`.
-  pub(crate) fn new(direction: Direction, first: T, left: T, right: T) -> Self {
-    Self {
-      direction,
-      first,
-      left,
-      right,
-    }
+  /// `value` gives each kind of the unnamed pages and of the pages of each of `names`, in a
+  /// document whose root has `direction`.
+  pub(crate) fn of_names(
+    names: Vec<PageName>,
+    direction: Direction,
+    mut value: impl FnMut(PageKind, &PageName) -> T,
+  ) -> Self {
+    let entries = [PageName::default()]
+      .into_iter()
+      .chain(names)
+      .map(|name| {
+        let values =
+          [PageKind::First, PageKind::Left, PageKind::Right].map(|kind| value(kind, &name));
+
+        (name, values)
+      })
+      .collect();
+
+    Self { direction, entries }
   }
 
-  /// The value of page `page`, counted from 0.
-  pub(crate) fn get(&self, page: usize) -> &T {
-    match PageKind::of(page, self.direction) {
-      PageKind::First => &self.first,
-      PageKind::Left => &self.left,
-      PageKind::Right => &self.right,
-    }
+  /// The value of page `page`, counted from 0, a page `name`.
+  pub(crate) fn get(&self, page: usize, name: &PageName) -> &T {
+    let (_, values) = self
+      .entries
+      .iter()
+      .find(|(entry, _)| entry == name)
+      .unwrap_or(&self.entries[0]);
+
+    &values[PageKind::of(page, self.direction) as usize]
   }
 
-  /// The first page's value, the left pages', and the right pages'.
-  pub(crate) fn values(&self) -> [&T; 3] {
-    [&self.first, &self.left, &self.right]
+  /// The value of the first page, when it is unnamed.
+  pub(crate) fn first(&self) -> &T {
+    self.get(0, &PageName::default())
+  }
+
+  /// Every value.
+  pub(crate) fn values(&self) -> impl Iterator<Item = &T> {
+    self.entries.iter().flat_map(|(_, values)| values)
   }
 
   /// Each value mapped through `map`.
   pub(crate) fn map<U>(&self, mut map: impl FnMut(&T) -> U) -> PerPage<U> {
-    PerPage::new(
-      self.direction,
-      map(&self.first),
-      map(&self.left),
-      map(&self.right),
-    )
+    PerPage {
+      direction: self.direction,
+      entries: self
+        .entries
+        .iter()
+        .map(|(name, values)| (name.clone(), values.each_ref().map(&mut map)))
+        .collect(),
+    }
   }
 
   /// Each value mapped through `map` with the value of `other` for the same pages, or the first
-  /// error `map` returns.
+  /// error `map` returns. `other` maps the same names.
   pub(crate) fn try_zip_map<U, V, E>(
     &self,
     other: &PerPage<U>,
     mut map: impl FnMut(&T, &U) -> Result<V, E>,
   ) -> Result<PerPage<V>, E> {
-    Ok(PerPage::new(
-      self.direction,
-      map(&self.first, &other.first)?,
-      map(&self.left, &other.left)?,
-      map(&self.right, &other.right)?,
-    ))
+    let entries = self
+      .entries
+      .iter()
+      .zip(&other.entries)
+      .map(
+        |((name, [first, left, right]), (_, [other_first, other_left, other_right]))| {
+          Ok((
+            name.clone(),
+            [
+              map(first, other_first)?,
+              map(left, other_left)?,
+              map(right, other_right)?,
+            ],
+          ))
+        },
+      )
+      .collect::<Result<_, E>>()?;
+
+    Ok(PerPage {
+      direction: self.direction,
+      entries,
+    })
   }
 
   /// [`Self::try_map_shared`] with a `map` that cannot fail.
@@ -85,7 +120,8 @@ impl<T> PerPage<T> {
     mut map: impl FnMut(&T) -> Result<U, E>,
   ) -> Result<PerPage<Rc<U>>, E> {
     let mut made: Vec<(K, Rc<U>)> = Vec::new();
-    let mut share = |value: &T| {
+
+    self.try_zip_map(self, |value, _| {
       let key = key(value);
 
       if let Some((_, shared)) = made.iter().find(|(made_key, _)| *made_key == key) {
@@ -96,14 +132,7 @@ impl<T> PerPage<T> {
 
       made.push((key, Rc::clone(&shared)));
       Ok(shared)
-    };
-
-    Ok(PerPage::new(
-      self.direction,
-      share(&self.first)?,
-      share(&self.left)?,
-      share(&self.right)?,
-    ))
+    })
   }
 }
 
@@ -111,16 +140,23 @@ impl<T> PerPage<T> {
 mod tests {
   use std::rc::Rc;
 
-  use takumi_core::style::Direction;
+  use takumi_core::style::{Direction, PageName, page_rule::PageKind};
 
   use super::PerPage;
+  use crate::test_support::per_kind;
 
   #[test]
   fn pages_after_the_first_alternate_left_and_right() {
     let pages = |direction| {
-      let pages = PerPage::new(direction, "first", "left", "right");
+      let pages = PerPage::of_names(Vec::new(), direction, |kind, _| match kind {
+        PageKind::First => "first",
+        PageKind::Left => "left",
+        PageKind::Right => "right",
+      });
 
-      (0..5).map(|page| *pages.get(page)).collect::<Vec<_>>()
+      (0..5)
+        .map(|page| *pages.get(page, &PageName::default()))
+        .collect::<Vec<_>>()
     };
 
     assert_eq!(
@@ -134,9 +170,27 @@ mod tests {
   }
 
   #[test]
+  fn a_page_of_a_name_without_values_takes_the_unnamed_ones() {
+    let pages = PerPage::of_names(
+      vec![PageName::named("cover")],
+      Direction::Ltr,
+      |kind, name| (kind, name.get().unwrap_or("unnamed").to_owned()),
+    );
+
+    assert_eq!(
+      pages.get(0, &PageName::named("cover")),
+      &(PageKind::First, "cover".to_owned())
+    );
+    assert_eq!(
+      pages.get(3, &PageName::named("index")),
+      &(PageKind::Left, "unnamed".to_owned())
+    );
+  }
+
+  #[test]
   fn values_with_one_key_share_one_mapping() {
     let mut calls = 0;
-    let shared = PerPage::new(Direction::Ltr, 10, 20, 10)
+    let shared = per_kind(10, 20, 10)
       .try_map_shared(
         |value| *value,
         |value| {
@@ -145,7 +199,7 @@ mod tests {
         },
       )
       .expect("maps");
-    let [first, left, right] = shared.values();
+    let [first, left, right] = [0, 1, 2].map(|page| shared.get(page, &PageName::default()));
 
     assert_eq!(calls, 2);
     assert_eq!((**first, **left), (20, 40));

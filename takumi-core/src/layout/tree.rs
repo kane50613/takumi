@@ -3362,8 +3362,8 @@ mod tests {
     layout::node::Node,
     resources::font::Fonts,
     style::{
-      ComputedStyle, Direction, Length, PropertyRule, SizingContext, Style, StyleDeclaration,
-      StyleDeclarationBlock, StyleSheet,
+      ComputedStyle, Direction, Length, PageName, PropertyRule, SizingContext, Style,
+      StyleDeclaration, StyleDeclarationBlock, StyleSheet,
       page_rule::{PageContext, PageKind},
     },
     viewport::Viewport,
@@ -3395,7 +3395,12 @@ mod tests {
       ]);
       let page = PageContext::from_initial_containing_block(&context, &roots);
       let margin = stylesheet
-        .page_descriptors(Viewport::default(), PageKind::First, &page)
+        .page_descriptors(
+          Viewport::default(),
+          PageKind::First,
+          &PageName::default(),
+          &page,
+        )
         .margin
         .top;
 

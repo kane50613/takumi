@@ -1,14 +1,13 @@
 //! `@page` rules as Blink's [`ParsePageSelector`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/parser/css_parser_impl.cc)
 //! reads them, and the descriptors that win for a page, as `PageRuleCollector` matches them.
-//! Only `size` and the margin descriptors are read. Approximate: a named page selector never
-//! matches, as takumi does not support the `page` property.
+//! Only `size` and the margin descriptors are read.
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
   geometry::{Rect, Size},
   style::{
-    CustomProperties, Direction, FromCss, Length, MediaQueryList, RawDeclaration,
+    CustomProperties, Direction, FromCss, Length, MediaQueryList, PageName, RawDeclaration,
     RawDeclarationParser, SizingContext, contains_var_references, resolve_var_references,
     selector::LayerPath,
   },
@@ -116,22 +115,27 @@ pub(crate) enum PagePseudoClass {
 /// An `@page` selector: an optional page name and an optional pseudo-class.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct PageSelector {
-  /// The page name, which a `page` property would give elements.
-  name: Option<String>,
+  /// The page name, which the `page` property gives the pages an element starts.
+  name: PageName,
   pseudo_class: Option<PagePseudoClass>,
 }
 
 impl PageSelector {
-  /// Whether the selector applies to `kind` pages under the root's `direction`, as Blink's
-  /// `CheckPageSelectorComponents` says.
-  pub(crate) fn matches(&self, kind: PageKind, direction: Direction) -> bool {
-    self.name.is_none()
+  /// Whether the selector applies to `kind` pages named `name` under the root's `direction`, as
+  /// Blink's `CheckPageSelectorComponents` says.
+  pub(crate) fn matches(&self, kind: PageKind, name: &PageName, direction: Direction) -> bool {
+    (!self.name.is_named() || self.name == *name)
       && match self.pseudo_class {
         None => true,
         Some(PagePseudoClass::First) => kind == PageKind::First,
         Some(PagePseudoClass::Left) => kind.is_left(direction),
         Some(PagePseudoClass::Right) => !kind.is_left(direction),
       }
+  }
+
+  /// The page name the selector selects, `auto` for any.
+  pub(crate) fn name(&self) -> &PageName {
+    &self.name
   }
 
   /// Blink's `CSSSelector::Specificity` for a page selector.
@@ -142,14 +146,14 @@ impl PageSelector {
       Some(PagePseudoClass::Left | PagePseudoClass::Right) => 1,
     };
 
-    u32::from(self.name.is_some()) * 4 + pseudo_class
+    u32::from(self.name.is_named()) * 4 + pseudo_class
   }
 
   /// Blink's `ParsePageSelector`: a page name, a pseudo-class, both, or nothing.
   pub(crate) fn parse(input: &mut Parser) -> Option<Self> {
     let name = input
-      .try_parse(|input| input.expect_ident().map(ToString::to_string))
-      .ok();
+      .try_parse(|input| input.expect_ident().map(|name| PageName::named(name)))
+      .unwrap_or_default();
     let pseudo_class = if input.try_parse(Parser::expect_colon).is_ok() {
       let ident = input.expect_ident().ok()?.clone();
 
@@ -505,19 +509,20 @@ impl PageRule {
   }
 
   /// The descriptors that win among `rules` whose `@media` holds at `viewport` and whose selector
-  /// matches `kind` pages in `context`, in cascade order: importance, layer, specificity, then
-  /// source order.
+  /// matches `kind` pages named `name` in `context`, in cascade order: importance, layer,
+  /// specificity, then source order.
   pub(crate) fn cascade<'r>(
     rules: impl IntoIterator<Item = &'r Self>,
     layer_count: usize,
     viewport: Viewport,
     kind: PageKind,
+    name: &PageName,
     context: &PageContext,
   ) -> PageDescriptors {
     let mut ranked: Vec<(u64, &[PageDeclaration])> = Vec::new();
 
     for (order, rule) in rules.into_iter().enumerate() {
-      if !rule.selector.matches(kind, context.direction)
+      if !rule.selector.matches(kind, name, context.direction)
         || !rule
           .media_queries
           .iter()
@@ -578,7 +583,7 @@ mod tests {
 
     StyleSheet::parse(css)
       .expect("parse @page")
-      .page_descriptors(print, kind, context)
+      .page_descriptors(print, kind, &PageName::default(), context)
   }
 
   fn context_with(direction: Direction, custom_properties: &[(&str, &str)]) -> PageContext {
@@ -748,7 +753,35 @@ mod tests {
   }
 
   #[test]
-  fn a_named_page_or_an_unknown_selector_selects_nothing() {
+  fn a_named_selector_selects_the_pages_of_that_name() {
+    let sheet = StyleSheet::parse(
+      "@page { margin: 1px } @page cover { margin: 2px } @page cover:first { margin: 3px }",
+    )
+    .expect("parse @page");
+    let print = Viewport::default().with_media_target(MediaTarget::Print);
+    let top = |kind, name: &PageName| {
+      sheet
+        .page_descriptors(print, kind, name, &PageContext::default())
+        .margin
+        .top
+    };
+    let cover = PageName::named("cover");
+
+    assert_eq!(top(PageKind::First, &cover), Some(Length::Px(3.0)));
+    assert_eq!(top(PageKind::Left, &cover), Some(Length::Px(2.0)));
+    assert_eq!(
+      top(PageKind::Left, &PageName::named("index")),
+      Some(Length::Px(1.0))
+    );
+    assert_eq!(
+      top(PageKind::Left, &PageName::default()),
+      Some(Length::Px(1.0))
+    );
+    assert_eq!(sheet.page_names(), [cover]);
+  }
+
+  #[test]
+  fn a_named_page_or_an_unknown_selector_selects_nothing_on_an_unnamed_page() {
     for css in [
       "@page cover { margin: 1px }",
       "@page :blank { margin: 1px }",
@@ -760,7 +793,12 @@ mod tests {
 
       assert_eq!(
         sheet
-          .page_descriptors(print, PageKind::First, &PageContext::default())
+          .page_descriptors(
+            print,
+            PageKind::First,
+            &PageName::default(),
+            &PageContext::default()
+          )
           .margin
           .top,
         None,

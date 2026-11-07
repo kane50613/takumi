@@ -25,7 +25,7 @@ use crate::{
     logical_rect::LogicalBoxStrut,
   },
   layout_unit::LayoutUnit,
-  style::{BoxDecorationBreak, BreakBetween, BreakInside, Overflow},
+  style::{BoxDecorationBreak, BreakBetween, BreakInside, Overflow, PageName},
 };
 
 /// Blink's `BoxFragmentBuilder` as block fragmentation reads and writes it.
@@ -89,6 +89,10 @@ pub(crate) struct BoxFragmentBuilder {
   /// Blink's `HasFragmentainerBreak` of a new formatting context's exclusion space: a float in it
   /// broke before or inside.
   pub(crate) has_float_break: bool,
+  /// Blink's `PageName` of the builder: the named page of the first child, none until one.
+  pub(crate) page_name: PageName,
+  /// Blink's `PageName` of the builder's space.
+  pub(crate) space_page_name: PageName,
 }
 
 /// Which flow a child is in, as Blink's `PropagateBreakInfo` tells them apart.
@@ -159,6 +163,8 @@ impl BoxFragmentBuilder {
       includes_block_end: true,
       break_token_data: None,
       has_float_break: false,
+      page_name: PageName::default(),
+      space_page_name: space.page_name.clone(),
     }
   }
 
@@ -387,6 +393,33 @@ impl BoxFragmentBuilder {
       result.break_info.final_break_after.unwrap_or_default(),
       style.breaks.break_after,
     );
+
+    // Blink's `SetPageNameIfNeeded`.
+    if !self.page_name.is_named() {
+      self.page_name = self.page_name_for_child_fragment(result, style).clone();
+    }
+  }
+
+  /// Blink's `PageNameForChildFragment`: the named page of a child of `style` laid out as
+  /// `result`.
+  pub(crate) fn page_name_for_child_fragment<'a>(
+    &'a self,
+    result: &'a LayoutResult,
+    style: &'a LayoutStyle,
+  ) -> &'a PageName {
+    [&result.break_info.propagated_page_name, &style.breaks.page]
+      .into_iter()
+      .find(|name| name.is_named())
+      .unwrap_or(&self.space_page_name)
+  }
+
+  /// Blink's `PageName` of the builder, or of its space before a child names one.
+  pub(crate) fn current_page_name(&self) -> &PageName {
+    if self.page_name.is_named() {
+      &self.page_name
+    } else {
+      &self.space_page_name
+    }
   }
 
   /// Blink's `ReserveSpaceForMonolithicOverflow`.
@@ -702,6 +735,7 @@ impl BoxFragmentBuilder {
       fragment_index: fragment_index(self.previous_break_token.as_deref()),
       is_repeated: false,
       avoids_break_inside: self.has_block_fragmentation() && self.break_inside.avoids_page_break(),
+      propagated_page_name: self.page_name.clone(),
     }
   }
 }

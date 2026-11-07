@@ -19,7 +19,7 @@ use crate::{
     floats_utils::{FloatFragmentation, PositionedFloat, UnpositionedFloat},
     fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     fragmentation_utils::{
-      BlockChildIterator, FlexItemBreak, adjust_margins_for_fragmentation,
+      BlockChildIterator, FlexItemBreak, FragmentationChild, adjust_margins_for_fragmentation,
       adjusted_margin_after_final_child_fragment, attempt_soft_break, break_before_child,
       calculate_break_appeal_before, calculate_break_between_value, finish_fragmentation,
       fragment_index, fragmentation_layout_input_for_child, is_break_inside, is_early_break_target,
@@ -328,7 +328,9 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     setup_space_builder_for_fragmentation(
       self.space,
       &self.builder,
-      child.is_some_and(|child| self.tree.is_monolithic(child)),
+      child.map_or_else(FragmentationChild::default, |child| {
+        self.tree.fragmentation_child(child)
+      }),
       fragmentainer_offset_delta,
       builder,
     );

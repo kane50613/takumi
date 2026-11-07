@@ -21,7 +21,7 @@ use crate::{
     logical_rect::LogicalBoxStrut,
   },
   layout_unit::LayoutUnit,
-  style::{BoxDecorationBreak, BreakBetween, BreakInside},
+  style::{BoxDecorationBreak, BreakBetween, BreakInside, PageName},
 };
 
 /// Blink's `FlexColumnBreakInfo`: the break state of one column of a multi-line column flex
@@ -131,10 +131,20 @@ pub(crate) fn calculate_break_between_value(
     return BreakBetween::Auto;
   }
 
-  builder.joined_break_between_value(join_fragmentainer_break_values(
+  let break_before = builder.joined_break_between_value(join_fragmentainer_break_values(
     child_style.breaks.break_before,
     initial_break_before,
-  ))
+  ));
+
+  // A child on another named page than the one so far starts a new page.
+  if builder.has_block_fragmentation()
+    && result.status == LayoutStatus::Success
+    && !break_before.forces_page_break()
+    && builder.page_name_for_child_fragment(result, child_style) != builder.current_page_name()
+  {
+    return BreakBetween::Page;
+  }
+  break_before
 }
 
 /// Blink's `IsBreakableAtStartOfResumedContainer`.
@@ -452,12 +462,21 @@ pub(crate) fn fragmentation_layout_input_for_child(
   }
 }
 
+/// What Blink's `SetupSpaceBuilderForFragmentation` reads off the child, a line by default.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct FragmentationChild<'a> {
+  /// Blink's `IsMonolithic`.
+  pub(crate) is_monolithic: bool,
+  /// Blink's `LayoutInputNode::PageName`, none for a line.
+  pub(crate) page_name: Option<&'a PageName>,
+}
+
 /// Blink's `SetupSpaceBuilderForFragmentation` for a child of the box `builder` builds in
 /// `parent_space`, `fragmentainer_offset_delta` past its children's fragmentainer offset.
 pub(crate) fn setup_space_builder_for_fragmentation(
   parent_space: &ConstraintSpace,
   builder: &BoxFragmentBuilder,
-  child_is_monolithic: bool,
+  child: FragmentationChild<'_>,
   fragmentainer_offset_delta: LayoutUnit,
   child_space: &mut ConstraintSpace,
 ) {
@@ -467,7 +486,7 @@ pub(crate) fn setup_space_builder_for_fragmentation(
 
   setup_space_for_fragmentation(
     parent_space,
-    child_is_monolithic,
+    child,
     builder.fragmentainer_offset(true) + fragmentainer_offset_delta,
     builder
       .fragmentainer_capacity(true)
@@ -481,7 +500,7 @@ pub(crate) fn setup_space_builder_for_fragmentation(
 /// `fragmentainer_offset` into a page `fragmentainer_block_size` tall.
 pub(crate) fn setup_space_for_fragmentation(
   parent_space: &ConstraintSpace,
-  child_is_monolithic: bool,
+  child: FragmentationChild<'_>,
   fragmentainer_offset: LayoutUnit,
   fragmentainer_block_size: LayoutUnit,
   requires_content_before_breaking: bool,
@@ -491,7 +510,7 @@ pub(crate) fn setup_space_for_fragmentation(
     return;
   };
 
-  if child_is_monolithic {
+  if child.is_monolithic {
     return;
   }
 
@@ -503,6 +522,11 @@ pub(crate) fn setup_space_for_fragmentation(
     min_break_appeal: parent.min_break_appeal,
     min_block_size_should_encompass_intrinsic_size: false,
   });
+  child_space.page_name = child
+    .page_name
+    .filter(|name| name.is_named())
+    .unwrap_or(&parent_space.page_name)
+    .clone();
 }
 
 /// Blink's `BreakBeforeChildIfNeeded` for a block-level `child` laid out as `result` at

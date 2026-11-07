@@ -298,7 +298,7 @@ impl TableRowLayoutAlgorithm<'_, '_> {
     setup_space_builder_for_fragmentation(
       self.space,
       &self.builder,
-      self.tree.is_monolithic(cell),
+      self.tree.fragmentation_child(cell),
       LayoutUnit::ZERO,
       space,
     );

@@ -458,7 +458,7 @@ impl TableLayoutAlgorithm<'_, '_> {
     setup_space_builder_for_fragmentation(
       self.space,
       &self.builder,
-      self.tree.is_monolithic(child),
+      self.tree.fragmentation_child(child),
       offset,
       space,
     );

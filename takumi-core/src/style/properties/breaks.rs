@@ -1,8 +1,8 @@
 //! The fragmentation properties, which only paged output reads.
 
-use std::fmt;
+use std::{fmt, sync::Arc};
 
-use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser};
+use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser, serialize_identifier};
 
 use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, lerp,
@@ -173,6 +173,54 @@ impl_css_enum!(
   "slice" => BoxDecorationBreak::Slice,
   "clone" => BoxDecorationBreak::Clone
 );
+
+/// A `page` value: the named page a box starts on, Blink's `ComputedStyle::Page`. `auto` names
+/// none, so the box takes its container's.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PageName(Option<Arc<str>>);
+
+impl PageName {
+  /// The page named `name`.
+  pub fn named(name: &str) -> Self {
+    Self(Some(name.into()))
+  }
+
+  /// The name, none for `auto`.
+  pub fn get(&self) -> Option<&str> {
+    self.0.as_deref()
+  }
+
+  /// Whether the value names a page, as a non-null Blink `AtomicString` does.
+  pub fn is_named(&self) -> bool {
+    self.0.is_some()
+  }
+}
+
+impl MakeComputed for PageName {}
+
+impl Animatable for PageName {}
+
+impl<'i> FromCss<'i> for PageName {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    let name = input.expect_ident()?;
+
+    if name.eq_ignore_ascii_case("auto") {
+      return Ok(Self::default());
+    }
+    Ok(Self(Some(name.as_ref().into())))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "<custom-ident>"];
+}
+
+impl ToCss for PageName {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self.get() {
+      Some(name) => serialize_identifier(name, dest),
+      None => dest.write_str("auto"),
+    }
+  }
+}
 
 #[cfg(test)]
 mod tests {

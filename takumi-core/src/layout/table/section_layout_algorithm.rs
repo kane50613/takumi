@@ -118,7 +118,7 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
       #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
       let mut space = data.space(part, CacheSlot::Layout);
 
-      self.setup_row_space_for_fragmentation(&mut space, offset);
+      self.setup_row_space_for_fragmentation(row.node, &mut space, offset);
 
       let result = self.lay_out_row(row.node, &space, &token);
 
@@ -227,8 +227,19 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
     true
   }
 
-  fn setup_row_space_for_fragmentation(&self, space: &mut ConstraintSpace, offset: LayoutUnit) {
-    setup_space_builder_for_fragmentation(self.space, &self.builder, false, offset, space);
+  fn setup_row_space_for_fragmentation(
+    &self,
+    row: NodeId,
+    space: &mut ConstraintSpace,
+    offset: LayoutUnit,
+  ) {
+    setup_space_builder_for_fragmentation(
+      self.space,
+      &self.builder,
+      self.tree.fragmentation_child(row),
+      offset,
+      space,
+    );
   }
 
   fn lay_out_row(
@@ -368,7 +379,13 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
     false
   }
 
-  fn setup_row_space_for_fragmentation(&self, _space: &mut ConstraintSpace, _offset: LayoutUnit) {}
+  fn setup_row_space_for_fragmentation(
+    &self,
+    _row: NodeId,
+    _space: &mut ConstraintSpace,
+    _offset: LayoutUnit,
+  ) {
+  }
 
   fn lay_out_row(
     &mut self,
