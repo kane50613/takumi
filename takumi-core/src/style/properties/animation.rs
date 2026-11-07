@@ -7,8 +7,8 @@ use cssparser::{
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  FromCss, FromCssStr, MakeComputed, ParseResult, ToCss, impl_comma_list_from_css, impl_css_enum,
-  next_is_comma, tw::TailwindPropertyParser, unexpected_token,
+  FromCss, FromCssStr, LinearEasing, MakeComputed, ParseResult, ToCss, impl_comma_list_from_css,
+  impl_css_enum, next_is_comma, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a CSS animation time value stored in milliseconds.
@@ -87,6 +87,8 @@ pub enum AnimationTimingFunction {
   Steps(u32, StepPosition),
   /// Uses a custom cubic bezier timing curve.
   CubicBezier(f32, f32, f32, f32),
+  /// Uses a `linear()` curve through its control points.
+  LinearCurve(LinearEasing),
 }
 
 impl MakeComputed for AnimationTimingFunction {}
@@ -113,6 +115,13 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
 
     if let Ok(function) = input.try_parse(parse_steps_function) {
       return Ok(function);
+    }
+
+    if let Ok(curve) = input.try_parse(|input| {
+      input.expect_function_matching("linear")?;
+      input.parse_nested_block(LinearEasing::parse)
+    }) {
+      return Ok(Self::LinearCurve(curve));
     }
 
     input.expect_function_matching("cubic-bezier")?;
@@ -145,6 +154,7 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
     "step-end",
     "<steps()>",
     "<cubic-bezier()>",
+    "<linear()>",
   ];
 }
 
@@ -579,6 +589,7 @@ impl AnimationTimingFunction {
       Self::StepEnd => steps_sample(1, StepPosition::End, progress, before),
       Self::Steps(count, position) => steps_sample(count, position, progress, before),
       Self::CubicBezier(x1, y1, x2, y2) => cubic_bezier_sample(x1, y1, x2, y2, progress),
+      Self::LinearCurve(curve) => curve.apply(progress),
     }
   }
 }
@@ -619,6 +630,7 @@ impl ToCss for AnimationTimingFunction {
         dest.write_char(')')
       }
       Self::CubicBezier(x1, y1, x2, y2) => write!(dest, "cubic-bezier({x1}, {y1}, {x2}, {y2})"),
+      Self::LinearCurve(curve) => curve.to_css(dest),
     }
   }
 }

@@ -2,7 +2,7 @@ use cssparser::{ParseError as CssParseError, Parser, Token};
 
 use crate::style::{
   Length, ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
-  ParseResult, SizingContext, is_math_function, parse_number,
+  ParseResult, SizingContext, is_math_function, parse_number, parse_percentage,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -376,6 +376,17 @@ pub(crate) fn parse_number_value<'i>(input: &mut Parser<'i>) -> ParseResult<'i, 
   match input.try_parse(Parser::expect_number) {
     Ok(number) => Ok(number),
     Err(_) => parse_calc_number_expression(input),
+  }
+}
+
+/// A `<percentage>`, or a math function that reduces to one, as a fraction.
+pub(crate) fn parse_percentage_value<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
+  let token = input.next()?.clone();
+
+  match token {
+    Token::Percentage { unit_value, .. } => Ok(unit_value),
+    Token::Function(name) if is_math_function(&name) => parse_percentage(&name, input),
+    _ => Err(CssParseError::unexpected_token()),
   }
 }
 
