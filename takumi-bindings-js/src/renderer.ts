@@ -337,6 +337,17 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     await this.backend.cacheFontFile(url, asView(data));
   }
 
+  /** Loads each of `fonts` the backend does not hold, released for space, and returns whether any was loaded. */
+  async cache(fonts: FontLoader[]): Promise<boolean> {
+    const loaders = fonts
+      .map(toLoader)
+      .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false));
+
+    await Promise.all(loaders.map((loader) => this.register(loader, false)));
+
+    return loaders.length > 0;
+  }
+
   /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */
   listed(fonts: FontLoader[]): ListedFont[] | undefined {
     const loaders = fonts.map(toLoader);

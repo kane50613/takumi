@@ -150,6 +150,40 @@ describe("prepare", () => {
     expect(second.data).not.toHaveBeenCalled();
   });
 
+  test("moves a character on to the next family when the subset its range picks has no glyph", async () => {
+    const devanagari = await readFile(
+      join(
+        import.meta.dir,
+        "../../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+      ),
+    );
+    const face = (name: string, data: Uint8Array) => ({
+      name,
+      key: `glyphless-${name}`,
+      unicodeRange: [[0x900, 0x97f]] as [number, number][],
+      data: mock(() => data),
+    });
+    // Geist claims Devanagari here but draws none of it.
+    const sans = face("Sans", fontBytes);
+    const serif = face("Serif", devanagari);
+    const page = '<p style="font-family: Sans, Serif; font-size: 32px">नमस्ते</p>';
+    const options = { width: 160, height: 60 };
+    const fallback = await new Renderer().render(page, { ...options, fonts: [sans, serif] });
+
+    expect(sans.data).toHaveBeenCalledTimes(1);
+    expect(serif.data).toHaveBeenCalledTimes(1);
+
+    const whole = await new Renderer().render(page, {
+      ...options,
+      fonts: [
+        { name: "Sans", data: fontBytes },
+        { name: "Serif", data: devanagari },
+      ],
+    });
+
+    expect(Buffer.compare(fallback, whole)).toBe(0);
+  });
+
   test("loads a weight only when text uses it", async () => {
     const weight = (value: number) => ({
       name: "Weighted",
