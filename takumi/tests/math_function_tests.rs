@@ -1,6 +1,6 @@
 use takumi::prelude::*;
 
-use crate::test_utils::measure_with_css;
+use crate::test_utils::{block, measure_with_css};
 
 /// Each math function resolves as Chromium resolves it in `margin-left`: in a 400px wide box at a
 /// 20px font size, in a viewport 1200px wide.
@@ -65,4 +65,64 @@ fn math_functions_resolve_as_chromium() {
     .collect();
 
   assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+/// `linear()` eases as Chromium eases it, at 0, 250, 500 and 750ms into a 1s animation that grows
+/// a box from 0 to 400px. A single point is invalid, which leaves the default `ease`.
+#[test]
+fn linear_easing_as_chromium() {
+  let cases = [
+    ("linear(0, 1)", [0.0, 100.0, 200.0, 300.0]),
+    ("linear(0, 0.25 75%, 1)", [0.0, 33.3281, 66.6562, 100.0]),
+    ("linear(0, 0.5 25% 75%, 1)", [0.0, 200.0, 200.0, 200.0]),
+    ("linear(0, 1 50%, 0)", [0.0, 200.0, 400.0, 200.0]),
+    ("linear(0 20%, 1 60%)", [0.0, 50.0, 300.0, 550.0]),
+    ("linear(0, 0.3, 0.6 80%, 1)", [0.0, 75.0, 150.0, 225.0]),
+    ("linear(0.5)", [0.0, 163.391, 320.953, 384.172]),
+    ("linear(0, 2 50%, 1 40%)", [0.0, 400.0, 400.0, 400.0]),
+  ];
+  let mismatches: Vec<_> = cases
+    .iter()
+    .flat_map(|&(easing, widths)| {
+      [0, 250, 500, 750].into_iter().zip(widths).filter_map(move |(delay, chromium)| {
+        let css = format!(
+          "@keyframes g {{ from {{ width: 0px }} to {{ width: 400px }} }}
+           .box {{ display: block; height: 1px; animation: g 1000ms -{delay}ms; animation-timing-function: {easing} }}"
+        );
+        let width = measure_with_css(Node::container([block("box")]), &css).children[0].width;
+
+        ((width - chromium).abs() > 0.5).then(|| format!("{easing} at {delay}ms: {width}, Chromium {chromium}"))
+      })
+    })
+    .collect();
+
+  assert!(mismatches.is_empty(), "{mismatches:#?}");
+
+  let many_points = format!("linear({})", vec!["0.5"; 5_000].join(", "));
+
+  assert!(AnimationTimingFunction::from_css_str(&many_points).is_err());
+
+  for (easing, chromium) in [
+    ("linear(0, 1)", "linear(0 0%, 1 100%)"),
+    ("linear(0, 0.25 75%, 1)", "linear(0 0%, 0.25 75%, 1 100%)"),
+    (
+      "linear(0, 0.5 25% 75%, 1)",
+      "linear(0 0%, 0.5 25%, 0.5 75%, 1 100%)",
+    ),
+    ("linear(0, 1 50%, 0)", "linear(0 0%, 1 50%, 0 100%)"),
+    ("linear(0 20%, 1 60%)", "linear(0 20%, 1 60%)"),
+    (
+      "linear(0, 0.3, 0.6 80%, 1)",
+      "linear(0 0%, 0.3 40%, 0.6 80%, 1 100%)",
+    ),
+    ("linear(0, 2 50%, 1 40%)", "linear(0 0%, 2 50%, 1 50%)"),
+  ] {
+    let mut css = String::new();
+
+    AnimationTimingFunction::from_css_str(easing)
+      .expect("the easing parses")
+      .to_css(&mut css)
+      .expect("the easing serializes");
+    assert_eq!(css, chromium);
+  }
 }
