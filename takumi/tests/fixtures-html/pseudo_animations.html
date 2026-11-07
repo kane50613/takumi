@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>pseudo_animations</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      @property --w {
+        syntax: "<length>";
+        inherits: false;
+        initial-value: 0px;
+      }
+      @keyframes grow {
+        from {
+          --w: 40px;
+        }
+        to {
+          --w: 240px;
+        }
+      }
+      @keyframes fade {
+        from {
+          background: rgb(59, 130, 246);
+        }
+        to {
+          background: rgb(239, 68, 68);
+        }
+      }
+      .column {
+        display: block;
+        padding: 8px;
+      }
+      .row::before {
+        content: "";
+        display: block;
+        height: 16px;
+        margin-bottom: 8px;
+        width: var(--w);
+        background: rgb(34, 197, 94);
+        animation: grow 1000ms linear -250ms paused;
+      }
+      .late::before {
+        animation-delay: -750ms;
+      }
+      .row::after {
+        content: "";
+        display: block;
+        width: 120px;
+        height: 16px;
+        margin-bottom: 8px;
+        animation: fade 1000ms linear -500ms paused;
+      }
+    </style>
+  </head>
+  <body style="width: 256px; height: 112px">
+    <div class="column">
+      <div class="row"></div>
+      <div class="row late"></div>
+    </div>
+  </body>
+</html>

@@ -851,19 +851,38 @@ macro_rules! define_style {
           self.declarations.image_urls()
         }
 
-        pub(crate) fn inherit_with_lang(self, parent: &ComputedStyle, lang: Option<Lang>) -> ComputedStyle {
-          let mut style = self.inherit(parent);
+        /// Resolves an element's style against its parent, with the declarations a cycle invalidated.
+        pub(crate) fn inherit_element(
+          self,
+          parent: &ComputedStyle,
+          lang: Option<Lang>,
+          is_document_root: bool,
+        ) -> (ComputedStyle, InvalidDeclarations) {
+          let (mut style, invalid) = self.cascade(parent, is_document_root);
+
           if let Some(lang) = lang {
             style.lang = Some(lang);
           }
-          style
+          (style, invalid)
         }
 
         /// Resolves this style against a parent into a computed style.
+        #[cfg(test)]
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
+          self.cascade(parent, false).0
+        }
+
+        fn cascade(
+          self,
+          parent: &ComputedStyle,
+          is_document_root: bool,
+        ) -> (ComputedStyle, InvalidDeclarations) {
           let mut style = ComputedStyle::from_parent(parent);
           let mut declarations = ParsedDeclarations::new();
           let mut declared_custom_properties = Vec::new();
+          // A cycle resolves the custom properties again from what the element declares.
+          let mut specified_custom_properties = Vec::new();
+          let registered = style.custom_properties.has_registrations();
 
           for name in &self.declarations.element_state {
             style.custom_properties.register_element_state(name);
@@ -873,6 +892,9 @@ macro_rules! define_style {
             match declaration {
               StyleDeclaration::CustomProperty(name, value) => {
                 declared_custom_properties.push(name.clone());
+                if registered {
+                  specified_custom_properties.push((name.clone(), value.clone()));
+                }
                 style
                   .custom_properties
                   .declare(name, value, Some(&parent.custom_properties));
@@ -881,21 +903,30 @@ macro_rules! define_style {
             }
           }
 
-          // Once before `var()` substitutes, so a reference reads the value the syntax leaves, and
-          // once after, for the values a reference made.
-          style
-            .custom_properties
-            .enforce_syntax(&declared_custom_properties, &parent.custom_properties);
-          if let Some(resolved_custom_properties) =
-            resolve_custom_properties(style.custom_properties.values())
-          {
-            style
-              .custom_properties
-              .replace_values(resolved_custom_properties);
+          resolve_declared_custom_properties(&mut style, &declared_custom_properties, parent);
+
+          let invalid = InvalidDeclarations::find(
+            &style,
+            &declarations,
+            &specified_custom_properties,
+            is_document_root,
+          );
+
+          if !invalid.is_empty() {
+            for (name, value) in specified_custom_properties {
+              style
+                .custom_properties
+                .declare(name, value, Some(&parent.custom_properties));
+            }
+            for name in &invalid.names {
+              style.custom_properties.reset_to_initial(name);
+            }
+            resolve_declared_custom_properties(&mut style, &declared_custom_properties, parent);
+            declarations = declarations
+              .into_iter()
+              .flat_map(|declaration| invalid.replace(declaration))
+              .collect();
           }
-          style
-            .custom_properties
-            .enforce_syntax(&declared_custom_properties, &parent.custom_properties);
 
           // Pre-resolve `direction` so logical-axis applies below see the
           // final value even if `direction:` is declared later in the block.
@@ -924,7 +955,7 @@ macro_rules! define_style {
             }
             declaration.apply_with_parent(&mut style, parent);
           }
-          style
+          (style, invalid)
         }
       }
 
@@ -2424,6 +2455,217 @@ impl ImportantBits {
       }
     }
   }
+}
+
+impl ComputedStyle {
+  /// Copies each of `longhands` from `source`.
+  pub(crate) fn copy_longhands(&mut self, longhands: &PropertyMask, source: &Self) {
+    for longhand in longhands.iter() {
+      self.copy_longhand(longhand, source);
+    }
+  }
+}
+
+impl Style {
+  /// The `animation` longhands its declarations set through `var()` of one of the custom
+  /// properties `names`, directly or through a custom property it declares.
+  pub(crate) fn animation_longhands_reading(&self, names: &[&str]) -> PropertyMask {
+    const ANIMATION: [LonghandId; 8] = [
+      LonghandId::AnimationName,
+      LonghandId::AnimationDuration,
+      LonghandId::AnimationDelay,
+      LonghandId::AnimationTimingFunction,
+      LonghandId::AnimationIterationCount,
+      LonghandId::AnimationDirection,
+      LonghandId::AnimationFillMode,
+      LonghandId::AnimationPlayState,
+    ];
+
+    let aliases: Vec<(String, String)> = self
+      .declarations
+      .declarations
+      .iter()
+      .filter_map(|declaration| match declaration {
+        StyleDeclaration::CustomProperty(name, value) => Some((name.clone(), value.clone())),
+        _ => None,
+      })
+      .collect();
+
+    self
+      .declarations
+      .declarations
+      .iter()
+      .filter_map(|declaration| match declaration {
+        StyleDeclaration::Deferred(deferred) => Some(deferred),
+        StyleDeclaration::VarRef(var_ref) => Some(&var_ref.deferred),
+        _ => None,
+      })
+      .filter(|deferred| {
+        names
+          .iter()
+          .any(|name| reads(&deferred.specified_value, name, &aliases))
+      })
+      .flat_map(|deferred| {
+        deferred
+          .property
+          .target_longhands()
+          .iter()
+          .collect::<Vec<_>>()
+      })
+      .filter(|longhand| ANIMATION.contains(longhand))
+      .collect()
+  }
+}
+
+/// Substitutes `var()` among the custom properties, enforcing registered syntax before and after.
+fn resolve_declared_custom_properties(
+  style: &mut ComputedStyle,
+  declared: &[String],
+  parent: &ComputedStyle,
+) {
+  style
+    .custom_properties
+    .enforce_syntax(declared, &parent.custom_properties);
+  if let Some(resolved) = resolve_custom_properties(style.custom_properties.values()) {
+    style.custom_properties.replace_values(resolved);
+  }
+  style
+    .custom_properties
+    .enforce_syntax(declared, &parent.custom_properties);
+}
+
+/// The winning `font-size` and `line-height` declarations in a relative-unit cycle with registered
+/// custom properties, which act as `unset` while those properties take their initial values.
+/// <https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles>
+#[derive(Debug, Default)]
+pub(crate) struct InvalidDeclarations {
+  declarations: Vec<StyleDeclaration>,
+  names: Vec<String>,
+}
+
+impl InvalidDeclarations {
+  fn find(
+    style: &ComputedStyle,
+    declarations: &ParsedDeclarations,
+    aliases: &[(String, String)],
+    is_document_root: bool,
+  ) -> Self {
+    let mut invalid = Self::default();
+
+    if style.custom_properties.typed_values().next().is_none() {
+      return invalid;
+    }
+
+    for (longhand, units, root_units) in [
+      (
+        LonghandId::FontSize,
+        &["em", "ex", "cap", "ch", "ic", "lh"][..],
+        &["rem", "rlh"][..],
+      ),
+      (LonghandId::LineHeight, &["lh"][..], &["rlh"][..]),
+    ] {
+      let Some(winner) = declarations
+        .iter()
+        .rfind(|declaration| declaration.affected_longhands().contains(&longhand))
+      else {
+        continue;
+      };
+      let deferred = match winner {
+        StyleDeclaration::Deferred(deferred) => deferred,
+        StyleDeclaration::VarRef(var_ref) => &var_ref.deferred,
+        _ => continue,
+      };
+      let relative =
+        |value: &str| has_unit(value, units) || (is_document_root && has_unit(value, root_units));
+      let before = invalid.names.len();
+
+      for (name, value) in style.custom_properties.typed_values() {
+        if relative(value) && reads(&deferred.specified_value, name, aliases) {
+          invalid.names.push(name.to_owned());
+        }
+      }
+      if invalid.names.len() > before && !invalid.declarations.contains(winner) {
+        invalid.declarations.push(winner.clone());
+      }
+    }
+    invalid
+  }
+
+  fn is_empty(&self) -> bool {
+    self.declarations.is_empty()
+  }
+
+  /// `declaration`, or `unset` for each of its longhands when a cycle invalidated it.
+  pub(crate) fn replace(&self, declaration: StyleDeclaration) -> ParsedDeclarations {
+    if !self.declarations.contains(&declaration) {
+      return [declaration].into_iter().collect();
+    }
+
+    declaration
+      .affected_longhands()
+      .iter()
+      .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset))
+      .collect()
+  }
+}
+
+/// Whether `value` holds a dimension in one of `units`, at any depth.
+fn has_unit(value: &str, units: &[&str]) -> bool {
+  fn walk(input: &mut Parser<'_>, units: &[&str]) -> bool {
+    while let Ok(token) = input.next() {
+      match token {
+        Token::Dimension { unit, .. }
+          if units.iter().any(|known| unit.eq_ignore_ascii_case(known)) =>
+        {
+          return true;
+        }
+        Token::Function(_) | Token::ParenthesisBlock => {
+          let nested = input
+            .parse_nested_block(|input| Ok::<_, cssparser::ParseError<()>>(walk(input, units)))
+            .unwrap_or(false);
+
+          if nested {
+            return true;
+          }
+        }
+        _ => {}
+      }
+    }
+    false
+  }
+
+  walk(&mut Parser::new(value), units)
+}
+
+/// Whether `value` names the custom property `name`, not one that merely contains it.
+fn references(value: &str, name: &str) -> bool {
+  let is_name =
+    |character: char| character.is_alphanumeric() || character == '-' || character == '_';
+
+  value.match_indices(name).any(|(at, _)| {
+    !value[..at].chars().next_back().is_some_and(is_name)
+      && !value[at + name.len()..].chars().next().is_some_and(is_name)
+  })
+}
+
+/// Whether `value` reads the custom property `name`, directly or through the custom properties
+/// `aliases` an element declares.
+fn reads(value: &str, name: &str, aliases: &[(String, String)]) -> bool {
+  let mut pending = vec![value];
+  let mut visited = vec![false; aliases.len()];
+
+  while let Some(value) = pending.pop() {
+    if references(value, name) {
+      return true;
+    }
+    for (index, (alias, alias_value)) in aliases.iter().enumerate() {
+      if !visited[index] && references(value, alias) {
+        visited[index] = true;
+        pending.push(alias_value);
+      }
+    }
+  }
+  false
 }
 
 /// Ordered specified declarations plus the set of important properties.

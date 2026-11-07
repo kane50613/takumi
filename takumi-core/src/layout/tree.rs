@@ -54,9 +54,9 @@ use crate::{
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Direction, Display, Float, FontUnits, KeyframesRule, LineHeight, MatchedStyleKey, Position,
-    Registrations, SizingContext, Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock,
-    StyleSheet, WhiteSpaceCollapse, animated_custom_properties, apply_stylesheet_animations,
-    page_rule::PageContext,
+    PropertyMask, Registrations, SizingContext, Style as NodeStyle, StyleDeclaration,
+    StyleDeclarationBlock, StyleSheet, WhiteSpaceCollapse, animated_custom_properties,
+    apply_stylesheet_animations, page_rule::PageContext,
   },
   viewport::Viewport,
 };
@@ -3084,13 +3084,7 @@ impl RenderContext {
     &self,
     pseudo_matched: &MatchedDeclarationsView<'_>,
   ) -> (ComputedStyle, SizingContext, Color) {
-    let (style_layers, _) = self.cascade(NodeStyleLayers::default(), pseudo_matched);
-    let mut style = style_layers.inherit(&self.inherited_style());
-    let sizing = self.child_sizing(&style, &self.sizing, false);
-    let current_color = style.inherited_data.color.resolve(self.current_color);
-
-    style.make_computed(&sizing);
-    (style, sizing, current_color)
+    self.resolve_uncached_child_style(NodeStyleLayers::default(), pseudo_matched, false)
   }
 
   /// Resolves a child's style and sizing from its matched declarations, sharing the style a box
@@ -3189,7 +3183,9 @@ impl RenderContext {
       .any(KeyframesRule::animates_custom_properties)
       .then(|| style_layers.clone());
 
-    let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
+    let (mut style, mut invalid) =
+      style_layers.inherit_element(&inherited_parent, lang, is_document_root);
+    let mut tainted = PropertyMask::new();
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
     if let Some(style_layers) = recascade
@@ -3204,12 +3200,22 @@ impl RenderContext {
         })
       });
       if !animated.is_empty() {
-        style = animated
+        // An animated custom property is animation-tainted, so an animation property that reads
+        // it keeps the value from before the animation, as Chromium keeps it.
+        // <https://drafts.csswg.org/css-variables-1/#animation-tainted>
+        let names: Vec<&str> = animated.iter().map(|(name, _)| name.as_str()).collect();
+        tainted = style_layers.animation_longhands_reading(&names);
+
+        let (mut animated_style, animated_invalid) = animated
           .into_iter()
           .fold(style_layers, |layers, (name, value)| {
             layers.with(StyleDeclaration::CustomProperty(name, value))
           })
-          .inherit_with_lang(&inherited_parent, lang);
+          .inherit_element(&inherited_parent, lang, is_document_root);
+
+        animated_style.copy_longhands(&tainted, &style);
+        style = animated_style;
+        invalid = animated_invalid;
       }
     }
     if !style.misc1_data.animation_name.is_empty() {
@@ -3219,12 +3225,18 @@ impl RenderContext {
       child_sizing_for_final = Some(child_sizing);
     }
 
-    // Important declarations outrank an animation, and `inherit` among them
-    // needs the parent the first pass resolved against.
+    // Important declarations outrank an animation, and `inherit` among them needs the parent the
+    // first pass resolved against. A tainted animation longhand keeps the value the first pass
+    // restored, since no animation reaches it.
     for &declaration in &important {
-      declaration
-        .clone()
-        .apply_with_parent(&mut style, &inherited_parent);
+      let longhands = declaration.affected_longhands();
+
+      if !longhands.is_empty() && tainted.contains_all(&longhands) {
+        continue;
+      }
+      for declaration in invalid.replace(declaration.clone()) {
+        declaration.apply_with_parent(&mut style, &inherited_parent);
+      }
     }
 
     let sizing = self.child_sizing(
