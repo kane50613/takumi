@@ -74,7 +74,12 @@ impl TrackBreadth {
   pub(crate) fn is_fixed(self) -> bool {
     matches!(
       self,
-      Self::Length(LayoutLength::Fixed(_) | LayoutLength::Percent(_) | LayoutLength::Calc { .. })
+      Self::Length(
+        LayoutLength::Fixed(_)
+          | LayoutLength::Percent(_)
+          | LayoutLength::Calc { .. }
+          | LayoutLength::Math(_)
+      )
     )
   }
 
