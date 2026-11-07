@@ -83,7 +83,8 @@ impl Window {
   }
 
   /// A line belongs to the page holding its baseline, or the middle of the part a clip leaves
-  /// when the clip cuts its baseline away.
+  /// when the clip cuts its baseline away. Approximate: Blink picks no owner from geometry. It
+  /// paints each line in the page whose fragment holds its line box.
   fn disowns(&self, item: LineItem) -> bool {
     let height = match self.clip {
       Some((top, bottom)) if item.baseline < top || item.baseline >= bottom => {
