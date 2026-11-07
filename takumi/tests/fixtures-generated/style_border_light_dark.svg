@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="160" height="192" viewBox="0 0 160 192">
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="240" viewBox="0 0 160 240">
   <path d="M8 8h120v40h-120v-40Zm4 4h112v32h-112v-32Z" fill="#ef4444" fill-rule="evenodd"/>
   <path d="M8 56h120v40h-120v-40Zm4 4h112v32h-112v-32Z" fill="#22c55e" fill-rule="evenodd"/>
   <path d="M8 104h120v40h-120v-40Zm4 4h112v32h-112v-32Z" fill="#eab308" fill-rule="evenodd"/>
+  <path d="M8 152h120v40h-120v-40Zm4 4h112v32h-112v-32Z" fill="#a855f7" fill-rule="evenodd"/>
 </svg>
