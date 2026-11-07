@@ -106,16 +106,20 @@ Takumi differs from Chromium in three places:
 
 A length, a number, or an angle takes the math functions of CSS Values 4, nested in any order:
 
-| Function                                                           | Takes                                    |
-| ------------------------------------------------------------------ | ---------------------------------------- |
-| `calc()`                                                           | `+`, `-`, `*`, `/`, and parentheses      |
-| `min()`, `max()`, `clamp()`                                        | values of one type                       |
-| `round()`, `mod()`, `rem()`                                        | a value and a step, `round()` a strategy |
-| `abs()`, `sign()`, `hypot()`                                       | values of one type                       |
-| `sin()`, `cos()`, `tan()`, `asin()`, `acos()`, `atan()`, `atan2()` | numbers or angles                        |
-| `pow()`, `sqrt()`, `log()`, `exp()`                                | numbers                                  |
+| Function                            | Takes                                    |
+| ----------------------------------- | ---------------------------------------- |
+| `calc()`                            | `+`, `-`, `*`, `/`, and parentheses      |
+| `min()`, `max()`, `clamp()`         | values of one type                       |
+| `round()`, `mod()`, `rem()`         | a value and a step, `round()` a strategy |
+| `abs()`, `sign()`, `hypot()`        | values of one type                       |
+| `sin()`, `cos()`, `tan()`           | a number or an angle                     |
+| `asin()`, `acos()`, `atan()`        | a number                                 |
+| `atan2()`                           | two values of one type                   |
+| `pow()`, `sqrt()`, `log()`, `exp()` | numbers                                  |
 
 `min(200px, 50%)` resolves once the box knows the width it takes a percentage of, as in a browser. The constants `e`, `pi`, `infinity`, and `NaN` work inside any of them. Dividing a value by one of its own type gives a number, so `calc(1px * atan2(1, 1) / 1deg)` is `45px`.
+
+A number, an angle, and the arguments of the trigonometric and exponential functions resolve when the stylesheet is read, so they take only absolute lengths. Chromium also takes `calc(1em / 1em)` as a number and `atan2(1em, 1em)` as an angle, which takumi rejects.
 
 ### Media queries
 
