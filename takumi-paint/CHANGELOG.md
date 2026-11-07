@@ -1,3 +1,21 @@
+## takumi-paint@0.6.0
+
+### A `unicodeRange` subset without a glyph falls back to the next family again
+
+A font in `fonts` whose `unicodeRange` claims a character it has no glyph for now hands that character on to the next family in the stack, as a browser does and as 0.18 did. Before, the render left the next family's subset unloaded. The PDF render then failed with "No registered font covers". That error now reads "No font the text can use draws", and suggests checking each font's `unicodeRange` and the `font-family` stack, because a registered font can have the glyph and still be out of reach.
+
+### `prepare` downloads the fonts `@font-face` rules load
+
+An `@font-face` rule in `css` or a `<style>` element now loads its font in `prepare`, `render`, and `ImageResponse`. A `src` that fails to download falls back to the next one.
+
+### A `using` block frees a renderer
+
+`Renderer`, `PdfRenderer` and `Painter` implement `Symbol.dispose`, so `using renderer = new Renderer()` frees the renderer's WebAssembly memory when the block ends, as calling `free()` does.
+
+### `PaintTree.free()` releases a tree's font files and glyph outlines
+
+A paint tree keeps its font files and glyph outlines in WebAssembly memory until garbage collection releases them, which can take a while after many paints. `tree.free()`, or a `using` declaration, releases them right away. Calling it again does nothing, and the painter and other trees stay usable. Reading the files of a freed tree throws `The paint tree was freed`.
+
 ## takumi-paint@0.5.0
 
 ### `PdfRenderer` and `Painter` prepare a document too

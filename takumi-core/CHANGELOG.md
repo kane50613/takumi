@@ -1,3 +1,49 @@
+## takumi-core@0.36.0
+
+### `@font-face` applies `size-adjust`, metric overrides, `font-feature-settings`, and `local()`
+
+### Paged layout asks for each page's size as it reaches the page
+
+`PagedLayout::new`, `PageStream::new`, and `PagedScene::lay_out` take a `PageSizer` instead of one `Size`, and `PageSizer::uniform(size)` gives every page the size passed before. The layout records the size of each page it lays out in `PageSizes`, which `PagedLayout::sizes` and `PageStream::sizes` return and `SceneRef::window` and the `PageWindows` methods take. `SceneRef::page_origin(size, page)` is now `PageSizes::origin(page)`, and `PageWindows::new(size)` is now `PageWindows::default()`.
+
+### An inline `<svg>` draws whole at a `devicePixelRatio` above one
+
+An inline `<svg>` with a `viewBox` used to scale its shapes by the device pixel ratio twice, so at `devicePixelRatio: 2` only the top-left quarter showed. Its user units are now CSS pixels at any ratio, as Chromium draws them.
+
+### The `page` property puts content on named pages
+
+An element with `page: cover` starts a page that `@page cover` rules size and margin, and the content after it that names no page goes back to the unnamed pages, as in Chromium. `PageSizer::new` now takes the page name with the page index, and `PageSizes::name` returns the name each page laid out as.
+
+### `@page` rules size and margin the pages of a PDF
+
+A `@page` rule sets the page `size` and margins and wins over the `size`, `landscape`, and `margin` options, as CSS does in Chromium with `preferCSSPageSize`. `:first` styles the first page, and `:left` and `:right` style pages by the side they fall on, so under `direction: rtl` the first page is a left page. Each page lays out its content, bands, and repeated boxes at its own size. `em`, `rem`, and `var()` in a rule read the root element, as Chromium's page style inherits it. `@media`, `@layer`, and `!important` order the rules as they order any other. `StyleSheet::page_descriptors` returns the descriptors that win for a page in a `PageContext`, which `PageContext::from_root` and `PageContext::from_initial_containing_block` take from a tree's root element. Margin boxes such as `@top-center` are not read yet.
+
+### `:has()` matches
+
+A `:has()` selector used to parse as an unknown pseudo-class and never match, so `:not(:has(…))` always matched. It now matches its relative selectors, `>`, `+` and `~` included, as browsers do.
+
+### Raster pages can take their sizes from `@page` rules
+
+`render_pages` takes anything that converts into a `PageSizer`. A `Size` still gives every page the same area, and each page's image is now that page's own size. `PageRules::new(stylesheet, page_box, context)` converts into a `PageSizer` that gives each page the area the stylesheet's `@page` rules give it, including `:first`, `:left`, `:right`, and page names. `context` is the `PageContext` the root element gives, from `PageContext::from_root`. `PageRules::page_box` returns a page's size and margins, and `Viewport::print_page` is the viewport an `@page` rule resolves against.
+
+### `light-dark()` takes `currentColor`
+
+`border: 4px solid light-dark(currentColor, blue)` used to make its declaration invalid, so the element drew no border. `light-dark()` now takes `currentColor` wherever a colour can be `currentColor`.
+
+### A font file registered at two weights keeps a face for each
+
+Registering one file under the same family with another `weight`, `style`, width or `unicodeRange` used to reuse the first face, so `font-weight: 700` drew a synthetic bold of the face declared at 400. Each registration with its own descriptors now adds its own face, sharing the parsed font.
+
+Registering a face again with the same descriptors moves it after the faces registered since, so the latest registration takes precedence as a later `@font-face` rule does.
+
+### Parse `light-dark()` colors
+
+`light-dark()` used to make its declaration invalid, so `border: 1px solid light-dark(red, blue)` drew no border and `border-color: light-dark(red, blue)` fell back to `currentColor`. It now takes its first color, since a render has no `color-scheme` and is light.
+
+### Load fonts from `@font-face` rules
+
+With the `font-face` feature, on by default in `takumi`, `@font-face` rules add fonts to a render. `needs` reports the files the text uses in `RenderNeeds::font_files`. Pass each to `Fonts::load_font_file`, or to `Fonts::fail_font_file` to fall back to the next `src`.
+
 ## takumi-core@0.35.0
 
 ### Number content with CSS counters
