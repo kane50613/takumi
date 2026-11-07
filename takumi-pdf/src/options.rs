@@ -66,7 +66,7 @@ pub enum PdfError {
   /// An image arrived as bytes this build cannot turn into pixels. It would
   /// leave a hole where the page expects a picture, so the render stops.
   UndrawableImage(String),
-  /// No registered font covers these characters. They would draw nothing and
+  /// No registered font has a glyph for these characters. They would draw nothing and
   /// leave no trace in the text layer, so the render stops instead.
   UncoveredCharacters(String),
   /// [`UncoveredText::Placeholder`] met a standard that forbids the glyph it draws.
@@ -108,14 +108,14 @@ impl Display for PdfError {
       Self::UndrawableImage(reason) => write!(f, "Image could not be decoded: {reason}"),
       Self::UncoveredCharacters(characters) => write!(
         f,
-        "No registered font covers {characters}. Register one that does."
+        "No registered font has a glyph for {characters}. Register one that does."
       ),
       Self::PlaceholderForbidden {
         characters,
         standard,
       } => write!(
         f,
-        "No registered font covers {characters}, and {standard} forbids the placeholder glyph. \
+        "No registered font has a glyph for {characters}, and {standard} forbids the placeholder glyph. \
          Register a font that covers them, or set uncoveredText to \"blank\"."
       ),
       Self::InvalidPageRange(range) => {
@@ -1215,7 +1215,7 @@ mod tests {
   fn error_messages_read_as_sentences() {
     assert_eq!(
       PdfError::UncoveredCharacters("क (U+0915)".into()).to_string(),
-      "No registered font covers क (U+0915). Register one that does."
+      "No registered font has a glyph for क (U+0915). Register one that does."
     );
     assert_eq!(
       PdfError::UnsupportedFilter("blur(2px)".into()).to_string(),

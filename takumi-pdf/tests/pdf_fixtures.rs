@@ -3813,7 +3813,7 @@ fn a_forbidden_placeholder_names_the_standard() {
     render_with(PdfStandard::A2b, Tagging::On)
       .expect_err("PDF/A-2b forbids the placeholder")
       .to_string(),
-    "No registered font covers 直 (U+76F4), and PDF/A-2b forbids the placeholder glyph. \
+    "No registered font has a glyph for 直 (U+76F4), and PDF/A-2b forbids the placeholder glyph. \
      Register a font that covers them, or set uncoveredText to \"blank\"."
   );
   assert!(matches!(

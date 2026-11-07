@@ -150,9 +150,9 @@ Vite writes the client asset and the server chunk to different directories. The 
 
 ## Render errors
 
-### No registered font covers क (U+0915)
+### No registered font has a glyph for क (U+0915)
 
-Register a font that covers the characters the error names:
+Register a font that draws the characters the error names:
 
 ```ts title="Load a Devanagari font"
 import { googleFonts } from "takumi-js/helpers";
@@ -162,6 +162,8 @@ const pdf = await render(document, {
   fonts: await googleFonts(["Noto Sans Devanagari"]),
 });
 ```
+
+A `unicodeRange` subset can claim a character it has no glyph for. The render then moves that character on to the next family in the stack, as a browser does, and this error means no family drew it.
 
 The PDF renderer stops on uncovered characters, because they would be missing from both the page and its text layer. To draw them as blanks or as the font's placeholder glyph instead, set [`uncoveredText`](/docs/pdf/assets).
 
