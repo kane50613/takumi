@@ -428,10 +428,12 @@ fn fold_binary(name: &str, first: Node, second: Node) -> Option<Node> {
   }
 }
 
-fn parse_sum<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, Node> {
+fn parse_sum<'i>(input: &mut Parser<'i>, mut depth: u32) -> ParseResult<'i, Node> {
   let mut node = parse_product(input, depth)?;
 
+  // Each operand of a chain nests the tree one level deeper, so a chain counts toward the depth.
   while let Some(operator) = operator(input, ['+', '-']) {
+    depth += 1;
     let rhs = parse_product(input, depth)?;
 
     node = if operator == '+' {
@@ -446,10 +448,11 @@ fn parse_sum<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, Node> {
     .ok_or_else(CssParseError::unexpected_token)
 }
 
-fn parse_product<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, Node> {
+fn parse_product<'i>(input: &mut Parser<'i>, mut depth: u32) -> ParseResult<'i, Node> {
   let mut node = parse_factor(input, depth)?;
 
   while let Some(operator) = operator(input, ['*', '/']) {
+    depth += 1;
     let rhs = parse_factor(input, depth)?;
 
     node = if operator == '*' {
@@ -532,14 +535,20 @@ impl Node {
       Self::Number(_) => Some(Kind::NUMBER),
       Self::Angle(_) => Some(Kind::ANGLE),
       Self::Length(_) => Some(Kind::LENGTH),
-      Self::Sum(lhs, rhs) => (lhs.kind()? == rhs.kind()?).then(|| lhs.kind())?,
+      Self::Sum(lhs, rhs) => {
+        let kind = lhs.kind()?;
+
+        (kind == rhs.kind()?).then_some(kind)
+      }
       Self::Product(lhs, rhs) => lhs.kind()?.times(rhs.kind()?),
       Self::Quotient(lhs, rhs) => lhs.kind()?.over(rhs.kind()?),
       Self::Negate(node) | Self::Abs(node) => node.kind(),
       Self::Min(nodes) | Self::Max(nodes) | Self::Hypot(nodes) => same(nodes),
       Self::Clamp(nodes) => same(&nodes[..]),
       Self::Round(_, value, step) | Self::Mod(value, step) | Self::Rem(value, step) => {
-        (value.kind()? == step.kind()?).then(|| value.kind())?
+        let kind = value.kind()?;
+
+        (kind == step.kind()?).then_some(kind)
       }
       Self::Sign(node) => node.kind().map(|_| Kind::NUMBER),
     }
@@ -865,6 +874,18 @@ mod tests {
       FontWeight::from_css_str("calc(1200)"),
       Ok(FontWeight::from(1000.0))
     );
+  }
+
+  /// A long chain counts toward the depth limit, so it cannot nest the tree past it.
+  #[test]
+  fn a_long_chain_stops_at_the_depth_limit() {
+    let chain = |terms: usize| format!("min({}, 20%)", vec!["1px"; terms].join(" + "));
+
+    assert!(matches!(
+      Length::from_css_str(&chain(50)),
+      Ok(Length::Math(_))
+    ));
+    assert!(Length::from_css_str(&chain(100_000)).is_err());
   }
 
   /// An angle context takes a math function that reduces to an angle.
