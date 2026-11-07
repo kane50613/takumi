@@ -1,3 +1,37 @@
+## takumi-pdf@0.20.0
+
+### The `page` property puts content on named pages
+
+An element with `page: cover` starts a page that `@page cover` rules size and margin, and the content after it that names no page goes back to the unnamed pages, as in Chromium. `PageSizer::new` now takes the page name with the page index, and `PageSizes::name` returns the name each page laid out as.
+
+### An `href` on a table row or row group renders
+
+An `href` on a `tr`, `thead`, `tbody`, or `tfoot` used to fail the whole render with `invalid tag tree: annotation identifier ... doesn't appear in the tag tree`. The link now covers the row or group as it does on other elements, and its `Link` element sits in the last cell the link spans.
+
+### `@page` rules size and margin the pages of a PDF
+
+A `@page` rule sets the page `size` and margins and wins over the `size`, `landscape`, and `margin` options, as CSS does in Chromium with `preferCSSPageSize`. `:first` styles the first page, and `:left` and `:right` style pages by the side they fall on, so under `direction: rtl` the first page is a left page. Each page lays out its content, bands, and repeated boxes at its own size. `em`, `rem`, and `var()` in a rule read the root element, as Chromium's page style inherits it. `@media`, `@layer`, and `!important` order the rules as they order any other. `StyleSheet::page_descriptors` returns the descriptors that win for a page in a `PageContext`, which `PageContext::from_root` and `PageContext::from_initial_containing_block` take from a tree's root element. Margin boxes such as `@top-center` are not read yet.
+
+### A `unicodeRange` subset without a glyph falls back to the next family again
+
+A font in `fonts` whose `unicodeRange` claims a character it has no glyph for now hands that character on to the next family in the stack, as a browser does and as 0.18 did. Before, the render left the next family's subset unloaded. The PDF render then failed with "No registered font covers". That error now reads "No font the text can use draws", and suggests checking each font's `unicodeRange` and the `font-family` stack, because a registered font can have the glyph and still be out of reach.
+
+### `prepare` downloads the fonts `@font-face` rules load
+
+An `@font-face` rule in `css` or a `<style>` element now loads its font in `prepare`, `render`, and `ImageResponse`. A `src` that fails to download falls back to the next one.
+
+### PDF renders decode a repeated `data:` URI image once
+
+A PDF that repeats a `data:` URI image, such as a table with the same signature in every row, used to decode and parse the image each time layout looked at it, so long documents rendered slowly. `PdfOptions` and `MeasureOptions` in the `takumi-pdf` crate take a `resource_cache` as the raster renderer's options do, and a render without one keeps its own. `PdfRenderer` passes its cache, so its renders share decoded images.
+
+### A `using` block frees a renderer
+
+`Renderer`, `PdfRenderer` and `Painter` implement `Symbol.dispose`, so `using renderer = new Renderer()` frees the renderer's WebAssembly memory when the block ends, as calling `free()` does.
+
+### The `takumi-pdf` crate is on crates.io
+
+Rust programs can depend on `takumi-pdf` to write PDFs with selectable text, as the `takumi-pdf` npm package does. Its `render`, `measure`, and `needs` take the node tree, fonts, and stylesheet types from `takumi-core`.
+
 ## takumi-pdf@0.19.0
 
 ### `PdfRenderer` and `Painter` prepare a document too
