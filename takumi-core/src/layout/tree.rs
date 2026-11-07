@@ -3047,15 +3047,22 @@ impl RenderContext {
 
   /// This style as a child inherits it, with the stylesheet's registered custom properties.
   fn inherited_style(&self) -> Cow<'_, ComputedStyle> {
-    // Registrations come only from this render's stylesheet, so a style that carries any carries
-    // them all, and its descendants take them through `inherited`.
-    if self.stylesheet().property_rules().is_empty()
-      || self.style.custom_properties.has_registrations()
-    {
+    if self.stylesheet().property_rules().is_empty() {
       return Cow::Borrowed(&self.style);
     }
 
-    self.registered_inherited_style()
+    // Registrations come only from this render's stylesheet, so a style that carries any carries
+    // them all, and its descendants take them through `inherited`.
+    let mut style = if self.style.custom_properties.has_registrations() {
+      Cow::Borrowed(self.style.as_ref())
+    } else {
+      self.registered_inherited_style()
+    };
+
+    if let Some(custom_properties) = style.custom_properties.with_computed_lengths(&self.sizing) {
+      style.to_mut().custom_properties = custom_properties;
+    }
+    style
   }
 
   /// [`Self::inherited_style`] for a style the stylesheet's `@property` rules have not reached yet,
@@ -3275,7 +3282,7 @@ impl RenderContext {
 
 #[cfg(test)]
 mod tests {
-  use std::str::FromStr;
+  use std::{str::FromStr, sync::Arc};
 
   use super::{
     NodeId, NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
@@ -3283,6 +3290,7 @@ mod tests {
   };
   use crate::{
     context::RenderContext,
+    layout::node::Node,
     resources::font::Fonts,
     style::{
       ComputedStyle, Length, PropertyRule, SizingContext, Style, StyleDeclaration,
@@ -3352,6 +3360,40 @@ mod tests {
       children,
       vec![NodeId::new(1), NodeId::new(3), NodeId::new(2)]
     );
+  }
+
+  #[test]
+  fn a_registered_length_inherits_as_the_px_its_parent_computes() {
+    let stylesheet = parse_stylesheet(
+      "@property --g { syntax: ' <length> '; inherits: true; initial-value: 0px }
+       @property --h { syntax: '<length>'; inherits: true; initial-value: 3px }
+       @property --w { syntax: '*'; inherits: true }
+       .p { font-size: 20px; --g: .5em; --w: .5em }
+       .c { font-size: 2em; margin-top: var(--g); margin-bottom: var(--h); margin-left: var(--w) }",
+    );
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([Node::container([]).with_class_name("c")]).with_class_name("p"),
+    );
+    let child = &tree.children.as_deref().expect("children")[0];
+    let margin = |length: Length| length.to_px(&child.context.sizing, 0.0);
+
+    assert_eq!(
+      child.context.style.custom_properties.get("--g"),
+      Some("10px")
+    );
+    assert_eq!(margin(child.context.style.box_data.margin_top), 10.0);
+    assert_eq!(margin(child.context.style.box_data.margin_bottom), 3.0);
+    assert_eq!(margin(child.context.style.box_data.margin_left), 20.0);
   }
 
   #[test]
