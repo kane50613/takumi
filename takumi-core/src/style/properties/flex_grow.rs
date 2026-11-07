@@ -4,7 +4,7 @@ use cssparser::Parser;
 
 use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
-  tw::TailwindPropertyParser,
+  parse_number_value, tw::TailwindPropertyParser,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -28,7 +28,7 @@ impl Animatable for FlexGrow {
 
 impl<'i> FromCss<'i> for FlexGrow {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Ok(FlexGrow(input.expect_number()?))
+    Ok(FlexGrow(parse_number_value(input)?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<number>"];

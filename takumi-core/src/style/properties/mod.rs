@@ -46,6 +46,7 @@ mod length;
 mod line_break;
 mod line_clamp;
 mod line_height;
+mod linear_easing;
 pub(crate) mod linear_gradient;
 mod list_style;
 mod max_size;
@@ -130,6 +131,7 @@ pub use length::*;
 pub use line_break::*;
 pub use line_clamp::*;
 pub use line_height::*;
+pub use linear_easing::LinearEasing;
 pub use linear_gradient::{
   Angle, GradientKeywordDirection, GradientStop, HorizontalKeyword, LinearGradient,
   LinearGradientDirection, ResolvedGradientStop, StopPosition, VerticalKeyword,
