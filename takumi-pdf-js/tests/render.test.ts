@@ -370,7 +370,7 @@ const uncoveredViewport = { width: 200, height: 100 };
 
 test("uncoveredText renders through uncovered characters", async () => {
   await expect(renderer.render(uncoveredDoc, { viewport: uncoveredViewport })).rejects.toThrow(
-    "No registered font has a glyph for क (U+0915)",
+    "No font the text can use draws क (U+0915)",
   );
 
   const placeholder = await renderer.render(uncoveredDoc, {
