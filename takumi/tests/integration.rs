@@ -9,6 +9,7 @@ mod font_tests;
 mod form_control_tests;
 mod html_fixtures;
 mod inline_svg;
+mod math_function_tests;
 mod measure_tests;
 mod oversized_nodes;
 mod paint_tree_tests;

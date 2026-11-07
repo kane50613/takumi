@@ -1,8 +1,8 @@
-use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
+use cssparser::{ParseError as CssParseError, Parser, Token};
 
 use crate::style::{
   Length, ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
-  ParseResult, SizingContext, length_from_dimension_unit, unexpected_token,
+  ParseResult, SizingContext, is_math_function, parse_number,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -242,8 +242,29 @@ impl CalcFormula {
   for_each_unit!(calc_sub);
   for_each_unit!(calc_scale);
 
+  /// `px` CSS px plus the fraction `percent` of the basis.
+  pub(crate) fn linear(px: f32, percent: f32) -> Self {
+    Self {
+      px,
+      ..Self::percent(percent)
+    }
+  }
+
+  /// The formula in CSS px, when only absolute units make it up.
+  pub(crate) fn absolute_px(&self) -> Option<f32> {
+    let mut px = 0.0;
+
+    for term in self.compress()?.terms() {
+      if term.unit != CalcUnit::Px {
+        return None;
+      }
+      px += term.value;
+    }
+    Some(px)
+  }
+
   /// Bridges a single-unit `Length` to its symbolic `calc(...)` coefficient.
-  fn from_length(length: Length) -> Self {
+  pub(crate) fn from_length(length: Length) -> Self {
     match length {
       Length::Px(v) => Self::px(v),
       Length::Em(v) => Self::em(v),
@@ -323,7 +344,7 @@ pub(crate) enum CalcValue {
 
 impl CalcValue {
   /// Applies a binary operator, or `None` when the operand types rule it out.
-  fn combine(self, operator: char, rhs: Self) -> Option<Self> {
+  pub(crate) fn combine(self, operator: char, rhs: Self) -> Option<Self> {
     Some(match (operator, self, rhs) {
       ('+', Self::Number(lhs), Self::Number(rhs)) => Self::Number(lhs + rhs),
       ('+', Self::Formula(lhs), Self::Formula(rhs)) => Self::Formula(lhs.add(rhs)),
@@ -340,108 +361,30 @@ impl CalcValue {
   }
 }
 
-// Matches Blink's `kMaxExpressionDepth` (css_math_expression_node.h).
-const MAX_CALC_DEPTH: u32 = 100;
-
-pub(crate) fn parse_calc_sum<'i>(input: &mut Parser<'i>) -> ParseResult<'i, CalcValue> {
-  parse_calc_sum_at(input, 0)
-}
-
-fn parse_calc_sum_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, CalcValue> {
-  parse_calc_chain(input, ['+', '-'], |input| {
-    parse_calc_product_at(input, depth)
-  })
-}
-
 /// Parses a `calc(...)` that must reduce to a unitless number.
 pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
   let token = input.next()?.clone();
 
-  if let Token::Function(function) = &token
-    && function.eq_ignore_ascii_case("calc")
-    && let CalcValue::Number(value) = input.parse_nested_block(parse_calc_sum)?
-  {
-    return Ok(value);
+  match &token {
+    Token::Function(function) if is_math_function(function) => parse_number(function, input),
+    _ => Err(CssParseError::unexpected_token()),
   }
-
-  Err(CssParseError::unexpected_token())
 }
 
-fn parse_calc_product_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, CalcValue> {
-  parse_calc_chain(input, ['*', '/'], |input| {
-    parse_calc_factor_at(input, depth)
-  })
+/// A `<number>`, or a math function that reduces to one.
+pub(crate) fn parse_number_value<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
+  match input.try_parse(Parser::expect_number) {
+    Ok(number) => Ok(number),
+    Err(_) => parse_calc_number_expression(input),
+  }
 }
 
-/// An operand followed by any number of `operators` and further operands, folded left.
-fn parse_calc_chain<'i>(
-  input: &mut Parser<'i>,
-  operators: [char; 2],
-  mut parse_operand: impl FnMut(&mut Parser<'i>) -> ParseResult<'i, CalcValue>,
-) -> ParseResult<'i, CalcValue> {
-  let mut value = parse_operand(input)?;
-
-  while let Some(operator) = parse_calc_operator(input, operators) {
-    let rhs = parse_operand(input)?;
-
-    value = value
-      .combine(operator, rhs)
-      .ok_or_else(|| unexpected_token!(Length, &Token::Delim(operator),))?;
-  }
-
-  Ok(value)
-}
-
-/// Consumes the next token when it is a delimiter among `operators`.
-fn parse_calc_operator(input: &mut Parser<'_>, operators: [char; 2]) -> Option<char> {
-  input
-    .try_parse(|input| match input.next() {
-      Ok(&Token::Delim(operator)) if operators.contains(&operator) => Ok(operator),
-      _ => Err(()),
-    })
-    .ok()
-}
-
-fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, CalcValue> {
-  if depth >= MAX_CALC_DEPTH {
-    return Err(CssParseError::unexpected_token());
-  }
-
-  match parse_calc_operator(input, ['+', '-']) {
-    Some('+') => return parse_calc_factor_at(input, depth + 1),
-    Some('-') => {
-      return Ok(match parse_calc_factor_at(input, depth + 1)? {
-        CalcValue::Number(value) => CalcValue::Number(-value),
-        CalcValue::Formula(formula) => CalcValue::Formula(formula.neg()),
-      });
-    }
-    _ => {}
-  }
-
-  let token = input.next()?;
-
-  match token {
-    Token::Number { value, .. } => Ok(CalcValue::Number(*value)),
-    Token::Percentage { unit_value, .. } => {
-      Ok(CalcValue::Formula(CalcFormula::percent(*unit_value)))
-    }
-    Token::Dimension { value, unit, .. } => {
-      match length_from_dimension_unit(unit.as_ref(), *value) {
-        Some(length) => Ok(CalcValue::Formula(CalcFormula::from_length(length))),
-        None => Err(unexpected_token!(Length, token)),
-      }
-    }
-    Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
-      input.parse_nested_block(|input| parse_calc_sum_at(input, depth + 1))
-    }
-    Token::Ident(ident) => match_ignore_ascii_case! {ident.as_ref(),
-      "e" => Ok(CalcValue::Number(std::f32::consts::E)),
-      "pi" => Ok(CalcValue::Number(std::f32::consts::PI)),
-      "infinity" => Ok(CalcValue::Number(f32::INFINITY)),
-      "-infinity" => Ok(CalcValue::Number(f32::NEG_INFINITY)),
-      "nan" => Ok(CalcValue::Number(f32::NAN)),
-      _ => Err(unexpected_token!(Length, token)),
-    },
-    _ => Err(unexpected_token!(Length, token)),
+/// An `<integer>`, or a math function that reduces to a number, rounded as CSS rounds one: a
+/// half toward positive infinity.
+/// <https://drafts.csswg.org/css-values-4/#calc-type-checking>
+pub(crate) fn parse_integer_value<'i>(input: &mut Parser<'i>) -> ParseResult<'i, i32> {
+  match input.try_parse(Parser::expect_integer) {
+    Ok(integer) => Ok(integer),
+    Err(_) => parse_calc_number_expression(input).map(|number| (number + 0.5).floor() as i32),
   }
 }

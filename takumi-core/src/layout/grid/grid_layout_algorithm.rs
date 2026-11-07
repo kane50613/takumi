@@ -1162,7 +1162,8 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       | LayoutLength::FitContent
       | LayoutLength::Stretch
       | LayoutLength::Percent(_)
-      | LayoutLength::Calc { .. } => {}
+      | LayoutLength::Calc { .. }
+      | LayoutLength::Math(_) => {}
     }
 
     let resolver = LengthResolver::new(measure.space, &item_style);

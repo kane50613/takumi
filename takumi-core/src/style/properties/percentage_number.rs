@@ -6,7 +6,7 @@ use std::{
 use cssparser::{Parser, Token};
 
 use crate::style::{
-  Animatable, Color, MakeComputed, SizingContext, ToCss, lerp,
+  Animatable, Color, MakeComputed, SizingContext, ToCss, lerp, parse_number_value,
   properties::{FromCss, ParseResult},
   tw::TailwindPropertyParser,
   unexpected_token,
@@ -69,10 +69,13 @@ impl TailwindPropertyParser for PercentageNumber {
 
 impl<'i> FromCss<'i> for PercentageNumber {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if let Ok(number) = input.try_parse(parse_number_value) {
+      return Ok(PercentageNumber(number));
+    }
+
     let token = input.next()?;
 
     match token {
-      Token::Number { value, .. } => Ok(PercentageNumber(*value)),
       Token::Percentage { unit_value, .. } => Ok(PercentageNumber(*unit_value)),
       _ => Err(unexpected_token!(token)),
     }

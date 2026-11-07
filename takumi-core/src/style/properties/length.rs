@@ -7,8 +7,9 @@ use crate::{
   layout::layout_style::LayoutLength,
   layout_unit::LayoutUnit,
   style::{
-    AspectRatio, FromCss, FromCssStr, MakeComputed, ParseResult, SizingContext, ToCss,
-    calc::{CalcTerms, CalcUnit, CalcValue, parse_calc_sum},
+    AspectRatio, FromCss, FromCssStr, MakeComputed, MathExpr, ParseResult, SizingContext, ToCss,
+    calc::{CalcTerms, CalcUnit},
+    is_math_function, parse_length,
     tw::Namespace,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
     unexpected_token,
@@ -146,6 +147,8 @@ pub enum Length {
   Px(f32),
   /// calc(...) expression
   Calc(CalcTerms),
+  /// A math function that needs the percentage basis to resolve, such as `min(10px, 20%)`
+  Math(MathExpr),
 }
 
 impl Length {
@@ -234,6 +237,7 @@ impl ToCss for Length {
       Self::Pt(v) => write!(dest, "{v}pt"),
       Self::Pc(v) => write!(dest, "{v}pc"),
       Self::Px(v) => write!(dest, "{v}px"),
+      Self::Math(expr) => expr.to_css(dest),
       Self::Calc(f) => {
         if f.terms().next().is_none() {
           return dest.write_str("0px");
@@ -312,7 +316,7 @@ impl Length {
       | Self::Pt(value)
       | Self::Pc(value)
       | Self::Px(value) => value < 0.0,
-      Self::Auto | Self::Calc(_) => false,
+      Self::Auto | Self::Calc(_) | Self::Math(_) => false,
     }
   }
 
@@ -343,6 +347,7 @@ impl Length {
       Length::Pc(v) => Length::Pc(-v),
       Length::Px(v) => Length::Px(-v),
       Length::Calc(formula) => Length::Calc(formula.neg()),
+      Length::Math(expr) => expr.negate(),
     }
   }
 }
@@ -362,16 +367,10 @@ impl<'i> FromCss<'i> for Length {
         "auto" => Ok(Self::Auto),
         _ => Err(unexpected_token!(token)),
       },
-      Token::Function(function) if function.eq_ignore_ascii_case("calc") => {
-        let token = token.clone();
+      Token::Function(function) if is_math_function(function) => {
+        let function = function.clone();
 
-        match input.parse_nested_block(parse_calc_sum)? {
-          CalcValue::Number(value) => Ok(Self::Px(value)),
-          CalcValue::Formula(formula) => formula
-            .compress()
-            .map(Self::Calc)
-            .ok_or_else(|| unexpected_token!(&token)),
-        }
+        parse_length(&function, input)
       }
       Token::Dimension { value, unit, .. } => {
         length_from_dimension_unit(unit.as_ref(), *value).ok_or_else(|| unexpected_token!(token))
@@ -439,12 +438,14 @@ impl Length {
       Length::Pc(value) => value * ONE_PC_IN_PX,
       // Calc linear values are already in device pixels.
       Length::Calc(formula) => formula.resolve(sizing).resolve(percentage_full_px),
+      Length::Math(expr) => expr.to_px(sizing, percentage_full_px),
     }
   }
 
   /// Resolves to a layout length, keeping percent and calc unresolved.
   pub(crate) fn to_layout_length(self, sizing: &SizingContext) -> LayoutLength {
     match self {
+      Length::Math(expr) => expr.to_layout_length(sizing),
       Length::Auto => LayoutLength::Auto,
       Length::Percentage(value) => LayoutLength::Percent(clamp_px_for_integer_cast(value / 100.0)),
       Length::Rem(_)
@@ -551,6 +552,11 @@ impl MakeComputed for Length {
 
     if let Self::Ex(ex) = *self {
       *self = Self::Px(ex * sizing.to_css(sizing.ex));
+      return;
+    }
+
+    if let Self::Math(expr) = *self {
+      *self = expr.make_computed(sizing);
       return;
     }
 
@@ -706,10 +712,14 @@ mod tests {
     assert!(parsed.is_err());
   }
 
+  /// Division by zero is infinity, which a property clamps to the largest finite value, as
+  /// css-values-4 has it.
   #[test]
-  fn parse_calc_rejects_division_by_zero() {
-    let parsed = Length::from_css_str("calc(10px / 0)");
-    assert!(parsed.is_err());
+  fn calc_division_by_zero_clamps_to_the_largest_length() {
+    assert_eq!(
+      Length::from_css_str("calc(10px / 0)"),
+      Ok(Length::Px(f32::MAX))
+    );
   }
 
   #[test]
