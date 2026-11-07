@@ -47,7 +47,7 @@ use takumi_core::{
   geometry::{Rect, Size},
   layout::page_sizes::{PageBox, PageRules, PageSizer},
   resources::image::ResourceCache,
-  style::PageName,
+  style::{PageName, page_rule::PageContext},
 };
 use test_utils::{CONTEXT, matches_fragments};
 
@@ -1078,7 +1078,11 @@ impl Runner {
         .build()
     };
     let (bitmaps, page_boxes) = if print {
-      let rules = PageRules::new(
+      let root = PageContext::from_root(
+        &options(Viewport::print_page(PRINT_PAGE_SIZE)).take_render_context(),
+        &node,
+      );
+      let rules = Rc::new(PageRules::new(
         Arc::clone(&stylesheet),
         PageBox {
           size: PRINT_PAGE_SIZE,
@@ -1089,31 +1093,51 @@ impl Runner {
             left: PRINT_PAGE_MARGIN,
           },
         },
-      );
-      // Approximate: Blink sizes the content's viewport from the first page under its page name,
-      // which this takes as unnamed.
-      let viewport = Viewport::print_page(rules.page_box(0, &PageName::default()).area());
-      let page_boxes = Rc::new(RefCell::new(Vec::new()));
-      let sizer = PageSizer::new({
-        let page_boxes = Rc::clone(&page_boxes);
+        root,
+      ));
+      // The pages, and each page's box and name, with the content's viewport the first page's
+      // area as a page `first_name`.
+      let print_pages = |first_name: &PageName| -> Result<_, String> {
+        let viewport = Viewport::print_page(rules.page_box(0, first_name).area());
+        let laid = Rc::new(RefCell::new(Vec::new()));
+        let sizer = PageSizer::new({
+          let rules = Rc::clone(&rules);
+          let laid = Rc::clone(&laid);
 
-        move |page, name| {
-          let page_box = rules.page_box(page, name);
-          let mut page_boxes = page_boxes.borrow_mut();
+          move |page, name| {
+            let page_box = rules.page_box(page, name);
+            let mut laid = laid.borrow_mut();
 
-          page_boxes.truncate(page);
-          page_boxes.push(page_box);
-          page_box.area()
-        }
-      });
-      let mut pages = Vec::new();
+            laid.truncate(page);
+            laid.push((page_box, name.clone()));
+            page_box.area()
+          }
+        });
+        let mut pages = Vec::new();
 
-      render_pages(options(viewport), sizer, usize::MAX, |page| {
-        pages.push(page);
-        Ok(())
-      })
-      .map_err(|error| format!("render: {error}"))?;
-      (pages, page_boxes.take())
+        render_pages(options(viewport), sizer, usize::MAX, |page| {
+          pages.push(page);
+          Ok(())
+        })
+        .map_err(|error| format!("render: {error}"))?;
+
+        Ok((pages, laid.take()))
+      };
+      let unnamed = PageName::default();
+      let (mut pages, mut laid) = print_pages(&unnamed)?;
+
+      // Blink sizes the content's viewport from the first page's area under the name its content
+      // gives it, which only a layout finds.
+      if let Some(first_name) = laid.first().map(|(_, name)| name.clone())
+        && rules.page_box(0, &first_name).area() != rules.page_box(0, &unnamed).area()
+      {
+        (pages, laid) = print_pages(&first_name)?;
+      }
+
+      (
+        pages,
+        laid.into_iter().map(|(page_box, _)| page_box).collect(),
+      )
     } else {
       let bitmap =
         render(options(Viewport::new(VIEWPORT))).map_err(|error| format!("render: {error}"))?;
@@ -1134,10 +1158,12 @@ impl Runner {
         .iter()
         .enumerate()
         .filter(|&(index, _)| selected(index))
-        .map(|(index, bitmap)| Page {
-          size: (bitmap.width(), bitmap.height()),
-          sheet: page_boxes.get(index).map(|&page_box| sheet(page_box)),
-          pixels: over_white(bitmap),
+        .map(|(index, bitmap)| match page_boxes.get(index) {
+          Some(&page_box) => Page::on_sheet(bitmap, page_box),
+          None => Page {
+            size: (bitmap.width(), bitmap.height()),
+            pixels: over_white(bitmap),
+          },
         })
         .collect(),
     })
@@ -1149,27 +1175,40 @@ struct Rendering {
   pages: Vec<Page>,
 }
 
-/// One rendered page's size, printed sheet, and RGBA.
+/// One rendered page's size and RGBA.
 struct Page {
   size: (u32, u32),
-  sheet: Option<[i32; 6]>,
   pixels: Vec<u8>,
 }
 
-/// `page_box` in whole pixels, as a printed sheet holds it: its width and height, then its top,
-/// right, bottom, and left margins.
-fn sheet(page_box: PageBox) -> [i32; 6] {
-  let PageBox { size, margin } = page_box;
+impl Page {
+  /// The printed sheet `page_box` gives `area`: white, with `area` over white inside its margins,
+  /// as a print screenshot shows the page.
+  fn on_sheet(area: &Bitmap, page_box: PageBox) -> Self {
+    let PageBox { size, margin } = page_box;
+    let (width, height) = (size.width.round() as usize, size.height.round() as usize);
+    let (left, top) = (margin.left.round() as usize, margin.top.round() as usize);
+    let area_width = area.width() as usize;
+    let mut pixels = vec![u8::MAX; width * height * 4];
 
-  [
-    size.width,
-    size.height,
-    margin.top,
-    margin.right,
-    margin.bottom,
-    margin.left,
-  ]
-  .map(|length| length.round() as i32)
+    for (row, line) in over_white(area).chunks_exact(area_width * 4).enumerate() {
+      let y = top + row;
+
+      if y >= height || left >= width {
+        continue;
+      }
+
+      let columns = area_width.min(width - left);
+      let start = (y * width + left) * 4;
+
+      pixels[start..start + columns * 4].copy_from_slice(&line[..columns * 4]);
+    }
+
+    Self {
+      size: (width as u32, height as u32),
+      pixels,
+    }
+  }
 }
 
 impl Rendering {
@@ -1181,9 +1220,7 @@ impl Rendering {
         .iter()
         .zip(&reference.pages)
         .all(|(test, reference)| {
-          test.size == reference.size
-            && test.sheet == reference.sheet
-            && fuzzy.allows(&test.pixels, &reference.pixels)
+          test.size == reference.size && fuzzy.allows(&test.pixels, &reference.pixels)
         })
   }
 }

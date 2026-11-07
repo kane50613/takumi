@@ -6,7 +6,10 @@ use std::sync::Arc;
 use crate::{
   geometry::{Point, Rect, Size},
   layout_unit::LayoutUnit,
-  style::{Length, PageName, SizingContext, StyleSheet, page_rule::PageKind},
+  style::{
+    Length, PageName, StyleSheet,
+    page_rule::{PageContext, PageKind},
+  },
   viewport::Viewport,
 };
 
@@ -66,35 +69,35 @@ pub struct PageRules {
   stylesheet: Arc<StyleSheet>,
   base: PageBox,
   viewport: Viewport,
+  context: PageContext,
 }
 
 impl PageRules {
-  /// The `@page` rules of `stylesheet` over `base`, the page box no rule changes.
-  pub fn new(stylesheet: Arc<StyleSheet>, base: PageBox) -> Self {
+  /// The `@page` rules of `stylesheet` over `base`, the page box no rule changes, for pages whose
+  /// style inherits `context`.
+  pub fn new(stylesheet: Arc<StyleSheet>, base: PageBox, context: PageContext) -> Self {
     Self {
       stylesheet,
       base,
       viewport: Viewport::print_page(base.size),
+      context,
     }
   }
 
   /// Page `page`'s box as a page `name`, as Blink's `StyleForPage` and `ResolvePageBoxGeometry`
-  /// give it, a margin percentage taking the page's size on its own axis. A rule that leaves less
-  /// than a pixel of page area on either axis is ignored, as Blink's `LayoutPageContainer` ignores
-  /// one that leaves none. Approximate: `em` and `rem` resolve against 16px, where Blink's page
-  /// style takes the root's.
+  /// give it, a margin percentage taking the page's size on its own axis. Lengths resolve with
+  /// the base page as the viewport, as Blink's `ViewportSizeChangeScopeForPrinting` sizes it. A
+  /// rule that leaves less than a pixel of page area on either axis is ignored, as Blink's
+  /// `LayoutPageContainer` ignores one that leaves none.
   pub fn page_box(&self, page: usize, name: &PageName) -> PageBox {
-    let kind = PageKind::of(page);
-    let descriptors = self.stylesheet.page_descriptors(self.viewport, kind, name);
-    let size = descriptors.size.map_or(self.base.size, |size| {
-      size.resolve(
-        self.base.size,
-        &SizingContext::builder().viewport(self.viewport).build(),
-      )
-    });
-    let sizing = SizingContext::builder()
-      .viewport(Viewport::print_page(size))
-      .build();
+    let kind = PageKind::of(page, self.context.direction());
+    let descriptors = self
+      .stylesheet
+      .page_descriptors(self.viewport, kind, name, &self.context);
+    let sizing = self.context.sizing(self.viewport);
+    let size = descriptors
+      .size
+      .map_or(self.base.size, |size| size.resolve(self.base.size, &sizing));
     // Blink's `ResolveAutoMargins` leaves a page box that fills its page no `auto` margin.
     let side = |base: f32, length: Option<Length>, basis: f32| match length {
       None => base,

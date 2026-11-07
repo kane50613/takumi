@@ -4,6 +4,7 @@ use takumi::{prelude::*, unstable::raster::render_pages, write_image};
 use takumi_core::{
   geometry::{Rect, Size},
   layout::page_sizes::{PageBox, PageRules},
+  style::page_rule::PageContext,
 };
 
 use crate::test_utils::{CONTEXT, generated_path};
@@ -44,6 +45,7 @@ fn page_rules() {
       },
       margin: Rect::default(),
     },
+    PageContext::default(),
   );
   let mut pages = Vec::new();
 
@@ -90,6 +92,7 @@ fn page_rules_viewport_units() {
       },
       margin: Rect::default(),
     },
+    PageContext::default(),
   );
   let mut sizes = Vec::new();
 
