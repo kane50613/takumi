@@ -54,58 +54,17 @@ pub(crate) fn apply_stylesheet_animations(
 
   let base_snapshot = base_style.clone();
 
-  for (animation_index, animation_name) in
-    base_snapshot.misc1_data.animation_name.iter().enumerate()
-  {
-    let Some(animation_name) = animation_name else {
-      continue;
-    };
-
-    let Some(keyframes) = find_keyframes(stylesheet, animation_name, sizing.viewport) else {
-      continue;
-    };
-
-    let duration: AnimationTime = repeated_list_value(
-      &base_snapshot.misc1_data.animation_duration,
-      animation_index,
-    );
-    let delay: AnimationTime =
-      repeated_list_value(&base_snapshot.misc1_data.animation_delay, animation_index);
-    let iteration_count = repeated_list_value(
-      &base_snapshot.misc1_data.animation_iteration_count,
-      animation_index,
-    );
-    let direction = repeated_list_value(
-      &base_snapshot.misc1_data.animation_direction,
-      animation_index,
-    );
-    let fill_mode = repeated_list_value(
-      &base_snapshot.misc1_data.animation_fill_mode,
-      animation_index,
-    );
-    let timing_function: AnimationTimingFunction = repeated_list_value(
-      &base_snapshot.misc1_data.animation_timing_function,
-      animation_index,
-    );
-
-    let Some(sample) = sample_animation_progress(
-      time as f32,
-      duration.milliseconds,
-      delay.milliseconds,
-      iteration_count,
-      direction,
-      fill_mode,
-    ) else {
-      continue;
-    };
-
-    let resolved_frames = resolve_keyframes(&keyframes, &base_snapshot);
-    let Some(segment) = sample_keyframe_segment(&resolved_frames, &base_snapshot, sample.progress)
+  for animation in active_animations(&base_snapshot, stylesheet, time, sizing.viewport) {
+    let resolved_frames = resolve_keyframes(&animation.keyframes, &base_snapshot);
+    let Some(segment) =
+      sample_keyframe_segment(&resolved_frames, &base_snapshot, animation.sample.progress)
     else {
       continue;
     };
 
-    let eased_progress = timing_function.apply(segment.progress, sample.before);
+    let eased_progress = animation
+      .timing_function
+      .apply(segment.progress, animation.sample.before);
     base_style.apply_interpolated_properties(
       segment.from_style,
       segment.to_style,
@@ -117,6 +76,101 @@ pub(crate) fn apply_stylesheet_animations(
   }
 
   base_style
+}
+
+/// The custom properties the stylesheet's animations set on `base_style` at `time`, each after
+/// the earlier animations that set it: a registered one interpolated as its syntax types it, any
+/// other switching half way, as css-variables-1 animates one.
+/// <https://drafts.css-houdini.org/css-properties-values-api-1/#animation-behavior-of-custom-properties>
+pub(crate) fn animated_custom_properties(
+  base_style: &ComputedStyle,
+  stylesheet: &StyleSheet,
+  time: u64,
+  sizing: &SizingContext,
+  current_color: Color,
+) -> Vec<(String, String)> {
+  let mut animated = Vec::new();
+
+  for animation in active_animations(base_style, stylesheet, time, sizing.viewport) {
+    let names = animation.keyframes.custom_property_names();
+
+    if names.is_empty() {
+      continue;
+    }
+
+    let resolved_frames = resolve_keyframes(&animation.keyframes, base_style);
+    let Some(segment) =
+      sample_keyframe_segment(&resolved_frames, base_style, animation.sample.progress)
+    else {
+      continue;
+    };
+    let progress = animation
+      .timing_function
+      .apply(segment.progress, animation.sample.before);
+
+    for name in names {
+      let (Some(from), Some(to)) = (
+        segment.from_style.custom_properties.get(name),
+        segment.to_style.custom_properties.get(name),
+      ) else {
+        continue;
+      };
+      let value = base_style
+        .custom_properties
+        .registration(name)
+        .and_then(|rule| {
+          rule
+            .syntax
+            .interpolate(from, to, progress, sizing, current_color)
+        })
+        .unwrap_or_else(|| discrete(&from, &to, progress).to_owned());
+
+      animated.push((name.to_owned(), value));
+    }
+  }
+
+  animated
+}
+
+/// An animation `animation-name` runs that is sampled at the render's time.
+struct ActiveAnimation<'s> {
+  keyframes: Cow<'s, KeyframesRule>,
+  sample: AnimationSample,
+  timing_function: AnimationTimingFunction,
+}
+
+/// The animations `base_style` names that `time` falls in or fills, in `animation-name` order.
+fn active_animations<'s>(
+  base_style: &'s ComputedStyle,
+  stylesheet: &'s StyleSheet,
+  time: u64,
+  viewport: Viewport,
+) -> impl Iterator<Item = ActiveAnimation<'s>> {
+  let animation = &base_style.misc1_data;
+
+  animation
+    .animation_name
+    .iter()
+    .enumerate()
+    .filter_map(move |(index, name)| {
+      let keyframes = find_keyframes(stylesheet, name.as_ref()?, viewport)?;
+      let duration: AnimationTime = repeated_list_value(&animation.animation_duration, index);
+      let delay: AnimationTime = repeated_list_value(&animation.animation_delay, index);
+      let sample = sample_animation_progress(
+        time as f32,
+        duration.milliseconds,
+        delay.milliseconds,
+        repeated_list_value(&animation.animation_iteration_count, index),
+        repeated_list_value(&animation.animation_direction, index),
+        repeated_list_value(&animation.animation_fill_mode, index),
+      )?;
+
+      Some(ActiveAnimation {
+        keyframes,
+        sample,
+        timing_function: repeated_list_value(&animation.animation_timing_function, index),
+      })
+    })
 }
 
 pub(crate) fn find_keyframes<'a>(
@@ -137,6 +191,34 @@ pub(crate) fn find_keyframes<'a>(
     })
     .map(Cow::Borrowed)
     .or_else(|| tailwind_animation_keyframes(name).map(Cow::Owned))
+}
+
+impl KeyframesRule {
+  /// The custom properties its keyframes declare.
+  fn custom_property_names(&self) -> Vec<&str> {
+    let mut names: Vec<&str> = self
+      .keyframes
+      .iter()
+      .flat_map(|keyframe| keyframe.declarations.iter())
+      .filter_map(|declaration| match declaration {
+        StyleDeclaration::CustomProperty(name, _) => Some(name.as_str()),
+        _ => None,
+      })
+      .collect();
+
+    names.sort_unstable();
+    names.dedup();
+    names
+  }
+
+  /// Whether a keyframe declares a custom property.
+  pub(crate) fn animates_custom_properties(&self) -> bool {
+    self
+      .keyframes
+      .iter()
+      .flat_map(|keyframe| keyframe.declarations.iter())
+      .any(|declaration| matches!(declaration, StyleDeclaration::CustomProperty(..)))
+  }
 }
 
 fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {

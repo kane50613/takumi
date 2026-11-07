@@ -6,9 +6,8 @@ use std::{
   sync::Arc,
 };
 
-use crate::{
-  layout::layout_style::LayoutLength,
-  style::{CssWideKeyword, FromCssStr, Length, SizingContext, selector::PropertyRule},
+use crate::style::{
+  CssWideKeyword, FromCssStr, PropertySyntax, SizingContext, selector::PropertyRule,
 };
 
 /// The `@property` rules in force, by name, shared by every element they reach.
@@ -23,14 +22,6 @@ pub struct CustomProperties {
   /// Names a utility engine wrote as this element's own composition state.
   /// Unlike a registration, this does not reach the children.
   element_state: Arc<HashSet<String>>,
-}
-
-/// `value` in CSS px, unless it is not a length or needs a percentage basis.
-fn computed_length(value: &str, sizing: &SizingContext) -> Option<f32> {
-  match Length::from_css_str(value).ok()?.to_layout_length(sizing) {
-    LayoutLength::Fixed(px) => Some(sizing.to_css(px)),
-    _ => None,
-  }
 }
 
 impl CustomProperties {
@@ -116,30 +107,59 @@ impl CustomProperties {
     }
   }
 
-  /// A copy with each registered `<length>` computed to px against `sizing`, if any changes.
+  /// A copy with each registered value computed against `sizing`, if any changes: a `<length>`
+  /// to px, an `<angle>` to deg, a `<color>` to its color, and so on.
   /// <https://drafts.css-houdini.org/css-properties-values-api-1/#calculation-of-computed-values>
-  pub(crate) fn with_computed_lengths(&self, sizing: &SizingContext) -> Option<Self> {
+  pub(crate) fn with_computed_values(&self, sizing: &SizingContext) -> Option<Self> {
     let mut computed: Option<Self> = None;
 
     for rule in self
       .registrations
       .values()
-      .filter(|rule| rule.syntax == "<length>")
+      .filter(|rule| rule.syntax != PropertySyntax::Universal)
     {
       let Some(value) = self.get(&rule.name) else {
         continue;
       };
-      let Some(px) = computed_length(value, sizing).map(|px| format!("{px}px")) else {
+      let Some(computed_value) = rule.syntax.compute(value, Some(sizing)) else {
         continue;
       };
 
-      if px != value {
+      if computed_value != value {
         computed
           .get_or_insert_with(|| self.clone())
-          .set(rule.name.clone(), px);
+          .set(rule.name.clone(), computed_value);
       }
     }
     computed
+  }
+
+  /// Makes each of the `declared` names its registered syntax does not take, after `var()`
+  /// substitution, invalid at computed-value time: `unset`, so the parent's value when it
+  /// inherits and the initial value otherwise.
+  /// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
+  pub(crate) fn enforce_syntax(&mut self, declared: &[String], parent: &Self) {
+    let registrations = Arc::clone(&self.registrations);
+
+    for name in declared {
+      let Some(rule) = registrations.get(name) else {
+        continue;
+      };
+
+      if self.get(name).is_some_and(|value| rule.syntax.takes(value)) {
+        continue;
+      }
+
+      match rule
+        .inherits
+        .then(|| parent.get(name))
+        .flatten()
+        .or(rule.initial_value.as_deref())
+      {
+        Some(value) => self.set(name.clone(), value.to_owned()),
+        None => self.remove(name),
+      }
+    }
   }
 
   /// Records state a utility engine wrote for this element alone, as Tailwind's `@property` does.

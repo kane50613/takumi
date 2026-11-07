@@ -645,3 +645,38 @@ fn a_filter_url_to_a_fragment_leaves_an_html_element_unfiltered() {
 
   assert_eq!(plain.as_raw(), filtered.as_raw());
 }
+
+/// A registered custom property animates as its syntax types it, and `var()` reads the animated
+/// value; an unregistered one switches half way, as Chromium animates them.
+#[test]
+fn an_animated_custom_property_interpolates_when_registered() {
+  let width_at = |registered: bool, delay_ms: u32, from: &str, to: &str| {
+    let registration = if registered {
+      "@property --w { syntax: '<length>'; inherits: false; initial-value: 0px }
+       @property --n { syntax: '<number>'; inherits: false; initial-value: 0 }"
+    } else {
+      ""
+    };
+    let css = format!(
+      "{registration}
+       @keyframes grow {{ from {{ --w: {from}; --n: {from} }} to {{ --w: {to}; --n: {to} }} }}
+       .box {{ font-size: 10px; animation: grow 1000ms linear -{delay_ms}ms; width: var(--w); height: calc(var(--n) * 1px) }}"
+    );
+    let measured = measure_with_css(
+      Node::container([styled_block(
+        "box",
+        serde_json::json!({ "display": "block" }),
+      )]),
+      &css,
+    );
+
+    (measured.children[0].width, measured.children[0].height)
+  };
+
+  assert_eq!(width_at(true, 250, "100px", "300px").0, 150.0);
+  assert_eq!(width_at(true, 750, "100px", "300px").0, 250.0);
+  assert_eq!(width_at(true, 500, "1em", "3em").0, 20.0);
+  assert_eq!(width_at(true, 250, "100", "300").1, 150.0);
+  assert_eq!(width_at(false, 250, "100px", "300px").0, 100.0);
+  assert_eq!(width_at(false, 750, "100px", "300px").0, 300.0);
+}

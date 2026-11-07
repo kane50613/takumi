@@ -10,6 +10,7 @@ pub mod math;
 mod media_query;
 pub mod page_rule;
 pub(crate) mod properties;
+mod property_syntax;
 mod raw_declaration;
 pub(crate) mod selector;
 mod sizing;
@@ -18,7 +19,9 @@ mod supports;
 mod tw;
 
 pub use animation::{KeyframeRule, KeyframesRule};
-pub(crate) use animation::{apply_stylesheet_animations, find_keyframes};
+pub(crate) use animation::{
+  animated_custom_properties, apply_stylesheet_animations, find_keyframes,
+};
 pub(crate) use calc::parse_calc_number_expression;
 pub(crate) use css_input::{CssInput, CssNumber, CssUnexpected, CssValueSeed};
 pub use css_source::{
@@ -33,6 +36,7 @@ pub(crate) use properties::unexpected_token;
 pub use properties::*;
 pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
 // Selector internals stay crate-private.
+pub use property_syntax::PropertySyntax;
 pub use selector::{MediaQueryList, PropertyRule, StyleSheet};
 pub(crate) use sizing::FontUnits;
 pub use sizing::SizingContext;

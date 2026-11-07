@@ -863,6 +863,7 @@ macro_rules! define_style {
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
           let mut declarations = ParsedDeclarations::new();
+          let mut declared_custom_properties = Vec::new();
 
           for name in &self.declarations.element_state {
             style.custom_properties.register_element_state(name);
@@ -871,6 +872,7 @@ macro_rules! define_style {
           for declaration in self.declarations.declarations {
             match declaration {
               StyleDeclaration::CustomProperty(name, value) => {
+                declared_custom_properties.push(name.clone());
                 style
                   .custom_properties
                   .declare(name, value, Some(&parent.custom_properties));
@@ -886,6 +888,9 @@ macro_rules! define_style {
               .custom_properties
               .replace_values(resolved_custom_properties);
           }
+          style
+            .custom_properties
+            .enforce_syntax(&declared_custom_properties, &parent.custom_properties);
 
           // Pre-resolve `direction` so logical-axis applies below see the
           // final value even if `direction:` is declared later in the block.
