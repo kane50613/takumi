@@ -21,7 +21,9 @@ mod tw;
 
 pub use animation::{KeyframeRule, KeyframesRule};
 pub(crate) use animation::{apply_stylesheet_animations, find_keyframes};
-pub(crate) use calc::{parse_calc_number_expression, parse_integer_value, parse_number_value};
+pub(crate) use calc::{
+  parse_calc_number_expression, parse_integer_value, parse_number_value, parse_percentage_value,
+};
 pub(crate) use css_input::{CssInput, CssNumber, CssUnexpected, CssValueSeed};
 pub use css_source::{
   AnimationRule, AnimationStep, CssSource, CssSourceError, LayerRule, MediaRule, StyleRule,
