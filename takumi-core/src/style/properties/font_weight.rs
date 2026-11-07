@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp, tw::Namespace,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
+  parse_calc_number_expression, tw::Namespace, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents font weight value.
@@ -66,6 +66,11 @@ impl Animatable for FontWeight {
 
 impl<'i> FromCss<'i> for FontWeight {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    // A math function's weight clamps to the range a number must be in.
+    if let Ok(weight) = input.try_parse(parse_calc_number_expression) {
+      return Ok(weight.clamp(1.0, 1000.0).into());
+    }
+
     let token = input.next()?;
 
     match token {

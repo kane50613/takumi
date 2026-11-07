@@ -15,7 +15,8 @@ use super::gradient_utils::{
 use crate::geometry::Size;
 use crate::style::{
   Animatable, Color, ColorInput, ColorInterpolationMethod, FromCss, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, tw::TailwindPropertyParser, unexpected_token,
+  ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, parse_angle,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a linear gradient.
@@ -793,6 +794,11 @@ impl<'i> FromCss<'i> for Angle {
     let token = input.next()?;
 
     match token {
+      Token::Function(function) if is_math_function(function) => {
+        let function = function.clone();
+
+        parse_angle(&function, input).map(Angle::new)
+      }
       Token::Number { value, .. } => Ok(Angle::new(*value)),
       Token::Dimension { value, unit, .. } => match unit.as_ref() {
         "deg" => Ok(Angle::new(*value)),

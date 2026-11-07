@@ -110,6 +110,16 @@ A named utility reads its theme variable, as in Tailwind. `animate-wiggle` reads
   `--animate-*` variable instead.
 </Callout>
 
+### Timing functions
+
+`animation-timing-function` takes the keywords, `steps()`, `cubic-bezier()`, and `linear()`. `linear()` draws straight lines between its points, so it can approximate a bounce or a spring:
+
+```css
+animation-timing-function: linear(0, 1 30%, 0.8 45%, 1 60%, 0.95 75%, 1);
+```
+
+A point without a percentage sits evenly between its neighbours, and a point with two takes both.
+
 ## Render the animation
 
 ### One frame with `render()`
