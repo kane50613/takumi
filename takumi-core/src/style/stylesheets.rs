@@ -881,6 +881,11 @@ macro_rules! define_style {
             }
           }
 
+          // Once before `var()` substitutes, so a reference reads the value the syntax leaves, and
+          // once after, for the values a reference made.
+          style
+            .custom_properties
+            .enforce_syntax(&declared_custom_properties, &parent.custom_properties);
           if let Some(resolved_custom_properties) =
             resolve_custom_properties(style.custom_properties.values())
           {
@@ -1363,7 +1368,10 @@ macro_rules! define_style {
             Self::CustomProperty(name, value) => {
               style
                 .custom_properties
-                .declare(name, value, Some(&parent.custom_properties));
+                .declare(name.clone(), value, Some(&parent.custom_properties));
+              style
+                .custom_properties
+                .enforce_syntax(&[name], &parent.custom_properties);
             }
             Self::Deferred(deferred) => deferred.apply_with_parent(style, parent),
             Self::VarRef(var_ref) => var_ref.apply(style, Some(parent)),

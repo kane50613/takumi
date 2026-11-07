@@ -3162,14 +3162,32 @@ impl RenderContext {
 
     let (style_layers, element_important) = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
+    let important: Vec<&StyleDeclaration> = matched
+      .unlayered_important()
+      .iter()
+      .map(|declarations| declarations.iter())
+      .chain(
+        matched
+          .layered_important()
+          .iter()
+          .map(|declarations| declarations.iter()),
+      )
+      .chain(
+        element_important
+          .inline
+          .iter()
+          .map(|declarations| declarations.iter()),
+      )
+      .flatten()
+      .collect();
     // An animated custom property cascades above the element's declarations, before `var()`
     // substitutes it, so the element cascades again with it.
-    let animates_custom_properties = self
+    let recascade = self
       .stylesheet()
       .keyframes
       .iter()
-      .any(KeyframesRule::animates_custom_properties);
-    let recascade = animates_custom_properties.then(|| style_layers.clone());
+      .any(KeyframesRule::animates_custom_properties)
+      .then(|| style_layers.clone());
 
     let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
 
@@ -3177,8 +3195,14 @@ impl RenderContext {
     if let Some(style_layers) = recascade
       && !style.misc1_data.animation_name.is_empty()
     {
-      let animated = self.animated_custom_properties(&style);
+      let mut animated = self.animated_custom_properties(&style);
 
+      // An important declaration outranks the animation of the same custom property.
+      animated.retain(|(name, _)| {
+        !important.iter().any(|declaration| {
+          matches!(declaration, StyleDeclaration::CustomProperty(important, _) if important == name.as_str())
+        })
+      });
       if !animated.is_empty() {
         style = animated
           .into_iter()
@@ -3197,29 +3221,10 @@ impl RenderContext {
 
     // Important declarations outrank an animation, and `inherit` among them
     // needs the parent the first pass resolved against.
-    let important = matched
-      .unlayered_important()
-      .iter()
-      .map(|declarations| declarations.iter())
-      .chain(
-        matched
-          .layered_important()
-          .iter()
-          .map(|declarations| declarations.iter()),
-      )
-      .chain(
-        element_important
-          .inline
-          .iter()
-          .map(|declarations| declarations.iter()),
-      );
-
-    for declarations in important {
-      for declaration in declarations {
-        declaration
-          .clone()
-          .apply_with_parent(&mut style, &inherited_parent);
-      }
+    for &declaration in &important {
+      declaration
+        .clone()
+        .apply_with_parent(&mut style, &inherited_parent);
     }
 
     let sizing = self.child_sizing(

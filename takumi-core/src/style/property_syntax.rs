@@ -7,9 +7,10 @@ use std::{
   str::FromStr,
 };
 
-use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
+use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_identifier, serialize_string};
 
 use crate::{
+  geometry::Size,
   layout::layout_style::LayoutLength,
   style::{
     Animatable, AnimationTime, BackgroundImage, Color, ColorInput, CssWideKeyword, FromCss,
@@ -168,11 +169,6 @@ impl PropertySyntax {
     Some(component.serialize(&items))
   }
 
-  /// Whether `value` matches the syntax.
-  pub(crate) fn takes(&self, value: &str) -> bool {
-    self.compute(value, None).is_some()
-  }
-
   /// Whether `value` computes without the element: no `var()`, and nothing relative to its font,
   /// its viewport, or a query container.
   /// <https://drafts.css-houdini.org/css-properties-values-api-1/#computationally-independent>
@@ -187,10 +183,7 @@ impl PropertySyntax {
     let [small, large] = [probe_sizing(100, 10.0), probe_sizing(300, 30.0)];
     let computed = self.compute(value, Some(&small));
 
-    computed.is_some()
-      && computed == self.compute(value, Some(&large))
-      && !small.container_read.get()
-      && !large.container_read.get()
+    computed.is_some() && computed == self.compute(value, Some(&large))
   }
 
   /// `progress` of the way from `from` to `to`, item by item, when both take the same component
@@ -241,7 +234,27 @@ fn probe_sizing(size: u32, font_size: f32) -> SizingContext {
   sizing.root_line_height = Some(font_size);
   sizing.ch = font_size;
   sizing.ex = font_size;
+  sizing.container_size = Size {
+    width: Some(size as f32),
+    height: Some(size as f32),
+  };
   sizing
+}
+
+/// `value` rounded to the nearest integer, a half up toward positive infinity, as CSS rounds an
+/// `<integer>`.
+/// <https://drafts.csswg.org/css-values-4/#combine-integers>
+fn round_integer(value: f32) -> f32 {
+  (value + 0.5).floor()
+}
+
+/// Whether `ident` is reserved, so neither a keyword of a syntax nor a `<custom-ident>`.
+/// <https://drafts.csswg.org/css-values-4/#custom-idents>
+fn is_reserved(ident: &str) -> bool {
+  CssWideKeyword::from_css_str(ident).is_ok()
+    || ["default", "revert", "revert-layer"]
+      .iter()
+      .any(|reserved| ident.eq_ignore_ascii_case(reserved))
 }
 
 impl SyntaxComponent {
@@ -325,10 +338,7 @@ impl SyntaxComponent {
 fn is_keyword(source: &str) -> bool {
   let mut input = Parser::new(source);
 
-  input.expect_ident().is_ok()
-    && input.is_exhausted()
-    && CssWideKeyword::from_css_str(source).is_err()
-    && !source.eq_ignore_ascii_case("default")
+  input.expect_ident().is_ok() && input.is_exhausted() && !is_reserved(source)
 }
 
 impl DataType {
@@ -372,12 +382,24 @@ impl DataType {
         Ok(integer) => Some(Item::Integer(integer as f32)),
         Err(_) => parse_calc_number_expression(input)
           .ok()
-          .map(|value| Item::Integer(value.round())),
+          .map(|value| Item::Integer(round_integer(value))),
       },
-      Self::Percentage => match input.next().ok()? {
-        Token::Percentage { unit_value, .. } => Some(Item::Percentage(unit_value * 100.0)),
-        _ => None,
-      },
+      Self::Percentage => {
+        if let Ok(unit_value) = input.try_parse(|input| match input.next()? {
+          Token::Percentage { unit_value, .. } => Ok(*unit_value),
+          _ => Err(input.new_error_for_next_token::<()>()),
+        }) {
+          return Some(Item::Percentage(unit_value * 100.0));
+        }
+
+        // A `calc()` of percentages alone.
+        let Length::Calc(formula) = Length::from_css(input).ok()? else {
+          return None;
+        };
+        let (px, percent) = formula.resolve(&probe_sizing(100, 10.0)).components();
+
+        (px == 0.0).then_some(Item::Percentage(percent * 100.0))
+      }
       Self::Angle => match input.next().ok()? {
         // Not `Angle`, which wraps to a turn and takes a unitless number.
         Token::Dimension { value, unit, .. } => {
@@ -397,7 +419,7 @@ impl DataType {
         .ok()
         .map(|time| Item::Time(time.milliseconds / 1000.0)),
       Self::Resolution => match input.next().ok()? {
-        Token::Dimension { value, unit, .. } => {
+        Token::Dimension { value, unit, .. } if *value >= 0.0 => {
           let dppx = match_ignore_ascii_case! { unit,
             "dppx" | "x" => *value,
             "dpi" => value / 96.0,
@@ -418,8 +440,23 @@ impl DataType {
           return None;
         }
 
-        BackgroundImage::from_css(input).ok()?;
-        Some(specified(input))
+        let image = BackgroundImage::from_css(input).ok()?;
+        let Some(sizing) = sizing else {
+          return Some(specified(input));
+        };
+        let (mut computed, mut before, mut after) = (image.clone(), String::new(), String::new());
+
+        computed.make_computed(sizing);
+        image.to_css(&mut before).ok()?;
+        computed.to_css(&mut after).ok()?;
+
+        // Only a relative length changes in computing, and the rest stays as written, as Chromium
+        // keeps it.
+        Some(if before == after {
+          specified(input)
+        } else {
+          Item::Specified(after)
+        })
       }
       Self::Url => {
         let url = match input.next().ok()? {
@@ -454,10 +491,14 @@ impl DataType {
         Some(Item::Transforms(transforms))
       }
       Self::CustomIdent => {
-        let ident = input.expect_ident().ok()?.clone();
+        let ident = input.expect_ident().ok()?;
+        let mut serialized = String::new();
 
-        (CssWideKeyword::from_css_str(&ident).is_err() && !ident.eq_ignore_ascii_case("default"))
-          .then(|| Item::Specified(ident.to_string()))
+        if is_reserved(ident) {
+          return None;
+        }
+        serialize_identifier(ident, &mut serialized).ok()?;
+        Some(Item::Specified(serialized))
       }
       Self::String => Some(Item::Specified(quoted(input.expect_string().ok()?))),
     }
@@ -538,7 +579,7 @@ impl Item {
         percent: mix(*percent, *to_percent),
       },
       (Self::Number(from), Self::Number(to)) => Self::Number(mix(*from, *to)),
-      (Self::Integer(from), Self::Integer(to)) => Self::Integer(mix(*from, *to).round()),
+      (Self::Integer(from), Self::Integer(to)) => Self::Integer(round_integer(mix(*from, *to))),
       (Self::Percentage(from), Self::Percentage(to)) => Self::Percentage(mix(*from, *to)),
       (Self::Angle(from), Self::Angle(to)) => Self::Angle(mix(*from, *to)),
       (Self::Time(from), Self::Time(to)) => Self::Time(mix(*from, *to)),
@@ -684,6 +725,51 @@ mod tests {
     assert!(mismatches.is_empty(), "{mismatches:#?}");
   }
 
+  /// The edge cases of each type: CSS rounding, math that reduces to a percentage, a negative
+  /// resolution, an escaped identifier, and the reserved keywords.
+  #[test]
+  fn computes_the_edge_cases() {
+    let compute = |syntax: &str, value: &str| {
+      syntax
+        .parse::<PropertySyntax>()
+        .expect("the syntax parses")
+        .compute(value, None)
+    };
+
+    assert_eq!(compute("<integer>", "calc(-1.5)").as_deref(), Some("-1"));
+    assert_eq!(compute("<integer>", "calc(2.5)").as_deref(), Some("3"));
+    assert_eq!(
+      compute("<percentage>", "calc(25% + 25%)").as_deref(),
+      Some("50%")
+    );
+    assert_eq!(compute("<percentage>", "calc(10px + 5%)"), None);
+    assert_eq!(compute("<resolution>", "-1dppx"), None);
+    assert_eq!(
+      compute("<custom-ident>", r"\31 foo").as_deref(),
+      Some(r"\31 foo")
+    );
+    assert_eq!(compute("<custom-ident>", "revert-layer"), None);
+    assert!("revert".parse::<PropertySyntax>().is_err());
+    assert!("REVERT-LAYER | <length>".parse::<PropertySyntax>().is_err());
+  }
+
+  /// Math with absolute lengths computes without the element, and a gradient stop in `em` does
+  /// not.
+  #[test]
+  fn tells_which_values_compute_without_the_element() {
+    let independent = |syntax: &str, value: &str| {
+      syntax
+        .parse::<PropertySyntax>()
+        .expect("the syntax parses")
+        .is_computationally_independent(value)
+    };
+
+    assert!(independent("<length>", "calc(1px + 1px)"));
+    assert!(independent("<image>", "linear-gradient(red 10px, blue)"));
+    assert!(!independent("<image>", "linear-gradient(red 1em, blue)"));
+    assert!(!independent("<length>", "10cqw"));
+  }
+
   /// A turn and more interpolates through every angle on the way, as Chromium animates it.
   #[test]
   fn an_angle_interpolates_past_a_turn() {
@@ -695,7 +781,15 @@ mod tests {
 
     assert_eq!(at(0.25).as_deref(), Some("180deg"));
     assert_eq!(at(0.75).as_deref(), Some("540deg"));
-    assert!(!syntax.takes("0"));
-    assert!(!syntax.takes("none"));
+    assert_eq!(
+      "<integer>"
+        .parse::<PropertySyntax>()
+        .expect("the syntax parses")
+        .interpolate("-2", "-1", 0.5, &sizing, Color::black())
+        .as_deref(),
+      Some("-1")
+    );
+    assert_eq!(syntax.compute("0", None), None);
+    assert_eq!(syntax.compute("none", None), None);
   }
 }

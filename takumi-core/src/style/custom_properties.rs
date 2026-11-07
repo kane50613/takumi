@@ -7,7 +7,8 @@ use std::{
 };
 
 use crate::style::{
-  CssWideKeyword, FromCssStr, PropertySyntax, SizingContext, selector::PropertyRule,
+  CssWideKeyword, FromCssStr, PropertySyntax, SizingContext, contains_var_references,
+  selector::PropertyRule,
 };
 
 /// The `@property` rules in force, by name, shared by every element they reach.
@@ -134,9 +135,10 @@ impl CustomProperties {
     computed
   }
 
-  /// Makes each of the `declared` names its registered syntax does not take, after `var()`
-  /// substitution, invalid at computed-value time: `unset`, so the parent's value when it
-  /// inherits and the initial value otherwise.
+  /// Computes each of the `declared` names its registered syntax takes, as far as the element
+  /// needs no sizing to, and makes each it does not take invalid at computed-value time: `unset`,
+  /// so the parent's value when it inherits and the initial value otherwise. A value `var()` has
+  /// yet to substitute into waits.
   /// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
   pub(crate) fn enforce_syntax(&mut self, declared: &[String], parent: &Self) {
     let registrations = Arc::clone(&self.registrations);
@@ -145,8 +147,13 @@ impl CustomProperties {
       let Some(rule) = registrations.get(name) else {
         continue;
       };
+      let value = self.get(name);
 
-      if self.get(name).is_some_and(|value| rule.syntax.takes(value)) {
+      if value.is_some_and(contains_var_references) {
+        continue;
+      }
+      if let Some(computed) = value.and_then(|value| rule.syntax.compute(value, None)) {
+        self.set(name.clone(), computed);
         continue;
       }
 

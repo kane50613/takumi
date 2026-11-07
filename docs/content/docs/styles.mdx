@@ -98,7 +98,7 @@ A rule takes effect only when it is valid, as in Chromium. `syntax` must use the
 
 Takumi differs from Chromium in three places:
 
-- An element reads its own registered property as written, and its children read the computed value. Chromium computes it on the element too, which matters only when `font-size` reads a font-relative registered length.
+- An element reads its own registered length as written, and its children read the px it computes to. Chromium computes it on the element too, which matters only when `font-size` reads a font-relative registered length. Every other type computes on the element itself.
 - A `<url>` keeps the URL as written, because a render has no document to resolve it against.
 - An `<angle>` does not take `calc()`.
 

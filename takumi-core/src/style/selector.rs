@@ -795,11 +795,13 @@ fn parse_property_rule<'i>(
     ));
   };
 
-  // The descriptor is a string, and nothing downstream wants the quotes.
-  let syntax = syntax
-    .trim_matches(['"', '\''])
-    .parse::<PropertySyntax>()
-    .map_err(|()| ParseError::custom(StyleSheetParseErrorKind::InvalidPropertySyntax))?;
+  // The descriptor is one CSS string, which the syntax is read from once decoded.
+  let mut syntax_input = Parser::new(&syntax);
+  let decoded = syntax_input.expect_string().map(ToString::to_string).ok();
+  let syntax = decoded
+    .filter(|_| syntax_input.is_exhausted())
+    .and_then(|decoded| decoded.parse::<PropertySyntax>().ok())
+    .ok_or_else(|| ParseError::custom(StyleSheetParseErrorKind::InvalidPropertySyntax))?;
 
   // css-properties-values-api-1 2.1: only the universal syntax may leave the initial value out,
   // and any other must take it and compute it without an element.
@@ -2806,6 +2808,8 @@ mod tests {
         @property --em { syntax: "<length>"; inherits: false; initial-value: 1em }
         @property --vw { syntax: "<length>"; inherits: false; initial-value: 10vw }
         @property --off { syntax: "<length>"; inherits: false; initial-value: red }
+        @property --bare { syntax: <length>; inherits: false; initial-value: 1px }
+        @property --escaped { syntax: "\3c length\3e"; inherits: false; initial-value: 2px }
         @property --kept { syntax: "<length>"; inherits: false; initial-value: 1in }
       "#,
     );
@@ -2815,7 +2819,7 @@ mod tests {
       .map(|rule| (rule.name.as_str(), rule.initial_value.as_deref()))
       .collect();
 
-    assert_eq!(kept, [("--kept", Some("1in"))]);
+    assert_eq!(kept, [("--escaped", Some("2px")), ("--kept", Some("1in"))]);
   }
 
   #[test]

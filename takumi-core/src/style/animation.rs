@@ -92,38 +92,34 @@ pub(crate) fn animated_custom_properties(
   let mut animated = Vec::new();
 
   for animation in active_animations(base_style, stylesheet, time, sizing.viewport) {
-    let names = animation.keyframes.custom_property_names();
-
-    if names.is_empty() {
-      continue;
-    }
-
-    let resolved_frames = resolve_keyframes(&animation.keyframes, base_style);
-    let Some(segment) =
-      sample_keyframe_segment(&resolved_frames, base_style, animation.sample.progress)
-    else {
-      continue;
-    };
-    let progress = animation
-      .timing_function
-      .apply(segment.progress, animation.sample.before);
-
-    for name in names {
-      let (Some(from), Some(to)) = (
-        segment.from_style.custom_properties.get(name),
-        segment.to_style.custom_properties.get(name),
-      ) else {
-        continue;
-      };
-      let value = base_style
-        .custom_properties
-        .registration(name)
-        .and_then(|rule| {
-          rule
-            .syntax
-            .interpolate(from, to, progress, sizing, current_color)
+    for name in animation.keyframes.custom_property_names() {
+      let (from, to, progress) = animation.keyframes.custom_property_segment(
+        name,
+        base_style.custom_properties.get(name),
+        animation.sample.progress,
+      );
+      let resolve = |value: Option<&str>| {
+        value.map(|value| {
+          resolve_var_references(value, &base_style.custom_properties)
+            .unwrap_or_else(|| value.to_owned())
         })
-        .unwrap_or_else(|| discrete(&from, &to, progress).to_owned());
+      };
+      let (from, to) = (resolve(from), resolve(to));
+      let progress = animation
+        .timing_function
+        .apply(progress, animation.sample.before);
+      let interpolated = from.as_deref().zip(to.as_deref()).and_then(|(from, to)| {
+        base_style
+          .custom_properties
+          .registration(name)?
+          .syntax
+          .interpolate(from, to, progress, sizing, current_color)
+      });
+      // An endpoint no keyframe and no underlying value gives is the guaranteed-invalid value,
+      // which `initial` declares.
+      let value = interpolated
+        .or_else(|| discrete(&from, &to, progress))
+        .unwrap_or_else(|| "initial".to_owned());
 
       animated.push((name.to_owned(), value));
     }
@@ -194,9 +190,82 @@ pub(crate) fn find_keyframes<'a>(
 }
 
 impl KeyframesRule {
-  /// The custom properties its keyframes declare.
+  /// The names of the custom properties its keyframes declare, each once.
   fn custom_property_names(&self) -> Vec<&str> {
-    let mut names: Vec<&str> = self
+    let mut names: Vec<&str> = self.custom_properties().collect();
+
+    names.sort_unstable();
+    names.dedup();
+    names
+  }
+
+  /// The keyframes on either side of `progress` that declare the custom property `name`, the
+  /// `underlying` value standing in for an offset of 0 or 1 none declares, and the progress
+  /// between them, as Blink samples each property's keyframes apart from the others.
+  fn custom_property_segment<'k>(
+    &'k self,
+    name: &str,
+    underlying: Option<&'k str>,
+    progress: f32,
+  ) -> (Option<&'k str>, Option<&'k str>, f32) {
+    let mut points: Vec<(f32, Option<&str>)> = self
+      .keyframes
+      .iter()
+      .filter_map(|keyframe| {
+        let value =
+          keyframe
+            .declarations
+            .iter()
+            .rev()
+            .find_map(|declaration| match declaration {
+              StyleDeclaration::CustomProperty(declared, value) if declared == name => {
+                Some(value.as_str())
+              }
+              _ => None,
+            })?;
+
+        Some(
+          keyframe
+            .offsets
+            .iter()
+            .map(move |&offset| (offset, Some(value))),
+        )
+      })
+      .flatten()
+      .collect();
+
+    sort_by_key(&mut points, |&(offset, _)| offset);
+    if points.first().is_none_or(|&(offset, _)| offset > 0.0) {
+      points.insert(0, (0.0, underlying));
+    }
+    if points.last().is_none_or(|&(offset, _)| offset < 1.0) {
+      points.push((1.0, underlying));
+    }
+
+    let end = points
+      .iter()
+      .position(|&(offset, _)| offset >= progress)
+      .unwrap_or(points.len() - 1)
+      .max(1);
+    let ((from_offset, from), (to_offset, to)) = (points[end - 1], points[end]);
+    let width = to_offset - from_offset;
+    let local = if width <= f32::EPSILON {
+      1.0
+    } else {
+      ((progress - from_offset) / width).clamp(0.0, 1.0)
+    };
+
+    (from, to, local)
+  }
+
+  /// Whether a keyframe declares a custom property.
+  pub(crate) fn animates_custom_properties(&self) -> bool {
+    self.custom_properties().next().is_some()
+  }
+
+  /// The name of each custom property declaration in its keyframes.
+  fn custom_properties(&self) -> impl Iterator<Item = &str> {
+    self
       .keyframes
       .iter()
       .flat_map(|keyframe| keyframe.declarations.iter())
@@ -204,20 +273,6 @@ impl KeyframesRule {
         StyleDeclaration::CustomProperty(name, _) => Some(name.as_str()),
         _ => None,
       })
-      .collect();
-
-    names.sort_unstable();
-    names.dedup();
-    names
-  }
-
-  /// Whether a keyframe declares a custom property.
-  pub(crate) fn animates_custom_properties(&self) -> bool {
-    self
-      .keyframes
-      .iter()
-      .flat_map(|keyframe| keyframe.declarations.iter())
-      .any(|declaration| matches!(declaration, StyleDeclaration::CustomProperty(..)))
   }
 }
 
