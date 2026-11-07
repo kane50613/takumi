@@ -14,7 +14,7 @@ use crate::{
   layout_unit::LayoutUnit,
   style::{
     AlignItems, BaselineSource, BoxSizing, ComputedStyle, Contain, Direction, Display, FlexBasis,
-    FlexDirection, FlexWrap, Gap, JustifyContent, Length, MaxSize, Overflow, Position,
+    FlexDirection, FlexWrap, Gap, JustifyContent, Length, MathExpr, MaxSize, Overflow, Position,
     Size as SizeValue, SizingContext,
   },
 };
@@ -27,6 +27,8 @@ pub(crate) enum LayoutLength {
   Fixed(f32),
   /// A fraction of the percentage basis.
   Percent(f32),
+  /// A math function of device px and the percentage basis, such as `min(10px, 20%)`.
+  Math(MathExpr),
   /// `px` plus a fraction of the percentage basis.
   Calc {
     px: f32,
@@ -69,13 +71,14 @@ impl LayoutLength {
     match self {
       Self::Percent(_) => true,
       Self::Calc { percent, .. } => percent != 0.0,
+      Self::Math(expr) => expr.has_percent(),
       _ => false,
     }
   }
 
   /// Blink's `MayHavePercentDependence`: a percentage, or a `calc()` that may hold one.
   pub(crate) fn may_have_percent_dependence(self) -> bool {
-    matches!(self, Self::Percent(_) | Self::Calc { .. })
+    matches!(self, Self::Percent(_) | Self::Calc { .. } | Self::Math(_))
   }
 
   /// Blink's `HasPercentOrStretch`.
@@ -99,6 +102,9 @@ impl LayoutLength {
       Self::Calc { px, percent } => {
         basis.map(|basis| LayoutUnit::from_float(px + basis.to_float() * percent))
       }
+      Self::Math(expr) => basis
+        .or_else(|| (!expr.has_percent()).then_some(LayoutUnit::ZERO))
+        .map(|basis| LayoutUnit::from_float(expr.resolve(basis.to_float()))),
       _ => None,
     }
   }
