@@ -113,7 +113,7 @@ jobs:
           VERAPDF_VERSION: 1.30.3
           VERAPDF_SHA256: b512bf24945503a33fc10738ecffc1f2dccaaf8593a448e94ee9ac86a9559a59
         run: |
-          curl -sSfL --connect-timeout 30 --speed-limit 1 --speed-time 60 --max-time 600 --retry 6 --retry-delay 10 --retry-all-errors -o verapdf-installer.zip "https://software.verapdf.org/rel/${VERAPDF_VERSION%.*}/verapdf-greenfield-$VERAPDF_VERSION-installer.zip"
+          curl -sSfL --connect-timeout 30 --speed-limit 1 --speed-time 60 --max-time 600 --retry-max-time 900 --retry 6 --retry-delay 10 --retry-all-errors -o verapdf-installer.zip "https://software.verapdf.org/rel/${VERAPDF_VERSION%.*}/verapdf-greenfield-$VERAPDF_VERSION-installer.zip"
           echo "$VERAPDF_SHA256  verapdf-installer.zip" | sha256sum -c -
           unzip -q verapdf-installer.zip
           cat > auto-install.xml <<XML
