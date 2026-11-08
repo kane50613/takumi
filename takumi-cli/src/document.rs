@@ -18,6 +18,9 @@ use crate::{
 /// A parsed document, its CSS loaded, and the URL its relative references resolve against.
 pub(crate) struct Document {
   pub(crate) node: Node,
+  /// Its own CSS, in cascade order.
+  pub(crate) css: Vec<String>,
+  /// The style sheet it renders with, which [`Document::share_style_sheet`] can widen.
   pub(crate) stylesheet: Arc<StyleSheet>,
   pub(crate) base: Url,
 }
@@ -68,9 +71,31 @@ impl Document {
 
     Ok(Self {
       node: parsed.node,
-      stylesheet: Arc::new(StyleSheet::parse_owned_list_loosy(css)),
+      stylesheet: Arc::new(StyleSheet::parse_owned_list_loosy(css.clone())),
+      css,
       base,
     })
+  }
+
+  /// Gives this document and `others` one style sheet: this document's CSS, then each of
+  /// theirs in order, as a PDF's header and footer share the page's style sheet.
+  pub(crate) fn share_style_sheet(&mut self, others: &mut [Document]) {
+    if others.is_empty() {
+      return;
+    }
+
+    let css = self
+      .css
+      .iter()
+      .chain(others.iter().flat_map(|other| &other.css))
+      .cloned()
+      .collect();
+    let stylesheet = Arc::new(StyleSheet::parse_owned_list_loosy(css));
+
+    for other in others.iter_mut() {
+      other.stylesheet = Arc::clone(&stylesheet);
+    }
+    self.stylesheet = stylesheet;
   }
 
   /// The images the document reaches, decoded and keyed as written. Loads its `@font-face` files

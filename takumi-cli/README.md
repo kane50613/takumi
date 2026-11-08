@@ -3,13 +3,13 @@
 `takumi` renders an HTML file to an image or a PDF.
 
 ```sh
+cargo install --locked --git https://github.com/kane50613/takumi takumi-cli
+
 takumi image card.html -o card.png --width 1200 --height 630
-takumi pdf invoice.html -o invoice.pdf --page "letter landscape" --margin 0.5in
+takumi pdf invoice.html -o invoice.pdf --page "letter landscape" --footer footer.html
 ```
 
-`takumi image` writes PNG, JPEG, WebP, or SVG, picked by the output's extension or `--format`. `takumi pdf` pages the document into a PDF. `--page` and `--margin` take what the CSS `size` and `margin` properties take, and the document's own `@page` rule wins over them. Run either with `--help` for every flag, and see [DESIGN.md](DESIGN.md) for the conventions the commands follow.
-
-The document's `<link rel="stylesheet">`, `@import`, `@font-face`, and image URLs load as they would in a browser, with each relative URL resolved against the file that holds it. `-` reads the input from standard input or writes the output to standard output.
+The [command line guide](https://takumi.kane.tw/docs/cli) covers installation, every product, and scripting. Run `takumi image --help` or `takumi pdf --help` for each flag, and see [DESIGN.md](DESIGN.md) for the conventions the commands follow.
 
 ## What a document can read
 
@@ -24,4 +24,4 @@ A document reads files only from the directories it is granted, and it never rea
 
 `--list-resources` prints the images and fonts a document would load and whether each is allowed, without rendering.
 
-Font files named with `--font` and the input file itself are trusted, since you name them on the command line. When the document loads no font, text falls back to Geist.
+The input and the files named with `--font`, `--header`, and `--footer` are trusted, since you name them on the command line. What they reference goes through the same checks. When the document loads no font, text falls back to Geist.

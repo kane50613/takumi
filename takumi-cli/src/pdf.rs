@@ -1,6 +1,10 @@
 //! `takumi pdf`: the document paged into a PDF.
 
-use std::{error::Error, sync::Arc};
+use std::{
+  error::Error,
+  path::{Path, PathBuf},
+  sync::Arc,
+};
 
 use takumi::prelude::{
   Color, ColorInput, Fonts, FromCssStr, PageName, RenderNeeds, StyleSheet, Viewport,
@@ -19,7 +23,12 @@ use crate::{
 #[command(after_help = "Examples:
   takumi pdf invoice.html -o invoice.pdf
   takumi pdf report.html -o report.pdf --page \"letter landscape\" --margin \"0.5in\"
-  takumi pdf book.html -o excerpt.pdf --pages 1-3,8 --outline")]
+  takumi pdf book.html -o excerpt.pdf --pages 1-3,8 --outline
+  takumi pdf report.html -o report.pdf --margin \"2cm 1cm\" --footer footer.html
+
+A header or footer fills elements with the class `pageNumber` or `totalPages`
+with the page number or the page count, as in
+  <div style=\"text-align: center\"><span class=\"pageNumber\"></span> / <span class=\"totalPages\"></span></div>")]
 pub(crate) struct PdfArgs {
   #[command(flatten)]
   pub(crate) input: InputArgs,
@@ -56,6 +65,15 @@ pub(crate) struct PdfArgs {
   /// Adds bookmarks for the document's `h1` to `h6` headings.
   #[arg(long)]
   outline: bool,
+
+  /// An HTML file drawn in the top margin of every page. Its references resolve against the
+  /// file and read through the same directories as the input's.
+  #[arg(long, value_name = "FILE")]
+  header: Option<PathBuf>,
+
+  /// An HTML file drawn in the bottom margin of every page, as `--header` is in the top one.
+  #[arg(long, value_name = "FILE")]
+  footer: Option<PathBuf>,
 }
 
 /// The `--pages` spans, in a type clap can hold.
@@ -65,6 +83,8 @@ struct PageRanges(Vec<PageRange>);
 /// A PDF product with its settings checked.
 pub(crate) struct Pdf {
   page_css: Option<String>,
+  header: Option<PathBuf>,
+  footer: Option<PathBuf>,
   page_ranges: Option<Vec<PageRange>>,
   background: Option<Color>,
   metadata: Option<PdfMetadata>,
@@ -94,6 +114,8 @@ impl PdfArgs {
     });
 
     Ok(Pdf {
+      header: self.header.clone(),
+      footer: self.footer.clone(),
       page_css: (!declarations.is_empty())
         .then(|| format!("@page {{ {} }}", declarations.join("; "))),
       page_ranges: self.pages.clone().map(|ranges| ranges.0),
@@ -176,6 +198,15 @@ impl Product for Pdf {
     self.page_css.clone()
   }
 
+  fn band_files(&self) -> Vec<&Path> {
+    self
+      .header
+      .iter()
+      .chain(&self.footer)
+      .map(PathBuf::as_path)
+      .collect()
+  }
+
   fn needs(
     &self,
     document: &Document,
@@ -196,9 +227,13 @@ impl Product for Pdf {
   fn render(
     &self,
     document: Document,
+    bands: Vec<Document>,
     fonts: &Fonts,
     images: Images,
   ) -> Result<Vec<u8>, Box<dyn Error>> {
+    let mut bands = bands.into_iter().map(|band| band.node);
+    let header = self.header.as_ref().and_then(|_| bands.next());
+    let footer = self.footer.as_ref().and_then(|_| bands.next());
     let mut options = PdfOptions::builder()
       .fonts(fonts)
       .node(document.node)
@@ -211,6 +246,8 @@ impl Product for Pdf {
     options.background_color = self.background;
     options.metadata = self.metadata.clone();
     options.outline = self.outline;
+    options.header = header;
+    options.footer = footer;
 
     Ok(takumi_pdf::render(options)?)
   }

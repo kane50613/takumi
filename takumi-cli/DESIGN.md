@@ -30,7 +30,7 @@ A product gets its own subcommand when its options differ from every other produ
 ## Resources and trust
 
 - Every file a document reaches goes through one `Sandbox`. See the README for the rules.
-- A file named on the command line is trusted: the input, `--font`, and later `--header`, `--footer`, and `--attach`. What those files reference is not, and goes through the sandbox like the document's own references.
+- A file named on the command line is trusted: the input, `--font`, `--header`, `--footer`, and later `--attach`. What those files reference is not, and goes through the sandbox like the document's own references.
 - A new way to load resources, such as the network, comes as an explicit permission flag that is off by default, in the shape of `--allow-read`.
 
 ## Changes
@@ -39,7 +39,7 @@ New behavior arrives as a new flag or subcommand. Changing what an existing flag
 
 ## Planned
 
-- `takumi pdf`: `--header` and `--footer` from HTML files, `--standard` for PDF/A, `--attach`, and `--no-tagged`.
+- `takumi pdf`: `--standard` for PDF/A, `--attach`, and `--no-tagged`.
 - `takumi animation`: animated WebP, PNG, and GIF, with `--duration` and `--fps`.
 - `--json` on `--list-resources`, once a consumer needs more than the tab-separated fields.
 - `--allow-net`, with the address checks the README's network section will describe.

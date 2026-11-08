@@ -59,15 +59,13 @@ impl InputArgs {
 
       (html, directory_url(&env::current_dir()?)?, None)
     } else {
-      let path = fs::canonicalize(&self.input)
-        .map_err(|error| format!("{}: {error}", self.input.display()))?;
-      let location = Url::from_file_path(&path).map_err(|()| "the input is not a local file")?;
+      let (html, location) = read_html_file(&self.input)?;
+      let directory = location
+        .to_file_path()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf));
 
-      (
-        fs::read_to_string(&path)?,
-        location,
-        path.parent().map(Path::to_path_buf),
-      )
+      (html, location, directory)
     };
     let roots = self.root.clone().or(default_root).into_iter();
     let sandbox = Sandbox::new(roots.chain(self.allow_read.iter().cloned()))?;
@@ -95,6 +93,16 @@ impl InputArgs {
 
     Ok(fonts)
   }
+}
+
+/// The HTML of a file named on the command line, and its `file:` URL.
+pub(crate) fn read_html_file(path: &Path) -> Result<(String, Url), Box<dyn Error>> {
+  let with_path = |error: io::Error| format!("{}: {error}", path.display());
+  let canonical = fs::canonicalize(path).map_err(with_path)?;
+  let location = Url::from_file_path(&canonical)
+    .map_err(|()| format!("{} is not a local file", path.display()))?;
+
+  Ok((fs::read_to_string(&canonical).map_err(with_path)?, location))
 }
 
 /// Where the rendered file goes, or a list of what it would load instead.

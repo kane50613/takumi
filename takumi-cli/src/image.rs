@@ -129,6 +129,7 @@ impl Product for Image {
   fn render(
     &self,
     document: Document,
+    _bands: Vec<Document>,
     fonts: &Fonts,
     images: Images,
   ) -> Result<Vec<u8>, Box<dyn Error>> {

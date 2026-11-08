@@ -1,0 +1,94 @@
+---
+title: Command line
+description: Install the takumi CLI and render HTML files to images and PDFs from a terminal or a script.
+---
+
+The `takumi` command renders an HTML file to a PNG, JPEG, WebP, SVG, or PDF without writing any code. It loads the stylesheets, fonts, and images the file links, and reads only the directories you allow.
+
+## Install
+
+The CLI builds from source with Rust 1.91 or later. Install Rust with [rustup](https://rustup.rs) first if `cargo --version` does not print a version.
+
+```sh title="Install the latest takumi"
+cargo install --locked --git https://github.com/kane50613/takumi takumi-cli
+```
+
+Cargo builds the `takumi` binary and puts it in `~/.cargo/bin`, which rustup adds to your `PATH`. Check that it runs:
+
+```sh
+takumi --version
+```
+
+To build from a clone instead, run `cargo install --locked --path takumi-cli` in the repository. Run the install command again to update, and `cargo uninstall takumi-cli` to remove it.
+
+<Callout type="info">
+  The CLI is not on crates.io or npm yet, so these commands build it from the GitHub repository.
+</Callout>
+
+## Render an image
+
+```sh title="Render a social card"
+takumi image card.html -o card.png --width 1200 --height 630
+```
+
+The output's extension picks the format: `png`, `jpg`, `webp`, or `svg`. Without `--height`, the image is as tall as the content. `--dpr 2` doubles the pixels for high-density screens. `--quality` sets JPEG quality, which defaults to 75, and switches WebP from lossless to lossy.
+
+## Render a PDF
+
+```sh title="Render an invoice"
+takumi pdf invoice.html -o invoice.pdf --page "letter landscape" --margin 0.5in
+```
+
+`--page` and `--margin` take the values the CSS `size` and `margin` properties take, and default to A4 with a 1 cm margin. The document's own `@page` rule wins over both, as it does over Chrome's print dialog. `--pages 1-3,8` keeps only those pages, and `--outline` adds bookmarks for the headings.
+
+`--header` and `--footer` draw an HTML file in the top and bottom margins of every page. An element with the class `pageNumber` or `totalPages` shows the page number or the page count:
+
+```html title="footer.html"
+<div style="width: 100%; text-align: center; font-size: 10px">
+  Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+</div>
+```
+
+```sh
+takumi pdf report.html -o report.pdf --margin "2cm 1cm" --footer footer.html
+```
+
+Leave the margin tall enough for the band, since a header or footer does not push the content down.
+
+## Use it in a script
+
+`-` reads the HTML from standard input or writes the output to standard output. Writing an image to standard output needs `--format`, since there is no file extension to read:
+
+```sh
+curl -s https://example.com/card.html | takumi image - -o - --format png > card.png
+```
+
+The rendered file is the only thing written to standard output. Warnings and errors go to standard error, and `-q` hides the warnings. The command exits with `0` when it writes the file, `1` when rendering fails, `2` when the arguments are wrong, and `3` when the document tries to read a file it is not allowed to.
+
+## What a document can read
+
+An HTML file can reference any path, so `takumi` reads only the directories you grant. This keeps an untrusted file from putting your private files into its output.
+
+- By default, the document reads files under the input file's directory. Reading from standard input grants no directory.
+- `--root <dir>` replaces that directory, and `--allow-read <dir>` adds another. Repeat `--allow-read` for more.
+- `http` and `https` URLs never load. `takumi` skips them with a warning, as a browser skips a resource that fails to load. Use a local copy, or a `data:` URL, which always loads.
+- A read outside the granted directories stops the render, and the error names the `--allow-read` flag that would allow it.
+
+Files you name on the command line are trusted: the input, `--font`, `--header`, and `--footer`. What they reference still goes through the same checks.
+
+To see what a document would load before rendering it, add `--list-resources`:
+
+```sh
+takumi image card.html -o card.png --list-resources
+```
+
+```text
+image	allowed	file:///home/me/site/img/logo.png
+font	blocked	file:///home/me/fonts/Inter.woff2	… Pass `--allow-read /home/me/fonts` to allow it.
+```
+
+## Fonts
+
+Text uses the fonts the document loads with `@font-face`, and falls back to Geist when it loads none. `--font <file>` registers another font file. Repeat it for more.
+
+Run `takumi image --help` or `takumi pdf --help` for every flag. To render from code instead, start with [Get started](/docs).
