@@ -7202,7 +7202,7 @@ fn paged_lines_under_a_transform_or_a_clip() {
     (&rotated, &[1, 1]),
     (&clipped, &[3]),
     (&at_page_edge, &[1]),
-    (&translated_off, &[1]),
+    (&translated_off, &[0, 1]),
   ] {
     let pages = text_shows_per_page(pdf);
     let shows = pages.iter().flatten().collect::<HashSet<_>>();
