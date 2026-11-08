@@ -51,6 +51,7 @@ impl ClipNode {
   /// Whether the clip cuts content off below some block offset, which an overflow clip on the
   /// inline axis alone does not: its block axis spans [`UNBOUNDED`] both ways. Approximate: it
   /// reads the box's own block axis, so a rotated clip counts as the axis it clips locally.
+  #[cfg(feature = "fragmentation")]
   pub(crate) fn clips_block_end(&self) -> bool {
     match &self.kind {
       ClipKind::Shape(FillShape::Rect(size)) => size.height < 1.5 * UNBOUNDED,
