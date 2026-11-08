@@ -354,12 +354,7 @@ impl BoxFragmentBuilder {
       token.is_none_or(|token| !token.is_at_block_end) && flow == ChildFlow::InFlow;
 
     if child_is_in_same_flow {
-      let fragmentainer_overflow =
-        block_offset + result.size.block_size - self.fragmentainer_space_left(false);
-
-      if fragmentainer_overflow > LayoutUnit::ZERO {
-        self.reserve_space_for_monolithic_overflow(fragmentainer_overflow);
-      }
+      self.reserve_space_past_child(block_offset + result.size.block_size);
     }
 
     if is_break_inside(token) {
@@ -424,6 +419,17 @@ impl BoxFragmentBuilder {
       &self.page_name
     } else {
       &self.space_page_name
+    }
+  }
+
+  /// Blink's check in `AddChild` that a child in the same flow ending at `block_end` reaches past
+  /// the page, which moves the content after it below. Like Blink's, it checks only the offset, so
+  /// any line that overflows counts, not just one with monolithic content.
+  pub(crate) fn reserve_space_past_child(&mut self, block_end: LayoutUnit) {
+    let fragmentainer_overflow = block_end - self.fragmentainer_space_left(false);
+
+    if fragmentainer_overflow > LayoutUnit::ZERO {
+      self.reserve_space_for_monolithic_overflow(fragmentainer_overflow);
     }
   }
 

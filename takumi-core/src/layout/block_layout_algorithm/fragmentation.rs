@@ -377,6 +377,9 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     if !line.is_line_for_parallel_flow {
       self
         .builder
+        .reserve_space_past_child(block_offset + line.block_size);
+      self
+        .builder
         .add_line(line.break_token.clone(), line.is_empty_line_box);
     }
   }
