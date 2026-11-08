@@ -44,6 +44,7 @@ enum Source {
 }
 
 impl UpgradeArgs {
+  /// Reinstalls takumi from its recorded source, or prints the command with `--dry-run`.
   pub(crate) fn run(&self) -> Result<(), Box<dyn Error>> {
     let executable = env::current_exe()?;
     let root = executable

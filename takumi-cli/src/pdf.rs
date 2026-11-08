@@ -92,6 +92,7 @@ pub(crate) struct Pdf {
 }
 
 impl PdfArgs {
+  /// The PDF product these flags describe, refusing an output named for another format.
   pub(crate) fn product(&self) -> Result<Pdf, Box<dyn Error>> {
     if let Some(extension) = self.output.extension()
       && extension != "pdf"
@@ -198,6 +199,7 @@ fn parse_page_ranges(value: &str) -> Result<PageRanges, String> {
     .map(PageRanges)
 }
 
+/// Parses `--background` as a CSS color.
 fn parse_color(value: &str) -> Result<Color, String> {
   ColorInput::from_css_str(value)
     .map(|color| color.resolve(Color::black()))

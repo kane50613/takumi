@@ -184,6 +184,7 @@ impl Document {
     Ok(())
   }
 
+  /// Prints one listing line for the resource written as `written`.
   fn print_resource(&self, kind: &str, written: &str, sandbox: &Sandbox) {
     match self.base.join(written) {
       Ok(url) => match sandbox.check(&url) {
@@ -289,6 +290,7 @@ impl ImageCache {
     Ok(())
   }
 
+  /// The images, keyed as the documents write them.
   pub(crate) fn into_images(self) -> Images {
     self.images
   }

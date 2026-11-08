@@ -112,6 +112,7 @@ pub(crate) fn run(
   )
 }
 
+/// Prints each warning to standard error, unless `-q` hides them.
 fn print_warnings(warnings: &[ResourceError], quiet: bool) {
   if quiet {
     return;

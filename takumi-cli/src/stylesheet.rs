@@ -8,11 +8,15 @@ use cssparser::{
   stylesheet_encoding,
 };
 use encoding_rs::{Encoding, UTF_8, UTF_16BE, UTF_16LE};
-use url::Url;
+use url::{Position, Url};
 
 use crate::sandbox::{ResourceError, Sandbox};
 
 /// How deep `@import` rules may nest.
+///
+/// Approximate: Blink sets no depth limit and stops only a cycle, so a chain of more than 16
+/// distinct sheets loads further in Chromium.
+/// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/style_rule_import.cc;l=171>
 pub(crate) const MAX_IMPORT_DEPTH: usize = 16;
 
 /// What loading a document's style sheets turned up besides the CSS.
@@ -34,6 +38,7 @@ pub(crate) struct StyleSheetLoader<'s> {
 }
 
 impl<'s> StyleSheetLoader<'s> {
+  /// A loader that fails on a read that [fails the render](ResourceError::fails_render).
   pub(crate) fn new(sandbox: &'s Sandbox) -> Self {
     Self {
       sandbox,
@@ -50,6 +55,7 @@ impl<'s> StyleSheetLoader<'s> {
     }
   }
 
+  /// What loading turned up besides the CSS.
   pub(crate) fn into_report(self) -> LoadReport {
     self.report
   }
@@ -77,8 +83,12 @@ impl<'s> StyleSheetLoader<'s> {
     environment: &'static Encoding,
     importing: &mut Vec<Url>,
   ) -> Result<Option<String>, ResourceError> {
-    // A sheet that imports itself, directly or not, imports nothing the second time.
-    if importing.contains(url) {
+    // A sheet that imports itself, directly or not, imports nothing the second time, whatever
+    // the fragment, as Blink's `StyleRuleImport::RequestStyleSheet` checks.
+    if importing
+      .iter()
+      .any(|sheet| same_ignoring_fragment(sheet, url))
+    {
       return Ok(Some(String::new()));
     }
 
@@ -110,6 +120,8 @@ impl<'s> StyleSheetLoader<'s> {
     css.map(Some)
   }
 
+  /// `css` with its `url()`s resolved against `base` and its imports loaded, each import decoded
+  /// in `encoding` when it declares none.
   fn rewrite_nested(
     &mut self,
     css: &str,
@@ -268,6 +280,7 @@ fn write_token(
   }
 }
 
+/// Writes `url()` holding `url` resolved against `base`.
 fn write_url(url: &str, base: &Url, out: &mut String) {
   out.push_str("url(");
   let _ = serialize_string(&resolve(url, base), out);
@@ -407,6 +420,11 @@ impl EncodingSupport for EncodingRs {
   fn is_utf16_be_or_le(encoding: &Self::Encoding) -> bool {
     *encoding == UTF_16BE || *encoding == UTF_16LE
   }
+}
+
+/// Whether `a` and `b` name the same sheet once their fragments are dropped.
+fn same_ignoring_fragment(a: &Url, b: &Url) -> bool {
+  a[..Position::AfterQuery] == b[..Position::AfterQuery]
 }
 
 /// The source text inside the block the parser just opened.
@@ -589,6 +607,22 @@ mod tests {
       .unwrap();
 
     assert!(css.contains(&format!(r#"url("{base}img.png")"#)), "{css}");
+  }
+
+  #[test]
+  fn a_cycle_through_a_fragment_imports_nothing_more() {
+    let root = temp_dir("fragment-cycle");
+
+    fs::write(root.join("css/a.css"), "@import \"a.css#again\"; a{}").unwrap();
+
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let base = directory_url(&root).unwrap();
+    let css = StyleSheetLoader::new(&sandbox)
+      .load(&base.join("css/a.css").unwrap())
+      .unwrap()
+      .unwrap();
+
+    assert_eq!(css.matches("a{}").count(), 1, "{css}");
   }
 
   #[test]

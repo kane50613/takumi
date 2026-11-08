@@ -87,6 +87,7 @@ pub(crate) struct Image {
 }
 
 impl ImageArgs {
+  /// The image product these flags describe, its format read from `--format` or the output's extension.
   pub(crate) fn product(&self) -> Result<Image, Box<dyn Error>> {
     let usage = |message: String| -> Box<dyn Error> { Box::new(UsageError(message)) };
     let format = match (self.format, self.output.extension().as_deref()) {
@@ -114,6 +115,7 @@ impl ImageArgs {
 }
 
 impl Image {
+  /// The options that render `document` at this product's viewport.
   fn options<'f>(
     &self,
     document: &Document,

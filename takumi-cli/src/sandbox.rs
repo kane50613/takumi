@@ -271,6 +271,7 @@ impl Sandbox {
     Ok((root, relative, metadata.len()))
   }
 
+  /// Counts `bytes` read from `url` against the budget, failing once it runs out.
   fn charge(&self, url: &Url, bytes: u64) -> Result<(), ResourceError> {
     let total = self.loaded_bytes.get() + bytes;
     let count = self.loaded_resources.get() + 1;
@@ -313,6 +314,7 @@ fn open_error(url: &Url, error: io::Error) -> ResourceError {
   }
 }
 
+/// The error for `url` naming something other than a regular file.
 fn not_a_file(url: &Url) -> ResourceError {
   ResourceError::Io {
     url: url.clone(),
