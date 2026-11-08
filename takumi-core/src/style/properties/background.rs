@@ -64,7 +64,8 @@ impl<'i> FromCss<'i> for Background {
       }
 
       if position.is_none()
-        && let Ok(value) = input.try_parse(PositionValue::from_css)
+        && let Ok(value) =
+          input.try_parse(|input| PositionValue::parse(input, PositionSyntax::Background))
       {
         position = Some(value);
 
@@ -138,6 +139,15 @@ impl_comma_list_from_css!(Backgrounds, Background);
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// The shorthand takes the three-value `<bg-position>` that `background-position` does.
+  #[test]
+  fn a_three_value_position_parses_in_the_shorthand() {
+    let background =
+      Background::from_css_str("red right 10px top no-repeat").expect("the shorthand parses");
+
+    assert_eq!(background.position.to_css_string(), "calc(100% - 10px) top");
+  }
 
   #[test]
   fn test_parse_background_color_only() {

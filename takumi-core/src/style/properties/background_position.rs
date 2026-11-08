@@ -3,6 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::context::RenderContext;
+use crate::style::calc::CalcTerms;
 use crate::style::{
   Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseResult,
   SizingContext, SpacePair, ToCss, parse_comma_list, tw::TailwindPropertyParser, unexpected_token,
@@ -204,45 +205,231 @@ impl Default for PositionValue {
   }
 }
 
-impl<'i> FromCss<'i> for PositionValue {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let first = PositionComponent::from_css(input)?;
-    let second = input.try_parse(PositionComponent::from_css).ok();
+/// How many values a `<position>` takes, by the Blink function that parses it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PositionSyntax {
+  /// One or two, as Blink's `ConsumeOneOrTwoValuedPosition` reads `transform-origin`.
+  OneOrTwo,
+  /// One, two, or four, as Blink's `ConsumePosition` reads a `<position>`.
+  Position,
+  /// One to four, as `ConsumePosition` reads a `<bg-position>`.
+  Background,
+}
 
-    // Two keywords of one axis name no position, where `center` belongs to either.
-    // https://drafts.csswg.org/css-values-4/#position, and Blink's `ConsumePosition` in
-    // `css_parsing_utils.cc`.
-    if let Some(second) = second
-      && first.keyword_axis() == second.keyword_axis()
-      && first.keyword_axis().is_some()
+impl PositionValue {
+  /// A position of `syntax`, after Blink's `ConsumePosition`.
+  /// <https://drafts.csswg.org/css-values-4/#position>
+  pub(crate) fn parse<'i>(input: &mut Parser<'i>, syntax: PositionSyntax) -> ParseResult<'i, Self> {
+    let mut edges = Edges::default();
+    let first = edges.component(input)?;
+
+    if first.keyword().is_none() {
+      edges.horizontal = true;
+    }
+    if syntax == PositionSyntax::OneOrTwo
+      && edges.vertical
+      && input.try_parse(Length::from_css).is_ok()
     {
       return Err(input.new_error_for_next_token());
     }
 
-    let (x, y) = match (first, second) {
-      (PositionComponent::KeywordY(_), None) => {
-        (PositionComponent::KeywordX(PositionKeywordX::Center), first)
+    let after_first = input.state();
+    let Ok(second) = input.try_parse(|input| edges.component(input)) else {
+      // A second side keyword of the first one's axis names no position.
+      if input
+        .try_parse(PositionComponent::from_css)
+        .is_ok_and(|component| component.keyword().is_some())
+      {
+        return Err(input.new_error_for_next_token());
       }
-      (PositionComponent::KeywordY(_), Some(second)) => (second, first),
-      (x, None) => (x, PositionComponent::KeywordY(PositionKeywordY::Center)),
-      (x, Some(y)) => (x, y),
+
+      return Ok(Self::from_one(first));
     };
 
-    Ok(PositionValue(SpacePair::from_pair(x, y)))
+    if syntax == PositionSyntax::OneOrTwo {
+      return Ok(Self::from_two(first, second));
+    }
+
+    let after_second = input.state();
+    let third = first
+      .keyword()
+      .filter(|_| second.keyword().is_some() != next_is_ident(input))
+      .filter(|_| !second.keyword().unwrap_or(first).is_center())
+      .and_then(|_| input.try_parse(|input| edges.component(input)).ok());
+    let fourth = third
+      .and_then(PositionComponent::keyword)
+      .filter(|keyword| !keyword.is_center() && !next_is_ident(input))
+      .and_then(|_| input.try_parse(|input| edges.component(input)).ok());
+
+    if let Some(third) = third
+      && (fourth.is_some() || syntax == PositionSyntax::Background)
+    {
+      return Self::from_edges(&[Some(first), Some(second), Some(third), fourth])
+        .ok_or_else(|| input.new_error_for_next_token());
+    }
+
+    // `top 10px` and `bottom 10px` name no position: the length belongs to what follows.
+    if edges.vertical && second.keyword().is_none() {
+      input.reset(&after_first);
+      return Ok(Self::from_one(first));
+    }
+
+    input.reset(&after_second);
+    Ok(Self::from_two(first, second))
+  }
+
+  /// A `transform-origin`, of one or two values.
+  pub(crate) fn parse_origin<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::parse(input, PositionSyntax::OneOrTwo)
+  }
+
+  /// Blink's `PositionFromOneValue`.
+  fn from_one(value: PositionComponent) -> Self {
+    let center = PositionComponent::KeywordX(PositionKeywordX::Center);
+
+    if matches!(value, PositionComponent::KeywordY(keyword) if keyword != PositionKeywordY::Center)
+    {
+      return Self(SpacePair::from_pair(center, value));
+    }
+
+    Self(SpacePair::from_pair(
+      value,
+      PositionComponent::KeywordY(PositionKeywordY::Center),
+    ))
+  }
+
+  /// Blink's `PositionFromTwoValues`.
+  fn from_two(first: PositionComponent, second: PositionComponent) -> Self {
+    if first.is_vertical_side() || second.is_horizontal_side() {
+      return Self(SpacePair::from_pair(second, first));
+    }
+
+    Self(SpacePair::from_pair(first, second))
+  }
+
+  /// Blink's `PositionFromThreeOrFourValues`: each side keyword, with the offset after it.
+  fn from_edges(values: &[Option<PositionComponent>]) -> Option<Self> {
+    let mut x = None;
+    let mut y = None;
+    let mut center = false;
+    let mut index = 0;
+
+    while let Some(Some(keyword)) = values.get(index) {
+      let offset = match values.get(index + 1) {
+        // An offset takes a length or percentage, never `auto`.
+        Some(Some(PositionComponent::Length(Length::Auto))) => return None,
+        Some(Some(PositionComponent::Length(offset))) => {
+          index += 1;
+          Some(*offset)
+        }
+        _ => None,
+      };
+
+      index += 1;
+
+      if keyword.is_center() {
+        center = true;
+        continue;
+      }
+
+      let near = matches!(
+        keyword,
+        PositionComponent::KeywordX(PositionKeywordX::Left)
+          | PositionComponent::KeywordY(PositionKeywordY::Top)
+      );
+      let component = match offset {
+        None => *keyword,
+        Some(offset) if near => PositionComponent::Length(offset),
+        Some(Length::Percentage(percent)) => {
+          PositionComponent::Length(Length::Percentage(100.0 - percent))
+        }
+        Some(offset) => PositionComponent::Length(Length::Calc(CalcTerms::from_far_edge(offset)?)),
+      };
+
+      if keyword.is_horizontal_side() {
+        x = Some(component);
+      } else {
+        y = Some(component);
+      }
+    }
+
+    let (x, y) = match (x, y, center) {
+      (Some(x), Some(y), _) => (x, y),
+      (Some(x), None, true) => (x, PositionComponent::KeywordY(PositionKeywordY::Center)),
+      (None, Some(y), true) => (PositionComponent::KeywordX(PositionKeywordX::Center), y),
+      _ => return None,
+    };
+
+    Some(Self(SpacePair::from_pair(x, y)))
+  }
+}
+
+/// The side keywords a position has used, each axis at most once, as Blink's
+/// `ConsumePositionComponent` tracks them.
+#[derive(Default)]
+struct Edges {
+  horizontal: bool,
+  vertical: bool,
+}
+
+impl Edges {
+  fn component<'i>(&mut self, input: &mut Parser<'i>) -> ParseResult<'i, PositionComponent> {
+    let component = PositionComponent::from_css(input)?;
+    let seen = if component.is_horizontal_side() {
+      &mut self.horizontal
+    } else if component.is_vertical_side() {
+      &mut self.vertical
+    } else {
+      return Ok(component);
+    };
+
+    if *seen {
+      return Err(input.new_error_for_next_token());
+    }
+
+    *seen = true;
+    Ok(component)
+  }
+}
+
+/// Whether the next token is an identifier, without consuming it.
+fn next_is_ident(input: &mut Parser<'_>) -> bool {
+  let state = input.state();
+  let is_ident = matches!(input.next(), Ok(Token::Ident(_)));
+
+  input.reset(&state);
+  is_ident
+}
+
+impl<'i> FromCss<'i> for PositionValue {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::parse(input, PositionSyntax::Position)
   }
 
   const VALID_TOKENS: &'static [&'static str] = PositionComponent::VALID_TOKENS;
 }
 
 impl PositionComponent {
-  /// Whether a side keyword is horizontal, none for `center` and for a length.
-  fn keyword_axis(self) -> Option<bool> {
-    match self {
-      Self::KeywordX(PositionKeywordX::Center) => None,
-      Self::KeywordX(_) => Some(true),
-      Self::KeywordY(_) => Some(false),
-      _ => None,
-    }
+  /// The component when it is a keyword.
+  fn keyword(self) -> Option<Self> {
+    (!matches!(self, Self::Length(_))).then_some(self)
+  }
+
+  fn is_center(self) -> bool {
+    matches!(
+      self,
+      Self::KeywordX(PositionKeywordX::Center) | Self::KeywordY(PositionKeywordY::Center)
+    )
+  }
+
+  /// Whether the component is `left` or `right`.
+  fn is_horizontal_side(self) -> bool {
+    matches!(self, Self::KeywordX(keyword) if keyword != PositionKeywordX::Center)
+  }
+
+  /// Whether the component is `top` or `bottom`.
+  fn is_vertical_side(self) -> bool {
+    matches!(self, Self::KeywordY(keyword) if keyword != PositionKeywordY::Center)
   }
 }
 
@@ -277,7 +464,9 @@ pub type PositionValues = Box<[PositionValue]>;
 
 impl<'i> FromCss<'i> for PositionValues {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    parse_comma_list(input, PositionValue::from_css)
+    parse_comma_list(input, |input| {
+      PositionValue::parse(input, PositionSyntax::Background)
+    })
   }
 
   const VALID_TOKENS: &'static [&'static str] = PositionValue::VALID_TOKENS;
@@ -333,6 +522,7 @@ mod tests {
       "right right",
       "left left",
     ] {
+      assert!(entire(css, PositionSyntax::Position).is_none(), "{css}");
       assert!(PositionValue::from_css_str(css).is_err(), "{css}");
     }
     for css in [
@@ -342,7 +532,74 @@ mod tests {
       "top center",
       "bottom left",
     ] {
-      assert!(PositionValue::from_css_str(css).is_ok(), "{css}");
+      assert!(entire(css, PositionSyntax::Position).is_some(), "{css}");
+    }
+  }
+
+  /// A whole declaration value parsed as a position, as a declaration list parses one.
+  fn entire(css: &str, syntax: PositionSyntax) -> Option<String> {
+    Parser::new(css)
+      .parse_entirely(|input| PositionValue::parse(input, syntax))
+      .ok()
+      .map(|position| position.to_css_string())
+  }
+
+  /// A side keyword takes an offset from that side, in the four-value form and, for
+  /// `background-position`, the three-value one, as Blink's `ConsumePosition` reads them.
+  #[test]
+  fn an_offset_measures_from_the_side_before_it() {
+    for (css, syntax, expected) in [
+      (
+        "top 25% left 25%",
+        PositionSyntax::Position,
+        Some("25% 25%"),
+      ),
+      (
+        "bottom 1px right 2px",
+        PositionSyntax::Position,
+        Some("calc(100% - 2px) calc(100% - 1px)"),
+      ),
+      (
+        "right 2px bottom 1px",
+        PositionSyntax::Position,
+        Some("calc(100% - 2px) calc(100% - 1px)"),
+      ),
+      (
+        "top 3px left 50%",
+        PositionSyntax::Position,
+        Some("50% 3px"),
+      ),
+      (
+        "top 50% right 25%",
+        PositionSyntax::Position,
+        Some("75% 50%"),
+      ),
+      ("right 10% top", PositionSyntax::Position, None),
+      ("right 10% top", PositionSyntax::Background, Some("90% top")),
+      (
+        "center right 25%",
+        PositionSyntax::Background,
+        Some("75% center"),
+      ),
+      ("top 10px", PositionSyntax::Position, None),
+      ("left 10px", PositionSyntax::Position, Some("left 10px")),
+      (
+        "left 10px top 5px",
+        PositionSyntax::Position,
+        Some("10px 5px"),
+      ),
+      ("left 10px left 5px", PositionSyntax::Position, None),
+      ("center 10px top 5px", PositionSyntax::Position, None),
+      ("left auto top 5px", PositionSyntax::Position, None),
+      ("right 10px bottom 20px", PositionSyntax::OneOrTwo, None),
+      ("top 10px", PositionSyntax::OneOrTwo, None),
+      (
+        "right bottom",
+        PositionSyntax::OneOrTwo,
+        Some("right bottom"),
+      ),
+    ] {
+      assert_eq!(entire(css, syntax).as_deref(), expected, "{css}");
     }
   }
 

@@ -91,13 +91,35 @@ fn process_image_for_object_fit(
     }));
   }
 
-  let rendered = image.render_for_layout(
-    width,
-    height,
+  // A bitmap decodes at the size the whole image draws at, and only the crop of it draws, as
+  // Blink's `ImagePainter::PaintIntoRect` maps the visible part back to a source rect of the image.
+  let rendered = match image.render_for_layout(
+    (placement.size.width.round() as u32).max(1),
+    (placement.size.height.round() as u32).max(1),
     context.style.misc_inherited_data.image_rendering,
     context.time_ms(),
     context,
-  )?;
+  )? {
+    RenderedImage::Sampled {
+      source,
+      algorithm,
+      source_scale,
+      ..
+    } => RenderedImage::Sampled {
+      source,
+      width,
+      height,
+      algorithm,
+      source_scale,
+    },
+    RenderedImage::Rasterized(_) => image.render_for_layout(
+      width,
+      height,
+      context.style.misc_inherited_data.image_rendering,
+      context.time_ms(),
+      context,
+    )?,
+  };
   let logical_to_source = if placement.size.width == 0.0 || placement.size.height == 0.0 {
     Affine::IDENTITY
   } else {
