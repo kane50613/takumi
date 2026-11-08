@@ -49,7 +49,8 @@ Code `3` separates a policy failure from a broken document, so a script can retr
 `--list-resources` prints one tab-separated line for each file the document would load, with `blocked` in the second field for a file that would not load. This step fails when any file would be blocked:
 
 ```sh
-blocked=$(takumi image page.html --list-resources | awk -F '\t' '$2 == "blocked"')
+listing=$(takumi image page.html --list-resources) || exit
+blocked=$(printf '%s\n' "$listing" | awk -F '\t' '$2 == "blocked"')
 
 if [ -n "$blocked" ]; then
   printf '%s\n' "$blocked"

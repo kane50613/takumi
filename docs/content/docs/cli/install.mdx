@@ -49,7 +49,7 @@ To see the `cargo install` command it would run without running it, add `--dry-r
 takumi upgrade --dry-run
 ```
 
-`takumi upgrade` does not run when it cannot move the install forward. It prints the command to run instead:
+`takumi upgrade` does not run when it cannot move the install forward. It prints the command to run instead, to standard error, and exits with code `1`, with or without `--dry-run`:
 
 - An install pinned with `--tag` or `--rev` stays at that pin. The printed command follows the default branch instead.
 - An install from a local clone upgrades after you pull the clone. The printed command rebuilds from it.

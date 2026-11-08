@@ -34,7 +34,7 @@ The output's extension picks the format:
 
 `--format` overrides the extension, with the values `png`, `jpeg` (or `jpg`), `webp`, and `svg`. Writing to standard output has no extension, so it needs `--format`. See [Use takumi in scripts](/docs/cli/scripting).
 
-An output with any other extension stops before rendering, with exit code `2`. Use `takumi pdf` for a PDF.
+Without `--format`, an output with any other extension stops before rendering, with exit code `2`. With `--format`, takumi writes that format whatever the file is named. Use `takumi pdf` for a PDF.
 
 ## Set the quality
 
