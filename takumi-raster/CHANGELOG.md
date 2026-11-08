@@ -1,3 +1,15 @@
+## takumi-raster@0.7.0
+
+### Raster pages can take their sizes from `@page` rules
+
+`render_pages` takes anything that converts into a `PageSizer`. A `Size` still gives every page the same area, and each page's image is now that page's own size. `PageRules::new(stylesheet, page_box, context)` converts into a `PageSizer` that gives each page the area the stylesheet's `@page` rules give it, including `:first`, `:left`, `:right`, and page names. `context` is the `PageContext` the root element gives, from `PageContext::from_root`. `PageRules::page_box` returns a page's size and margins, and `Viewport::print_page` is the viewport an `@page` rule resolves against.
+
+### Positions take offsets from a side, and an offset image keeps its pixels
+
+`object-position: bottom 1px right 2px` used to make its declaration invalid, so the image stayed centered. A position now takes the four-value form, where each side keyword takes an offset from that side, and `background-position` and `mask-position` also take the three-value form, as in Chromium.
+
+An image drawn smaller than its file and reaching past its content box, such as one an offset moves, used to be squeezed into the part that shows. It now draws at its full size, and the box crops it.
+
 ## takumi-raster@0.6.0
 
 ### Read what a render needs after the cascade
