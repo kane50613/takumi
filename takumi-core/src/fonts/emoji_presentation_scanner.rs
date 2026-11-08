@@ -1,6 +1,5 @@
 //! The emoji presentation grammar of [emoji-segmenter](https://github.com/google/emoji-segmenter/blob/955936be8b391e00835257059607d7c5b72ce744/emoji_presentation_scanner.rl), matched by hand; see LICENSE-EMOJI-SEGMENTER.
 
-use crate::sort_key::sort_by_key;
 use crate::text::emoji_segmentation_category::EmojiSegmentationCategory as Category;
 
 /// A token of the grammar: its length in characters, whether it shows as emoji, and whether a variation selector chose that.
@@ -147,7 +146,7 @@ impl Grammar<'_> {
         .flat_map(|&end| self.emoji_zwj_element_ends(end + 1))
         .collect();
 
-      sort_by_key(&mut next_ends, |&end| end);
+      next_ends.sort_unstable();
       next_ends.dedup();
       longest = next_ends.last().copied().max(longest);
       ends = next_ends;

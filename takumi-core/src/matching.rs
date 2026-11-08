@@ -995,7 +995,7 @@ impl RuleIndex {
     }
 
     out.retain(|&rule| matching_media[self.rule_media[rule]]);
-    sort_by_key(out, |&index| index);
+    out.sort_unstable();
     out.dedup();
   }
 }

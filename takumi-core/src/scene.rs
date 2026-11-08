@@ -1055,7 +1055,7 @@ impl FragmentChildren {
       .copied()
       .collect();
 
-    sort_by_key(&mut positions, |&position| position);
+    positions.sort_unstable();
     positions
   }
 }

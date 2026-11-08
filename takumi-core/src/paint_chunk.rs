@@ -4,7 +4,6 @@
 
 // `ConversionContext` follows Blink, under the notice in LICENSE-CHROMIUM.
 
-use crate::sort_key::sort_by_key;
 use crate::{
   paint_property::{ClipId, ClipNode, EffectId, EffectNode, PropertyState, PropertyTrees},
   scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, SceneBounds, StackingContextNode},
@@ -372,7 +371,7 @@ impl HeightIndex {
       .copied()
       .collect();
 
-    sort_by_key(&mut indices, |&index| index);
+    indices.sort_unstable();
     indices.dedup();
     indices
   }
