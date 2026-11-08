@@ -42,7 +42,7 @@ pub(crate) struct PdfArgs {
   page: Option<String>,
 
   /// The page margins as the CSS `margin` property takes them, such as `20mm` or `1in 0.75in`.
-  /// Defaults to 1cm. The document's `@page` rule wins.
+  /// Defaults to 1cm, grown to fit a header or footer. The document's `@page` rule wins.
   #[arg(long, value_name = "MARGIN")]
   margin: Option<String>,
 
