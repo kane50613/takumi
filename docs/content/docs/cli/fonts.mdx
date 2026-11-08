@@ -1,0 +1,51 @@
+---
+title: Use your fonts
+description: Load fonts with @font-face or --font, and know which font the takumi CLI falls back to.
+---
+
+`takumi` never reads the fonts installed on your system. Text uses the fonts the document loads, and falls back to Geist, the one font built into takumi, which covers Latin. Load a font for every other script your text uses, such as Chinese or Arabic.
+
+## Load a font from the document
+
+An `@font-face` rule loads a font file the way a browser does. A relative URL resolves against the stylesheet that writes it:
+
+```html title="card.html"
+<style>
+  @font-face {
+    font-family: Brand;
+    src: url(fonts/Brand.woff2) format("woff2");
+  }
+
+  body {
+    font-family: Brand, sans-serif;
+  }
+</style>
+```
+
+A URL in CSS is not a shell path, so write `fonts/Brand.woff2` or an absolute path rather than `~/fonts/Brand.woff2`. The file has to be inside a directory the document may read, which by default is the HTML file's directory and everything under it. See [Control file access](/docs/cli/file-access).
+
+When a `src` file is missing or cannot be decoded, takumi prints a warning and moves on to the rule's next source, as Chrome does. A `src` outside the readable directories stops the render instead, like any other blocked read. `takumi` loads only the faces the text uses, so a rule nothing on the page uses never reads its file.
+
+## Register a font from the command line
+
+`--font` registers a font file before the document loads, and needs no `@font-face` rule. Use the family name the font file declares, such as `Inter`, in your CSS:
+
+```sh
+takumi image card.html -o card.png --font ~/fonts/Inter.woff2 --font ~/fonts/NotoSansTC.woff2
+```
+
+A font named on the command line is trusted, so it can live anywhere, even outside the directories the document may read. Repeat `--font` for more fonts.
+
+## Check what loads
+
+`--list-resources` lists each font file the document would load, its fallback sources included, and whether the document may read it:
+
+```sh
+takumi image card.html --list-resources
+```
+
+```text
+font	allowed	file:///home/me/site/fonts/Brand.woff2
+```
+
+[Fonts](/docs/fonts) covers how takumi picks a font for each character, variable axes, and OpenType features. Those work the same in the CLI.

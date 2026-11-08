@@ -1,107 +1,82 @@
 ---
-title: Command line
-description: Install the takumi CLI and render HTML files to images and PDFs from a terminal or a script.
+title: Render from the command line
+description: Turn an HTML file into a PNG, JPEG, WebP, SVG, or PDF with the takumi CLI, without writing code.
+index: true
 ---
 
-The `takumi` command renders an HTML file to a PNG, JPEG, WebP, SVG, or PDF without writing any code. It loads the stylesheets, fonts, and images the file links, and reads only the directories you allow.
+The `takumi` command renders an HTML file to an image or a PDF. It loads the stylesheets, fonts, and images the file links, lays the page out with the same engine as [image output](/docs) and [takumi-pdf](/docs/pdf), and writes the result. It reads only the directories you allow, so an HTML file you did not write cannot put your private files into its output.
 
 ## Install
 
-The CLI builds from source with Rust 1.91 or later. Install Rust with [rustup](https://rustup.rs) first if `cargo --version` does not print a version.
+The CLI builds from source with Rust 1.91 or later:
 
-```sh title="Install the latest takumi"
+```sh
 cargo install --locked --git https://github.com/kane50613/takumi takumi-cli
 ```
 
-Cargo builds the `takumi` binary and puts it in `~/.cargo/bin`, which rustup adds to your `PATH`. Check that it runs:
+[Install and upgrade](/docs/cli/install) covers installing Rust, building from a clone, and keeping takumi up to date.
 
-```sh
-takumi --version
+## Render your first image
+
+Save this as `card.html`:
+
+```html title="card.html"
+<style>
+  body {
+    margin: 0;
+    font-family: sans-serif;
+  }
+
+  .card {
+    height: 630px;
+    padding: 64px;
+    box-sizing: border-box;
+    background: linear-gradient(135deg, #0f172a, #4338ca);
+    color: white;
+    font-size: 64px;
+    font-weight: 700;
+  }
+</style>
+<div class="card">Hello from takumi</div>
 ```
 
-To build from a clone instead, run `cargo install --locked --path takumi-cli` in the repository, and `cargo uninstall takumi-cli` to remove either install.
-
-## Upgrade
+Then render it at 1200×630, the usual size of a social card:
 
 ```sh
-takumi upgrade
-```
-
-`takumi upgrade` reinstalls takumi from the source `cargo install` recorded, such as the GitHub repository and branch, into the same directory. Add `--dry-run` to print the `cargo install` command without running it. It never checks for updates on its own. An install from a local checkout prints the command to run after you update the checkout instead.
-
-<Callout type="info">
-  The CLI is not on crates.io or npm yet, so these commands build it from the GitHub repository.
-</Callout>
-
-## Render an image
-
-```sh title="Render a social card"
 takumi image card.html -o card.png --width 1200 --height 630
 ```
 
-The output's extension picks the format: `png`, `jpg`, `webp`, or `svg`. Without `--height`, the image is as tall as the content. `--dpr 2` doubles the pixels for high-density screens. `--quality` sets JPEG quality, which defaults to 75, and switches WebP from lossless to lossy.
+`takumi` writes `card.png` and prints nothing else. A warning, such as a stylesheet that failed to load, goes to standard error and does not stop the render.
 
-## Render a PDF
+## Render your first PDF
 
-```sh title="Render an invoice"
-takumi pdf invoice.html -o invoice.pdf --page "letter landscape" --margin 0.5in
-```
-
-`--page` and `--margin` take the values the CSS `size` and `margin` properties take, and default to A4 with a 1 cm margin. The document's own `@page` rule wins over both, as it does over Chrome's print dialog. `--pages 1-3,8` keeps only those pages, and `--outline` adds bookmarks for the headings.
-
-`--header` and `--footer` draw an HTML file in the top and bottom margins of every page. An element with the class `pageNumber` or `totalPages` shows the page number or the page count:
-
-```html title="footer.html"
-<div style="width: 100%; text-align: center; font-size: 10px">
-  Page <span class="pageNumber"></span> of <span class="totalPages"></span>
-</div>
-```
+The same file becomes a PDF with the `pdf` command:
 
 ```sh
-takumi pdf report.html -o report.pdf --margin "2cm 1cm" --footer footer.html
+takumi pdf card.html -o card.pdf
 ```
 
-Leave the margin tall enough for the band, since a header or footer does not push the content down.
+Pages default to A4. A long document flows onto as many pages as it needs, and `--page`, `--margin`, `--header`, and `--footer` set the rest. [Render PDFs](/docs/cli/pdf) walks through them.
 
-## Use it in a script
+## How the CLI reads a file
 
-`-` reads the HTML from standard input or writes the output to standard output. Writing an image to standard output needs `--format`, since there is no file extension to read:
+`takumi` opens an HTML file the way a browser does. A file without `<html>` or `<body>` still gets both, so rules such as `body { font-family: … }` apply. Relative URLs in `<link>`, `<img>`, `url()`, and `@import` resolve against the file that writes them.
 
-```sh
-curl -s https://example.com/card.html | takumi image - -o - --format png > card.png
-```
+What a document can do is the same as in the rest of takumi. [Styles](/docs/styles) lists the CSS it supports, and [How Takumi works](/docs/concepts#where-it-differs-from-a-browser) covers where it differs from a browser. Two things differ from a browser on purpose: `takumi` never loads `http` or `https` URLs, and it reads only the directories you allow. [Control file access](/docs/cli/file-access) explains both.
 
-The rendered file is the only thing written to standard output. Warnings and errors go to standard error, and `-q` hides the warnings. The command exits with `0` when it writes the file, `1` when rendering fails, `2` when the arguments are wrong or name a format `takumi` does not write, and `3` when the document tries to read a file it is not allowed to.
+## Next steps
 
-## What a document can read
-
-An HTML file can reference any path, so `takumi` reads only the directories you grant. This keeps an untrusted file from putting your private files into its output.
-
-- By default, the document reads files under the input file's directory. Reading from standard input grants no directory.
-- `--root <dir>` replaces that directory, and `--allow-read <dir>` adds another. Repeat `--allow-read` for more.
-- `http` and `https` URLs never load. `takumi` skips them with a warning, as a browser skips a resource that fails to load. Use a local copy, or a `data:` URL, which loads wherever the document is, within the same size limits.
-- A read outside the granted directories stops the render, and the error names the `--allow-read` flag that would allow it.
-- One file may hold at most 32 MiB, all of them together 256 MiB, and a render may load at most 1024 of them.
-- A symlink must stay inside its granted directory and be relative. An absolute symlink is refused even when it points back inside, so make it relative or reference the target directly.
-
-Files you name on the command line are trusted: the input, `--font`, `--header`, and `--footer`. What they reference still goes through the same checks.
-
-To see what a document would load before rendering it, use `--list-resources`. It needs no `-o`:
-
-```sh
-takumi image card.html --list-resources
-```
-
-```text
-stylesheet	allowed	file:///home/me/site/css/style.css
-image	allowed	file:///home/me/site/img/logo.png
-font	blocked	file:///home/me/fonts/Inter.woff2	… Pass `--allow-read /home/me/fonts` to allow it.
-```
-
-The listing checks each file on its own, including the 32 MiB limit. It does not add files up, so a document over the 256 MiB or 1024-file totals can list as allowed and still stop when it renders.
-
-## Fonts
-
-Text uses the fonts the document loads with `@font-face`, and falls back to Geist when it loads none. `--font <file>` registers another font file. Repeat it for more.
-
-Run `takumi image --help` or `takumi pdf --help` for every flag. To render from code instead, start with [Get started](/docs).
+<Cards>
+  <Card title="Render images" href="/docs/cli/images">
+    Size, pixel density, formats, and quality.
+  </Card>
+  <Card title="Render PDFs" href="/docs/cli/pdf">
+    Page size, margins, headers, footers, and bookmarks.
+  </Card>
+  <Card title="Use takumi in scripts" href="/docs/cli/scripting">
+    Pipes, exit codes, and checking a document before you render it.
+  </Card>
+  <Card title="CLI reference" href="/docs/cli/reference">
+    Every command and flag.
+  </Card>
+</Cards>

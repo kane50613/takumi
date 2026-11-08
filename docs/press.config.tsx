@@ -26,6 +26,7 @@ import {
   Palette,
   Shovel,
   Sparkles,
+  Terminal,
   ToyBrick,
   Type,
   Wrench,
@@ -51,10 +52,12 @@ import { Video } from "./app/components/video";
 
 const PDF_ACCENT = "#3b82f6";
 const PAINT_ACCENT = "#8b5cf6";
+const CLI_ACCENT = "#10b981";
 
 const SECTION_CLASSES = [
   ["/docs/pdf", "pdf-section"],
   ["/docs/paint", "paint-section"],
+  ["/docs/cli", "cli-section"],
 ] as const;
 
 function sectionClass(url: string) {
@@ -257,6 +260,12 @@ export default defineConfig({
                 description: "Boxes, images, and text runs with takumi-paint",
                 url: "/docs/paint",
                 icon: tabIcon(<Brush size="100%" />, PAINT_ACCENT),
+              },
+              {
+                title: "CLI",
+                description: "Render HTML files from a terminal",
+                url: "/docs/cli",
+                icon: tabIcon(<Terminal size="100%" />, CLI_ACCENT),
               },
             ],
             links: [

@@ -1,0 +1,70 @@
+---
+title: Render PDFs
+description: Set the page size and margins, keep some pages, add headers, footers, and bookmarks, and fill in the document's title with takumi pdf.
+---
+
+`takumi pdf` lays an HTML file out on pages and writes a PDF:
+
+```sh
+takumi pdf invoice.html -o invoice.pdf
+```
+
+Content that does not fit on one page flows onto the next. [Pagination](/docs/pdf/pagination) covers how to control where pages break with CSS, which works the same here.
+
+## Set the page size and margins
+
+`--page` and `--margin` take the values the CSS `size` and `margin` properties take:
+
+```sh
+takumi pdf report.html -o report.pdf --page "letter landscape" --margin "0.5in 0.75in"
+```
+
+Pages default to A4 with a 1 cm margin. Both flags are defaults, so a `@page` rule in the document wins over them, as it does over Chrome's print dialog. A value CSS does not accept stops before rendering, with exit code `2`.
+
+## Keep some pages
+
+`--pages` keeps only the pages you list, numbered from 1:
+
+```sh
+takumi pdf book.html -o excerpt.pdf --pages 1-3,8
+```
+
+`5-` keeps page 5 to the end. The kept pages still count every page of the document, so page 8 keeps showing "8" in a page-number footer.
+
+## Add a header and a footer
+
+`--header` and `--footer` each take an HTML file, drawn in the top or bottom margin of every page. An element with the class `pageNumber` or `totalPages` shows the page number or the page count:
+
+```html title="footer.html"
+<div style="width: 100%; text-align: center; font-size: 10px">
+  Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+</div>
+```
+
+```sh
+takumi pdf report.html -o report.pdf --footer footer.html
+```
+
+Without `--margin`, the margin on that side grows to fit the header or footer. A margin you set, with `--margin` or the document's `@page` rule, stays as you set it, and a taller band then draws over the content. Leave out `--margin`, or give the band's side more room, such as `--margin "1cm 1cm 3cm"` for a tall footer. [Headers & footers](/docs/pdf/headers#sizing-the-margin) shows how takumi sizes the automatic margin.
+
+A header or footer file is a fragment of HTML, not a whole page. Its stylesheets and images load like the document's, through the same [file access](/docs/cli/file-access) rules.
+
+## Fill in the document details
+
+`--title` sets the title a PDF viewer shows, and `--author` adds an author. Repeat `--author` for more:
+
+```sh
+takumi pdf report.html -o report.pdf --title "Quarterly report" --author "Finance team"
+```
+
+`--outline` adds a bookmark for each `h1` to `h6` heading, so a PDF viewer shows the document's sections in its sidebar.
+
+## Fill the page
+
+`--background` takes a CSS color and fills every page with it, margins included:
+
+```sh
+takumi pdf poster.html -o poster.pdf --background "#fafafa"
+```
+
+The document's own backgrounds draw over it.

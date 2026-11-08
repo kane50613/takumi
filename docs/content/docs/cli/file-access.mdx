@@ -1,0 +1,59 @@
+---
+title: Control file access
+description: Choose which directories a document may read, why takumi never loads URLs from the network, and how to check a document before you render it.
+---
+
+An HTML file can reference any path on your machine, such as `<img src="/home/me/.ssh/id_ed25519">`. A browser would show nothing for it, but a renderer that writes images could copy the file into its output. So `takumi` reads only the directories you grant, and stops the render when a document reaches outside them.
+
+## Which directories a document may read
+
+By default, the document reads the HTML file's directory and everything under it. Most sites keep their stylesheets, images, and fonts beside the page, so the default is usually enough.
+
+Two flags change it:
+
+- `--root <dir>` replaces the default directory, for a page that references files above it.
+- `--allow-read <dir>` grants another directory. Repeat it for more.
+
+```sh
+takumi image site/pages/card.html -o card.png --root site
+```
+
+`--root` and `--allow-read` only change what the document may read. Relative URLs still resolve against the file that writes them.
+
+A document read from standard input gets no directory by default, since it has no file to sit beside. Grant one with `--root` if it references files.
+
+Files you name on the command line are trusted, wherever they are: the input, `--font`, `--header`, and `--footer`. What those files reference still has to be inside a granted directory.
+
+## What happens when a read fails
+
+A read outside the granted directories stops the render, so you notice before the output goes out without the file. Other failures are skipped with a warning, the way a browser skips a resource that fails to load:
+
+| Reference                                                          | Result                                                                             |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| A file outside the granted directories                             | Stops, exit code `3`. The error names the `--allow-read` flag that would allow it. |
+| A symlink that leads out of its directory, or any absolute symlink | Stops, exit code `3`. A relative symlink that stays inside works.                  |
+| A file past the size limits below                                  | Stops, exit code `1`.                                                              |
+| A missing file, or one that cannot be decoded                      | Skipped with a warning.                                                            |
+| An `http` or `https` URL                                           | Skipped with a warning.                                                            |
+
+`takumi` never loads anything from the network. To use a remote image or font, download it beside the document, or write it as a `data:` URL, which loads wherever the document is.
+
+One file may hold at most 32 MiB, all of the files in one render together 256 MiB, and a render may load at most 1024 files. `data:` URLs count toward the same limits.
+
+## Check a document before you render it
+
+`--list-resources` prints every stylesheet, image, and font the document would load, and whether it may, without rendering anything. It needs no `-o`:
+
+```sh
+takumi image card.html --list-resources
+```
+
+```text
+stylesheet	allowed	file:///home/me/site/css/style.css
+image	allowed	file:///home/me/site/img/logo.png
+font	blocked	file:///home/me/fonts/Inter.woff2	… Pass `--allow-read /home/me/fonts` to allow it.
+```
+
+Each line holds the kind, then `allowed` when the file would load or `blocked` when it would not, then the URL, and for a blocked file the reason, separated by tabs. A blocked stylesheet does not stop the listing, but the files it would have loaded are missing from the list until you allow it.
+
+The listing checks each file on its own, including the 32 MiB limit. It does not add files up, so a document over the 256 MiB or 1024-file totals can list as allowed and still stop when it renders.
