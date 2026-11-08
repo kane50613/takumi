@@ -1,240 +1,252 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n  takumi-paint:\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n# `PdfRenderer` and `Painter` prepare a document too\n\n`PdfRenderer.prepare` and `Painter.prepare`, and the shared `prepare` each package exports, fetch the images a document draws and load the font subsets its text uses, a PDF's header, footer, and page bands included. `render`, `measure`, and `paint` take the prepared document, a PDF with only file options such as `metadata` and `pdfa`.\n"
-    filename: prepare-pdf-paint.md
+  - content: "---\npackages:\n  takumi-paint:\n    type: minor\n---\n\n# `PaintTree.free()` releases a tree's font files and glyph outlines\n\nA paint tree keeps its font files and glyph outlines in WebAssembly memory until garbage collection releases them, which can take a while after many paints. `tree.free()`, or a `using` declaration, releases them right away. Calling it again does nothing, and the painter and other trees stay usable. Reading the files of a freed tree throws `The paint tree was freed`.\n"
+    filename: paint-tree-free.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-pdf:\n    type: patch\n  takumi-paint:\n    type: patch\n---\n\n# Render on Nitro's `bun` preset instead of failing\n\nNitro's `bun` preset used to answer every request with a 500 and `ENOENT ... _libs/@takumi-rs/[object WebAssembly.Module]`. The WASM packages now load their binary through unwasm there, as they do on other Nitro presets.\n"
-    filename: nitro-bun-preset-wasm.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-pdf:\n    type: patch\n  takumi-paint:\n    type: patch\n---\n\n# A `unicodeRange` subset without a glyph falls back to the next family again\n\nA font in `fonts` whose `unicodeRange` claims a character it has no glyph for now hands that character on to the next family in the stack, as a browser does and as 0.18 did. Before, the render left the next family's subset unloaded. The PDF render then failed with \"No registered font covers\". That error now reads \"No font the text can use draws\", and suggests checking each font's `unicodeRange` and the `font-family` stack, because a registered font can have the glyph and still be out of reach.\n"
+    filename: unicode-range-glyph-fallback.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Parse HTML strings in Rust in every renderer\n\n`takumi-paint` and `takumi-pdf` take HTML strings as `@takumi-rs/core` and `@takumi-rs/wasm` do, and `takumi-pdf` takes them for header and footer bands too. A `renderAnimation` scene can be an HTML string, its `<style>` rules applying to the animation. With `emoji: \"from-font\"`, `takumi-js` hands HTML to the renderer instead of parsing it in JavaScript.\n"
-    filename: html-in-bindings.md
+  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n  takumi-paint:\n    type: minor\n---\n\n# A `using` block frees a renderer\n\n`Renderer`, `PdfRenderer` and `Painter` implement `Symbol.dispose`, so `using renderer = new Renderer()` frees the renderer's WebAssembly memory when the block ends, as calling `free()` does.\n"
+    filename: js-dispose.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-js:\n    type: patch\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Font subsets load as a browser loads them\n\nWhen `fonts` holds `unicodeRange` subsets, as `googleFonts` returns, a render now loads only the subsets that font matching reaches for each character, through that text's own font stack, weight, and style. With `font-family: Inter, \"Noto Sans JP\"`, Latin text no longer loads Noto Sans JP's Latin subset, and a bold subset loads only when bold text uses it.\n\nThe text comes from the styled tree, so a subset needed only by a stylesheet's generated content, a list marker, `text-transform`, the `text` elements of an SVG image, or a `takumi-pdf` page counter now loads. `collectCodepoints`, `LIST_MARKER_CHARACTERS`, and `subsetFonts` are deprecated.\n"
-    filename: font-subsets-from-layout.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n  takumi-paint:\n    type: minor\n---\n\n# `prepare` downloads the fonts `@font-face` rules load\n\nAn `@font-face` rule in `css` or a `<style>` element now loads its font in `prepare`, `render`, and `ImageResponse`. A `src` that fails to download falls back to the next one.\n"
+    filename: font-face-prepare.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n  takumi-paint:\n    type: minor\n---\n\n# `takumi-pdf` and `takumi-paint` drop their deprecated options\n\n`takumi-pdf` no longer takes `stylesheets`. Pass CSS through `css`, which takes one string or a list. The `subsetOf` and `subsetRank` font fields are gone from both packages. Register each subset under its family `name` with its `unicodeRange`.\n"
-    filename: pdf-drop-stylesheets.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# The `page` property puts content on named pages\n\nAn element with `page: cover` starts a page that `@page cover` rules size and margin, and the content after it that names no page goes back to the unnamed pages, as in Chromium. `PageSizer::new` now takes the page name with the page index, and `PageSizes::name` returns the name each page laid out as.\n"
+    filename: named-pages.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n# Renderers take HTML directly\n\n`render`, `renderSvg`, `measure`, and the WASM `renderAsDataUrl` accept an HTML string in place of a node tree. The markup is parsed in Rust, and the CSS of its `<style>` elements follows the `css` option. A `<style>` with a `media` attribute applies only where its query matches. `takumi-html` adds `parse_html`, which returns that CSS with the tree. `fromHtml` from `@takumi-rs/helpers/html` is deprecated in favor of passing the string and will be removed in v3.\n"
-    filename: html-source-input.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Content moved past the last page gets pages of its own\n\nA box that a transform or `position: relative` moved past the end of the content now adds the pages it reaches, as Chromium prints it. Before, the document ended on the last page of the content, and the moved box was cut off. A shadow, and content its box clips, add no page, as in Chromium.\n"
+    filename: paged-scrollable-overflow-pages.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n  takumi-js:\n    type: minor\n---\n\n# `Renderer.prepare` fetches what a render needs ahead of it\n\n`renderer.prepare(source, options)` styles an HTML string or node tree, fetches the images it draws, and loads the font subsets its text uses. `render`, `renderSvg`, and `measure` take the prepared source with only output options such as `format`. `renderer.prepareAnimation(options)` does the same for every scene of an animation, and `renderAnimation` takes its result. `prepareImages` from `@takumi-rs/helpers` is deprecated in favor of `prepare`.\n\n`takumi-js` renders through `prepare`, so it fetches the images the styled tree draws. An image that `css`, a `<style>` element, or a `::before` rule sets now renders, an image under `display: none` is no longer fetched, and a custom `fetch` now receives relative URLs such as `/logo.png`.\n"
-    filename: prepare.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# PDF renders decode a repeated `data:` URI image once\n\nA PDF that repeats a `data:` URI image, such as a table with the same signature in every row, used to decode and parse the image each time layout looked at it, so long documents rendered slowly. `PdfOptions` and `MeasureOptions` in the `takumi-pdf` crate take a `resource_cache` as the raster renderer's options do, and a render without one keeps its own. `PdfRenderer` passes its cache, so its renders share decoded images.\n"
+    filename: pdf-data-uri-image-cache.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/image-response\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n# Editors point imports of `@takumi-rs/image-response` and `@takumi-rs/wasm/vite` to their replacements\n\nEditors now flag imports from `@takumi-rs/image-response`, which only re-exports `takumi-js/response`, and from `@takumi-rs/wasm/vite`, which resolves to the same loader as `@takumi-rs/wasm/auto` under Vite. Both keep working and will be removed in v3.\n"
-    filename: deprecate-moved-entries.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# The `takumi-pdf` crate is on crates.io\n\nRust programs can depend on `takumi-pdf` to write PDFs with selectable text, as the `takumi-pdf` npm package does. Its `render`, `measure`, and `needs` take the node tree, fonts, and stylesheet types from `takumi-core`.\n"
+    filename: publish-takumi-pdf.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Emoji images download once per process\n\nWithout a `fetchCache`, every render used to download each emoji's SVG again. Emoji images from the `emoji` providers are now kept across renders in a cache of up to 8 MB per `fetch` function. Other remote images still need a `fetchCache` to be reused. The `fluent` and `fluentFlat` sets now load from a pinned commit of `shuding/fluentui-emoji-unicode`, as the other sets load from a pinned version, so a cached image cannot go stale.\n"
-    filename: emoji-fetch-cache.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Paged PDFs keep the text a transform or a clip moves\n\nIn a paged PDF, text in a rotated or scaled box went missing from every page after the first. A line that an `overflow: hidden` box or the page edge cut in half went missing too. Each now draws on the page that shows it, as Chromium prints it, and the PDF holds its text. A line a transform moves across a page edge draws its part on each page, as Chromium prints it. One page holds its text, and the other draws outlines, so the text is not repeated. A line a transform moves above the first page or below the last also draws, on that page.\n"
+    filename: paged-pdf-line-pages.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Editors flag imports from `@takumi-rs/helpers/renderer`\n\nThe entry holds glue internal to the renderer packages, which no longer import it. Its exports keep working and will be removed in v3. Import types such as `FontLoader` and `ImagesInput` from the renderer package you use.\n"
-    filename: deprecate-renderer-entry.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# An `href` on a table row or row group renders\n\nAn `href` on a `tr`, `thead`, `tbody`, or `tfoot` used to fail the whole render with `invalid tag tree: annotation identifier ... doesn't appear in the tag tree`. The link now covers the row or group as it does on other elements, and its `Link` element sits in the last cell the link spans.\n"
+    filename: pdf-row-link-tags.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-js:\n    type: patch\n---\n\n# Render on the native backend under Nitro's `!unwasm` opt-in\n\nA Nitro build with `exportConditions: [\"!unwasm\"]` picked `@takumi-rs/core`, but every request failed with `TypeError: __exportAll is not a function`. It now renders with the native addon, and the `bun` preset no longer bundles the WASM binary next to it.\n"
-    filename: nitro-native-opt-in.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Content after a line taller than a page starts below it\n\nWhen a line held something taller than a page, such as a tall `inline-block`, the lines after it started at the top of the next page and drew over the part that ran on. They now start below it, as Chromium prints them.\n"
+    filename: paged-monolithic-overflow-lines.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n# Loading a font no longer blocks rendering\n\n`FontResource::into_resolved` now also limits the `cmap` to the `unicode_range` and hashes the font, so registering a resolved font takes the same short time whatever its size. `@takumi-rs/core` registers fonts on the JavaScript thread after decompressing them in the background, and renders no longer wait on a lock while fonts load. The font cache budget now counts a `unicode-range` subset by the bytes it keeps.\n"
-    filename: font-resolve-off-main-thread.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# `@page` rules size and margin the pages of a PDF\n\nA `@page` rule sets the page `size` and margins and wins over the `size`, `landscape`, and `margin` options, as CSS does in Chromium with `preferCSSPageSize`. `:first` styles the first page, and `:left` and `:right` style pages by the side they fall on, so under `direction: rtl` the first page is a left page. Each page lays out its content, bands, and repeated boxes at its own size. `em`, `rem`, and `var()` in a rule read the root element, as Chromium's page style inherits it. `@media`, `@layer`, and `!important` order the rules as they order any other. `StyleSheet::page_descriptors` returns the descriptors that win for a page in a `PageContext`, which `PageContext::from_root` and `PageContext::from_initial_containing_block` take from a tree's root element. Margin boxes such as `@top-center` are not read yet.\n"
+    filename: at-page-rules.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# `render` in `takumi-pdf` takes an abort `signal`\n\nPass `signal` to stop a render before it reads the document or draws it, as `@takumi-rs/core` renders take one.\n"
-    filename: pdf-render-signal.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# `registerFont` registers one buffer again under another name, weight, style or `unicodeRange`\n\nPassing the same `data` buffer to `registerFont` a second time with other descriptors used to return the first registration, so the new family or weight never existed. Each set of descriptors now registers its own face, as `@font-face` rules sharing one `src` do. A lazy font's key includes its `unicodeRange` too.\n"
+    filename: register-font-buffer-key.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# A class list splits on ASCII whitespace only\n\nSelectors used to split an element's `class` attribute on any Unicode whitespace, so `class=\"a b\"` matched `.a` as an ancestor. It now splits on ASCII whitespace, as HTML does, and `a b` is one class. The same applies to the page counter classes in PDFs.\n"
-    filename: class-ascii-whitespace.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# `@font-face` applies `size-adjust`, metric overrides, `font-feature-settings`, and `local()`\n"
+    filename: font-face-metrics.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n---\n\n# Draw the value of text fields such as `<input type=\"text\">`\n\nAn `<input>` of type `text`, `search`, `tel`, `url`, `email`, `password`, or `number` now draws its `value` inside the field, as Chromium does. The field takes Chromium's default font, border, and padding, sizes itself from the `size` attribute, centers its text vertically, and sits on the baseline of its line. A password shows a dot for each character, a number field with an invalid value shows nothing, and a disabled field turns gray. `<input type=\"hidden\">` takes no space. These inputs used to draw nothing, not even their author-set width.\n"
-    filename: text-input-value.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# A forced break inside a nested flex row moves the row\n\n`break-before: page` on the first item of a flex container nested in a flex row used to break only inside the nested container, so its first row stayed on the page before. The break now reaches the row around it, and the whole nested container starts the next page, as in Chromium.\n"
+    filename: flex-row-forced-breaks.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: minor\n---\n\n# `takumi-html` parses with its own parser instead of html5ever\n\nIt recovers from less malformed markup than html5ever. It implies `<html>`, `<head>`, `<body>`, `<tbody>`, and the end tags of `p`, `li`, `dt`, `dd`, `option`, and table rows and cells, but does not reconstruct misnested formatting elements or move stray table content out of the table.\n"
-    filename: html-builtin-parser.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# An inline `<svg>` draws whole at a `devicePixelRatio` above one\n\nAn inline `<svg>` with a `viewBox` used to scale its shapes by the device pixel ratio twice, so at `devicePixelRatio: 2` only the top-left quarter showed. Its user units are now CSS pixels at any ratio, as Chromium draws them.\n"
+    filename: inline-svg-device-pixel-ratio.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n---\n\n# The HTML parser moves into `takumi-core`\n\n`takumi_core::html` holds `from_html`, `parse_html`, `FromHtml`, `FromHtmlOptions`, `StylePresets`, and `HtmlError`, behind the `html` feature. `takumi-html` now only re-exports that module, so depend on `takumi-core` with `features = [\"html\"]` instead, adding `html-svg-nodes` where `takumi-html`'s `svg` feature kept inline `<svg>` as nodes. The `takumi` crate's `from-html` feature and its `takumi::html` re-export work as before.\n"
-    filename: html-in-core.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: minor\n---\n\n# Raster pages can take their sizes from `@page` rules\n\n`render_pages` takes anything that converts into a `PageSizer`. A `Size` still gives every page the same area, and each page's image is now that page's own size. `PageRules::new(stylesheet, page_box, context)` converts into a `PageSizer` that gives each page the area the stylesheet's `@page` rules give it, including `:first`, `:left`, `:right`, and page names. `context` is the `PageContext` the root element gives, from `PageContext::from_root`. `PageRules::page_box` returns a page's size and margins, and `Viewport::print_page` is the viewport an `@page` rule resolves against.\n"
+    filename: raster-page-rules.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n---\n\n# Lay out `<textarea>` as a field sized by `cols` and `rows`\n\nA `<textarea>` now takes Chromium's default monospace font, border, and padding, and sizes itself from `cols` and `rows` with room for a scrollbar. Its text keeps its line breaks and, unless the field is disabled or read-only, its spaces. It wraps inside the field, which clips it in both axes even under `overflow: visible`, as Chromium does. A disabled textarea turns gray. A textarea used to render as inline text with its line breaks collapsed.\n"
-    filename: textarea-control.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# `light-dark()` takes `currentColor`\n\n`border: 4px solid light-dark(currentColor, blue)` used to make its declaration invalid, so the element drew no border. `light-dark()` now takes `currentColor` wherever a colour can be `currentColor`.\n"
+    filename: light-dark-current-color.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Number content with CSS counters\n\n`counter-reset`, `counter-increment`, and `counter-set` change named counters, and `content` writes them with `counter(name)` or `counters(name, \".\")`, in any `list-style-type` style. Counters follow the document order Chrome counts in, including the implicit `list-item` counter of `ol`, `ul`, and `li`, and `contain: style` keeps the counters inside an element from reaching the rest of the page. `::after` reads a counter after the element's children change it, so a section can close with how many items it held.\n"
-    filename: css-counters.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# `linear()` easing\n\n`animation-timing-function` takes `linear()` from CSS Easing 2, a curve of straight lines between its control points, so an animation can approximate a bounce or a spring. Points without a percentage spread evenly, and a progress past either end extends the outermost line, as in Chromium. `AnimationTimingFunction::LinearCurve` holds it.\n"
+    filename: linear-easing.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# `<ol reversed>` numbers its items down\n\nList markers and the `list-item` counter now number as Chrome does: an `<ol reversed>` counts down from `start`, or from its item count when it has no `start`, and a box with `contain: style` numbers the list items inside it from 1. An item's `counter-set` or `counter-increment` of `list-item` moves its marker too. `start` now applies only to an `<ol>`, and `value` only to an `<li>`.\n"
-    filename: list-item-ordinal.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-raster:\n    type: patch\n---\n\n# Positions take offsets from a side, and an offset image keeps its pixels\n\n`object-position: bottom 1px right 2px` used to make its declaration invalid, so the image stayed centered. A position now takes the four-value form, where each side keyword takes an offset from that side, and `background-position` and `mask-position` also take the three-value form, as in Chromium.\n\nAn image drawn smaller than its file and reaching past its content box, such as one an offset moves, used to be squeezed into the part that shows. It now draws at its full size, and the box crops it.\n"
+    filename: position-edge-offsets.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# List items inside `display: none` no longer take a number\n\nAn item hidden with `display: none`, or inside a hidden element, used to take the next number in its list, so the visible item after it skipped one. It now takes none, as Chromium numbers only items that get a box. Hidden subtrees are also no longer styled, which makes measuring a tree with a large hidden section about a third faster.\n"
-    filename: skip-hidden-subtrees.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Animations run on pseudo-elements, and registered properties break their cycles\n\n`::before` and `::after` now run their animations, of longhands and custom properties alike. An `animation-*` property that reads an animated custom property keeps the value from before the animation, as Chromium keeps it. A `font-size` that reads a registered length in `em`, or a `line-height` that reads one in `lh`, makes a cycle, and on the root element `rem` and `rlh` count too. The custom property then takes its initial value, and the declaration that reads it acts as `unset`, as Chromium breaks it.\n"
+    filename: at-property-cycles.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Content a clipping box pushes past a page end shows on the next page\n\nA box with `overflow: hidden` that breaks across pages used to clip each page to its own piece of the box, so a child that a `transform` moved past the page end lost the part that belongs on the next page. Each page now clips to the whole box, as Chromium prints it. Rounded corners on such a box also curve over its whole height on every page, so a PDF holds back a page until the box that starts on it ends.\n"
-    filename: paged-overflow-clip-stitched.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# `line-clamp` on a flex or grid container no longer clamps, `max-lines` is a `MaxLines`, and `max-lines: none` is invalid\n\n`display: flex; line-clamp: 2` used to clamp the text inside the container. Chrome clamps only a block container, so this no longer clamps, and neither does `display: grid`. Put `line-clamp` on a block inside the flex or grid container instead.\n\nThe `max-lines` longhand is now a `MaxLines` in place of an `Option<u32>`, so it can hold `auto` beside a count. `StyleDeclaration::max_lines` takes one, and `StyleDeclaration::MaxLines` and `LineClamp::max_lines` hold one. Read it through `MaxLines::lines` and `MaxLines::has_auto`, and build it with `MaxLines::new` or from a `u32` or an `Option<u32>`, where `None` or a zero count is `auto`. `max-lines: none` is now invalid, as in Chrome, so a later `max-lines: none` no longer overrides an earlier `line-clamp: 3`.\n"
+    filename: line-clamp-breaking.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Content clipped by `overflow: hidden` no longer adds pages\n\nA box with `overflow` other than `visible` on the block axis that ends on a page used to keep breaking its overflowing children, so the clipped content added blank pages after it. The box now stops breaking on the page where it ends, as Chromium does, and its clipped content stays on that page.\n"
-    filename: clipped-overflow-pages.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Paged layout asks for each page's size as it reaches the page\n\n`PagedLayout::new`, `PageStream::new`, and `PagedScene::lay_out` take a `PageSizer` instead of one `Size`, and `PageSizer::uniform(size)` gives every page the size passed before. The layout records the size of each page it lays out in `PageSizes`, which `PagedLayout::sizes` and `PageStream::sizes` return and `SceneRef::window` and the `PageWindows` methods take. `SceneRef::page_origin(size, page)` is now `PageSizes::origin(page)`, and `PageWindows::new(size)` is now `PageWindows::default()`.\n"
+    filename: page-sizes.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: minor\n---\n\n# Read what a render needs after the cascade\n\n`RenderNode::needs` and `takumi_raster::needs` report the images a node tree looks up by URL and the fonts its text would load, read from the styled tree. Stylesheet and Tailwind rules, `display: none`, generated content, list markers, `text-transform`, and the `text` elements of SVG images count as they will render.\n\nRegister a font that is still downloading with `Fonts::register_pending` and a `PendingFontFace`. Font matching treats it as a loading `@font-face`, and `needs` reports its id when the text reaches it before a loaded font with the glyph, as Blink starts loading a face.\n"
-    filename: render-needs.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# A registered custom property takes the math functions\n\nA custom property that `@property` registers now takes the math functions in its value, as Chromium does. `--angle: calc(1turn / 4)` computes to `90deg`, `--size: min(10px, 2em)` to px, and a `<length-percentage>` that needs the percentage basis keeps its function with the other units computed, so `clamp(1em, 5%, 30px)` at a 16px font is `clamp(16px, 5%, 30px)`.\n"
+    filename: registered-math.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Malformed SVG images render what the parser recovers\n\nSVG images, `filter: url(data:image/svg+xml,...)` references, and SVG sizing now go through takumi's own markup parser instead of `roxmltree`, which leaves the binaries. An SVG that is not well-formed XML renders what the parser recovers instead of failing to load, entities a DTD declares stay unexpanded, and a referenced filter keeps only its `fe*` primitives, so a `<script>` or other element inside the `<filter>` no longer reaches the SVG output.\n"
-    filename: svg-through-html.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# A negative line-height calculation clamps to zero\n\n`line-height: min(1, -1)` or `calc(1em - 30px)` at 20px used to keep its negative value, which pushed the text above where `line-height: 0` puts it. A math function's negative result now clamps to zero, as Chromium clamps a calculation to the property's range.\n"
+    filename: line-height-negative-calc.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Match form control states such as `:disabled` and `:checked`\n\n`:disabled`, `:enabled`, `:checked`, `:indeterminate`, `:placeholder-shown`, `:read-only`, `:read-write`, `:required`, and `:optional` now match by the element's attributes, as HTML defines them. A control inside `<fieldset disabled>` counts as disabled, and an `<option>` counts as checked when its `<select>` would show it selected. These selectors used to match nothing, so their rules never applied.\n"
-    filename: form-state-pseudo-classes.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# `@property` types its custom property\n\nA custom property that `@property` registers now computes to the type its `syntax` names, inherits that computed value, and animates through it. A `<length>` computes to px, an `<angle>` to deg, a `<color>` to its color, and so on, so a `@keyframes` rule can spin a conic gradient through a registered `<angle>`. A registered `<length>` set to `.5em` at a 20px font size is 10px in every descendant, where each child used to read `.5em` again at its own font size. The element that sets it still reads `.5em`. A declared value the syntax does not take falls back to the inherited or initial value, and a rule whose `syntax` or `initial-value` Chromium rejects is dropped. `PropertyRule::syntax` is now a parsed `PropertySyntax`.\n"
+    filename: at-property-types.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# PNG images decode faster\n\nPNG decoding is 13 to 85% faster natively and 13 to 81% faster in WebAssembly on most images, with the largest gains on flat graphics such as social cards, emoji, and icons, and on paletted and interlaced images. The decoded pixels are unchanged.\n"
-    filename: png-decode-speed.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# CSS math functions\n\nLengths, numbers, and angles now take every math function of CSS Values 4: `min()`, `max()`, `clamp()`, `round()`, `mod()`, `rem()`, `abs()`, `sign()`, `hypot()`, the trigonometric functions, `pow()`, `sqrt()`, `log()`, and `exp()`. They nest inside `calc()` and each other, and `calc()` takes parentheses. A function that mixes a percentage with another unit, such as `min(200px, 50%)`, resolves once layout knows the percentage basis, as in a browser. Division by zero gives infinity, which clamps to the largest length, and a value divided by one of its own type gives a number. `Length::Math` holds such a function.\n"
+    filename: css-math-functions.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Count child blocks in `line-clamp`, and clamp by height with `line-clamp: auto`\n\n`line-clamp` used to count only the lines directly inside the clamped box, so text inside child `<div>`s or `<p>`s was never clamped. The lines of child blocks now count, and every box after the clamp point is hidden, as in Chrome. `line-clamp: auto` clamps after the last line that fits the box's `height` or `max-height`, and `line-clamp: 4 auto` clamps at whichever comes first, the fourth line or the box's height. `max-lines` takes the same `<integer> || auto` value. `block-ellipsis` also takes `no-ellipsis`. A container with no line to clamp still clips its floats to its content edge and does not grow to enclose them, as in Blink.\n"
+    filename: line-clamp-blocks-and-auto.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# `:has()` matches\n\nA `:has()` selector used to parse as an unknown pseudo-class and never match, so `:not(:has(…))` always matched. It now matches its relative selectors, `>`, `+` and `~` included, as browsers do.\n"
+    filename: has-selector.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Parse `light-dark()` colors\n\n`light-dark()` used to make its declaration invalid, so `border: 1px solid light-dark(red, blue)` drew no border and `border-color: light-dark(red, blue)` fell back to `currentColor`. It now takes its first color, since a render has no `color-scheme` and is light.\n"
+    filename: light-dark.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# A font file registered at two weights keeps a face for each\n\nRegistering one file under the same family with another `weight`, `style`, width or `unicodeRange` used to reuse the first face, so `font-weight: 700` drew a synthetic bold of the face declared at 400. Each registration with its own descriptors now adds its own face, sharing the parsed font.\n\nRegistering a face again with the same descriptors moves it after the faces registered since, so the latest registration takes precedence as a later `@font-face` rule does.\n"
+    filename: register-font-same-file-weights.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n---\n\n# Load fonts from `@font-face` rules\n\nWith the `font-face` feature, on by default in `takumi`, `@font-face` rules add fonts to a render. `needs` reports the files the text uses in `RenderNeeds::font_files`. Pass each to `Fonts::load_font_file`, or to `Fonts::fail_font_file` to fall back to the next `src`.\n"
+    filename: css-font-face.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
   - changelogIds:
-      - prepare-pdf-paint.md
-      - nitro-bun-preset-wasm.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - pdf-drop-stylesheets.md
+      - paint-tree-free.md
+      - unicode-range-glyph-fallback.md
+      - js-dispose.md
+      - font-face-prepare.md
     id: npm:takumi-paint
     updated: true
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - changelogIds:
-      - nitro-bun-preset-wasm.md
-      - html-source-input.md
-      - prepare.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - deprecate-moved-entries.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:takumi-js
     updated: true
   - changelogIds:
-      - deprecate-moved-entries.md
-    id: npm:@takumi-rs/image-response
-    updated: true
-  - changelogIds:
-      - prepare-pdf-paint.md
-      - emoji-fetch-cache.md
-      - html-source-input.md
-      - prepare.md
-      - deprecate-renderer-entry.md
-      - font-subsets-from-layout.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:@takumi-rs/bindings-js
-    updated: true
-  - changelogIds:
-      - nitro-native-opt-in.md
-      - prepare.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-    id: npm:takumi-js
-    updated: true
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - changelogIds:
-      - html-source-input.md
-      - prepare.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - font-resolve-off-main-thread.md
-    id: npm:@takumi-rs/core
-    updated: true
-  - changelogIds:
-      - prepare-pdf-paint.md
-      - pdf-render-signal.md
-      - nitro-bun-preset-wasm.md
-      - class-ascii-whitespace.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - pdf-drop-stylesheets.md
+      - named-pages.md
+      - unicode-range-glyph-fallback.md
+      - paged-scrollable-overflow-pages.md
+      - js-dispose.md
+      - pdf-data-uri-image-cache.md
+      - publish-takumi-pdf.md
+      - paged-pdf-line-pages.md
+      - font-face-prepare.md
+      - pdf-row-link-tags.md
+      - paged-monolithic-overflow-lines.md
+      - at-page-rules.md
     id: npm:takumi-pdf
+    updated: true
+  - changelogIds:
+      - register-font-buffer-key.md
+    id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:docs
     updated: false
   - changelogIds:
-      - html-source-input.md
-      - text-input-value.md
-      - html-builtin-parser.md
-      - html-in-core.md
-      - textarea-control.md
-    id: cargo:takumi-html
+      - unicode-range-glyph-fallback.md
+      - js-dispose.md
+      - font-face-prepare.md
+      - register-font-buffer-key.md
+    id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:@takumi-rs/bindings-js
     updated: true
   - changelogIds:
-      - css-counters.md
-      - list-item-ordinal.md
-      - text-input-value.md
-      - class-ascii-whitespace.md
-      - skip-hidden-subtrees.md
-      - paged-overflow-clip-stitched.md
-      - clipped-overflow-pages.md
-      - html-in-core.md
-      - render-needs.md
-      - textarea-control.md
-      - svg-through-html.md
-      - form-state-pseudo-classes.md
-      - png-decode-speed.md
-      - font-resolve-off-main-thread.md
-    id: cargo:takumi-core
+      - unicode-range-glyph-fallback.md
+      - font-face-prepare.md
+      - register-font-buffer-key.md
+    id: npm:@takumi-rs/core
     updated: true
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
   - changelogIds:
-      - render-needs.md
-    id: cargo:takumi-raster
+      - named-pages.md
+      - unicode-range-glyph-fallback.md
+      - paged-scrollable-overflow-pages.md
+      - js-dispose.md
+      - pdf-data-uri-image-cache.md
+      - publish-takumi-pdf.md
+      - paged-pdf-line-pages.md
+      - font-face-prepare.md
+      - pdf-row-link-tags.md
+      - paged-monolithic-overflow-lines.md
+      - at-page-rules.md
+    id: cargo:takumi-pdf
     updated: true
   - id: cargo:takumi-svg
     updated: true
-  - id: cargo:takumi
+  - changelogIds:
+      - font-face-metrics.md
+      - flex-row-forced-breaks.md
+      - named-pages.md
+      - inline-svg-device-pixel-ratio.md
+      - raster-page-rules.md
+      - light-dark-current-color.md
+      - linear-easing.md
+      - position-edge-offsets.md
+      - paged-scrollable-overflow-pages.md
+      - at-property-cycles.md
+      - line-clamp-breaking.md
+      - page-sizes.md
+      - registered-math.md
+      - line-height-negative-calc.md
+      - at-property-types.md
+      - css-math-functions.md
+      - line-clamp-blocks-and-auto.md
+      - paged-monolithic-overflow-lines.md
+      - at-page-rules.md
+      - has-selector.md
+      - light-dark.md
+      - register-font-same-file-weights.md
+      - css-font-face.md
+    id: cargo:takumi-core
     updated: true
   - changelogIds:
-      - prepare-pdf-paint.md
-      - pdf-render-signal.md
-      - nitro-bun-preset-wasm.md
-      - class-ascii-whitespace.md
-      - html-in-bindings.md
-      - font-subsets-from-layout.md
-      - pdf-drop-stylesheets.md
-    id: cargo:takumi-pdf
+      - raster-page-rules.md
+      - position-edge-offsets.md
+    id: cargo:takumi-raster
+    updated: true
+  - id: cargo:takumi-html
+    updated: true
+  - changelogIds:
+      - css-font-face.md
+    id: cargo:takumi
     updated: true
 npm:packages:
   - id: npm:takumi-workspace
   - id: npm:takumi-paint
-  - id: npm:waku-ssr
-  - id: npm:example-satori-html
-  - id: npm:svelte
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-twitter-images
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-css-library-integration
-  - id: npm:example-e-invoice
-  - id: npm:example-tanstack-start
-  - id: npm:ffplay
-  - id: npm:pdf-bench
-  - id: npm:example-nextjs
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/bindings-js
   - id: npm:takumi-js
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/helpers
+  - id: npm:docs
+  - id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/bindings-js
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/image-response
+  - id: npm:waku-ssr
+  - id: npm:example-css-library-integration
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-twitter-images
+  - id: npm:example-e-invoice
+  - id: npm:svelte
+  - id: npm:example-satori-html
   - id: npm:example-liquid-glass
   - id: npm:example-generate-invoice
-  - id: npm:@takumi-rs/core
-  - id: npm:takumi-pdf
-  - id: npm:docs
+  - id: npm:example-tanstack-start
+  - id: npm:example-nextjs
+  - id: npm:ffplay
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:pdf-bench

@@ -3167,6 +3167,97 @@ fn paged_rounded_clip_waits_for_the_whole_box() {
   assert!(first_page.contains("75 -225 c"), "{first_page}");
 }
 
+/// Content a transform or `position: relative` moves past the last page adds the pages it reaches,
+/// as Chromium prints it, while a shadow and content its box clips add none.
+#[test]
+fn content_moved_past_the_last_page_adds_pages() {
+  fn options<'f>(html: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse the document"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 100.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .fonts(fonts)
+      .build()
+  }
+
+  let fonts = fonts();
+  let pages = |html: &str| page_count(&render(options(html, &fonts)).expect("render the document"));
+  let lead = r#"<div style="height: 60px; background: #ddd"></div>"#;
+  let transformed = format!(
+    r#"{lead}<div style="height: 30px; background: #f87171; transform: translateY(120px)"></div>"#
+  );
+
+  assert_eq!(
+    page_count(&run_pdf_fixture(
+      "paged-transform-past-the-last-page",
+      |fonts| { options(&transformed, fonts) }
+    )),
+    3
+  );
+  assert_eq!(
+    pages(&format!(
+      r#"{lead}<div style="height: 30px; background: #f87171; position: relative; top: 120px"></div>"#
+    )),
+    3
+  );
+  assert_eq!(
+    pages(&format!(
+      r#"{lead}<div style="height: 30px; background: #f87171; box-shadow: 0 150px 0 #60a5fa"></div>"#
+    )),
+    1
+  );
+  assert_eq!(
+    pages(
+      r#"<div style="height: 90px; overflow: hidden; background: #ddd"><div style="height: 30px; background: #f87171; transform: translateY(120px)"></div></div>"#
+    ),
+    1
+  );
+  // A clip on the inline axis alone leaves the block axis visible, as Chromium prints it.
+  assert_eq!(
+    pages(
+      r#"<div style="height: 90px; overflow-x: clip; background: #ddd"><div style="height: 30px; background: #f87171; transform: translateY(120px)"></div></div>"#
+    ),
+    2
+  );
+  assert_eq!(
+    pages(
+      r#"<div style="height: 90px; overflow-x: hidden; background: #ddd"><div style="height: 30px; background: #f87171; transform: translateY(120px)"></div></div>"#
+    ),
+    1
+  );
+  // Scaling the clipping box leaves its block axis unbounded.
+  assert_eq!(
+    pages(
+      r#"<div style="height: 90px; overflow-x: clip; background: #ddd; transform: scale(0.1); transform-origin: 0 0"><div style="height: 30px; background: #f87171; transform: translateY(1200px)"></div></div>"#
+    ),
+    2
+  );
+  // An absolute box moved past the last page adds none, as Chromium prints it.
+  assert_eq!(
+    pages(&format!(
+      r#"{lead}<div style="position: absolute; top: 60px; height: 30px; width: 50px; background: #f87171; transform: translateY(120px)"></div>"#
+    )),
+    1
+  );
+  // A box on the first page moved past the content's second.
+  assert_eq!(
+    pages(
+      r#"<div style="height: 30px; background: #f87171; transform: translateY(380px)"></div><div style="height: 150px; background: #ddd"></div>"#
+    ),
+    5
+  );
+  // Lines that overflow a box too short for them.
+  assert_eq!(
+    pages(&format!(
+      r#"{lead}<div style="height: 30px; line-height: 40px; font-size: 20px">One<br>Two<br>Three</div>"#
+    )),
+    3
+  );
+}
+
 /// A line taller than a page moves to the next page, as content precedes it, then runs on over the
 /// page after it, where its text and the lines after it follow.
 #[test]
@@ -7111,7 +7202,7 @@ fn paged_lines_under_a_transform_or_a_clip() {
     (&rotated, &[1, 1]),
     (&clipped, &[3]),
     (&at_page_edge, &[1]),
-    (&translated_off, &[1]),
+    (&translated_off, &[0, 1]),
   ] {
     let pages = text_shows_per_page(pdf);
     let shows = pages.iter().flatten().collect::<HashSet<_>>();

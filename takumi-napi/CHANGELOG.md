@@ -1,3 +1,17 @@
+## @takumi-rs/core@2.20.0
+
+### A `unicodeRange` subset without a glyph falls back to the next family again
+
+A font in `fonts` whose `unicodeRange` claims a character it has no glyph for now hands that character on to the next family in the stack, as a browser does and as 0.18 did. Before, the render left the next family's subset unloaded. The PDF render then failed with "No registered font covers". That error now reads "No font the text can use draws", and suggests checking each font's `unicodeRange` and the `font-family` stack, because a registered font can have the glyph and still be out of reach.
+
+### `prepare` downloads the fonts `@font-face` rules load
+
+An `@font-face` rule in `css` or a `<style>` element now loads its font in `prepare`, `render`, and `ImageResponse`. A `src` that fails to download falls back to the next one.
+
+### `registerFont` registers one buffer again under another name, weight, style or `unicodeRange`
+
+Passing the same `data` buffer to `registerFont` a second time with other descriptors used to return the first registration, so the new family or weight never existed. Each set of descriptors now registers its own face, as `@font-face` rules sharing one `src` do. A lazy font's key includes its `unicodeRange` too.
+
 ## @takumi-rs/core@2.19.0
 
 ### Renderers take HTML directly
