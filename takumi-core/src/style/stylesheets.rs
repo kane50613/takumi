@@ -1192,6 +1192,13 @@ macro_rules! define_style {
           } else {
             TextOverflow::Clip
           };
+          // Approximate: an anonymous flex or grid item clamps lines for the box it stands in
+          // for, which Blink does not clamp. Among block-level siblings it clamps nothing itself.
+          let display = parent.base_data.display;
+
+          if !display.is_flex() && !display.is_grid() {
+            style.misc_data_mut().r#continue = Continue::Normal;
+          }
           style
         }
 
@@ -1679,7 +1686,7 @@ define_style! {
     }
     /// Blink's `misc->misc3` field group, which Blink nests in `misc`.
     misc3_data: StyleMisc3Data {
-      max_lines: Option<u32> where anonymous = true,
+      max_lines: MaxLines where anonymous = true,
       object_position: PositionValue where anonymous = true = PositionValue::center(),
       offset_anchor: OffsetAnchor,
       offset_distance: Length,

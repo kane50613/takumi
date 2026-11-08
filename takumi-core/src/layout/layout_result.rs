@@ -1,6 +1,5 @@
 //! Blink's [`LayoutResult`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/layout_result.h):
-//! what laying out a block-level box gives its container, without columns, line clamp, or
-//! `text-box-trim`.
+//! what laying out a block-level box gives its container, without columns or `text-box-trim`.
 
 use std::rc::Rc;
 
@@ -33,6 +32,8 @@ pub(crate) enum LayoutStatus {
   Success,
   /// The layout stopped once it resolved its block offset, which moved the floats before it.
   BfcBlockOffsetResolved,
+  /// A `line-clamp: auto` container measured where it clamps, so it lays out again to clamp there.
+  NeedsLineClampRelayout,
   /// The layout ran out of space where a breakpoint seen earlier is better, so it lays out again
   /// to break there.
   #[cfg(feature = "fragmentation")]
@@ -291,8 +292,11 @@ pub(crate) struct LayoutResult {
   pub(crate) line_box_bfc_block_offset: Option<LayoutUnit>,
   /// Blink's `ClearanceAfterLine`: the space a `<br clear>` adds after a line box.
   pub(crate) clearance_after_line: LayoutUnit,
-  /// Blink's `LinesUntilClamp`, after a line box.
+  /// Blink's `LinesUntilClamp`, after a line box or a block in the same formatting context.
   pub(crate) lines_until_clamp: Option<i32>,
+  /// Blink's `LineClampAfterLayoutObject`: the lineless box a `line-clamp: auto` container clamps
+  /// right after.
+  pub(crate) line_clamp_after_layout_object: Option<NodeId>,
   pub(crate) end_margin_strut: MarginStrut,
   /// The floats of the block formatting context after the box.
   pub(crate) exclusion_space: Rc<ExclusionSpace>,
@@ -306,6 +310,8 @@ pub(crate) struct LayoutResult {
   pub(crate) use_last_baseline_for_inline_baseline: bool,
   /// Blink's `IsLineClampClippedFloat`: a float its line-clamp container clips.
   pub(crate) is_line_clamp_clipped_float: bool,
+  /// Blink's `IsHiddenDueToLayout`: the box is past its `line-clamp` point.
+  pub(crate) is_hidden_due_to_layout: bool,
   /// The out-of-flow boxes inside that their containing block has yet to place.
   pub(crate) out_of_flow: Vec<OutOfFlowCandidate>,
   /// Blink's `TableSectionCollapsedBordersGeometry`: the table row a section fragment's rows start
@@ -415,6 +421,7 @@ impl LayoutResult {
       line_box_bfc_block_offset: None,
       clearance_after_line: LayoutUnit::ZERO,
       lines_until_clamp: None,
+      line_clamp_after_layout_object: None,
       end_margin_strut: MarginStrut::default(),
       exclusion_space: ExclusionSpace::empty(),
       adjoining_object_types: AdjoiningObjectTypes::empty(),
@@ -424,6 +431,7 @@ impl LayoutResult {
       last_baseline: None,
       use_last_baseline_for_inline_baseline: false,
       is_line_clamp_clipped_float: false,
+      is_hidden_due_to_layout: false,
       out_of_flow: Vec::new(),
       table_section_row_offsets: None,
       #[cfg(feature = "fragmentation")]

@@ -1,12 +1,12 @@
 use std::fmt;
 
-use cssparser::{Parser, serialize_string};
+use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser, serialize_string};
 
 use crate::style::{
   Animatable, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum, tw::TailwindPropertyParser,
 };
 
-/// `block-ellipsis`: `none | auto | <string>`. Inherited.
+/// `block-ellipsis`: `no-ellipsis | auto | <string>`. Inherited.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub enum BlockEllipsis {
@@ -24,7 +24,11 @@ impl Animatable for BlockEllipsis {}
 
 impl<'i> FromCss<'i> for BlockEllipsis {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+    if input
+      .try_parse(|i| i.expect_ident_matching("no-ellipsis"))
+      .or_else(|_| input.try_parse(|i| i.expect_ident_matching("none")))
+      .is_ok()
+    {
       return Ok(Self::None);
     }
     if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
@@ -33,13 +37,13 @@ impl<'i> FromCss<'i> for BlockEllipsis {
     Ok(Self::String(input.expect_string_cloned()?.to_string()))
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["none", "auto", "<string>"];
+  const VALID_TOKENS: &'static [&'static str] = &["no-ellipsis", "auto", "<string>"];
 }
 
 impl ToCss for BlockEllipsis {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::None => dest.write_str("none"),
+      Self::None => dest.write_str("no-ellipsis"),
       Self::Auto => dest.write_str("auto"),
       Self::String(value) => serialize_string(value, dest),
     }
@@ -71,12 +75,93 @@ impl_css_enum!(
   "-webkit-legacy" => Continue::WebkitLegacy,
 );
 
+/// `max-lines`: `<integer [1,∞]> || auto`, as Blink's `MaxLinesData` has it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct MaxLines {
+  /// The lines before the clamp point, none to clamp by the block size alone.
+  pub lines: Option<u32>,
+  /// Blink's `HasAutoKeyword`: also clamp where the content overflows the box's maximum block
+  /// size, as a missing count implies.
+  pub auto: bool,
+}
+
+impl MaxLines {
+  /// `lines` before the clamp point, and `auto` if given.
+  pub fn new(lines: Option<u32>, auto: bool) -> Self {
+    Self {
+      lines,
+      auto: auto || lines.is_none(),
+    }
+  }
+}
+
+impl Default for MaxLines {
+  fn default() -> Self {
+    Self::new(None, true)
+  }
+}
+
+impl MakeComputed for MaxLines {}
+impl Animatable for MaxLines {}
+
+impl<'i> FromCss<'i> for MaxLines {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(Self::default());
+    }
+
+    let mut lines = None;
+    let mut auto = false;
+
+    loop {
+      if !auto && input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+        auto = true;
+      } else if lines.is_none()
+        && let Ok(count) = input.try_parse(parse_positive_integer)
+      {
+        lines = Some(count);
+      } else {
+        break;
+      }
+    }
+
+    if lines.is_none() && !auto {
+      return Err(input.new_error_for_next_token());
+    }
+
+    Ok(Self::new(lines, auto))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &["<integer>", "auto"];
+}
+
+impl ToCss for MaxLines {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self.lines {
+      Some(lines) if self.auto => write!(dest, "{lines} auto"),
+      Some(lines) => write!(dest, "{lines}"),
+      None => dest.write_str("auto"),
+    }
+  }
+}
+
+/// A CSS `<integer [1,∞]>`.
+fn parse_positive_integer<'i>(input: &mut Parser<'i>) -> ParseResult<'i, u32> {
+  match u32::from_css(input)? {
+    0 => Err(CssParseError::from_basic_kind(
+      BasicParseErrorKind::QualifiedRuleInvalid,
+    )),
+    count => Ok(count),
+  }
+}
+
 /// The `line-clamp` shorthand of `max-lines`, `block-ellipsis`, and `continue`.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub struct LineClamp {
   /// `max-lines` longhand.
-  pub max_lines: Option<u32>,
+  pub max_lines: MaxLines,
   /// `block-ellipsis` longhand.
   pub block_ellipsis: BlockEllipsis,
   /// `continue` longhand.
@@ -84,10 +169,10 @@ pub struct LineClamp {
 }
 
 impl LineClamp {
-  fn clamp(max_lines: Option<u32>, block_ellipsis: BlockEllipsis) -> Self {
+  fn clamp(lines: u32) -> Self {
     Self {
-      max_lines,
-      block_ellipsis,
+      max_lines: MaxLines::new(Some(lines), false),
+      block_ellipsis: BlockEllipsis::Auto,
       line_continue: Continue::Collapse,
     }
   }
@@ -96,7 +181,7 @@ impl LineClamp {
 impl From<u32> for LineClamp {
   fn from(count: u32) -> Self {
     if count >= 1 {
-      Self::clamp(Some(count), BlockEllipsis::Auto)
+      Self::clamp(count)
     } else {
       Self::default()
     }
@@ -106,26 +191,52 @@ impl From<u32> for LineClamp {
 impl MakeComputed for LineClamp {}
 
 impl<'i> FromCss<'i> for LineClamp {
+  /// Blink's `AlternativeLineClampShorthand::ParseShorthand`, with a `<string>` ellipsis too.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::default());
     }
 
-    let count = input.expect_integer()?;
-    if count < 1 {
-      return Ok(Self::default());
+    let mut lines = None;
+    let mut auto = false;
+    let mut block_ellipsis = None;
+    let mut line_continue = Continue::Collapse;
+
+    while !input.is_exhausted() {
+      if input
+        .try_parse(|i| i.expect_ident_matching("-webkit-legacy"))
+        .is_ok()
+      {
+        line_continue = Continue::WebkitLegacy;
+        break;
+      }
+      if !auto && input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+        auto = true;
+      } else if block_ellipsis.is_none()
+        && let Ok(value) = input.try_parse(BlockEllipsis::from_css)
+      {
+        block_ellipsis = Some(value);
+      } else if lines.is_none()
+        && let Ok(count) = input.try_parse(parse_positive_integer)
+      {
+        lines = Some(count);
+      } else {
+        break;
+      }
     }
 
-    let block_ellipsis = if input.is_exhausted() {
-      BlockEllipsis::Auto
-    } else {
-      BlockEllipsis::from_css(input)?
-    };
+    if lines.is_none() && !auto && block_ellipsis.is_none() {
+      return Err(input.new_error_for_next_token());
+    }
 
-    Ok(Self::clamp(Some(count as u32), block_ellipsis))
+    Ok(Self {
+      max_lines: MaxLines::new(lines, auto),
+      block_ellipsis: block_ellipsis.unwrap_or(BlockEllipsis::Auto),
+      line_continue,
+    })
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["none", "<integer>", "<string>"];
+  const VALID_TOKENS: &'static [&'static str] = &["none", "<integer>", "auto", "<string>"];
 }
 
 /// Parsed `-webkit-line-clamp` legacy shorthand: `none | <integer>`, which expands as
@@ -149,9 +260,8 @@ impl<'i> FromCss<'i> for WebkitLineClamp {
     }
 
     Ok(Self(LineClamp {
-      max_lines: Some(count as u32),
-      block_ellipsis: BlockEllipsis::Auto,
       line_continue: Continue::WebkitLegacy,
+      ..LineClamp::clamp(count as u32)
     }))
   }
 
@@ -169,7 +279,7 @@ impl TailwindPropertyParser for LineClamp {
     if count == 0 {
       return None;
     }
-    Some(Self::clamp(Some(count), BlockEllipsis::Auto))
+    Some(Self::clamp(count))
   }
 }
 
@@ -181,6 +291,7 @@ mod tests {
   #[test]
   fn test_parse_block_ellipsis() {
     for (css, expected) in [
+      ("no-ellipsis", BlockEllipsis::None),
       ("none", BlockEllipsis::None),
       ("auto", BlockEllipsis::Auto),
       ("\"foo\"", BlockEllipsis::String("foo".to_string())),
@@ -195,7 +306,7 @@ mod tests {
 
   #[test]
   fn test_block_ellipsis_round_trip() {
-    for css in ["none", "auto", "\"foo\""] {
+    for css in ["no-ellipsis", "auto", "\"foo\""] {
       let parsed = BlockEllipsis::from_css_str(css).unwrap();
       let reparsed = BlockEllipsis::from_css_str(&parsed.to_css_string()).unwrap();
       assert_eq!(parsed, reparsed, "failed for {css}");
@@ -211,23 +322,43 @@ mod tests {
   fn test_parse_line_clamp() {
     for (css, expected) in [
       ("none", LineClamp::default()),
-      (
-        "3",
-        LineClamp {
-          max_lines: Some(3),
-          block_ellipsis: BlockEllipsis::Auto,
-          line_continue: Continue::Collapse,
-        },
-      ),
+      ("3", LineClamp::clamp(3)),
       (
         "2 \"foo\"",
         LineClamp {
-          max_lines: Some(2),
           block_ellipsis: BlockEllipsis::String("foo".to_string()),
+          ..LineClamp::clamp(2)
+        },
+      ),
+      (
+        "auto",
+        LineClamp {
+          max_lines: MaxLines::new(None, true),
+          ..LineClamp::clamp(1)
+        },
+      ),
+      (
+        "4 auto",
+        LineClamp {
+          max_lines: MaxLines::new(Some(4), true),
+          ..LineClamp::clamp(4)
+        },
+      ),
+      (
+        "auto no-ellipsis",
+        LineClamp {
+          max_lines: MaxLines::new(None, true),
+          block_ellipsis: BlockEllipsis::None,
           line_continue: Continue::Collapse,
         },
       ),
-      ("0", LineClamp::default()),
+      (
+        "2 -webkit-legacy",
+        LineClamp {
+          line_continue: Continue::WebkitLegacy,
+          ..LineClamp::clamp(2)
+        },
+      ),
     ] {
       assert_eq!(
         LineClamp::from_css_str(css),
@@ -241,5 +372,15 @@ mod tests {
   fn test_parse_line_clamp_invalid() {
     assert!(LineClamp::from_css_str("bogus").is_err());
     assert!(LineClamp::from_css_str("1.5").is_err());
+    assert!(LineClamp::from_css_str("0").is_err());
+  }
+
+  #[test]
+  fn test_max_lines_round_trip() {
+    for (css, serialized) in [("3", "3"), ("auto 3", "3 auto"), ("auto", "auto")] {
+      let parsed = MaxLines::from_css_str(css).unwrap();
+
+      assert_eq!(parsed.to_css_string(), serialized, "failed for {css}");
+    }
   }
 }

@@ -159,6 +159,7 @@ impl<'c> UnpositionedFloat<'c> {
     space.percentage_resolution_block_size = self.percentage_size.block_size;
     space.is_new_formatting_context = true;
     space.cache_slot = self.cache_slot;
+    space.is_hidden_due_to_layout = self.line_clamp_state == LineClampFloatState::Hide;
     space.is_line_clamp_clipped_float = self.line_clamp_state == LineClampFloatState::Clip;
     space
   }

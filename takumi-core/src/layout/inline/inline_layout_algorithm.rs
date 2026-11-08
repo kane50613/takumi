@@ -360,7 +360,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       space.inline_size(),
       space.direction,
     );
-    let mut lines_until_clamp = space.line_clamp_data.lines_until_clamp;
+    let mut lines_until_clamp = space.line_clamp_data.lines_until_clamp(true);
     let line_break_strategy = LineBreakStrategy::new(
       self.context,
       self.node.block.context.style.inherited_data.text_wrap_style,
@@ -519,6 +519,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         end_margin_strut = result.end_margin_strut;
         self.container_builder.exclusion_space = (*result.exclusion_space).clone();
         self.adjoining_object_types = result.adjoining_object_types;
+        lines_until_clamp = result.lines_until_clamp;
       }
 
       // A line taller than the opportunity tries the next one.
@@ -550,13 +551,18 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       } else {
         self.add_any_clearance_after_line(&line_info);
         self.container_builder.block_size = self.container_builder.line_height();
-        // Approximate: a block-in-inline counts as one line, as block layouts carry no
-        // `LinesUntilClamp`.
-        lines_until_clamp = lines_until_clamp.map(|lines| lines - 1);
 
         // Margins collapse only through an empty line.
         if !line_info.is_block_in_inline {
           end_margin_strut = MarginStrut::default();
+          // Clamping counts the lines down, measuring counts them up.
+          let step = if space.line_clamp_data.is_clamp_by_lines() {
+            -1
+          } else {
+            1
+          };
+
+          lines_until_clamp = lines_until_clamp.map(|lines| lines + step);
         }
 
         // The line placed the objects adjoining it.

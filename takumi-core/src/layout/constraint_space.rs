@@ -1,5 +1,5 @@
 //! Blink's [`ConstraintSpace`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/constraint_space.h):
-//! the constraints a box lays out under, without writing modes, columns, or line clamp relayout.
+//! the constraints a box lays out under, without writing modes or columns.
 
 use std::rc::Rc;
 
@@ -9,8 +9,11 @@ use bitflags::bitflags;
 use crate::{layout::break_appeal::BreakAppeal, style::PageName};
 use crate::{
   layout::{
-    bfc_rect::BfcOffset, exclusions::exclusion_space::ExclusionSpace,
-    line_clamp_data::LineClampData, logical_rect::AvailableLogicalSize, margin_strut::MarginStrut,
+    bfc_rect::BfcOffset,
+    exclusions::exclusion_space::ExclusionSpace,
+    line_clamp_data::{LineClampAncestorChain, LineClampData},
+    logical_rect::AvailableLogicalSize,
+    margin_strut::MarginStrut,
     table::TablePartSpace,
   },
   layout_unit::LayoutUnit,
@@ -75,8 +78,12 @@ pub(crate) struct ConstraintSpace {
   pub(crate) percentage_resolution_block_size: Option<LayoutUnit>,
   /// Blink's `GetLineClampData`.
   pub(crate) line_clamp_data: LineClampData,
+  /// Blink's `GetLineClampAncestorChain`.
+  pub(crate) line_clamp_ancestor_chain: Option<Rc<LineClampAncestorChain>>,
   /// Blink's `IsLineClampClippedFloat`: a float a line-clamp container clips.
   pub(crate) is_line_clamp_clipped_float: bool,
+  /// Blink's `IsHiddenDueToLayout`: the box is past its `line-clamp` point.
+  pub(crate) is_hidden_due_to_layout: bool,
   pub(crate) is_fixed_inline_size: bool,
   pub(crate) is_fixed_block_size: bool,
   pub(crate) inline_auto_behavior: AutoSizeBehavior,
@@ -149,7 +156,9 @@ impl ConstraintSpace {
       percentage_resolution_inline_size: available_inline_size,
       percentage_resolution_block_size: None,
       line_clamp_data: LineClampData::default(),
+      line_clamp_ancestor_chain: None,
       is_line_clamp_clipped_float: false,
+      is_hidden_due_to_layout: false,
       is_fixed_inline_size: false,
       is_fixed_block_size: false,
       inline_auto_behavior: AutoSizeBehavior::FitContent,

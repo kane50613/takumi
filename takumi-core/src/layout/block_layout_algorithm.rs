@@ -47,7 +47,7 @@ use crate::{
       LengthResolver, child_available_size, child_percentage_size, margins_for,
       resolve_inline_auto_margins,
     },
-    line_clamp_data::LineClampData,
+    line_clamp_data::{LineClampAncestorChain, LineClampData, LineClampState},
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
     margin_strut::MarginStrut,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
@@ -67,52 +67,131 @@ pub(crate) struct PreviousInflowPosition {
   pub(crate) self_collapsing_child_had_clearance: bool,
 }
 
-/// Blink's `BlockLineClampData`, clamping by lines alone. Approximate: a block child's lines do not
-/// count toward its container's clamp, so only the clamp container's own lines clamp.
-#[derive(Debug, Clone, Copy, Default)]
+/// Blink's `BlockLineClampData`.
+#[derive(Debug, Clone, Default)]
 struct BlockLineClampData {
   data: LineClampData,
   ignore_line_clamp: bool,
+  /// The position after the last line or box before the clamp point, once the box clamped.
   previous_inflow_position_when_clamped: Option<PreviousInflowPosition>,
+  /// The lineless box laid out since the last line, while measuring.
+  last_layout_object: Option<NodeId>,
+  /// The boxes from here up to the line-clamp container, while measuring.
+  ancestor_chain: Option<Rc<LineClampAncestorChain>>,
 }
 
 impl BlockLineClampData {
-  /// Blink's `Setup`: the clamp a `line-clamp` sets, else the one the space passes down.
-  fn setup(&mut self, line_clamp: Option<u32>, space: &ConstraintSpace) {
-    self.data = match line_clamp {
-      Some(_) if self.ignore_line_clamp => LineClampData::default(),
-      Some(lines) => LineClampData {
-        lines_until_clamp: Some(lines as i32),
-      },
-      None => space.line_clamp_data,
-    };
-  }
-
   /// Blink's `ShouldRelayoutWithNoForcedTruncate`: no line followed the clamp line.
   fn should_relayout_with_no_forced_truncate(&self) -> bool {
-    self.previous_inflow_position_when_clamped.is_some() && self.data.lines_until_clamp == Some(0)
+    self.previous_inflow_position_when_clamped.is_some() && self.data.lines_until_clamp == 0
   }
 
-  /// Blink's `UpdateAfterLayout`, the child laid out as `result` ending at `previous`.
+  /// Blink's `UpdateAfterLayout`, the child laid out as `result` ending at `previous`, in a box
+  /// whose block offset is `bfc_block_offset`. False when the child went past the clamp block
+  /// offset, to lay out again clamping before it.
   fn update_after_layout(
     &mut self,
     result: &LayoutResult,
     previous: &PreviousInflowPosition,
-    is_line_box: bool,
-  ) {
-    let Some(old_lines_until_clamp) = self.data.lines_until_clamp else {
-      return;
-    };
+    child: ClampedChild,
+    bfc_block_offset: Option<LayoutUnit>,
+  ) -> bool {
+    let mut old_lines_until_clamp = 0;
 
-    if is_line_box {
-      self.data.lines_until_clamp = result.lines_until_clamp;
-    } else if old_lines_until_clamp == 0 {
+    if self.data.is_clamp_by_lines() || self.data.is_count_lines() {
+      old_lines_until_clamp = self.data.lines_until_clamp;
+      if !matches!(child, ClampedChild::FormattingContextRoot(_))
+        && let Some(lines_until_clamp) = result.lines_until_clamp
+      {
+        self.data.lines_until_clamp = lines_until_clamp;
+      }
+
       // A lineless box right after the clamp point is content after it.
-      self.data.lines_until_clamp = Some(-1);
+      if self.data.is_clamp_by_lines()
+        && child != ClampedChild::LineBox
+        && old_lines_until_clamp == 0
+        && self.data.lines_until_clamp == 0
+      {
+        self.data.lines_until_clamp = -1;
+      }
+    }
+
+    // A measuring box always has an ancestor chain.
+    if self.data.is_measure_until_bfc_offset()
+      && self.previous_inflow_position_when_clamped.is_none()
+      && let Some(ancestor_chain) = &self.ancestor_chain
+    {
+      // An empty child before the box's block offset resolves is no clamp point.
+      if bfc_block_offset.is_none() {
+        return true;
+      }
+
+      let block_size = ancestor_chain
+        .final_line_clamp_block_size(previous.logical_block_offset, previous.margin_strut);
+
+      if block_size > self.data.clamp_bfc_offset {
+        self.data.lines_until_clamp = old_lines_until_clamp;
+        return false;
+      }
+
+      if old_lines_until_clamp == self.data.lines_until_clamp
+        || result.line_clamp_after_layout_object.is_some()
+      {
+        if let Some(node) = child.node() {
+          self.last_layout_object = Some(node);
+        }
+      } else {
+        self.last_layout_object = None;
+      }
     }
 
     if self.data.is_past_clamp_point() && self.previous_inflow_position_when_clamped.is_none() {
       self.previous_inflow_position_when_clamped = Some(*previous);
+    }
+
+    // Once past the box to clamp after, the box clamps as if by lines.
+    if self.data.state == LineClampState::ClampAfterLayoutObject
+      && (result.lines_until_clamp.is_some_and(|lines| lines < 0)
+        || self.data.clamp_after_layout_object == child.node())
+    {
+      self.data.state = LineClampState::ClampByLines;
+      self.data.lines_until_clamp = -1;
+      self.previous_inflow_position_when_clamped = Some(*previous);
+    }
+
+    true
+  }
+
+  /// Blink's `PropagateClampAfterLayoutObject`: the box to clamp after that a child `result` that
+  /// went past the clamp block offset hands up.
+  fn propagate_clamp_after_layout_object(&self, result: &LayoutResult) -> Option<NodeId> {
+    if result.line_clamp_after_layout_object.is_some() {
+      return result.line_clamp_after_layout_object;
+    }
+    if result.lines_until_clamp != Some(self.data.lines_until_clamp) {
+      return None;
+    }
+
+    self.last_layout_object
+  }
+}
+
+/// The kind of in-flow child Blink's `BlockLineClampData::UpdateAfterLayout` counts the lines of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClampedChild {
+  LineBox,
+  /// A block in the same formatting context, whose lines count.
+  Block(NodeId),
+  /// A new formatting context, whose lines do not.
+  FormattingContextRoot(NodeId),
+}
+
+impl ClampedChild {
+  /// The box, none for a line box.
+  fn node(self) -> Option<NodeId> {
+    match self {
+      Self::LineBox => None,
+      Self::Block(node) | Self::FormattingContextRoot(node) => Some(node),
     }
   }
 }
@@ -480,7 +559,11 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
   /// The layout as far as it got, to lay out again once the container moved it.
   fn abort(&self, status: LayoutStatus) -> LayoutResult {
-    LayoutResult::aborted(status, self.bfc_block_offset, self.is_pushed_by_floats)
+    LayoutResult {
+      lines_until_clamp: self.line_clamp_data.data.lines_until_clamp(true),
+      line_clamp_after_layout_object: self.line_clamp_data.last_layout_object,
+      ..LayoutResult::aborted(status, self.bfc_block_offset, self.is_pushed_by_floats)
+    }
   }
 
   /// Blink's `Layout`, and its `HandleNonsuccessfulLayoutResult` for a clamp that hid no line.
@@ -502,6 +585,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     });
     let (mut previous, lines) = match status {
       Ok(laid_out) => laid_out,
+      Err(LayoutStatus::NeedsLineClampRelayout) => return self.relayout_for_line_clamp(),
       Err(status) => return self.handle_nonsuccessful_layout_result(status),
     };
 
@@ -534,6 +618,52 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     self
   }
 
+  /// Blink's `HandleNonsuccessfulLayoutResult` for `kNeedsLineClampRelayout`: the line-clamp
+  /// container laid out again to clamp where it measured, or the status handed up to it.
+  fn relayout_for_line_clamp(self) -> LayoutResult {
+    let measured = &self.line_clamp_data;
+
+    if !measured.data.is_measure_until_bfc_offset() {
+      return self.relayout_ignoring_line_clamp();
+    }
+    if !self.space.is_new_formatting_context {
+      return self.abort(LayoutStatus::NeedsLineClampRelayout);
+    }
+
+    let mut data = LineClampData::default();
+
+    if let Some(node) = measured.last_layout_object {
+      // Blink's `RelayoutClampingAfterLayoutObject`.
+      data.state = LineClampState::ClampAfterLayoutObject;
+      data.clamp_after_layout_object = Some(node);
+    } else {
+      // Blink's `RelayoutClampingByLines`. Clamping by lines too counted them down from
+      // `max-lines`.
+      let lines_until_clamp = if measured.data.is_clamp_by_lines() {
+        let max_lines = self
+          .tree
+          .render_node(self.node)
+          .context
+          .style
+          .line_clamp()
+          .and_then(|max_lines| max_lines.lines)
+          .unwrap_or(0);
+
+        max_lines as i32 - measured.data.lines_until_clamp
+      } else {
+        measured.data.lines_until_clamp
+      };
+
+      data.state = LineClampState::ClampByLines;
+      data.lines_until_clamp = lines_until_clamp.max(0);
+    }
+
+    let mut relayout = Self::new(self.tree, self.node, self.space, &self.input);
+
+    relayout.line_clamp_data.data = data;
+    relayout.layout()
+  }
+
   /// Blink's `Layout` up to the children: the margins coming in, the offset resolved where none
   /// collapses through the block start, and the clamp set up.
   pub(in crate::layout) fn start_layout(&mut self) -> Result<PreviousInflowPosition, LayoutStatus> {
@@ -547,9 +677,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       self.abort_when_bfc_block_offset_updated = true;
     }
 
-    let line_clamp = self.tree.render_node(self.node).context.style.line_clamp();
-
-    self.line_clamp_data.setup(line_clamp, space);
+    self.setup_line_clamp_data();
 
     let content_edge = self.border_padding.block_start;
     let mut previous = PreviousInflowPosition {
@@ -575,7 +703,80 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
+    // A clamp by the block size can clamp before anything in the container.
+    if space.is_new_formatting_context && self.line_clamp_data.data.is_past_clamp_point() {
+      self.line_clamp_data.previous_inflow_position_when_clamped = Some(previous);
+    }
+
     Ok(previous)
+  }
+
+  /// Blink's `BlockLineClampData::Setup`: the clamp a `line-clamp` sets, else the one the space
+  /// passes down, with this box in the ancestor chain of a clamp by the block size.
+  fn setup_line_clamp_data(&mut self) {
+    let space = self.space;
+    let resolver = LengthResolver::new(space, &self.style);
+
+    if let Some(max_lines) = self.tree.render_node(self.node).context.style.line_clamp() {
+      let line_clamp_data = &mut self.line_clamp_data;
+
+      // A relayout keeps the clamp it was given.
+      if line_clamp_data.data.is_line_clamp_context() || line_clamp_data.ignore_line_clamp {
+        return;
+      }
+
+      let clamp_bfc_offset = if max_lines.auto {
+        match self.child_available_size.block_size {
+          Some(block_size) => Some(block_size + self.border_padding.block_sum()),
+          None => Some(resolver.initial_min_max_block_sizes(None).max_size)
+            .filter(|&max_size| max_size != LayoutUnit::MAX),
+        }
+      } else {
+        None
+      };
+      let data = &mut line_clamp_data.data;
+
+      data.lines_until_clamp = max_lines.lines.map_or(0, |lines| lines as i32);
+      if let Some(clamp_bfc_offset) = clamp_bfc_offset {
+        data.state = if data.lines_until_clamp != 0 {
+          LineClampState::ClampByLinesWithBfcOffset
+        } else {
+          LineClampState::MeasureLinesUntilBfcOffset
+        };
+        data.clamp_bfc_offset = clamp_bfc_offset;
+        line_clamp_data.ancestor_chain = Some(Rc::new(LineClampAncestorChain::root(
+          self.border_padding.block_end,
+        )));
+      } else if data.lines_until_clamp != 0 {
+        data.state = LineClampState::ClampByLines;
+      }
+
+      return;
+    }
+
+    self.line_clamp_data.data = space.line_clamp_data;
+
+    if !self.line_clamp_data.data.is_measure_until_bfc_offset() {
+      return;
+    }
+
+    let block_min_max_sizes = resolver.initial_min_max_block_sizes(None);
+
+    // A clamp point in a box of a fixed block size would not shrink the container, but the
+    // ancestors still count its lines. A measuring container always passes its ancestor chain.
+    if self.child_available_size.block_size.is_some()
+      || block_min_max_sizes.min_size == block_min_max_sizes.max_size
+    {
+      self.line_clamp_data.data.state = LineClampState::CountLines;
+    } else if let Some(parent) = space.line_clamp_ancestor_chain.clone() {
+      self.line_clamp_data.ancestor_chain = Some(Rc::new(LineClampAncestorChain::child(
+        space.expected_bfc_block_offset(),
+        self.border_padding.block_end,
+        resolver.margins_for_self().block_end,
+        block_min_max_sizes,
+        parent,
+      )));
+    }
   }
 
   /// The loop over the children in Blink's `Layout`.
@@ -799,6 +1000,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
     if !space.is_new_formatting_context {
       result.exclusion_space = self.exclusion_space.into_rc();
+      result.lines_until_clamp = self.line_clamp_data.data.lines_until_clamp(true);
+      result.line_clamp_after_layout_object = self.line_clamp_data.last_layout_object;
     }
 
     LayoutResult {
@@ -1346,11 +1549,6 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     builder.percentage_resolution_block_size = self.child_percentage_size.block_size;
     builder.is_new_formatting_context = is_new_fc;
     builder.cache_slot = space.cache_slot;
-    // Approximate: only the lines count toward the clamp, a block child getting the one above.
-    builder.line_clamp_data = match child {
-      Some(_) => space.line_clamp_data,
-      None => self.line_clamp_data.data,
-    };
 
     let has_bfc_block_offset = self.bfc_block_offset.is_some();
 
@@ -1393,6 +1591,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       if !has_bfc_block_offset {
         builder.adjoining_object_types = self.adjoining_object_types;
       }
+      builder.line_clamp_data = self.line_clamp_data.data;
+      builder.line_clamp_ancestor_chain = self.line_clamp_data.ancestor_chain.clone();
+    }
+
+    if self.line_clamp_data.data.is_past_clamp_point() {
+      builder.is_hidden_due_to_layout = true;
     }
 
     if !space.is_new_formatting_context {
@@ -1542,6 +1746,14 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       &result,
       false,
     );
+    if !self.line_clamp_data.update_after_layout(
+      &result,
+      previous,
+      ClampedChild::FormattingContextRoot(child),
+      self.bfc_block_offset,
+    ) {
+      return Err(LayoutStatus::NeedsLineClampRelayout);
+    }
     self.update_break_opportunity_before_next_child(&result, Some(&child_break_token));
 
     Ok(())
@@ -1858,6 +2070,15 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       }
     }
 
+    // A child that went past the clamp block offset hands the clamp point up to the container.
+    if result.status == LayoutStatus::NeedsLineClampRelayout {
+      let clamp_after = self
+        .line_clamp_data
+        .propagate_clamp_after_layout_object(&result);
+
+      self.line_clamp_data.data.lines_until_clamp = result.lines_until_clamp.unwrap_or(0);
+      self.line_clamp_data.last_layout_object = clamp_after;
+    }
     if result.status != LayoutStatus::Success {
       return Err(result.status);
     }
@@ -1947,11 +2168,19 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       &result,
       self_collapsing_child_had_clearance,
     );
-    self.line_clamp_data.update_after_layout(
+    let clamped_child = match child {
+      InflowChild::Inline(_) => ClampedChild::LineBox,
+      InflowChild::Block(node, _) => ClampedChild::Block(node),
+    };
+
+    if !self.line_clamp_data.update_after_layout(
       &result,
       previous,
-      matches!(child, InflowChild::Inline(_)),
-    );
+      clamped_child,
+      self.bfc_block_offset,
+    ) {
+      return Err(LayoutStatus::NeedsLineClampRelayout);
+    }
     self.update_break_opportunity_before_next_child(&result, child_break_token.as_ref());
 
     Ok(())
@@ -2089,8 +2318,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
   ) {
     let algorithm = self.space.baseline_algorithm;
 
-    // An inline-block takes no baselines from its tables.
-    if self.tree.is_table(child) && algorithm == BaselineAlgorithmType::InlineBlock {
+    // An inline-block takes no baselines from its tables, nor any box from past its clamp point.
+    if (self.tree.is_table(child) && algorithm == BaselineAlgorithmType::InlineBlock)
+      || self.line_clamp_data.data.is_past_clamp_point()
+    {
       return;
     }
 
@@ -2169,7 +2400,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     let mut measuring = BlockLayoutAlgorithm::new(&mut *self.tree, self.node, &space, &input);
     let mut inline_child = InlineChild::new(node, items_data);
 
-    measuring.line_clamp_data = self.line_clamp_data;
+    measuring.line_clamp_data = self.line_clamp_data.clone();
     inline_child
       .context
       .enable_measuring_mode_if_necessary(None);
