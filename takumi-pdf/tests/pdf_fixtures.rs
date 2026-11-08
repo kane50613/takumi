@@ -3228,6 +3228,13 @@ fn content_moved_past_the_last_page_adds_pages() {
     ),
     1
   );
+  // Scaling the clipping box leaves its block axis unbounded.
+  assert_eq!(
+    pages(
+      r#"<div style="height: 90px; overflow-x: clip; background: #ddd; transform: scale(0.1); transform-origin: 0 0"><div style="height: 30px; background: #f87171; transform: translateY(1200px)"></div></div>"#
+    ),
+    2
+  );
   // An absolute box moved past the last page adds none, as Chromium prints it.
   assert_eq!(
     pages(&format!(
