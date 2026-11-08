@@ -119,12 +119,16 @@ impl BlockLineClampData {
     // A measuring box always has an ancestor chain.
     if self.data.is_measure_until_bfc_offset()
       && self.previous_inflow_position_when_clamped.is_none()
-      && let Some(ancestor_chain) = &self.ancestor_chain
+      && let Some(ancestor_chain) = &mut self.ancestor_chain
     {
       // An empty child before the box's block offset resolves is no clamp point.
-      if bfc_block_offset.is_none() {
+      let Some(bfc_block_offset) = bfc_block_offset else {
         return true;
-      }
+      };
+
+      // Approximate: Blink keeps the offset the box expected, before its margins collapsed, and
+      // only a later layout's cached hint corrects it. The resolved offset is the one it hints.
+      *ancestor_chain = ancestor_chain.at_bfc_offset(bfc_block_offset);
 
       let block_size = ancestor_chain
         .final_line_clamp_block_size(previous.logical_block_offset, previous.margin_strut);
@@ -723,7 +727,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
       if let Some(lines) = max_lines {
         data.state = LineClampState::ClampByLines;
-        data.lines_until_clamp = lines as i32;
+        data.lines_until_clamp = i32::try_from(lines).unwrap_or(i32::MAX);
       } else if let Some(clamp_bfc_offset) = clamp_bfc_offset {
         data.state = LineClampState::MeasureLinesUntilBfcOffset;
         data.clamp_bfc_offset = clamp_bfc_offset;
@@ -2390,9 +2394,14 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       .start_layout()
       .and_then(|mut previous| measuring.layout_inline_children(&mut inline_child, &mut previous))
     {
-      // The container reads the offset the measuring layout resolved.
-      if status == LayoutStatus::BfcBlockOffsetResolved {
-        self.bfc_block_offset = measuring.bfc_block_offset;
+      // The container reads the offset the measuring layout resolved, or where it clamps.
+      // Blink's abort drops the clamp point, which clamps before every line.
+      match status {
+        LayoutStatus::BfcBlockOffsetResolved => self.bfc_block_offset = measuring.bfc_block_offset,
+        LayoutStatus::NeedsLineClampRelayout => {
+          self.line_clamp_data = measuring.line_clamp_data.clone();
+        }
+        _ => {}
       }
 
       return Err(status);

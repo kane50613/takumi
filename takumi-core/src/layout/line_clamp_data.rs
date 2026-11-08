@@ -137,6 +137,19 @@ impl LineClampAncestorChain {
     }
   }
 
+  /// The chain of this box at `bfc_offset` in place of the offset it expected. The line-clamp
+  /// container's own offset stays zero.
+  pub(crate) fn at_bfc_offset(self: &Rc<Self>, bfc_offset: LayoutUnit) -> Rc<Self> {
+    if self.parent.is_none() || self.bfc_offset == bfc_offset {
+      return Rc::clone(self);
+    }
+
+    Rc::new(Self {
+      bfc_offset,
+      ..(**self).clone()
+    })
+  }
+
   /// Blink's `FinalLineClampBlockSize`: the line-clamp container's block size for a clamp point in
   /// this box at `inflow_block_offset` with the margins `margin_strut` after it.
   pub(crate) fn final_line_clamp_block_size(
