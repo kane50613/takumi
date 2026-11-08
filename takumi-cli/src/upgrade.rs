@@ -196,7 +196,8 @@ fn install_arguments(source: &Source, root: &Path) -> Result<Vec<OsString>, Box<
   Ok(arguments)
 }
 
-/// `arguments` joined into one line a POSIX shell splits back into the same arguments.
+/// `arguments` joined into one line the platform's shell splits back into the same arguments:
+/// a POSIX shell, or on Windows `cmd` and PowerShell, which both read double quotes.
 fn command_line(arguments: &[OsString]) -> String {
   arguments
     .iter()
@@ -209,6 +210,8 @@ fn command_line(arguments: &[OsString]) -> String {
           .all(|c| c.is_ascii_alphanumeric() || "-_./:=@+,%".contains(c))
       {
         argument.into_owned()
+      } else if cfg!(windows) {
+        format!("\"{}\"", argument.replace('"', "\\\""))
       } else {
         format!("'{}'", argument.replace('\'', r"'\''"))
       }
@@ -294,6 +297,7 @@ mod tests {
     );
   }
 
+  #[cfg(not(windows))]
   #[test]
   fn a_local_checkout_is_left_to_the_user_with_the_same_root() {
     let error = install_arguments(
@@ -309,11 +313,21 @@ mod tests {
     );
   }
 
+  #[cfg(not(windows))]
   #[test]
   fn quotes_what_a_shell_would_split() {
     assert_eq!(
       command_line(&["--root".into(), "/opt/it's here".into(), "".into()]),
       r#"--root '/opt/it'\''s here' ''"#
+    );
+  }
+
+  #[cfg(windows)]
+  #[test]
+  fn quotes_what_cmd_would_split() {
+    assert_eq!(
+      command_line(&["--root".into(), r"C:\Program Files\tools".into()]),
+      r#"--root "C:\Program Files\tools""#
     );
   }
 }

@@ -78,7 +78,7 @@ impl fmt::Display for ResourceError {
       ),
       Self::Escapes(url) => write!(
         f,
-        "{url} is a symlink that leads out of its readable directory, which takumi never follows, even into another readable directory. Reference the file it points to instead, or pass a `--root` that holds both."
+        "{url} is an absolute symlink, or one that leads out of its readable directory, and takumi follows neither, even into another readable directory. Make the symlink relative, reference the file it points to, or pass a `--root` that holds both."
       ),
       Self::Network(url) => write!(f, "{url} needs the network, which takumi does not reach."),
       Self::UnsupportedScheme(url) => write!(f, "{url} has a scheme takumi cannot load."),
@@ -232,6 +232,16 @@ impl Sandbox {
       return Err(ResourceError::Network(url.clone()));
     }
 
+    if has_illegal_encoded_byte(url) {
+      return Err(ResourceError::Io {
+        url: url.clone(),
+        error: io::Error::new(
+          io::ErrorKind::InvalidInput,
+          "an encoded slash, backslash, or NUL cannot be part of a file name",
+        ),
+      });
+    }
+
     let path = url
       .to_file_path()
       .ok()
@@ -276,10 +286,24 @@ impl Sandbox {
   }
 }
 
+/// Whether `url`'s path encodes a byte no file name can hold, a slash, a NUL, or on Windows a
+/// backslash, which Chromium's `FileURLToFilePath` refuses.
+/// <https://source.chromium.org/chromium/chromium/src/+/main:net/base/filename_util.cc>
+fn has_illegal_encoded_byte(url: &Url) -> bool {
+  let path = url.path().to_ascii_lowercase();
+
+  path.contains("%2f") || path.contains("%00") || (cfg!(windows) && path.contains("%5c"))
+}
+
 /// The error for a failed open of `url` through a root. cap-std refuses a path that resolves
-/// outside the root as permission denied with no OS error code, unlike a file the OS refuses.
+/// outside the root as permission denied with no OS error code, unlike a file the OS refuses,
+/// except on FreeBSD, where a metadata read beneath the root returns the raw `ENOTCAPABLE`.
 fn open_error(url: &Url, error: io::Error) -> ResourceError {
-  if error.kind() == io::ErrorKind::PermissionDenied && error.raw_os_error().is_none() {
+  let escapes = error.kind() == io::ErrorKind::PermissionDenied && error.raw_os_error().is_none();
+  #[cfg(target_os = "freebsd")]
+  let escapes = escapes || error.raw_os_error() == Some(libc::ENOTCAPABLE);
+
+  if escapes {
     ResourceError::Escapes(url.clone())
   } else {
     ResourceError::Io {
@@ -445,6 +469,22 @@ mod tests {
       sandbox.read(&url),
       Err(ResourceError::Denied { .. })
     ));
+  }
+
+  #[test]
+  fn an_encoded_slash_names_no_directory() {
+    let root = temp_dir("encoded-slash");
+
+    fs::create_dir_all(root.join("dir")).unwrap();
+    fs::write(root.join("dir/style.css"), "a{}").unwrap();
+
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let url = directory_url(&root)
+      .unwrap()
+      .join("dir%2Fstyle.css")
+      .unwrap();
+
+    assert!(matches!(sandbox.read(&url), Err(ResourceError::Io { .. })));
   }
 
   #[test]

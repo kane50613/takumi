@@ -56,6 +56,10 @@ impl<'s> StyleSheetLoader<'s> {
 
   /// The CSS of the sheet at `url`, ready to parse with no base URL of its own. None when it
   /// fails to load, unless the failure [fails the render](ResourceError::fails_render).
+  ///
+  /// Approximate: a sheet with no BOM or `@charset` decodes as UTF-8, the encoding takumi reads
+  /// HTML in, where Chromium uses the encoding the document declares, so non-ASCII selectors in
+  /// such a sheet can differ.
   pub(crate) fn load(&mut self, url: &Url) -> Result<Option<String>, ResourceError> {
     self.load_nested(url, UTF_8, &mut Vec::new())
   }

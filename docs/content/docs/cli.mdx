@@ -82,6 +82,7 @@ An HTML file can reference any path, so `takumi` reads only the directories you 
 - `http` and `https` URLs never load. `takumi` skips them with a warning, as a browser skips a resource that fails to load. Use a local copy, or a `data:` URL, which loads wherever the document is, within the same size limits.
 - A read outside the granted directories stops the render, and the error names the `--allow-read` flag that would allow it.
 - One file may hold at most 32 MiB, all of them together 256 MiB, and a render may load at most 1024 of them.
+- A symlink must stay inside its granted directory and be relative. An absolute symlink is refused even when it points back inside, so make it relative or reference the target directly.
 
 Files you name on the command line are trusted: the input, `--font`, `--header`, and `--footer`. What they reference still goes through the same checks.
 
@@ -96,6 +97,8 @@ stylesheet	allowed	file:///home/me/site/css/style.css
 image	allowed	file:///home/me/site/img/logo.png
 font	blocked	file:///home/me/fonts/Inter.woff2	… Pass `--allow-read /home/me/fonts` to allow it.
 ```
+
+The listing checks each file on its own, including the 32 MiB limit. It does not add files up, so a document over the 256 MiB or 1024-file totals can list as allowed and still stop when it renders.
 
 ## Fonts
 
