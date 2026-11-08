@@ -66,6 +66,21 @@ impl ResourceError {
       Self::Denied { .. } | Self::Escapes(_) | Self::OverBudget(_)
     )
   }
+
+  /// The URL that failed to load, none for a failure that names no single URL.
+  pub(crate) fn url(&self) -> Option<&Url> {
+    match self {
+      Self::Denied { url, .. }
+      | Self::Escapes(url)
+      | Self::Network(url)
+      | Self::UnsupportedScheme(url)
+      | Self::InvalidData(url)
+      | Self::Io { url, .. }
+      | Self::OverBudget(url)
+      | Self::ImportTooDeep(url) => Some(url),
+      Self::Undecodable { .. } | Self::SharedKey { .. } => None,
+    }
+  }
 }
 
 impl fmt::Display for ResourceError {

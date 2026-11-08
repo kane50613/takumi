@@ -90,6 +90,16 @@ pub(crate) fn run(
     for url in &report.loaded {
       println!("stylesheet\tallowed\t{url}");
     }
+
+    // A stylesheet that would not load is a listing line like any other resource.
+    warnings.retain(|error| match error.url() {
+      Some(url) => {
+        println!("stylesheet\tblocked\t{url}\t{error}");
+        false
+      }
+      None => true,
+    });
+
     for each in std::iter::once(&document).chain(&bands) {
       each.list_resources(product, &fonts, sandbox)?;
     }
