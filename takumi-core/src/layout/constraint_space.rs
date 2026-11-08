@@ -111,6 +111,9 @@ pub(crate) struct ConstraintSpace {
   /// Blink's `ShouldRepeat`: a repeated table header or footer repeats again on the next page.
   #[cfg(feature = "fragmentation")]
   pub(crate) should_repeat: bool,
+  /// Blink's `ShouldPropagateChildBreakValues`, which a space keeps without fragmentation too, so
+  /// a flex or grid row learns its items' break values before it fragments.
+  pub(crate) should_propagate_child_break_values: bool,
   /// Blink's `PageName`: the named page the box is on, which its children without one take.
   #[cfg(feature = "fragmentation")]
   pub(crate) page_name: PageName,
@@ -127,8 +130,6 @@ pub(crate) struct BlockFragmentation {
   pub(crate) fragmentainer_offset: LayoutUnit,
   /// Blink's `RequiresContentBeforeBreaking`.
   pub(crate) requires_content_before_breaking: bool,
-  /// Blink's `ShouldPropagateChildBreakValues`.
-  pub(crate) should_propagate_child_break_values: bool,
   /// Blink's `MinBreakAppeal`.
   pub(crate) min_break_appeal: BreakAppeal,
   /// Blink's `MinBlockSizeShouldEncompassIntrinsicSize`: a fixed block size grows to the content
@@ -173,8 +174,22 @@ impl ConstraintSpace {
       block_fragmentation: None,
       #[cfg(feature = "fragmentation")]
       should_repeat: false,
+      should_propagate_child_break_values: false,
       #[cfg(feature = "fragmentation")]
       page_name: PageName::default(),
+    }
+  }
+
+  /// A space for a child of the box `parent` lays out, which takes its break-value propagation,
+  /// as Blink's `ConstraintSpaceBuilder` for a parent space does.
+  pub(crate) fn for_child(
+    parent: &Self,
+    available_inline_size: Option<LayoutUnit>,
+    direction: Direction,
+  ) -> Self {
+    Self {
+      should_propagate_child_break_values: parent.should_propagate_child_break_values,
+      ..Self::new(available_inline_size, direction)
     }
   }
 
@@ -285,8 +300,6 @@ impl ConstraintSpace {
 
   /// Blink's `ShouldPropagateChildBreakValues`.
   pub(crate) fn should_propagate_child_break_values(&self) -> bool {
-    self
-      .block_fragmentation
-      .is_some_and(|fragmentation| fragmentation.should_propagate_child_break_values)
+    self.should_propagate_child_break_values
   }
 }

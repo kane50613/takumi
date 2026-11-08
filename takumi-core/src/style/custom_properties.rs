@@ -6,7 +6,10 @@ use std::{
   sync::Arc,
 };
 
-use crate::style::{CssWideKeyword, FromCssStr, selector::PropertyRule};
+use crate::style::{
+  CssWideKeyword, FromCssStr, PropertySyntax, SizingContext, contains_var_references,
+  selector::PropertyRule,
+};
 
 /// The `@property` rules in force, by name, shared by every element they reach.
 pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
@@ -102,6 +105,87 @@ impl CustomProperties {
         Some(value) => self.set(rule.name.clone(), value.to_owned()),
         None => self.remove(&rule.name),
       }
+    }
+  }
+
+  /// A copy with each registered value computed against `sizing`, if any changes: a `<length>`
+  /// to px, an `<angle>` to deg, a `<color>` to its color, and so on.
+  /// <https://drafts.css-houdini.org/css-properties-values-api-1/#calculation-of-computed-values>
+  pub(crate) fn with_computed_values(&self, sizing: &SizingContext) -> Option<Self> {
+    let mut computed: Option<Self> = None;
+
+    for rule in self
+      .registrations
+      .values()
+      .filter(|rule| rule.syntax != PropertySyntax::Universal)
+    {
+      let Some(value) = self.get(&rule.name) else {
+        continue;
+      };
+      let Some(computed_value) = rule.syntax.compute(value, Some(sizing)) else {
+        continue;
+      };
+
+      if computed_value != value {
+        computed
+          .get_or_insert_with(|| self.clone())
+          .set(rule.name.clone(), computed_value);
+      }
+    }
+    computed
+  }
+
+  /// Computes each of the `declared` names its registered syntax takes, as far as the element
+  /// needs no sizing to, and makes each it does not take invalid at computed-value time: `unset`,
+  /// so the parent's value when it inherits and the initial value otherwise. A value `var()` has
+  /// yet to substitute into waits.
+  /// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
+  pub(crate) fn enforce_syntax(&mut self, declared: &[String], parent: &Self) {
+    let registrations = Arc::clone(&self.registrations);
+
+    for name in declared {
+      let Some(rule) = registrations.get(name) else {
+        continue;
+      };
+      let value = self.get(name);
+
+      if value.is_some_and(contains_var_references) {
+        continue;
+      }
+      if let Some(computed) = value.and_then(|value| rule.syntax.compute(value, None)) {
+        self.set(name.clone(), computed);
+        continue;
+      }
+
+      match rule
+        .inherits
+        .then(|| parent.get(name))
+        .flatten()
+        .or(rule.initial_value.as_deref())
+      {
+        Some(value) => self.set(name.clone(), value.to_owned()),
+        None => self.remove(name),
+      }
+    }
+  }
+
+  /// Each property a typed syntax registers, with its value.
+  pub(crate) fn typed_values(&self) -> impl Iterator<Item = (&str, &str)> {
+    self
+      .registrations
+      .values()
+      .filter(|rule| rule.syntax != PropertySyntax::Universal)
+      .filter_map(|rule| Some((rule.name.as_str(), self.get(&rule.name)?)))
+  }
+
+  /// Sets the registered `name` to its initial value.
+  pub(crate) fn reset_to_initial(&mut self, name: &str) {
+    match self
+      .registration(name)
+      .and_then(|rule| rule.initial_value.clone())
+    {
+      Some(value) => self.set(name.to_owned(), value),
+      None => self.remove(name),
     }
   }
 

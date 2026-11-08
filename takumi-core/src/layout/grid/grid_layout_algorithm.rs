@@ -1002,8 +1002,11 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     containing_grid_area_size: AvailableLogicalSize,
     fixed_available_size: AvailableLogicalSize,
   ) -> ConstraintSpace {
-    let mut space =
-      ConstraintSpace::new(containing_grid_area_size.inline_size, item.style.direction);
+    let mut space = ConstraintSpace::for_child(
+      self.space,
+      containing_grid_area_size.inline_size,
+      item.style.direction,
+    );
 
     space.is_new_formatting_context = true;
     space.cache_slot = cache_slot;
@@ -1162,7 +1165,8 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       | LayoutLength::FitContent
       | LayoutLength::Stretch
       | LayoutLength::Percent(_)
-      | LayoutLength::Calc { .. } => {}
+      | LayoutLength::Calc { .. }
+      | LayoutLength::Math(_) => {}
     }
 
     let resolver = LengthResolver::new(measure.space, &item_style);

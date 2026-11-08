@@ -1325,6 +1325,45 @@ fn a_forced_break_on_a_node_that_opens_a_page_adds_no_empty_page() {
   );
 }
 
+/// A forced break before the first item of a nested flex row reaches the row of the flex
+/// container around it, so the whole nested container moves to the next page, as in Blink.
+#[test]
+fn a_forced_break_in_a_nested_flex_row_moves_the_row() {
+  let fonts = fonts();
+  let pdf = run_pdf_fixture_with("paged-nested-flex-forced-break", &fonts, |fonts| {
+    a4_options(
+      r#"<div style="display: flex; flex-wrap: wrap; font-size: 18px;">
+        <div style="display: flex; flex-wrap: wrap; width: 100%;">
+          <div style="width: 50%;">One</div><div style="width: 50%;">Two</div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; width: 100%;">
+          <div style="width: 50%; break-before: page;">Three</div><div style="width: 50%;">Four</div>
+        </div>
+      </div>"#,
+      fonts,
+    )
+  });
+  // Page content is ASCII, unlike the embedded font that can spell `TJ` too.
+  let text_runs: Vec<usize> = content_streams(&pdf)
+    .iter()
+    .filter(|stream| stream.is_ascii())
+    .map(|stream| {
+      stream
+        .split(|&byte| byte == b'\n')
+        .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+        .count()
+    })
+    .filter(|&runs| runs > 0)
+    .collect();
+
+  assert_eq!(page_count(&pdf), 2);
+  assert_eq!(
+    text_runs,
+    [2, 2],
+    "the second nested row did not move to page 2"
+  );
+}
+
 #[test]
 fn forced_breaks_beside_spacing_break_as_blink_separates_them() {
   let fonts = fonts();

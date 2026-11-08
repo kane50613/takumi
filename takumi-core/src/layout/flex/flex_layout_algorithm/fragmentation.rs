@@ -275,7 +275,12 @@ impl FlexLayoutAlgorithm<'_, '_> {
     self.builder.fragments_total_block_size = block_size;
     finish_fragmentation(&mut self.builder)?;
     self.fragmentation.intrinsic_block_size = self.builder.intrinsic_block_size;
+    Ok(self.builder.fragment_block_size)
+  }
 
+  /// Blink's propagation at the end of `LayoutInternal`, with or without fragmentation: the
+  /// break-before of the first row and the break-after of the last reach the container.
+  pub(super) fn propagate_row_break_values(&mut self) {
     if self.space.should_propagate_child_break_values()
       && let (Some(&first), Some(&last)) = (
         self.fragmentation.row_break_between.first(),
@@ -285,7 +290,6 @@ impl FlexLayoutAlgorithm<'_, '_> {
       self.builder.initial_break_before = Some(first);
       self.builder.previous_break_after = last;
     }
-    Ok(self.builder.fragment_block_size)
   }
 
   /// The intrinsic block size of this fragment, or of the container in one piece.

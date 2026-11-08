@@ -3,13 +3,13 @@ use std::{
   ops::{Deref, Neg},
 };
 
-use cssparser::{Parser, Token};
+use cssparser::Parser;
 
 use crate::style::{
-  Animatable, Color, MakeComputed, SizingContext, ToCss, lerp,
+  Animatable, Color, MakeComputed, SizingContext, ToCss, lerp, parse_number_value,
+  parse_percentage_value,
   properties::{FromCss, ParseResult},
   tw::TailwindPropertyParser,
-  unexpected_token,
 };
 
 /// Represents a percentage value (0.0-1.0) in CSS parsing.
@@ -69,13 +69,10 @@ impl TailwindPropertyParser for PercentageNumber {
 
 impl<'i> FromCss<'i> for PercentageNumber {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let token = input.next()?;
-
-    match token {
-      Token::Number { value, .. } => Ok(PercentageNumber(*value)),
-      Token::Percentage { unit_value, .. } => Ok(PercentageNumber(*unit_value)),
-      _ => Err(unexpected_token!(token)),
-    }
+    input
+      .try_parse(parse_number_value)
+      .or_else(|_| parse_percentage_value(input))
+      .map(PercentageNumber)
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<number>", "<percentage>"];

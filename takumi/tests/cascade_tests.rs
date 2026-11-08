@@ -645,3 +645,210 @@ fn a_filter_url_to_a_fragment_leaves_an_html_element_unfiltered() {
 
   assert_eq!(plain.as_raw(), filtered.as_raw());
 }
+
+/// A registered custom property animates as its syntax types it, and `var()` reads the animated
+/// value; an unregistered one switches half way, as Chromium animates them.
+#[test]
+fn an_animated_custom_property_interpolates_when_registered() {
+  let width_at = |registered: bool, delay_ms: u32, from: &str, to: &str| {
+    let registration = if registered {
+      "@property --w { syntax: '<length>'; inherits: false; initial-value: 0px }
+       @property --n { syntax: '<number>'; inherits: false; initial-value: 0 }"
+    } else {
+      ""
+    };
+    let css = format!(
+      "{registration}
+       @keyframes grow {{ from {{ --w: {from}; --n: {from} }} to {{ --w: {to}; --n: {to} }} }}
+       .box {{ font-size: 10px; animation: grow 1000ms linear -{delay_ms}ms; width: var(--w); height: calc(var(--n) * 1px) }}"
+    );
+    let measured = measure_with_css(
+      Node::container([styled_block(
+        "box",
+        serde_json::json!({ "display": "block" }),
+      )]),
+      &css,
+    );
+
+    (measured.children[0].width, measured.children[0].height)
+  };
+
+  assert_eq!(width_at(true, 250, "100px", "300px").0, 150.0);
+  assert_eq!(width_at(true, 750, "100px", "300px").0, 250.0);
+  assert_eq!(width_at(true, 500, "1em", "3em").0, 20.0);
+  assert_eq!(width_at(true, 250, "100", "300").1, 150.0);
+  assert_eq!(width_at(false, 250, "100px", "300px").0, 100.0);
+  assert_eq!(width_at(false, 750, "100px", "300px").0, 300.0);
+}
+
+/// What a registered custom property gives `width`, set in the stylesheet `css` on `.box`.
+fn registered_width(css: &str) -> f32 {
+  measure_with_css(
+    Node::container([styled_block(
+      "box",
+      serde_json::json!({ "display": "block" }),
+    )]),
+    css,
+  )
+  .children[0]
+    .width
+}
+
+/// The cascade around a registered custom property, as Chromium cascades it.
+#[test]
+fn a_registered_custom_property_cascades_as_chromium_does() {
+  let size = "@property --size { syntax: '<length>'; inherits: false; initial-value: 10px }";
+  let count = "@property --n { syntax: '<integer>'; inherits: false; initial-value: 0 }";
+
+  // A reference reads the value the syntax leaves.
+  assert_eq!(
+    registered_width(&format!(
+      "{size} .box {{ --size: red; --alias: var(--size); width: var(--alias) }}"
+    )),
+    10.0
+  );
+  // The element itself reads the computed integer.
+  assert_eq!(
+    registered_width(&format!(
+      "{count} .box {{ --n: calc(2.6); width: calc(var(--n) * 1px) }}"
+    )),
+    3.0
+  );
+  // An important declaration outranks an animation.
+  assert_eq!(
+    registered_width(&format!(
+      "{size} @keyframes grow {{ to {{ --size: 300px }} }}
+       .box {{ --size: 40px !important; width: var(--size); animation: grow 1000ms linear -500ms }}"
+    )),
+    40.0
+  );
+  // A keyframe's `var()` resolves before it interpolates.
+  assert_eq!(
+    registered_width(&format!(
+      "{size} @keyframes grow {{ from {{ --size: var(--start) }} to {{ --size: var(--end) }} }}
+       .box {{ --start: 100px; --end: 300px; width: var(--size); animation: grow 1000ms linear -250ms }}"
+    )),
+    150.0
+  );
+  // A keyframe that leaves the property out does not split its interpolation.
+  assert_eq!(
+    registered_width(&format!(
+      "{size} @keyframes grow {{ from {{ --size: 0px }} 50% {{ opacity: 0.5 }} to {{ --size: 100px }} }}
+       .box {{ width: var(--size); animation: grow 1000ms linear -250ms }}"
+    )),
+    25.0
+  );
+  // An unregistered property with no value before switches to the keyframe's half way.
+  assert_eq!(
+    registered_width(
+      "@keyframes grow { to { --w: 100px } }
+       .box { width: var(--w, 5px); animation: grow 1000ms linear -750ms }"
+    ),
+    100.0
+  );
+}
+
+/// An animation property that reads an animated custom property keeps its value from before the
+/// animation, as Chromium keeps it: `g` runs over the declared 1s, not the 2s `a` animates `--d` to.
+#[test]
+fn an_animated_custom_property_leaves_the_animation_properties_alone() {
+  let measured = measure_with_css(
+    Node::container([styled_block(
+      "box",
+      serde_json::json!({ "display": "block", "height": "1px" }),
+    )]),
+    "@keyframes g { from { width: 0px } to { width: 400px } }
+     @keyframes a { from { --d: 2s } to { --d: 2s } }
+     .box { --d: 1s; animation-name: g, a; animation-duration: var(--d), 1s;
+       animation-timing-function: linear; animation-delay: -500ms }",
+  );
+
+  assert_eq!(measured.children[0].width, 200.0);
+
+  // The taint reaches an alias of the animated property, and survives an important replay.
+  for duration in [
+    "--duration: var(--d); animation-duration: var(--duration), 1s",
+    "animation-duration: var(--d), 1s !important",
+  ] {
+    let measured = measure_with_css(
+      Node::container([styled_block(
+        "box",
+        serde_json::json!({ "display": "block", "height": "1px" }),
+      )]),
+      &format!(
+        "@keyframes g {{ from {{ width: 0px }} to {{ width: 400px }} }}
+         @keyframes a {{ from {{ --d: 2s }} to {{ --d: 2s }} }}
+         .box {{ --d: 1s; animation-name: g, a; {duration};
+           animation-timing-function: linear; animation-delay: -500ms }}"
+      ),
+    );
+
+    assert_eq!(measured.children[0].width, 200.0, "{duration}");
+  }
+}
+
+/// On the document root, `rem` reads the root's own font size, so a registered `rem` length that
+/// `font-size` reads makes a cycle, as Chromium breaks it.
+#[test]
+fn the_root_font_size_breaks_a_cycle_with_a_registered_rem_length() {
+  let root = |declarations: &str| {
+    let html = Node::from_html("<html></html>", FromHtmlOptions::default()).expect("parses");
+    let measured = measure_with_css(
+      html,
+      &format!(
+        "@property --x {{ syntax: '<length>'; inherits: false; initial-value: 0px }}
+         html {{ display: block; height: 1em; {declarations} }}"
+      ),
+    );
+
+    (measured.width, measured.height)
+  };
+
+  assert_eq!(
+    root("--x: 2rem; font-size: var(--x); width: var(--x)"),
+    (0.0, 16.0)
+  );
+  assert_eq!(
+    root("--x: 2rem; font-size: 20px; width: var(--x)"),
+    (40.0, 20.0)
+  );
+}
+
+/// A registered length in a font-relative unit that `font-size` reads makes a cycle, which leaves
+/// the property at its initial value and `font-size` inherited, as Chromium breaks it.
+#[test]
+fn font_size_breaks_a_cycle_with_a_font_relative_registered_length() {
+  let size = |declarations: &str| {
+    let css = format!(
+      "@property --x {{ syntax: '<length>'; inherits: false; initial-value: 0px }}
+       .p {{ font-size: 10px }}
+       .box {{ --x: 2em; width: var(--x); height: 1em; {declarations} }}"
+    );
+    let measured = measure_with_css(
+      Node::container([styled_block(
+        "box",
+        serde_json::json!({ "display": "block" }),
+      )])
+      .with_class_name("p"),
+      &css,
+    );
+
+    (measured.children[0].width, measured.children[0].height)
+  };
+
+  assert_eq!(size("font-size: var(--x)"), (0.0, 10.0));
+  assert_eq!(size("font-size: calc(var(--x) + 1px)"), (0.0, 10.0));
+  assert_eq!(size("font-size: 30px"), (60.0, 30.0));
+  assert_eq!(size("font-size: var(--x) !important"), (0.0, 10.0));
+  assert_eq!(size("font-size: var(--x); font-size: 30px"), (60.0, 30.0));
+  assert_eq!(size("font-size: 30px; font-size: var(--x)"), (0.0, 10.0));
+  assert_eq!(
+    size("--alias: var(--x); font-size: var(--alias)"),
+    (0.0, 10.0)
+  );
+  assert_eq!(
+    size("--alias: var(--x); font-size: var(--x); width: var(--alias)"),
+    (0.0, 10.0)
+  );
+  assert_eq!(size("font-size: var(--prefix--x, 25px)"), (50.0, 25.0));
+}

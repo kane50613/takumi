@@ -199,11 +199,11 @@ impl<'r> PagedLayout<'r> {
     );
 
     adjust_margins_for_fragmentation(self.break_token.as_deref(), false, &mut margins);
+    space.should_propagate_child_break_values = true;
     space.block_fragmentation = Some(BlockFragmentation {
       fragmentainer_block_size: LayoutUnit::from_float(size.height),
       fragmentainer_offset: margins.block_start,
       requires_content_before_breaking: false,
-      should_propagate_child_break_values: true,
       min_break_appeal: BreakAppeal::LastResort,
       min_block_size_should_encompass_intrinsic_size: false,
     });

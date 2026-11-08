@@ -5,11 +5,14 @@ mod css_source;
 mod custom_properties;
 #[cfg(feature = "font-face")]
 pub(crate) mod font_face_rule;
+mod interner;
 mod matched_style_cache;
 pub mod math;
+mod math_expression;
 mod media_query;
 pub mod page_rule;
 pub(crate) mod properties;
+mod property_syntax;
 mod raw_declaration;
 pub(crate) mod selector;
 mod sizing;
@@ -18,8 +21,12 @@ mod supports;
 mod tw;
 
 pub use animation::{KeyframeRule, KeyframesRule};
-pub(crate) use animation::{apply_stylesheet_animations, find_keyframes};
-pub(crate) use calc::parse_calc_number_expression;
+pub(crate) use animation::{
+  animated_custom_properties, apply_stylesheet_animations, find_keyframes,
+};
+pub(crate) use calc::{
+  parse_calc_number_expression, parse_integer_value, parse_number_value, parse_percentage_value,
+};
 pub(crate) use css_input::{CssInput, CssNumber, CssUnexpected, CssValueSeed};
 pub use css_source::{
   AnimationRule, AnimationStep, CssSource, CssSourceError, LayerRule, MediaRule, StyleRule,
@@ -33,6 +40,11 @@ pub(crate) use properties::unexpected_token;
 pub use properties::*;
 pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};
 // Selector internals stay crate-private.
+pub use math_expression::MathExpr;
+pub(crate) use math_expression::{
+  is_math_function, parse_angle, parse_length, parse_number, parse_percentage,
+};
+pub use property_syntax::PropertySyntax;
 pub use selector::{MediaQueryList, PropertyRule, StyleSheet};
 pub(crate) use sizing::FontUnits;
 pub use sizing::SizingContext;
