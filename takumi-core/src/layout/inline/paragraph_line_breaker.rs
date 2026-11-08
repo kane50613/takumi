@@ -192,7 +192,7 @@ impl<'c> InlineNode<'c> {
     let mut normal_lines = LineBreakResults::new(self, items_data, space, &mut *atomic_inline);
     let lines_until_clamp = space
       .line_clamp_data
-      .lines_until_clamp
+      .lines_until_clamp(false)
       .and_then(|lines| usize::try_from(lines).ok())
       .filter(|&lines| lines > 0 && lines <= MAX_LINES_FOR_BALANCE);
 

@@ -117,6 +117,17 @@ impl ComputedStyle {
       };
     }
 
+    // Blink's `StyleAdjuster`: a vertical `-webkit-box` that clamps lays out as a block container.
+    if self.misc_data.box_orient == BoxOrient::Vertical
+      && self.misc_data.r#continue == Continue::Collapse
+    {
+      match self.base_data.display {
+        Display::WebkitBox => self.base_data_mut().display = Display::FlowRoot,
+        Display::WebkitInlineBox => self.base_data_mut().display = Display::InlineBlock,
+        _ => {}
+      }
+    }
+
     self.original_display = self.base_data.display;
 
     // https://www.w3.org/TR/css-display-3/#transformations
@@ -426,12 +437,9 @@ impl ComputedStyle {
     }
   }
 
-  /// The lines `line-clamp` keeps, which collapse the lines past them.
-  pub(crate) fn line_clamp(&self) -> Option<u32> {
-    self
-      .misc3_data
-      .max_lines
-      .filter(|&lines| self.misc_data.r#continue == Continue::Collapse && lines >= 1)
+  /// Blink's `HasLineClamp`: the `max-lines` of a box whose `continue` collapses what follows them.
+  pub(crate) fn line_clamp(&self) -> Option<MaxLines> {
+    (self.misc_data.r#continue == Continue::Collapse).then_some(self.misc3_data.max_lines)
   }
 
   /// What font matching reads of this style at `sizing`'s font size, apart from the families.

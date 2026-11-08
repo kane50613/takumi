@@ -208,7 +208,7 @@ impl<'s, 'a, 'c> ScoreLineBreaker<'s, 'a, 'c> {
         || self
           .space
           .line_clamp_data
-          .lines_until_clamp
+          .lines_until_clamp(false)
           .is_some_and(|lines| lines > 0 && line_info_list.len() == lines as usize)
       {
         context.suspend_until_end_paragraph();

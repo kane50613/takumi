@@ -1207,6 +1207,10 @@ macro_rules! define_style {
           } else {
             TextOverflow::Clip
           };
+          // `continue` does not inherit, so an anonymous box clamps nothing itself.
+          if style.misc_data.r#continue != Continue::Normal {
+            style.misc_data_mut().r#continue = Continue::Normal;
+          }
           style
         }
 
@@ -1696,7 +1700,7 @@ define_style! {
     }
     /// Blink's `misc->misc3` field group, which Blink nests in `misc`.
     misc3_data: StyleMisc3Data {
-      max_lines: Option<u32> where anonymous = true,
+      max_lines: MaxLines where anonymous = true,
       object_position: PositionValue where anonymous = true = PositionValue::center(),
       offset_anchor: OffsetAnchor,
       offset_distance: Length,

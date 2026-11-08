@@ -26,6 +26,7 @@ use super::{
 };
 use crate::{
   fonts::font_height::FontHeight,
+  geometry::NodeId,
   layout::{
     bfc_rect::BfcOffset,
     constraint_space::{AdjoiningObjectTypes, ConstraintSpace},
@@ -79,6 +80,8 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   pub(crate) exclusion_space: ExclusionSpace,
   /// Blink's `LinesUntilClamp`, after this line.
   pub(crate) lines_until_clamp: Option<i32>,
+  /// Blink's `LineClampAfterLayoutObject` of a block-in-inline that stopped the line.
+  pub(crate) line_clamp_after_layout_object: Option<NodeId>,
   /// Blink's `TextFitScale` of the line container.
   pub(crate) text_fit_scale: f32,
   /// `BfcBlockOffsetResolved` when the floats before the line moved, or when its block-in-inline
@@ -117,6 +120,7 @@ impl<'c> LineBoxFragment<'_, 'c> {
       clearance_after_line: LayoutUnit::ZERO,
       exclusion_space,
       lines_until_clamp: None,
+      line_clamp_after_layout_object: None,
       text_fit_scale: 1.0,
       status: LayoutStatus::Success,
       adjoining_object_types: AdjoiningObjectTypes::empty(),
@@ -212,6 +216,7 @@ impl<'c> LineBoxFragment<'_, 'c> {
       line_box_bfc_block_offset: self.line_box_bfc_block_offset,
       clearance_after_line: self.clearance_after_line,
       lines_until_clamp: self.lines_until_clamp,
+      line_clamp_after_layout_object: self.line_clamp_after_layout_object,
       end_margin_strut: self.end_margin_strut,
       exclusion_space: self.exclusion_space.clone().into_rc(),
       adjoining_object_types: self.adjoining_object_types,
@@ -360,7 +365,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       space.inline_size(),
       space.direction,
     );
-    let mut lines_until_clamp = space.line_clamp_data.lines_until_clamp;
+    let mut lines_until_clamp = space.line_clamp_data.lines_until_clamp(true);
     let line_break_strategy = LineBreakStrategy::new(
       self.context,
       self.node.block.context.style.inherited_data.text_wrap_style,
@@ -434,6 +439,9 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         if result.status != LayoutStatus::Success {
           self.container_builder.status = result.status;
           self.container_builder.bfc_block_offset = result.bfc_block_offset;
+          self.container_builder.lines_until_clamp = result.lines_until_clamp;
+          self.container_builder.line_clamp_after_layout_object =
+            result.line_clamp_after_layout_object;
 
           return self.container_builder;
         }
@@ -519,6 +527,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         end_margin_strut = result.end_margin_strut;
         self.container_builder.exclusion_space = (*result.exclusion_space).clone();
         self.adjoining_object_types = result.adjoining_object_types;
+        lines_until_clamp = result.lines_until_clamp;
       }
 
       // A line taller than the opportunity tries the next one.
@@ -550,13 +559,18 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       } else {
         self.add_any_clearance_after_line(&line_info);
         self.container_builder.block_size = self.container_builder.line_height();
-        // Approximate: a block-in-inline counts as one line, as block layouts carry no
-        // `LinesUntilClamp`.
-        lines_until_clamp = lines_until_clamp.map(|lines| lines - 1);
 
         // Margins collapse only through an empty line.
         if !line_info.is_block_in_inline {
           end_margin_strut = MarginStrut::default();
+          // Clamping counts the lines down, measuring counts them up.
+          let step = if space.line_clamp_data.is_clamp_by_lines() {
+            -1
+          } else {
+            1
+          };
+
+          lines_until_clamp = lines_until_clamp.map(|lines| lines + step);
         }
 
         // The line placed the objects adjoining it.

@@ -429,6 +429,8 @@ pub(crate) struct BoxFragment {
   pub(crate) layout: ComputedLayout,
   /// Blink's `IsLineClampClippedFloat` of the layout that placed it.
   pub(crate) is_line_clamp_clipped_float: bool,
+  /// Blink's `IsHiddenDueToLayout` of the layout that placed it.
+  pub(crate) is_hidden_due_to_layout: bool,
   /// Which of the parent's fragments holds it, as Blink's `PhysicalFragmentLink` in that
   /// fragment's children says.
   #[cfg(feature = "fragmentation")]

@@ -300,11 +300,12 @@ impl<'r> LayoutTree<'r> {
       self.clear_hoisted_children(node);
     }
 
-    // Blink's `BoxFragmentBuilder` takes the flag from the space whatever algorithm runs.
+    // Blink's `BoxFragmentBuilder` takes the flags from the space whatever algorithm runs.
     #[cfg(feature = "fragmentation")]
     let run = self.begin_run(node);
     let result = Rc::new(LayoutResult {
       is_line_clamp_clipped_float: space.is_line_clamp_clipped_float,
+      is_hidden_due_to_layout: space.is_hidden_due_to_layout,
       #[cfg(feature = "fragmentation")]
       run,
       ..self.run_algorithm(node, space, input)
@@ -704,6 +705,7 @@ impl<'r> LayoutTree<'r> {
       BoxFragment {
         layout: result.computed_layout(location),
         is_line_clamp_clipped_float: result.is_line_clamp_clipped_float,
+        is_hidden_due_to_layout: result.is_hidden_due_to_layout,
         #[cfg(feature = "fragmentation")]
         container_fragment_index,
         #[cfg(feature = "fragmentation")]

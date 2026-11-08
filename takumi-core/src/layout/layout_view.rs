@@ -305,6 +305,11 @@ impl<'a> LayoutView<'a> {
     };
 
     hidden.contains(&usize::from(node_id))
+      || self.parts(node_id).is_ok_and(|(fragments, _)| {
+        fragments
+          .first()
+          .is_some_and(|fragment| fragment.is_hidden_due_to_layout)
+      })
   }
 
   /// Blink's `IsLineClampClippedFloat` for `node_id`.
