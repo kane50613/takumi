@@ -80,7 +80,7 @@ export default function XPostImage() {
       </div>
       <span
         style={{
-          display: "flex",
+          display: "block",
           lineClamp: 1,
           textOverflow: "ellipsis",
           overflow: "hidden",

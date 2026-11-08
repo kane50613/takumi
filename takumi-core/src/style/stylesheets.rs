@@ -1192,13 +1192,8 @@ macro_rules! define_style {
           } else {
             TextOverflow::Clip
           };
-          // Approximate: an anonymous flex or grid item clamps lines for the box it stands in
-          // for, which Blink does not clamp. Among block-level siblings it clamps nothing itself.
-          let display = parent.base_data.display;
-
-          if !display.is_flex() && !display.is_grid() {
-            style.misc_data_mut().r#continue = Continue::Normal;
-          }
+          // `continue` does not inherit, so an anonymous box clamps nothing itself.
+          style.misc_data_mut().r#continue = Continue::Normal;
           style
         }
 
