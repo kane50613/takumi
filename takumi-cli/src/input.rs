@@ -53,11 +53,15 @@ impl InputArgs {
         return Err("the input is `-`, but standard input is a terminal. Pipe HTML into takumi or name a file.".into());
       }
 
-      let mut html = String::new();
+      let mut bytes = Vec::new();
 
-      stdin.read_to_string(&mut html)?;
+      stdin.read_to_end(&mut bytes)?;
 
-      (html, directory_url(&env::current_dir()?)?, None)
+      (
+        utf8_html(bytes, "standard input")?,
+        directory_url(&env::current_dir()?)?,
+        None,
+      )
     } else {
       let (html, location) = read_html_file(&self.input)?;
       let directory = location
@@ -103,7 +107,19 @@ pub(crate) fn read_html_file(path: &Path) -> Result<(String, Url), Box<dyn Error
   let location = Url::from_file_path(&absolute)
     .map_err(|()| format!("{} is not a local file", path.display()))?;
 
-  Ok((fs::read_to_string(&absolute).map_err(with_path)?, location))
+  let bytes = fs::read(&absolute).map_err(with_path)?;
+
+  Ok((utf8_html(bytes, &path.display().to_string())?, location))
+}
+
+/// The HTML in `bytes`, read from `name`.
+///
+/// Approximate: a browser decodes HTML in the encoding a `<meta charset>` declares, where this
+/// takes UTF-8 alone.
+fn utf8_html(bytes: Vec<u8>, name: &str) -> Result<String, Box<dyn Error>> {
+  String::from_utf8(bytes).map_err(|_| {
+    format!("{name} is not UTF-8, the only encoding takumi reads HTML in. Convert it first, for example with `iconv -f windows-1252 -t utf-8`.").into()
+  })
 }
 
 /// Where the rendered file goes, or a list of what it would load instead.

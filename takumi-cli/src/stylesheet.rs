@@ -57,17 +57,20 @@ impl<'s> StyleSheetLoader<'s> {
   /// The CSS of the sheet at `url`, ready to parse with no base URL of its own. None when it
   /// fails to load, unless the failure [fails the render](ResourceError::fails_render).
   pub(crate) fn load(&mut self, url: &Url) -> Result<Option<String>, ResourceError> {
-    self.load_nested(url, &mut Vec::new())
+    self.load_nested(url, UTF_8, &mut Vec::new())
   }
 
   /// `css` written inside a document at `base`, with its `url()`s resolved and its imports loaded.
   pub(crate) fn rewrite(&mut self, css: &str, base: &Url) -> Result<String, ResourceError> {
-    self.rewrite_nested(css, base, &mut Vec::new())
+    self.rewrite_nested(css, base, UTF_8, &mut Vec::new())
   }
 
+  /// Loads the sheet at `url`, decoded in `environment` when it declares no encoding, as the
+  /// encoding of the document or sheet that refers to it.
   fn load_nested(
     &mut self,
     url: &Url,
+    environment: &'static Encoding,
     importing: &mut Vec<Url>,
   ) -> Result<Option<String>, ResourceError> {
     // A sheet that imports itself, directly or not, imports nothing the second time.
@@ -93,11 +96,11 @@ impl<'s> StyleSheetLoader<'s> {
     };
 
     self.report.loaded.push(url.clone());
-    let encoding = stylesheet_encoding::<EncodingRs>(&bytes, None, None);
+    let encoding = stylesheet_encoding::<EncodingRs>(&bytes, None, Some(environment));
     let (text, _, _) = encoding.decode(&bytes);
 
     importing.push(url.clone());
-    let css = self.rewrite_nested(&text, url, importing);
+    let css = self.rewrite_nested(&text, url, encoding, importing);
     importing.pop();
 
     css.map(Some)
@@ -107,6 +110,7 @@ impl<'s> StyleSheetLoader<'s> {
     &mut self,
     css: &str,
     base: &Url,
+    encoding: &'static Encoding,
     importing: &mut Vec<Url>,
   ) -> Result<String, ResourceError> {
     let mut parser = Parser::new(css);
@@ -138,11 +142,11 @@ impl<'s> StyleSheetLoader<'s> {
           let import = import.filter(|_| !rule.trim_end().ends_with('}'));
 
           match import {
-            Some(import) if imports_allowed => match self.load_nested(&import.url, importing)? {
-              Some(sheet) => import.wrap(sheet, &mut out),
-              // A sheet that failed to load may be a Tailwind entry point, which takumi reads itself.
-              None => out.push_str(rule),
-            },
+            Some(import) if imports_allowed => {
+              if let Some(sheet) = self.load_nested(&import.url, encoding, importing)? {
+                import.wrap(sheet, &mut out);
+              }
+            }
             Some(_) => {}
             None => out.push_str(rule),
           }
@@ -289,7 +293,8 @@ struct Import {
 }
 
 impl Import {
-  /// The prelude after `@import`, none when it names no URL.
+  /// The prelude after `@import`, none when it names no URL or a Tailwind entry point such as
+  /// `tailwindcss/theme`, which takumi reads itself.
   fn parse(input: &mut Parser<'_>, base: &Url) -> Option<Self> {
     let target = match input.next().ok()?.clone() {
       Token::QuotedString(url) | Token::UnquotedUrl(url) => url.to_string(),
@@ -299,6 +304,11 @@ impl Import {
         .to_string(),
       _ => return None,
     };
+
+    if target == "tailwindcss" || target.starts_with("tailwindcss/") {
+      return None;
+    }
+
     let url = base.join(&target).ok()?;
     let mut layer = None;
     let mut supports = None;
@@ -307,10 +317,15 @@ impl Import {
       let state = input.state();
 
       match input.next() {
-        Ok(Token::Ident(name)) if name.eq_ignore_ascii_case("layer") && layer.is_none() => {
+        // `layer` comes before `supports()`, so after it, `layer` starts the media queries.
+        Ok(Token::Ident(name))
+          if name.eq_ignore_ascii_case("layer") && layer.is_none() && supports.is_none() =>
+        {
           layer = Some(String::new());
         }
-        Ok(Token::Function(name)) if name.eq_ignore_ascii_case("layer") && layer.is_none() => {
+        Ok(Token::Function(name))
+          if name.eq_ignore_ascii_case("layer") && layer.is_none() && supports.is_none() =>
+        {
           layer = Some(nested_text(input));
         }
         Ok(Token::Function(name))
@@ -498,6 +513,66 @@ mod tests {
   }
 
   #[test]
+  fn an_import_without_a_charset_decodes_in_the_importing_sheets_encoding() {
+    let root = temp_dir("import-encoding");
+    let mut bytes = b".caf".to_vec();
+
+    bytes.extend([0xe9]);
+    bytes.extend(b"{}");
+    fs::write(root.join("css/child.css"), bytes).unwrap();
+    fs::write(
+      root.join("css/parent.css"),
+      "@charset \"windows-1252\"; @import \"child.css\";",
+    )
+    .unwrap();
+
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let base = directory_url(&root).unwrap();
+    let css = StyleSheetLoader::new(&sandbox)
+      .load(&base.join("css/parent.css").unwrap())
+      .unwrap()
+      .unwrap();
+
+    assert!(css.contains(".café{}"), "{css}");
+  }
+
+  #[test]
+  fn a_tailwind_entry_point_is_left_for_takumi_without_a_grant() {
+    let sandbox = Sandbox::new([]).unwrap();
+    let base = Url::parse("file:///nowhere/").unwrap();
+    let css = StyleSheetLoader::new(&sandbox)
+      .rewrite(
+        r#"@import "tailwindcss"; @import "tailwindcss/theme.css" layer(theme);"#,
+        &base,
+      )
+      .unwrap();
+
+    assert!(css.contains(r#"@import "tailwindcss";"#), "{css}");
+    assert!(css.contains(r#"@import "tailwindcss/theme.css""#), "{css}");
+  }
+
+  #[test]
+  fn layer_after_supports_is_read_as_media() {
+    let root = temp_dir("layer-order");
+
+    fs::write(root.join("css/b.css"), "b{}").unwrap();
+
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let base = directory_url(&root).unwrap().join("css/").unwrap();
+    let css = StyleSheetLoader::new(&sandbox)
+      .rewrite(
+        r#"@import "b.css" supports(display: grid) layer(base);"#,
+        &base,
+      )
+      .unwrap();
+
+    assert!(
+      css.starts_with("@media layer(base) {@supports (display: grid) {b{}}}"),
+      "{css}"
+    );
+  }
+
+  #[test]
   fn an_import_with_a_block_ends_at_the_block() {
     let root = temp_dir("import-block");
     let sandbox = Sandbox::new([root.clone()]).unwrap();
@@ -537,20 +612,6 @@ mod tests {
         .iter()
         .any(|error| matches!(error, ResourceError::ImportTooDeep(_)))
     );
-  }
-
-  #[test]
-  fn a_missing_import_stays_for_takumi_to_read() {
-    let root = temp_dir("tailwind");
-    let sandbox = Sandbox::new([root.clone()]).unwrap();
-    let base = directory_url(&root).unwrap();
-    let mut loader = StyleSheetLoader::new(&sandbox);
-    let css = loader
-      .rewrite(r#"@import "tailwindcss"; a{}"#, &base)
-      .unwrap();
-
-    assert!(css.starts_with(r#"@import "tailwindcss";"#), "{css}");
-    assert_eq!(loader.into_report().skipped.len(), 1);
   }
 
   #[test]

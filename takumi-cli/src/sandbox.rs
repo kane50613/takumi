@@ -78,7 +78,7 @@ impl fmt::Display for ResourceError {
       ),
       Self::Escapes(url) => write!(
         f,
-        "{url} leads outside the readable directories through a symlink. Allow the directory it points into with `--allow-read`."
+        "{url} is a symlink that leads out of its readable directory, which takumi never follows, even into another readable directory. Reference the file it points to instead, or pass a `--root` that holds both."
       ),
       Self::Network(url) => write!(f, "{url} needs the network, which takumi does not reach."),
       Self::UnsupportedScheme(url) => write!(f, "{url} has a scheme takumi cannot load."),
@@ -174,20 +174,26 @@ impl Sandbox {
     Ok(bytes)
   }
 
-  /// Whether the sandbox would let the document read `url`, without reading it.
+  /// Whether the sandbox would let the document read `url` on its own, without reading it.
   pub(crate) fn check(&self, url: &Url) -> Result<(), ResourceError> {
-    match url.scheme() {
-      "data" => decode_data(url).map(drop),
-      "file" => self.regular_file(url).map(drop),
-      "http" | "https" => Err(ResourceError::Network(url.clone())),
-      _ => Err(ResourceError::UnsupportedScheme(url.clone())),
+    let bytes = match url.scheme() {
+      "data" => decode_data(url)?.len() as u64,
+      "file" => self.regular_file(url)?.2,
+      "http" | "https" => return Err(ResourceError::Network(url.clone())),
+      _ => return Err(ResourceError::UnsupportedScheme(url.clone())),
+    };
+
+    if bytes > MAX_RESOURCE_BYTES {
+      return Err(ResourceError::OverBudget(url.clone()));
     }
+
+    Ok(())
   }
 
   /// The file `url` names, opened through the root whose path holds it. Only a regular file
   /// opens, so a FIFO or a device under a root cannot hold the render up.
   fn open(&self, url: &Url) -> Result<cap_std::fs::File, ResourceError> {
-    let (root, relative) = self.regular_file(url)?;
+    let (root, relative, _) = self.regular_file(url)?;
     let mut options = OpenOptions::new();
 
     options.read(true);
@@ -216,9 +222,9 @@ impl Sandbox {
     Ok(file)
   }
 
-  /// The root holding the regular file `url` names and the file's path inside it, read from its
-  /// metadata without opening it. A URL naming another machine never reaches it.
-  fn regular_file(&self, url: &Url) -> Result<(&Root, PathBuf), ResourceError> {
+  /// The root holding the regular file `url` names, the file's path inside it, and its size, read
+  /// from its metadata without opening it. A URL naming another machine never reaches it.
+  fn regular_file(&self, url: &Url) -> Result<(&Root, PathBuf, u64), ResourceError> {
     if url
       .host_str()
       .is_some_and(|host| !host.is_empty() && !host.eq_ignore_ascii_case("localhost"))
@@ -243,16 +249,16 @@ impl Sandbox {
       });
     };
 
-    if !root
+    let metadata = root
       .dir
       .metadata(&relative)
-      .map_err(|error| open_error(url, error))?
-      .is_file()
-    {
+      .map_err(|error| open_error(url, error))?;
+
+    if !metadata.is_file() {
       return Err(not_a_file(url));
     }
 
-    Ok((root, relative))
+    Ok((root, relative, metadata.len()))
   }
 
   fn charge(&self, url: &Url, bytes: u64) -> Result<(), ResourceError> {
@@ -271,9 +277,9 @@ impl Sandbox {
 }
 
 /// The error for a failed open of `url` through a root. cap-std refuses a path that resolves
-/// outside the root, through a symlink or otherwise, as permission denied.
+/// outside the root as permission denied with no OS error code, unlike a file the OS refuses.
 fn open_error(url: &Url, error: io::Error) -> ResourceError {
-  if error.kind() == io::ErrorKind::PermissionDenied {
+  if error.kind() == io::ErrorKind::PermissionDenied && error.raw_os_error().is_none() {
     ResourceError::Escapes(url.clone())
   } else {
     ResourceError::Io {
@@ -317,7 +323,9 @@ fn lexical(path: &Path) -> Option<PathBuf> {
   for component in path.components() {
     match component {
       Component::Prefix(prefix) => match prefix.kind() {
-        Prefix::Disk(_) | Prefix::VerbatimDisk(_) => resolved.push(component),
+        Prefix::Disk(_) => resolved.push(component),
+        // `\\?\C:\` names the same directory as `C:\`, which is how a `file:` URL names it.
+        Prefix::VerbatimDisk(disk) => resolved.push(format!("{}:", char::from(disk))),
         Prefix::UNC(..) | Prefix::VerbatimUNC(..) | Prefix::Verbatim(_) | Prefix::DeviceNS(_) => {
           return None;
         }
@@ -500,5 +508,42 @@ mod tests {
       sandbox.read(&url),
       Err(ResourceError::OverBudget(_))
     ));
+    assert!(matches!(
+      sandbox.check(&url),
+      Err(ResourceError::OverBudget(_))
+    ));
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn an_unreadable_file_under_a_root_is_skipped_not_an_escape() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = temp_dir("unreadable");
+    let path = root.join("locked.css");
+
+    fs::write(&path, "a{}").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let url = directory_url(&root).unwrap().join("locked.css").unwrap();
+    let result = sandbox.read(&url);
+
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+
+    // Root reads any file, so only an unprivileged run sees the denial.
+    if let Err(error) = result {
+      assert!(matches!(error, ResourceError::Io { .. }), "{error:?}");
+      assert!(!error.fails_render());
+    }
+  }
+
+  #[cfg(windows)]
+  #[test]
+  fn a_verbatim_disk_root_matches_its_file_urls() {
+    assert_eq!(
+      lexical(Path::new(r"\\?\C:\site\a.png")),
+      Some(PathBuf::from(r"C:\site\a.png"))
+    );
   }
 }

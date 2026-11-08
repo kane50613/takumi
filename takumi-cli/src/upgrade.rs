@@ -14,6 +14,10 @@ use url::Url;
 /// The package `cargo install` takes.
 const PACKAGE: &str = "takumi-cli";
 
+/// The two names Cargo records crates.io under.
+const CRATES_IO_INDEX: &str = "https://github.com/rust-lang/crates.io-index";
+const CRATES_IO_SPARSE_INDEX: &str = "sparse+https://index.crates.io/";
+
 /// Reinstalls takumi from the source it was installed from, such as its Git branch.
 #[derive(clap::Args)]
 #[command(
@@ -33,8 +37,8 @@ enum Source {
   Git { url: String, branch: Option<String> },
   /// A Git repository pinned to a tag or a commit, which an upgrade cannot move.
   PinnedGit { url: String, pin: String },
-  /// crates.io.
-  Registry,
+  /// A registry: crates.io when `index` is none, or the registry at that index URL.
+  Registry { index: Option<String> },
   /// A local checkout.
   Path(PathBuf),
 }
@@ -48,11 +52,7 @@ impl UpgradeArgs {
       .ok_or("cannot tell where takumi is installed")?;
     let source = installed_source(root)?;
     let arguments = install_arguments(&source, root)?;
-    let shown = arguments
-      .iter()
-      .map(|argument| argument.to_string_lossy())
-      .collect::<Vec<_>>()
-      .join(" ");
+    let shown = command_line(&arguments);
 
     if self.dry_run {
       println!("cargo {shown}");
@@ -110,8 +110,16 @@ impl Source {
   fn from_package_id(id: &str) -> Option<Self> {
     let source = id.split_once(" (")?.1.strip_suffix(')')?;
 
-    if source.starts_with("registry+") || source.starts_with("sparse+") {
-      return Some(Self::Registry);
+    if let Some(index) = source.strip_prefix("registry+") {
+      return Some(Self::Registry {
+        index: (index != CRATES_IO_INDEX).then(|| index.to_owned()),
+      });
+    }
+
+    if source.starts_with("sparse+") {
+      return Some(Self::Registry {
+        index: (source != CRATES_IO_SPARSE_INDEX).then(|| source.to_owned()),
+      });
     }
 
     if let Some(path) = source.strip_prefix("path+") {
@@ -156,17 +164,57 @@ fn install_arguments(source: &Source, root: &Path) -> Result<Vec<OsString>, Box<
       }
     }
     Source::PinnedGit { url, pin } => {
-      return Err(format!("takumi was installed from {url} at {pin}, which does not move. To follow the default branch instead, run `cargo install --locked --git {url} {PACKAGE}`.").into());
+      let unpinned = Source::Git {
+        url: url.clone(),
+        branch: None,
+      };
+      let command = command_line(&install_arguments(&unpinned, root)?);
+
+      return Err(format!("takumi was installed from {url} at {pin}, which does not move. To follow the default branch instead, run `cargo {command}`.").into());
     }
-    Source::Registry => {}
+    Source::Registry { index } => {
+      if let Some(index) = index {
+        arguments.extend(["--index".into(), index.into()]);
+      }
+    }
     Source::Path(path) => {
-      return Err(format!("takumi was installed from the local checkout at {}. Update it, then run `cargo install --locked --path {}`.", path.display(), path.display()).into());
+      let command = command_line(&[
+        "install".into(),
+        "--locked".into(),
+        "--path".into(),
+        path.into(),
+        "--root".into(),
+        root.into(),
+      ]);
+
+      return Err(format!("takumi was installed from the local checkout at {}. Update it, then run `cargo {command}`.", path.display()).into());
     }
   }
 
   arguments.extend([PACKAGE.into(), "--root".into(), root.into()]);
 
   Ok(arguments)
+}
+
+/// `arguments` joined into one line a POSIX shell splits back into the same arguments.
+fn command_line(arguments: &[OsString]) -> String {
+  arguments
+    .iter()
+    .map(|argument| {
+      let argument = argument.to_string_lossy();
+
+      if !argument.is_empty()
+        && argument
+          .chars()
+          .all(|c| c.is_ascii_alphanumeric() || "-_./:=@+,%".contains(c))
+      {
+        argument.into_owned()
+      } else {
+        format!("'{}'", argument.replace('\'', r"'\''"))
+      }
+    })
+    .collect::<Vec<_>>()
+    .join(" ")
 }
 
 #[cfg(test)]
@@ -199,7 +247,17 @@ mod tests {
       ),
       (
         "takumi-cli 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
-        Source::Registry,
+        Source::Registry { index: None },
+      ),
+      (
+        "takumi-cli 0.1.0 (sparse+https://index.crates.io/)",
+        Source::Registry { index: None },
+      ),
+      (
+        "takumi-cli 0.1.0 (sparse+https://crates.example.com/index/)",
+        Source::Registry {
+          index: Some("sparse+https://crates.example.com/index/".into()),
+        },
       ),
     ];
 
@@ -237,7 +295,25 @@ mod tests {
   }
 
   #[test]
-  fn a_local_checkout_is_left_to_the_user() {
-    assert!(install_arguments(&Source::Path("/src/takumi".into()), Path::new("/opt")).is_err());
+  fn a_local_checkout_is_left_to_the_user_with_the_same_root() {
+    let error = install_arguments(
+      &Source::Path("/src/takumi".into()),
+      Path::new("/opt/my tools"),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+      error.contains("`cargo install --locked --path /src/takumi --root '/opt/my tools'`"),
+      "{error}"
+    );
+  }
+
+  #[test]
+  fn quotes_what_a_shell_would_split() {
+    assert_eq!(
+      command_line(&["--root".into(), "/opt/it's here".into(), "".into()]),
+      r#"--root '/opt/it'\''s here' ''"#
+    );
   }
 }
