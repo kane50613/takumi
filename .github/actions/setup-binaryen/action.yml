@@ -13,7 +13,7 @@ runs:
       run: |
         set -euo pipefail
         archive="binaryen-$VERSION-$TARGET.tar.gz"
-        curl -sSfL --connect-timeout 30 --speed-limit 1024 --speed-time 60 --retry 6 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/$archive" \
+        curl -sSfL --connect-timeout 30 --speed-limit 1 --speed-time 60 --max-time 600 --retry 6 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/$archive" \
           "https://github.com/WebAssembly/binaryen/releases/download/$VERSION/$archive"
         echo "$SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict
         tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" \
