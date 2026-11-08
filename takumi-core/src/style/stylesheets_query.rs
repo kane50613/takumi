@@ -437,17 +437,9 @@ impl ComputedStyle {
     }
   }
 
-  /// Blink's `HasLineClamp`: the `max-lines` of a box whose `continue` collapses what follows them,
-  /// none where a zero count without `auto` leaves nothing to clamp.
+  /// Blink's `HasLineClamp`: the `max-lines` of a box whose `continue` collapses what follows them.
   pub(crate) fn line_clamp(&self) -> Option<MaxLines> {
-    if self.misc_data.r#continue != Continue::Collapse {
-      return None;
-    }
-
-    let MaxLines { lines, auto } = self.misc3_data.max_lines;
-    let lines = lines.filter(|&lines| lines >= 1);
-
-    (lines.is_some() || auto).then_some(MaxLines::new(lines, auto))
+    (self.misc_data.r#continue == Continue::Collapse).then_some(self.misc3_data.max_lines)
   }
 
   /// What font matching reads of this style at `sizing`'s font size, apart from the families.

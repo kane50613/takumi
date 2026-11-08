@@ -71,7 +71,6 @@ pub(crate) struct PreviousInflowPosition {
 #[derive(Debug, Clone, Default)]
 struct BlockLineClampData {
   data: LineClampData,
-  ignore_line_clamp: bool,
   /// The position after the last line or box before the clamp point, once the box clamped.
   previous_inflow_position_when_clamped: Option<PreviousInflowPosition>,
   /// The lineless box laid out since the last line, while measuring.
@@ -618,7 +617,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
   /// The algorithm set up as `RelayoutIgnoringLineClamp` sets it up.
   pub(in crate::layout) fn ignoring_line_clamp(mut self) -> Self {
-    self.line_clamp_data.ignore_line_clamp = true;
+    self.line_clamp_data.data.state = LineClampState::DontClamp;
     self
   }
 
@@ -643,10 +642,15 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     } else {
       // Blink's `RelayoutClampingByLines`. Clamping by lines too, the lines counted down from the
       // `max-lines` count.
-      let lines_to_relayout = match self.tree.render_node(self.node).context.style.line_clamp() {
-        Some(MaxLines {
-          lines: Some(lines), ..
-        }) if measured.data.is_clamp_by_lines() => {
+      let max_lines = self
+        .tree
+        .render_node(self.node)
+        .context
+        .style
+        .line_clamp()
+        .and_then(MaxLines::lines);
+      let lines_to_relayout = match max_lines {
+        Some(lines) if measured.data.is_clamp_by_lines() => {
           i32::try_from(lines).unwrap_or(i32::MAX) - measured.data.lines_until_clamp
         }
         _ => measured.data.lines_until_clamp,
@@ -719,12 +723,12 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       let line_clamp_data = &mut self.line_clamp_data;
 
       // A relayout keeps the clamp it was given.
-      if line_clamp_data.data.is_line_clamp_context() || line_clamp_data.ignore_line_clamp {
+      if line_clamp_data.data.is_line_clamp_context() {
         return;
       }
 
       // The border-box block size `auto` clamps at, none where it is unbounded.
-      let clamp_bfc_offset = match (max_lines.auto, self.child_available_size.block_size) {
+      let clamp_bfc_offset = match (max_lines.has_auto(), self.child_available_size.block_size) {
         (false, _) => None,
         (true, Some(block_size)) => Some(block_size + self.border_padding.block_sum()),
         (true, None) => Some(resolver.initial_min_max_block_sizes(None).max_size)
@@ -733,7 +737,7 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       let data = &mut line_clamp_data.data;
 
       data.lines_until_clamp = max_lines
-        .lines
+        .lines()
         .map_or(0, |lines| i32::try_from(lines).unwrap_or(i32::MAX));
 
       if let Some(clamp_bfc_offset) = clamp_bfc_offset {
@@ -846,8 +850,8 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       || previous.self_collapsing_child_had_clearance
       || space.is_new_formatting_context
     {
-      // A new formatting context encloses its floats, unless it clamped.
-      if space.is_new_formatting_context && clamped.is_none() {
+      // A new formatting context encloses its floats, unless it is a line-clamp context.
+      if space.is_new_formatting_context && !self.line_clamp_data.data.is_line_clamp_context() {
         self.intrinsic_block_size = self
           .intrinsic_block_size
           .max(self.exclusion_space.clearance_offset(Clear::Both));

@@ -85,24 +85,38 @@ fn parse_positive_integer<'i>(input: &mut Parser<'i>) -> ParseResult<'i, u32> {
   }
 }
 
-/// `max-lines`: Blink's `MaxLinesData`, `<integer [1,∞]> || auto`, with `none` taken as `auto`.
+/// `max-lines`: Blink's `MaxLinesData`, `<integer [1,∞]> || auto`.
 /// <https://drafts.csswg.org/css-overflow-4/#max-lines>
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct MaxLines {
-  /// The lines to keep, none to clamp by the block size alone.
-  pub lines: Option<u32>,
-  /// Whether the box also clamps where its block size runs out.
-  pub auto: bool,
+  lines: Option<u32>,
+  auto: bool,
 }
 
 impl MaxLines {
   /// The `auto` value, which clamps by the block size alone.
-  pub const AUTO: Self = Self::new(None, true);
+  pub const AUTO: Self = Self {
+    lines: None,
+    auto: true,
+  };
 
-  /// The value keeping `lines`, also clamping by the block size if `auto`.
+  /// The value keeping `lines`, also clamping by the block size if `auto`. No count, or a zero
+  /// one, is `auto`.
   pub const fn new(lines: Option<u32>, auto: bool) -> Self {
-    Self { lines, auto }
+    match lines {
+      Some(0) | None => Self::AUTO,
+      Some(_) => Self { lines, auto },
+    }
+  }
+
+  /// The lines to keep, none to clamp by the block size alone.
+  pub const fn lines(self) -> Option<u32> {
+    self.lines
+  }
+
+  /// Whether the box also clamps where its block size runs out.
+  pub const fn has_auto(self) -> bool {
+    self.auto
   }
 }
 
@@ -120,7 +134,7 @@ impl From<u32> for MaxLines {
 
 impl From<Option<u32>> for MaxLines {
   fn from(lines: Option<u32>) -> Self {
-    lines.map_or(Self::AUTO, Self::from)
+    Self::new(lines, false)
   }
 }
 
@@ -130,10 +144,6 @@ impl Animatable for MaxLines {}
 impl<'i> FromCss<'i> for MaxLines {
   /// Blink's `MaxLines::ParseSingleValue`.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
-      return Ok(Self::AUTO);
-    }
-
     let mut lines = None;
     let mut auto = false;
 
@@ -156,7 +166,7 @@ impl<'i> FromCss<'i> for MaxLines {
     Ok(Self::new(lines, auto))
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["none", "<integer>", "auto"];
+  const VALID_TOKENS: &'static [&'static str] = &["<integer>", "auto"];
 }
 
 impl ToCss for MaxLines {
@@ -253,7 +263,7 @@ impl<'i> FromCss<'i> for LineClamp {
     }
 
     Ok(Self {
-      max_lines: MaxLines::new(lines, auto || lines.is_none()),
+      max_lines: MaxLines::new(lines, auto),
       block_ellipsis: block_ellipsis.unwrap_or(BlockEllipsis::Auto),
       line_continue,
     })
@@ -403,7 +413,6 @@ mod tests {
     for (css, expected, serialized) in [
       ("3", MaxLines::from(3), "3"),
       ("auto", MaxLines::AUTO, "auto"),
-      ("none", MaxLines::AUTO, "auto"),
       ("2 auto", MaxLines::new(Some(2), true), "2 auto"),
       ("auto 2", MaxLines::new(Some(2), true), "2 auto"),
     ] {
@@ -416,5 +425,8 @@ mod tests {
     }
 
     assert!(MaxLines::from_css_str("0").is_err());
+    assert!(MaxLines::from_css_str("none").is_err());
+    assert_eq!(MaxLines::new(None, false), MaxLines::AUTO);
+    assert_eq!(MaxLines::from(0), MaxLines::AUTO);
   }
 }

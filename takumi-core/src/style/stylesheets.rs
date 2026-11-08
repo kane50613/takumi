@@ -1193,7 +1193,9 @@ macro_rules! define_style {
             TextOverflow::Clip
           };
           // `continue` does not inherit, so an anonymous box clamps nothing itself.
-          style.misc_data_mut().r#continue = Continue::Normal;
+          if style.misc_data.r#continue != Continue::Normal {
+            style.misc_data_mut().r#continue = Continue::Normal;
+          }
           style
         }
 

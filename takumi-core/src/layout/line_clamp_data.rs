@@ -33,6 +33,8 @@ pub(crate) enum LineClampState {
   /// Clamps after a number of lines, unless the clamp block offset comes first, where the
   /// container lays out again clamping by lines.
   ClampByLinesWithBfcOffset,
+  /// Never clamps, but still clips floats, for a container laid out again with no clamp point.
+  DontClamp,
 }
 
 /// Blink's `LineClampData`: where a line-clamp container clamps, none outside one.
