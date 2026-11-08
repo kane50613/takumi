@@ -19,7 +19,15 @@ Cargo builds the `takumi` binary and puts it in `~/.cargo/bin`, which rustup add
 takumi --version
 ```
 
-To build from a clone instead, run `cargo install --locked --path takumi-cli` in the repository. Run the install command again to update, and `cargo uninstall takumi-cli` to remove it.
+To build from a clone instead, run `cargo install --locked --path takumi-cli` in the repository, and `cargo uninstall takumi-cli` to remove either install.
+
+## Upgrade
+
+```sh
+takumi upgrade
+```
+
+`takumi upgrade` reinstalls takumi from the source `cargo install` recorded, such as the GitHub repository and branch, into the same directory. Add `--dry-run` to print the `cargo install` command without running it. It never checks for updates on its own. An install from a local checkout prints the command to run after you update the checkout instead.
 
 <Callout type="info">
   The CLI is not on crates.io or npm yet, so these commands build it from the GitHub repository.

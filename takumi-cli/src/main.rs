@@ -8,12 +8,15 @@ mod pdf;
 mod product;
 mod sandbox;
 mod stylesheet;
+mod upgrade;
 
 use std::{error::Error, process::ExitCode};
 
 use clap::{Parser, Subcommand};
 
-use crate::{image::ImageArgs, input::UsageError, pdf::PdfArgs, sandbox::ResourceError};
+use crate::{
+  image::ImageArgs, input::UsageError, pdf::PdfArgs, sandbox::ResourceError, upgrade::UpgradeArgs,
+};
 
 /// Renders HTML and CSS to images and PDFs.
 #[derive(Parser)]
@@ -36,6 +39,7 @@ struct Cli {
 enum Command {
   Image(ImageArgs),
   Pdf(PdfArgs),
+  Upgrade(UpgradeArgs),
 }
 
 fn main() -> ExitCode {
@@ -47,6 +51,7 @@ fn main() -> ExitCode {
     Command::Pdf(args) => args
       .product()
       .and_then(|pdf| product::run(&pdf, &args.input, &args.output, cli.quiet)),
+    Command::Upgrade(args) => args.run(),
   };
 
   match result {

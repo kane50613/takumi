@@ -4,6 +4,7 @@
 
 ```sh
 cargo install --locked --git https://github.com/kane50613/takumi takumi-cli
+takumi upgrade   # later, to reinstall from the same source
 
 takumi image card.html -o card.png --width 1200 --height 630
 takumi pdf invoice.html -o invoice.pdf --page "letter landscape" --footer footer.html
