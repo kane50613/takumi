@@ -192,10 +192,13 @@ pub(crate) fn find_keyframes<'a>(
 impl KeyframesRule {
   /// The names of the custom properties its keyframes declare, each once.
   fn custom_property_names(&self) -> Vec<&str> {
-    let mut names: Vec<&str> = self.custom_properties().collect();
+    let mut names: Vec<&str> = Vec::new();
 
-    names.sort_unstable();
-    names.dedup();
+    for name in self.custom_properties() {
+      if !names.contains(&name) {
+        names.push(name);
+      }
+    }
     names
   }
 

@@ -103,6 +103,17 @@ pub(crate) struct DeferredDeclaration {
   pub(crate) specified_value: String,
 }
 
+impl StyleDeclaration {
+  /// The declaration that waits for `var()` to substitute, when this is one.
+  fn deferred(&self) -> Option<&DeferredDeclaration> {
+    match self {
+      Self::Deferred(deferred) => Some(deferred),
+      Self::VarRef(var_ref) => Some(&var_ref.deferred),
+      _ => None,
+    }
+  }
+}
+
 impl DeferredDeclaration {
   /// Applies its substituted value, or `unset` when it is
   /// [invalid at computed-value time](https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time).
@@ -2495,11 +2506,7 @@ impl Style {
       .declarations
       .declarations
       .iter()
-      .filter_map(|declaration| match declaration {
-        StyleDeclaration::Deferred(deferred) => Some(deferred),
-        StyleDeclaration::VarRef(var_ref) => Some(&var_ref.deferred),
-        _ => None,
-      })
+      .filter_map(StyleDeclaration::deferred)
       .filter(|deferred| {
         names
           .iter()
@@ -2539,7 +2546,7 @@ fn resolve_declared_custom_properties(
 /// <https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles>
 #[derive(Debug, Default)]
 pub(crate) struct InvalidDeclarations {
-  declarations: Vec<StyleDeclaration>,
+  declarations: Vec<DeferredDeclaration>,
   names: Vec<String>,
 }
 
@@ -2570,10 +2577,8 @@ impl InvalidDeclarations {
       else {
         continue;
       };
-      let deferred = match winner {
-        StyleDeclaration::Deferred(deferred) => deferred,
-        StyleDeclaration::VarRef(var_ref) => &var_ref.deferred,
-        _ => continue,
+      let Some(deferred) = winner.deferred() else {
+        continue;
       };
       let relative =
         |value: &str| has_unit(value, units) || (is_document_root && has_unit(value, root_units));
@@ -2584,8 +2589,8 @@ impl InvalidDeclarations {
           invalid.names.push(name.to_owned());
         }
       }
-      if invalid.names.len() > before && !invalid.declarations.contains(winner) {
-        invalid.declarations.push(winner.clone());
+      if invalid.names.len() > before && !invalid.declarations.contains(deferred) {
+        invalid.declarations.push(deferred.clone());
       }
     }
     invalid
@@ -2597,7 +2602,10 @@ impl InvalidDeclarations {
 
   /// `declaration`, or `unset` for each of its longhands when a cycle invalidated it.
   pub(crate) fn replace(&self, declaration: StyleDeclaration) -> ParsedDeclarations {
-    if !self.declarations.contains(&declaration) {
+    if !declaration
+      .deferred()
+      .is_some_and(|deferred| self.declarations.contains(deferred))
+    {
       return [declaration].into_iter().collect();
     }
 

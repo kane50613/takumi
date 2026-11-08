@@ -437,7 +437,7 @@ impl FragmentItems {
     };
     let mut starts: Vec<u32> = glyphs.iter().map(|glyph| glyph.character_index).collect();
 
-    starts.sort_unstable();
+    sort_by_key(&mut starts, |&start| start);
     starts.dedup();
 
     let cluster_of = |character_index: u32| {

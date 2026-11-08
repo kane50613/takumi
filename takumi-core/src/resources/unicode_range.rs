@@ -1,3 +1,5 @@
+use crate::sort_key::sort_by_key;
+
 /// An inclusive codepoint range from an `@font-face` `unicode-range`, as Blink's `UnicodeRange`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UnicodeRange {
@@ -28,7 +30,7 @@ impl FromIterator<UnicodeRange> for UnicodeRangeSet {
       .filter(|range| range.from <= range.to)
       .collect();
 
-    sorted.sort_unstable();
+    sort_by_key(&mut sorted, |range| (range.from, range.to));
 
     let mut merged: Vec<UnicodeRange> = Vec::with_capacity(sorted.len());
 

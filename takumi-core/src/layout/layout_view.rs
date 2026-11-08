@@ -1,6 +1,7 @@
 //! A layout read through one interface whether it is finished or still laying out pages.
 
 #[cfg(feature = "fragmentation")]
+use crate::sort_key::sort_by_key;
 use rustc_hash::{FxHashMap, FxHashSet};
 #[cfg(feature = "fragmentation")]
 use smallvec::SmallVec;
@@ -247,7 +248,7 @@ impl<'a> LayoutView<'a> {
       .map(|&position| position as usize)
       .collect();
 
-    positions.sort_unstable();
+    sort_by_key(&mut positions, |&position| position);
     positions.dedup();
     Some(positions)
   }
