@@ -194,8 +194,9 @@ impl BoxLineHeight {
         value,
         font_size: sizing.font_size,
       },
-      CssLineHeight::Length(length) => Self::Length(LayoutUnit::from_float(
-        LayoutUnit::from_float_round(length.to_px(sizing, sizing.font_size)).to_float(),
+      CssLineHeight::Length(_) => Self::Length(LayoutUnit::from_float(
+        LayoutUnit::from_float_round(style.inherited_data.line_height.to_px(sizing, 0.0))
+          .to_float(),
       )),
     }
   }

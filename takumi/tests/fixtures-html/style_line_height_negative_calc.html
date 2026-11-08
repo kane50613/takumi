@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_line_height_negative_calc</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        gap: 8px;
+        padding: 24px 8px;
+      }
+      .cell {
+        display: block;
+        width: 48px;
+        font-size: 20px;
+        color: rgb(20, 20, 20);
+        background: rgb(219, 234, 254);
+      }
+    </style>
+  </head>
+  <body style="width: 296px; height: 72px; margin: 0">
+    <div class="row">
+      <div class="cell" style="line-height: 0px">Ag</div>
+      <div class="cell" style="line-height: min(1, -1)">Ag</div>
+      <div class="cell" style="line-height: calc(-10px)">Ag</div>
+      <div class="cell" style="line-height: calc(1em - 30px)">Ag</div>
+      <div class="cell" style="line-height: 1">Ag</div>
+    </div>
+  </body>
+</html>

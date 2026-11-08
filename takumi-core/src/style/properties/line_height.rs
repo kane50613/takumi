@@ -56,8 +56,10 @@ impl<'i> FromCss<'i> for LineHeight {
       return Ok(Self::Normal);
     }
 
+    // A calculation clamps to the property's non-negative range.
+    // <https://drafts.csswg.org/css-values-4/#calc-range>
     if let Ok(number) = input.try_parse(parse_calc_number_expression) {
-      return Ok(LineHeight::Unitless(number));
+      return Ok(LineHeight::Unitless(number.max(0.0)));
     }
 
     if let Ok(percent) = input.try_parse(Parser::expect_percentage) {
@@ -75,12 +77,12 @@ impl<'i> FromCss<'i> for LineHeight {
 }
 
 impl LineHeight {
-  /// Resolves to pixels, using `normal_basis` for `normal`.
+  /// Resolves to pixels, using `normal_basis` for `normal`, a negative calculation clamped to zero.
   pub fn to_px(self, sizing: &SizingContext, normal_basis: f32) -> f32 {
     match self {
       Self::Normal => normal_basis,
       Self::Unitless(value) => value * sizing.font_size,
-      Self::Length(length) => length.to_px(sizing, sizing.font_size),
+      Self::Length(length) => length.to_px(sizing, sizing.font_size).max(0.0),
     }
   }
 }
