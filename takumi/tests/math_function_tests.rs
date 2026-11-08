@@ -156,3 +156,28 @@ fn linear_easing_as_chromium() {
     assert_eq!(css, chromium);
   }
 }
+
+/// A math function's negative `line-height` clamps to zero, as Chromium clamps a calculation to
+/// the property's range: 20px text sits where `line-height: 0px` puts it, in a box of no height.
+#[test]
+fn a_negative_line_height_calculation_clamps_to_zero() {
+  let layout = |line_height: &str| {
+    let measured = measure_with_css(
+      Node::container([Node::text("x")]).with_class_name("t"),
+      &format!(".t {{ display: block; font-size: 20px; line-height: {line_height} }}"),
+    );
+
+    (measured.height, measured.runs[0].y)
+  };
+  let zero = layout("0px");
+
+  for line_height in [
+    "min(1, -1)",
+    "calc(-1)",
+    "calc(-10px)",
+    "calc(1em - 30px)",
+    "max(-5px, -2em)",
+  ] {
+    assert_eq!(layout(line_height), zero, "{line_height}");
+  }
+}
