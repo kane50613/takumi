@@ -3,6 +3,7 @@
 //! the host loads each `src` file and hands it over by URL, and each rule makes the face its
 //! first usable source gives.
 
+use crate::sort_key::sort_by_key;
 use std::sync::{Arc, LazyLock};
 
 use quick_cache::sync::Cache;
@@ -121,7 +122,7 @@ impl FontsSnapshot {
       return self;
     }
 
-    rules.sort_by_key(|rule| rule.layer_order.unwrap_or(usize::MAX));
+    sort_by_key(&mut rules, |rule| rule.layer_order.unwrap_or(usize::MAX));
 
     let base = &self.0.registry;
     let sources: Vec<RuleSource> = rules

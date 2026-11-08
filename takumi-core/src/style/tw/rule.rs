@@ -2,6 +2,7 @@
 //! orders among the others as Tailwind's [`compileCandidates`](https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/src/compile.ts)
 //! sorts them.
 
+use crate::sort_key::sort_by_key;
 use std::cmp::{Ordering, Reverse};
 
 use selectors::parser::Selector;
@@ -47,7 +48,7 @@ impl TwOrder {
     }
 
     properties.extend(property_indices(longhands));
-    properties.sort_unstable();
+    sort_by_key(&mut properties, |&property| property);
     properties.dedup();
     properties.push(u16::MAX);
 

@@ -1,6 +1,7 @@
 //! Tailwind's [`GLOBAL_PROPERTY_ORDER`](https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/src/property-order.ts),
 //! the order its utilities sort in by the properties they set.
 
+use crate::sort_key::sort_by_key;
 use std::sync::LazyLock;
 
 use rustc_hash::FxHashMap;
@@ -418,7 +419,7 @@ pub(super) fn property_indices(mut longhands: PropertyMask) -> impl Iterator<Ite
     .flat_map(|longhand| COVERING[longhand.index()].iter().copied())
     .collect();
 
-  positions.sort_unstable();
+  sort_by_key(&mut positions, |&position| position);
   positions.dedup();
 
   positions.into_iter().filter_map(move |position| {

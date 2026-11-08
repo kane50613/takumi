@@ -1,5 +1,6 @@
 //! Positioning a chunk's clusters, after Blink's `SvgTextLayoutAlgorithm`.
 
+use crate::sort_key::sort_by_key;
 use std::rc::Rc;
 
 use kurbo::{
@@ -419,7 +420,7 @@ impl TextChunk {
       .map(|(index, cluster)| (cluster.byte_index, index))
       .collect();
 
-    by_byte.sort_unstable();
+    sort_by_key(&mut by_byte, |&pair| pair);
 
     for span in &self.spans {
       let Some(target_width) = span.style.text_length else {
