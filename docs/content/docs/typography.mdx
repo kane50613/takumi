@@ -77,7 +77,7 @@ Style text with color, stroke, decoration, shadow, and spacing, then control how
 
 ### Truncation
 
-`line-clamp` cuts text after a number of lines and ends the last line with an ellipsis, as Chrome does. The lines of child blocks count too, and the content after the last line is hidden. `line-clamp: 3 no-ellipsis` cuts without an ellipsis. `line-clamp: auto` cuts after the last line that fits the box's `height` or `max-height`, and `line-clamp: 3 auto` cuts at whichever comes first. The legacy `-webkit-line-clamp` works only with `display: -webkit-box` and `-webkit-box-orient: vertical`, as in browsers.
+`line-clamp` cuts text after a number of lines and ends the last line with an ellipsis, as Chrome does. The lines of child blocks count too, and the content after the last line is hidden. `line-clamp: 3 no-ellipsis` cuts without an ellipsis. `line-clamp: auto` cuts after the last line that fits the box's `height` or `max-height`. The legacy `-webkit-line-clamp` works only with `display: -webkit-box` and `-webkit-box-orient: vertical`, as in browsers.
 
 ```tsx title="Truncation"
 <div

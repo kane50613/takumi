@@ -1686,7 +1686,7 @@ define_style! {
     }
     /// Blink's `misc->misc3` field group, which Blink nests in `misc`.
     misc3_data: StyleMisc3Data {
-      max_lines: MaxLines where anonymous = true,
+      max_lines: Option<u32> where anonymous = true,
       object_position: PositionValue where anonymous = true = PositionValue::center(),
       offset_anchor: OffsetAnchor,
       offset_distance: Length,

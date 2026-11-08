@@ -437,8 +437,9 @@ impl ComputedStyle {
     }
   }
 
-  /// Blink's `HasLineClamp`: the `max-lines` of a box whose `continue` collapses what follows them.
-  pub(crate) fn line_clamp(&self) -> Option<MaxLines> {
+  /// Blink's `HasLineClamp`: the `max-lines` of a box whose `continue` collapses what follows them,
+  /// none to clamp by the block size alone.
+  pub(crate) fn line_clamp(&self) -> Option<Option<u32>> {
     (self.misc_data.r#continue == Continue::Collapse).then_some(self.misc3_data.max_lines)
   }
 

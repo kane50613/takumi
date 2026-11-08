@@ -2010,6 +2010,7 @@ css/css-overflow/line-clamp/
 !css/css-overflow/line-clamp/line-clamp-027.html
 !css/css-overflow/line-clamp/line-clamp-028.html
 !css/css-overflow/line-clamp/line-clamp-039.html
+!css/css-overflow/line-clamp/line-clamp-041.html
 !css/css-overflow/line-clamp/line-clamp-auto-009.html
 !css/css-overflow/line-clamp/line-clamp-auto-027.tentative.html
 !css/css-overflow/line-clamp/line-clamp-auto-041.html

@@ -637,25 +637,9 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       data.state = LineClampState::ClampAfterLayoutObject;
       data.clamp_after_layout_object = Some(node);
     } else {
-      // Blink's `RelayoutClampingByLines`. Clamping by lines too counted them down from
-      // `max-lines`.
-      let lines_until_clamp = if measured.data.is_clamp_by_lines() {
-        let max_lines = self
-          .tree
-          .render_node(self.node)
-          .context
-          .style
-          .line_clamp()
-          .and_then(|max_lines| max_lines.lines)
-          .unwrap_or(0);
-
-        max_lines as i32 - measured.data.lines_until_clamp
-      } else {
-        measured.data.lines_until_clamp
-      };
-
+      // Blink's `RelayoutClampingByLines`.
       data.state = LineClampState::ClampByLines;
-      data.lines_until_clamp = lines_until_clamp.max(0);
+      data.lines_until_clamp = measured.data.lines_until_clamp.max(0);
     }
 
     let mut relayout = Self::new(self.tree, self.node, self.space, &self.input);
@@ -713,6 +697,9 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
 
   /// Blink's `BlockLineClampData::Setup`: the clamp a `line-clamp` sets, else the one the space
   /// passes down, with this box in the ancestor chain of a clamp by the block size.
+  ///
+  /// Approximate: `max-lines` holds no `auto` beside a count, so a box clamps by lines or by its
+  /// block size, never by both as Blink's `kClampByLinesWithBfcOffset` does.
   fn setup_line_clamp_data(&mut self) {
     let space = self.space;
     let resolver = LengthResolver::new(space, &self.style);
@@ -725,30 +712,24 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         return;
       }
 
-      let clamp_bfc_offset = if max_lines.auto {
-        match self.child_available_size.block_size {
-          Some(block_size) => Some(block_size + self.border_padding.block_sum()),
-          None => Some(resolver.initial_min_max_block_sizes(None).max_size)
-            .filter(|&max_size| max_size != LayoutUnit::MAX),
-        }
-      } else {
-        None
+      // The border-box block size `line-clamp: auto` clamps at, none where it is unbounded.
+      let clamp_bfc_offset = match (max_lines, self.child_available_size.block_size) {
+        (Some(_), _) => None,
+        (None, Some(block_size)) => Some(block_size + self.border_padding.block_sum()),
+        (None, None) => Some(resolver.initial_min_max_block_sizes(None).max_size)
+          .filter(|&max_size| max_size != LayoutUnit::MAX),
       };
       let data = &mut line_clamp_data.data;
 
-      data.lines_until_clamp = max_lines.lines.map_or(0, |lines| lines as i32);
-      if let Some(clamp_bfc_offset) = clamp_bfc_offset {
-        data.state = if data.lines_until_clamp != 0 {
-          LineClampState::ClampByLinesWithBfcOffset
-        } else {
-          LineClampState::MeasureLinesUntilBfcOffset
-        };
+      if let Some(lines) = max_lines {
+        data.state = LineClampState::ClampByLines;
+        data.lines_until_clamp = lines as i32;
+      } else if let Some(clamp_bfc_offset) = clamp_bfc_offset {
+        data.state = LineClampState::MeasureLinesUntilBfcOffset;
         data.clamp_bfc_offset = clamp_bfc_offset;
         line_clamp_data.ancestor_chain = Some(Rc::new(LineClampAncestorChain::root(
           self.border_padding.block_end,
         )));
-      } else if data.lines_until_clamp != 0 {
-        data.state = LineClampState::ClampByLines;
       }
 
       return;
