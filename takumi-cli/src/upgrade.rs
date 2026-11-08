@@ -211,13 +211,42 @@ fn command_line(arguments: &[OsString]) -> String {
       {
         argument.into_owned()
       } else if cfg!(windows) {
-        format!("\"{}\"", argument.replace('"', "\\\""))
+        windows_quote(&argument)
       } else {
         format!("'{}'", argument.replace('\'', r"'\''"))
       }
     })
     .collect::<Vec<_>>()
     .join(" ")
+}
+
+/// `argument` in double quotes, read back whole by the Windows argument rules Cargo parses with,
+/// where backslashes escape only a quote, or the closing quote when they end the argument.
+/// <https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments>
+fn windows_quote(argument: &str) -> String {
+  let mut quoted = String::from('"');
+  let mut backslashes = 0;
+
+  for c in argument.chars() {
+    if c == '\\' {
+      backslashes += 1;
+      continue;
+    }
+
+    if c == '"' {
+      quoted.push_str(&"\\".repeat(backslashes * 2 + 1));
+    } else {
+      quoted.push_str(&"\\".repeat(backslashes));
+    }
+
+    quoted.push(c);
+    backslashes = 0;
+  }
+
+  quoted.push_str(&"\\".repeat(backslashes * 2));
+  quoted.push('"');
+
+  quoted
 }
 
 #[cfg(test)]
@@ -319,6 +348,16 @@ mod tests {
     assert_eq!(
       command_line(&["--root".into(), "/opt/it's here".into(), "".into()]),
       r#"--root '/opt/it'\''s here' ''"#
+    );
+  }
+
+  #[test]
+  fn a_windows_quote_keeps_backslashes_before_a_quote() {
+    assert_eq!(windows_quote(r"C:\"), r#""C:\\""#);
+    assert_eq!(windows_quote(r#"a\"b"#), r#""a\\\"b""#);
+    assert_eq!(
+      windows_quote(r"C:\Program Files\tools"),
+      r#""C:\Program Files\tools""#
     );
   }
 
