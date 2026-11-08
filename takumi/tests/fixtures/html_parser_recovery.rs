@@ -52,6 +52,29 @@ fn html_style_elements() {
   .unwrap();
 }
 
+/// Only the preferred style sheet set styles the document: the first titled `<style>`, `dark`,
+/// picks it, so the blue `light` sheet is left out and the box stays green.
+#[test]
+fn html_preferred_style_sheet_set() {
+  let parsed = parse_html(
+    r#"<style>div { width: 200px; height: 100px }</style><style title="dark">div { background-color: rgb(34, 197, 94) }</style><style title="light">div { background-color: rgb(59, 130, 246) }</style><div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .unwrap();
+
+  write_goldens(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(parsed.node)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
+      .stylesheet(StyleSheet::parse(&parsed.css.join("\n")).unwrap().into())
+      .build(),
+    "html_preferred_style_sheet_set",
+  )
+  .unwrap();
+}
+
 /// Outside quirks mode a `<table>` start tag ends the open `<p>`, so the table is not inside it.
 #[test]
 fn html_table_ends_paragraph() {

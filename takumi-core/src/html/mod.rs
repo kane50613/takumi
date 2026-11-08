@@ -319,18 +319,22 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
 pub struct ParsedHtml {
   /// The node tree, as [`from_html`] returns it.
   pub node: Node,
-  /// The text of each CSS `<style>` element outside `<svg>` and `<math>`, in document order, inside an
-  /// `@media` rule when the element has a `media` attribute.
+  /// The text of each non-empty CSS `<style>` element outside `<svg>` and `<math>` that the
+  /// preferred style sheet set keeps, in document order, inside an `@media` rule when the element
+  /// has a `media` attribute.
   pub css: Vec<String>,
-  /// Each `<link rel="stylesheet">` for the host to fetch, in document order.
+  /// Each `<link rel="stylesheet">` the preferred style sheet set keeps, for the host to fetch,
+  /// in document order.
   pub links: Vec<StyleSheetLink>,
   /// The `href` of the first `<base>` element that has one, which relative URLs resolve against.
   pub base_href: Option<String>,
 }
 
 impl ParsedHtml {
-  /// The CSS of every `<style>` element and of every link `fetch` returns text for, in document
-  /// order. A link `fetch` returns none for is skipped, as a browser skips one that fails to load.
+  /// The CSS of every [`css`](Self::css) entry and of every [link](Self::links) `fetch` returns
+  /// text for, in document order. A link `fetch` returns none for is skipped, as a browser skips
+  /// one that fails to load. [`parse_html`] has already left out the sheets outside the preferred
+  /// style sheet set.
   pub fn css_with_links(
     &self,
     mut fetch: impl FnMut(&StyleSheetLink) -> Option<String>,
@@ -466,6 +470,7 @@ impl ParsedHtml {
       }
 
       match sheet {
+        DocumentStyleSheet::Inline(css) if css.is_empty() => {}
         DocumentStyleSheet::Inline(css) => self.css.push(css),
         DocumentStyleSheet::Link(link) => self.links.push(StyleSheetLink {
           css_index: self.css.len(),
@@ -482,8 +487,9 @@ enum DocumentStyleSheet {
   Link(StyleSheetLink),
 }
 
-/// The non-empty text of a `<style>` element with no type or `text/css`, inside an `@media` rule
-/// when the element has a `media` attribute.
+/// The text of a `<style>` element with no type or `text/css`, inside an `@media` rule when the
+/// element has a `media` attribute. An empty one still takes part in picking the preferred
+/// style sheet set, as in Blink.
 fn style_css(style: NodeRef<'_>) -> Option<String> {
   if !is_css_type(style.attribute("type")) {
     return None;
@@ -497,7 +503,11 @@ fn style_css(style: NodeRef<'_>) -> Option<String> {
     })
     .collect();
 
-  (!text.is_empty()).then(|| in_media(media_attribute(style), text))
+  if text.is_empty() {
+    return Some(text);
+  }
+
+  Some(in_media(media_attribute(style), text))
 }
 
 /// The `href` a `<link>` loads a style sheet from, as Blink's
@@ -1453,6 +1463,17 @@ mod tests {
         .collect::<Vec<_>>(),
       ["d.css"]
     );
+  }
+
+  #[test]
+  fn an_empty_titled_style_still_picks_the_style_sheet_set() {
+    let parsed = parse_html(
+      r#"<style title="dark"></style><style title="light">a{}</style><style>b{}</style>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["b{}"]);
   }
 
   #[test]
