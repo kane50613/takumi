@@ -1,3 +1,101 @@
+## takumi-core@0.36.0
+
+### `@font-face` applies `size-adjust`, metric overrides, `font-feature-settings`, and `local()`
+
+### A forced break inside a nested flex row moves the row
+
+`break-before: page` on the first item of a flex container nested in a flex row used to break only inside the nested container, so its first row stayed on the page before. The break now reaches the row around it, and the whole nested container starts the next page, as in Chromium.
+
+### The `page` property puts content on named pages
+
+An element with `page: cover` starts a page that `@page cover` rules size and margin, and the content after it that names no page goes back to the unnamed pages, as in Chromium. `PageSizer::new` now takes the page name with the page index, and `PageSizes::name` returns the name each page laid out as.
+
+### An inline `<svg>` draws whole at a `devicePixelRatio` above one
+
+An inline `<svg>` with a `viewBox` used to scale its shapes by the device pixel ratio twice, so at `devicePixelRatio: 2` only the top-left quarter showed. Its user units are now CSS pixels at any ratio, as Chromium draws them.
+
+### Raster pages can take their sizes from `@page` rules
+
+`render_pages` takes anything that converts into a `PageSizer`. A `Size` still gives every page the same area, and each page's image is now that page's own size. `PageRules::new(stylesheet, page_box, context)` converts into a `PageSizer` that gives each page the area the stylesheet's `@page` rules give it, including `:first`, `:left`, `:right`, and page names. `context` is the `PageContext` the root element gives, from `PageContext::from_root`. `PageRules::page_box` returns a page's size and margins, and `Viewport::print_page` is the viewport an `@page` rule resolves against.
+
+### `light-dark()` takes `currentColor`
+
+`border: 4px solid light-dark(currentColor, blue)` used to make its declaration invalid, so the element drew no border. `light-dark()` now takes `currentColor` wherever a colour can be `currentColor`.
+
+### `linear()` easing
+
+`animation-timing-function` takes `linear()` from CSS Easing 2, a curve of straight lines between its control points, so an animation can approximate a bounce or a spring. Points without a percentage spread evenly, and a progress past either end extends the outermost line, as in Chromium. `AnimationTimingFunction::LinearCurve` holds it.
+
+### Positions take offsets from a side, and an offset image keeps its pixels
+
+`object-position: bottom 1px right 2px` used to make its declaration invalid, so the image stayed centered. A position now takes the four-value form, where each side keyword takes an offset from that side, and `background-position` and `mask-position` also take the three-value form, as in Chromium.
+
+An image drawn smaller than its file and reaching past its content box, such as one an offset moves, used to be squeezed into the part that shows. It now draws at its full size, and the box crops it.
+
+### Content moved past the last page gets pages of its own
+
+A box that a transform or `position: relative` moved past the end of the content now adds the pages it reaches, as Chromium prints it. Before, the document ended on the last page of the content, and the moved box was cut off. A shadow, and content its box clips, add no page, as in Chromium.
+
+### Animations run on pseudo-elements, and registered properties break their cycles
+
+`::before` and `::after` now run their animations, of longhands and custom properties alike. An `animation-*` property that reads an animated custom property keeps the value from before the animation, as Chromium keeps it. A `font-size` that reads a registered length in `em`, or a `line-height` that reads one in `lh`, makes a cycle, and on the root element `rem` and `rlh` count too. The custom property then takes its initial value, and the declaration that reads it acts as `unset`, as Chromium breaks it.
+
+### `line-clamp` on a flex or grid container no longer clamps, `max-lines` is a `MaxLines`, and `max-lines: none` is invalid
+
+`display: flex; line-clamp: 2` used to clamp the text inside the container. Chrome clamps only a block container, so this no longer clamps, and neither does `display: grid`. Put `line-clamp` on a block inside the flex or grid container instead.
+
+The `max-lines` longhand is now a `MaxLines` in place of an `Option<u32>`, so it can hold `auto` beside a count. `StyleDeclaration::max_lines` takes one, and `StyleDeclaration::MaxLines` and `LineClamp::max_lines` hold one. Read it through `MaxLines::lines` and `MaxLines::has_auto`, and build it with `MaxLines::new` or from a `u32` or an `Option<u32>`, where `None` or a zero count is `auto`. `max-lines: none` is now invalid, as in Chrome, so a later `max-lines: none` no longer overrides an earlier `line-clamp: 3`.
+
+### Paged layout asks for each page's size as it reaches the page
+
+`PagedLayout::new`, `PageStream::new`, and `PagedScene::lay_out` take a `PageSizer` instead of one `Size`, and `PageSizer::uniform(size)` gives every page the size passed before. The layout records the size of each page it lays out in `PageSizes`, which `PagedLayout::sizes` and `PageStream::sizes` return and `SceneRef::window` and the `PageWindows` methods take. `SceneRef::page_origin(size, page)` is now `PageSizes::origin(page)`, and `PageWindows::new(size)` is now `PageWindows::default()`.
+
+### A registered custom property takes the math functions
+
+A custom property that `@property` registers now takes the math functions in its value, as Chromium does. `--angle: calc(1turn / 4)` computes to `90deg`, `--size: min(10px, 2em)` to px, and a `<length-percentage>` that needs the percentage basis keeps its function with the other units computed, so `clamp(1em, 5%, 30px)` at a 16px font is `clamp(16px, 5%, 30px)`.
+
+### A negative line-height calculation clamps to zero
+
+`line-height: min(1, -1)` or `calc(1em - 30px)` at 20px used to keep its negative value, which pushed the text above where `line-height: 0` puts it. A math function's negative result now clamps to zero, as Chromium clamps a calculation to the property's range.
+
+### `@property` types its custom property
+
+A custom property that `@property` registers now computes to the type its `syntax` names, inherits that computed value, and animates through it. A `<length>` computes to px, an `<angle>` to deg, a `<color>` to its color, and so on, so a `@keyframes` rule can spin a conic gradient through a registered `<angle>`. A registered `<length>` set to `.5em` at a 20px font size is 10px in every descendant, where each child used to read `.5em` again at its own font size. The element that sets it still reads `.5em`. A declared value the syntax does not take falls back to the inherited or initial value, and a rule whose `syntax` or `initial-value` Chromium rejects is dropped. `PropertyRule::syntax` is now a parsed `PropertySyntax`.
+
+### CSS math functions
+
+Lengths, numbers, and angles now take every math function of CSS Values 4: `min()`, `max()`, `clamp()`, `round()`, `mod()`, `rem()`, `abs()`, `sign()`, `hypot()`, the trigonometric functions, `pow()`, `sqrt()`, `log()`, and `exp()`. They nest inside `calc()` and each other, and `calc()` takes parentheses. A function that mixes a percentage with another unit, such as `min(200px, 50%)`, resolves once layout knows the percentage basis, as in a browser. Division by zero gives infinity, which clamps to the largest length, and a value divided by one of its own type gives a number. `Length::Math` holds such a function.
+
+### Count child blocks in `line-clamp`, and clamp by height with `line-clamp: auto`
+
+`line-clamp` used to count only the lines directly inside the clamped box, so text inside child `<div>`s or `<p>`s was never clamped. The lines of child blocks now count, and every box after the clamp point is hidden, as in Chrome. `line-clamp: auto` clamps after the last line that fits the box's `height` or `max-height`, and `line-clamp: 4 auto` clamps at whichever comes first, the fourth line or the box's height. `max-lines` takes the same `<integer> || auto` value. `block-ellipsis` also takes `no-ellipsis`. A container with no line to clamp still clips its floats to its content edge and does not grow to enclose them, as in Blink.
+
+### Content after a line taller than a page starts below it
+
+When a line held something taller than a page, such as a tall `inline-block`, the lines after it started at the top of the next page and drew over the part that ran on. They now start below it, as Chromium prints them.
+
+### `@page` rules size and margin the pages of a PDF
+
+A `@page` rule sets the page `size` and margins and wins over the `size`, `landscape`, and `margin` options, as CSS does in Chromium with `preferCSSPageSize`. `:first` styles the first page, and `:left` and `:right` style pages by the side they fall on, so under `direction: rtl` the first page is a left page. Each page lays out its content, bands, and repeated boxes at its own size. `em`, `rem`, and `var()` in a rule read the root element, as Chromium's page style inherits it. `@media`, `@layer`, and `!important` order the rules as they order any other. `StyleSheet::page_descriptors` returns the descriptors that win for a page in a `PageContext`, which `PageContext::from_root` and `PageContext::from_initial_containing_block` take from a tree's root element. Margin boxes such as `@top-center` are not read yet.
+
+### `:has()` matches
+
+A `:has()` selector used to parse as an unknown pseudo-class and never match, so `:not(:has(…))` always matched. It now matches its relative selectors, `>`, `+` and `~` included, as browsers do.
+
+### Parse `light-dark()` colors
+
+`light-dark()` used to make its declaration invalid, so `border: 1px solid light-dark(red, blue)` drew no border and `border-color: light-dark(red, blue)` fell back to `currentColor`. It now takes its first color, since a render has no `color-scheme` and is light.
+
+### A font file registered at two weights keeps a face for each
+
+Registering one file under the same family with another `weight`, `style`, width or `unicodeRange` used to reuse the first face, so `font-weight: 700` drew a synthetic bold of the face declared at 400. Each registration with its own descriptors now adds its own face, sharing the parsed font.
+
+Registering a face again with the same descriptors moves it after the faces registered since, so the latest registration takes precedence as a later `@font-face` rule does.
+
+### Load fonts from `@font-face` rules
+
+With the `font-face` feature, on by default in `takumi`, `@font-face` rules add fonts to a render. `needs` reports the files the text uses in `RenderNeeds::font_files`. Pass each to `Fonts::load_font_file`, or to `Fonts::fail_font_file` to fall back to the next `src`.
+
 ## takumi-core@0.35.0
 
 ### Number content with CSS counters
