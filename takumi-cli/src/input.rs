@@ -14,7 +14,7 @@ use url::Url;
 use crate::sandbox::{Sandbox, absolute_path, directory_url};
 
 /// The font text falls back to when the document loads none of its own.
-const DEFAULT_FONT: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
+const DEFAULT_FONT: &[u8] = include_bytes!("../assets/Geist[wght].woff2");
 
 /// The input document, the fonts the command line names, and the directories it may read.
 #[derive(clap::Args)]

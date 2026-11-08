@@ -3,8 +3,8 @@
 `takumi` renders an HTML file to an image or a PDF.
 
 ```sh
-cargo install --locked --git https://github.com/kane50613/takumi takumi-cli
-takumi upgrade   # later, to reinstall from the same source
+cargo install --locked takumi-cli
+takumi upgrade   # later, to install the newest release
 
 takumi image card.html -o card.png --width 1200 --height 630
 takumi pdf invoice.html -o invoice.pdf --page "letter landscape" --footer footer.html

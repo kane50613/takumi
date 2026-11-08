@@ -6,7 +6,8 @@ license = "MIT OR Apache-2.0"
 description = "Renders HTML and CSS to images, SVG, and PDF from the command line."
 repository = "https://github.com/kane50613/takumi"
 rust-version = "1.91"
-publish = false
+keywords = ["html", "css", "pdf", "image", "cli"]
+categories = ["command-line-utilities", "multimedia::images"]
 
 [[bin]]
 name = "takumi"
@@ -26,10 +27,12 @@ libc = "0.2"
 
 [dependencies.takumi]
 path = "../takumi"
+version = "2.20.0"
 features = ["from-html", "svg-backend"]
 
 [dependencies.takumi-pdf]
 path = "../takumi-pdf"
+version = "0.20.0"
 
 [lints]
 workspace = true
