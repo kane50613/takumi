@@ -85,14 +85,96 @@ fn parse_positive_integer<'i>(input: &mut Parser<'i>) -> ParseResult<'i, u32> {
   }
 }
 
+/// `max-lines`: Blink's `MaxLinesData`, `<integer [1,∞]> || auto`, with `none` taken as `auto`.
+/// <https://drafts.csswg.org/css-overflow-4/#max-lines>
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct MaxLines {
+  /// The lines to keep, none to clamp by the block size alone.
+  pub lines: Option<u32>,
+  /// Whether the box also clamps where its block size runs out.
+  pub auto: bool,
+}
+
+impl MaxLines {
+  /// The `auto` value, which clamps by the block size alone.
+  pub const AUTO: Self = Self::new(None, true);
+
+  /// The value keeping `lines`, also clamping by the block size if `auto`.
+  pub const fn new(lines: Option<u32>, auto: bool) -> Self {
+    Self { lines, auto }
+  }
+}
+
+impl Default for MaxLines {
+  fn default() -> Self {
+    Self::AUTO
+  }
+}
+
+impl From<u32> for MaxLines {
+  fn from(lines: u32) -> Self {
+    Self::new(Some(lines), false)
+  }
+}
+
+impl From<Option<u32>> for MaxLines {
+  fn from(lines: Option<u32>) -> Self {
+    lines.map_or(Self::AUTO, Self::from)
+  }
+}
+
+impl MakeComputed for MaxLines {}
+impl Animatable for MaxLines {}
+
+impl<'i> FromCss<'i> for MaxLines {
+  /// Blink's `MaxLines::ParseSingleValue`.
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(Self::AUTO);
+    }
+
+    let mut lines = None;
+    let mut auto = false;
+
+    while !input.is_exhausted() {
+      if !auto && input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+        auto = true;
+      } else if lines.is_none()
+        && let Ok(count) = input.try_parse(parse_positive_integer)
+      {
+        lines = Some(count);
+      } else {
+        break;
+      }
+    }
+
+    if lines.is_none() && !auto {
+      return Err(input.new_error_for_next_token());
+    }
+
+    Ok(Self::new(lines, auto))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &["none", "<integer>", "auto"];
+}
+
+impl ToCss for MaxLines {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match (self.lines, self.auto) {
+      (Some(lines), true) => write!(dest, "{lines} auto"),
+      (Some(lines), false) => write!(dest, "{lines}"),
+      (None, _) => dest.write_str("auto"),
+    }
+  }
+}
+
 /// The `line-clamp` shorthand of `max-lines`, `block-ellipsis`, and `continue`.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub struct LineClamp {
-  /// `max-lines` longhand, none to clamp by the block size alone.
-  pub max_lines: Option<u32>,
-  /// Blink's `HasAutoKeyword`, which the `max-lines` longhand drops beside a count.
-  pub max_lines_auto: bool,
+  /// `max-lines` longhand.
+  pub max_lines: MaxLines,
   /// `block-ellipsis` longhand.
   pub block_ellipsis: BlockEllipsis,
   /// `continue` longhand.
@@ -102,8 +184,7 @@ pub struct LineClamp {
 impl LineClamp {
   fn clamp(lines: u32) -> Self {
     Self {
-      max_lines: Some(lines),
-      max_lines_auto: false,
+      max_lines: MaxLines::from(lines),
       block_ellipsis: BlockEllipsis::Auto,
       line_continue: Continue::Collapse,
     }
@@ -172,8 +253,7 @@ impl<'i> FromCss<'i> for LineClamp {
     }
 
     Ok(Self {
-      max_lines: lines,
-      max_lines_auto: auto,
+      max_lines: MaxLines::new(lines, auto || lines.is_none()),
       block_ellipsis: block_ellipsis.unwrap_or(BlockEllipsis::Auto),
       line_continue,
     })
@@ -276,23 +356,21 @@ mod tests {
       (
         "auto",
         LineClamp {
-          max_lines: None,
-          max_lines_auto: true,
+          max_lines: MaxLines::AUTO,
           ..LineClamp::clamp(1)
         },
       ),
       (
         "4 auto",
         LineClamp {
-          max_lines_auto: true,
+          max_lines: MaxLines::new(Some(4), true),
           ..LineClamp::clamp(4)
         },
       ),
       (
         "auto no-ellipsis",
         LineClamp {
-          max_lines: None,
-          max_lines_auto: true,
+          max_lines: MaxLines::AUTO,
           block_ellipsis: BlockEllipsis::None,
           line_continue: Continue::Collapse,
         },
@@ -318,5 +396,25 @@ mod tests {
   fn test_parse_line_clamp_invalid() {
     assert!(LineClamp::from_css_str("bogus").is_err());
     assert!(LineClamp::from_css_str("1.5").is_err());
+  }
+
+  #[test]
+  fn max_lines_takes_a_count_and_auto_in_either_order() {
+    for (css, expected, serialized) in [
+      ("3", MaxLines::from(3), "3"),
+      ("auto", MaxLines::AUTO, "auto"),
+      ("none", MaxLines::AUTO, "auto"),
+      ("2 auto", MaxLines::new(Some(2), true), "2 auto"),
+      ("auto 2", MaxLines::new(Some(2), true), "2 auto"),
+    ] {
+      assert_eq!(
+        MaxLines::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+      assert_eq!(expected.to_css_string(), serialized);
+    }
+
+    assert!(MaxLines::from_css_str("0").is_err());
   }
 }

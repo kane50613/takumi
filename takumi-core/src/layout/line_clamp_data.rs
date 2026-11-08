@@ -17,7 +17,7 @@ pub(crate) enum LineClampFloatState {
   Clip,
 }
 
-/// Blink's `LineClampData::State`, without `kClampByLinesWithBfcOffset`.
+/// Blink's `LineClampData::State`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum LineClampState {
   #[default]
@@ -30,6 +30,9 @@ pub(crate) enum LineClampState {
   MeasureLinesUntilBfcOffset,
   /// Counts the lines for an ancestor measuring up to its clamp block offset.
   CountLines,
+  /// Clamps after a number of lines, unless the clamp block offset comes first, where the
+  /// container lays out again clamping by lines.
+  ClampByLinesWithBfcOffset,
 }
 
 /// Blink's `LineClampData`: where a line-clamp container clamps, none outside one.
@@ -53,12 +56,18 @@ impl LineClampData {
 
   /// Blink's `IsClampByLines`.
   pub(crate) fn is_clamp_by_lines(self) -> bool {
-    self.state == LineClampState::ClampByLines
+    matches!(
+      self.state,
+      LineClampState::ClampByLines | LineClampState::ClampByLinesWithBfcOffset
+    )
   }
 
   /// Blink's `IsMeasureUntilBfcOffset`.
   pub(crate) fn is_measure_until_bfc_offset(self) -> bool {
-    self.state == LineClampState::MeasureLinesUntilBfcOffset
+    matches!(
+      self.state,
+      LineClampState::MeasureLinesUntilBfcOffset | LineClampState::ClampByLinesWithBfcOffset
+    )
   }
 
   /// Blink's `IsCountLines`.

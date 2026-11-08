@@ -463,7 +463,7 @@ fn webkit_line_clamp_needs_a_vertical_webkit_box() {
   let horizontal = style(&[("display", "-webkit-box"), ("-webkit-line-clamp", "2")]);
   let overridden = style(&[("line-clamp", "4"), ("-webkit-line-clamp", "4")]);
 
-  assert_eq!(legacy.line_clamp(), Some(Some(2)));
+  assert_eq!(legacy.line_clamp(), Some(MaxLines::from(2)));
   assert_eq!(legacy.base_data.display, Display::FlowRoot);
   assert_eq!(bare.line_clamp(), None);
   assert_eq!(flex_column.line_clamp(), None);
@@ -481,7 +481,7 @@ fn parse_webkit_line_clamp_matches_line_clamp() {
 
   let webkit = webkit_line_clamp.inherit(&ComputedStyle::default());
   let plain = line_clamp.inherit(&ComputedStyle::default());
-  assert_eq!(webkit.misc3_data.max_lines, Some(2));
+  assert_eq!(webkit.misc3_data.max_lines, MaxLines::from(2));
   assert_eq!(webkit.misc3_data.max_lines, plain.misc3_data.max_lines);
   assert_eq!(
     webkit.misc_inherited1_data.block_ellipsis,
@@ -495,7 +495,7 @@ fn line_clamp_shorthand_expands_to_longhands() {
   parent.append_block(parse_declarations("line-clamp", "3 \"...\""));
   let parent = parent.inherit(&ComputedStyle::default());
 
-  assert_eq!(parent.misc3_data.max_lines, Some(3));
+  assert_eq!(parent.misc3_data.max_lines, MaxLines::from(3));
   assert_eq!(
     parent.misc_inherited1_data.block_ellipsis,
     BlockEllipsis::String("...".to_owned())
@@ -504,7 +504,7 @@ fn line_clamp_shorthand_expands_to_longhands() {
 
   // Only `block-ellipsis` inherits; `max-lines` and `continue` do not.
   let child = Style::default().inherit(&parent);
-  assert_eq!(child.misc3_data.max_lines, None);
+  assert_eq!(child.misc3_data.max_lines, MaxLines::AUTO);
   assert_eq!(child.misc_data.r#continue, Continue::Normal);
   assert_eq!(
     child.misc_inherited1_data.block_ellipsis,

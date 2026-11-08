@@ -1,8 +1,10 @@
 ---
 packages:
-  takumi-core: patch
+  takumi-core: minor
 ---
 
 # Count child blocks in `line-clamp`, and clamp by height with `line-clamp: auto`
 
-`line-clamp` used to count only the lines directly inside the clamped box, so text inside child `<div>`s or `<p>`s was never clamped. The lines of child blocks now count, and every box after the clamp point is hidden, as in Chrome. `line-clamp: auto` clamps after the last line that fits the box's `height` or `max-height`. `block-ellipsis` also takes `no-ellipsis`.
+`line-clamp` used to count only the lines directly inside the clamped box, so text inside child `<div>`s or `<p>`s was never clamped. The lines of child blocks now count, and every box after the clamp point is hidden, as in Chrome. `line-clamp: auto` clamps after the last line that fits the box's `height` or `max-height`, and `line-clamp: 4 auto` clamps at whichever comes first, the fourth line or the box's height. `max-lines` takes the same `<integer> || auto` value. `block-ellipsis` also takes `no-ellipsis`.
+
+Breaking: the `max-lines` longhand is now a `MaxLines` in place of an `Option<u32>`. `StyleDeclaration::max_lines` takes one, and `StyleDeclaration::MaxLines` and `LineClamp::max_lines` hold one. `MaxLines` converts from a `u32` or an `Option<u32>`, where `None` is `auto`.
