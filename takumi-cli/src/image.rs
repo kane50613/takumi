@@ -14,7 +14,7 @@ use takumi::{
 
 use crate::{
   document::Document,
-  input::{InputArgs, OutputArgs},
+  input::{InputArgs, OutputArgs, UsageError},
   product::{Images, Product},
 };
 
@@ -47,16 +47,27 @@ pub(crate) struct ImageArgs {
 #[derive(clap::Args)]
 struct ViewportArgs {
   /// The viewport width in CSS pixels.
-  #[arg(long, default_value_t = 1200)]
+  #[arg(long, default_value_t = 1200, value_parser = clap::value_parser!(u32).range(1..))]
   width: u32,
 
   /// The viewport height in CSS pixels. Without it, the image is as tall as its content.
-  #[arg(long)]
+  #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
   height: Option<u32>,
 
   /// The device pixel ratio, which scales the image's pixels.
-  #[arg(long, default_value_t = 1.0)]
+  #[arg(long, default_value_t = 1.0, value_parser = parse_device_pixel_ratio)]
   dpr: f32,
+}
+
+/// `--dpr`: a finite ratio above zero.
+fn parse_device_pixel_ratio(value: &str) -> Result<f32, String> {
+  value
+    .parse::<f32>()
+    .ok()
+    .filter(|ratio| ratio.is_finite() && *ratio > 0.0)
+    .ok_or_else(|| {
+      format!("`{value}` is not a device pixel ratio. Use a number above 0, such as 2.")
+    })
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -77,16 +88,19 @@ pub(crate) struct Image {
 
 impl ImageArgs {
   pub(crate) fn product(&self) -> Result<Image, Box<dyn Error>> {
+    let usage = |message: String| -> Box<dyn Error> { Box::new(UsageError(message)) };
     let format = match (self.format, self.output.extension().as_deref()) {
       (Some(format), _) => format,
+      // A listing writes no file, and every format loads the same resources.
+      (None, _) if !self.output.renders() => ImageFormat::Png,
       (None, Some(extension)) => ImageFormat::from_str(extension, true).map_err(|_| {
-        format!("`.{extension}` is not an image format takumi writes. Use png, jpg, webp, or svg, or pass `--format`.")
+        usage(format!("`.{extension}` is not an image format takumi writes. Use png, jpg, webp, or svg, or pass `--format`."))
       })?,
       (None, None) if self.output.is_stdout() => {
-        return Err("writing to standard output needs `--format`.".into());
+        return Err(usage("writing to standard output needs `--format`.".into()));
       }
       (None, None) => {
-        return Err("the output has no extension. Add png, jpg, webp, or svg, or pass `--format`.".into());
+        return Err(usage("the output has no extension. Add png, jpg, webp, or svg, or pass `--format`.".into()));
       }
     };
 
@@ -157,7 +171,7 @@ impl Product for Image {
     let bitmap = render(self.options(&document, fonts, images)).map_err(|error| -> Box<dyn Error> {
       match error {
         RenderError::InvalidViewport if self.viewport.size.height.is_none() => {
-          "the document's content is 0px tall, so the image would have no pixels. Pass `--height`.".into()
+          "the image would be 0px tall or over 64 megapixels at the content's height. Pass `--height`.".into()
         }
         error => error.into(),
       }

@@ -1,7 +1,7 @@
 //! An HTML document and everything it loads through the sandbox: style sheets, images, and
 //! `@font-face` files.
 
-use std::{error::Error, sync::Arc};
+use std::{collections::HashMap, error::Error, sync::Arc};
 
 use takumi::{
   parse_html,
@@ -26,14 +26,13 @@ pub(crate) struct Document {
 }
 
 impl Document {
-  /// Parses `html` found at `location` and loads the style sheets it links and imports, after
-  /// `default_css`, which they override.
+  /// Parses `html` found at `location` and loads the style sheets it links and imports through
+  /// `loader`, after `default_css`, which they override.
   pub(crate) fn load(
     html: &str,
     location: &Url,
     default_css: Option<String>,
-    sandbox: &Sandbox,
-    warnings: &mut Vec<ResourceError>,
+    loader: &mut StyleSheetLoader<'_>,
   ) -> Result<Self, Box<dyn Error>> {
     let mut parsed = parse_html(html, FromHtmlOptions::default())?;
     let base = parsed
@@ -41,7 +40,6 @@ impl Document {
       .as_deref()
       .and_then(|href| location.join(href).ok())
       .unwrap_or_else(|| location.clone());
-    let mut loader = StyleSheetLoader::new(sandbox);
 
     for css in &mut parsed.css {
       *css = loader.rewrite(css, &base)?;
@@ -67,8 +65,6 @@ impl Document {
       return Err(error.into());
     }
 
-    warnings.extend(loader.into_report().skipped);
-
     Ok(Self {
       node: parsed.node,
       stylesheet: Arc::new(StyleSheet::parse_owned_list_loosy(css.clone())),
@@ -79,6 +75,10 @@ impl Document {
 
   /// Gives this document and `others` one style sheet: this document's CSS, then each of
   /// theirs in order, as a PDF's header and footer share the page's style sheet.
+  ///
+  /// Approximate: Chromium draws a header or footer template in a frame of its own, so its CSS,
+  /// an `@page` rule included, never reaches the page. This follows takumi-pdf's JS API, which
+  /// joins them.
   pub(crate) fn share_style_sheet(&mut self, others: &mut [Document]) {
     if others.is_empty() {
       return;
@@ -98,15 +98,17 @@ impl Document {
     self.stylesheet = stylesheet;
   }
 
-  /// The images the document reaches, decoded and keyed as written. Loads its `@font-face` files
-  /// into `fonts` first, since each font loaded can change which other faces the text reaches.
+  /// Loads the `@font-face` files the document reaches into `fonts`, then its images into
+  /// `images`. Fonts come first, since each font loaded can change which other faces the text
+  /// reaches.
   pub(crate) fn load_resources(
     &self,
     product: &impl Product,
     fonts: &mut Fonts,
+    images: &mut ImageCache,
     sandbox: &Sandbox,
     warnings: &mut Vec<ResourceError>,
-  ) -> Result<Images, Box<dyn Error>> {
+  ) -> Result<(), Box<dyn Error>> {
     loop {
       let font_files = product.needs(self, fonts, &Images::new())?.font_files;
 
@@ -117,13 +119,16 @@ impl Document {
       let mut failed = Vec::new();
 
       for written in font_files {
-        let loaded = self.read(&written, sandbox, warnings)?.and_then(|bytes| {
-          fonts
-            .load_font_file(written.as_str(), FontSource::from(bytes))
-            .ok()
-        });
+        let Some(bytes) = self.read(&written, sandbox, warnings)? else {
+          failed.push(written);
+          continue;
+        };
 
-        if loaded.is_none() {
+        if let Err(error) = fonts.load_font_file(written.as_str(), FontSource::from(bytes)) {
+          warnings.push(ResourceError::Undecodable {
+            url: written.clone(),
+            reason: error.to_string(),
+          });
           failed.push(written);
         }
       }
@@ -131,50 +136,62 @@ impl Document {
       *fonts = fonts.with_failed_font_files(&failed);
     }
 
-    let mut images = Images::new();
-
     for written in product.needs(self, fonts, &Images::new())?.images {
-      let Some(bytes) = self.read(&written, sandbox, warnings)? else {
+      let Ok(url) = self.base.join(&written) else {
         continue;
       };
 
-      match ImageSource::from_bytes(&bytes) {
-        Ok(image) => {
-          images.insert(Arc::from(written), image);
-        }
-        Err(error) => eprintln!("warning: {written} is not an image takumi can decode: {error}"),
-      }
+      images.add(written, url, sandbox, warnings)?;
     }
 
-    Ok(images)
+    Ok(())
   }
 
-  /// Prints each image and font the document reaches, whether the sandbox lets it load, and its
-  /// URL, tab-separated.
+  /// Prints each image and font the document reaches, fallback `@font-face` sources included,
+  /// with whether the sandbox lets it load, tab-separated.
   pub(crate) fn list_resources(
     &self,
     product: &impl Product,
     fonts: &Fonts,
     sandbox: &Sandbox,
   ) -> Result<(), Box<dyn Error>> {
-    let needs = product.needs(self, fonts, &Images::new())?;
-    let resources = needs
-      .images
-      .iter()
-      .map(|written| ("image", written))
-      .chain(needs.font_files.iter().map(|written| ("font", written)));
+    let mut fonts = fonts.clone();
+    let images = product.needs(self, &fonts, &Images::new())?.images;
 
-    for (kind, written) in resources {
-      match self.base.join(written) {
-        Ok(url) => match sandbox.check(&url) {
-          Ok(()) => println!("{kind}\tallowed\t{url}"),
-          Err(error) => println!("{kind}\tblocked\t{url}\t{error}"),
-        },
-        Err(_) => println!("{kind}\tinvalid\t{written}"),
+    for written in &images {
+      self.print_resource("image", written, sandbox);
+    }
+
+    // Marking every source failed reaches the next one, as a font that fails to load would.
+    loop {
+      let font_files: Vec<String> = product
+        .needs(self, &fonts, &Images::new())?
+        .font_files
+        .into_iter()
+        .collect();
+
+      if font_files.is_empty() {
+        break;
       }
+
+      for written in &font_files {
+        self.print_resource("font", written, sandbox);
+      }
+
+      fonts = fonts.with_failed_font_files(&font_files);
     }
 
     Ok(())
+  }
+
+  fn print_resource(&self, kind: &str, written: &str, sandbox: &Sandbox) {
+    match self.base.join(written) {
+      Ok(url) => match sandbox.check(&url) {
+        Ok(()) => println!("{kind}\tallowed\t{url}"),
+        Err(error) => println!("{kind}\tblocked\t{url}\t{error}"),
+      },
+      Err(_) => println!("{kind}\tinvalid\t{written}"),
+    }
   }
 
   /// The bytes of the resource written as `written`, none when a browser would skip it.
@@ -188,13 +205,91 @@ impl Document {
       return Ok(None);
     };
 
-    match sandbox.read(&url) {
-      Ok(bytes) => Ok(Some(bytes)),
-      Err(error) if error.fails_render() => Err(error),
-      Err(error) => {
-        warnings.push(error);
-        Ok(None)
-      }
+    read_or_skip(&url, sandbox, warnings)
+  }
+}
+
+/// The bytes at `url`, none when a browser would skip it. Only a read that
+/// [fails the render](ResourceError::fails_render) is an error.
+fn read_or_skip(
+  url: &Url,
+  sandbox: &Sandbox,
+  warnings: &mut Vec<ResourceError>,
+) -> Result<Option<Vec<u8>>, ResourceError> {
+  match sandbox.read(url) {
+    Ok(bytes) => Ok(Some(bytes)),
+    Err(error) if error.fails_render() => Err(error),
+    Err(error) => {
+      warnings.push(error);
+      Ok(None)
     }
+  }
+}
+
+/// The images of every document in one render, each file read and decoded once.
+#[derive(Default)]
+pub(crate) struct ImageCache {
+  /// Each image by the key the render looks it up by, the URL as a document writes it.
+  images: Images,
+  /// The URL each key resolved to, so a second document writing the same key for another file
+  /// is caught.
+  resolved: HashMap<Arc<str>, Url>,
+  decoded: HashMap<Url, ImageSource>,
+}
+
+impl ImageCache {
+  /// Adds the image a document writes as `written` and resolves to `url`.
+  fn add(
+    &mut self,
+    written: String,
+    url: Url,
+    sandbox: &Sandbox,
+    warnings: &mut Vec<ResourceError>,
+  ) -> Result<(), ResourceError> {
+    let key: Arc<str> = Arc::from(written);
+
+    if let Some(kept) = self.resolved.get(&key) {
+      if *kept != url {
+        warnings.push(ResourceError::SharedKey {
+          written: key.to_string(),
+          kept: kept.to_string(),
+          other: url.to_string(),
+        });
+      }
+
+      return Ok(());
+    }
+
+    let image = match self.decoded.get(&url) {
+      Some(image) => image.clone(),
+      None => {
+        let Some(bytes) = read_or_skip(&url, sandbox, warnings)? else {
+          return Ok(());
+        };
+
+        match ImageSource::from_bytes(&bytes) {
+          Ok(image) => {
+            self.decoded.insert(url.clone(), image.clone());
+            image
+          }
+          Err(error) => {
+            warnings.push(ResourceError::Undecodable {
+              url: url.to_string(),
+              reason: error.to_string(),
+            });
+            return Ok(());
+          }
+        }
+      }
+    };
+
+    self.resolved.insert(Arc::clone(&key), url);
+    self.images.insert(key, image);
+
+    Ok(())
+  }
+
+  pub(crate) fn into_images(self) -> Images {
+    self.images
   }
 }

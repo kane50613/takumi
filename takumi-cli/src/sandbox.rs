@@ -1,13 +1,18 @@
 //! The only way a document reaches outside itself: reads of local files under the granted roots
 //! and `data:` URLs, within a budget. The network is not reachable at all.
+//!
+//! Each root is an open directory handle, and every read resolves relative to one through
+//! `cap-std`, so neither `..`, a symlink, nor a file swapped for a symlink between a check and
+//! the read can step outside it, and nothing outside a root is opened or probed.
 
 use std::{
   cell::Cell,
-  fmt, fs,
+  fmt,
   io::{self, Read},
   path::{self, Component, Path, PathBuf, Prefix},
 };
 
+use cap_std::{ambient_authority, fs::Dir};
 use data_url::DataUrl;
 use url::Url;
 
@@ -25,6 +30,8 @@ const MAX_RESOURCES: usize = 1024;
 pub(crate) enum ResourceError {
   /// The file is outside every granted root.
   Denied { url: Url, path: PathBuf },
+  /// The file is named under a granted root, but a symlink in its path leads outside it.
+  Escapes(Url),
   /// The URL needs the network, which the CLI never reaches.
   Network(Url),
   /// The URL's scheme names nothing the CLI can load.
@@ -35,13 +42,26 @@ pub(crate) enum ResourceError {
   Io { url: Url, error: io::Error },
   /// The resource, or all of them together, went past the budget.
   OverBudget(Url),
+  /// The resource loaded, but takumi cannot decode it as the image or font it should be.
+  Undecodable { url: String, reason: String },
+  /// A stylesheet that `@import` rules nest deeper than the CLI follows.
+  ImportTooDeep(Url),
+  /// The page and a header or footer write the same image URL for different files.
+  SharedKey {
+    written: String,
+    kept: String,
+    other: String,
+  },
 }
 
 impl ResourceError {
   /// Whether the render stops: the sandbox denied the read or the budget ran out. Anything else
   /// the render skips, as a browser skips a resource that fails to load.
   pub(crate) fn fails_render(&self) -> bool {
-    matches!(self, Self::Denied { .. } | Self::OverBudget(_))
+    matches!(
+      self,
+      Self::Denied { .. } | Self::Escapes(_) | Self::OverBudget(_)
+    )
   }
 }
 
@@ -53,6 +73,10 @@ impl fmt::Display for ResourceError {
         "{url} is outside the readable directories. Pass `--allow-read {}` to allow it.",
         path.parent().unwrap_or(path).display()
       ),
+      Self::Escapes(url) => write!(
+        f,
+        "{url} leads outside the readable directories through a symlink. Allow the directory it points into with `--allow-read`."
+      ),
       Self::Network(url) => write!(f, "{url} needs the network, which takumi does not reach."),
       Self::UnsupportedScheme(url) => write!(f, "{url} has a scheme takumi cannot load."),
       Self::InvalidData(url) => write!(f, "{url} is not a valid data: URL."),
@@ -63,40 +87,58 @@ impl fmt::Display for ResourceError {
         MAX_RESOURCE_BYTES >> 20,
         MAX_TOTAL_BYTES >> 20
       ),
+      Self::Undecodable { url, reason } => write!(f, "{url} could not be decoded: {reason}"),
+      Self::ImportTooDeep(url) => write!(
+        f,
+        "{url} is nested deeper than {} `@import` levels, so takumi left it out.",
+        crate::stylesheet::MAX_IMPORT_DEPTH
+      ),
+      Self::SharedKey {
+        written,
+        kept,
+        other,
+      } => write!(
+        f,
+        "`{written}` names {kept} in one document and {other} in another, so both draw {kept}. Give the files different names."
+      ),
     }
   }
 }
 
 impl std::error::Error for ResourceError {}
 
+/// A granted directory: its absolute path, to match a URL against by name, and its handle.
+#[derive(Debug)]
+struct Root {
+  path: PathBuf,
+  dir: Dir,
+}
+
 /// The directories a document may read and what it has read so far.
 #[derive(Debug)]
 pub(crate) struct Sandbox {
-  /// Canonical paths, so a symlink or `..` cannot step out of one.
-  roots: Vec<PathBuf>,
-  /// The roots as given, made absolute, to check a path against before touching the filesystem.
-  given_roots: Vec<PathBuf>,
+  roots: Vec<Root>,
   loaded_bytes: Cell<u64>,
   loaded_resources: Cell<usize>,
 }
 
 impl Sandbox {
-  /// A sandbox reading under `roots`, each of which must exist.
+  /// A sandbox reading under `roots`, each of which must be a directory.
   pub(crate) fn new(roots: impl IntoIterator<Item = PathBuf>) -> io::Result<Self> {
-    let mut canonical_roots = Vec::new();
-    let mut given_roots = Vec::new();
+    let roots = roots
+      .into_iter()
+      .map(|root| {
+        let with_path =
+          |error: io::Error| io::Error::new(error.kind(), format!("{}: {error}", root.display()));
+        let path = absolute_path(&root).map_err(with_path)?;
+        let dir = Dir::open_ambient_dir(&path, ambient_authority()).map_err(with_path)?;
 
-    for root in roots {
-      let with_path =
-        |error: io::Error| io::Error::new(error.kind(), format!("{}: {error}", root.display()));
-
-      canonical_roots.push(fs::canonicalize(&root).map_err(with_path)?);
-      given_roots.extend(lexical(&path::absolute(&root).map_err(with_path)?));
-    }
+        Ok(Root { path, dir })
+      })
+      .collect::<io::Result<_>>()?;
 
     Ok(Self {
-      roots: canonical_roots,
-      given_roots,
+      roots,
       loaded_bytes: Cell::new(0),
       loaded_resources: Cell::new(0),
     })
@@ -105,8 +147,21 @@ impl Sandbox {
   /// The bytes `url` holds, if the sandbox lets the document read it.
   pub(crate) fn read(&self, url: &Url) -> Result<Vec<u8>, ResourceError> {
     let bytes = match url.scheme() {
-      "data" => self.read_data(url)?,
-      "file" => self.read_file(url)?,
+      "data" => decode_data(url)?,
+      "file" => {
+        let mut bytes = Vec::new();
+
+        self
+          .open(url)?
+          .take(MAX_RESOURCE_BYTES + 1)
+          .read_to_end(&mut bytes)
+          .map_err(|error| ResourceError::Io {
+            url: url.clone(),
+            error,
+          })?;
+
+        bytes
+      }
       "http" | "https" => return Err(ResourceError::Network(url.clone())),
       _ => return Err(ResourceError::UnsupportedScheme(url.clone())),
     };
@@ -119,42 +174,16 @@ impl Sandbox {
   /// Whether the sandbox would let the document read `url`, without reading it.
   pub(crate) fn check(&self, url: &Url) -> Result<(), ResourceError> {
     match url.scheme() {
-      "data" => DataUrl::process(url.as_str())
-        .map(drop)
-        .map_err(|_| ResourceError::InvalidData(url.clone())),
-      "file" => self.allowed_path(url).map(drop),
+      "data" => decode_data(url).map(drop),
+      "file" => self.open(url).map(drop),
       "http" | "https" => Err(ResourceError::Network(url.clone())),
       _ => Err(ResourceError::UnsupportedScheme(url.clone())),
     }
   }
 
-  fn read_data(&self, url: &Url) -> Result<Vec<u8>, ResourceError> {
-    DataUrl::process(url.as_str())
-      .ok()
-      .and_then(|data| data.decode_to_vec().ok())
-      .map(|(bytes, _)| bytes)
-      .ok_or_else(|| ResourceError::InvalidData(url.clone()))
-  }
-
-  fn read_file(&self, url: &Url) -> Result<Vec<u8>, ResourceError> {
-    let path = self.allowed_path(url)?;
-    let io_error = |error| ResourceError::Io {
-      url: url.clone(),
-      error,
-    };
-    let mut bytes = Vec::new();
-
-    fs::File::open(&path)
-      .and_then(|file| file.take(MAX_RESOURCE_BYTES + 1).read_to_end(&mut bytes))
-      .map_err(io_error)?;
-
-    Ok(bytes)
-  }
-
-  /// The canonical path `url` names, if it lies under a root. The path is checked as written
-  /// before the filesystem is touched, so a path outside every root is never probed, and a URL
-  /// naming another machine never reaches it.
-  fn allowed_path(&self, url: &Url) -> Result<PathBuf, ResourceError> {
+  /// The file `url` names, opened through the root whose path holds it. A URL naming another
+  /// machine never reaches it.
+  fn open(&self, url: &Url) -> Result<cap_std::fs::File, ResourceError> {
     if url
       .host_str()
       .is_some_and(|host| !host.is_empty() && !host.eq_ignore_ascii_case("localhost"))
@@ -167,37 +196,37 @@ impl Sandbox {
       .ok()
       .and_then(|path| lexical(&path))
       .ok_or_else(|| ResourceError::UnsupportedScheme(url.clone()))?;
-    let denied = |path: PathBuf| ResourceError::Denied {
+    let denied = || ResourceError::Denied {
       url: url.clone(),
-      path,
+      path: path.clone(),
     };
-
-    if !self
-      .given_roots
-      .iter()
-      .chain(&self.roots)
-      .any(|root| path.starts_with(root))
-    {
-      return Err(denied(path));
-    }
-
-    let canonical = fs::canonicalize(&path).map_err(|error| ResourceError::Io {
+    let io_error = |error| ResourceError::Io {
       url: url.clone(),
       error,
+    };
+    let (root, relative) = self
+      .roots
+      .iter()
+      .find_map(|root| Some((root, path.strip_prefix(&root.path).ok()?)))
+      .filter(|(_, relative)| !relative.as_os_str().is_empty())
+      .ok_or_else(denied)?;
+    let file = root.dir.open(relative).map_err(|error| {
+      // cap-std refuses a path that resolves outside the root, through a symlink or otherwise.
+      if error.kind() == io::ErrorKind::PermissionDenied {
+        ResourceError::Escapes(url.clone())
+      } else {
+        io_error(error)
+      }
     })?;
 
-    if !self.roots.iter().any(|root| canonical.starts_with(root)) {
-      return Err(denied(canonical));
+    if !file.metadata().map_err(io_error)?.is_file() {
+      return Err(io_error(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "not a file",
+      )));
     }
 
-    if !canonical.is_file() {
-      return Err(ResourceError::Io {
-        url: url.clone(),
-        error: io::Error::new(io::ErrorKind::InvalidInput, "not a file"),
-      });
-    }
-
-    Ok(canonical)
+    Ok(file)
   }
 
   fn charge(&self, url: &Url, bytes: u64) -> Result<(), ResourceError> {
@@ -213,6 +242,25 @@ impl Sandbox {
 
     Ok(())
   }
+}
+
+/// The bytes a `data:` URL holds.
+fn decode_data(url: &Url) -> Result<Vec<u8>, ResourceError> {
+  DataUrl::process(url.as_str())
+    .ok()
+    .and_then(|data| data.decode_to_vec().ok())
+    .map(|(bytes, _)| bytes)
+    .ok_or_else(|| ResourceError::InvalidData(url.clone()))
+}
+
+/// `path` made absolute against the working directory, with `.` and `..` resolved by name.
+pub(crate) fn absolute_path(path: &Path) -> io::Result<PathBuf> {
+  lexical(&path::absolute(path)?).ok_or_else(|| {
+    io::Error::new(
+      io::ErrorKind::InvalidInput,
+      "names another machine or a device, which takumi does not read",
+    )
+  })
 }
 
 /// `path` with `.` and `..` resolved by name alone, none when it names another machine or a
@@ -242,14 +290,14 @@ fn lexical(path: &Path) -> Option<PathBuf> {
 
 /// The `file:` URL of a directory, ending in a slash so relative references resolve inside it.
 pub(crate) fn directory_url(directory: &Path) -> io::Result<Url> {
-  let canonical = fs::canonicalize(directory)?;
-
-  Url::from_directory_path(&canonical)
+  Url::from_directory_path(absolute_path(directory)?)
     .map_err(|()| io::Error::new(io::ErrorKind::InvalidInput, "not an absolute path"))
 }
 
 #[cfg(test)]
 mod tests {
+  use std::fs;
+
   use super::*;
 
   fn temp_dir(name: &str) -> PathBuf {
@@ -307,10 +355,7 @@ mod tests {
     let sandbox = Sandbox::new([root.clone()]).unwrap();
     let url = directory_url(&root).unwrap().join("link.txt").unwrap();
 
-    assert!(matches!(
-      sandbox.read(&url),
-      Err(ResourceError::Denied { .. })
-    ));
+    assert!(matches!(sandbox.read(&url), Err(ResourceError::Escapes(_))));
   }
 
   #[test]
@@ -351,6 +396,16 @@ mod tests {
     assert!(matches!(
       sandbox.read(&Url::parse("ftp://example.com/a.css").unwrap()),
       Err(ResourceError::UnsupportedScheme(_))
+    ));
+  }
+
+  #[test]
+  fn checks_a_data_url_payload() {
+    let sandbox = Sandbox::new([]).unwrap();
+
+    assert!(matches!(
+      sandbox.check(&Url::parse("DATA:image/png;base64,A").unwrap()),
+      Err(ResourceError::InvalidData(_))
     ));
   }
 

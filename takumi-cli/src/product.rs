@@ -5,9 +5,10 @@ use std::{collections::HashMap, error::Error, path::Path, sync::Arc};
 use takumi::prelude::{Fonts, ImageSource, RenderNeeds};
 
 use crate::{
-  document::Document,
+  document::{Document, ImageCache},
   input::{InputArgs, OutputArgs, read_html_file},
   sandbox::ResourceError,
+  stylesheet::StyleSheetLoader,
 };
 
 /// The decoded images a render looks up, keyed by URL as the document writes it.
@@ -57,13 +58,17 @@ pub(crate) fn run(
 ) -> Result<(), Box<dyn Error>> {
   let loaded = input.read()?;
   let sandbox = &loaded.sandbox;
-  let mut warnings = Vec::new();
+  let listing = output.list_resources;
+  let mut loader = if listing {
+    StyleSheetLoader::lenient(sandbox)
+  } else {
+    StyleSheetLoader::new(sandbox)
+  };
   let mut document = Document::load(
     &loaded.html,
     &loaded.location,
     product.default_css(),
-    sandbox,
-    &mut warnings,
+    &mut loader,
   )?;
   let mut bands = product
     .band_files()
@@ -71,40 +76,47 @@ pub(crate) fn run(
     .map(|path| {
       let (html, location) = read_html_file(path)?;
 
-      Document::load(&html, &location, None, sandbox, &mut warnings)
+      Document::load(&html, &location, None, &mut loader)
     })
     .collect::<Result<Vec<_>, _>>()?;
+  let report = loader.into_report();
+  let mut warnings = report.skipped;
 
   document.share_style_sheet(&mut bands);
 
   let mut fonts = input.fonts()?;
 
-  if output.list_resources {
+  if listing {
+    for url in &report.loaded {
+      println!("stylesheet\tallowed\t{url}");
+    }
     for each in std::iter::once(&document).chain(&bands) {
       each.list_resources(product, &fonts, sandbox)?;
     }
+    print_warnings(&warnings, quiet);
 
     return Ok(());
   }
 
-  let mut images = Images::new();
+  let mut images = ImageCache::default();
 
   for each in std::iter::once(&document).chain(&bands) {
-    // A band's image keyed as the page writes another wins, as the band renders after the page.
-    images.extend(each.load_resources(product, &mut fonts, sandbox, &mut warnings)?);
+    each.load_resources(product, &mut fonts, &mut images, sandbox, &mut warnings)?;
   }
 
-  if !quiet {
-    print_warnings(&warnings);
-  }
+  print_warnings(&warnings, quiet);
 
   output.write(
-    &product.render(document, bands, &fonts, images)?,
+    &product.render(document, bands, &fonts, images.into_images())?,
     product.is_text(),
   )
 }
 
-fn print_warnings(warnings: &[ResourceError]) {
+fn print_warnings(warnings: &[ResourceError], quiet: bool) {
+  if quiet {
+    return;
+  }
+
   for warning in warnings {
     eprintln!("warning: {warning}");
   }

@@ -13,7 +13,7 @@ use std::{error::Error, process::ExitCode};
 
 use clap::{Parser, Subcommand};
 
-use crate::{image::ImageArgs, pdf::PdfArgs, sandbox::ResourceError};
+use crate::{image::ImageArgs, input::UsageError, pdf::PdfArgs, sandbox::ResourceError};
 
 /// Renders HTML and CSS to images and PDFs.
 #[derive(Parser)]
@@ -58,11 +58,16 @@ fn main() -> ExitCode {
   }
 }
 
-/// `3` when the sandbox denied a read, so a script can tell a policy failure from a broken
-/// document, and `1` for any other failure. clap exits with `2` on a usage error.
+/// `2` for a usage error, as clap exits with on a malformed command line, `3` when the sandbox
+/// denied a read, so a script can tell a policy failure from a broken document, and `1` for any
+/// other failure.
 fn exit_code(error: &(dyn Error + 'static)) -> ExitCode {
+  if error.is::<UsageError>() {
+    return ExitCode::from(2);
+  }
+
   match error.downcast_ref::<ResourceError>() {
-    Some(ResourceError::Denied { .. }) => ExitCode::from(3),
+    Some(ResourceError::Denied { .. } | ResourceError::Escapes(_)) => ExitCode::from(3),
     _ => ExitCode::FAILURE,
   }
 }

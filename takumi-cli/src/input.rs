@@ -11,7 +11,7 @@ use std::{
 use takumi::prelude::{FontResource, Fonts};
 use url::Url;
 
-use crate::sandbox::{Sandbox, directory_url};
+use crate::sandbox::{Sandbox, absolute_path, directory_url};
 
 /// The font text falls back to when the document loads none of its own.
 const DEFAULT_FONT: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
@@ -95,52 +95,69 @@ impl InputArgs {
   }
 }
 
-/// The HTML of a file named on the command line, and its `file:` URL.
+/// The HTML of a file named on the command line, and its `file:` URL as named, so its relative
+/// references resolve beside the name even when it is a symlink.
 pub(crate) fn read_html_file(path: &Path) -> Result<(String, Url), Box<dyn Error>> {
   let with_path = |error: io::Error| format!("{}: {error}", path.display());
-  let canonical = fs::canonicalize(path).map_err(with_path)?;
-  let location = Url::from_file_path(&canonical)
+  let absolute = absolute_path(path).map_err(with_path)?;
+  let location = Url::from_file_path(&absolute)
     .map_err(|()| format!("{} is not a local file", path.display()))?;
 
-  Ok((fs::read_to_string(&canonical).map_err(with_path)?, location))
+  Ok((fs::read_to_string(&absolute).map_err(with_path)?, location))
 }
 
 /// Where the rendered file goes, or a list of what it would load instead.
 #[derive(clap::Args)]
 pub(crate) struct OutputArgs {
   /// The file to write, or `-` for standard output.
-  #[arg(short, long)]
-  pub(crate) output: PathBuf,
+  #[arg(short, long, required_unless_present = "list_resources")]
+  output: Option<PathBuf>,
 
   /// Lists the files the document would load and whether it may, without rendering.
   #[arg(long)]
   pub(crate) list_resources: bool,
 }
 
+/// A command line that names something takumi cannot do, such as an output format it does not
+/// write, as clap reports a malformed one.
+#[derive(Debug)]
+pub(crate) struct UsageError(pub(crate) String);
+
+impl std::fmt::Display for UsageError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str(&self.0)
+  }
+}
+
+impl Error for UsageError {}
+
 impl OutputArgs {
-  /// Whether the output goes to standard output.
-  pub(crate) fn is_stdout(&self) -> bool {
-    self.output == Path::new("-")
+  /// Whether the command writes a file rather than listing resources.
+  pub(crate) fn renders(&self) -> bool {
+    !self.list_resources
   }
 
-  /// The lowercase extension of the output file, none for standard output.
+  /// Whether the output goes to standard output.
+  pub(crate) fn is_stdout(&self) -> bool {
+    self.output.as_deref() == Some(Path::new("-"))
+  }
+
+  /// The lowercase extension of the output file, none for standard output or no output.
   pub(crate) fn extension(&self) -> Option<String> {
-    (!self.is_stdout())
-      .then(|| {
-        self
-          .output
-          .extension()?
-          .to_str()
-          .map(str::to_ascii_lowercase)
-      })
-      .flatten()
+    let output = self.output.as_deref().filter(|_| !self.is_stdout())?;
+
+    output.extension()?.to_str().map(str::to_ascii_lowercase)
   }
 
   /// Writes `bytes` to the output. `is_text` lets a terminal receive them.
   pub(crate) fn write(&self, bytes: &[u8], is_text: bool) -> Result<(), Box<dyn Error>> {
+    let Some(output) = self.output.as_deref() else {
+      return Err(UsageError("the command needs `-o` to write its output.".into()).into());
+    };
+
     if !self.is_stdout() {
-      return fs::write(&self.output, bytes)
-        .map_err(|error| format!("{}: {error}", self.output.display()).into());
+      return fs::write(output, bytes)
+        .map_err(|error| format!("{}: {error}", output.display()).into());
     }
 
     let mut stdout = io::stdout().lock();

@@ -23,9 +23,9 @@ A product gets its own subcommand when its options differ from every other produ
 
 ## Output and errors
 
-- The rendered file goes to `-o`. Nothing else is written to standard output, except the list `--list-resources` prints, one resource per line with tab-separated fields.
+- The rendered file goes to `-o`. Nothing else is written to standard output, except the list `--list-resources` prints, one resource per line with tab-separated fields. A flag that only reads, such as `--list-resources`, needs no `-o`.
 - Warnings and errors go to standard error, as `warning: …` and `error: …`. `-q` hides warnings. An error says what failed and the flag or change that fixes it.
-- Exit codes: `0` when the file is written, `1` when rendering fails, `2` for a usage error, and `3` when the sandbox denies a read, so a script can tell a policy failure from a broken document.
+- Exit codes: `0` when the file is written, `1` when rendering fails, `2` for a usage error, including an output format takumi does not write, and `3` when the sandbox denies a read, so a script can tell a policy failure from a broken document.
 
 ## Resources and trust
 

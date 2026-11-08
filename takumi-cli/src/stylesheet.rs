@@ -3,17 +3,23 @@
 
 use std::fmt::Write;
 
-use cssparser::{Delimiter, ParseError, Parser, ToCss, Token, serialize_string};
+use cssparser::{
+  Delimiter, EncodingSupport, ParseError, Parser, ToCss, Token, serialize_string,
+  stylesheet_encoding,
+};
+use encoding_rs::{Encoding, UTF_8, UTF_16BE, UTF_16LE};
 use url::Url;
 
 use crate::sandbox::{ResourceError, Sandbox};
 
 /// How deep `@import` rules may nest.
-const MAX_IMPORT_DEPTH: usize = 16;
+pub(crate) const MAX_IMPORT_DEPTH: usize = 16;
 
 /// What loading a document's style sheets turned up besides the CSS.
 #[derive(Debug, Default)]
 pub(crate) struct LoadReport {
+  /// The sheets that loaded, in the order they did.
+  pub(crate) loaded: Vec<Url>,
   /// Sheets that failed to load, which a browser skips as this does.
   pub(crate) skipped: Vec<ResourceError>,
 }
@@ -22,6 +28,9 @@ pub(crate) struct LoadReport {
 pub(crate) struct StyleSheetLoader<'s> {
   sandbox: &'s Sandbox,
   report: LoadReport,
+  /// Whether a read that [fails the render](ResourceError::fails_render) fails the load, rather
+  /// than being skipped and reported as `--list-resources` wants.
+  strict: bool,
 }
 
 impl<'s> StyleSheetLoader<'s> {
@@ -29,6 +38,15 @@ impl<'s> StyleSheetLoader<'s> {
     Self {
       sandbox,
       report: LoadReport::default(),
+      strict: true,
+    }
+  }
+
+  /// A loader that skips and reports every sheet that fails to load.
+  pub(crate) fn lenient(sandbox: &'s Sandbox) -> Self {
+    Self {
+      strict: false,
+      ..Self::new(sandbox)
     }
   }
 
@@ -53,23 +71,33 @@ impl<'s> StyleSheetLoader<'s> {
     importing: &mut Vec<Url>,
   ) -> Result<Option<String>, ResourceError> {
     // A sheet that imports itself, directly or not, imports nothing the second time.
-    if importing.contains(url) || importing.len() >= MAX_IMPORT_DEPTH {
+    if importing.contains(url) {
+      return Ok(Some(String::new()));
+    }
+
+    if importing.len() >= MAX_IMPORT_DEPTH {
+      self
+        .report
+        .skipped
+        .push(ResourceError::ImportTooDeep(url.clone()));
       return Ok(Some(String::new()));
     }
 
     let bytes = match self.sandbox.read(url) {
       Ok(bytes) => bytes,
-      Err(error) if error.fails_render() => return Err(error),
+      Err(error) if self.strict && error.fails_render() => return Err(error),
       Err(error) => {
         self.report.skipped.push(error);
         return Ok(None);
       }
     };
-    let text = String::from_utf8_lossy(&bytes);
-    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+
+    self.report.loaded.push(url.clone());
+    let encoding = stylesheet_encoding::<EncodingRs>(&bytes, None, None);
+    let (text, _, _) = encoding.decode(&bytes);
 
     importing.push(url.clone());
-    let css = self.rewrite_nested(text, url, importing);
+    let css = self.rewrite_nested(&text, url, importing);
     importing.pop();
 
     css.map(Some)
@@ -99,12 +127,15 @@ impl<'s> StyleSheetLoader<'s> {
         Token::AtKeyword(name) if name.eq_ignore_ascii_case("import") => {
           let rule_start = start.position();
           let import = parser
-            .parse_until_after(Delimiter::Semicolon, |input| {
-              Ok::<_, ParseError<()>>(Import::parse(input, base))
-            })
+            .parse_until_after(
+              Delimiter::Semicolon | Delimiter::CurlyBracketBlock,
+              |input| Ok::<_, ParseError<()>>(Import::parse(input, base)),
+            )
             .ok()
             .flatten();
           let rule = parser.slice_from(rule_start);
+          // An `@import` that ends in a block is invalid, and the rule ends with the block.
+          let import = import.filter(|_| !rule.trim_end().ends_with('}'));
 
           match import {
             Some(import) if imports_allowed => match self.load_nested(&import.url, importing)? {
@@ -246,6 +277,10 @@ fn resolve(url: &str, base: &Url) -> String {
 }
 
 /// An `@import` rule: the sheet it loads and the conditions it applies the sheet under.
+///
+/// Approximate: the sheet loads whatever its `supports()` condition says, where a browser loads
+/// none for a false one, and a `layer()` inside a `@media` that does not match still takes its
+/// place in the layer order.
 struct Import {
   url: Url,
   layer: Option<String>,
@@ -336,6 +371,25 @@ impl Import {
   }
 }
 
+/// [`EncodingSupport`] through `encoding_rs`, to decode a sheet as CSS Syntax picks its encoding.
+struct EncodingRs;
+
+impl EncodingSupport for EncodingRs {
+  type Encoding = &'static Encoding;
+
+  fn from_label(ascii_label: &[u8]) -> Option<Self::Encoding> {
+    Encoding::for_label(ascii_label)
+  }
+
+  fn utf8() -> Self::Encoding {
+    UTF_8
+  }
+
+  fn is_utf16_be_or_le(encoding: &Self::Encoding) -> bool {
+    *encoding == UTF_16BE || *encoding == UTF_16LE
+  }
+}
+
 /// The source text inside the block the parser just opened.
 fn nested_text(input: &mut Parser<'_>) -> String {
   input
@@ -422,6 +476,67 @@ mod tests {
     );
     assert!(css.contains(" c{}"), "{css}");
     assert!(!css.contains("late{}"), "{css}");
+  }
+
+  #[test]
+  fn decodes_a_sheet_in_its_declared_encoding() {
+    let root = temp_dir("encoding");
+    let mut bytes = b"@charset \"windows-1252\"; .caf".to_vec();
+
+    bytes.extend([0xe9]);
+    bytes.extend(b"{}");
+    fs::write(root.join("css/latin.css"), bytes).unwrap();
+
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let base = directory_url(&root).unwrap();
+    let css = StyleSheetLoader::new(&sandbox)
+      .load(&base.join("css/latin.css").unwrap())
+      .unwrap()
+      .unwrap();
+
+    assert!(css.contains(".café{}"), "{css}");
+  }
+
+  #[test]
+  fn an_import_with_a_block_ends_at_the_block() {
+    let root = temp_dir("import-block");
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let base = directory_url(&root).unwrap().join("css/").unwrap();
+    let css = StyleSheetLoader::new(&sandbox)
+      .rewrite(
+        r#"@import "a.css" {} .hero { background: url(img.png) }"#,
+        &base,
+      )
+      .unwrap();
+
+    assert!(css.contains(&format!(r#"url("{base}img.png")"#)), "{css}");
+  }
+
+  #[test]
+  fn an_import_nested_too_deep_is_reported() {
+    let root = temp_dir("deep");
+
+    for level in 0..=MAX_IMPORT_DEPTH {
+      fs::write(
+        root.join(format!("css/{level}.css")),
+        format!(r#"@import "{}.css"; .l{level}{{}}"#, level + 1),
+      )
+      .unwrap();
+    }
+
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let base = directory_url(&root).unwrap();
+    let mut loader = StyleSheetLoader::new(&sandbox);
+
+    loader.load(&base.join("css/0.css").unwrap()).unwrap();
+
+    assert!(
+      loader
+        .into_report()
+        .skipped
+        .iter()
+        .any(|error| matches!(error, ResourceError::ImportTooDeep(_)))
+    );
   }
 
   #[test]

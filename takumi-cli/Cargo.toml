@@ -13,6 +13,8 @@ name = "takumi"
 path = "src/main.rs"
 
 [dependencies]
+cap-std = "3"
+encoding_rs = "0.8"
 clap = { version = "4.6", features = ["derive"] }
 cssparser.workspace = true
 data-url.workspace = true

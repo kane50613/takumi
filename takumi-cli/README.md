@@ -17,11 +17,11 @@ A document reads files only from the directories it is granted, and it never rea
 
 - By default, the document may read files under the input file's directory. Reading from standard input grants no directory.
 - `--root <DIR>` replaces that directory, and `--allow-read <DIR>` adds another. Repeat `--allow-read` for more.
-- A path is checked as written before anything on disk is touched, so nothing outside a granted directory is probed. It is checked again after symlinks resolve, so a symlink cannot step outside either.
-- `data:` URLs always load. `http` and `https` URLs never do, and neither does a `file:` URL that names another machine, such as a Windows network share. takumi skips them with a warning, as a browser skips a resource that fails to load.
+- Each granted directory is opened once, and every read resolves inside it, so neither `..`, a symlink, nor a file swapped for a symlink mid-read can step outside, and nothing outside a granted directory is opened or probed.
+- `data:` URLs load wherever the document is, within the same size limits. `http` and `https` URLs never do, and neither does a `file:` URL that names another machine, such as a Windows network share. takumi skips them with a warning, as a browser skips a resource that fails to load.
 - A read outside the granted directories stops the render with exit code 3, and the error names the `--allow-read` flag that would allow it.
 - One resource may hold at most 32 MiB, all of them together 256 MiB, and a render may load at most 1024 of them.
 
-`--list-resources` prints the images and fonts a document would load and whether each is allowed, without rendering.
+`--list-resources` prints the stylesheets, images, and fonts a document would load and whether each is allowed, without rendering. It needs no `-o`, and a blocked stylesheet becomes a warning so the listing goes on.
 
 The input and the files named with `--font`, `--header`, and `--footer` are trusted, since you name them on the command line. What they reference goes through the same checks. When the document loads no font, text falls back to Geist.

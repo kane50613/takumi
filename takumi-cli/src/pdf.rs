@@ -14,7 +14,7 @@ use takumi_pdf::{MeasureOptions, PageOptions, PageRange, PdfMetadata, PdfOptions
 
 use crate::{
   document::Document,
-  input::{InputArgs, OutputArgs},
+  input::{InputArgs, OutputArgs, UsageError},
   product::{Images, Product},
 };
 
@@ -96,7 +96,9 @@ impl PdfArgs {
     if let Some(extension) = self.output.extension()
       && extension != "pdf"
     {
-      return Err(format!("`takumi pdf` writes PDF, but the output ends in `.{extension}`. Name it `.pdf` or use `takumi image`.").into());
+      return Err(Box::new(UsageError(format!(
+        "`takumi pdf` writes PDF, but the output ends in `.{extension}`. Name it `.pdf` or use `takumi image`."
+      ))));
     }
 
     let declarations: Vec<String> = [("size", &self.page), ("margin", &self.margin)]
@@ -106,7 +108,8 @@ impl PdfArgs {
           .as_ref()
           .map(|value| check_page_declaration(property, value))
       })
-      .collect::<Result<_, _>>()?;
+      .collect::<Result<_, _>>()
+      .map_err(UsageError)?;
     let metadata = (self.title.is_some() || !self.authors.is_empty()).then(|| PdfMetadata {
       title: self.title.clone(),
       authors: self.authors.clone(),
@@ -126,8 +129,16 @@ impl PdfArgs {
   }
 }
 
-/// `property: value` for an `@page` rule, if takumi reads the value.
+/// `property: value` for an `@page` rule, if takumi reads the value. A value holding anything
+/// that could end the declaration or the rule, or raise it to `!important`, is refused, so a flag
+/// stays one default the document's own `@page` rule overrides.
 fn check_page_declaration(property: &str, value: &str) -> Result<String, String> {
+  if value.contains(['{', '}', ';', '!', '@', '\\']) || value.contains("/*") {
+    return Err(format!(
+      "`{value}` is not a CSS `{property}` value takumi reads."
+    ));
+  }
+
   let declaration = format!("{property}: {value}");
   let descriptors = StyleSheet::parse_loosy(&format!("@page {{ {declaration} }}"))
     .page_descriptors(
@@ -293,5 +304,9 @@ mod tests {
     assert!(check_page_declaration("size", "letter landscape").is_ok());
     assert!(check_page_declaration("margin", "1in 0.5in").is_ok());
     assert!(check_page_declaration("size", "bogus").is_err());
+    assert!(check_page_declaration("margin", "1in !important").is_err());
+    assert!(
+      check_page_declaration("margin", "1cm } body { display: none } @page { margin: 1cm").is_err()
+    );
   }
 }

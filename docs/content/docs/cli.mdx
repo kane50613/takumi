@@ -63,7 +63,7 @@ Leave the margin tall enough for the band, since a header or footer does not pus
 curl -s https://example.com/card.html | takumi image - -o - --format png > card.png
 ```
 
-The rendered file is the only thing written to standard output. Warnings and errors go to standard error, and `-q` hides the warnings. The command exits with `0` when it writes the file, `1` when rendering fails, `2` when the arguments are wrong, and `3` when the document tries to read a file it is not allowed to.
+The rendered file is the only thing written to standard output. Warnings and errors go to standard error, and `-q` hides the warnings. The command exits with `0` when it writes the file, `1` when rendering fails, `2` when the arguments are wrong or name a format `takumi` does not write, and `3` when the document tries to read a file it is not allowed to.
 
 ## What a document can read
 
@@ -71,18 +71,20 @@ An HTML file can reference any path, so `takumi` reads only the directories you 
 
 - By default, the document reads files under the input file's directory. Reading from standard input grants no directory.
 - `--root <dir>` replaces that directory, and `--allow-read <dir>` adds another. Repeat `--allow-read` for more.
-- `http` and `https` URLs never load. `takumi` skips them with a warning, as a browser skips a resource that fails to load. Use a local copy, or a `data:` URL, which always loads.
+- `http` and `https` URLs never load. `takumi` skips them with a warning, as a browser skips a resource that fails to load. Use a local copy, or a `data:` URL, which loads wherever the document is, within the same size limits.
 - A read outside the granted directories stops the render, and the error names the `--allow-read` flag that would allow it.
+- One file may hold at most 32 MiB, all of them together 256 MiB, and a render may load at most 1024 of them.
 
 Files you name on the command line are trusted: the input, `--font`, `--header`, and `--footer`. What they reference still goes through the same checks.
 
-To see what a document would load before rendering it, add `--list-resources`:
+To see what a document would load before rendering it, use `--list-resources`. It needs no `-o`:
 
 ```sh
-takumi image card.html -o card.png --list-resources
+takumi image card.html --list-resources
 ```
 
 ```text
+stylesheet	allowed	file:///home/me/site/css/style.css
 image	allowed	file:///home/me/site/img/logo.png
 font	blocked	file:///home/me/fonts/Inter.woff2	… Pass `--allow-read /home/me/fonts` to allow it.
 ```
