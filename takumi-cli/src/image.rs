@@ -59,6 +59,20 @@ struct ViewportArgs {
   dpr: f32,
 }
 
+impl ViewportArgs {
+  /// The viewport in the device pixels takumi measures it in: the CSS size scaled by `--dpr`.
+  fn device_viewport(&self) -> Viewport {
+    let device_pixels = |css_pixels: u32| {
+      (f64::from(css_pixels) * f64::from(self.dpr))
+        .round()
+        .clamp(1.0, f64::from(u32::MAX)) as u32
+    };
+
+    Viewport::new((device_pixels(self.width), self.height.map(device_pixels)))
+      .with_device_pixel_ratio(self.dpr)
+  }
+}
+
 /// `--dpr`: a finite ratio above zero.
 fn parse_device_pixel_ratio(value: &str) -> Result<f32, String> {
   value
@@ -108,8 +122,7 @@ impl ImageArgs {
     Ok(Image {
       format,
       quality: self.quality.map(Quality::new),
-      viewport: Viewport::new((self.viewport.width, self.viewport.height))
-        .with_device_pixel_ratio(self.viewport.dpr),
+      viewport: self.viewport.device_viewport(),
     })
   }
 }
@@ -187,5 +200,26 @@ impl Product for Image {
 
   fn is_text(&self) -> bool {
     matches!(self.format, ImageFormat::Svg)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn the_device_pixel_ratio_scales_the_css_size() {
+    let viewport = ViewportArgs {
+      width: 1200,
+      height: Some(630),
+      dpr: 1.5,
+    }
+    .device_viewport();
+
+    assert_eq!(
+      (viewport.size.width, viewport.size.height),
+      (Some(1800), Some(945))
+    );
+    assert_eq!(viewport.device_pixel_ratio, 1.5);
   }
 }
