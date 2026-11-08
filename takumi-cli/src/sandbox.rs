@@ -12,7 +12,10 @@ use std::{
   path::{self, Component, Path, PathBuf, Prefix},
 };
 
-use cap_std::{ambient_authority, fs::Dir};
+use cap_std::{
+  ambient_authority,
+  fs::{Dir, OpenOptions},
+};
 use data_url::DataUrl;
 use url::Url;
 
@@ -175,15 +178,47 @@ impl Sandbox {
   pub(crate) fn check(&self, url: &Url) -> Result<(), ResourceError> {
     match url.scheme() {
       "data" => decode_data(url).map(drop),
-      "file" => self.open(url).map(drop),
+      "file" => self.regular_file(url).map(drop),
       "http" | "https" => Err(ResourceError::Network(url.clone())),
       _ => Err(ResourceError::UnsupportedScheme(url.clone())),
     }
   }
 
-  /// The file `url` names, opened through the root whose path holds it. A URL naming another
-  /// machine never reaches it.
+  /// The file `url` names, opened through the root whose path holds it. Only a regular file
+  /// opens, so a FIFO or a device under a root cannot hold the render up.
   fn open(&self, url: &Url) -> Result<cap_std::fs::File, ResourceError> {
+    let (root, relative) = self.regular_file(url)?;
+    let mut options = OpenOptions::new();
+
+    options.read(true);
+
+    // A file swapped for a FIFO after the check above still cannot block the open.
+    #[cfg(unix)]
+    {
+      use cap_std::fs::OpenOptionsExt;
+
+      options.custom_flags(libc::O_NONBLOCK);
+    }
+
+    let file = root
+      .dir
+      .open_with(&relative, &options)
+      .map_err(|error| open_error(url, error))?;
+
+    if !file
+      .metadata()
+      .map_err(|error| open_error(url, error))?
+      .is_file()
+    {
+      return Err(not_a_file(url));
+    }
+
+    Ok(file)
+  }
+
+  /// The root holding the regular file `url` names and the file's path inside it, read from its
+  /// metadata without opening it. A URL naming another machine never reaches it.
+  fn regular_file(&self, url: &Url) -> Result<(&Root, PathBuf), ResourceError> {
     if url
       .host_str()
       .is_some_and(|host| !host.is_empty() && !host.eq_ignore_ascii_case("localhost"))
@@ -196,37 +231,28 @@ impl Sandbox {
       .ok()
       .and_then(|path| lexical(&path))
       .ok_or_else(|| ResourceError::UnsupportedScheme(url.clone()))?;
-    let denied = || ResourceError::Denied {
-      url: url.clone(),
-      path: path.clone(),
-    };
-    let io_error = |error| ResourceError::Io {
-      url: url.clone(),
-      error,
-    };
-    let (root, relative) = self
+    let Some((root, relative)) = self
       .roots
       .iter()
-      .find_map(|root| Some((root, path.strip_prefix(&root.path).ok()?)))
+      .find_map(|root| Some((root, path.strip_prefix(&root.path).ok()?.to_path_buf())))
       .filter(|(_, relative)| !relative.as_os_str().is_empty())
-      .ok_or_else(denied)?;
-    let file = root.dir.open(relative).map_err(|error| {
-      // cap-std refuses a path that resolves outside the root, through a symlink or otherwise.
-      if error.kind() == io::ErrorKind::PermissionDenied {
-        ResourceError::Escapes(url.clone())
-      } else {
-        io_error(error)
-      }
-    })?;
+    else {
+      return Err(ResourceError::Denied {
+        url: url.clone(),
+        path,
+      });
+    };
 
-    if !file.metadata().map_err(io_error)?.is_file() {
-      return Err(io_error(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "not a file",
-      )));
+    if !root
+      .dir
+      .metadata(&relative)
+      .map_err(|error| open_error(url, error))?
+      .is_file()
+    {
+      return Err(not_a_file(url));
     }
 
-    Ok(file)
+    Ok((root, relative))
   }
 
   fn charge(&self, url: &Url, bytes: u64) -> Result<(), ResourceError> {
@@ -241,6 +267,26 @@ impl Sandbox {
     self.loaded_resources.set(count);
 
     Ok(())
+  }
+}
+
+/// The error for a failed open of `url` through a root. cap-std refuses a path that resolves
+/// outside the root, through a symlink or otherwise, as permission denied.
+fn open_error(url: &Url, error: io::Error) -> ResourceError {
+  if error.kind() == io::ErrorKind::PermissionDenied {
+    ResourceError::Escapes(url.clone())
+  } else {
+    ResourceError::Io {
+      url: url.clone(),
+      error,
+    }
+  }
+}
+
+fn not_a_file(url: &Url) -> ResourceError {
+  ResourceError::Io {
+    url: url.clone(),
+    error: io::Error::new(io::ErrorKind::InvalidInput, "not a regular file"),
   }
 }
 
@@ -356,6 +402,26 @@ mod tests {
     let url = directory_url(&root).unwrap().join("link.txt").unwrap();
 
     assert!(matches!(sandbox.read(&url), Err(ResourceError::Escapes(_))));
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn refuses_a_fifo_without_blocking() {
+    let root = temp_dir("fifo");
+    let fifo = root.join("pipe.css");
+    let _ = fs::remove_file(&fifo);
+    let status = std::process::Command::new("mkfifo")
+      .arg(&fifo)
+      .status()
+      .unwrap();
+
+    assert!(status.success());
+
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let url = directory_url(&root).unwrap().join("pipe.css").unwrap();
+
+    assert!(matches!(sandbox.read(&url), Err(ResourceError::Io { .. })));
+    assert!(sandbox.check(&url).is_err());
   }
 
   #[test]

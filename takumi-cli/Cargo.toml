@@ -20,6 +20,9 @@ cssparser.workspace = true
 data-url.workspace = true
 url = "2"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dependencies.takumi]
 path = "../takumi"
 features = ["from-html", "svg-backend"]
