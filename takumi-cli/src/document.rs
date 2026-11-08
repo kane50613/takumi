@@ -1,7 +1,7 @@
 //! An HTML document and everything it loads through the sandbox: style sheets, images, and
 //! `@font-face` files.
 
-use std::{collections::HashMap, error::Error, sync::Arc};
+use std::{error::Error, sync::Arc};
 
 use takumi::{
   parse_html,
@@ -10,7 +10,7 @@ use takumi::{
 use url::Url;
 
 use crate::{
-  output::{Output, RenderInputs},
+  product::{Images, Product},
   sandbox::{ResourceError, Sandbox},
   stylesheet::StyleSheetLoader,
 };
@@ -23,10 +23,12 @@ pub(crate) struct Document {
 }
 
 impl Document {
-  /// Parses `html` found at `location` and loads the style sheets it links and imports.
+  /// Parses `html` found at `location` and loads the style sheets it links and imports, after
+  /// `default_css`, which they override.
   pub(crate) fn load(
     html: &str,
     location: &Url,
+    default_css: Option<String>,
     sandbox: &Sandbox,
     warnings: &mut Vec<ResourceError>,
   ) -> Result<Self, Box<dyn Error>> {
@@ -43,7 +45,9 @@ impl Document {
     }
 
     let mut denied = None;
-    let css = parsed.css_with_links(|link| {
+    let mut css: Vec<String> = default_css.into_iter().collect();
+
+    css.extend(parsed.css_with_links(|link| {
       if denied.is_some() {
         return None;
       }
@@ -54,7 +58,7 @@ impl Document {
         denied = Some(error);
         None
       })
-    });
+    }));
 
     if let Some(error) = denied {
       return Err(error.into());
@@ -73,14 +77,13 @@ impl Document {
   /// into `fonts` first, since each font loaded can change which other faces the text reaches.
   pub(crate) fn load_resources(
     &self,
-    output: &Output,
-    inputs: &RenderInputs,
+    product: &impl Product,
     fonts: &mut Fonts,
     sandbox: &Sandbox,
     warnings: &mut Vec<ResourceError>,
-  ) -> Result<HashMap<Arc<str>, ImageSource>, Box<dyn Error>> {
+  ) -> Result<Images, Box<dyn Error>> {
     loop {
-      let font_files = output.needs(inputs, self, fonts)?.font_files;
+      let font_files = product.needs(self, fonts, &Images::new())?.font_files;
 
       if font_files.is_empty() {
         break;
@@ -103,9 +106,9 @@ impl Document {
       *fonts = fonts.with_failed_font_files(&failed);
     }
 
-    let mut images = HashMap::new();
+    let mut images = Images::new();
 
-    for written in output.needs(inputs, self, fonts)?.images {
+    for written in product.needs(self, fonts, &Images::new())?.images {
       let Some(bytes) = self.read(&written, sandbox, warnings)? else {
         continue;
       };
@@ -119,6 +122,34 @@ impl Document {
     }
 
     Ok(images)
+  }
+
+  /// Prints each image and font the document reaches, whether the sandbox lets it load, and its
+  /// URL, tab-separated.
+  pub(crate) fn list_resources(
+    &self,
+    product: &impl Product,
+    fonts: &Fonts,
+    sandbox: &Sandbox,
+  ) -> Result<(), Box<dyn Error>> {
+    let needs = product.needs(self, fonts, &Images::new())?;
+    let resources = needs
+      .images
+      .iter()
+      .map(|written| ("image", written))
+      .chain(needs.font_files.iter().map(|written| ("font", written)));
+
+    for (kind, written) in resources {
+      match self.base.join(written) {
+        Ok(url) => match sandbox.check(&url) {
+          Ok(()) => println!("{kind}\tallowed\t{url}"),
+          Err(error) => println!("{kind}\tblocked\t{url}\t{error}"),
+        },
+        Err(_) => println!("{kind}\tinvalid\t{written}"),
+      }
+    }
+
+    Ok(())
   }
 
   /// The bytes of the resource written as `written`, none when a browser would skip it.
