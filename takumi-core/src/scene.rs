@@ -1283,6 +1283,77 @@ impl<'a> SceneRef<'a> {
   }
 }
 
+/// Blink's `BlockEndScrollableOverflow` of page `page`'s root fragment, which the paginated root
+/// adds pages for: how far down its boxes' border boxes reach once transformed, leaving out the
+/// boxes inside one that clips its overflow, and their line boxes with them. `None` when the page
+/// holds no root fragment.
+#[cfg(feature = "fragmentation")]
+pub(crate) fn scrollable_block_end(
+  root: &RenderNode,
+  layout: LayoutView<'_>,
+  sizes: &PageSizes,
+  page: usize,
+) -> Result<Option<f32>> {
+  let roots = page_roots(layout, sizes, &[page]);
+
+  if roots.is_empty() {
+    return Ok(None);
+  }
+
+  let layers = build_layers(root, layout, false, &roots, None)?;
+  let mut seen = FxHashSet::default();
+  let mut end = None::<f32>;
+
+  for chunk in PaintChunk::in_paint_order(&layers.contexts) {
+    let node = chunk.node;
+
+    if !seen.insert((node.node_id, node.fragment_index)) {
+      continue;
+    }
+
+    let mut clip = node.properties.border_box.clip;
+    let mut clipped = false;
+
+    while let Some(id) = clip {
+      let clip_node = layers.properties.clip(id);
+
+      clipped |= clip_node.clips_block_end();
+      clip = clip_node.parent;
+    }
+    if clipped {
+      continue;
+    }
+
+    let fragment = layout.fragment_layout(node.node_id, node.fragment_index)?;
+    let content = fragment.content_box_offset();
+    let lines = root
+      .node_at_path(&node.path)
+      .and_then(|render_node| render_node.fragment_items_of(node.fragment_index, fragment))
+      .and_then(|items| {
+        let (first, last) = (items.line_boxes().first()?.0, items.line_boxes().last()?.1);
+
+        Some((
+          Point::new(content.x, content.y + first),
+          Size {
+            width: fragment.content_box_width(),
+            height: last - first,
+          },
+        ))
+      });
+    let reaches = [(Point::ZERO, fragment.size)]
+      .into_iter()
+      .chain(lines)
+      .filter_map(|(origin, size)| transformed_rect_extents(origin, size, node.transform))
+      .map(|(_, _, _, bottom)| bottom);
+
+    for bottom in reaches {
+      end = Some(end.map_or(bottom, |end| end.max(bottom)));
+    }
+  }
+
+  Ok(end)
+}
+
 #[cfg(feature = "fragmentation")]
 fn page_roots(layout: LayoutView<'_>, sizes: &PageSizes, pages: &[usize]) -> Vec<RootFragment> {
   pages
