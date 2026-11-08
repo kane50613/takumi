@@ -9,6 +9,7 @@ members = [
   "takumi-pdf-js",
   "takumi-paint",
   "takumi-html",
+  "takumi-cli",
   "takumi-bindings-common",
   "takumi-napi",
   "takumi-wasm",

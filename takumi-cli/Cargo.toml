@@ -1,0 +1,29 @@
+[package]
+name = "takumi-cli"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Renders HTML and CSS to images, SVG, and PDF from the command line."
+repository = "https://github.com/kane50613/takumi"
+rust-version = "1.91"
+publish = false
+
+[[bin]]
+name = "takumi"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.6", features = ["derive"] }
+cssparser.workspace = true
+data-url.workspace = true
+url = "2"
+
+[dependencies.takumi]
+path = "../takumi"
+features = ["from-html", "svg-backend"]
+
+[dependencies.takumi-pdf]
+path = "../takumi-pdf"
+
+[lints]
+workspace = true
