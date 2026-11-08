@@ -26,15 +26,39 @@ pub(crate) struct Document {
 }
 
 impl Document {
-  /// Parses `html` found at `location` and loads the style sheets it links and imports through
-  /// `loader`, after `default_css`, which they override.
+  /// Parses the HTML file `html` found at `location` as a whole document, as a browser opens it,
+  /// and loads the style sheets it links and imports through `loader`, after `default_css`,
+  /// which they override.
   pub(crate) fn load(
     html: &str,
     location: &Url,
     default_css: Option<String>,
     loader: &mut StyleSheetLoader<'_>,
   ) -> Result<Self, Box<dyn Error>> {
-    let mut parsed = parse_html(html, FromHtmlOptions::default())?;
+    let options = FromHtmlOptions::builder().document(true).build();
+
+    Self::parse(html, location, options, default_css, loader)
+  }
+
+  /// Parses a header or footer file as a fragment, as Chromium inserts a header or footer
+  /// template into an element of its own page, and loads its style sheets through `loader`.
+  pub(crate) fn load_band(
+    html: &str,
+    location: &Url,
+    loader: &mut StyleSheetLoader<'_>,
+  ) -> Result<Self, Box<dyn Error>> {
+    Self::parse(html, location, FromHtmlOptions::default(), None, loader)
+  }
+
+  /// Parses `html` with `options`, then loads the style sheets it links and imports.
+  fn parse(
+    html: &str,
+    location: &Url,
+    options: FromHtmlOptions,
+    default_css: Option<String>,
+    loader: &mut StyleSheetLoader<'_>,
+  ) -> Result<Self, Box<dyn Error>> {
+    let mut parsed = parse_html(html, options)?;
     let base = parsed
       .base_href
       .as_deref()

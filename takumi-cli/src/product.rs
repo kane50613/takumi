@@ -76,7 +76,7 @@ pub(crate) fn run(
     .map(|path| {
       let (html, location) = read_html_file(path)?;
 
-      Document::load(&html, &location, None, &mut loader)
+      Document::load_band(&html, &location, &mut loader)
     })
     .collect::<Result<Vec<_>, _>>()?;
   let report = loader.into_report();

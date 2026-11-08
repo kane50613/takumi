@@ -287,6 +287,11 @@ pub struct FromHtmlOptions {
   /// Defaults to [`MAXIMUM_DOM_TREE_DEPTH`].
   #[builder(default = MAXIMUM_DOM_TREE_DEPTH)]
   pub(crate) max_depth: usize,
+  /// Parses the source as a whole document with `html` and `body`, as a browser opens an HTML
+  /// file, even when it starts with neither a doctype nor `<html>`. Off by default, which parses
+  /// such a source as a fragment.
+  #[builder(default)]
+  pub(crate) document: bool,
 }
 
 impl Default for FromHtmlOptions {
@@ -382,7 +387,7 @@ pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, 
     styles: RefCell::default(),
     disabling_fieldsets: Cell::new(0),
   };
-  let dom = markup::parse(source, is_document(source));
+  let dom = markup::parse(source, options.document || is_document(source));
   let mut nodes = Vec::new();
 
   builder.build_nodes(dom.document(), 0, &mut nodes)?;
@@ -1179,6 +1184,22 @@ mod tests {
     assert_eq!(parse("<div>hi</div>").tag_name(), Some("div"));
     assert_eq!(parse("<body><div>hi</div></body>").tag_name(), Some("div"));
     assert_eq!(parse("text <html> in content").tag_name(), None);
+  }
+
+  #[test]
+  fn the_document_option_wraps_a_fragment_in_html_and_body() {
+    let options = FromHtmlOptions::builder().document(true).build();
+    let node = parse_html("<style>p{}</style><p>hi</p>", options)
+      .unwrap()
+      .node;
+
+    assert_eq!(node.tag_name(), Some("html"));
+    let html = node.to_html();
+
+    assert!(
+      html.contains("<body ") && html.contains(">hi</p></body>"),
+      "{html}"
+    );
   }
 
   /// Tag names are ASCII case-insensitive, so a document is a document however
