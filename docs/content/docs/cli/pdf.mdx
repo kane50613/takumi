@@ -19,7 +19,7 @@ Content that does not fit on one page flows onto the next. [Pagination](/docs/pd
 takumi pdf report.html -o report.pdf --page "letter landscape" --margin "0.5in 0.75in"
 ```
 
-Pages default to A4 with a 1 cm margin. Both flags are defaults, so a `@page` rule in the document wins over them, as it does over Chrome's print dialog. A value CSS does not accept stops before rendering, with exit code `2`.
+Pages default to A4 with a 1 cm margin, which grows to fit a header or footer. Both flags are defaults, so a `@page` rule in the document wins over them, as it does over Chrome's print dialog. A value CSS does not accept stops before rendering, with exit code `2`.
 
 ## Keep some pages
 
@@ -49,7 +49,7 @@ Without `--margin`, the margin on that side grows to fit the header or footer. A
 
 A header or footer file is a fragment of HTML, not a whole page. Its stylesheets and images load like the document's, through the same [file access](/docs/cli/file-access) rules.
 
-## Fill in the document details
+## Add a title, authors, and bookmarks
 
 `--title` sets the title a PDF viewer shows, and `--author` adds an author. Repeat `--author` for more:
 
@@ -59,7 +59,7 @@ takumi pdf report.html -o report.pdf --title "Quarterly report" --author "Financ
 
 `--outline` adds a bookmark for each `h1` to `h6` heading, so a PDF viewer shows the document's sections in its sidebar.
 
-## Fill the page
+## Set a page background
 
 `--background` takes a CSS color and fills every page with it, margins included:
 

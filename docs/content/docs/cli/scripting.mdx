@@ -7,7 +7,7 @@ description: Pipe HTML in and images out, read the exit codes, and fail a build 
 
 ## Read from standard input
 
-`-` as the input reads the HTML from standard input:
+`-` as the input reads the HTML from standard input. Here `generate-card` stands for any program that prints HTML:
 
 ```sh
 generate-card --title "Launch day" | takumi image - -o card.png
@@ -21,10 +21,10 @@ generate-card | takumi image - -o card.png --root assets
 
 ## Write to standard output
 
-`-o -` writes the output to standard output. There is no file extension to read the format from, so an image needs `--format`:
+`-o -` writes the output to standard output. There is no file extension to read the format from, so an image needs `--format`. This example compresses the image with `gzip` on its way to a file:
 
 ```sh
-takumi image card.html -o - --format webp | upload-to-cdn card.webp
+takumi image card.html -o - --format svg | gzip > card.svg.gz
 ```
 
 `takumi pdf` always writes PDF, so it needs no `--format`. Neither command writes binary output to a terminal. Redirect it to a file or a pipe.

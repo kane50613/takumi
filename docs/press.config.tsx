@@ -174,6 +174,7 @@ export default defineConfig({
           ArrowBigRight,
           Zap,
           Palette,
+          Terminal,
           Type,
           Mermaid,
           PaintPipeline,

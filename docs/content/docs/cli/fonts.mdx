@@ -22,7 +22,7 @@ An `@font-face` rule loads a font file the way a browser does. A relative URL re
 </style>
 ```
 
-A URL in CSS is not a shell path, so write `fonts/Brand.woff2` or an absolute path rather than `~/fonts/Brand.woff2`. The file has to be inside a directory the document may read, which by default is the HTML file's directory and everything under it. See [Control file access](/docs/cli/file-access).
+The font file has to be inside a directory the document may read, which by default is the HTML file's directory and everything under it. See [Control file access](/docs/cli/file-access). Write its path relative to the stylesheet, or as an absolute path. CSS does not expand `~` the way a shell does, so `url(~/fonts/Brand.woff2)` never reaches your home directory.
 
 When a `src` file is missing or cannot be decoded, takumi prints a warning and moves on to the rule's next source, as Chrome does. A `src` outside the readable directories stops the render instead, like any other blocked read. `takumi` loads only the faces the text uses, so a rule nothing on the page uses never reads its file.
 
