@@ -15,8 +15,8 @@ A document reads files only from the directories it is granted, and it never rea
 
 - By default, the document may read files under the input file's directory. Reading from standard input grants no directory.
 - `--root <DIR>` replaces that directory, and `--allow-read <DIR>` adds another. Repeat `--allow-read` for more.
-- A path is checked after symlinks and `..` are resolved, so neither can step outside a granted directory.
-- `data:` URLs always load. `http` and `https` URLs never do. takumi skips them with a warning, as a browser skips a resource that fails to load.
+- A path is checked as written before anything on disk is touched, so nothing outside a granted directory is probed. It is checked again after symlinks resolve, so a symlink cannot step outside either.
+- `data:` URLs always load. `http` and `https` URLs never do, and neither does a `file:` URL that names another machine, such as a Windows network share. takumi skips them with a warning, as a browser skips a resource that fails to load.
 - A read outside the granted directories stops the render, and the error names the `--allow-read` flag that would allow it.
 - One resource may hold at most 32 MiB, all of them together 256 MiB, and a render may load at most 1024 of them.
 

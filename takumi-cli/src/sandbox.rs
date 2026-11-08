@@ -5,7 +5,7 @@ use std::{
   cell::Cell,
   fmt, fs,
   io::{self, Read},
-  path::{Path, PathBuf},
+  path::{self, Component, Path, PathBuf, Prefix},
 };
 
 use data_url::DataUrl;
@@ -74,6 +74,8 @@ impl std::error::Error for ResourceError {}
 pub(crate) struct Sandbox {
   /// Canonical paths, so a symlink or `..` cannot step out of one.
   roots: Vec<PathBuf>,
+  /// The roots as given, made absolute, to check a path against before touching the filesystem.
+  given_roots: Vec<PathBuf>,
   loaded_bytes: Cell<u64>,
   loaded_resources: Cell<usize>,
 }
@@ -81,16 +83,20 @@ pub(crate) struct Sandbox {
 impl Sandbox {
   /// A sandbox reading under `roots`, each of which must exist.
   pub(crate) fn new(roots: impl IntoIterator<Item = PathBuf>) -> io::Result<Self> {
-    let roots = roots
-      .into_iter()
-      .map(|root| {
-        fs::canonicalize(&root)
-          .map_err(|error| io::Error::new(error.kind(), format!("{}: {error}", root.display())))
-      })
-      .collect::<io::Result<_>>()?;
+    let mut canonical_roots = Vec::new();
+    let mut given_roots = Vec::new();
+
+    for root in roots {
+      let with_path =
+        |error: io::Error| io::Error::new(error.kind(), format!("{}: {error}", root.display()));
+
+      canonical_roots.push(fs::canonicalize(&root).map_err(with_path)?);
+      given_roots.extend(lexical(&path::absolute(&root).map_err(with_path)?));
+    }
 
     Ok(Self {
-      roots,
+      roots: canonical_roots,
+      given_roots,
       loaded_bytes: Cell::new(0),
       loaded_resources: Cell::new(0),
     })
@@ -145,27 +151,49 @@ impl Sandbox {
     Ok(bytes)
   }
 
-  /// The canonical path `url` names, if it lies under a root.
+  /// The canonical path `url` names, if it lies under a root. The path is checked as written
+  /// before the filesystem is touched, so a path outside every root is never probed, and a URL
+  /// naming another machine never reaches it.
   fn allowed_path(&self, url: &Url) -> Result<PathBuf, ResourceError> {
+    if url
+      .host_str()
+      .is_some_and(|host| !host.is_empty() && !host.eq_ignore_ascii_case("localhost"))
+    {
+      return Err(ResourceError::Network(url.clone()));
+    }
+
     let path = url
       .to_file_path()
-      .map_err(|()| ResourceError::UnsupportedScheme(url.clone()))?;
+      .ok()
+      .and_then(|path| lexical(&path))
+      .ok_or_else(|| ResourceError::UnsupportedScheme(url.clone()))?;
+    let denied = |path: PathBuf| ResourceError::Denied {
+      url: url.clone(),
+      path,
+    };
+
+    if !self
+      .given_roots
+      .iter()
+      .chain(&self.roots)
+      .any(|root| path.starts_with(root))
+    {
+      return Err(denied(path));
+    }
+
     let canonical = fs::canonicalize(&path).map_err(|error| ResourceError::Io {
       url: url.clone(),
       error,
     })?;
 
+    if !self.roots.iter().any(|root| canonical.starts_with(root)) {
+      return Err(denied(canonical));
+    }
+
     if !canonical.is_file() {
       return Err(ResourceError::Io {
         url: url.clone(),
         error: io::Error::new(io::ErrorKind::InvalidInput, "not a file"),
-      });
-    }
-
-    if !self.roots.iter().any(|root| canonical.starts_with(root)) {
-      return Err(ResourceError::Denied {
-        url: url.clone(),
-        path: canonical,
       });
     }
 
@@ -185,6 +213,31 @@ impl Sandbox {
 
     Ok(())
   }
+}
+
+/// `path` with `.` and `..` resolved by name alone, none when it names another machine or a
+/// device, as a Windows UNC path does.
+fn lexical(path: &Path) -> Option<PathBuf> {
+  let mut resolved = PathBuf::new();
+
+  for component in path.components() {
+    match component {
+      Component::Prefix(prefix) => match prefix.kind() {
+        Prefix::Disk(_) | Prefix::VerbatimDisk(_) => resolved.push(component),
+        Prefix::UNC(..) | Prefix::VerbatimUNC(..) | Prefix::Verbatim(_) | Prefix::DeviceNS(_) => {
+          return None;
+        }
+      },
+      Component::RootDir => resolved.push(component),
+      Component::CurDir => {}
+      Component::ParentDir => {
+        resolved.pop();
+      }
+      Component::Normal(name) => resolved.push(name),
+    }
+  }
+
+  Some(resolved)
 }
 
 /// The `file:` URL of a directory, ending in a slash so relative references resolve inside it.
@@ -257,6 +310,31 @@ mod tests {
     assert!(matches!(
       sandbox.read(&url),
       Err(ResourceError::Denied { .. })
+    ));
+  }
+
+  #[test]
+  fn never_probes_a_missing_file_outside_every_root() {
+    let root = temp_dir("probe-root");
+    let sandbox = Sandbox::new([root.clone()]).unwrap();
+    let url = directory_url(&root)
+      .unwrap()
+      .join("../takumi-cli-no-such-file")
+      .unwrap();
+
+    assert!(matches!(
+      sandbox.read(&url),
+      Err(ResourceError::Denied { .. })
+    ));
+  }
+
+  #[test]
+  fn a_file_url_naming_another_machine_never_reaches_it() {
+    let sandbox = Sandbox::new([]).unwrap();
+
+    assert!(matches!(
+      sandbox.read(&Url::parse("file://attacker.example/share/a.png").unwrap()),
+      Err(ResourceError::Network(_))
     ));
   }
 
