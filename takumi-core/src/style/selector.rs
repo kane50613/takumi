@@ -1581,6 +1581,16 @@ impl StyleSheet {
     )
   }
 
+  /// Whether an `@page` rule nests a page-margin rule.
+  pub fn has_page_margin_rules(&self) -> bool {
+    self.page_rules.iter().any(|rule| !rule.margins.is_empty())
+  }
+
+  /// Whether a page-margin rule's `content` reads `counter(pages)`, the document's page count.
+  pub fn page_margins_count_pages(&self) -> bool {
+    self.page_rules.iter().any(PageRule::counts_pages)
+  }
+
   /// The page names the `@page` rules select, each once, in the order they first appear.
   pub fn page_names(&self) -> Vec<PageName> {
     let mut names: Vec<PageName> = Vec::new();

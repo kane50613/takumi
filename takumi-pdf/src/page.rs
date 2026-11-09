@@ -1,18 +1,22 @@
 //! The pages of a document: their geometry, and the walk that draws each.
 
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::Cell, collections::HashMap, rc::Rc};
 
 use takumi_core::{
   context::RenderContext,
   geometry::{Point as CorePoint, Rect, Size},
   layout::{
     node::Node,
-    page_sizes::{PageSizer, PageSizes},
+    page_margin_boxes::{PageCounters, PageMarginBoxes},
+    page_sizes::{PageBox, PageSizer, PageSizes},
     tree::RenderNode,
   },
   page_stream::Settle,
   scene::{SceneRef, SceneView},
-  style::{Color, page_rule::PageContext},
+  style::{
+    Color, PageName,
+    page_rule::{PageContext, PageKind},
+  },
   viewport::{MediaTarget, Viewport},
 };
 
@@ -223,6 +227,16 @@ struct Solved {
   frames: PageFrames,
   /// The bands of each page, measured at its width.
   bands: PerPage<Rc<Bands>>,
+  margin_boxes: MarginBoxSource,
+}
+
+/// What a page's page-margin boxes are styled from.
+#[derive(Clone)]
+struct MarginBoxSource {
+  /// The page context the root element gives every page.
+  root: PageContext,
+  /// The viewport the `@page` rules' `@media` read.
+  media: Viewport,
 }
 
 /// What the passes that solved the frame left of the content.
@@ -254,7 +268,11 @@ impl PageDrawing<'_, '_> {
     let root =
       PageContext::from_initial_containing_block(&self.inputs.context(page.viewport()), &node);
     let pages = page.with_page_rules(&self.inputs.stylesheet, &root);
-    let (solved, content) = Self::solve(self.inputs, &pages, &bands, node, settle)?;
+    let margin_boxes = MarginBoxSource {
+      root,
+      media: page.viewport(),
+    };
+    let (solved, content) = Self::solve(self.inputs, &pages, &bands, node, settle, margin_boxes)?;
 
     match content {
       Content::Stream(content) => self.stream(solved, content, None, selection, structural, settle),
@@ -277,6 +295,7 @@ impl PageDrawing<'_, '_> {
     templates: &PageBands<'_>,
     node: Node,
     settle: Settle<'_>,
+    margin_boxes: MarginBoxSource,
   ) -> Result<(Solved, Content), PdfError> {
     // Bands lay out at full page width and draw inside the margin areas,
     // like Chromium's print header and footer templates.
@@ -291,10 +310,17 @@ impl PageDrawing<'_, '_> {
     // its height settles.
     let dynamic = bands.values().any(|bands| bands.dynamic());
 
-    if !dynamic && !reads_layout(&node) {
+    if !dynamic && !reads_layout(&node) && !inputs.stylesheet.page_margins_count_pages() {
       let content = Prepared::new(node, inputs, &frames)?;
 
-      return Ok((Solved { frames, bands }, Content::Stream(Box::new(content))));
+      return Ok((
+        Solved {
+          frames,
+          bands,
+          margin_boxes,
+        },
+        Content::Stream(Box::new(content)),
+      ));
     }
 
     // Only a margin that follows a band can move the frame, which is when the content lays out
@@ -330,7 +356,14 @@ impl PageDrawing<'_, '_> {
       }
     }
 
-    Ok((Solved { frames, bands }, Content::Counted(counted)))
+    Ok((
+      Solved {
+        frames,
+        bands,
+        margin_boxes,
+      },
+      Content::Counted(counted),
+    ))
   }
 
   /// Lays `content` out a page at a time and draws each page, in order, once `settle` says it is
@@ -344,13 +377,17 @@ impl PageDrawing<'_, '_> {
     structural: bool,
     settle: Settle<'_>,
   ) -> Result<PagePlan, PdfError> {
-    let Solved { frames, bands } = solved;
+    let Solved {
+      frames,
+      bands,
+      margin_boxes,
+    } = solved;
     let Prepared {
       root,
       repeated,
       reads_summary,
     } = *content;
-    let composer = PageComposer::new(self, &frames, &bands, &repeated);
+    let composer = PageComposer::new(self, &frames, &bands, &repeated, margin_boxes);
     let mut summary = PageSummary::new(false);
     let counted_pages = counts.as_ref().map(|counts| counts.sizes.len());
 
@@ -429,7 +466,11 @@ impl PageDrawing<'_, '_> {
     selection: PageSelection,
     structural: bool,
   ) -> Result<PagePlan, PdfError> {
-    let Solved { frames, bands } = solved;
+    let Solved {
+      frames,
+      bands,
+      margin_boxes,
+    } = solved;
     let summary = paginated.summary()?;
     let Paginated {
       content,
@@ -446,7 +487,7 @@ impl PageDrawing<'_, '_> {
       summary,
       sizes,
     };
-    let composer = PageComposer::new(self, &plan.frames, &bands, &repeated);
+    let composer = PageComposer::new(self, &plan.frames, &bands, &repeated, margin_boxes);
 
     for slice in PageSlice::all(&plan.sizes) {
       if !plan.selection.keeps(slice.index) {
@@ -478,6 +519,9 @@ struct PageComposer<'c, 'g> {
   page_contexts: PerPage<Rc<RenderContext>>,
   state: &'c DocumentState<'c>,
   background: Option<Color>,
+  margin_boxes: MarginBoxSource,
+  /// The page after the last one drawn, and the `page` counter that one left.
+  page_counter: Cell<(usize, i32)>,
 }
 
 impl<'c, 'g> PageComposer<'c, 'g> {
@@ -486,6 +530,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
     frames: &'c PageFrames,
     bands: &'c PerPage<Rc<Bands>>,
     repeated: &'c RepeatedBoxes,
+    margin_boxes: MarginBoxSource,
   ) -> Self {
     let page_contexts = frames.map_shared(
       |frame| frame.page_area,
@@ -500,7 +545,71 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       page_contexts,
       state: drawing.state,
       background: drawing.background,
+      margin_boxes,
+      page_counter: Cell::new((0, 0)),
     }
+  }
+
+  /// Draws the page-margin boxes the `@page` rules give the page, over its content as Blink
+  /// paints them. A page the page ranges skipped counts as an unnamed page.
+  fn emit_margin_boxes(
+    &self,
+    frame: &PageFrame,
+    slice: &PageSlice,
+    pages: usize,
+    surface: &mut Surface,
+  ) -> Result<(), PdfError> {
+    let stylesheet = &self.inputs.stylesheet;
+
+    if !stylesheet.has_page_margin_rules() {
+      return Ok(());
+    }
+
+    let MarginBoxSource { root, media } = &self.margin_boxes;
+    let direction = root.direction();
+    let viewport = Viewport::print_page(frame.size);
+    let context = self.inputs.context(viewport);
+    let styles_of = |page: usize, name: &PageName| {
+      stylesheet.page_styles(*media, PageKind::of(page, direction), name, root)
+    };
+    let (next, mut counter) = self.page_counter.get();
+
+    for skipped in next..slice.index {
+      counter = styles_of(skipped, &PageName::default()).advance_page_counter(&context, counter);
+    }
+
+    let styles = styles_of(slice.index, &slice.name);
+
+    counter = styles.advance_page_counter(&context, counter);
+    self.page_counter.set((slice.index + 1, counter));
+
+    let Some(boxes) = PageMarginBoxes::lay_out(
+      &context,
+      &styles,
+      PageBox {
+        size: frame.size,
+        margin: frame.margin,
+      },
+      direction,
+      PageCounters {
+        page: counter,
+        pages: Some(pages),
+      },
+    ) else {
+      return Ok(());
+    };
+    let tree = self.inputs.prepare(boxes.node, viewport)?;
+
+    ContentWindow {
+      clip: (0.0, 0.0, frame.size.width, frame.size.height),
+      translate: CorePoint { x: 0.0, y: 0.0 },
+      window: Window::default(),
+      artifact: self.state.tags.is_some(),
+    }
+    .emit(
+      Emitter::new(tree.view(), self.state, None, None, false),
+      surface,
+    )
   }
 
   /// Draws one page of `pages`, the content it shows being `scene`. `anchor` says where
@@ -547,6 +656,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
     for repeatable in resolved.iter().filter(|page| !page.draws_before_content()) {
       repeatable.emit(frame, self.state, &mut surface)?;
     }
+    self.emit_margin_boxes(frame, slice, pages, &mut surface)?;
     surface.pop();
     surface.finish();
     add_link_annotations(

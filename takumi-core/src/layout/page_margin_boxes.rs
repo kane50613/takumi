@@ -729,3 +729,102 @@ impl MarginBox {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::geometry::Rect;
+
+  fn auto(min: f32, max: f32, margin_sum: f32) -> Option<PreferredSize> {
+    Some(PreferredSize {
+      min,
+      max,
+      margin_sum,
+      is_auto: true,
+    })
+  }
+
+  fn fixed(size: f32) -> Option<PreferredSize> {
+    Some(PreferredSize {
+      min: size,
+      max: size,
+      margin_sum: 0.0,
+      is_auto: false,
+    })
+  }
+
+  /// WPT `css/css-page/margin-boxes/dimensions-003-print.html`: the space two `auto` boxes leave
+  /// goes to each by its max-content size, margins included.
+  #[test]
+  fn two_auto_boxes_share_the_edge_by_their_max_content_sizes() {
+    assert_eq!(
+      edge_sizes(
+        [auto(32.0, 32.0, 16.0), None, auto(16.0, 16.0, 16.0)],
+        320.0
+      ),
+      [176.0, 0.0, 112.0]
+    );
+  }
+
+  #[test]
+  fn an_auto_center_box_stays_centered_between_unequal_sides() {
+    let sizes = edge_sizes(
+      [
+        auto(100.0, 100.0, 0.0),
+        auto(50.0, 50.0, 0.0),
+        auto(20.0, 20.0, 0.0),
+      ],
+      400.0,
+    );
+
+    assert_eq!(sizes[0], sizes[2]);
+    assert_eq!(sizes.iter().sum::<f32>(), 400.0);
+    assert_eq!(sizes[1], 80.0);
+  }
+
+  #[test]
+  fn a_lone_auto_box_takes_the_edge_and_empty_ones_split_it() {
+    assert_eq!(
+      edge_sizes([auto(0.0, 0.0, 0.0), None, None], 200.0),
+      [200.0, 0.0, 0.0]
+    );
+    assert_eq!(
+      edge_sizes([auto(0.0, 0.0, 0.0), None, auto(0.0, 0.0, 0.0)], 200.0),
+      [100.0, 0.0, 100.0]
+    );
+    assert_eq!(
+      edge_sizes([fixed(60.0), None, auto(10.0, 30.0, 0.0)], 200.0),
+      [60.0, 0.0, 140.0]
+    );
+  }
+
+  #[test]
+  fn each_box_lies_in_the_margin_its_name_says() {
+    let page_box = PageBox {
+      size: Size::new(400.0, 300.0),
+      margin: Rect {
+        top: 10.0,
+        right: 20.0,
+        bottom: 30.0,
+        left: 40.0,
+      },
+    };
+    let area = |kind| {
+      let Area { x, y } = page_box.margin_area(kind);
+
+      (x.start, y.start, x.size, y.size)
+    };
+
+    assert_eq!(area(PageMarginKind::TopLeftCorner), (0.0, 0.0, 40.0, 10.0));
+    assert_eq!(area(PageMarginKind::TopCenter), (40.0, 0.0, 340.0, 10.0));
+    assert_eq!(
+      area(PageMarginKind::RightMiddle),
+      (380.0, 10.0, 20.0, 260.0)
+    );
+    assert_eq!(
+      area(PageMarginKind::BottomRightCorner),
+      (380.0, 270.0, 20.0, 30.0)
+    );
+    assert_eq!(area(PageMarginKind::LeftBottom), (0.0, 10.0, 40.0, 260.0));
+  }
+}

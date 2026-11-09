@@ -737,6 +737,17 @@ impl PageRule {
     rule
   }
 
+  /// Whether a page-margin rule's `content` names the `pages` counter.
+  pub(crate) fn counts_pages(&self) -> bool {
+    self
+      .margins
+      .iter()
+      .flat_map(|margin| &margin.declarations)
+      .any(|declaration| {
+        declaration.name.eq_ignore_ascii_case("content") && declaration.value.contains("pages")
+      })
+  }
+
   /// The rules among `rules` whose `@media` holds at `viewport` and whose selector matches `kind`
   /// pages named `name` in `context`, each once without and once with `!important`, in cascade
   /// order: importance, layer, specificity, then source order.
@@ -1143,6 +1154,55 @@ mod tests {
         bottom: Some(Length::Px(0.0)),
         left: Some(Length::Px(0.0)),
       }
+    );
+  }
+  fn styles(css: &str, kind: PageKind) -> PageStyles {
+    let print = Viewport::default().with_media_target(MediaTarget::Print);
+
+    StyleSheet::parse(css).expect("parse @page").page_styles(
+      print,
+      kind,
+      &PageName::default(),
+      &PageContext::default(),
+    )
+  }
+
+  #[test]
+  fn page_margin_rules_cascade_with_the_page_rules_that_hold_them() {
+    let styles = styles(
+      "@page { color: red; margin: 1in; @top-center { content: 'a'; color: blue !important } }
+       @page :first { @top-center { content: 'first'; color: green } @bottom-left { content: 'b' } }
+       @page { @unknown { content: 'x' } @TOP-LEFT { content: 'c' } }",
+      PageKind::First,
+    );
+
+    assert_eq!(styles.page, "color:red;margin:1in;");
+    assert_eq!(
+      styles.margins,
+      [
+        (PageMarginKind::TopLeft, "content:'c';".to_owned()),
+        (
+          PageMarginKind::TopCenter,
+          "content:'a';content:'first';color:green;color:blue;".to_owned()
+        ),
+        (PageMarginKind::BottomLeft, "content:'b';".to_owned()),
+      ]
+    );
+  }
+
+  #[test]
+  fn a_page_margin_rule_leaves_the_page_descriptors_alone() {
+    let css = "@page { @top-left { margin: 5px; size: 10px } margin-top: 7px }";
+
+    assert_eq!(
+      winners(css, PageKind::First).margin.top,
+      Some(Length::Px(7.0))
+    );
+    assert_eq!(winners(css, PageKind::First).size, None);
+    assert!(
+      StyleSheet::parse("@page { @bottom-center { content: counter(pages) } }")
+        .expect("parse @page")
+        .page_margins_count_pages()
     );
   }
 }
