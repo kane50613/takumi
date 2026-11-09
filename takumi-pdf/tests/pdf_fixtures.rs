@@ -830,6 +830,30 @@ fn a_forced_break_after_a_table_row_in_a_flex_item_breaks_after_the_container() 
   });
 }
 
+/// css-flexbox-1 §4: `float` does not apply to a flex item, so a floated item lays out and breaks
+/// as any other item, and its `break-after: page` starts a new page, as Chromium prints it.
+#[test]
+fn a_floated_flex_item_breaks_after_as_any_other_item() {
+  run_pdf_fixture("floated-flex-item-break-after", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="display: flex; flex-direction: column; background: #e2e8f0">
+        <div style="float: left; width: 120px; background: #93c5fd; break-after: page">floated item</div>
+        <div style="background: #fde68a">next item, on the next page</div>
+      </div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse flex column"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. Each
 /// segment of a line resolves on its own, so the 4px border under one column

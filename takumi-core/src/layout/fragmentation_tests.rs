@@ -289,6 +289,21 @@ fn a_forced_break_after_a_table_row_in_a_flex_item_breaks_after_the_container() 
 }
 
 #[test]
+fn a_floated_flex_item_is_an_item_that_breaks_after_as_any_other() {
+  let item = block("item", "h10 floated forced-after");
+  let flex = Node::container([item, block("second", "h10")]).with_class_name("block column");
+  let tree = render(
+    root([flex]),
+    ".column { display: flex; flex-direction: column } .h10 { height: 10px } \
+     .floated { float: left } .forced-after { break-after: page }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["second"], [placed(1, 0.0, 10.0)]);
+}
+
+#[test]
 fn break_before_page_starts_a_block_on_a_new_page() {
   let tree = render(
     root([block("a", "h50"), block("b", "h50 forced")]),
