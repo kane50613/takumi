@@ -24,7 +24,7 @@ use crate::{
   path_data::path_data,
   resources::glyph::ResolvedBitmapGlyph,
   shadow::SizedShadow,
-  style::{Affine, Color, LineJoin},
+  style::{Affine, Color, LineJoin, PaintPhase},
 };
 
 /// A clip the painters pushed.
@@ -475,8 +475,38 @@ impl Recorder {
     self.record_glyph_paint(run, style, frame);
   }
 
-  /// Records `run`'s glyphs in their own paint.
+  /// Records `run`'s glyphs in their own paint: the fill and the text stroke each over the whole
+  /// run, in the order `paint-order` gives.
   fn record_glyph_paint(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+  ) {
+    let mut text_stroke = self.text_stroke(run, style);
+
+    for phase in run.glyph_run.brush.paint_order.text_phases() {
+      match phase {
+        PaintPhase::Fill => self.record_glyph_fill(run, style, frame),
+        PaintPhase::Stroke => {
+          if let Some((stroke, color)) = text_stroke.take() {
+            self.glyphs(
+              Role::TextStroke,
+              run.index,
+              Paint::Color { color },
+              PaintPoint { x: 0.0, y: 0.0 },
+              0.0,
+              Some(stroke),
+            );
+          }
+        }
+        PaintPhase::Markers => {}
+      }
+    }
+  }
+
+  /// Records `run`'s glyph fills, with any faux bold, color layers, and bitmaps.
+  fn record_glyph_fill(
     &mut self,
     run: &PositionedInlineRun,
     style: &SizedFontStyle,
@@ -486,7 +516,6 @@ impl Recorder {
     let brush = &run.glyph_run.brush;
     let join = style.parent.misc_inherited_data.stroke_linejoin;
     let origin = PaintPoint { x: 0.0, y: 0.0 };
-    let text_stroke = self.text_stroke(run, style);
 
     if let Some(color) = self.visible(brush.color) {
       self.glyphs(self.role, index, Paint::Color { color }, origin, 0.0, None);
@@ -525,17 +554,6 @@ impl Recorder {
         }
         GlyphPaint::Bitmap(bitmap) => self.record_bitmap(bitmap, frame.place(glyph.transform)),
       }
-    }
-
-    if let Some((stroke, color)) = text_stroke {
-      self.glyphs(
-        Role::TextStroke,
-        index,
-        Paint::Color { color },
-        origin,
-        0.0,
-        Some(stroke),
-      );
     }
   }
 
