@@ -483,13 +483,11 @@ impl Recorder {
     style: &SizedFontStyle,
     frame: BoxFrame,
   ) {
-    let mut text_stroke = self.text_stroke(run, style);
-
     for phase in run.glyph_run.brush.paint_order.text_phases() {
       match phase {
         PaintPhase::Fill => self.record_glyph_fill(run, style, frame),
         PaintPhase::Stroke => {
-          if let Some((stroke, color)) = text_stroke.take() {
+          if let Some((stroke, color)) = self.text_stroke(run, style) {
             self.glyphs(
               Role::TextStroke,
               run.index,

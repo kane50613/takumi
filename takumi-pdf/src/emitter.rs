@@ -2154,14 +2154,6 @@ impl TextDevice<'_, '_, '_, '_> {
     }
   }
 
-  /// The stroke a run's glyphs draw with: its `-webkit-text-stroke`, else its faux bold, both in
-  /// `color` when a shadow recolours them.
-  fn glyph_stroke(&self, shaped: &ShapedRun, fill: &Fill, color: Option<Color>) -> Option<Stroke> {
-    self
-      .text_stroke(shaped, color)
-      .or_else(|| synthetic_stroke(shaped, fill))
-  }
-
   /// A run's visible `-webkit-text-stroke`, in `color` when a shadow recolours it.
   fn text_stroke(&self, shaped: &ShapedRun, color: Option<Color>) -> Option<Stroke> {
     let brush = &shaped.brush;
@@ -2410,11 +2402,12 @@ impl TextDevice<'_, '_, '_, '_> {
         .collect(),
       None => glyphs,
     };
-    let stroke = self.glyph_stroke(shaped, &paint, shadow_color);
+    let text_stroke = self.text_stroke(shaped, shadow_color);
+    let stroke = text_stroke
+      .clone()
+      .or_else(|| synthetic_stroke(shaped, &paint));
     // Without a shadow, the fill and the text stroke paint as separate passes over the run.
-    let text_stroke = self
-      .text_stroke(shaped, shadow_color)
-      .filter(|_| shadow_color.is_none());
+    let text_stroke = text_stroke.filter(|_| shadow_color.is_none());
     let surface = &mut *self.device.surface;
     let oblique = self.emitter.push_oblique(shaped, origin, surface);
 
