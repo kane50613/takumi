@@ -774,6 +774,62 @@ fn a_flex_row_whose_item_margin_runs_past_the_page_moves_to_the_next() {
   });
 }
 
+/// css-break-3 §3.1: a forced break after the last child of a flex item propagates out through
+/// the item and its row, so the content after the container starts a new page, as Chromium prints.
+#[test]
+fn a_forced_break_after_a_flex_items_last_child_breaks_after_the_container() {
+  run_pdf_fixture("flex-item-child-break-after", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="display: flex; gap: 8px">
+        <div style="background: #e2e8f0">
+          <div>first item</div>
+          <div style="break-after: page">ends with a forced break</div>
+        </div>
+        <div style="background: #fde68a">second item</div>
+      </div>
+      <div>after the row, on the next page</div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse flex row"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// css-break-3 §3.1: a forced break after a table row inside a flex item propagates out through
+/// the table and the item, so the content after the container starts a new page, as Chromium
+/// prints it.
+#[test]
+fn a_forced_break_after_a_table_row_in_a_flex_item_breaks_after_the_container() {
+  run_pdf_fixture("flex-item-table-row-break-after", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="display: flex">
+        <table style="border-collapse: collapse">
+          <tr><td style="background: #e2e8f0">first row</td></tr>
+          <tr style="break-after: page"><td style="background: #fde68a">last row</td></tr>
+        </table>
+      </div>
+      <div>after the table, on the next page</div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse table"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. Each
 /// segment of a line resolves on its own, so the 4px border under one column
