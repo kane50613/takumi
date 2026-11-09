@@ -336,18 +336,14 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     );
   }
 
-  /// The block fragmentation part of Blink's `BoxFragmentBuilder::AddResult` for a block child
-  /// `node` laid out as `result` at `block_offset`.
+  /// The breaking part of Blink's `BoxFragmentBuilder::AddResult` for a block child `node` laid
+  /// out as `result` at `block_offset`.
   pub(super) fn propagate_break_info(
     &mut self,
     node: NodeId,
     result: &LayoutResult,
     block_offset: LayoutUnit,
   ) {
-    if !self.space.has_block_fragmentation() {
-      return;
-    }
-
     let child_style = Rc::clone(self.tree.layout_style_rc(node));
 
     self

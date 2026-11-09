@@ -1255,7 +1255,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
           }
           offset += collapsible_spacing;
 
-          let mut space = data.space(TablePart::Section(index), self.space.cache_slot);
+          let mut space = data.space(self.space, TablePart::Section(index), self.space.cache_slot);
 
           if is_repeated_section {
             self.setup_repeated_section_space(&mut space, may_repeat_again);
@@ -1560,7 +1560,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         block_offset = block_offset.min(end_of_page);
       }
 
-      let mut space = data.space(TablePart::Section(index), self.space.cache_slot);
+      let mut space = data.space(self.space, TablePart::Section(index), self.space.cache_slot);
 
       self.setup_repeated_section_space(&mut space, true);
 
