@@ -1058,6 +1058,14 @@ mod tests {
     assert!(matches!(data.src, ImageSourceInput::Loaded(_)));
     assert_eq!((data.width, data.height), (Some(10.0), Some(20.0)));
     assert!(node.to_html().contains(r#"width="10" height="20""#));
+
+    let reparsed = parse(&node.to_html());
+    let NodeKind::Image(data) = &reparsed.kind else {
+      panic!("expected image after a round trip");
+    };
+
+    assert!(matches!(data.src, ImageSourceInput::Loaded(_)));
+    assert_eq!((data.width, data.height), (Some(10.0), Some(20.0)));
   }
 
   #[test]
