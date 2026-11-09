@@ -85,15 +85,20 @@ impl TableConstraintSpaceData {
       .collect()
   }
 
-  /// The space `part` lays out in, in the table's direction as Blink's
-  /// `table_writing_direction`.
-  pub(super) fn space(self: &Rc<Self>, part: TablePart, cache_slot: CacheSlot) -> ConstraintSpace {
+  /// The space `part` lays out in inside a box laid out in `parent`, in the table's direction as
+  /// Blink's `table_writing_direction`.
+  pub(super) fn space(
+    self: &Rc<Self>,
+    parent: &ConstraintSpace,
+    part: TablePart,
+    cache_slot: CacheSlot,
+  ) -> ConstraintSpace {
     let direction = if self.rtl {
       Direction::Rtl
     } else {
       Direction::Ltr
     };
-    let mut space = ConstraintSpace::new(Some(self.inline_size), direction);
+    let mut space = ConstraintSpace::for_child(parent, Some(self.inline_size), direction);
 
     space.is_fixed_inline_size = true;
     space.cache_slot = cache_slot;

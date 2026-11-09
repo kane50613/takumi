@@ -234,6 +234,25 @@ fn a_forced_break_after_a_grid_items_last_child_breaks_after_the_container() {
 }
 
 #[test]
+fn a_forced_break_after_a_table_row_in_a_flex_item_breaks_after_the_container() {
+  let row = Node::container([Node::container(Vec::<Node>::new()).with_class_name("cell")])
+    .with_class_name("row forced-after");
+  let table =
+    Node::container([Node::container([row]).with_class_name("body")]).with_class_name("table");
+  let flex = Node::container([table]).with_class_name("block flex");
+  let tree = render(
+    root([flex, block("next", "h10")]),
+    ".flex { display: flex } .table { display: table } .body { display: table-row-group } \
+     .row { display: table-row } .cell { display: table-cell; height: 10px } \
+     .h10 { height: 10px } .forced-after { break-after: page }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["next"], [placed(1, 0.0, 10.0)]);
+}
+
+#[test]
 fn break_before_page_starts_a_block_on_a_new_page() {
   let tree = render(
     root([block("a", "h50"), block("b", "h50 forced")]),

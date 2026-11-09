@@ -336,32 +336,19 @@ impl<'r> BlockLayoutAlgorithm<'_, 'r> {
     );
   }
 
-  /// The block fragmentation part of Blink's `BoxFragmentBuilder::AddResult` for a block child
-  /// `node` laid out as `result` at `block_offset`, which propagates the child's break values
-  /// without fragmentation too.
+  /// The breaking part of Blink's `BoxFragmentBuilder::AddResult` for a block child `node` laid
+  /// out as `result` at `block_offset`.
   pub(super) fn propagate_break_info(
     &mut self,
     node: NodeId,
     result: &LayoutResult,
     block_offset: LayoutUnit,
   ) {
-    let has_block_fragmentation = self.space.has_block_fragmentation();
-
-    if !has_block_fragmentation && !self.space.should_propagate_child_break_values() {
-      return;
-    }
-
     let child_style = Rc::clone(self.tree.layout_style_rc(node));
 
-    if has_block_fragmentation {
-      self
-        .builder
-        .add_result(self.space, &child_style, result, block_offset);
-    } else {
-      self
-        .builder
-        .propagate_child_break_values(result, &child_style);
-    }
+    self
+      .builder
+      .add_result(self.space, &child_style, result, block_offset);
   }
 
   /// What Blink's `FragmentBuilder::PropagateFromFragment` reads off a line.

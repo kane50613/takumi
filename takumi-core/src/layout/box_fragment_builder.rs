@@ -278,8 +278,9 @@ impl BoxFragmentBuilder {
       ))));
   }
 
-  /// The block fragmentation part of Blink's `AddResult` for a child of `child_style` laid out as
-  /// `result` at `block_offset`, in a box laid out in `space`.
+  /// The breaking part of Blink's `AddResult` for a child of `child_style` laid out as `result` at
+  /// `block_offset`, in a box laid out in `space`: its break data under block fragmentation, and
+  /// its break values wherever `space` propagates them.
   pub(crate) fn add_result(
     &mut self,
     space: &ConstraintSpace,
@@ -287,8 +288,12 @@ impl BoxFragmentBuilder {
     result: &LayoutResult,
     block_offset: LayoutUnit,
   ) {
-    self.add_child_break_token(result);
-    self.propagate_result(space, child_style, result, block_offset);
+    if space.has_block_fragmentation() {
+      self.add_child_break_token(result);
+      self.propagate_result(space, child_style, result, block_offset);
+    } else if space.should_propagate_child_break_values() {
+      self.propagate_child_break_values(result, child_style);
+    }
   }
 
   /// The break data Blink's `AddResult` propagates from a child of `child_style` laid out as
