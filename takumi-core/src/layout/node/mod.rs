@@ -474,16 +474,37 @@ impl Node {
     if let Some(lang) = &self.metadata.lang {
       attrs.push(format!("lang=\"{}\"", escape_attr(lang.as_str())));
     }
+    let image = match &self.kind {
+      NodeKind::Image(image) => Some(image),
+      _ => None,
+    };
+
     if let Some(attributes) = &self.metadata.attributes {
       for (k, v) in attributes {
-        attrs.push(format!("{}=\"{}\"", k, escape_attr(v)));
+        // An image's own width and height win over an attribute of the same name.
+        let is_image_size = image.is_some_and(|image| match k.as_ref() {
+          "width" => image.width.is_some(),
+          "height" => image.height.is_some(),
+          _ => false,
+        });
+
+        if !is_image_size {
+          attrs.push(format!("{}=\"{}\"", k, escape_attr(v)));
+        }
       }
     }
 
-    if let NodeKind::Image(image) = &self.kind
-      && let ImageSourceInput::Url(url) = &image.src
-    {
-      attrs.push(format!("src=\"{}\"", escape_attr(url)));
+    if let Some(image) = image {
+      if let ImageSourceInput::Url(url) = &image.src {
+        attrs.push(format!("src=\"{}\"", escape_attr(url)));
+      }
+      // Adding zero writes a negative zero as `0`.
+      if let Some(width) = image.width {
+        attrs.push(format!("width=\"{}\"", width + 0.0));
+      }
+      if let Some(height) = image.height {
+        attrs.push(format!("height=\"{}\"", height + 0.0));
+      }
     }
 
     // Each entry is (prefix_len, css_string) where css_string[..prefix_len] is the property name.
@@ -745,6 +766,17 @@ mod tests {
 
   use super::*;
   use crate::style::{BackgroundImage, Style, StyleDeclaration, TailwindValues};
+
+  #[test]
+  fn an_image_writes_its_own_size_once_and_zero_without_a_sign() {
+    let node = Node::image(("a.png", Some(-0.0), Some(20.0)))
+      .with_attributes(BTreeMap::from([("height".into(), "5".into())]));
+    let html = node.to_html();
+
+    assert!(html.contains(r#"width="0""#), "{html}");
+    assert_eq!(html.matches("height=").count(), 1, "{html}");
+    assert!(html.contains(r#"height="20""#), "{html}");
+  }
 
   #[test]
   fn alt_distinguishes_missing_from_empty() {

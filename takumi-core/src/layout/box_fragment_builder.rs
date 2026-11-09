@@ -278,8 +278,9 @@ impl BoxFragmentBuilder {
       ))));
   }
 
-  /// The block fragmentation part of Blink's `AddResult` for a child of `child_style` laid out as
-  /// `result` at `block_offset`, in a box laid out in `space`.
+  /// The breaking part of Blink's `AddResult` for a child of `child_style` laid out as `result` at
+  /// `block_offset`, in a box laid out in `space`: its break data under block fragmentation, and
+  /// its break values wherever `space` propagates them.
   pub(crate) fn add_result(
     &mut self,
     space: &ConstraintSpace,
@@ -287,8 +288,12 @@ impl BoxFragmentBuilder {
     result: &LayoutResult,
     block_offset: LayoutUnit,
   ) {
-    self.add_child_break_token(result);
-    self.propagate_result(space, child_style, result, block_offset);
+    if space.has_block_fragmentation() {
+      self.add_child_break_token(result);
+      self.propagate_result(space, child_style, result, block_offset);
+    } else if space.should_propagate_child_break_values() {
+      self.propagate_child_break_values(result, child_style);
+    }
   }
 
   /// The break data Blink's `AddResult` propagates from a child of `child_style` laid out as
@@ -736,8 +741,9 @@ impl BoxFragmentBuilder {
     self.break_info(break_token, breaks_for_out_of_flow_alone)
   }
 
-  /// Whether the box breaks only to resume out-of-flow boxes past its in-flow content. Blink lays
-  /// those out in the pages themselves, which leaves no break inside the box to avoid.
+  /// Whether the box breaks only to resume out-of-flow boxes past its in-flow content. Chrome lays
+  /// those out in the pages themselves, which leaves no break inside the box to avoid. Blink's
+  /// `FragmentedOofInCb`, which this layout follows otherwise, still counts that break.
   fn breaks_for_out_of_flow_alone(&self) -> bool {
     !self.out_of_flow_break_tokens.is_empty()
       && !self.did_break_self
@@ -745,6 +751,18 @@ impl BoxFragmentBuilder {
       && self.last_inline_break_token.is_none()
       && self.monolithic_overflow <= LayoutUnit::ZERO
       && !self.has_subsequent_children
+  }
+
+  /// Blink's adjustments in `ToBoxFragment`: the fragment's border box alone where the box clips
+  /// its block overflow or must stay on this page, else it and the children's reach.
+  fn final_block_size_for_fragmentation(&self) -> LayoutUnit {
+    if self.has_non_visible_block_overflow || self.is_block_size_for_fragmentation_clamped {
+      self.fragment_block_size
+    } else {
+      self
+        .block_size_for_fragmentation
+        .max(self.fragment_block_size)
+    }
   }
 
   /// What the box's layout result tells its container about breaking, with its `break_token`.
@@ -761,8 +779,13 @@ impl BoxFragmentBuilder {
         .initial_break_before
         .filter(|_| self.keeps_break_values),
       final_break_after: self.keeps_break_values.then_some(self.previous_break_after),
-      early_break: self.early_break.clone(),
-      block_size_for_fragmentation: Some(self.block_size_for_fragmentation),
+      // Breaking early inside a box that fits starts a parallel flow, which honors no break
+      // avoidance after it.
+      early_break: self
+        .early_break
+        .clone()
+        .filter(|_| !self.is_known_to_fit_in_fragmentainer),
+      block_size_for_fragmentation: Some(self.final_block_size_for_fragmentation()),
       is_block_size_for_fragmentation_clamped: self.is_block_size_for_fragmentation_clamped,
       is_first_for_node: self.is_first_for_node,
       fragment_index: fragment_index(self.previous_break_token.as_deref()),

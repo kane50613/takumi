@@ -236,13 +236,15 @@ impl TableLayoutAlgorithm<'_, '_> {
   }
 
   /// Sets a repeated section's space up to repeat again on the next page when
-  /// `may_repeat_again`. It lays out with no fragmentation, so nothing inside it breaks.
+  /// `may_repeat_again`. It lays out with no fragmentation, so nothing inside it breaks, and
+  /// propagates no break values.
   pub(super) fn setup_repeated_section_space(
     &self,
     space: &mut ConstraintSpace,
     may_repeat_again: bool,
   ) {
     space.should_repeat = may_repeat_again;
+    space.should_propagate_child_break_values = false;
   }
 
   /// Blink's `ReserveSpaceInFragmentainer`: the page a section lays out in, less the space the
@@ -520,10 +522,6 @@ impl TableLayoutAlgorithm<'_, '_> {
       location,
       result,
     );
-    if !self.space.has_block_fragmentation() {
-      return;
-    }
-
     let style = Rc::clone(self.tree.layout_style_rc(child));
 
     self

@@ -116,7 +116,7 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
         row: index,
       };
       #[cfg_attr(not(feature = "fragmentation"), allow(unused_mut))]
-      let mut space = data.space(part, CacheSlot::Layout);
+      let mut space = data.space(self.space, part, CacheSlot::Layout);
 
       self.setup_row_space_for_fragmentation(row.node, &mut space, offset);
 
@@ -293,10 +293,6 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
       location,
       result,
     );
-    if !self.space.has_block_fragmentation() {
-      return;
-    }
-
     let style = Rc::clone(self.tree.layout_style_rc(row));
 
     self

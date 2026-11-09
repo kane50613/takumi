@@ -726,6 +726,134 @@ fn an_absolute_box_past_the_page_leaves_an_avoiding_box_in_place() {
   });
 }
 
+/// HTML §15.4.3: an `<img>` that represents nothing is still a replaced element, so a tall one
+/// that does not fit moves to the next page whole, as Chromium prints it.
+#[test]
+fn an_img_without_a_source_moves_to_the_next_page_whole() {
+  run_pdf_fixture("img-without-source-past-page", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="height: 60px">before the image</div>
+      <img width="120" height="110" style="display: block; background: #93c5fd">
+      <div>after the image</div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse image"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// css-break-3 §4.4: a flex row whose item margin runs past the page reaches that far, so the
+/// container moves to the next page whole, as Chromium prints it.
+#[test]
+fn a_flex_row_whose_item_margin_runs_past_the_page_moves_to_the_next() {
+  run_pdf_fixture("flex-item-margin-past-page", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="height: 40px">before the row</div>
+      <div style="display: flex; gap: 8px; background: #e2e8f0">
+        <div style="height: 80px; margin-bottom: 30px; background: #93c5fd">item</div>
+        <div style="height: 50px; background: #fca5a5">short item</div>
+      </div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse flex row"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// css-break-3 §3.1: a forced break after the last child of a flex item propagates out through
+/// the item and its row, so the content after the container starts a new page, as Chromium prints.
+#[test]
+fn a_forced_break_after_a_flex_items_last_child_breaks_after_the_container() {
+  run_pdf_fixture("flex-item-child-break-after", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="display: flex; gap: 8px">
+        <div style="background: #e2e8f0">
+          <div>first item</div>
+          <div style="break-after: page">ends with a forced break</div>
+        </div>
+        <div style="background: #fde68a">second item</div>
+      </div>
+      <div>after the row, on the next page</div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse flex row"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// css-break-3 §3.1: a forced break after a table row inside a flex item propagates out through
+/// the table and the item, so the content after the container starts a new page, as Chromium
+/// prints it.
+#[test]
+fn a_forced_break_after_a_table_row_in_a_flex_item_breaks_after_the_container() {
+  run_pdf_fixture("flex-item-table-row-break-after", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="display: flex">
+        <table style="border-collapse: collapse">
+          <tr><td style="background: #e2e8f0">first row</td></tr>
+          <tr style="break-after: page"><td style="background: #fde68a">last row</td></tr>
+        </table>
+      </div>
+      <div>after the table, on the next page</div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse table"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// css-flexbox-1 §4: `float` does not apply to a flex item, so a floated item lays out and breaks
+/// as any other item, and its `break-after: page` starts a new page, as Chromium prints it.
+#[test]
+fn a_floated_flex_item_breaks_after_as_any_other_item() {
+  run_pdf_fixture("floated-flex-item-break-after", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="display: flex; flex-direction: column; background: #e2e8f0">
+        <div style="float: left; width: 120px; background: #93c5fd; break-after: page">floated item</div>
+        <div style="background: #fde68a">next item, on the next page</div>
+      </div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse flex column"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// css-break-3 §4.2: a box at the top of a page that overflows it moves the content after it
 /// below the overflow on the next page, as Chromium prints it.
 #[test]

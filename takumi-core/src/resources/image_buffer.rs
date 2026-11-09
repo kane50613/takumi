@@ -27,6 +27,16 @@ impl ImageBuffer {
     })
   }
 
+  /// An image with no pixels, for an element that represents nothing.
+  #[cfg(feature = "html")]
+  pub(crate) fn empty() -> Self {
+    Self {
+      data: Vec::new(),
+      width: 0,
+      height: 0,
+    }
+  }
+
   /// A single transparent pixel, for a draw with nothing to show.
   #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
   pub(crate) fn transparent_pixel() -> Self {
