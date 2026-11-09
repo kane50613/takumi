@@ -74,7 +74,7 @@ const image = await renderer.render(node, {
 | None               | `images.fetchCache`               | Byte cache shared across renders. <sup>1</sup>                            |
 | None               | `fonts` on `renderAnimation`      | Animation calls now accept `fonts` and `fontFamilies`, matching `render`. |
 
-<sup>1</sup> It is a `Map`-like store and dedupes concurrent fetches.
+<sup>1</sup> `images.fetchCache` is a `Map`-like store and dedupes concurrent fetches.
 
 ```tsx title="Renamed and changed options"
 const image = await renderer.render(node, {

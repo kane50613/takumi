@@ -102,11 +102,11 @@ const pdf = await render(report, {
 | `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | Margin in CSS px. <sup>2</sup>                                         |
 | `backgroundColor` | CSS color                                                 | unset    | Fills the whole page, margins included, under everything. <sup>3</sup> |
 
-<sup>1</sup> Keywords ignore case.
+<sup>1</sup> Size keywords ignore case.
 
 <sup>2</sup> A side left out of the object is `"auto"`.
 
-<sup>3</sup> Viewers show unset as white.
+<sup>3</sup> Without `backgroundColor`, viewers show the page as white.
 
 Each keyword is a portrait paper size:
 

@@ -96,9 +96,9 @@ function replay(ctx: CanvasRenderingContext2D, tree: PaintTree) {
 | `masked` | Draw `content` into a layer, keep it only where `mask` covers, then composite it                                         |
 | `group`  | Draw `drawables` into a layer, then composite it at `opacity`                                                            |
 
-<sup>1</sup> Blend with `blendMode` when set.
+<sup>1</sup> A `fill` blends with `blendMode` when it is set.
 
-<sup>2</sup> Stroke them instead when `stroke` is set.
+<sup>2</sup> When `stroke` is set, `glyphs` strokes the outlines instead.
 
 A `shadow` or `glyphs` blur is a Gaussian standard deviation, half the CSS blur radius. A `glyphs` drawable with a blur is a text shadow. Every drawable except `group` has a `role`, such as `background`, `border`, or `text`, which exporters use to rebuild editable objects. For example, a slide writer can merge a box's background, border, and shadow into one shape.
 

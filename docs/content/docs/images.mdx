@@ -120,7 +120,7 @@ Set `emoji` to choose the set. `render`, `renderSvg`, `renderAnimation`, `measur
 | `fluentFlat`        | Fluent Emoji, flat                | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode) `7a40f1a` |
 | `from-font`         | Glyphs from a color font you load | No fetch <sup>1</sup>                                                                         |
 
-<sup>1</sup> See [COLR / bitmap fonts](#colr--bitmap-fonts).
+<sup>1</sup> See [COLR / bitmap fonts](#colr--bitmap-fonts) to load one.
 
 ```tsx twoslash title="Fetch emoji images"
 import { ImageResponse } from "takumi-js/response";
@@ -218,7 +218,7 @@ const image = await render(element, {
 | `allowUrl` | allow all          | Rejects a URL before fetching it, redirect destinations included. |
 | `fetch`    | `globalThis.fetch` | Replaces the fetch implementation.                                |
 
-<sup>1</sup> `0` or negative disables it.
+<sup>1</sup> A `timeout` of `0` or less disables the deadline.
 
 ### Retries
 

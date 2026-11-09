@@ -37,9 +37,9 @@ const pdf = await render(invoice, {
 
 <sup>1</sup> Two attachments cannot share a name.
 
-<sup>2</sup> The next table lists the values.
+<sup>2</sup> The next table lists the `relationship` values.
 
-<sup>3</sup> Falls back to `metadata.creationDate`.
+<sup>3</sup> When unset, it falls back to `metadata.creationDate`.
 
 `relationship` takes one of these values.
 
@@ -51,7 +51,7 @@ const pdf = await render(invoice, {
 | `"supplement"`  | Additional resources for the document.           |
 | `"unspecified"` | No clear relationship. <sup>1</sup>              |
 
-<sup>1</sup> The default.
+<sup>1</sup> `"unspecified"` is the default.
 
 ## Electronic invoices
 
@@ -97,7 +97,7 @@ TypeScript enforces `mimeType` and `description` under these levels. A missing d
 | `"4f"`                        | Allowed, with `mimeType` and `description` <sup>1</sup> |
 | `"2b"`, `"2u"`, `"2a"`, `"4"` | Not allowed, and a TypeScript type error                |
 
-<sup>1</sup> The PDF 2.0 option.
+<sup>1</sup> `"4f"` is the PDF 2.0 option.
 
 <Callout type="warn">
   Attaching the XML does not validate it or its profile. Add the profile's XMP metadata and validate

@@ -25,7 +25,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 
 <sup>1</sup> Name, weight, and style come from the file.
 
-<sup>2</sup> The fields override what the file reports.
+<sup>2</sup> A descriptor's fields override what the file reports.
 
 `render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
 
@@ -124,11 +124,12 @@ await googleFonts([
 
 <sup>1</sup> Known families autocomplete their weights and axes.
 
-<sup>2</sup> Defaults to `400`. A range loads the variable font, and `font-weight` drives it.
+<sup>2</sup> `weight` defaults to `400`. A range loads the variable font, and `font-weight` drives
+it.
 
-<sup>3</sup> Defaults to `"normal"`.
+<sup>3</sup> `style` defaults to `"normal"`.
 
-<sup>4</sup> A range keeps them live.
+<sup>4</sup> An axis given as a range stays variable.
 
 Pass an object instead of an array for request options:
 
