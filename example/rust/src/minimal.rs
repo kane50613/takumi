@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{error::Error, fs::File, result::Result};
 
 use takumi::{
   prelude::{Length::Px, *},
@@ -6,17 +6,15 @@ use takumi::{
 };
 
 /// Renders a "Hello, {name}!" image and saves it to `output.webp`.
-pub fn say_hello_to(name: &str) {
+pub fn say_hello_to(name: &str) -> Result<(), Box<dyn Error>> {
   // A `Fonts` holds the registered fonts; create one per application and share it
   // across renders (e.g. behind an `Arc`). takumi loads no system fonts by default,
   // so register custom fonts with `register` before rendering text.
   let mut fonts = Fonts::default();
 
-  fonts
-    .register(FontResource::new(include_bytes!(
-      "../../../assets/fonts/geist/Geist[wght].woff2"
-    )))
-    .unwrap();
+  fonts.register(FontResource::new(include_bytes!(
+    "../../../assets/fonts/geist/Geist[wght].woff2"
+  )))?;
 
   let text = Node::text(format!("Hello, {name}!"))
     .with_style(Style::default().with(StyleDeclaration::font_size(Px(48.0).into())));
@@ -28,8 +26,10 @@ pub fn say_hello_to(name: &str) {
     .fonts(&fonts)
     .build();
 
-  let image = render(options).unwrap();
+  let image = render(options)?;
 
-  let mut file = File::create("output.webp").unwrap();
-  write_image(&image, &mut file, OutputFormat::WebPLossless).unwrap();
+  let mut file = File::create("output.webp")?;
+  write_image(&image, &mut file, OutputFormat::WebPLossless)?;
+
+  Ok(())
 }
