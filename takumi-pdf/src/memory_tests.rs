@@ -24,24 +24,29 @@ fn add_live_bytes(delta: isize) {
 /// Counts the bytes the current thread holds, so tests running beside this one do not move it.
 struct CountingAllocator;
 
+// SAFETY: every method forwards to `System` with the caller's arguments, only counting bytes.
 unsafe impl GlobalAlloc for CountingAllocator {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
     add_live_bytes(layout.size() as isize);
+    // SAFETY: the caller meets `GlobalAlloc::alloc`'s contract, which `System` shares.
     unsafe { System.alloc(layout) }
   }
 
   unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
     add_live_bytes(-(layout.size() as isize));
+    // SAFETY: `ptr` came from `System` through this allocator, with the same `layout`.
     unsafe { System.dealloc(ptr, layout) }
   }
 
   unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
     add_live_bytes(layout.size() as isize);
+    // SAFETY: the caller meets `GlobalAlloc::alloc_zeroed`'s contract, which `System` shares.
     unsafe { System.alloc_zeroed(layout) }
   }
 
   unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
     add_live_bytes(new_size as isize - layout.size() as isize);
+    // SAFETY: `ptr` came from `System` with `layout`, and the caller meets `realloc`'s contract.
     unsafe { System.realloc(ptr, layout, new_size) }
   }
 }

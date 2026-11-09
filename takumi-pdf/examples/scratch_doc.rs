@@ -1,18 +1,18 @@
-use std::{fs, time::Instant};
+use std::{error::Error, fs, time::Instant};
 
 use takumi_core::html::{FromHtmlOptions, from_html};
 use takumi_core::{Fonts, resources::font::FontResource};
 use takumi_pdf::{PageMargins, PageOptions, PdfOptions, render};
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
   let path = std::env::args().nth(1).expect("html path");
   let mut fonts = Fonts::default();
   let archivo: &[u8] =
     include_bytes!("../../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
-  fonts.register(FontResource::new(archivo.to_vec())).unwrap();
-  let html = fs::read_to_string(&path).unwrap();
+  fonts.register(FontResource::new(archivo.to_vec()))?;
+  let html = fs::read_to_string(&path)?;
   let start = Instant::now();
-  let node = from_html(&html, FromHtmlOptions::default()).unwrap();
+  let node = from_html(&html, FromHtmlOptions::default())?;
   println!("parse {:?}", start.elapsed());
   let start = Instant::now();
   let pdf = render(
@@ -25,29 +25,32 @@ fn main() {
       })
       .fonts(&fonts)
       .build(),
-  )
-  .unwrap();
+  )?;
   let elapsed = start.elapsed();
   let text = String::from_utf8_lossy(&pdf);
-  let s = text.find("/Type/Pages/Count ").unwrap() + "/Type/Pages/Count ".len();
+  let s = text
+    .find("/Type/Pages/Count ")
+    .ok_or("the PDF has no page count")?
+    + "/Type/Pages/Count ".len();
   let pages: usize = text[s..]
     .chars()
     .take_while(char::is_ascii_digit)
     .collect::<String>()
-    .parse()
-    .unwrap();
+    .parse()?;
   println!(
     "render {pages} pages in {elapsed:?} ({:?}/page), {} bytes",
     elapsed / pages as u32,
     pdf.len()
   );
-  fs::write(format!("{path}.pdf"), &pdf).unwrap();
+  fs::write(format!("{path}.pdf"), &pdf)?;
   println!(
     "{}",
     fs::read_to_string("/proc/self/status")
-      .unwrap()
+      .unwrap_or_default()
       .lines()
       .find(|l| l.starts_with("VmHWM"))
       .unwrap_or("")
   );
+
+  Ok(())
 }
