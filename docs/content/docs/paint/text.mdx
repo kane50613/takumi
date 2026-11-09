@@ -37,6 +37,8 @@ An outline is an empty string for a glyph with no contours, such as a space. It 
 | `glyphs` with `stroke`                 | Stroke the outline, as `-webkit-text-stroke` does |
 | `masked` under `background-clip: text` | Draw the background layers, masked by the glyphs  |
 
+Draw a run's drawables in the order they arrive. `paint-order: stroke` puts the stroke before the fill.
+
 A native text API reads `run.glyphs` instead. Each glyph has an `id` in `run.font`, its `x` and `y` offset from the baseline start, and usually a `cluster`, which is where its cluster starts in `run.text`, in UTF-16 code units. `run.font.data()` returns the font file. Runs in the same face share one `Font` object.
 
 ## Lay text out again
