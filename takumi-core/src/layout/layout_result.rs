@@ -351,9 +351,8 @@ pub(crate) struct BreakInfo {
   pub(crate) fragment_index: usize,
   /// Whether the layout repeats the box's first, as a table header's does on each later page.
   pub(crate) is_repeated: bool,
-  /// Whether the layout resumed past the box's block end, holding only what overflows it, such as
-  /// out-of-flow boxes that run on.
-  pub(crate) is_past_block_end: bool,
+  /// Whether the layout resumes the box only for out-of-flow boxes that run on past its content.
+  pub(crate) resumes_out_of_flow_alone: bool,
   /// Whether the box's `break-inside` avoids a page break, which Blink reads off the fragment's
   /// style, and the box breaks for more than the out-of-flow boxes it resumes.
   pub(crate) avoids_break_inside: bool,
@@ -377,7 +376,7 @@ impl Default for BreakInfo {
       is_first_for_node: true,
       fragment_index: 0,
       is_repeated: false,
-      is_past_block_end: false,
+      resumes_out_of_flow_alone: false,
       avoids_break_inside: false,
       propagated_page_name: PageName::default(),
     }
