@@ -736,8 +736,9 @@ impl BoxFragmentBuilder {
     self.break_info(break_token, breaks_for_out_of_flow_alone)
   }
 
-  /// Whether the box breaks only to resume out-of-flow boxes past its in-flow content. Blink lays
-  /// those out in the pages themselves, which leaves no break inside the box to avoid.
+  /// Whether the box breaks only to resume out-of-flow boxes past its in-flow content. Chrome lays
+  /// those out in the pages themselves, which leaves no break inside the box to avoid. Blink's
+  /// `FragmentedOofInCb`, which this layout follows otherwise, still counts that break.
   fn breaks_for_out_of_flow_alone(&self) -> bool {
     !self.out_of_flow_break_tokens.is_empty()
       && !self.did_break_self
