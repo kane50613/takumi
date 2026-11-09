@@ -2480,23 +2480,27 @@ impl RenderNode {
   /// Blockifies, trims, and wraps `children` as their parent's display requires.
   pub(super) fn normalize_children(
     context: &mut RenderContext,
-    children: Box<[RenderNode]>,
+    mut children: Box<[RenderNode]>,
     blockifies: bool,
   ) -> Box<[RenderNode]> {
+    let makes_items = context.style.base_data.display.should_blockify_children();
+
+    for child in &mut children {
+      child.is_flex_or_grid_item = makes_items;
+    }
     if RenderNode::holds_table_parts(context) {
       return RenderNode::fix_up_table_children(context, Vec::from(children))
         .unwrap_or_default()
         .into_boxed_slice();
     }
 
-    if context.style.base_data.display.should_blockify_children() {
+    if makes_items {
       // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
       // between items is not rendered; every remaining child blockifies.
       let mut children = Vec::from(children);
       children.retain(|child| !child.is_collapsible_whitespace_only_text_node());
       for child in &mut children {
         child.context.blockify();
-        child.is_flex_or_grid_item = true;
       }
 
       return children.into_boxed_slice();
@@ -3428,13 +3432,14 @@ mod tests {
     NodeId, NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
     sort_children_by_order,
   };
+  use crate::layout::floats_utils::Float as LayoutFloat;
   use crate::{
     context::RenderContext,
     layout::node::Node,
     resources::font::Fonts,
     style::{
-      ComputedStyle, Direction, Length, PageName, PropertyRule, PropertySyntax, SizingContext,
-      Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+      ComputedStyle, Direction, Float, Length, PageName, PropertyRule, PropertySyntax,
+      SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
       page_rule::{PageContext, PageKind},
     },
     viewport::Viewport,
@@ -3557,6 +3562,33 @@ mod tests {
       children,
       vec![NodeId::new(1), NodeId::new(3), NodeId::new(2)]
     );
+  }
+
+  #[test]
+  fn a_flex_or_grid_item_keeps_its_computed_float_and_lays_out_without_it() {
+    let stylesheet =
+      parse_stylesheet(".flex { display: flex } .grid { display: grid } .float { float: left }");
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+
+    for (parent, item_floats) in [("flex", false), ("grid", false), ("block", true)] {
+      let tree = RenderNode::from_node(
+        &context,
+        Node::container([Node::container([]).with_class_name("float")]).with_class_name(parent),
+      );
+      let child = &tree.children.as_deref().expect("children")[0];
+      let layout_float = child.layout_box_style(&child.context.sizing).float;
+
+      assert_eq!(child.context.style.base_data.float, Float::Left, "{parent}");
+      assert_eq!(layout_float != LayoutFloat::None, item_floats, "{parent}");
+    }
   }
 
   #[test]
