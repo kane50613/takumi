@@ -218,6 +218,7 @@ fn a_flex_container_whose_item_margin_overflows_the_page_moves_to_the_next() {
 
   assert_eq!(page_count, 2);
   assert_eq!(boxes["flex"], [placed(1, 0.0, 186.0)]);
+  assert_eq!(boxes["inner"], [placed(1, 0.0, 161.0)]);
 }
 
 #[test]
