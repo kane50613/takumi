@@ -726,6 +726,31 @@ fn an_absolute_box_past_the_page_leaves_an_avoiding_box_in_place() {
   });
 }
 
+/// css-break-3 §4.4: a flex row whose item margin runs past the page reaches that far, so the
+/// container moves to the next page whole, as Chromium prints it.
+#[test]
+fn a_flex_row_whose_item_margin_runs_past_the_page_moves_to_the_next() {
+  run_pdf_fixture("flex-item-margin-past-page", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="height: 40px">before the row</div>
+      <div style="display: flex; gap: 8px; background: #e2e8f0">
+        <div style="height: 80px; margin-bottom: 30px; background: #93c5fd">item</div>
+        <div style="height: 50px; background: #fca5a5">short item</div>
+      </div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse flex row"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. Each
 /// segment of a line resolves on its own, so the 4px border under one column
