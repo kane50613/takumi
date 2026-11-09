@@ -881,8 +881,9 @@ fn a_forced_break_after_a_box_whose_absolute_child_runs_on_applies_once() {
   });
 }
 
-/// css-break-3 §4.2: a box at the top of a page that overflows it moves the content after it
-/// below the overflow on the next page, as Chromium prints it.
+/// A box at the top of a page that overflows it moves the content after it below the overflow on
+/// the next page. No spec defines this: Blink's `BlockLayoutAlgorithm::ComputeChildData` offsets
+/// the outermost box whose break token records monolithic overflow.
 #[test]
 fn content_after_a_box_overflowing_the_first_page_starts_below_the_overflow() {
   run_pdf_fixture("root-monolithic-overflow", |fonts| {
