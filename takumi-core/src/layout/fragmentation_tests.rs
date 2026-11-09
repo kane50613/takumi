@@ -202,6 +202,25 @@ fn an_absolute_box_past_the_page_leaves_its_avoiding_containing_block_on_the_pag
 }
 
 #[test]
+fn a_flex_container_whose_item_margin_overflows_the_page_moves_to_the_next() {
+  let item = Node::container([block("inner", "h161")])
+    .with_class_name("block mb")
+    .with_id("item");
+  let flex = Node::container([item])
+    .with_class_name("block flex")
+    .with_id("flex");
+  let tree = render(
+    root([block("a", "h25"), flex]),
+    ".flex { display: flex } .mb { margin-bottom: 25px } .h161 { height: 161px } \
+     .h25 { height: 25px }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["flex"], [placed(1, 0.0, 186.0)]);
+}
+
+#[test]
 fn break_before_page_starts_a_block_on_a_new_page() {
   let tree = render(
     root([block("a", "h50"), block("b", "h50 forced")]),
