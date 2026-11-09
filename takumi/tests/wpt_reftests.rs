@@ -46,7 +46,7 @@ use takumi::{
 use takumi_core::{
   geometry::{Rect, Size},
   layout::{
-    page_margin_boxes::PageCounters,
+    page_margin_boxes::{PageCounters, PageMarginBoxes},
     page_sizes::{PageBox, PageRules, PageSizer},
   },
   resources::image::ResourceCache,
@@ -1085,6 +1085,7 @@ impl Runner {
         &options(Viewport::print_page(PRINT_PAGE_SIZE)).take_render_context(),
         &node,
       );
+      let direction = root.direction();
       let rules = Rc::new(PageRules::new(
         Arc::clone(&stylesheet),
         PageBox {
@@ -1144,27 +1145,29 @@ impl Runner {
         .into_iter()
         .enumerate()
         .map(|(index, (page_box, name))| {
-          page_counter = rules.advance_page_counter(&context, page_counter, index, &name);
+          let styles = rules.page_styles(index, &name);
+
+          page_counter = styles.advance_page_counter(&context, page_counter);
 
           let counters = PageCounters {
             page: page_counter,
             pages: Some(page_count),
           };
-          let margin_boxes = rules
-            .margin_boxes(&context, index, &name, counters)
-            .map(|boxes| {
-              render(
-                RenderOptions::builder()
-                  .viewport(Viewport::print_page(page_box.size))
-                  .node(boxes.node)
-                  .fonts(&self.fonts)
-                  .images(images.clone())
-                  .stylesheet(Arc::clone(&stylesheet))
-                  .build(),
-              )
-              .map_err(|error| format!("render page-margin boxes: {error}"))
-            })
-            .transpose()?;
+          let margin_boxes =
+            PageMarginBoxes::lay_out(&context, &styles, page_box, direction, counters)
+              .map(|boxes| {
+                render(
+                  RenderOptions::builder()
+                    .viewport(Viewport::print_page(page_box.size))
+                    .node(boxes.node)
+                    .fonts(&self.fonts)
+                    .images(images.clone())
+                    .stylesheet(Arc::clone(&stylesheet))
+                    .build(),
+                )
+                .map_err(|error| format!("render page-margin boxes: {error}"))
+              })
+              .transpose()?;
 
           Ok((page_box, margin_boxes))
         })

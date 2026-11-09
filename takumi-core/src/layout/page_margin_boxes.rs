@@ -16,9 +16,9 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   style::{
-    BackgroundImage, ContentItem, ContentValue, CounterChange, PageName, Style,
+    BackgroundImage, ContentItem, ContentValue, CounterChange, Direction, PageName, Style,
     StyleDeclarationBlock, VerticalAlign, VerticalAlignKeyword,
-    page_rule::{PageKind, PageMarginKind},
+    page_rule::{PageKind, PageMarginKind, PageStyles},
   },
 };
 
@@ -40,7 +40,7 @@ const MARGIN_BOX_RESET: &str = "display:flow-root;float:none;clear:none;transfor
 /// The values of the counters a page's margin boxes read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageCounters {
-  /// `counter(page)`, which [`PageRules::advance_page_counter`] moves from page to page.
+  /// `counter(page)`, which [`PageStyles::advance_page_counter`] moves from page to page.
   pub page: i32,
   /// `counter(pages)`: the document's page count, once known.
   pub pages: Option<usize>,
@@ -362,31 +362,18 @@ fn edge_sizes(mut sizes: [Option<PreferredSize>; 3], available: f32) -> [f32; 3]
   [0, 1, 2].map(|index| (lengths[index] - preferred[index].margin_sum).max(0.0))
 }
 
-impl PageRules {
-  /// The `page` counter on page `page` as a page `name`, given its value on the page before, or
-  /// 0 before the first: the page context's `counter-reset`, then its `counter-increment`, which
-  /// is 1 where the context sets none, as CSS Paged Media §7.1 has it.
-  pub fn advance_page_counter(
-    &self,
-    context: &RenderContext,
-    counter: i32,
-    page: usize,
-    name: &PageName,
-  ) -> i32 {
-    let styles = self.stylesheet.page_styles(
-      self.viewport,
-      PageKind::of(page, self.context.direction()),
-      name,
-      &self.context,
-    );
-
-    if !styles.page.contains("counter-") {
+impl PageStyles {
+  /// The `page` counter on the page these style, given its value on the page before, or 0 before
+  /// the first: the page context's `counter-reset`, then its `counter-increment`, which is 1
+  /// where the context sets none, as CSS Paged Media §7.1 has it.
+  pub fn advance_page_counter(&self, context: &RenderContext, counter: i32) -> i32 {
+    if !self.page.contains("counter-") {
       return counter.saturating_add(1);
     }
 
     let probe = RenderNode::from_node(
       context,
-      Node::container([]).with_style(style(&[&styles.page, PAGE_CONTEXT_RESET])),
+      Node::container([]).with_style(style(&[&self.page, PAGE_CONTEXT_RESET])),
     );
     let changes = &probe.context.style.misc1_data;
     let of_page = |change: &&CounterChange| &*change.name == PAGE_COUNTER;
@@ -410,28 +397,34 @@ impl PageRules {
       .map_or(counter, |change| change.value)
       .saturating_add(increment)
   }
+}
 
-  /// Page `page`'s page-margin boxes as a page `name`, `None` when no rule gives one content.
-  pub fn margin_boxes(
-    &self,
-    context: &RenderContext,
-    page: usize,
-    name: &PageName,
-    counters: PageCounters,
-  ) -> Option<PageMarginBoxes> {
-    let direction = self.context.direction();
-    let styles = self.stylesheet.page_styles(
+impl PageRules {
+  /// The declarations that style page `page`'s boxes as a page `name`.
+  pub fn page_styles(&self, page: usize, name: &PageName) -> PageStyles {
+    self.stylesheet.page_styles(
       self.viewport,
-      PageKind::of(page, direction),
+      PageKind::of(page, self.context.direction()),
       name,
       &self.context,
-    );
+    )
+  }
+}
 
+impl PageMarginBoxes {
+  /// The page-margin boxes `styles` give a page of `page_box` whose root's text runs in
+  /// `direction`, `None` when no rule gives one content.
+  pub fn lay_out(
+    context: &RenderContext,
+    styles: &PageStyles,
+    page_box: PageBox,
+    direction: Direction,
+    counters: PageCounters,
+  ) -> Option<Self> {
     if styles.margins.is_empty() {
       return None;
     }
 
-    let page_box = self.page_box(page, name);
     let page_css = [styles.page.as_str(), PAGE_CONTEXT_RESET].concat();
     let probe = RenderNode::from_node(
       context,
@@ -449,7 +442,7 @@ impl PageRules {
     let mut needs_page_count = false;
     let boxes: Vec<MarginBox> = styles
       .margins
-      .into_iter()
+      .iter()
       .zip(probe.children.iter().flatten())
       .filter_map(|((kind, css), probed)| {
         let ContentValue::Items(items) = &probed.context.style.misc1_data.content else {
@@ -497,8 +490,8 @@ impl PageRules {
         };
 
         Some(MarginBox {
-          kind,
-          css,
+          kind: *kind,
+          css: css.clone(),
           children,
           style: probed.layout_box_style(&probed.context.sizing),
           alignment,
@@ -605,7 +598,7 @@ impl PageRules {
         ),
       ]));
 
-    Some(PageMarginBoxes {
+    Some(Self {
       node,
       needs_page_count,
     })
