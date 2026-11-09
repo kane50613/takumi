@@ -31,12 +31,13 @@ use std::{
 };
 
 #[cfg(feature = "html-svg-nodes")]
-use crate::resources::image::{ImageSource, SvgSource};
+use crate::resources::image::SvgSource;
 use crate::{
   form_control::InputType,
   layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
+  resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::{
-    Direction, Display, FromCssStr, Lang, Length, Style, StyleDeclaration, StyleDeclarationBlock,
+    Direction, FromCssStr, Lang, Length, Style, StyleDeclaration, StyleDeclarationBlock,
     TailwindValues,
   },
 };
@@ -510,9 +511,13 @@ impl NodeBuilder<'_> {
           width: pixels(handle, tag, "width"),
           height: pixels(handle, tag, "height"),
         }),
-        // Chrome draws an `<img>` without a source as an empty inline box its `width` and
-        // `height` size.
-        None => Node::container([]).with_preset(empty_image_style(handle)),
+        // An `<img>` that represents nothing is a replaced element with natural dimensions of 0:
+        // https://html.spec.whatwg.org/multipage/rendering.html#images-3
+        None => Node::image(ImageData {
+          src: ImageSourceInput::Loaded(ImageSource::from(ImageBuffer::empty())),
+          width: pixels(handle, tag, "width"),
+          height: pixels(handle, tag, "height"),
+        }),
       },
       _ if UNRENDERED_TAGS.contains(&tag) => return Ok(None),
       "svg" => Node::image(ImageData {
@@ -833,21 +838,6 @@ fn pixels(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<f32> {
   }
 }
 
-/// The style of an `<img>` without a source: an inline-block, sized by its `width` and `height`.
-fn empty_image_style(handle: NodeRef<'_>) -> Style {
-  let mut style = Style::default().display(Display::InlineBlock);
-
-  if let Some(width) = dimension(handle, "img", "width") {
-    style = style.width(width);
-  }
-
-  if let Some(height) = dimension(handle, "img", "height") {
-    style = style.height(height);
-  }
-
-  style
-}
-
 /// An attribute's name as SVG markup writes it, its namespace prefix included, as fragment
 /// serialization names it. <https://html.spec.whatwg.org/multipage/parsing.html#attribute's-serialized-name>
 #[cfg(feature = "html-svg-nodes")]
@@ -1059,10 +1049,14 @@ mod tests {
   }
 
   #[test]
-  fn an_img_without_a_source_is_an_empty_box() {
+  fn an_img_without_a_source_is_a_replaced_element_with_no_pixels() {
     let node = parse(r#"<img src="" width="10" height="20">"#);
+    let NodeKind::Image(data) = &node.kind else {
+      panic!("expected image");
+    };
 
-    assert!(matches!(node.kind, NodeKind::Container { .. }));
+    assert!(matches!(data.src, ImageSourceInput::Loaded(_)));
+    assert_eq!((data.width, data.height), (Some(10.0), Some(20.0)));
   }
 
   #[test]
