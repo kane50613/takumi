@@ -1501,7 +1501,8 @@ impl StyleSheet {
     &self.rules
   }
 
-  /// Collects unique resource URLs referenced by the declarations of its rules and keyframes.
+  /// Collects unique resource URLs referenced by the declarations of its rules, keyframes, and
+  /// page-margin rules.
   pub fn image_urls(&self) -> impl Iterator<Item = &str> {
     let rules = self
       .rules
@@ -1515,6 +1516,12 @@ impl StyleSheet {
     let urls: Xxh3HashSet<&str> = rules
       .chain(keyframes)
       .flat_map(StyleDeclarationBlock::image_urls)
+      .chain(
+        self
+          .page_rules
+          .iter()
+          .flat_map(|rule| rule.image_urls.iter().map(|url| &**url)),
+      )
       .collect();
 
     urls.into_iter()

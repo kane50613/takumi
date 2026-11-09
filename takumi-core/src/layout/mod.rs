@@ -60,6 +60,9 @@ pub mod node;
 pub(crate) mod out_of_flow;
 #[cfg(feature = "fragmentation")]
 pub(crate) mod page_area;
+/// The page-margin boxes `@page` rules give a page.
+#[cfg(feature = "fragmentation")]
+pub mod page_margin_boxes;
 /// The page area of each page of a paged layout.
 #[cfg(feature = "fragmentation")]
 pub mod page_sizes;

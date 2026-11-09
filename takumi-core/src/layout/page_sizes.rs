@@ -66,10 +66,10 @@ impl PageBox {
 
 /// The `@page` rules of a stylesheet laid over a default page box.
 pub struct PageRules {
-  stylesheet: Arc<StyleSheet>,
+  pub(crate) stylesheet: Arc<StyleSheet>,
   base: PageBox,
-  viewport: Viewport,
-  context: PageContext,
+  pub(crate) viewport: Viewport,
+  pub(crate) context: PageContext,
 }
 
 impl PageRules {

@@ -13,8 +13,8 @@ use crate::{
   geometry::{Rect, Size},
   style::{
     CustomProperties, Direction, FromCss, Length, MediaQueryList, PageName, RawDeclaration,
-    RawDeclarationParser, SizingContext, contains_var_references, resolve_var_references,
-    selector::LayerPath,
+    RawDeclarationParser, SizingContext, StyleDeclarationBlock, contains_var_references,
+    resolve_var_references, selector::LayerPath,
   },
   units::{ONE_IN_PX, ONE_MM_IN_PX},
   viewport::Viewport,
@@ -564,6 +564,20 @@ pub(crate) struct PageStyleDeclaration {
   important: bool,
 }
 
+impl PageStyleDeclaration {
+  /// Appends those of `declarations` with or without `!important` to `css`.
+  fn write(css: &mut String, declarations: &[Self], important: bool) {
+    for declaration in declarations {
+      if declaration.important == important {
+        css.push_str(&declaration.name);
+        css.push(':');
+        css.push_str(&declaration.value);
+        css.push(';');
+      }
+    }
+  }
+}
+
 /// A page-margin rule nested in an `@page` rule, such as `@top-center { ... }`.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PageMarginRule {
@@ -671,6 +685,8 @@ pub(crate) struct PageRule {
   pub(crate) style: Vec<PageStyleDeclaration>,
   /// The page-margin rules nested in the rule, in source order.
   pub(crate) margins: Vec<PageMarginRule>,
+  /// The resources its page-margin rules' declarations reference.
+  pub(crate) image_urls: Vec<Box<str>>,
   /// Media queries gating this rule.
   pub(crate) media_queries: Vec<MediaQueryList>,
   /// Cascade layer this rule belongs to.
@@ -706,6 +722,18 @@ impl PageRule {
       rule.style.push(declaration.into());
     }
 
+    let mut css = String::new();
+
+    for margin in &rule.margins {
+      for important in [false, true] {
+        PageStyleDeclaration::write(&mut css, &margin.declarations, important);
+      }
+    }
+
+    rule.image_urls = StyleDeclarationBlock::parse_loosy(&css)
+      .image_urls()
+      .map(Box::from)
+      .collect();
     rule
   }
 
@@ -771,22 +799,11 @@ impl PageRule {
     name: &PageName,
     context: &PageContext,
   ) -> PageStyles {
-    fn write(css: &mut String, declarations: &[PageStyleDeclaration], important: bool) {
-      for declaration in declarations {
-        if declaration.important == important {
-          css.push_str(&declaration.name);
-          css.push(':');
-          css.push_str(&declaration.value);
-          css.push(';');
-        }
-      }
-    }
-
     let ranked = Self::ranked(rules, layer_count, viewport, kind, name, context);
     let mut styles = PageStyles::default();
 
     for &(important, rule) in &ranked {
-      write(&mut styles.page, &rule.style, important);
+      PageStyleDeclaration::write(&mut styles.page, &rule.style, important);
     }
 
     for margin_kind in PageMarginKind::ALL {
@@ -794,7 +811,7 @@ impl PageRule {
 
       for &(important, rule) in &ranked {
         for margin in rule.margins.iter().filter(|rule| rule.kind == margin_kind) {
-          write(&mut css, &margin.declarations, important);
+          PageStyleDeclaration::write(&mut css, &margin.declarations, important);
         }
       }
 

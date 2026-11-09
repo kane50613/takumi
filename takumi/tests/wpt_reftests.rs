@@ -45,7 +45,10 @@ use takumi::{
 };
 use takumi_core::{
   geometry::{Rect, Size},
-  layout::page_sizes::{PageBox, PageRules, PageSizer},
+  layout::{
+    page_margin_boxes::PageCounters,
+    page_sizes::{PageBox, PageRules, PageSizer},
+  },
   resources::image::ResourceCache,
   style::{PageName, page_rule::PageContext},
 };
@@ -1134,10 +1137,40 @@ impl Runner {
         (pages, laid) = print_pages(&first_name)?;
       }
 
-      (
-        pages,
-        laid.into_iter().map(|(page_box, _)| page_box).collect(),
-      )
+      let page_count = laid.len();
+      let context = options(Viewport::print_page(PRINT_PAGE_SIZE)).take_render_context();
+      let mut page_counter = 0;
+      let sheets = laid
+        .into_iter()
+        .enumerate()
+        .map(|(index, (page_box, name))| {
+          page_counter = rules.advance_page_counter(&context, page_counter, index, &name);
+
+          let counters = PageCounters {
+            page: page_counter,
+            pages: Some(page_count),
+          };
+          let margin_boxes = rules
+            .margin_boxes(&context, index, &name, counters)
+            .map(|boxes| {
+              render(
+                RenderOptions::builder()
+                  .viewport(Viewport::print_page(page_box.size))
+                  .node(boxes.node)
+                  .fonts(&self.fonts)
+                  .images(images.clone())
+                  .stylesheet(Arc::clone(&stylesheet))
+                  .build(),
+              )
+              .map_err(|error| format!("render page-margin boxes: {error}"))
+            })
+            .transpose()?;
+
+          Ok((page_box, margin_boxes))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+      (pages, sheets)
     } else {
       let bitmap =
         render(options(Viewport::new(VIEWPORT))).map_err(|error| format!("render: {error}"))?;
@@ -1159,7 +1192,9 @@ impl Runner {
         .enumerate()
         .filter(|&(index, _)| selected(index))
         .map(|(index, bitmap)| match page_boxes.get(index) {
-          Some(&page_box) => Page::on_sheet(bitmap, page_box),
+          Some((page_box, margin_boxes)) => {
+            Page::on_sheet(bitmap, *page_box, margin_boxes.as_ref())
+          }
           None => Page {
             size: (bitmap.width(), bitmap.height()),
             pixels: over_white(bitmap),
@@ -1182,9 +1217,9 @@ struct Page {
 }
 
 impl Page {
-  /// The printed sheet `page_box` gives `area`: white, with `area` over white inside its margins,
-  /// as a print screenshot shows the page.
-  fn on_sheet(area: &Bitmap, page_box: PageBox) -> Self {
+  /// The printed sheet `page_box` gives `area`: white, with `area` over white inside its margins
+  /// and `margin_boxes` over the whole sheet, as a print screenshot shows the page.
+  fn on_sheet(area: &Bitmap, page_box: PageBox, margin_boxes: Option<&Bitmap>) -> Self {
     let PageBox { size, margin } = page_box;
     let (width, height) = (size.width.round() as usize, size.height.round() as usize);
     let (left, top) = (margin.left.round() as usize, margin.top.round() as usize);
@@ -1202,6 +1237,27 @@ impl Page {
       let start = (y * width + left) * 4;
 
       pixels[start..start + columns * 4].copy_from_slice(&line[..columns * 4]);
+    }
+
+    if let Some(margin_boxes) = margin_boxes {
+      let boxes_width = margin_boxes.width() as usize;
+
+      for (row, line) in margin_boxes
+        .as_raw()
+        .chunks_exact(boxes_width * 4)
+        .enumerate()
+        .take(height)
+      {
+        for (column, source) in line.as_chunks::<4>().0.iter().enumerate().take(width) {
+          let alpha = u32::from(source[3]);
+          let target = &mut pixels[(row * width + column) * 4..][..3];
+
+          for (channel, &value) in target.iter_mut().zip(source) {
+            *channel =
+              ((u32::from(value) * alpha + u32::from(*channel) * (255 - alpha)) / 255) as u8;
+          }
+        }
+      }
     }
 
     Self {
