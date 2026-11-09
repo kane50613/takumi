@@ -64,10 +64,10 @@ pub(crate) fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option
 }
 
 /// Each of `run`'s resolved glyphs with the matrix that places it in the document.
-fn placed_glyphs<'r>(
-  run: &'r PositionedInlineRun,
+fn placed_glyphs(
+  run: &PositionedInlineRun,
   frame: BoxFrame,
-) -> impl Iterator<Item = (u32, &'r ResolvedGlyph, Affine)> {
+) -> impl Iterator<Item = (u32, &ResolvedGlyph, Affine)> {
   let run_transform = run.transform(Affine::IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
 
@@ -91,18 +91,9 @@ pub(crate) fn emit_run_strokes(
   let mut uses: Vec<(u32, f32, f32)> = Vec::new();
 
   for (_, resolved, placed) in placed_glyphs(run, frame) {
-    let ResolvedGlyph::Outline(outline) = resolved else {
-      continue;
-    };
-
-    if outline.embolden().is_some_and(|embolden| embolden > 0.0) {
-      let data = path_data(outline.paths(), placed);
-
-      if !data.is_empty() {
-        doc.flush_glyph_uses(&mut uses, Rgba::TRANSPARENT, Some(stroke))?;
-        doc.glyph_path(&data, Rgba::TRANSPARENT, Some(stroke))?;
-      }
-    } else if let Some(id) = doc.outline_ref(outline, placed) {
+    if let ResolvedGlyph::Outline(outline) = resolved
+      && let Some(id) = doc.outline_ref(outline, placed)
+    {
       uses.push((id, placed.x, placed.y));
     }
   }
