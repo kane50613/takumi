@@ -28,7 +28,7 @@ use crate::{
     image::{ImageSource, ResourceCache},
   },
   style::{
-    Affine, AppliedTextDecorations, Color, ComputedStyle, Float, MatchedStyleCache, SizingContext,
+    Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, SizingContext,
     StyleSheet,
   },
 };
@@ -314,15 +314,6 @@ impl RenderContext {
 
     if display != self.style.base_data.display {
       self.style_mut().base_data_mut().display = display;
-    }
-  }
-
-  /// Makes the box a flex or grid item: blockified, and not floating, as Blink's
-  /// `IsInsideDisplayIgnoringFloatingChildren` leaves it.
-  pub(crate) fn make_flex_or_grid_item(&mut self) {
-    self.blockify();
-    if self.style.base_data.float != Float::None {
-      self.style_mut().base_data_mut().float = Float::None;
     }
   }
 }

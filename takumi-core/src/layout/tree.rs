@@ -28,6 +28,7 @@ use crate::{
     block_node::LayoutCache,
     constraint_space::CacheSlot,
     counters::{CountersAttachmentContext, ListItemCounter},
+    floats_utils::Float as LayoutFloat,
     grid::grid_layout_algorithm::GridGeometry,
     inline::{
       ContentBox, FragmentItems, InlineContent, InlineContentKind, InlineOutOfFlow,
@@ -705,6 +706,9 @@ pub struct RenderNode {
   /// Whether it is the root element, whose box always establishes an independent formatting
   /// context, as Blink's `CreatesNewFormattingContext` reads `IsDocumentElement`.
   pub(crate) is_root_element: bool,
+  /// Whether it is a flex or grid item, which does not float whatever its `float`, as Blink's
+  /// `IsInsideDisplayIgnoringFloatingChildren` has it.
+  pub(crate) is_flex_or_grid_item: bool,
   /// The part it plays in a text control, if any.
   pub(crate) text_control: Option<TextControlBox>,
   /// The fragment items its inline content last laid out to.
@@ -1848,6 +1852,9 @@ impl RenderNode {
 
     style.ignores_overflow_for_inline_block_baseline =
       matches!(self.text_control, Some(TextControlBox::InnerEditor(_)));
+    if self.is_flex_or_grid_item {
+      style.float = LayoutFloat::None;
+    }
     style
   }
 
@@ -1872,6 +1879,7 @@ impl RenderNode {
       force_inline_layout: false,
       is_block_in_inline: false,
       is_root_element: false,
+      is_flex_or_grid_item: false,
       text_control: None,
       fragment_items: FragmentItemsCache::default(),
       item_shapes: ItemShapes::default(),
@@ -2487,7 +2495,8 @@ impl RenderNode {
       let mut children = Vec::from(children);
       children.retain(|child| !child.is_collapsible_whitespace_only_text_node());
       for child in &mut children {
-        child.context.make_flex_or_grid_item();
+        child.context.blockify();
+        child.is_flex_or_grid_item = true;
       }
 
       return children.into_boxed_slice();
