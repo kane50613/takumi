@@ -737,14 +737,16 @@ impl PageRule {
     rule
   }
 
-  /// Whether a page-margin rule's `content` names the `pages` counter.
+  /// Whether a page-margin rule's `content` names the `pages` counter, or holds a `var()` that
+  /// may.
   pub(crate) fn counts_pages(&self) -> bool {
     self
       .margins
       .iter()
       .flat_map(|margin| &margin.declarations)
       .any(|declaration| {
-        declaration.name.eq_ignore_ascii_case("content") && declaration.value.contains("pages")
+        declaration.name.eq_ignore_ascii_case("content")
+          && (declaration.value.contains("pages") || contains_var_references(&declaration.value))
       })
   }
 
@@ -1199,10 +1201,18 @@ mod tests {
       Some(Length::Px(7.0))
     );
     assert_eq!(winners(css, PageKind::First).size, None);
-    assert!(
-      StyleSheet::parse("@page { @bottom-center { content: counter(pages) } }")
-        .expect("parse @page")
-        .page_margins_count_pages()
-    );
+    for (css, counts) in [
+      ("@page { @bottom-center { content: counter(pages) } }", true),
+      ("@page { @bottom-center { content: var(--total) } }", true),
+      ("@page { @bottom-center { content: counter(page) } }", false),
+    ] {
+      assert_eq!(
+        StyleSheet::parse(css)
+          .expect("parse @page")
+          .page_margins_count_pages(),
+        counts,
+        "{css}"
+      );
+    }
   }
 }
