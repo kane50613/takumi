@@ -218,6 +218,22 @@ fn a_forced_break_after_a_flex_items_last_child_breaks_after_the_container() {
 }
 
 #[test]
+fn a_forced_break_before_a_flex_items_first_child_breaks_before_the_container() {
+  let item = Node::container([block("inner", "h10 forced-before")]).with_class_name("block");
+  let flex = Node::container([item])
+    .with_class_name("block flex")
+    .with_id("flex");
+  let tree = render(
+    root([block("first", "h10"), flex]),
+    ".flex { display: flex } .h10 { height: 10px } .forced-before { break-before: page }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["flex"], [placed(1, 0.0, 10.0)]);
+}
+
+#[test]
 fn a_forced_break_after_a_grid_items_last_child_breaks_after_the_container() {
   let item = Node::container([block("inner", "h10 forced-after")]).with_class_name("block");
   let grid = Node::container([item])
