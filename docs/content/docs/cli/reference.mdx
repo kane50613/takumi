@@ -23,7 +23,7 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 | `-h`, `--help`    | Prints help for the command. |
 | `-V`, `--version` | Prints the version.          |
 
-<sup>1</sup> Errors still print.
+<sup>1</sup> `--quiet` still prints errors.
 
 ## Input and output
 
@@ -38,9 +38,9 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 | `--root <dir>`          | The input file's directory, or none for standard input | The directory the document may read.                                           |
 | `--allow-read <dir>`    |                                                        | Another directory the document may read. <sup>2</sup>                          |
 
-<sup>1</sup> Required unless `--list-resources` is set.
+<sup>1</sup> `-o` is required unless `--list-resources` is set.
 
-<sup>2</sup> Repeat it for more.
+<sup>2</sup> Repeat `--font` or `--allow-read` to add more.
 
 ## `takumi image`
 
@@ -52,11 +52,12 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 | `--format <format>` | From the output's extension      | `png`, `jpeg` (or `jpg`), `webp`, or `svg`. <sup>2</sup> |
 | `--quality <0-100>` | `75` for JPEG, lossless for WebP | The encoding quality. <sup>3</sup>                       |
 
-<sup>1</sup> The image has `width × dpr` by `height × dpr` pixels, at most 64 megapixels.
+<sup>1</sup> The image is `width × dpr` by `height × dpr` pixels, and may hold at most 64
+megapixels.
 
-<sup>2</sup> Required when writing to standard output.
+<sup>2</sup> `--format` is required with `-o -`, since standard output has no extension.
 
-<sup>3</sup> Setting it makes WebP lossy. PNG and SVG ignore it.
+<sup>3</sup> Setting `--quality` makes WebP lossy. PNG and SVG ignore it.
 
 ## `takumi pdf`
 
@@ -72,9 +73,9 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 | `--outline`            |                                        | Adds bookmarks for the `h1` to `h6` headings.                                                    |
 | `--background <color>` |                                        | A CSS color that fills every page, margins included.                                             |
 
-<sup>1</sup> Page numbers still count every page.
+<sup>1</sup> Kept pages keep their numbers from the whole document.
 
-<sup>2</sup> Repeat it for more.
+<sup>2</sup> Repeat `--author` to add more authors.
 
 A `@page` rule in the document wins over `--page` and `--margin`. In a header or footer, an element with the class `pageNumber` or `totalPages` shows the page number or the page count.
 

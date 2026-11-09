@@ -36,9 +36,9 @@ A read outside the granted directories stops the render, so you notice before th
 | A missing file, or one that cannot be decoded                      | Skipped with a warning.            |
 | An `http` or `https` URL                                           | Skipped with a warning.            |
 
-<sup>1</sup> The error names the `--allow-read` flag that would allow it.
+<sup>1</sup> The error names the `--allow-read` flag that would allow the read.
 
-<sup>2</sup> A relative symlink that stays inside works.
+<sup>2</sup> A relative symlink that stays inside its directory loads normally.
 
 `takumi` never loads anything from the network. To use a remote image or font, download it beside the document, or write it as a `data:` URL, which loads wherever the document is.
 
