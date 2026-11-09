@@ -26,13 +26,13 @@ const webp = await render(card, { width: 1200, height: 630, format: "webp", qual
 | `ico`           | Yes   | No        | No         | Favicon file. <sup>4</sup>                      |
 | `raw`           | Yes   | No        | No         | Uncompressed RGBA bytes, `width × height × 4`.  |
 
-<sup>1</sup> Use it for transparency or exact pixels.
+<sup>1</sup> Use PNG for transparency or exact pixels.
 
 <sup>2</sup> Draw an opaque background, since JPEG has no alpha channel.
 
-<sup>3</sup> `lossless: true` wins.
+<sup>3</sup> `lossless: true` wins over `quality`.
 
-<sup>4</sup> At most 256 × 256 pixels.
+<sup>4</sup> An ICO image is at most 256 × 256 pixels.
 
 `quality` runs from `0` to `100` and defaults to `75`. Formats marked No in the `quality` column ignore it.
 

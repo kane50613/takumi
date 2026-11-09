@@ -24,11 +24,13 @@ const node = container({
 | `fontFromUrl(url, options?)`     | Turn a font URL into a lazy `fonts` entry. <sup>2</sup> |
 | `subsetFonts({ fonts, source })` | Deprecated. <sup>3</sup>                                |
 
-<sup>1</sup> `render` keeps the subsets used. See [Fonts & text](/docs/fonts#from-google-fonts).
+<sup>1</sup> `render` keeps only the subsets the text uses. See [Fonts &
+text](/docs/fonts#from-google-fonts).
 
 <sup>2</sup> `options` takes the [fetch limits](/docs/images#fetch-limits).
 
-<sup>3</sup> A render keeps the subsets its text uses, the text inside SVG images included.
+<sup>3</sup> `subsetFonts` is no longer needed, since a render keeps the subsets its text uses, the
+text inside SVG images included.
 
 `googleFonts`, `fontFromUrl`, and `prepareImages` share [fetch limits and retry behavior](/docs/images#fetch-limits).
 
@@ -74,7 +76,8 @@ Length and color shorthands return CSS strings. `vw` and `vh` are viewport units
 | `prepareImages(options)`         | `takumi-js/helpers`       | Deprecated. <sup>1</sup>                           |
 | `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. <sup>2</sup> |
 
-<sup>1</sup> A renderer's `prepare` reads the images a document draws and fetches them.
+<sup>1</sup> Use a renderer's `prepare` instead, which reads the images a document draws and fetches
+them.
 
 <sup>2</sup> See [Emoji](/docs/images#emoji).
 
