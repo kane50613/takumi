@@ -21,15 +21,19 @@ description: Look up paint options, tree methods, and the fields of nodes, runs,
 
 ## Paint options
 
-| Option             | Type                              | Effect                                                                  |
-| ------------------ | --------------------------------- | ----------------------------------------------------------------------- |
-| `width`, `height`  | `number`                          | Canvas size in device pixels. An omitted dimension follows the content. |
-| `devicePixelRatio` | `number`                          | Device pixels per CSS pixel. Default `1`.                               |
-| `fonts`            | `FontLoader[]`                    | Fonts registered before layout                                          |
-| `images`           | `ImagesInput`                     | Image bytes, keyed by the `src` that references them                    |
-| `css`              | `CssInput \| readonly CssInput[]` | Stylesheets applied before layout                                       |
-| `fontFamilies`     | `string[]`                        | Fallback family chain for this call                                     |
-| `lang`             | `string`                          | Default BCP 47 language tag on the root                                 |
+| Option             | Type                              | Effect                                               |
+| ------------------ | --------------------------------- | ---------------------------------------------------- |
+| `width`, `height`  | `number`                          | Canvas size in device pixels <sup>1</sup>            |
+| `devicePixelRatio` | `number`                          | Device pixels per CSS pixel <sup>2</sup>             |
+| `fonts`            | `FontLoader[]`                    | Fonts registered before layout                       |
+| `images`           | `ImagesInput`                     | Image bytes, keyed by the `src` that references them |
+| `css`              | `CssInput \| readonly CssInput[]` | Stylesheets applied before layout                    |
+| `fontFamilies`     | `string[]`                        | Fallback family chain for this call                  |
+| `lang`             | `string`                          | Default BCP 47 language tag on the root              |
+
+<sup>1</sup> An omitted dimension follows the content.
+
+<sup>2</sup> Defaults to `1`.
 
 ## PaintTree
 

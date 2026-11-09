@@ -67,12 +67,14 @@ const image = await renderer.render(node, {
 
 ### Renamed and changed options
 
-| v1                 | v2                                | Note                                                                                       |
-| ------------------ | --------------------------------- | ------------------------------------------------------------------------------------------ |
-| `fetchedResources` | `images`                          | Pre-fetched images, keyed by `src`.                                                        |
-| `resourcesOptions` | `images.fetch` / `images.timeout` | Fetch implementation and timeout for remote images.                                        |
-| None               | `images.fetchCache`               | Byte cache shared across renders. It is a `Map`-like store and dedupes concurrent fetches. |
-| None               | `fonts` on `renderAnimation`      | Animation calls now accept `fonts` and `fontFamilies`, matching `render`.                  |
+| v1                 | v2                                | Note                                                                      |
+| ------------------ | --------------------------------- | ------------------------------------------------------------------------- |
+| `fetchedResources` | `images`                          | Pre-fetched images, keyed by `src`.                                       |
+| `resourcesOptions` | `images.fetch` / `images.timeout` | Fetch implementation and timeout for remote images.                       |
+| None               | `images.fetchCache`               | Byte cache shared across renders. <sup>1</sup>                            |
+| None               | `fonts` on `renderAnimation`      | Animation calls now accept `fonts` and `fontFamilies`, matching `render`. |
+
+<sup>1</sup> It is a `Map`-like store and dedupes concurrent fetches.
 
 ```tsx title="Renamed and changed options"
 const image = await renderer.render(node, {
@@ -162,13 +164,15 @@ Animations with high frame rates could stall or play incorrectly. In v2, `render
   pages visually.
 </Callout>
 
-| Property                               | v1              | v2               | Action                                                                                    |
-| -------------------------------------- | --------------- | ---------------- | ----------------------------------------------------------------------------------------- |
-| `position`                             | `relative`      | `static`         | Set `position: relative` where you relied on the default containing block or insets.      |
-| `border-width` / `outline-width`       | `0`             | `medium` (3px)   | `border: solid red` now draws a 3px line. It was invisible.                               |
-| `scale` (negative)                     | collapses to 0  | reflects         | `scale: -1`, `scaleX(-1)` etc. now mirror the element.                                    |
-| `line-clamp`                           | single property | shorthand        | Expands to `max-lines`, `block-ellipsis`, and `continue`. Only `block-ellipsis` inherits. |
-| `transform-origin` / `object-position` | top-left        | center (50% 50%) | Set the origin or anchor explicitly where you relied on the top-left default.             |
+| Property                               | v1              | v2               | Action                                                                               |
+| -------------------------------------- | --------------- | ---------------- | ------------------------------------------------------------------------------------ |
+| `position`                             | `relative`      | `static`         | Set `position: relative` where you relied on the default containing block or insets. |
+| `border-width` / `outline-width`       | `0`             | `medium` (3px)   | `border: solid red` now draws a 3px line instead of nothing.                         |
+| `scale` (negative)                     | collapses to 0  | reflects         | `scale: -1`, `scaleX(-1)` etc. now mirror the element.                               |
+| `line-clamp`                           | single property | shorthand        | Expands to `max-lines`, `block-ellipsis`, and `continue`. <sup>1</sup>               |
+| `transform-origin` / `object-position` | top-left        | center (50% 50%) | Set the origin or anchor explicitly where you relied on the top-left default.        |
+
+<sup>1</sup> Only `block-ellipsis` inherits.
 
 The sections below cover the subtler cases.
 

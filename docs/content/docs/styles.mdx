@@ -311,11 +311,14 @@ Between two utilities that set the same property, Tailwind's order decides, not 
 
 A Tailwind source stylesheet drops into `css` unchanged. Takumi reads these directives and skips the rest:
 
-| At-rule                 | Reads as                                                                                                  | Rejected                |
-| ----------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `@theme`                | its `:root` rule. Nested `@keyframes` register. Modifiers such as `reference` and `inline` change nothing | `prefix()`              |
-| `@import "tailwindcss"` | [Preflight](#preflight) when the entry point brings it, at the top level only                             | any other import target |
-| `@apply`                | the utilities' declarations, expanded in place, `!` suffix included                                       | variants such as `md:`  |
+| At-rule                 | Reads as                                                                      | Rejected                |
+| ----------------------- | ----------------------------------------------------------------------------- | ----------------------- |
+| `@theme`                | its `:root` rule <sup>1</sup>                                                 | `prefix()`              |
+| `@import "tailwindcss"` | [Preflight](#preflight) when the entry point brings it, at the top level only | any other import target |
+| `@apply`                | the utilities' declarations, expanded in place, `!` suffix included           | variants such as `md:`  |
+
+<sup>1</sup> Nested `@keyframes` register. Modifiers such as `reference` and `inline` change
+nothing.
 
 ```css title="Define Tailwind utilities"
 .card {
@@ -363,23 +366,34 @@ const image = await render(<div tw="bg-brand-500 p-gutter">Hello</div>, {
 
 The token's namespace decides which utilities read it:
 
-| Namespace                                           | Utilities                                                                                                                                             |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--color-*`                                         | color utilities: `bg-*`, `text-*`, `border-*`, `outline-*`, `decoration-*`                                                                            |
-| `--spacing`, `--spacing-*`                          | length utilities: `p-*`, `m-*`, `w-*`, `gap-*`, `inset-*`. `p-4` reads `calc(var(--spacing) * 4)`, `p-gutter` reads `var(--spacing-gutter)`           |
-| `--container-*`                                     | `max-w-*`                                                                                                                                             |
-| `--text-*`                                          | `--text-xl` sets `text-xl`, `--text-xl--line-height` sets its leading                                                                                 |
-| `--font-*`                                          | font families, such as `font-sans`                                                                                                                    |
-| `--font-weight-*`                                   | font weights, such as `font-bold`                                                                                                                     |
-| `--tracking-*`                                      | `tracking-*`                                                                                                                                          |
-| `--leading-*`                                       | `leading-*`                                                                                                                                           |
-| `--radius-*`                                        | `rounded-*`, including corners and sides                                                                                                              |
-| `--aspect-*`                                        | `aspect-*`                                                                                                                                            |
-| `--blur-*`                                          | `blur-*` and `backdrop-blur-*` presets                                                                                                                |
-| `--drop-shadow-*`                                   | `drop-shadow-*` presets                                                                                                                               |
-| `--shadow-*`, `--inset-shadow-*`, `--text-shadow-*` | shadow preset shapes. A custom shape carries its own colors, so shadow color utilities only reach the built-in fallback                               |
-| `--animate-*`                                       | `animate-*`. An unknown token such as `animate-wiggle` reads `var(--animate-wiggle)`. Pair it with its `@keyframes`                                   |
-| `--breakpoint-*`                                    | the `sm:` to `2xl:` variants, and new ones such as `3xl:`. Variants apply before the cascade, so only an unconditional `:root` declaration moves them |
+| Namespace                                           | Utilities                                                                  |
+| --------------------------------------------------- | -------------------------------------------------------------------------- |
+| `--color-*`                                         | color utilities: `bg-*`, `text-*`, `border-*`, `outline-*`, `decoration-*` |
+| `--spacing`, `--spacing-*`                          | length utilities: `p-*`, `m-*`, `w-*`, `gap-*`, `inset-*` <sup>1</sup>     |
+| `--container-*`                                     | `max-w-*`                                                                  |
+| `--text-*`                                          | `--text-xl` sets `text-xl`, `--text-xl--line-height` sets its leading      |
+| `--font-*`                                          | font families, such as `font-sans`                                         |
+| `--font-weight-*`                                   | font weights, such as `font-bold`                                          |
+| `--tracking-*`                                      | `tracking-*`                                                               |
+| `--leading-*`                                       | `leading-*`                                                                |
+| `--radius-*`                                        | `rounded-*`, including corners and sides                                   |
+| `--aspect-*`                                        | `aspect-*`                                                                 |
+| `--blur-*`                                          | `blur-*` and `backdrop-blur-*` presets                                     |
+| `--drop-shadow-*`                                   | `drop-shadow-*` presets                                                    |
+| `--shadow-*`, `--inset-shadow-*`, `--text-shadow-*` | shadow preset shapes <sup>2</sup>                                          |
+| `--animate-*`                                       | `animate-*` <sup>3</sup>                                                   |
+| `--breakpoint-*`                                    | the `sm:` to `2xl:` variants, and new ones such as `3xl:` <sup>4</sup>     |
+
+<sup>1</sup> `p-4` reads `calc(var(--spacing) * 4)`, and `p-gutter` reads `var(--spacing-gutter)`.
+
+<sup>2</sup> A custom shape carries its own colors, so shadow color utilities only reach the
+built-in fallback.
+
+<sup>3</sup> An unknown token such as `animate-wiggle` reads `var(--animate-wiggle)`. Pair it with
+its `@keyframes`.
+
+<sup>4</sup> Variants apply before the cascade, so only an unconditional `:root` declaration moves
+them.
 
 ### Overriding tokens
 

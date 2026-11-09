@@ -70,8 +70,10 @@ Whether an uncovered character survives in copied text depends on its shaping cl
 
 | Uncovered character                  | Copied text                                            |
 | ------------------------------------ | ------------------------------------------------------ |
-| On its own                           | Nothing. A PDF carries no Unicode mapping for glyph 0. |
+| On its own                           | Nothing. <sup>1</sup>                                  |
 | A combining mark on a covered letter | The mark, through the letter it shares a cluster with. |
+
+<sup>1</sup> A PDF carries no Unicode mapping for glyph 0.
 
 ## Images
 
@@ -98,13 +100,16 @@ To fetch every remote image a document draws at once, use [`prepare()`](/docs/pd
 
 ### Formats
 
-| Source | In the PDF                                                                                                                         |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| SVG    | Vector paths and gradients. Parts vectors cannot express, such as filters and embedded bitmaps, rasterize at 2× their placed size. |
-| PNG    | Embedded as an image                                                                                                               |
-| JPEG   | Embedded as the bytes you passed, keeping their compression                                                                        |
-| WebP   | Embedded as an image                                                                                                               |
-| GIF    | Rejected, since the PDF build ships no GIF decoder                                                                                 |
+| Source | In the PDF                                                  |
+| ------ | ----------------------------------------------------------- |
+| SVG    | Vector paths and gradients <sup>1</sup>                     |
+| PNG    | Embedded as an image                                        |
+| JPEG   | Embedded as the bytes you passed, keeping their compression |
+| WebP   | Embedded as an image                                        |
+| GIF    | Rejected, since the PDF build ships no GIF decoder          |
+
+<sup>1</sup> Parts vectors cannot express, such as filters and embedded bitmaps, rasterize at 2×
+their placed size.
 
 Identical raster images are embedded once.
 

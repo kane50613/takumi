@@ -58,10 +58,12 @@ Validators require some inputs the renderer cannot infer.
 
 | Input                   | Required by                                                                  |
 | ----------------------- | ---------------------------------------------------------------------------- |
-| `lang`                  | `"2a"`, `"3a"`, and `tagged: "ua2"`. PDF/UA-1 only recommends it.            |
+| `lang`                  | `"2a"`, `"3a"`, and `tagged: "ua2"` <sup>1</sup>                             |
 | `metadata.title`        | `tagged: "ua1"` and `tagged: "ua2"`                                          |
 | `metadata.creationDate` | Every `pdfa` level, when `metadata` is set or when tagged output sets `lang` |
 | `alt` on every `<img>`  | `"2a"`, `"3a"`, and both PDF/UA levels                                       |
+
+<sup>1</sup> PDF/UA-1 only recommends it.
 
 A missing input fails the render. Four more rules apply:
 

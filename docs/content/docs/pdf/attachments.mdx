@@ -26,14 +26,20 @@ const pdf = await render(invoice, {
 });
 ```
 
-| Field              | Value                                                                             |
-| ------------------ | --------------------------------------------------------------------------------- |
-| `name`             | File name in the PDF. Two attachments cannot share a name.                        |
-| `data`             | A `Uint8Array`, or a string written as UTF-8                                      |
-| `mimeType`         | IANA media type, such as `"application/xml"`                                      |
-| `description`      | Human-readable description                                                        |
-| `relationship`     | The file's role, written as `AFRelationship`. The next table lists the values.    |
-| `modificationDate` | UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. Falls back to `metadata.creationDate`. |
+| Field              | Value                                                     |
+| ------------------ | --------------------------------------------------------- |
+| `name`             | File name in the PDF <sup>1</sup>                         |
+| `data`             | A `Uint8Array`, or a string written as UTF-8              |
+| `mimeType`         | IANA media type, such as `"application/xml"`              |
+| `description`      | Human-readable description                                |
+| `relationship`     | The file's role, written as `AFRelationship` <sup>2</sup> |
+| `modificationDate` | UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS` <sup>3</sup>    |
+
+<sup>1</sup> Two attachments cannot share a name.
+
+<sup>2</sup> The next table lists the values.
+
+<sup>3</sup> Falls back to `metadata.creationDate`.
 
 `relationship` takes one of these values.
 
@@ -43,7 +49,9 @@ const pdf = await render(invoice, {
 | `"alternative"` | An alternative representation of the document.   |
 | `"data"`        | The file backs a visual presentation in the PDF. |
 | `"supplement"`  | Additional resources for the document.           |
-| `"unspecified"` | No clear relationship. The default.              |
+| `"unspecified"` | No clear relationship. <sup>1</sup>              |
+
+<sup>1</sup> The default.
 
 ## Electronic invoices
 
@@ -82,12 +90,14 @@ TypeScript enforces `mimeType` and `description` under these levels. A missing d
 
 ## Levels that allow attachments
 
-| `pdfa`                        | Attachments                                                     |
-| ----------------------------- | --------------------------------------------------------------- |
-| unset                         | Allowed                                                         |
-| `"3b"`, `"3u"`, `"3a"`        | Allowed, with the three fields above                            |
-| `"4f"`                        | Allowed, with `mimeType` and `description`. The PDF 2.0 option. |
-| `"2b"`, `"2u"`, `"2a"`, `"4"` | Not allowed, and a TypeScript type error                        |
+| `pdfa`                        | Attachments                                             |
+| ----------------------------- | ------------------------------------------------------- |
+| unset                         | Allowed                                                 |
+| `"3b"`, `"3u"`, `"3a"`        | Allowed, with the three fields above                    |
+| `"4f"`                        | Allowed, with `mimeType` and `description` <sup>1</sup> |
+| `"2b"`, `"2u"`, `"2a"`, `"4"` | Not allowed, and a TypeScript type error                |
+
+<sup>1</sup> The PDF 2.0 option.
 
 <Callout type="warn">
   Attaching the XML does not validate it or its profile. Add the profile's XMP metadata and validate
