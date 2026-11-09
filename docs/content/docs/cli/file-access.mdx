@@ -28,13 +28,17 @@ Files you name on the command line are trusted, wherever they are: the input, `-
 
 A read outside the granted directories stops the render, so you notice before the output goes out without the file. Other failures are skipped with a warning, the way a browser skips a resource that fails to load:
 
-| Reference                                                          | Result                                                                             |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| A file outside the granted directories                             | Stops, exit code `3`. The error names the `--allow-read` flag that would allow it. |
-| A symlink that leads out of its directory, or any absolute symlink | Stops, exit code `3`. A relative symlink that stays inside works.                  |
-| A file past the size limits below                                  | Stops, exit code `1`.                                                              |
-| A missing file, or one that cannot be decoded                      | Skipped with a warning.                                                            |
-| An `http` or `https` URL                                           | Skipped with a warning.                                                            |
+| Reference                                                          | Result                             |
+| ------------------------------------------------------------------ | ---------------------------------- |
+| A file outside the granted directories                             | Stops, exit code `3`. <sup>1</sup> |
+| A symlink that leads out of its directory, or any absolute symlink | Stops, exit code `3`. <sup>2</sup> |
+| A file past the size limits below                                  | Stops, exit code `1`.              |
+| A missing file, or one that cannot be decoded                      | Skipped with a warning.            |
+| An `http` or `https` URL                                           | Skipped with a warning.            |
+
+<sup>1</sup> The error names the `--allow-read` flag that would allow it.
+
+<sup>2</sup> A relative symlink that stays inside works.
 
 `takumi` never loads anything from the network. To use a remote image or font, download it beside the document, or write it as a `data:` URL, which loads wherever the document is.
 

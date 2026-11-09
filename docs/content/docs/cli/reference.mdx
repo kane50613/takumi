@@ -17,36 +17,46 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 
 ## Global flags
 
-| Flag              | Effect                              |
-| ----------------- | ----------------------------------- |
-| `-q`, `--quiet`   | Hides warnings. Errors still print. |
-| `-h`, `--help`    | Prints help for the command.        |
-| `-V`, `--version` | Prints the version.                 |
+| Flag              | Effect                       |
+| ----------------- | ---------------------------- |
+| `-q`, `--quiet`   | Hides warnings. <sup>1</sup> |
+| `-h`, `--help`    | Prints help for the command. |
+| `-V`, `--version` | Prints the version.          |
+
+<sup>1</sup> Errors still print.
 
 ## Input and output
 
 `takumi image` and `takumi pdf` both take these:
 
-| Flag                    | Default                                                | Effect                                                                                    |
-| ----------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `<input>`               |                                                        | The HTML file to render, or `-` for standard input.                                       |
-| `-o`, `--output <file>` |                                                        | The file to write, or `-` for standard output. Required unless `--list-resources` is set. |
-| `--list-resources`      |                                                        | Lists the files the document would load and whether it may, without rendering.            |
-| `--font <file>`         |                                                        | Registers a font file. Repeat it for more.                                                |
-| `--root <dir>`          | The input file's directory, or none for standard input | The directory the document may read.                                                      |
-| `--allow-read <dir>`    |                                                        | Another directory the document may read. Repeat it for more.                              |
+| Flag                    | Default                                                | Effect                                                                         |
+| ----------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `<input>`               |                                                        | The HTML file to render, or `-` for standard input.                            |
+| `-o`, `--output <file>` |                                                        | The file to write, or `-` for standard output. <sup>1</sup>                    |
+| `--list-resources`      |                                                        | Lists the files the document would load and whether it may, without rendering. |
+| `--font <file>`         |                                                        | Registers a font file. <sup>2</sup>                                            |
+| `--root <dir>`          | The input file's directory, or none for standard input | The directory the document may read.                                           |
+| `--allow-read <dir>`    |                                                        | Another directory the document may read. <sup>2</sup>                          |
+
+<sup>1</sup> Required unless `--list-resources` is set.
+
+<sup>2</sup> Repeat it for more.
 
 ## `takumi image`
 
-| Flag                | Default                          | Effect                                                                                |
-| ------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
-| `--width <px>`      | `1200`                           | The viewport width in CSS pixels.                                                     |
-| `--height <px>`     | The content's height             | The viewport height in CSS pixels.                                                    |
-| `--dpr <ratio>`     | `1`                              | The device pixel ratio. The image has `width × dpr` by `height × dpr` pixels.         |
-| `--format <format>` | From the output's extension      | `png`, `jpeg` (or `jpg`), `webp`, or `svg`. Required when writing to standard output. |
-| `--quality <0-100>` | `75` for JPEG, lossless for WebP | The encoding quality. Setting it makes WebP lossy. PNG and SVG ignore it.             |
+| Flag                | Default                          | Effect                                                   |
+| ------------------- | -------------------------------- | -------------------------------------------------------- |
+| `--width <px>`      | `1200`                           | The viewport width in CSS pixels.                        |
+| `--height <px>`     | The content's height             | The viewport height in CSS pixels.                       |
+| `--dpr <ratio>`     | `1`                              | The device pixel ratio. <sup>1</sup>                     |
+| `--format <format>` | From the output's extension      | `png`, `jpeg` (or `jpg`), `webp`, or `svg`. <sup>2</sup> |
+| `--quality <0-100>` | `75` for JPEG, lossless for WebP | The encoding quality. <sup>3</sup>                       |
 
-An image may hold at most 64 megapixels.
+<sup>1</sup> The image has `width × dpr` by `height × dpr` pixels, at most 64 megapixels.
+
+<sup>2</sup> Required when writing to standard output.
+
+<sup>3</sup> Setting it makes WebP lossy. PNG and SVG ignore it.
 
 ## `takumi pdf`
 
@@ -54,13 +64,17 @@ An image may hold at most 64 megapixels.
 | ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `--page <size>`        | `A4`                                   | The page size, as the CSS `size` property takes it, such as `letter landscape` or `210mm 297mm`. |
 | `--margin <margin>`    | `1cm`, grown to fit a header or footer | The page margins, as the CSS `margin` property takes them, such as `20mm` or `1in 0.75in`.       |
-| `--pages <ranges>`     | Every page                             | The pages to keep, such as `1-3,8` or `5-`. Page numbers still count every page.                 |
+| `--pages <ranges>`     | Every page                             | The pages to keep, such as `1-3,8` or `5-`. <sup>1</sup>                                         |
 | `--header <file>`      |                                        | An HTML file drawn in the top margin of every page.                                              |
 | `--footer <file>`      |                                        | An HTML file drawn in the bottom margin of every page.                                           |
 | `--title <title>`      |                                        | The title a PDF viewer shows.                                                                    |
-| `--author <name>`      |                                        | An author of the document. Repeat it for more.                                                   |
+| `--author <name>`      |                                        | An author of the document. <sup>2</sup>                                                          |
 | `--outline`            |                                        | Adds bookmarks for the `h1` to `h6` headings.                                                    |
 | `--background <color>` |                                        | A CSS color that fills every page, margins included.                                             |
+
+<sup>1</sup> Page numbers still count every page.
+
+<sup>2</sup> Repeat it for more.
 
 A `@page` rule in the document wins over `--page` and `--margin`. In a header or footer, an element with the class `pageNumber` or `totalPages` shows the page number or the page count.
 
@@ -72,12 +86,15 @@ A `@page` rule in the document wins over `--page` and `--margin`. In a header or
 
 ## Exit codes
 
-| Code | Meaning                                                                                                                                |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | The output was written, or the listing printed.                                                                                        |
-| `1`  | The render failed.                                                                                                                     |
-| `2`  | The command line is wrong, such as an unknown flag or command, a value CSS does not accept, or an output format takumi does not write. |
-| `3`  | The document tried to read a file outside the granted directories.                                                                     |
+| Code | Meaning                                                            |
+| ---- | ------------------------------------------------------------------ |
+| `0`  | The output was written, or the listing printed.                    |
+| `1`  | The render failed.                                                 |
+| `2`  | The command line is wrong. <sup>1</sup>                            |
+| `3`  | The document tried to read a file outside the granted directories. |
+
+<sup>1</sup> For example, an unknown flag or command, a value CSS does not accept, or an output
+format takumi does not write.
 
 ## Limits
 

@@ -35,12 +35,17 @@ Warnings and errors go to standard error, starting with `warning:` or `error:`. 
 
 The exit code tells a script why a render failed:
 
-| Code | Meaning                                                                                                                     |
-| ---- | --------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | The output was written, or the listing printed.                                                                             |
-| `1`  | The render failed, such as an input that does not exist or a file past the size limits.                                     |
-| `2`  | The command line is wrong, such as an unknown flag, a value CSS does not accept, or an output format takumi does not write. |
-| `3`  | The document tried to read a file outside the directories you granted.                                                      |
+| Code | Meaning                                                                |
+| ---- | ---------------------------------------------------------------------- |
+| `0`  | The output was written, or the listing printed.                        |
+| `1`  | The render failed. <sup>1</sup>                                        |
+| `2`  | The command line is wrong. <sup>2</sup>                                |
+| `3`  | The document tried to read a file outside the directories you granted. |
+
+<sup>1</sup> For example, an input that does not exist, or a file past the size limits.
+
+<sup>2</sup> For example, an unknown flag, a value CSS does not accept, or an output format takumi
+does not write.
 
 Code `3` separates a policy failure from a broken document, so a script can retry with `--allow-read`, or report the document as untrusted. See [Control file access](/docs/cli/file-access).
 
