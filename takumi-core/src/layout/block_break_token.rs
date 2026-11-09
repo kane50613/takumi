@@ -45,8 +45,7 @@ pub(crate) struct BlockBreakToken {
 }
 
 impl BlockBreakToken {
-  /// Whether a container the token resumes pushes a child below its monolithic overflow: one
-  /// whose own token records none, holding a child whose token records some.
+  /// Whether a box the token resumes moves a child below that child's monolithic overflow.
   pub(crate) fn pushes_monolithic_overflow_inside(&self) -> bool {
     self.child_break_tokens.iter().any(|child| match child {
       BreakToken::Block(child) => {
