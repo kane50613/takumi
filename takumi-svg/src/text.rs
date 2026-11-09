@@ -63,6 +63,53 @@ pub(crate) fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option
   })
 }
 
+/// Each of `run`'s resolved glyphs with the matrix that places it in the document.
+fn placed_glyphs<'r>(
+  run: &'r PositionedInlineRun,
+  frame: BoxFrame,
+) -> impl Iterator<Item = (u32, &'r ResolvedGlyph, Affine)> {
+  let run_transform = run.transform(Affine::IDENTITY);
+  let glyph_offset = run.glyph_offset(frame.layout);
+
+  run.glyph_run.glyphs.iter().filter_map(move |glyph| {
+    let resolved = run.resolved_glyphs.get(&glyph.id)?;
+    let matrix =
+      run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
+
+    Some((glyph.id, resolved.as_ref(), frame.place(matrix)))
+  })
+}
+
+/// Emits the `-webkit-text-stroke` of `run`'s outline glyphs alone, unfilled, as one pass of
+/// Blink's `GraphicsContext::DrawTextPasses`.
+pub(crate) fn emit_run_strokes(
+  run: &PositionedInlineRun,
+  frame: BoxFrame,
+  stroke: GlyphStroke,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let mut uses: Vec<(u32, f32, f32)> = Vec::new();
+
+  for (_, resolved, placed) in placed_glyphs(run, frame) {
+    let ResolvedGlyph::Outline(outline) = resolved else {
+      continue;
+    };
+
+    if outline.embolden().is_some_and(|embolden| embolden > 0.0) {
+      let data = path_data(outline.paths(), placed);
+
+      if !data.is_empty() {
+        doc.flush_glyph_uses(&mut uses, Rgba::TRANSPARENT, Some(stroke))?;
+        doc.glyph_path(&data, Rgba::TRANSPARENT, Some(stroke))?;
+      }
+    } else if let Some(id) = doc.outline_ref(outline, placed) {
+      uses.push((id, placed.x, placed.y));
+    }
+  }
+
+  doc.flush_glyph_uses(&mut uses, Rgba::TRANSPARENT, Some(stroke))
+}
+
 /// Emits a run's glyphs. `color_override` (for shadows) recolors every glyph and
 /// suppresses bitmaps/COLR; `stroke` adds `-webkit-text-stroke` to outlines.
 pub(crate) fn emit_run_glyphs(
@@ -73,8 +120,6 @@ pub(crate) fn emit_run_glyphs(
   stroke: Option<GlyphStroke>,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let run_transform = run.transform(Affine::IDENTITY);
-  let glyph_offset = run.glyph_offset(frame.layout);
   let fill_color = run.glyph_run.brush.color;
   let bold_join = font_style.parent.misc_inherited_data.stroke_linejoin;
 
@@ -82,15 +127,8 @@ pub(crate) fn emit_run_glyphs(
   let fill = color_override.unwrap_or(Rgba(fill_color.0));
   let mut uses: Vec<(u32, f32, f32)> = Vec::new();
 
-  for glyph in &run.glyph_run.glyphs {
-    let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
-      continue;
-    };
-    let matrix =
-      run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-    let placed = frame.place(matrix);
-
-    match resolved.as_ref() {
+  for (glyph_id, resolved, placed) in placed_glyphs(run, frame) {
+    match resolved {
       ResolvedGlyph::Outline(outline) => {
         let color_layers = if color_override.is_some() {
           Vec::new()
@@ -143,7 +181,7 @@ pub(crate) fn emit_run_glyphs(
         let key = ImageKey::BitmapGlyph {
           font: run.glyph_run.font_id(),
           index: run.glyph_run.font_index,
-          glyph: glyph.id,
+          glyph: glyph_id,
           size: run.glyph_run.font_size.to_bits(),
         };
         let Some(href) = doc.image_href(&key, || {
