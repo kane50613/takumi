@@ -1520,7 +1520,7 @@ impl StyleSheet {
         self
           .page_rules
           .iter()
-          .flat_map(|rule| rule.image_urls.iter().map(|url| &**url)),
+          .flat_map(PageRule::image_urls),
       )
       .collect();
 

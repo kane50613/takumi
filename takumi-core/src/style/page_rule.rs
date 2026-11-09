@@ -13,8 +13,8 @@ use crate::{
   geometry::{Rect, Size},
   style::{
     CustomProperties, Direction, FromCss, Length, MediaQueryList, PageName, RawDeclaration,
-    RawDeclarationParser, SizingContext, StyleDeclarationBlock, contains_var_references,
-    resolve_var_references, selector::LayerPath,
+    ContentItem, ContentValue, RawDeclarationParser, SizingContext, StyleDeclaration,
+    StyleDeclarationBlock, contains_var_references, resolve_var_references, selector::LayerPath,
   },
   units::{ONE_IN_PX, ONE_MM_IN_PX},
   viewport::Viewport,
@@ -467,6 +467,11 @@ impl PageDeclaration {
   }
 }
 
+/// The counter CSS Paged Media §7.1 increments on every page.
+pub(crate) const PAGE_COUNTER: &str = "page";
+/// The counter Blink sets to the document's page count.
+pub(crate) const PAGES_COUNTER: &str = "pages";
+
 /// One of the 16 [page-margin boxes](https://drafts.csswg.org/css-page-3/#margin-boxes), in the
 /// order Blink's `LayoutAllMarginBoxes` paints them: clockwise from the top left corner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -555,25 +560,47 @@ impl PageMarginKind {
   }
 }
 
-/// A declaration of an `@page` rule or a page-margin rule, kept as text for the style of the box
-/// it applies to.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct PageStyleDeclaration {
-  name: String,
-  value: String,
-  important: bool,
+/// The declarations that style one of a page's boxes, split by `!important`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) struct PageDeclarations {
+  normal: StyleDeclarationBlock,
+  important: StyleDeclarationBlock,
 }
 
-impl PageStyleDeclaration {
-  /// Appends those of `declarations` with or without `!important` to `css`.
-  fn write(css: &mut String, declarations: &[Self], important: bool) {
-    for declaration in declarations {
-      if declaration.important == important {
-        css.push_str(&declaration.name);
-        css.push(':');
-        css.push_str(&declaration.value);
-        css.push(';');
-      }
+impl PageDeclarations {
+  /// Reads the declarations of a rule's body.
+  fn parse(input: &mut Parser) -> Self {
+    let mut declarations = Self::default();
+
+    for declaration in RuleBodyParser::new(input, &mut RawDeclarationParser).flatten() {
+      declarations.push(&declaration);
+    }
+
+    declarations
+  }
+
+  fn push(&mut self, declaration: &RawDeclaration<'_>) {
+    let block = if declaration.important {
+      &mut self.important
+    } else {
+      &mut self.normal
+    };
+    let css = format!("{}:{}", declaration.name, declaration.value);
+
+    for parsed in StyleDeclarationBlock::parse_loosy(&css).declarations {
+      block.push(parsed, false);
+    }
+  }
+
+  fn blocks(&self) -> [&StyleDeclarationBlock; 2] {
+    [&self.normal, &self.important]
+  }
+
+  /// Appends its declarations with or without `!important` to `block`, none of them important
+  /// there, so the last one of a property wins.
+  fn append_to(&self, block: &mut StyleDeclarationBlock, important: bool) {
+    for declaration in self.blocks()[usize::from(important)].iter() {
+      block.push(declaration.clone(), false);
     }
   }
 }
@@ -582,16 +609,16 @@ impl PageStyleDeclaration {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PageMarginRule {
   kind: PageMarginKind,
-  declarations: Vec<PageStyleDeclaration>,
+  declarations: PageDeclarations,
 }
 
-/// The declarations that style a page's boxes, as CSS text with the winner of each property last.
+/// The declarations that style a page's boxes, the winner of each property last.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PageStyles {
   /// The page context's, which every page-margin box inherits from.
-  pub page: String,
+  pub page: StyleDeclarationBlock,
   /// Each page-margin box's a rule styles, in paint order.
-  pub margins: Vec<(PageMarginKind, String)>,
+  pub margins: Vec<(PageMarginKind, StyleDeclarationBlock)>,
 }
 
 enum PageBodyItem<'i> {
@@ -637,10 +664,7 @@ impl<'i> AtRuleParser<'i> for PageBodyParser {
     _start: &ParserState,
     input: &mut Parser<'i>,
   ) -> Result<Self::AtRule, ParseError<Self::Error>> {
-    let declarations = RuleBodyParser::new(input, &mut RawDeclarationParser)
-      .flatten()
-      .map(PageStyleDeclaration::from)
-      .collect();
+    let declarations = PageDeclarations::parse(input);
 
     Ok(PageBodyItem::Margin(PageMarginRule { kind, declarations }))
   }
@@ -662,16 +686,6 @@ impl<'i> RuleBodyItemParser<'i, PageBodyItem<'i>, StyleSheetParseError> for Page
   }
 }
 
-impl From<RawDeclaration<'_>> for PageStyleDeclaration {
-  fn from(declaration: RawDeclaration<'_>) -> Self {
-    Self {
-      name: declaration.name.to_string(),
-      value: declaration.value.to_owned(),
-      important: declaration.important,
-    }
-  }
-}
-
 /// One `@page` rule.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct PageRule {
@@ -681,12 +695,10 @@ pub(crate) struct PageRule {
   pub(crate) normal: Vec<PageDeclaration>,
   /// The declarations with `!important`, in source order.
   pub(crate) important: Vec<PageDeclaration>,
-  /// Every declaration, in source order.
-  pub(crate) style: Vec<PageStyleDeclaration>,
+  /// Every declaration that is a property, which styles the page context.
+  pub(crate) style: PageDeclarations,
   /// The page-margin rules nested in the rule, in source order.
   pub(crate) margins: Vec<PageMarginRule>,
-  /// The resources its page-margin rules' declarations reference.
-  pub(crate) image_urls: Vec<Box<str>>,
   /// Media queries gating this rule.
   pub(crate) media_queries: Vec<MediaQueryList>,
   /// Cascade layer this rule belongs to.
@@ -719,34 +731,41 @@ impl PageRule {
       };
 
       declarations.extend(PageDeclaration::parse(&declaration.name, declaration.value));
-      rule.style.push(declaration.into());
+      rule.style.push(&declaration);
     }
 
-    let mut css = String::new();
-
-    for margin in &rule.margins {
-      for important in [false, true] {
-        PageStyleDeclaration::write(&mut css, &margin.declarations, important);
-      }
-    }
-
-    rule.image_urls = StyleDeclarationBlock::parse_loosy(&css)
-      .image_urls()
-      .map(Box::from)
-      .collect();
     rule
   }
 
-  /// Whether a page-margin rule's `content` names the `pages` counter, or holds a `var()` that
-  /// may.
+  /// The declaration blocks of the rule and its page-margin rules.
+  fn blocks(&self) -> impl Iterator<Item = &StyleDeclarationBlock> {
+    self.style.blocks().into_iter().chain(
+      self
+        .margins
+        .iter()
+        .flat_map(|margin| margin.declarations.blocks()),
+    )
+  }
+
+  /// The resources its declarations reference.
+  pub(crate) fn image_urls(&self) -> impl Iterator<Item = &str> {
+    self.blocks().flat_map(StyleDeclarationBlock::image_urls)
+  }
+
+  /// Whether a page-margin rule's `content` reads the `pages` counter, or a declaration of one
+  /// holds a `var()` that may put it there.
   pub(crate) fn counts_pages(&self) -> bool {
     self
       .margins
       .iter()
-      .flat_map(|margin| &margin.declarations)
-      .any(|declaration| {
-        declaration.name.eq_ignore_ascii_case("content")
-          && (declaration.value.contains("pages") || contains_var_references(&declaration.value))
+      .flat_map(|margin| margin.declarations.blocks())
+      .flat_map(|block| block.iter())
+      .any(|declaration| match declaration {
+        StyleDeclaration::Content(ContentValue::Items(items)) => items.iter().any(
+          |item| matches!(item, ContentItem::Counter(counter) if &*counter.name == PAGES_COUNTER),
+        ),
+        StyleDeclaration::Deferred(_) | StyleDeclaration::VarRef(_) => true,
+        _ => false,
       })
   }
 
@@ -816,20 +835,20 @@ impl PageRule {
     let mut styles = PageStyles::default();
 
     for &(important, rule) in &ranked {
-      PageStyleDeclaration::write(&mut styles.page, &rule.style, important);
+      rule.style.append_to(&mut styles.page, important);
     }
 
     for margin_kind in PageMarginKind::ALL {
-      let mut css = String::new();
+      let mut block = StyleDeclarationBlock::default();
 
       for &(important, rule) in &ranked {
         for margin in rule.margins.iter().filter(|rule| rule.kind == margin_kind) {
-          PageStyleDeclaration::write(&mut css, &margin.declarations, important);
+          margin.declarations.append_to(&mut block, important);
         }
       }
 
-      if !css.is_empty() {
-        styles.margins.push((margin_kind, css));
+      if !block.declarations.is_empty() {
+        styles.margins.push((margin_kind, block));
       }
     }
 
