@@ -78,13 +78,17 @@ takumiPlugin({
 
 These come from `TakumiOptions` in `fumapress/plugins/takumi`:
 
-| Option     | Default                               | Notes                                                                              |
-| ---------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
-| `generate` | A built-in title and description card | `(page) => { node, options? }`. `this` is the app context.                         |
-| `options`  | None                                  | `ImageResponse` options shared by every image. `generate` overrides them per page. |
-| `width`    | `1200`                                | Image width, also written to `og:image:width`                                      |
-| `height`   | `630`                                 | Image height, also written to `og:image:height`                                    |
-| `basePath` | `/` (static) or `/_takumi` (dynamic)  | Route prefix for image URLs                                                        |
+| Option     | Default                               | Notes                                                      |
+| ---------- | ------------------------------------- | ---------------------------------------------------------- |
+| `generate` | A built-in title and description card | `(page) => { node, options? }` <sup>1</sup>                |
+| `options`  | None                                  | `ImageResponse` options shared by every image <sup>2</sup> |
+| `width`    | `1200`                                | Image width, also written to `og:image:width`              |
+| `height`   | `630`                                 | Image height, also written to `og:image:height`            |
+| `basePath` | `/` (static) or `/_takumi` (dynamic)  | Route prefix for image URLs                                |
+
+<sup>1</sup> `this` is the app context.
+
+<sup>2</sup> `generate` overrides them per page.
 
 The plugin always encodes WebP, so `format` is not an option.
 

@@ -88,13 +88,17 @@ function replay(ctx: CanvasRenderingContext2D, tree: PaintTree) {
 
 | Type     | Draw                                                                                                                     |
 | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `fill`   | Fill `shape` with `paint`, clipped to every shape in `clips`. Blend with `blendMode` when set.                           |
+| `fill`   | Fill `shape` with `paint`, clipped to every shape in `clips` <sup>1</sup>                                                |
 | `stroke` | Stroke `shape` with `stroke` and `paint`, clipped to every shape in `clips`                                              |
 | `shadow` | Blur a copy of `shape`, filled or stroked with `stroke`, moved by `offset`, visible only `outside` or `inside` its `box` |
-| `glyphs` | Fill the run's outlines with `paint`, moved by `offset` and blurred by `blur`. Stroke them instead when `stroke` is set. |
+| `glyphs` | Fill the run's outlines with `paint`, moved by `offset` and blurred by `blur` <sup>2</sup>                               |
 | `image`  | Draw `image` into `rect`, clipped to `clip`, sampled per `sampling`                                                      |
 | `masked` | Draw `content` into a layer, keep it only where `mask` covers, then composite it                                         |
 | `group`  | Draw `drawables` into a layer, then composite it at `opacity`                                                            |
+
+<sup>1</sup> Blend with `blendMode` when set.
+
+<sup>2</sup> Stroke them instead when `stroke` is set.
 
 A `shadow` or `glyphs` blur is a Gaussian standard deviation, half the CSS blur radius. A `glyphs` drawable with a blur is a text shadow. Every drawable except `group` has a `role`, such as `background`, `border`, or `text`, which exporters use to rebuild editable objects. For example, a slide writer can merge a box's background, border, and shadow into one shape.
 

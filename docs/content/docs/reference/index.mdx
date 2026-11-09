@@ -137,7 +137,7 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `visibility`                                                         | `visible`, `hidden`, `collapse`                                                                                                                                                                                                                                                                          |
 | `contain`                                                            | `none`, `content` (= `layout style paint`), or a space-separated combination of `layout`, `style`, `paint` in any order, without duplicates <sup>2</sup>                                                                                                                                                 |
 | `content`                                                            | Strings, images, `attr()`, `counter()`, and `counters()`                                                                                                                                                                                                                                                 |
-| `counterReset`                                                       | `none`, or counter names, each with an optional integer. `reversed(<name>)` resets to the integer, as Chrome does                                                                                                                                                                                        |
+| `counterReset`                                                       | `none`, or counter names, each with an optional integer <sup>3</sup>                                                                                                                                                                                                                                     |
 | `counterIncrement`                                                   | `none`, or counter names, each with an optional integer                                                                                                                                                                                                                                                  |
 | `counterSet`                                                         | `none`, or counter names, each with an optional integer                                                                                                                                                                                                                                                  |
 | `listStyleType`                                                      | `none`, `disc`, `circle`, `square`, `decimal`, `decimal-leading-zero`, `lower-alpha`, `lower-latin`, `upper-alpha`, `upper-latin`, `lower-roman`, `upper-roman`, `<string>`                                                                                                                              |
@@ -158,6 +158,8 @@ and list markers inside it number from 1.
 Containment is a correctness feature here, not a performance hint. Takumi renders once, so there
 is no relayout to skip, and paint containment adds a stacking context and a clip layer per box.
 Applying it broadly makes a render slower, not faster.
+
+<sup>3</sup> `reversed(<name>)` resets to the integer, as Chrome does.
 
 ### Sizing
 

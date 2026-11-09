@@ -118,7 +118,9 @@ Set `emoji` to choose the set. `render`, `renderSvg`, `renderAnimation`, `measur
 | `openmoji`          | OpenMoji                          | [`@svgmoji/openmoji`](https://www.npmjs.com/package/@svgmoji/openmoji) 2.0.0                  |
 | `fluent`            | Fluent Emoji, color               | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode) `7a40f1a` |
 | `fluentFlat`        | Fluent Emoji, flat                | [shuding/fluentui-emoji-unicode](https://github.com/shuding/fluentui-emoji-unicode) `7a40f1a` |
-| `from-font`         | Glyphs from a color font you load | No fetch. See [COLR / bitmap fonts](#colr--bitmap-fonts)                                      |
+| `from-font`         | Glyphs from a color font you load | No fetch <sup>1</sup>                                                                         |
+
+<sup>1</sup> See [COLR / bitmap fonts](#colr--bitmap-fonts).
 
 ```tsx twoslash title="Fetch emoji images"
 import { ImageResponse } from "takumi-js/response";
@@ -208,13 +210,15 @@ const image = await render(element, {
 
 `images`, `googleFonts`, and `fontFromUrl` take these options. A custom `data` loader makes its own requests, so they do not apply to it.
 
-| Option     | Default            | Effect                                                                          |
-| :--------- | :----------------- | :------------------------------------------------------------------------------ |
-| `timeout`  | `30000` ms         | Deadline for each request, including retry delays. `0` or negative disables it. |
-| `signal`   | none               | Cancels a request and any pending retry.                                        |
-| `maxBytes` | 32 MiB             | Rejects larger bodies, by `content-length` and by streamed bytes.               |
-| `allowUrl` | allow all          | Rejects a URL before fetching it, redirect destinations included.               |
-| `fetch`    | `globalThis.fetch` | Replaces the fetch implementation.                                              |
+| Option     | Default            | Effect                                                            |
+| :--------- | :----------------- | :---------------------------------------------------------------- |
+| `timeout`  | `30000` ms         | Deadline for each request, including retry delays. <sup>1</sup>   |
+| `signal`   | none               | Cancels a request and any pending retry.                          |
+| `maxBytes` | 32 MiB             | Rejects larger bodies, by `content-length` and by streamed bytes. |
+| `allowUrl` | allow all          | Rejects a URL before fetching it, redirect destinations included. |
+| `fetch`    | `globalThis.fetch` | Replaces the fetch implementation.                                |
+
+<sup>1</sup> `0` or negative disables it.
 
 ### Retries
 
@@ -326,7 +330,9 @@ function OgImage() {
 
 Takumi rejects oversized images when it decodes them. The limits protect servers from decode bombs, which are small files that declare huge dimensions to force huge allocations.
 
-| Input                       | Limit                                                                        |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| Image                       | 8192 × 8192 pixels                                                           |
-| Animated GIF, APNG, or WebP | 4 × 8192 × 8192 pixels summed over all frames. Frames past 1024 are dropped. |
+| Input                       | Limit                                                      |
+| --------------------------- | ---------------------------------------------------------- |
+| Image                       | 8192 × 8192 pixels                                         |
+| Animated GIF, APNG, or WebP | 4 × 8192 × 8192 pixels summed over all frames <sup>1</sup> |
+
+<sup>1</sup> Frames past 1024 are dropped.

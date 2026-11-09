@@ -17,11 +17,15 @@ Load a font for every script your text uses.
 
 Pass the fonts a render needs through `fonts`. Each entry takes one of three forms:
 
-| Entry      | Resolves to                                                                          |
-| ---------- | ------------------------------------------------------------------------------------ |
-| URL string | Fetched on demand, keyed by the URL. Name, weight, and style come from the file.     |
-| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                     |
-| Descriptor | `{ name, data, weight, style, generic }`. The fields override what the file reports. |
+| Entry      | Resolves to                                                      |
+| ---------- | ---------------------------------------------------------------- |
+| URL string | Fetched on demand, keyed by the URL. <sup>1</sup>                |
+| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly. |
+| Descriptor | `{ name, data, weight, style, generic }`. <sup>2</sup>           |
+
+<sup>1</sup> Name, weight, and style come from the file.
+
+<sup>2</sup> The fields override what the file reports.
 
 `render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
 
@@ -110,13 +114,21 @@ await googleFonts([
 ]);
 ```
 
-| Field     | Accepts                                     | Effect                                                                           |
-| --------- | ------------------------------------------- | -------------------------------------------------------------------------------- |
-| `name`    | a family name                               | The family to load. Known families autocomplete their weights and axes.          |
-| `weight`  | a weight, an array, or a range `"100..900"` | Defaults to `400`. A range loads the variable font, and `font-weight` drives it. |
-| `style`   | `"normal"`, `"italic"`, or both             | Defaults to `"normal"`. Which styles to fetch.                                   |
-| `axes`    | `{ tag: value \| "min..max" }`              | Variable axes to load, such as `{ opsz: "9..144" }`. A range keeps them live.    |
-| `generic` | a CSS generic family keyword                | Every loaded subset claims it, so `font-mono` can resolve to the family.         |
+| Field     | Accepts                                     | Effect                                                                   |
+| --------- | ------------------------------------------- | ------------------------------------------------------------------------ |
+| `name`    | a family name                               | The family to load. <sup>1</sup>                                         |
+| `weight`  | a weight, an array, or a range `"100..900"` | Which weights to fetch. <sup>2</sup>                                     |
+| `style`   | `"normal"`, `"italic"`, or both             | Which styles to fetch. <sup>3</sup>                                      |
+| `axes`    | `{ tag: value \| "min..max" }`              | Variable axes to load, such as `{ opsz: "9..144" }`. <sup>4</sup>        |
+| `generic` | a CSS generic family keyword                | Every loaded subset claims it, so `font-mono` can resolve to the family. |
+
+<sup>1</sup> Known families autocomplete their weights and axes.
+
+<sup>2</sup> Defaults to `400`. A range loads the variable font, and `font-weight` drives it.
+
+<sup>3</sup> Defaults to `"normal"`.
+
+<sup>4</sup> A range keeps them live.
 
 Pass an object instead of an array for request options:
 
