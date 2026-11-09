@@ -728,15 +728,31 @@ impl BoxFragmentBuilder {
       };
     }
 
+    let breaks_for_out_of_flow_alone = self.breaks_for_out_of_flow_alone();
     let break_token = self
       .should_break()
       .then(|| Rc::new(self.create_break_token(node)));
 
-    self.break_info(break_token)
+    self.break_info(break_token, breaks_for_out_of_flow_alone)
+  }
+
+  /// Whether the box breaks only to resume out-of-flow boxes past its in-flow content. Blink lays
+  /// those out in the pages themselves, which leaves no break inside the box to avoid.
+  fn breaks_for_out_of_flow_alone(&self) -> bool {
+    !self.out_of_flow_break_tokens.is_empty()
+      && !self.did_break_self
+      && self.child_break_tokens.is_empty()
+      && self.last_inline_break_token.is_none()
+      && self.monolithic_overflow <= LayoutUnit::ZERO
+      && !self.has_subsequent_children
   }
 
   /// What the box's layout result tells its container about breaking, with its `break_token`.
-  fn break_info(&self, break_token: Option<Rc<BlockBreakToken>>) -> BreakInfo {
+  fn break_info(
+    &self,
+    break_token: Option<Rc<BlockBreakToken>>,
+    breaks_for_out_of_flow_alone: bool,
+  ) -> BreakInfo {
     BreakInfo {
       break_token,
       break_appeal: self.break_appeal,
@@ -751,7 +767,7 @@ impl BoxFragmentBuilder {
       is_first_for_node: self.is_first_for_node,
       fragment_index: fragment_index(self.previous_break_token.as_deref()),
       is_repeated: false,
-      avoids_break_inside: self.has_block_fragmentation() && self.break_inside.avoids_page_break(),
+      avoids_break_inside: !breaks_for_out_of_flow_alone && self.break_inside.avoids_page_break(),
       propagated_page_name: self.page_name.clone(),
     }
   }
