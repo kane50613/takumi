@@ -202,6 +202,26 @@ fn an_absolute_box_past_the_page_leaves_its_avoiding_containing_block_on_the_pag
 }
 
 #[test]
+fn a_flex_container_whose_item_margin_overflows_the_page_moves_to_the_next() {
+  let item = Node::container([block("inner", "h161")])
+    .with_class_name("block mb")
+    .with_id("item");
+  let flex = Node::container([item])
+    .with_class_name("block flex")
+    .with_id("flex");
+  let tree = render(
+    root([block("a", "h25"), flex]),
+    ".flex { display: flex } .mb { margin-bottom: 25px } .h161 { height: 161px } \
+     .h25 { height: 25px }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["flex"], [placed(1, 0.0, 186.0)]);
+  assert_eq!(boxes["inner"], [placed(1, 0.0, 161.0)]);
+}
+
+#[test]
 fn a_floated_flex_item_is_an_item_that_breaks_after_as_any_other() {
   let item = block("item", "h10 floated forced-after");
   let flex = Node::container([item, block("second", "h10")]).with_class_name("block column");
