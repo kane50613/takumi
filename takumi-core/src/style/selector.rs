@@ -1516,12 +1516,7 @@ impl StyleSheet {
     let urls: Xxh3HashSet<&str> = rules
       .chain(keyframes)
       .flat_map(StyleDeclarationBlock::image_urls)
-      .chain(
-        self
-          .page_rules
-          .iter()
-          .flat_map(PageRule::image_urls),
-      )
+      .chain(self.page_rules.iter().flat_map(PageRule::image_urls))
       .collect();
 
     urls.into_iter()

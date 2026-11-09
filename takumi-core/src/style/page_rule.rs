@@ -9,11 +9,12 @@ use cssparser::{
 };
 
 use crate::{
+  context::RenderContext,
   error::StyleSheetParseError,
   geometry::{Rect, Size},
   style::{
-    CustomProperties, Direction, FromCss, Length, MediaQueryList, PageName, RawDeclaration,
-    ContentItem, ContentValue, RawDeclarationParser, SizingContext, StyleDeclaration,
+    ContentItem, ContentValue, CustomProperties, Direction, FromCss, Length, MediaQueryList,
+    PageName, RawDeclaration, RawDeclarationParser, SizingContext, StyleDeclaration,
     StyleDeclarationBlock, contains_var_references, resolve_var_references, selector::LayerPath,
   },
   units::{ONE_IN_PX, ONE_MM_IN_PX},
@@ -63,6 +64,8 @@ pub struct PageContext {
   direction: Direction,
   sizing: SizingContext,
   custom_properties: CustomProperties,
+  /// The root element's context, when the document has one that gets a box.
+  root: Option<RenderContext>,
 }
 
 impl Default for PageContext {
@@ -73,11 +76,29 @@ impl Default for PageContext {
         .viewport(Viewport::default())
         .build(),
       custom_properties: CustomProperties::default(),
+      root: None,
     }
   }
 }
 
 impl PageContext {
+  /// [`Self::new`] for the root element whose context is `root`.
+  pub(crate) fn of_root_context(root: RenderContext) -> Self {
+    Self {
+      root: Some(root.clone()),
+      ..Self::new(
+        root.style.inherited_data.direction,
+        root.sizing.clone(),
+        root.style.custom_properties.inherited(),
+      )
+    }
+  }
+
+  /// The context page boxes inherit from: the root element's, or `initial` without one.
+  pub fn root_context(&self, initial: &RenderContext) -> RenderContext {
+    self.root.clone().unwrap_or_else(|| initial.clone())
+  }
+
   /// The context a root element with `direction`, `sizing`, and `custom_properties` gives.
   pub(crate) fn new(
     direction: Direction,
@@ -88,6 +109,7 @@ impl PageContext {
       direction,
       sizing,
       custom_properties,
+      root: None,
     }
   }
 

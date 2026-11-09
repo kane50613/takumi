@@ -4,11 +4,13 @@
 use std::sync::Arc;
 
 use crate::{
+  context::RenderContext,
   geometry::{Point, Rect, Size},
+  layout::page_container::PageContainers,
   layout_unit::LayoutUnit,
   style::{
-    Length, PageName, StyleSheet,
-    page_rule::{PageContext, PageKind},
+    PageName, StyleSheet,
+    page_rule::{PageContext, PageKind, PageStyles},
   },
   viewport::Viewport,
 };
@@ -48,79 +50,107 @@ impl From<Size<f32>> for PageSizer {
   }
 }
 
-/// A page's size and the margins around its page area.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// A page's size and the margins, borders, and padding around its page area.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct PageBox {
   /// The page's size.
   pub size: Size<f32>,
-  /// The margins between the page's edges and its page area.
+  /// The margins between the page's edges and its page border box.
   pub margin: Rect<f32>,
+  /// The page border box's borders.
+  pub border: Rect<f32>,
+  /// The padding between the borders and the page area.
+  pub padding: Rect<f32>,
 }
 
 impl PageBox {
-  /// The page area inside the margins.
+  /// The page area inside the margins, borders, and padding.
   pub fn area(&self) -> Size<f32> {
-    self.size.inset(self.margin)
+    self
+      .size
+      .inset(self.margin)
+      .inset(self.border)
+      .inset(self.padding)
+  }
+
+  /// Where the page area starts on the page.
+  pub fn area_origin(&self) -> Point<f32> {
+    Point::new(
+      self.margin.left + self.border.left + self.padding.left,
+      self.margin.top + self.border.top + self.padding.top,
+    )
   }
 }
 
 /// The `@page` rules of a stylesheet laid over a default page box.
 pub struct PageRules {
-  pub(crate) stylesheet: Arc<StyleSheet>,
+  stylesheet: Arc<StyleSheet>,
   base: PageBox,
-  pub(crate) viewport: Viewport,
-  pub(crate) context: PageContext,
+  viewport: Viewport,
+  context: PageContext,
+  /// The root element's context, which page boxes inherit from.
+  root: RenderContext,
 }
 
 impl PageRules {
   /// The `@page` rules of `stylesheet` over `base`, the page box no rule changes, for pages whose
-  /// style inherits `context`.
-  pub fn new(stylesheet: Arc<StyleSheet>, base: PageBox, context: PageContext) -> Self {
+  /// style inherits `context`, or `initial` where the document has no root element.
+  pub fn new(
+    stylesheet: Arc<StyleSheet>,
+    base: PageBox,
+    context: PageContext,
+    initial: &RenderContext,
+  ) -> Self {
     Self {
       stylesheet,
       base,
       viewport: Viewport::print_page(base.size),
+      root: context.root_context(initial),
       context,
     }
   }
 
-  /// Page `page`'s box as a page `name`, as Blink's `StyleForPage` and `ResolvePageBoxGeometry`
-  /// give it, a margin percentage taking the page's size on its own axis. Lengths resolve with
-  /// the base page as the viewport, as Blink's `ViewportSizeChangeScopeForPrinting` sizes it. A
-  /// rule that leaves less than a pixel of page area on either axis is ignored, as Blink's
-  /// `LayoutPageContainer` ignores one that leaves none.
-  pub fn page_box(&self, page: usize, name: &PageName) -> PageBox {
+  /// The root element's context, which page boxes inherit from.
+  pub fn root(&self) -> &RenderContext {
+    &self.root
+  }
+
+  /// The declarations that style page `page`'s boxes as a page `name`.
+  pub fn page_styles(&self, page: usize, name: &PageName) -> PageStyles {
+    self.stylesheet.page_styles(
+      self.viewport,
+      PageKind::of(page, self.context.direction()),
+      name,
+      &self.context,
+    )
+  }
+
+  /// Page `page`'s box as a page `name` before its style applies: the size its `size`
+  /// descriptor gives, with the base page's margins. Lengths resolve with the base page as the
+  /// viewport, as Blink's `ViewportSizeChangeScopeForPrinting` sizes it.
+  pub fn base_box(&self, page: usize, name: &PageName) -> PageBox {
     let kind = PageKind::of(page, self.context.direction());
     let descriptors = self
       .stylesheet
       .page_descriptors(self.viewport, kind, name, &self.context);
     let sizing = self.context.sizing(self.viewport);
-    let size = descriptors
-      .size
-      .map_or(self.base.size, |size| size.resolve(self.base.size, &sizing));
-    // Blink's `ResolveAutoMargins` leaves a page box that fills its page no `auto` margin.
-    let side = |base: f32, length: Option<Length>, basis: f32| match length {
-      None => base,
-      Some(Length::Auto) => 0.0,
-      Some(length) => length.to_px(&sizing, basis),
-    };
-    let margin = self.base.margin;
-    let page_box = PageBox {
-      size,
-      margin: Rect {
-        top: side(margin.top, descriptors.margin.top, size.height),
-        right: side(margin.right, descriptors.margin.right, size.width),
-        bottom: side(margin.bottom, descriptors.margin.bottom, size.height),
-        left: side(margin.left, descriptors.margin.left, size.width),
-      },
-    };
-    let area = page_box.area();
 
-    if area.width >= 1.0 && area.height >= 1.0 {
-      page_box
-    } else {
-      self.base
+    PageBox {
+      size: descriptors
+        .size
+        .map_or(self.base.size, |size| size.resolve(self.base.size, &sizing)),
+      ..self.base
     }
+  }
+
+  /// Page `page`'s box as a page `name`, as Blink's `StyleForPage` and `ResolvePageBoxGeometry`
+  /// give it.
+  pub fn page_box(&self, page: usize, name: &PageName) -> PageBox {
+    PageContainers::page_box(
+      &self.root,
+      &self.page_styles(page, name),
+      self.base_box(page, name),
+    )
   }
 }
 

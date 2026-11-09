@@ -3,8 +3,7 @@
 //! and pseudo-element that gets a box and leaving it after its descendants.
 //!
 //! It follows Blink as Chrome ships it, with the experimental `CSSListCounterAccounting` off, so
-//! `reversed()` resets a counter to its integer. The page and page-margin paths are left out, as
-//! this tree holds neither box.
+//! `reversed()` resets a counter to its integer.
 
 use std::sync::Arc;
 
@@ -15,7 +14,10 @@ use crate::{
     list_marker::{ListItemOrdinals, explicit_value},
     node::Node,
   },
-  style::{ComputedStyle, Contain, CounterChange, Display},
+  style::{
+    ComputedStyle, Contain, CounterChange, Display,
+    page_rule::{PAGE_COUNTER, PAGES_COUNTER},
+  },
 };
 
 pub(super) const LIST_ITEM: &str = "list-item";
@@ -235,17 +237,32 @@ struct CounterEntry {
   layout_object: ObjectId,
   parent: Option<ObjectId>,
   value: i32,
+  /// Whether a page box or a page-margin box made it, which Blink tells by the box having no node.
+  is_page: bool,
+}
+
+/// A box of the page context, which Blink's counters treat apart from the document's.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PageObject {
+  /// The page box, which counts the `page` counter.
+  PageBox,
+  /// One of the page's page-margin boxes.
+  MarginBox,
 }
 
 /// Each name's counters from the outermost in, `None` marking a style containment boundary.
 type CounterStack = Vec<Option<CounterEntry>>;
 
 /// The counters in scope while a render tree is built, and the boxes entered but not yet left.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(super) struct CountersAttachmentContext {
   counter_inheritance_table: FxHashMap<Arc<str>, CounterStack>,
   path: Vec<ObjectId>,
   next_object: ObjectId,
+  /// The page context box entered last, while it is being entered or left.
+  page_object: Option<PageObject>,
+  /// What `counter(pages)` reads in a page-margin box: the document's page count.
+  pub(super) page_count: Option<i32>,
 }
 
 impl CountersAttachmentContext {
@@ -271,10 +288,32 @@ impl CountersAttachmentContext {
       self.maybe_create_list_item_counter(list_item);
     }
 
+    // By default, @page boxes keep track of the page number: with no directive for `page`, it
+    // goes up by one. <https://drafts.csswg.org/css-page-3/#page-based-counters>
+    if self.page_object == Some(PageObject::PageBox)
+      && !has_counter(&counter_directives, PAGE_COUNTER)
+    {
+      self.process_counter(PAGE_COUNTER, INCREMENT_TYPE, 1);
+    }
+
     // The element itself is not in its style containment scope.
     if contains_style(style) {
       self.enter_style_containment_scope();
     }
+  }
+
+  /// [`Self::enter_object`] for a box of the page context.
+  pub(super) fn enter_page_object(&mut self, style: &ComputedStyle, object: PageObject) {
+    self.page_object = Some(object);
+    self.enter_object(style, ListItemCounter::None);
+    self.page_object = None;
+  }
+
+  /// [`Self::leave_object`] for a box of the page context.
+  pub(super) fn leave_page_object(&mut self, style: &ComputedStyle, object: PageObject) {
+    self.page_object = Some(object);
+    self.leave_object(style, ListItemCounter::None);
+    self.page_object = None;
   }
 
   /// Leaves the box [`Self::enter_object`] entered last, after its descendants.
@@ -289,6 +328,10 @@ impl CountersAttachmentContext {
       let Some((counter_type, _)) = directives.type_and_value() else {
         continue;
       };
+
+      if let Some(object) = self.page_object {
+        self.unobscure_page_counter_if_needed(counter_name, counter_type, object);
+      }
 
       if !is_reset(counter_type) {
         continue;
@@ -311,17 +354,37 @@ impl CountersAttachmentContext {
   pub(super) fn get_counter_values(&mut self, counter_name: &str, only_last: bool) -> Vec<i32> {
     self.remove_stale_counters(counter_name);
 
+    if counter_name == PAGES_COUNTER
+      && let Some(page_count) = self.page_count
+    {
+      return vec![page_count];
+    }
+
     let Some(counter_stack) = self.counter_inheritance_table.get(counter_name) else {
       return vec![0];
     };
-    // counter() and counters() can cross style containment boundaries.
-    let mut result: Vec<i32> = counter_stack
-      .iter()
-      .rev()
-      .flatten()
-      .map(|entry| entry.value)
-      .take(if only_last { 1 } else { usize::MAX })
-      .collect();
+    let mut result = Vec::new();
+    // Counters changed within a page or page margin context obscure all counters of the same
+    // name within the document.
+    let mut is_page_counter = false;
+
+    for entry in counter_stack.iter().rev() {
+      // counter() and counters() can cross style containment boundaries.
+      let Some(entry) = entry else {
+        if is_page_counter {
+          break;
+        }
+
+        continue;
+      };
+
+      result.push(entry.value);
+      if only_last {
+        break;
+      }
+
+      is_page_counter |= entry.is_page;
+    }
 
     if result.is_empty() {
       result.push(0);
@@ -359,6 +422,13 @@ impl CountersAttachmentContext {
     // First, there might be some counters on stack that are stale, remove those.
     self.remove_stale_counters(counter_name);
 
+    // Counters in page boxes and page margin boxes may be special.
+    if let Some(object) = self.page_object
+      && self.obscure_page_counter_if_needed(counter_name, counter_type, value_argument, object)
+    {
+      return;
+    }
+
     // Reset counter always creates counter.
     if is_reset(counter_type) {
       self.create_counter(counter_name, value_argument);
@@ -370,6 +440,71 @@ impl CountersAttachmentContext {
     self.update_counter_value(counter_name, counter_type, value_argument);
   }
 
+  /// Blink's `ObscurePageCounterIfNeeded`: a counter reset in a page context, or changed in a
+  /// page-margin context, hides the counters of the name outside it behind a boundary. An
+  /// increment in a page context does not, so a counter can run across pages
+  /// (<https://github.com/w3c/csswg-drafts/issues/4759>).
+  fn obscure_page_counter_if_needed(
+    &mut self,
+    counter_name: &str,
+    counter_type: u8,
+    value_argument: i32,
+    object: PageObject,
+  ) -> bool {
+    if object == PageObject::PageBox && !is_reset(counter_type) {
+      return false;
+    }
+
+    let new_entry = |value| CounterEntry {
+      layout_object: self.current(),
+      parent: self.current_parent(),
+      value,
+      is_page: true,
+    };
+    let Some(Some(last)) = self
+      .counter_inheritance_table
+      .get(counter_name)
+      .and_then(|counter_stack| counter_stack.last())
+    else {
+      return false;
+    };
+    let entry = new_entry(calculate_counter_value(
+      counter_type,
+      value_argument,
+      last.value,
+    ));
+
+    if let Some(counter_stack) = self.counter_inheritance_table.get_mut(counter_name) {
+      counter_stack.push(None);
+      counter_stack.push(Some(entry));
+    }
+
+    true
+  }
+
+  /// Blink's `UnobscurePageCounterIfNeeded`: pops what [`Self::obscure_page_counter_if_needed`]
+  /// pushed, down to its boundary.
+  fn unobscure_page_counter_if_needed(
+    &mut self,
+    counter_name: &str,
+    counter_type: u8,
+    object: PageObject,
+  ) {
+    if object == PageObject::PageBox && !is_reset(counter_type) {
+      return;
+    }
+
+    let Some(counter_stack) = self.counter_inheritance_table.get_mut(counter_name) else {
+      return;
+    };
+
+    while let Some(last) = counter_stack.pop() {
+      if last.is_none() {
+        break;
+      }
+    }
+  }
+
   /// Pushes a counter, after removing the innermost one when its box is a sibling of the box
   /// entered last, per <https://drafts.csswg.org/css-lists/#instantiating-counters>.
   fn create_counter(&mut self, counter_name: &str, value: i32) {
@@ -377,6 +512,7 @@ impl CountersAttachmentContext {
       layout_object: self.current(),
       parent: self.current_parent(),
       value,
+      is_page: self.page_object.is_some(),
     };
     let Some(counter_stack) = self.counter_inheritance_table.get_mut(counter_name) else {
       self

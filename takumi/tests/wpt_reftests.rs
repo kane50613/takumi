@@ -40,17 +40,19 @@ use takumi::{
     ImageSource, Node, OutputFormat, RenderOptions, StyleSheet, Viewport,
   },
   render,
-  unstable::raster::render_pages,
+  unstable::raster::{render_pages, render_scene},
   write_image,
 };
 use takumi_core::{
-  geometry::{Rect, Size},
+  geometry::{Point, Rect, Size},
   layout::{
-    page_margin_boxes::{PageCounters, PageMarginBoxes},
+    page_container::{PageContainers, PageFragment},
     page_sizes::{PageBox, PageRules, PageSizer},
   },
   resources::image::ResourceCache,
+  scene::Scene,
   style::{PageName, page_rule::PageContext},
+  viewport::MediaTarget,
 };
 use test_utils::{CONTEXT, matches_fragments};
 
@@ -230,8 +232,10 @@ fn wpt_reftests() {
 }
 
 /// What a browser's default style sheet sets that takumi's does not: CSS's initial `box-sizing`,
+/// for elements and for the boxes of the page context,
 /// which takumi changes to `border-box`, apart from tables.
-const UA_SHEET: &str = "* { box-sizing: content-box } ::before, ::after { box-sizing: content-box } table { box-sizing: border-box }";
+const UA_SHEET: &str = "* { box-sizing: content-box } ::before, ::after { box-sizing: content-box } table { box-sizing: border-box } \
+  @page { box-sizing: content-box; @top-left-corner { box-sizing: content-box } @top-left { box-sizing: content-box } @top-center { box-sizing: content-box } @top-right { box-sizing: content-box } @top-right-corner { box-sizing: content-box } @right-top { box-sizing: content-box } @right-middle { box-sizing: content-box } @right-bottom { box-sizing: content-box } @bottom-right-corner { box-sizing: content-box } @bottom-right { box-sizing: content-box } @bottom-center { box-sizing: content-box } @bottom-left { box-sizing: content-box } @bottom-left-corner { box-sizing: content-box } @left-bottom { box-sizing: content-box } @left-middle { box-sizing: content-box } @left-top { box-sizing: content-box } }";
 
 /// What a standalone SVG document's viewport sets: no margin, and a root that fills it.
 const STANDALONE_SVG_SHEET: &str =
@@ -1085,7 +1089,6 @@ impl Runner {
         &options(Viewport::print_page(PRINT_PAGE_SIZE)).take_render_context(),
         &node,
       );
-      let direction = root.direction();
       let rules = Rc::new(PageRules::new(
         Arc::clone(&stylesheet),
         PageBox {
@@ -1096,8 +1099,10 @@ impl Runner {
             bottom: PRINT_PAGE_MARGIN,
             left: PRINT_PAGE_MARGIN,
           },
+          ..PageBox::default()
         },
         root,
+        &options(Viewport::print_page(PRINT_PAGE_SIZE)).take_render_context(),
       ));
       // The pages, and each page's box and name, with the content's viewport the first page's
       // area as a page `first_name`.
@@ -1139,37 +1144,42 @@ impl Runner {
       }
 
       let page_count = laid.len();
-      let context = options(Viewport::print_page(PRINT_PAGE_SIZE)).take_render_context();
-      let mut page_counter = 0;
+      let mut containers = PageContainers::new(rules.root().clone());
+      let paint = |fragment: PageFragment| -> Result<Option<(Point<f32>, Bitmap)>, String> {
+        let size = fragment.size.map(|length| length.ceil() as u32);
+
+        if size.width == 0 || size.height == 0 {
+          return Ok(None);
+        }
+
+        let viewport =
+          Viewport::new((size.width, size.height)).with_media_target(MediaTarget::Print);
+        let scene = Scene::lay_out(fragment.root, viewport, true)
+          .map_err(|error| format!("lay out a page box: {error}"))?;
+
+        render_scene(&scene)
+          .map(|bitmap| Some((fragment.offset, bitmap)))
+          .map_err(|error| format!("render a page box: {error}"))
+      };
       let sheets = laid
         .into_iter()
         .enumerate()
-        .map(|(index, (page_box, name))| {
-          let styles = rules.page_styles(index, &name);
+        .map(|(index, (_, name))| {
+          let container = containers.lay_out_next(
+            &rules.page_styles(index, &name),
+            rules.base_box(index, &name),
+            Some(page_count),
+          );
 
-          page_counter = styles.advance_page_counter(&context, page_counter);
-
-          let counters = PageCounters {
-            page: page_counter,
-            pages: Some(page_count),
-          };
-          let margin_boxes =
-            PageMarginBoxes::lay_out(&context, &styles, page_box, direction, counters)
-              .map(|boxes| {
-                render(
-                  RenderOptions::builder()
-                    .viewport(Viewport::print_page(page_box.size))
-                    .node(boxes.node)
-                    .fonts(&self.fonts)
-                    .images(images.clone())
-                    .stylesheet(Arc::clone(&stylesheet))
-                    .build(),
-                )
-                .map_err(|error| format!("render page-margin boxes: {error}"))
-              })
-              .transpose()?;
-
-          Ok((page_box, margin_boxes))
+          Ok(Sheet {
+            page_box: container.page_box,
+            under: container.border_box.map(&paint).transpose()?.flatten(),
+            over: container
+              .margin_boxes
+              .into_iter()
+              .filter_map(|fragment| paint(fragment).transpose())
+              .collect::<Result<_, String>>()?,
+          })
         })
         .collect::<Result<Vec<_>, String>>()?;
 
@@ -1195,9 +1205,7 @@ impl Runner {
         .enumerate()
         .filter(|&(index, _)| selected(index))
         .map(|(index, bitmap)| match page_boxes.get(index) {
-          Some((page_box, margin_boxes)) => {
-            Page::on_sheet(bitmap, *page_box, margin_boxes.as_ref())
-          }
+          Some(sheet) => Page::on_sheet(bitmap, sheet),
           None => Page {
             size: (bitmap.width(), bitmap.height()),
             pixels: over_white(bitmap),
@@ -1219,41 +1227,41 @@ struct Page {
   pixels: Vec<u8>,
 }
 
+/// What a page container puts around a page's area: its box model, the page border box under the
+/// area, and the page-margin boxes over it, each painted and placed on the sheet.
+struct Sheet {
+  page_box: PageBox,
+  under: Option<(Point<f32>, Bitmap)>,
+  over: Vec<(Point<f32>, Bitmap)>,
+}
+
 impl Page {
-  /// The printed sheet `page_box` gives `area`: white, with `area` over white inside its margins
-  /// and `margin_boxes` over the whole sheet, as a print screenshot shows the page.
-  fn on_sheet(area: &Bitmap, page_box: PageBox, margin_boxes: Option<&Bitmap>) -> Self {
-    let PageBox { size, margin } = page_box;
+  /// The printed sheet of `area`: white, with the page border box, then `area` at its place, then
+  /// the page-margin boxes, as a print screenshot shows the page.
+  fn on_sheet(area: &Bitmap, sheet: &Sheet) -> Self {
+    let size = sheet.page_box.size;
     let (width, height) = (size.width.round() as usize, size.height.round() as usize);
-    let (left, top) = (margin.left.round() as usize, margin.top.round() as usize);
-    let area_width = area.width() as usize;
     let mut pixels = vec![u8::MAX; width * height * 4];
+    let mut blend = |origin: Point<f32>, bitmap: &Bitmap| {
+      let (left, top) = (origin.x.round() as i64, origin.y.round() as i64);
+      let bitmap_width = bitmap.width() as usize;
 
-    for (row, line) in over_white(area).chunks_exact(area_width * 4).enumerate() {
-      let y = top + row;
+      for (row, line) in bitmap.as_raw().chunks_exact(bitmap_width * 4).enumerate() {
+        let y = top + row as i64;
 
-      if y >= height || left >= width {
-        continue;
-      }
+        if !(0..height as i64).contains(&y) {
+          continue;
+        }
 
-      let columns = area_width.min(width - left);
-      let start = (y * width + left) * 4;
+        for (column, source) in line.as_chunks::<4>().0.iter().enumerate() {
+          let x = left + column as i64;
 
-      pixels[start..start + columns * 4].copy_from_slice(&line[..columns * 4]);
-    }
+          if !(0..width as i64).contains(&x) {
+            continue;
+          }
 
-    if let Some(margin_boxes) = margin_boxes {
-      let boxes_width = margin_boxes.width() as usize;
-
-      for (row, line) in margin_boxes
-        .as_raw()
-        .chunks_exact(boxes_width * 4)
-        .enumerate()
-        .take(height)
-      {
-        for (column, source) in line.as_chunks::<4>().0.iter().enumerate().take(width) {
           let alpha = u32::from(source[3]);
-          let target = &mut pixels[(row * width + column) * 4..][..3];
+          let target = &mut pixels[(y as usize * width + x as usize) * 4..][..3];
 
           for (channel, &value) in target.iter_mut().zip(source) {
             *channel =
@@ -1261,6 +1269,15 @@ impl Page {
           }
         }
       }
+    };
+
+    if let Some((origin, bitmap)) = &sheet.under {
+      blend(*origin, bitmap);
+    }
+
+    blend(sheet.page_box.area_origin(), area);
+    for (origin, bitmap) in &sheet.over {
+      blend(*origin, bitmap);
     }
 
     Self {
