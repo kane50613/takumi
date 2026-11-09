@@ -360,12 +360,22 @@ impl PaintOrder {
   }
 
   /// Whether the stroke paints before the fill, with markers wherever they fall.
-  #[cfg(feature = "svg")]
   pub(crate) fn strokes_first(self) -> bool {
     matches!(
       self.phases(),
       [PaintPhase::Stroke, ..] | [PaintPhase::Markers, PaintPhase::Stroke, _]
     )
+  }
+
+  /// The fill and stroke phases of text in painting order, each over a whole run, as Blink's
+  /// `GraphicsContext::DrawTextPasses` paints them. Text has no markers.
+  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/graphics/graphics_context.cc;l=458>
+  pub fn text_phases(self) -> [PaintPhase; 2] {
+    if self.strokes_first() {
+      [PaintPhase::Stroke, PaintPhase::Fill]
+    } else {
+      [PaintPhase::Fill, PaintPhase::Stroke]
+    }
   }
 
   fn from_phases(phases: [PaintPhase; 3]) -> Self {

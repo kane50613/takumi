@@ -7,7 +7,16 @@
     <use href="#g3" x="483.53" y="340.5"/>
     <use href="#g4" x="504.19" y="340.5"/>
   </g>
-  <g fill="#000" stroke="#f00" stroke-width="4">
+  <g fill="#000">
+    <use href="#g5" x="548.19" y="340.5"/>
+    <use href="#g6" x="595.64" y="340.5"/>
+    <use href="#g7" x="628.04" y="340.5"/>
+    <use href="#g8" x="655.76" y="340.5"/>
+    <use href="#g9" x="699.53" y="340.5"/>
+    <use href="#g10" x="740.93" y="340.5"/>
+    <use href="#g11" x="783.77" y="340.5"/>
+  </g>
+  <g fill="#000" fill-opacity="0" stroke="#f00" stroke-width="4">
     <use href="#g5" x="548.19" y="340.5"/>
     <use href="#g6" x="595.64" y="340.5"/>
     <use href="#g7" x="628.04" y="340.5"/>

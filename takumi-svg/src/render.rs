@@ -28,7 +28,7 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, FillRule, FontFamily, Isolation,
-    Lang, SizingContext, StyleSheet, ToCss,
+    Lang, PaintPhase, SizingContext, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
@@ -40,7 +40,7 @@ use crate::{
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
-  text::{emit_inline_content, emit_run_glyphs, run_stroke},
+  text::{emit_inline_content, emit_run_glyphs, emit_run_strokes, run_stroke},
 };
 
 /// Inputs for [`render`], built with [`SvgOptions::builder`].
@@ -707,9 +707,17 @@ impl GlyphDevice for DocumentDevice<'_> {
       return self.write(|doc| emit_run_glyphs(run, style, frame, Some(black), stroke, doc));
     }
 
-    let stroke = run_stroke(&run.glyph_run, style);
+    self.write(|doc| {
+      for phase in run.glyph_run.brush.paint_order.text_phases() {
+        match (phase, stroke) {
+          (PaintPhase::Fill, _) => emit_run_glyphs(run, style, frame, None, None, doc)?,
+          (PaintPhase::Stroke, Some(stroke)) => emit_run_strokes(run, frame, stroke, doc)?,
+          (PaintPhase::Stroke, None) | (PaintPhase::Markers, _) => {}
+        }
+      }
 
-    self.write(|doc| emit_run_glyphs(run, style, frame, None, stroke, doc));
+      Ok(())
+    });
   }
 
   fn fill_text_clip(

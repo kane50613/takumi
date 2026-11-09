@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_stroke_paint_order</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        align-items: center;
+        height: 190px;
+        padding-left: 40px;
+        color: white;
+        font-size: 120px;
+        font-weight: 700;
+        letter-spacing: -0.05em;
+        -webkit-text-stroke: 12px black;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div style="height: 100%; padding-top: 30px; background-color: rgb(48, 112, 192)">
+      <div class="row">Stroke</div>
+      <div class="row" style="paint-order: stroke fill">Stroke</div>
+      <div class="row" style="paint-order: stroke"><span>Stroke</span></div>
+    </div>
+  </body>
+</html>

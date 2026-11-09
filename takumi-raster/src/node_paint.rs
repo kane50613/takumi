@@ -19,7 +19,7 @@ use takumi_core::{
   resources::{font::FontError, glyph::ResolvedGlyph},
   scene::SceneBounds,
   shadow::SizedShadow,
-  style::{Color, ImageScalingAlgorithm},
+  style::{Color, ImageScalingAlgorithm, PaintPhase},
 };
 use tiny_skia::{IntRect, Pixmap};
 
@@ -483,7 +483,8 @@ impl<'c> CanvasDevice<'c> {
     self.clips.pop();
   }
 
-  /// Draws `run`'s glyphs filled as `fill` says, or their shadow while one is open.
+  /// Draws `run`'s glyphs filled as `fill` says, or their shadow while one is open. The fill and
+  /// the stroke each cover the whole run, in the order `paint-order` gives.
   fn draw_glyphs(
     &mut self,
     run: &PositionedInlineRun,
@@ -568,18 +569,25 @@ impl<'c> CanvasDevice<'c> {
     let palettes = font.color_palettes();
     let palette = palettes.get(0);
 
-    for glyph in &glyph_run.glyphs {
-      if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
-        draw_glyph(
-          content,
-          self.canvas,
-          style,
-          stroke,
-          transform,
-          placed(glyph),
-          color,
-          palette.as_ref(),
-        )?;
+    for phase in glyph_run.brush.paint_order.text_phases() {
+      if phase == PaintPhase::Stroke && stroke.0 <= 0.0 {
+        continue;
+      }
+
+      for glyph in &glyph_run.glyphs {
+        if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
+          draw_glyph(
+            phase,
+            content,
+            self.canvas,
+            style,
+            stroke,
+            transform,
+            placed(glyph),
+            color,
+            palette.as_ref(),
+          )?;
+        }
       }
     }
 

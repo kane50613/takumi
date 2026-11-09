@@ -36,7 +36,7 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule as CoreFillRule,
-    Filter, Isolation, Lang, ResolvedGradientStop,
+    Filter, Isolation, Lang, PaintPhase, ResolvedGradientStop,
   },
 };
 
@@ -2154,26 +2154,25 @@ impl TextDevice<'_, '_, '_, '_> {
     }
   }
 
-  /// The stroke a run's glyphs draw with: its `-webkit-text-stroke`, else its faux bold, both in
-  /// `color` when a shadow recolours them.
-  fn glyph_stroke(&self, shaped: &ShapedRun, fill: &Fill, color: Option<Color>) -> Option<Stroke> {
+  /// A run's visible `-webkit-text-stroke`, in `color` when a shadow recolours it.
+  fn text_stroke(&self, shaped: &ShapedRun, color: Option<Color>) -> Option<Stroke> {
     let brush = &shaped.brush;
 
-    if brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0 {
-      let stroke_fill = fill_from_rgba(
-        self.emitter.filtered(color.unwrap_or(brush.stroke_color)),
-        1.0,
-      );
-
-      return Some(Stroke {
-        paint: stroke_fill.paint,
-        opacity: stroke_fill.opacity,
-        width: brush.stroke_width,
-        ..Stroke::default()
-      });
+    if brush.stroke_width <= 0.0 || brush.stroke_color.0[3] == 0 {
+      return None;
     }
 
-    synthetic_stroke(shaped, fill)
+    let stroke_fill = fill_from_rgba(
+      self.emitter.filtered(color.unwrap_or(brush.stroke_color)),
+      1.0,
+    );
+
+    Some(Stroke {
+      paint: stroke_fill.paint,
+      opacity: stroke_fill.opacity,
+      width: brush.stroke_width,
+      ..Stroke::default()
+    })
   }
 }
 
@@ -2403,7 +2402,12 @@ impl TextDevice<'_, '_, '_, '_> {
         .collect(),
       None => glyphs,
     };
-    let stroke = self.glyph_stroke(shaped, &paint, shadow_color);
+    let text_stroke = self.text_stroke(shaped, shadow_color);
+    let stroke = text_stroke
+      .clone()
+      .or_else(|| synthetic_stroke(shaped, &paint));
+    // Without a shadow, the fill and the text stroke paint as separate passes over the run.
+    let text_stroke = text_stroke.filter(|_| shadow_color.is_none());
     let surface = &mut *self.device.surface;
     let oblique = self.emitter.push_oblique(shaped, origin, surface);
 
@@ -2468,23 +2472,64 @@ impl TextDevice<'_, '_, '_, '_> {
             surface.pop();
           }
         }
-        None => {
-          surface.set_fill(Some(paint));
-          surface.set_stroke(stroke);
-          surface.draw_glyphs(
-            origin,
-            &glyphs,
-            font,
-            text,
-            shaped.font_size,
-            shadow_color.is_some() || !owned,
-          );
-          if let Some(colors) = &colors {
-            colors.draw_outlines(surface);
-            #[cfg(feature = "images")]
-            draw_silhouettes(&colors.bitmaps, rgba, surface);
+        None => match text_stroke {
+          Some(text_stroke) => {
+            // The stroke pass is outlined, so the text layer holds the text once.
+            for phase in shaped.brush.paint_order.text_phases() {
+              match phase {
+                PaintPhase::Fill => {
+                  surface.set_fill(Some(paint.clone()));
+                  surface.set_stroke(synthetic_stroke(shaped, &paint));
+                  surface.draw_glyphs(
+                    origin,
+                    &glyphs,
+                    font.clone(),
+                    text,
+                    shaped.font_size,
+                    !owned,
+                  );
+                }
+                PaintPhase::Stroke => {
+                  // An outlined color or bitmap glyph would paint its layers or image again.
+                  let outlines: Vec<_> = glyphs
+                    .iter()
+                    .filter(|glyph| !ColorGlyphs::contains(run, glyph.id))
+                    .cloned()
+                    .collect();
+
+                  surface.set_fill(None);
+                  surface.set_stroke(Some(text_stroke.clone()));
+                  surface.draw_glyphs(
+                    origin,
+                    &outlines,
+                    font.clone(),
+                    text,
+                    shaped.font_size,
+                    true,
+                  );
+                }
+                PaintPhase::Markers => {}
+              }
+            }
           }
-        }
+          None => {
+            surface.set_fill(Some(paint));
+            surface.set_stroke(stroke);
+            surface.draw_glyphs(
+              origin,
+              &glyphs,
+              font,
+              text,
+              shaped.font_size,
+              shadow_color.is_some() || !owned,
+            );
+            if let Some(colors) = &colors {
+              colors.draw_outlines(surface);
+              #[cfg(feature = "images")]
+              draw_silhouettes(&colors.bitmaps, rgba, surface);
+            }
+          }
+        },
       }
     }
 

@@ -9,7 +9,7 @@ Style text with color, stroke, decoration, shadow, and spacing, then control how
 
 ### Color, stroke, and fill
 
-`color` takes modern CSS color spaces, such as `oklch()`, `lab()`, and `color(display-p3 ...)`, as well as `rgb()` and `hsl()`. Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`. The stroke uses `color` when you leave its color out.
+`color` takes modern CSS color spaces, such as `oklch()`, `lab()`, and `color(display-p3 ...)`, as well as `rgb()` and `hsl()`. Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`. The stroke uses `color` when you leave its color out. It draws over the fill, so half of a thick stroke covers the letters. `paint-order: stroke` draws it underneath instead, and the fill keeps its full shape.
 
 ```tsx title="Color, stroke, and fill"
 <div

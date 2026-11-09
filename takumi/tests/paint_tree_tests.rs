@@ -34,6 +34,8 @@ const CSS: &str = r#"
   .sized { display: inline; font-size: 18px; }
   .fade { opacity: 0.5; }
   .padded-pic { width: 120px; height: 80px; padding: 10px; border: 2px solid black; }
+  .stroked { -webkit-text-stroke: 2px red; }
+  .stroke-first { paint-order: stroke; }
 "#;
 
 fn card() -> Node {
@@ -121,6 +123,26 @@ fn roles(node: &PaintNode) -> Vec<Role> {
   }
 
   roles_of(&node.drawables)
+}
+
+#[test]
+fn paint_order_stroke_records_the_text_stroke_before_the_fill() {
+  let text_roles = |class_name: &str| -> Vec<Role> {
+    let document = build(Node::container([Node::text("Ab")]).with_class_name(class_name));
+
+    document
+      .nodes
+      .iter()
+      .flat_map(roles)
+      .filter(|role| matches!(role, Role::Text | Role::TextStroke))
+      .collect()
+  };
+
+  assert_eq!(text_roles("stroked"), [Role::Text, Role::TextStroke]);
+  assert_eq!(
+    text_roles("stroked stroke-first"),
+    [Role::TextStroke, Role::Text]
+  );
 }
 
 #[test]

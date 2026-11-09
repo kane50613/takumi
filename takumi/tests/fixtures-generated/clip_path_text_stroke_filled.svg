@@ -37,7 +37,7 @@
     <path d="M300 315h600v163.5h-600v-163.5Z"/>
   </clipPath>
   <g clip-path="url(#cp1)">
-    <g fill="#000" fill-opacity="0" stroke="#808080" stroke-width="2">
+    <g fill="#000" fill-opacity="0">
       <use href="#g0" x="412.63" y="235.5"/>
       <use href="#g1" x="462.44" y="235.5"/>
       <use href="#g2" x="488.06" y="235.5"/>
@@ -49,6 +49,17 @@
       <use href="#g7" x="736.03" y="235.5"/>
     </g>
     <g fill="#000" fill-opacity="0" stroke="#808080" stroke-width="2">
+      <use href="#g0" x="412.63" y="235.5"/>
+      <use href="#g1" x="462.44" y="235.5"/>
+      <use href="#g2" x="488.06" y="235.5"/>
+      <use href="#g3" x="512.16" y="235.5"/>
+      <use href="#g4" x="565.42" y="235.5"/>
+      <use href="#g3" x="600.45" y="235.5"/>
+      <use href="#g5" x="653.37" y="235.5"/>
+      <use href="#g6" x="699.57" y="235.5"/>
+      <use href="#g7" x="736.03" y="235.5"/>
+    </g>
+    <g fill="#000" fill-opacity="0">
       <use href="#g8" x="427.75" y="344.5"/>
       <use href="#g9" x="496.71" y="344.5"/>
       <use href="#g10" x="547.79" y="344.5"/>
@@ -56,6 +67,23 @@
       <use href="#g12" x="629.77" y="344.5"/>
       <use href="#g2" x="696.8" y="344.5"/>
       <use href="#g13" x="720.91" y="344.5"/>
+    </g>
+    <g fill="#000" fill-opacity="0" stroke="#808080" stroke-width="2">
+      <use href="#g8" x="427.75" y="344.5"/>
+      <use href="#g9" x="496.71" y="344.5"/>
+      <use href="#g10" x="547.79" y="344.5"/>
+      <use href="#g11" x="581.47" y="344.5"/>
+      <use href="#g12" x="629.77" y="344.5"/>
+      <use href="#g2" x="696.8" y="344.5"/>
+      <use href="#g13" x="720.91" y="344.5"/>
+    </g>
+    <g fill="#000" fill-opacity="0">
+      <use href="#g14" x="451.98" y="453.5"/>
+      <use href="#g5" x="496.42" y="453.5"/>
+      <use href="#g11" x="545.64" y="453.5"/>
+      <use href="#g15" x="598.31" y="453.5"/>
+      <use href="#g16" x="649.3" y="453.5"/>
+      <use href="#g2" x="724.4" y="453.5"/>
     </g>
     <g fill="#000" fill-opacity="0" stroke="#808080" stroke-width="2">
       <use href="#g14" x="451.98" y="453.5"/>

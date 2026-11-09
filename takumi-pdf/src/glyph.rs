@@ -238,6 +238,7 @@ fn spans_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
 }
 
 /// A positioned glyph with em-normalized offsets, which krilla scales by the size it asks with.
+#[derive(Clone)]
 pub(crate) struct PdfGlyph {
   pub(crate) id: GlyphId,
   pub(crate) x_offset: f32,
