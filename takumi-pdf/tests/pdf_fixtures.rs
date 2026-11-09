@@ -726,6 +726,32 @@ fn an_absolute_box_past_the_page_leaves_an_avoiding_box_in_place() {
   });
 }
 
+/// css-break-3 §4.2: a box at the top of a page that overflows it moves the content after it
+/// below the overflow on the next page, as Chromium prints it.
+#[test]
+fn content_after_a_box_overflowing_the_first_page_starts_below_the_overflow() {
+  run_pdf_fixture("root-monolithic-overflow", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="display: flex; background: #e2e8f0">
+        <div style="margin: 20px 0 30px; background: #93c5fd; width: 140px; height: 110px">
+          item whose margin runs past the page
+        </div>
+      </div>
+      <div style="background: #fde68a">after the overflow</div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse flex row"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. Each
 /// segment of a line resolves on its own, so the 4px border under one column

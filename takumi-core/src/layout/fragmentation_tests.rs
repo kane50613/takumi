@@ -202,6 +202,25 @@ fn an_absolute_box_past_the_page_leaves_its_avoiding_containing_block_on_the_pag
 }
 
 #[test]
+fn content_after_a_box_overflowing_the_root_page_starts_below_the_overflow() {
+  let item =
+    Node::container([block("gap", "m8-25"), block("tall", "h129")]).with_class_name("block m25");
+  let flex = Node::container([item])
+    .with_class_name("block flex")
+    .with_id("flex");
+  let tree = render(
+    root([flex, block("next", "h10")]),
+    ".flex { display: flex } .m25 { margin: 25px 0 } .m8-25 { margin: 8px 0 25px 0 } \
+     .h129 { height: 129px } .h10 { height: 10px }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["flex"], [placed(0, 0.0, 204.0)]);
+  assert_eq!(boxes["next"], [placed(1, 4.0, 10.0)]);
+}
+
+#[test]
 fn break_before_page_starts_a_block_on_a_new_page() {
   let tree = render(
     root([block("a", "h50"), block("b", "h50 forced")]),
