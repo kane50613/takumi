@@ -6,6 +6,8 @@
 //! binding keeps only its platform-specific glue (JS type coercion, error
 //! mapping, threading).
 
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 pub mod font_cache;
 pub mod input;
 #[cfg(feature = "raster")]

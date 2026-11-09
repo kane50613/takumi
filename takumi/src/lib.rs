@@ -3,6 +3,8 @@
   html_favicon_url = "https://raw.githubusercontent.com/kane50613/takumi/master/assets/images/takumi.svg"
 )]
 #![deny(missing_docs)]
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 //! Takumi lays out a node tree with CSS and renders it to an image, an animation, or SVG,
 //! without a browser. Its text and inline layout port Chromium's Blink.
 //!
