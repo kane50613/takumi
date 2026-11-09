@@ -2487,7 +2487,7 @@ impl RenderNode {
       let mut children = Vec::from(children);
       children.retain(|child| !child.is_collapsible_whitespace_only_text_node());
       for child in &mut children {
-        child.context.blockify();
+        child.context.make_flex_or_grid_item();
       }
 
       return children.into_boxed_slice();
