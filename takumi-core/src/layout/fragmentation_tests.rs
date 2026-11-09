@@ -202,6 +202,38 @@ fn an_absolute_box_past_the_page_leaves_its_avoiding_containing_block_on_the_pag
 }
 
 #[test]
+fn a_forced_break_after_a_flex_items_last_child_breaks_after_the_container() {
+  let item = Node::container([block("inner", "h10 forced-after")]).with_class_name("block");
+  let flex = Node::container([item])
+    .with_class_name("block flex")
+    .with_id("flex");
+  let tree = render(
+    root([flex, block("next", "h10")]),
+    ".flex { display: flex } .h10 { height: 10px } .forced-after { break-after: page }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["next"], [placed(1, 0.0, 10.0)]);
+}
+
+#[test]
+fn a_forced_break_after_a_grid_items_last_child_breaks_after_the_container() {
+  let item = Node::container([block("inner", "h10 forced-after")]).with_class_name("block");
+  let grid = Node::container([item])
+    .with_class_name("block grid")
+    .with_id("grid");
+  let tree = render(
+    root([grid, block("next", "h10")]),
+    ".grid { display: grid } .h10 { height: 10px } .forced-after { break-after: page }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["next"], [placed(1, 0.0, 10.0)]);
+}
+
+#[test]
 fn break_before_page_starts_a_block_on_a_new_page() {
   let tree = render(
     root([block("a", "h50"), block("b", "h50 forced")]),

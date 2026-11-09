@@ -726,6 +726,34 @@ fn an_absolute_box_past_the_page_leaves_an_avoiding_box_in_place() {
   });
 }
 
+/// css-break-3 §3.1: a forced break after the last child of a flex item propagates out through
+/// the item and its row, so the content after the container starts a new page, as Chromium prints.
+#[test]
+fn a_forced_break_after_a_flex_items_last_child_breaks_after_the_container() {
+  run_pdf_fixture("flex-item-child-break-after", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="display: flex; gap: 8px">
+        <div style="background: #e2e8f0">
+          <div>first item</div>
+          <div style="break-after: page">ends with a forced break</div>
+        </div>
+        <div style="background: #fde68a">second item</div>
+      </div>
+      <div>after the row, on the next page</div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse flex row"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. Each
 /// segment of a line resolves on its own, so the 4px border under one column
