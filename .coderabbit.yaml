@@ -27,6 +27,14 @@ reviews:
         - Siblings doing the same job share parameter order, units, naming, and error handling.
         - Items used only by an optional feature, such as `svg`, are compiled behind that feature, so `cargo clippy --target wasm32-unknown-unknown -p takumi-paint-wasm` sees no dead code.
 
+        Safety and errors:
+        - Every `unsafe` block and `unsafe impl` opens with a `// SAFETY:` comment, which clippy's `undocumented_unsafe_blocks` requires. Flag a comment that restates the call instead of naming the invariant that makes this use sound, such as who owns the pointer and how long it lives.
+        - Flag new `unsafe` that safe code could replace. When the reason is speed, ask for the measurement.
+        - Library code returns `Result` or `Option` instead of panicking: its crates deny `unwrap_used`, `expect_used`, and `panic` outside tests. Examples propagate errors with `?`, since readers copy them. Tests and benchmarks may panic.
+        - Prefer `if let` or `let ... else` to checking a value and then unwrapping it.
+        - A `bool` parameter whose meaning is unclear at the call site becomes an enum. When the codebase already models the choice as an enum, use that enum.
+        - An assertion message says what went wrong, not the condition it checks.
+
         Style:
         - `use` statements sit at the top of the file. Flag a fully qualified path in a new expression.
         - Every `if`, `else`, `for`, and `while` body has braces.
