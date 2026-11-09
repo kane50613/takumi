@@ -22,7 +22,7 @@ use crate::{
   context::{BoxId, RenderContext},
   font_style::SizedFontStyle,
   fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
-  form_control::{is_element, text_content, unboxes},
+  form_control::{is_element, text_content},
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     block_node::LayoutCache,
@@ -2847,7 +2847,7 @@ impl PendingRenderNode {
     let children = children.map_or_else(Vec::new, <[Node]>::into_vec);
     let mut context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
-    if context.style.base_data.display == Display::Contents && !unboxes(&node) {
+    if context.style.base_data.display == Display::Contents && !node.unboxes() {
       context.style_mut().base_data_mut().display = Display::None;
     }
 
