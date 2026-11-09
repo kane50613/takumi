@@ -135,6 +135,7 @@ impl ComputedStyle {
     let base_data = &self.base_data;
 
     if (base_data.position.is_out_of_flow() || base_data.float != Float::None)
+      && base_data.display != Display::Contents
       && base_data.display.as_blockified() != base_data.display
     {
       self.base_data_mut().display.blockify();

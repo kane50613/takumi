@@ -158,6 +158,18 @@ pub(crate) fn is_element(node: &Node, tag: &str) -> bool {
     .is_some_and(|name| name.eq_ignore_ascii_case(tag))
 }
 
+/// Whether `display: contents` leaves `node` out and renders its children, where the
+/// [elements CSS Display §2.5 lists](https://drafts.csswg.org/css-display-3/#unbox-html) render
+/// nothing. Blink's `AdjustStyleForHTMLElement`.
+pub(crate) fn unboxes(node: &Node) -> bool {
+  const BOXED: [&str; 15] = [
+    "audio", "br", "canvas", "embed", "iframe", "img", "input", "meter", "object", "progress",
+    "select", "svg", "textarea", "video", "wbr",
+  ];
+
+  !matches!(node.kind, NodeKind::Image(_)) && !BOXED.into_iter().any(|tag| is_element(node, tag))
+}
+
 /// Whether `node` has the boolean attribute `name`.
 pub(crate) fn has_attribute(node: &Node, name: &str) -> bool {
   node.attribute(name).is_some()
