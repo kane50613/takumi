@@ -298,17 +298,17 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
 
   fn parse_non_ts_pseudo_class(
     &self,
-    name: CowRcStr<'i>,
+    name: &str,
   ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<Self::Error>> {
-    Ok(FormState::from_name(&name).map_or_else(
-      || PseudoClass::Other(Ident::from(&*name)),
+    Ok(FormState::from_name(name).map_or_else(
+      || PseudoClass::Other(Ident::from(name)),
       PseudoClass::FormState,
     ))
   }
 
   fn parse_non_ts_functional_pseudo_class(
     &self,
-    name: CowRcStr<'i>,
+    name: &str,
     parser: &mut Parser<'i>,
     _after_part: bool,
   ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<Self::Error>> {
@@ -333,23 +333,23 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     }
 
     while parser.next_including_whitespace_and_comments().is_ok() {}
-    Ok(PseudoClass::Other(Ident::from(&*name)))
+    Ok(PseudoClass::Other(Ident::from(name)))
   }
 
   fn parse_pseudo_element(
     &self,
-    name: CowRcStr<'i>,
+    name: &str,
   ) -> Result<<Self::Impl as SelectorImplTrait>::PseudoElement, ParseError<Self::Error>> {
-    Ok(PseudoElement::from_name(&name))
+    Ok(PseudoElement::from_name(name))
   }
 
   fn parse_functional_pseudo_element(
     &self,
-    name: CowRcStr<'i>,
+    name: &str,
     arguments: &mut Parser<'i>,
   ) -> Result<<Self::Impl as SelectorImplTrait>::PseudoElement, ParseError<Self::Error>> {
     while arguments.next_including_whitespace_and_comments().is_ok() {}
-    Ok(PseudoElement::Other(Ident::from(&*name)))
+    Ok(PseudoElement::Other(Ident::from(name)))
   }
 }
 
