@@ -28,6 +28,9 @@ pub(crate) struct BlockBreakToken {
   /// Blink's `IsAtBlockEnd`: layout was past the block-end border edge, so only overflow
   /// resumes.
   pub(crate) is_at_block_end: bool,
+  /// Whether the box broke only to resume out-of-flow boxes past its in-flow content. Takumi's
+  /// own, Blink has no such token.
+  pub(crate) breaks_for_out_of_flow_alone: bool,
   /// Blink's `HasSeenAllChildren`: every child finished or has a break token.
   pub(crate) has_seen_all_children: bool,
   /// Blink's `HasUnpositionedListMarker`: the list item's outside marker waits for a later page.
@@ -66,6 +69,7 @@ impl BlockBreakToken {
       is_forced_break,
       is_repeated: false,
       is_at_block_end: false,
+      breaks_for_out_of_flow_alone: false,
       has_seen_all_children: false,
       has_unpositioned_list_marker: false,
       child_break_tokens: Vec::new(),

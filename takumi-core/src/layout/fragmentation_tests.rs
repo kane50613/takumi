@@ -304,6 +304,41 @@ fn a_floated_flex_item_is_an_item_that_breaks_after_as_any_other() {
 }
 
 #[test]
+fn a_forced_break_after_a_box_whose_absolute_child_runs_on_puts_the_next_float_on_the_next_page() {
+  let rel = Node::container([block("abs", "abs")])
+    .with_class_name("block rel forced-after")
+    .with_id("rel");
+  let tree = render(
+    root([block("a", "h110"), rel, block("next", "h10 float")]),
+    ".h110 { height: 110px } .h10 { height: 10px; width: 10px } .float { float: left } \
+     .rel { position: relative } .abs { position: absolute; top: 150px; height: 10px } \
+     .forced-after { break-after: page }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["next"], [placed(1, 0.0, 10.0)]);
+  assert_eq!(boxes["abs"].last().map(|placed| placed.page), Some(1));
+}
+
+#[test]
+fn a_forced_break_after_a_box_whose_content_overflows_its_height_applies_after_the_overflow() {
+  let outer = Node::container([block("forced", "forced-after"), block("overflow", "h54")])
+    .with_class_name("block h46 forced-after")
+    .with_id("outer");
+  let tree = render(
+    root([outer, block("next", "h10 float")]),
+    ".h46 { height: 46px } .h54 { height: 54px } .h10 { height: 10px; width: 10px } \
+     .float { float: left } .forced-after { break-after: page }",
+  );
+  let (boxes, page_count) = pages(&tree, 200.0);
+
+  assert_eq!(page_count, 3);
+  assert_eq!(boxes["overflow"], [placed(1, 0.0, 54.0)]);
+  assert_eq!(boxes["next"], [placed(2, 0.0, 10.0)]);
+}
+
+#[test]
 fn break_before_page_starts_a_block_on_a_new_page() {
   let tree = render(
     root([block("a", "h50"), block("b", "h50 forced")]),
