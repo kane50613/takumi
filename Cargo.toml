@@ -171,6 +171,7 @@ features = ["xxh3"]
 # denials stay as crate-level `#![deny(...)]` (the table can't scope to lib).
 [workspace.lints.clippy]
 redundant_closure_for_method_calls = "deny"
+undocumented_unsafe_blocks = "deny"
 
 [workspace.lints.clippy.all]
 level = "deny"

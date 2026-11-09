@@ -392,12 +392,15 @@ mod tests {
   fn decode_rgba(encoded: &[u8]) -> Bitmap {
     let mut width = 0;
     let mut height = 0;
+    // SAFETY: `encoded` is valid for `encoded.len()` bytes, and libwebp writes only the two sizes.
     let pixels =
       unsafe { WebPDecodeRGBA(encoded.as_ptr(), encoded.len(), &mut width, &mut height) };
     assert!(!pixels.is_null(), "decode failed");
 
     let len = width as usize * height as usize * 4;
+    // SAFETY: a successful decode returns `width * height` RGBA pixels, which `len` counts.
     let raw = unsafe { slice::from_raw_parts(pixels, len) }.to_vec();
+    // SAFETY: libwebp allocated `pixels`, and nothing reads them after the copy above.
     unsafe { WebPFree(pixels.cast()) };
 
     Bitmap::from_raw(width as u32, height as u32, raw).unwrap()
@@ -464,38 +467,47 @@ mod tests {
     };
     let mut options = MaybeUninit::<WebPAnimDecoderOptions>::uninit();
     assert_ne!(
+      // SAFETY: `options` is valid for writes.
       unsafe { WebPAnimDecoderOptionsInit(options.as_mut_ptr()) },
       0
     );
 
+    // SAFETY: `WebPAnimDecoderOptionsInit` succeeded, so it set every field.
     let mut options = unsafe { options.assume_init() };
     options.color_mode = WEBP_CSP_MODE::MODE_RGBA;
 
+    // SAFETY: `data` points into `encoded`, which outlives the decoder.
     let decoder = unsafe { WebPAnimDecoderNew(&data, &options) };
     assert!(!decoder.is_null(), "anim decoder rejected the container");
 
     let mut info = MaybeUninit::<WebPAnimInfo>::uninit();
     assert_ne!(
+      // SAFETY: `decoder` is a live decoder, and `info` is valid for writes.
       unsafe { WebPAnimDecoderGetInfo(decoder, info.as_mut_ptr()) },
       0
     );
 
+    // SAFETY: `WebPAnimDecoderGetInfo` succeeded, so it set every field.
     let info = unsafe { info.assume_init() };
     let canvas_bytes = (info.canvas_width * info.canvas_height * 4) as usize;
     let mut composited = Vec::new();
 
+    // SAFETY: `decoder` stays live until the `WebPAnimDecoderDelete` below.
     while unsafe { WebPAnimDecoderHasMoreFrames(decoder) } != 0 {
       let mut pixels: *mut u8 = null_mut();
       let mut timestamp = 0;
       assert_ne!(
+        // SAFETY: `decoder` is live, and libwebp writes only the frame pointer and timestamp.
         unsafe { WebPAnimDecoderGetNext(decoder, &mut pixels, &mut timestamp) },
         0
       );
 
+      // SAFETY: the decoder owns a full RGBA canvas of `canvas_bytes` until its next call.
       let raw = unsafe { slice::from_raw_parts(pixels, canvas_bytes) }.to_vec();
       composited.push(Bitmap::from_raw(info.canvas_width, info.canvas_height, raw).unwrap());
     }
 
+    // SAFETY: `decoder` came from `WebPAnimDecoderNew` and is deleted once, after its last use.
     unsafe { WebPAnimDecoderDelete(decoder) };
     composited
   }

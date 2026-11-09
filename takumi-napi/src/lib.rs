@@ -118,16 +118,21 @@ impl JsBytes {
 /// Calls `read` with the bytes of a JS buffer, borrowed for the call alone.
 fn read_bytes<R>(env: Env, value: Object, read: impl FnOnce(&[u8]) -> R) -> Result<R> {
   if value.is_buffer()? {
+    // SAFETY: `value` is a live Buffer in `env`, and the slice is dropped before this call returns.
     let buffer = unsafe { BufferSlice::from_napi_value(env.raw(), value.raw()) }?;
     return Ok(read(&buffer));
   }
 
   if value.is_typedarray()? {
+    // SAFETY: `value` is a live typed array in `env`, whose element type `from_napi_value` checks,
+    // and the slice is dropped before this call returns.
     let array = unsafe { Uint8ArraySlice::from_napi_value(env.raw(), value.raw()) }?;
     return Ok(read(&array));
   }
 
   if value.is_arraybuffer()? {
+    // SAFETY: `value` is a live ArrayBuffer in `env`, and the view is dropped before this call
+    // returns.
     let buffer = unsafe { ArrayBuffer::from_napi_value(env.raw(), value.raw()) }?;
     return Ok(read(&buffer));
   }

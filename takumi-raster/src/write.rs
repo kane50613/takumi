@@ -1419,17 +1419,21 @@ mod tests {
       size: bytes.len(),
     };
     let mut state = WebPDemuxState::WEBP_DEMUX_PARSING_HEADER;
+    // SAFETY: `webp_data` points into `bytes`, which outlives `demux`.
     let demux =
       unsafe { WebPDemuxInternal(&webp_data, 1, &mut state, WEBP_DEMUX_ABI_VERSION as i32) };
     assert!(!demux.is_null(), "demux should parse encoded animation");
 
+    // SAFETY: `demux` is a live demuxer.
     let loop_count = unsafe { WebPDemuxGetI(demux, WebPFormatFeature::WEBP_FF_LOOP_COUNT) };
     assert_eq!(loop_count, 7);
 
     let mut iter = MaybeUninit::<WebPIterator>::zeroed();
+    // SAFETY: `demux` is live, and `iter` is valid for writes.
     let has_frame = unsafe { WebPDemuxGetFrame(demux, 1, iter.as_mut_ptr()) };
     assert_eq!(has_frame, 1, "first frame should be available");
 
+    // SAFETY: an all-zero `WebPIterator` is valid, and `WebPDemuxGetFrame` filled it in.
     let mut iter = unsafe { iter.assume_init() };
     assert_eq!(
       iter.dispose_method,
@@ -1437,6 +1441,7 @@ mod tests {
     );
     assert_eq!(iter.blend_method, WebPMuxAnimBlend::WEBP_MUX_BLEND);
 
+    // SAFETY: `iter` came from `demux`, and both are released once, after their last use.
     unsafe {
       WebPDemuxReleaseIterator(&mut iter);
       WebPDemuxDelete(demux);
@@ -1478,9 +1483,11 @@ mod tests {
       size: bytes.len(),
     };
     let mut state = WebPDemuxState::WEBP_DEMUX_PARSING_HEADER;
+    // SAFETY: `webp_data` points into `bytes`, which outlives `demux`.
     let demux =
       unsafe { WebPDemuxInternal(&webp_data, 1, &mut state, WEBP_DEMUX_ABI_VERSION as i32) };
     assert!(!demux.is_null(), "lossy animation should be parseable");
+    // SAFETY: `demux` came from `WebPDemuxInternal` and is deleted once.
     unsafe { WebPDemuxDelete(demux) };
   }
 
@@ -1508,10 +1515,12 @@ mod tests {
       size: bytes.len(),
     };
     let mut state = WebPDemuxState::WEBP_DEMUX_PARSING_HEADER;
+    // SAFETY: `webp_data` points into `bytes`, which outlives `demux`.
     let demux =
       unsafe { WebPDemuxInternal(&webp_data, 1, &mut state, WEBP_DEMUX_ABI_VERSION as i32) };
     assert!(!demux.is_null(), "demux should parse encoded animation");
 
+    // SAFETY: `demux` is a live demuxer.
     let frame_count = unsafe { WebPDemuxGetI(demux, WebPFormatFeature::WEBP_FF_FRAME_COUNT) };
     assert_eq!(
       frame_count, 2,
@@ -1519,14 +1528,17 @@ mod tests {
     );
 
     let mut iter = MaybeUninit::<WebPIterator>::zeroed();
+    // SAFETY: `demux` is live, and `iter` is valid for writes.
     let has_frame = unsafe { WebPDemuxGetFrame(demux, 1, iter.as_mut_ptr()) };
     assert_eq!(has_frame, 1, "first frame should be available");
+    // SAFETY: an all-zero `WebPIterator` is valid, and `WebPDemuxGetFrame` filled it in.
     let mut iter = unsafe { iter.assume_init() };
     assert_eq!(
       iter.duration, 120,
       "merged frame should keep total duration"
     );
 
+    // SAFETY: `iter` came from `demux`, and both are released once, after their last use.
     unsafe {
       WebPDemuxReleaseIterator(&mut iter);
       WebPDemuxDelete(demux);
@@ -1581,11 +1593,14 @@ mod tests {
       size: bytes.len(),
     };
     let mut state = WebPDemuxState::WEBP_DEMUX_PARSING_HEADER;
+    // SAFETY: `webp_data` points into `bytes`, which outlives `demux`.
     let demux =
       unsafe { WebPDemuxInternal(&webp_data, 1, &mut state, WEBP_DEMUX_ABI_VERSION as i32) };
     assert!(!demux.is_null(), "demux should parse encoded animation");
 
+    // SAFETY: `WebPDecoderConfig` is a plain C struct, valid when all zero.
     let mut decoder_config = unsafe { MaybeUninit::<WebPDecoderConfig>::zeroed().assume_init() };
+    // SAFETY: `decoder_config` is valid for writes.
     let init_ok = unsafe { WebPInitDecoderConfig(&raw mut decoder_config) };
     assert!(init_ok, "decoder config should initialize");
     decoder_config.output.colorspace = MODE_RGBA;
@@ -1599,13 +1614,16 @@ mod tests {
     let expected_durations = [10, 20, 30, 40];
 
     let mut iter = MaybeUninit::<WebPIterator>::zeroed();
+    // SAFETY: `demux` is live, and `iter` is valid for writes.
     let has_frame = unsafe { WebPDemuxGetFrame(demux, 1, iter.as_mut_ptr()) };
     assert_eq!(has_frame, 1, "first frame should be available");
+    // SAFETY: an all-zero `WebPIterator` is valid, and `WebPDemuxGetFrame` filled it in.
     let mut iter = unsafe { iter.assume_init() };
 
     for (expected_dominant_channels, expected_duration) in
       expected_dominant_channels.iter().zip(expected_durations)
     {
+      // SAFETY: `iter.fragment` points at a frame inside `bytes`, which is still alive.
       let decode_status = unsafe {
         WebPDecode(
           iter.fragment.bytes,
@@ -1619,6 +1637,7 @@ mod tests {
         "frame payload should decode"
       );
 
+      // SAFETY: a successful `WebPDecode` leaves `size` RGBA bytes at `rgba`, in `output`.
       let rgba = unsafe {
         from_raw_parts(
           decoder_config.output.u.RGBA.rgba,
@@ -1630,13 +1649,16 @@ mod tests {
       assert!(rgba[3] >= 250, "decoded frame should remain opaque");
       assert_eq!(iter.duration, expected_duration);
 
+      // SAFETY: `rgba` is no longer read, and the buffer is freed once per decode.
       unsafe { WebPFreeDecBuffer(&raw mut decoder_config.output) };
       if expected_duration != expected_durations[expected_durations.len() - 1] {
+        // SAFETY: `iter` belongs to the live `demux`.
         let has_next = unsafe { WebPDemuxNextFrame(&mut iter) };
         assert_eq!(has_next, 1, "next frame should be available");
       }
     }
 
+    // SAFETY: `iter` came from `demux`, and both are released once, after their last use.
     unsafe {
       WebPDemuxReleaseIterator(&mut iter);
       WebPDemuxDelete(demux);

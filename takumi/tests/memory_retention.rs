@@ -28,14 +28,17 @@ struct CountingAllocator;
 
 static LIVE_BYTES: AtomicIsize = AtomicIsize::new(0);
 
+// SAFETY: every method forwards to `System` with the caller's arguments, only counting bytes.
 unsafe impl GlobalAlloc for CountingAllocator {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
     LIVE_BYTES.fetch_add(layout.size() as isize, Ordering::Relaxed);
+    // SAFETY: the caller meets `GlobalAlloc::alloc`'s contract, which `System` shares.
     unsafe { System.alloc(layout) }
   }
 
   unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
     LIVE_BYTES.fetch_sub(layout.size() as isize, Ordering::Relaxed);
+    // SAFETY: `ptr` came from `System` through this allocator, with the same `layout`.
     unsafe { System.dealloc(ptr, layout) }
   }
 
@@ -44,11 +47,13 @@ unsafe impl GlobalAlloc for CountingAllocator {
       new_size as isize - layout.size() as isize,
       Ordering::Relaxed,
     );
+    // SAFETY: `ptr` came from `System` with `layout`, and the caller meets `realloc`'s contract.
     unsafe { System.realloc(ptr, layout, new_size) }
   }
 
   unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
     LIVE_BYTES.fetch_add(layout.size() as isize, Ordering::Relaxed);
+    // SAFETY: the caller meets `GlobalAlloc::alloc_zeroed`'s contract, which `System` shares.
     unsafe { System.alloc_zeroed(layout) }
   }
 }
