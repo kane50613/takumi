@@ -1,10 +1,15 @@
 //! `@page` rules as Blink's [`ParsePageSelector`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/parser/css_parser_impl.cc)
 //! reads them, and the descriptors that win for a page, as `PageRuleCollector` matches them.
-//! Only `size` and the margin descriptors are read.
+//! `size` and the margin descriptors size the page, and every declaration, with those of the
+//! page-margin rules nested in the rule, styles its page-margin boxes.
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{
+  AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserState, QualifiedRuleParser,
+  RuleBodyItemParser, RuleBodyParser, Token, match_ignore_ascii_case,
+};
 
 use crate::{
+  error::StyleSheetParseError,
   geometry::{Rect, Size},
   style::{
     CustomProperties, Direction, FromCss, Length, MediaQueryList, PageName, RawDeclaration,
@@ -462,6 +467,197 @@ impl PageDeclaration {
   }
 }
 
+/// One of the 16 [page-margin boxes](https://drafts.csswg.org/css-page-3/#margin-boxes), in the
+/// order Blink's `LayoutAllMarginBoxes` paints them: clockwise from the top left corner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PageMarginKind {
+  /// `@top-left-corner`
+  TopLeftCorner,
+  /// `@top-left`
+  TopLeft,
+  /// `@top-center`
+  TopCenter,
+  /// `@top-right`
+  TopRight,
+  /// `@top-right-corner`
+  TopRightCorner,
+  /// `@right-top`
+  RightTop,
+  /// `@right-middle`
+  RightMiddle,
+  /// `@right-bottom`
+  RightBottom,
+  /// `@bottom-right-corner`
+  BottomRightCorner,
+  /// `@bottom-right`
+  BottomRight,
+  /// `@bottom-center`
+  BottomCenter,
+  /// `@bottom-left`
+  BottomLeft,
+  /// `@bottom-left-corner`
+  BottomLeftCorner,
+  /// `@left-bottom`
+  LeftBottom,
+  /// `@left-middle`
+  LeftMiddle,
+  /// `@left-top`
+  LeftTop,
+}
+
+impl PageMarginKind {
+  /// Every box, in paint order.
+  pub const ALL: [Self; 16] = [
+    Self::TopLeftCorner,
+    Self::TopLeft,
+    Self::TopCenter,
+    Self::TopRight,
+    Self::TopRightCorner,
+    Self::RightTop,
+    Self::RightMiddle,
+    Self::RightBottom,
+    Self::BottomRightCorner,
+    Self::BottomRight,
+    Self::BottomCenter,
+    Self::BottomLeft,
+    Self::BottomLeftCorner,
+    Self::LeftBottom,
+    Self::LeftMiddle,
+    Self::LeftTop,
+  ];
+
+  /// The at-rule that styles the box, without its `@`.
+  pub fn at_rule_name(self) -> &'static str {
+    match self {
+      Self::TopLeftCorner => "top-left-corner",
+      Self::TopLeft => "top-left",
+      Self::TopCenter => "top-center",
+      Self::TopRight => "top-right",
+      Self::TopRightCorner => "top-right-corner",
+      Self::RightTop => "right-top",
+      Self::RightMiddle => "right-middle",
+      Self::RightBottom => "right-bottom",
+      Self::BottomRightCorner => "bottom-right-corner",
+      Self::BottomRight => "bottom-right",
+      Self::BottomCenter => "bottom-center",
+      Self::BottomLeft => "bottom-left",
+      Self::BottomLeftCorner => "bottom-left-corner",
+      Self::LeftBottom => "left-bottom",
+      Self::LeftMiddle => "left-middle",
+      Self::LeftTop => "left-top",
+    }
+  }
+
+  fn from_at_rule_name(name: &str) -> Option<Self> {
+    Self::ALL
+      .into_iter()
+      .find(|kind| kind.at_rule_name().eq_ignore_ascii_case(name))
+  }
+}
+
+/// A declaration of an `@page` rule or a page-margin rule, kept as text for the style of the box
+/// it applies to.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PageStyleDeclaration {
+  name: String,
+  value: String,
+  important: bool,
+}
+
+/// A page-margin rule nested in an `@page` rule, such as `@top-center { ... }`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PageMarginRule {
+  kind: PageMarginKind,
+  declarations: Vec<PageStyleDeclaration>,
+}
+
+/// The declarations that style a page's boxes, as CSS text with the winner of each property last.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PageStyles {
+  /// The page context's, which every page-margin box inherits from.
+  pub page: String,
+  /// Each page-margin box's a rule styles, in paint order.
+  pub margins: Vec<(PageMarginKind, String)>,
+}
+
+enum PageBodyItem<'i> {
+  Declaration(RawDeclaration<'i>),
+  Margin(PageMarginRule),
+}
+
+/// Reads an `@page` rule's body: declarations and page-margin rules.
+struct PageBodyParser;
+
+impl<'i> DeclarationParser<'i> for PageBodyParser {
+  type Declaration = PageBodyItem<'i>;
+  type Error = StyleSheetParseError;
+
+  fn parse_value(
+    &mut self,
+    name: CowRcStr<'i>,
+    input: &mut Parser<'i>,
+    state: &ParserState,
+  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
+    RawDeclarationParser
+      .parse_value(name, input, state)
+      .map(PageBodyItem::Declaration)
+  }
+}
+
+impl<'i> AtRuleParser<'i> for PageBodyParser {
+  type Prelude = PageMarginKind;
+  type AtRule = PageBodyItem<'i>;
+  type Error = StyleSheetParseError;
+
+  fn parse_prelude(
+    &mut self,
+    name: CowRcStr<'i>,
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
+    PageMarginKind::from_at_rule_name(&name).ok_or_else(|| input.new_error_for_next_token())
+  }
+
+  fn parse_block(
+    &mut self,
+    kind: Self::Prelude,
+    _start: &ParserState,
+    input: &mut Parser<'i>,
+  ) -> Result<Self::AtRule, ParseError<Self::Error>> {
+    let declarations = RuleBodyParser::new(input, &mut RawDeclarationParser)
+      .flatten()
+      .map(PageStyleDeclaration::from)
+      .collect();
+
+    Ok(PageBodyItem::Margin(PageMarginRule { kind, declarations }))
+  }
+}
+
+impl<'i> QualifiedRuleParser<'i> for PageBodyParser {
+  type Prelude = ();
+  type QualifiedRule = PageBodyItem<'i>;
+  type Error = StyleSheetParseError;
+}
+
+impl<'i> RuleBodyItemParser<'i, PageBodyItem<'i>, StyleSheetParseError> for PageBodyParser {
+  fn parse_declarations(&self) -> bool {
+    true
+  }
+
+  fn parse_qualified(&self) -> bool {
+    false
+  }
+}
+
+impl From<RawDeclaration<'_>> for PageStyleDeclaration {
+  fn from(declaration: RawDeclaration<'_>) -> Self {
+    Self {
+      name: declaration.name.to_string(),
+      value: declaration.value.to_owned(),
+      important: declaration.important,
+    }
+  }
+}
+
 /// One `@page` rule.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct PageRule {
@@ -471,6 +667,10 @@ pub(crate) struct PageRule {
   pub(crate) normal: Vec<PageDeclaration>,
   /// The declarations with `!important`, in source order.
   pub(crate) important: Vec<PageDeclaration>,
+  /// Every declaration, in source order.
+  pub(crate) style: Vec<PageStyleDeclaration>,
+  /// The page-margin rules nested in the rule, in source order.
+  pub(crate) margins: Vec<PageMarginRule>,
   /// Media queries gating this rule.
   pub(crate) media_queries: Vec<MediaQueryList>,
   /// Cascade layer this rule belongs to.
@@ -487,39 +687,40 @@ impl PageRule {
       ..Self::default()
     };
 
-    for declaration in cssparser::RuleBodyParser::new(input, &mut RawDeclarationParser) {
-      let Ok(RawDeclaration {
-        name,
-        value,
-        important,
-      }) = declaration
-      else {
-        continue;
+    for item in RuleBodyParser::new(input, &mut PageBodyParser).flatten() {
+      let declaration = match item {
+        PageBodyItem::Declaration(declaration) => declaration,
+        PageBodyItem::Margin(margin) => {
+          rule.margins.push(margin);
+
+          continue;
+        }
       };
-      let declarations = if important {
+      let declarations = if declaration.important {
         &mut rule.important
       } else {
         &mut rule.normal
       };
 
-      declarations.extend(PageDeclaration::parse(&name, value));
+      declarations.extend(PageDeclaration::parse(&declaration.name, declaration.value));
+      rule.style.push(declaration.into());
     }
 
     rule
   }
 
-  /// The descriptors that win among `rules` whose `@media` holds at `viewport` and whose selector
-  /// matches `kind` pages named `name` in `context`, in cascade order: importance, layer,
-  /// specificity, then source order.
-  pub(crate) fn cascade<'r>(
+  /// The rules among `rules` whose `@media` holds at `viewport` and whose selector matches `kind`
+  /// pages named `name` in `context`, each once without and once with `!important`, in cascade
+  /// order: importance, layer, specificity, then source order.
+  fn ranked<'r>(
     rules: impl IntoIterator<Item = &'r Self>,
     layer_count: usize,
     viewport: Viewport,
     kind: PageKind,
     name: &PageName,
     context: &PageContext,
-  ) -> PageDescriptors {
-    let mut ranked: Vec<(u64, &[PageDeclaration])> = Vec::new();
+  ) -> Vec<(bool, &'r Self)> {
+    let mut ranked: Vec<(u64, bool, &Self)> = Vec::new();
 
     for (order, rule) in rules.into_iter().enumerate() {
       if !rule.selector.matches(kind, name, context.direction)
@@ -540,25 +741,92 @@ impl PageRule {
 
       ranked.push((
         rank(false, rule.layer_order.unwrap_or(layer_count)),
-        &rule.normal,
+        false,
+        rule,
       ));
       ranked.push((
         rank(
           true,
           rule.layer_order.map_or(0, |layer| layer_count - layer),
         ),
-        &rule.important,
+        true,
+        rule,
       ));
     }
 
-    ranked.sort_by_key(|&(rank, _)| rank);
+    ranked.sort_by_key(|&(rank, ..)| rank);
+    ranked
+      .into_iter()
+      .map(|(_, important, rule)| (important, rule))
+      .collect()
+  }
 
+  /// The declarations that style a page's boxes among `rules`, matched and ordered as
+  /// [`Self::cascade`] does.
+  pub(crate) fn styles<'r>(
+    rules: impl IntoIterator<Item = &'r Self>,
+    layer_count: usize,
+    viewport: Viewport,
+    kind: PageKind,
+    name: &PageName,
+    context: &PageContext,
+  ) -> PageStyles {
+    fn write(css: &mut String, declarations: &[PageStyleDeclaration], important: bool) {
+      for declaration in declarations {
+        if declaration.important == important {
+          css.push_str(&declaration.name);
+          css.push(':');
+          css.push_str(&declaration.value);
+          css.push(';');
+        }
+      }
+    }
+
+    let ranked = Self::ranked(rules, layer_count, viewport, kind, name, context);
+    let mut styles = PageStyles::default();
+
+    for &(important, rule) in &ranked {
+      write(&mut styles.page, &rule.style, important);
+    }
+
+    for margin_kind in PageMarginKind::ALL {
+      let mut css = String::new();
+
+      for &(important, rule) in &ranked {
+        for margin in rule.margins.iter().filter(|rule| rule.kind == margin_kind) {
+          write(&mut css, &margin.declarations, important);
+        }
+      }
+
+      if !css.is_empty() {
+        styles.margins.push((margin_kind, css));
+      }
+    }
+
+    styles
+  }
+
+  /// The descriptors that win among `rules` whose `@media` holds at `viewport` and whose selector
+  /// matches `kind` pages named `name` in `context`, in cascade order: importance, layer,
+  /// specificity, then source order.
+  pub(crate) fn cascade<'r>(
+    rules: impl IntoIterator<Item = &'r Self>,
+    layer_count: usize,
+    viewport: Viewport,
+    kind: PageKind,
+    name: &PageName,
+    context: &PageContext,
+  ) -> PageDescriptors {
+    let ranked = Self::ranked(rules, layer_count, viewport, kind, name, context);
     let mut winners = PageDescriptors::default();
 
-    for declaration in ranked
-      .into_iter()
-      .flat_map(|(_, declarations)| declarations)
-    {
+    for declaration in ranked.into_iter().flat_map(|(important, rule)| {
+      if important {
+        &rule.important
+      } else {
+        &rule.normal
+      }
+    }) {
       winners.apply(&declaration.descriptors(&context.custom_properties));
     }
 

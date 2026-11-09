@@ -18,7 +18,7 @@ use crate::style::font_face_rule::FontFaceRule;
 pub use crate::style::media_query::MediaQueryList;
 use crate::style::{
   PageName, PropertySyntax,
-  page_rule::{PageContext, PageDescriptors, PageKind, PageRule, PageSelector},
+  page_rule::{PageContext, PageDescriptors, PageKind, PageRule, PageSelector, PageStyles},
 };
 use crate::viewport::Viewport;
 use crate::{
@@ -1546,6 +1546,25 @@ impl StyleSheet {
     context: &PageContext,
   ) -> PageDescriptors {
     PageRule::cascade(
+      &self.page_rules,
+      self.layer_count,
+      viewport,
+      kind,
+      name,
+      context,
+    )
+  }
+
+  /// The declarations that style the boxes of a `kind` page named `name` in `context`, with
+  /// `@media` read at `viewport`.
+  pub fn page_styles(
+    &self,
+    viewport: Viewport,
+    kind: PageKind,
+    name: &PageName,
+    context: &PageContext,
+  ) -> PageStyles {
+    PageRule::styles(
       &self.page_rules,
       self.layer_count,
       viewport,
