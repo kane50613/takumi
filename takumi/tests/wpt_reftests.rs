@@ -1145,22 +1145,26 @@ impl Runner {
 
       let page_count = laid.len();
       let mut containers = PageContainers::new(rules.root().clone());
-      let paint = |fragment: PageFragment| -> Result<Option<(Point<f32>, Bitmap)>, String> {
-        let size = fragment.size.map(|length| length.ceil() as u32);
+      // A box paints onto a canvas of the page's size, so what overflows it towards the page's
+      // end shows, as it does in print.
+      let paint =
+        |fragment: PageFragment, page: Size<f32>| -> Result<Option<(Point<f32>, Bitmap)>, String> {
+          let size = fragment.size.map(|length| length.ceil() as u32);
 
-        if size.width == 0 || size.height == 0 {
-          return Ok(None);
-        }
+          if size.width == 0 || size.height == 0 {
+            return Ok(None);
+          }
 
-        let viewport =
-          Viewport::new((size.width, size.height)).with_media_target(MediaTarget::Print);
-        let scene = Scene::lay_out(fragment.root, viewport, true)
-          .map_err(|error| format!("lay out a page box: {error}"))?;
+          let viewport =
+            Viewport::new((size.width, size.height)).with_media_target(MediaTarget::Print);
+          let mut scene = Scene::lay_out(fragment.root, viewport, true)
+            .map_err(|error| format!("lay out a page box: {error}"))?;
 
-        render_scene(&scene)
-          .map(|bitmap| Some((fragment.offset, bitmap)))
-          .map_err(|error| format!("render a page box: {error}"))
-      };
+          scene.size = page;
+          render_scene(&scene)
+            .map(|bitmap| Some((fragment.offset, bitmap)))
+            .map_err(|error| format!("render a page box: {error}"))
+        };
       let sheets = laid
         .into_iter()
         .enumerate()
@@ -1173,11 +1177,16 @@ impl Runner {
 
           Ok(Sheet {
             page_box: container.page_box,
-            under: container.border_box.map(&paint).transpose()?.flatten(),
-            over: container
-              .margin_boxes
+            under: container
+              .below
               .into_iter()
-              .filter_map(|fragment| paint(fragment).transpose())
+              .chain(container.border_box)
+              .filter_map(|fragment| paint(fragment, container.page_box.size).transpose())
+              .collect::<Result<_, String>>()?,
+            over: container
+              .above
+              .into_iter()
+              .filter_map(|fragment| paint(fragment, container.page_box.size).transpose())
               .collect::<Result<_, String>>()?,
           })
         })
@@ -1227,11 +1236,11 @@ struct Page {
   pixels: Vec<u8>,
 }
 
-/// What a page container puts around a page's area: its box model, the page border box under the
-/// area, and the page-margin boxes over it, each painted and placed on the sheet.
+/// What a page container puts around a page's area: its box model, and the boxes under the area
+/// and over it, each painted and placed on the sheet.
 struct Sheet {
   page_box: PageBox,
-  under: Option<(Point<f32>, Bitmap)>,
+  under: Vec<(Point<f32>, Bitmap)>,
   over: Vec<(Point<f32>, Bitmap)>,
 }
 
@@ -1271,7 +1280,7 @@ impl Page {
       }
     };
 
-    if let Some((origin, bitmap)) = &sheet.under {
+    for (origin, bitmap) in &sheet.under {
       blend(*origin, bitmap);
     }
 

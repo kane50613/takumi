@@ -66,6 +66,9 @@ pub struct PageContext {
   custom_properties: CustomProperties,
   /// The root element's context, when the document has one that gets a box.
   root: Option<RenderContext>,
+  /// Whether the root element is `display: none`, where Blink's `StyleForPage` still makes a
+  /// page box but applies no property to it.
+  root_is_hidden: bool,
 }
 
 impl Default for PageContext {
@@ -77,6 +80,7 @@ impl Default for PageContext {
         .build(),
       custom_properties: CustomProperties::default(),
       root: None,
+      root_is_hidden: false,
     }
   }
 }
@@ -91,6 +95,14 @@ impl PageContext {
         root.sizing.clone(),
         root.style.custom_properties.inherited(),
       )
+    }
+  }
+
+  /// The context of a document whose root element is `display: none`.
+  pub(crate) fn of_hidden_root() -> Self {
+    Self {
+      root_is_hidden: true,
+      ..Self::default()
     }
   }
 
@@ -110,6 +122,7 @@ impl PageContext {
       sizing,
       custom_properties,
       root: None,
+      root_is_hidden: false,
     }
   }
 
@@ -853,8 +866,13 @@ impl PageRule {
     name: &PageName,
     context: &PageContext,
   ) -> PageStyles {
-    let ranked = Self::ranked(rules, layer_count, viewport, kind, name, context);
     let mut styles = PageStyles::default();
+
+    if context.root_is_hidden {
+      return styles;
+    }
+
+    let ranked = Self::ranked(rules, layer_count, viewport, kind, name, context);
 
     for &(important, rule) in &ranked {
       rule.style.append_to(&mut styles.page, important);

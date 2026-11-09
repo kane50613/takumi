@@ -2098,10 +2098,12 @@ impl RenderNode {
 
     // The box is a block container, where generated images sit in the text's lines.
     for child in &mut children {
-      if child.anonymous_text_content.is_none()
-        && let Some(style) = &mut child.layout_style_override
-      {
-        Rc::make_mut(style).display = Display::Inline;
+      if child.anonymous_text_content.is_none() {
+        child.context.style_mut().base_data_mut().display = Display::Inline;
+
+        if let Some(style) = &mut child.layout_style_override {
+          Rc::make_mut(style).display = Display::Inline;
+        }
       }
     }
 
@@ -3473,7 +3475,7 @@ impl PageContext {
       context.resolve_child_style(&mut root.without_children(), source_order, matched);
 
     if style.base_data.display == Display::None {
-      return Self::default();
+      return Self::of_hidden_root();
     }
 
     Self::of_root_context(RenderContext::from_parent(

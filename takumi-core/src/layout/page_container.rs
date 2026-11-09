@@ -18,7 +18,7 @@ use crate::{
   layout_unit::LayoutUnit,
   style::{
     BoxSizing, ContentItem, ContentValue, Display, JustifyContent, Position, StyleDeclarationBlock,
-    VerticalAlign, VerticalAlignKeyword,
+    VerticalAlign, VerticalAlignKeyword, ZIndex,
     page_rule::{PAGES_COUNTER, PageMarginKind, PageStyles},
   },
 };
@@ -43,10 +43,13 @@ pub struct PageFragment {
 pub struct PageContainer {
   /// The page's box model: its size, and the used margins, borders, and padding around its area.
   pub page_box: PageBox,
+  /// The page-margin boxes with a negative `z-index`, which paint under the page border box, in
+  /// paint order.
+  pub below: Vec<PageFragment>,
   /// The page border box, which paints under the page's content.
   pub border_box: Option<PageFragment>,
-  /// The page-margin boxes, which paint over the page's content, in paint order.
-  pub margin_boxes: Vec<PageFragment>,
+  /// The other page-margin boxes, which paint over the page's content, in paint order.
+  pub above: Vec<PageFragment>,
   /// Whether a box reads `counter(pages)` and no page count was given, so the container is to
   /// be laid out again once the document's pages are counted.
   pub needs_page_count: bool,
@@ -464,8 +467,39 @@ impl MarginBox {
     }
   }
 
-  /// The box's border-box size across `horizontal`, in a space that stretches it.
-  fn stretched(&self, horizontal: bool) -> f32 {
+  /// The box's border-box min-content and max-content widths.
+  fn min_max_widths(&self, counters: &CountersAttachmentContext) -> (f32, f32) {
+    let node = self.node(
+      self.sized(Size::new(LayoutLength::Auto, self.style.size.height)),
+      counters,
+    );
+
+    LayoutTree::from_render_node(&node)
+      .root_min_max_widths(AvailableSpace::Definite(self.area.size.height))
+  }
+
+  /// The box's border-box height around its content at a border-box `width`.
+  fn content_height(&self, width: f32, counters: &CountersAttachmentContext) -> f32 {
+    let node = self.node(
+      self.sized(Size::new(LayoutLength::Fixed(width), LayoutLength::Auto)),
+      counters,
+    );
+    let results = LayoutResults::compute_for_paint(
+      &node,
+      Size::new(
+        AvailableSpace::Definite(self.area.size.width),
+        AvailableSpace::Definite(self.area.size.height),
+      ),
+    );
+
+    results
+      .layout(NodeId::ROOT)
+      .map_or(0.0, |layout| layout.size.height)
+  }
+
+  /// The box's border-box size across `horizontal` in a space that stretches it: its specified
+  /// size, a size its content gives, or the size its area leaves its margins.
+  fn border_box(&self, horizontal: bool, counters: &CountersAttachmentContext) -> f32 {
     let Decorations {
       border_padding,
       margin,
@@ -473,13 +507,27 @@ impl MarginBox {
     } = &self.decorations;
 
     if horizontal {
+      let margin_sum = margin.left + margin.right;
+
+      if self.style.size.width.is_content_or_intrinsic() {
+        let (min, max) = self.min_max_widths(counters);
+
+        return match self.style.size.width {
+          LayoutLength::MinContent => min,
+          LayoutLength::MaxContent => max,
+          _ => (self.area.size.width - margin_sum).min(max).max(min),
+        };
+      }
+
       border_box_axis(
         &self.style,
         true,
         self.area.size.width,
-        margin.left + margin.right,
+        margin_sum,
         border_padding.left + border_padding.right,
       )
+    } else if self.style.size.height.is_content_or_intrinsic() {
+      self.content_height(self.border_box(true, counters), counters)
     } else {
       border_box_axis(
         &self.style,
@@ -498,15 +546,9 @@ impl MarginBox {
     if edge.is_horizontal() {
       let is_auto = self.style.size.width.is_auto();
       let (min, max) = if is_auto {
-        let node = self.node(
-          self.sized(Size::new(LayoutLength::Auto, self.style.size.height)),
-          counters,
-        );
-
-        LayoutTree::from_render_node(&node)
-          .root_min_max_widths(AvailableSpace::Definite(self.area.size.height))
+        self.min_max_widths(counters)
       } else {
-        let width = self.stretched(true);
+        let width = self.border_box(true, counters);
 
         (width, width)
       };
@@ -521,26 +563,9 @@ impl MarginBox {
 
     let is_auto = self.style.size.height.is_auto();
     let height = if is_auto {
-      let node = self.node(
-        self.sized(Size::new(
-          LayoutLength::Fixed(self.stretched(true)),
-          LayoutLength::Auto,
-        )),
-        counters,
-      );
-      let results = LayoutResults::compute_for_paint(
-        &node,
-        Size::new(
-          AvailableSpace::Definite(self.area.size.width),
-          AvailableSpace::Definite(self.area.size.height),
-        ),
-      );
-
-      results
-        .layout(NodeId::ROOT)
-        .map_or(0.0, |layout| layout.size.height)
+      self.content_height(self.border_box(true, counters), counters)
     } else {
-      self.stretched(false)
+      self.border_box(false, counters)
     };
 
     PreferredSize {
@@ -553,8 +578,8 @@ impl MarginBox {
 
   /// Blink's `ResolveMargins` on an axis where the box lies along the page's edge: the box's
   /// border-box size there and how far its margins put it into its area.
-  fn across(&self, horizontal: bool) -> (f32, f32) {
-    let size = self.stretched(horizontal);
+  fn across(&self, horizontal: bool, counters: &CountersAttachmentContext) -> (f32, f32) {
+    let size = self.border_box(horizontal, counters);
     let margin = &self.decorations.margin;
     let (available, lengths, mut start, mut end, at_start) = if horizontal {
       (
@@ -642,7 +667,7 @@ impl PageContainers {
         },
       ),
     });
-    let (margin_boxes, needs_page_count) =
+    let (below, above, needs_page_count) =
       self.lay_out_all_margin_boxes(&context, styles, &page_box, page_count);
 
     self
@@ -651,8 +676,9 @@ impl PageContainers {
 
     PageContainer {
       page_box,
+      below,
       border_box,
-      margin_boxes,
+      above,
       needs_page_count,
     }
   }
@@ -738,15 +764,16 @@ impl PageContainers {
     }
   }
 
-  /// Blink's `LayoutAllMarginBoxes`: the page-margin boxes that generate content, in paint order,
-  /// and whether one reads a page count that was not given.
+  /// Blink's `LayoutAllMarginBoxes`: the page-margin boxes that generate content, those with a
+  /// negative `z-index` and the rest, each in paint order, and whether one reads a page count that
+  /// was not given.
   fn lay_out_all_margin_boxes(
     &mut self,
     page_context: &RenderContext,
     styles: &PageStyles,
     page_box: &PageBox,
     page_count: Option<usize>,
-  ) -> (Vec<PageFragment>, bool) {
+  ) -> (Vec<PageFragment>, Vec<PageFragment>, bool) {
     let mut needs_page_count = false;
     let boxes: Vec<MarginBox> = styles
       .margins
@@ -801,8 +828,8 @@ impl PageContainers {
       .iter()
       .filter(|margin_box| margin_box.kind.is_corner())
     {
-      let (width, left) = margin_box.across(true);
-      let (height, top) = margin_box.across(false);
+      let (width, left) = margin_box.across(true, counters);
+      let (height, top) = margin_box.across(false, counters);
 
       fragments.push((
         margin_box.kind,
@@ -837,7 +864,7 @@ impl PageContainers {
           1 => (available - outer) / 2.0,
           _ => available - outer,
         };
-        let (cross_size, cross_offset) = margin_box.across(!edge.is_horizontal());
+        let (cross_size, cross_offset) = margin_box.across(!edge.is_horizontal(), counters);
         let (offset, size) = if edge.is_horizontal() {
           (
             Point::new(along + margin.left, cross_offset),
@@ -854,16 +881,38 @@ impl PageContainers {
       }
     }
 
-    // Blink's paint order: clockwise from the top left corner.
-    fragments.sort_by_key(|&(kind, _)| PageMarginKind::ALL.iter().position(|&other| other == kind));
+    // Each box is a stacking context, painted by its `z-index`, then clockwise from the top left
+    // corner.
+    let z_index = |kind: PageMarginKind| {
+      boxes
+        .iter()
+        .find(|margin_box| margin_box.kind == kind)
+        .map_or(0, |margin_box| {
+          match margin_box.context.style.box_data.z_index {
+            ZIndex::Integer(z_index) => z_index,
+            ZIndex::Auto => 0,
+          }
+        })
+    };
 
-    (
+    fragments.sort_by_key(|&(kind, _)| {
+      (
+        z_index(kind),
+        PageMarginKind::ALL.iter().position(|&other| other == kind),
+      )
+    });
+
+    let (below, above): (Vec<_>, Vec<_>) = fragments
+      .into_iter()
+      .partition(|&(kind, _)| z_index(kind) < 0);
+    let fragments = |fragments: Vec<(PageMarginKind, PageFragment)>| {
       fragments
         .into_iter()
         .map(|(_, fragment)| fragment)
-        .collect(),
-      needs_page_count,
-    )
+        .collect()
+    };
+
+    (fragments(below), fragments(above), needs_page_count)
   }
 }
 
