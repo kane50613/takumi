@@ -184,6 +184,24 @@ fn break_inside_avoid_moves_a_block_to_the_next_page() {
 }
 
 #[test]
+fn an_absolute_box_past_the_page_leaves_its_avoiding_containing_block_on_the_page() {
+  let c = Node::container([block("abs", "abs")])
+    .with_class_name("block h50 avoid rel")
+    .with_id("c");
+  let tree = render(
+    root([block("a", "h100"), block("b", "h80"), c]),
+    ".h100 { height: 100px } .h80 { height: 80px } .h50 { height: 50px } \
+     .avoid { break-inside: avoid } .rel { position: relative } \
+     .abs { position: absolute; top: 80px; height: 0 }",
+  );
+  let (boxes, page_count) = pages(&tree, 250.0);
+
+  assert_eq!(page_count, 2);
+  assert_eq!(boxes["c"], [placed(0, 180.0, 50.0), placed(1, 0.0, 0.0)]);
+  assert_eq!(boxes["abs"], [placed(1, 10.0, 0.0)]);
+}
+
+#[test]
 fn break_before_page_starts_a_block_on_a_new_page() {
   let tree = render(
     root([block("a", "h50"), block("b", "h50 forced")]),

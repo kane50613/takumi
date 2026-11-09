@@ -696,6 +696,36 @@ fn sided_and_page_avoiding_breaks_split_the_page() {
   });
 }
 
+/// css-break-3 §4.1: an absolute box that starts past the page leaves its
+/// `break-inside: avoid` containing block where it fits, and goes on alone.
+#[test]
+fn an_absolute_box_past_the_page_leaves_an_avoiding_box_in_place() {
+  run_pdf_fixture("avoid-break-out-of-flow-overflow", |fonts| {
+    let filler: String = (1..=5)
+      .map(|i| format!("<p style=\"margin: 0\">line {i}</p>"))
+      .collect();
+    let html = format!(
+      r#"<div style="font-size: 12px; color: #141414">
+        {filler}
+        <div style="position: relative; break-inside: avoid; background: #e2e8f0; padding: 8px">
+          kept on the first page
+          <div style="position: absolute; left: 0; bottom: -40px; color: #b91c1c">badge</div>
+        </div>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse avoiding box"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. Each
 /// segment of a line resolves on its own, so the 4px border under one column

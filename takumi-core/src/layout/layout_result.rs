@@ -352,7 +352,7 @@ pub(crate) struct BreakInfo {
   /// Whether the layout repeats the box's first, as a table header's does on each later page.
   pub(crate) is_repeated: bool,
   /// Whether the box's `break-inside` avoids a page break, which Blink reads off the fragment's
-  /// style.
+  /// style, and the box breaks for more than the out-of-flow boxes it resumes.
   pub(crate) avoids_break_inside: bool,
   /// Blink's `PropagatedPageName`: the named page of the box's first child, none to take its own.
   pub(crate) propagated_page_name: PageName,
