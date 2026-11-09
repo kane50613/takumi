@@ -384,7 +384,14 @@ impl BoxFragmentBuilder {
     result: &LayoutResult,
     style: &LayoutStyle,
   ) {
-    if result.status != LayoutStatus::Success || style.is_floating() || style.is_out_of_flow() {
+    // Blink's `FragmentedOofInCb` resumes a box only for the out-of-flow boxes that run on past
+    // its content, and applies its break values there again. Chrome lays those boxes out in the
+    // pages themselves, which leaves no such layout.
+    if result.status != LayoutStatus::Success
+      || style.is_floating()
+      || style.is_out_of_flow()
+      || result.break_info.resumes_out_of_flow_alone
+    {
       return;
     }
 
@@ -589,6 +596,8 @@ impl BoxFragmentBuilder {
 
   /// Blink's `BlockBreakToken::Create`: where `node` resumes, once [`Self::should_break`].
   pub(crate) fn create_break_token(&mut self, node: NodeId) -> BlockBreakToken {
+    let breaks_for_out_of_flow_alone = self.breaks_for_out_of_flow_alone();
+
     if let Some(inline_break_token) = self.last_inline_break_token.take() {
       self
         .child_break_tokens
@@ -604,6 +613,7 @@ impl BoxFragmentBuilder {
       is_forced_break: false,
       is_repeated: false,
       is_at_block_end: self.is_at_block_end,
+      breaks_for_out_of_flow_alone,
       has_seen_all_children: self.has_seen_all_children,
       has_unpositioned_list_marker: self.has_unpositioned_list_marker,
       child_break_tokens: take(&mut self.out_of_flow_break_tokens)
@@ -790,6 +800,10 @@ impl BoxFragmentBuilder {
       is_first_for_node: self.is_first_for_node,
       fragment_index: fragment_index(self.previous_break_token.as_deref()),
       is_repeated: false,
+      resumes_out_of_flow_alone: self
+        .previous_break_token
+        .as_deref()
+        .is_some_and(|token| token.breaks_for_out_of_flow_alone),
       avoids_break_inside: !breaks_for_out_of_flow_alone && self.break_inside.avoids_page_break(),
       propagated_page_name: self.page_name.clone(),
     }

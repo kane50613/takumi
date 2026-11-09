@@ -854,6 +854,33 @@ fn a_floated_flex_item_breaks_after_as_any_other_item() {
   });
 }
 
+/// css-break-3 §3.1: a forced break after a box applies once, where its content ends, even when an
+/// absolute box inside it runs on past the page, so the float after it starts the next page, as
+/// Chromium prints it.
+#[test]
+fn a_forced_break_after_a_box_whose_absolute_child_runs_on_applies_once() {
+  run_pdf_fixture("break-after-with-running-absolute", |fonts| {
+    let html = r#"<div style="font-size: 12px; color: #141414">
+      <div style="height: 80px">before the box</div>
+      <div style="position: relative; break-after: page; background: #e2e8f0">
+        the box
+        <div style="position: absolute; top: 110px; background: #fca5a5">absolute, next page</div>
+      </div>
+      <div style="float: left; background: #93c5fd">float after the box, next page</div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse box"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// css-break-3 §4.2: a box at the top of a page that overflows it moves the content after it
 /// below the overflow on the next page, as Chromium prints it.
 #[test]
