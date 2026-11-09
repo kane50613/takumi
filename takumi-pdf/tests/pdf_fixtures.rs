@@ -2875,20 +2875,29 @@ fn bitmap_glyph_text_shadow() {
 }
 
 /// `paint-order: stroke` paints the whole run's stroke under its fill, where `normal` strokes over
-/// it, set on the text or inherited from its parent.
+/// it, set on the text or inherited from its parent. A colour glyph paints once, unstroked.
 #[test]
 fn text_stroke_paint_order() {
-  run_pdf_fixture("text-stroke-paint-order", |fonts| {
+  let mut fonts = fonts();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/twemoji/TwemojiMozilla-colr.woff2"),
+  )
+  .expect("read emoji font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load emoji font");
+  run_pdf_fixture_with("text-stroke-paint-order", &fonts, |fonts| {
     let source = r##"<div style="padding: 16px; background-color: #3070c0; color: white; font-size: 64px; font-weight: 700; letter-spacing: -0.05em; -webkit-text-stroke: 8px black;">
-      <div>Stroke</div>
-      <div style="paint-order: stroke fill;">Stroke</div>
-      <div style="paint-order: stroke;"><span>Stroke</span></div>
+      <div>Stroke 🎉</div>
+      <div style="paint-order: stroke fill;">Stroke 🎉</div>
+      <div style="paint-order: stroke;"><span>Stroke 🎉</span></div>
     </div>"##;
     let node = from_html(source, FromHtmlOptions::default()).expect("parse paint order fixture");
 
     PdfOptions::builder()
       .node(node)
-      .viewport(Viewport::new((360, 280)))
+      .viewport(Viewport::new((420, 280)))
       .fonts(fonts)
       .build()
   });

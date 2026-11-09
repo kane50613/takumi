@@ -2497,9 +2497,23 @@ impl TextDevice<'_, '_, '_, '_> {
                   );
                 }
                 PaintPhase::Stroke => {
+                  // An outlined color or bitmap glyph would paint its layers or image again.
+                  let outlines: Vec<_> = glyphs
+                    .iter()
+                    .filter(|glyph| !ColorGlyphs::contains(run, glyph.id))
+                    .cloned()
+                    .collect();
+
                   surface.set_fill(None);
                   surface.set_stroke(Some(text_stroke.clone()));
-                  surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+                  surface.draw_glyphs(
+                    origin,
+                    &outlines,
+                    font.clone(),
+                    text,
+                    shaped.font_size,
+                    true,
+                  );
                 }
                 PaintPhase::Markers => {}
               }
