@@ -45,16 +45,26 @@ pub(crate) struct BlockBreakToken {
 }
 
 impl BlockBreakToken {
-  /// Whether a box the token resumes moves a child below that child's monolithic overflow.
-  pub(crate) fn pushes_monolithic_overflow_inside(&self) -> bool {
-    self.child_break_tokens.iter().any(|child| match child {
-      BreakToken::Block(child) => {
-        (self.monolithic_overflow == LayoutUnit::ZERO
-          && child.monolithic_overflow > LayoutUnit::ZERO)
-          || child.pushes_monolithic_overflow_inside()
-      }
-      BreakToken::Inline(_) => false,
-    })
+  /// How far the furthest box the token resumes moves a child below that child's monolithic
+  /// overflow, zero when none does.
+  pub(crate) fn monolithic_overflow_pushed_inside(&self) -> LayoutUnit {
+    self
+      .child_break_tokens
+      .iter()
+      .filter_map(|child| match child {
+        BreakToken::Block(child) => {
+          let pushed = if self.monolithic_overflow == LayoutUnit::ZERO {
+            child.monolithic_overflow
+          } else {
+            LayoutUnit::ZERO
+          };
+
+          Some(pushed.max(child.monolithic_overflow_pushed_inside()))
+        }
+        BreakToken::Inline(_) => None,
+      })
+      .max()
+      .unwrap_or(LayoutUnit::ZERO)
   }
 
   /// Blink's `CreateRepeated`: where `node` repeats after its fragment `sequence_number`.
@@ -108,5 +118,40 @@ impl BlockBreakToken {
       oof_start_offset,
       ..Self::break_before(node, false)
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::rc::Rc;
+
+  use super::BlockBreakToken;
+  use crate::{geometry::NodeId, layout::break_token::BreakToken, layout_unit::LayoutUnit};
+
+  fn token(node: usize, overflow: i32, children: Vec<BlockBreakToken>) -> BlockBreakToken {
+    BlockBreakToken {
+      monolithic_overflow: LayoutUnit::from_int(overflow),
+      child_break_tokens: children
+        .into_iter()
+        .map(|child| BreakToken::Block(Rc::new(child)))
+        .collect(),
+      ..BlockBreakToken::break_before(NodeId::new(node), false)
+    }
+  }
+
+  #[test]
+  fn the_push_inside_comes_from_a_box_without_overflow_of_its_own() {
+    // A box with no overflow pushes its child by 5, below the root's 20.
+    let root = token(0, 20, vec![token(1, 0, vec![token(2, 5, vec![])])]);
+
+    assert_eq!(
+      root.monolithic_overflow_pushed_inside(),
+      LayoutUnit::from_int(5)
+    );
+
+    // Every box records the overflow, so nothing inside pushes.
+    let root = token(0, 20, vec![token(1, 20, vec![token(2, 0, vec![])])]);
+
+    assert_eq!(root.monolithic_overflow_pushed_inside(), LayoutUnit::ZERO);
   }
 }

@@ -222,7 +222,7 @@ impl<'r> PagedLayout<'r> {
     // Blink's paginated root starts the root below an earlier page's monolithic overflow, unless
     // a box inside already moves its content past it.
     if let Some(token) = self.break_token.as_deref()
-      && !token.pushes_monolithic_overflow_inside()
+      && token.monolithic_overflow_pushed_inside() < token.monolithic_overflow
     {
       margins.block_start += token.monolithic_overflow;
     }
