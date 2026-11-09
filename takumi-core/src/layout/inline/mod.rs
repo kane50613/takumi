@@ -2,7 +2,7 @@
 
 use crate::{
   geometry::Point,
-  style::{AppliedTextDecorations, Color, TextDecorationSkipInk},
+  style::{AppliedTextDecorations, Color, PaintOrder, TextDecorationSkipInk},
 };
 
 pub(crate) mod atomic_inline;
@@ -94,6 +94,8 @@ pub struct InlineBrush {
   pub stroke_color: Color,
   /// `-webkit-text-stroke` width in pixels.
   pub stroke_width: f32,
+  /// `paint-order`, which decides whether the stroke paints under the fill.
+  pub paint_order: PaintOrder,
 }
 
 impl Default for InlineBrush {
@@ -106,6 +108,7 @@ impl Default for InlineBrush {
       decoration_skip_ink: TextDecorationSkipInk::default(),
       stroke_color: Color::black(),
       stroke_width: 0.0,
+      paint_order: PaintOrder::default(),
     }
   }
 }

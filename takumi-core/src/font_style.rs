@@ -135,6 +135,7 @@ impl SizedFontStyle<'_> {
       decoration_skip_ink: self.parent.misc_inherited_data.text_decoration_skip_ink,
       stroke_color: self.text_stroke_color,
       stroke_width: self.stroke_width,
+      paint_order: self.parent.svg_inherited_data.paint_order,
     }
   }
 

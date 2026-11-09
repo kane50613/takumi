@@ -9,10 +9,10 @@ use crate::{
   Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
   alpha_mask, checked_area, cull_bounds, render_mask,
   resources::{
-    glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph},
+    glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
     glyph_cache::glyph_mask,
   },
-  style::{Affine, BlendMode, Color},
+  style::{Affine, BlendMode, Color, PaintPhase},
 };
 
 /// A glyph transform split into the cached mask's transform and the whole pixels it is blitted at.
@@ -146,7 +146,24 @@ struct GlyphPaintCtx<'a, 'b> {
   glyph_signature: u64,
 }
 
-impl GlyphPaintCtx<'_, '_> {
+impl<'a, 'b> GlyphPaintCtx<'a, 'b> {
+  fn new(
+    canvas: &'a mut Canvas,
+    style: &'a SizedFontStyle<'a>,
+    stroke: (f32, Color),
+    transform: Affine,
+    outline: &'b ResolvedOutlineGlyph,
+  ) -> Self {
+    Self {
+      canvas,
+      style,
+      stroke,
+      transform,
+      paths: outline.paths(),
+      glyph_signature: outline.cache_signature(),
+    }
+  }
+
   /// A stroke of `width` joined the way the text's `stroke-linejoin` asks.
   fn stroke_of(&self, width: f32) -> Stroke {
     let mut stroke = Stroke::new(width);
@@ -187,8 +204,10 @@ impl GlyphPaintCtx<'_, '_> {
   }
 }
 
+/// Draws `phase` of `glyph`: its fill, with any synthetic bold, or its `-webkit-text-stroke`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_glyph(
+  phase: PaintPhase,
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
   style: &SizedFontStyle,
@@ -200,8 +219,8 @@ pub(crate) fn draw_glyph(
 ) -> Result<()> {
   transform *= Affine::translation(inline_offset.x, inline_offset.y);
 
-  match glyph {
-    ResolvedGlyph::Bitmap(bitmap) => {
+  match (glyph, phase) {
+    (ResolvedGlyph::Bitmap(bitmap), PaintPhase::Fill) => {
       let Ok(source) = PixmapRef::try_from(&bitmap.image) else {
         return Ok(());
       };
@@ -221,7 +240,7 @@ pub(crate) fn draw_glyph(
         BlendMode::Normal,
       );
     }
-    ResolvedGlyph::Outline(outline) => {
+    (ResolvedGlyph::Outline(outline), PaintPhase::Fill) => {
       if let Some(color_layers) = outline.color_layers()
         && let Some(palette) = palette
       {
@@ -237,21 +256,15 @@ pub(crate) fn draw_glyph(
         );
       }
 
-      let mut ctx = GlyphPaintCtx {
-        canvas,
-        style,
-        stroke,
-        transform,
-        paths: outline.paths(),
-        glyph_signature: outline.cache_signature(),
-      };
-
       if let Some(embolden) = outline.embolden() {
-        ctx.draw_embolden(embolden, color);
+        GlyphPaintCtx::new(canvas, style, stroke, transform, outline)
+          .draw_embolden(embolden, color);
       }
-
-      ctx.draw_text_stroke();
     }
+    (ResolvedGlyph::Outline(outline), PaintPhase::Stroke) => {
+      GlyphPaintCtx::new(canvas, style, stroke, transform, outline).draw_text_stroke();
+    }
+    (ResolvedGlyph::Bitmap(_), PaintPhase::Stroke) | (_, PaintPhase::Markers) => {}
   }
 
   Ok(())
