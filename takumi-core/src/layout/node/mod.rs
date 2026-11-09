@@ -480,10 +480,16 @@ impl Node {
       }
     }
 
-    if let NodeKind::Image(image) = &self.kind
-      && let ImageSourceInput::Url(url) = &image.src
-    {
-      attrs.push(format!("src=\"{}\"", escape_attr(url)));
+    if let NodeKind::Image(image) = &self.kind {
+      if let ImageSourceInput::Url(url) = &image.src {
+        attrs.push(format!("src=\"{}\"", escape_attr(url)));
+      }
+      if let Some(width) = image.width {
+        attrs.push(format!("width=\"{width}\""));
+      }
+      if let Some(height) = image.height {
+        attrs.push(format!("height=\"{height}\""));
+      }
     }
 
     // Each entry is (prefix_len, css_string) where css_string[..prefix_len] is the property name.
