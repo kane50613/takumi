@@ -45,6 +45,19 @@ pub(crate) struct BlockBreakToken {
 }
 
 impl BlockBreakToken {
+  /// Whether a container the token resumes pushes a child below its monolithic overflow: one
+  /// whose own token records none, holding a child whose token records some.
+  pub(crate) fn pushes_monolithic_overflow_inside(&self) -> bool {
+    self.child_break_tokens.iter().any(|child| match child {
+      BreakToken::Block(child) => {
+        (self.monolithic_overflow == LayoutUnit::ZERO
+          && child.monolithic_overflow > LayoutUnit::ZERO)
+          || child.pushes_monolithic_overflow_inside()
+      }
+      BreakToken::Inline(_) => false,
+    })
+  }
+
   /// Blink's `CreateRepeated`: where `node` repeats after its fragment `sequence_number`.
   pub(crate) fn repeated(node: NodeId, sequence_number: u32) -> Self {
     Self {

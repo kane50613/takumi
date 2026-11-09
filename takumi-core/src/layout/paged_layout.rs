@@ -219,8 +219,14 @@ impl<'r> PagedLayout<'r> {
     );
 
     adjust_margins_for_fragmentation(self.break_token.as_deref(), false, &mut margins);
-    // Blink's paginated root pushes the root below the monolithic overflow an earlier page left.
-    if let Some(token) = self.break_token.as_deref() {
+    // Blink's paginated root pushes the root below the monolithic overflow an earlier page left,
+    // as a container whose own token records none pushes its child. Blink records the overflow
+    // in every container on the way to it, so only the outermost pushes. Takumi can leave a
+    // container between them without it, which then pushes its child instead, so the page area
+    // pushes the root only when nothing inside does.
+    if let Some(token) = self.break_token.as_deref()
+      && !token.pushes_monolithic_overflow_inside()
+    {
       margins.block_start += token.monolithic_overflow;
     }
     space.should_propagate_child_break_values = true;
