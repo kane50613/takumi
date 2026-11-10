@@ -1117,7 +1117,7 @@ pub(crate) fn match_stylesheets_view<'a>(
             continue;
           }
 
-          if early_reject_by_local_name(selector, 0, &element) {
+          if early_reject_by_local_name(selector, 0, element) {
             continue;
           }
 
@@ -1131,7 +1131,7 @@ pub(crate) fn match_stylesheets_view<'a>(
             selector,
             0,
             Some(&ancestor_hashes[selector_index]),
-            &element,
+            element,
             ctx,
           ) {
             let specificity = selector.specificity();
@@ -1169,7 +1169,7 @@ pub(crate) fn match_stylesheets_view<'a>(
         && rule
           .condition
           .as_ref()
-          .is_none_or(|condition| matches_selector(condition, 0, None, &element, &mut element_ctx));
+          .is_none_or(|condition| matches_selector(condition, 0, None, element, &mut element_ctx));
 
       if applies {
         record_tw_match(
