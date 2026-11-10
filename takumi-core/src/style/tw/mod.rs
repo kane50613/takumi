@@ -123,7 +123,15 @@ impl TailwindValues {
       inner: Arc::new(
         source
           .split_whitespace()
-          .filter_map(TwRule::parse)
+          .filter_map(|class| {
+            let rule = TwRule::parse(class);
+
+            if rule.is_none() {
+              log::debug!(target: "takumi::style", "`{class}` is not a utility takumi knows");
+            }
+
+            rule
+          })
           .map(Arc::new)
           .collect(),
       ),

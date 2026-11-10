@@ -6,10 +6,10 @@ use std::{
 };
 
 const PAGE: &str = r#"<style>
-  body { margin: 0; font-family: Nowhere, sans-serif }
-  h1 { break-after: page }
+  body { margin: 0; font-family: Nowhere, sans-serif; colr: red; -webkit-font-smoothing: antialiased }
+  h1 { break-after: page; display: flexx }
 </style>
-<h1>First</h1><img src="missing.png" width="10" height="10"><p>Second</p>"#;
+<h1 style="widht: 1px" tw="flex bogus-utility">First</h1><img src="missing.png" width="10" height="10"><p>Second</p>"#;
 
 fn steps(name: &str, arguments: &[&str]) -> String {
   let dir = env::temp_dir().join(format!("takumi-cli-log-{name}-{}", process::id()));
@@ -66,6 +66,22 @@ fn debug_names_the_font_family_and_image_the_render_found_missing() {
     "{steps}"
   );
   assert!(steps.contains("layout: laid out "), "{steps}");
+  assert!(steps.contains("paint: painting "), "{steps}");
+}
+
+#[test]
+fn debug_names_the_css_the_parser_dropped() {
+  let steps = steps("style", &["image", "--log", "debug"]);
+
+  for dropped in [
+    "style: ignored the unknown property `colr`",
+    "style: ignored the unknown property `widht`",
+    "style: ignored `display: flexx` at line 3, column ",
+    "style: `bogus-utility` is not a utility takumi knows",
+  ] {
+    assert!(steps.contains(dropped), "{dropped}\n{steps}");
+  }
+  assert!(!steps.contains("-webkit-font-smoothing"), "{steps}");
 }
 
 #[test]
@@ -73,6 +89,10 @@ fn debug_names_each_page_of_a_pdf() {
   let steps = steps("pages", &["pdf", "--log", "debug"]);
 
   assert!(steps.contains("layout: page 1 is "), "{steps}");
+  assert!(
+    steps.contains("layout: page 1 ends at a forced break"),
+    "{steps}"
+  );
   assert!(steps.contains("layout: page 2 is "), "{steps}");
   assert!(!steps.contains("layout: page 3 is "), "{steps}");
 }

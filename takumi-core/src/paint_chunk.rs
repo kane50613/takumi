@@ -38,6 +38,7 @@ impl<'s> PaintChunk<'s> {
     let mut chunks = Vec::new();
 
     push_context_chunks(contexts, 0, &mut chunks);
+    log::debug!(target: "takumi::paint", "painting {} chunks", chunks.len());
 
     chunks
   }

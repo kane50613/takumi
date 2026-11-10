@@ -165,6 +165,20 @@ impl<'r> PagedLayout<'r> {
 
         self.sizes.push(laid_page.size, laid_page.name);
         self.break_token = result.break_info.break_token.clone();
+
+        if let Some(token) = &self.break_token {
+          log::debug!(
+            target: "takumi::layout",
+            "page {} ends {}",
+            page + 1,
+            if token.has_forced_break() {
+              "at a forced break"
+            } else {
+              "where its content ran out of room"
+            }
+          );
+        }
+
         (
           (fragment_index, root_origin),
           result.out_of_flow.clone(),
