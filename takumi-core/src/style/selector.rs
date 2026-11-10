@@ -435,7 +435,7 @@ fn recover<'i, T>(
 pub(crate) fn log_ignored(source: &str, location: SourceLocation) {
   log::debug!(
     target: "takumi::style",
-    "ignored `{}` at line {}, column {}",
+    "ignored `{}` at line {}, column {} of its style sheet or `style` attribute",
     source.trim().lines().next().unwrap_or_default(),
     location.line + 1,
     location.column

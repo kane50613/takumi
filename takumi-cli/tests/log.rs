@@ -56,7 +56,7 @@ fn debug_names_the_font_family_and_image_the_render_found_missing() {
 
   assert_eq!(
     steps
-      .matches("font: no face is loaded for font-family \"Nowhere\"")
+      .matches("font: no face is loaded for font-family \"Nowhere\", so text uses Geist")
       .count(),
     1,
     "{steps}"
@@ -88,13 +88,13 @@ fn debug_names_the_css_the_parser_dropped() {
 fn debug_names_each_page_of_a_pdf() {
   let steps = steps("pages", &["pdf", "--log", "debug"]);
 
-  assert!(steps.contains("layout: page 1 is "), "{steps}");
+  assert!(steps.contains("layout: page 1 has a "), "{steps}");
   assert!(
     steps.contains("layout: page 1 ends at a forced break"),
     "{steps}"
   );
-  assert!(steps.contains("layout: page 2 is "), "{steps}");
-  assert!(!steps.contains("layout: page 3 is "), "{steps}");
+  assert!(steps.contains("layout: page 2 has a "), "{steps}");
+  assert!(!steps.contains("layout: page 3 has a "), "{steps}");
 }
 
 #[test]

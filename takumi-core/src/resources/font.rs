@@ -378,16 +378,10 @@ impl Fonts {
       .iter()
       .filter_map(|family| match family {
         FontFamilyToken::Owned(name) => {
-          let faces = self
+          self
             .registry
             .selector
-            .get_font_data(description, name, false);
-
-          if faces.is_none() {
-            log::debug!(target: "takumi::font", "no face is loaded for font-family {name:?}");
-          }
-
-          faces
+            .get_font_data(description, name, false)
         }
         FontFamilyToken::Generic(generic) => {
           self
@@ -445,7 +439,6 @@ impl Fonts {
 
   /// The registered family name of a face, by the font blob id and collection index a
   /// shaped run reports.
-  #[cfg(feature = "paint-tree")]
   pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<&str> {
     self
       .registry

@@ -1,6 +1,6 @@
 //! Blink's [`FontFallbackList`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_list.cc), resolving every family up front; approximate, see #2001.
 
-use std::{cell::OnceCell, rc::Rc};
+use std::{cell::OnceCell, rc::Rc, slice};
 
 use super::{
   font_cache::FontCache,
@@ -114,6 +114,10 @@ impl FontFallbackList {
 
     font_list.extend(standard);
 
+    if log::log_enabled!(target: "takumi::font", log::Level::Debug) {
+      Self::log_missing_families(fonts, key, font_list.first());
+    }
+
     Self {
       font_list,
       font_cache,
@@ -122,6 +126,44 @@ impl FontFallbackList {
       primary_with_digit_zero: OnceCell::new(),
       has_pending_faces: fonts.has_pending_faces(),
     }
+  }
+
+  /// Logs the families `key` names that no loaded face has, with the family text falls back to.
+  fn log_missing_families(fonts: &Fonts, key: &FontFallbackKey, primary: Option<&FontData>) {
+    let missing: Vec<String> = key
+      .family
+      .tokens()
+      .iter()
+      .filter_map(|token| match token {
+        FontFamilyToken::Owned(name)
+          if fonts
+            .font_group(slice::from_ref(token), &key.selection)
+            .is_empty() =>
+        {
+          Some(format!("{name:?}"))
+        }
+        _ => None,
+      })
+      .collect();
+
+    if missing.is_empty() {
+      return;
+    }
+
+    let used = primary
+      .and_then(|font_data| font_data.font_data_for_character(' '))
+      .and_then(|font_data| {
+        let typeface = &font_data.face.typeface;
+
+        fonts.face_family(typeface.id, typeface.index)
+      });
+
+    log::debug!(
+      target: "takumi::font",
+      "no face is loaded for font-family {}, so text uses {}",
+      missing.join(", "),
+      used.unwrap_or("no font")
+    );
   }
 
   /// Whether the registry the list resolved from holds a pending face.

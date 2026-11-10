@@ -169,12 +169,12 @@ impl<'r> PagedLayout<'r> {
         if let Some(token) = &self.break_token {
           log::debug!(
             target: "takumi::layout",
-            "page {} ends {}",
+            "page {} {}",
             page + 1,
             if token.has_forced_break() {
-              "at a forced break"
+              "ends at a forced break"
             } else {
-              "where its content ran out of room"
+              "is full, so its content continues on the next page"
             }
           );
         }

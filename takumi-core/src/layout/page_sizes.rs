@@ -167,7 +167,7 @@ impl PageSizes {
 
     log::debug!(
       target: "takumi::layout",
-      "page {} is {}x{}",
+      "page {} has a {}x{}px page area",
       page + 1,
       size.width,
       size.height

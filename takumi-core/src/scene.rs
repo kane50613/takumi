@@ -833,7 +833,7 @@ impl Scene {
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
 
-    log::debug!(target: "takumi::layout", "laid out {}x{}", size.width, size.height);
+    log::debug!(target: "takumi::layout", "laid out a {}x{}px canvas", size.width, size.height);
 
     let layers = SceneRequest {
       root: &root,
