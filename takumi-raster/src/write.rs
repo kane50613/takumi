@@ -683,8 +683,8 @@ where
     .set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))
     .map_err(Error::encode)?;
 
-  let quantize = |frame: Result<AnimationFrame>| -> Result<GifFrame<'static>> {
-    let frame = frame?;
+  let quantize = |frame: Result<(AnimationFrame, u16)>| -> Result<GifFrame<'static>> {
+    let (frame, delay) = frame?;
 
     if frame.image.width() != u32::from(width) || frame.image.height() != u32::from(height) {
       return Err(Error::MixedAnimationFrameDimensions);
@@ -693,7 +693,7 @@ where
     let mut pixels = frame.image.into_raw();
     let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
 
-    gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
+    gif_frame.delay = delay;
     // The LZW pass is the frame's own, so it runs here, beside the other frames of its batch.
     gif_frame.make_lzw_pre_encoded();
     Ok(gif_frame)
@@ -701,8 +701,6 @@ where
   let frames = HeldFrames {
     frames: once(Ok(first)).chain(frames),
     held: None,
-    // The longest delay a GIF frame stores, in hundredths of a second.
-    longest_ms: u32::from(u16::MAX) * 10,
   };
 
   // Each frame quantizes to its own palette, so a batch quantizes at once and is written in order.
@@ -740,17 +738,19 @@ where
   }
 }
 
-/// Frames with each run of equal images made one frame, shown for as long as the run is, up to
-/// `longest_ms`. A timeline holds an image for many frames more often than not, and a held frame
-/// would otherwise quantize and compress again for every one of them.
+/// Frames with each run of equal images made one frame, with the GIF delay of the run. A timeline
+/// holds an image for many frames more often than not, and a held frame would otherwise quantize
+/// and compress again for every one of them. Each frame rounds its own delay, as it would shown
+/// alone, so the run plays as long as its frames did; a run splits where its delay would pass the
+/// longest a GIF frame stores.
 struct HeldFrames<I> {
   frames: I,
-  held: Option<AnimationFrame>,
-  longest_ms: u32,
+  /// The frame shown and its delay so far, in hundredths of a second.
+  held: Option<(AnimationFrame, u16)>,
 }
 
 impl<I: Iterator<Item = Result<AnimationFrame>>> Iterator for HeldFrames<I> {
-  type Item = Result<AnimationFrame>;
+  type Item = Result<(AnimationFrame, u16)>;
 
   fn next(&mut self) -> Option<Self::Item> {
     loop {
@@ -759,17 +759,18 @@ impl<I: Iterator<Item = Result<AnimationFrame>>> Iterator for HeldFrames<I> {
         Some(Err(error)) => return Some(Err(error)),
         None => return self.held.take().map(Ok),
       };
+      let delay = duration_ms_to_gif_delay(frame.duration_ms);
 
       match &mut self.held {
-        Some(held)
+        Some((held, held_delay))
           if held.image.dimensions() == frame.image.dimensions()
-            && held.image.as_raw() == frame.image.as_raw()
-            && held.duration_ms.saturating_add(frame.duration_ms) <= self.longest_ms =>
+            && held_delay.checked_add(delay).is_some()
+            && held.image.as_raw() == frame.image.as_raw() =>
         {
-          held.duration_ms += frame.duration_ms;
+          *held_delay += delay;
         }
         held => {
-          if let Some(shown) = held.replace(frame) {
+          if let Some(shown) = held.replace((frame, delay)) {
             return Some(Ok(shown));
           }
         }
@@ -918,6 +919,7 @@ impl FrameRegion {
     height: 1,
   };
 
+  /// The whole canvas, `width` by `height`.
   fn full(width: u32, height: u32) -> Self {
     Self {
       x: 0,
@@ -1332,11 +1334,13 @@ mod tests {
     assert_eq!(regions[4], (0, 0, 40, 30));
   }
 
-  /// A held image becomes one GIF frame shown for as long as it was held.
+  /// A held image becomes one GIF frame shown for as long as its frames were, each rounded to
+  /// hundredths of a second on its own, and splits where a GIF delay runs out.
   #[test]
   fn write_animated_gif_shows_a_held_frame_once() {
     let red = Bitmap::from_pixel(6, 4, [255, 0, 0, 255]);
     let green = Bitmap::from_pixel(6, 4, [0, 255, 0, 255]);
+    let blue = Bitmap::from_pixel(6, 4, [0, 0, 255, 255]);
     let frames = vec![
       mk_frame(red.clone(), 33),
       mk_frame(red.clone(), 34),
@@ -1344,6 +1348,8 @@ mod tests {
       mk_frame(green.clone(), 33),
       mk_frame(green, 34),
       mk_frame(red, 100),
+      mk_frame(blue.clone(), 400_000),
+      mk_frame(blue, 400_000),
     ];
     let mut bytes = Vec::new();
 
@@ -1368,9 +1374,11 @@ mod tests {
     assert_eq!(
       shown,
       [
+        (12, vec![255, 0, 0, 255]),
+        (8, vec![0, 255, 0, 255]),
         (10, vec![255, 0, 0, 255]),
-        (7, vec![0, 255, 0, 255]),
-        (10, vec![255, 0, 0, 255]),
+        (40_000, vec![0, 0, 255, 255]),
+        (40_000, vec![0, 0, 255, 255]),
       ]
     );
   }

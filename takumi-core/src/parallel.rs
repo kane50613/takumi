@@ -81,7 +81,7 @@ fn spreads_across(active: usize, threads: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
-  use super::{ACTIVE, ActiveRender, Ordering, spreads_across};
+  use super::{ACTIVE, ActiveRender, DEPTH, Ordering, spreads_across};
 
   #[test]
   fn work_spreads_while_a_third_of_the_pool_is_idle() {
@@ -98,8 +98,7 @@ mod tests {
 
   #[test]
   fn nested_renders_count_once() {
-    // Other tests render on their own threads, so only this thread's share is exact.
-    let before = ACTIVE.load(Ordering::Relaxed);
+    // Other tests render on their own threads, so only this thread's depth is exact.
     let outer = ActiveRender::begin();
     let inner = ActiveRender::begin();
 
@@ -107,11 +106,11 @@ mod tests {
     drop(inner);
     assert!(ACTIVE.load(Ordering::Relaxed) >= 1);
     drop(outer);
+    assert_eq!(DEPTH.get(), 0, "the thread still holds a render");
 
     let again = ActiveRender::begin();
 
     assert!(again.counted);
     drop(again);
-    let _ = before;
   }
 }

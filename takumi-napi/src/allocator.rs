@@ -2,7 +2,7 @@
 //!
 //! musl's own allocator is the slow path of every render there: see this crate's `Cargo.toml`.
 
-use std::{ffi::c_long, sync::Once};
+use std::ffi::c_long;
 
 use libmimalloc_sys::{mi_option_set_default, mi_option_t};
 use mimalloc::MiMalloc;
@@ -21,12 +21,12 @@ const PURGE_DELAY: mi_option_t = 15;
 const PURGE_DELAY_MS: c_long = 2;
 
 /// Sets how long freed memory waits, unless `MIMALLOC_PURGE_DELAY` already says.
-pub(crate) fn tune() {
-  static TUNED: Once = Once::new();
-
-  TUNED.call_once(|| {
-    // SAFETY: `PURGE_DELAY` is an option of the mimalloc this crate links, and a default leaves a
-    // value the environment set alone.
-    unsafe { mi_option_set_default(PURGE_DELAY, PURGE_DELAY_MS) };
-  });
+#[napi_derive::module_init]
+fn tune() {
+  // SAFETY: `PURGE_DELAY` is an option of the mimalloc this crate links, and a default leaves a
+  // value the environment set alone, whether mimalloc reads the environment before or after. The
+  // write is unsynchronized, so nothing may read the option meanwhile: the loader runs this
+  // constructor once, on the thread loading the binding, before any export is callable, so no
+  // other thread has run the binding's code or its allocator yet.
+  unsafe { mi_option_set_default(PURGE_DELAY, PURGE_DELAY_MS) };
 }

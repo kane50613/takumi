@@ -6,7 +6,10 @@ use std::{array, f32::consts::PI, ops::Range};
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
-use crate::geometry::{Placement, Point, Size};
+use crate::{
+  geometry::{Placement, Point, Size},
+  parallel::spreads,
+};
 
 /// Smallest sigma that blurs, Skia's `SkBlurEngine::IsEffectivelyIdentity`.
 pub(crate) const MIN_SIGMA: f32 = 0.03;
@@ -55,7 +58,12 @@ pub fn blur_alpha_region(
   region: Placement,
   sigma: f32,
 ) -> Vec<u8> {
-  let sigma = if sigma.is_finite() { sigma } else { 0.0 };
+  // A negative sigma blurs nothing, as in `blur`, and must not shrink the reach below the region.
+  let sigma = if sigma.is_finite() {
+    sigma.max(0.0)
+  } else {
+    0.0
+  };
   let region = Window::from(region);
   let mask_window = Window::from(mask_at);
 
@@ -292,7 +300,7 @@ fn blur<const N: usize>(
     return blur_rescaled(pixels, width, height, sigma, rounding);
   }
 
-  let parallel = pixels.len() * N >= PARALLEL_CHANNELS && crate::parallel::spreads();
+  let parallel = pixels.len() * N >= PARALLEL_CHANNELS && spreads();
 
   // Rows blur as the columns of a transposed strip, so both axes run the vectorized column pass.
   if let Some(pass) = Pass::new(sigma.x, rounding) {
@@ -1340,6 +1348,8 @@ mod tests {
     ];
 
     for sigma in [
+      -1e30,
+      -50.0,
       0.0,
       0.5,
       1.7,

@@ -196,8 +196,6 @@ impl Renderer {
     ts_args_type = "options?: RendererOptions | undefined | null"
   )]
   pub fn new(env: Env, options: Option<Object>) -> Result<Self> {
-    #[cfg(target_env = "musl")]
-    crate::allocator::tune();
     crate::pool::register_cleanup(&env);
 
     let options: RendererOptions = read_options(options)?;
