@@ -99,11 +99,18 @@ version = "0.15"
 default-features = false
 
 # `local_dynamic_tls` is what lets a library loaded with `dlopen`, as a Node addon is, use it on
-# musl.
+# musl. `no_thp` stops it asking the kernel for 2MiB pages: with them a server held half again as
+# much memory and drew a page of text a fifth slower.
 [workspace.dependencies.mimalloc]
 version = "0.1"
 default-features = false
-features = ["local_dynamic_tls"]
+features = ["local_dynamic_tls", "no_thp"]
+
+# mimalloc's options, which the `mimalloc` crate does not reach.
+[workspace.dependencies.libmimalloc-sys]
+version = "0.1"
+default-features = false
+features = ["extended"]
 
 [workspace.dependencies.napi]
 version = "3"

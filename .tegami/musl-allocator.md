@@ -5,4 +5,4 @@ packages:
 
 # The Node.js binding renders faster on Alpine and other musl systems
 
-On musl, the binding now allocates with mimalloc instead of musl's own allocator, which more than doubles the renders a second when several run at once. It holds more memory while it does; `MIMALLOC_PURGE_DELAY=0` returns freed memory at once, as the performance guide describes.
+On musl, the binding now allocates with mimalloc instead of musl's own allocator, which doubles the renders a second when several run at once. It holds about a quarter more memory at the peak; `MIMALLOC_PURGE_DELAY=0` trades some of the speed back for less, as the performance guide describes.

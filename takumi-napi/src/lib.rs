@@ -4,6 +4,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
 
+#[cfg(target_env = "musl")]
+mod allocator;
 mod load_font_file_task;
 mod load_font_task;
 mod measure_task;
@@ -16,11 +18,6 @@ pub(crate) mod renderer;
 mod svg_render_task;
 
 use std::{fmt::Display, sync::Arc};
-
-/// musl's own allocator is the slow path of every render there: see this crate's `Cargo.toml`.
-#[cfg(target_env = "musl")]
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;

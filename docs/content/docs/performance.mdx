@@ -82,18 +82,19 @@ These figures come from one test setup, described in [PR #1862](https://github.c
 
 ### Alpine and other musl images
 
-These settings belong to glibc and do nothing on musl. There the Node.js binding allocates with [mimalloc](https://github.com/microsoft/mimalloc) instead of musl's own allocator, which more than doubles the renders a second when several run at once. mimalloc keeps freed memory for a moment before it returns it to the system, so the process holds more than the renderer retains. A purge delay of zero returns it at once:
+These settings belong to glibc and do nothing on musl. There the Node.js binding allocates with [mimalloc](https://github.com/microsoft/mimalloc) instead of musl's own allocator, which doubles the renders a second when several run at once. mimalloc keeps freed memory for a moment before it returns it to the system, so the process holds a little more than it would under musl's allocator. The binding sets that wait to 2 milliseconds, and `MIMALLOC_PURGE_DELAY` changes it:
 
 ```bash title="Return freed memory at once"
 MIMALLOC_PURGE_DELAY=0 node server.js
 ```
 
-| Setting                  | Peak RSS | Renders a second |
-| :----------------------- | :------- | :--------------- |
-| Default                  | 308 MB   | 540              |
-| `MIMALLOC_PURGE_DELAY=0` | 215 MB   | 510              |
+| Setting                     | Peak RSS | Renders a second |
+| :-------------------------- | :------- | :--------------- |
+| `MIMALLOC_PURGE_DELAY=0`    | 161 MiB  | 515              |
+| Default                     | 178 MiB  | 546              |
+| `MIMALLOC_PURGE_DELAY=1000` | 244 MiB  | 576              |
 
-These figures come from one test setup: Node.js 24 on Alpine 3.24, Linux arm64, rendering a 1200 × 630 card with two box shadows to PNG, four at a time.
+These figures come from one test setup: Node.js 24 on Alpine 3.24, Linux arm64, rendering a 1200 × 630 card with two box shadows to PNG, four at a time. With musl's own allocator the same test peaked at 144 MiB and drew 259 renders a second.
 
 ## Keep network requests out of repeated work
 
