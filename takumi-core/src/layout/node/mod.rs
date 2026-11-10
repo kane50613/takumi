@@ -374,6 +374,47 @@ impl Node {
         .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
   }
 
+  /// Whether `display: contents` leaves the node out and renders its children, where the
+  /// [elements CSS Display §2.5 lists](https://drafts.csswg.org/css-display-3/#unbox-html) render
+  /// nothing. Blink's `AdjustStyleForHTMLElement`.
+  pub(crate) fn unboxes(&self) -> bool {
+    const BOXED: [&str; 15] = [
+      "audio", "br", "canvas", "embed", "iframe", "img", "input", "meter", "object", "progress",
+      "select", "svg", "textarea", "video", "wbr",
+    ];
+
+    !matches!(self.kind, NodeKind::Image(_))
+      && !self
+        .tag_name()
+        .is_some_and(|name| BOXED.into_iter().any(|tag| name.eq_ignore_ascii_case(tag)))
+  }
+
+  /// Whether the node is text alone, as a DOM text node is, and no element holding text.
+  pub(crate) fn is_text_run(&self) -> bool {
+    let NodeMetadata {
+      tag_name,
+      class_name,
+      id,
+      attributes,
+      preset,
+      presentation,
+      style,
+      tw,
+      dir: _,
+      lang: _,
+    } = &self.metadata;
+
+    matches!(self.kind, NodeKind::Text(_))
+      && tag_name.is_none()
+      && class_name.is_none()
+      && id.is_none()
+      && attributes.is_none()
+      && preset.is_none()
+      && presentation.is_none()
+      && style.is_none()
+      && tw.is_none()
+  }
+
   pub(crate) fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;

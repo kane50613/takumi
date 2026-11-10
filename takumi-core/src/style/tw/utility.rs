@@ -916,6 +916,7 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
   "inline-grid" => fixed!(display(Display::InlineGrid)),
   "block" => fixed!(display(Display::Block)),
   "flow-root" => fixed!(display(Display::FlowRoot)),
+  "contents" => fixed!(display(Display::Contents)),
   "grid" => fixed!(display(Display::Grid)),
   "hidden" => fixed!(display(Display::None)),
   "list-item" => fixed!(display(Display::ListItem)),
