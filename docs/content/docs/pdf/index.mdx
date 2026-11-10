@@ -157,7 +157,8 @@ The rule also styles the page itself, as it does in Chromium:
 
 - `background` covers the whole page, margins included.
 - `border` and `padding` lie inside the margins, around the area the content flows in.
-- `width` and `height` size that area. With `auto` margins a smaller area is centered on the page. With fixed margins the page takes the size the area and its margins add up to.
+- `width` and `height` size the page's box. With `auto` margins a smaller box is centered on the page. With fixed margins the page takes the size the box and its margins add up to.
+- `box-sizing` is `border-box` here, as it is for every takumi element, so `width` and `height` include the border and padding. Chromium measures the area inside them unless the rule sets `box-sizing: border-box`. Set `box-sizing: content-box` to size the area as Chromium does.
 - The properties that inherit, such as `font` and `color`, pass to the page-margin boxes.
 
 ```css title="A framed page with a narrower column"
@@ -165,6 +166,7 @@ The rule also styles the page itself, as it does in Chromium:
   size: A4;
   margin: 15mm auto;
   width: 150mm;
+  box-sizing: content-box;
   padding: 5mm;
   border: 0.5pt solid #94a3b8;
   background: #f8fafc;

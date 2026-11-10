@@ -3144,7 +3144,6 @@ impl RenderContext {
     registered_custom_property_parent_style(&self.style, &registrations)
   }
 
-  /// Resolves a generated box's style and sizing from its matched declarations.
   /// The context of a box of the page context that `declarations` style under this one, as
   /// Blink's `StyleForPage` and `StyleForPageMargins` cascade them.
   #[cfg(feature = "fragmentation")]
@@ -3159,6 +3158,7 @@ impl RenderContext {
     Self::from_parent(self, style, sizing, current_color)
   }
 
+  /// Resolves a generated box's style and sizing from its matched declarations.
   pub(super) fn resolve_pseudo_style(
     &self,
     pseudo_matched: &MatchedDeclarationsView<'_>,

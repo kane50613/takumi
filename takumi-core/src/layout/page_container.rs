@@ -23,15 +23,14 @@ use crate::{
   },
 };
 
-/// What no rule gives a page-margin box: the properties outside the
-/// [ones that apply to it](https://drafts.csswg.org/css-page-3/#margin-property-list).
 /// What the page container does not paint of the page context's style: its border, which the
 /// page border box paints.
 const PAGE_CONTAINER_RESET: &str = "border:0;";
 /// What the page border box does not paint of the page context's style: its background, which
 /// the page container paints across the page.
 const PAGE_BORDER_BOX_RESET: &str = "background:none;";
-
+/// What no rule gives a page-margin box: the properties outside the
+/// [ones that apply to it](https://drafts.csswg.org/css-page-3/#margin-property-list).
 const MARGIN_BOX_RESET: &str = "display:block;position:static;float:none;transform:none;\
   rotate:none;scale:none;translate:none;";
 
