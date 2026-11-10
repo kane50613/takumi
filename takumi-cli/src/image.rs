@@ -46,7 +46,7 @@ pub(crate) struct ImageArgs {
 /// The viewport a raster product lays the document out in.
 #[derive(clap::Args)]
 struct ViewportArgs {
-  /// The viewport width in CSS pixels.
+  /// The viewport width in CSS pixels. Set it to the width the document is designed for.
   #[arg(long, default_value_t = 1200, value_parser = clap::value_parser!(u32).range(1..))]
   width: u32,
 
@@ -54,7 +54,8 @@ struct ViewportArgs {
   #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
   height: Option<u32>,
 
-  /// The device pixel ratio, which scales the image's pixels.
+  /// The device pixel ratio. `--dpr 2` writes an image twice as wide and twice as tall, for
+  /// high-density screens.
   #[arg(long, default_value_t = 1.0, value_parser = parse_device_pixel_ratio)]
   dpr: f32,
 }
