@@ -33,6 +33,34 @@ takumi image card.html -o - --format svg | gzip > card.svg.gz
 
 Warnings and errors go to standard error, starting with `warning:` or `error:`. A warning means a file was skipped and the render went on, such as a missing image. `-q` hides warnings and keeps errors.
 
+### What a render did
+
+`--log info` prints one line to standard error for each stage, with the time since the command began:
+
+```sh
+takumi image card.html -o card.png --log info
+```
+
+```
+[     0.6ms] input: read file:///site/card.html, 290 bytes
+[     5.1ms] stylesheet: style sheets loaded: 1
+[    10.2ms] resource: images loaded: 1
+[    20.0ms] render: rendered 4339 bytes
+[    20.1ms] output: writing card.png
+```
+
+`--log debug` adds a line for each style sheet, font file, and image loaded, the size layout gave the canvas or each PDF page, and what the render looked for and did not find:
+
+```
+[     3.9ms] font: no face is loaded for font-family "Inter"
+[     5.8ms] image: no image is loaded for "missing.png"
+[     6.0ms] layout: page 1 is 718.1102x1046.9292
+```
+
+A missing font family is not a warning, since text falls back to the next family as CSS says. The `debug` line is where it shows. Each `debug` line prints once, however many boxes reach it. The word before the colon is the stage, so `grep '] font:'` keeps one stage.
+
+### Exit codes
+
 The exit code tells a script why a render failed:
 
 | Code | Meaning                                                                |

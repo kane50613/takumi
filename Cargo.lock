@@ -1817,6 +1817,7 @@ dependencies = [
  "data-url",
  "encoding_rs",
  "libc",
+ "log",
  "serde_json",
  "takumi",
  "takumi-pdf",

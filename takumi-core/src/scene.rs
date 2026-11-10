@@ -832,6 +832,9 @@ impl Scene {
     let results = LayoutResults::compute_for_paint(&root, viewport.into());
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
+
+    log::debug!(target: "takumi::layout", "laid out {}x{}", size.width, size.height);
+
     let layers = SceneRequest {
       root: &root,
       layout_results: &results,

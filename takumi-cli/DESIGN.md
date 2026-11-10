@@ -25,6 +25,7 @@ A product gets its own subcommand when its options differ from every other produ
 
 - The rendered file goes to `-o`. Nothing else is written to standard output, except the list `--list-resources` prints, one resource per line with tab-separated fields. A flag that only reads, such as `--list-resources`, needs no `-o`.
 - Warnings and errors go to standard error, as `warning: …` and `error: …`. `-q` hides warnings. An error says what failed and the flag or change that fixes it.
+- `--log info` and `--log debug` print what a render does to standard error, as `[<time>] <stage>: …`. A stage is the last part of a `log` target such as `takumi::font`, and `info` holds one line per stage. A new step logs under an existing stage where one fits. Each `debug` line prints once.
 - Exit codes: `0` when the file is written, `1` when rendering fails, `2` for a usage error, including an output format takumi does not write, and `3` when the sandbox denies a read, so a script can tell a policy failure from a broken document.
 
 ## Resources and trust

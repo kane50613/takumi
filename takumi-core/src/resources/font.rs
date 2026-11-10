@@ -378,10 +378,16 @@ impl Fonts {
       .iter()
       .filter_map(|family| match family {
         FontFamilyToken::Owned(name) => {
-          self
+          let faces = self
             .registry
             .selector
-            .get_font_data(description, name, false)
+            .get_font_data(description, name, false);
+
+          if faces.is_none() {
+            log::debug!(target: "takumi::font", "no face is loaded for font-family {name:?}");
+          }
+
+          faces
         }
         FontFamilyToken::Generic(generic) => {
           self
