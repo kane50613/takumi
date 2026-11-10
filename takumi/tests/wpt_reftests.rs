@@ -1178,8 +1178,9 @@ impl Runner {
           Ok(Sheet {
             page_box: container.page_box,
             under: container
-              .below
+              .background
               .into_iter()
+              .chain(container.below)
               .chain(container.border_box)
               .filter_map(|fragment| paint(fragment, container.page_box.size).transpose())
               .collect::<Result<_, String>>()?,

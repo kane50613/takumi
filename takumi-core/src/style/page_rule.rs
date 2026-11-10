@@ -1237,16 +1237,18 @@ mod tests {
       PageKind::First,
     );
 
-    assert_eq!(styles.page, "color:red;margin:1in;");
+    let block = StyleDeclarationBlock::parse_loosy;
+
+    assert_eq!(styles.page, block("color:red;margin:1in"));
     assert_eq!(
       styles.margins,
       [
-        (PageMarginKind::TopLeft, "content:'c';".to_owned()),
+        (PageMarginKind::TopLeft, block("content:'c'")),
         (
           PageMarginKind::TopCenter,
-          "content:'a';content:'first';color:green;color:blue;".to_owned()
+          block("content:'a';content:'first';color:green;color:blue")
         ),
-        (PageMarginKind::BottomLeft, "content:'b';".to_owned()),
+        (PageMarginKind::BottomLeft, block("content:'b'")),
       ]
     );
   }

@@ -242,6 +242,7 @@ struct CounterEntry {
 }
 
 /// A box of the page context, which Blink's counters treat apart from the document's.
+#[cfg_attr(not(feature = "fragmentation"), expect(dead_code))]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum PageObject {
   /// The page box, which counts the `page` counter.
@@ -303,6 +304,7 @@ impl CountersAttachmentContext {
   }
 
   /// [`Self::enter_object`] for a box of the page context.
+  #[cfg(feature = "fragmentation")]
   pub(super) fn enter_page_object(&mut self, style: &ComputedStyle, object: PageObject) {
     self.page_object = Some(object);
     self.enter_object(style, ListItemCounter::None);
@@ -310,6 +312,7 @@ impl CountersAttachmentContext {
   }
 
   /// [`Self::leave_object`] for a box of the page context.
+  #[cfg(feature = "fragmentation")]
   pub(super) fn leave_page_object(&mut self, style: &ComputedStyle, object: PageObject) {
     self.page_object = Some(object);
     self.leave_object(style, ListItemCounter::None);

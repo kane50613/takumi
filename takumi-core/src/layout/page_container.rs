@@ -17,14 +17,21 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   style::{
-    BoxSizing, ContentItem, ContentValue, Display, JustifyContent, Position, StyleDeclarationBlock,
-    VerticalAlign, VerticalAlignKeyword, ZIndex,
+    BoxSizing, ColorInput, ContentItem, ContentValue, Display, JustifyContent, Position,
+    StyleDeclarationBlock, VerticalAlign, VerticalAlignKeyword, ZIndex,
     page_rule::{PAGES_COUNTER, PageMarginKind, PageStyles},
   },
 };
 
 /// What no rule gives a page-margin box: the properties outside the
 /// [ones that apply to it](https://drafts.csswg.org/css-page-3/#margin-property-list).
+/// What the page container does not paint of the page context's style: its border, which the
+/// page border box paints.
+const PAGE_CONTAINER_RESET: &str = "border:0;";
+/// What the page border box does not paint of the page context's style: its background, which
+/// the page container paints across the page.
+const PAGE_BORDER_BOX_RESET: &str = "background:none;";
+
 const MARGIN_BOX_RESET: &str = "display:block;position:static;float:none;transform:none;\
   rotate:none;scale:none;translate:none;";
 
@@ -43,10 +50,12 @@ pub struct PageFragment {
 pub struct PageContainer {
   /// The page's box model: its size, and the used margins, borders, and padding around its area.
   pub page_box: PageBox,
+  /// The page context's background across the whole page, margins included, which paints first.
+  pub background: Option<PageFragment>,
   /// The page-margin boxes with a negative `z-index`, which paint under the page border box, in
   /// paint order.
   pub below: Vec<PageFragment>,
-  /// The page border box, which paints under the page's content.
+  /// The page border box's borders, which paint under the page's content.
   pub border_box: Option<PageFragment>,
   /// The other page-margin boxes, which paint over the page's content, in paint order.
   pub above: Vec<PageFragment>,
@@ -191,11 +200,17 @@ impl PageMarginKind {
   }
 }
 
-/// The length `length` computes to against `basis`, zero for `auto`.
+/// The length `length` computes to against `basis`, zero for `auto`. A length in px stays as
+/// written, where a layout unit would round it.
 fn px(length: LayoutLength, basis: f32) -> f32 {
-  length
-    .resolve_or_zero(Some(LayoutUnit::from_float(basis)))
-    .to_float()
+  match length {
+    LayoutLength::Fixed(px) => px,
+    LayoutLength::Percent(fraction) => fraction * basis,
+    LayoutLength::Calc { px, percent } => px + percent * basis,
+    length => length
+      .resolve_or_zero(Some(LayoutUnit::from_float(basis)))
+      .to_float(),
+  }
 }
 
 /// A box's border, padding, and margins against `available`, each side's percentage taking the
@@ -247,10 +262,13 @@ fn border_box_axis(
       style.max_size.height,
     )
   };
-  let basis = Some(LayoutUnit::from_float(available));
   let border_box = |length: LayoutLength| {
-    length.resolve(basis).map(|resolved| {
-      let resolved = resolved.to_float();
+    let resolves = length
+      .resolve(Some(LayoutUnit::from_float(available)))
+      .is_some();
+
+    resolves.then(|| {
+      let resolved = px(length, available);
 
       match style.box_sizing {
         BoxSizing::BorderBox => resolved.max(border_padding_sum),
@@ -638,7 +656,7 @@ impl PageContainers {
     base: PageBox,
     page_count: Option<usize>,
   ) -> PageContainer {
-    let context = Self::page_context(&self.root, styles, &base);
+    let context = Self::page_context(&self.root, styles, &base, "");
     let style = LayoutStyle::from_computed(&context.style, &context.sizing, false);
     let (page_box, border_box_size) = Self::resolve_page_box_geometry(&style, base);
 
@@ -647,25 +665,48 @@ impl PageContainers {
       .counters
       .enter_page_object(&context.style, PageObject::PageBox);
 
-    let border_box = (!styles.page.declarations.is_empty()).then(|| PageFragment {
-      offset: Point::new(page_box.margin.left, page_box.margin.top),
-      size: border_box_size,
-      root: RenderNode::page_box(
-        context.clone(),
-        Box::default(),
-        LayoutStyle {
-          display: Display::FlowRoot,
-          position: Position::Static,
-          float: Float::None,
-          size: border_box_size.map(LayoutLength::Fixed),
-          min_size: Size::new(LayoutLength::Auto, LayoutLength::Auto),
-          max_size: Size::new(LayoutLength::Auto, LayoutLength::Auto),
-          box_sizing: BoxSizing::BorderBox,
-          margin: Rect::default(),
-          padding: page_box.padding.map(LayoutLength::Fixed),
-          ..style
-        },
-      ),
+    let fragment = |reset: &str, offset: Point<f32>, size: Size<f32>, padding: Rect<f32>| {
+      let context = Self::page_context(&self.root, styles, &base, reset);
+
+      PageFragment {
+        offset,
+        size,
+        root: RenderNode::page_box(
+          context,
+          Box::default(),
+          LayoutStyle {
+            display: Display::FlowRoot,
+            position: Position::Static,
+            float: Float::None,
+            size: size.map(LayoutLength::Fixed),
+            min_size: Size::new(LayoutLength::Auto, LayoutLength::Auto),
+            max_size: Size::new(LayoutLength::Auto, LayoutLength::Auto),
+            box_sizing: BoxSizing::BorderBox,
+            margin: Rect::default(),
+            padding: padding.map(LayoutLength::Fixed),
+            ..style.clone()
+          },
+        ),
+      }
+    };
+    let paints_background = context.style.background_data.background_image.is_some()
+      || context.style.background_data.background_color != ColorInput::transparent();
+    let background = paints_background.then(|| {
+      fragment(
+        PAGE_CONTAINER_RESET,
+        Point::default(),
+        page_box.size,
+        Rect::default(),
+      )
+    });
+    let has_border = style.border != Rect::default();
+    let border_box = has_border.then(|| {
+      fragment(
+        PAGE_BORDER_BOX_RESET,
+        Point::new(page_box.margin.left, page_box.margin.top),
+        border_box_size,
+        page_box.padding,
+      )
     });
     let (below, above, needs_page_count) =
       self.lay_out_all_margin_boxes(&context, styles, &page_box, page_count);
@@ -676,6 +717,7 @@ impl PageContainers {
 
     PageContainer {
       page_box,
+      background,
       below,
       border_box,
       above,
@@ -683,15 +725,38 @@ impl PageContainers {
     }
   }
 
+  /// Passes the next page without laying its container out, as a page that is not drawn still
+  /// moves the counters.
+  pub fn skip_next(&mut self, styles: &PageStyles, base: PageBox) {
+    let context = Self::page_context(&self.root, styles, &base, "");
+
+    self
+      .counters
+      .enter_page_object(&context.style, PageObject::PageBox);
+    self
+      .counters
+      .leave_page_object(&context.style, PageObject::PageBox);
+  }
+
   /// Blink's `StyleForPage`: the page context `styles` give a page under `root`, over the margins
-  /// of `base`, which stand in for the ones Blink takes from the print settings.
-  fn page_context(root: &RenderContext, styles: &PageStyles, base: &PageBox) -> RenderContext {
+  /// of `base`, which stand in for the ones Blink takes from the print settings, and under the
+  /// declarations of `reset`.
+  fn page_context(
+    root: &RenderContext,
+    styles: &PageStyles,
+    base: &PageBox,
+    reset: &str,
+  ) -> RenderContext {
     let mut declarations = StyleDeclarationBlock::parse_loosy(&format!(
       "margin:{}px {}px {}px {}px",
       base.margin.top, base.margin.right, base.margin.bottom, base.margin.left
     ));
 
-    for declaration in styles.page.iter() {
+    for declaration in styles
+      .page
+      .iter()
+      .chain(StyleDeclarationBlock::parse_loosy(reset).iter())
+    {
       declarations.push(declaration.clone(), false);
     }
 
@@ -701,7 +766,7 @@ impl PageContainers {
   /// The box of a page `styles` style under `root` over `base`, its size and the margins no rule
   /// sets.
   pub fn page_box(root: &RenderContext, styles: &PageStyles, base: PageBox) -> PageBox {
-    let context = Self::page_context(root, styles, &base);
+    let context = Self::page_context(root, styles, &base, "");
     let style = LayoutStyle::from_computed(&context.style, &context.sizing, false);
 
     Self::resolve_page_box_geometry(&style, base).0
@@ -746,10 +811,23 @@ impl PageContainers {
 
     // The page is as large as its margin box: Blink sizes a PDF's pages from the `@page`
     // properties alone, so a border box and margins that do not add up to `size` change it.
+    let fitted = |base: f32, margin_box: f32| {
+      if (margin_box - base).abs() < LayoutUnit::epsilon() {
+        base
+      } else {
+        margin_box
+      }
+    };
     let page_box = PageBox {
       size: Size::new(
-        border_box.width + margin.left + margin.right,
-        border_box.height + margin.top + margin.bottom,
+        fitted(
+          base.size.width,
+          border_box.width + margin.left + margin.right,
+        ),
+        fitted(
+          base.size.height,
+          border_box.height + margin.top + margin.bottom,
+        ),
       ),
       margin,
       border: style.border,
@@ -1029,5 +1107,102 @@ mod tests {
     assert_eq!(resolve((auto, zero), true), (80.0, 0.0));
     assert_eq!(resolve((zero, zero), true), (80.0, 0.0));
     assert_eq!(resolve((zero, zero), false), (0.0, 80.0));
+  }
+  fn base() -> PageBox {
+    PageBox {
+      size: Size::new(400.0, 300.0),
+      margin: Rect {
+        top: 10.0,
+        right: 20.0,
+        bottom: 10.0,
+        left: 20.0,
+      },
+      ..PageBox::default()
+    }
+  }
+
+  /// The page style the base page's margins give, as [`PageContainers::page_context`] sets them.
+  fn page_style() -> LayoutStyle {
+    LayoutStyle {
+      margin: base().margin.map(LayoutLength::Fixed),
+      ..LayoutStyle::default()
+    }
+  }
+
+  #[test]
+  fn a_page_without_a_size_of_its_own_keeps_its_base_box() {
+    let (page_box, border_box) = PageContainers::resolve_page_box_geometry(&page_style(), base());
+
+    assert_eq!(page_box, base());
+    assert_eq!(border_box, Size::new(360.0, 280.0));
+  }
+
+  #[test]
+  fn auto_margins_center_a_narrower_page_area_and_fixed_ones_resize_the_page() {
+    let narrow = LayoutStyle {
+      size: Size::new(LayoutLength::Fixed(300.0), LayoutLength::Auto),
+      ..page_style()
+    };
+    let centered = LayoutStyle {
+      margin: Rect {
+        left: LayoutLength::Auto,
+        right: LayoutLength::Auto,
+        ..narrow.margin
+      },
+      ..narrow.clone()
+    };
+    let (page_box, border_box) = PageContainers::resolve_page_box_geometry(&centered, base());
+
+    assert_eq!(border_box.width, 300.0);
+    assert_eq!(page_box.size, base().size);
+    assert_eq!((page_box.margin.left, page_box.margin.right), (50.0, 50.0));
+
+    let (page_box, _) = PageContainers::resolve_page_box_geometry(&narrow, base());
+
+    assert_eq!(page_box.size, Size::new(340.0, 300.0));
+    assert_eq!((page_box.margin.left, page_box.margin.right), (20.0, 20.0));
+  }
+
+  #[test]
+  fn borders_and_padding_lie_between_the_margins_and_the_page_area() {
+    let style = LayoutStyle {
+      border: Rect {
+        top: 4.0,
+        right: 4.0,
+        bottom: 4.0,
+        left: 4.0,
+      },
+      padding: Rect {
+        top: LayoutLength::Fixed(12.0),
+        right: LayoutLength::Percent(0.1),
+        bottom: LayoutLength::Fixed(12.0),
+        left: LayoutLength::Percent(0.1),
+      },
+      ..page_style()
+    };
+    let (page_box, border_box) = PageContainers::resolve_page_box_geometry(&style, base());
+
+    assert_eq!(border_box, Size::new(360.0, 280.0));
+    assert_eq!(page_box.padding.left, 40.0);
+    assert_eq!(page_box.area(), Size::new(272.0, 248.0));
+    assert_eq!(page_box.area_origin(), Point::new(64.0, 26.0));
+  }
+
+  #[test]
+  fn a_style_that_leaves_no_page_area_is_ignored() {
+    let style = LayoutStyle {
+      padding: Rect {
+        top: LayoutLength::Fixed(200.0),
+        right: LayoutLength::Fixed(0.0),
+        bottom: LayoutLength::Fixed(200.0),
+        left: LayoutLength::Fixed(0.0),
+      },
+      ..page_style()
+    };
+
+    assert_eq!(
+      PageContainers::resolve_page_box_geometry(&style, base()).0,
+      base()
+    );
   }
 }

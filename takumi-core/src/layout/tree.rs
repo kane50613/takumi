@@ -18,6 +18,8 @@ use crate::layout::{
   releases::{Finished, Releases},
 };
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::counters::PageObject;
 use crate::{
   context::{BoxId, RenderContext},
   font_style::SizedFontStyle,
@@ -27,7 +29,7 @@ use crate::{
   layout::{
     block_node::LayoutCache,
     constraint_space::CacheSlot,
-    counters::{CountersAttachmentContext, ListItemCounter, PageObject},
+    counters::{CountersAttachmentContext, ListItemCounter},
     floats_utils::Float as LayoutFloat,
     grid::grid_layout_algorithm::GridGeometry,
     inline::{

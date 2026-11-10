@@ -220,11 +220,11 @@ A document can draw its own headers and footers with the page-margin rules of CS
 
 There are 16 boxes: three along each edge, such as `@top-left`, `@top-center`, and `@top-right`, and one in each corner, such as `@bottom-right-corner`. A box without `content`, or with `content: none`, is not drawn. The boxes inherit from the `@page` rule, so `font` and `color` set there apply to all of them.
 
-`content` takes strings, images, `counter(page)`, and `counter(pages)`, with a counter style as the second argument, such as `counter(page, upper-roman)`. `counter-increment: page 2` in the `@page` rule changes how far the page number moves on each page. Other counters read 0.
+`content` takes strings, images, and counters. `counter(page)` is the page number and `counter(pages)` the page count, each with a counter style as an optional second argument, such as `counter(page, upper-roman)`. `counter-increment: page 2` in the `@page` rule changes how far the page number moves on each page, and a counter the root element sets can be read as well.
 
-The three boxes on an edge share its length by the width of their content, and `width`, `height`, `margin`, `border`, `padding`, and `background` size and decorate a box as they do an element. Text is centered across the edge by default, with the outer boxes aligned to the page's sides. `text-align` and `vertical-align` change that.
+The three boxes on an edge share its length by the width of their content, and `width`, `height`, `margin`, `border`, `padding`, and `background` size and decorate a box as they do an element. Text is centered across the edge by default, with the outer boxes aligned to the page's sides. `text-align` and `vertical-align` change that, and `z-index` orders boxes that overlap.
 
-Page-margin boxes draw in the margin the `@page` rule or the `margin` option gives, and they do not grow it. They draw alongside a `header` or `footer` band, so use one or the other for each margin. A box does not paint the `@page` rule's own `background` or `border`.
+Page-margin boxes draw in the margin the `@page` rule or the `margin` option gives, and they do not grow it. They draw alongside a `header` or `footer` band, so use one or the other for each margin.
 
 ## Band height
 

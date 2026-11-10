@@ -4,6 +4,6 @@ packages:
   takumi-pdf: minor
 ---
 
-# `@page` rules draw page-margin boxes, such as `@top-left` and `@bottom-center`
+# `@page` rules style the page and draw page-margin boxes, such as `@bottom-center`
 
-A page-margin rule nested in `@page`, such as `@bottom-center { content: "Page " counter(page) " of " counter(pages) }`, now draws its `content` in that part of the page's margin. Before, these rules were dropped.
+An `@page` rule now gives the page its `background`, `border`, `padding`, `width`, and `height`, and a page-margin rule nested in it, such as `@bottom-center { content: "Page " counter(page) " of " counter(pages) }`, draws its `content` in that part of the margin. Before, only `size` and `margin` were read.
