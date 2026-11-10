@@ -31,7 +31,30 @@ takumi image card.html -o - --format svg | gzip > card.svg.gz
 
 ## Messages and exit codes
 
-Warnings and errors go to standard error, starting with `warning:` or `error:`. A warning means a file was skipped and the render went on, such as a missing image. `-q` hides warnings and keeps errors.
+Warnings and errors go to standard error, starting with `warning:` or `error:`. A warning means the render went on without something the document asked for:
+
+```
+warning: ignored the property `widht` at line 4, column 13 of its style sheet or `style` attribute, since takumi does not support it. Check its spelling.
+warning: no font draws 你 (U+4F60), 好 (U+597D), so each shows as an empty box. Pass a font that does with `--font`, or check the `font-family` of that text.
+```
+
+| Warning                   | What the render did                                               |
+| ------------------------- | ----------------------------------------------------------------- |
+| A file that did not load  | Left out the image, font, or style sheet.                         |
+| An unsupported property   | Dropped the declaration, as a browser drops one it does not know. |
+| A character no font draws | Drew an empty box in its place.                                   |
+
+Each warning prints once. `-q` hides warnings and keeps errors.
+
+### Fail on a warning
+
+A warning leaves the exit code at `0`, since the output was written. `--deny-warnings` makes any warning a failure. The command prints its warnings, writes no output, and exits with `1`:
+
+```sh
+takumi image card.html -o card.png --deny-warnings
+```
+
+`-q` hides the warnings and `--deny-warnings` still counts them.
 
 ### What a render did
 
@@ -52,7 +75,7 @@ takumi image card.html -o card.png --log info
 `--log debug` adds a line for each style sheet, font file, and image loaded, and for what the render dropped or did not find:
 
 ```
-[     4.7ms] style: ignored the unknown property `widht`
+[     4.7ms] style: ignored the property `cursor`, which changes nothing in a render
 [     5.7ms] style: `bogus-utility` is not a utility takumi knows
 [     6.2ms] style: ignored `display: flexx` at line 2, column 32 of its style sheet or `style` attribute
 [     6.9ms] font: no face is loaded for font-family "Inter", so text uses Geist
@@ -65,13 +88,13 @@ takumi image card.html -o card.png --log info
 
 | Stage    | What `debug` adds                                                                                           |
 | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `style`  | Each property, value, rule, and utility class the parser dropped. <sup>1</sup>                              |
+| `style`  | Each value, rule, and utility class the parser dropped. <sup>1</sup>                                        |
 | `font`   | Each font file loaded, and each `font-family` name with no loaded face, with the family text falls back to. |
 | `image`  | Each image loaded, and each one a box asked for that was not.                                               |
 | `layout` | The size of the canvas, or of each PDF page with why it ended.                                              |
 | `paint`  | How many chunks each paint pass draws.                                                                      |
 
-<sup>1</sup> A line number counts from the start of its `<style>` element or file. A vendor-prefixed property such as `-webkit-font-smoothing` is not listed.
+<sup>1</sup> A line number counts from the start of its `<style>` element or file. An unsupported property is a warning instead, unless it could not change a render, such as `cursor` or `transition`, which is listed here. A vendor-prefixed property such as `-webkit-font-smoothing` is not listed at all.
 
 A missing font family is not a warning, since text falls back to the next family as CSS says. The `debug` line is where it shows. Each `debug` line prints once, however many boxes reach it. The word before the colon is the stage, so `grep '] font:'` keeps one stage.
 
@@ -86,7 +109,8 @@ The exit code tells a script why a render failed:
 | `2`  | The command line is wrong. <sup>2</sup>                                |
 | `3`  | The document tried to read a file outside the directories you granted. |
 
-<sup>1</sup> For example, an input that does not exist, or a file past the size limits.
+<sup>1</sup> For example, an input that does not exist, a file past the size limits, or a warning
+under `--deny-warnings`.
 
 <sup>2</sup> For example, an unknown flag, a value CSS does not accept, or an output format takumi
 does not write.

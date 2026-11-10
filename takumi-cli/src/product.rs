@@ -7,6 +7,7 @@ use takumi::prelude::{Fonts, ImageSource, RenderNeeds};
 use crate::{
   document::{Document, ImageCache},
   input::{InputArgs, OutputArgs, read_html_file},
+  logger::Logger,
   sandbox::ResourceError,
   stylesheet::StyleSheetLoader,
 };
@@ -59,7 +60,7 @@ pub(crate) fn run(
   product: &impl Product,
   input: &InputArgs,
   output: &OutputArgs,
-  quiet: bool,
+  deny_warnings: bool,
 ) -> Result<(), Box<dyn Error>> {
   let loaded = input.read()?;
 
@@ -121,7 +122,8 @@ pub(crate) fn run(
     for each in std::iter::once(&document).chain(&bands) {
       each.list_resources(product, &fonts, sandbox)?;
     }
-    print_warnings(&warnings, quiet);
+    warn(&warnings);
+    Logger::deny_warnings(deny_warnings)?;
 
     return Ok(());
   }
@@ -132,31 +134,26 @@ pub(crate) fn run(
     each.load_resources(product, &mut fonts, &mut images, sandbox, &mut warnings)?;
   }
 
-  print_warnings(&warnings, quiet);
+  warn(&warnings);
 
   let images = images.into_images();
 
   log::info!(target: "takumi::resource", "images loaded: {}", images.len());
 
-  if !quiet {
-    for warning in product.warnings(&document, &fonts, &images) {
-      eprintln!("warning: {warning}");
-    }
+  for warning in product.warnings(&document, &fonts, &images) {
+    log::warn!(target: "takumi::render", "{warning}");
   }
 
   let rendered = product.render(document, bands, &fonts, images)?;
 
   log::info!(target: "takumi::render", "rendered {} bytes", rendered.len());
+  Logger::deny_warnings(deny_warnings)?;
   output.write(&rendered, product.is_text())
 }
 
-/// Prints each warning to standard error, unless `-q` hides them.
-fn print_warnings(warnings: &[ResourceError], quiet: bool) {
-  if quiet {
-    return;
-  }
-
-  for warning in warnings {
-    eprintln!("warning: {warning}");
+/// Logs each resource the render went on without.
+fn warn(skipped: &[ResourceError]) {
+  for error in skipped {
+    log::warn!(target: "takumi::resource", "{error}");
   }
 }

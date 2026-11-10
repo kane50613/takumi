@@ -6,7 +6,7 @@ use std::{
   sync::{Arc, OnceLock},
 };
 
-use cssparser::{Parser, RuleBodyParser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, RuleBodyParser, SourceLocation, Token, match_ignore_ascii_case};
 use pastey::paste;
 use serde::{
   Deserialize,
@@ -319,6 +319,56 @@ macro_rules! push_four_side_declarations {
 
 /// `declarations`, or the error Blink's `kNonNegative` raises when one of them is negative on a
 /// property that must not be.
+/// Whether an unsupported property changes nothing in a render, which has no pointer, scrolling, or elapsed time.
+fn is_inert_property(name: &str) -> bool {
+  let name = name.to_ascii_lowercase();
+
+  ["transition", "scroll", "overscroll-behavior"]
+    .iter()
+    .any(|prefix| name.starts_with(prefix))
+    || matches!(
+      name.as_str(),
+      "cursor"
+        | "pointer-events"
+        | "user-select"
+        | "will-change"
+        | "touch-action"
+        | "resize"
+        | "caret-color"
+        | "accent-color"
+        | "appearance"
+        | "text-size-adjust"
+        | "text-rendering"
+        | "print-color-adjust"
+        | "forced-color-adjust"
+        | "interpolate-size"
+        | "overflow-anchor"
+    )
+}
+
+/// Logs the declaration of a property takumi has no support for, as a warning when it could change the render.
+fn log_unsupported_property(name: &str, location: SourceLocation) {
+  // A vendor-prefixed property is written for another engine, not by mistake.
+  if name.starts_with('-') {
+    return;
+  }
+
+  if is_inert_property(name) {
+    log::debug!(
+      target: "takumi::style",
+      "ignored the property `{name}`, which changes nothing in a render"
+    );
+    return;
+  }
+
+  log::warn!(
+    target: "takumi::style",
+    "ignored the property `{name}` at line {}, column {} of its style sheet or `style` attribute, since takumi does not support it. Check its spelling.",
+    location.line + 1,
+    location.column
+  );
+}
+
 fn reject_negative<'i>(declarations: ParsedDeclarations) -> ParseResult<'i, ParsedDeclarations> {
   if declarations
     .iter()
@@ -578,10 +628,7 @@ macro_rules! define_style {
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             Self::Ignored => {
-              // A vendor-prefixed property is written for another engine, not by mistake.
-              if !name.starts_with('-') {
-                log::debug!(target: "takumi::style", "ignored the unknown property `{name}`");
-              }
+              log_unsupported_property(name, input.current_source_location());
 
               while input.next_including_whitespace_and_comments().is_ok() {}
               Ok(ParsedDeclarations::new())

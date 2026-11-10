@@ -6,7 +6,7 @@ use std::{
 };
 
 const PAGE: &str = r#"<style>
-  body { margin: 0; font-family: Nowhere, sans-serif; colr: red; -webkit-font-smoothing: antialiased }
+  body { margin: 0; font-family: Nowhere, sans-serif; colr: red; cursor: pointer; -webkit-font-smoothing: antialiased }
   h1 { break-after: page; display: flexx }
 </style>
 <h1 style="widht: 1px" tw="flex bogus-utility">First</h1><img src="missing.png" width="10" height="10"><p>Second</p>"#;
@@ -74,8 +74,7 @@ fn debug_names_the_css_the_parser_dropped() {
   let steps = steps("style", &["image", "--log", "debug"]);
 
   for dropped in [
-    "style: ignored the unknown property `colr`",
-    "style: ignored the unknown property `widht`",
+    "style: ignored the property `cursor`, which changes nothing in a render",
     "style: ignored `display: flexx` at line 3, column ",
     "style: `bogus-utility` is not a utility takumi knows",
   ] {
