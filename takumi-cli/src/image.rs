@@ -9,7 +9,7 @@ use takumi::{
     Error as RenderError, Fonts, OutputFormat, Quality, RenderNeeds, RenderOptions, SvgOptions,
     Viewport,
   },
-  render, render_svg, write_image,
+  render, render_svg, uncovered_characters, write_image,
 };
 
 use crate::{
@@ -109,6 +109,11 @@ impl ImageArgs {
       (Some(format), _) => format,
       // A listing writes no file, and every format loads the same resources.
       (None, _) if !self.output.renders() => ImageFormat::Png,
+      (None, Some("pdf")) => {
+        return Err(usage(
+          "`takumi image` writes images, but the output ends in `.pdf`. Use `takumi pdf`.".into(),
+        ));
+      }
       (None, Some(extension)) => ImageFormat::from_str(extension, true).map_err(|_| {
         usage(format!("`.{extension}` is not an image format takumi writes. Use png, jpg, webp, or svg, or pass `--format`."))
       })?,
@@ -154,6 +159,25 @@ impl Product for Image {
     images: &Images,
   ) -> Result<RenderNeeds, Box<dyn Error>> {
     Ok(needs(self.options(document, fonts, images.clone())))
+  }
+
+  fn warnings(&self, document: &Document, fonts: &Fonts, images: &Images) -> Vec<String> {
+    let uncovered =
+      uncovered_characters(self.options(document, fonts, images.clone())).unwrap_or_default();
+
+    if uncovered.is_empty() {
+      return Vec::new();
+    }
+
+    let named = uncovered
+      .iter()
+      .map(|&character| format!("{character} (U+{:04X})", character as u32))
+      .collect::<Vec<_>>()
+      .join(", ");
+
+    vec![format!(
+      "no font draws {named}, so each shows as an empty box. Pass a font that does with `--font`, or check the `font-family` of that text."
+    )]
   }
 
   fn render(

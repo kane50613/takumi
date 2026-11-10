@@ -911,6 +911,31 @@ impl SceneView<'_> {
     Ok(layout)
   }
 
+  /// The characters of the scene's text that no font it can use draws, each once, in paint order.
+  pub fn uncovered_characters(self) -> Vec<char> {
+    let mut characters = Vec::new();
+
+    self.for_each_paint(|paint| {
+      let Some(node) = self.root.node_at_path(&paint.path) else {
+        return;
+      };
+      let Ok(layout) = self.enter(paint) else {
+        return;
+      };
+      let Some(items) = node.fragment_items_of(paint.fragment_index, layout) else {
+        return;
+      };
+
+      for character in items.uncovered_characters() {
+        if !characters.contains(&character) {
+          characters.push(character);
+        }
+      }
+    });
+
+    characters
+  }
+
   /// Visits every node paint of the scene, in paint order.
   pub fn for_each_paint(self, mut visit: impl FnMut(&NodePaint)) {
     fn walk(view: SceneView<'_>, id: usize, visit: &mut impl FnMut(&NodePaint)) {

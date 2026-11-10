@@ -35,6 +35,11 @@ pub(crate) trait Product {
     images: &Images,
   ) -> Result<RenderNeeds, Box<dyn Error>>;
 
+  /// What the render would get wrong without failing, each as a warning to print before it.
+  fn warnings(&self, _document: &Document, _fonts: &Fonts, _images: &Images) -> Vec<String> {
+    Vec::new()
+  }
+
   /// The bytes of the document rendered as this product, with the documents of its
   /// [band files](Product::band_files).
   fn render(
@@ -94,7 +99,7 @@ pub(crate) fn run(
     // A stylesheet that would not load is a listing line like any other resource.
     warnings.retain(|error| match error.url() {
       Some(url) => {
-        println!("stylesheet\tblocked\t{url}\t{error}");
+        println!("stylesheet\t{}\t{url}\t{error}", error.listing_status());
         false
       }
       None => true,
@@ -116,8 +121,16 @@ pub(crate) fn run(
 
   print_warnings(&warnings, quiet);
 
+  let images = images.into_images();
+
+  if !quiet {
+    for warning in product.warnings(&document, &fonts, &images) {
+      eprintln!("warning: {warning}");
+    }
+  }
+
   output.write(
-    &product.render(document, bands, &fonts, images.into_images())?,
+    &product.render(document, bands, &fonts, images)?,
     product.is_text(),
   )
 }

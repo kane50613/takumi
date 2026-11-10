@@ -213,7 +213,7 @@ impl Document {
     match self.base.join(written) {
       Ok(url) => match sandbox.check(&url) {
         Ok(()) => println!("{kind}\tallowed\t{url}"),
-        Err(error) => println!("{kind}\tblocked\t{url}\t{error}"),
+        Err(error) => println!("{kind}\t{}\t{url}\t{error}", error.listing_status()),
       },
       Err(_) => println!("{kind}\tinvalid\t{written}"),
     }

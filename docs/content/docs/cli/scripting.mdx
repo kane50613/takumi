@@ -51,14 +51,14 @@ Code `3` separates a policy failure from a broken document, so a script can retr
 
 ## Check a document in CI
 
-`--list-resources` prints one tab-separated line for each file the document would load, with `blocked` in the second field for a file that would not load. This step fails when any file would be blocked:
+`--list-resources` prints one tab-separated line for each file the document would load, with `allowed` in the second field for a file that would load. This step fails when any file would not:
 
 ```sh
 listing=$(takumi image page.html --list-resources) || exit
-blocked=$(printf '%s\n' "$listing" | awk -F '\t' '$2 == "blocked"')
+unloaded=$(printf '%s\n' "$listing" | awk -F '\t' '$2 != "allowed"')
 
-if [ -n "$blocked" ]; then
-  printf '%s\n' "$blocked"
+if [ -n "$unloaded" ]; then
+  printf '%s\n' "$unloaded"
   exit 1
 fi
 ```

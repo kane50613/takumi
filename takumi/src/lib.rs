@@ -52,6 +52,7 @@
 //! - [`render_animation`] renders every frame of a scene timeline at a fixed frame rate.
 //!   [`write_animation`] streams the frames into animated WebP, APNG, or GIF instead.
 //! - [`measure`] lays out the tree and returns box sizes and text runs without drawing.
+//! - [`uncovered_characters`] lists the characters no registered font draws.
 //! - [`needs`] reports the images and `@font-face` files a tree loads, for the host to fetch
 //!   before it renders.
 //! - `render_svg` writes vector SVG. It needs the `svg-backend` feature.
@@ -111,8 +112,8 @@ pub mod prelude {
 pub use takumi_core::html::{from_html, parse_html};
 #[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
-  measure, needs, render, render_animation, write_animated_gif, write_animated_png,
-  write_animated_webp, write_animation, write_image,
+  measure, needs, render, render_animation, uncovered_characters, write_animated_gif,
+  write_animated_png, write_animated_webp, write_animation, write_image,
 };
 #[cfg(feature = "svg-backend")]
 pub use takumi_svg::render as render_svg;
