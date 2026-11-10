@@ -7,7 +7,7 @@
 
 use std::{
   cell::Cell,
-  fmt,
+  fmt, fs,
   io::{self, Read},
   path::{self, Component, Path, PathBuf, Prefix},
 };
@@ -129,7 +129,21 @@ impl std::error::Error for ResourceError {}
 #[derive(Debug)]
 struct Root {
   path: PathBuf,
+  /// The path with its symlinks followed, when that differs: a document named through the
+  /// working directory carries this name, as macOS reports `/private/tmp` for `/tmp`.
+  resolved: Option<PathBuf>,
   dir: Dir,
+}
+
+impl Root {
+  /// The path of `file` inside the directory, under either name of the directory.
+  fn relative(&self, file: &Path) -> Option<PathBuf> {
+    file
+      .strip_prefix(&self.path)
+      .ok()
+      .or_else(|| file.strip_prefix(self.resolved.as_ref()?).ok())
+      .map(Path::to_path_buf)
+  }
 }
 
 /// The directories a document may read and what it has read so far.
@@ -150,8 +164,16 @@ impl Sandbox {
           |error: io::Error| io::Error::new(error.kind(), format!("{}: {error}", root.display()));
         let path = absolute_path(&root).map_err(with_path)?;
         let dir = Dir::open_ambient_dir(&path, ambient_authority()).map_err(with_path)?;
+        let resolved = fs::canonicalize(&path)
+          .ok()
+          .and_then(|resolved| lexical(&resolved))
+          .filter(|resolved| *resolved != path);
 
-        Ok(Root { path, dir })
+        Ok(Root {
+          path,
+          resolved,
+          dir,
+        })
       })
       .collect::<io::Result<_>>()?;
 
@@ -265,7 +287,7 @@ impl Sandbox {
     let Some((root, relative)) = self
       .roots
       .iter()
-      .find_map(|root| Some((root, path.strip_prefix(&root.path).ok()?.to_path_buf())))
+      .find_map(|root| Some((root, root.relative(&path)?)))
       .filter(|(_, relative)| !relative.as_os_str().is_empty())
     else {
       return Err(ResourceError::Denied {
@@ -391,8 +413,6 @@ pub(crate) fn directory_url(directory: &Path) -> io::Result<Url> {
 
 #[cfg(test)]
 mod tests {
-  use std::fs;
-
   use super::*;
 
   fn temp_dir(name: &str) -> PathBuf {
@@ -451,6 +471,25 @@ mod tests {
     let url = directory_url(&root).unwrap().join("link.txt").unwrap();
 
     assert!(matches!(sandbox.read(&url), Err(ResourceError::Escapes(_))));
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn a_root_named_through_a_symlink_holds_files_named_through_its_target() {
+    let target = fs::canonicalize(temp_dir("resolved-target")).unwrap();
+    let link = temp_dir("resolved-links").join("link");
+
+    fs::write(target.join("a.css"), "a{}").unwrap();
+    let _ = fs::remove_file(&link);
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    let sandbox = Sandbox::new([link.clone()]).unwrap();
+
+    for named in [&target, &link] {
+      let url = directory_url(named).unwrap().join("a.css").unwrap();
+
+      assert_eq!(sandbox.read(&url).unwrap(), b"a{}", "{url}");
+    }
   }
 
   #[cfg(unix)]
