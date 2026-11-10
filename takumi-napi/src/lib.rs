@@ -17,6 +17,11 @@ mod svg_render_task;
 
 use std::{fmt::Display, sync::Arc};
 
+/// musl's own allocator is the slow path of every render there: see this crate's `Cargo.toml`.
+#[cfg(target_env = "musl")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
 pub use renderer::Renderer;

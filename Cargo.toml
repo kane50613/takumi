@@ -98,6 +98,13 @@ features = ["derive"]
 version = "0.15"
 default-features = false
 
+# `local_dynamic_tls` is what lets a library loaded with `dlopen`, as a Node addon is, use it on
+# musl.
+[workspace.dependencies.mimalloc]
+version = "0.1"
+default-features = false
+features = ["local_dynamic_tls"]
+
 [workspace.dependencies.napi]
 version = "3"
 default-features = false
@@ -223,8 +230,10 @@ strip = "debuginfo"
 # Crates that run at most once per image (parse/decode/encode), never per pixel.
 # Size-optimizing them is perf-neutral (verified via the napi JS bench). Hot
 # raster/shaping and image-webp (wasm webp encode) stay at opt-level 3.
-[profile.release.package.zune-jpeg]
-opt-level = "z"
+#
+# zune-jpeg is not in this list: a JPEG decodes per pixel, and "z" costs a native build 10-21%
+# of every decode (8.4ms vs 7.2ms for a 1920x1280 progressive file) to save 16KB. The wasm
+# packages size-optimize it in their build scripts, where the bundle is what ships.
 [profile.release.package.imagesize]
 opt-level = "z"
 [profile.release.package.cssparser]

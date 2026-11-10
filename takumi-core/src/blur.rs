@@ -45,6 +45,9 @@ pub fn blur_alpha(alpha: &mut [u8], width: usize, height: usize, sigma: f32) {
 }
 
 /// The pixels of `region` that [`blur_alpha`] leaves of `mask` at `mask_at`, blurring nothing else.
+///
+/// A box's shadow is a mask whose middle rows are all alike, and its middle columns too. The blur
+/// of such lines is one line repeated, so the mask blurs without them: see [`Fold`].
 pub fn blur_alpha_region(
   mask: &[u8],
   mask_at: Placement,
@@ -60,16 +63,17 @@ pub fn blur_alpha_region(
     return vec![0; region.width() * region.height()];
   }
 
-  let source = Raster {
-    left: mask_window.columns.start,
-    top: mask_window.rows.start,
-    width: mask_window.width(),
-    height: mask_window.height(),
-    pixels: mask.as_chunks::<1>().0.to_vec(),
-  };
+  let mask = mask.as_chunks::<1>().0;
 
   if sigma > MAX_SIGMA {
     let size = (image.width as usize, image.height as usize);
+    let source = Raster {
+      left: mask_window.columns.start,
+      top: mask_window.rows.start,
+      width: mask_window.width(),
+      height: mask_window.height(),
+      pixels: mask.to_vec(),
+    };
 
     return rescaled(
       source,
@@ -78,8 +82,7 @@ pub fn blur_alpha_region(
       Point { x: sigma, y: sigma },
       Rounding::Alpha,
     )
-    .as_flattened()
-    .to_vec();
+    .into_flattened();
   }
 
   // Every pass reads a pixel's neighbours no further than three sigma away, plus a rounding margin.
@@ -91,21 +94,182 @@ pub fn blur_alpha_region(
     height: image.height,
   });
   let crop = region.grown(reach).intersection(&image_window);
-  let mut cropped = source.within(crop.clone());
+  let cropped = Raster::part(mask, &mask_window, crop.clone());
+  let kept = region.intersection(&crop);
+  let folds = Folds::of(&cropped, reach as usize);
+  let mut folded = match &folds {
+    Some(folds) => folds.fold(&cropped),
+    None => cropped,
+  };
 
   blur(
-    &mut cropped.pixels,
-    crop.width(),
-    crop.height(),
+    &mut folded.pixels,
+    folded.width,
+    folded.height,
     Point { x: sigma, y: sigma },
     Rounding::Alpha,
   );
 
-  cropped
-    .within(region.intersection(&crop))
-    .pixels
-    .as_flattened()
-    .to_vec()
+  match folds {
+    Some(folds) => folds.unfold(&folded, &crop, &kept),
+    None => folded.within(kept).pixels.into_flattened(),
+  }
+}
+
+/// Fewest lines a [`Fold`] takes out; under it the blur saves less than the fold costs.
+const MIN_FOLD: usize = 16;
+
+/// The middle of a run of equal lines, rows or columns, longer than a blur reaches both ways. A
+/// pixel's blur reads no further than `reach` lines away, so every line that far inside the run
+/// blurs to the same pixels. A raster without all but one of them blurs to the pixels the whole
+/// one does, with that one line standing for the rest.
+#[derive(Clone, Copy)]
+struct Fold {
+  /// The first line taken out. The line before it stands for them all.
+  start: usize,
+  /// How many lines are taken out.
+  len: usize,
+}
+
+impl Fold {
+  /// The fold of the longest run among `lines` lines, where `equals_previous` tells whether a line
+  /// equals the one before it.
+  fn of(lines: usize, reach: usize, equals_previous: impl Fn(usize) -> bool) -> Option<Self> {
+    let keep = 2 * reach + 1;
+    let mut longest = 0..0;
+    let mut run_start = 0;
+
+    for line in 1..=lines {
+      if line == lines || !equals_previous(line) {
+        if line - run_start > longest.len() {
+          longest = run_start..line;
+        }
+        run_start = line;
+      }
+    }
+
+    (longest.len() >= keep + MIN_FOLD).then(|| Self {
+      start: longest.start + reach + 1,
+      len: longest.len() - keep,
+    })
+  }
+
+  /// Where the folded raster keeps what line `line` blurs to.
+  fn folded(self, line: usize) -> usize {
+    if line < self.start {
+      line
+    } else if line < self.start + self.len {
+      self.start - 1
+    } else {
+      line - self.len
+    }
+  }
+
+  /// A fold that takes nothing out of `lines` lines.
+  fn none(lines: usize) -> Self {
+    Self {
+      start: lines,
+      len: 0,
+    }
+  }
+}
+
+/// The rows and columns an alpha raster blurs without.
+struct Folds {
+  rows: Fold,
+  columns: Fold,
+}
+
+impl Folds {
+  /// The folds of `raster` for a blur reaching `reach` pixels, when it has a run to fold.
+  fn of(raster: &Raster<1>, reach: usize) -> Option<Self> {
+    let (width, height) = (raster.width, raster.height);
+    let keep = 2 * reach + 1;
+
+    if width.max(height) < keep + MIN_FOLD || width == 0 {
+      return None;
+    }
+
+    let row = |row: usize| &raster.pixels[row * width..(row + 1) * width];
+    let rows = Fold::of(height, reach, |line| row(line) == row(line - 1));
+    let columns = (width >= keep + MIN_FOLD)
+      .then(|| {
+        // Whether each column differs from the one before it in any row.
+        let mut differs = vec![0u8; width];
+
+        for row in raster.pixels.chunks_exact(width) {
+          for (differs, pair) in differs[1..].iter_mut().zip(row.windows(2)) {
+            *differs |= u8::from(pair[0] != pair[1]);
+          }
+        }
+        Fold::of(width, reach, |line| differs[line] == 0)
+      })
+      .flatten();
+
+    (rows.is_some() || columns.is_some()).then(|| Self {
+      rows: rows.unwrap_or(Fold::none(height)),
+      columns: columns.unwrap_or(Fold::none(width)),
+    })
+  }
+
+  /// `raster` without the folded rows and columns.
+  fn fold(&self, raster: &Raster<1>) -> Raster<1> {
+    let (width, height) = (
+      raster.width - self.columns.len,
+      raster.height - self.rows.len,
+    );
+    let mut pixels = Vec::with_capacity(width * height);
+    let after = self.columns.start + self.columns.len;
+
+    for (index, row) in raster.pixels.chunks_exact(raster.width).enumerate() {
+      if (self.rows.start..self.rows.start + self.rows.len).contains(&index) {
+        continue;
+      }
+      pixels.extend_from_slice(&row[..self.columns.start]);
+      pixels.extend_from_slice(&row[after..]);
+    }
+
+    Raster {
+      left: raster.left,
+      top: raster.top,
+      width,
+      height,
+      pixels,
+    }
+  }
+
+  /// The pixels of `kept`, a window inside `crop`, that a raster of `crop` blurs to, read from
+  /// `blurred`, the blur of its fold.
+  fn unfold(&self, blurred: &Raster<1>, crop: &Window, kept: &Window) -> Vec<u8> {
+    let (width, height) = (kept.width(), kept.height());
+    let mut pixels = vec![0u8; width * height];
+
+    if width == 0 || height == 0 {
+      return pixels;
+    }
+
+    let left = (kept.columns.start - crop.columns.start) as usize;
+    let top = (kept.rows.start - crop.rows.start) as usize;
+    let source = blurred.pixels.as_flattened();
+    // Where the folded columns begin and end in a row of `kept`.
+    let fold_start = self.columns.start.clamp(left, left + width) - left;
+    let fold_end = (self.columns.start + self.columns.len).clamp(left, left + width) - left;
+
+    for (index, row) in pixels.chunks_exact_mut(width).enumerate() {
+      let folded_row = self.rows.folded(top + index);
+      let from = &source[folded_row * blurred.width..(folded_row + 1) * blurred.width];
+
+      row[..fold_start].copy_from_slice(&from[left..left + fold_start]);
+      if fold_start < fold_end {
+        row[fold_start..fold_end].fill(from[self.columns.start - 1]);
+      }
+      row[fold_end..].copy_from_slice(
+        &from[left + fold_end - self.columns.len..left + width - self.columns.len],
+      );
+    }
+
+    pixels
+  }
 }
 
 fn blur<const N: usize>(
@@ -128,7 +292,7 @@ fn blur<const N: usize>(
     return blur_rescaled(pixels, width, height, sigma, rounding);
   }
 
-  let parallel = pixels.len() * N >= PARALLEL_CHANNELS;
+  let parallel = pixels.len() * N >= PARALLEL_CHANNELS && crate::parallel::spreads();
 
   // Rows blur as the columns of a transposed strip, so both axes run the vectorized column pass.
   if let Some(pass) = Pass::new(sigma.x, rounding) {
@@ -476,25 +640,37 @@ impl<const N: usize> Raster<N> {
 
   /// The part of the image `window` covers, on a transparent raster of `window`.
   fn within(self, window: Window) -> Self {
+    let at = Window {
+      columns: self.left..self.left + self.width as i64,
+      rows: self.top..self.top + self.height as i64,
+    };
+
+    Self::part(&self.pixels, &at, window)
+  }
+
+  /// The part of `pixels`, an image filling `at`, that `window` covers, on a transparent raster of
+  /// `window`.
+  fn part(pixels: &[[u8; N]], at: &Window, window: Window) -> Self {
     let (width, height) = (window.width(), window.height());
-    let mut pixels = vec![[0u8; N]; width * height];
+    let (source_width, source_height) = (at.width(), at.height());
+    let mut part = vec![[0u8; N]; width * height];
     let columns =
-      self.left.max(window.columns.start)..(self.left + self.width as i64).min(window.columns.end);
+      at.columns.start.max(window.columns.start)..at.columns.end.min(window.columns.end);
 
     if !columns.is_empty() {
       let length = (columns.end - columns.start) as usize;
 
-      for row in 0..self.height {
-        let y = self.top + row as i64 - window.rows.start;
+      for row in 0..source_height {
+        let y = at.rows.start + row as i64 - window.rows.start;
 
         if y < 0 || y >= height as i64 {
           continue;
         }
 
-        let from = row * self.width + (columns.start - self.left) as usize;
+        let from = row * source_width + (columns.start - at.columns.start) as usize;
         let to = y as usize * width + (columns.start - window.columns.start) as usize;
 
-        pixels[to..to + length].copy_from_slice(&self.pixels[from..from + length]);
+        part[to..to + length].copy_from_slice(&pixels[from..from + length]);
       }
     }
 
@@ -503,7 +679,7 @@ impl<const N: usize> Raster<N> {
       top: window.rows.start,
       width,
       height,
-      pixels,
+      pixels: part,
     }
   }
 
@@ -836,8 +1012,8 @@ fn box_window(sigma: f32) -> usize {
 #[cfg(test)]
 mod tests {
   use super::{
-    BAND_LANES, MAX_SIGMA, Placement, Point, Size, blur_alpha, blur_alpha_region, blur_rgba,
-    blur_rgba_axes, box_window, downscale_step_count,
+    BAND_LANES, Folds, MAX_SIGMA, Placement, Point, Raster, Size, Window, blur_alpha,
+    blur_alpha_region, blur_rgba, blur_rgba_axes, box_window, downscale_step_count,
   };
 
   #[test]
@@ -976,6 +1152,154 @@ mod tests {
         [0; 64]
       );
     }
+  }
+
+  /// The coverage of a box with rounded corners, antialiased, as a shadow's mask is.
+  fn rounded_box(width: u32, height: u32, radius: f32) -> Vec<u8> {
+    (0..height)
+      .flat_map(|row| (0..width).map(move |column| (column, row)))
+      .map(|(column, row)| {
+        let (x, y) = (column as f32 + 0.5, row as f32 + 0.5);
+        let inside_x = (radius - x).max(x - (width as f32 - radius)).max(0.0);
+        let inside_y = (radius - y).max(y - (height as f32 - radius)).max(0.0);
+        let distance = (inside_x * inside_x + inside_y * inside_y).sqrt();
+
+        ((radius - distance + 0.5).clamp(0.0, 1.0) * 255.0) as u8
+      })
+      .collect()
+  }
+
+  /// A box's mask blurs through its folds to the pixels the whole image blurs to, whichever of its
+  /// rows and columns the region reaches.
+  #[test]
+  fn a_folded_box_blurs_as_the_whole_image_does() {
+    let mut folded_both = 0;
+
+    for (width, height, radius) in [
+      (300, 220, 0.0),
+      (300, 220, 24.0),
+      (411, 97, 40.0),
+      (64, 400, 9.0),
+      (260, 260, 130.0),
+      (173, 181, 3.5),
+    ] {
+      let mask = rounded_box(width, height, radius);
+
+      for sigma in [0.6, 2.0, 7.5, 12.5, 30.0] {
+        let reach = (3.0_f32 * sigma).ceil() as u32 + 4;
+        let image = Size {
+          width: width + 2 * reach + 11,
+          height: height + 2 * reach + 9,
+        };
+        let mask_at = Placement {
+          left: reach as i32 + 6,
+          top: reach as i32 + 4,
+          width,
+          height,
+        };
+        let mut whole = vec![0u8; (image.width * image.height) as usize];
+
+        for (row, source) in mask.chunks_exact(width as usize).enumerate() {
+          let start = (mask_at.top as usize + row) * image.width as usize + mask_at.left as usize;
+
+          whole[start..start + source.len()].copy_from_slice(source);
+        }
+        blur_alpha(
+          &mut whole,
+          image.width as usize,
+          image.height as usize,
+          sigma,
+        );
+
+        let regions = [
+          // The whole image, its left part, a window inside the box, and strips across each fold.
+          (0, 0, image.width, image.height),
+          (0, 0, image.width / 2 + 3, image.height),
+          (
+            mask_at.left as u32 + width / 3,
+            mask_at.top as u32 + height / 3,
+            width / 3,
+            height / 3,
+          ),
+          (0, image.height / 2 - 2, image.width, 5),
+          (image.width / 2 - 2, 0, 5, image.height),
+          (image.width - 40, image.height - 30, 40, 30),
+        ];
+
+        for (left, top, region_width, region_height) in regions {
+          let region = Placement {
+            left: left as i32,
+            top: top as i32,
+            width: region_width,
+            height: region_height,
+          };
+          let expected: Vec<u8> = (region.top..region.bottom())
+            .flat_map(|row| {
+              let start = row as usize * image.width as usize + region.left as usize;
+
+              whole[start..start + region.width as usize].iter().copied()
+            })
+            .collect();
+
+          assert_eq!(
+            blur_alpha_region(&mask, mask_at, image, region, sigma),
+            expected,
+            "box {width}x{height} radius {radius} sigma {sigma} region {region:?}"
+          );
+        }
+
+        let window = Window::from(Placement {
+          left: 0,
+          top: 0,
+          width: image.width,
+          height: image.height,
+        });
+        let raster = Raster::part(mask.as_chunks::<1>().0, &Window::from(mask_at), window);
+
+        if let Some(folds) = Folds::of(&raster, reach as usize)
+          && folds.rows.len > 0
+          && folds.columns.len > 0
+        {
+          folded_both += 1;
+        }
+      }
+    }
+
+    // The grid is only worth its name if most of it folds both ways.
+    assert!(
+      folded_both >= 12,
+      "{folded_both} cases folded rows and columns"
+    );
+  }
+
+  /// A mask of noise has no run to fold, and one with equal lines along one axis folds that axis.
+  #[test]
+  fn only_equal_lines_fold() {
+    let window = |width: u32, height: u32| {
+      Window::from(Placement {
+        left: 0,
+        top: 0,
+        width,
+        height,
+      })
+    };
+    let noise: Vec<[u8; 1]> = (0..200u32 * 120)
+      .map(|index| [(index.wrapping_mul(2_654_435_761) >> 13) as u8])
+      .collect();
+    let raster = Raster::part(&noise, &window(200, 120), window(200, 120));
+
+    assert!(Folds::of(&raster, 5).is_none());
+
+    // Every row alike: columns of noise, so only the rows fold.
+    let striped: Vec<[u8; 1]> = (0..120).flat_map(|_| noise[..200].to_vec()).collect();
+    let raster = Raster::part(&striped, &window(200, 120), window(200, 120));
+    let folds = Folds::of(&raster, 5).unwrap();
+
+    assert_eq!((folds.rows.start, folds.rows.len), (6, 120 - 11));
+    assert_eq!(folds.columns.len, 0);
+    assert_eq!(folds.fold(&raster).height, 11);
+    // A run only as long as the blur reaches both ways, and a little more, stays.
+    assert!(Folds::of(&raster, 52).is_none());
   }
 
   /// A region blurs to the pixels the whole image blurs to, below the sigma limit and past it.

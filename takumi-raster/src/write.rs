@@ -236,7 +236,6 @@ impl Bitmap {
   }
 
   /// The `width` by `height` region whose top-left pixel is `(x, y)`.
-  #[cfg(any(test, target_arch = "wasm32"))]
   pub(crate) fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Self {
     let row_bytes = width as usize * 4;
     let data = (y..y + height)
@@ -255,7 +254,6 @@ impl Bitmap {
     }
   }
 
-  #[cfg(any(test, target_arch = "wasm32"))]
   fn index(&self, x: u32, y: u32) -> usize {
     debug_assert!(x < self.width && y < self.height);
 
@@ -517,6 +515,8 @@ pub fn write_image<T: Write>(
   destination: &mut T,
   format: OutputFormat,
 ) -> Result<()> {
+  let _active = takumi_core::parallel::ActiveRender::begin();
+
   match format {
     OutputFormat::Jpeg { quality } => {
       let mut encoder = JpegEncoder::new(destination, quality.get());
@@ -694,9 +694,16 @@ where
     let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
 
     gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
+    // The LZW pass is the frame's own, so it runs here, beside the other frames of its batch.
+    gif_frame.make_lzw_pre_encoded();
     Ok(gif_frame)
   };
-  let frames = once(Ok(first)).chain(frames);
+  let frames = HeldFrames {
+    frames: once(Ok(first)).chain(frames),
+    held: None,
+    // The longest delay a GIF frame stores, in hundredths of a second.
+    longest_ms: u32::from(u16::MAX) * 10,
+  };
 
   // Each frame quantizes to its own palette, so a batch quantizes at once and is written in order.
   #[cfg(feature = "rayon")]
@@ -715,7 +722,9 @@ where
       let quantized: Vec<_> = batch.into_par_iter().map(quantize).collect();
 
       for gif_frame in quantized {
-        encoder.write_frame(&gif_frame?).map_err(Error::encode)?;
+        encoder
+          .write_lzw_pre_encoded_frame(&gif_frame?)
+          .map_err(Error::encode)?;
       }
     }
   }
@@ -724,10 +733,48 @@ where
   {
     for frame in frames {
       encoder
-        .write_frame(&quantize(frame)?)
+        .write_lzw_pre_encoded_frame(&quantize(frame)?)
         .map_err(Error::encode)?;
     }
     Ok(())
+  }
+}
+
+/// Frames with each run of equal images made one frame, shown for as long as the run is, up to
+/// `longest_ms`. A timeline holds an image for many frames more often than not, and a held frame
+/// would otherwise quantize and compress again for every one of them.
+struct HeldFrames<I> {
+  frames: I,
+  held: Option<AnimationFrame>,
+  longest_ms: u32,
+}
+
+impl<I: Iterator<Item = Result<AnimationFrame>>> Iterator for HeldFrames<I> {
+  type Item = Result<AnimationFrame>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    loop {
+      let frame = match self.frames.next() {
+        Some(Ok(frame)) => frame,
+        Some(Err(error)) => return Some(Err(error)),
+        None => return self.held.take().map(Ok),
+      };
+
+      match &mut self.held {
+        Some(held)
+          if held.image.dimensions() == frame.image.dimensions()
+            && held.image.as_raw() == frame.image.as_raw()
+            && held.duration_ms.saturating_add(frame.duration_ms) <= self.longest_ms =>
+        {
+          held.duration_ms += frame.duration_ms;
+        }
+        held => {
+          if let Some(shown) = held.replace(frame) {
+            return Some(Ok(shown));
+          }
+        }
+      }
+    }
   }
 }
 
@@ -784,32 +831,47 @@ where
 
   let mut sequence = 0_u32;
   let mut written = 0_u32;
+  let mut previous: Option<F> = None;
 
   for frame in once(Ok(first)).chain(frames) {
     let frame = frame?;
-    let frame = frame.borrow();
+    let AnimationFrame { image, duration_ms } = frame.borrow();
 
-    if frame.image.width() != width || frame.image.height() != height {
+    if image.width() != width || image.height() != height {
       return Err(Error::MixedAnimationFrameDimensions);
     }
     if written == frame_count {
       return Err(frame_count_mismatch());
     }
 
+    // A frame after the first replaces only the pixels that changed since the one before it, and
+    // the pixel at the origin when none did, so a held frame costs a few bytes and no deflate of
+    // the canvas. The count in the header stays the caller's.
+    let region = match &previous {
+      None => FrameRegion::full(width, height),
+      Some(previous) => {
+        FrameRegion::changed(&previous.borrow().image, image).unwrap_or(FrameRegion::ORIGIN)
+      }
+    };
+
     writer
-      .write_chunk(
-        fcTL,
-        &frame_control(sequence, width, height, frame.duration_ms),
-      )
+      .write_chunk(fcTL, &frame_control(sequence, region, *duration_ms))
       .map_err(Error::encode)?;
     sequence += 1;
 
+    let part;
+    let pixels = if region == FrameRegion::full(width, height) {
+      image
+    } else {
+      part = image.crop(region.x, region.y, region.width, region.height);
+      &part
+    };
     let stream = encoding.deflate(
       Pixels::Rgba {
-        image: &frame.image,
+        image: pixels,
         keep_alpha: true,
       },
-      height as usize,
+      region.height as usize,
     )?;
 
     if written == 0 {
@@ -828,6 +890,7 @@ where
       }
     }
     written += 1;
+    previous = Some(frame);
   }
 
   if written != frame_count {
@@ -837,18 +900,83 @@ where
   writer.finish().map_err(Error::encode)
 }
 
+/// The pixels of the canvas a frame of an animation replaces.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct FrameRegion {
+  x: u32,
+  y: u32,
+  width: u32,
+  height: u32,
+}
+
+impl FrameRegion {
+  /// The one pixel a frame that changes nothing writes again.
+  const ORIGIN: Self = Self {
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+  };
+
+  fn full(width: u32, height: u32) -> Self {
+    Self {
+      x: 0,
+      y: 0,
+      width,
+      height,
+    }
+  }
+
+  /// The smallest region outside which `current` holds the bytes `previous` does, both the same
+  /// size, or `None` when they hold the same bytes throughout.
+  fn changed(previous: &Bitmap, current: &Bitmap) -> Option<Self> {
+    let mut rows: Option<(u32, u32)> = None;
+    let (mut left, mut right) = (current.width(), 0);
+
+    for (row, (before, after)) in previous.rows().zip(current.rows()).enumerate() {
+      if before == after {
+        continue;
+      }
+
+      let mut differing = before
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(after.as_chunks::<4>().0)
+        .enumerate()
+        .filter(|(_, (before, after))| before != after)
+        .map(|(column, _)| column as u32);
+      let first = differing.next()?;
+      let last = differing.next_back().unwrap_or(first);
+
+      rows = Some((rows.map_or(row as u32, |(top, _)| top), row as u32));
+      left = left.min(first);
+      right = right.max(last);
+    }
+
+    rows.map(|(top, bottom)| Self {
+      x: left,
+      y: top,
+      width: right + 1 - left,
+      height: bottom + 1 - top,
+    })
+  }
+}
+
 fn frame_count_mismatch() -> Error {
   Error::encode(io::Error::other("APNG frames do not match the frame count"))
 }
 
-/// An `fcTL` for a whole-canvas frame shown for `duration_ms`, replacing what came before it, as
-/// the png crate writes one by default.
-fn frame_control(sequence: u32, width: u32, height: u32, duration_ms: u32) -> [u8; 26] {
+/// An `fcTL` for a frame shown for `duration_ms` that replaces `region` of the canvas and leaves
+/// the rest as the frame before it left it.
+fn frame_control(sequence: u32, region: FrameRegion, duration_ms: u32) -> [u8; 26] {
   let mut control = [0; 26];
 
   control[..4].copy_from_slice(&sequence.to_be_bytes());
-  control[4..8].copy_from_slice(&width.to_be_bytes());
-  control[8..12].copy_from_slice(&height.to_be_bytes());
+  control[4..8].copy_from_slice(&region.width.to_be_bytes());
+  control[8..12].copy_from_slice(&region.height.to_be_bytes());
+  control[12..16].copy_from_slice(&region.x.to_be_bytes());
+  control[16..20].copy_from_slice(&region.y.to_be_bytes());
   control[20..22].copy_from_slice(&duration_ms_to_apng_delay(duration_ms).to_be_bytes());
   control[22..24].copy_from_slice(&1000_u16.to_be_bytes());
   control
@@ -1125,6 +1253,126 @@ mod tests {
       return;
     };
     assert_eq!((second.delay_num, second.delay_den), (30, 1000));
+  }
+
+  /// Frames that hold, change in one corner, and change throughout decode, one after another, to
+  /// the frames they were written from, each replacing no more than what changed.
+  #[test]
+  fn write_animated_png_decodes_to_the_frames_it_was_given() {
+    let base = Bitmap::from_fn(40, 30, |x, y| {
+      let alpha = if (x + y) % 7 == 0 { 0 } else { u8::MAX };
+
+      [(x * 6) as u8, (y * 8) as u8, 90, alpha]
+    });
+    let mut corner = base.clone();
+
+    for y in 20..27 {
+      for x in 31..38 {
+        corner.put_pixel(x, y, [255, 255, 0, 128]);
+      }
+    }
+
+    let other = Bitmap::from_fn(40, 30, |x, y| {
+      [(y * 3) as u8 + 1, (x * 5) as u8, 7, u8::MAX]
+    });
+    let frames = vec![
+      mk_frame(base.clone(), 100),
+      mk_frame(base.clone(), 50),
+      mk_frame(corner.clone(), 40),
+      mk_frame(corner, 40),
+      mk_frame(other, 70),
+      mk_frame(base, 10),
+    ];
+    let mut bytes = Vec::new();
+
+    write_animated_png(&frames, &mut bytes, AnimatedPngOptions { loop_count: None }).unwrap();
+
+    let mut reader = png::Decoder::new(Cursor::new(&bytes)).read_info().unwrap();
+    let mut canvas = vec![0u8; 40 * 30 * 4];
+    let mut regions = Vec::new();
+
+    assert_eq!(reader.info().animation_control.unwrap().num_frames, 6);
+    for (index, frame) in frames.iter().enumerate() {
+      let control = if index == 0 {
+        reader.info().frame_control.unwrap()
+      } else {
+        *reader.next_frame_info().unwrap()
+      };
+      let mut part = vec![0; reader.output_buffer_size().unwrap()];
+
+      reader.next_frame(&mut part).unwrap();
+      assert_eq!(control.blend_op, png::BlendOp::Source);
+      assert_eq!(control.dispose_op, png::DisposeOp::None);
+      assert_eq!(u32::from(control.delay_num), frame.duration_ms);
+
+      let row_bytes = control.width as usize * 4;
+
+      for (row, from) in part
+        .chunks_exact(row_bytes)
+        .take(control.height as usize)
+        .enumerate()
+      {
+        let to = ((control.y_offset as usize + row) * 40 + control.x_offset as usize) * 4;
+
+        canvas[to..to + row_bytes].copy_from_slice(from);
+      }
+      assert_eq!(canvas, frame.image.as_raw(), "frame {index}");
+      regions.push((
+        control.x_offset,
+        control.y_offset,
+        control.width,
+        control.height,
+      ));
+    }
+
+    assert_eq!(regions[0], (0, 0, 40, 30));
+    assert_eq!(regions[1], (0, 0, 1, 1));
+    assert_eq!(regions[2], (31, 20, 7, 7));
+    assert_eq!(regions[3], (0, 0, 1, 1));
+    assert_eq!(regions[4], (0, 0, 40, 30));
+  }
+
+  /// A held image becomes one GIF frame shown for as long as it was held.
+  #[test]
+  fn write_animated_gif_shows_a_held_frame_once() {
+    let red = Bitmap::from_pixel(6, 4, [255, 0, 0, 255]);
+    let green = Bitmap::from_pixel(6, 4, [0, 255, 0, 255]);
+    let frames = vec![
+      mk_frame(red.clone(), 33),
+      mk_frame(red.clone(), 34),
+      mk_frame(red.clone(), 33),
+      mk_frame(green.clone(), 33),
+      mk_frame(green, 34),
+      mk_frame(red, 100),
+    ];
+    let mut bytes = Vec::new();
+
+    write_animated_gif(
+      Cow::Owned(frames),
+      &mut bytes,
+      AnimatedGifOptions { loop_count: None },
+    )
+    .unwrap();
+
+    let mut decoder_options = DecodeOptions::new();
+
+    decoder_options.set_color_output(ColorOutput::RGBA);
+
+    let mut decoder = decoder_options.read_info(Cursor::new(&bytes)).unwrap();
+    let mut shown = Vec::new();
+
+    while let Some(frame) = decoder.read_next_frame().unwrap() {
+      shown.push((frame.delay, frame.buffer[..4].to_vec()));
+    }
+
+    assert_eq!(
+      shown,
+      [
+        (10, vec![255, 0, 0, 255]),
+        (7, vec![0, 255, 0, 255]),
+        (10, vec![255, 0, 0, 255]),
+      ]
+    );
   }
 
   #[test]

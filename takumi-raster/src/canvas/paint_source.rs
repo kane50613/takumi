@@ -4,6 +4,7 @@ use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
 use crate::{
   BackgroundTile, BilinearRows, BoxRows, ColorTile, SampledBitmapView,
+  background_drawing::whole_pixel,
   blend::premultiplied_from_pixel,
   canvas::checked_area,
   style::{Affine, ImageScalingAlgorithm},
@@ -285,16 +286,8 @@ pub(crate) struct BilinearAxis {
   ratio: u32,
 }
 
-/// The two source rows a vertical axis reads.
-#[derive(Clone, Copy)]
-pub(crate) struct BilinearRow<'p> {
-  axis: BilinearAxis,
-  top: &'p [PremultipliedColorU8],
-  bottom: &'p [PremultipliedColorU8],
-}
-
 /// Bilinear magnification one row at a time, each source row lerped once, matching
-/// [`BilinearAxis::mix`].
+/// [`interpolate_bilinear`].
 pub(crate) struct BilinearColumns {
   columns: Vec<BilinearAxis>,
   lerped: RefCell<LerpedRows>,
@@ -312,7 +305,7 @@ impl BilinearColumns {
     }
   }
 
-  /// [`BilinearAxis::mix`] of each column at source rows `row` into `out`.
+  /// The bilinear mix of each column at source rows `row` into `out`.
   pub(crate) fn fill(&self, source: PixmapRef<'_>, row: BilinearAxis, out: &mut [[u8; 4]]) {
     let mut lerped = self.lerped.borrow_mut();
     let top = lerped.slot(source, &self.columns, row.floor, row.ceil);
@@ -378,17 +371,6 @@ impl BilinearAxis {
     }
   }
 
-  pub(crate) fn rows(self, source: PixmapRef<'_>) -> BilinearRow<'_> {
-    let stride = source.width() as usize;
-    let pixels = source.pixels();
-
-    BilinearRow {
-      axis: self,
-      top: &pixels[self.floor * stride..][..stride],
-      bottom: &pixels[self.ceil * stride..][..stride],
-    }
-  }
-
   /// 8.8 fixed-point weights for the taps `[floor, ceil] x [top, bottom]`.
   #[inline(always)]
   fn weights(self, row: Self) -> [u32; 4] {
@@ -401,21 +383,6 @@ impl BilinearAxis {
       u_opposite * row.ratio,
       self.ratio * row.ratio,
     ]
-  }
-
-  /// Legal premultiplied taps average to a legal premultiplied colour; measured 4% faster
-  /// on a full-canvas image when force-inlined.
-  #[inline(always)]
-  pub(crate) fn mix(self, row: BilinearRow<'_>) -> [u8; 4] {
-    mix_taps(
-      [
-        row.top[self.floor],
-        row.top[self.ceil],
-        row.bottom[self.floor],
-        row.bottom[self.ceil],
-      ],
-      self.weights(row.axis),
-    )
   }
 }
 
@@ -462,6 +429,18 @@ enum ScaledColumns {
   },
 }
 
+/// The source column the first of `columns` reads when each reads one pixel and they run in
+/// order, which makes a row of them a copy.
+fn whole_pixel_shift(columns: &[BilinearAxis]) -> Option<usize> {
+  let start = columns.first()?.floor;
+
+  columns
+    .iter()
+    .enumerate()
+    .all(|(index, column)| column.ratio == 0 && column.floor == start + index)
+    .then_some(start)
+}
+
 impl<'a> ScaledRows<'a> {
   /// `x_start` and the `y` given to `fill` are in the transform's input space.
   pub(crate) fn new(
@@ -482,6 +461,23 @@ impl<'a> ScaledRows<'a> {
       return None;
     }
 
+    // An image decoded at the size it draws maps back through a scale and its reciprocal, whose
+    // product rounds to a hair off one for some sizes (a 4032 pixel wide photograph drawn 1200
+    // wide), and its crop's offset to a hair off a whole pixel. That draw is a copy.
+    let transform = match (whole_pixel(transform.x), whole_pixel(transform.y)) {
+      (Some(x), Some(y))
+        if (transform.a - 1.0).abs() < 1e-6 && (transform.d - 1.0).abs() < 1e-6 =>
+      {
+        Affine {
+          a: 1.0,
+          d: 1.0,
+          x,
+          y,
+          ..transform
+        }
+      }
+      _ => transform,
+    };
     let footprint = SamplingFootprint::of(transform);
     let (mut sample_x, _) = transform.transform_point(x_start, 0.0);
     let start = sample_x - 0.5;
@@ -515,11 +511,16 @@ impl<'a> ScaledRows<'a> {
         span_y: footprint.box_span_y(),
       }
     } else {
-      ScaledColumns::Bilinear(BilinearColumns::new(
-        (0..width)
-          .map(|_| BilinearAxis::new(advance(), source.width()))
-          .collect(),
-      ))
+      let columns: Vec<BilinearAxis> = (0..width)
+        .map(|_| BilinearAxis::new(advance(), source.width()))
+        .collect();
+
+      // A scale that is one only after rounding, as `1200 / 4032 * (4032 / 1200)` is in `f32`,
+      // still lands every tap on a pixel centre. Those columns copy, as an exact shift does.
+      match whole_pixel_shift(&columns) {
+        Some(start) => ScaledColumns::Shift { start },
+        None => ScaledColumns::Bilinear(BilinearColumns::new(columns)),
+      }
     };
 
     Some(Self {
@@ -544,10 +545,17 @@ impl<'a> ScaledRows<'a> {
           return;
         }
 
-        let rows = row.rows(self.source);
+        // A column on a pixel centre weighs its one tap by 256, so the mix is a lerp of two rows.
+        let top = &source[row.floor * stride + start..][..out.len()];
+        let bottom = &source[row.ceil * stride + start..][..out.len()];
+        let weight = row.ratio;
 
-        for (index, dst) in out.iter_mut().enumerate() {
-          *dst = BilinearAxis::new((start + index) as f32 + 0.5, stride as u32).mix(rows);
+        for ((dst, top), bottom) in out.iter_mut().zip(top).zip(bottom) {
+          *dst = array::from_fn(|channel| {
+            ((u32::from(top[channel]) * 256 * (256 - weight)
+              + u32::from(bottom[channel]) * 256 * weight)
+              >> 16) as u8
+          });
         }
       }
       ScaledColumns::Bilinear(columns) => {
@@ -747,13 +755,99 @@ fn box_average(
 
 #[cfg(test)]
 mod tests {
-  use tiny_skia::{Pixmap, PremultipliedColorU8};
+  use tiny_skia::{Pixmap, PixmapRef, PremultipliedColorU8};
 
   use super::{
     BilinearAxis, BilinearColumns, SamplingFootprint, ScaledColumns, ScaledRows,
-    interpolate_bilinear, interpolate_with_footprint, sample_paint_source,
+    interpolate_bilinear, interpolate_with_footprint, mix_taps, sample_paint_source,
   };
   use crate::style::{Affine, ImageScalingAlgorithm};
+
+  /// The two source rows a vertical axis reads.
+  #[derive(Clone, Copy)]
+  struct BilinearRow<'p> {
+    axis: BilinearAxis,
+    top: &'p [PremultipliedColorU8],
+    bottom: &'p [PremultipliedColorU8],
+  }
+
+  impl BilinearAxis {
+    fn rows(self, source: PixmapRef<'_>) -> BilinearRow<'_> {
+      let stride = source.width() as usize;
+      let pixels = source.pixels();
+
+      BilinearRow {
+        axis: self,
+        top: &pixels[self.floor * stride..][..stride],
+        bottom: &pixels[self.ceil * stride..][..stride],
+      }
+    }
+
+    /// One pixel's bilinear mix, the reference the row fillers are tested against.
+    fn mix(self, row: BilinearRow<'_>) -> [u8; 4] {
+      mix_taps(
+        [
+          row.top[self.floor],
+          row.top[self.ceil],
+          row.bottom[self.floor],
+          row.bottom[self.ceil],
+        ],
+        self.weights(row.axis),
+      )
+    }
+  }
+
+  #[test]
+  fn a_scale_that_rounds_to_one_draws_as_the_shift_it_is() {
+    let pixmap = noisy_pixmap();
+    let source = pixmap.as_ref().into();
+    let width = 60;
+    // What a 4032 pixel wide photograph decoded 1200 wide draws under.
+    let scale = (1200.0_f32 / 4032.0) * (4032.0_f32 / 1200.0);
+
+    assert_ne!(scale, 1.0);
+    // Offsets a hair off a whole pixel, as a crop's are, snap with the scale.
+    for (shift_x, shift_y, row_offset) in [
+      (7.0, 3.0, 0.5),
+      (7.0, 3.0, 0.75),
+      (30.0, 40.0, 0.5),
+      (0.0, 0.0, 0.5),
+      (6.999_99, 3.000_01, 0.5),
+    ] {
+      let transform = Affine::translation(shift_x, shift_y) * Affine::scale(scale, scale);
+      let shift = Affine::translation(shift_x.round(), shift_y.round());
+      let rows =
+        ScaledRows::new(source, transform, ImageScalingAlgorithm::Auto, 0.5, width).unwrap();
+      let shifted =
+        ScaledRows::new(source, shift, ImageScalingAlgorithm::Auto, 0.5, width).unwrap();
+
+      assert!(
+        matches!(rows.columns, ScaledColumns::Shift { .. }),
+        "shift {shift_x},{shift_y}"
+      );
+      for y in 0..18 {
+        let y = y as f32 + row_offset;
+        let mut drawn = vec![[0; 4]; width];
+        let mut expected = vec![[0; 4]; width];
+
+        rows.fill(y, &mut drawn);
+        shifted.fill(y, &mut expected);
+        assert_eq!(drawn, expected, "shift {shift_x},{shift_y} at row {y}");
+      }
+    }
+
+    // A scale further from one than rounding leaves it still filters.
+    let scaled = ScaledRows::new(
+      source,
+      Affine::translation(7.0, 3.0) * Affine::scale(1.001, 1.001),
+      ImageScalingAlgorithm::Auto,
+      0.5,
+      width,
+    )
+    .unwrap();
+
+    assert!(!matches!(scaled.columns, ScaledColumns::Shift { .. }));
+  }
 
   #[test]
   fn a_filled_row_mixes_each_column_alone() {

@@ -60,11 +60,25 @@ pub(crate) fn compress_segmented(
     )
   };
 
+  // The segments are the image's own, so they deflate to the same bytes on one thread or many.
   #[cfg(feature = "rayon")]
-  let starts = starts.par_iter();
+  let spread = takumi_core::parallel::spreads().then(|| {
+    starts
+      .par_iter()
+      .enumerate()
+      .map(&segment)
+      .collect::<Result<Vec<Segment>>>()
+  });
   #[cfg(not(feature = "rayon"))]
-  let starts = starts.iter();
-  let segments: Vec<Segment> = starts.enumerate().map(segment).collect::<Result<_>>()?;
+  let spread: Option<Result<Vec<Segment>>> = None;
+  let segments = match spread {
+    Some(segments) => segments?,
+    None => starts
+      .iter()
+      .enumerate()
+      .map(&segment)
+      .collect::<Result<Vec<Segment>>>()?,
+  };
 
   let adler = segments
     .iter()
