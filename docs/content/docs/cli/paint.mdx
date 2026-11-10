@@ -1,0 +1,103 @@
+---
+title: See what a document paints
+description: Read where each box, text, and image lands with takumi paint, to find why a render looks wrong without opening the image.
+---
+
+`takumi paint` lays a document out as `takumi image` does and writes what it would draw as text. Read it when part of a render is missing, in the wrong place, or the wrong color, or hand it to a script or a coding agent that cannot look at the image.
+
+```html title="card.html"
+<style>
+  body {
+    margin: 0;
+  }
+  #card {
+    width: 1200px;
+    height: 630px;
+    padding: 64px;
+    box-sizing: border-box;
+    background: #0f172a;
+    color: white;
+    overflow: hidden;
+  }
+  .title {
+    margin: 0;
+    font-size: 64px;
+  }
+  .badge {
+    position: absolute;
+    left: 1300px;
+    top: 40px;
+    width: 96px;
+    height: 96px;
+    background: red;
+  }
+</style>
+<div id="card">
+  <h1 class="title">Quarterly report</h1>
+  <div class="badge"></div>
+</div>
+```
+
+```sh
+takumi paint card.html -o - --width 1200 --height 630
+```
+
+```txt title="One line for each node"
+canvas 1200x630
+box html 0,0 1200x630
+  box body 0,0 1200x630
+    box div#card 0,0 1200x630 background #0f172a clips-overflow
+      box h1.title 64,64 1072x83
+        text h1.title 64,64 1072x83 "Quarterly report" Geist 700 64px #ffffff
+      box div.badge 1300,40 96x96 background #ff0000 offscreen
+```
+
+The last line shows why the red badge is missing from the image: `left: 1300px` puts it past the 1200px canvas.
+
+A line holds the kind of node, a selector for its element, and its rectangle on the canvas as `x,y widthxheight`. A child is indented under its parent. The rest of the line says what the node shows:
+
+- a box's `background` color or gradient, and `border` or `box-shadow` when it draws one
+- a text's content, the font it was shaped in, and its color
+- an image's `src` and natural size
+- `clips-overflow`, `opacity`, `filters`, and `transform` when they apply
+
+Two markers point at a node that cannot show. `offscreen` means its rectangle lies outside the canvas, and `empty` means it has no width or no height.
+
+## Ask for more
+
+`--detail` sets how much the output holds:
+
+| Value       | Adds                                                                   |
+| ----------- | ---------------------------------------------------------------------- |
+| `nodes`     | One line for each node. The default.                                   |
+| `drawables` | A line for each thing a node draws: its fills, borders, and text.      |
+| `full`      | The paint order, which says what covers what and what each clip holds. |
+
+```sh
+takumi paint card.html -o - --detail full
+```
+
+```txt title="The end of the full output"
+paint order
+  0 draw box div#card
+  1 begin clip box div#card
+  2 end clip box div#card
+  3 begin clip box div#card
+  4 draw text h1.title
+  5 end clip box div#card
+  6 draw box div.badge
+  7 begin clip box div#card
+  8 end clip box div#card
+```
+
+A later step draws over an earlier one, and a step between `begin clip` and `end clip` shows only inside that box. Here the title is clipped to the card, and the badge is drawn outside every clip.
+
+## Write JSON
+
+`--format json`, or an output that ends in `.json`, writes the same paint tree [takumi-paint](/docs/paint) returns. `--detail` trims it: `nodes` leaves out the drawables and the paint order, `drawables` keeps them without each glyph, and `full` holds everything.
+
+```sh
+takumi paint card.html -o card.json --detail full
+```
+
+The [paint reference](/docs/paint/reference) lists every field.

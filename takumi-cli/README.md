@@ -8,6 +8,7 @@ takumi upgrade   # later, to install the newest release
 
 takumi image card.html -o card.png --width 1200 --height 630
 takumi pdf invoice.html -o invoice.pdf --page "letter landscape" --footer footer.html
+takumi paint card.html -o -   # what the render draws, as text
 ```
 
 The [command line guide](https://takumi.kane.tw/docs/cli) covers installation, every product, and scripting. Run `takumi image --help` or `takumi pdf --help` for each flag, and see [DESIGN.md](DESIGN.md) for the conventions the commands follow.

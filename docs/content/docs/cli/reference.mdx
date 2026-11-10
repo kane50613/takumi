@@ -11,6 +11,7 @@ description: Every takumi command and flag, with its default, plus the exit code
 | ---------------------- | ---------------------------------------------------------- |
 | `takumi image <input>` | Renders an HTML file to a PNG, JPEG, WebP, or SVG image.   |
 | `takumi pdf <input>`   | Renders an HTML file to a paged PDF.                       |
+| `takumi paint <input>` | Writes what painting an HTML file draws, as text or JSON.  |
 | `takumi upgrade`       | Reinstalls takumi from the source Cargo installed it from. |
 
 Commands must be written in full. `takumi im` is an error, not `takumi image`.
@@ -29,7 +30,7 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 
 ## Input and output
 
-`takumi image` and `takumi pdf` both take these:
+`takumi image`, `takumi pdf`, and `takumi paint` all take these:
 
 | Flag                    | Default                                                | Effect                                                                         |
 | ----------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
@@ -80,6 +81,20 @@ megapixels.
 <sup>2</sup> Repeat `--author` to add more authors.
 
 A `@page` rule in the document wins over `--page` and `--margin`. In a header or footer, an element with the class `pageNumber` or `totalPages` shows the page number or the page count.
+
+## `takumi paint`
+
+| Flag                | Default                     | Effect                                        |
+| ------------------- | --------------------------- | --------------------------------------------- |
+| `--width <px>`      | `1200`                      | The viewport width in CSS pixels.             |
+| `--height <px>`     | The content's height        | The viewport height in CSS pixels.            |
+| `--dpr <ratio>`     | `1`                         | The device pixel ratio.                       |
+| `--detail <detail>` | `nodes`                     | `nodes`, `drawables`, or `full`. <sup>1</sup> |
+| `--format <format>` | From the output's extension | `text` or `json`. <sup>2</sup>                |
+
+<sup>1</sup> [See what a document paints](/docs/cli/paint) shows what each detail holds.
+
+<sup>2</sup> `takumi paint` writes text unless the output ends in `.json`.
 
 ## `takumi upgrade`
 

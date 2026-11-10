@@ -12,6 +12,7 @@
     "fonts",
     "file-access",
     "scripting",
+    "paint",
     "---[Library]Reference---",
     "reference",
     "[Styles](/docs/styles)"

@@ -43,9 +43,9 @@ pub(crate) struct ImageArgs {
   quality: Option<u8>,
 }
 
-/// The viewport a raster product lays the document out in.
+/// The viewport a product lays the document out in.
 #[derive(clap::Args)]
-struct ViewportArgs {
+pub(crate) struct ViewportArgs {
   /// The viewport width in CSS pixels. Set it to the width the document is designed for.
   #[arg(long, default_value_t = 1200, value_parser = clap::value_parser!(u32).range(1..))]
   width: u32,
@@ -62,7 +62,7 @@ struct ViewportArgs {
 
 impl ViewportArgs {
   /// The viewport in the device pixels takumi measures it in: the CSS size scaled by `--dpr`.
-  fn device_viewport(&self) -> Viewport {
+  pub(crate) fn device_viewport(&self) -> Viewport {
     let device_pixels = |css_pixels: u32| {
       (f64::from(css_pixels) * f64::from(self.dpr))
         .round()

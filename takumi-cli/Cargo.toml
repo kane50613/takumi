@@ -31,6 +31,12 @@ path = "../takumi"
 version = "2.20.0"
 features = ["from-html", "svg-backend"]
 
+[dependencies.takumi-core]
+path = "../takumi-core"
+version = "0.36.0"
+default-features = false
+features = ["paint-tree"]
+
 [dependencies.takumi-pdf]
 path = "../takumi-pdf"
 version = "0.20.0"

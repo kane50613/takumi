@@ -9,6 +9,7 @@ Each product is one subcommand named by the noun it writes, and rendering is imp
 ```sh
 takumi image <input> -o card.png
 takumi pdf <input> -o invoice.pdf
+takumi paint <input> -o -
 ```
 
 A product gets its own subcommand when its options differ from every other product's, so no flag is accepted and then ignored. `takumi animation` will follow the same shape. An action other than rendering becomes a top-level verb, never a third word under a product: `takumi upgrade` reinstalls takumi, and measuring would be `takumi measure`. There is one word per action, so no `update` beside `upgrade`. An action that reaches the network or changes the install runs only when asked, and takes `-n`/`--dry-run` to print what it would do. Subcommands are never matched by prefix, so adding one cannot change what an existing abbreviation means.
