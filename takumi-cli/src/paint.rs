@@ -7,7 +7,7 @@ use serde_json::Value;
 use takumi::prelude::{Fonts, RenderNeeds};
 use takumi_core::paint_tree::{
   Drawable, Effects, ElementInfo, NodeKind, Paint, PaintDocument, PaintNode, PaintRect, PaintStep,
-  PaintTreeOptions, Rgba, Role, Shape, TextRun, paint_tree, paint_tree_needs,
+  PaintTreeOptions, Rgba, Role, Shape, TextRun, UnpaintedReason, paint_tree, paint_tree_needs,
 };
 
 use crate::{
@@ -28,7 +28,10 @@ use crate::{
 Each line of the text format is one node, indented under its parent:
   box div#card.panel 0,0 1200x630 background #0f172a
     text h1 64,80 820x72 \"Quarterly report\" Geist 64px #ffffff
-`offscreen` marks a node outside the canvas, and `empty` one without an area.")]
+`offscreen` marks a node outside the canvas, with the edge it is past, `empty` one without an
+area, and `draws nothing` text or an image that paints no pixel, as `visibility: hidden` leaves
+it. An element `opacity: 0` hides has no node, and is listed under `not painted`. An element
+with `display: none` makes no box and is not listed.")]
 pub(crate) struct PaintArgs {
   #[command(flatten)]
   pub(crate) input: InputArgs,
@@ -154,6 +157,20 @@ impl PaintProduct {
     );
     if !document.nodes.is_empty() {
       outline.node(0, 0);
+    }
+    if !document.unpainted.is_empty() {
+      outline.text.push_str("not painted\n");
+    }
+    for unpainted in &document.unpainted {
+      let _ = writeln!(
+        outline.text,
+        "  {} {}",
+        selector(Some(&unpainted.element)),
+        match unpainted.reason {
+          UnpaintedReason::OpacityZero => "opacity: 0",
+          UnpaintedReason::DisplayNone => "display: none",
+        }
+      );
     }
     if self.detail == Detail::Full {
       outline.steps();
@@ -350,7 +367,14 @@ impl Outline<'_> {
   fn summary(&mut self, node: &PaintNode) {
     match &node.kind {
       NodeKind::Text { runs, .. } => {
-        let content: String = runs.iter().map(|run| run.text.as_str()).collect();
+        // A node that draws no run at all still names its text, marked `draws nothing`.
+        let draws_any = (0..runs.len()).any(|index| draws_run(&node.drawables, index));
+        let content: String = runs
+          .iter()
+          .enumerate()
+          .filter(|(index, _)| !draws_any || draws_run(&node.drawables, *index))
+          .map(|(_, run)| run.text.as_str())
+          .collect();
         let _ = write!(self.text, " {content:?}");
 
         if let Some(run) = runs.first() {
@@ -403,15 +427,24 @@ impl Outline<'_> {
     }
 
     let bounds = &node.bounds;
-    let is_offscreen = bounds.x >= self.document.width
-      || bounds.y >= self.document.height
-      || bounds.x + bounds.width <= 0.0
-      || bounds.y + bounds.height <= 0.0;
+    let side = if bounds.x >= self.document.width {
+      Some("right")
+    } else if bounds.x + bounds.width <= 0.0 {
+      Some("left")
+    } else if bounds.y >= self.document.height {
+      Some("bottom")
+    } else if bounds.y + bounds.height <= 0.0 {
+      Some("top")
+    } else {
+      None
+    };
 
     if bounds.width <= 0.0 || bounds.height <= 0.0 {
       self.text.push_str(" empty");
-    } else if is_offscreen {
-      self.text.push_str(" offscreen");
+    } else if let Some(side) = side {
+      let _ = write!(self.text, " offscreen past the {side} edge");
+    } else if node.drawables.is_empty() && !matches!(node.kind, NodeKind::Box { .. }) {
+      self.text.push_str(" draws nothing");
     }
   }
 
@@ -619,6 +652,15 @@ fn drawable_role(drawable: &Drawable) -> Option<Role> {
     | Drawable::Masked { role, .. } => Some(*role),
     Drawable::Group { .. } => None,
   }
+}
+
+/// Whether any of `drawables` draws the glyphs of the text run at `index`.
+fn draws_run(drawables: &[Drawable], index: usize) -> bool {
+  drawables.iter().any(|drawable| match drawable {
+    Drawable::Glyphs { run, .. } => *run == index,
+    Drawable::Group { drawables, .. } => draws_run(drawables, index),
+    _ => false,
+  })
 }
 
 /// What the first drawable of `role` is filled with.

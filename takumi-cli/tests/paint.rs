@@ -10,7 +10,7 @@ const PAGE: &str = r#"<style>
   #card { width: 300px; height: 100px; background: #0f172a; color: white; overflow: hidden }
   .ghost { position: absolute; left: 900px; top: 0; width: 20px; height: 20px; background: red }
 </style>
-<div id="card"><h1 class="title big">Hello</h1><div class="ghost"></div><p style="height: 0"></p></div>"#;
+<div id="card"><h1 class="title big">Hello</h1><div class="ghost"></div><p style="height: 0"></p><section style="opacity: 0; position: absolute; top: 0">faded <b>deep</b></section><p class="unseen" style="visibility: hidden; position: absolute; top: 0; margin: 0">unseen</p><span>shown<em style="opacity: 0">inline</em><i style="visibility: hidden">hidden</i></span></div>"#;
 
 fn paint(name: &str, arguments: &[&str]) -> String {
   let dir = env::temp_dir().join(format!("takumi-cli-paint-{name}-{}", process::id()));
@@ -48,8 +48,14 @@ fn the_outline_names_each_node_where_it_lands_and_what_fills_it() {
   assert!(line("div#card").contains("0,0 300x100 background #0f172a clips-overflow"));
   assert!(line("text h1.title.big").contains("\"Hello\""));
   assert!(line("text h1.title.big").contains("#ffffff"));
-  assert!(line("div.ghost").ends_with("background #ff0000 offscreen"));
-  assert!(line("box p ").ends_with("empty"));
+  assert!(line("div.ghost").ends_with("background #ff0000 offscreen past the right edge"));
+  assert!(line("text p.unseen").ends_with("\"unseen\" Geist 16px draws nothing"));
+  assert!(
+    outline.ends_with("not painted\n  section opacity: 0\n  em opacity: 0\n"),
+    "{outline}"
+  );
+  assert!(!outline.contains("deep"));
+  assert!(line("\"shown").contains("\"shown\""), "{outline}");
   // A child sits one level under its parent.
   assert!(line("box h1.title.big").starts_with("      box "));
   assert!(!outline.contains("- fill"));
