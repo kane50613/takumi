@@ -171,6 +171,8 @@ The rule also styles the page itself, as it does in Chromium:
 }
 ```
 
+A background on `<html>` or `<body>` covers that element's box, not the page as it does in a browser. Set the page's color with `@page { background }` or the `background` option.
+
 Rules nested in `@page`, such as `@top-center`, draw [page-margin boxes](/docs/pdf/headers#page-margin-boxes-in-css). Other descriptors, such as `marks` and `bleed`, are not read.
 
 ### Named pages
