@@ -527,7 +527,9 @@ fn a_negative_calc_padding_clamps_to_zero() {
       ".a {{ width: 200px; padding-top: {padding} }} .p {{ display: block; height: 20px }}"
     );
     let document = build_with(
-      Node::container([Node::container([]).with_class_name("p")]).with_id("a"),
+      Node::container([Node::container([]).with_class_name("p")])
+        .with_class_name("a")
+        .with_id("a"),
       &css,
     );
 
