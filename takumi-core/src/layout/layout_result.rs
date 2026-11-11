@@ -450,9 +450,12 @@ impl LayoutResult {
 
     Self {
       border: style.border,
-      padding: style
-        .padding
-        .map(|padding| padding.resolve_or_zero(percentage_inline_size).to_float()),
+      padding: style.padding.map(|padding| {
+        padding
+          .resolve_or_zero(percentage_inline_size)
+          .max(LayoutUnit::ZERO)
+          .to_float()
+      }),
       ..Self::new(size)
     }
   }

@@ -1694,7 +1694,7 @@ impl LayoutTree<'_> {
     self
       .layout_style(node)
       .padding
-      .map(|padding| padding.resolve_or_zero(basis))
+      .map(|padding| padding.resolve_or_zero(basis).max(LayoutUnit::ZERO))
       .into()
   }
 
