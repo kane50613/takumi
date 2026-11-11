@@ -57,13 +57,21 @@ fn card() -> Node {
 }
 
 fn paint(node: Node) -> PaintTree {
+  paint_with(node, CSS)
+}
+
+fn build_with(node: Node, css: &str) -> PaintDocument {
+  paint_with(node, css).document
+}
+
+fn paint_with(node: Node, css: &str) -> PaintTree {
   paint_tree(
     PaintTreeOptions::builder()
       .viewport(Viewport::new((600, 400)))
       .node(node)
       .fonts(&CONTEXT)
       .images(TEST_IMAGES.clone())
-      .stylesheet(StyleSheet::parse_loosy(CSS).into())
+      .stylesheet(StyleSheet::parse_loosy(css).into())
       .build(),
   )
   .unwrap()
@@ -510,4 +518,19 @@ fn run_outlines_write_each_glyph() {
       .is_some_and(|outline| outline.starts_with('M'))
   }));
   assert_eq!(tree.run_outlines(node, usize::MAX), None);
+}
+
+#[test]
+fn a_negative_calc_padding_clamps_to_zero() {
+  for padding in ["0px", "-4px", "calc(0px - 4px)", "calc(2px - 4px)"] {
+    let css = format!(
+      ".a {{ width: 200px; padding-top: {padding} }} .p {{ display: block; height: 20px }}"
+    );
+    let document = build_with(
+      Node::container([Node::container([]).with_class_name("p")]).with_id("a"),
+      &css,
+    );
+
+    assert_eq!(find(&document, "a").height, 20.0, "padding-top: {padding}");
+  }
 }

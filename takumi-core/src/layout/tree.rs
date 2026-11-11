@@ -2619,7 +2619,12 @@ impl RenderNode {
       bottom: style.box_data.padding_bottom,
       left: style.box_data.padding_left,
     }
-    .map(|length| length.to_px(&self.context.sizing, containing_block_width))
+    // A negative `calc()` clamps to zero.
+    .map(|length| {
+      length
+        .to_px(&self.context.sizing, containing_block_width)
+        .max(0.0)
+    })
   }
 
   /// The child-index path to `node` in this tree, `self` included.
