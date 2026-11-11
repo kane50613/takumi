@@ -2619,7 +2619,7 @@ impl RenderNode {
       bottom: style.box_data.padding_bottom,
       left: style.box_data.padding_left,
     }
-    // A negative `calc()` clamps to zero.
+    // Blink's `MinimumValueForLength`.
     .map(|length| {
       length
         .to_px(&self.context.sizing, containing_block_width)
