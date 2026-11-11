@@ -463,10 +463,11 @@ impl<'a> ScaledRows<'a> {
 
     // An image decoded at the size it draws maps back through a scale and its reciprocal, whose
     // product rounds to a hair off one for some sizes (a 4032 pixel wide photograph drawn 1200
-    // wide), and its crop's offset to a hair off a whole pixel. That draw is a copy, as Skia's
-    // `tweak_sampling` in `src/shaders/SkImageShader.cpp` samples an integer translate nearest.
-    // Approximate: Skia takes only an exact integer translate, so a scale within 1e-6 of one or an
-    // offset within 1e-3 of a whole pixel that is really meant filters there and copies here.
+    // wide), and its crop's offset to a hair off a whole pixel. That draw is a copy, as it is in
+    // Chromium, whose Skia samples an integer translate nearest (`tweak_sampling` in
+    // `src/shaders/SkImageShader.cpp`). Approximate: Skia takes only an exact integer translate,
+    // so a scale within 1e-6 of one or an offset within 1e-3 of a whole pixel that is really meant
+    // filters in Chromium and copies here.
     let transform = match (whole_pixel(transform.x), whole_pixel(transform.y)) {
       (Some(x), Some(y))
         if (transform.a - 1.0).abs() < 1e-6 && (transform.d - 1.0).abs() < 1e-6 =>
@@ -534,6 +535,7 @@ impl<'a> ScaledRows<'a> {
     })
   }
 
+  /// Fills `out` with the source sampled at the row the transform maps `y` to.
   pub(crate) fn fill(&self, y: f32, out: &mut [[u8; 4]]) {
     let (_, sample_y) = self.transform.transform_point(self.x_start, y);
 

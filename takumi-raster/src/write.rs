@@ -740,9 +740,11 @@ where
 
 /// Frames with each run of equal images made one frame, with the GIF delay of the run. A timeline
 /// holds an image for many frames more often than not, and a held frame would otherwise quantize
-/// and compress again for every one of them. Each frame rounds its own delay, as it would shown
-/// alone, so the run plays as long as its frames did; a run splits where its delay would pass the
-/// longest a GIF frame stores.
+/// and compress again for every one of them. Each frame rounds its own delay to GIF89a's Delay
+/// Time (section 23, hundredths of a second), as it would shown alone, and the run stores their
+/// sum; a run splits where its delay would pass the longest a GIF frame stores. Approximate:
+/// browsers bump a delay of 10ms or less to 100ms, which lengthens each such frame shown alone
+/// and only their sum in a run.
 struct HeldFrames<I> {
   frames: I,
   /// The frame shown and its delay so far, in hundredths of a second.

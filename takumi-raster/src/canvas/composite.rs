@@ -136,6 +136,7 @@ pub(super) fn source(
   source_general(pixmap, mask, source, &options, region);
 }
 
+/// [`constant_general`]'s normal-mode source-over, a run of pixels at a time.
 #[inline]
 fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: DestRegion) {
   for dest_y in region.bounds.y_min..region.bounds.y_max {

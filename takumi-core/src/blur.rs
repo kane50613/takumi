@@ -280,6 +280,7 @@ impl Folds {
   }
 }
 
+/// Blurs pixels of `N` channels in place with a sigma for each axis.
 fn blur<const N: usize>(
   pixels: &mut [[u8; N]],
   width: usize,
