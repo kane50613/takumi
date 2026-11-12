@@ -7457,3 +7457,56 @@ fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
     })
     .collect()
 }
+
+/// An SVG image drawn many times at one size is one form XObject from its second draw on, a size
+/// of its own for each width and height, and an SVG drawn once draws in place.
+#[test]
+fn a_repeated_svg_image_draws_once_more() {
+  let repeated = data_url(
+    "image/svg+xml",
+    br##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="#0044ff"/></svg>"##,
+  );
+  let once = data_url(
+    "image/svg+xml",
+    br##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="20" height="20" fill="#ff4400"/></svg>"##,
+  );
+  let html = format!(
+    r#"<img src="{repeated}"><img src="{repeated}"><img src="{repeated}">
+    <img src="{repeated}" style="width: 48px; height: 24px"><img src="{repeated}" style="width: 48px; height: 24px">
+    <img src="{repeated}" style="width: 24px; height: 48px"><img src="{repeated}" style="width: 24px; height: 48px">
+    <img src="{once}">"#
+  );
+  let pdf = run_pdf_fixture("svg-image-repeated", |fonts| a4_options(&html, fonts));
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert_eq!(text.matches("/Subtype/Form").count(), 3, "{text}");
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b" Do"))
+      .count(),
+    4
+  );
+}
+
+/// An SVG image whose root `color` takes the host's draws in each host's color, however its
+/// draws repeat.
+#[test]
+fn a_repeated_svg_image_keeps_each_host_color() {
+  let svg = data_url(
+    "image/svg+xml",
+    br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" color="currentColor"><rect width="24" height="24" fill="currentColor"/></svg>"#,
+  );
+  let html = format!(
+    r#"<img src="{svg}" style="color: #ff0000"><img src="{svg}" style="color: #0000ff"><img src="{svg}" style="color: #ff0000">"#
+  );
+  let fonts = fonts();
+  let pdf = render_pinned(a4_options(&html, &fonts));
+  let fills = |color: &str| {
+    content_lines(&pdf)
+      .filter(|line| String::from_utf8_lossy(line).contains(color))
+      .count()
+  };
+
+  assert_eq!(fills("1 0 0 rg"), 2);
+  assert_eq!(fills("0 0 1 rg"), 1);
+}
