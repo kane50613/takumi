@@ -44,8 +44,6 @@ use takumi_core::{
 use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
-#[cfg(all(feature = "svg", feature = "images"))]
-use crate::svg::SvgPainter;
 use crate::{
   chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
@@ -75,6 +73,8 @@ use crate::{
   tree::draws,
   window::{LineFrame, Window},
 };
+#[cfg(all(feature = "svg", feature = "images"))]
+use crate::{krilla::graphic::Graphic, svg::SvgPainter};
 #[cfg(feature = "images")]
 use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
 
@@ -83,6 +83,10 @@ type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 
 /// Krilla fonts embedded so far, one per distinct instance.
 type FontMap = FxHashMap<FontKey, Font>;
+
+/// An image SVG's draw hash and the bits of the viewport width and height it is laid out at.
+#[cfg(all(feature = "svg", feature = "images"))]
+type SvgKey = (u64, u32, u32);
 
 pub(crate) struct Emitter<'a> {
   pub(crate) scene: SceneView<'a>,
@@ -118,6 +122,9 @@ pub(crate) struct DocumentState<'a> {
   pub(crate) lang: Option<&'a str>,
   #[cfg(feature = "images")]
   images: RasterizedImages,
+  /// Each image SVG drawn so far, which every later draw of it reuses as one form XObject.
+  #[cfg(all(feature = "svg", feature = "images"))]
+  svgs: RefCell<FxHashMap<SvgKey, Graphic>>,
 }
 
 impl<'a> DocumentState<'a> {
@@ -132,6 +139,8 @@ impl<'a> DocumentState<'a> {
       lang,
       #[cfg(feature = "images")]
       images: RasterizedImages::default(),
+      #[cfg(all(feature = "svg", feature = "images"))]
+      svgs: RefCell::default(),
     }
   }
 
@@ -994,9 +1003,6 @@ impl Emitter<'_> {
     if viewport.width <= 0.0 || viewport.height <= 0.0 {
       return;
     }
-    let ops = svg.vector_ops(context, viewport);
-    let canvas =
-      KrillaRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
 
     surface.push_transform(&Transform::from_row(
       size.width / viewport.width,
@@ -1006,6 +1012,46 @@ impl Emitter<'_> {
       at.x,
       at.y,
     ));
+
+    // A color filter repaints the document, so only an unfiltered one draws as a shared XObject.
+    match svg
+      .draw_hash(context)
+      .filter(|_| self.color_filter.is_none())
+    {
+      Some(hash) => {
+        let key = (hash, viewport.width.to_bits(), viewport.height.to_bits());
+        let drawn = self.document.svgs.borrow().get(&key).cloned();
+        let graphic = drawn.unwrap_or_else(|| {
+          let stream = draw_stream(surface, |content| {
+            self.paint_svg(svg, context, viewport, content);
+          });
+          let graphic = Graphic::new(stream, false);
+
+          self.document.svgs.borrow_mut().insert(key, graphic.clone());
+          graphic
+        });
+
+        surface.draw_graphic(graphic);
+      }
+      None => self.paint_svg(svg, context, viewport, surface),
+    }
+
+    surface.pop();
+  }
+
+  #[cfg(all(feature = "svg", feature = "images"))]
+  /// Paints `svg` laid out at `viewport`, clipped to its canvas.
+  fn paint_svg(
+    &self,
+    svg: &SvgSource,
+    context: &RenderContext,
+    viewport: Size<f32>,
+    surface: &mut Surface,
+  ) {
+    let ops = svg.vector_ops(context, viewport);
+    let canvas =
+      KrillaRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
+
     if let Some(canvas) = &canvas {
       surface.push_clip_path(canvas, &FillRule::NonZero);
     }
@@ -1013,7 +1059,6 @@ impl Emitter<'_> {
     if canvas.is_some() {
       surface.pop();
     }
-    surface.pop();
   }
 
   /// Draws a text-bearing box's runs, from the pre-built inline map when the node is in it (content

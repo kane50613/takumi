@@ -104,10 +104,9 @@ pub struct SvgSource {
   #[cfg(feature = "svg")]
   inline: bool,
   /// Whether the markup contains `<text`, so rendering depends on the registered fonts.
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   has_text: bool,
   #[cfg(feature = "svg")]
-  #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
   hash: u64,
   #[cfg(feature = "svg")]
   #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
@@ -252,7 +251,6 @@ impl SvgSource {
   /// The source of `document`, parsed from `src`, as an image that no cache holds.
   fn from_document(document: SvgDocument, src: &str) -> Self {
     Self {
-      #[cfg(feature = "svg-raster")]
       has_text: document.has_text(),
       uses_current_color: document.uses_current_color(),
       document: Arc::new(document),
@@ -296,17 +294,11 @@ impl SvgSource {
       .ok_or(ImageError::InvalidPixmapSize)
   }
 
-  /// The pixels of `raster`, from the cache when an image drew them before.
-  #[cfg(feature = "svg-raster")]
-  pub fn rasterize_cached(
-    &self,
-    raster: SvgRaster,
-    image_rendering: ImageScalingAlgorithm,
-    host: &RenderContext,
-  ) -> Result<Arc<ImageBuffer>, ImageError> {
-    // An inline `svg` draws in the style of its box, which the key cannot hold.
+  /// A hash equal for every host the document draws the same in, none for an inline `svg`, which
+  /// draws in the style of its box.
+  pub fn draw_hash(&self, host: &RenderContext) -> Option<u64> {
     if self.inline {
-      return self.rasterize(raster, host);
+      return None;
     }
 
     let mut hash = if self.uses_current_color {
@@ -315,10 +307,25 @@ impl SvgSource {
       self.hash
     };
 
-    // Text rasterization depends on which fonts are registered.
+    // Text draws with the fonts registered.
     if self.has_text {
       hash ^= xxh3_64(&host.fonts().revision().to_le_bytes());
     }
+
+    Some(hash)
+  }
+
+  /// The pixels of `raster`, from the cache when an image drew them before.
+  #[cfg(feature = "svg-raster")]
+  pub fn rasterize_cached(
+    &self,
+    raster: SvgRaster,
+    image_rendering: ImageScalingAlgorithm,
+    host: &RenderContext,
+  ) -> Result<Arc<ImageBuffer>, ImageError> {
+    let Some(mut hash) = self.draw_hash(host) else {
+      return self.rasterize(raster, host);
+    };
 
     hash ^= raster.hash();
 

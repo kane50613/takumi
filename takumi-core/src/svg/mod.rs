@@ -156,7 +156,6 @@ impl SvgDocument {
   }
 
   /// Whether the document holds a `text` element, which draws with the registered fonts.
-  #[cfg(feature = "svg-raster")]
   pub(crate) fn has_text(&self) -> bool {
     self
       .elements
